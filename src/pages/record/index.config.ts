@@ -1,4 +1,4 @@
 export default definePageConfig({
-  navigationBarTitleText: '记录'
+  navigationBarTitleText: '食物分析和记录'
 })
 

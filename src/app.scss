@@ -28,3 +28,13 @@ page {
   justify-content: space-between;
 }
 
+// TabBar 样式调整
+// 注意：微信小程序原生 tabBar 的文字大小由系统控制，无法通过 CSS 直接调整
+// 但我们可以通过增大图标尺寸来让整体看起来更大
+// 图标已设置为 120x120px（标准为 81x81px）
+
+// 如果使用 Taro 的自定义 tabBar，可以通过以下样式调整：
+// .taro-tabbar__item {
+//   font-size: 28rpx !important;
+// }
+

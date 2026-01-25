@@ -1,27 +1,27 @@
 .profile-page {
   min-height: 100vh;
   background: #f9fafb;
-  padding-bottom: 100px;
+  padding-bottom: 200rpx;
 }
 
 // 顶部渐变区域
 .header-section {
   background: linear-gradient(143.75deg, #00bc7d 0%, #00bba7 100%);
-  padding: 32px 16px 24px;
+  padding: 64rpx 32rpx 48rpx;
 }
 
 .user-info-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 32rpx;
+  margin-bottom: 48rpx;
 }
 
 .user-avatar-wrapper {
-  width: 80px;
-  height: 80px;
+  width: 160rpx;
+  height: 160rpx;
   background: rgba(255, 255, 255, 0.2);
-  border: 4px solid rgba(255, 255, 255, 0.3);
+  border: 8rpx solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -30,129 +30,178 @@
 }
 
 .user-avatar {
-  font-size: 36px;
-  line-height: 40px;
+  font-size: 72rpx;
+  line-height: 80rpx;
+}
+
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
 }
 
 .user-details {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8rpx;
 }
 
 .user-name {
-  font-size: 24px;
+  font-size: 36rpx;
   font-weight: bold;
   color: #ffffff;
-  line-height: 32px;
+  line-height: 48rpx;
+  
+  &.login-link {
+    text-decoration: underline;
+  }
+}
+
+.login-link-wrapper {
+  opacity: 0.9;
+  transition: all 0.2s ease;
+  
+  &:active {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+}
+
+.login-link-button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  line-height: normal;
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #ffffff;
+  text-decoration: underline;
+  opacity: 0.9;
+  transition: all 0.2s ease;
+  
+  &::after {
+    border: none;
+  }
+  
+  &:active {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
 }
 
 .user-meta {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #d0fae5;
-  line-height: 20px;
+  line-height: 40rpx;
 }
 
 .settings-btn {
-  width: 36px;
-  height: 36px;
+  width: 72rpx;
+  height: 72rpx;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 40rpx;
   flex-shrink: 0;
+  transition: all 0.2s ease;
+  
+  &:active {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(0.95);
+  }
 }
 
 // 当前体重卡片
 .weight-card {
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 32rpx;
+  padding: 32rpx;
 }
 
 .weight-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 24rpx;
 }
 
 .weight-label {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #d0fae5;
-  line-height: 20px;
+  line-height: 40rpx;
 }
 
 .weight-target {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #d0fae5;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 .weight-value-section {
   display: flex;
   align-items: baseline;
-  margin-bottom: 12px;
+  margin-bottom: 24rpx;
 }
 
 .weight-value {
-  font-size: 36px;
+  font-size: 72rpx;
   font-weight: bold;
   color: #ffffff;
-  line-height: 40px;
-  margin-right: 8px;
+  line-height: 80rpx;
+  margin-right: 16rpx;
 }
 
 .weight-unit {
-  font-size: 18px;
+  font-size: 36rpx;
   color: #d0fae5;
-  line-height: 28px;
+  line-height: 56rpx;
 }
 
 .weight-progress-bar {
   width: 100%;
-  height: 8px;
+  height: 16rpx;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 9999px;
+  border-radius: 9999rpx;
   overflow: hidden;
 }
 
 .weight-progress-fill {
   height: 100%;
   background: #ffffff;
-  border-radius: 9999px;
+  border-radius: 9999rpx;
 }
 
 // 统计卡片
 .stats-cards {
   display: flex;
-  gap: 12px;
-  margin: 16px;
+  gap: 24rpx;
+  margin: 32rpx;
 }
 
 .stat-card {
   flex: 1;
   background: #ffffff;
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: 28rpx;
+  padding: 32rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  gap: 16rpx;
+  box-shadow: 0px 2rpx 6rpx rgba(0, 0, 0, 0.1), 0px 2rpx 4rpx rgba(0, 0, 0, 0.1);
 }
 
 .stat-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 20rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 40rpx;
 }
 
 .checkin-icon {
@@ -168,65 +217,70 @@
 }
 
 .stat-number {
-  font-size: 24px;
+  font-size: 48rpx;
   font-weight: bold;
   color: #1e2939;
-  line-height: 32px;
+  line-height: 64rpx;
 }
 
 .stat-unit {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #6a7282;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 .stat-label {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #4a5565;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 // 我的服务
 .services-section {
-  padding: 0 16px;
-  margin-bottom: 12px;
+  padding: 0 32rpx;
+  margin-bottom: 24rpx;
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1e2939;
-  line-height: 24px;
-  margin-bottom: 12px;
+  line-height: 48rpx;
+  margin-bottom: 24rpx;
 }
 
 .services-list {
   background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: 32rpx;
+  box-shadow: 0px 2rpx 6rpx rgba(0, 0, 0, 0.1), 0px 2rpx 4rpx rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
 .service-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid #f3f4f6;
+  gap: 32rpx;
+  padding: 32rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+  transition: all 0.2s ease;
   
   &:last-child {
     border-bottom: none;
   }
+  
+  &:active {
+    background: #f9fafb;
+  }
 }
 
 .service-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 28rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 40rpx;
   flex-shrink: 0;
 }
 
@@ -254,24 +308,24 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4rpx;
 }
 
 .service-title {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1e2939;
-  line-height: 24px;
+  line-height: 48rpx;
 }
 
 .service-desc {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #6a7282;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 .service-arrow {
-  font-size: 16px;
+  font-size: 32rpx;
   color: #6a7282;
   flex-shrink: 0;
 }
@@ -279,57 +333,57 @@
 // 我的贡献值
 .contribution-card {
   background: linear-gradient(158.12deg, #ad46ff 0%, #f6339a 100%);
-  border-radius: 16px;
-  padding: 16px;
-  margin: 16px;
+  border-radius: 32rpx;
+  padding: 32rpx;
+  margin: 32rpx;
 }
 
 .contribution-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 24rpx;
 }
 
 .contribution-title-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 16rpx;
 }
 
 .contribution-icon {
-  width: 36px;
-  height: 36px;
+  width: 72rpx;
+  height: 72rpx;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 40rpx;
 }
 
 .contribution-title {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
   color: #ffffff;
-  line-height: 24px;
+  line-height: 48rpx;
 }
 
 .contribution-value {
-  font-size: 24px;
+  font-size: 48rpx;
   font-weight: bold;
   color: #ffffff;
-  line-height: 32px;
+  line-height: 64rpx;
 }
 
 .contribution-stats {
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 28rpx;
+  padding: 24rpx;
   display: flex;
   gap: 0;
-  margin-bottom: 12px;
-  min-height: 72px;
+  margin-bottom: 24rpx;
+  min-height: 144rpx;
 }
 
 .contribution-stat-item {
@@ -337,101 +391,293 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 8rpx;
+  
+  &:not(:first-child):not(:last-child) {
+    border-left: 1rpx solid rgba(255, 255, 255, 0.2);
+    border-right: 1rpx solid rgba(255, 255, 255, 0.2);
+  }
 }
 
 .contribution-stat-label {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #f3e8ff;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 .contribution-stat-value {
-  font-size: 18px;
+  font-size: 36rpx;
   font-weight: bold;
   color: #ffffff;
-  line-height: 28px;
+  line-height: 56rpx;
 }
 
 .contribution-thanks {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #f3e8ff;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 // 设置
 .settings-section {
-  padding: 0 16px;
-  margin-bottom: 12px;
+  padding: 0 32rpx;
+  margin-bottom: 24rpx;
 }
 
 .settings-list {
   background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: 32rpx;
+  box-shadow: 0px 2rpx 6rpx rgba(0, 0, 0, 0.1), 0px 2rpx 4rpx rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
 .setting-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid #f3f4f6;
+  gap: 32rpx;
+  padding: 32rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+  transition: all 0.2s ease;
   
   &:last-child {
     border-bottom: none;
   }
+  
+  &:active {
+    background: #f9fafb;
+  }
 }
 
 .setting-icon {
-  width: 44px;
-  height: 44px;
+  width: 88rpx;
+  height: 88rpx;
   background: #f3f4f6;
-  border-radius: 14px;
+  border-radius: 28rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 40rpx;
   flex-shrink: 0;
 }
 
 .setting-title {
   flex: 1;
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 500;
   color: #1e2939;
-  line-height: 24px;
+  line-height: 48rpx;
 }
 
 .setting-arrow {
-  font-size: 16px;
+  font-size: 32rpx;
   color: #6a7282;
   flex-shrink: 0;
 }
 
-// 退出登录
+// 登录/退出登录按钮
+.login-btn,
 .logout-btn {
   background: #ffffff;
-  border-radius: 14px;
-  padding: 16px;
-  margin: 16px;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  margin: 32rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  gap: 16rpx;
+  box-shadow: 0px 2rpx 6rpx rgba(0, 0, 0, 0.1), 0px 2rpx 4rpx rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  border: none;
+  line-height: normal;
+  
+  &::after {
+    border: none;
+  }
 }
 
+.login-btn:active,
+.logout-btn:active {
+  background: #f9fafb;
+  transform: scale(0.98);
+}
+
+.login-icon,
 .logout-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
+  font-size: 40rpx;
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.login-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #00bc7d;
+  line-height: 48rpx;
 }
 
 .logout-text {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
   color: #e7000b;
-  line-height: 24px;
+  line-height: 48rpx;
+}
+
+// 头像昵称填写弹窗
+.profile-form-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.profile-form-content {
+  background: #ffffff;
+  border-radius: 32rpx;
+  width: 90%;
+  max-width: 600rpx;
+  padding: 48rpx 32rpx;
+  box-shadow: 0px 8rpx 24rpx rgba(0, 0, 0, 0.15);
+}
+
+.profile-form-header {
+  margin-bottom: 40rpx;
+  text-align: center;
+}
+
+.profile-form-title {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 56rpx;
+}
+
+.profile-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 40rpx;
+  margin-bottom: 40rpx;
+}
+
+// 头像选择区域
+.avatar-choose-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.form-label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #1e2939;
+  line-height: 40rpx;
+}
+
+.avatar-choose-btn {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  line-height: normal;
+  
+  &::after {
+    border: none;
+  }
+}
+
+.avatar-choose-wrapper {
+  width: 200rpx;
+  height: 200rpx;
+  margin: 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4rpx solid #e5e7eb;
+}
+
+.avatar-preview {
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+
+.avatar-placeholder-icon {
+  font-size: 64rpx;
+  line-height: 80rpx;
+}
+
+.avatar-placeholder-text {
+  font-size: 24rpx;
+  color: #6a7282;
+  line-height: 32rpx;
+}
+
+// 昵称输入区域
+.nickname-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.nickname-input {
+  width: 100%;
+  min-height: 88rpx;
+  padding: 24rpx 32rpx;
+  background: #f9fafb;
+  border: 2rpx solid #e5e7eb;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  color: #1e2939;
+  line-height: 48rpx;
+  box-sizing: border-box;
+  
+  &:focus {
+    border-color: #00bc7d;
+    background: #ffffff;
+  }
+}
+
+// 表单底部按钮
+.profile-form-footer {
+  display: flex;
+  gap: 24rpx;
+}
+
+.form-btn {
+  flex: 1;
+  padding: 28rpx;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  line-height: 48rpx;
+  border: none;
+  
+  &::after {
+    border: none;
+  }
+}
+
+.skip-btn {
+  background: #f3f4f6;
+  color: #6a7282;
+}
+
+.save-btn {
+  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
+  color: #ffffff;
 }

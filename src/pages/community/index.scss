@@ -1,236 +1,271 @@
 .community-page {
   min-height: 100vh;
   background: #f9fafb;
-  padding-bottom: 100px;
+  padding-bottom: 200rpx;
+}
+
+.community-scroll {
+  height: 100vh;
 }
 
 // 页面头部
 .page-header {
   background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 32px 16px 16px;
+  border-bottom: 1rpx solid #e5e7eb;
+  padding: 64rpx 32rpx 32rpx;
 }
 
 .page-title {
   display: block;
-  font-size: 24px;
+  font-size: 40rpx;
   font-weight: bold;
   color: #1e2939;
-  line-height: 32px;
-  margin-bottom: 8px;
+  line-height: 64rpx;
+  margin-bottom: 16rpx;
 }
 
 .page-subtitle {
   display: block;
-  font-size: 14px;
+  font-size: 28rpx;
   color: #6a7282;
-  line-height: 20px;
+  line-height: 40rpx;
 }
 
 // 我的圈子
 .my-circles-section {
-  padding: 16px;
+  padding: 32rpx;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 24rpx;
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1e2939;
-  line-height: 24px;
+  line-height: 48rpx;
 }
 
 .view-all-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8rpx;
+  transition: all 0.2s ease;
+  
+  &:active {
+    opacity: 0.7;
+  }
 }
 
 .view-all-text {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #009966;
-  line-height: 20px;
+  line-height: 40rpx;
 }
 
 .arrow {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #009966;
 }
 
 .circles-list {
   display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  
-  &::-webkit-scrollbar {
-    display: none;
-  }
+  flex-direction: row;
+  gap: 16rpx;
+  padding-bottom: 8rpx;
+  width: 100%;
 }
 
 .circle-card {
   flex: 1;
   background: #ffffff;
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 28rpx;
+  padding: 24rpx 16rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  gap: 12rpx;
+  box-shadow: 0px 2rpx 6rpx rgba(0, 0, 0, 0.1), 0px 2rpx 4rpx rgba(0, 0, 0, 0.1);
   min-width: 0;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  
+  &:active {
+    transform: scale(0.98);
+    background: #f9fafb;
+  }
 }
 
 .circle-icon {
-  font-size: 24px;
-  line-height: 32px;
-  height: 32px;
+  font-size: 48rpx;
+  line-height: 48rpx;
+  height: 48rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 8rpx;
 }
 
 .circle-name {
-  font-size: 14px;
+  font-size: 26rpx;
   font-weight: 600;
   color: #1e2939;
-  line-height: 20px;
+  line-height: 36rpx;
   text-align: center;
   width: 100%;
+  margin-bottom: 8rpx;
 }
 
 .circle-members {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 8rpx;
   width: 100%;
 }
 
 .member-icon {
-  font-size: 12px;
-  width: 12px;
-  height: 12px;
+  font-size: 24rpx;
+  width: 24rpx;
+  height: 24rpx;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .member-count {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #6a7282;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 // 本周打卡排行榜
 .ranking-banner {
   background: linear-gradient(to right, #ffb900 0%, #ff6900 100%);
-  border-radius: 16px;
-  padding: 16px;
-  margin: 16px;
+  border-radius: 32rpx;
+  padding: 32rpx;
+  margin: 32rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0px 4px 12px rgba(255, 105, 0, 0.2);
+  box-shadow: 0px 8rpx 24rpx rgba(255, 105, 0, 0.2);
+  transition: all 0.2s ease;
+  
+  &:active {
+    transform: scale(0.98);
+  }
 }
 
 .ranking-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 24rpx;
   flex: 1;
 }
 
 .ranking-icon {
-  width: 48px;
-  height: 48px;
+  width: 96rpx;
+  height: 96rpx;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 48rpx;
   flex-shrink: 0;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8rpx);
 }
 
 .ranking-text {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8rpx;
 }
 
 .ranking-title {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
   color: #ffffff;
-  line-height: 24px;
+  line-height: 48rpx;
 }
 
 .ranking-subtitle {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #fef3c6;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 .ranking-arrow {
-  font-size: 20px;
+  font-size: 40rpx;
   color: #ffffff;
   flex-shrink: 0;
 }
 
 // 热门话题
 .topics-section {
-  padding: 0 16px;
-  margin-bottom: 12px;
+  padding: 0 32rpx;
+  margin-bottom: 24rpx;
 }
 
 .topics-section .section-header {
-  margin-bottom: 12px;
+  margin-bottom: 24rpx;
+}
+
+.section-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.section-title-icon {
+  font-size: 32rpx;
+  color: #1e2939;
+  line-height: 48rpx;
+}
+
+.topics-list-wrapper {
+  width: 100%;
 }
 
 .topics-list {
   display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-.topic-icon {
-  font-size: 20px;
-  margin-right: 8px;
+  flex-direction: row;
+  gap: 16rpx;
+  padding: 0 0 8rpx 0;
+  width: max-content;
 }
 
 .topic-tag {
-  background: #ffffff;
-  border-radius: 9999px;
-  padding: 8px 16px;
-  font-size: 14px;
+  background: #f3f4f6;
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+  font-size: 28rpx;
   color: #364153;
-  line-height: 20px;
+  line-height: 40rpx;
   white-space: nowrap;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1rpx solid rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
-  height: 36px;
+  height: 64rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
+  min-width: fit-content;
+  
+  &:active {
+    transform: scale(0.95);
+    background: #e5e7eb;
+  }
 }
 
 // 最新动态
 .feed-section {
-  padding: 0 16px;
+  padding: 0 32rpx;
 }
 
 .feed-list {
@@ -241,10 +276,10 @@
 
 .feed-card {
   background: #ffffff;
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
-  margin-bottom: 12px;
+  border-radius: 32rpx;
+  padding: 32rpx;
+  box-shadow: 0px 2rpx 6rpx rgba(0, 0, 0, 0.1), 0px 2rpx 4rpx rgba(0, 0, 0, 0.1);
+  margin-bottom: 24rpx;
   
   &:last-child {
     margin-bottom: 0;
@@ -254,19 +289,19 @@
 .feed-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 24rpx;
+  margin-bottom: 24rpx;
 }
 
 .user-avatar {
-  width: 40px;
-  height: 40px;
+  width: 80rpx;
+  height: 80rpx;
   border-radius: 50%;
   background: linear-gradient(135deg, #00d492 0%, #00bba7 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 40rpx;
   flex-shrink: 0;
 }
 
@@ -274,79 +309,90 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8rpx;
 }
 
 .user-name {
-  font-size: 16px;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1e2939;
-  line-height: 24px;
+  line-height: 48rpx;
 }
 
 .post-time {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #6a7282;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 .share-btn {
-  width: 20px;
-  height: 20px;
+  width: 40rpx;
+  height: 40rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 36rpx;
   color: #4a5565;
   flex-shrink: 0;
   line-height: 1;
-  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:active {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
 }
 
 .feed-content {
-  font-size: 16px;
+  font-size: 32rpx;
   color: #364153;
-  line-height: 24px;
-  margin-bottom: 12px;
+  line-height: 48rpx;
+  margin-bottom: 24rpx;
   word-break: break-word;
 }
 
 .feed-image {
   background: linear-gradient(152.3deg, #d0fae5 0%, #cbfbf1 100%);
-  border-radius: 14px;
-  height: 192px;
+  border-radius: 28rpx;
+  height: 384rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: 24rpx;
   position: relative;
   overflow: hidden;
 }
 
+.feed-image-content {
+  width: 100%;
+  height: 100%;
+  border-radius: 28rpx;
+}
+
 .image-placeholder {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #99a1af;
-  line-height: 20px;
+  line-height: 40rpx;
   text-align: center;
   z-index: 1;
 }
 
 .feed-tags {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
   flex-wrap: wrap;
 }
 
 .feed-tag {
   background: #ecfdf5;
-  border-radius: 9999px;
-  padding: 4px 12px;
-  font-size: 12px;
+  border-radius: 9999rpx;
+  padding: 8rpx 24rpx;
+  font-size: 24rpx;
   color: #009966;
-  line-height: 16px;
-  height: 24px;
+  line-height: 32rpx;
+  height: 48rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -356,23 +402,29 @@
 .feed-actions {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding-top: 12px;
-  border-top: 1px solid #f3f4f6;
-  margin-top: 12px;
+  gap: 48rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid #f3f4f6;
+  margin-top: 24rpx;
 }
 
 .action-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 16rpx;
   min-width: 0;
+  transition: all 0.2s ease;
+  
+  &:active {
+    opacity: 0.7;
+    transform: scale(0.95);
+  }
 }
 
 .action-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
+  font-size: 40rpx;
+  width: 40rpx;
+  height: 40rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -380,27 +432,26 @@
 }
 
 .action-count {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #4a5565;
-  line-height: 20px;
+  line-height: 40rpx;
   white-space: nowrap;
 }
 
 // 浮动发布按钮
 .fab-button {
   position: fixed;
-  right: 16px;
-  bottom: 100px;
-  width: 56px;
-  height: 56px;
+  right: 32rpx;
+  bottom: 200rpx;
+  width: 112rpx;
+  height: 112rpx;
   background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0px 10px 15px rgba(0, 0, 0, 0.1), 0px 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0px 20rpx 30rpx rgba(0, 0, 0, 0.1), 0px 8rpx 12rpx rgba(0, 0, 0, 0.1);
   z-index: 100;
-  cursor: pointer;
   transition: transform 0.2s ease;
   
   &:active {
@@ -409,7 +460,7 @@
 }
 
 .fab-icon {
-  font-size: 24px;
+  font-size: 48rpx;
   color: #ffffff;
   display: flex;
   align-items: center;

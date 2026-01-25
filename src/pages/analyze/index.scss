@@ -1,0 +1,211 @@
+.analyze-page {
+  min-height: 100vh;
+  background: #f9fafb;
+  padding: 24rpx 0 200rpx;
+}
+
+// 图片预览区域
+.image-preview-section {
+  background: #ffffff;
+  margin: 0 24rpx 32rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0px 4rpx 12rpx rgba(0, 0, 0, 0.08), 0px 2rpx 4rpx rgba(0, 0, 0, 0.04);
+}
+
+.preview-image {
+  width: 100%;
+  height: 520rpx;
+  display: block;
+}
+
+.no-image-placeholder {
+  width: 100%;
+  height: 520rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+}
+
+.placeholder-text {
+  font-size: 32rpx;
+  color: #6a7282;
+  line-height: 48rpx;
+}
+
+// 补充细节区域
+.details-section {
+  background: #ffffff;
+  margin: 0 24rpx 40rpx;
+  border-radius: 24rpx;
+  padding: 36rpx 32rpx;
+  box-shadow: 0px 4rpx 12rpx rgba(0, 0, 0, 0.08), 0px 2rpx 4rpx rgba(0, 0, 0, 0.04);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.section-icon {
+  font-size: 36rpx;
+  line-height: 52rpx;
+  width: 44rpx;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 12rpx;
+}
+
+.section-title {
+  font-size: 38rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 56rpx;
+}
+
+.section-hint {
+  font-size: 26rpx;
+  color: #6a7282;
+  line-height: 42rpx;
+  margin-bottom: 28rpx;
+  padding: 0 4rpx;
+  letter-spacing: 0.3rpx;
+}
+
+.input-wrapper {
+  position: relative;
+  background: #f9fafb;
+  border-radius: 18rpx;
+  border: 2rpx solid #e5e7eb;
+  padding: 28rpx 88rpx 28rpx 28rpx;
+  min-height: 220rpx;
+  display: flex;
+  align-items: flex-start;
+  transition: all 0.3s ease;
+  
+  &:focus-within {
+    border-color: #00bc7d;
+    background: #ffffff;
+    box-shadow: 0px 0px 0px 4rpx rgba(0, 188, 125, 0.1);
+  }
+}
+
+.details-input {
+  flex: 1;
+  font-size: 30rpx;
+  color: #1e2939;
+  line-height: 48rpx;
+  min-height: 160rpx;
+  width: 100%;
+  letter-spacing: 0.3rpx;
+}
+
+.input-placeholder {
+  color: #9ca3af;
+  font-size: 30rpx;
+  line-height: 44rpx;
+}
+
+.voice-btn {
+  position: absolute;
+  right: 20rpx;
+  top: 20rpx;
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  border-radius: 50%;
+  box-shadow: 0px 4rpx 8rpx rgba(0, 0, 0, 0.1), 0px 2rpx 4rpx rgba(0, 0, 0, 0.06);
+  transition: all 0.2s ease;
+  border: 1rpx solid #e5e7eb;
+  
+  &:active {
+    transform: scale(0.92);
+    box-shadow: 0px 2rpx 4rpx rgba(0, 0, 0, 0.1);
+  }
+}
+
+.voice-icon {
+  font-size: 36rpx;
+  line-height: 52rpx;
+}
+
+// 确认按钮区域
+.confirm-section {
+  padding: 0 24rpx;
+  margin-top: 32rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.confirm-btn {
+  width: 100%;
+  max-width: 100%;
+  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
+  border-radius: 24rpx;
+  padding: 40rpx 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0px 8rpx 16rpx rgba(0, 188, 125, 0.25), 0px 4rpx 8rpx rgba(0, 188, 125, 0.15);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+  }
+  
+  &:active {
+    transform: translateY(2rpx);
+    box-shadow: 0px 4rpx 12rpx rgba(0, 188, 125, 0.25), 0px 2rpx 4rpx rgba(0, 188, 125, 0.15);
+    
+    &::before {
+      left: 100%;
+    }
+  }
+  
+  &.disabled {
+    background: #e5e7eb;
+    box-shadow: none;
+    opacity: 0.5;
+    cursor: not-allowed;
+    
+    &:active {
+      transform: none;
+    }
+  }
+}
+
+.confirm-btn-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 48rpx;
+  letter-spacing: 0.5rpx;
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.confirm-btn.disabled .confirm-btn-text {
+  color: #9ca3af;
+}

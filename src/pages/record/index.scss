@@ -1,39 +1,39 @@
 .record-page {
   min-height: 100vh;
   background: #f9fafb;
-  padding-bottom: 100px;
+  padding-bottom: 100rpx;
 }
 
 // 页面头部
 .page-header {
   background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 32px 16px 16px;
+  border-bottom: 1rpx solid #e5e7eb;
+  padding: 48rpx 24rpx 24rpx;
 }
 
 .page-title {
   display: block;
-  font-size: 24px;
+  font-size: 38rpx;
   font-weight: bold;
   color: #1e2939;
-  line-height: 32px;
-  margin-bottom: 8px;
+  line-height: 52rpx;
+  margin-bottom: 12rpx;
 }
 
 .page-subtitle {
   display: block;
-  font-size: 14px;
+  font-size: 28rpx;
   color: #6a7282;
-  line-height: 20px;
+  line-height: 40rpx;
 }
 
 // 记录方式选择
 .record-methods {
   display: flex;
-  margin: 16px;
+  margin: 24rpx;
   background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: 20rpx;
+  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
   overflow: hidden;
 }
 
@@ -42,10 +42,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px;
-  gap: 8px;
+  padding: 24rpx 16rpx;
+  gap: 12rpx;
   background: #ffffff;
-  border-right: 1px solid #f3f4f6;
+  border-right: 1rpx solid #f3f4f6;
+  transition: all 0.2s ease;
   
   &:last-child {
     border-right: none;
@@ -57,13 +58,13 @@
 }
 
 .method-icon {
-  width: 48px;
-  height: 48px;
+  width: 56rpx;
+  height: 56rpx;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 28rpx;
   flex-shrink: 0;
 }
 
@@ -71,14 +72,21 @@
   background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
 }
 
-.text-icon,
+.text-icon {
+  background: #f3f4f6;
+}
+
 .history-icon {
   background: #f3f4f6;
 }
 
+.method-card.active .history-icon {
+  background: linear-gradient(to right, #6b7280 0%, #4b5563 100%);
+}
+
 .method-text {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 26rpx;
+  line-height: 36rpx;
   text-align: center;
 }
 
@@ -94,162 +102,674 @@
 // AI拍照识别区域
 .ai-recognition-section {
   background: linear-gradient(136.58deg, #00bc7d 0%, #00bba7 100%);
-  border-radius: 16px;
-  padding: 24px;
-  margin: 16px;
+  border-radius: 24rpx;
+  padding: 32rpx 24rpx;
+  margin: 24rpx;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24rpx;
 }
 
 .ai-title {
-  font-size: 20px;
+  font-size: 34rpx;
   font-weight: bold;
   color: #ffffff;
-  line-height: 28px;
+  line-height: 48rpx;
 }
 
 .ai-subtitle {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #d0fae5;
-  line-height: 20px;
+  line-height: 40rpx;
 }
 
 .upload-area {
   background: rgba(255, 255, 255, 0.1);
-  border: 2px dashed rgba(255, 255, 255, 0.3);
-  border-radius: 14px;
-  padding: 40px 24px;
+  border: 2rpx dashed rgba(255, 255, 255, 0.3);
+  border-radius: 20rpx;
+  padding: 60rpx 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  min-height: 240px;
+  gap: 16rpx;
+  min-height: 360rpx;
+  position: relative;
+  overflow: hidden;
 }
 
 .upload-icon {
-  font-size: 64px;
-  width: 64px;
-  height: 64px;
+  width: 120rpx;
+  height: 120rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: 16rpx;
+}
+
+.upload-icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .upload-text {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #ffffff;
-  line-height: 20px;
+  line-height: 40rpx;
   text-align: center;
+  font-weight: 500;
 }
 
 .upload-hint {
-  font-size: 12px;
+  font-size: 24rpx;
   color: #d0fae5;
-  line-height: 16px;
+  line-height: 32rpx;
   text-align: center;
+}
+
+.uploaded-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .action-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16rpx;
+}
+
+.text-input-card .action-buttons {
+  grid-template-columns: 1fr;
+  margin-top: 8rpx;
 }
 
 .action-btn {
-  height: 48px;
-  border-radius: 14px;
+  height: 56rpx;
+  border-radius: 16rpx;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s ease;
 }
 
 .primary-btn {
-  background: #ffffff;
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+  box-shadow: 0px 4rpx 12rpx rgba(0, 188, 125, 0.3);
+}
+
+.text-input-card .primary-btn {
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
 }
 
 .secondary-btn {
   background: rgba(255, 255, 255, 0.2);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
 }
 
 .primary-btn .btn-text {
-  font-size: 16px;
+  font-size: 28rpx;
   font-weight: 600;
-  color: #009966;
-  line-height: 24px;
+  color: #ffffff;
+  line-height: 40rpx;
+}
+
+.text-input-card .primary-btn .btn-text {
+  color: #ffffff;
 }
 
 .secondary-btn .btn-text {
-  font-size: 16px;
+  font-size: 28rpx;
   font-weight: 600;
   color: #ffffff;
-  line-height: 24px;
+  line-height: 40rpx;
+}
+
+// 文字记录区域
+.text-record-section {
+  padding: 0 24rpx;
+}
+
+// 餐次选择
+.meal-selector {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 24rpx;
+  padding: 0 24rpx;
+}
+
+.meal-option {
+  flex: 1;
+  background: #ffffff;
+  border: 2rpx solid #e5e7eb;
+  border-radius: 18rpx;
+  padding: 24rpx 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  transition: all 0.2s ease;
+  box-shadow: 0px 1rpx 3rpx rgba(0, 0, 0, 0.05);
+}
+
+.meal-option.active {
+  background: #f0fdf4;
+  border-width: 2rpx;
+  box-shadow: 0px 2rpx 8rpx rgba(0, 188, 125, 0.15);
+}
+
+.meal-icon {
+  font-size: 36rpx;
+  line-height: 44rpx;
+}
+
+.meal-name {
+  font-size: 26rpx;
+  color: #1e2939;
+  line-height: 36rpx;
+  font-weight: 500;
+}
+
+.meal-option.active .meal-name {
+  font-weight: 600;
+  color: #009966;
+}
+
+// 常用食物
+.common-foods-section {
+  margin-bottom: 24rpx;
+  padding: 0 24rpx;
+}
+
+.section-label {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 40rpx;
+  margin-bottom: 16rpx;
+}
+
+.common-foods-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+}
+
+.common-food-item {
+  background: #ffffff;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 14rpx;
+  padding: 18rpx 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 68rpx;
+  transition: all 0.2s ease;
+  box-shadow: 0px 1rpx 2rpx rgba(0, 0, 0, 0.04);
+}
+
+.common-food-item:active {
+  background: #f0fdf4;
+  border-color: #00bc7d;
+  transform: scale(0.98);
+}
+
+.common-food-text {
+  font-size: 26rpx;
+  color: #364153;
+  line-height: 36rpx;
+  text-align: center;
+  font-weight: 500;
+}
+
+.text-input-card {
+  background: #ffffff;
+  border-radius: 24rpx;
+  padding: 28rpx 24rpx;
+  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
+  margin: 0 24rpx 24rpx;
+}
+
+.input-label {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 40rpx;
+  margin-bottom: 16rpx;
+}
+
+.food-name-input {
+  background: #f9fafb;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  height: 64rpx;
+  font-size: 28rpx;
+  color: #1e2939;
+  line-height: 40rpx;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 24rpx;
+}
+
+.input-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.input-label-small {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #4a5565;
+  line-height: 36rpx;
+}
+
+.amount-input {
+  background: #f9fafb;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  height: 56rpx;
+  font-size: 28rpx;
+  color: #1e2939;
+  line-height: 40rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.time-picker {
+  background: #f9fafb;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.time-text {
+  font-size: 28rpx;
+  color: #1e2939;
+  line-height: 40rpx;
+}
+
+.time-placeholder {
+  font-size: 28rpx;
+  color: rgba(10, 10, 10, 0.4);
+  line-height: 40rpx;
+}
+
+.time-icon {
+  font-size: 24rpx;
+  color: #6a7282;
+}
+
+.input-placeholder {
+  font-size: 28rpx;
+  color: rgba(10, 10, 10, 0.4);
+  line-height: 40rpx;
 }
 
 // Tips卡片
 .tips-section {
   background: #ffffff;
-  border-radius: 14px;
-  padding: 16px;
-  margin: 16px;
-  box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin: 24rpx;
+  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
 }
 
 .tips-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
 }
 
 .tips-badge {
   background: #d0fae5;
-  border-radius: 4px;
-  padding: 4px 8px;
-  height: 24px;
+  border-radius: 8rpx;
+  padding: 6rpx 12rpx;
+  height: 32rpx;
   display: flex;
   align-items: center;
 }
 
 .tips-badge-text {
-  font-size: 12px;
+  font-size: 24rpx;
   font-weight: 600;
   color: #009966;
-  line-height: 16px;
+  line-height: 32rpx;
 }
 
 .tips-title {
-  font-size: 16px;
+  font-size: 34rpx;
   font-weight: 600;
   color: #1e2939;
-  line-height: 24px;
+  line-height: 48rpx;
 }
 
 .tips-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12rpx;
 }
 
 .tip-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 12rpx;
 }
 
 .tip-dot {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #00bc7d;
-  line-height: 20px;
-  margin-top: 0.5px;
+  line-height: 40rpx;
+  margin-top: 2rpx;
   flex-shrink: 0;
 }
 
 .tip-text {
-  font-size: 14px;
+  font-size: 28rpx;
   color: #4a5565;
-  line-height: 20px;
+  line-height: 40rpx;
   flex: 1;
+}
+
+// 历史记录区域
+.history-section {
+  padding: 0 24rpx 24rpx;
+}
+
+// 日期选择
+.date-selector {
+  margin-bottom: 24rpx;
+}
+
+.date-card {
+  background: #ffffff;
+  border-radius: 22rpx;
+  padding: 28rpx 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
+}
+
+.date-label {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 40rpx;
+  margin-bottom: 16rpx;
+}
+
+.date-display {
+  background: #f9fafb;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 16rpx;
+  padding: 20rpx 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+}
+
+.date-display:active {
+  background: #f3f4f6;
+  border-color: #00bc7d;
+}
+
+.date-text {
+  font-size: 30rpx;
+  color: #1e2939;
+  line-height: 42rpx;
+  font-weight: 600;
+}
+
+.date-icon {
+  font-size: 32rpx;
+  color: #6a7282;
+}
+
+.date-stats {
+  display: flex;
+  gap: 16rpx;
+}
+
+.stat-item {
+  flex: 1;
+  background: #ffffff;
+  border-radius: 18rpx;
+  padding: 24rpx 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
+}
+
+.stat-label {
+  font-size: 26rpx;
+  color: #6a7282;
+  line-height: 36rpx;
+}
+
+.stat-value {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #1e2939;
+  line-height: 52rpx;
+}
+
+// 历史记录列表
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.history-meal-card {
+  background: #ffffff;
+  border-radius: 22rpx;
+  padding: 28rpx 24rpx;
+  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
+  margin-bottom: 16rpx;
+}
+
+.meal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24rpx;
+  padding-bottom: 24rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.meal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+}
+
+.meal-type-icon {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  flex-shrink: 0;
+}
+
+.breakfast-icon {
+  background: #ffedd4;
+}
+
+.lunch-icon {
+  background: #dcfce7;
+}
+
+.dinner-icon {
+  background: #dbeafe;
+}
+
+.snack-icon {
+  background: #f3e8ff;
+}
+
+.meal-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.meal-card-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 48rpx;
+}
+
+.meal-card-time {
+  font-size: 26rpx;
+  color: #6a7282;
+  line-height: 36rpx;
+}
+
+.meal-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12rpx;
+}
+
+.meal-calorie {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 48rpx;
+}
+
+.meal-actions {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+}
+
+.action-icon {
+  width: 44rpx;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10rpx;
+  background: #f9fafb;
+  transition: all 0.2s ease;
+  font-size: 24rpx;
+  cursor: pointer;
+}
+
+.action-icon:active {
+  background: #f3f4f6;
+  transform: scale(0.95);
+}
+
+// 食物列表
+.food-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.food-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+  
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.food-info {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  flex: 1;
+}
+
+.food-name {
+  font-size: 28rpx;
+  color: #1e2939;
+  line-height: 40rpx;
+  font-weight: 500;
+}
+
+.food-amount {
+  font-size: 24rpx;
+  color: #6a7282;
+  line-height: 32rpx;
+  padding: 2rpx 8rpx;
+  background: #f9fafb;
+  border-radius: 6rpx;
+}
+
+.food-calorie {
+  font-size: 28rpx;
+  color: #4a5565;
+  line-height: 40rpx;
+  font-weight: 600;
+  min-width: 80rpx;
+  text-align: right;
+}
+
+// 空状态
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 24rpx;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  margin-bottom: 24rpx;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-size: 32rpx;
+  color: #1e2939;
+  line-height: 48rpx;
+  font-weight: 600;
+  margin-bottom: 12rpx;
+}
+
+.empty-hint {
+  font-size: 28rpx;
+  color: #6a7282;
+  line-height: 40rpx;
 }

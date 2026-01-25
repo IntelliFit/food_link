@@ -1,7 +1,7 @@
 .home-page {
     min-height: 100vh;
     background: #f9fafb;
-    padding-bottom: 100px;
+    padding-bottom: 100rpx;
     position: relative;
   }
   
@@ -12,7 +12,7 @@
     top: 0;
     left: 0;
     right: 0;
-    height: 360px;
+    height: 360rpx;
     background: linear-gradient(to bottom, #ecfdf5 0%, rgba(236, 253, 245, 0) 100%);
     pointer-events: none;
     z-index: 0;
@@ -21,10 +21,10 @@
   // 顶部渐变区域
   .header-section {
     background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-    padding: 32px 16px 24px;
+    padding: 48rpx 24rpx 32rpx;
     position: relative;
     z-index: 1;
-    min-height: 336px;
+    min-height: 400rpx;
     box-sizing: border-box;
   }
   
@@ -32,7 +32,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 24px;
+    margin-bottom: 32rpx;
   }
   
   .greeting-section {
@@ -41,23 +41,23 @@
   
   .greeting-title {
     display: block;
-    font-size: 24px;
+    font-size: 38rpx;
     font-weight: bold;
     color: #ffffff;
-    line-height: 32px;
-    margin-bottom: 4px;
+    line-height: 52rpx;
+    margin-bottom: 10rpx;
   }
   
   .greeting-subtitle {
     display: block;
-    font-size: 14px;
+    font-size: 28rpx;
     color: #d0fae5;
-    line-height: 20px;
+    line-height: 40rpx;
   }
   
   .trend-icon {
-    width: 40px;
-    height: 40px;
+    width: 56rpx;
+    height: 56rpx;
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     display: flex;
@@ -66,76 +66,77 @@
   }
   
   .icon-placeholder {
-    width: 24px;
-    height: 24px;
+    width: 32rpx;
+    height: 32rpx;
     background: rgba(255, 255, 255, 0.8);
-    border-radius: 4px;
+    border-radius: 4rpx;
   }
   
   // 今日摄入卡片
   .intake-card {
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    padding: 16px;
+    border-radius: 24rpx;
+    padding: 24rpx;
   }
   
   .intake-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 24rpx;
   }
   
   .intake-label {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #d0fae5;
-    line-height: 20px;
+    line-height: 40rpx;
   }
   
   .target-label {
-    font-size: 12px;
+    font-size: 26rpx;
     color: #d0fae5;
-    line-height: 16px;
+    line-height: 36rpx;
   }
   
   .calorie-section {
     display: flex;
     align-items: baseline;
-    margin-bottom: 16px;
+    margin-bottom: 24rpx;
   }
   
   .calorie-value {
-    font-size: 36px;
+    font-size: 72rpx;
     font-weight: bold;
     color: #ffffff;
-    line-height: 40px;
-    margin-right: 8px;
+    line-height: 84rpx;
+    margin-right: 12rpx;
   }
   
   .calorie-target {
-    font-size: 18px;
+    font-size: 32rpx;
     color: #d0fae5;
-    line-height: 28px;
+    line-height: 48rpx;
   }
   
   .progress-bar {
     width: 100%;
-    height: 8px;
+    height: 12rpx;
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 9999px;
-    margin-bottom: 16px;
+    border-radius: 9999rpx;
+    margin-bottom: 24rpx;
     overflow: hidden;
   }
   
   .progress-fill {
     height: 100%;
     background: #ffffff;
-    border-radius: 9999px;
+    border-radius: 9999rpx;
   }
   
   .macros-section {
     display: flex;
     justify-content: space-between;
+    gap: 16rpx;
   }
   
   .macro-item {
@@ -143,56 +144,56 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 8rpx;
   }
   
   .macro-icon {
-    font-size: 16px;
-    margin-bottom: 4px;
+    font-size: 32rpx;
+    margin-bottom: 6rpx;
   }
   
   .macro-label {
-    font-size: 12px;
+    font-size: 26rpx;
     color: #d0fae5;
-    line-height: 16px;
+    line-height: 36rpx;
   }
   
   .macro-value {
-    font-size: 18px;
+    font-size: 32rpx;
     font-weight: 600;
     color: #ffffff;
-    line-height: 28px;
+    line-height: 48rpx;
   }
   
   .macro-target {
-    font-size: 12px;
+    font-size: 26rpx;
     color: #d0fae5;
-    line-height: 16px;
+    line-height: 36rpx;
   }
   
   // 快捷记录
   .quick-record-section {
     background: #ffffff;
     // 上浮叠在 header 上（设计稿效果）
-    margin: -24px 16px 16px;
-    padding: 16px;
-    border-radius: 16px;
-    box-shadow: 0px 10px 15px rgba(0, 0, 0, 0.1), 0px 4px 6px rgba(0, 0, 0, 0.1);
+    margin: -32rpx 24rpx 24rpx;
+    padding: 24rpx;
+    border-radius: 24rpx;
+    box-shadow: 0px 10rpx 15rpx rgba(0, 0, 0, 0.1), 0px 4rpx 6rpx rgba(0, 0, 0, 0.1);
     position: relative;
     z-index: 2;
   }
   
   .section-title {
-    font-size: 16px;
+    font-size: 34rpx;
     font-weight: 600;
     color: #1e2939;
-    line-height: 24px;
-    margin-bottom: 12px;
+    line-height: 48rpx;
+    margin-bottom: 20rpx;
   }
   
   .quick-buttons {
     display: flex;
-    gap: 12px;
+    gap: 20rpx;
   }
   
   .quick-button {
@@ -200,9 +201,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 12px;
-    border-radius: 14px;
-    gap: 8px;
+    padding: 20rpx 16rpx;
+    border-radius: 20rpx;
+    gap: 12rpx;
   }
   
   .photo-btn {
@@ -218,13 +219,13 @@
   }
   
   .button-icon {
-    width: 44px;
-    height: 44px;
+    width: 60rpx;
+    height: 60rpx;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 36rpx;
     color: #ffffff;
   }
   
@@ -241,75 +242,78 @@
   }
   
   .button-text {
-    font-size: 12px;
+    font-size: 28rpx;
     color: #364153;
-    line-height: 16px;
+    line-height: 40rpx;
+    font-weight: 500;
   }
   
   // 今日餐食
   .meals-section {
-    padding: 0 16px;
-    margin-top: 12px;
+    padding: 0 24rpx;
+    margin-top: 20rpx;
   }
   
   .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 20rpx;
   }
   
   .view-all-btn {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8rpx;
+    padding: 6rpx 0;
   }
   
   .view-all-text {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #009966;
-    line-height: 20px;
+    line-height: 40rpx;
+    font-weight: 500;
   }
   
   .arrow {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #009966;
   }
   
   .meals-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 20rpx;
   }
   
   .meal-card {
     background: #ffffff;
-    border-radius: 14px;
-    padding: 16px;
-    box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+    border-radius: 22rpx;
+    padding: 24rpx;
+    box-shadow: 0px 1rpx 3rpx rgba(0, 0, 0, 0.1), 0px 1rpx 2rpx rgba(0, 0, 0, 0.1);
   }
   
   .meal-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 12px;
+    margin-bottom: 20rpx;
   }
   
   .meal-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 16rpx;
   }
   
   .meal-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 52rpx;
+    height: 52rpx;
+    border-radius: 14rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 36rpx;
   }
   
   .breakfast-icon {
@@ -323,58 +327,60 @@
   .meal-details {
     display: flex;
     flex-direction: column;
+    gap: 6rpx;
   }
   
   .meal-name {
-    font-size: 16px;
+    font-size: 34rpx;
     font-weight: 600;
     color: #1e2939;
-    line-height: 24px;
+    line-height: 48rpx;
   }
   
   .meal-time {
-    font-size: 12px;
+    font-size: 26rpx;
     color: #6a7282;
-    line-height: 16px;
+    line-height: 36rpx;
   }
   
   .meal-calorie {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+    gap: 6rpx;
   }
   
   .calorie-text {
-    font-size: 16px;
+    font-size: 34rpx;
     font-weight: 600;
     color: #1e2939;
-    line-height: 24px;
+    line-height: 48rpx;
   }
   
   .calorie-label {
-    font-size: 12px;
+    font-size: 26rpx;
     color: #6a7282;
-    line-height: 16px;
+    line-height: 36rpx;
   }
   
   .meal-progress {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 16rpx;
+    margin-bottom: 20rpx;
   }
   
   .meal-progress-bar {
     flex: 1;
-    height: 6px;
+    height: 10rpx;
     background: #f3f4f6;
-    border-radius: 9999px;
+    border-radius: 9999rpx;
     overflow: hidden;
   }
   
   .meal-progress-fill {
     height: 100%;
-    border-radius: 9999px;
+    border-radius: 9999rpx;
   }
   
   .breakfast-progress {
@@ -386,22 +392,23 @@
   }
   
   .progress-percent {
-    font-size: 12px;
+    font-size: 26rpx;
     color: #6a7282;
-    line-height: 16px;
-    min-width: 30px;
+    line-height: 36rpx;
+    min-width: 44rpx;
+    font-weight: 500;
   }
   
   .meal-tags {
     display: flex;
-    gap: 8px;
+    gap: 12rpx;
     flex-wrap: wrap;
   }
   
   .meal-tag {
-    padding: 4px 8px;
-    border-radius: 4px;
-    height: 24px;
+    padding: 8rpx 16rpx;
+    border-radius: 8rpx;
+    height: 32rpx;
     display: flex;
     align-items: center;
   }
@@ -415,8 +422,9 @@
   }
   
   .tag-text {
-    font-size: 12px;
-    line-height: 16px;
+    font-size: 26rpx;
+    line-height: 36rpx;
+    font-weight: 500;
   }
   
   .breakfast-tag .tag-text {
@@ -430,26 +438,26 @@
   // AI建议
   .ai-suggestion-section {
     background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
-    margin: 16px;
-    padding: 16px;
-    border-radius: 16px;
+    margin: 24rpx;
+    padding: 24rpx;
+    border-radius: 24rpx;
   }
   
   .ai-content {
     display: flex;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 20rpx;
+    margin-bottom: 20rpx;
   }
   
   .ai-icon {
-    width: 40px;
-    height: 40px;
+    width: 56rpx;
+    height: 56rpx;
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 40rpx;
     flex-shrink: 0;
   }
   
@@ -459,93 +467,96 @@
   
   .ai-title {
     display: block;
-    font-size: 16px;
+    font-size: 34rpx;
     font-weight: 600;
     color: #ffffff;
-    line-height: 24px;
-    margin-bottom: 4px;
+    line-height: 48rpx;
+    margin-bottom: 10rpx;
   }
   
   .ai-description {
     display: block;
-    font-size: 14px;
+    font-size: 28rpx;
     color: #f3e8ff;
-    line-height: 20px;
+    line-height: 40rpx;
   }
   
   .ai-button {
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    height: 36px;
+    border-radius: 14rpx;
+    height: 52rpx;
     display: flex;
     align-items: center;
     justify-content: center;
   }
   
   .ai-button-text {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #ffffff;
-    line-height: 20px;
+    line-height: 40rpx;
+    font-weight: 500;
   }
   
   // 今日运动
   .exercise-section {
     background: #ffffff;
-    margin: 16px;
-    padding: 16px;
-    border-radius: 14px;
-    box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1), 0px 1px 2px rgba(0, 0, 0, 0.1);
+    margin: 24rpx;
+    padding: 24rpx;
+    border-radius: 22rpx;
+    box-shadow: 0px 1rpx 3rpx rgba(0, 0, 0, 0.1), 0px 1rpx 2rpx rgba(0, 0, 0, 0.1);
   }
   
   .exercise-header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 16rpx;
   }
   
   .exercise-icon {
-    width: 36px;
-    height: 36px;
+    width: 52rpx;
+    height: 52rpx;
     background: #dbeafe;
-    border-radius: 10px;
+    border-radius: 14rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 36rpx;
   }
   
   .record-btn {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #009966;
-    line-height: 20px;
+    line-height: 40rpx;
+    font-weight: 500;
+    padding: 6rpx 0;
   }
   
   .exercise-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-top: 12px;
+    gap: 20rpx;
+    margin-top: 20rpx;
   }
   
   .stat-card {
     background: #eff6ff;
-    border-radius: 10px;
-    padding: 12px;
+    border-radius: 14rpx;
+    padding: 20rpx;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8rpx;
   }
   
   .stat-label {
-    font-size: 12px;
+    font-size: 26rpx;
     color: #4a5565;
-    line-height: 16px;
+    line-height: 36rpx;
   }
   
   .stat-value {
-    font-size: 20px;
+    font-size: 44rpx;
     font-weight: bold;
     color: #155dfc;
-    line-height: 28px;
+    line-height: 60rpx;
   }
   
