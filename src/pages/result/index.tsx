@@ -8,10 +8,10 @@ import './index.scss'
 interface NutritionItem {
   id: number
   name: string
-  weight: number
-  calorie: number
-  intake: number
-  ratio: number
+  weight: number // AI 估算的食物总重量（可通过 +- 调节）
+  calorie: number // 基于 weight 的总热量
+  intake: number // 实际摄入量 = weight × ratio
+  ratio: number // 摄入比例（0-100%，独立调节）
   protein: number
   carbs: number
   fat: number
@@ -50,7 +50,8 @@ export default function ResultPage() {
   const calculateNutritionStats = (items: NutritionItem[]) => {
     const stats = items.reduce(
       (acc, item) => {
-        const ratio = item.intake / item.weight
+        // 使用 ratio 来计算实际摄入的营养
+        const ratio = item.ratio / 100
         return {
           calories: acc.calories + item.calorie * ratio,
           protein: acc.protein + item.protein * ratio,
@@ -62,7 +63,7 @@ export default function ResultPage() {
     )
     setNutritionStats(stats)
     
-    // 计算总重量
+    // 计算总摄入重量
     const total = items.reduce((sum, item) => sum + item.intake, 0)
     setTotalWeight(Math.round(total))
   }
@@ -118,16 +119,46 @@ export default function ResultPage() {
     })
   }
 
+  // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id === id) {
-          const newIntake = Math.max(0, item.intake + delta)
-          const newRatio = Math.round((newIntake / item.weight) * 100)
+          // 调节的是 weight（AI 估算的食物总重量）
+          const newWeight = Math.max(10, item.weight + delta) // 最小 10g
+          // ratio 保持不变，重新计算 intake
+          const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
             ...item,
-            intake: newIntake,
-            ratio: newRatio
+            weight: newWeight,
+            intake: newIntake
+            // ratio 不变
+          }
+        }
+        return item
+      })
+      
+      // 重新计算营养统计
+      calculateNutritionStats(updatedItems)
+      
+      return updatedItems
+    })
+  }
+
+  // 调节摄入比例（滑块或其他控件）
+  const handleRatioAdjust = (id: number, newRatio: number) => {
+    setNutritionItems(items => {
+      const updatedItems = items.map(item => {
+        if (item.id === id) {
+          // 调节的是 ratio（摄入比例）
+          const clampedRatio = Math.max(0, Math.min(100, newRatio)) // 0-100%
+          // weight 保持不变，重新计算 intake
+          const newIntake = Math.round(item.weight * (clampedRatio / 100))
+          return {
+            ...item,
+            ratio: clampedRatio,
+            intake: newIntake
+            // weight 不变
           }
         }
         return item
@@ -260,7 +291,7 @@ export default function ResultPage() {
                 <View className='ingredient-header'>
                   <View className='ingredient-info'>
                     <Text className='ingredient-name'>{item.name}</Text>
-                    <Text className='ingredient-weight'>{item.weight} g</Text>
+                    <Text className='ingredient-weight'>估算: {item.weight} g</Text>
                   </View>
                   <View className='ingredient-actions'>
                     <View 
@@ -276,13 +307,13 @@ export default function ResultPage() {
                       <Text className='action-icon'>+</Text>
                     </View>
                     <Text className='divider'>|</Text>
-                    <Text className='intake-text'>摄入: {item.intake}g</Text>
+                    <Text className='intake-text'>实际摄入: {item.intake}g</Text>
                   </View>
                 </View>
                 <View className='ingredient-footer'>
                   <View className='calorie-info'>
                     <Text className='calorie-value'>
-                      {Math.round(item.calorie * (item.intake / item.weight))} kcal
+                      {Math.round(item.calorie * (item.ratio / 100))} kcal
                     </Text>
                     <Text className='calorie-arrow'>↓</Text>
                   </View>
