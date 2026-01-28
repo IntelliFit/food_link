@@ -375,34 +375,22 @@
   align-items: center;
   gap: 12rpx;
   position: relative;
+  min-height: 40rpx;
 }
 
 .ratio-slider {
   flex: 1;
-  height: 12rpx;
-  background: #e5e7eb;
-  border-radius: 6rpx;
-  position: relative;
-  overflow: hidden;
+  margin: 0;
+  padding: 0;
 }
 
-.ratio-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  border-radius: 6rpx;
-  transition: width 0.3s ease;
-}
-
-.ratio-text {
+.ratio-value {
   font-size: 24rpx;
   color: #00bc7d;
   font-weight: 600;
   line-height: 32rpx;
   white-space: nowrap;
-  min-width: 50rpx;
+  min-width: 60rpx;
   text-align: right;
 }
 

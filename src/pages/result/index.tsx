@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Slider } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem } from '../../utils/api'
@@ -320,13 +320,20 @@ export default function ResultPage() {
                   <View className='ratio-info'>
                     <Text className='ratio-label'>摄入比例</Text>
                     <View className='ratio-slider-wrapper'>
-                      <View className='ratio-slider'>
-                        <View 
-                          className='ratio-fill'
-                          style={{ width: `${item.ratio}%` }}
-                        />
-                      </View>
-                      <Text className='ratio-text'>{item.ratio}%</Text>
+                      <Slider
+                        className='ratio-slider'
+                        value={item.ratio}
+                        min={0}
+                        max={100}
+                        step={5}
+                        activeColor='#10b981'
+                        backgroundColor='#e5e7eb'
+                        blockSize={24}
+                        blockColor='#10b981'
+                        showValue={false}
+                        onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                      />
+                      <Text className='ratio-value'>{item.ratio}%</Text>
                     </View>
                   </View>
                 </View>
