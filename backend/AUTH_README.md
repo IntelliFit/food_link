@@ -184,19 +184,19 @@ backend/
 
 1. 启动后端服务：
 ```bash
-uvicorn main:app --reload --port 8888
+uvicorn main:app --reload --port 3010
 ```
 
 2. 测试登录接口：
 ```bash
-curl -X POST http://localhost:8888/api/login \
+curl -X POST http://localhost:3010/api/login \
   -H "Content-Type: application/json" \
   -d '{"code": "your_wechat_code"}'
 ```
 
 3. 测试鉴权接口：
 ```bash
-curl -X GET http://localhost:8888/api/user/profile \
+curl -X GET http://localhost:3010/api/user/profile \
   -H "Authorization: Bearer your_access_token"
 ```
 

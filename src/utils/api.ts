@@ -3,7 +3,8 @@ import Taro from '@tarojs/taro'
 // API 基础URL配置
 // 开发环境：使用 localhost（需要确保后端服务运行在 8000 端口）
 // 生产环境：请修改为实际的后端服务器地址
-const API_BASE_URL = 'http://localhost:8888'
+const API_BASE_URL = 'https://healthymax.cn'
+// const API_BASE_URL = 'http://localhost:3010'
 
 // 分析请求接口
 export interface AnalyzeRequest {
@@ -275,6 +276,16 @@ export async function login(code: string, phoneCode?: string): Promise<LoginResp
     return loginData
   } catch (error: any) {
     console.error('登录API调用失败:', error)
+    console.error('错误详情:', JSON.stringify(error))
+    // 提取更有意义的错误信息
+    const errMsg = error.errMsg || error.message || ''
+    if (errMsg.includes('ERR_CERT')) {
+      throw new Error('SSL证书验证失败，请检查服务器证书配置')
+    } else if (errMsg.includes('timeout')) {
+      throw new Error('请求超时，请稍后重试')
+    } else if (errMsg.includes('fail')) {
+      throw new Error(`网络请求失败: ${errMsg}`)
+    }
     throw new Error(error.message || '连接服务器失败，请检查网络')
   }
 }
