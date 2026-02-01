@@ -1,0 +1,503 @@
+/* 健康档案 - 分步卡片答题式 */
+.health-profile-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f0fdf9 0%, #f5f6f8 24%);
+  padding: 0 0 64rpx;
+  box-sizing: border-box;
+}
+
+/* 进度条 */
+.progress-wrap {
+  padding: 32rpx 40rpx 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-dots {
+  display: flex;
+  gap: 12rpx;
+  flex: 1;
+}
+
+.progress-dot {
+  flex: 1;
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #e2e8f0;
+  transition: all 0.25s ease;
+
+  &.active {
+    background: #99f6e4;
+  }
+
+  &.current {
+    background: #00bc7d;
+    transform: scaleY(1.2);
+  }
+}
+
+.progress-text {
+  font-size: 24rpx;
+  color: #64748b;
+  margin-left: 24rpx;
+  min-width: 64rpx;
+  text-align: right;
+}
+
+/* 左滑下一题提示（方案 D） */
+.progress-swipe-hint {
+  font-size: 22rpx;
+  color: #94a3b8;
+  font-weight: normal;
+}
+
+/* 卡片滑动容器：用 rpx 固定宽度，避免小程序百分比计算异常 */
+.cards-wrap {
+  width: 100%;
+  overflow: hidden;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+}
+
+.cards-track {
+  display: flex;
+  /* 可见区 686rpx，10 张卡：问卷 8 步 + 上传体检报告 + 最后一步保存 */
+  width: 6860rpx;
+  will-change: transform;
+}
+
+.card.step-card {
+  flex: 0 0 686rpx;
+  width: 686rpx;
+  min-height: 520rpx;
+  background: #fff;
+  border-radius: 32rpx;
+  padding: 48rpx 40rpx 40rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 188, 125, 0.08);
+  margin-right: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.step-card-step {
+  font-size: 24rpx;
+  color: #00bc7d;
+  letter-spacing: 0.5px;
+  margin-bottom: 16rpx;
+}
+
+.step-card-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 40rpx;
+  line-height: 1.4;
+}
+
+/* 单选项 - 大卡片（性别） */
+.choice-row {
+  display: flex;
+  gap: 24rpx;
+  flex: 1;
+  align-items: stretch;
+}
+
+/* 性别选项上下摆放，宽度仅比文字略宽 */
+.choice-row-vertical {
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+
+  .option-card.big {
+    flex: none;
+    width: auto;
+    min-width: 180rpx;
+    min-height: 100rpx;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 16rpx;
+    padding: 28rpx 36rpx;
+
+    .option-icon {
+      margin-bottom: 0;
+      margin-right: 0;
+      font-size: 44rpx;
+    }
+
+    .option-label {
+      font-size: 32rpx;
+    }
+  }
+}
+
+/* 所有带图标的选项：图标在文字前（横向），宽度仅比内容略宽 */
+.option-card {
+  flex: 0 0 auto;
+  border-radius: 24rpx;
+  border: 4rpx solid #e2e8f0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  padding: 28rpx 32rpx;
+  transition: all 0.25s ease;
+  background: #fff;
+  gap: 16rpx;
+
+  &.big {
+    min-height: 100rpx;
+  }
+
+  &.active,
+  &:active {
+    border-color: #00bc7d;
+    background: linear-gradient(145deg, #f0fdf9 0%, #e6fffa 100%);
+    box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.15);
+  }
+
+  .option-icon {
+    font-size: 64rpx;
+    margin-bottom: 0;
+    margin-right: 0;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .option-label {
+    font-size: 32rpx;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+
+  .option-desc {
+    font-size: 22rpx;
+    color: #64748b;
+    margin-top: 0;
+    text-align: left;
+  }
+}
+
+/* 活动水平 - 列表，选项宽度仅比文字略宽 */
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  align-items: flex-start;
+}
+
+/* 活动水平：图标在文字前，描述换行，宽度随内容 */
+.option-card.with-desc {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  flex-direction: row;
+  justify-content: flex-start;
+  padding: 24rpx 28rpx;
+  text-align: left;
+  min-height: auto;
+  gap: 20rpx;
+
+  .option-icon {
+    font-size: 40rpx;
+    margin-bottom: 0;
+    margin-right: 0;
+    flex-shrink: 0;
+  }
+
+  .option-label {
+    font-size: 30rpx;
+  }
+
+  .option-desc {
+    margin-top: 4rpx;
+    text-align: left;
+    font-size: 24rpx;
+  }
+}
+
+/* 多选 - 小卡片网格，选项宽度仅比文字略宽 */
+.option-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  margin-bottom: 32rpx;
+}
+
+/* 多选小卡片：图标在文字前，宽度随内容 */
+.option-card.small {
+  flex: 0 0 auto;
+  min-width: 160rpx;
+  min-height: 88rpx;
+  padding: 20rpx 24rpx;
+  justify-content: flex-start;
+  gap: 12rpx;
+
+  .option-icon {
+    font-size: 34rpx;
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  .option-label {
+    font-size: 26rpx;
+  }
+}
+
+/* 日期选择卡片 */
+.picker-card {
+  padding: 36rpx;
+  background: #f8fafc;
+  border-radius: 20rpx;
+  border: 2rpx dashed #cbd5e1;
+  margin-bottom: 32rpx;
+  text-align: center;
+}
+
+.picker-card-value {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.picker-card-hint {
+  font-size: 24rpx;
+  color: #64748b;
+  margin-top: 8rpx;
+}
+
+/* 快捷数字（身高/体重） */
+.quick-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+}
+
+.quick-num {
+  flex: 0 0 calc(20% - 16rpx);
+  padding: 24rpx 12rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  border: 2rpx solid transparent;
+  text-align: center;
+  transition: all 0.2s ease;
+
+  &.active {
+    background: #e6fffa;
+    border-color: #00bc7d;
+    color: #0d9488;
+  }
+
+  .quick-num-unit {
+    display: block;
+    font-size: 22rpx;
+    color: #64748b;
+    margin-top: 4rpx;
+  }
+}
+
+.input-card {
+  padding: 20rpx 24rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.card-input {
+  font-size: 28rpx;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+/* 卡片底部：上一题 + 确认 同一行（方案 D） */
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 32rpx;
+  gap: 24rpx;
+}
+
+.card-footer-single {
+  justify-content: flex-end;
+}
+
+.card-prev-link {
+  font-size: 28rpx;
+  color: #0d9488;
+  padding: 16rpx 0;
+  flex-shrink: 0;
+}
+
+/* 下一题 / 保存按钮：紧贴选项/文本框下方 */
+.card-next-btn {
+  flex: 1;
+  max-width: 420rpx;
+  margin-top: 0;
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #00bc7d;
+  background: #e6fffa;
+  border-radius: 44rpx;
+  border: none;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+
+  &.ready {
+    box-shadow: 0 4rpx 20rpx rgba(0, 188, 125, 0.25);
+  }
+
+  &.primary {
+    flex: none;
+    max-width: none;
+    color: #fff;
+    background: linear-gradient(135deg, #00bc7d 0%, #0d9488 100%);
+    margin-bottom: 24rpx;
+  }
+
+  &[disabled] {
+    opacity: 0.5;
+    color: #94a3b8;
+    background: #e2e8f0;
+    box-shadow: none;
+  }
+}
+
+.card-footer-single .card-next-btn {
+  flex: none;
+  max-width: none;
+}
+
+.step-card.last .skip-hint,
+.step-card.last .save-hint {
+  font-size: 24rpx;
+  color: #94a3b8;
+  text-align: center;
+  margin-bottom: 24rpx;
+}
+
+/* 上传体检报告卡片 */
+.report-card-desc {
+  font-size: 24rpx;
+  color: #64748b;
+  margin-bottom: 32rpx;
+  line-height: 1.5;
+}
+
+.report-upload-btn {
+  height: 96rpx;
+  line-height: 96rpx;
+  text-align: center;
+  font-size: 30rpx;
+  color: #00bc7d;
+  background: #e6fffa;
+  border-radius: 16rpx;
+  border: 2rpx dashed #00bc7d;
+  margin-bottom: 24rpx;
+
+  &::after {
+    border: none;
+  }
+}
+
+/* 体检报告识别结果展示（仅展示，未保存） */
+.report-result {
+  padding: 24rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  margin-bottom: 24rpx;
+  border: 2rpx solid #e2e8f0;
+}
+
+.report-result-title {
+  font-size: 24rpx;
+  color: #64748b;
+  display: block;
+  margin-bottom: 20rpx;
+  font-weight: 600;
+}
+
+.report-result-block {
+  margin-bottom: 20rpx;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.report-result-label {
+  font-size: 24rpx;
+  color: #00bc7d;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.report-result-item {
+  font-size: 26rpx;
+  color: #475569;
+  line-height: 1.6;
+  display: block;
+  margin-bottom: 4rpx;
+}
+
+.report-result-text {
+  font-size: 26rpx;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.result-mini {
+  text-align: center;
+  font-size: 26rpx;
+  color: #0d9488;
+  margin-bottom: 16rpx;
+}
+
+.ocr-link-btn {
+  margin-top: 16rpx;
+  height: auto;
+  line-height: 1.5;
+  padding: 20rpx;
+  font-size: 26rpx;
+  color: #64748b;
+  background: transparent;
+  border: none;
+
+  &::after {
+    border: none;
+  }
+}
+
+/* 底部上一题 */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24rpx 32rpx 48rpx;
+  background: linear-gradient(0deg, #fff 60%, transparent);
+}
+
+.nav-btn {
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  font-size: 28rpx;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 40rpx;
+  border: none;
+
+  &.prev {
+    color: #0d9488;
+    background: #f0fdf9;
+  }
+}

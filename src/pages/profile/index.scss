@@ -175,6 +175,26 @@
   border-radius: 9999rpx;
 }
 
+// 未完成健康档案引导条
+.onboarding-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 32rpx 24rpx;
+  padding: 24rpx 32rpx;
+  background: linear-gradient(135deg, #e6f7f2 0%, #f0fdf9 100%);
+  border-radius: 16rpx;
+  border-left: 6rpx solid #00bc7d;
+}
+.onboarding-banner-text {
+  font-size: 28rpx;
+  color: #0d9488;
+}
+.onboarding-banner-arrow {
+  font-size: 28rpx;
+  color: #00bc7d;
+}
+
 // 统计卡片
 .stats-cards {
   display: flex;

@@ -1,16 +1,22 @@
 import Taro from '@tarojs/taro'
 
-// API 基础URL配置
-// 开发环境：使用 localhost（需要确保后端服务运行在 8000 端口）
-// 生产环境：请修改为实际的后端服务器地址
-const API_BASE_URL = 'https://healthymax.cn'
-// const API_BASE_URL = 'http://localhost:3010'
+// API 基础 URL：从环境变量读取，未配置时使用生产地址
+// 开发：.env.development 中 TARO_APP_API_BASE_URL
+// 生产：.env.production 中 TARO_APP_API_BASE_URL
+const API_BASE_URL =
+  process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
 
-// 分析请求接口
+// 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
-  base64Image: string
+  base64Image?: string
+  /** Supabase 等公网图片 URL，分析时用此 URL 获取图片；标记样本/保存记录时也存此 URL */
+  image_url?: string
   additionalContext?: string
   modelName?: string
+  user_goal?: 'muscle_gain' | 'fat_loss' | 'maintain'
+  context_state?: string
+  remaining_calories?: number
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
 }
 
 // 营养成分接口
@@ -31,11 +37,107 @@ export interface FoodItem {
   nutrients: Nutrients
 }
 
-// 分析响应接口
+// 分析响应接口（含专业营养分析）
 export interface AnalyzeResponse {
   description: string
   insight: string
   items: FoodItem[]
+  pfc_ratio_comment?: string
+  absorption_notes?: string
+  context_advice?: string
+}
+
+/** 确认记录时提交的单条食物项（含调节后的 weight/ratio/intake） */
+export interface FoodRecordItemPayload {
+  name: string
+  weight: number
+  ratio: number
+  intake: number
+  nutrients: Nutrients
+}
+
+/** 确认记录请求：餐次 + 识别结果与营养汇总 + 用户状态与专业分析 */
+export interface SaveFoodRecordRequest {
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  image_path?: string
+  description?: string
+  insight?: string
+  items: FoodRecordItemPayload[]
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  total_weight_grams: number
+  context_state?: string
+  pfc_ratio_comment?: string
+  absorption_notes?: string
+  context_advice?: string
+}
+
+/** 单条偏差样本（标记样本接口请求项） */
+export interface CriticalSamplePayload {
+  image_path?: string
+  food_name: string
+  ai_weight: number
+  user_weight: number
+  deviation_percent: number
+}
+
+/** 单条饮食记录（列表接口返回） */
+export interface FoodRecord {
+  id: string
+  user_id: string
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  image_path?: string | null
+  description?: string | null
+  insight?: string | null
+  context_state?: string | null
+  pfc_ratio_comment?: string | null
+  absorption_notes?: string | null
+  context_advice?: string | null
+  items: Array<{
+    name: string
+    weight: number
+    ratio: number
+    intake: number
+    nutrients: Nutrients
+  }>
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  total_weight_grams: number
+  record_time: string
+  created_at: string
+}
+
+/** 首页今日摄入与宏量 */
+export interface HomeIntakeData {
+  current: number
+  target: number
+  progress: number
+  macros: {
+    protein: { current: number; target: number }
+    carbs: { current: number; target: number }
+    fat: { current: number; target: number }
+  }
+}
+
+/** 首页今日餐食单条 */
+export interface HomeMealItem {
+  type: string
+  name: string
+  time: string
+  calorie: number
+  target: number
+  progress: number
+  tags: string[]
+}
+
+/** 首页仪表盘接口返回（不含运动） */
+export interface HomeDashboard {
+  intakeData: HomeIntakeData
+  meals: HomeMealItem[]
 }
 
 // 登录请求接口
@@ -73,6 +175,53 @@ export interface UserInfo {
   telephone?: string
   create_time?: string
   update_time?: string
+  /** 健康档案相关（扩展字段） */
+  height?: number | null
+  weight?: number | null
+  birthday?: string | null
+  gender?: string | null
+  activity_level?: string | null
+  health_condition?: HealthCondition | null
+  bmr?: number | null
+  tdee?: number | null
+  onboarding_completed?: boolean
+}
+
+/** 健康档案中的病史/饮食/过敏等 JSON */
+export interface HealthCondition {
+  medical_history?: string[]
+  diet_preference?: string[]
+  allergies?: string[]
+  [key: string]: unknown
+}
+
+/** 健康档案（GET 返回） */
+export interface HealthProfile {
+  height?: number | null
+  weight?: number | null
+  birthday?: string | null
+  gender?: string | null
+  activity_level?: string | null
+  health_condition?: HealthCondition | null
+  bmr?: number | null
+  tdee?: number | null
+  onboarding_completed?: boolean
+}
+
+/** 提交健康档案问卷请求 */
+export interface HealthProfileUpdateRequest {
+  gender?: string
+  birthday?: string
+  height?: number
+  weight?: number
+  activity_level?: string
+  medical_history?: string[]
+  diet_preference?: string[]
+  allergies?: string[]
+  /** 体检报告 OCR 识别结果，保存时与问卷一并写入 user_health_documents */
+  report_extract?: Record<string, unknown>
+  /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
+  report_image_url?: string
 }
 
 // 更新用户信息请求接口
@@ -109,9 +258,30 @@ export async function imageToBase64(imagePath: string): Promise<string> {
  * @param request 分析请求参数
  * @returns Promise<AnalyzeResponse> 分析结果
  */
+/**
+ * 食物分析前上传图片到 Supabase，返回公网 URL
+ */
+export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUrl: string }> {
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/upload-analyze-image`,
+    method: 'POST',
+    header: { 'Content-Type': 'application/json' },
+    data: { base64Image },
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    const msg = (response.data as any)?.detail || '上传图片失败'
+    throw new Error(msg)
+  }
+  return response.data as { imageUrl: string }
+}
+
 export async function analyzeFoodImage(
   request: AnalyzeRequest
 ): Promise<AnalyzeResponse> {
+  if (!request.base64Image && !request.image_url) {
+    throw new Error('请提供 base64Image 或 image_url')
+  }
   try {
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze`,
@@ -120,9 +290,14 @@ export async function analyzeFoodImage(
         'Content-Type': 'application/json'
       },
       data: {
-        base64Image: request.base64Image,
+        ...(request.base64Image != null && { base64Image: request.base64Image }),
+        ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
         additionalContext: request.additionalContext || '',
-        modelName: request.modelName || 'qwen-vl-max'
+        modelName: request.modelName || 'qwen-vl-max',
+        ...(request.user_goal != null && { user_goal: request.user_goal }),
+        ...(request.context_state != null && request.context_state !== '' && { context_state: request.context_state }),
+        ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
+        ...(request.meal_type != null && request.meal_type !== '' && { meal_type: request.meal_type })
       },
       timeout: 60000 // 60秒超时
     })
@@ -137,6 +312,104 @@ export async function analyzeFoodImage(
     console.error('API调用失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
   }
+}
+
+/** 文字分析请求参数 */
+export interface AnalyzeTextParams {
+  text: string
+  user_goal?: 'muscle_gain' | 'fat_loss' | 'maintain'
+  context_state?: string
+  remaining_calories?: number
+}
+
+/**
+ * 根据文字描述分析食物营养成分（与图片分析返回结构一致）
+ * @param params 文本内容及可选的 user_goal、context_state、remaining_calories
+ * @returns Promise<AnalyzeResponse>
+ */
+export async function analyzeFoodText(params: AnalyzeTextParams | string): Promise<AnalyzeResponse> {
+  const payload = typeof params === 'string' ? { text: params.trim() } : {
+    text: params.text.trim(),
+    ...(params.user_goal != null && { user_goal: params.user_goal }),
+    ...(params.context_state != null && params.context_state !== '' && { context_state: params.context_state }),
+    ...(params.remaining_calories != null && { remaining_calories: params.remaining_calories })
+  }
+  try {
+    const response = await Taro.request({
+      url: `${API_BASE_URL}/api/analyze-text`,
+      method: 'POST',
+      header: { 'Content-Type': 'application/json' },
+      data: payload,
+      timeout: 60000
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '分析失败，请重试'
+      throw new Error(errorMsg)
+    }
+    return response.data as AnalyzeResponse
+  } catch (error: any) {
+    console.error('analyzeFoodText 失败:', error)
+    throw new Error(error.message || '连接服务器失败，请检查网络')
+  }
+}
+
+/**
+ * 拍照识别完成后确认记录：选择餐次后保存到服务器
+ * @param payload 餐次 + 识别结果与营养汇总
+ */
+export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ id: string; message: string }> {
+  const res = await authenticatedRequest('/api/food-record/save', {
+    method: 'POST',
+    data: payload,
+    timeout: 15000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '保存记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { id: string; message: string }
+}
+
+/**
+ * 提交偏差样本（用户点击「认为 AI 估算偏差大，点击标记样本」）
+ * 需登录。items 中每条为：食物名、AI 重量、用户修正重量、偏差百分比。
+ */
+export async function saveCriticalSamples(items: CriticalSamplePayload[]): Promise<{ message: string; count: number }> {
+  const res = await authenticatedRequest('/api/critical-samples', {
+    method: 'POST',
+    data: { items },
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '保存偏差样本失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; count: number }
+}
+
+/**
+ * 获取饮食记录列表，可选按日期筛选（YYYY-MM-DD）
+ */
+export async function getFoodRecordList(date?: string): Promise<{ records: FoodRecord[] }> {
+  const url = date ? `/api/food-record/list?date=${encodeURIComponent(date)}` : '/api/food-record/list'
+  const res = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { records: FoodRecord[] }
+}
+
+/**
+ * 获取首页仪表盘数据（今日摄入 + 今日餐食，不含运动）
+ */
+export async function getHomeDashboard(): Promise<HomeDashboard> {
+  const res = await authenticatedRequest('/api/home/dashboard', { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取首页数据失败'
+    throw new Error(msg)
+  }
+  return res.data as HomeDashboard
 }
 
 /**
@@ -333,6 +606,124 @@ export async function updateUserInfo(userInfo: UpdateUserInfoRequest): Promise<U
   } catch (error: any) {
     console.error('更新用户信息失败:', error)
     throw new Error(error.message || '更新用户信息失败')
+  }
+}
+
+/**
+ * 获取当前用户健康档案
+ * @returns Promise<HealthProfile>
+ */
+export async function getHealthProfile(): Promise<HealthProfile> {
+  try {
+    const response = await authenticatedRequest('/api/user/health-profile', {
+      method: 'GET'
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取健康档案失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as HealthProfile
+  } catch (error: any) {
+    console.error('获取健康档案失败:', error)
+    throw new Error(error.message || '获取健康档案失败')
+  }
+}
+
+/**
+ * 提交/更新健康档案问卷（后端自动计算 BMR、TDEE）
+ * @param data 问卷数据
+ * @returns Promise<HealthProfile>
+ */
+export async function updateHealthProfile(
+  data: HealthProfileUpdateRequest
+): Promise<HealthProfile> {
+  try {
+    const response = await authenticatedRequest('/api/user/health-profile', {
+      method: 'PUT',
+      data
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '更新健康档案失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as HealthProfile
+  } catch (error: any) {
+    console.error('更新健康档案失败:', error)
+    throw new Error(error.message || '更新健康档案失败')
+  }
+}
+
+/**
+ * 上传体检报告图片到 Supabase Storage，返回公网 URL。
+ * 小程序先调此接口拿 imageUrl，再调 extractHealthReportOcr 传 imageUrl 给多模态模型识别。
+ */
+export async function uploadReportImage(base64Image: string): Promise<{ imageUrl: string }> {
+  try {
+    const response = await authenticatedRequest('/api/user/health-profile/upload-report-image', {
+      method: 'POST',
+      data: { base64Image }
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '上传失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { imageUrl: string }
+  } catch (error: any) {
+    console.error('体检报告图片上传失败:', error)
+    throw new Error(error.message || '上传失败，请重试')
+  }
+}
+
+/**
+ * 仅识别体检报告/病例截图，不写入数据库。推荐先 uploadReportImage 拿 imageUrl 再传此处。
+ * @param options 传 imageUrl（推荐）或 base64Image
+ */
+export async function extractHealthReportOcr(options: {
+  imageUrl?: string
+  base64Image?: string
+}): Promise<{ extracted: Record<string, unknown> }> {
+  const { imageUrl, base64Image } = options
+  if (!imageUrl && !base64Image) {
+    throw new Error('请传 imageUrl 或 base64Image')
+  }
+  try {
+    const response = await authenticatedRequest('/api/user/health-profile/ocr-extract', {
+      method: 'POST',
+      data: imageUrl ? { imageUrl } : { base64Image }
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || 'OCR 识别失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { extracted: Record<string, unknown> }
+  } catch (error: any) {
+    console.error('健康报告 OCR 识别失败:', error)
+    throw new Error(error.message || '识别失败，请重试')
+  }
+}
+
+/**
+ * 上传体检报告/病例截图，OCR 识别并立即保存到健康档案
+ * @param base64Image Base64 编码的图片
+ * @returns Promise<{ extracted; message }>
+ */
+export async function uploadHealthReportOcr(base64Image: string): Promise<{
+  extracted: Record<string, unknown>
+  message: string
+}> {
+  try {
+    const response = await authenticatedRequest('/api/user/health-profile/ocr', {
+      method: 'POST',
+      data: { base64Image }
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || 'OCR 识别失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { extracted: Record<string, unknown>; message: string }
+  } catch (error: any) {
+    console.error('健康报告 OCR 失败:', error)
+    throw new Error(error.message || '识别失败，请重试')
   }
 }
 

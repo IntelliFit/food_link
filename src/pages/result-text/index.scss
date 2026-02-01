@@ -1,4 +1,4 @@
-.result-page {
+.result-text-page {
   min-height: 100vh;
   background: #f9fafb;
   padding-bottom: 200rpx;
@@ -8,72 +8,52 @@
   height: 100vh;
 }
 
-// 图片区域
-.image-section {
-  position: relative;
-  width: 100%;
+.text-result-header {
   background: #ffffff;
   margin: 24rpx 24rpx 32rpx;
   border-radius: 22rpx;
-  overflow: hidden;
+  padding: 28rpx 32rpx;
   box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
 }
 
-.result-image {
-  width: 100%;
-  height: 520rpx;
-  display: block;
-}
-
-.no-image-placeholder {
-  width: 100%;
-  height: 520rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f3f4f6;
-}
-
-.placeholder-text {
-  font-size: 32rpx;
-  color: #6a7282;
+.text-result-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1e2939;
   line-height: 48rpx;
 }
 
-.favorite-btn {
-  position: absolute;
-  top: 24rpx;
-  right: 24rpx;
-  width: 72rpx;
-  height: 72rpx;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 50%;
+.empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.1), 0px 1rpx 3rpx rgba(0, 0, 0, 0.06);
-  transition: all 0.2s ease;
-  
-  &:active {
-    transform: scale(0.95);
-  }
+  padding: 80rpx 48rpx;
+  min-height: 40vh;
 }
 
-.favorite-icon {
-  font-size: 40rpx;
-  line-height: 56rpx;
-  
-  &.favorited {
-    animation: heartBeat 0.3s ease;
-  }
+.empty-icon {
+  font-size: 80rpx;
+  line-height: 100rpx;
+  margin-bottom: 24rpx;
 }
 
-@keyframes heartBeat {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.2); }
+.empty-text {
+  font-size: 32rpx;
+  font-weight: 500;
+  color: #1e2939;
+  line-height: 48rpx;
+  margin-bottom: 12rpx;
 }
 
-// AI 健康透视
+.empty-hint {
+  font-size: 26rpx;
+  color: #6a7282;
+  line-height: 40rpx;
+  text-align: center;
+}
+
+// 以下与 result 页共用样式结构
 .health-section {
   background: #ffffff;
   margin: 0 24rpx 32rpx;
@@ -92,11 +72,6 @@
 .section-icon {
   font-size: 36rpx;
   line-height: 52rpx;
-  width: 44rpx;
-  height: 44rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .section-title {
@@ -117,7 +92,6 @@
   font-size: 28rpx;
   color: #364153;
   line-height: 42rpx;
-  letter-spacing: 0.3rpx;
 }
 
 .advice-box.pro-box {
@@ -132,7 +106,6 @@
   font-weight: 500;
 }
 
-// 营养统计
 .nutrition-section {
   background: #ffffff;
   margin: 0 24rpx 32rpx;
@@ -187,12 +160,6 @@
   line-height: 32rpx;
 }
 
-.weight-arrow {
-  font-size: 24rpx;
-  color: #00bc7d;
-  line-height: 32rpx;
-}
-
 .nutrition-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -230,7 +197,6 @@
   line-height: 48rpx;
 }
 
-// 包含成分
 .ingredients-section {
   background: #ffffff;
   margin: 0 24rpx 32rpx;
@@ -293,19 +259,17 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  
+
   &.minus-btn {
     background: #fee2e2;
-    
     &:active {
       background: #fecaca;
       transform: scale(0.95);
     }
   }
-  
+
   &.plus-btn {
     background: #dcfce7;
-    
     &:active {
       background: #bbf7d0;
       transform: scale(0.95);
@@ -361,12 +325,6 @@
   line-height: 40rpx;
 }
 
-.calorie-arrow {
-  font-size: 20rpx;
-  color: #9ca3af;
-  line-height: 28rpx;
-}
-
 .ratio-info {
   display: flex;
   align-items: center;
@@ -386,7 +344,6 @@
   display: flex;
   align-items: center;
   gap: 12rpx;
-  position: relative;
   min-height: 40rpx;
 }
 
@@ -406,14 +363,12 @@
   text-align: right;
 }
 
-// 确认按钮
 .confirm-section {
   padding: 0 24rpx 40rpx;
   margin-top: 24rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
 }
 
 .confirm-btn {
@@ -427,12 +382,10 @@
   justify-content: center;
   box-shadow: 0px 2rpx 8rpx rgba(0, 188, 125, 0.15), 0px 1rpx 3rpx rgba(0, 188, 125, 0.1);
   transition: all 0.3s ease;
-  margin-bottom: 16rpx;
   box-sizing: border-box;
-  
+
   &:active {
     transform: translateY(2rpx);
-    box-shadow: 0px 1rpx 4rpx rgba(0, 188, 125, 0.15), 0px 1rpx 2rpx rgba(0, 188, 125, 0.1);
   }
 }
 
@@ -444,37 +397,4 @@
   letter-spacing: 0.5rpx;
   text-align: center;
   width: 100%;
-  white-space: nowrap;
-}
-
-.warning-section {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8rpx;
-  padding: 16rpx;
-  transition: all 0.2s ease;
-
-  &:active {
-    opacity: 0.7;
-  }
-
-  &--done {
-    pointer-events: none;
-
-    .warning-text {
-      color: #059669;
-    }
-  }
-}
-
-.warning-icon {
-  font-size: 24rpx;
-  line-height: 32rpx;
-}
-
-.warning-text {
-  font-size: 24rpx;
-  color: #dc2626;
-  line-height: 32rpx;
 }

@@ -1,54 +1,60 @@
 import { View, Text } from '@tarojs/components'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
+import { getHomeDashboard, getAccessToken, type HomeIntakeData, type HomeMealItem } from '../../utils/api'
 
 import './index.scss'
 
-export default function IndexPage() {
-  // 示例数据，实际应该从接口获取
-  const [intakeData] = useState({
-    current: 1248,
-    target: 2000,
-    progress: 62.4,
-    macros: {
-      protein: { current: 85, target: 120 },
-      carbs: { current: 150, target: 250 },
-      fat: { current: 45, target: 65 }
-    }
-  })
+const DEFAULT_INTAKE: HomeIntakeData = {
+  current: 0,
+  target: 2000,
+  progress: 0,
+  macros: {
+    protein: { current: 0, target: 120 },
+    carbs: { current: 0, target: 250 },
+    fat: { current: 0, target: 65 }
+  }
+}
 
-  const [meals] = useState([
-    {
-      type: 'breakfast',
-      name: '早餐',
-      time: '08:30',
-      calorie: 450,
-      target: 500,
-      progress: 90,
-      tags: ['高蛋白', '低脂']
-    },
-    {
-      type: 'lunch',
-      name: '午餐',
-      time: '12:15',
-      calorie: 798,
-      target: 800,
-      progress: 99.75,
-      tags: ['均衡', '蔬菜']
+function getGreeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return '早上好'
+  if (h < 18) return '下午好'
+  return '晚上好'
+}
+
+function getMealIcon(type: string): string {
+  if (type === 'breakfast') return '🌅'
+  if (type === 'lunch') return '☀️'
+  if (type === 'dinner') return '🌙'
+  return '🍎'
+}
+
+export default function IndexPage() {
+  const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
+  const [meals, setMeals] = useState<HomeMealItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!getAccessToken()) {
+      setLoading(false)
+      return
     }
-  ])
+    getHomeDashboard()
+      .then((res) => {
+        setIntakeData(res.intakeData)
+        setMeals(res.meals || [])
+      })
+      .catch(() => {
+        setIntakeData(DEFAULT_INTAKE)
+        setMeals([])
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
   const handleQuickRecord = (type: string) => {
-    console.log('快速记录:', type)
-    // 根据类型跳转到相应页面
     if (type === 'photo') {
-      Taro.chooseImage({
-        count: 1,
-        success: (res) => {
-          console.log('选择的图片:', res.tempFilePaths)
-          // 跳转到记录页面或处理图片
-        }
-      })
+      Taro.navigateTo({ url: '/pages/record/index' })
     } else if (type === 'text') {
       Taro.navigateTo({
         url: '/pages/record/index?type=text'
@@ -84,7 +90,7 @@ export default function IndexPage() {
       <View className='header-section'>
         <View className='header-content'>
           <View className='greeting-section'>
-            <Text className='greeting-title'>早上好</Text>
+            <Text className='greeting-title'>{getGreeting()}</Text>
             <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
           </View>
           <View className='trend-icon'>
@@ -99,7 +105,9 @@ export default function IndexPage() {
             <Text className='target-label'>目标 {intakeData.target} kcal</Text>
           </View>
           <View className='calorie-section'>
-            <Text className='calorie-value'>{intakeData.current}</Text>
+            <Text className='calorie-value'>
+              {loading ? '--' : intakeData.current}
+            </Text>
             <Text className='calorie-target'>/{intakeData.target} kcal</Text>
           </View>
           <View className='progress-bar'>
@@ -175,12 +183,17 @@ export default function IndexPage() {
           </View>
         </View>
         <View className='meals-list'>
-          {meals.map((meal, index) => (
-            <View key={index} className='meal-card'>
+          {loading ? null : meals.length === 0 ? (
+            <View className='meals-empty'>
+              <Text className='meals-empty-text'>暂无今日餐食，去记录一餐吧</Text>
+            </View>
+          ) : (
+          meals.map((meal, index) => (
+            <View key={`${meal.type}-${index}`} className='meal-card'>
               <View className='meal-header'>
                 <View className='meal-info'>
                   <View className={`meal-icon ${meal.type}-icon`}>
-                    <Text>{meal.type === 'breakfast' ? '🌅' : '☀️'}</Text>
+                    <Text>{getMealIcon(meal.type)}</Text>
                   </View>
                   <View className='meal-details'>
                     <Text className='meal-name'>{meal.name}</Text>
@@ -199,20 +212,22 @@ export default function IndexPage() {
                     style={{ width: `${meal.progress}%` }}
                   />
                 </View>
-                <Text className='progress-percent'>{meal.progress.toFixed(0)}%</Text>
+                <Text className='progress-percent'>{Number(meal.progress).toFixed(0)}%</Text>
               </View>
-              <View className='meal-tags'>
-                {meal.tags.map((tag, tagIndex) => (
-                  <View 
-                    key={tagIndex} 
-                    className={`meal-tag ${meal.type}-tag`}
-                  >
-                    <Text className='tag-text'>{tag}</Text>
-                  </View>
-                ))}
-              </View>
+              {meal.tags && meal.tags.length > 0 && (
+                <View className='meal-tags'>
+                  {meal.tags.map((tag, tagIndex) => (
+                    <View
+                      key={tagIndex}
+                      className={`meal-tag ${meal.type}-tag`}
+                    >
+                      <Text className='tag-text'>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
-          ))}
+          )))}
         </View>
       </View>
 

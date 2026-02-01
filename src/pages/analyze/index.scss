@@ -34,6 +34,76 @@
   line-height: 48rpx;
 }
 
+// 餐次区域
+.meal-section {
+  background: #ffffff;
+  margin: 0 24rpx 32rpx;
+  border-radius: 24rpx;
+  padding: 36rpx 32rpx;
+  box-shadow: 0px 4rpx 12rpx rgba(0, 0, 0, 0.08), 0px 2rpx 4rpx rgba(0, 0, 0, 0.04);
+}
+
+.meal-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+
+.meal-option {
+  flex: 0 0 calc(50% - 10rpx);
+  padding: 24rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  border: 4rpx solid transparent;
+  transition: all 0.2s ease;
+
+  &.active {
+    border-color: #00bc7d;
+    background: #f0fdf9;
+  }
+}
+
+.meal-label {
+  font-size: 28rpx;
+  color: #1e2939;
+  font-weight: 500;
+}
+
+// 当前状态区域
+.state-section {
+  background: #ffffff;
+  margin: 0 24rpx 32rpx;
+  border-radius: 24rpx;
+  padding: 36rpx 32rpx;
+  box-shadow: 0px 4rpx 12rpx rgba(0, 0, 0, 0.08), 0px 2rpx 4rpx rgba(0, 0, 0, 0.04);
+}
+
+.state-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+
+.state-option {
+  flex: 0 0 calc(50% - 10rpx);
+  padding: 24rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  border: 4rpx solid transparent;
+  transition: all 0.2s ease;
+
+  &.active {
+    border-color: #00bc7d;
+    background: #f0fdf9;
+  }
+}
+
+.state-label {
+  font-size: 28rpx;
+  color: #1e2939;
+  font-weight: 500;
+}
+
 // 补充细节区域
 .details-section {
   background: #ffffff;

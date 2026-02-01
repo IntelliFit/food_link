@@ -1,15 +1,40 @@
-import { View, Text, Image, Input } from '@tarojs/components'
-import { useState } from 'react'
+import { View, Text, Image, Textarea } from '@tarojs/components'
+import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
+import { getFoodRecordList, analyzeFoodText, type FoodRecord } from '../../utils/api'
 
 import './index.scss'
+
+const MEAL_TYPE_NAMES: Record<string, string> = {
+  breakfast: '早餐',
+  lunch: '午餐',
+  dinner: '晚餐',
+  snack: '加餐'
+}
+
+const MEAL_TYPE_ICONS: Record<string, string> = {
+  breakfast: '🌅',
+  lunch: '☀️',
+  dinner: '🌙',
+  snack: '🍎'
+}
+
+/** 文字记录：当前状态（AI 将结合此状态分析），≤6 项 */
+const CONTEXT_STATE_OPTIONS = [
+  { value: 'post_workout', label: '刚健身完' },
+  { value: 'fasting', label: '空腹/餐前' },
+  { value: 'fat_loss', label: '减脂期' },
+  { value: 'muscle_gain', label: '增肌期' },
+  { value: 'maintain', label: '维持体重' },
+  { value: 'none', label: '无特殊' }
+]
 
 export default function RecordPage() {
   const [activeMethod, setActiveMethod] = useState('photo')
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
   const [selectedMeal, setSelectedMeal] = useState('breakfast')
-  const [selectedTime, setSelectedTime] = useState('')
+  const [textContextState, setTextContextState] = useState<string>('none')
 
   const recordMethods = [
     { id: 'photo', icon: '📷', text: '拍照识别', iconClass: 'photo-icon' },
@@ -28,7 +53,6 @@ export default function RecordPage() {
       sourceType: ['album', 'camera'],
       success: (res) => {
         const imagePath = res.tempFilePaths[0]
-        console.log('选择的图片:', res.tempFilePaths)
         // 将图片路径存储到全局数据中
         Taro.setStorageSync('analyzeImagePath', imagePath)
         // 直接跳转到分析页面
@@ -71,189 +95,161 @@ export default function RecordPage() {
     setFoodText(food)
   }
 
-  const handleTimeSelect = () => {
-    const now = new Date()
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    
-    // 如果没有选择时间，默认使用当前时间
-    if (!selectedTime) {
-      setSelectedTime(currentTime)
-    } else {
-      // 可以打开时间选择器
-      Taro.showActionSheet({
-        itemList: ['使用当前时间', '手动输入'],
-        success: (res) => {
-          if (res.tapIndex === 0) {
-            setSelectedTime(currentTime)
-          }
-        }
-      })
-    }
-  }
+  const [textCalculating, setTextCalculating] = useState(false)
 
-  const handleSubmitFood = () => {
-    if (!foodText.trim()) {
-      Taro.showToast({
-        title: '请输入食物名称',
-        icon: 'none'
-      })
+  /** 文字记录：开始计算前确认 → 调大模型分析 → 跳转结果页 */
+  const handleStartCalculate = async () => {
+    const trimmed = foodText.trim()
+    if (!trimmed) {
+      Taro.showToast({ title: '请输入食物描述', icon: 'none' })
       return
     }
-    
-    const now = new Date()
-    const defaultTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    
-    const foodData = {
-      name: foodText,
-      amount: foodAmount || '1份',
-      meal: selectedMeal,
-      time: selectedTime || defaultTime
-    }
-    
-    console.log('添加食物:', foodData)
-    Taro.showToast({
-      title: '添加成功',
-      icon: 'success'
+    const { confirm } = await Taro.showModal({
+      title: '确认计算',
+      content: '确定根据当前描述开始计算营养分析吗？'
     })
-    
-    // 重置表单
-    setFoodText('')
-    setFoodAmount('')
-    setSelectedTime('')
+    if (!confirm) return
+    let inputText = trimmed
+    if (foodAmount.trim()) inputText += `\n数量：${foodAmount.trim()}`
+    setTextCalculating(true)
+    Taro.showLoading({ title: '分析中...', mask: true })
+    try {
+      const result = await analyzeFoodText({ text: inputText, context_state: textContextState })
+      Taro.hideLoading()
+      Taro.setStorageSync('analyzeTextResult', JSON.stringify(result))
+      Taro.setStorageSync('analyzeTextSource', 'text')
+      Taro.setStorageSync('analyzeContextState', textContextState)
+      Taro.navigateTo({ url: '/pages/result-text/index' })
+    } catch (e: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: e.message || '分析失败', icon: 'none' })
+    } finally {
+      setTextCalculating(false)
+    }
   }
 
-  // 历史记录数据
-  const getTodayDate = () => {
-    return new Date().toISOString().split('T')[0]
-  }
-  
+  // 历史记录：按日期从接口拉取
+  const getTodayDate = () => new Date().toISOString().split('T')[0]
   const [selectedDate, setSelectedDate] = useState(getTodayDate())
-  
+  const [historyRecords, setHistoryRecords] = useState<Array<{
+    date: string
+    meals: Array<{
+      id: string
+      mealType: string
+      mealName: string
+      time: string
+      foods: Array<{ name: string; amount: string; calorie: number }>
+      totalCalorie: number
+    }>
+    totalCalorie: number
+  }>>([])
+  const [rawRecords, setRawRecords] = useState<FoodRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
+    const date = new Date(dateStr + 'T12:00:00')
     const month = date.getMonth() + 1
     const day = date.getDate()
     const weekdays = ['日', '一', '二', '三', '四', '五', '六']
     const weekday = weekdays[date.getDay()]
     const today = new Date()
-    const isToday = dateStr === today.toISOString().split('T')[0]
+    const todayStr = today.toISOString().split('T')[0]
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
-    const isYesterday = dateStr === yesterday.toISOString().split('T')[0]
-    
-    if (isToday) {
-      return `${month}月${day}日 今天`
-    } else if (isYesterday) {
-      return `${month}月${day}日 昨天`
-    }
+    const yesterdayStr = yesterday.toISOString().split('T')[0]
+    if (dateStr === todayStr) return `${month}月${day}日 今天`
+    if (dateStr === yesterdayStr) return `${month}月${day}日 昨天`
     return `${month}月${day}日 周${weekday}`
   }
-  
-  const getYesterdayDate = () => {
-    const date = new Date()
-    date.setDate(date.getDate() - 1)
-    return date.toISOString().split('T')[0]
-  }
-  
-  const allHistoryRecords = [
-    {
-      id: 1,
-      date: getTodayDate(),
-      meals: [
-        {
-          id: 1,
-          mealType: 'breakfast',
-          mealName: '早餐',
-          time: '08:30',
-          foods: [
-            { name: '鸡蛋', amount: '2个', calorie: 140 },
-            { name: '全麦面包', amount: '2片', calorie: 160 },
-            { name: '牛奶', amount: '200ml', calorie: 120 }
-          ],
-          totalCalorie: 420
-        },
-        {
-          id: 2,
-          mealType: 'lunch',
-          mealName: '午餐',
-          time: '12:15',
-          foods: [
-            { name: '米饭', amount: '1碗', calorie: 200 },
-            { name: '鸡胸肉', amount: '150g', calorie: 250 },
-            { name: '青菜', amount: '200g', calorie: 50 }
-          ],
-          totalCalorie: 500
-        },
-        {
-          id: 3,
-          mealType: 'dinner',
-          mealName: '晚餐',
-          time: '18:30',
-          foods: [
-            { name: '面条', amount: '1碗', calorie: 300 },
-            { name: '牛肉', amount: '100g', calorie: 200 },
-            { name: '蔬菜沙拉', amount: '150g', calorie: 60 }
-          ],
-          totalCalorie: 560
-        }
-      ],
-      totalCalorie: 1480
-    },
-    {
-      id: 2,
-      date: getYesterdayDate(),
-      meals: [
-        {
-          id: 4,
-          mealType: 'breakfast',
-          mealName: '早餐',
-          time: '08:00',
-          foods: [
-            { name: '燕麦粥', amount: '1碗', calorie: 150 },
-            { name: '香蕉', amount: '1根', calorie: 90 }
-          ],
-          totalCalorie: 240
-        },
-        {
-          id: 5,
-          mealType: 'lunch',
-          mealName: '午餐',
-          time: '12:30',
-          foods: [
-            { name: '米饭', amount: '1碗', calorie: 200 },
-            { name: '鱼', amount: '150g', calorie: 180 },
-            { name: '豆腐', amount: '100g', calorie: 80 }
-          ],
-          totalCalorie: 460
-        }
-      ],
-      totalCalorie: 700
+
+  const formatRecordTime = (recordTime: string) => {
+    try {
+      const d = new Date(recordTime)
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    } catch {
+      return '--:--'
     }
-  ]
-
-  // 根据选中日期筛选记录
-  const currentDateRecords = allHistoryRecords.find(record => record.date === selectedDate)
-  const historyRecords = currentDateRecords ? [currentDateRecords] : []
-
-  const handleEditRecord = (recordId: number) => {
-    console.log('编辑记录:', recordId)
-    // 可以跳转到编辑页面
   }
 
-  const handleDeleteRecord = (recordId: number) => {
+  const loadHistory = async (date: string) => {
+    setHistoryLoading(true)
+    setHistoryError(null)
+    try {
+      const { records } = await getFoodRecordList(date)
+      const meals = records.map((r: FoodRecord) => ({
+        id: r.id,
+        mealType: r.meal_type,
+        mealName: MEAL_TYPE_NAMES[r.meal_type] || r.meal_type,
+        time: formatRecordTime(r.record_time),
+        foods: (r.items || []).map((item: { name: string; intake: number; ratio?: number; nutrients?: { calories?: number } }) => {
+          const ratio = (item as { ratio?: number }).ratio ?? 100
+          const fullCal = (item.nutrients?.calories ?? 0)
+          const consumedCal = fullCal * (ratio / 100)
+          return {
+            name: item.name,
+            amount: `${item.intake ?? 0}g`,
+            calorie: Math.round(consumedCal * 10) / 10
+          }
+        }),
+        totalCalorie: Math.round((r.total_calories ?? 0) * 10) / 10
+      }))
+      const totalCalorie = meals.reduce((sum, m) => sum + m.totalCalorie, 0)
+      setHistoryRecords([{ date, meals, totalCalorie }])
+      setRawRecords(records)
+    } catch (e: any) {
+      const msg = e.message || '获取记录失败'
+      setHistoryError(msg)
+      setHistoryRecords([])
+      setRawRecords([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeMethod === 'history') {
+      loadHistory(selectedDate)
+    }
+  }, [activeMethod, selectedDate])
+
+  /** 点击记录卡片：跳转识别记录详情页 */
+  const handleRecordCardClick = (mealId: string) => {
+    const r = rawRecords.find((rec) => rec.id === mealId)
+    if (!r) return
+    Taro.setStorageSync('recordDetail', r)
+    Taro.navigateTo({ url: '/pages/record-detail/index' })
+  }
+
+  const handleEditRecord = (e: any, _recordId: string) => {
+    e.stopPropagation()
+    Taro.showToast({ title: '编辑功能开发中', icon: 'none' })
+  }
+
+  const handleDeleteRecord = (e: any, _recordId: string) => {
+    e.stopPropagation()
     Taro.showModal({
       title: '确认删除',
       content: '确定要删除这条记录吗？',
       success: (res) => {
         if (res.confirm) {
-          console.log('删除记录:', recordId)
-          Taro.showToast({
-            title: '删除成功',
-            icon: 'success'
-          })
+          Taro.showToast({ title: '删除功能开发中', icon: 'none' })
         }
       }
     })
+  }
+
+  /** 生成最近 6 天的日期选项（微信 showActionSheet 最多 6 项） */
+  const getDateOptions = () => {
+    const options: { dateStr: string; label: string }[] = []
+    const today = new Date()
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      const dateStr = d.toISOString().split('T')[0]
+      options.push({ dateStr, label: formatDate(dateStr) })
+    }
+    return options
   }
 
   const tips = [
@@ -347,6 +343,23 @@ export default function RecordPage() {
             ))}
           </View>
 
+          {/* 当前状态（AI 将结合此状态分析） */}
+          <View className='text-state-section'>
+            <Text className='section-label'>当前状态</Text>
+            <Text className='section-hint'>选择状态后，AI 会结合状态给出更贴合的建议</Text>
+            <View className='text-state-options'>
+              {CONTEXT_STATE_OPTIONS.map((opt) => (
+                <View
+                  key={opt.value}
+                  className={`text-state-option ${textContextState === opt.value ? 'active' : ''}`}
+                  onClick={() => setTextContextState(opt.value)}
+                >
+                  <Text className='text-state-label'>{opt.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
           {/* 常用食物快速选择 */}
           <View className='common-foods-section'>
             <Text className='section-label'>常用食物</Text>
@@ -365,42 +378,35 @@ export default function RecordPage() {
 
           {/* 输入卡片 */}
           <View className='text-input-card'>
-            <Text className='input-label'>食物名称</Text>
-            <Input
-              className='food-name-input'
-              placeholder='例如：一碗米饭、一个苹果'
+            <Text className='input-label'>食物描述</Text>
+            <Textarea
+              className='food-name-textarea'
+              placeholder='例如：一碗米饭、一个苹果、200g 鸡胸肉（可多行）'
               placeholderClass='input-placeholder'
               value={foodText}
               onInput={(e) => setFoodText(e.detail.value)}
-              maxlength={50}
+              maxlength={500}
+              autoHeight
             />
 
-            <View className='input-row'>
-              <View className='input-group'>
-                <Text className='input-label-small'>数量</Text>
-                <Input
-                  className='amount-input'
-                  placeholder='例如：1碗、200g'
-                  placeholderClass='input-placeholder'
-                  value={foodAmount}
-                  onInput={(e) => setFoodAmount(e.detail.value)}
-                  maxlength={20}
-                />
-              </View>
-              <View className='input-group'>
-                <Text className='input-label-small'>时间</Text>
-                <View className='time-picker' onClick={handleTimeSelect}>
-                  <Text className={selectedTime ? 'time-text' : 'time-placeholder'}>
-                    {selectedTime || '选择时间'}
-                  </Text>
-                  <Text className='time-icon'>🕐</Text>
-                </View>
-              </View>
-            </View>
+            <Text className='input-label'>数量（可选，可多行）</Text>
+            <Textarea
+              className='amount-textarea'
+              placeholder='例如：1碗、200g、半份（可多行补充）'
+              placeholderClass='input-placeholder'
+              value={foodAmount}
+              onInput={(e) => setFoodAmount(e.detail.value)}
+              maxlength={200}
+              autoHeight
+            />
 
             <View className='action-buttons'>
-              <View className='action-btn primary-btn' onClick={handleSubmitFood}>
-                <Text className='btn-text'>确认添加</Text>
+              <View
+                className='action-btn primary-btn'
+                onClick={handleStartCalculate}
+                style={{ opacity: textCalculating ? 0.7 : 1 }}
+              >
+                <Text className='btn-text'>{textCalculating ? '计算中...' : '开始计算'}</Text>
               </View>
             </View>
           </View>
@@ -414,34 +420,19 @@ export default function RecordPage() {
           <View className='date-selector'>
             <View className='date-card'>
               <Text className='date-label'>选择日期</Text>
-              <View className='date-display' onClick={() => {
-                // 切换日期：今天、昨天、前天
-                const today = new Date()
-                const todayStr = today.toISOString().split('T')[0]
-                const yesterday = new Date(today)
-                yesterday.setDate(yesterday.getDate() - 1)
-                const yesterdayStr = yesterday.toISOString().split('T')[0]
-                const dayBefore = new Date(today)
-                dayBefore.setDate(dayBefore.getDate() - 2)
-                const dayBeforeStr = dayBefore.toISOString().split('T')[0]
-                
-                Taro.showActionSheet({
-                  itemList: [
-                    formatDate(todayStr),
-                    formatDate(yesterdayStr),
-                    formatDate(dayBeforeStr)
-                  ],
-                  success: (res) => {
-                    if (res.tapIndex === 0) {
-                      setSelectedDate(todayStr)
-                    } else if (res.tapIndex === 1) {
-                      setSelectedDate(yesterdayStr)
-                    } else if (res.tapIndex === 2) {
-                      setSelectedDate(dayBeforeStr)
+              <View
+                className='date-display'
+                onClick={() => {
+                  const options = getDateOptions()
+                  Taro.showActionSheet({
+                    itemList: options.map((o) => o.label),
+                    success: (res) => {
+                      const opt = options[res.tapIndex]
+                      if (opt) setSelectedDate(opt.dateStr)
                     }
-                  }
-                })
-              }}>
+                  })
+                }}
+              >
                 <Text className='date-text'>{formatDate(selectedDate)}</Text>
                 <Text className='date-icon'>📅</Text>
               </View>
@@ -449,7 +440,7 @@ export default function RecordPage() {
             <View className='date-stats'>
               <View className='stat-item'>
                 <Text className='stat-label'>总摄入</Text>
-                <Text className='stat-value'>{historyRecords[0]?.totalCalorie || 0} kcal</Text>
+                <Text className='stat-value'>{historyRecords[0]?.totalCalorie ?? 0} kcal</Text>
               </View>
               <View className='stat-item'>
                 <Text className='stat-label'>目标</Text>
@@ -459,14 +450,29 @@ export default function RecordPage() {
           </View>
 
           {/* 记录列表 */}
-          {historyRecords.length > 0 && historyRecords[0].meals.length > 0 ? (
+          {historyLoading ? (
+            <View className='empty-state'>
+              <Text className='empty-icon'>⏳</Text>
+              <Text className='empty-text'>加载中...</Text>
+            </View>
+          ) : historyError ? (
+            <View className='empty-state'>
+              <Text className='empty-icon'>🔐</Text>
+              <Text className='empty-text'>{historyError}</Text>
+              <Text className='empty-hint'>请先登录后查看历史记录</Text>
+            </View>
+          ) : historyRecords.length > 0 && historyRecords[0].meals.length > 0 ? (
             <View className='history-list'>
               {historyRecords[0].meals.map((meal) => (
-                <View key={meal.id} className='history-meal-card'>
+                <View
+                  key={meal.id}
+                  className='history-meal-card'
+                  onClick={() => handleRecordCardClick(meal.id)}
+                >
                   <View className='meal-card-header'>
                     <View className='meal-header-left'>
                       <View className={`meal-type-icon ${meal.mealType}-icon`}>
-                        <Text>{meal.mealType === 'breakfast' ? '🌅' : meal.mealType === 'lunch' ? '☀️' : meal.mealType === 'dinner' ? '🌙' : '🍎'}</Text>
+                        <Text>{MEAL_TYPE_ICONS[meal.mealType] || '🍽️'}</Text>
                       </View>
                       <View className='meal-header-info'>
                         <Text className='meal-card-name'>{meal.mealName}</Text>
@@ -476,10 +482,10 @@ export default function RecordPage() {
                     <View className='meal-header-right'>
                       <Text className='meal-calorie'>{meal.totalCalorie} kcal</Text>
                       <View className='meal-actions'>
-                        <View className='action-icon' onClick={() => handleEditRecord(meal.id)}>
+                        <View className='action-icon' onClick={(e) => handleEditRecord(e, meal.id)}>
                           <Text>✏️</Text>
                         </View>
-                        <View className='action-icon' onClick={() => handleDeleteRecord(meal.id)}>
+                        <View className='action-icon' onClick={(e) => handleDeleteRecord(e, meal.id)}>
                           <Text>🗑️</Text>
                         </View>
                       </View>
@@ -503,7 +509,7 @@ export default function RecordPage() {
             <View className='empty-state'>
               <Text className='empty-icon'>📝</Text>
               <Text className='empty-text'>暂无记录</Text>
-              <Text className='empty-hint'>开始记录您的饮食吧</Text>
+              <Text className='empty-hint'>拍照识别并确认记录后，将显示在这里</Text>
             </View>
           )}
         </View>

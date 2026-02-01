@@ -36,6 +36,9 @@ export default function ProfilePage() {
     meta: '已记录 30 天'
   })
 
+  // 是否已完成健康档案引导（首次问卷）
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean>(true)
+
   // 从本地存储读取登录状态，并从服务器获取用户信息
   useEffect(() => {
     const loadUserInfo = async () => {
@@ -51,6 +54,7 @@ export default function ProfilePage() {
               name: apiUserInfo.nickname || '用户昵称',
               meta: '已记录 30 天'
             })
+            setOnboardingCompleted(apiUserInfo.onboarding_completed ?? true)
           } catch (error) {
             console.error('获取用户信息失败:', error)
             // 如果获取失败，尝试从本地存储读取
@@ -92,6 +96,13 @@ export default function ProfilePage() {
 
   // 我的服务
   const services = [
+    {
+      id: 0,
+      icon: '📋',
+      title: '健康档案',
+      desc: '生理指标、BMR/TDEE、病史与饮食偏好',
+      iconClass: 'health-icon'
+    },
     {
       id: 1,
       icon: '🎯',
@@ -149,6 +160,20 @@ export default function ProfilePage() {
   ]
 
   const handleServiceClick = (service: typeof services[0]) => {
+    // 健康档案：未完成则去填写，已完成则去查看
+    if (service.id === 0) {
+      if (!onboardingCompleted) {
+        Taro.navigateTo({ url: '/pages/health-profile/index' })
+      } else {
+        Taro.navigateTo({ url: '/pages/health-profile-view/index' })
+      }
+      return
+    }
+    const path = (service as { path?: string }).path
+    if (path) {
+      Taro.navigateTo({ url: path })
+      return
+    }
     Taro.showToast({
       title: `打开${service.title}`,
       icon: 'none'
@@ -309,6 +334,7 @@ export default function ProfilePage() {
         }
         setIsLoggedIn(true)
         setUserInfo(newUserInfo)
+        setOnboardingCompleted(apiUserInfo.onboarding_completed ?? true)
         Taro.setStorageSync('userInfo', newUserInfo)
         Taro.hideLoading()
         Taro.showToast({
@@ -383,6 +409,7 @@ export default function ProfilePage() {
         }
         setIsLoggedIn(true)
         setUserInfo(newUserInfo)
+        setOnboardingCompleted(apiUserInfo.onboarding_completed ?? true)
         Taro.setStorageSync('userInfo', newUserInfo)
         Taro.hideLoading()
         Taro.showToast({
@@ -627,6 +654,17 @@ export default function ProfilePage() {
           </View>
         </View>
       </View>
+
+      {/* 未完成健康档案时显示引导 */}
+      {isLoggedIn && !onboardingCompleted && (
+        <View
+          className='onboarding-banner'
+          onClick={() => Taro.navigateTo({ url: '/pages/health-profile/index' })}
+        >
+          <Text className='onboarding-banner-text'>📋 完善健康档案，获取个性化饮食建议</Text>
+          <Text className='onboarding-banner-arrow'>{'>'}</Text>
+        </View>
+      )}
 
       {/* 统计卡片 */}
       <View className='stats-cards'>

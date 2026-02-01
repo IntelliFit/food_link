@@ -1,7 +1,7 @@
-import { View, Text, Image, ScrollView, Slider } from '@tarojs/components'
+import { View, Text, ScrollView, Slider } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, saveFoodRecord } from '../../utils/api'
 
 import './index.scss'
 
@@ -12,7 +12,7 @@ const MEAL_OPTIONS = [
   { value: 'snack' as const, label: '加餐' }
 ]
 
-/** 用户当前状态（确认记录时选择，≤6 项以满足微信 showActionSheet 限制） */
+/** 用户当前状态（确认记录时选择，≤6 项） */
 const CONTEXT_STATE_OPTIONS = [
   { value: 'post_workout', label: '刚健身完' },
   { value: 'fasting', label: '空腹/餐前' },
@@ -25,19 +25,16 @@ const CONTEXT_STATE_OPTIONS = [
 interface NutritionItem {
   id: number
   name: string
-  weight: number // 当前重量（用户可调节）
-  originalWeight: number // AI 初始估算重量（用于标记样本时计算偏差）
-  calorie: number // 基于 weight 的总热量
-  intake: number // 实际摄入量 = weight × ratio
-  ratio: number // 摄入比例（0-100%，独立调节）
+  weight: number
+  calorie: number
+  intake: number
+  ratio: number
   protein: number
   carbs: number
   fat: number
 }
 
-export default function ResultPage() {
-  const [imagePath, setImagePath] = useState<string>('')
-  const [isFavorited, setIsFavorited] = useState(false)
+export default function ResultTextPage() {
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
   const [nutritionStats, setNutritionStats] = useState({
@@ -52,32 +49,25 @@ export default function ResultPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [hasSavedCritical, setHasSavedCritical] = useState(false)
+  const [noData, setNoData] = useState(false)
 
-  // 将API返回的数据转换为页面需要的格式（保留 originalWeight 用于标记样本时计算偏差）
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
-    return items.map((item, index) => {
-      const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
-      return {
-        id: index + 1,
-        name: item.name,
-        weight: item.estimatedWeightGrams,
-        originalWeight: aiWeight,
-        calorie: item.nutrients.calories,
-        intake: item.estimatedWeightGrams,
-        ratio: 100,
-        protein: item.nutrients.protein,
-        carbs: item.nutrients.carbs,
-        fat: item.nutrients.fat
-      }
-    })
+    return items.map((item, index) => ({
+      id: index + 1,
+      name: item.name,
+      weight: item.estimatedWeightGrams,
+      calorie: item.nutrients.calories,
+      intake: item.estimatedWeightGrams,
+      ratio: 100,
+      protein: item.nutrients.protein,
+      carbs: item.nutrients.carbs,
+      fat: item.nutrients.fat
+    }))
   }
 
-  // 计算总营养统计
   const calculateNutritionStats = (items: NutritionItem[]) => {
     const stats = items.reduce(
       (acc, item) => {
-        // 使用 ratio 来计算实际摄入的营养
         const ratio = item.ratio / 100
         return {
           calories: acc.calories + item.calorie * ratio,
@@ -89,142 +79,81 @@ export default function ResultPage() {
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     )
     setNutritionStats(stats)
-    
-    // 计算总摄入重量
     const total = items.reduce((sum, item) => sum + item.intake, 0)
     setTotalWeight(Math.round(total))
   }
 
   useEffect(() => {
-    // 获取传递的图片路径和分析结果
     try {
-      const storedPath = Taro.getStorageSync('analyzeImagePath')
-      if (storedPath) {
-        setImagePath(storedPath)
+      const stored = Taro.getStorageSync('analyzeTextResult')
+      if (!stored) {
+        setNoData(true)
+        return
       }
-
-      const storedResult = Taro.getStorageSync('analyzeResult')
-      if (storedResult) {
-        const result: AnalyzeResponse = JSON.parse(storedResult)
-        
-        // 设置描述和健康建议
-        setDescription(result.description || '')
-        setHealthAdvice(result.insight || '保持健康饮食！')
-        setPfcRatioComment(result.pfc_ratio_comment ?? null)
-        setAbsorptionNotes(result.absorption_notes ?? null)
-        setContextAdvice(result.context_advice ?? null)
-        // 转换并设置食物项
-        const items = convertApiDataToItems(result.items)
-        setNutritionItems(items)
-        
-        // 计算营养统计
-        calculateNutritionStats(items)
-      } else {
-        // 如果没有分析结果，提示用户
-        Taro.showModal({
-          title: '提示',
-          content: '未找到分析结果，请重新分析',
-          showCancel: false,
-          confirmText: '确定',
-          success: () => {
-            Taro.navigateBack()
-          }
-        })
-      }
-    } catch (error) {
-      console.error('获取数据失败:', error)
-      Taro.showToast({
-        title: '数据加载失败',
-        icon: 'none'
-      })
+      const result: AnalyzeResponse = JSON.parse(stored)
+      setDescription(result.description || '')
+      setHealthAdvice(result.insight || '保持健康饮食！')
+      setPfcRatioComment(result.pfc_ratio_comment ?? null)
+      setAbsorptionNotes(result.absorption_notes ?? null)
+      setContextAdvice(result.context_advice ?? null)
+      const items = convertApiDataToItems(result.items)
+      setNutritionItems(items)
+      calculateNutritionStats(items)
+    } catch {
+      setNoData(true)
     }
   }, [])
 
-  const handleFavorite = () => {
-    setIsFavorited(!isFavorited)
-    Taro.showToast({
-      title: isFavorited ? '已取消收藏' : '已收藏',
-      icon: 'none'
-    })
-  }
-
-  // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
-    setNutritionItems(items => {
-      const updatedItems = items.map(item => {
-        if (item.id === id) {
-          // 调节的是 weight（AI 估算的食物总重量）
-          const newWeight = Math.max(10, item.weight + delta) // 最小 10g
-          // ratio 保持不变，重新计算 intake
-          const newIntake = Math.round(newWeight * (item.ratio / 100))
-          return {
-            ...item,
-            weight: newWeight,
-            intake: newIntake
-            // ratio 不变
-          }
-        }
-        return item
+    setNutritionItems((items) => {
+      const updated = items.map((item) => {
+        if (item.id !== id) return item
+        const newWeight = Math.max(10, item.weight + delta)
+        const newIntake = Math.round(newWeight * (item.ratio / 100))
+        return { ...item, weight: newWeight, intake: newIntake }
       })
-      
-      // 重新计算营养统计
-      calculateNutritionStats(updatedItems)
-      
-      return updatedItems
+      calculateNutritionStats(updated)
+      return updated
     })
   }
 
-  // 调节摄入比例（滑块或其他控件）
   const handleRatioAdjust = (id: number, newRatio: number) => {
-    setNutritionItems(items => {
-      const updatedItems = items.map(item => {
-        if (item.id === id) {
-          // 调节的是 ratio（摄入比例）
-          const clampedRatio = Math.max(0, Math.min(100, newRatio)) // 0-100%
-          // weight 保持不变，重新计算 intake
-          const newIntake = Math.round(item.weight * (clampedRatio / 100))
-          return {
-            ...item,
-            ratio: clampedRatio,
-            intake: newIntake
-            // weight 不变
-          }
-        }
-        return item
+    const clamped = Math.max(0, Math.min(100, newRatio))
+    setNutritionItems((items) => {
+      const updated = items.map((item) => {
+        if (item.id !== id) return item
+        const newIntake = Math.round(item.weight * (clamped / 100))
+        return { ...item, ratio: clamped, intake: newIntake }
       })
-      
-      // 重新计算营养统计
-      calculateNutritionStats(updatedItems)
-      
-      return updatedItems
+      calculateNutritionStats(updated)
+      return updated
     })
   }
 
-  /** 确认记录：若分析页已选餐次与状态则直接确认保存，否则先选状态再选餐次 */
+  /** 确认记录：若记录页已选状态则直接用，否则先选状态；再选餐次，保存 */
   const handleConfirm = () => {
     const savedContextState = Taro.getStorageSync('analyzeContextState')
-    const savedMealType = Taro.getStorageSync('analyzeMealType')
     const contextStateValue = savedContextState && typeof savedContextState === 'string' ? savedContextState : null
     const contextStateLabel = contextStateValue
       ? (CONTEXT_STATE_OPTIONS.find((o) => o.value === contextStateValue)?.label ?? contextStateValue)
       : null
-    const mealFromStorage = savedMealType && MEAL_OPTIONS.find((o) => o.value === savedMealType)
-    const mealLabel = mealFromStorage?.label ?? null
-    const mealValue = mealFromStorage?.value ?? null
 
-    const performSave = (stateValue: string, stateLabel: string, mealType: string, mealLabelText: string) => {
-      Taro.showModal({
-        title: '确认记录',
-        content: `当前状态：${stateLabel}\n餐次：${mealLabelText}\n确定保存吗？`,
-        success: async (res) => {
-          if (!res.confirm) return
+    const doSave = (stateValue: string, stateLabel: string) => {
+      Taro.showActionSheet({
+        itemList: MEAL_OPTIONS.map((o) => o.label),
+        success: async (mealRes) => {
+          const meal = MEAL_OPTIONS[mealRes.tapIndex]
+          if (!meal) return
+          const { confirm } = await Taro.showModal({
+            title: '确认记录',
+            content: `当前状态：${stateLabel}\n餐次：${meal.label}\n确定保存吗？`
+          })
+          if (!confirm) return
           setSaving(true)
           try {
-            Taro.removeStorageSync('analyzeContextState')
-            Taro.removeStorageSync('analyzeMealType')
+            if (contextStateValue) Taro.removeStorageSync('analyzeContextState')
             const payload = {
-              meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-              image_path: imagePath || undefined,
+              meal_type: meal.value,
               description: description || undefined,
               insight: healthAdvice || undefined,
               items: nutritionItems.map((item) => ({
@@ -254,7 +183,7 @@ export default function ResultPage() {
             await saveFoodRecord(payload)
             Taro.showToast({ title: '记录成功', icon: 'success' })
             setTimeout(() => {
-              Taro.navigateBack({ delta: 2 })
+              Taro.navigateBack({ delta: 1 })
             }, 1500)
           } catch (e: any) {
             Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
@@ -265,121 +194,49 @@ export default function ResultPage() {
       })
     }
 
-    // 分析页已选餐次与状态：直接确认保存，不再弹选择
-    if (contextStateValue && contextStateLabel && mealValue && mealLabel) {
-      performSave(contextStateValue, contextStateLabel, mealValue, mealLabel)
-      return
-    }
-    // 仅有状态：选餐次后确认保存
     if (contextStateValue && contextStateLabel) {
-      Taro.showActionSheet({
-        itemList: MEAL_OPTIONS.map((o) => o.label),
-        success: (mealRes) => {
-          const meal = MEAL_OPTIONS[mealRes.tapIndex]
-          if (!meal) return
-          performSave(contextStateValue, contextStateLabel, meal.value, meal.label)
-        }
-      })
+      doSave(contextStateValue, contextStateLabel)
       return
     }
-    // 都未选：先选状态再选餐次
     Taro.showActionSheet({
       itemList: CONTEXT_STATE_OPTIONS.map((o) => o.label),
       success: (stateRes) => {
         const contextState = CONTEXT_STATE_OPTIONS[stateRes.tapIndex]
         if (!contextState) return
-        Taro.showActionSheet({
-          itemList: MEAL_OPTIONS.map((o) => o.label),
-          success: (mealRes) => {
-            const meal = MEAL_OPTIONS[mealRes.tapIndex]
-            if (!meal) return
-            performSave(contextState.value, contextState.label, meal.value, meal.label)
-          }
-        })
+        doSave(contextState.value, contextState.label)
       }
     })
   }
 
-  /** 标记样本：将当前有重量偏差的项提交为偏差样本（参考 hkh 实现） */
-  const handleMarkSample = async () => {
-    if (hasSavedCritical) {
-      Taro.showToast({ title: '已标记为偏差样本', icon: 'none' })
-      return
-    }
-    const token = getAccessToken()
-    if (!token) {
-      Taro.showToast({ title: '请先登录以保存偏差样本', icon: 'none' })
-      return
-    }
-    // 手动标记：只要有 1g 以上差异就记录（与 hkh 一致）
-    const thresholdGrams = 1
-    const samples = nutritionItems
-      .filter((item) => item.originalWeight > 0 && Math.abs(item.weight - item.originalWeight) > thresholdGrams)
-      .map((item) => {
-        const diff = item.weight - item.originalWeight
-        const percent = (diff / item.originalWeight) * 100
-        return {
-          image_path: imagePath || undefined,
-          food_name: item.name,
-          ai_weight: item.originalWeight,
-          user_weight: item.weight,
-          deviation_percent: Math.round(percent)
-        }
-      })
-    if (samples.length === 0) {
-      Taro.showToast({ title: '请先修改上方的重量数值，以便我们记录偏差', icon: 'none' })
-      return
-    }
-    Taro.showModal({
-      title: '确认标记样本',
-      content: `确定将当前 ${samples.length} 个食物的偏差标记为样本吗？将用于后续优化 AI 估算。`,
-      confirmText: '确定',
-      cancelText: '取消',
-      success: async (res) => {
-        if (!res.confirm) return
-        try {
-          await saveCriticalSamples(samples)
-          setHasSavedCritical(true)
-          Taro.showToast({
-            title: `已标记 ${samples.length} 个偏差样本`,
-            icon: 'none'
-          })
-        } catch (e: any) {
-          Taro.showToast({
-            title: e?.message || '保存偏差样本失败',
-            icon: 'none'
-          })
-        }
-      }
-    })
+  if (noData) {
+    return (
+      <View className='result-text-page'>
+        <View className='empty-state'>
+          <Text className='empty-icon'>📝</Text>
+          <Text className='empty-text'>未找到分析结果</Text>
+          <Text className='empty-hint'>请从记录页使用「文字记录」并点击「开始计算」</Text>
+        </View>
+      </View>
+    )
+  }
+
+  if (nutritionItems.length === 0) {
+    return (
+      <View className='result-text-page'>
+        <View className='empty-state'>
+          <Text className='empty-icon'>⏳</Text>
+          <Text className='empty-text'>加载中...</Text>
+        </View>
+      </View>
+    )
   }
 
   return (
-    <View className='result-page'>
-      <ScrollView
-        className='result-scroll'
-        scrollY
-        enhanced
-        showScrollbar={false}
-      >
-        {/* 图片区域 */}
-        <View className='image-section'>
-          {imagePath ? (
-            <Image
-              src={imagePath}
-              mode='aspectFill'
-              className='result-image'
-            />
-          ) : (
-            <View className='no-image-placeholder'>
-              <Text className='placeholder-text'>暂无图片</Text>
-            </View>
-          )}
-          <View className='favorite-btn' onClick={handleFavorite}>
-            <Text className={`favorite-icon ${isFavorited ? 'favorited' : ''}`}>
-              {isFavorited ? '❤️' : '🤍'}
-            </Text>
-          </View>
+    <View className='result-text-page'>
+      <ScrollView className='result-scroll' scrollY enhanced showScrollbar={false}>
+        {/* 文字记录标题区（无图片） */}
+        <View className='text-result-header'>
+          <Text className='text-result-title'>✏️ 文字记录分析</Text>
         </View>
 
         {/* AI 健康透视（含 PFC、吸收率、情境建议） */}
@@ -425,11 +282,9 @@ export default function ResultPage() {
               <View className='weight-value-wrapper'>
                 <Text className='weight-value'>{totalWeight}</Text>
                 <Text className='weight-unit'>克</Text>
-                <Text className='weight-arrow'>↕️</Text>
               </View>
             </View>
           </View>
-
           <View className='nutrition-grid'>
             <View className='nutrition-card'>
               <Text className='nutrition-icon'>🔥</Text>
@@ -476,13 +331,13 @@ export default function ResultPage() {
                     <Text className='ingredient-weight'>估算: {item.weight} g</Text>
                   </View>
                   <View className='ingredient-actions'>
-                    <View 
+                    <View
                       className='action-btn minus-btn'
                       onClick={() => handleWeightAdjust(item.id, -10)}
                     >
                       <Text className='action-icon'>−</Text>
                     </View>
-                    <View 
+                    <View
                       className='action-btn plus-btn'
                       onClick={() => handleWeightAdjust(item.id, 10)}
                     >
@@ -497,7 +352,6 @@ export default function ResultPage() {
                     <Text className='calorie-value'>
                       {Math.round(item.calorie * (item.ratio / 100))} kcal
                     </Text>
-                    <Text className='calorie-arrow'>↓</Text>
                   </View>
                   <View className='ratio-info'>
                     <Text className='ratio-label'>摄入比例</Text>
@@ -524,20 +378,15 @@ export default function ResultPage() {
           </View>
         </View>
 
-        {/* 确认按钮 */}
+        {/* 确认记录按钮 */}
         <View className='confirm-section'>
-          <View className='confirm-btn' onClick={handleConfirm} style={{ opacity: saving ? 0.7 : 1 }}>
-            <Text className='confirm-btn-text'>
-              {saving ? '保存中...' : '确认记录并完成'}
-            </Text>
-          </View>
           <View
-            className={`warning-section ${hasSavedCritical ? 'warning-section--done' : ''}`}
-            onClick={hasSavedCritical ? undefined : handleMarkSample}
+            className='confirm-btn'
+            onClick={handleConfirm}
+            style={{ opacity: saving ? 0.7 : 1 }}
           >
-            <Text className='warning-icon'>{hasSavedCritical ? '✓' : '⚠️'}</Text>
-            <Text className='warning-text'>
-              {hasSavedCritical ? '已标记为偏差样本' : '认为AI估算偏差大?点击标记样本'}
+            <Text className='confirm-btn-text'>
+              {saving ? '保存中...' : '确认记录'}
             </Text>
           </View>
         </View>
@@ -545,4 +394,3 @@ export default function ResultPage() {
     </View>
   )
 }
-

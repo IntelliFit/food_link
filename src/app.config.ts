@@ -5,8 +5,12 @@ export default defineAppConfig({
     'pages/record/index',
     'pages/analyze/index',
     'pages/result/index',
+    'pages/result-text/index',
     'pages/ai-assistant/index',
-    'pages/profile/index'
+    'pages/profile/index',
+    'pages/health-profile/index',
+    'pages/health-profile-view/index',
+    'pages/record-detail/index'
   ],
   window: {
     backgroundTextStyle: 'light',
