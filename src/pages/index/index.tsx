@@ -78,12 +78,6 @@ export default function IndexPage() {
     })
   }
 
-  const handleRecordExercise = () => {
-    Taro.navigateTo({
-      url: '/pages/record/index?type=exercise'
-    })
-  }
-
   return (
     <View className='home-page'>
       {/* 顶部渐变区域 */}
@@ -244,29 +238,6 @@ export default function IndexPage() {
         </View>
         <View className='ai-button'>
           <Text className='ai-button-text'>查看建议</Text>
-        </View>
-      </View>
-
-      {/* 今日运动 */}
-      <View className='exercise-section'>
-        <View className='section-header'>
-          <View className='exercise-header-left'>
-            <View className='exercise-icon'>
-              <Text>🏃</Text>
-            </View>
-            <Text className='section-title'>今日运动</Text>
-          </View>
-          <Text className='record-btn' onClick={handleRecordExercise}>记录</Text>
-        </View>
-        <View className='exercise-stats'>
-          <View className='stat-card'>
-            <Text className='stat-label'>运动时长</Text>
-            <Text className='stat-value'>30 分钟</Text>
-          </View>
-          <View className='stat-card'>
-            <Text className='stat-label'>消耗卡路里</Text>
-            <Text className='stat-value'>180 kcal</Text>
-          </View>
         </View>
       </View>
     </View>

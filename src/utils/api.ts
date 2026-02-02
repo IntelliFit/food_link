@@ -140,6 +140,25 @@ export interface HomeDashboard {
   meals: HomeMealItem[]
 }
 
+/** 数据统计接口返回（周/月） */
+export interface StatsSummary {
+  range: 'week' | 'month'
+  start_date: string
+  end_date: string
+  tdee: number
+  streak_days: number
+  total_calories: number
+  avg_calories_per_day: number
+  cal_surplus_deficit: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  by_meal: { breakfast: number; lunch: number; dinner: number; snack: number }
+  daily_calories: Array<{ date: string; calories: number }>
+  macro_percent: { protein: number; carbs: number; fat: number }
+  analysis_summary: string
+}
+
 // 登录请求接口
 export interface LoginRequest {
   code: string
@@ -297,7 +316,7 @@ export async function analyzeFoodImage(
         ...(request.user_goal != null && { user_goal: request.user_goal }),
         ...(request.context_state != null && request.context_state !== '' && { context_state: request.context_state }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
-        ...(request.meal_type != null && request.meal_type !== '' && { meal_type: request.meal_type })
+        ...(request.meal_type != null && { meal_type: request.meal_type })
       },
       timeout: 60000 // 60秒超时
     })
@@ -410,6 +429,22 @@ export async function getHomeDashboard(): Promise<HomeDashboard> {
     throw new Error(msg)
   }
   return res.data as HomeDashboard
+}
+
+/**
+ * 获取数据统计（周/月摄入、TDEE、连续天数、饮食结构及简单分析）
+ * @param range 'week' | 'month'
+ */
+export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSummary> {
+  const res = await authenticatedRequest(
+    `/api/stats/summary?range=${encodeURIComponent(range)}`,
+    { method: 'GET', timeout: 10000 }
+  )
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取统计失败'
+    throw new Error(msg)
+  }
+  return res.data as StatsSummary
 }
 
 /**
@@ -725,5 +760,129 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
     console.error('健康报告 OCR 失败:', error)
     throw new Error(error.message || '识别失败，请重试')
   }
+}
+
+// ---------- 好友与圈子 ----------
+
+/** 搜索用户项（不包含手机号） */
+export interface FriendSearchUser {
+  id: string
+  nickname: string
+  avatar: string
+}
+
+/** 收到的好友请求 */
+export interface FriendRequestItem {
+  id: string
+  from_user_id: string
+  to_user_id: string
+  status: string
+  created_at: string
+  from_nickname: string
+  from_avatar: string
+}
+
+/** 好友列表项 */
+export interface FriendListItem {
+  id: string
+  nickname: string
+  avatar: string
+}
+
+/** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
+export interface CommunityFeedItem {
+  record: FoodRecord
+  author: { id: string; nickname: string; avatar: string }
+  like_count: number
+  liked: boolean
+  /** 是否为当前用户自己的帖子 */
+  is_mine?: boolean
+}
+
+/** 评论项 */
+export interface FeedCommentItem {
+  id: string
+  user_id: string
+  record_id: string
+  content: string
+  created_at: string
+  nickname: string
+  avatar: string
+}
+
+/** 搜索用户（昵称模糊 / 手机号精确） */
+export async function friendSearch(params: { nickname?: string; telephone?: string }): Promise<{ list: FriendSearchUser[] }> {
+  const q = new URLSearchParams()
+  if (params.nickname) q.set('nickname', params.nickname)
+  if (params.telephone) q.set('telephone', params.telephone)
+  const response = await authenticatedRequest(`/api/friend/search?${q.toString()}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '搜索失败')
+  return response.data as { list: FriendSearchUser[] }
+}
+
+/** 发送好友请求 */
+export async function friendSendRequest(toUserId: string): Promise<void> {
+  const response = await authenticatedRequest('/api/friend/request', { method: 'POST', data: { to_user_id: toUserId } })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发送失败')
+}
+
+/** 收到的待处理好友请求列表 */
+export async function friendGetRequests(): Promise<{ list: FriendRequestItem[] }> {
+  const response = await authenticatedRequest('/api/friend/requests', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as { list: FriendRequestItem[] }
+}
+
+/** 处理好友请求 */
+export async function friendRespondRequest(requestId: string, action: 'accept' | 'reject'): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend/request/${requestId}/respond`, {
+    method: 'POST',
+    data: { action }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '操作失败')
+}
+
+/** 好友列表 */
+export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
+  const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as { list: FriendListItem[] }
+}
+
+/** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */
+export async function communityGetFeed(date?: string): Promise<{ list: CommunityFeedItem[] }> {
+  const q = date ? `?date=${date}` : ''
+  const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
+  return response.data as { list: CommunityFeedItem[] }
+}
+
+/** 点赞某条动态 */
+export async function communityLike(recordId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/community/feed/${recordId}/like`, { method: 'POST' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '点赞失败')
+}
+
+/** 取消点赞 */
+export async function communityUnlike(recordId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/community/feed/${recordId}/like`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '取消失败')
+}
+
+/** 某条动态的评论列表 */
+export async function communityGetComments(recordId: string): Promise<{ list: FeedCommentItem[] }> {
+  const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取评论失败')
+  return response.data as { list: FeedCommentItem[] }
+}
+
+/** 发表评论 */
+export async function communityPostComment(recordId: string, content: string): Promise<{ comment: FeedCommentItem }> {
+  const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, {
+    method: 'POST',
+    data: { content: content.trim() }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发表失败')
+  return response.data as { comment: FeedCommentItem }
 }
 

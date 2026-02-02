@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-02-02
+
+- ✨ feat: 新增数据统计页：个人中心「数据统计」跳转 pages/stats；周/月切换、热量盈缺看板（日均 vs TDEE）、连续记录天数、按餐次与宏量占比的饮食结构、每日摄入列表、简单分析报告；后端 GET /api/stats/summary?range=week|month `backend/main.py` `src/utils/api.ts` `src/pages/stats/` `src/pages/profile/index.tsx` `app.config.ts`
+- 🔧 chore: 新增脚本 seed_xiaomage_request.py：模拟用户「小马哥」请求添加测试账号(18870666046)为好友；主种子脚本增加同一步骤 `backend/seed_test_data.py` `backend/seed_xiaomage_request.py`
+- ✨ feat: 圈子 Feed 同时展示自己的今日食物：list_friends_today_records 包含当前用户，API 返回 is_mine，前端自己的帖子显示「我」 `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx`
+- ✨ feat: 圈子测试帖增加图片与食物明细：种子脚本 FOOD_RECORDS 含 image_path（Unsplash 图）、items 明细；圈子帖支持点击查看详情（存 record 后跳 record-detail），点赞/评论区域阻止冒泡 `backend/seed_test_data.py` `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页下拉刷新不生效：改为使用 ScrollView 的 refresher（refresherEnabled/onRefresherRefresh/refresherTriggered），因页面级下拉被内部 ScrollView 接管 `src/pages/community/index.tsx` `src/pages/community/index.config.ts`
+- ✨ feat: 圈子页改为下拉刷新：启用 enablePullDownRefresh，使用 usePullDownRefresh 刷新好友与动态，移除触顶刷新 `src/pages/community/index.tsx` `src/pages/community/index.config.ts`
+- 🐛 fix: 圈子页滚动与屏幕不同步：页面用 flex 布局、ScrollView 外包一层并绝对定位填满，使滚动区域高度与可视区一致；底部留白 320rpx `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🐛 fix: 圈子页滚动到底部内容被遮挡：为滚动内容增加底部留白 280rpx，避免最后一条动态被 tab 栏和浮动按钮挡住 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🔧 chore: 新增种子脚本 seed_test_data.py：为测试账号 18870666046 添加 3 名测试好友（小明/小红/小刚）及今日食物记录，用于圈子 Feed 测试 `backend/seed_test_data.py`
+- ✨ feat: 圈子页完善社交：好友（按昵称/手机号搜索、发送请求、收到的请求接受/拒绝、好友列表）、好友今日饮食动态（来自 user_food_records）、点赞与评论（feed_likes/feed_comments）；后端 user_friends/friend_requests/feed_likes/feed_comments 表与 API `backend/database/user_friends.sql` `backend/database/feed_likes_comments.sql` `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- ✨ feat: 食物分析结合健康档案：/api/analyze、/api/analyze-text 支持可选 Authorization，已登录时拉取用户健康档案（性别/身高体重年龄/活动水平/病史/饮食偏好/过敏/BMR·TDEE/体检摘要）注入 prompt，AI 在 insight、absorption_notes、context_advice 中给出更贴合体质与健康状况的建议（如控糖、低嘌呤、过敏规避） `backend/middleware.py` `backend/main.py`
+- 🎨 style: 首页去除今日运动卡片及相关逻辑与样式 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+
 ## 2026-02-01
 
 - ✨ feat: 食物分析先上传图片到 Supabase 获取 URL，分析接口支持 image_url；分析页先调 upload-analyze-image 再分析，结果页/标记样本/保存记录均存 Supabase 图片 URL `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/analyze/index.tsx`

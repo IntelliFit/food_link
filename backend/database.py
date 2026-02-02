@@ -307,6 +307,55 @@ async def list_food_records(
         raise
 
 
+async def list_food_records_by_range(
+    user_id: str,
+    start_date: str,
+    end_date: str,
+) -> List[Dict[str, Any]]:
+    """
+    查询用户在日期范围内的饮食记录（用于数据统计）。
+    start_date/end_date: YYYY-MM-DD，含首含尾（end_date 当天 24:00 前）。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        start_ts = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+        end_d = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+        end_ts = end_d.isoformat().replace("+00:00", "Z")
+        q = supabase.table("user_food_records").select("*").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=False)
+        result = q.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_food_records_by_range] 错误: {e}")
+        raise
+
+
+async def get_streak_days(user_id: str) -> int:
+    """
+    计算连续记录天数（从今天起往前，有记录的连续天数）。
+    某天至少有 1 条饮食记录即算「有记录」。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        today = datetime.now(timezone.utc).date()
+        streak = 0
+        d = today
+        while True:
+            day_str = d.strftime("%Y-%m-%d")
+            start_ts = datetime.combine(d, datetime.min.time().replace(tzinfo=timezone.utc)).isoformat().replace("+00:00", "Z")
+            end_ts = datetime.combine(d + timedelta(days=1), datetime.min.time().replace(tzinfo=timezone.utc)).isoformat().replace("+00:00", "Z")
+            r = supabase.table("user_food_records").select("id").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).limit(1).execute()
+            if not r.data or len(r.data) == 0:
+                break
+            streak += 1
+            d -= timedelta(days=1)
+        return streak
+    except Exception as e:
+        print(f"[get_streak_days] 错误: {e}")
+        raise
+
+
 async def insert_critical_samples(
     user_id: str,
     items: List[Dict[str, Any]],
@@ -399,4 +448,319 @@ def upload_food_analyze_image(base64_image: str) -> str:
     if hasattr(result, "publicUrl"):
         return getattr(result, "publicUrl", "")
     return str(result)
+
+
+# ---------- 好友系统 ----------
+
+async def get_friend_ids(user_id: str) -> List[str]:
+    """获取用户的好友 ID 列表"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_friends").select("friend_id").eq("user_id", user_id).execute()
+        return [r["friend_id"] for r in (result.data or [])]
+    except Exception as e:
+        print(f"[get_friend_ids] 错误: {e}")
+        raise
+
+
+async def is_friend(user_id: str, friend_id: str) -> bool:
+    """判断两人是否为好友"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        r1 = supabase.table("user_friends").select("id").eq("user_id", user_id).eq("friend_id", friend_id).limit(1).execute()
+        if r1.data and len(r1.data) > 0:
+            return True
+        r2 = supabase.table("user_friends").select("id").eq("user_id", friend_id).eq("friend_id", user_id).limit(1).execute()
+        return bool(r2.data and len(r2.data) > 0)
+    except Exception as e:
+        print(f"[is_friend] 错误: {e}")
+        raise
+
+
+async def add_friend_pair(user_id: str, friend_id: str) -> None:
+    """建立双向好友关系（插入两条记录）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("user_friends").insert([
+            {"user_id": user_id, "friend_id": friend_id},
+            {"user_id": friend_id, "friend_id": user_id},
+        ]).execute()
+    except Exception as e:
+        print(f"[add_friend_pair] 错误: {e}")
+        raise
+
+
+async def get_pending_request_to_user_ids(from_user_id: str) -> List[str]:
+    """获取 from_user_id 已发出的、状态为 pending 的 to_user_id 列表"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("friend_requests").select("to_user_id").eq("from_user_id", from_user_id).eq("status", "pending").execute()
+        return [r["to_user_id"] for r in (result.data or [])]
+    except Exception as e:
+        print(f"[get_pending_request_to_user_ids] 错误: {e}")
+        raise
+
+
+async def search_users(
+    current_user_id: str,
+    nickname: Optional[str] = None,
+    telephone: Optional[str] = None,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    """
+    搜索用户：按昵称模糊或手机号精确。排除自己、已是好友、已发过待处理请求的。
+    返回 id, nickname, avatar（不返回 telephone）。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        if telephone:
+            q = supabase.table("weapp_user").select("id, nickname, avatar").eq("telephone", telephone.strip()).neq("id", current_user_id).limit(1)
+            result = q.execute()
+        elif nickname and nickname.strip():
+            q = supabase.table("weapp_user").select("id, nickname, avatar").ilike("nickname", f"%{nickname.strip()}%").neq("id", current_user_id).limit(limit)
+            result = q.execute()
+        else:
+            return []
+        users = list(result.data or [])
+        if not users:
+            return []
+        friend_ids = await get_friend_ids(current_user_id)
+        pending = await get_pending_request_to_user_ids(current_user_id)
+        out = []
+        for u in users:
+            uid = u.get("id")
+            if uid in friend_ids or uid in pending:
+                continue
+            out.append(u)
+        return out
+    except Exception as e:
+        print(f"[search_users] 错误: {e}")
+        raise
+
+
+async def send_friend_request(from_user_id: str, to_user_id: str) -> Dict[str, Any]:
+    """发送好友请求"""
+    if from_user_id == to_user_id:
+        raise ValueError("不能添加自己为好友")
+    if await is_friend(from_user_id, to_user_id):
+        raise ValueError("你们已是好友")
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = supabase.table("friend_requests").select("*").eq("from_user_id", from_user_id).eq("to_user_id", to_user_id).execute()
+        if existing.data and len(existing.data) > 0:
+            row = existing.data[0]
+            if row.get("status") == "pending":
+                return row
+            supabase.table("friend_requests").update({"status": "pending", "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", row["id"]).execute()
+            return {**row, "status": "pending"}
+        result = supabase.table("friend_requests").insert({
+            "from_user_id": from_user_id,
+            "to_user_id": to_user_id,
+            "status": "pending",
+        }).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("发送好友请求失败")
+    except ValueError:
+        raise
+    except Exception as e:
+        print(f"[send_friend_request] 错误: {e}")
+        raise
+
+
+async def get_friend_requests_received(to_user_id: str) -> List[Dict[str, Any]]:
+    """获取收到的待处理好友请求列表"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("friend_requests").select("id, from_user_id, to_user_id, status, created_at").eq("to_user_id", to_user_id).eq("status", "pending").order("created_at", desc=True).execute()
+        rows = list(result.data or [])
+        if not rows:
+            return []
+        from_ids = [r["from_user_id"] for r in rows]
+        users_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", from_ids).execute()
+        users_map = {u["id"]: u for u in (users_result.data or [])}
+        out = []
+        for r in rows:
+            u = users_map.get(r["from_user_id"], {})
+            out.append({
+                "id": r["id"],
+                "from_user_id": r["from_user_id"],
+                "to_user_id": r["to_user_id"],
+                "status": r["status"],
+                "created_at": r["created_at"],
+                "from_nickname": u.get("nickname") or "用户",
+                "from_avatar": u.get("avatar") or "",
+            })
+        return out
+    except Exception as e:
+        print(f"[get_friend_requests_received] 错误: {e}")
+        raise
+
+
+async def respond_friend_request(request_id: str, to_user_id: str, accept: bool) -> None:
+    """处理好友请求：接受则建立双向好友关系"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        req = supabase.table("friend_requests").select("*").eq("id", request_id).eq("to_user_id", to_user_id).single().execute()
+        if not req.data:
+            raise ValueError("请求不存在或无权操作")
+        row = req.data
+        if row.get("status") != "pending":
+            raise ValueError("该请求已处理")
+        status = "accepted" if accept else "rejected"
+        supabase.table("friend_requests").update({"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", request_id).execute()
+        if accept:
+            await add_friend_pair(row["to_user_id"], row["from_user_id"])
+    except ValueError:
+        raise
+    except Exception as e:
+        print(f"[respond_friend_request] 错误: {e}")
+        raise
+
+
+async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
+    """获取好友列表，含 nickname、avatar、id"""
+    friend_ids = await get_friend_ids(user_id)
+    if not friend_ids:
+        return []
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", friend_ids).execute()
+    return list(result.data or [])
+
+
+# ---------- 圈子动态（好友今日饮食 + 点赞评论）----------
+
+async def list_friends_today_records(user_id: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """获取好友 + 自己在指定日期（默认今天）的饮食记录，用于圈子 Feed"""
+    friend_ids = await get_friend_ids(user_id)
+    # 包含自己：圈子 Feed 同时展示自己的今日食物
+    author_ids = list(set(friend_ids) | {user_id})
+    if not author_ids:
+        author_ids = [user_id]
+    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    start_ts = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    end_d = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+    end_ts = end_d.isoformat().replace("+00:00", "Z")
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        records = supabase.table("user_food_records").select("*").in_("user_id", author_ids).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=True).execute()
+        rec_list = list(records.data or [])
+        if not rec_list:
+            return []
+        authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute()
+        author_map = {a["id"]: a for a in (authors.data or [])}
+        out = []
+        for r in rec_list:
+            author = author_map.get(r["user_id"], {})
+            out.append({
+                "record": r,
+                "author": {
+                    "id": author.get("id"),
+                    "nickname": author.get("nickname") or "用户",
+                    "avatar": author.get("avatar") or "",
+                },
+            })
+        return out
+    except Exception as e:
+        print(f"[list_friends_today_records] 错误: {e}")
+        raise
+
+
+async def add_feed_like(user_id: str, record_id: str) -> None:
+    """对某条饮食记录点赞"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("feed_likes").insert({"user_id": user_id, "record_id": record_id}).execute()
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            return
+        print(f"[add_feed_like] 错误: {e}")
+        raise
+
+
+async def remove_feed_like(user_id: str, record_id: str) -> None:
+    """取消点赞"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("feed_likes").delete().eq("user_id", user_id).eq("record_id", record_id).execute()
+    except Exception as e:
+        print(f"[remove_feed_like] 错误: {e}")
+        raise
+
+
+async def get_feed_likes_for_records(record_ids: List[str], current_user_id: str) -> Dict[str, Any]:
+    """批量查询点赞数及当前用户是否已点赞。返回 { record_id: { count, liked } }"""
+    if not record_ids:
+        return {}
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        r = supabase.table("feed_likes").select("record_id").in_("record_id", record_ids).execute()
+        rows = r.data or []
+        count_map: Dict[str, int] = {}
+        for row in rows:
+            rid = row["record_id"]
+            count_map[rid] = count_map.get(rid, 0) + 1
+        my = supabase.table("feed_likes").select("record_id").eq("user_id", current_user_id).in_("record_id", record_ids).execute()
+        my_set = {m["record_id"] for m in (my.data or [])}
+        return {rid: {"count": count_map.get(rid, 0), "liked": rid in my_set} for rid in record_ids}
+    except Exception as e:
+        print(f"[get_feed_likes_for_records] 错误: {e}")
+        raise
+
+
+async def add_feed_comment(user_id: str, record_id: str, content: str) -> Dict[str, Any]:
+    """发表评论"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("feed_comments").insert({"user_id": user_id, "record_id": record_id, "content": content.strip()}).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("发表评论失败")
+    except Exception as e:
+        print(f"[add_feed_comment] 错误: {e}")
+        raise
+
+
+async def list_feed_comments(record_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """某条动态的评论列表，含评论者 nickname、avatar"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("feed_comments").select("id, user_id, record_id, content, created_at").eq("record_id", record_id).order("created_at", desc=False).limit(limit).execute()
+        rows = list(result.data or [])
+        if not rows:
+            return []
+        user_ids = list({r["user_id"] for r in rows})
+        users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", user_ids).execute()
+        user_map = {u["id"]: u for u in (users.data or [])}
+        out = []
+        for r in rows:
+            u = user_map.get(r["user_id"], {})
+            out.append({
+                "id": r["id"],
+                "user_id": r["user_id"],
+                "record_id": r["record_id"],
+                "content": r["content"],
+                "created_at": r["created_at"],
+                "nickname": u.get("nickname") or "用户",
+                "avatar": u.get("avatar") or "",
+            })
+        return out
+    except Exception as e:
+        print(f"[list_feed_comments] 错误: {e}")
+        raise
 

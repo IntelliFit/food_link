@@ -10,6 +10,7 @@ export default defineAppConfig({
     'pages/profile/index',
     'pages/health-profile/index',
     'pages/health-profile-view/index',
+    'pages/stats/index',
     'pages/record-detail/index'
   ],
   window: {

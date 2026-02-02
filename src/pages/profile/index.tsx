@@ -169,6 +169,11 @@ export default function ProfilePage() {
       }
       return
     }
+    // 数据统计
+    if (service.id === 2) {
+      Taro.navigateTo({ url: '/pages/stats/index' })
+      return
+    }
     const path = (service as { path?: string }).path
     if (path) {
       Taro.navigateTo({ url: path })

@@ -96,16 +96,45 @@ async def get_current_openid(
 ) -> str:
     """
     从请求头提取并验证 token，返回 openid
-    
+
     Args:
         authorization: Authorization 请求头（格式：Bearer {token}）
-    
+
     Returns:
         openid: 微信 openid 字符串
-    
+
     Raises:
         HTTPException: 如果 token 无效或缺失
     """
     user_info = await get_current_user_info(authorization)
     return user_info["openid"]
+
+
+async def get_optional_user_info(
+    authorization: Optional[str] = Header(None)
+) -> Optional[Dict[str, str]]:
+    """
+    可选认证：有有效 token 时返回用户信息，无 token 或无效时返回 None。
+    用于食物分析等接口，在已登录时结合健康档案给出更全面建议。
+    """
+    if not authorization:
+        return None
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            return None
+    except ValueError:
+        return None
+    payload = verify_token(token)
+    if payload is None:
+        return None
+    user_id = payload.get("user_id")
+    openid = payload.get("openid")
+    if not user_id:
+        return None
+    return {
+        "user_id": user_id,
+        "openid": openid or "",
+        "unionid": payload.get("unionid"),
+    }
 

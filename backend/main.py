@@ -18,11 +18,24 @@ from database import (
     insert_health_document,
     insert_food_record,
     list_food_records,
+    list_food_records_by_range,
+    get_streak_days,
     insert_critical_samples,
     upload_health_report_image,
     upload_food_analyze_image,
+    search_users,
+    send_friend_request,
+    get_friend_requests_received,
+    respond_friend_request,
+    get_friends_with_profile,
+    list_friends_today_records,
+    add_feed_like,
+    remove_feed_like,
+    get_feed_likes_for_records,
+    add_feed_comment,
+    list_feed_comments,
 )
-from middleware import get_current_user_info, get_current_user_id, get_current_openid
+from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
 
 # 从 .env 文件加载环境变量
@@ -100,14 +113,99 @@ class LoginResponse(BaseModel):
     countryCode: Optional[str] = None
 
 
+# 活动水平中文映射（用于健康档案摘要）
+ACTIVITY_LEVEL_LABELS = {
+    "sedentary": "久坐",
+    "light": "轻度活动",
+    "moderate": "中度活动",
+    "active": "高度活动",
+    "very_active": "极高活动",
+}
+
+
+def _format_health_profile_for_analysis(user: Dict[str, Any]) -> str:
+    """
+    将 weapp_user 健康档案格式化为供 AI 参考的简短摘要。
+    用于在食物分析时结合体质、病史、过敏等给出更全面建议。
+    """
+    parts = []
+    gender = user.get("gender")
+    if gender:
+        parts.append(f"性别：{'男' if gender == 'male' else '女'}")
+    height = user.get("height")
+    if height is not None:
+        parts.append(f"身高 {float(height):.0f} cm")
+    weight = user.get("weight")
+    if weight is not None:
+        parts.append(f"体重 {float(weight):.1f} kg")
+    birthday = user.get("birthday")
+    if birthday:
+        age = get_age_from_birthday(str(birthday))
+        if age is not None:
+            parts.append(f"年龄 {age} 岁")
+    if parts:
+        parts[0] = "· " + parts[0]
+        for i in range(1, len(parts)):
+            parts[i] = "  " + parts[i]
+        line1 = " ".join(parts)
+    else:
+        line1 = ""
+    activity = user.get("activity_level")
+    activity_str = ACTIVITY_LEVEL_LABELS.get(activity, activity or "未填")
+    line2 = f"· 活动水平：{activity_str}"
+    hc = user.get("health_condition") or {}
+    if isinstance(hc, str):
+        try:
+            hc = json.loads(hc) if hc else {}
+        except Exception:
+            hc = {}
+    medical = hc.get("medical_history") or []
+    if medical:
+        line3 = "· 既往病史：" + "、".join(medical) if isinstance(medical, list) else "· 既往病史：" + str(medical)
+    else:
+        line3 = ""
+    diet = hc.get("diet_preference") or []
+    if diet:
+        line4 = "· 饮食偏好：" + "、".join(diet) if isinstance(diet, list) else "· 饮食偏好：" + str(diet)
+    else:
+        line4 = ""
+    allergies = hc.get("allergies") or []
+    if allergies:
+        line5 = "· 过敏/忌口：" + "、".join(allergies) if isinstance(allergies, list) else "· 过敏/忌口：" + str(allergies)
+    else:
+        line5 = ""
+    bmr = user.get("bmr")
+    tdee = user.get("tdee")
+    line6 = ""
+    if bmr is not None or tdee is not None:
+        bmr_s = f"{float(bmr):.0f} kcal/天" if bmr is not None else "未计算"
+        tdee_s = f"{float(tdee):.0f} kcal/天" if tdee is not None else "未计算"
+        line6 = f"· 基础代谢(BMR)：{bmr_s}；每日总消耗(TDEE)：{tdee_s}"
+    report = hc.get("report_extract") or hc.get("ocr_notes") or ""
+    if isinstance(report, dict):
+        report = json.dumps(report, ensure_ascii=False)[:500]
+    elif report:
+        report = (report[:500] + "…") if len(str(report)) > 500 else str(report)
+    line7 = "· 体检/病历摘要：" + report if report else ""
+    lines = [line1, line2, line3, line4, line5, line6, line7]
+    lines = [x for x in lines if x]
+    if not lines:
+        return ""
+    return "用户健康档案（供营养建议参考）：\n" + "\n".join(lines)
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
-async def analyze_food(request: AnalyzeRequest):
+async def analyze_food(
+    request: AnalyzeRequest,
+    user_info: Optional[dict] = Depends(get_optional_user_info),
+):
     """
     分析食物图片，返回营养成分和健康建议
-    
+
     - **base64Image**: Base64 编码的图片数据（必需）
     - **additionalContext**: 用户补充的上下文信息（可选）
     - **modelName**: 使用的模型名称（默认: qwen-vl-max）
+    - 若请求头带有效 Authorization，将结合该用户的健康档案给出更贴合体质与健康状况的建议。
     """
     try:
         # 获取 API Key
@@ -148,6 +246,18 @@ async def analyze_food(request: AnalyzeRequest):
             meal_name = meal_map.get(request.meal_type, request.meal_type)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
 
+        # 若已登录，拉取健康档案并注入 prompt
+        profile_block = ""
+        if user_info:
+            user = await get_user_by_id(user_info["user_id"])
+            if user:
+                profile_block = _format_health_profile_for_analysis(user)
+                if profile_block:
+                    profile_block = (
+                        "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
+                        + profile_block
+                    )
+
         # 构建提示词
         prompt = f"""
 请作为专业的营养师分析这张食物图片。
@@ -157,7 +267,7 @@ async def analyze_food(request: AnalyzeRequest):
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（如维生素C促铁吸收、油脂助脂溶性维生素等，一两句话）。
-7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}
+7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
 
 {('用户补充背景信息: "' + request.additionalContext + '"。请根据此信息调整对隐形成分或烹饪方式的判断。') if request.additionalContext else ''}
 
@@ -341,9 +451,13 @@ class AnalyzeTextRequest(BaseModel):
 
 
 @app.post("/api/analyze-text", response_model=AnalyzeResponse)
-async def analyze_food_text(request: AnalyzeTextRequest):
+async def analyze_food_text(
+    request: AnalyzeTextRequest,
+    user_info: Optional[dict] = Depends(get_optional_user_info),
+):
     """
     根据用户文字描述分析食物营养成分，返回与 /api/analyze 相同结构（description, insight, items）。
+    若请求头带有效 Authorization，将结合该用户的健康档案给出更贴合体质与健康状况的建议。
     """
     try:
         api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
@@ -367,6 +481,18 @@ async def analyze_food_text(request: AnalyzeTextRequest):
         state_hint = f" 用户当前状态: {request.context_state}，请在 context_advice 中给出针对性建议。" if request.context_state else ""
         remain_hint = f" 当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示。" if request.remaining_calories is not None else ""
 
+        # 若已登录，拉取健康档案并注入 prompt
+        profile_block = ""
+        if user_info:
+            user = await get_user_by_id(user_info["user_id"])
+            if user:
+                profile_block = _format_health_profile_for_analysis(user)
+                if profile_block:
+                    profile_block = (
+                        " 若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
+                        + profile_block
+                    )
+
         prompt = f"""
 请作为专业营养师，根据用户对食物的**文字描述**，分析营养成分。
 用户描述内容：
@@ -379,7 +505,7 @@ async def analyze_food_text(request: AnalyzeTextRequest):
 4. insight: 用一句话给出健康建议。
 5. pfc_ratio_comment: 本餐 P/F/C 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪对吸收率、生物利用度的简要说明（一两句话）。
-7. context_advice: 结合用户状态或剩余热量的情境建议（若无则空字符串）。{state_hint}{remain_hint}
+7. context_advice: 结合用户状态或剩余热量的情境建议（若无则空字符串）。{state_hint}{remain_hint}{profile_block}
 
 重要：请务必使用**简体中文**返回所有文本。
 请**严格按照**以下 JSON 格式返回，不要包含任何其他文字：
@@ -1169,6 +1295,280 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
         })
 
     return {"intakeData": intake_data, "meals": meals_out}
+
+
+# ---------- 数据统计（周/月摄入、TDEE、连续天数、饮食结构） ----------
+
+@app.get("/api/stats/summary")
+async def get_stats_summary(
+    range: str = "week",
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    数据统计：按周(week)或月(month)汇总摄入、与 TDEE 对比、连续记录天数、饮食结构（按餐次与宏量），并给出简单分析。
+    """
+    if range not in ("week", "month"):
+        range = "week"
+    user_id = user_info["user_id"]
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    if range == "week":
+        start_d = (now - timedelta(days=6)).date()
+    else:
+        start_d = (now - timedelta(days=29)).date()
+    start_date = start_d.strftime("%Y-%m-%d")
+    end_date = today
+    try:
+        user = await get_user_by_id(user_id)
+        tdee = (user.get("tdee") and float(user["tdee"])) or 2000
+        records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
+        streak_days = await get_streak_days(user_id)
+    except Exception as e:
+        print(f"[get_stats_summary] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取统计失败")
+
+    total_cal = sum(float(r.get("total_calories") or 0) for r in records)
+    total_protein = sum(float(r.get("total_protein") or 0) for r in records)
+    total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
+    total_fat = sum(float(r.get("total_fat") or 0) for r in records)
+    days_in_range = 7 if range == "week" else 30
+    avg_cal_per_day = round(total_cal / days_in_range, 1) if days_in_range else 0
+    cal_surplus_deficit = round(avg_cal_per_day - tdee, 1)
+
+    by_meal: Dict[str, float] = {}
+    for r in records:
+        mt = r.get("meal_type") or "snack"
+        by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
+    by_meal_out = {
+        "breakfast": round(by_meal.get("breakfast", 0), 1),
+        "lunch": round(by_meal.get("lunch", 0), 1),
+        "dinner": round(by_meal.get("dinner", 0), 1),
+        "snack": round(by_meal.get("snack", 0), 1),
+    }
+
+    daily_cal: Dict[str, float] = {}
+    for r in records:
+        rt = r.get("record_time")
+        if rt:
+            try:
+                dt_str = rt[:10] if isinstance(rt, str) else str(rt)[:10]
+                daily_cal[dt_str] = daily_cal.get(dt_str, 0) + float(r.get("total_calories") or 0)
+            except Exception:
+                pass
+    daily_list = [{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())]
+
+    total_macros = total_protein * 4 + total_carbs * 4 + total_fat * 9
+    if total_macros <= 0:
+        pct_p, pct_c, pct_f = 0, 0, 0
+    else:
+        pct_p = round(total_protein * 4 / total_macros * 100, 1)
+        pct_c = round(total_carbs * 4 / total_macros * 100, 1)
+        pct_f = round(total_fat * 9 / total_macros * 100, 1)
+
+    analysis_parts = []
+    if cal_surplus_deficit > 100:
+        analysis_parts.append(f"本期日均摄入比 TDEE 高约 {cal_surplus_deficit:.0f} kcal，注意控制总热量。")
+    elif cal_surplus_deficit < -100:
+        analysis_parts.append(f"本期日均摄入比 TDEE 低约 {-cal_surplus_deficit:.0f} kcal，减重期可接受，长期请保证营养。")
+    else:
+        analysis_parts.append("本期日均摄入与 TDEE 接近，热量控制良好。")
+    if streak_days > 0:
+        analysis_parts.append(f"已连续记录 {streak_days} 天，继续保持。")
+    if pct_p > 0:
+        analysis_parts.append(f"蛋白质占比约 {pct_p}%、碳水 {pct_c}%、脂肪 {pct_f}%，可根据目标微调比例。")
+
+    return {
+        "range": range,
+        "start_date": start_date,
+        "end_date": end_date,
+        "tdee": int(tdee),
+        "streak_days": streak_days,
+        "total_calories": round(total_cal, 1),
+        "avg_calories_per_day": avg_cal_per_day,
+        "cal_surplus_deficit": cal_surplus_deficit,
+        "total_protein": round(total_protein, 1),
+        "total_carbs": round(total_carbs, 1),
+        "total_fat": round(total_fat, 1),
+        "by_meal": by_meal_out,
+        "daily_calories": daily_list,
+        "macro_percent": {"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+        "analysis_summary": " ".join(analysis_parts),
+    }
+
+
+# ---------- 好友与圈子 ----------
+
+@app.get("/api/friend/search")
+async def api_friend_search(
+    nickname: Optional[str] = None,
+    telephone: Optional[str] = None,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """搜索用户（昵称模糊 / 手机号精确），排除自己、已是好友、已发过待处理请求的。返回 id, nickname, avatar。"""
+    if not nickname and not telephone:
+        return {"list": []}
+    try:
+        users = await search_users(
+            current_user_id=user_info["user_id"],
+            nickname=nickname.strip() if nickname else None,
+            telephone=telephone.strip() if telephone else None,
+            limit=20,
+        )
+        return {"list": users}
+    except Exception as e:
+        print(f"[api/friend/search] 错误: {e}")
+        raise HTTPException(status_code=500, detail="搜索失败")
+
+
+@app.post("/api/friend/request")
+async def api_friend_request(
+    body: dict,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """发送好友请求。body: { "to_user_id": "uuid" }"""
+    to_user_id = body.get("to_user_id")
+    if not to_user_id:
+        raise HTTPException(status_code=400, detail="缺少 to_user_id")
+    try:
+        await send_friend_request(user_info["user_id"], to_user_id)
+        return {"message": "已发送好友请求"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[api/friend/request] 错误: {e}")
+        raise HTTPException(status_code=500, detail="发送失败")
+
+
+@app.get("/api/friend/requests")
+async def api_friend_requests(user_info: dict = Depends(get_current_user_info)):
+    """收到的待处理好友请求列表"""
+    try:
+        rows = await get_friend_requests_received(user_info["user_id"])
+        return {"list": rows}
+    except Exception as e:
+        print(f"[api/friend/requests] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取失败")
+
+
+@app.post("/api/friend/request/{request_id}/respond")
+async def api_friend_respond(
+    request_id: str,
+    body: dict,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """处理好友请求。body: { "action": "accept" | "reject" }"""
+    action = body.get("action")
+    if action not in ("accept", "reject"):
+        raise HTTPException(status_code=400, detail="action 须为 accept 或 reject")
+    try:
+        await respond_friend_request(request_id, user_info["user_id"], action == "accept")
+        return {"message": "已接受" if action == "accept" else "已拒绝"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[api/friend/respond] 错误: {e}")
+        raise HTTPException(status_code=500, detail="操作失败")
+
+
+@app.get("/api/friend/list")
+async def api_friend_list(user_info: dict = Depends(get_current_user_info)):
+    """好友列表"""
+    try:
+        friends = await get_friends_with_profile(user_info["user_id"])
+        return {"list": friends}
+    except Exception as e:
+        print(f"[api/friend/list] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取失败")
+
+
+@app.get("/api/community/feed")
+async def api_community_feed(
+    date: Optional[str] = None,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """圈子 Feed：好友 + 自己在指定日期（默认今天）的饮食记录，带点赞数与当前用户是否已点赞。"""
+    try:
+        current_user_id = user_info["user_id"]
+        items = await list_friends_today_records(current_user_id, date=date)
+        record_ids = [item["record"]["id"] for item in items]
+        likes_map = await get_feed_likes_for_records(record_ids, current_user_id) if record_ids else {}
+        out = []
+        for item in items:
+            rec = item["record"]
+            rid = rec["id"]
+            like_info = likes_map.get(rid, {"count": 0, "liked": False})
+            is_mine = rec.get("user_id") == current_user_id
+            out.append({
+                "record": rec,
+                "author": item["author"],
+                "like_count": like_info["count"],
+                "liked": like_info["liked"],
+                "is_mine": is_mine,
+            })
+        return {"list": out}
+    except Exception as e:
+        print(f"[api/community/feed] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取动态失败")
+
+
+@app.post("/api/community/feed/{record_id}/like")
+async def api_community_like(
+    record_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """对某条动态点赞"""
+    try:
+        await add_feed_like(user_info["user_id"], record_id)
+        return {"message": "已点赞"}
+    except Exception as e:
+        print(f"[api/community/feed/like] 错误: {e}")
+        raise HTTPException(status_code=500, detail="点赞失败")
+
+
+@app.delete("/api/community/feed/{record_id}/like")
+async def api_community_unlike(
+    record_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """取消点赞"""
+    try:
+        await remove_feed_like(user_info["user_id"], record_id)
+        return {"message": "已取消"}
+    except Exception as e:
+        print(f"[api/community/feed/unlike] 错误: {e}")
+        raise HTTPException(status_code=500, detail="取消失败")
+
+
+@app.get("/api/community/feed/{record_id}/comments")
+async def api_community_comments(
+    record_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """某条动态的评论列表"""
+    try:
+        comments = await list_feed_comments(record_id, limit=50)
+        return {"list": comments}
+    except Exception as e:
+        print(f"[api/community/feed/comments] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取评论失败")
+
+
+@app.post("/api/community/feed/{record_id}/comments")
+async def api_community_comment_post(
+    record_id: str,
+    body: dict,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """发表评论。body: { "content": "评论内容" }"""
+    content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
+    if not content:
+        raise HTTPException(status_code=400, detail="评论内容不能为空")
+    try:
+        comment = await add_feed_comment(user_info["user_id"], record_id, content.strip())
+        return {"comment": comment}
+    except Exception as e:
+        print(f"[api/community/feed/comment] 错误: {e}")
+        raise HTTPException(status_code=500, detail="发表失败")
 
 
 async def get_access_token() -> str:

@@ -1,11 +1,36 @@
+/* 页面根节点：占满可视高度，flex 让 ScrollView 获得准确高度，与屏幕滚动同步 */
 .community-page {
+  height: 100vh;
   min-height: 100vh;
   background: #f9fafb;
-  padding-bottom: 200rpx;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
+/* 滚动外层：flex 占满剩余空间，给 ScrollView 提供明确高度 */
+.community-scroll-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* ScrollView 填满外层，高度明确，与屏幕滚动同步 */
 .community-scroll {
-  height: 100vh;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* 滚动内容底部留白，避免最后一条被 tab 栏和浮动按钮遮挡 */
+.community-scroll-content {
+  padding-bottom: 320rpx;
+  box-sizing: border-box;
 }
 
 // 页面头部
@@ -31,7 +56,104 @@
   line-height: 40rpx;
 }
 
-// 我的圈子
+// 未登录提示
+.login-tip {
+  margin: 32rpx;
+  padding: 48rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  text-align: center;
+}
+
+.login-tip-text {
+  display: block;
+  font-size: 28rpx;
+  color: #6a7282;
+  margin-bottom: 24rpx;
+}
+
+.login-tip-btn {
+  font-size: 28rpx;
+  color: #009966;
+  background: #ecfdf5;
+  border-radius: 12rpx;
+  width: 200rpx;
+  margin: 0 auto;
+}
+
+// 好友区域
+.friends-section {
+  padding: 32rpx;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+
+.requests-badge {
+  padding: 8rpx 20rpx;
+  background: #fef3c7;
+  border-radius: 9999rpx;
+}
+
+.requests-badge-text {
+  font-size: 26rpx;
+  color: #b45309;
+}
+
+.loading-text,
+.empty-text {
+  font-size: 28rpx;
+  color: #6a7282;
+  padding: 24rpx 0;
+}
+
+.friends-list {
+  white-space: nowrap;
+  padding-bottom: 8rpx;
+}
+
+.friend-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  width: 120rpx;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+}
+
+.friend-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00d492 0%, #00bba7 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.friend-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.friend-avatar-placeholder {
+  font-size: 40rpx;
+}
+
+.friend-name {
+  font-size: 24rpx;
+  color: #364153;
+  margin-top: 8rpx;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// 我的圈子（保留类名兼容）
 .my-circles-section {
   padding: 32rpx;
 }
@@ -303,6 +425,16 @@
   justify-content: center;
   font-size: 40rpx;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.user-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.user-avatar-placeholder {
+  font-size: 40rpx;
 }
 
 .user-info {
@@ -349,6 +481,27 @@
   line-height: 48rpx;
   margin-bottom: 24rpx;
   word-break: break-word;
+}
+
+.feed-empty {
+  padding: 48rpx 24rpx;
+  text-align: center;
+}
+
+.feed-empty-text {
+  font-size: 28rpx;
+  color: #6a7282;
+  line-height: 40rpx;
+}
+
+.feed-meta {
+  margin-bottom: 16rpx;
+}
+
+.feed-calorie {
+  font-size: 28rpx;
+  color: #009966;
+  font-weight: 600;
 }
 
 .feed-image {
@@ -465,4 +618,241 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+// 弹窗
+.modal-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  box-sizing: border-box;
+}
+
+.modal-box {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  max-height: 80vh;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1e2939;
+  margin-bottom: 24rpx;
+}
+
+.modal-close-btn {
+  margin-top: 24rpx;
+  font-size: 28rpx;
+  color: #6a7282;
+  background: #f3f4f6;
+  border-radius: 12rpx;
+}
+
+// 添加好友
+.add-friend-modal .search-type-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.search-type-btn {
+  padding: 16rpx 32rpx;
+  background: #f3f4f6;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  color: #364153;
+
+  &.active {
+    background: #ecfdf5;
+    color: #009966;
+  }
+}
+
+.add-friend-modal .search-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.search-input {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 24rpx;
+  background: #f9fafb;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+}
+
+.search-btn {
+  padding: 0 32rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  font-size: 28rpx;
+  background: #00bc7d;
+  color: #fff;
+  border-radius: 12rpx;
+}
+
+.search-results {
+  max-height: 400rpx;
+  margin-bottom: 16rpx;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+  gap: 24rpx;
+}
+
+.result-avatar {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.result-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.result-name {
+  flex: 1;
+  font-size: 30rpx;
+  color: #1e2939;
+}
+
+.result-add-btn {
+  background: #00bc7d;
+  color: #fff;
+  border-radius: 12rpx;
+}
+
+// 好友请求
+.requests-list {
+  max-height: 400rpx;
+  margin-bottom: 16rpx;
+}
+
+.request-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+  gap: 24rpx;
+}
+
+.request-avatar {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.request-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.request-name {
+  flex: 1;
+  font-size: 30rpx;
+  color: #1e2939;
+}
+
+.request-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.request-reject {
+  background: #f3f4f6;
+  color: #6a7282;
+}
+
+.request-accept {
+  background: #00bc7d;
+  color: #fff;
+}
+
+// 评论
+.comments-list {
+  max-height: 360rpx;
+  margin-bottom: 24rpx;
+}
+
+.comments-empty {
+  font-size: 28rpx;
+  color: #6a7282;
+  padding: 24rpx 0;
+}
+
+.comment-item {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.comment-author {
+  font-size: 26rpx;
+  color: #009966;
+  margin-right: 12rpx;
+}
+
+.comment-content {
+  font-size: 28rpx;
+  color: #364153;
+  line-height: 40rpx;
+}
+
+.comment-time {
+  font-size: 24rpx;
+  color: #9ca3af;
+  margin-top: 8rpx;
+  display: block;
+}
+
+.comment-input-row {
+  display: flex;
+  gap: 16rpx;
+  align-items: center;
+}
+
+.comment-input {
+  flex: 1;
+  height: 64rpx;
+  padding: 0 24rpx;
+  background: #f9fafb;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+}
+
+.comment-submit {
+  background: #00bc7d;
+  color: #fff;
+  border-radius: 12rpx;
 }
