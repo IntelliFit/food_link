@@ -764,3 +764,252 @@ async def list_feed_comments(record_id: str, limit: int = 50) -> List[Dict[str, 
         print(f"[list_feed_comments] 错误: {e}")
         raise
 
+
+# ---------- 公共食物库 ----------
+
+async def create_public_food_library_item(
+    user_id: str,
+    image_path: Optional[str] = None,
+    source_record_id: Optional[str] = None,
+    total_calories: float = 0,
+    total_protein: float = 0,
+    total_carbs: float = 0,
+    total_fat: float = 0,
+    items: Optional[List[Dict[str, Any]]] = None,
+    description: Optional[str] = None,
+    insight: Optional[str] = None,
+    merchant_name: Optional[str] = None,
+    merchant_address: Optional[str] = None,
+    taste_rating: Optional[int] = None,
+    suitable_for_fat_loss: bool = False,
+    user_tags: Optional[List[str]] = None,
+    user_notes: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    city: Optional[str] = None,
+    district: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    创建公共食物库条目（上传/分享）。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "image_path": image_path,
+        "source_record_id": source_record_id,
+        "total_calories": total_calories,
+        "total_protein": total_protein,
+        "total_carbs": total_carbs,
+        "total_fat": total_fat,
+        "items": items or [],
+        "description": description or "",
+        "insight": insight or "",
+        "merchant_name": merchant_name or "",
+        "merchant_address": merchant_address or "",
+        "taste_rating": taste_rating,
+        "suitable_for_fat_loss": suitable_for_fat_loss,
+        "user_tags": user_tags or [],
+        "user_notes": user_notes or "",
+        "latitude": latitude,
+        "longitude": longitude,
+        "city": city or "",
+        "district": district or "",
+        "status": "published",  # 暂时直接发布，后续可改为 pending_review
+        "published_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        result = supabase.table("public_food_library").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建公共食物库条目失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_public_food_library_item] 错误: {e}")
+        raise
+
+
+async def list_public_food_library(
+    city: Optional[str] = None,
+    suitable_for_fat_loss: Optional[bool] = None,
+    merchant_name: Optional[str] = None,
+    min_calories: Optional[float] = None,
+    max_calories: Optional[float] = None,
+    sort_by: str = "latest",  # latest / hot / rating
+    limit: int = 20,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
+    """
+    查询公共食物库列表（仅返回 published 状态）。
+    可按城市、适合减脂、商家名模糊、热量区间筛选。
+    排序：latest（最新）/ hot（点赞最多）/ rating（评分最高）。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        q = supabase.table("public_food_library").select("*").eq("status", "published")
+        if city:
+            q = q.eq("city", city)
+        if suitable_for_fat_loss is not None:
+            q = q.eq("suitable_for_fat_loss", suitable_for_fat_loss)
+        if merchant_name:
+            q = q.ilike("merchant_name", f"%{merchant_name}%")
+        if min_calories is not None:
+            q = q.gte("total_calories", min_calories)
+        if max_calories is not None:
+            q = q.lte("total_calories", max_calories)
+        # 排序
+        if sort_by == "hot":
+            q = q.order("like_count", desc=True)
+        elif sort_by == "rating":
+            q = q.order("avg_rating", desc=True)
+        else:
+            q = q.order("published_at", desc=True)
+        q = q.range(offset, offset + limit - 1)
+        result = q.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_public_food_library] 错误: {e}")
+        raise
+
+
+async def get_public_food_library_item(item_id: str) -> Optional[Dict[str, Any]]:
+    """获取单条公共食物库条目详情"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("public_food_library").select("*").eq("id", item_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_public_food_library_item] 错误: {e}")
+        raise
+
+
+async def list_my_public_food_library(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """获取当前用户上传/分享的公共食物库条目"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("public_food_library").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_my_public_food_library] 错误: {e}")
+        raise
+
+
+async def add_public_food_library_like(user_id: str, item_id: str) -> None:
+    """对公共食物库条目点赞"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("public_food_library_likes").insert({"user_id": user_id, "library_item_id": item_id}).execute()
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            return
+        print(f"[add_public_food_library_like] 错误: {e}")
+        raise
+
+
+async def remove_public_food_library_like(user_id: str, item_id: str) -> None:
+    """取消点赞"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("public_food_library_likes").delete().eq("user_id", user_id).eq("library_item_id", item_id).execute()
+    except Exception as e:
+        print(f"[remove_public_food_library_like] 错误: {e}")
+        raise
+
+
+async def get_public_food_library_likes_for_items(item_ids: List[str], current_user_id: str) -> Dict[str, Any]:
+    """批量查询公共食物库点赞数及当前用户是否已点赞。返回 { item_id: { count, liked } }"""
+    if not item_ids:
+        return {}
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        r = supabase.table("public_food_library_likes").select("library_item_id").in_("library_item_id", item_ids).execute()
+        rows = r.data or []
+        count_map: Dict[str, int] = {}
+        for row in rows:
+            iid = row["library_item_id"]
+            count_map[iid] = count_map.get(iid, 0) + 1
+        my = supabase.table("public_food_library_likes").select("library_item_id").eq("user_id", current_user_id).in_("library_item_id", item_ids).execute()
+        my_set = {m["library_item_id"] for m in (my.data or [])}
+        return {iid: {"count": count_map.get(iid, 0), "liked": iid in my_set} for iid in item_ids}
+    except Exception as e:
+        print(f"[get_public_food_library_likes_for_items] 错误: {e}")
+        raise
+
+
+async def add_public_food_library_comment(
+    user_id: str,
+    item_id: str,
+    content: str,
+    rating: Optional[int] = None,
+) -> Dict[str, Any]:
+    """发表公共食物库评论（可选评分）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "library_item_id": item_id,
+        "content": content.strip(),
+    }
+    if rating is not None:
+        row["rating"] = rating
+    try:
+        result = supabase.table("public_food_library_comments").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("发表评论失败")
+    except Exception as e:
+        print(f"[add_public_food_library_comment] 错误: {e}")
+        raise
+
+
+async def list_public_food_library_comments(item_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """公共食物库条目的评论列表，含评论者 nickname、avatar"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("public_food_library_comments").select("id, user_id, library_item_id, content, rating, created_at").eq("library_item_id", item_id).order("created_at", desc=False).limit(limit).execute()
+        rows = list(result.data or [])
+        if not rows:
+            return []
+        user_ids = list({r["user_id"] for r in rows})
+        users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", user_ids).execute()
+        user_map = {u["id"]: u for u in (users.data or [])}
+        out = []
+        for r in rows:
+            u = user_map.get(r["user_id"], {})
+            out.append({
+                "id": r["id"],
+                "user_id": r["user_id"],
+                "library_item_id": r["library_item_id"],
+                "content": r["content"],
+                "rating": r.get("rating"),
+                "created_at": r["created_at"],
+                "nickname": u.get("nickname") or "用户",
+                "avatar": u.get("avatar") or "",
+            })
+        return out
+    except Exception as e:
+        print(f"[list_public_food_library_comments] 错误: {e}")
+        raise
+
+
+async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
+    """通过 ID 获取单条饮食记录（用于分享到公共库时读取来源记录）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_food_records").select("*").eq("id", record_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_food_record_by_id] 错误: {e}")
+        raise
+

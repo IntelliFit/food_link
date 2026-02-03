@@ -886,3 +886,188 @@ export async function communityPostComment(recordId: string, content: string): P
   return response.data as { comment: FeedCommentItem }
 }
 
+// ---------- 公共食物库 ----------
+
+/** 公共食物库条目 */
+export interface PublicFoodLibraryItem {
+  id: string
+  user_id: string
+  source_record_id?: string | null
+  image_path?: string | null
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  items: Array<{
+    name: string
+    weight?: number
+    nutrients?: Nutrients
+  }>
+  description?: string | null
+  insight?: string | null
+  merchant_name?: string | null
+  merchant_address?: string | null
+  taste_rating?: number | null
+  suitable_for_fat_loss: boolean
+  user_tags: string[]
+  user_notes?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  city?: string | null
+  district?: string | null
+  status: string
+  like_count: number
+  comment_count: number
+  avg_rating: number
+  published_at?: string | null
+  created_at: string
+  updated_at: string
+  /** 当前用户是否已点赞 */
+  liked?: boolean
+  /** 作者信息 */
+  author?: { id: string; nickname: string; avatar: string }
+}
+
+/** 公共食物库评论 */
+export interface PublicFoodLibraryComment {
+  id: string
+  user_id: string
+  library_item_id: string
+  content: string
+  rating?: number | null
+  created_at: string
+  nickname: string
+  avatar: string
+}
+
+/** 创建公共食物库条目请求 */
+export interface CreatePublicFoodLibraryRequest {
+  image_path?: string
+  source_record_id?: string
+  total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }>
+  description?: string
+  insight?: string
+  merchant_name?: string
+  merchant_address?: string
+  taste_rating?: number
+  suitable_for_fat_loss?: boolean
+  user_tags?: string[]
+  user_notes?: string
+  latitude?: number
+  longitude?: number
+  city?: string
+  district?: string
+}
+
+/** 公共食物库列表查询参数 */
+export interface PublicFoodLibraryListParams {
+  city?: string
+  suitable_for_fat_loss?: boolean
+  merchant_name?: string
+  min_calories?: number
+  max_calories?: number
+  sort_by?: 'latest' | 'hot' | 'rating'
+  limit?: number
+  offset?: number
+}
+
+/** 创建公共食物库条目（上传/分享） */
+export async function createPublicFoodLibraryItem(
+  data: CreatePublicFoodLibraryRequest
+): Promise<{ id: string; message: string }> {
+  const response = await authenticatedRequest('/api/public-food-library', {
+    method: 'POST',
+    data,
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '分享失败')
+  }
+  return response.data as { id: string; message: string }
+}
+
+/** 获取公共食物库列表 */
+export async function getPublicFoodLibraryList(
+  params?: PublicFoodLibraryListParams
+): Promise<{ list: PublicFoodLibraryItem[] }> {
+  const q = new URLSearchParams()
+  if (params?.city) q.set('city', params.city)
+  if (params?.suitable_for_fat_loss !== undefined) q.set('suitable_for_fat_loss', String(params.suitable_for_fat_loss))
+  if (params?.merchant_name) q.set('merchant_name', params.merchant_name)
+  if (params?.min_calories !== undefined) q.set('min_calories', String(params.min_calories))
+  if (params?.max_calories !== undefined) q.set('max_calories', String(params.max_calories))
+  if (params?.sort_by) q.set('sort_by', params.sort_by)
+  if (params?.limit !== undefined) q.set('limit', String(params.limit))
+  if (params?.offset !== undefined) q.set('offset', String(params.offset))
+  const qs = q.toString()
+  const url = qs ? `/api/public-food-library?${qs}` : '/api/public-food-library'
+  const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取列表失败')
+  }
+  return response.data as { list: PublicFoodLibraryItem[] }
+}
+
+/** 获取当前用户上传/分享的公共食物库条目 */
+export async function getMyPublicFoodLibrary(): Promise<{ list: PublicFoodLibraryItem[] }> {
+  const response = await authenticatedRequest('/api/public-food-library/mine', { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取失败')
+  }
+  return response.data as { list: PublicFoodLibraryItem[] }
+}
+
+/** 获取公共食物库条目详情 */
+export async function getPublicFoodLibraryItem(itemId: string): Promise<PublicFoodLibraryItem> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取详情失败')
+  }
+  return response.data as PublicFoodLibraryItem
+}
+
+/** 点赞公共食物库条目 */
+export async function likePublicFoodLibraryItem(itemId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/like`, { method: 'POST' })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '点赞失败')
+  }
+}
+
+/** 取消点赞公共食物库条目 */
+export async function unlikePublicFoodLibraryItem(itemId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/like`, { method: 'DELETE' })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '取消失败')
+  }
+}
+
+/** 获取公共食物库条目的评论列表 */
+export async function getPublicFoodLibraryComments(itemId: string): Promise<{ list: PublicFoodLibraryComment[] }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取评论失败')
+  }
+  return response.data as { list: PublicFoodLibraryComment[] }
+}
+
+/** 发表公共食物库评论（可选评分 1-5） */
+export async function postPublicFoodLibraryComment(
+  itemId: string,
+  content: string,
+  rating?: number
+): Promise<{ comment: PublicFoodLibraryComment }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, {
+    method: 'POST',
+    data: { content: content.trim(), ...(rating !== undefined && { rating }) }
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '发表失败')
+  }
+  return response.data as { comment: PublicFoodLibraryComment }
+}
+

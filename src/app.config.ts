@@ -11,7 +11,10 @@ export default defineAppConfig({
     'pages/health-profile/index',
     'pages/health-profile-view/index',
     'pages/stats/index',
-    'pages/record-detail/index'
+    'pages/record-detail/index',
+    'pages/food-library/index',
+    'pages/food-library-detail/index',
+    'pages/food-library-share/index'
   ],
   window: {
     backgroundTextStyle: 'light',

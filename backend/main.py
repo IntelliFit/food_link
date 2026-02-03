@@ -34,6 +34,17 @@ from database import (
     get_feed_likes_for_records,
     add_feed_comment,
     list_feed_comments,
+    # 公共食物库
+    create_public_food_library_item,
+    list_public_food_library,
+    get_public_food_library_item,
+    list_my_public_food_library,
+    add_public_food_library_like,
+    remove_public_food_library_like,
+    get_public_food_library_likes_for_items,
+    add_public_food_library_comment,
+    list_public_food_library_comments,
+    get_food_record_by_id,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -1568,6 +1579,254 @@ async def api_community_comment_post(
         return {"comment": comment}
     except Exception as e:
         print(f"[api/community/feed/comment] 错误: {e}")
+        raise HTTPException(status_code=500, detail="发表失败")
+
+
+# ---------- 公共食物库 ----------
+
+class PublicFoodLibraryCreateRequest(BaseModel):
+    """创建公共食物库条目请求"""
+    image_path: Optional[str] = Field(default=None, description="图片 URL")
+    source_record_id: Optional[str] = Field(default=None, description="若从个人记录分享，传来源记录 ID")
+    # AI 标签（若从记录分享可自动带入，否则需前端先识别）
+    total_calories: float = Field(default=0)
+    total_protein: float = Field(default=0)
+    total_carbs: float = Field(default=0)
+    total_fat: float = Field(default=0)
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+    description: Optional[str] = Field(default=None)
+    insight: Optional[str] = Field(default=None)
+    # 用户标签
+    merchant_name: Optional[str] = Field(default=None, description="商家名称")
+    merchant_address: Optional[str] = Field(default=None, description="商家地址")
+    taste_rating: Optional[int] = Field(default=None, ge=1, le=5, description="口味评分 1-5")
+    suitable_for_fat_loss: bool = Field(default=False, description="是否适合减脂")
+    user_tags: List[str] = Field(default_factory=list, description="用户自定义标签")
+    user_notes: Optional[str] = Field(default=None, description="用户备注")
+    # 地理位置
+    latitude: Optional[float] = Field(default=None)
+    longitude: Optional[float] = Field(default=None)
+    city: Optional[str] = Field(default=None)
+    district: Optional[str] = Field(default=None)
+
+
+@app.post("/api/public-food-library")
+async def api_create_public_food_library(
+    body: PublicFoodLibraryCreateRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    创建公共食物库条目。
+    - 可直接上传（需先识别得到营养数据）
+    - 可从个人饮食记录分享（传 source_record_id，后端自动拷贝营养数据）
+    """
+    user_id = user_info["user_id"]
+    # 若从记录分享，拷贝来源记录的营养数据
+    src_record = None
+    if body.source_record_id:
+        src_record = await get_food_record_by_id(body.source_record_id)
+        if not src_record:
+            raise HTTPException(status_code=404, detail="来源记录不存在")
+        if src_record.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="无权分享他人记录")
+    try:
+        item = await create_public_food_library_item(
+            user_id=user_id,
+            image_path=body.image_path or (src_record.get("image_path") if src_record else None),
+            source_record_id=body.source_record_id,
+            total_calories=body.total_calories or (float(src_record.get("total_calories") or 0) if src_record else 0),
+            total_protein=body.total_protein or (float(src_record.get("total_protein") or 0) if src_record else 0),
+            total_carbs=body.total_carbs or (float(src_record.get("total_carbs") or 0) if src_record else 0),
+            total_fat=body.total_fat or (float(src_record.get("total_fat") or 0) if src_record else 0),
+            items=body.items or (src_record.get("items") if src_record else []),
+            description=body.description or (src_record.get("description") if src_record else None),
+            insight=body.insight or (src_record.get("insight") if src_record else None),
+            merchant_name=body.merchant_name,
+            merchant_address=body.merchant_address,
+            taste_rating=body.taste_rating,
+            suitable_for_fat_loss=body.suitable_for_fat_loss,
+            user_tags=body.user_tags,
+            user_notes=body.user_notes,
+            latitude=body.latitude,
+            longitude=body.longitude,
+            city=body.city,
+            district=body.district,
+        )
+        return {"id": item.get("id"), "message": "分享成功"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/public-food-library] 创建错误: {e}")
+        raise HTTPException(status_code=500, detail="分享失败")
+
+
+@app.get("/api/public-food-library")
+async def api_list_public_food_library(
+    city: Optional[str] = None,
+    suitable_for_fat_loss: Optional[bool] = None,
+    merchant_name: Optional[str] = None,
+    min_calories: Optional[float] = None,
+    max_calories: Optional[float] = None,
+    sort_by: str = "latest",
+    limit: int = 20,
+    offset: int = 0,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    查询公共食物库列表。
+    筛选：city、suitable_for_fat_loss、merchant_name（模糊）、热量区间。
+    排序：latest / hot / rating。
+    返回每条含 like_count、liked（当前用户是否已点赞）。
+    """
+    try:
+        items = await list_public_food_library(
+            city=city,
+            suitable_for_fat_loss=suitable_for_fat_loss,
+            merchant_name=merchant_name,
+            min_calories=min_calories,
+            max_calories=max_calories,
+            sort_by=sort_by,
+            limit=limit,
+            offset=offset,
+        )
+        # 批量查询点赞状态
+        item_ids = [it["id"] for it in items]
+        likes_map = await get_public_food_library_likes_for_items(item_ids, user_info["user_id"]) if item_ids else {}
+        # 批量查询作者信息
+        author_ids = list({it["user_id"] for it in items})
+        from database import get_supabase_client
+        supabase = get_supabase_client()
+        authors_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
+        author_map = {a["id"]: a for a in (authors_result.data or [])} if authors_result else {}
+        out = []
+        for it in items:
+            like_info = likes_map.get(it["id"], {"count": 0, "liked": False})
+            author = author_map.get(it["user_id"], {})
+            out.append({
+                **it,
+                "like_count": like_info["count"],
+                "liked": like_info["liked"],
+                "author": {
+                    "id": author.get("id"),
+                    "nickname": author.get("nickname") or "用户",
+                    "avatar": author.get("avatar") or "",
+                },
+            })
+        return {"list": out}
+    except Exception as e:
+        print(f"[api/public-food-library] 列表错误: {e}")
+        raise HTTPException(status_code=500, detail="获取列表失败")
+
+
+@app.get("/api/public-food-library/mine")
+async def api_my_public_food_library(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取当前用户上传/分享的公共食物库条目"""
+    try:
+        items = await list_my_public_food_library(user_info["user_id"])
+        return {"list": items}
+    except Exception as e:
+        print(f"[api/public-food-library/mine] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取失败")
+
+
+@app.get("/api/public-food-library/{item_id}")
+async def api_get_public_food_library_item(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取单条公共食物库条目详情"""
+    try:
+        item = await get_public_food_library_item(item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        # 查询作者信息
+        author = await get_user_by_id(item["user_id"])
+        # 查询点赞状态
+        likes_map = await get_public_food_library_likes_for_items([item_id], user_info["user_id"])
+        like_info = likes_map.get(item_id, {"count": 0, "liked": False})
+        return {
+            **item,
+            "like_count": like_info["count"],
+            "liked": like_info["liked"],
+            "author": {
+                "id": author.get("id") if author else None,
+                "nickname": author.get("nickname") or "用户" if author else "用户",
+                "avatar": author.get("avatar") or "" if author else "",
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/public-food-library/{item_id}] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取详情失败")
+
+
+@app.post("/api/public-food-library/{item_id}/like")
+async def api_public_food_library_like(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """点赞公共食物库条目"""
+    try:
+        await add_public_food_library_like(user_info["user_id"], item_id)
+        return {"message": "已点赞"}
+    except Exception as e:
+        print(f"[api/public-food-library/{item_id}/like] 错误: {e}")
+        raise HTTPException(status_code=500, detail="点赞失败")
+
+
+@app.delete("/api/public-food-library/{item_id}/like")
+async def api_public_food_library_unlike(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """取消点赞"""
+    try:
+        await remove_public_food_library_like(user_info["user_id"], item_id)
+        return {"message": "已取消"}
+    except Exception as e:
+        print(f"[api/public-food-library/{item_id}/unlike] 错误: {e}")
+        raise HTTPException(status_code=500, detail="取消失败")
+
+
+@app.get("/api/public-food-library/{item_id}/comments")
+async def api_public_food_library_comments(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取公共食物库条目的评论列表"""
+    try:
+        comments = await list_public_food_library_comments(item_id, limit=50)
+        return {"list": comments}
+    except Exception as e:
+        print(f"[api/public-food-library/{item_id}/comments] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取评论失败")
+
+
+@app.post("/api/public-food-library/{item_id}/comments")
+async def api_public_food_library_comment_post(
+    item_id: str,
+    body: dict,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    发表公共食物库评论。
+    body: { "content": "评论内容", "rating": 5 }  # rating 可选 1-5
+    """
+    content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
+    if not content:
+        raise HTTPException(status_code=400, detail="评论内容不能为空")
+    rating = body.get("rating")
+    if rating is not None:
+        if not isinstance(rating, int) or rating < 1 or rating > 5:
+            raise HTTPException(status_code=400, detail="评分须为 1-5 的整数")
+    try:
+        comment = await add_public_food_library_comment(user_info["user_id"], item_id, content, rating)
+        return {"comment": comment}
+    except Exception as e:
+        print(f"[api/public-food-library/{item_id}/comments] 发表错误: {e}")
         raise HTTPException(status_code=500, detail="发表失败")
 
 

@@ -1,0 +1,453 @@
+// 公共食物库详情页样式
+.food-detail-page {
+  min-height: 100vh;
+  background: #f9fafb;
+  padding-bottom: 160rpx;
+}
+
+// 图片区域
+.image-section {
+  width: 100%;
+  height: 480rpx;
+  background: linear-gradient(135deg, #d0fae5 0%, #cbfbf1 100%);
+  position: relative;
+}
+
+.detail-image {
+  width: 100%;
+  height: 100%;
+}
+
+.image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  color: #9ca3af;
+}
+
+.fat-loss-badge {
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  background: #00bc7d;
+  color: #fff;
+  font-size: 24rpx;
+  padding: 8rpx 20rpx;
+  border-radius: 12rpx;
+}
+
+// 基础信息卡片
+.info-card {
+  background: #fff;
+  margin: -48rpx 24rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  position: relative;
+  z-index: 10;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+}
+
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24rpx;
+}
+
+.info-title {
+  flex: 1;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 52rpx;
+}
+
+.info-calories {
+  font-size: 32rpx;
+  color: #009966;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.info-insight {
+  font-size: 28rpx;
+  color: #6a7282;
+  line-height: 44rpx;
+  margin-bottom: 24rpx;
+}
+
+// 营养数据
+.nutrients-row {
+  display: flex;
+  justify-content: space-around;
+  padding: 24rpx 0;
+  border-top: 1rpx solid #f3f4f6;
+  border-bottom: 1rpx solid #f3f4f6;
+  margin-bottom: 24rpx;
+}
+
+.nutrient-item {
+  text-align: center;
+}
+
+.nutrient-value {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1e2939;
+  margin-bottom: 8rpx;
+}
+
+.nutrient-label {
+  font-size: 24rpx;
+  color: #9ca3af;
+}
+
+// 作者信息
+.author-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.author-avatar {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.author-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.author-info {
+  flex: 1;
+}
+
+.author-name {
+  display: block;
+  font-size: 28rpx;
+  color: #1e2939;
+  font-weight: 500;
+}
+
+.publish-time {
+  font-size: 24rpx;
+  color: #9ca3af;
+}
+
+// 商家信息卡片
+.merchant-card {
+  background: #fff;
+  margin: 0 24rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 32rpx;
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1e2939;
+  margin-bottom: 20rpx;
+}
+
+.merchant-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.merchant-icon {
+  font-size: 28rpx;
+  flex-shrink: 0;
+  width: 36rpx;
+  text-align: center;
+}
+
+.merchant-text {
+  font-size: 28rpx;
+  color: #364153;
+  line-height: 40rpx;
+  flex: 1;
+}
+
+// 标签卡片
+.tags-card {
+  background: #fff;
+  margin: 0 24rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 32rpx;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.tag-item {
+  background: #f3f4f6;
+  padding: 10rpx 24rpx;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  color: #364153;
+}
+
+// 用户备注
+.notes-card {
+  background: #fff;
+  margin: 0 24rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 32rpx;
+}
+
+.notes-content {
+  font-size: 28rpx;
+  color: #364153;
+  line-height: 44rpx;
+}
+
+// 评论区
+.comments-card {
+  background: #fff;
+  margin: 0 24rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 32rpx;
+}
+
+.comments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.comments-count {
+  font-size: 26rpx;
+  color: #6a7282;
+}
+
+.comments-list {
+  max-height: 600rpx;
+}
+
+.comment-item {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.comment-avatar {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.comment-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.comment-info {
+  flex: 1;
+}
+
+.comment-name {
+  display: block;
+  font-size: 26rpx;
+  color: #1e2939;
+  font-weight: 500;
+}
+
+.comment-time {
+  font-size: 22rpx;
+  color: #9ca3af;
+}
+
+.comment-rating {
+  font-size: 24rpx;
+  color: #f59e0b;
+}
+
+.comment-content {
+  font-size: 28rpx;
+  color: #364153;
+  line-height: 42rpx;
+  padding-left: 60rpx;
+}
+
+.comments-empty {
+  padding: 32rpx 0;
+  text-align: center;
+  font-size: 28rpx;
+  color: #9ca3af;
+}
+
+// 底部操作栏
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+  padding: 24rpx 32rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 24rpx;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  z-index: 100;
+}
+
+.action-btn {
+  flex: 1;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+}
+
+.like-btn {
+  background: #fef2f2;
+  color: #dc2626;
+
+  &.liked {
+    background: #dc2626;
+    color: #fff;
+  }
+}
+
+.comment-btn {
+  background: #f3f4f6;
+  color: #364153;
+}
+
+.btn-icon {
+  font-size: 32rpx;
+}
+
+// 评论输入弹窗
+.comment-modal {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+}
+
+.comment-modal-content {
+  background: #fff;
+  width: 100%;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 32rpx;
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.modal-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1e2939;
+}
+
+.modal-close {
+  font-size: 32rpx;
+  color: #6a7282;
+  padding: 8rpx;
+}
+
+.rating-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.rating-label {
+  font-size: 28rpx;
+  color: #364153;
+}
+
+.rating-stars {
+  display: flex;
+  gap: 8rpx;
+}
+
+.rating-star {
+  font-size: 40rpx;
+  color: #e5e7eb;
+
+  &.active {
+    color: #f59e0b;
+  }
+}
+
+.comment-input {
+  width: 100%;
+  height: 160rpx;
+  padding: 24rpx;
+  background: #f9fafb;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  margin-bottom: 24rpx;
+  box-sizing: border-box;
+}
+
+.submit-btn {
+  width: 100%;
+  height: 88rpx;
+  background: #00bc7d;
+  color: #fff;
+  font-size: 30rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// 加载状态
+.loading-state {
+  padding: 80rpx;
+  text-align: center;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #6a7282;
+}

@@ -317,6 +317,37 @@ export default function CommunityPage() {
               )}
             </View>
 
+            {/* 我的圈子 */}
+            <View className='my-circles-section'>
+              <View className='section-header'>
+                <Text className='section-title'>发现</Text>
+              </View>
+              <View className='circles-list'>
+                <View
+                  className='circle-card'
+                  onClick={() => Taro.navigateTo({ url: '/pages/food-library/index' })}
+                >
+                  <Text className='circle-icon'>🍽️</Text>
+                  <Text className='circle-name'>公共食物库</Text>
+                  <View className='circle-members'>
+                    <Text className='member-icon'>📍</Text>
+                    <Text className='member-count'>健康外卖推荐</Text>
+                  </View>
+                </View>
+                <View
+                  className='circle-card'
+                  onClick={() => Taro.showToast({ title: '敬请期待', icon: 'none' })}
+                >
+                  <Text className='circle-icon'>🏆</Text>
+                  <Text className='circle-name'>打卡排行榜</Text>
+                  <View className='circle-members'>
+                    <Text className='member-icon'>👥</Text>
+                    <Text className='member-count'>本周活跃</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
             {/* 本周打卡排行榜（占位） */}
             <View
               className='ranking-banner'
