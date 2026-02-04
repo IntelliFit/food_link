@@ -23,6 +23,7 @@ from database import (
     insert_critical_samples,
     upload_health_report_image,
     upload_food_analyze_image,
+    upload_user_avatar,
     search_users,
     send_friend_request,
     get_friend_requests_received,
@@ -45,6 +46,13 @@ from database import (
     add_public_food_library_comment,
     list_public_food_library_comments,
     get_food_record_by_id,
+    # 私人食谱
+    create_user_recipe,
+    list_user_recipes,
+    get_user_recipe,
+    update_user_recipe,
+    delete_user_recipe,
+    use_recipe_record,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -424,11 +432,25 @@ async def analyze_food(
 
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"[api/analyze] error: {e}")
+    except httpx.TimeoutException:
+        print("[api/analyze] error: DashScope 请求超时")
         raise HTTPException(
             status_code=500,
-            detail=str(e) or "连接 AI 服务失败"
+            detail="AI 服务超时，请稍后重试"
+        )
+    except httpx.HTTPError as e:
+        msg = str(e) or "连接 AI 服务失败"
+        print(f"[api/analyze] error: {msg}")
+        raise HTTPException(
+            status_code=500,
+            detail=msg
+        )
+    except Exception as e:
+        msg = str(e) or f"未知错误: {type(e).__name__}"
+        print(f"[api/analyze] error: {msg}")
+        raise HTTPException(
+            status_code=500,
+            detail=msg
         )
 
 
@@ -448,9 +470,29 @@ async def upload_analyze_image(body: UploadAnalyzeImageRequest):
     try:
         image_url = upload_food_analyze_image(body.base64Image)
         return {"imageUrl": image_url}
+    except ValueError as e:
+        # base64 解码失败等参数错误
+        print(f"[upload_analyze_image] 参数错误: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        # 网络连接错误（SSL、EOF 等）
+        error_msg = str(e) or "网络连接失败"
+        print(f"[upload_analyze_image] 网络错误: {error_msg}")
+        raise HTTPException(
+            status_code=500,
+            detail="上传图片时网络连接失败，请检查网络后重试"
+        )
     except Exception as e:
-        print(f"[upload_analyze_image] 错误: {e}")
-        raise HTTPException(status_code=500, detail=str(e) or "上传图片失败")
+        error_msg = str(e) or f"未知错误: {type(e).__name__}"
+        # 检查是否是 SSL 或网络相关错误（兜底检查）
+        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower():
+            print(f"[upload_analyze_image] 网络错误: {error_msg}")
+            raise HTTPException(
+                status_code=500,
+                detail="上传图片时网络连接失败，请检查网络后重试"
+            )
+        print(f"[upload_analyze_image] 错误: {error_msg}")
+        raise HTTPException(status_code=500, detail=f"上传图片失败: {error_msg}")
 
 
 class AnalyzeTextRequest(BaseModel):
@@ -724,6 +766,34 @@ async def get_user_profile(
     }
 
 
+@app.get("/api/user/record-days")
+async def get_user_record_days(
+    user_info: dict = Depends(get_current_user_info)
+):
+    """
+    获取用户记录天数（从第一条记录到现在有记录的天数）
+    """
+    user_id = user_info["user_id"]
+    try:
+        # 获取用户所有记录的日期（去重）
+        records = await list_food_records(user_id)
+        if not records:
+            return {"record_days": 0}
+        
+        # 提取所有记录日期（只取日期部分）
+        record_dates = set()
+        for record in records:
+            # record_time 格式：YYYY-MM-DD HH:MM:SS
+            date_str = record.get("record_time", "").split(" ")[0] if record.get("record_time") else ""
+            if date_str:
+                record_dates.add(date_str)
+        
+        return {"record_days": len(record_dates)}
+    except Exception as e:
+        print(f"[get_user_record_days] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取记录天数失败: {str(e)}")
+
+
 @app.put("/api/user/profile")
 async def update_user_profile(
     update_data: UpdateUserInfoRequest,
@@ -762,6 +832,33 @@ async def update_user_profile(
     except Exception as e:
         print(f"[update_user_profile] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"更新用户信息失败: {str(e)}")
+
+
+class UploadAvatarRequest(BaseModel):
+    """上传用户头像请求"""
+    base64Image: str = Field(..., description="Base64 编码的头像图片")
+
+
+@app.post("/api/user/upload-avatar")
+async def upload_avatar(
+    body: UploadAvatarRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    上传用户头像到 Supabase Storage，返回公网 URL。
+    小程序先调此接口拿 imageUrl，再调 PUT /api/user/profile 更新 avatar 字段。
+    """
+    user_id = user_info["user_id"]
+    if not body.base64Image:
+        raise HTTPException(status_code=400, detail="base64Image 不能为空")
+    try:
+        image_url = upload_user_avatar(user_id, body.base64Image)
+        return {"imageUrl": image_url}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[upload_avatar] 错误: {e}")
+        raise HTTPException(status_code=500, detail="上传失败，请检查 Supabase Storage 是否已创建 bucket「user-avatars」并设为 Public")
 
 
 # ---------- 健康档案 API ----------
@@ -2124,4 +2221,171 @@ async def login(request: LoginRequest):
             status_code=500,
             detail=str(e) or "登录失败"
         )
+
+
+# ---------- 用户私人食谱 API ----------
+
+class CreateRecipeRequest(BaseModel):
+    """创建食谱请求"""
+    recipe_name: str = Field(..., description="食谱名称")
+    description: Optional[str] = Field(None, description="食谱描述")
+    image_path: Optional[str] = Field(None, description="封面图片路径")
+    items: List[Dict[str, Any]] = Field(..., description="食物明细")
+    total_calories: float = Field(0, description="总热量")
+    total_protein: float = Field(0, description="总蛋白质")
+    total_carbs: float = Field(0, description="总碳水")
+    total_fat: float = Field(0, description="总脂肪")
+    total_weight_grams: float = Field(0, description="总重量")
+    tags: Optional[List[str]] = Field(None, description="标签")
+    meal_type: Optional[str] = Field(None, description="餐次类型")
+    is_favorite: Optional[bool] = Field(False, description="是否收藏")
+
+
+class UpdateRecipeRequest(BaseModel):
+    """更新食谱请求"""
+    recipe_name: Optional[str] = None
+    description: Optional[str] = None
+    image_path: Optional[str] = None
+    items: Optional[List[Dict[str, Any]]] = None
+    total_calories: Optional[float] = None
+    total_protein: Optional[float] = None
+    total_carbs: Optional[float] = None
+    total_fat: Optional[float] = None
+    total_weight_grams: Optional[float] = None
+    tags: Optional[List[str]] = None
+    meal_type: Optional[str] = None
+    is_favorite: Optional[bool] = None
+
+
+@app.post("/api/recipes")
+async def create_recipe(
+    body: CreateRecipeRequest,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """创建私人食谱"""
+    user_id = user_info["user_id"]
+    try:
+        recipe = await create_user_recipe(user_id, body.dict())
+        return {"id": recipe["id"], "message": "食谱创建成功"}
+    except Exception as e:
+        print(f"[create_recipe] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"创建失败: {str(e)}")
+
+
+@app.get("/api/recipes")
+async def list_recipes(
+    meal_type: Optional[str] = None,
+    is_favorite: Optional[bool] = None,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """获取私人食谱列表"""
+    user_id = user_info["user_id"]
+    try:
+        recipes = await list_user_recipes(user_id, meal_type, is_favorite)
+        return {"recipes": recipes}
+    except Exception as e:
+        print(f"[list_recipes] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取列表失败: {str(e)}")
+
+
+@app.get("/api/recipes/{recipe_id}")
+async def get_recipe(
+    recipe_id: str,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """获取食谱详情"""
+    user_id = user_info["user_id"]
+    try:
+        recipe = await get_user_recipe(recipe_id, user_id)
+        if not recipe:
+            raise HTTPException(status_code=404, detail="食谱不存在")
+        return recipe
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_recipe] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@app.put("/api/recipes/{recipe_id}")
+async def update_recipe(
+    recipe_id: str,
+    body: UpdateRecipeRequest,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """更新食谱"""
+    user_id = user_info["user_id"]
+    try:
+        # 只更新非空字段
+        update_data = {k: v for k, v in body.dict().items() if v is not None}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="没有要更新的字段")
+        
+        recipe = await update_user_recipe(recipe_id, user_id, update_data)
+        return {"message": "更新成功", "recipe": recipe}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[update_recipe] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+
+
+@app.delete("/api/recipes/{recipe_id}")
+async def delete_recipe(
+    recipe_id: str,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """删除食谱"""
+    user_id = user_info["user_id"]
+    try:
+        await delete_user_recipe(recipe_id, user_id)
+        return {"message": "删除成功"}
+    except Exception as e:
+        print(f"[delete_recipe] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+
+
+@app.post("/api/recipes/{recipe_id}/use")
+async def use_recipe(
+    recipe_id: str,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """使用食谱创建记录（一键记录）"""
+    user_id = user_info["user_id"]
+    try:
+        # 获取食谱详情
+        recipe = await get_user_recipe(recipe_id, user_id)
+        if not recipe:
+            raise HTTPException(status_code=404, detail="食谱不存在")
+        
+        # 创建饮食记录（餐次为空或不合法时回退到 snack）
+        meal_type = recipe.get("meal_type") or "snack"
+        if meal_type not in {"breakfast", "lunch", "dinner", "snack"}:
+            meal_type = "snack"
+
+        record = await insert_food_record(
+            user_id=user_id,
+            meal_type=meal_type,
+            image_path=recipe.get("image_path"),
+            description=f"使用食谱：{recipe['recipe_name']}",
+            items=recipe.get("items") or [],
+            total_calories=float(recipe.get("total_calories", 0)),
+            total_protein=float(recipe.get("total_protein", 0)),
+            total_carbs=float(recipe.get("total_carbs", 0)),
+            total_fat=float(recipe.get("total_fat", 0)),
+            total_weight_grams=int(float(recipe.get("total_weight_grams", 0))),
+        )
+        
+        # 更新食谱使用次数
+        await use_recipe_record(recipe_id, user_id)
+        
+        return {
+            "message": "记录成功",
+            "record_id": record["id"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[use_recipe] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"使用失败: {str(e)}")
 

@@ -2,6 +2,7 @@ import { View, Text, Image, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { getFoodRecordList, analyzeFoodText, type FoodRecord } from '../../utils/api'
+import { IconCamera, IconText, IconClock } from '../../components/iconfont'
 
 import './index.scss'
 
@@ -37,9 +38,9 @@ export default function RecordPage() {
   const [textContextState, setTextContextState] = useState<string>('none')
 
   const recordMethods = [
-    { id: 'photo', icon: '📷', text: '拍照识别', iconClass: 'photo-icon' },
-    { id: 'text', icon: '✏️', text: '文字记录', iconClass: 'text-icon' },
-    { id: 'history', icon: '📋', text: '历史记录', iconClass: 'history-icon' }
+    { id: 'photo', text: '拍照识别', iconClass: 'photo-icon' },
+    { id: 'text', text: '文字记录', iconClass: 'text-icon' },
+    { id: 'history', text: '历史记录', iconClass: 'history-icon' }
   ]
 
   const handleMethodClick = (methodId: string) => {
@@ -276,7 +277,9 @@ export default function RecordPage() {
             onClick={() => handleMethodClick(method.id)}
           >
             <View className={`method-icon ${method.iconClass}`}>
-              <Text>{method.icon}</Text>
+              {method.id === 'photo' && <IconCamera size={40} color="#ffffff" />}
+              {method.id === 'text' && <IconText size={40} color="#ffffff" />}
+              {method.id === 'history' && <IconClock size={40} color="#ffffff" />}
             </View>
             <Text className='method-text'>{method.text}</Text>
           </View>

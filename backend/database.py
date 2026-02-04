@@ -15,6 +15,9 @@ HEALTH_REPORTS_BUCKET = "health-reports"
 # 食物分析图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
 FOOD_ANALYZE_BUCKET = "food-images"
 
+# 用户头像存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
+USER_AVATARS_BUCKET = "user-avatars"
+
 # 延迟初始化 Supabase 客户端
 _supabase_client = None
 
@@ -424,8 +427,8 @@ def upload_health_report_image(user_id: str, base64_image: str) -> str:
 def upload_food_analyze_image(base64_image: str) -> str:
     """
     将食物分析图片上传到 Supabase Storage，返回公网可访问的 URL。
-    路径：food-analyze/{uuid}.jpg
-    需先在 Supabase Dashboard → Storage 创建 bucket「food-analyze」并设为 Public。
+    路径：food-images/{uuid}.jpg
+    需先在 Supabase Dashboard → Storage 创建 bucket「food-images」并设为 Public。
     """
     check_supabase_configured()
     supabase = get_supabase_client()
@@ -434,13 +437,71 @@ def upload_food_analyze_image(base64_image: str) -> str:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
+    
     path = f"{uuid.uuid4().hex}.jpg"
-    supabase.storage.from_(FOOD_ANALYZE_BUCKET).upload(
+    try:
+        # 上传文件到 Supabase Storage
+        supabase.storage.from_(FOOD_ANALYZE_BUCKET).upload(
+            path,
+            file_bytes,
+            {"content-type": "image/jpeg", "upsert": "true"},
+        )
+    except Exception as e:
+        error_msg = str(e) or f"上传失败: {type(e).__name__}"
+        # 检查是否是网络或 SSL 相关错误
+        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
+        raise Exception(f"上传图片到 Supabase Storage 失败: {error_msg}")
+    
+    try:
+        # 获取公网 URL
+        result = supabase.storage.from_(FOOD_ANALYZE_BUCKET).get_public_url(path)
+        if isinstance(result, dict):
+            url = result.get("publicUrl") or result.get("public_url") or ""
+            if not url:
+                raise ValueError("无法获取图片公网 URL")
+            return url
+        if hasattr(result, "public_url"):
+            url = getattr(result, "public_url", "")
+            if not url:
+                raise ValueError("无法获取图片公网 URL")
+            return url
+        if hasattr(result, "publicUrl"):
+            url = getattr(result, "publicUrl", "")
+            if not url:
+                raise ValueError("无法获取图片公网 URL")
+            return url
+        url = str(result)
+        if not url:
+            raise ValueError("无法获取图片公网 URL")
+        return url
+    except Exception as e:
+        error_msg = str(e) or f"获取 URL 失败: {type(e).__name__}"
+        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower():
+            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
+        raise Exception(f"获取图片公网 URL 失败: {error_msg}")
+
+
+def upload_user_avatar(user_id: str, base64_image: str) -> str:
+    """
+    将用户头像上传到 Supabase Storage，返回公网可访问的 URL。
+    路径：user-avatars/{user_id}/{uuid}.jpg
+    需先在 Supabase Dashboard → Storage 创建 bucket「user-avatars」并设为 Public。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    raw = base64_image.split(",")[1] if "," in base64_image else base64_image
+    try:
+        file_bytes = base64.b64decode(raw)
+    except Exception as e:
+        raise ValueError(f"base64 解码失败: {e}")
+    path = f"{user_id}/{uuid.uuid4().hex}.jpg"
+    supabase.storage.from_(USER_AVATARS_BUCKET).upload(
         path,
         file_bytes,
         {"content-type": "image/jpeg", "upsert": "true"},
     )
-    result = supabase.storage.from_(FOOD_ANALYZE_BUCKET).get_public_url(path)
+    result = supabase.storage.from_(USER_AVATARS_BUCKET).get_public_url(path)
     if isinstance(result, dict):
         return result.get("publicUrl") or result.get("public_url") or ""
     if hasattr(result, "public_url"):
@@ -1011,5 +1072,110 @@ async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         print(f"[get_food_record_by_id] 错误: {e}")
+        raise
+
+
+# ---------- 用户私人食谱 ----------
+
+async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建私人食谱"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        recipe_data = {
+            "user_id": user_id,
+            "recipe_name": data.get("recipe_name"),
+            "description": data.get("description"),
+            "image_path": data.get("image_path"),
+            "items": data.get("items", []),
+            "total_calories": data.get("total_calories", 0),
+            "total_protein": data.get("total_protein", 0),
+            "total_carbs": data.get("total_carbs", 0),
+            "total_fat": data.get("total_fat", 0),
+            "total_weight_grams": data.get("total_weight_grams", 0),
+            "tags": data.get("tags", []),
+            "meal_type": data.get("meal_type"),
+            "is_favorite": data.get("is_favorite", False),
+        }
+        result = supabase.table("user_recipes").insert(recipe_data).execute()
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f"[create_user_recipe] 错误: {e}")
+        raise
+
+
+async def list_user_recipes(user_id: str, meal_type: Optional[str] = None, is_favorite: Optional[bool] = None) -> List[Dict[str, Any]]:
+    """获取用户的私人食谱列表"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("user_recipes").select("*").eq("user_id", user_id)
+        if meal_type:
+            query = query.eq("meal_type", meal_type)
+        if is_favorite is not None:
+            query = query.eq("is_favorite", is_favorite)
+        result = query.order("created_at", desc=True).execute()
+        return result.data or []
+    except Exception as e:
+        print(f"[list_user_recipes] 错误: {e}")
+        raise
+
+
+async def get_user_recipe(recipe_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    """获取单个食谱详情"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_recipes").select("*").eq("id", recipe_id).eq("user_id", user_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_user_recipe] 错误: {e}")
+        raise
+
+
+async def update_user_recipe(recipe_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """更新食谱"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_recipes").update(data).eq("id", recipe_id).eq("user_id", user_id).execute()
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f"[update_user_recipe] 错误: {e}")
+        raise
+
+
+async def delete_user_recipe(recipe_id: str, user_id: str) -> bool:
+    """删除食谱"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("user_recipes").delete().eq("id", recipe_id).eq("user_id", user_id).execute()
+        return True
+    except Exception as e:
+        print(f"[delete_user_recipe] 错误: {e}")
+        raise
+
+
+async def use_recipe_record(recipe_id: str, user_id: str) -> bool:
+    """使用食谱时更新使用次数和最后使用时间"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 先获取当前使用次数
+        recipe = await get_user_recipe(recipe_id, user_id)
+        if not recipe:
+            return False
+        
+        # 更新使用次数和时间
+        supabase.table("user_recipes").update({
+            "use_count": (recipe.get("use_count", 0) + 1),
+            "last_used_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", recipe_id).eq("user_id", user_id).execute()
+        return True
+    except Exception as e:
+        print(f"[use_recipe_record] 错误: {e}")
         raise
 

@@ -2,6 +2,7 @@ import { View, Text } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { getHomeDashboard, getAccessToken, type HomeIntakeData, type HomeMealItem } from '../../utils/api'
+import { IconCamera, IconText, IconClock, IconProtein, IconCarbs, IconFat } from '../../components/iconfont'
 
 import './index.scss'
 
@@ -112,19 +113,25 @@ export default function IndexPage() {
           </View>
           <View className='macros-section'>
             <View className='macro-item'>
-              <Text className='macro-icon'>🥩</Text>
+              <View className='macro-icon'>
+                <IconProtein size={28} color="#ffffff" />
+              </View>
               <Text className='macro-label'>蛋白质</Text>
               <Text className='macro-value'>{intakeData.macros.protein.current}</Text>
               <Text className='macro-target'>/{intakeData.macros.protein.target}g</Text>
             </View>
             <View className='macro-item'>
-              <Text className='macro-icon'>🍞</Text>
+              <View className='macro-icon'>
+                <IconCarbs size={28} color="#ffffff" />
+              </View>
               <Text className='macro-label'>碳水</Text>
               <Text className='macro-value'>{intakeData.macros.carbs.current}</Text>
               <Text className='macro-target'>/{intakeData.macros.carbs.target}g</Text>
             </View>
             <View className='macro-item'>
-              <Text className='macro-icon'>🥑</Text>
+              <View className='macro-icon'>
+                <IconFat size={28} color="#ffffff" />
+              </View>
               <Text className='macro-label'>脂肪</Text>
               <Text className='macro-value'>{intakeData.macros.fat.current}</Text>
               <Text className='macro-target'>/{intakeData.macros.fat.target}g</Text>
@@ -142,7 +149,7 @@ export default function IndexPage() {
             onClick={() => handleQuickRecord('photo')}
           >
             <View className='button-icon photo-icon'>
-              <Text>📷</Text>
+              <IconCamera size={44} color="#ffffff" />
             </View>
             <Text className='button-text'>拍照识别</Text>
           </View>
@@ -151,7 +158,7 @@ export default function IndexPage() {
             onClick={() => handleQuickRecord('text')}
           >
             <View className='button-icon text-icon'>
-              <Text>✏️</Text>
+              <IconText size={44} color="#ffffff" />
             </View>
             <Text className='button-text'>文字记录</Text>
           </View>
@@ -160,7 +167,7 @@ export default function IndexPage() {
             onClick={() => handleQuickRecord('history')}
           >
             <View className='button-icon history-icon'>
-              <Text>📋</Text>
+              <IconClock size={44} color="#ffffff" />
             </View>
             <Text className='button-text'>历史记录</Text>
           </View>

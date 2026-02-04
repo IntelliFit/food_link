@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-02-04
+
+- 🐛 fix: 改进图片上传接口错误处理，区分网络错误与参数错误，提供友好提示 `backend/main.py` `backend/database.py`
+- 🐛 fix: 补充图片分析超时与网络错误提示，避免 500 空错误信息 `backend/main.py`
+- 🎨 style: 记录页记录方式图标替换为 iconfont，统一视觉风格 `src/pages/record/index.tsx`
+- 🐛 fix: 社区页拍照取消不提示失败，避免误导用户 `src/pages/community/index.tsx`
+- ✨ feat: 社区页拍照按钮接入拍照分析流程并替换为拍照图标 `src/pages/community/index.tsx`
+- 🐛 fix: 修复导入路径大小写错误：将 Iconfont 改为 iconfont 匹配实际文件夹名称，解决 TypeScript 大小写敏感警告 `src/pages/index/index.tsx`
+- 🎨 style: 营养素图标颜色统一为白色：蛋白质/碳水/脂肪图标都使用 #ffffff 白色，与绿色渐变背景更加协调 `src/pages/index/index.tsx`
+- ✨ feat: 更新 iconfont 并添加营养素图标：下载最新 CSS（font_5122763_t62pgegqf8）新增蛋白质/碳水/脂肪图标；创建 IconProtein/IconCarbs/IconFat 组件；替换首页宏量营养素 emoji 为专业图标（蛋白质-绿色、碳水-橙色、脂肪-红色） `src/assets/iconfont/iconfont.css` `src/components/Iconfont/index.tsx` `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 调整首页快捷记录卡片与上方间距：margin-top 从 -32rpx 改为 -16rpx，减少叠加效果增加呼吸感 `src/pages/index/index.scss`
+- 🎨 style: 优化首页快捷记录卡片：图标容器从 60rpx 增大到 72rpx，图标从 37rpx 增大到 44rpx；卡片内边距从 20rpx 增加到 32rpx，按钮间距从 20rpx 增加到 24rpx，图标与文字间距从 12rpx 增加到 16rpx `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🐛 fix: 增强 iconfont 图标居中：在组件内联样式添加 display:flex/alignItems/justifyContent，SCSS 使用 inline-flex 和 !important 确保样式生效 `src/components/Iconfont/index.tsx` `src/components/Iconfont/index.scss`
+- 🐛 fix: 修复 iconfont 图标居中问题：将 display 从 inline-block 改为 flex，添加 align-items 和 justify-content 确保所有图标完美居中 `src/components/Iconfont/index.scss`
+- 🎨 style: 首页快捷按钮全部替换为 iconfont 图标：拍照使用 IconCamera、文字记录使用 IconText、历史记录使用 IconClock，统一大小 40rpx 白色图标 `src/pages/index/index.tsx`
+- 🎨 style: 首页拍照按钮图标优化：调整 IconCamera 大小为 40rpx，添加 overflow 和 line-height 样式确保图标完美居中且不与圆形边界相交 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 首页拍照按钮替换为 iconfont 图标：使用 IconCamera 组件替换 emoji 相机图标 `src/pages/index/index.tsx`
+- ✨ feat: 配置 Iconfont Font Class 方案：下载字体文件、创建 Iconfont 组件（支持 name/size/color）、全局引入样式、提供 3 个预设图标组件（IconClock/IconCamera/IconText） `src/assets/iconfont/iconfont.css` `src/components/Iconfont/index.tsx` `src/components/Iconfont/index.scss` `src/app.scss` `docs/ICONFONT使用指南.md`
+- 📝 docs: Taro-iconfont-cli 兼容性问题说明：工具不兼容 Taro 4.x，提供三种替代方案（简化图标组件/Font class/等待更新） `docs/ICONFONT问题说明.md` `src/components/Icon/index.tsx`
+- 🔧 chore: 配置 taro-iconfont-cli 图标管理：安装依赖、创建配置文件、添加 npm 脚本、编写使用文档 `iconfont.json` `package.json` `docs/ICONFONT使用说明.md`
+- 🐛 fix: 食谱一键记录数据类型转换：total_weight_grams 从浮点数转整数避免数据库报错 `backend/main.py`
+- 🐛 fix: 食谱一键记录创建饮食记录失败：修正 insert_food_record 参数传递，并对餐次为空/非法时回退 snack `backend/main.py`
+- ✨ feat: 新增食谱编辑页：支持编辑名称/描述/标签/餐次/收藏，显示营养摘要；无 id 时提示从识别结果页保存 `src/pages/recipe-edit/index.tsx` `src/pages/recipe-edit/index.scss` `src/pages/recipe-edit/index.config.ts` `src/app.config.ts`
+- ✨ feat: 私人食谱库前端页面：新增食谱列表页（全部/收藏切换、营养摘要、使用统计、一键记录/编辑/删除）；结果页增加「保存为食谱」按钮；个人中心新增「我的食谱」入口 `src/pages/recipes/` `src/pages/result/index.tsx` `src/pages/result/index.scss` `src/pages/profile/index.tsx` `src/pages/profile/index.scss` `src/app.config.ts`
+- ✨ feat: 私人食谱库功能：支持用户保存常吃的食物组合为食谱（如"我的标配减脂早餐"），实现一键记录；后端新增 user_recipes 表、CRUD API（创建/列表/详情/更新/删除/使用）；前端新增对应 API 函数 `backend/database/user_recipes.sql` `backend/database.py` `backend/main.py` `src/utils/api.ts`
+- 🎨 style: 个人中心页面颜色调整：将深绿色系（#10b981）统一调整为首页的明亮绿色（#00bc7d、#00bba7），保持全局色彩一致性 `src/pages/profile/index.scss`
+- 🎨 style: 个人中心页面设计全面优化：更现代的渐变配色（绿色主题）、圆润的圆角设计、精致的阴影和光效、流畅的动画过渡、卡片悬浮效果、图标旋转动效、优化的间距和排版 `src/pages/profile/index.scss`
+- 🔧 refactor: 个人中心去除减重相关内容：删除体重卡片与统计卡片（连续签到/已减重/总记录），仅保留用户信息与服务列表；新增 GET /api/user/record-days 返回真实记录天数（按日期去重计算） `src/pages/profile/index.tsx` `src/pages/profile/index.scss` `src/utils/api.ts` `backend/main.py`
+- ✨ feat: 个人设置功能优化：保存前显示确认弹窗；校验空信息并提示；单独修改头像或昵称时二次确认；未做修改时也显示保存成功 `src/pages/profile/index.tsx`
+- ✨ feat: 个人设置功能：点击设置按钮打开弹窗，支持重新修改头像和昵称；微信头像自动上传到 Supabase 获取公网 URL；保存时显示具体修改项（头像/昵称）的提示；后端新增 POST /api/user/upload-avatar、database.py 新增 upload_user_avatar、Supabase 新增 user-avatars bucket `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
+
 ## 2026-02-03
 
 - ✨ feat: 公共食物库功能（生态建设）：用户可分享健康餐到公共库（带商家名、地址、位置、口味评分、是否适合减脂、自定义标签），支持点赞、评论与评分，形成带地理位置/商家信息的健康饮食红黑榜，解决「减肥不知道点什么外卖」痛点 `backend/database/public_food_library.sql` `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/food-library/` `src/pages/food-library-detail/` `src/pages/food-library-share/` `src/pages/community/index.tsx` `src/app.config.ts`

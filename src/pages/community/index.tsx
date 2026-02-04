@@ -20,6 +20,7 @@ import {
   type CommunityFeedItem,
   type FeedCommentItem
 } from '../../utils/api'
+import { IconCamera } from '../../components/iconfont'
 
 import './index.scss'
 
@@ -236,6 +237,27 @@ export default function CommunityPage() {
     } finally {
       setCommentSubmitting(false)
     }
+  }
+
+  /**
+   * 拍照识别：直接进入拍照分析流程
+   */
+  const handlePhotoAnalyze = () => {
+    Taro.chooseImage({
+      count: 1,
+      sizeType: ['original', 'compressed'],
+      sourceType: ['album', 'camera'],
+      success: (res) => {
+        const imagePath = res.tempFilePaths[0]
+        Taro.setStorageSync('analyzeImagePath', imagePath)
+        Taro.navigateTo({ url: '/pages/analyze/index' })
+      },
+      fail: (err) => {
+        if (err?.errMsg?.includes('cancel')) return
+        console.error('选择图片失败:', err)
+        Taro.showToast({ title: '选择图片失败', icon: 'none' })
+      }
+    })
   }
 
   const topics = [
@@ -586,9 +608,11 @@ export default function CommunityPage() {
       {loggedIn && (
         <View
           className='fab-button'
-          onClick={() => Taro.navigateTo({ url: '/pages/record/index' })}
+          onClick={handlePhotoAnalyze}
         >
-          <Text className='fab-icon'>📷</Text>
+          <View className='fab-icon'>
+            <IconCamera size={48} color="#ffffff" />
+          </View>
         </View>
       )}
     </View>

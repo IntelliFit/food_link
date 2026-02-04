@@ -1,0 +1,8 @@
+{
+  "symbol_url": "https://at.alicdn.com/t/c/font_5122763_axsos2q643d.js",
+  "use_typescript": true,
+  "platforms": "*",
+  "save_dir": "./src/components/iconfont",
+  "trim_icon_prefix": "icon",
+  "default_icon_size": 18
+}

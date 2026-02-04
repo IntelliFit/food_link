@@ -7,7 +7,10 @@ import {
   getUserProfile, 
   updateUserInfo, 
   getAccessToken,
-  clearAllStorage
+  clearAllStorage,
+  uploadUserAvatar,
+  imageToBase64,
+  getUserRecordDays
 } from '../../utils/api'
 
 import './index.scss'
@@ -25,6 +28,9 @@ export default function ProfilePage() {
   // 是否显示头像昵称填写界面
   const [showProfileForm, setShowProfileForm] = useState(false)
   
+  // 是否显示设置弹窗
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  
   // 临时头像和昵称（用于填写表单）
   const [tempAvatar, setTempAvatar] = useState('')
   const [tempNickname, setTempNickname] = useState('')
@@ -33,11 +39,14 @@ export default function ProfilePage() {
   const [userInfo, setUserInfo] = useState<UserInfo>({
     avatar: '👤',
     name: '用户昵称',
-    meta: '已记录 30 天'
+    meta: '已记录 0 天'
   })
 
   // 是否已完成健康档案引导（首次问卷）
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean>(true)
+  
+  // 记录天数
+  const [recordDays, setRecordDays] = useState(0)
 
   // 从本地存储读取登录状态，并从服务器获取用户信息
   useEffect(() => {
@@ -49,10 +58,21 @@ export default function ProfilePage() {
           // 从服务器获取最新用户信息
           try {
             const apiUserInfo = await getUserProfile()
+            
+            // 获取记录天数
+            let days = 0
+            try {
+              const recordDaysData = await getUserRecordDays()
+              days = recordDaysData.record_days
+              setRecordDays(days)
+            } catch (error) {
+              console.error('获取记录天数失败:', error)
+            }
+            
             setUserInfo({
               avatar: apiUserInfo.avatar || '👤',
               name: apiUserInfo.nickname || '用户昵称',
-              meta: '已记录 30 天'
+              meta: `已记录 ${days} 天`
             })
             setOnboardingCompleted(apiUserInfo.onboarding_completed ?? true)
           } catch (error) {
@@ -80,20 +100,6 @@ export default function ProfilePage() {
     loadUserInfo()
   }, [])
 
-  // 体重信息
-  const [weightData] = useState({
-    current: 65.5,
-    target: 60,
-    progress: 73
-  })
-
-  // 统计数据
-  const [stats] = useState({
-    checkin: 30,
-    weightLoss: 5.2,
-    records: 180
-  })
-
   // 我的服务
   const services = [
     {
@@ -105,34 +111,42 @@ export default function ProfilePage() {
     },
     {
       id: 1,
+      icon: '📖',
+      title: '我的食谱',
+      desc: '常吃的食物组合，一键记录',
+      iconClass: 'recipe-icon',
+      path: '/pages/recipes/index'
+    },
+    {
+      id: 2,
       icon: '🎯',
       title: '我的目标',
       desc: '设置和管理你的健康目标',
       iconClass: 'goal-icon'
     },
     {
-      id: 2,
+      id: 3,
       icon: '📊',
       title: '数据统计',
       desc: '查看详细的饮食和运动数据',
       iconClass: 'stats-icon'
     },
     {
-      id: 3,
+      id: 4,
       icon: '🏆',
       title: '我的成就',
       desc: '查看已获得的成就徽章',
       iconClass: 'achievement-icon'
     },
     {
-      id: 4,
+      id: 5,
       icon: '📍',
       title: '附近美食',
       desc: '发现附近健康美食推荐',
       iconClass: 'map-icon'
     },
     {
-      id: 5,
+      id: 6,
       icon: '🛒',
       title: '健康商城',
       desc: '购买健康食品和运动装备',
@@ -169,8 +183,13 @@ export default function ProfilePage() {
       }
       return
     }
+    // 我的食谱
+    if (service.id === 1) {
+      Taro.navigateTo({ url: '/pages/recipes/index' })
+      return
+    }
     // 数据统计
-    if (service.id === 2) {
+    if (service.id === 3) {
       Taro.navigateTo({ url: '/pages/stats/index' })
       return
     }
@@ -462,10 +481,45 @@ export default function ProfilePage() {
   }
 
   // 处理头像选择
-  const handleChooseAvatar = (e: any) => {
+  const handleChooseAvatar = async (e: any) => {
     const { avatarUrl } = e.detail
     console.log('选择的头像:', avatarUrl)
-    setTempAvatar(avatarUrl)
+    
+    // 如果是微信临时路径，需要上传到 Supabase
+    if (avatarUrl && avatarUrl.startsWith('http://tmp/')) {
+      Taro.showLoading({
+        title: '上传中...',
+        mask: true
+      })
+      
+      try {
+        // 转换为 base64
+        const base64Image = await imageToBase64(avatarUrl)
+        
+        // 上传到 Supabase
+        const { imageUrl } = await uploadUserAvatar(base64Image)
+        
+        console.log('头像已上传到 Supabase:', imageUrl)
+        setTempAvatar(imageUrl)
+        
+        Taro.hideLoading()
+        Taro.showToast({
+          title: '头像已选择',
+          icon: 'success'
+        })
+      } catch (error: any) {
+        console.error('上传头像失败:', error)
+        Taro.hideLoading()
+        Taro.showToast({
+          title: error.message || '上传失败',
+          icon: 'none',
+          duration: 2000
+        })
+      }
+    } else {
+      // 其他情况直接使用（已经是 URL）
+      setTempAvatar(avatarUrl)
+    }
   }
 
   // 处理昵称输入
@@ -484,14 +538,80 @@ export default function ProfilePage() {
 
   // 保存用户信息
   const handleSaveProfile = async () => {
-    if (!tempAvatar && !tempNickname) {
-      Taro.showToast({
-        title: '请至少填写一项信息',
-        icon: 'none'
-      })
-      return
+    // 校验：如果从设置弹窗进入，检查是否提交了空信息
+    if (showSettingsModal) {
+      // 检查头像是否为空（空字符串或仅包含 emoji）
+      const isAvatarEmpty = !tempAvatar || tempAvatar.trim() === '' || tempAvatar === '👤'
+      // 检查昵称是否为空
+      const isNicknameEmpty = !tempNickname || tempNickname.trim() === ''
+      
+      if (isAvatarEmpty && isNicknameEmpty) {
+        Taro.showToast({
+          title: '请至少设置头像或昵称',
+          icon: 'none',
+          duration: 2000
+        })
+        return
+      }
+      
+      // 如果昵称为空但有头像，或头像为空但有昵称，也需要提示
+      if (isNicknameEmpty && !isAvatarEmpty) {
+        Taro.showModal({
+          title: '提示',
+          content: '您还未设置昵称，确定只保存头像吗？',
+          confirmText: '确定保存',
+          cancelText: '取消',
+          success: (res) => {
+            if (res.confirm) {
+              performSave()
+            }
+          }
+        })
+        return
+      }
+      
+      if (isAvatarEmpty && !isNicknameEmpty) {
+        Taro.showModal({
+          title: '提示',
+          content: '您还未设置头像，确定只保存昵称吗？',
+          confirmText: '确定保存',
+          cancelText: '取消',
+          success: (res) => {
+            if (res.confirm) {
+              performSave()
+            }
+          }
+        })
+        return
+      }
+    } else {
+      // 首次填写时的校验
+      if (!tempAvatar && !tempNickname) {
+        Taro.showToast({
+          title: '请至少填写一项信息',
+          icon: 'none',
+          duration: 2000
+        })
+        return
+      }
     }
 
+    // 显示保存确认弹窗
+    Taro.showModal({
+      title: '确认保存',
+      content: '确定要保存修改的信息吗？',
+      confirmText: '保存',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          performSave()
+        }
+      }
+    })
+  }
+
+  // 执行保存操作
+  const performSave = async () => {
     Taro.showLoading({
       title: '保存中...',
       mask: true
@@ -500,11 +620,28 @@ export default function ProfilePage() {
     try {
       // 构建更新数据
       const updateData: any = {}
-      if (tempNickname) {
+      const changesList: string[] = []
+      
+      if (tempNickname && tempNickname !== userInfo.name) {
         updateData.nickname = tempNickname
+        changesList.push('昵称')
       }
-      if (tempAvatar) {
+      if (tempAvatar && tempAvatar !== userInfo.avatar) {
         updateData.avatar = tempAvatar
+        changesList.push('头像')
+      }
+
+      // 如果没有需要更新的内容，也显示保存成功
+      if (Object.keys(updateData).length === 0) {
+        Taro.hideLoading()
+        Taro.showToast({
+          title: '保存成功',
+          icon: 'success',
+          duration: 2000
+        })
+        setShowProfileForm(false)
+        setShowSettingsModal(false)
+        return
       }
 
       // 调用后端接口更新用户信息
@@ -514,19 +651,27 @@ export default function ProfilePage() {
       const newUserInfo: UserInfo = {
         avatar: updatedUser.avatar || userInfo.avatar,
         name: updatedUser.nickname || userInfo.name,
-        meta: '已记录 30 天'
+        meta: `已记录 ${recordDays} 天`
       }
 
       Taro.setStorageSync('userInfo', newUserInfo)
       setUserInfo(newUserInfo)
       setShowProfileForm(false)
+      setShowSettingsModal(false)
       setTempAvatar('')
       setTempNickname('')
 
       Taro.hideLoading()
+      
+      // 根据修改内容给出具体提示
+      const message = changesList.length > 0 
+        ? `${changesList.join('和')}已更新` 
+        : '保存成功'
+      
       Taro.showToast({
-        title: '保存成功',
-        icon: 'success'
+        title: message,
+        icon: 'success',
+        duration: 2000
       })
     } catch (error: any) {
       console.error('保存用户信息失败:', error)
@@ -534,7 +679,7 @@ export default function ProfilePage() {
       Taro.showToast({
         title: error.message || '保存失败，请重试',
         icon: 'none',
-        duration: 2000
+        duration: 2500
       })
     }
   }
@@ -544,7 +689,7 @@ export default function ProfilePage() {
     const defaultUserInfo: UserInfo = {
       avatar: '👤',
       name: `用户${Taro.getStorageSync('openid')?.slice(-6) || '000000'}`,
-      meta: '已记录 30 天'
+      meta: '已记录 0 天'
     }
 
     Taro.setStorageSync('isLoggedIn', true)
@@ -573,7 +718,7 @@ export default function ProfilePage() {
             setUserInfo({
               avatar: '👤',
               name: '用户昵称',
-              meta: '已记录 30 天'
+              meta: '已记录 0 天'
             })
             
             Taro.showToast({
@@ -595,10 +740,17 @@ export default function ProfilePage() {
   }
 
   const handleSettings = () => {
-    Taro.showToast({
-      title: '打开设置',
-      icon: 'none'
-    })
+    if (!isLoggedIn) {
+      Taro.showToast({
+        title: '请先登录',
+        icon: 'none'
+      })
+      return
+    }
+    setShowSettingsModal(true)
+    // 初始化设置弹窗的临时数据
+    setTempAvatar(userInfo.avatar)
+    setTempNickname(userInfo.name)
   }
 
   return (
@@ -640,24 +792,6 @@ export default function ProfilePage() {
             <Text>⚙️</Text>
           </View>
         </View>
-
-        {/* 当前体重卡片 */}
-        <View className='weight-card'>
-          <View className='weight-header'>
-            <Text className='weight-label'>当前体重</Text>
-            <Text className='weight-target'>目标 {weightData.target} kg</Text>
-          </View>
-          <View className='weight-value-section'>
-            <Text className='weight-value'>{weightData.current}</Text>
-            <Text className='weight-unit'>kg</Text>
-          </View>
-          <View className='weight-progress-bar'>
-            <View 
-              className='weight-progress-fill' 
-              style={{ width: `${weightData.progress}%` }}
-            />
-          </View>
-        </View>
       </View>
 
       {/* 未完成健康档案时显示引导 */}
@@ -671,37 +805,9 @@ export default function ProfilePage() {
         </View>
       )}
 
-      {/* 统计卡片 */}
-      <View className='stats-cards'>
-        <View className='stat-card'>
-          <View className='stat-icon checkin-icon'>
-            <Text>📅</Text>
-          </View>
-          <Text className='stat-number'>{stats.checkin}</Text>
-          <Text className='stat-unit'>天</Text>
-          <Text className='stat-label'>连续签到</Text>
-        </View>
-        <View className='stat-card'>
-          <View className='stat-icon weight-loss-icon'>
-            <Text>⚖️</Text>
-          </View>
-          <Text className='stat-number'>{stats.weightLoss}</Text>
-          <Text className='stat-unit'>kg</Text>
-          <Text className='stat-label'>已减重</Text>
-        </View>
-        <View className='stat-card'>
-          <View className='stat-icon record-icon'>
-            <Text>📝</Text>
-          </View>
-          <Text className='stat-number'>{stats.records}</Text>
-          <Text className='stat-unit'>条</Text>
-          <Text className='stat-label'>总记录</Text>
-        </View>
-      </View>
-
       {/* 我的服务 */}
       <View className='services-section'>
-        <Text className='section-title'>我的服务</Text>
+        {/* <Text className='section-title'>我的服务</Text> */}
         <View className='services-list'>
           {services.map((service) => (
             <View
@@ -843,6 +949,79 @@ export default function ProfilePage() {
                 onClick={handleSkipProfile}
               >
                 跳过
+              </Button>
+              <Button 
+                className='form-btn save-btn'
+                onClick={handleSaveProfile}
+              >
+                保存
+              </Button>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 设置弹窗 */}
+      {showSettingsModal && (
+        <View className='profile-form-modal'>
+          <View className='profile-form-content'>
+            <View className='profile-form-header'>
+              <Text className='profile-form-title'>个人设置</Text>
+              <Text 
+                className='profile-form-close'
+                onClick={() => setShowSettingsModal(false)}
+              >
+                ✕
+              </Text>
+            </View>
+            
+            <View className='profile-form-body'>
+              {/* 头像选择 */}
+              <View className='avatar-choose-section'>
+                <Text className='form-label'>更换头像</Text>
+                <Button
+                  className='avatar-choose-btn'
+                  openType='chooseAvatar'
+                  onChooseAvatar={handleChooseAvatar}
+                >
+                  <View className='avatar-choose-wrapper'>
+                    {tempAvatar && tempAvatar.startsWith('http') ? (
+                      <Image 
+                        src={tempAvatar} 
+                        mode='aspectFill'
+                        className='avatar-preview'
+                      />
+                    ) : (
+                      <View className='avatar-placeholder'>
+                        <Text className='avatar-placeholder-icon'>{tempAvatar || '📷'}</Text>
+                        <Text className='avatar-placeholder-text'>点击选择头像</Text>
+                      </View>
+                    )}
+                  </View>
+                </Button>
+                <Text className='form-hint'>支持选择微信头像或相册图片</Text>
+              </View>
+
+              {/* 昵称输入 */}
+              <View className='nickname-input-section'>
+                <Text className='form-label'>修改昵称</Text>
+                <Input
+                  className='nickname-input'
+                  type='nickname'
+                  placeholder='请输入昵称'
+                  value={tempNickname}
+                  onInput={handleNicknameInput}
+                  onBlur={handleNicknameBlur}
+                />
+              </View>
+            </View>
+
+            <View className='profile-form-footer'>
+              <Button 
+                className='form-btn skip-btn'
+                onClick={() => setShowSettingsModal(false)}
+              >
+                取消
               </Button>
               <Button 
                 className='form-btn save-btn'

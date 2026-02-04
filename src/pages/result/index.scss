@@ -478,3 +478,34 @@
   color: #dc2626;
   line-height: 32rpx;
 }
+
+// 保存为食谱按钮
+.save-recipe-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 28rpx;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-radius: 20rpx;
+  margin-top: 24rpx;
+  border: 2rpx solid #00bc7d;
+  transition: all 0.3s ease;
+  
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+}
+
+.save-recipe-icon {
+  font-size: 32rpx;
+  line-height: 32rpx;
+}
+
+.save-recipe-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #047857;
+  line-height: 40rpx;
+}

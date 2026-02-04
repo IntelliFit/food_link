@@ -645,6 +645,37 @@ export async function updateUserInfo(userInfo: UpdateUserInfoRequest): Promise<U
 }
 
 /**
+ * 上传用户头像到 Supabase Storage
+ * @param base64Image Base64 编码的图片
+ * @returns Promise<{ imageUrl: string }>
+ */
+export async function uploadUserAvatar(base64Image: string): Promise<{ imageUrl: string }> {
+  const response = await authenticatedRequest('/api/user/upload-avatar', {
+    method: 'POST',
+    data: { base64Image },
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    const msg = (response.data as any)?.detail || '上传头像失败'
+    throw new Error(msg)
+  }
+  return response.data as { imageUrl: string }
+}
+
+/**
+ * 获取用户记录天数统计
+ * @returns Promise<{ record_days: number }>
+ */
+export async function getUserRecordDays(): Promise<{ record_days: number }> {
+  const res = await authenticatedRequest('/api/user/record-days', { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取记录天数失败'
+    throw new Error(msg)
+  }
+  return res.data as { record_days: number }
+}
+
+/**
  * 获取当前用户健康档案
  * @returns Promise<HealthProfile>
  */
@@ -1069,5 +1100,149 @@ export async function postPublicFoodLibraryComment(
     throw new Error((response.data as any)?.detail || '发表失败')
   }
   return response.data as { comment: PublicFoodLibraryComment }
+}
+
+// ---------- 用户私人食谱 ----------
+
+/** 私人食谱接口 */
+export interface UserRecipe {
+  id: string
+  user_id: string
+  recipe_name: string
+  description?: string
+  image_path?: string
+  items: Array<{
+    name: string
+    weight: number
+    ratio: number
+    intake: number
+    nutrients: Nutrients
+  }>
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  total_weight_grams: number
+  tags?: string[]
+  meal_type?: string
+  is_favorite: boolean
+  use_count: number
+  last_used_at?: string
+  created_at: string
+  updated_at: string
+}
+
+/** 创建食谱请求 */
+export interface CreateRecipeRequest {
+  recipe_name: string
+  description?: string
+  image_path?: string
+  items: Array<{
+    name: string
+    weight: number
+    ratio: number
+    intake: number
+    nutrients: Nutrients
+  }>
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  total_weight_grams: number
+  tags?: string[]
+  meal_type?: string
+  is_favorite?: boolean
+}
+
+/** 更新食谱请求 */
+export interface UpdateRecipeRequest {
+  recipe_name?: string
+  description?: string
+  image_path?: string
+  items?: Array<{
+    name: string
+    weight: number
+    ratio: number
+    intake: number
+    nutrients: Nutrients
+  }>
+  total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  total_weight_grams?: number
+  tags?: string[]
+  meal_type?: string
+  is_favorite?: boolean
+}
+
+/** 创建私人食谱 */
+export async function createUserRecipe(data: CreateRecipeRequest): Promise<{ id: string; message: string }> {
+  const response = await authenticatedRequest('/api/recipes', {
+    method: 'POST',
+    data,
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '创建食谱失败')
+  }
+  return response.data as { id: string; message: string }
+}
+
+/** 获取私人食谱列表 */
+export async function getUserRecipes(params?: { meal_type?: string; is_favorite?: boolean }): Promise<{ recipes: UserRecipe[] }> {
+  const q = new URLSearchParams()
+  if (params?.meal_type) q.set('meal_type', params.meal_type)
+  if (params?.is_favorite !== undefined) q.set('is_favorite', String(params.is_favorite))
+  const qs = q.toString()
+  const url = qs ? `/api/recipes?${qs}` : '/api/recipes'
+  const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取食谱列表失败')
+  }
+  return response.data as { recipes: UserRecipe[] }
+}
+
+/** 获取单个食谱详情 */
+export async function getUserRecipe(recipeId: string): Promise<UserRecipe> {
+  const response = await authenticatedRequest(`/api/recipes/${recipeId}`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取食谱失败')
+  }
+  return response.data as UserRecipe
+}
+
+/** 更新食谱 */
+export async function updateUserRecipe(recipeId: string, data: UpdateRecipeRequest): Promise<{ message: string; recipe: UserRecipe }> {
+  const response = await authenticatedRequest(`/api/recipes/${recipeId}`, {
+    method: 'PUT',
+    data,
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '更新食谱失败')
+  }
+  return response.data as { message: string; recipe: UserRecipe }
+}
+
+/** 删除食谱 */
+export async function deleteUserRecipe(recipeId: string): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/recipes/${recipeId}`, { method: 'DELETE', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '删除食谱失败')
+  }
+  return response.data as { message: string }
+}
+
+/** 使用食谱（一键记录） */
+export async function useUserRecipe(recipeId: string): Promise<{ message: string; record_id: string }> {
+  const response = await authenticatedRequest(`/api/recipes/${recipeId}/use`, {
+    method: 'POST',
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '使用食谱失败')
+  }
+  return response.data as { message: string; record_id: string }
 }
 

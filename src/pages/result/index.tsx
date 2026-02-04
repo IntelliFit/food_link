@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Slider } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe } from '../../utils/api'
 
 import './index.scss'
 
@@ -354,6 +354,86 @@ export default function ResultPage() {
     })
   }
 
+  // 保存为食谱
+  const handleSaveAsRecipe = () => {
+    // 检查登录
+    const token = getAccessToken()
+    if (!token) {
+      Taro.showToast({ title: '请先登录', icon: 'none' })
+      return
+    }
+
+    // 获取餐次信息
+    const savedMealType = Taro.getStorageSync('analyzeMealType')
+    const mealType = savedMealType && MEAL_OPTIONS.find((o) => o.value === savedMealType)
+      ? savedMealType
+      : undefined
+
+    // 弹窗输入食谱名称
+    Taro.showModal({
+      title: '保存为食谱',
+      content: '请输入食谱名称',
+      editable: true,
+      placeholderText: '例如：我的标配减脂早餐',
+      success: async (res) => {
+        if (res.confirm && res.content) {
+          const recipeName = res.content.trim()
+          if (!recipeName) {
+            Taro.showToast({ title: '请输入食谱名称', icon: 'none' })
+            return
+          }
+
+          Taro.showLoading({ title: '保存中...', mask: true })
+          
+          try {
+            // 构建食谱数据
+            const recipeItems = nutritionItems.map(nutritionItem => ({
+              name: nutritionItem.name,
+              weight: nutritionItem.weight,
+              ratio: nutritionItem.ratio,
+              intake: nutritionItem.intake,
+              nutrients: {
+                calories: nutritionItem.calorie,
+                protein: nutritionItem.protein,
+                carbs: nutritionItem.carbs,
+                fat: nutritionItem.fat,
+                fiber: 0,
+                sugar: 0
+              }
+            }))
+
+            await createUserRecipe({
+              recipe_name: recipeName,
+              description: description || '',
+              image_path: imagePath || undefined,
+              items: recipeItems,
+              total_calories: nutritionStats.calories,
+              total_protein: nutritionStats.protein,
+              total_carbs: nutritionStats.carbs,
+              total_fat: nutritionStats.fat,
+              total_weight_grams: totalWeight,
+              meal_type: mealType,
+              tags: ['自定义']
+            })
+
+            Taro.hideLoading()
+            Taro.showModal({
+              title: '保存成功',
+              content: '食谱已保存，可在"我的"-"我的食谱"中查看和使用',
+              showCancel: false
+            })
+          } catch (error: any) {
+            Taro.hideLoading()
+            Taro.showToast({
+              title: error.message || '保存失败',
+              icon: 'none'
+            })
+          }
+        }
+      }
+    })
+  }
+
   return (
     <View className='result-page'>
       <ScrollView
@@ -531,6 +611,13 @@ export default function ResultPage() {
               {saving ? '保存中...' : '确认记录并完成'}
             </Text>
           </View>
+          
+          {/* 保存为食谱按钮 */}
+          <View className='save-recipe-btn' onClick={handleSaveAsRecipe}>
+            <Text className='save-recipe-icon'>📖</Text>
+            <Text className='save-recipe-text'>保存为食谱</Text>
+          </View>
+          
           <View
             className={`warning-section ${hasSavedCritical ? 'warning-section--done' : ''}`}
             onClick={hasSavedCritical ? undefined : handleMarkSample}

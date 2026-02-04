@@ -8,6 +8,8 @@ export default defineAppConfig({
     'pages/result-text/index',
     'pages/ai-assistant/index',
     'pages/profile/index',
+    'pages/recipes/index',
+    'pages/recipe-edit/index',
     'pages/health-profile/index',
     'pages/health-profile-view/index',
     'pages/stats/index',

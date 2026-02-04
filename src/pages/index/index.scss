@@ -148,7 +148,9 @@
   }
   
   .macro-icon {
-    font-size: 32rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     margin-bottom: 6rpx;
   }
   
@@ -175,7 +177,7 @@
   .quick-record-section {
     background: #ffffff;
     // 上浮叠在 header 上（设计稿效果）
-    margin: -32rpx 24rpx 24rpx;
+    margin: -16rpx 24rpx 24rpx;
     padding: 24rpx;
     border-radius: 24rpx;
     box-shadow: 0px 10rpx 15rpx rgba(0, 0, 0, 0.1), 0px 4rpx 6rpx rgba(0, 0, 0, 0.1);
@@ -193,7 +195,7 @@
   
   .quick-buttons {
     display: flex;
-    gap: 20rpx;
+    gap: 24rpx;
   }
   
   .quick-button {
@@ -201,9 +203,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20rpx 16rpx;
+    padding: 32rpx 20rpx;
     border-radius: 20rpx;
-    gap: 12rpx;
+    gap: 16rpx;
   }
   
   .photo-btn {
@@ -219,14 +221,23 @@
   }
   
   .button-icon {
-    width: 60rpx;
-    height: 60rpx;
+    width: 72rpx;
+    height: 72rpx;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 36rpx;
     color: #ffffff;
+    overflow: hidden;
+    
+    // 确保 iconfont 图标居中
+    .iconfont {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
   }
   
   .photo-icon {
