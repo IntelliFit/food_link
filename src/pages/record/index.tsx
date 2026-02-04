@@ -20,14 +20,20 @@ const MEAL_TYPE_ICONS: Record<string, string> = {
   snack: '🍎'
 }
 
-/** 文字记录：当前状态（AI 将结合此状态分析），≤6 项 */
-const CONTEXT_STATE_OPTIONS = [
-  { value: 'post_workout', label: '刚健身完' },
-  { value: 'fasting', label: '空腹/餐前' },
+/** 饮食目标（状态一） */
+const DIET_GOAL_OPTIONS = [
   { value: 'fat_loss', label: '减脂期' },
   { value: 'muscle_gain', label: '增肌期' },
   { value: 'maintain', label: '维持体重' },
-  { value: 'none', label: '无特殊' }
+  { value: 'none', label: '无' }
+]
+
+/** 运动时机（状态二） */
+const ACTIVITY_TIMING_OPTIONS = [
+  { value: 'post_workout', label: '练后' },
+  { value: 'daily', label: '日常' },
+  { value: 'before_sleep', label: '睡前' },
+  { value: 'none', label: '无' }
 ]
 
 export default function RecordPage() {
@@ -35,13 +41,19 @@ export default function RecordPage() {
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
   const [selectedMeal, setSelectedMeal] = useState('breakfast')
-  const [textContextState, setTextContextState] = useState<string>('none')
+  const [textDietGoal, setTextDietGoal] = useState<string>('none')
+  const [textActivityTiming, setTextActivityTiming] = useState<string>('none')
 
   const recordMethods = [
     { id: 'photo', text: '拍照识别', iconClass: 'photo-icon' },
     { id: 'text', text: '文字记录', iconClass: 'text-icon' },
     { id: 'history', text: '历史记录', iconClass: 'history-icon' }
   ]
+
+  const getMethodIconColor = (methodId: string) => {
+    if (methodId === 'photo') return '#ffffff'
+    return '#ffffff'
+  }
 
   const handleMethodClick = (methodId: string) => {
     setActiveMethod(methodId)
@@ -115,11 +127,16 @@ export default function RecordPage() {
     setTextCalculating(true)
     Taro.showLoading({ title: '分析中...', mask: true })
     try {
-      const result = await analyzeFoodText({ text: inputText, context_state: textContextState })
+      const result = await analyzeFoodText({ 
+        text: inputText, 
+        diet_goal: textDietGoal as any,
+        activity_timing: textActivityTiming as any
+      })
       Taro.hideLoading()
       Taro.setStorageSync('analyzeTextResult', JSON.stringify(result))
       Taro.setStorageSync('analyzeTextSource', 'text')
-      Taro.setStorageSync('analyzeContextState', textContextState)
+      Taro.setStorageSync('analyzeDietGoal', textDietGoal)
+      Taro.setStorageSync('analyzeActivityTiming', textActivityTiming)
       Taro.navigateTo({ url: '/pages/result-text/index' })
     } catch (e: any) {
       Taro.hideLoading()
@@ -273,13 +290,13 @@ export default function RecordPage() {
         {recordMethods.map((method) => (
           <View
             key={method.id}
-            className={`method-card ${activeMethod === method.id ? 'active' : ''}`}
+            className={`method-card ${activeMethod === method.id ? 'active' : ''} ${method.id}-method`}
             onClick={() => handleMethodClick(method.id)}
           >
             <View className={`method-icon ${method.iconClass}`}>
-              {method.id === 'photo' && <IconCamera size={40} color="#ffffff" />}
-              {method.id === 'text' && <IconText size={40} color="#ffffff" />}
-              {method.id === 'history' && <IconClock size={40} color="#ffffff" />}
+              {method.id === 'photo' && <IconCamera size={40} color={getMethodIconColor(method.id)} />}
+              {method.id === 'text' && <IconText size={40} color={getMethodIconColor(method.id)} />}
+              {method.id === 'history' && <IconClock size={40} color={getMethodIconColor(method.id)} />}
             </View>
             <Text className='method-text'>{method.text}</Text>
           </View>
@@ -346,16 +363,33 @@ export default function RecordPage() {
             ))}
           </View>
 
-          {/* 当前状态（AI 将结合此状态分析） */}
+          {/* 饮食目标（状态一） */}
           <View className='text-state-section'>
-            <Text className='section-label'>当前状态</Text>
-            <Text className='section-hint'>选择状态后，AI 会结合状态给出更贴合的建议</Text>
+            <Text className='section-label'>饮食目标</Text>
+            <Text className='section-hint'>选择您的饮食目标，AI 会结合目标给出建议</Text>
             <View className='text-state-options'>
-              {CONTEXT_STATE_OPTIONS.map((opt) => (
+              {DIET_GOAL_OPTIONS.map((opt) => (
                 <View
                   key={opt.value}
-                  className={`text-state-option ${textContextState === opt.value ? 'active' : ''}`}
-                  onClick={() => setTextContextState(opt.value)}
+                  className={`text-state-option ${textDietGoal === opt.value ? 'active' : ''}`}
+                  onClick={() => setTextDietGoal(opt.value)}
+                >
+                  <Text className='text-state-label'>{opt.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* 运动时机（状态二） */}
+          <View className='text-state-section'>
+            <Text className='section-label'>运动时机</Text>
+            <Text className='section-hint'>选择进食时机，AI 会给出针对性建议</Text>
+            <View className='text-state-options'>
+              {ACTIVITY_TIMING_OPTIONS.map((opt) => (
+                <View
+                  key={opt.value}
+                  className={`text-state-option ${textActivityTiming === opt.value ? 'active' : ''}`}
+                  onClick={() => setTextActivityTiming(opt.value)}
                 >
                   <Text className='text-state-label'>{opt.label}</Text>
                 </View>

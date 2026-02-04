@@ -6,6 +6,19 @@
   flex-direction: column;
 }
 
+// 图标字体在本页的统一样式
+.food-library-page .iconfont {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+
+  &::before {
+    font-size: inherit;
+    color: inherit;
+  }
+}
+
 // 筛选区域
 .filter-section {
   background: #fff;
@@ -186,6 +199,7 @@
 
 .merchant-icon {
   font-size: 28rpx;
+  color: #6a7282;
 }
 
 .merchant-name {
@@ -202,6 +216,7 @@
 
 .location-icon {
   font-size: 26rpx;
+  color: #9ca3af;
 }
 
 .location-text {
@@ -269,6 +284,7 @@
 
 .stat-icon {
   font-size: 28rpx;
+  color: #6a7282;
 }
 
 .stat-icon.liked {

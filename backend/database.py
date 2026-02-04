@@ -220,6 +220,8 @@ async def insert_food_record(
     total_fat: float = 0,
     total_weight_grams: int = 0,
     context_state: Optional[str] = None,
+    diet_goal: Optional[str] = None,
+    activity_timing: Optional[str] = None,
     pfc_ratio_comment: Optional[str] = None,
     absorption_notes: Optional[str] = None,
     context_advice: Optional[str] = None,
@@ -261,6 +263,10 @@ async def insert_food_record(
     }
     if context_state is not None:
         row["context_state"] = context_state
+    if diet_goal is not None:
+        row["diet_goal"] = diet_goal
+    if activity_timing is not None:
+        row["activity_timing"] = activity_timing
     if pfc_ratio_comment is not None:
         row["pfc_ratio_comment"] = pfc_ratio_comment
     if absorption_notes is not None:

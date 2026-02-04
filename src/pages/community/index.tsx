@@ -349,10 +349,10 @@ export default function CommunityPage() {
                   className='circle-card'
                   onClick={() => Taro.navigateTo({ url: '/pages/food-library/index' })}
                 >
-                  <Text className='circle-icon'>🍽️</Text>
+                  <Text className='circle-icon iconfont icon-shiwu' />
                   <Text className='circle-name'>公共食物库</Text>
                   <View className='circle-members'>
-                    <Text className='member-icon'>📍</Text>
+                    <Text className='member-icon iconfont icon-dizhi' />
                     <Text className='member-count'>健康外卖推荐</Text>
                   </View>
                 </View>
@@ -360,10 +360,10 @@ export default function CommunityPage() {
                   className='circle-card'
                   onClick={() => Taro.showToast({ title: '敬请期待', icon: 'none' })}
                 >
-                  <Text className='circle-icon'>🏆</Text>
+                  <Text className='circle-icon iconfont icon-weibiaoti-_huabanfuben' />
                   <Text className='circle-name'>打卡排行榜</Text>
                   <View className='circle-members'>
-                    <Text className='member-icon'>👥</Text>
+                    <Text className='member-icon iconfont icon-duoren' />
                     <Text className='member-count'>本周活跃</Text>
                   </View>
                 </View>
@@ -376,7 +376,6 @@ export default function CommunityPage() {
               onClick={() => Taro.showToast({ title: '敬请期待', icon: 'none' })}
             >
               <View className='ranking-content'>
-                <View className='ranking-icon'><Text>🏆</Text></View>
                 <View className='ranking-text'>
                   <Text className='ranking-title'>本周打卡排行榜</Text>
                   <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
@@ -389,7 +388,7 @@ export default function CommunityPage() {
             <View className='topics-section'>
               <View className='section-header'>
                 <View className='section-title-wrapper'>
-                  <Text className='section-title-icon'>📈</Text>
+                  <Text className='section-title-icon iconfont icon-shangzhang' />
                   <Text className='section-title'>热门话题</Text>
                 </View>
               </View>
@@ -463,14 +462,16 @@ export default function CommunityPage() {
                           className='action-item'
                           onClick={() => handleLike(item)}
                         >
-                          <Text className='action-icon'>{item.liked ? '❤️' : '🤍'}</Text>
+                        <Text
+                          className={`action-icon iconfont icon-good ${item.liked ? 'liked' : ''}`}
+                        />
                           <Text className='action-count'>{item.like_count}</Text>
                         </View>
                         <View
                           className='action-item'
                           onClick={() => openComments(item.record.id)}
                         >
-                          <Text className='action-icon'>💬</Text>
+                        <Text className='action-icon iconfont icon-pinglun' />
                           <Text className='action-count'>评论</Text>
                         </View>
                       </View>

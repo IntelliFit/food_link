@@ -12,15 +12,8 @@ const MEAL_OPTIONS = [
   { value: 'snack' as const, label: '加餐' }
 ]
 
-/** 用户当前状态（确认记录时选择，≤6 项以满足微信 showActionSheet 限制） */
-const CONTEXT_STATE_OPTIONS = [
-  { value: 'post_workout', label: '刚健身完' },
-  { value: 'fasting', label: '空腹/餐前' },
-  { value: 'fat_loss', label: '减脂期' },
-  { value: 'muscle_gain', label: '增肌期' },
-  { value: 'maintain', label: '维持体重' },
-  { value: 'none', label: '无特殊' }
-]
+// 移除未使用的 CONTEXT_STATE_OPTIONS
+
 
 interface NutritionItem {
   id: number
@@ -200,102 +193,83 @@ export default function ResultPage() {
     })
   }
 
-  /** 确认记录：若分析页已选餐次与状态则直接确认保存，否则先选状态再选餐次 */
+  /** 确认记录：直接提示保存（状态已在分析页选择或不需要） */
   const handleConfirm = () => {
-    const savedContextState = Taro.getStorageSync('analyzeContextState')
+    // 从缓存获取分析时选择的状态
     const savedMealType = Taro.getStorageSync('analyzeMealType')
-    const contextStateValue = savedContextState && typeof savedContextState === 'string' ? savedContextState : null
-    const contextStateLabel = contextStateValue
-      ? (CONTEXT_STATE_OPTIONS.find((o) => o.value === contextStateValue)?.label ?? contextStateValue)
-      : null
+    const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
+    const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
+
+    // 映射餐次，未找到默认早餐（防止空指针，虽理论上必定有值）
     const mealFromStorage = savedMealType && MEAL_OPTIONS.find((o) => o.value === savedMealType)
-    const mealLabel = mealFromStorage?.label ?? null
-    const mealValue = mealFromStorage?.value ?? null
+    const mealType = mealFromStorage?.value || 'breakfast'
+    const mealLabel = mealFromStorage?.label || '早餐'
 
-    const performSave = (stateValue: string, stateLabel: string, mealType: string, mealLabelText: string) => {
-      Taro.showModal({
-        title: '确认记录',
-        content: `当前状态：${stateLabel}\n餐次：${mealLabelText}\n确定保存吗？`,
-        success: async (res) => {
-          if (!res.confirm) return
-          setSaving(true)
-          try {
-            Taro.removeStorageSync('analyzeContextState')
-            Taro.removeStorageSync('analyzeMealType')
-            const payload = {
-              meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-              image_path: imagePath || undefined,
-              description: description || undefined,
-              insight: healthAdvice || undefined,
-              items: nutritionItems.map((item) => ({
-                name: item.name,
-                weight: item.weight,
-                ratio: item.ratio,
-                intake: item.intake,
-                nutrients: {
-                  calories: item.calorie,
-                  protein: item.protein,
-                  carbs: item.carbs,
-                  fat: item.fat,
-                  fiber: 0,
-                  sugar: 0
-                }
-              })),
-              total_calories: nutritionStats.calories,
-              total_protein: nutritionStats.protein,
-              total_carbs: nutritionStats.carbs,
-              total_fat: nutritionStats.fat,
-              total_weight_grams: totalWeight,
-              context_state: stateValue,
-              pfc_ratio_comment: pfcRatioComment ?? undefined,
-              absorption_notes: absorptionNotes ?? undefined,
-              context_advice: contextAdvice ?? undefined
-            }
-            await saveFoodRecord(payload)
-            Taro.showToast({ title: '记录成功', icon: 'success' })
-            setTimeout(() => {
-              Taro.navigateBack({ delta: 2 })
-            }, 1500)
-          } catch (e: any) {
-            Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
-          } finally {
-            setSaving(false)
-          }
-        }
-      })
-    }
+    // 饮食目标和时机，未找到默认无
+    const dietGoal = savedDietGoal || 'none'
+    const activityTiming = savedActivityTiming || 'none'
 
-    // 分析页已选餐次与状态：直接确认保存，不再弹选择
-    if (contextStateValue && contextStateLabel && mealValue && mealLabel) {
-      performSave(contextStateValue, contextStateLabel, mealValue, mealLabel)
-      return
-    }
-    // 仅有状态：选餐次后确认保存
-    if (contextStateValue && contextStateLabel) {
-      Taro.showActionSheet({
-        itemList: MEAL_OPTIONS.map((o) => o.label),
-        success: (mealRes) => {
-          const meal = MEAL_OPTIONS[mealRes.tapIndex]
-          if (!meal) return
-          performSave(contextStateValue, contextStateLabel, meal.value, meal.label)
-        }
-      })
-      return
-    }
-    // 都未选：先选状态再选餐次
-    Taro.showActionSheet({
-      itemList: CONTEXT_STATE_OPTIONS.map((o) => o.label),
-      success: (stateRes) => {
-        const contextState = CONTEXT_STATE_OPTIONS[stateRes.tapIndex]
-        if (!contextState) return
-        Taro.showActionSheet({
-          itemList: MEAL_OPTIONS.map((o) => o.label),
-          success: (mealRes) => {
-            const meal = MEAL_OPTIONS[mealRes.tapIndex]
-            if (!meal) return
-            performSave(contextState.value, contextState.label, meal.value, meal.label)
+    Taro.showModal({
+      title: '确认记录',
+      content: `餐次：${mealLabel}\n确定保存当前饮食记录吗？`,
+      success: async (res) => {
+        if (!res.confirm) return
+        setSaving(true)
+        try {
+          // 清除相关缓存
+          Taro.removeStorageSync('analyzeMealType')
+          Taro.removeStorageSync('analyzeDietGoal')
+          Taro.removeStorageSync('analyzeActivityTiming')
+          // 这里不做状态映射了，直接传空字符串或者特定的状态值给后端
+          // 注意：后端可能需要 context_state 字段兼容旧逻辑，
+          // 这里我们优先使用 diet_goal 和 activity_timing
+          // 为了兼容旧接口，我们可以把它们拼接到 context_state 或者传 'none'
+          // 既然用户已经在分析页选了详细状态，这里 context_state 传 'none' 即可，
+          // 重要的是 diet_goal 和 activity_timing 字段。
+          
+          const payload = {
+            meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+            image_path: imagePath || undefined,
+            description: description || undefined,
+            insight: healthAdvice || undefined,
+            items: nutritionItems.map((item) => ({
+              name: item.name,
+              weight: item.weight,
+              ratio: item.ratio,
+              intake: item.intake,
+              nutrients: {
+                calories: item.calorie,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                fiber: 0,
+                sugar: 0
+              }
+            })),
+            total_calories: nutritionStats.calories,
+            total_protein: nutritionStats.protein,
+            total_carbs: nutritionStats.carbs,
+            total_fat: nutritionStats.fat,
+            total_weight_grams: totalWeight,
+            // 兼容旧字段，实际逻辑已迁移到 diet_goal 和 activity_timing
+            context_state: 'none', 
+            diet_goal: dietGoal,
+            activity_timing: activityTiming,
+            pfc_ratio_comment: pfcRatioComment ?? undefined,
+            absorption_notes: absorptionNotes ?? undefined,
+            context_advice: contextAdvice ?? undefined
           }
-        })
+          await saveFoodRecord(payload)
+          Taro.showToast({ title: '记录成功', icon: 'success' })
+          setTimeout(() => {
+            // 返回两层：结果页 -> 分析页 -> 首页/记录页
+            Taro.navigateBack({ delta: 2 })
+          }, 1500)
+        } catch (e: any) {
+          Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+        } finally {
+          setSaving(false)
+        }
       }
     })
   }
@@ -469,7 +443,7 @@ export default function ResultPage() {
             <Text className='section-title'>AI 健康透视</Text>
           </View>
           {description && (
-            <View className='advice-box' style={{ marginBottom: '20rpx' }}>
+            <View className='advice-box'>
               <Text className='advice-text'>{description}</Text>
             </View>
           )}

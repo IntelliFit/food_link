@@ -15,6 +15,8 @@ export interface AnalyzeRequest {
   modelName?: string
   user_goal?: 'muscle_gain' | 'fat_loss' | 'maintain'
   context_state?: string
+  diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
+  activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
   remaining_calories?: number
   meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
 }
@@ -69,6 +71,8 @@ export interface SaveFoodRecordRequest {
   total_fat: number
   total_weight_grams: number
   context_state?: string
+  diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
+  activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
@@ -338,6 +342,8 @@ export interface AnalyzeTextParams {
   text: string
   user_goal?: 'muscle_gain' | 'fat_loss' | 'maintain'
   context_state?: string
+  diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
+  activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
   remaining_calories?: number
 }
 

@@ -6,28 +6,35 @@ import { imageToBase64, uploadAnalyzeImage, analyzeFoodImage, AnalyzeResponse } 
 import './index.scss'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
-const MEAL_OPTIONS = [
-  { value: 'breakfast' as const, label: '早餐' },
-  { value: 'lunch' as const, label: '午餐' },
-  { value: 'dinner' as const, label: '晚餐' },
-  { value: 'snack' as const, label: '加餐' }
+const MEAL_OPTIONS: Array<{ value: MealType; label: string; icon: string }> = [
+  { value: 'breakfast', label: '早餐', icon: '🌅' },
+  { value: 'lunch', label: '午餐', icon: '☀️' },
+  { value: 'dinner', label: '晚餐', icon: '🌙' },
+  { value: 'snack', label: '加餐', icon: '🍎' }
 ]
 
-/** 用户当前状态（分析前选择，AI 将结合此状态给出建议），≤6 项以满足 showActionSheet 限制 */
-const CONTEXT_STATE_OPTIONS = [
-  { value: 'post_workout', label: '刚健身完' },
-  { value: 'fasting', label: '空腹/餐前' },
-  { value: 'fat_loss', label: '减脂期' },
-  { value: 'muscle_gain', label: '增肌期' },
-  { value: 'maintain', label: '维持体重' },
-  { value: 'none', label: '无特殊' }
+/** 饮食目标（状态一） */
+const DIET_GOAL_OPTIONS: Array<{ value: DietGoal; label: string; icon: string }> = [
+  { value: 'fat_loss', label: '减脂期', icon: '🔥' },
+  { value: 'muscle_gain', label: '增肌期', icon: '💪' },
+  { value: 'maintain', label: '维持体重', icon: '⚖️' },
+  { value: 'none', label: '无', icon: '⚪' }
+]
+
+/** 运动时机（状态二） */
+const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; icon: string }> = [
+  { value: 'post_workout', label: '练后', icon: '🏋️' },
+  { value: 'daily', label: '日常', icon: '🚶' },
+  { value: 'before_sleep', label: '睡前', icon: '🛌' },
+  { value: 'none', label: '无', icon: '⚪' }
 ]
 
 export default function AnalyzePage() {
   const [imagePath, setImagePath] = useState<string>('')
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<string>('breakfast')
-  const [contextState, setContextState] = useState<string>('none')
+  const [dietGoal, setDietGoal] = useState<string>('none')
+  const [activityTiming, setActivityTiming] = useState<string>('none')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
   useEffect(() => {
@@ -43,6 +50,14 @@ export default function AnalyzePage() {
       console.error('获取图片路径失败:', error)
     }
   }, [])
+
+  const handleDietGoalSelect = (value: string) => {
+    setDietGoal(value)
+  }
+
+  const handleActivityTimingSelect = (value: string) => {
+    setActivityTiming(value)
+  }
 
   const doAnalyze = async () => {
     setIsAnalyzing(true)
@@ -62,14 +77,16 @@ export default function AnalyzePage() {
         additionalContext: additionalInfo,
         modelName: 'qwen-vl-max',
         meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-        context_state: contextState
+        diet_goal: dietGoal as any,
+        activity_timing: activityTiming as any
       })
 
       // 3. 保存分析结果与 Supabase 图片 URL，结果页/标记样本/保存记录均使用此 URL
       Taro.setStorageSync('analyzeImagePath', imageUrl)
       Taro.setStorageSync('analyzeResult', JSON.stringify(result))
       Taro.setStorageSync('analyzeMealType', mealType)
-      Taro.setStorageSync('analyzeContextState', contextState)
+      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       
       Taro.hideLoading()
       
@@ -136,7 +153,7 @@ export default function AnalyzePage() {
       {/* 餐次（AI 将结合餐次分析） */}
       <View className='meal-section'>
         <View className='section-header'>
-          <Text className='section-icon'>🍽️</Text>
+          <Text className='section-icon iconfont icon-canciguanli' />
           <Text className='section-title'>餐次</Text>
         </View>
         <Text className='section-hint'>
@@ -149,28 +166,53 @@ export default function AnalyzePage() {
               className={`meal-option ${mealType === opt.value ? 'active' : ''}`}
               onClick={() => setMealType(opt.value)}
             >
+              <Text className='meal-icon'>{opt.icon}</Text>
               <Text className='meal-label'>{opt.label}</Text>
             </View>
           ))}
         </View>
       </View>
 
-      {/* 当前状态（AI 将结合此状态进行分析与建议） */}
+      {/* 饮食目标（状态一） */}
       <View className='state-section'>
         <View className='section-header'>
-          <Text className='section-icon'>📍</Text>
-          <Text className='section-title'>当前状态</Text>
+          <Text className='section-icon iconfont icon-shentinianling' />
+          <Text className='section-title'>饮食目标</Text>
         </View>
         <Text className='section-hint'>
-          选择您当前的状态，AI 将结合状态给出更贴合的建议（如运动后补蛋白、减脂期控碳等）。
+          选择您的饮食目标，AI 将结合目标给出更贴合的建议。
         </Text>
         <View className='state-options'>
-          {CONTEXT_STATE_OPTIONS.map((opt) => (
+          {DIET_GOAL_OPTIONS.map((opt) => (
             <View
               key={opt.value}
-              className={`state-option ${contextState === opt.value ? 'active' : ''}`}
-              onClick={() => setContextState(opt.value)}
+              className={`state-option ${dietGoal === opt.value ? 'active' : ''}`}
+              onClick={() => handleDietGoalSelect(opt.value)}
             >
+              <Text className='state-icon'>{opt.icon}</Text>
+              <Text className='state-label'>{opt.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* 运动时机（状态二） */}
+      <View className='state-section'>
+        <View className='section-header'>
+          <Text className='section-icon iconfont icon-canciguanli' />
+          <Text className='section-title'>运动时机</Text>
+        </View>
+        <Text className='section-hint'>
+          选择进食时机，AI 将结合时机给出针对性建议（如运动后补充蛋白、睡前避免碳水等）。
+        </Text>
+        <View className='state-options'>
+          {ACTIVITY_TIMING_OPTIONS.map((opt) => (
+            <View
+              key={opt.value}
+              className={`state-option ${activityTiming === opt.value ? 'active' : ''}`}
+              onClick={() => handleActivityTimingSelect(opt.value)}
+            >
+              <Text className='state-icon'>{opt.icon}</Text>
               <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
@@ -180,7 +222,7 @@ export default function AnalyzePage() {
       {/* 补充细节区域 */}
       <View className='details-section'>
         <View className='section-header'>
-          <Text className='section-icon'>⚡</Text>
+          <Text className='section-icon iconfont icon-ic_detail' />
           <Text className='section-title'>补充细节</Text>
         </View>
         <Text className='section-hint'>
@@ -199,7 +241,7 @@ export default function AnalyzePage() {
             showConfirmBar={false}
           />
           <View className='voice-btn' onClick={handleVoiceInput}>
-            <Text className='voice-icon'>🎤</Text>
+            <Text className='voice-icon iconfont icon--yuyinshuruzhong' />
           </View>
         </View>
       </View>

@@ -4,8 +4,29 @@
 
 ---
 
+## 2026-02-05
+
+- 🎨 style: 优化分析结果页样式：重构所有卡片视觉，统一阴影与圆角，优化字体排版与颜色，增强按钮交互质感，提升页面整体精致度 `src/pages/result/index.scss` `src/pages/result/index.tsx`
+- 🎨 style: 全面优化分析页样式：增加选项图标（餐次/目标/时机），升级为 Grid 卡片布局，优化圆角阴影与交互动效，提升整体精致度 `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss`
+
 ## 2026-02-04
 
+- 🎨 style: 分析页去除图标背景与阴影，保持纯图标样式 `src/pages/analyze/index.scss`
+- 🎨 style: 更新 iconfont 字体库为 wk9o9xvo91c，并在分析页用 iconfont 替换餐次/状态/细节/语音图标 `src/assets/iconfont/iconfont.css` `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss`
+- 🎨 style: 记录页选中态卡片背景调整为统一浅灰高亮，移除彩色渐变选中效果 `src/pages/record/index.scss`
+- 🎨 style: 记录页选中态卡片背景对齐首页快捷记录（绿/蓝/紫浅色渐变） `src/pages/record/index.tsx` `src/pages/record/index.scss`
+- 🎨 style: 记录页文字/历史图标背景改为首页快捷记录配色（蓝/紫渐变），提升清晰度 `src/pages/record/index.tsx` `src/pages/record/index.scss`
+- 🎨 style: 记录页文字/历史图标提升可读性：未选中改深色，文字记录激活态补充绿色渐变背景 `src/pages/record/index.tsx` `src/pages/record/index.scss`
+- 🎨 style: 公共食物库页图标替换为 iconfont（空状态/商家/定位/点赞/评论/评分），并补充图标继承与颜色样式 `src/pages/food-library/index.tsx` `src/pages/food-library/index.scss`
+- 🎨 style: 移除本周打卡排行榜 banner 图标，保持文字布局简洁 `src/pages/community/index.tsx`
+- 🎨 style: 打卡排行榜图标替换为奖杯 icon-weibiaoti-_huabanfuben，保持原有配色与样式 `src/pages/community/index.tsx`
+- 🎨 style: 社区页部分 emoji 图标替换为 iconfont（食物/定位/排行榜/热门话题/点赞/评论/活跃人数），并补充图标继承样式与点赞高亮色 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🎨 style: 更新 iconfont 字体库为最新版本（font_5122763_08ofacfx1j2），同步新增图标类与字体文件地址 `src/assets/iconfont/iconfont.css`
+- 🐛 fix: 修复 iconfont 图标大小样式失效问题：单位从 px 改为 rpx，移除 SCSS 中的 !important，添加伪元素样式继承，默认大小从 24 改为 48rpx `src/components/iconfont/index.tsx` `src/components/iconfont/index.scss`
+- 🐛 fix: 修复 IconCarbs 组件名称不一致，将 IconCarb 改为 IconCarbs 匹配使用方 `src/components/iconfont/index.tsx`
+- ✨ feat: 创建食谱列表页面，支持全部/收藏标签切换、一键使用、编辑、删除操作，显示营养摘要和使用统计 `src/pages/recipes/index.tsx`
+- 🐛 fix: 创建缺失的 iconfont 组件文件，导出 IconCamera/IconText/IconClock 等图标组件，修复记录页模块导入错误 `src/components/iconfont/index.tsx`
+- 🐛 fix: 修复构建错误：创建缺失的 recipe-edit/index.tsx 文件，实现基础食谱编辑页面（名称/描述/餐次/营养摘要/保存删除按钮） `src/pages/recipe-edit/index.tsx`
 - 🐛 fix: 改进图片上传接口错误处理，区分网络错误与参数错误，提供友好提示 `backend/main.py` `backend/database.py`
 - 🐛 fix: 补充图片分析超时与网络错误提示，避免 500 空错误信息 `backend/main.py`
 - 🎨 style: 记录页记录方式图标替换为 iconfont，统一视觉风格 `src/pages/record/index.tsx`

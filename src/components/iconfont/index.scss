@@ -1,10 +1,16 @@
 @import '../../assets/iconfont/iconfont.css';
 
 .iconfont {
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   font-style: normal;
-  line-height: 1 !important;
+  line-height: 1;
   vertical-align: middle;
+  
+  // 确保伪元素继承 font-size 和 color
+  &::before {
+    font-size: inherit;
+    color: inherit;
+  }
 }

@@ -53,7 +53,7 @@
   }
   
   &.active {
-    background: #ecfdf5;
+    background: #f3f4f6;
   }
 }
 
@@ -73,15 +73,11 @@
 }
 
 .text-icon {
-  background: #f3f4f6;
+  background: linear-gradient(to right, #2b7fff 0%, #00b8db 100%);
 }
 
 .history-icon {
-  background: #f3f4f6;
-}
-
-.method-card.active .history-icon {
-  background: linear-gradient(to right, #6b7280 0%, #4b5563 100%);
+  background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
 }
 
 .method-text {

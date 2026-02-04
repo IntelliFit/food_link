@@ -100,7 +100,9 @@ class AnalyzeRequest(BaseModel):
     additionalContext: Optional[str] = Field(default="", description="用户补充的上下文信息")
     modelName: Optional[str] = Field(default="qwen-vl-max", description="使用的模型名称")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain，用于 PFC 评价")
-    context_state: Optional[str] = Field(default=None, description="用户当前状态，用于情境建议")
+    context_state: Optional[str] = Field(default=None, description="用户当前状态，用于情境建议（已废弃，兼容旧版）")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss(减脂期) / muscle_gain(增肌期) / maintain(维持体重) / none(无)")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout(练后) / daily(日常) / before_sleep(睡前) / none(无)")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal，用于建议下一餐")
     meal_type: Optional[str] = Field(default=None, description="餐次: breakfast / lunch / dinner / snack，用于结合餐次给出建议")
 
@@ -257,7 +259,20 @@ async def analyze_food(
         if request.user_goal:
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
-        state_hint = f"\n用户当前状态: {request.context_state}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。" if request.context_state else ""
+        
+        # 拼接状态提示（优先使用新版 diet_goal + activity_timing，兼容旧版 context_state）
+        state_hint = ""
+        if request.diet_goal or request.activity_timing:
+            diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
+            activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
+            diet_text = diet_map.get(request.diet_goal, request.diet_goal) if request.diet_goal and request.diet_goal != "none" else ""
+            activity_text = activity_map.get(request.activity_timing, request.activity_timing) if request.activity_timing and request.activity_timing != "none" else ""
+            state_parts = [s for s in [diet_text, activity_text] if s]
+            if state_parts:
+                state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
+        elif request.context_state:
+            # 兼容旧版
+            state_hint = f"\n用户当前状态: {request.context_state}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
         if request.meal_type:
@@ -531,7 +546,20 @@ async def analyze_food_text(
         if request.user_goal:
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f" 用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价 P/C/F 占比是否适合。"
-        state_hint = f" 用户当前状态: {request.context_state}，请在 context_advice 中给出针对性建议。" if request.context_state else ""
+        
+        # 拼接状态提示（优先使用新版 diet_goal + activity_timing，兼容旧版 context_state）
+        state_hint = ""
+        if request.diet_goal or request.activity_timing:
+            diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体权", "none": "无特殊目标"}
+            activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
+            diet_text = diet_map.get(request.diet_goal, request.diet_goal) if request.diet_goal and request.diet_goal != "none" else ""
+            activity_text = activity_map.get(request.activity_timing, request.activity_timing) if request.activity_timing and request.activity_timing != "none" else ""
+            state_parts = [s for s in [diet_text, activity_text] if s]
+            if state_parts:
+                state_hint = f" 用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性建议。"
+        elif request.context_state:
+            # 兼容旧版
+            state_hint = f" 用户当前状态: {request.context_state}，请在 context_advice 中给出针对性建议。"
         remain_hint = f" 当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示。" if request.remaining_calories is not None else ""
 
         # 若已登录，拉取健康档案并注入 prompt
@@ -1244,7 +1272,9 @@ class SaveFoodRecordRequest(BaseModel):
     total_carbs: float = Field(0, description="总碳水 g")
     total_fat: float = Field(0, description="总脂肪 g")
     total_weight_grams: int = Field(0, description="总预估重量 g")
-    context_state: Optional[str] = Field(default=None, description="用户当前状态（提交时选择）")
+    context_state: Optional[str] = Field(default=None, description="用户当前状态（已废弃，兼容旧版）")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     pfc_ratio_comment: Optional[str] = Field(default=None, description="PFC 比例评价")
     absorption_notes: Optional[str] = Field(default=None, description="吸收率说明")
     context_advice: Optional[str] = Field(default=None, description="情境建议")
@@ -1292,6 +1322,8 @@ async def save_food_record(
             total_fat=body.total_fat,
             total_weight_grams=body.total_weight_grams,
             context_state=body.context_state,
+            diet_goal=body.diet_goal,
+            activity_timing=body.activity_timing,
             pfc_ratio_comment=body.pfc_ratio_comment,
             absorption_notes=body.absorption_notes,
             context_advice=body.context_advice,

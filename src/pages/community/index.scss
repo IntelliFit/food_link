@@ -8,6 +8,19 @@
   box-sizing: border-box;
 }
 
+// 图标字体在本页的统一样式
+.community-page .iconfont {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+
+  &::before {
+    font-size: inherit;
+    color: inherit;
+  }
+}
+
 /* 滚动外层：flex 占满剩余空间，给 ScrollView 提供明确高度 */
 .community-scroll-wrap {
   flex: 1;
@@ -582,6 +595,11 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  color: #6a7282;
+}
+
+.action-icon.liked {
+  color: #ef4444;
 }
 
 .action-count {

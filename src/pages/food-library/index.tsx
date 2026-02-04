@@ -159,7 +159,7 @@ export default function FoodLibraryPage() {
             </View>
           ) : list.length === 0 ? (
             <View className="empty-state">
-              <Text className="empty-icon">🍽️</Text>
+              <Text className="empty-icon iconfont icon-shiwu" />
               <Text className="empty-text">暂无内容，快来分享第一份健康餐吧</Text>
               <View className="empty-btn" onClick={goShare}>去分享</View>
             </View>
@@ -183,13 +183,13 @@ export default function FoodLibraryPage() {
                   </View>
                   {item.merchant_name && (
                     <View className="food-merchant">
-                      <Text className="merchant-icon">🏪</Text>
+                      <Text className="merchant-icon iconfont icon-shiwu" />
                       <Text className="merchant-name">{item.merchant_name}</Text>
                     </View>
                   )}
                   {item.city && (
                     <View className="food-location">
-                      <Text className="location-icon">📍</Text>
+                      <Text className="location-icon iconfont icon-dizhi" />
                       <Text className="location-text">{item.city}{item.district ? ` ${item.district}` : ''}</Text>
                     </View>
                   )}
@@ -216,18 +216,16 @@ export default function FoodLibraryPage() {
                         className="stat-item"
                         onClick={e => { e.stopPropagation(); handleLike(item) }}
                       >
-                        <Text className={`stat-icon ${item.liked ? 'liked' : ''}`}>
-                          {item.liked ? '❤️' : '🤍'}
-                        </Text>
+                        <Text className={`stat-icon iconfont icon-good ${item.liked ? 'liked' : ''}`} />
                         <Text className="stat-count">{item.like_count}</Text>
                       </View>
                       <View className="stat-item">
-                        <Text className="stat-icon">💬</Text>
+                        <Text className="stat-icon iconfont icon-pinglun" />
                         <Text className="stat-count">{item.comment_count}</Text>
                       </View>
                       {item.avg_rating > 0 && (
                         <View className="stat-item">
-                          <Text className="stat-icon">⭐</Text>
+                          <Text className="stat-icon iconfont icon-shoucang-yishoucang" />
                           <Text className="stat-count">{item.avg_rating.toFixed(1)}</Text>
                         </View>
                       )}
