@@ -64,12 +64,10 @@
     align-items: center;
     justify-content: center;
   }
-  
-  .icon-placeholder {
-    width: 32rpx;
-    height: 32rpx;
-    background: rgba(255, 255, 255, 0.8);
-    border-radius: 4rpx;
+
+  .trend-icon-symbol {
+    font-size: 36rpx;
+    color: #ffffff;
   }
   
   // 今日摄入卡片
@@ -190,7 +188,7 @@
     font-weight: 600;
     color: #1e2939;
     line-height: 48rpx;
-    margin-bottom: 20rpx;
+    margin-bottom: 32rpx;
   }
   
   .quick-buttons {
@@ -297,15 +295,14 @@
     gap: 20rpx;
   }
 
-  .meals-empty {
-    padding: 48rpx 24rpx;
-    text-align: center;
-  }
-
-  .meals-empty-text {
+  // Taroify Empty 组件按钮样式
+  .empty-record-btn {
+    margin-top: 32rpx;
+    width: 240rpx;
+    height: 72rpx;
+    background: linear-gradient(135deg, #00bc7d 0%, #0d9488 100%);
+    border: none;
     font-size: 28rpx;
-    color: #6a7282;
-    line-height: 40rpx;
   }
   
   .meal-card {
@@ -338,12 +335,11 @@
     font-size: 36rpx;
   }
   
-  .breakfast-icon {
-    background: #ffedd4;
-  }
-  
-  .lunch-icon {
-    background: #dcfce7;
+  .breakfast-icon,
+  .lunch-icon,
+  .dinner-icon,
+  .snack-icon {
+    background: transparent;
   }
   
   .meal-details {
@@ -413,6 +409,14 @@
     background: #00c950;
   }
   
+  .dinner-progress {
+    background: #2b7fff;
+  }
+  
+  .snack-progress {
+    background: #ad46ff;
+  }
+  
   .progress-percent {
     font-size: 26rpx;
     color: #6a7282;
@@ -443,6 +447,14 @@
     background: #f0fdf4;
   }
   
+  .dinner-tag {
+    background: #eff6ff;
+  }
+  
+  .snack-tag {
+    background: #f5f3ff;
+  }
+  
   .tag-text {
     font-size: 26rpx;
     line-height: 36rpx;
@@ -455,6 +467,14 @@
   
   .lunch-tag .tag-text {
     color: #00a63e;
+  }
+  
+  .dinner-tag .tag-text {
+    color: #1d4ed8;
+  }
+  
+  .snack-tag .tag-text {
+    color: #7c3aed;
   }
   
   // AI建议

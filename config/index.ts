@@ -1,4 +1,5 @@
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
+import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
 import devConfig from './dev'
 import prodConfig from './prod'
@@ -37,7 +38,25 @@ export default defineConfig<'vite'>(async (merge) => {
       }
     },
     framework: 'react',
-    compiler: 'vite',
+    compiler: {
+      type: 'vite',
+      vitePlugins: [
+        createStyleImportPlugin({
+          libs: [
+            {
+              libraryName: '@taroify/core',
+              esModule: true,
+              resolveStyle: (name: string) => `@taroify/core/${name}/index.css`,
+            },
+            {
+              libraryName: '@taroify/icons',
+              esModule: true,
+              resolveStyle: () => '@taroify/icons/style',
+            },
+          ],
+        }),
+      ],
+    },
     mini: {
       postcss: {
         pxtransform: {
@@ -58,6 +77,7 @@ export default defineConfig<'vite'>(async (merge) => {
     h5: {
       publicPath: '/',
       staticDirectory: 'static',
+      esnextModules: ['@taroify'],
 
       miniCssExtractPluginOption: {
         ignoreOrder: true,

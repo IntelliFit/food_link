@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食物分析测试后台</title>
+    <link rel="stylesheet" href="/static/test_backend/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>🍎 食物分析测试后台</h1>
+                    <p class="subtitle">对比千问模型与 Gemini 模型的食物重量估算准确性</p>
+                </div>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </header>
+
+        <!-- 选项卡 -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="batch">批量测试 (ZIP)</button>
+            <button class="tab-btn" data-tab="single">单张图片测试</button>
+            <button class="tab-btn" data-tab="prompts">提示词管理</button>
+        </div>
+
+        <!-- 批量测试面板 -->
+        <div class="tab-panel active" id="batch-panel">
+            <div class="upload-section">
+                <div class="upload-area" id="batch-upload-area">
+                    <div class="upload-icon">📦</div>
+                    <p>拖拽 ZIP 文件到此处，或点击选择文件</p>
+                    <p class="upload-hint">ZIP 文件应包含图片和 labels.txt 标签文件</p>
+                    <input type="file" id="batch-file-input" accept=".zip" hidden>
+                </div>
+                <div class="file-info" id="batch-file-info" style="display: none;">
+                    <span class="file-name"></span>
+                    <button class="clear-btn" onclick="clearBatchFile()">✕</button>
+                </div>
+                <button class="analyze-btn" id="batch-analyze-btn" disabled>开始分析</button>
+            </div>
+
+            <!-- 进度条 -->
+            <div class="progress-section" id="batch-progress" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <p class="progress-text" id="progress-text">准备中...</p>
+            </div>
+        </div>
+
+        <!-- 单张图片测试面板 -->
+        <div class="tab-panel" id="single-panel">
+            <div class="upload-section">
+                <div class="single-upload-row">
+                    <div class="upload-area small" id="single-upload-area">
+                        <div class="upload-icon">🖼️</div>
+                        <p>选择图片</p>
+                        <input type="file" id="single-file-input" accept="image/*" hidden>
+                    </div>
+                    <div class="image-preview" id="image-preview" style="display: none;">
+                        <img id="preview-img" src="" alt="预览">
+                        <button class="clear-btn" onclick="clearSingleFile()">✕</button>
+                    </div>
+                    <div class="weight-input">
+                        <label for="true-weight">真实重量 (克)</label>
+                        <input type="number" id="true-weight" placeholder="例如：100" min="0" step="0.1">
+                    </div>
+                </div>
+                <button class="analyze-btn" id="single-analyze-btn" disabled>开始分析</button>
+            </div>
+        </div>
+
+        <!-- 提示词管理面板 -->
+        <div class="tab-panel" id="prompts-panel">
+            <div class="prompts-section">
+                <!-- 模型选择 -->
+                <div class="model-tabs">
+                    <button class="model-tab active" data-model="qwen">千问模型</button>
+                    <button class="model-tab" data-model="gemini">Gemini 模型</button>
+                </div>
+
+                <!-- 提示词列表 -->
+                <div class="prompts-list-section">
+                    <div class="prompts-header">
+                        <h3>📝 提示词列表</h3>
+                        <button class="add-prompt-btn" onclick="showAddPromptModal()">+ 新建提示词</button>
+                    </div>
+                    <div class="prompts-list" id="prompts-list">
+                        <!-- 动态渲染 -->
+                    </div>
+                </div>
+
+                <!-- 当前激活提示词编辑区 -->
+                <div class="active-prompt-section">
+                    <h3>✏️ 当前激活提示词</h3>
+                    <div class="prompt-editor">
+                        <div class="prompt-meta">
+                            <input type="text" id="active-prompt-name" placeholder="提示词名称" class="prompt-name-input">
+                            <span class="prompt-status active">激活中</span>
+                        </div>
+                        <textarea id="active-prompt-content" class="prompt-textarea" placeholder="请输入提示词内容..."></textarea>
+                        <div class="prompt-actions">
+                            <button class="save-prompt-btn" onclick="saveActivePrompt()">💾 保存修改</button>
+                            <button class="reset-prompt-btn" onclick="resetActivePrompt()">↩️ 重置</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 新建/编辑提示词弹窗 -->
+        <div class="modal" id="prompt-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="prompt-modal-title">新建提示词</h3>
+                    <button class="close-btn" onclick="closePromptModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>提示词名称</label>
+                        <input type="text" id="new-prompt-name" placeholder="例如：精简版提示词">
+                    </div>
+                    <div class="form-group">
+                        <label>描述（可选）</label>
+                        <input type="text" id="new-prompt-description" placeholder="简要描述这个提示词的用途">
+                    </div>
+                    <div class="form-group">
+                        <label>提示词内容</label>
+                        <textarea id="new-prompt-content" class="prompt-textarea" placeholder="请输入提示词内容..."></textarea>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="new-prompt-active">
+                            创建后立即激活
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="cancel-btn" onclick="closePromptModal()">取消</button>
+                        <button class="confirm-btn" onclick="createNewPrompt()">创建</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果区域 -->
+        <div class="results-section" id="results-section" style="display: none;">
+            <!-- 汇总统计 -->
+            <div class="summary-card" id="summary-card" style="display: none;">
+                <h3>📊 汇总统计</h3>
+                <div class="summary-grid" id="summary-grid"></div>
+            </div>
+
+            <!-- 结果表格 -->
+            <div class="table-controls">
+                <div class="sort-controls">
+                    <label>排序：</label>
+                    <select id="sort-select">
+                        <option value="name">文件名</option>
+                        <option value="qwen-deviation">千问偏差 ↑</option>
+                        <option value="qwen-deviation-desc">千问偏差 ↓</option>
+                        <option value="gemini-deviation">Gemini偏差 ↑</option>
+                        <option value="gemini-deviation-desc">Gemini偏差 ↓</option>
+                    </select>
+                </div>
+                <button class="export-btn" id="export-btn">导出 CSV</button>
+            </div>
+            
+            <div class="results-table-wrapper">
+                <table class="results-table" id="results-table">
+                    <thead>
+                        <tr>
+                            <th>图片</th>
+                            <th>真实重量 (g)</th>
+                            <th colspan="2">千问模型</th>
+                            <th colspan="2">Gemini 模型</th>
+                            <th>详情</th>
+                        </tr>
+                        <tr class="sub-header">
+                            <th></th>
+                            <th></th>
+                            <th>估算 (g)</th>
+                            <th>偏差 (%)</th>
+                            <th>估算 (g)</th>
+                            <th>偏差 (%)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 详情弹窗 -->
+        <div class="modal" id="detail-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-title">分析详情</h3>
+                    <button class="close-btn" onclick="closeModal()">✕</button>
+                </div>
+                <div class="modal-body" id="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- 加载遮罩 -->
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="loading-spinner"></div>
+            <p>分析中，请稍候...</p>
+        </div>
+    </div>
+
+    <script src="/static/test_backend/app.js"></script>
+</body>
+</html>

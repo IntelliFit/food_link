@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Slider } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, CompareAnalyzeResponse, ModelAnalyzeResult } from '../../utils/api'
 
 import './index.scss'
 
@@ -46,6 +46,11 @@ export default function ResultPage() {
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [hasSavedCritical, setHasSavedCritical] = useState(false)
+  
+  // 双模型对比模式状态
+  const [isCompareMode, setIsCompareMode] = useState(false)
+  const [compareResult, setCompareResult] = useState<CompareAnalyzeResponse | null>(null)
+  const [selectedModel, setSelectedModel] = useState<'qwen' | 'gemini'>('qwen')
 
   // 将API返回的数据转换为页面需要的格式（保留 originalWeight 用于标记样本时计算偏差）
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
@@ -88,6 +93,38 @@ export default function ResultPage() {
     setTotalWeight(Math.round(total))
   }
 
+  // 从模型结果设置当前显示的数据
+  const setDataFromModelResult = (result: ModelAnalyzeResult) => {
+    if (!result.success) {
+      setDescription(result.error || '分析失败')
+      setHealthAdvice('')
+      setNutritionItems([])
+      setPfcRatioComment(null)
+      setAbsorptionNotes(null)
+      setContextAdvice(null)
+      return
+    }
+    
+    setDescription(result.description || '')
+    setHealthAdvice(result.insight || '保持健康饮食！')
+    setPfcRatioComment(result.pfc_ratio_comment ?? null)
+    setAbsorptionNotes(result.absorption_notes ?? null)
+    setContextAdvice(result.context_advice ?? null)
+    
+    const items = convertApiDataToItems(result.items || [])
+    setNutritionItems(items)
+    calculateNutritionStats(items)
+  }
+
+  // 切换模型时更新显示数据
+  const handleModelSwitch = (model: 'qwen' | 'gemini') => {
+    if (!compareResult) return
+    setSelectedModel(model)
+    
+    const result = model === 'qwen' ? compareResult.qwen_result : compareResult.gemini_result
+    setDataFromModelResult(result)
+  }
+
   useEffect(() => {
     // 获取传递的图片路径和分析结果
     try {
@@ -96,33 +133,74 @@ export default function ResultPage() {
         setImagePath(storedPath)
       }
 
-      const storedResult = Taro.getStorageSync('analyzeResult')
-      if (storedResult) {
-        const result: AnalyzeResponse = JSON.parse(storedResult)
-        
-        // 设置描述和健康建议
-        setDescription(result.description || '')
-        setHealthAdvice(result.insight || '保持健康饮食！')
-        setPfcRatioComment(result.pfc_ratio_comment ?? null)
-        setAbsorptionNotes(result.absorption_notes ?? null)
-        setContextAdvice(result.context_advice ?? null)
-        // 转换并设置食物项
-        const items = convertApiDataToItems(result.items)
-        setNutritionItems(items)
-        
-        // 计算营养统计
-        calculateNutritionStats(items)
-      } else {
-        // 如果没有分析结果，提示用户
-        Taro.showModal({
-          title: '提示',
-          content: '未找到分析结果，请重新分析',
-          showCancel: false,
-          confirmText: '确定',
-          success: () => {
-            Taro.navigateBack()
+      // 检查是否是对比模式
+      const isCompare = Taro.getStorageSync('analyzeCompareMode')
+      setIsCompareMode(!!isCompare)
+
+      if (isCompare) {
+        // 对比模式：读取对比结果
+        const storedCompareResult = Taro.getStorageSync('analyzeCompareResult')
+        if (storedCompareResult) {
+          const result: CompareAnalyzeResponse = JSON.parse(storedCompareResult)
+          setCompareResult(result)
+          
+          // 默认显示千问结果（如果成功），否则显示 Gemini 结果
+          if (result.qwen_result.success) {
+            setSelectedModel('qwen')
+            setDataFromModelResult(result.qwen_result)
+          } else if (result.gemini_result.success) {
+            setSelectedModel('gemini')
+            setDataFromModelResult(result.gemini_result)
+          } else {
+            // 两个模型都失败了
+            setDescription('两个模型分析均失败')
+            setHealthAdvice(result.qwen_result.error || result.gemini_result.error || '')
           }
-        })
+          
+          // 清理缓存
+          Taro.removeStorageSync('analyzeCompareResult')
+          Taro.removeStorageSync('analyzeCompareMode')
+        } else {
+          Taro.showModal({
+            title: '提示',
+            content: '未找到对比分析结果，请重新分析',
+            showCancel: false,
+            confirmText: '确定',
+            success: () => {
+              Taro.navigateBack()
+            }
+          })
+        }
+      } else {
+        // 普通模式：读取单一结果
+        const storedResult = Taro.getStorageSync('analyzeResult')
+        if (storedResult) {
+          const result: AnalyzeResponse = JSON.parse(storedResult)
+          
+          // 设置描述和健康建议
+          setDescription(result.description || '')
+          setHealthAdvice(result.insight || '保持健康饮食！')
+          setPfcRatioComment(result.pfc_ratio_comment ?? null)
+          setAbsorptionNotes(result.absorption_notes ?? null)
+          setContextAdvice(result.context_advice ?? null)
+          // 转换并设置食物项
+          const items = convertApiDataToItems(result.items)
+          setNutritionItems(items)
+          
+          // 计算营养统计
+          calculateNutritionStats(items)
+        } else {
+          // 如果没有分析结果，提示用户
+          Taro.showModal({
+            title: '提示',
+            content: '未找到分析结果，请重新分析',
+            showCancel: false,
+            confirmText: '确定',
+            success: () => {
+              Taro.navigateBack()
+            }
+          })
+        }
       }
     } catch (error) {
       console.error('获取数据失败:', error)
@@ -435,6 +513,45 @@ export default function ResultPage() {
             </Text>
           </View>
         </View>
+
+        {/* 双模型对比切换区域 */}
+        {isCompareMode && compareResult && (
+          <View className='model-switch-section'>
+            <View className='model-switch-header'>
+              <Text className='model-switch-icon'>🔬</Text>
+              <Text className='model-switch-title'>模型对比分析</Text>
+            </View>
+            <View className='model-tabs'>
+              <View
+                className={`model-tab ${selectedModel === 'qwen' ? 'active' : ''} ${!compareResult.qwen_result.success ? 'error' : ''}`}
+                onClick={() => handleModelSwitch('qwen')}
+              >
+                <Text className='model-tab-icon'>🤖</Text>
+                <Text className='model-tab-name'>千问</Text>
+                {compareResult.qwen_result.success ? (
+                  <Text className='model-tab-status success'>✓</Text>
+                ) : (
+                  <Text className='model-tab-status fail'>✗</Text>
+                )}
+              </View>
+              <View
+                className={`model-tab ${selectedModel === 'gemini' ? 'active' : ''} ${!compareResult.gemini_result.success ? 'error' : ''}`}
+                onClick={() => handleModelSwitch('gemini')}
+              >
+                <Text className='model-tab-icon'>✨</Text>
+                <Text className='model-tab-name'>Gemini</Text>
+                {compareResult.gemini_result.success ? (
+                  <Text className='model-tab-status success'>✓</Text>
+                ) : (
+                  <Text className='model-tab-status fail'>✗</Text>
+                )}
+              </View>
+            </View>
+            <Text className='model-switch-hint'>
+              当前显示: {selectedModel === 'qwen' ? '千问 (Qwen-VL-Max)' : 'Gemini (2.0-Flash)'} 的分析结果
+            </Text>
+          </View>
+        )}
 
         {/* AI 健康透视（含 PFC、吸收率、情境建议） */}
         <View className='health-section'>

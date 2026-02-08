@@ -4,24 +4,11 @@
   padding-bottom: 200rpx;
 }
 
-// 顶部渐变区域 - 优化渐变和圆角
+// 顶部区域 - 白色背景
 .header-section {
-  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
+  background: #ffffff;
   padding: 80rpx 40rpx 60rpx;
-  box-shadow: 0 8rpx 32rpx rgba(0, 188, 125, 0.2);
   position: relative;
-  
-  // 添加装饰性渐变叠加
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.15) 0%, transparent 60%);
-    pointer-events: none;
-  }
 }
 
 .user-info-header {
@@ -33,16 +20,15 @@
 }
 
 .user-avatar-wrapper {
-  width: 160rpx;
-  height: 160rpx;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.1) 100%);
-  border: 6rpx solid rgba(255, 255, 255, 0.4);
+  width: 120rpx;
+  height: 120rpx;
+  background: #f3f4f6;
+  border: 4rpx solid #e5e7eb;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
   transition: transform 0.3s ease;
   
   &:active {
@@ -70,11 +56,10 @@
 }
 
 .user-name {
-  font-size: 40rpx;
+  font-size: 36rpx;
   font-weight: bold;
-  color: #ffffff;
-  line-height: 56rpx;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+  color: #111827;
+  line-height: 48rpx;
   
   &.login-link {
     text-decoration: underline;
@@ -87,11 +72,10 @@
   padding: 0;
   margin: 0;
   line-height: normal;
-  font-size: 40rpx;
+  font-size: 36rpx;
   font-weight: bold;
-  color: #ffffff;
+  color: #00bc7d;
   text-decoration: underline;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   
   &::after {
@@ -105,35 +89,32 @@
 }
 
 .user-meta {
-  font-size: 28rpx;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 40rpx;
+  font-size: 26rpx;
+  color: #6b7280;
+  line-height: 36rpx;
   display: flex;
   align-items: center;
   gap: 8rpx;
   
   &::before {
     content: '📅';
-    font-size: 24rpx;
+    font-size: 22rpx;
   }
 }
 
 .settings-btn {
-  width: 80rpx;
-  height: 80rpx;
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(10rpx);
+  width: 72rpx;
+  height: 72rpx;
+  background: #f3f4f6;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 42rpx;
   flex-shrink: 0;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   
   &:active {
-    background: rgba(255, 255, 255, 0.35);
+    background: #e5e7eb;
     transform: rotate(90deg) scale(0.95);
   }
 }
@@ -170,10 +151,14 @@
   font-weight: bold;
 }
 
-// 我的服务 - 优化卡片设计
+// 我的服务 - 使用 Taroify Cell 组件
 .services-section {
-  padding: 0 40rpx;
   margin: 40rpx 0 32rpx;
+  
+  // 图标颜色
+  .taroify-icon {
+    color: #6b7280;
+  }
 }
 
 .section-title {
@@ -198,96 +183,6 @@
   }
 }
 
-.services-list {
-  background: #ffffff;
-  border-radius: 32rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-  border: 1rpx solid rgba(0, 0, 0, 0.04);
-}
-
-.service-item {
-  display: flex;
-  align-items: center;
-  gap: 28rpx;
-  padding: 32rpx;
-  border-bottom: 1rpx solid #f3f4f6;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  
-  &:last-child {
-    border-bottom: none;
-  }
-  
-  &:active {
-    background: linear-gradient(90deg, #f0fdf4 0%, #ffffff 100%);
-    transform: scale(0.98);
-  }
-  
-  // 添加微妙的悬浮效果指示器
-  &::after {
-    content: '';
-    position: absolute;
-    right: 32rpx;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 6rpx;
-    height: 6rpx;
-    background: #00bc7d;
-    border-radius: 50%;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  
-  &:active::after {
-    opacity: 0.5;
-  }
-}
-
-.service-icon {
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 44rpx;
-  flex-shrink: 0;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
-  transition: transform 0.3s ease;
-}
-
-.service-item:active .service-icon {
-  transform: scale(1.1) rotate(-5deg);
-}
-
-.health-icon {
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-}
-
-.recipe-icon {
-  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-}
-
-.goal-icon {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-}
-
-.stats-icon {
-  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
-}
-
-.achievement-icon {
-  background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
-}
-
-.map-icon {
-  background: linear-gradient(135deg, #fae8ff 0%, #f5d0fe 100%);
-}
-
-.shop-icon {
-  background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
-}
 
 .service-content {
   flex: 1;
@@ -432,69 +327,20 @@
   z-index: 1;
 }
 
-// 设置 - 优化样式
+// 设置 - 使用 Taroify Cell 组件
 .settings-section {
-  padding: 0 40rpx;
   margin-bottom: 32rpx;
-}
-
-.settings-list {
-  background: #ffffff;
-  border-radius: 32rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.06);
-  overflow: hidden;
-  border: 1rpx solid rgba(0, 0, 0, 0.04);
-}
-
-.setting-item {
-  display: flex;
-  align-items: center;
-  gap: 28rpx;
-  padding: 32rpx;
-  border-bottom: 1rpx solid #f3f4f6;
-  transition: all 0.3s ease;
   
-  &:last-child {
-    border-bottom: none;
+  .section-title {
+    padding-left: 32rpx;
   }
   
-  &:active {
-    background: #f9fafb;
-    transform: scale(0.98);
+  // 图标颜色
+  .taroify-icon {
+    color: #6b7280;
   }
 }
 
-.setting-icon {
-  width: 88rpx;
-  height: 88rpx;
-  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-  border-radius: 22rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 40rpx;
-  flex-shrink: 0;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-}
-
-.setting-title {
-  flex: 1;
-  font-size: 32rpx;
-  font-weight: 500;
-  color: #111827;
-  line-height: 48rpx;
-}
-
-.setting-arrow {
-  font-size: 28rpx;
-  color: #9ca3af;
-  flex-shrink: 0;
-  transition: transform 0.3s ease;
-}
-
-.setting-item:active .setting-arrow {
-  transform: translateX(4rpx);
-}
 
 // 登录/退出登录按钮 - 优化设计
 .login-btn,

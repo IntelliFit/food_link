@@ -49,12 +49,6 @@ export default defineAppConfig({
         selectedIconPath: 'assets/icons/record-active.png'
       },
       {
-        pagePath: 'pages/ai-assistant/index',
-        text: 'AI助手',
-        iconPath: 'assets/icons/ai-assistant.png',
-        selectedIconPath: 'assets/icons/ai-assistant-active.png'
-      },
-      {
         pagePath: 'pages/profile/index',
         text: '我的',
         iconPath: 'assets/icons/profile.png',

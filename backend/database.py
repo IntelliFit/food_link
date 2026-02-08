@@ -547,15 +547,26 @@ async def is_friend(user_id: str, friend_id: str) -> bool:
 
 
 async def add_friend_pair(user_id: str, friend_id: str) -> None:
-    """建立双向好友关系（插入两条记录）"""
+    """建立双向好友关系（插入两条记录），如果已存在则跳过"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        supabase.table("user_friends").insert([
-            {"user_id": user_id, "friend_id": friend_id},
-            {"user_id": friend_id, "friend_id": user_id},
-        ]).execute()
+        # 先检查是否已存在好友关系，避免重复插入
+        existing1 = supabase.table("user_friends").select("id").eq("user_id", user_id).eq("friend_id", friend_id).execute()
+        existing2 = supabase.table("user_friends").select("id").eq("user_id", friend_id).eq("friend_id", user_id).execute()
+        
+        records_to_insert = []
+        if not existing1.data or len(existing1.data) == 0:
+            records_to_insert.append({"user_id": user_id, "friend_id": friend_id})
+        if not existing2.data or len(existing2.data) == 0:
+            records_to_insert.append({"user_id": friend_id, "friend_id": user_id})
+        
+        if records_to_insert:
+            supabase.table("user_friends").insert(records_to_insert).execute()
     except Exception as e:
+        # 忽略唯一约束冲突错误
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            return
         print(f"[add_friend_pair] 错误: {e}")
         raise
 
@@ -579,8 +590,10 @@ async def search_users(
     limit: int = 20,
 ) -> List[Dict[str, Any]]:
     """
-    搜索用户：按昵称模糊或手机号精确。排除自己、已是好友、已发过待处理请求的。
-    返回 id, nickname, avatar（不返回 telephone）。
+    搜索用户：按昵称模糊或手机号精确。排除自己。
+    返回 id, nickname, avatar, is_friend, is_pending（不返回 telephone）。
+    - is_friend: 是否已是好友
+    - is_pending: 是否已发送待处理请求
     """
     check_supabase_configured()
     supabase = get_supabase_client()
@@ -601,8 +614,8 @@ async def search_users(
         out = []
         for u in users:
             uid = u.get("id")
-            if uid in friend_ids or uid in pending:
-                continue
+            u["is_friend"] = uid in friend_ids
+            u["is_pending"] = uid in pending
             out.append(u)
         return out
     except Exception as e:
@@ -694,14 +707,49 @@ async def respond_friend_request(request_id: str, to_user_id: str, accept: bool)
 
 
 async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
-    """获取好友列表，含 nickname、avatar、id"""
+    """获取好友列表，含 nickname、avatar、id（去重）"""
     friend_ids = await get_friend_ids(user_id)
     if not friend_ids:
         return []
+    # 去重 friend_ids
+    unique_friend_ids = list(set(friend_ids))
     check_supabase_configured()
     supabase = get_supabase_client()
-    result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", friend_ids).execute()
+    result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", unique_friend_ids).execute()
     return list(result.data or [])
+
+
+async def cleanup_duplicate_friends(user_id: str) -> Dict[str, Any]:
+    """清理用户的重复好友记录，只保留每个好友的第一条记录"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 获取该用户的所有好友记录
+        result = supabase.table("user_friends").select("id, friend_id").eq("user_id", user_id).execute()
+        records = result.data or []
+        
+        # 统计每个 friend_id 的记录
+        friend_records: Dict[str, List[str]] = {}
+        for r in records:
+            fid = r["friend_id"]
+            if fid not in friend_records:
+                friend_records[fid] = []
+            friend_records[fid].append(r["id"])
+        
+        # 找出重复的并删除多余的
+        deleted_count = 0
+        for fid, record_ids in friend_records.items():
+            if len(record_ids) > 1:
+                # 保留第一条，删除其他
+                to_delete = record_ids[1:]
+                for rid in to_delete:
+                    supabase.table("user_friends").delete().eq("id", rid).execute()
+                    deleted_count += 1
+        
+        return {"cleaned": deleted_count, "user_id": user_id}
+    except Exception as e:
+        print(f"[cleanup_duplicate_friends] 错误: {e}")
+        raise
 
 
 # ---------- 圈子动态（好友今日饮食 + 点赞评论）----------
@@ -1185,3 +1233,255 @@ async def use_recipe_record(recipe_id: str, user_id: str) -> bool:
         print(f"[use_recipe_record] 错误: {e}")
         raise
 
+
+# ========== 模型提示词管理 ==========
+
+async def get_active_prompt(model_type: str) -> Optional[Dict[str, Any]]:
+    """
+    获取指定模型的当前激活提示词
+    
+    Args:
+        model_type: 模型类型 ('qwen' 或 'gemini')
+    
+    Returns:
+        提示词信息字典，如果不存在则返回 None
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("model_prompts")\
+            .select("*")\
+            .eq("model_type", model_type)\
+            .eq("is_active", True)\
+            .execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_active_prompt] 错误: {e}")
+        return None
+
+
+async def list_prompts(model_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    获取所有提示词列表
+    
+    Args:
+        model_type: 可选，过滤指定模型类型
+    
+    Returns:
+        提示词列表
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("model_prompts").select("*")
+        if model_type:
+            query = query.eq("model_type", model_type)
+        result = query.order("created_at", desc=True).execute()
+        return result.data or []
+    except Exception as e:
+        print(f"[list_prompts] 错误: {e}")
+        raise
+
+
+async def get_prompt_by_id(prompt_id: int) -> Optional[Dict[str, Any]]:
+    """通过 ID 获取提示词"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("model_prompts")\
+            .select("*")\
+            .eq("id", prompt_id)\
+            .execute()
+        
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_prompt_by_id] 错误: {e}")
+        raise
+
+
+async def create_prompt(
+    model_type: str,
+    prompt_name: str,
+    prompt_content: str,
+    description: str = "",
+    is_active: bool = False
+) -> Dict[str, Any]:
+    """
+    创建新的提示词
+    
+    Args:
+        model_type: 模型类型 ('qwen' 或 'gemini')
+        prompt_name: 提示词名称
+        prompt_content: 提示词内容
+        description: 描述
+        is_active: 是否设为当前激活
+    
+    Returns:
+        创建的提示词信息
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 如果设为激活，先将该模型的其他提示词设为非激活
+        if is_active:
+            supabase.table("model_prompts")\
+                .update({"is_active": False})\
+                .eq("model_type", model_type)\
+                .execute()
+        
+        result = supabase.table("model_prompts").insert({
+            "model_type": model_type,
+            "prompt_name": prompt_name,
+            "prompt_content": prompt_content,
+            "description": description,
+            "is_active": is_active
+        }).execute()
+        
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f"[create_prompt] 错误: {e}")
+        raise
+
+
+async def update_prompt(
+    prompt_id: int,
+    prompt_name: Optional[str] = None,
+    prompt_content: Optional[str] = None,
+    description: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    更新提示词
+    
+    Args:
+        prompt_id: 提示词 ID
+        prompt_name: 新名称（可选）
+        prompt_content: 新内容（可选）
+        description: 新描述（可选）
+    
+    Returns:
+        更新后的提示词信息
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 先获取原提示词，用于记录历史
+        old_prompt = await get_prompt_by_id(prompt_id)
+        if old_prompt:
+            # 记录修改历史
+            supabase.table("model_prompts_history").insert({
+                "prompt_id": prompt_id,
+                "model_type": old_prompt["model_type"],
+                "prompt_name": old_prompt["prompt_name"],
+                "prompt_content": old_prompt["prompt_content"],
+                "change_reason": "内容更新"
+            }).execute()
+        
+        # 构建更新数据
+        update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+        if prompt_name is not None:
+            update_data["prompt_name"] = prompt_name
+        if prompt_content is not None:
+            update_data["prompt_content"] = prompt_content
+        if description is not None:
+            update_data["description"] = description
+        
+        result = supabase.table("model_prompts")\
+            .update(update_data)\
+            .eq("id", prompt_id)\
+            .execute()
+        
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f"[update_prompt] 错误: {e}")
+        raise
+
+
+async def set_active_prompt(prompt_id: int) -> bool:
+    """
+    设置指定提示词为激活状态
+    
+    Args:
+        prompt_id: 提示词 ID
+    
+    Returns:
+        是否设置成功
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 获取提示词信息
+        prompt = await get_prompt_by_id(prompt_id)
+        if not prompt:
+            return False
+        
+        model_type = prompt["model_type"]
+        
+        # 先将该模型的所有提示词设为非激活
+        supabase.table("model_prompts")\
+            .update({"is_active": False})\
+            .eq("model_type", model_type)\
+            .execute()
+        
+        # 设置指定提示词为激活
+        supabase.table("model_prompts")\
+            .update({"is_active": True})\
+            .eq("id", prompt_id)\
+            .execute()
+        
+        return True
+    except Exception as e:
+        print(f"[set_active_prompt] 错误: {e}")
+        raise
+
+
+async def delete_prompt(prompt_id: int) -> bool:
+    """
+    删除提示词（不能删除激活状态的提示词）
+    
+    Args:
+        prompt_id: 提示词 ID
+    
+    Returns:
+        是否删除成功
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 检查是否为激活状态
+        prompt = await get_prompt_by_id(prompt_id)
+        if not prompt:
+            return False
+        
+        if prompt.get("is_active"):
+            raise ValueError("不能删除当前激活的提示词")
+        
+        supabase.table("model_prompts")\
+            .delete()\
+            .eq("id", prompt_id)\
+            .execute()
+        
+        return True
+    except Exception as e:
+        print(f"[delete_prompt] 错误: {e}")
+        raise
+
+
+async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
+    """获取提示词的修改历史"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("model_prompts_history")\
+            .select("*")\
+            .eq("prompt_id", prompt_id)\
+            .order("changed_at", desc=True)\
+            .execute()
+        return result.data or []
+    except Exception as e:
+        print(f"[get_prompt_history] 错误: {e}")
+        raise

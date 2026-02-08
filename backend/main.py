@@ -1,5 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
+import hashlib
+import secrets
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import os
@@ -7,8 +11,13 @@ import httpx
 import json
 import re
 import time
+import asyncio
+import base64
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
+
+# OpenRouter API 用于调用 Gemini 模型（OpenAI 兼容格式）
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 from auth import create_access_token
 from database import (
     get_user_by_openid,
@@ -29,6 +38,7 @@ from database import (
     get_friend_requests_received,
     respond_friend_request,
     get_friends_with_profile,
+    cleanup_duplicate_friends,
     list_friends_today_records,
     add_feed_like,
     remove_feed_like,
@@ -114,6 +124,250 @@ class AnalyzeResponse(BaseModel):
     pfc_ratio_comment: Optional[str] = Field(default=None, description="PFC 比例评价（蛋白质/脂肪/碳水占比）")
     absorption_notes: Optional[str] = Field(default=None, description="吸收率与生物利用度简要说明")
     context_advice: Optional[str] = Field(default=None, description="情境感知建议（结合用户状态）")
+
+
+# ---------- 双模型对比分析响应模型 ----------
+
+class ModelAnalyzeResult(BaseModel):
+    """单个模型的分析结果"""
+    model_name: str = Field(..., description="模型名称")
+    success: bool = Field(..., description="是否成功")
+    error: Optional[str] = Field(default=None, description="错误信息（失败时）")
+    description: Optional[str] = Field(default=None)
+    insight: Optional[str] = Field(default=None)
+    items: List[FoodItemResponse] = Field(default_factory=list)
+    pfc_ratio_comment: Optional[str] = Field(default=None)
+    absorption_notes: Optional[str] = Field(default=None)
+    context_advice: Optional[str] = Field(default=None)
+
+
+class CompareAnalyzeResponse(BaseModel):
+    """双模型对比分析响应"""
+    qwen_result: ModelAnalyzeResult = Field(..., description="千问模型分析结果")
+    gemini_result: ModelAnalyzeResult = Field(..., description="Gemini 模型分析结果")
+
+
+# ---------- Gemini 分析函数 ----------
+
+def _build_gemini_prompt(
+    additional_context: str = "",
+    goal_hint: str = "",
+    state_hint: str = "",
+    remain_hint: str = "",
+    meal_hint: str = "",
+    profile_block: str = ""
+) -> str:
+    """构建 Gemini 分析的提示词"""
+    return f"""
+请作为专业的营养师分析这张食物图片。
+1. 识别图中所有不同的食物单品。
+2. 估算每种食物的重量（克）和详细营养成分。
+3. description: 提供这顿饭的简短中文描述。
+4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
+5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
+6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（如维生素C促铁吸收、油脂助脂溶性维生素等，一两句话）。
+7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
+
+{('用户补充背景信息: "' + additional_context + '"。请根据此信息调整对隐形成分或烹饪方式的判断。') if additional_context else ''}
+
+重要：请务必使用**简体中文**返回所有文本内容。
+请严格按照以下 JSON 格式返回，不要包含任何其他文本：
+
+{{
+  "items": [
+    {{
+      "name": "食物名称（简体中文）",
+      "estimatedWeightGrams": 重量（数字）,
+      "nutrients": {{
+        "calories": 热量,
+        "protein": 蛋白质,
+        "carbs": 碳水,
+        "fat": 脂肪,
+        "fiber": 纤维,
+        "sugar": 糖分
+      }}
+    }}
+  ],
+  "description": "餐食描述（简体中文）",
+  "insight": "健康建议（简体中文）",
+  "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
+  "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
+  "context_advice": "情境建议（简体中文，若无则空字符串）"
+}}
+""".strip()
+
+
+async def _analyze_with_gemini(
+    image_url: str = None,
+    base64_image: str = None,
+    prompt: str = "",
+    model_name: str = "google/gemini-2.0-flash-001"
+) -> Dict[str, Any]:
+    """
+    使用 Gemini 模型分析食物图片（通过 OpenRouter API）
+    OpenRouter 提供 OpenAI 兼容的 API 格式，支持多种模型包括 Gemini
+    """
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key or api_key == "your_openrouter_api_key_here":
+        raise Exception("请在 .env 中配置有效的 OPENROUTER_API_KEY")
+    
+    # 准备图片数据（OpenRouter 支持 URL 和 base64 两种格式）
+    if image_url:
+        image_content = {"type": "image_url", "image_url": {"url": image_url}}
+    elif base64_image:
+        # 确保 base64 格式正确
+        if "," in base64_image:
+            image_data = base64_image
+        else:
+            image_data = f"data:image/jpeg;base64,{base64_image}"
+        image_content = {"type": "image_url", "image_url": {"url": image_data}}
+    else:
+        raise Exception("请提供 image_url 或 base64_image")
+    
+    # 构建 OpenAI 兼容格式的请求
+    api_url = f"{OPENROUTER_BASE_URL}/chat/completions"
+    
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        response = await client.post(
+            api_url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://healthymax.cn",  # OpenRouter 需要
+                "X-Title": "Food Link",  # 应用名称
+            },
+            json={
+                "model": model_name,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            image_content
+                        ]
+                    }
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.7,
+            }
+        )
+        
+        if not response.is_success:
+            error_data = response.json() if response.content else {}
+            error_message = (
+                error_data.get("error", {}).get("message")
+                or f"OpenRouter API 错误: {response.status_code}"
+            )
+            raise Exception(error_message)
+        
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content")
+        
+        if not content:
+            raise Exception("Gemini (via OpenRouter) 返回了空响应")
+        
+        # 清理可能的 markdown 代码块标记
+        json_str = re.sub(r"```json", "", content)
+        json_str = re.sub(r"```", "", json_str).strip()
+        
+        try:
+            parsed = json.loads(json_str)
+        except json.JSONDecodeError:
+            raise Exception("Gemini 返回的 JSON 格式解析失败")
+        
+        return parsed
+
+
+async def _analyze_with_qwen(
+    request: "AnalyzeRequest",
+    prompt: str,
+    image_url_for_api: str,
+    api_key: str,
+    base_url: str
+) -> Dict[str, Any]:
+    """使用千问模型分析食物图片（复用现有逻辑）"""
+    api_url = f"{base_url}/chat/completions"
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            api_url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": request.modelName or "qwen-vl-max",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": image_url_for_api}}
+                        ]
+                    }
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.7,
+            }
+        )
+        
+        if not response.is_success:
+            error_data = response.json() if response.content else {}
+            error_message = (
+                error_data.get("error", {}).get("message")
+                or f"DashScope API 错误: {response.status_code}"
+            )
+            raise Exception(error_message)
+        
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content")
+        
+        if not content:
+            raise Exception("千问返回了空响应")
+        
+        json_str = re.sub(r"```json", "", content)
+        json_str = re.sub(r"```", "", json_str).strip()
+        
+        return json.loads(json_str)
+
+
+def _parse_analyze_result(parsed: Dict[str, Any]) -> tuple:
+    """解析分析结果，返回 (items, description, insight, pfc, absorption, context)"""
+    valid_items = []
+    if isinstance(parsed.get("items"), list):
+        for item in parsed["items"]:
+            nutrients = Nutrients(
+                calories=float(item.get("nutrients", {}).get("calories", 0) or 0),
+                protein=float(item.get("nutrients", {}).get("protein", 0) or 0),
+                carbs=float(item.get("nutrients", {}).get("carbs", 0) or 0),
+                fat=float(item.get("nutrients", {}).get("fat", 0) or 0),
+                fiber=float(item.get("nutrients", {}).get("fiber", 0) or 0),
+                sugar=float(item.get("nutrients", {}).get("sugar", 0) or 0),
+            )
+            weight = float(item.get("estimatedWeightGrams", 0) or 0)
+            valid_items.append(
+                FoodItemResponse(
+                    name=str(item.get("name", "未知食物")),
+                    estimatedWeightGrams=weight,
+                    originalWeightGrams=weight,
+                    nutrients=nutrients,
+                )
+            )
+    
+    def _opt_str(v):
+        if v is None or v == "":
+            return None
+        s = str(v).strip()
+        return s if s else None
+    
+    return (
+        valid_items,
+        str(parsed.get("description", "无法获取描述")),
+        str(parsed.get("insight", "保持健康饮食！")),
+        _opt_str(parsed.get("pfc_ratio_comment")),
+        _opt_str(parsed.get("absorption_notes")),
+        _opt_str(parsed.get("context_advice")),
+    )
 
 
 class LoginRequest(BaseModel):
@@ -508,6 +762,162 @@ async def upload_analyze_image(body: UploadAnalyzeImageRequest):
             )
         print(f"[upload_analyze_image] 错误: {error_msg}")
         raise HTTPException(status_code=500, detail=f"上传图片失败: {error_msg}")
+
+
+# ---------- 双模型对比分析接口 ----------
+
+@app.post("/api/analyze-compare", response_model=CompareAnalyzeResponse)
+async def analyze_food_compare(
+    request: AnalyzeRequest,
+    user_info: Optional[dict] = Depends(get_optional_user_info),
+):
+    """
+    双模型对比分析：同时使用千问和 Gemini 分析同一张食物图片，返回两个模型的结果供对比。
+    
+    - 千问模型 (qwen-vl-max): 通过 DashScope API 调用
+    - Gemini 模型 (gemini-2.0-flash): 通过 Google AI SDK 调用
+    
+    前端可以展示两个结果，让用户选择保存哪个。
+    """
+    if not request.base64Image and not request.image_url:
+        raise HTTPException(status_code=400, detail="请提供 base64Image 或 image_url 之一")
+    
+    # 获取 API Key
+    dashscope_api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+    
+    # 构建提示词参数
+    goal_hint = ""
+    if request.user_goal:
+        goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
+        goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
+    
+    state_hint = ""
+    if request.diet_goal or request.activity_timing:
+        diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
+        activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
+        diet_text = diet_map.get(request.diet_goal, request.diet_goal) if request.diet_goal and request.diet_goal != "none" else ""
+        activity_text = activity_map.get(request.activity_timing, request.activity_timing) if request.activity_timing and request.activity_timing != "none" else ""
+        state_parts = [s for s in [diet_text, activity_text] if s]
+        if state_parts:
+            state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
+    elif request.context_state:
+        state_hint = f"\n用户当前状态: {request.context_state}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
+    
+    remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
+    
+    meal_hint = ""
+    if request.meal_type:
+        meal_map = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
+        meal_name = meal_map.get(request.meal_type, request.meal_type)
+        meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
+    
+    # 若已登录，拉取健康档案
+    profile_block = ""
+    if user_info:
+        user = await get_user_by_id(user_info["user_id"])
+        if user:
+            profile_block = _format_health_profile_for_analysis(user)
+            if profile_block:
+                profile_block = (
+                    "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
+                    + profile_block
+                )
+    
+    # 构建通用提示词
+    prompt = _build_gemini_prompt(
+        additional_context=request.additionalContext or "",
+        goal_hint=goal_hint,
+        state_hint=state_hint,
+        remain_hint=remain_hint,
+        meal_hint=meal_hint,
+        profile_block=profile_block,
+    )
+    
+    # 准备图片 URL
+    if request.image_url:
+        image_url_for_api = request.image_url
+        base64_for_gemini = None
+    else:
+        image_data = (
+            request.base64Image.split(",")[1]
+            if "," in request.base64Image
+            else request.base64Image
+        )
+        image_url_for_api = f"data:image/jpeg;base64,{image_data}"
+        base64_for_gemini = request.base64Image
+    
+    # 并行调用两个模型
+    qwen_result = ModelAnalyzeResult(model_name="qwen-vl-max", success=False)
+    gemini_result = ModelAnalyzeResult(model_name="gemini-2.0-flash", success=False)
+    
+    async def call_qwen():
+        nonlocal qwen_result
+        try:
+            if not dashscope_api_key:
+                raise Exception("缺少 DASHSCOPE_API_KEY 环境变量")
+            
+            base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+            parsed = await _analyze_with_qwen(request, prompt, image_url_for_api, dashscope_api_key, base_url)
+            items, desc, insight, pfc, absorption, context = _parse_analyze_result(parsed)
+            
+            qwen_result = ModelAnalyzeResult(
+                model_name="qwen-vl-max",
+                success=True,
+                description=desc,
+                insight=insight,
+                items=items,
+                pfc_ratio_comment=pfc,
+                absorption_notes=absorption,
+                context_advice=context,
+            )
+        except Exception as e:
+            print(f"[analyze-compare] 千问分析失败: {e}")
+            qwen_result = ModelAnalyzeResult(
+                model_name="qwen-vl-max",
+                success=False,
+                error=str(e),
+            )
+    
+    async def call_gemini():
+        nonlocal gemini_result
+        try:
+            if not openrouter_api_key or openrouter_api_key == "your_openrouter_api_key_here":
+                raise Exception("请在 .env 中配置有效的 OPENROUTER_API_KEY")
+            
+            parsed = await _analyze_with_gemini(
+                image_url=request.image_url,
+                base64_image=base64_for_gemini,
+                prompt=prompt,
+                model_name="google/gemini-2.0-flash-001",  # OpenRouter 模型名称
+            )
+            items, desc, insight, pfc, absorption, context = _parse_analyze_result(parsed)
+            
+            gemini_result = ModelAnalyzeResult(
+                model_name="gemini-2.0-flash",
+                success=True,
+                description=desc,
+                insight=insight,
+                items=items,
+                pfc_ratio_comment=pfc,
+                absorption_notes=absorption,
+                context_advice=context,
+            )
+        except Exception as e:
+            print(f"[analyze-compare] Gemini (OpenRouter) 分析失败: {e}")
+            gemini_result = ModelAnalyzeResult(
+                model_name="gemini-2.0-flash",
+                success=False,
+                error=str(e),
+            )
+    
+    # 并行执行两个模型的分析
+    await asyncio.gather(call_qwen(), call_gemini())
+    
+    return CompareAnalyzeResponse(
+        qwen_result=qwen_result,
+        gemini_result=gemini_result,
+    )
 
 
 class AnalyzeTextRequest(BaseModel):
@@ -1621,6 +2031,17 @@ async def api_friend_list(user_info: dict = Depends(get_current_user_info)):
         raise HTTPException(status_code=500, detail="获取失败")
 
 
+@app.post("/api/friend/cleanup-duplicates")
+async def api_friend_cleanup_duplicates(user_info: dict = Depends(get_current_user_info)):
+    """清理当前用户的重复好友记录"""
+    try:
+        result = await cleanup_duplicate_friends(user_info["user_id"])
+        return result
+    except Exception as e:
+        print(f"[api/friend/cleanup-duplicates] 错误: {e}")
+        raise HTTPException(status_code=500, detail="清理失败")
+
+
 @app.get("/api/community/feed")
 async def api_community_feed(
     date: Optional[str] = None,
@@ -2217,16 +2638,16 @@ async def login(request: LoginRequest):
             "sub": user_id  # JWT 标准字段
         }
         
-        # Access token（7 天有效期）
+        # Access token（永不过期）
         access_token = create_access_token(
             data=token_data,
-            expires_delta=timedelta(days=7)
+            expires_delta=timedelta(days=36525)
         )
         
-        # Refresh token（30 天有效期）
+        # Refresh token（永不过期）
         refresh_token = create_access_token(
             data={"user_id": user_id, "openid": openid, "type": "refresh"},
-            expires_delta=timedelta(days=30)
+            expires_delta=timedelta(days=36525)
         )
         
         # 6. 返回登录结果
@@ -2234,7 +2655,7 @@ async def login(request: LoginRequest):
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            expires_in=7 * 24 * 60 * 60,  # 7 天的秒数
+            expires_in=36525 * 24 * 60 * 60,  # 约 100 年秒数
             user_id=user_id,
             openid=openid,
             unionid=unionid,
@@ -2421,3 +2842,382 @@ async def use_recipe(
         print(f"[use_recipe] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"使用失败: {str(e)}")
 
+
+# ========== 测试后台 API ==========
+
+from test_backend import BatchProcessor, SingleProcessor
+
+# 测试后台登录凭证（简单认证）
+TEST_BACKEND_USERNAME = "好人松松"
+TEST_BACKEND_PASSWORD = "123456"
+
+# 有效的会话 token 集合（内存存储，重启后失效）
+_valid_session_tokens = set()
+
+
+def _generate_session_token() -> str:
+    """生成会话 token"""
+    return secrets.token_urlsafe(32)
+
+
+def _verify_test_backend_auth(test_backend_token: str = Cookie(None)) -> bool:
+    """验证测试后台登录状态"""
+    if not test_backend_token:
+        return False
+    return test_backend_token in _valid_session_tokens
+
+
+async def require_test_backend_auth(test_backend_token: str = Cookie(None)):
+    """依赖项：要求测试后台登录"""
+    if not _verify_test_backend_auth(test_backend_token):
+        raise HTTPException(status_code=401, detail="请先登录测试后台")
+
+
+class TestBackendLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/test-backend/login")
+async def test_backend_login(data: TestBackendLoginRequest):
+    """测试后台登录"""
+    if data.username == TEST_BACKEND_USERNAME and data.password == TEST_BACKEND_PASSWORD:
+        token = _generate_session_token()
+        _valid_session_tokens.add(token)
+        
+        response = JSONResponse(content={"success": True, "message": "登录成功"})
+        # 设置 cookie，有效期 24 小时
+        response.set_cookie(
+            key="test_backend_token",
+            value=token,
+            max_age=86400,
+            httponly=True,
+            samesite="lax"
+        )
+        return response
+    else:
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "message": "账号或密码错误"}
+        )
+
+
+@app.post("/api/test-backend/logout")
+async def test_backend_logout(test_backend_token: str = Cookie(None)):
+    """测试后台登出"""
+    if test_backend_token and test_backend_token in _valid_session_tokens:
+        _valid_session_tokens.discard(test_backend_token)
+    
+    response = JSONResponse(content={"success": True, "message": "已登出"})
+    response.delete_cookie("test_backend_token")
+    return response
+
+
+def _get_test_processors():
+    """获取测试处理器实例"""
+    qwen_api_key = os.getenv("DASHSCOPE_API_KEY")
+    qwen_base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    
+    return BatchProcessor(
+        analyze_with_qwen_func=_analyze_with_qwen,
+        analyze_with_gemini_func=_analyze_with_gemini,
+        build_prompt_func=_build_gemini_prompt,
+        qwen_api_key=qwen_api_key,
+        qwen_base_url=qwen_base_url,
+        max_concurrent=2
+    ), SingleProcessor(
+        analyze_with_qwen_func=_analyze_with_qwen,
+        analyze_with_gemini_func=_analyze_with_gemini,
+        build_prompt_func=_build_gemini_prompt,
+        qwen_api_key=qwen_api_key,
+        qwen_base_url=qwen_base_url
+    )
+
+
+@app.post("/api/test/batch-upload")
+async def test_batch_upload(
+    file: UploadFile = File(...),
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """
+    批量测试：上传 ZIP 文件进行食物分析对比（需要登录）
+    
+    ZIP 文件应包含：
+    - 多张食物图片（jpg, jpeg, png）
+    - labels.txt 标签文件，格式：文件名 重量g（每行一条）
+    """
+    # 验证文件类型
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="请上传 ZIP 文件")
+    
+    # 读取文件内容
+    try:
+        zip_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"文件读取失败: {str(e)}")
+    
+    # 文件大小限制（50MB）
+    if len(zip_bytes) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件大小超过限制（最大 50MB）")
+    
+    # 处理批量分析
+    batch_processor, _ = _get_test_processors()
+    
+    try:
+        result = await batch_processor.process_zip(zip_bytes)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[test/batch-upload] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+
+@app.post("/api/test/single-image")
+async def test_single_image(
+    image: UploadFile = File(...),
+    trueWeight: float = Form(...),
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """
+    单张图片测试：上传图片和真实重量进行食物分析对比（需要登录）
+    """
+    # 验证文件类型
+    valid_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    if image.content_type not in valid_types:
+        raise HTTPException(status_code=400, detail="请上传有效的图片文件（jpg, png, gif, webp）")
+    
+    # 验证重量
+    if trueWeight <= 0:
+        raise HTTPException(status_code=400, detail="真实重量必须大于 0")
+    
+    # 读取图片内容
+    try:
+        image_bytes = await image.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"图片读取失败: {str(e)}")
+    
+    # 文件大小限制（10MB）
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="图片大小超过限制（最大 10MB）")
+    
+    # 处理单张图片分析
+    _, single_processor = _get_test_processors()
+    
+    try:
+        result = await single_processor.analyze_image(
+            image_bytes=image_bytes,
+            true_weight=trueWeight,
+            filename=image.filename or "uploaded_image.jpg"
+        )
+        return {"success": True, "data": result}
+    except Exception as e:
+        print(f"[test/single-image] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+
+# 测试后台页面路由
+@app.get("/test-backend/login", response_class=HTMLResponse)
+async def test_backend_login_page():
+    """测试后台登录页面"""
+    html_path = os.path.join(os.path.dirname(__file__), "static", "test_backend", "login.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    raise HTTPException(status_code=404, detail="登录页面不存在")
+
+
+@app.get("/test-backend", response_class=HTMLResponse)
+async def test_backend_page(test_backend_token: str = Cookie(None)):
+    """测试后台页面（需要登录）"""
+    # 检查登录状态
+    if not _verify_test_backend_auth(test_backend_token):
+        return RedirectResponse(url="/test-backend/login", status_code=302)
+    
+    html_path = os.path.join(os.path.dirname(__file__), "static", "test_backend", "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    raise HTTPException(status_code=404, detail="测试后台页面不存在")
+
+
+# ========== 提示词管理 API ==========
+
+from database import (
+    get_active_prompt,
+    list_prompts,
+    get_prompt_by_id,
+    create_prompt,
+    update_prompt,
+    set_active_prompt,
+    delete_prompt,
+    get_prompt_history,
+)
+
+
+class PromptCreate(BaseModel):
+    model_type: str = Field(..., description="模型类型: qwen 或 gemini")
+    prompt_name: str = Field(..., description="提示词名称")
+    prompt_content: str = Field(..., description="提示词内容")
+    description: str = Field("", description="描述")
+    is_active: bool = Field(False, description="是否设为激活")
+
+
+class PromptUpdate(BaseModel):
+    prompt_name: Optional[str] = Field(None, description="提示词名称")
+    prompt_content: Optional[str] = Field(None, description="提示词内容")
+    description: Optional[str] = Field(None, description="描述")
+
+
+@app.get("/api/prompts")
+async def api_list_prompts(
+    model_type: Optional[str] = None,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """获取提示词列表（需要登录）"""
+    try:
+        prompts = await list_prompts(model_type)
+        return {"success": True, "data": prompts}
+    except Exception as e:
+        print(f"[api/prompts] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/prompts/active/{model_type}")
+async def api_get_active_prompt(
+    model_type: str,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """获取指定模型的激活提示词（需要登录）"""
+    if model_type not in ("qwen", "gemini"):
+        raise HTTPException(status_code=400, detail="model_type 必须是 qwen 或 gemini")
+    
+    try:
+        prompt = await get_active_prompt(model_type)
+        return {"success": True, "data": prompt}
+    except Exception as e:
+        print(f"[api/prompts/active] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/prompts/{prompt_id}")
+async def api_get_prompt(
+    prompt_id: int,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """获取单个提示词详情（需要登录）"""
+    try:
+        prompt = await get_prompt_by_id(prompt_id)
+        if not prompt:
+            raise HTTPException(status_code=404, detail="提示词不存在")
+        return {"success": True, "data": prompt}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/prompts/{prompt_id}] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/prompts")
+async def api_create_prompt(
+    data: PromptCreate,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """创建新提示词（需要登录）"""
+    if data.model_type not in ("qwen", "gemini"):
+        raise HTTPException(status_code=400, detail="model_type 必须是 qwen 或 gemini")
+    
+    try:
+        prompt = await create_prompt(
+            model_type=data.model_type,
+            prompt_name=data.prompt_name,
+            prompt_content=data.prompt_content,
+            description=data.description,
+            is_active=data.is_active
+        )
+        return {"success": True, "data": prompt}
+    except Exception as e:
+        print(f"[api/prompts create] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/prompts/{prompt_id}")
+async def api_update_prompt(
+    prompt_id: int,
+    data: PromptUpdate,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """更新提示词（需要登录）"""
+    try:
+        prompt = await update_prompt(
+            prompt_id=prompt_id,
+            prompt_name=data.prompt_name,
+            prompt_content=data.prompt_content,
+            description=data.description
+        )
+        if not prompt:
+            raise HTTPException(status_code=404, detail="提示词不存在")
+        return {"success": True, "data": prompt}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/prompts update] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/prompts/{prompt_id}/activate")
+async def api_activate_prompt(
+    prompt_id: int,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """激活指定提示词（需要登录）"""
+    try:
+        success = await set_active_prompt(prompt_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="提示词不存在")
+        return {"success": True, "message": "已激活"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/prompts activate] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/prompts/{prompt_id}")
+async def api_delete_prompt(
+    prompt_id: int,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """删除提示词（需要登录）"""
+    try:
+        success = await delete_prompt(prompt_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="提示词不存在")
+        return {"success": True, "message": "已删除"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/prompts delete] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/prompts/{prompt_id}/history")
+async def api_get_prompt_history(
+    prompt_id: int,
+    _auth: None = Depends(require_test_backend_auth)
+):
+    """获取提示词修改历史（需要登录）"""
+    try:
+        history = await get_prompt_history(prompt_id)
+        return {"success": True, "data": history}
+    except Exception as e:
+        print(f"[api/prompts history] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 挂载静态文件（放在最后，避免路由冲突）
+static_path = os.path.join(os.path.dirname(__file__), "static", "test_backend")
+if os.path.exists(static_path):
+    app.mount("/static/test_backend", StaticFiles(directory=static_path), name="test_backend_static")

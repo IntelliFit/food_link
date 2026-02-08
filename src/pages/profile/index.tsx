@@ -1,6 +1,21 @@
 import { View, Text, Image, Button, Input } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
+import { Cell } from '@taroify/core'
+import '@taroify/core/cell/style'
+import {
+  TodoListOutlined,
+  NotesOutlined,
+  ChartTrendingOutlined,
+  LocationOutlined,
+  SettingOutlined,
+  Bell,
+  ShieldOutlined,
+  CommentOutlined,
+  InfoOutlined,
+  StarOutlined
+} from '@taroify/icons'
+import '@taroify/icons/style'
 import { 
   login, 
   LoginResponse, 
@@ -104,53 +119,28 @@ export default function ProfilePage() {
   const services = [
     {
       id: 0,
-      icon: '📋',
+      icon: <TodoListOutlined size="20" />,
       title: '健康档案',
-      desc: '生理指标、BMR/TDEE、病史与饮食偏好',
-      iconClass: 'health-icon'
+      desc: '生理指标、BMR/TDEE、病史与饮食偏好'
     },
     {
       id: 1,
-      icon: '📖',
+      icon: <NotesOutlined size="20" />,
       title: '我的食谱',
       desc: '常吃的食物组合，一键记录',
-      iconClass: 'recipe-icon',
       path: '/pages/recipes/index'
     },
     {
-      id: 2,
-      icon: '🎯',
-      title: '我的目标',
-      desc: '设置和管理你的健康目标',
-      iconClass: 'goal-icon'
-    },
-    {
       id: 3,
-      icon: '📊',
+      icon: <ChartTrendingOutlined size="20" />,
       title: '数据统计',
-      desc: '查看详细的饮食和运动数据',
-      iconClass: 'stats-icon'
-    },
-    {
-      id: 4,
-      icon: '🏆',
-      title: '我的成就',
-      desc: '查看已获得的成就徽章',
-      iconClass: 'achievement-icon'
+      desc: '查看详细的饮食和运动数据'
     },
     {
       id: 5,
-      icon: '📍',
+      icon: <LocationOutlined size="20" />,
       title: '附近美食',
-      desc: '发现附近健康美食推荐',
-      iconClass: 'map-icon'
-    },
-    {
-      id: 6,
-      icon: '🛒',
-      title: '健康商城',
-      desc: '购买健康食品和运动装备',
-      iconClass: 'shop-icon'
+      desc: '发现附近健康美食推荐'
     }
   ]
 
@@ -166,11 +156,11 @@ export default function ProfilePage() {
 
   // 设置项
   const settings = [
-    { id: 1, icon: '⚙️', title: '账号设置' },
-    { id: 2, icon: '🔔', title: '消息通知' },
-    { id: 3, icon: '🔒', title: '隐私设置' },
-    { id: 4, icon: '💬', title: '意见反馈' },
-    { id: 5, icon: 'ℹ️', title: '关于我们' }
+    { id: 1, icon: <SettingOutlined size="20" />, title: '账号设置' },
+    { id: 2, icon: <Bell size="20" />, title: '消息通知' },
+    { id: 3, icon: <ShieldOutlined size="20" />, title: '隐私设置' },
+    { id: 4, icon: <CommentOutlined size="20" />, title: '意见反馈' },
+    { id: 5, icon: <InfoOutlined size="20" />, title: '关于我们' }
   ]
 
   const handleServiceClick = (service: typeof services[0]) => {
@@ -485,8 +475,14 @@ export default function ProfilePage() {
     const { avatarUrl } = e.detail
     console.log('选择的头像:', avatarUrl)
     
-    // 如果是微信临时路径，需要上传到 Supabase
-    if (avatarUrl && avatarUrl.startsWith('http://tmp/')) {
+    // 判断是否需要上传：非 https 开头的都是临时路径，需要上传
+    // 兼容不同环境的临时路径格式：
+    // - 开发者工具: http://tmp/xxx
+    // - 真机 iOS: wxfile://tmp_xxx
+    // - 真机 Android: wxfile://xxx 或其他格式
+    const needUpload = avatarUrl && !avatarUrl.startsWith('https://')
+    
+    if (needUpload) {
       Taro.showLoading({
         title: '上传中...',
         mask: true
@@ -516,8 +512,8 @@ export default function ProfilePage() {
           duration: 2000
         })
       }
-    } else {
-      // 其他情况直接使用（已经是 URL）
+    } else if (avatarUrl) {
+      // 已经是 https URL，直接使用
       setTempAvatar(avatarUrl)
     }
   }
@@ -789,7 +785,7 @@ export default function ProfilePage() {
             )}
           </View>
           <View className='settings-btn' onClick={handleSettings}>
-            <Text>⚙️</Text>
+            <SettingOutlined size="20" color="#6b7280" />
           </View>
         </View>
       </View>
@@ -807,25 +803,18 @@ export default function ProfilePage() {
 
       {/* 我的服务 */}
       <View className='services-section'>
-        {/* <Text className='section-title'>我的服务</Text> */}
-        <View className='services-list'>
+        <Cell.Group>
           {services.map((service) => (
-            <View
+            <Cell
               key={service.id}
-              className='service-item'
+              title={service.title}
+              brief={service.desc}
+              icon={service.icon}
+              isLink
               onClick={() => handleServiceClick(service)}
-            >
-              <View className={`service-icon ${service.iconClass}`}>
-                <Text>{service.icon}</Text>
-              </View>
-              <View className='service-content'>
-                <Text className='service-title'>{service.title}</Text>
-                <Text className='service-desc'>{service.desc}</Text>
-              </View>
-              <Text className='service-arrow'>{'>'}</Text>
-            </View>
+            />
           ))}
-        </View>
+        </Cell.Group>
       </View>
 
       {/* 我的贡献值 */}
@@ -833,7 +822,7 @@ export default function ProfilePage() {
         <View className='contribution-header'>
           <View className='contribution-title-section'>
             <View className='contribution-icon'>
-              <Text>⭐</Text>
+              <StarOutlined size="44" color="#fff" />
             </View>
             <Text className='contribution-title'>我的贡献值</Text>
           </View>
@@ -859,21 +848,17 @@ export default function ProfilePage() {
       {/* 设置 */}
       <View className='settings-section'>
         <Text className='section-title'>设置</Text>
-        <View className='settings-list'>
+        <Cell.Group>
           {settings.map((setting) => (
-            <View
+            <Cell
               key={setting.id}
-              className='setting-item'
+              title={setting.title}
+              icon={setting.icon}
+              isLink
               onClick={() => handleSettingClick(setting)}
-            >
-              <View className='setting-icon'>
-                <Text>{setting.icon}</Text>
-              </View>
-              <Text className='setting-title'>{setting.title}</Text>
-              <Text className='setting-arrow'>{'>'}</Text>
-            </View>
+            />
           ))}
-        </View>
+        </Cell.Group>
       </View>
 
       {/* 登录/退出登录按钮 */}

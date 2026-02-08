@@ -1,7 +1,7 @@
-import { View, Text, Image, Textarea } from '@tarojs/components'
+import { View, Text, Image, Textarea, Switch } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { imageToBase64, uploadAnalyzeImage, analyzeFoodImage, AnalyzeResponse } from '../../utils/api'
+import { imageToBase64, uploadAnalyzeImage, analyzeFoodImage, analyzeFoodImageCompare, AnalyzeResponse, CompareAnalyzeResponse } from '../../utils/api'
 
 import './index.scss'
 
@@ -36,6 +36,8 @@ export default function AnalyzePage() {
   const [dietGoal, setDietGoal] = useState<string>('none')
   const [activityTiming, setActivityTiming] = useState<string>('none')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  // 双模型对比模式开关
+  const [compareMode, setCompareMode] = useState(false)
 
   useEffect(() => {
     // 从本地存储获取图片路径
@@ -62,7 +64,7 @@ export default function AnalyzePage() {
   const doAnalyze = async () => {
     setIsAnalyzing(true)
     Taro.showLoading({
-      title: '分析中...',
+      title: compareMode ? '双模型对比分析中...' : '分析中...',
       mask: true
     })
 
@@ -71,29 +73,57 @@ export default function AnalyzePage() {
       const base64Image = await imageToBase64(imagePath!)
       const { imageUrl } = await uploadAnalyzeImage(base64Image)
 
-      // 2. 使用 URL 调用分析接口（AI 通过 URL 获取图片）
-      const result: AnalyzeResponse = await analyzeFoodImage({
-        image_url: imageUrl,
-        additionalContext: additionalInfo,
-        modelName: 'qwen-vl-max',
-        meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-        diet_goal: dietGoal as any,
-        activity_timing: activityTiming as any
-      })
+      if (compareMode) {
+        // 对比模式：同时调用千问和 Gemini
+        const compareResult: CompareAnalyzeResponse = await analyzeFoodImageCompare({
+          image_url: imageUrl,
+          additionalContext: additionalInfo,
+          modelName: 'qwen-vl-max',
+          meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+          diet_goal: dietGoal as any,
+          activity_timing: activityTiming as any
+        })
 
-      // 3. 保存分析结果与 Supabase 图片 URL，结果页/标记样本/保存记录均使用此 URL
-      Taro.setStorageSync('analyzeImagePath', imageUrl)
-      Taro.setStorageSync('analyzeResult', JSON.stringify(result))
-      Taro.setStorageSync('analyzeMealType', mealType)
-      Taro.setStorageSync('analyzeDietGoal', dietGoal)
-      Taro.setStorageSync('analyzeActivityTiming', activityTiming)
-      
-      Taro.hideLoading()
-      
-      // 跳转到结果页面
-      Taro.redirectTo({
-        url: '/pages/result/index'
-      })
+        // 保存对比结果
+        Taro.setStorageSync('analyzeImagePath', imageUrl)
+        Taro.setStorageSync('analyzeCompareResult', JSON.stringify(compareResult))
+        Taro.setStorageSync('analyzeCompareMode', true)
+        Taro.setStorageSync('analyzeMealType', mealType)
+        Taro.setStorageSync('analyzeDietGoal', dietGoal)
+        Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+        
+        Taro.hideLoading()
+        
+        // 跳转到对比结果页面
+        Taro.redirectTo({
+          url: '/pages/result/index'
+        })
+      } else {
+        // 普通模式：只调用千问
+        const result: AnalyzeResponse = await analyzeFoodImage({
+          image_url: imageUrl,
+          additionalContext: additionalInfo,
+          modelName: 'qwen-vl-max',
+          meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+          diet_goal: dietGoal as any,
+          activity_timing: activityTiming as any
+        })
+
+        // 保存分析结果
+        Taro.setStorageSync('analyzeImagePath', imageUrl)
+        Taro.setStorageSync('analyzeResult', JSON.stringify(result))
+        Taro.setStorageSync('analyzeCompareMode', false)
+        Taro.setStorageSync('analyzeMealType', mealType)
+        Taro.setStorageSync('analyzeDietGoal', dietGoal)
+        Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+        
+        Taro.hideLoading()
+        
+        // 跳转到结果页面
+        Taro.redirectTo({
+          url: '/pages/result/index'
+        })
+      }
     } catch (error: any) {
       Taro.hideLoading()
       setIsAnalyzing(false)
@@ -216,6 +246,25 @@ export default function AnalyzePage() {
               <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
+        </View>
+      </View>
+
+      {/* 双模型对比模式 */}
+      <View className='compare-section'>
+        <View className='section-header'>
+          <Text className='section-icon'>🔬</Text>
+          <Text className='section-title'>模型对比</Text>
+        </View>
+        <View className='compare-toggle'>
+          <View className='compare-info'>
+            <Text className='compare-label'>启用双模型对比</Text>
+            <Text className='compare-hint'>同时使用千问和 Gemini 分析，对比结果</Text>
+          </View>
+          <Switch
+            checked={compareMode}
+            onChange={(e) => setCompareMode(e.detail.value)}
+            color='#00bc7d'
+          />
         </View>
       </View>
 

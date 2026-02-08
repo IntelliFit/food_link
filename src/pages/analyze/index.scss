@@ -204,6 +204,43 @@
   transition: all 0.2s ease;
 }
 
+// 双模型对比区域
+.compare-section {
+  @extend %card-style;
+}
+
+.compare-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx;
+  background: #f9fafb;
+  border-radius: 20rpx;
+  border: 2rpx solid transparent;
+  transition: all 0.3s ease;
+  
+  &:active {
+    background: #f0fdf9;
+  }
+}
+
+.compare-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.compare-label {
+  font-size: 30rpx;
+  color: #111827;
+  font-weight: 600;
+}
+
+.compare-hint {
+  font-size: 24rpx;
+  color: #6b7280;
+}
+
 // 补充细节区域
 .details-section {
   @extend %card-style;

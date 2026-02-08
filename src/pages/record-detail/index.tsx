@@ -215,7 +215,7 @@ export default function RecordDetailPage() {
             <View className="meal-icon">
               <Text>{mealIcon}</Text>
             </View>
-            <View>
+            <View className="meal-badge-text">
               <Text className="meal-name">{mealName}</Text>
               <Text className="meal-time">{timeStr}</Text>
             </View>
@@ -227,7 +227,15 @@ export default function RecordDetailPage() {
         </View>
 
         {record.image_path ? (
-          <View className="detail-image">
+          <View
+            className="detail-image"
+            onClick={() => {
+              Taro.previewImage({
+                urls: [record.image_path!],
+                current: record.image_path!
+              })
+            }}
+          >
             <Image src={record.image_path} mode="aspectFill" />
           </View>
         ) : null}

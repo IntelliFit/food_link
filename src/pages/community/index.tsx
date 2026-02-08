@@ -9,6 +9,7 @@ import {
   friendGetRequests,
   friendRespondRequest,
   friendGetList,
+  friendCleanupDuplicates,
   communityGetFeed,
   communityLike,
   communityUnlike,
@@ -56,7 +57,12 @@ export default function CommunityPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
   const [showRequests, setShowRequests] = useState(false)
-  const [showComments, setShowComments] = useState<{ recordId: string } | null>(null)
+
+  // 评论：每条动态的评论列表、当前展开评论输入的 recordId、输入内容、提交中
+  const [commentsByRecordId, setCommentsByRecordId] = useState<Record<string, FeedCommentItem[]>>({})
+  const [expandedCommentRecordId, setExpandedCommentRecordId] = useState<string | null>(null)
+  const [commentContent, setCommentContent] = useState('')
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
 
   // 添加好友：搜索类型、关键词、结果、发送中
   const [searchType, setSearchType] = useState<'nickname' | 'telephone'>('nickname')
@@ -65,15 +71,13 @@ export default function CommunityPage() {
   const [searching, setSearching] = useState(false)
   const [sendingId, setSendingId] = useState<string | null>(null)
 
-  // 评论：当前动态的评论列表、输入内容、提交中
-  const [comments, setComments] = useState<FeedCommentItem[]>([])
-  const [commentContent, setCommentContent] = useState('')
-  const [commentSubmitting, setCommentSubmitting] = useState(false)
-
   const loadFriendsAndRequests = useCallback(async () => {
     if (!getAccessToken()) return
     setLoadingFriends(true)
     try {
+      // 先清理可能存在的重复好友记录
+      await friendCleanupDuplicates().catch(() => {})
+      
       const [listRes, reqRes] = await Promise.all([
         friendGetList(),
         friendGetRequests()
@@ -107,6 +111,27 @@ export default function CommunityPage() {
       loadFeed()
     }
   }, [loadFriendsAndRequests, loadFeed])
+
+  // Feed 加载后，为每条动态加载前 5 条评论
+  useEffect(() => {
+    if (!getAccessToken() || feedList.length === 0) return
+    const loadComments = async () => {
+      const results = await Promise.allSettled(
+        feedList.map((item) => communityGetComments(item.record.id))
+      )
+      const next: Record<string, FeedCommentItem[]> = {}
+      results.forEach((r, i) => {
+        const recordId = feedList[i].record.id
+        if (r.status === 'fulfilled' && r.value?.list) {
+          next[recordId] = r.value.list.slice(0, 5)
+        } else {
+          next[recordId] = []
+        }
+      })
+      setCommentsByRecordId((prev) => ({ ...prev, ...next }))
+    }
+    loadComments()
+  }, [feedList])
 
   // ScrollView 自带下拉刷新（页面级下拉被内部 ScrollView 接管，需用 refresher）
   const handleRefresherRefresh = useCallback(() => {
@@ -204,34 +229,43 @@ export default function CommunityPage() {
     }
   }
 
-  const openComments = async (recordId: string) => {
-    setShowComments({ recordId })
-    setComments([])
-    setCommentContent('')
-    try {
-      const res = await communityGetComments(recordId)
-      setComments(res.list || [])
-    } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '加载评论失败', icon: 'none' })
+  const toggleCommentInput = (recordId: string) => {
+    if (!getAccessToken()) {
+      Taro.showToast({ title: '请先登录', icon: 'none' })
+      return
+    }
+    if (expandedCommentRecordId === recordId) {
+      setExpandedCommentRecordId(null)
+      setCommentContent('')
+    } else {
+      setExpandedCommentRecordId(recordId)
+      setCommentContent('')
+      // 若尚未加载该卡片的评论，则加载
+      if (!commentsByRecordId[recordId]) {
+        communityGetComments(recordId)
+          .then((res) => {
+            setCommentsByRecordId((prev) => ({
+              ...prev,
+              [recordId]: (res.list || []).slice(0, 5)
+            }))
+          })
+          .catch(() => Taro.showToast({ title: '加载评论失败', icon: 'none' }))
+      }
     }
   }
 
   const submitComment = async () => {
-    if (!showComments?.recordId || !commentContent.trim()) return
+    if (!expandedCommentRecordId || !commentContent.trim()) return
     setCommentSubmitting(true)
     try {
-      await communityPostComment(showComments.recordId, commentContent.trim())
-      const res = await communityGetComments(showComments.recordId)
-      setComments(res.list || [])
+      await communityPostComment(expandedCommentRecordId, commentContent.trim())
+      const res = await communityGetComments(expandedCommentRecordId)
+      setCommentsByRecordId((prev) => ({
+        ...prev,
+        [expandedCommentRecordId]: (res.list || []).slice(0, 5)
+      }))
       setCommentContent('')
       Taro.showToast({ title: '评论成功', icon: 'success' })
-      setFeedList(prev =>
-        prev.map(f =>
-          f.record.id === showComments.recordId
-            ? { ...f, record: { ...f.record } } // 可在此叠加 comment_count 若后端返回
-            : f
-        )
-      )
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
     } finally {
@@ -323,18 +357,20 @@ export default function CommunityPage() {
                   enhanced
                   showScrollbar={false}
                 >
-                  {friends.map((f) => (
-                    <View key={f.id} className='friend-item'>
-                      <View className='friend-avatar'>
-                        {f.avatar ? (
-                          <Image src={f.avatar} mode='aspectFill' className='friend-avatar-img' />
-                        ) : (
-                          <Text className='friend-avatar-placeholder'>👤</Text>
-                        )}
+                  <View className='friends-list-inner'>
+                    {friends.map((f) => (
+                      <View key={f.id} className='friend-item'>
+                        <View className='friend-avatar'>
+                          {f.avatar ? (
+                            <Image src={f.avatar} mode='aspectFill' className='friend-avatar-img' />
+                          ) : (
+                            <Text className='friend-avatar-placeholder'>👤</Text>
+                          )}
+                        </View>
+                        <Text className='friend-name' numberOfLines={1}>{f.nickname || '用户'}</Text>
                       </View>
-                      <Text className='friend-name' numberOfLines={1}>{f.nickname || '用户'}</Text>
-                    </View>
-                  ))}
+                    ))}
+                  </View>
                 </ScrollView>
               )}
             </View>
@@ -352,7 +388,7 @@ export default function CommunityPage() {
                   <Text className='circle-icon iconfont icon-shiwu' />
                   <Text className='circle-name'>公共食物库</Text>
                   <View className='circle-members'>
-                    <Text className='member-icon iconfont icon-dizhi' />
+                    {/* <Text className='member-icon iconfont icon-dizhi' /> */}
                     <Text className='member-count'>健康外卖推荐</Text>
                   </View>
                 </View>
@@ -363,7 +399,7 @@ export default function CommunityPage() {
                   <Text className='circle-icon iconfont icon-weibiaoti-_huabanfuben' />
                   <Text className='circle-name'>打卡排行榜</Text>
                   <View className='circle-members'>
-                    <Text className='member-icon iconfont icon-duoren' />
+                    {/* <Text className='member-icon iconfont icon-duoren' /> */}
                     <Text className='member-count'>本周活跃</Text>
                   </View>
                 </View>
@@ -453,6 +489,9 @@ export default function CommunityPage() {
                         <Text className='feed-calorie'>
                           {Number(item.record.total_calories || 0).toFixed(0)} kcal
                         </Text>
+                        <Text className='feed-macros'>
+                          蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
+                        </Text>
                       </View>
                       <View
                         className='feed-actions'
@@ -469,12 +508,53 @@ export default function CommunityPage() {
                         </View>
                         <View
                           className='action-item'
-                          onClick={() => openComments(item.record.id)}
+                          onClick={() => toggleCommentInput(item.record.id)}
                         >
                         <Text className='action-icon iconfont icon-pinglun' />
                           <Text className='action-count'>评论</Text>
                         </View>
                       </View>
+                      {/* 前 5 条评论 */}
+                      {(commentsByRecordId[item.record.id]?.length ?? 0) > 0 && (
+                        <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
+                          {(commentsByRecordId[item.record.id] || []).map((c) => (
+                            <View key={c.id} className='feed-comment-item'>
+                              <View className='comment-avatar'>
+                                {c.avatar ? (
+                                  <Image src={c.avatar} mode='aspectFill' className='comment-avatar-img' />
+                                ) : (
+                                  <Text className='comment-avatar-placeholder'>👤</Text>
+                                )}
+                              </View>
+                              <View className='comment-body'>
+                                <Text className='comment-text'>
+                                  <Text className='comment-author'>{c.nickname || '用户'}</Text>
+                                  <Text> {c.content}</Text>
+                                </Text>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                      {/* 评论输入框（点击评论后展开） */}
+                      {expandedCommentRecordId === item.record.id && (
+                        <View className='feed-comment-input-wrap' onClick={(e) => e.stopPropagation()}>
+                          <Input
+                            className='feed-comment-input'
+                            placeholder='说点什么...'
+                            value={commentContent}
+                            onInput={(e) => setCommentContent(e.detail.value)}
+                          />
+                          <Button
+                            className='feed-comment-send'
+                            size='mini'
+                            onClick={submitComment}
+                            disabled={commentSubmitting || !commentContent.trim()}
+                          >
+                            {commentSubmitting ? '发送中' : '发送'}
+                          </Button>
+                        </View>
+                      )}
                     </View>
                   ))}
                 </View>
@@ -527,14 +607,20 @@ export default function CommunityPage() {
                     )}
                   </View>
                   <Text className='result-name'>{u.nickname || '用户'}</Text>
-                  <Button
-                    className='result-add-btn'
-                    size='mini'
-                    onClick={() => handleSendRequest(u.id)}
-                    disabled={!!sendingId}
-                  >
-                    {sendingId === u.id ? '发送中' : '加好友'}
-                  </Button>
+                  {u.is_friend ? (
+                    <Text className='result-status-tag added'>已添加</Text>
+                  ) : u.is_pending ? (
+                    <Text className='result-status-tag pending'>已发送</Text>
+                  ) : (
+                    <Button
+                      className='result-add-btn'
+                      size='mini'
+                      onClick={() => handleSendRequest(u.id)}
+                      disabled={!!sendingId}
+                    >
+                      {sendingId === u.id ? '发送中' : '加好友'}
+                    </Button>
+                  )}
                 </View>
               ))}
             </ScrollView>
@@ -567,40 +653,6 @@ export default function CommunityPage() {
               ))}
             </ScrollView>
             <Button className='modal-close-btn' onClick={() => setShowRequests(false)}>关闭</Button>
-          </View>
-        </View>
-      )}
-
-      {/* 评论弹窗 */}
-      {showComments && (
-        <View className='modal-mask' onClick={() => setShowComments(null)}>
-          <View className='modal-box comments-modal' onClick={e => e.stopPropagation()}>
-            <Text className='modal-title'>评论</Text>
-            <ScrollView className='comments-list' scrollY>
-              {comments.length === 0 ? (
-                <Text className='comments-empty'>暂无评论</Text>
-              ) : (
-                comments.map((c) => (
-                  <View key={c.id} className='comment-item'>
-                    <Text className='comment-author'>{c.nickname}</Text>
-                    <Text className='comment-content'>{c.content}</Text>
-                    <Text className='comment-time'>{formatFeedTime(c.created_at)}</Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-            <View className='comment-input-row'>
-              <Input
-                className='comment-input'
-                placeholder='说点什么...'
-                value={commentContent}
-                onInput={e => setCommentContent(e.detail.value)}
-              />
-              <Button className='comment-submit' size='mini' onClick={submitComment} disabled={commentSubmitting || !commentContent.trim()}>
-                {commentSubmitting ? '发送中' : '发送'}
-              </Button>
-            </View>
-            <Button className='modal-close-btn' onClick={() => setShowComments(null)}>关闭</Button>
           </View>
         </View>
       )}

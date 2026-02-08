@@ -9,8 +9,8 @@ import os
 # JWT 配置
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production-min-32-chars")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 7  # token 有效期 7 天
-REFRESH_TOKEN_EXPIRE_DAYS = 30  # refresh token 有效期 30 天
+ACCESS_TOKEN_EXPIRE_DAYS = 36525  # 约 100 年，等效永不过期
+REFRESH_TOKEN_EXPIRE_DAYS = 36525  # 约 100 年，等效永不过期
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { getHomeDashboard, getAccessToken, type HomeIntakeData, type HomeMealItem } from '../../utils/api'
 import { IconCamera, IconText, IconClock, IconProtein, IconCarbs, IconFat } from '../../components/iconfont'
+import { Empty, Button } from '@taroify/core'
+import { FlowerOutlined, FireOutlined, HomeOutlined, BirthdayCakeOutlined } from '@taroify/icons'
+import '@taroify/icons/style'
 
 import './index.scss'
 
@@ -24,12 +27,13 @@ function getGreeting(): string {
   return '晚上好'
 }
 
-function getMealIcon(type: string): string {
-  if (type === 'breakfast') return '🌅'
-  if (type === 'lunch') return '☀️'
-  if (type === 'dinner') return '🌙'
-  return '🍎'
-}
+// 餐次对应的 Taroify 图标及颜色
+const MEAL_ICON_CONFIG = {
+  breakfast: { Icon: FlowerOutlined, color: '#ff6900' },
+  lunch: { Icon: FireOutlined, color: '#00c950' },
+  dinner: { Icon: HomeOutlined, color: '#2b7fff' },
+  snack: { Icon: BirthdayCakeOutlined, color: '#ad46ff' }
+} as const
 
 export default function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
@@ -54,29 +58,21 @@ export default function IndexPage() {
   }, [])
 
   const handleQuickRecord = (type: string) => {
-    if (type === 'photo') {
-      Taro.navigateTo({ url: '/pages/record/index' })
-    } else if (type === 'text') {
-      Taro.navigateTo({
-        url: '/pages/record/index?type=text'
-      })
+    // 记录页面是 tabBar 页面，需要使用 switchTab
+    // switchTab 不支持传参，通过 storage 传递
+    if (type === 'text') {
+      Taro.setStorageSync('recordPageTab', 'text')
     } else if (type === 'history') {
-      Taro.navigateTo({
-        url: '/pages/record/index?type=history'
-      })
+      Taro.setStorageSync('recordPageTab', 'history')
+    } else {
+      Taro.setStorageSync('recordPageTab', 'photo')
     }
+    Taro.switchTab({ url: '/pages/record/index' })
   }
 
   const handleViewAllMeals = () => {
-    Taro.navigateTo({
-      url: '/pages/record/index'
-    })
-  }
-
-  const handleAISuggestion = () => {
-    Taro.navigateTo({
-      url: '/pages/ai-assistant/index'
-    })
+    Taro.setStorageSync('recordPageTab', 'history')
+    Taro.switchTab({ url: '/pages/record/index' })
   }
 
   return (
@@ -89,7 +85,7 @@ export default function IndexPage() {
             <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
           </View>
           <View className='trend-icon'>
-            <View className='icon-placeholder' />
+            <Text className='iconfont icon-shangzhang trend-icon-symbol' />
           </View>
         </View>
 
@@ -185,16 +181,28 @@ export default function IndexPage() {
         </View>
         <View className='meals-list'>
           {loading ? null : meals.length === 0 ? (
-            <View className='meals-empty'>
-              <Text className='meals-empty-text'>暂无今日餐食，去记录一餐吧</Text>
-            </View>
+            <Empty>
+              <Empty.Image />
+              <Empty.Description>暂无今日餐食</Empty.Description>
+              <Button 
+                shape="round" 
+                color="primary" 
+                className="empty-record-btn"
+                onClick={() => handleQuickRecord('photo')}
+              >
+                去记录一餐
+              </Button>
+            </Empty>
           ) : (
           meals.map((meal, index) => (
             <View key={`${meal.type}-${index}`} className='meal-card'>
               <View className='meal-header'>
                 <View className='meal-info'>
                   <View className={`meal-icon ${meal.type}-icon`}>
-                    <Text>{getMealIcon(meal.type)}</Text>
+                    {(() => {
+                      const { Icon, color } = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
+                      return <Icon size={28} color={color} />
+                    })()}
                   </View>
                   <View className='meal-details'>
                     <Text className='meal-name'>{meal.name}</Text>
@@ -229,22 +237,6 @@ export default function IndexPage() {
               )}
             </View>
           )))}
-        </View>
-      </View>
-
-      {/* AI建议 */}
-      <View className='ai-suggestion-section' onClick={handleAISuggestion}>
-        <View className='ai-content'>
-          <View className='ai-icon'>
-            <Text>🤖</Text>
-          </View>
-          <View className='ai-text-content'>
-            <Text className='ai-title'>AI 营养建议</Text>
-            <Text className='ai-description'>根据您的饮食记录，为您推荐个性化建议</Text>
-          </View>
-        </View>
-        <View className='ai-button'>
-          <Text className='ai-button-text'>查看建议</Text>
         </View>
       </View>
     </View>

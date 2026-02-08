@@ -1,73 +1,86 @@
 /* 识别记录详情页 */
 .record-detail-page {
   min-height: 100vh;
-  background: #f5f6f8;
-  padding: 24rpx 32rpx 48rpx;
+  background: #f1f5f9;
+  padding: 32rpx 32rpx 64rpx;
   box-sizing: border-box;
 }
 
 .detail-card {
   background: #fff;
   border-radius: 24rpx;
-  padding: 32rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  padding: 40rpx 36rpx;
+  margin-bottom: 28rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
 }
 
 .detail-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 28rpx;
-  padding-bottom: 24rpx;
-  border-bottom: 2rpx solid #f0f0f0;
+  margin-bottom: 32rpx;
+  padding-bottom: 28rpx;
+  border-bottom: 2rpx solid #f1f5f9;
 }
 
 .meal-badge {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 20rpx;
+
+  .meal-badge-text {
+    display: flex;
+    flex-direction: column;
+    gap: 8rpx;
+  }
+
   .meal-icon {
-    width: 64rpx;
-    height: 64rpx;
-    border-radius: 16rpx;
+    width: 72rpx;
+    height: 72rpx;
+    border-radius: 18rpx;
     background: linear-gradient(135deg, #e6fffa 0%, #f0fdf9 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 36rpx;
+    font-size: 40rpx;
   }
   .meal-name {
-    font-size: 32rpx;
+    display: block;
+    font-size: 34rpx;
     font-weight: 600;
-    color: #1a1a1a;
+    color: #1e293b;
+    line-height: 1.4;
   }
   .meal-time {
-    font-size: 24rpx;
+    display: block;
+    font-size: 26rpx;
     color: #64748b;
-    margin-top: 4rpx;
+    line-height: 1.4;
   }
 }
 
 .total-calorie {
-  font-size: 36rpx;
+  font-size: 40rpx;
   font-weight: 700;
   color: #00bc7d;
+  letter-spacing: -0.5px;
   .unit {
-    font-size: 24rpx;
+    font-size: 26rpx;
     font-weight: 500;
     color: #64748b;
-    margin-left: 4rpx;
+    margin-left: 6rpx;
   }
 }
 
 .detail-image {
   width: 100%;
-  height: 360rpx;
-  border-radius: 16rpx;
+  height: 380rpx;
+  border-radius: 20rpx;
   background: #f8fafc;
-  margin-bottom: 24rpx;
+  margin-bottom: 32rpx;
   overflow: hidden;
+  cursor: pointer;
+
   image {
     width: 100%;
     height: 100%;
@@ -79,30 +92,46 @@
 .detail-insight {
   font-size: 28rpx;
   color: #475569;
-  line-height: 1.6;
-  margin-bottom: 20rpx;
+  line-height: 1.75;
+  margin-bottom: 28rpx;
+  padding-bottom: 28rpx;
+  border-bottom: 2rpx solid #f1f5f9;
+
   .label {
+    display: block;
     font-size: 24rpx;
+    font-weight: 600;
     color: #64748b;
-    margin-bottom: 8rpx;
+    margin-bottom: 12rpx;
+    letter-spacing: 0.5px;
+  }
+
+  > Text:last-child {
+    display: block;
+    line-height: 1.8;
   }
 }
 
 .food-list-title {
-  font-size: 28rpx;
+  display: block;
+  font-size: 32rpx;
   font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 20rpx;
+  color: #1e293b;
+  margin-bottom: 24rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 2rpx solid #f1f5f9;
 }
 
 .food-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24rpx;
+  padding: 28rpx 24rpx;
   background: #f8fafc;
   border-radius: 16rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
+  gap: 24rpx;
+
   &:last-child {
     margin-bottom: 0;
   }
@@ -110,29 +139,39 @@
 
 .food-info {
   flex: 1;
+  min-width: 0;
   .food-name {
-    font-size: 28rpx;
+    display: block;
+    font-size: 30rpx;
     font-weight: 500;
-    color: #1a1a1a;
+    color: #1e293b;
+    line-height: 1.45;
+    margin-bottom: 8rpx;
   }
   .food-meta {
+    display: block;
     font-size: 24rpx;
     color: #64748b;
-    margin-top: 6rpx;
+    line-height: 1.5;
   }
 }
 
 .food-nutrients {
   text-align: right;
+  flex-shrink: 0;
   .food-calorie {
+    display: block;
     font-size: 28rpx;
     font-weight: 600;
     color: #00bc7d;
+    line-height: 1.4;
+    margin-bottom: 6rpx;
   }
   .food-macros {
-    font-size: 22rpx;
+    display: block;
+    font-size: 24rpx;
     color: #94a3b8;
-    margin-top: 4rpx;
+    line-height: 1.4;
   }
 }
 
@@ -140,28 +179,37 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20rpx 0;
-  border-top: 2rpx solid #f0f0f0;
-  font-size: 26rpx;
+  padding: 24rpx 0;
+  border-top: 2rpx solid #f1f5f9;
+  font-size: 28rpx;
   color: #64748b;
+  line-height: 1.5;
+
+  &:first-of-type {
+    margin-top: 8rpx;
+    padding-top: 28rpx;
+    border-top: 2rpx solid #e2e8f0;
+  }
+
   .value {
     font-weight: 600;
-    color: #1a1a1a;
+    color: #1e293b;
   }
 }
 
 .empty-tip {
   text-align: center;
-  padding: 80rpx 32rpx;
+  padding: 96rpx 32rpx;
   font-size: 28rpx;
   color: #94a3b8;
+  line-height: 1.6;
 }
 
 /* 生成海报 */
 .poster-actions {
-  margin-top: 32rpx;
-  padding-top: 24rpx;
-  border-top: 2rpx solid #f0f0f0;
+  margin-top: 40rpx;
+  padding-top: 32rpx;
+  border-top: 2rpx solid #f1f5f9;
 }
 
 .poster-btn {
@@ -233,11 +281,11 @@
 
 .poster-modal-title {
   display: block;
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 600;
-  color: #1a1a1a;
+  color: #1e293b;
   text-align: center;
-  margin-bottom: 24rpx;
+  margin-bottom: 28rpx;
   flex-shrink: 0;
 }
 
@@ -245,14 +293,13 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  margin-bottom: 32rpx;
-  /* 隐藏滚动条但保留功能 */
+  margin-bottom: 36rpx;
   -webkit-overflow-scrolling: touch;
 }
 
 .poster-modal-image {
   width: 100%;
-  border-radius: 12rpx;
+  border-radius: 16rpx;
   display: block;
 }
 
@@ -264,10 +311,11 @@
 
 .poster-modal-btn {
   flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  font-size: 28rpx;
-  border-radius: 40rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+  border-radius: 44rpx;
   border: none;
 
   &.secondary {

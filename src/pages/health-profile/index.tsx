@@ -62,6 +62,9 @@ export default function HealthProfilePage() {
   const [bmr, setBmr] = useState<number | null>(null)
   const [tdee, setTdee] = useState<number | null>(null)
   const [touchStartX, setTouchStartX] = useState(0)
+  const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
+  const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
+  const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([]) // 被选中的自定义病史
 
   const loadProfile = async () => {
     try {
@@ -124,12 +127,56 @@ export default function HealthProfilePage() {
   const toggleMedical = (value: string) => {
     if (value === 'none') {
       setMedicalHistory(['none'])
+      setSelectedCustomMedical([]) // 选择"无"时取消所有自定义病史的选中
       return
     }
     setMedicalHistory((prev) => {
       const next = prev.filter((v) => v !== 'none')
       if (next.includes(value)) return next.filter((v) => v !== value)
       return [...next, value]
+    })
+  }
+
+  // 添加自定义病史
+  const handleAddCustomMedical = () => {
+    const trimmed = customMedical.trim()
+    if (!trimmed) {
+      Taro.showToast({ title: '请输入病史名称', icon: 'none' })
+      return
+    }
+    if (customMedicalList.includes(trimmed)) {
+      Taro.showToast({ title: '该病史已添加', icon: 'none' })
+      return
+    }
+    setCustomMedicalList((prev) => [...prev, trimmed])
+    setSelectedCustomMedical((prev) => [...prev, trimmed]) // 添加时默认选中
+    setMedicalHistory((prev) => prev.filter((v) => v !== 'none')) // 添加自定义时移除"无"
+    setCustomMedical('')
+  }
+
+  // 切换自定义病史的选中状态
+  const toggleCustomMedical = (item: string) => {
+    setSelectedCustomMedical((prev) => {
+      if (prev.includes(item)) {
+        return prev.filter((v) => v !== item)
+      }
+      return [...prev, item]
+    })
+    // 选中自定义病史时移除"无"
+    setMedicalHistory((prev) => prev.filter((v) => v !== 'none'))
+  }
+
+  // 删除自定义病史（长按）
+  const handleRemoveCustomMedical = (item: string) => {
+    Taro.showModal({
+      title: '删除确认',
+      content: `确定要删除「${item}」吗？`,
+      success: (res) => {
+        if (res.confirm) {
+          setCustomMedicalList((prev) => prev.filter((v) => v !== item))
+          setSelectedCustomMedical((prev) => prev.filter((v) => v !== item))
+        }
+      }
     })
   }
 
@@ -175,13 +222,15 @@ export default function HealthProfilePage() {
   }
 
   const handleSubmit = async () => {
+    // 合并预设病史和选中的自定义病史
+    const allMedicalHistory = [...medicalHistory.filter(v => v !== 'none'), ...selectedCustomMedical]
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
       height: height ? Number(height) : undefined,
       weight: weight ? Number(weight) : undefined,
       activity_level: activityLevel || undefined,
-      medical_history: medicalHistory.length ? medicalHistory : undefined,
+      medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
       report_extract: reportExtract || undefined,
@@ -272,7 +321,7 @@ export default function HealthProfilePage() {
         <View
           className="cards-track"
           style={{
-            transform: `translateX(-${currentStep * 686}rpx)`,
+            transform: `translateX(-${currentStep * 750}rpx)`,
             transition: 'transform 0.3s ease-out'
           }}
         >
@@ -432,6 +481,31 @@ export default function HealthProfilePage() {
                   <Text className="option-label">{o.label}</Text>
                 </View>
               ))}
+              {/* 显示用户添加的自定义病史 */}
+              {customMedicalList.map((item) => (
+                <View
+                  key={item}
+                  className={`option-card small custom-tag ${selectedCustomMedical.includes(item) ? 'active' : ''}`}
+                  onClick={() => toggleCustomMedical(item)}
+                  onLongPress={() => handleRemoveCustomMedical(item)}
+                >
+                  <Text className="option-icon">🏥</Text>
+                  <Text className="option-label">{item}</Text>
+                </View>
+              ))}
+            </View>
+            {/* 自定义病史输入 */}
+            <View className="custom-input-wrap">
+              <Input
+                className="custom-input"
+                placeholder="其他病史，输入后点击添加"
+                value={customMedical}
+                onInput={(e) => setCustomMedical(e.detail.value)}
+                onConfirm={handleAddCustomMedical}
+              />
+              <View className="custom-input-btn" onClick={handleAddCustomMedical}>
+                <Text>添加</Text>
+              </View>
             </View>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>

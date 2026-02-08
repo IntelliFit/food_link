@@ -1,9 +1,12 @@
 /* 健康档案 - 分步卡片答题式 */
 .health-profile-page {
-  min-height: 100vh;
-  background: linear-gradient(180deg, #f0fdf9 0%, #f5f6f8 24%);
-  padding: 0 0 64rpx;
+  height: 100vh;
+  background: #fff;
+  padding: 0;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* 进度条 */
@@ -12,6 +15,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  background: #fff;
 }
 
 .progress-dots {
@@ -52,34 +57,36 @@
   font-weight: normal;
 }
 
-/* 卡片滑动容器：用 rpx 固定宽度，避免小程序百分比计算异常 */
+/* 卡片滑动容器：铺满屏幕 */
 .cards-wrap {
+  flex: 1;
   width: 100%;
   overflow: hidden;
-  padding: 0 32rpx;
   box-sizing: border-box;
 }
 
 .cards-track {
   display: flex;
-  /* 可见区 686rpx，10 张卡：问卷 8 步 + 上传体检报告 + 最后一步保存 */
-  width: 6860rpx;
+  /* 可见区 750rpx，10 张卡：问卷 8 步 + 上传体检报告 + 最后一步保存 */
+  width: 7500rpx;
+  height: 100%;
   will-change: transform;
 }
 
 .card.step-card {
-  flex: 0 0 686rpx;
-  width: 686rpx;
-  min-height: 520rpx;
+  flex: 0 0 750rpx;
+  width: 750rpx;
+  height: 100%;
   background: #fff;
-  border-radius: 32rpx;
-  padding: 48rpx 40rpx 40rpx;
-  box-shadow: 0 8rpx 32rpx rgba(0, 188, 125, 0.08);
+  border-radius: 0;
+  padding: 48rpx 40rpx 80rpx;
+  box-shadow: none;
   margin-right: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  overflow-y: auto;
 }
 
 .step-card-step {
@@ -245,6 +252,44 @@
   .option-label {
     font-size: 26rpx;
   }
+
+  /* 自定义标签样式 */
+  &.custom-tag {
+    border-style: dashed;
+  }
+}
+
+/* 自定义输入框区域 */
+.custom-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+  padding: 16rpx 20rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  border: 2rpx solid #e2e8f0;
+
+  .custom-input {
+    flex: 1;
+    font-size: 28rpx;
+    color: #1a1a1a;
+    background: transparent;
+  }
+
+  .custom-input-btn {
+    flex-shrink: 0;
+    padding: 12rpx 24rpx;
+    font-size: 26rpx;
+    color: #fff;
+    background: #00bc7d;
+    border-radius: 12rpx;
+    transition: opacity 0.2s ease;
+
+    &:active {
+      opacity: 0.8;
+    }
+  }
 }
 
 /* 日期选择卡片 */
@@ -319,8 +364,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 32rpx;
+  margin-top: auto;
+  padding-top: 32rpx;
   gap: 24rpx;
+  flex-shrink: 0;
 }
 
 .card-footer-single {

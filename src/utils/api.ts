@@ -49,6 +49,27 @@ export interface AnalyzeResponse {
   context_advice?: string
 }
 
+// ---------- 双模型对比分析接口 ----------
+
+/** 单个模型的分析结果 */
+export interface ModelAnalyzeResult {
+  model_name: string
+  success: boolean
+  error?: string
+  description?: string
+  insight?: string
+  items: FoodItem[]
+  pfc_ratio_comment?: string
+  absorption_notes?: string
+  context_advice?: string
+}
+
+/** 双模型对比分析响应 */
+export interface CompareAnalyzeResponse {
+  qwen_result: ModelAnalyzeResult
+  gemini_result: ModelAnalyzeResult
+}
+
 /** 确认记录时提交的单条食物项（含调节后的 weight/ratio/intake） */
 export interface FoodRecordItemPayload {
   name: string
@@ -333,6 +354,51 @@ export async function analyzeFoodImage(
     return response.data as AnalyzeResponse
   } catch (error: any) {
     console.error('API调用失败:', error)
+    throw new Error(error.message || '连接服务器失败，请检查网络')
+  }
+}
+
+/**
+ * 双模型对比分析：同时调用千问和 Gemini 模型，返回两个结果供对比
+ * @param request 分析请求参数
+ * @returns Promise<CompareAnalyzeResponse> 包含两个模型的分析结果
+ */
+export async function analyzeFoodImageCompare(
+  request: AnalyzeRequest
+): Promise<CompareAnalyzeResponse> {
+  if (!request.base64Image && !request.image_url) {
+    throw new Error('请提供 base64Image 或 image_url')
+  }
+  try {
+    const response = await Taro.request({
+      url: `${API_BASE_URL}/api/analyze-compare`,
+      method: 'POST',
+      header: {
+        'Content-Type': 'application/json'
+      },
+      data: {
+        ...(request.base64Image != null && { base64Image: request.base64Image }),
+        ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
+        additionalContext: request.additionalContext || '',
+        modelName: request.modelName || 'qwen-vl-max',
+        ...(request.user_goal != null && { user_goal: request.user_goal }),
+        ...(request.context_state != null && request.context_state !== '' && { context_state: request.context_state }),
+        ...(request.diet_goal != null && { diet_goal: request.diet_goal }),
+        ...(request.activity_timing != null && { activity_timing: request.activity_timing }),
+        ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
+        ...(request.meal_type != null && { meal_type: request.meal_type })
+      },
+      timeout: 120000 // 120秒超时（双模型调用需要更长时间）
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '对比分析失败，请重试'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as CompareAnalyzeResponse
+  } catch (error: any) {
+    console.error('双模型对比分析失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
   }
 }
@@ -806,6 +872,8 @@ export interface FriendSearchUser {
   id: string
   nickname: string
   avatar: string
+  is_friend?: boolean  // 是否已是好友
+  is_pending?: boolean // 是否已发送待处理请求
 }
 
 /** 收到的好友请求 */
@@ -861,6 +929,13 @@ export async function friendSearch(params: { nickname?: string; telephone?: stri
 export async function friendSendRequest(toUserId: string): Promise<void> {
   const response = await authenticatedRequest('/api/friend/request', { method: 'POST', data: { to_user_id: toUserId } })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发送失败')
+}
+
+/** 清理重复好友记录 */
+export async function friendCleanupDuplicates(): Promise<{ cleaned: number }> {
+  const response = await authenticatedRequest('/api/friend/cleanup-duplicates', { method: 'POST' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '清理失败')
+  return response.data as { cleaned: number }
 }
 
 /** 收到的待处理好友请求列表 */
