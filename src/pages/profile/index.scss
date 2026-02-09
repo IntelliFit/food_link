@@ -4,225 +4,276 @@
   padding-bottom: 200rpx;
 }
 
-// 顶部区域 - 白色背景
+// 顶部区域 - 包含头部信息和卡片
 .header-section {
   background: #ffffff;
-  padding: 80rpx 40rpx 60rpx;
+  padding: 0 0 40rpx;
   position: relative;
+
+  // 底部圆弧效果
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -40rpx;
+    left: 0;
+    right: 0;
+    height: 80rpx;
+    background: #ffffff;
+    border-radius: 0 0 50% 50%;
+    z-index: 0;
+  }
 }
 
-.user-info-header {
+// 第一行：用户信息 + 会员码
+.user-header-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 32rpx;
+  padding: 40rpx 40rpx 30rpx;
+  background: #ffffff;
   position: relative;
   z-index: 1;
 }
 
-.user-avatar-wrapper {
-  width: 120rpx;
-  height: 120rpx;
-  background: #f3f4f6;
-  border: 4rpx solid #e5e7eb;
-  border-radius: 50%;
+.user-basic-info {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: transform 0.3s ease;
-  
-  &:active {
-    transform: scale(0.95);
-  }
+  gap: 24rpx;
 }
 
-.user-avatar {
-  font-size: 72rpx;
-  line-height: 80rpx;
-}
-
-.user-avatar-image {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.user-details {
-  flex: 1;
+.user-text-info {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 8rpx;
+}
+
+.user-name-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
 }
 
 .user-name {
   font-size: 36rpx;
   font-weight: bold;
   color: #111827;
-  line-height: 48rpx;
-  
-  &.login-link {
-    text-decoration: underline;
-  }
 }
 
-.login-link-button {
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  line-height: normal;
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #00bc7d;
-  text-decoration: underline;
-  transition: all 0.3s ease;
-  
-  &::after {
-    border: none;
-  }
-  
-  &:active {
-    opacity: 0.8;
-    transform: scale(0.98);
-  }
+.user-tag {
+  font-size: 20rpx;
+  color: #854d26; // 类似金色的深色
+  background: #fde68a; // 金色背景
+  padding: 2rpx 12rpx;
+  border-radius: 20rpx;
+  font-weight: 600;
 }
 
-.user-meta {
+.user-phone {
   font-size: 26rpx;
   color: #6b7280;
-  line-height: 36rpx;
+}
+
+.user-meta-row {
   display: flex;
   align-items: center;
   gap: 8rpx;
-  
-  &::before {
-    content: '📅';
-    font-size: 22rpx;
+  margin-top: 8rpx;
+}
+
+.meta-icon {
+  color: #6b7280;
+}
+
+.user-meta-text {
+  font-size: 26rpx;
+  color: #6b7280;
+}
+
+// 会员码按钮
+.member-code-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+
+  .member-code-text {
+    font-size: 20rpx;
+    color: #374151;
   }
 }
 
-.settings-btn {
-  width: 72rpx;
-  height: 72rpx;
+// 会员卡片
+.member-card {
+  margin: 0 40rpx;
+  padding: 40rpx;
+  background: linear-gradient(135deg, #bfa070 0%, #a88b5e 100%); // 仿照截图的金色/棕色，或者改成绿色
+  // 如果要符合“小程序整体颜色”，可以用绿色渐变：
+  background: linear-gradient(135deg, #00bc7d 0%, #009462 100%);
+
+  border-radius: 24rpx;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.25);
+  z-index: 2;
+}
+
+.card-bg-icon {
+  position: absolute;
+  right: -20rpx;
+  bottom: -40rpx;
+  opacity: 0.2;
+  transform: rotate(-15deg);
+  pointer-events: none;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 60rpx;
+
+  .card-validity {
+    display: block;
+    font-size: 22rpx;
+    opacity: 0.8;
+    margin-bottom: 8rpx;
+  }
+
+  .card-title {
+    font-size: 40rpx;
+    font-weight: bold;
+  }
+
+  .card-btn {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 12rpx 24rpx;
+    border-radius: 30rpx;
+    font-size: 24rpx;
+    backdrop-filter: blur(4px);
+  }
+}
+
+.card-body {
+  .progress-info {
+    margin-bottom: 16rpx;
+  }
+
+  .progress-text {
+    font-size: 24rpx;
+    margin-bottom: 8rpx;
+    display: block;
+  }
+
+  .progress-bar {
+    height: 8rpx;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4rpx;
+    overflow: hidden;
+  }
+
+  .progress-inner {
+    height: 100%;
+    background: #ffffff;
+    border-radius: 4rpx;
+  }
+
+  .card-tip {
+    font-size: 22rpx;
+    opacity: 0.9;
+  }
+}
+
+// 服务网格
+.services-grid {
+  display: flex;
+  justify-content: space-between;
+  padding: 40rpx 40rpx 0;
+  margin-bottom: 20rpx;
+  position: relative;
+  z-index: 2; // 保证在白色背景之上
+}
+
+.grid-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+
+  .grid-icon {
+    width: 100rpx;
+    height: 100rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #00bc7d;
+    font-size: 56rpx;
+  }
+
+  .grid-text {
+    font-size: 24rpx;
+    color: #4b5563;
+  }
+}
+
+// 菜单列表区域
+.menu-list-section {
+  padding: 20rpx 0;
+
+  .taroify-cell-group {
+    background-color: transparent !important;
+  }
+}
+
+// 重置一些旧样式
+.user-avatar-wrapper {
+  width: 100rpx;
+  height: 100rpx;
   background: #f3f4f6;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  &:active {
-    background: #e5e7eb;
-    transform: rotate(90deg) scale(0.95);
-  }
+  overflow: hidden;
+  border: 2rpx solid #e5e7eb;
 }
 
-// 未完成健康档案引导条 - 优化样式
-.onboarding-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: -32rpx 40rpx 32rpx;
-  padding: 28rpx 32rpx;
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-  border-radius: 24rpx;
-  border: 2rpx solid #00bc7d;
-  box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.12);
-  transition: all 0.3s ease;
-  
-  &:active {
-    transform: translateY(2rpx);
-    box-shadow: 0 2rpx 8rpx rgba(0, 188, 125, 0.12);
-  }
+.user-avatar-image {
+  width: 100%;
+  height: 100%;
 }
 
-.onboarding-banner-text {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #047857;
-  line-height: 40rpx;
+.user-avatar {
+  font-size: 48rpx;
 }
 
-.onboarding-banner-arrow {
+.login-link-button {
   font-size: 32rpx;
-  color: #00bc7d;
-  font-weight: bold;
-}
-
-// 我的服务 - 使用 Taroify Cell 组件
-.services-section {
-  margin: 40rpx 0 32rpx;
-  
-  // 图标颜色
-  .taroify-icon {
-    color: #6b7280;
-  }
-}
-
-.section-title {
-  font-size: 36rpx;
-  font-weight: 700;
   color: #111827;
-  line-height: 48rpx;
-  margin-bottom: 24rpx;
-  position: relative;
-  padding-left: 20rpx;
-  
-  &::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 8rpx;
-    height: 32rpx;
-    background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
-    border-radius: 4rpx;
-  }
-}
-
-
-.service-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.service-title {
-  font-size: 32rpx;
   font-weight: 600;
-  color: #111827;
-  line-height: 44rpx;
-}
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-decoration: none;
 
-.service-desc {
-  font-size: 24rpx;
-  color: #6b7280;
-  line-height: 32rpx;
-}
+  &::after {
+    border: none;
+  }
 
-.service-arrow {
-  font-size: 28rpx;
-  color: #9ca3af;
-  flex-shrink: 0;
-  transition: transform 0.3s ease;
-}
-
-.service-item:active .service-arrow {
-  transform: translateX(4rpx);
+  &[plain] {
+    border: none !important;
+    background: transparent !important;
+  }
 }
 
 // 设置 - 使用 Taroify Cell 组件
 .settings-section {
   margin-bottom: 32rpx;
-  
+
   .section-title {
     padding-left: 32rpx;
   }
-  
+
   // 图标颜色
   .taroify-icon {
     color: #6b7280;
@@ -245,7 +296,7 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2rpx solid transparent;
   line-height: normal;
-  
+
   &::after {
     border: none;
   }
@@ -253,9 +304,15 @@
 
 .login-btn {
   border-color: #d1fae5;
-  
+
+  &[plain] {
+    border: 2rpx solid #d1fae5 !important;
+    background: #ffffff !important;
+    color: inherit !important; // Prevent text from turning black if plain does that
+  }
+
   &:active {
-    background: #f0fdf4;
+    background: #f0fdf4 !important; // Ensure active state still works
     transform: scale(0.97);
     box-shadow: 0 2rpx 12rpx rgba(0, 188, 125, 0.15);
   }
@@ -263,7 +320,7 @@
 
 .logout-btn {
   border-color: #fee2e2;
-  
+
   &:active {
     background: #fef2f2;
     transform: scale(0.97);
@@ -311,6 +368,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -331,6 +389,7 @@
     opacity: 0;
     transform: translateY(40rpx);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -364,7 +423,7 @@
   background: #f3f4f6;
   border-radius: 50%;
   transition: all 0.3s ease;
-  
+
   &:active {
     color: #6b7280;
     background: #e5e7eb;
@@ -407,7 +466,7 @@
   background: transparent;
   border: none;
   line-height: normal;
-  
+
   &::after {
     border: none;
   }
@@ -426,7 +485,7 @@
   border: 4rpx solid #e5e7eb;
   box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
   transition: all 0.3s ease;
-  
+
   &:active {
     transform: scale(0.95);
     border-color: #00bc7d;
@@ -477,7 +536,7 @@
   line-height: 48rpx;
   box-sizing: border-box;
   transition: all 0.3s ease;
-  
+
   &:focus {
     border-color: #00bc7d;
     background: #ffffff;
@@ -500,11 +559,11 @@
   line-height: 48rpx;
   border: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  
+
   &::after {
     border: none;
   }
-  
+
   &:active {
     transform: scale(0.96);
   }
@@ -513,7 +572,7 @@
 .skip-btn {
   background: #f3f4f6;
   color: #6b7280;
-  
+
   &:active {
     background: #e5e7eb;
   }
@@ -523,7 +582,7 @@
   background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
   color: #ffffff;
   box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.3);
-  
+
   &:active {
     box-shadow: 0 2rpx 8rpx rgba(0, 188, 125, 0.3);
   }

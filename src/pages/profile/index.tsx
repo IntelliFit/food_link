@@ -13,13 +13,22 @@ import {
   ShieldOutlined,
   CommentOutlined,
   InfoOutlined,
+  CalendarOutlined,
+  Scan,
+  GemOutlined,
+  CouponOutlined,
+  CreditPay,
+  FriendsOutlined,
+  GiftOutlined,
+  DescriptionOutlined,
+  ServiceOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
-import { 
-  login, 
-  LoginResponse, 
-  getUserProfile, 
-  updateUserInfo, 
+import {
+  login,
+  LoginResponse,
+  getUserProfile,
+  updateUserInfo,
   getAccessToken,
   clearAllStorage,
   uploadUserAvatar,
@@ -38,17 +47,17 @@ interface UserInfo {
 export default function ProfilePage() {
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  
+
   // 是否显示头像昵称填写界面
   const [showProfileForm, setShowProfileForm] = useState(false)
-  
+
   // 是否显示设置弹窗
   const [showSettingsModal, setShowSettingsModal] = useState(false)
-  
+
   // 临时头像和昵称（用于填写表单）
   const [tempAvatar, setTempAvatar] = useState('')
   const [tempNickname, setTempNickname] = useState('')
-  
+
   // 用户信息
   const [userInfo, setUserInfo] = useState<UserInfo>({
     avatar: '👤',
@@ -58,7 +67,7 @@ export default function ProfilePage() {
 
   // 是否已完成健康档案引导（首次问卷）
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean>(true)
-  
+
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
 
@@ -72,7 +81,7 @@ export default function ProfilePage() {
           // 从服务器获取最新用户信息
           try {
             const apiUserInfo = await getUserProfile()
-            
+
             // 获取记录天数
             let days = 0
             try {
@@ -82,7 +91,7 @@ export default function ProfilePage() {
             } catch (error) {
               console.error('获取记录天数失败:', error)
             }
-            
+
             setUserInfo({
               avatar: apiUserInfo.avatar || '👤',
               name: apiUserInfo.nickname || '用户昵称',
@@ -110,7 +119,7 @@ export default function ProfilePage() {
         console.error('读取登录状态失败:', error)
       }
     }
-    
+
     loadUserInfo()
   }, [])
 
@@ -118,26 +127,26 @@ export default function ProfilePage() {
   const services = [
     {
       id: 0,
-      icon: <TodoListOutlined size="20" />,
+      icon: <TodoListOutlined size="35" />,
       title: '健康档案',
       desc: '生理指标、BMR/TDEE、病史与饮食偏好'
     },
     {
       id: 1,
-      icon: <NotesOutlined size="20" />,
+      icon: <NotesOutlined size="35" />,
       title: '我的食谱',
       desc: '常吃的食物组合，一键记录',
       path: '/pages/recipes/index'
     },
     {
       id: 3,
-      icon: <ChartTrendingOutlined size="20" />,
+      icon: <ChartTrendingOutlined size="35" />,
       title: '数据统计',
       desc: '查看详细的饮食和运动数据'
     },
     {
       id: 5,
-      icon: <LocationOutlined size="20" />,
+      icon: <LocationOutlined size="35" />,
       title: '附近美食',
       desc: '发现附近健康美食推荐'
     }
@@ -145,7 +154,7 @@ export default function ProfilePage() {
 
   // 设置项
   const settings = [
-    { id: 1, icon: <SettingOutlined size="20" />, title: '账号设置' },
+    { id: 1, icon: <SettingOutlined size="20" />, title: '设置' },
     { id: 2, icon: <Bell size="20" />, title: '消息通知' },
     { id: 3, icon: <ShieldOutlined size="20" />, title: '隐私设置' },
     { id: 4, icon: <CommentOutlined size="20" />, title: '意见反馈' },
@@ -184,6 +193,11 @@ export default function ProfilePage() {
   }
 
   const handleSettingClick = (setting: typeof settings[0]) => {
+    // 设置：打开个人设置弹窗
+    if (setting.id === 1) {
+      handleSettings()
+      return
+    }
     Taro.showToast({
       title: `打开${setting.title}`,
       icon: 'none'
@@ -195,7 +209,7 @@ export default function ProfilePage() {
     console.log('========== handleGetPhoneNumber 被调用 ==========')
     console.log('完整事件对象:', JSON.stringify(e, null, 2))
     console.log('e.detail:', e.detail)
-    
+
     // 检查事件详情
     if (!e || !e.detail) {
       console.error('getPhoneNumber 事件数据异常:', e)
@@ -221,7 +235,7 @@ export default function ProfilePage() {
       if (e.detail.errMsg !== 'getPhoneNumber:ok') {
         Taro.hideLoading()
         console.warn('获取手机号失败:', e.detail.errMsg, e.detail.errno)
-        
+
         // 根据不同的错误类型给出不同的提示
         if (e.detail.errno === 1400001) {
           Taro.showToast({
@@ -290,7 +304,7 @@ export default function ProfilePage() {
 
       // 1. 获取微信登录凭证 code
       const loginRes = await Taro.login()
-      
+
       if (!loginRes.code) {
         throw new Error('获取登录凭证失败')
       }
@@ -344,7 +358,7 @@ export default function ProfilePage() {
           title: '登录成功',
           icon: 'success'
         })
-        
+
         // 如果没有昵称或头像，显示完善信息界面
         if (!apiUserInfo.nickname || !apiUserInfo.avatar || apiUserInfo.avatar === '') {
           setShowProfileForm(true)
@@ -377,7 +391,7 @@ export default function ProfilePage() {
     try {
       // 1. 获取微信登录凭证 code
       const loginRes = await Taro.login()
-      
+
       if (!loginRes.code) {
         throw new Error('获取登录凭证失败')
       }
@@ -401,7 +415,7 @@ export default function ProfilePage() {
       if (loginData.unionid) {
         Taro.setStorageSync('unionid', loginData.unionid)
       }
-      
+
       // 5. 从服务器获取用户信息
       try {
         const apiUserInfo = await getUserProfile()
@@ -419,7 +433,7 @@ export default function ProfilePage() {
           title: '登录成功',
           icon: 'success'
         })
-        
+
         // 如果没有昵称或头像，显示完善信息界面
         if (!apiUserInfo.nickname || !apiUserInfo.avatar || apiUserInfo.avatar === '') {
           setShowProfileForm(true)
@@ -463,30 +477,30 @@ export default function ProfilePage() {
   const handleChooseAvatar = async (e: any) => {
     const { avatarUrl } = e.detail
     console.log('选择的头像:', avatarUrl)
-    
+
     // 判断是否需要上传：非 https 开头的都是临时路径，需要上传
     // 兼容不同环境的临时路径格式：
     // - 开发者工具: http://tmp/xxx
     // - 真机 iOS: wxfile://tmp_xxx
     // - 真机 Android: wxfile://xxx 或其他格式
     const needUpload = avatarUrl && !avatarUrl.startsWith('https://')
-    
+
     if (needUpload) {
       Taro.showLoading({
         title: '上传中...',
         mask: true
       })
-      
+
       try {
         // 转换为 base64
         const base64Image = await imageToBase64(avatarUrl)
-        
+
         // 上传到 Supabase
         const { imageUrl } = await uploadUserAvatar(base64Image)
-        
+
         console.log('头像已上传到 Supabase:', imageUrl)
         setTempAvatar(imageUrl)
-        
+
         Taro.hideLoading()
         Taro.showToast({
           title: '头像已选择',
@@ -529,7 +543,7 @@ export default function ProfilePage() {
       const isAvatarEmpty = !tempAvatar || tempAvatar.trim() === '' || tempAvatar === '👤'
       // 检查昵称是否为空
       const isNicknameEmpty = !tempNickname || tempNickname.trim() === ''
-      
+
       if (isAvatarEmpty && isNicknameEmpty) {
         Taro.showToast({
           title: '请至少设置头像或昵称',
@@ -538,7 +552,7 @@ export default function ProfilePage() {
         })
         return
       }
-      
+
       // 如果昵称为空但有头像，或头像为空但有昵称，也需要提示
       if (isNicknameEmpty && !isAvatarEmpty) {
         Taro.showModal({
@@ -554,7 +568,7 @@ export default function ProfilePage() {
         })
         return
       }
-      
+
       if (isAvatarEmpty && !isNicknameEmpty) {
         Taro.showModal({
           title: '提示',
@@ -606,7 +620,7 @@ export default function ProfilePage() {
       // 构建更新数据
       const updateData: any = {}
       const changesList: string[] = []
-      
+
       if (tempNickname && tempNickname !== userInfo.name) {
         updateData.nickname = tempNickname
         changesList.push('昵称')
@@ -647,12 +661,12 @@ export default function ProfilePage() {
       setTempNickname('')
 
       Taro.hideLoading()
-      
+
       // 根据修改内容给出具体提示
-      const message = changesList.length > 0 
-        ? `${changesList.join('和')}已更新` 
+      const message = changesList.length > 0
+        ? `${changesList.join('和')}已更新`
         : '保存成功'
-      
+
       Taro.showToast({
         title: message,
         icon: 'success',
@@ -694,18 +708,18 @@ export default function ProfilePage() {
           try {
             // 清除所有本地存储数据
             clearAllStorage()
-            
+
             // 重置登录状态
             setIsLoggedIn(false)
             setShowProfileForm(false)
-            
+
             // 重置为默认用户信息
             setUserInfo({
               avatar: '👤',
               name: '用户昵称',
               meta: '已记录 0 天'
             })
-            
+
             Taro.showToast({
               title: '已退出登录',
               icon: 'success',
@@ -740,75 +754,106 @@ export default function ProfilePage() {
 
   return (
     <View className='profile-page'>
-      {/* 顶部渐变区域 */}
+      {/* 顶部区域：用户信息 + 会员卡片 */}
       <View className='header-section'>
-        {/* 用户信息头部 */}
-        <View className='user-info-header'>
-          <View className='user-avatar-wrapper'>
-            {userInfo.avatar && userInfo.avatar.startsWith('http') ? (
-              <Image 
-                src={userInfo.avatar} 
-                mode='aspectFill'
-                className='user-avatar-image'
-              />
-            ) : (
-              <Text className='user-avatar'>{userInfo.avatar}</Text>
-            )}
-          </View>
-          <View className='user-details'>
-            {isLoggedIn ? (
-              <>
-                <Text className='user-name'>{userInfo.name}</Text>
-                <Text className='user-meta'>{userInfo.meta}</Text>
-              </>
-            ) : (
-              <Button
-                className='login-link-button'
-                openType='getPhoneNumber'
-                onGetPhoneNumber={handleGetPhoneNumber}
-                plain
-                hoverClass='none'
-              >
-                点击登录
-              </Button>
-            )}
-          </View>
-          <View className='settings-btn' onClick={handleSettings}>
-            <SettingOutlined size="20" color="#6b7280" />
+        {/* 第一行：用户信息 + 会员码 */}
+        <View className='user-header-row'>
+          <View className='user-basic-info'>
+            <View className='user-avatar-wrapper' onClick={isLoggedIn ? undefined : () => Taro.navigateTo({ url: '/pages/login/index' })}>
+              {userInfo.avatar && userInfo.avatar.startsWith('http') ? (
+                <Image
+                  src={userInfo.avatar}
+                  mode='aspectFit'
+                  className='user-avatar-image'
+                />
+              ) : (
+                <Text className='user-avatar'>{userInfo.avatar}</Text>
+              )}
+            </View>
+            <View className='user-text-info'>
+              {isLoggedIn ? (
+                <>
+                  <View className='user-name-row'>
+                    <Text className='user-name'>{userInfo.name}</Text>
+                  </View>
+                  <Text className='user-phone'>{Taro.getStorageSync('phoneNumber') || '188******46'}</Text>
+                  <View className='user-meta-row'>
+                    <CalendarOutlined size="14" className="meta-icon" />
+                    <Text className='user-meta-text'>{userInfo.meta}</Text>
+                  </View>
+                </>
+              ) : (
+                <Button
+                  className='login-link-button'
+                  openType='getPhoneNumber'
+                  onGetPhoneNumber={handleGetPhoneNumber}
+                  plain
+                  hoverClass='none'
+                >
+                  点击登录
+                </Button>
+              )}
+            </View>
           </View>
         </View>
+
+        {/* 第二行：会员卡片 */}
+        <View className='member-card'>
+          <View className='card-header'>
+            <View>
+              <Text className='card-validity'>有效期至 2026-02-08</Text>
+              <Text className='card-title'>食探会员</Text>
+            </View>
+            <View className='card-btn'>会员权益</View>
+          </View>
+
+          <View className='card-body'>
+            <View className='progress-info'>
+              <Text className='progress-text'>{recordDays}/365</Text>
+              <View className='progress-bar'>
+                <View className='progress-inner' style={{ width: `${Math.min((recordDays / 365) * 100, 100)}%` }}></View>
+              </View>
+            </View>
+            <Text className='card-tip'>再记录 {365 - recordDays > 0 ? 365 - recordDays : 0} 天可升级为大咖会员 {'>'}</Text>
+          </View>
+
+          <View className='card-bg-icon'>
+            {/* 装饰背景图标 */}
+            <ShieldOutlined size="120" color="rgba(255,255,255,0.1)" />
+          </View>
+        </View>
+
+        {/* 服务网格 (原 services 列表) */}
+        <View className='services-grid'>
+          {services.map((service) => (
+            <View
+              key={service.id}
+              className='grid-item'
+              onClick={() => handleServiceClick(service)}
+            >
+              <View className='grid-icon'>{service.icon}</View>
+              <Text className='grid-text'>{service.title}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* 数据概览条 (可选) */}
       </View>
 
-      {/* 未完成健康档案时显示引导 */}
       {isLoggedIn && !onboardingCompleted && (
         <View
           className='onboarding-banner'
           onClick={() => Taro.navigateTo({ url: '/pages/health-profile/index' })}
+          style={{ margin: '32rpx' }}
         >
           <Text className='onboarding-banner-text'>📋 完善健康档案，获取个性化饮食建议</Text>
           <Text className='onboarding-banner-arrow'>{'>'}</Text>
         </View>
       )}
 
-      {/* 我的服务 */}
-      <View className='services-section'>
-        <Cell.Group>
-          {services.map((service) => (
-            <Cell
-              key={service.id}
-              title={service.title}
-              brief={service.desc}
-              icon={service.icon}
-              isLink
-              onClick={() => handleServiceClick(service)}
-            />
-          ))}
-        </Cell.Group>
-      </View>
 
       {/* 设置 */}
-      <View className='settings-section'>
-        <Text className='section-title'>设置</Text>
+      < View className='settings-section' >
         <Cell.Group>
           {settings.map((setting) => (
             <Cell
@@ -820,167 +865,172 @@ export default function ProfilePage() {
             />
           ))}
         </Cell.Group>
-      </View>
+      </View >
 
       {/* 登录/退出登录按钮 */}
-      {isLoggedIn ? (
-        <View className='logout-btn' onClick={handleLogout}>
-          <Text className='logout-icon'>🚪</Text>
-          <Text className='logout-text'>退出登录</Text>
-        </View>
-      ) : (
-        <Button
-          className='login-btn'
-          openType='getPhoneNumber'
-          onGetPhoneNumber={handleGetPhoneNumber}
-          plain
-          hoverClass='none'
-        >
-          <Text className='login-icon'>🔑</Text>
-          <Text className='login-text'>登录</Text>
-        </Button>
-      )}
+      {
+        isLoggedIn ? (
+          <View className='logout-btn' onClick={handleLogout}>
+            <Text className='logout-icon'>🚪</Text>
+            <Text className='logout-text'>退出登录</Text>
+          </View>
+        ) : (
+          <Button
+            className='login-btn'
+            openType='getPhoneNumber'
+            onGetPhoneNumber={handleGetPhoneNumber}
+            plain
+            hoverClass='none'
+          >
+            <Text className='login-icon'>🔑</Text>
+            <Text className='login-text'>登录</Text>
+          </Button>
+        )
+      }
 
       {/* 头像昵称填写弹窗 */}
-      {showProfileForm && (
-        <View className='profile-form-modal'>
-          <View className='profile-form-content'>
-            <View className='profile-form-header'>
-              <Text className='profile-form-title'>完善个人信息</Text>
-            </View>
-            
-            <View className='profile-form-body'>
-              {/* 头像选择 */}
-              <View className='avatar-choose-section'>
-                <Text className='form-label'>选择头像</Text>
+      {
+        showProfileForm && (
+          <View className='profile-form-modal'>
+            <View className='profile-form-content'>
+              <View className='profile-form-header'>
+                <Text className='profile-form-title'>完善个人信息</Text>
+              </View>
+
+              <View className='profile-form-body'>
+                {/* 头像选择 */}
+                <View className='avatar-choose-section'>
+                  <Text className='form-label'>选择头像</Text>
+                  <Button
+                    className='avatar-choose-btn'
+                    openType='chooseAvatar'
+                    onChooseAvatar={handleChooseAvatar}
+                  >
+                    <View className='avatar-choose-wrapper'>
+                      {tempAvatar ? (
+                        <Image
+                          src={tempAvatar}
+                          mode='aspectFill'
+                          className='avatar-preview'
+                        />
+                      ) : (
+                        <View className='avatar-placeholder'>
+                          <Text className='avatar-placeholder-icon'>📷</Text>
+                          <Text className='avatar-placeholder-text'>点击选择头像</Text>
+                        </View>
+                      )}
+                    </View>
+                  </Button>
+                </View>
+
+                {/* 昵称输入 */}
+                <View className='nickname-input-section'>
+                  <Text className='form-label'>输入昵称</Text>
+                  <Input
+                    className='nickname-input'
+                    type='nickname'
+                    placeholder='请输入昵称'
+                    value={tempNickname}
+                    onInput={handleNicknameInput}
+                    onBlur={handleNicknameBlur}
+                  />
+                </View>
+              </View>
+
+              <View className='profile-form-footer'>
                 <Button
-                  className='avatar-choose-btn'
-                  openType='chooseAvatar'
-                  onChooseAvatar={handleChooseAvatar}
+                  className='form-btn skip-btn'
+                  onClick={handleSkipProfile}
                 >
-                  <View className='avatar-choose-wrapper'>
-                    {tempAvatar ? (
-                      <Image 
-                        src={tempAvatar} 
-                        mode='aspectFill'
-                        className='avatar-preview'
-                      />
-                    ) : (
-                      <View className='avatar-placeholder'>
-                        <Text className='avatar-placeholder-icon'>📷</Text>
-                        <Text className='avatar-placeholder-text'>点击选择头像</Text>
-                      </View>
-                    )}
-                  </View>
+                  跳过
+                </Button>
+                <Button
+                  className='form-btn save-btn'
+                  onClick={handleSaveProfile}
+                >
+                  保存
                 </Button>
               </View>
-
-              {/* 昵称输入 */}
-              <View className='nickname-input-section'>
-                <Text className='form-label'>输入昵称</Text>
-                <Input
-                  className='nickname-input'
-                  type='nickname'
-                  placeholder='请输入昵称'
-                  value={tempNickname}
-                  onInput={handleNicknameInput}
-                  onBlur={handleNicknameBlur}
-                />
-              </View>
-            </View>
-
-            <View className='profile-form-footer'>
-              <Button 
-                className='form-btn skip-btn'
-                onClick={handleSkipProfile}
-              >
-                跳过
-              </Button>
-              <Button 
-                className='form-btn save-btn'
-                onClick={handleSaveProfile}
-              >
-                保存
-              </Button>
             </View>
           </View>
-        </View>
-      )}
+        )
+      }
 
       {/* 设置弹窗 */}
-      {showSettingsModal && (
-        <View className='profile-form-modal'>
-          <View className='profile-form-content'>
-            <View className='profile-form-header'>
-              <Text className='profile-form-title'>个人设置</Text>
-              <Text 
-                className='profile-form-close'
-                onClick={() => setShowSettingsModal(false)}
-              >
-                ✕
-              </Text>
-            </View>
-            
-            <View className='profile-form-body'>
-              {/* 头像选择 */}
-              <View className='avatar-choose-section'>
-                <Text className='form-label'>更换头像</Text>
-                <Button
-                  className='avatar-choose-btn'
-                  openType='chooseAvatar'
-                  onChooseAvatar={handleChooseAvatar}
+      {
+        showSettingsModal && (
+          <View className='profile-form-modal'>
+            <View className='profile-form-content'>
+              <View className='profile-form-header'>
+                <Text className='profile-form-title'>个人设置</Text>
+                <Text
+                  className='profile-form-close'
+                  onClick={() => setShowSettingsModal(false)}
                 >
-                  <View className='avatar-choose-wrapper'>
-                    {tempAvatar && tempAvatar.startsWith('http') ? (
-                      <Image 
-                        src={tempAvatar} 
-                        mode='aspectFill'
-                        className='avatar-preview'
-                      />
-                    ) : (
-                      <View className='avatar-placeholder'>
-                        <Text className='avatar-placeholder-icon'>{tempAvatar || '📷'}</Text>
-                        <Text className='avatar-placeholder-text'>点击选择头像</Text>
-                      </View>
-                    )}
-                  </View>
+                  ✕
+                </Text>
+              </View>
+
+              <View className='profile-form-body'>
+                {/* 头像选择 */}
+                <View className='avatar-choose-section'>
+                  <Text className='form-label'>更换头像</Text>
+                  <Button
+                    className='avatar-choose-btn'
+                    openType='chooseAvatar'
+                    onChooseAvatar={handleChooseAvatar}
+                  >
+                    <View className='avatar-choose-wrapper'>
+                      {tempAvatar && tempAvatar.startsWith('http') ? (
+                        <Image
+                          src={tempAvatar}
+                          mode='aspectFill'
+                          className='avatar-preview'
+                        />
+                      ) : (
+                        <View className='avatar-placeholder'>
+                          <Text className='avatar-placeholder-icon'>{tempAvatar || '📷'}</Text>
+                          <Text className='avatar-placeholder-text'>点击选择头像</Text>
+                        </View>
+                      )}
+                    </View>
+                  </Button>
+                  <Text className='form-hint'>支持选择微信头像或相册图片</Text>
+                </View>
+
+                {/* 昵称输入 */}
+                <View className='nickname-input-section'>
+                  <Text className='form-label'>修改昵称</Text>
+                  <Input
+                    className='nickname-input'
+                    type='nickname'
+                    placeholder='请输入昵称'
+                    value={tempNickname}
+                    onInput={handleNicknameInput}
+                    onBlur={handleNicknameBlur}
+                  />
+                </View>
+              </View>
+
+              <View className='profile-form-footer'>
+                <Button
+                  className='form-btn skip-btn'
+                  onClick={() => setShowSettingsModal(false)}
+                >
+                  取消
                 </Button>
-                <Text className='form-hint'>支持选择微信头像或相册图片</Text>
+                <Button
+                  className='form-btn save-btn'
+                  onClick={handleSaveProfile}
+                >
+                  保存
+                </Button>
               </View>
-
-              {/* 昵称输入 */}
-              <View className='nickname-input-section'>
-                <Text className='form-label'>修改昵称</Text>
-                <Input
-                  className='nickname-input'
-                  type='nickname'
-                  placeholder='请输入昵称'
-                  value={tempNickname}
-                  onInput={handleNicknameInput}
-                  onBlur={handleNicknameBlur}
-                />
-              </View>
-            </View>
-
-            <View className='profile-form-footer'>
-              <Button 
-                className='form-btn skip-btn'
-                onClick={() => setShowSettingsModal(false)}
-              >
-                取消
-              </Button>
-              <Button 
-                className='form-btn save-btn'
-                onClick={handleSaveProfile}
-              >
-                保存
-              </Button>
             </View>
           </View>
-        </View>
-      )}
-    </View>
+        )
+      }
+    </View >
   )
 }
-
 

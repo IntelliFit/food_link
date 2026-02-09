@@ -331,6 +331,13 @@ export default function RecordPage() {
             <Text className='upload-text'>点击上传食物照片</Text>
             <Text className='upload-hint'>支持 JPG、PNG 格式，最大 10MB</Text>
           </View>
+          <View
+            className='history-entry'
+            onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
+          >
+            <Text className='history-entry-icon'>📋</Text>
+            <Text className='history-entry-text'>查看分析历史</Text>
+          </View>
         </View>
       )}
 

@@ -382,6 +382,11 @@
 }
 
 /* 下一题 / 保存按钮：紧贴选项/文本框下方 */
+/* Taroify Button 覆盖：移除默认边框 */
+.health-profile-page .taroify-button::after {
+  border: none;
+}
+
 .card-next-btn {
   flex: 1;
   max-width: 420rpx;

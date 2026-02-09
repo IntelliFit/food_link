@@ -4,8 +4,17 @@
 
 ---
 
+## 2026-02-10
+
+- 🐛 fix: 个人中心页头像改为 aspectFit 模式，完整显示在圆形内不被裁剪 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
+- ✨ feat: 个人中心页「账号设置」改为「设置」，点击打开个人设置弹窗 `src/pages/profile/index.tsx`
+- 🎨 style: 个人中心页健康档案、我的食谱、数据统计、附近美食四个图标变大 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
+
 ## 2026-02-09
 
+- 🔧 refactor: 健康档案页确认按钮改为 Taroify Button 组件 `src/pages/health-profile/index.tsx` `src/pages/health-profile/index.scss`
+- 🎨 style: 圈子页公共食物库和打卡排行榜图标改为灰黑色，与文字颜色统一 `src/pages/community/index.scss`
+- ✨ feat: 记录页拍照识别区域增加「查看分析历史」入口，可跳转分析历史页查看任务状态 `src/pages/record/index.tsx` `src/pages/record/index.scss`
 - ✨ feat: 健康档案体检报告上传优化：上传后仅展示图片、点击放大预览；保存档案时提交病历提取任务，由 Worker 后台异步处理并更新到档案，用户无感知 `src/pages/health-profile/` `src/utils/api.ts` `backend/main.py` `backend/worker.py` `backend/database.py` `backend/run_backend.py`
 - 🎨 style: 个人中心页移除贡献值卡片 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
 - ✨ feat: 食物分析小程序优化：提交后进入加载页（旋转动画+健身小知识轮播+可离开提示），任务完成后自动跳转结果页；新增分析历史页可查看任务状态并将结果保存为饮食记录；分析页改为异步提交并增加「查看分析历史」入口 `src/pages/analyze-loading/` `src/pages/analyze-history/` `src/pages/analyze/index.tsx` `src/pages/result/index.tsx` `src/utils/api.ts` `src/app.config.ts`

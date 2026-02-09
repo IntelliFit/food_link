@@ -1,4 +1,6 @@
-import { View, Text, Input, Picker, Button, Image } from '@tarojs/components'
+import { View, Text, Input, Picker, Image } from '@tarojs/components'
+import { Button } from '@taroify/core'
+import '@taroify/core/button/style'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import {
@@ -356,7 +358,7 @@ export default function HealthProfilePage() {
               </View>
             </View>
             <View className="card-footer card-footer-single">
-              <Button className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
+              <Button block color="primary" shape="round" className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
                 确认
               </Button>
             </View>
@@ -379,7 +381,7 @@ export default function HealthProfilePage() {
             </Picker>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
+              <Button block color="primary" shape="round" className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
                 确认
               </Button>
             </View>
@@ -412,7 +414,7 @@ export default function HealthProfilePage() {
             </View>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
+              <Button block color="primary" shape="round" className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
                 确认
               </Button>
             </View>
@@ -445,7 +447,7 @@ export default function HealthProfilePage() {
             </View>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
+              <Button block color="primary" shape="round" className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
                 确认
               </Button>
             </View>
@@ -470,7 +472,7 @@ export default function HealthProfilePage() {
             </View>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
+              <Button block color="primary" shape="round" className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
                 确认
               </Button>
             </View>
@@ -519,7 +521,7 @@ export default function HealthProfilePage() {
             </View>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className="card-next-btn ready" onClick={goNext}>
+              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
                 确认
               </Button>
             </View>
@@ -543,7 +545,7 @@ export default function HealthProfilePage() {
             </View>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className="card-next-btn ready" onClick={goNext}>
+              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
                 确认
               </Button>
             </View>
@@ -564,7 +566,7 @@ export default function HealthProfilePage() {
             <Text className="skip-hint">没有可留空</Text>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className="card-next-btn ready" onClick={goNext}>
+              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
                 确认
               </Button>
             </View>
@@ -575,7 +577,7 @@ export default function HealthProfilePage() {
             <Text className="step-card-step">第 9 题（选填）</Text>
             <Text className="step-card-title">上传体检报告/病例截图</Text>
             <Text className="report-card-desc">上传后点击图片可放大预览。保存档案时，系统会在后台自动识别并更新到档案中。</Text>
-            <Button className="report-upload-btn" onClick={handleReportUpload}>
+            <Button block variant="outlined" color="primary" className="report-upload-btn" onClick={handleReportUpload}>
               {reportImageUrl ? '✓ 已上传，可重新选择' : '选择报告截图'}
             </Button>
             {reportImageUrl && (
@@ -590,7 +592,7 @@ export default function HealthProfilePage() {
             )}
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button className="card-next-btn ready" onClick={goNext}>
+              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
                 确认
               </Button>
             </View>
@@ -601,7 +603,7 @@ export default function HealthProfilePage() {
             <Text className="step-card-step">最后一步</Text>
             <Text className="step-card-title">保存健康信息</Text>
             <Text className="save-hint">将保存：个人身体情况 + 病史与饮食偏好{reportImageUrl ? '（体检报告将在后台识别后更新）' : ''}</Text>
-            <Button className="card-next-btn primary" onClick={handleSubmit} disabled={saving}>
+            <Button block color="primary" shape="round" className="card-next-btn primary" onClick={handleSubmit} disabled={saving} loading={saving}>
               {saving ? '保存中...' : '保存健康信息'}
             </Button>
             {bmr != null && tdee != null && (
