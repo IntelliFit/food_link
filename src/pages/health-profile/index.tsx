@@ -1,11 +1,11 @@
-import { View, Text, Input, Picker, Button } from '@tarojs/components'
+import { View, Text, Input, Picker, Button, Image } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import {
   getHealthProfile,
   updateHealthProfile,
   uploadReportImage,
-  extractHealthReportOcr,
+  submitReportExtractionTask,
   imageToBase64,
   type HealthProfileUpdateRequest
 } from '../../utils/api'
@@ -58,7 +58,6 @@ export default function HealthProfilePage() {
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
   const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
-  const [reportExtract, setReportExtract] = useState<Record<string, unknown> | null>(null)
   const [bmr, setBmr] = useState<number | null>(null)
   const [tdee, setTdee] = useState<number | null>(null)
   const [touchStartX, setTouchStartX] = useState(0)
@@ -233,7 +232,6 @@ export default function HealthProfilePage() {
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
-      report_extract: reportExtract || undefined,
       report_image_url: reportImageUrl || undefined
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.activity_level) {
@@ -242,7 +240,9 @@ export default function HealthProfilePage() {
     }
     const { confirm } = await Taro.showModal({
       title: '确认保存',
-      content: '确定将当前填写的健康信息及体检报告识别结果保存到个人档案吗？'
+      content: reportImageUrl
+        ? '确定保存健康档案吗？体检报告将在后台自动识别，完成后会更新到档案中。'
+        : '确定将当前填写的健康信息保存到个人档案吗？'
     })
     if (!confirm) return
     setSaving(true)
@@ -250,6 +250,12 @@ export default function HealthProfilePage() {
       const res = await updateHealthProfile(req)
       setBmr(res.bmr ?? null)
       setTdee(res.tdee ?? null)
+      // 若有上传的体检报告图片，提交后台病历提取任务（用户无感知）
+      if (reportImageUrl) {
+        submitReportExtractionTask(reportImageUrl).catch(() => {
+          // 静默失败，不影响保存成功
+        })
+      }
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setTimeout(() => {
         Taro.switchTab({ url: '/pages/profile/index' })
@@ -261,22 +267,26 @@ export default function HealthProfilePage() {
     }
   }
 
-  /** 上传体检报告：先上传到 Supabase 拿 URL，再传 URL 给多模态模型识别，不保存；点击「保存健康档案」时再一并写入 user_health_documents */
+  /** 上传体检报告：仅上传到 Supabase 并展示，不解析；点击「保存健康档案」时在后台提交病历提取任务 */
   const handleReportUpload = async () => {
     try {
       const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })
       const base64 = await imageToBase64(res.tempFilePaths[0])
       Taro.showLoading({ title: '上传中...', mask: true })
       const { imageUrl } = await uploadReportImage(base64)
-      setReportImageUrl(imageUrl)
-      Taro.showLoading({ title: '识别中...', mask: true })
-      const { extracted } = await extractHealthReportOcr({ imageUrl })
       Taro.hideLoading()
-      setReportExtract(extracted)
-      Taro.showToast({ title: '已识别，保存时将一并提交', icon: 'success' })
+      setReportImageUrl(imageUrl)
+      Taro.showToast({ title: '上传成功，保存时将自动识别', icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: e.message || '上传或识别失败', icon: 'none' })
+      Taro.showToast({ title: e.message || '上传失败', icon: 'none' })
+    }
+  }
+
+  /** 点击图片放大预览 */
+  const handlePreviewReportImage = () => {
+    if (reportImageUrl) {
+      Taro.previewImage({ urls: [reportImageUrl] })
     }
   }
 
@@ -560,49 +570,22 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 8: 上传体检报告（单独卡片，仅识别并展示结果，不保存；点击「保存健康档案」时再一并保存） */}
+          {/* Step 8: 上传体检报告（仅上传展示，点击放大预览；保存时后台自动识别并写入档案） */}
           <View className="card step-card">
             <Text className="step-card-step">第 9 题（选填）</Text>
             <Text className="step-card-title">上传体检报告/病例截图</Text>
-            <Text className="report-card-desc">AI 仅识别并展示结果，不会保存。请到下一步点击「保存健康档案」时，再与个人身体情况一并保存。</Text>
+            <Text className="report-card-desc">上传后点击图片可放大预览。保存档案时，系统会在后台自动识别并更新到档案中。</Text>
             <Button className="report-upload-btn" onClick={handleReportUpload}>
-              {reportExtract ? '✓ 已识别，可重新上传' : '选择报告截图'}
+              {reportImageUrl ? '✓ 已上传，可重新选择' : '选择报告截图'}
             </Button>
-            {reportExtract && (
-              <View className="report-result">
-                <Text className="report-result-title">识别结果（仅供参考，尚未保存）</Text>
-                {Array.isArray(reportExtract.indicators) && (reportExtract.indicators as Array<{ name?: string; value?: string; unit?: string }>).length > 0 && (
-                  <View className="report-result-block">
-                    <Text className="report-result-label">指标</Text>
-                    {(reportExtract.indicators as Array<{ name?: string; value?: string; unit?: string }>).map((item, i) => (
-                      <Text key={i} className="report-result-item">
-                        {item.name || '—'}: {item.value ?? '—'} {item.unit ?? ''}
-                      </Text>
-                    ))}
-                  </View>
-                )}
-                {Array.isArray(reportExtract.conclusions) && (reportExtract.conclusions as string[]).length > 0 && (
-                  <View className="report-result-block">
-                    <Text className="report-result-label">结论</Text>
-                    {(reportExtract.conclusions as string[]).map((s, i) => (
-                      <Text key={i} className="report-result-item">• {s}</Text>
-                    ))}
-                  </View>
-                )}
-                {Array.isArray(reportExtract.suggestions) && (reportExtract.suggestions as string[]).length > 0 && (
-                  <View className="report-result-block">
-                    <Text className="report-result-label">建议</Text>
-                    {(reportExtract.suggestions as string[]).map((s, i) => (
-                      <Text key={i} className="report-result-item">• {s}</Text>
-                    ))}
-                  </View>
-                )}
-                {reportExtract.medical_notes && (
-                  <View className="report-result-block">
-                    <Text className="report-result-label">其他说明</Text>
-                    <Text className="report-result-text">{String(reportExtract.medical_notes)}</Text>
-                  </View>
-                )}
+            {reportImageUrl && (
+              <View className="report-image-preview" onClick={handlePreviewReportImage}>
+                <Image
+                  className="report-image-thumb"
+                  src={reportImageUrl}
+                  mode="aspectFit"
+                />
+                <Text className="report-preview-hint">点击放大预览</Text>
               </View>
             )}
             <View className="card-footer">
@@ -617,7 +600,7 @@ export default function HealthProfilePage() {
           <View className="card step-card last">
             <Text className="step-card-step">最后一步</Text>
             <Text className="step-card-title">保存健康信息</Text>
-            <Text className="save-hint">将保存：个人身体情况 + 病史与饮食偏好{reportExtract ? ' + 体检报告识别结果' : ''}</Text>
+            <Text className="save-hint">将保存：个人身体情况 + 病史与饮食偏好{reportImageUrl ? '（体检报告将在后台识别后更新）' : ''}</Text>
             <Button className="card-next-btn primary" onClick={handleSubmit} disabled={saving}>
               {saving ? '保存中...' : '保存健康信息'}
             </Button>

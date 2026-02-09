@@ -103,6 +103,20 @@ async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
         raise
 
 
+def get_user_by_id_sync(user_id: str) -> Optional[Dict[str, Any]]:
+    """同步版：通过 user_id 查询用户，供 Worker 子进程使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("weapp_user").select("*").eq("id", user_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_user_by_id_sync] 错误: {e}")
+        raise
+
+
 async def create_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     创建新用户
@@ -170,6 +184,20 @@ async def update_user(user_id: str, update_data: Dict[str, Any]) -> Dict[str, An
         raise
 
 
+def update_user_sync(user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """同步版：更新用户信息，供 Worker 子进程使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("weapp_user").update(update_data).eq("id", user_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("更新用户失败：返回数据为空")
+    except Exception as e:
+        print(f"[update_user_sync] 错误: {e}")
+        raise
+
+
 async def insert_health_document(
     user_id: str,
     document_type: str = "report",
@@ -207,6 +235,31 @@ async def insert_health_document(
         raise
 
 
+def insert_health_document_sync(
+    user_id: str,
+    document_type: str = "report",
+    image_url: Optional[str] = None,
+    extracted_content: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """同步版：插入健康报告记录，供 Worker 子进程使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "document_type": document_type,
+        "image_url": image_url,
+        "extracted_content": extracted_content or {},
+    }
+    try:
+        result = supabase.table("user_health_documents").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("插入健康报告记录失败：返回数据为空")
+    except Exception as e:
+        print(f"[insert_health_document_sync] 错误: {e}")
+        raise
+
+
 async def insert_food_record(
     user_id: str,
     meal_type: str,
@@ -225,6 +278,7 @@ async def insert_food_record(
     pfc_ratio_comment: Optional[str] = None,
     absorption_notes: Optional[str] = None,
     context_advice: Optional[str] = None,
+    source_task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     插入用户饮食记录（拍照识别后确认记录）。
@@ -273,6 +327,8 @@ async def insert_food_record(
         row["absorption_notes"] = absorption_notes
     if context_advice is not None:
         row["context_advice"] = context_advice
+    if source_task_id is not None:
+        row["source_task_id"] = source_task_id
     try:
         result = supabase.table("user_food_records").insert(row).execute()
         if result.data and len(result.data) > 0:
@@ -397,6 +453,129 @@ async def insert_critical_samples(
         supabase.table("critical_samples_weapp").insert(rows).execute()
     except Exception as e:
         print(f"[insert_critical_samples] 错误: {e}")
+        raise
+
+
+# ---------- 异步分析任务（analysis_tasks）：Worker 子进程消费 ----------
+
+def create_analysis_task_sync(
+    user_id: str,
+    task_type: str,
+    image_url: str,
+    payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """创建一条分析任务（pending），返回任务记录。供 API 调用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "task_type": task_type,
+        "image_url": image_url,
+        "status": "pending",
+        "payload": payload or {},
+    }
+    try:
+        result = supabase.table("analysis_tasks").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建分析任务失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_analysis_task_sync] 错误: {e}")
+        raise
+
+
+def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
+    """
+    原子抢占一条 pending 任务，将其置为 processing 并返回。
+    供 Worker 子进程调用，多进程下通过「先查后更新 where status=pending」避免重复处理。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 取一条 pending
+        r = (
+            supabase.table("analysis_tasks")
+            .select("*")
+            .eq("status", "pending")
+            .eq("task_type", task_type)
+            .order("created_at")
+            .limit(1)
+            .execute()
+        )
+        rows = list(r.data or [])
+        if not rows:
+            return None
+        task_id = rows[0]["id"]
+        # 仅当仍为 pending 时更新为 processing，避免多 Worker 重复抢
+        up = (
+            supabase.table("analysis_tasks")
+            .update({"status": "processing", "updated_at": datetime.now(timezone.utc).isoformat()})
+            .eq("id", task_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        if up.data and len(up.data) > 0:
+            return up.data[0]
+        return None
+    except Exception as e:
+        print(f"[claim_next_pending_task_sync] 错误: {e}")
+        raise
+
+
+def update_analysis_task_result_sync(
+    task_id: str,
+    status: str,
+    result: Optional[Dict[str, Any]] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    """更新任务结果（done / failed）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if result is not None:
+        row["result"] = result
+    if error_message is not None:
+        row["error_message"] = error_message
+    try:
+        supabase.table("analysis_tasks").update(row).eq("id", task_id).execute()
+    except Exception as e:
+        print(f"[update_analysis_task_result_sync] 错误: {e}")
+        raise
+
+
+def get_analysis_task_by_id_sync(task_id: str) -> Optional[Dict[str, Any]]:
+    """按 ID 查询单条任务。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        r = supabase.table("analysis_tasks").select("*").eq("id", task_id).limit(1).execute()
+        if r.data and len(r.data) > 0:
+            return r.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_analysis_task_by_id_sync] 错误: {e}")
+        raise
+
+
+def list_analysis_tasks_by_user_sync(
+    user_id: str,
+    task_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """按用户查询任务列表，支持按 task_type、status 筛选。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        q = supabase.table("analysis_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
+        if task_type:
+            q = q.eq("task_type", task_type)
+        if status:
+            q = q.eq("status", status)
+        r = q.execute()
+        return list(r.data or [])
+    except Exception as e:
+        print(f"[list_analysis_tasks_by_user_sync] 错误: {e}")
         raise
 
 

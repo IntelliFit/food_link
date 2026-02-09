@@ -13,7 +13,6 @@ import {
   ShieldOutlined,
   CommentOutlined,
   InfoOutlined,
-  StarOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import { 
@@ -143,16 +142,6 @@ export default function ProfilePage() {
       desc: '发现附近健康美食推荐'
     }
   ]
-
-  // 贡献值数据
-  const [contribution] = useState({
-    value: 1280,
-    stats: {
-      posts: 45,
-      likes: 320,
-      shares: 89
-    }
-  })
 
   // 设置项
   const settings = [
@@ -815,34 +804,6 @@ export default function ProfilePage() {
             />
           ))}
         </Cell.Group>
-      </View>
-
-      {/* 我的贡献值 */}
-      <View className='contribution-card'>
-        <View className='contribution-header'>
-          <View className='contribution-title-section'>
-            <View className='contribution-icon'>
-              <StarOutlined size="44" color="#fff" />
-            </View>
-            <Text className='contribution-title'>我的贡献值</Text>
-          </View>
-          <Text className='contribution-value'>{contribution.value}</Text>
-        </View>
-        <View className='contribution-stats'>
-          <View className='contribution-stat-item'>
-            <Text className='contribution-stat-label'>发布</Text>
-            <Text className='contribution-stat-value'>{contribution.stats.posts}</Text>
-          </View>
-          <View className='contribution-stat-item'>
-            <Text className='contribution-stat-label'>获赞</Text>
-            <Text className='contribution-stat-value'>{contribution.stats.likes}</Text>
-          </View>
-          <View className='contribution-stat-item'>
-            <Text className='contribution-stat-label'>分享</Text>
-            <Text className='contribution-stat-value'>{contribution.stats.shares}</Text>
-          </View>
-        </View>
-        <Text className='contribution-thanks'>感谢您为社区做出的贡献！</Text>
       </View>
 
       {/* 设置 */}

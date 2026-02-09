@@ -97,6 +97,8 @@ export interface SaveFoodRecordRequest {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
+  /** 来源识别任务 ID（从分析历史保存而来时传入） */
+  source_task_id?: string
 }
 
 /** 单条偏差样本（标记样本接口请求项） */
@@ -461,6 +463,70 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ 
   return res.data as { id: string; message: string }
 }
 
+// ---------- 异步分析任务（提交后 Worker 执行，可稍后在分析历史查看） ----------
+
+export interface AnalyzeTaskSubmitParams {
+  image_url: string
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+  additionalContext?: string
+  modelName?: string
+}
+
+export interface AnalysisTask {
+  id: string
+  user_id: string
+  task_type: string
+  image_url: string
+  status: 'pending' | 'processing' | 'done' | 'failed'
+  payload?: Record<string, unknown>
+  result?: AnalyzeResponse
+  error_message?: string
+  created_at: string
+  updated_at: string
+}
+
+/** 提交食物分析任务，立即返回 task_id */
+export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const res = await authenticatedRequest('/api/analyze/submit', {
+    method: 'POST',
+    data: body,
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '提交任务失败'
+    throw new Error(msg)
+  }
+  return res.data as { task_id: string; message: string }
+}
+
+/** 查询单条分析任务 */
+export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
+  const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}`, { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取任务失败'
+    throw new Error(msg)
+  }
+  return res.data as AnalysisTask
+}
+
+/** 查询当前用户的分析任务列表 */
+export async function listAnalyzeTasks(params?: { task_type?: string; status?: string }): Promise<{ tasks: AnalysisTask[] }> {
+  const q = new URLSearchParams()
+  if (params?.task_type) q.set('task_type', params.task_type)
+  if (params?.status) q.set('status', params.status)
+  const url = `/api/analyze/tasks${q.toString() ? '?' + q.toString() : ''}`
+  const res = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取任务列表失败'
+    throw new Error(msg)
+  }
+  return res.data as { tasks: AnalysisTask[] }
+}
+
 /**
  * 提交偏差样本（用户点击「认为 AI 估算偏差大，点击标记样本」）
  * 需登录。items 中每条为：食物名、AI 重量、用户修正重量、偏差百分比。
@@ -809,6 +875,27 @@ export async function uploadReportImage(base64Image: string): Promise<{ imageUrl
   } catch (error: any) {
     console.error('体检报告图片上传失败:', error)
     throw new Error(error.message || '上传失败，请重试')
+  }
+}
+
+/**
+ * 提交病历信息提取任务，后台异步处理，完成后自动更新到健康档案。用户无感知。
+ * @param imageUrl 体检报告图片在 Supabase Storage 的公网 URL
+ */
+export async function submitReportExtractionTask(imageUrl: string): Promise<{ taskId: string }> {
+  try {
+    const response = await authenticatedRequest('/api/user/health-profile/submit-report-extraction-task', {
+      method: 'POST',
+      data: { imageUrl }
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '提交失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { taskId: string }
+  } catch (error: any) {
+    console.error('提交病历提取任务失败:', error)
+    throw new Error(error.message || '提交失败，请重试')
   }
 }
 

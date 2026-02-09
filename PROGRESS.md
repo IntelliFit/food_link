@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-02-09
+
+- ✨ feat: 健康档案体检报告上传优化：上传后仅展示图片、点击放大预览；保存档案时提交病历提取任务，由 Worker 后台异步处理并更新到档案，用户无感知 `src/pages/health-profile/` `src/utils/api.ts` `backend/main.py` `backend/worker.py` `backend/database.py` `backend/run_backend.py`
+- 🎨 style: 个人中心页移除贡献值卡片 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
+- ✨ feat: 食物分析小程序优化：提交后进入加载页（旋转动画+健身小知识轮播+可离开提示），任务完成后自动跳转结果页；新增分析历史页可查看任务状态并将结果保存为饮食记录；分析页改为异步提交并增加「查看分析历史」入口 `src/pages/analyze-loading/` `src/pages/analyze-history/` `src/pages/analyze/index.tsx` `src/pages/result/index.tsx` `src/utils/api.ts` `src/app.config.ts`
+- ✨ feat: 食物分析异步任务：Supabase 存储任务、多子进程 Worker 消费，提交即返回 task_id，用户可退出后从识别历史查看结果；任务表与饮食记录关联 source_task_id `backend/database/analysis_tasks.sql` `backend/database/user_food_records_source_task.sql` `backend/database.py` `backend/worker.py` `backend/run_backend.py` `backend/main.py`
+
 ## 2026-02-08
 
 - 🎨 style: 社区页全面样式优化：渐变背景、卡片阴影、营养 pill 展示、评论区样式、弹窗与 FAB 按钮等 `src/pages/community/index.scss`

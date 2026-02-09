@@ -4,6 +4,8 @@ export default defineAppConfig({
     'pages/community/index',
     'pages/record/index',
     'pages/analyze/index',
+    'pages/analyze-loading/index',
+    'pages/analyze-history/index',
     'pages/result/index',
     'pages/result-text/index',
     'pages/ai-assistant/index',

@@ -454,6 +454,31 @@
   }
 }
 
+/* 体检报告图片预览（可点击放大） */
+.report-image-preview {
+  margin-bottom: 24rpx;
+  padding: 16rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  border: 2rpx solid #e2e8f0;
+}
+
+.report-image-thumb {
+  width: 100%;
+  height: 320rpx;
+  border-radius: 12rpx;
+  display: block;
+  background: #f1f5f9;
+}
+
+.report-preview-hint {
+  font-size: 24rpx;
+  color: #64748b;
+  text-align: center;
+  margin-top: 12rpx;
+  display: block;
+}
+
 /* 体检报告识别结果展示（仅展示，未保存） */
 .report-result {
   padding: 24rpx;

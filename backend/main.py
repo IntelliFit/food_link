@@ -26,6 +26,9 @@ from database import (
     get_user_by_id,
     insert_health_document,
     insert_food_record,
+    create_analysis_task_sync,
+    get_analysis_task_by_id_sync,
+    list_analysis_tasks_by_user_sync,
     list_food_records,
     list_food_records_by_range,
     get_streak_days,
@@ -762,6 +765,90 @@ async def upload_analyze_image(body: UploadAnalyzeImageRequest):
             )
         print(f"[upload_analyze_image] 错误: {error_msg}")
         raise HTTPException(status_code=500, detail=f"上传图片失败: {error_msg}")
+
+
+# ---------- 异步分析任务（提交后由 Worker 子进程处理） ----------
+
+class AnalyzeSubmitRequest(BaseModel):
+    """提交食物分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
+    image_url: str = Field(..., description="Supabase 公网图片 URL（需先调 upload-analyze-image）")
+    meal_type: Optional[str] = Field(default=None, description="餐次: breakfast / lunch / dinner / snack")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
+    user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
+    remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
+    additionalContext: Optional[str] = Field(default=None, description="用户补充上下文")
+    modelName: Optional[str] = Field(default="qwen-vl-max", description="模型名称")
+
+
+@app.post("/api/analyze/submit")
+async def analyze_submit(
+    body: AnalyzeSubmitRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    提交食物分析任务（异步）。立即返回 task_id，Worker 子进程会在后台执行分析，
+    完成后可通过 GET /api/analyze/tasks/{task_id} 或列表接口查看结果。
+    """
+    if not body.image_url or not body.image_url.strip():
+        raise HTTPException(status_code=400, detail="image_url 不能为空")
+    payload = {
+        "meal_type": body.meal_type,
+        "diet_goal": body.diet_goal,
+        "activity_timing": body.activity_timing,
+        "user_goal": body.user_goal,
+        "remaining_calories": body.remaining_calories,
+        "additionalContext": body.additionalContext,
+        "modelName": body.modelName,
+    }
+    try:
+        task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_info["user_id"],
+            task_type="food",
+            image_url=body.image_url.strip(),
+            payload=payload,
+        )
+        return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
+    except Exception as e:
+        print(f"[analyze/submit] 错误: {e}")
+        raise HTTPException(status_code=500, detail="提交任务失败")
+
+
+@app.get("/api/analyze/tasks")
+async def list_analyze_tasks(
+    task_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """查询当前用户的识别任务列表，支持按 task_type、status 筛选。"""
+    try:
+        tasks = await asyncio.to_thread(
+            list_analysis_tasks_by_user_sync,
+            user_id=user_info["user_id"],
+            task_type=task_type,
+            status=status,
+            limit=limit,
+        )
+        return {"tasks": tasks}
+    except Exception as e:
+        print(f"[analyze/tasks] 错误: {e}")
+        raise HTTPException(status_code=500, detail="查询任务列表失败")
+
+
+@app.get("/api/analyze/tasks/{task_id}")
+async def get_analyze_task(
+    task_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """查询单条任务详情（仅能查看本人任务）。"""
+    task = await asyncio.to_thread(get_analysis_task_by_id_sync, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.get("user_id") != user_info["user_id"]:
+        raise HTTPException(status_code=403, detail="无权查看该任务")
+    return task
 
 
 # ---------- 双模型对比分析接口 ----------
@@ -1547,6 +1634,38 @@ async def upload_report_image(
         raise HTTPException(status_code=500, detail="上传失败，请检查 Supabase Storage 是否已创建 bucket「health-reports」并设为 Public")
 
 
+class SubmitReportExtractionTaskRequest(BaseModel):
+    """提交病历信息提取任务（后台异步处理）"""
+    imageUrl: str = Field(..., description="体检报告图片在 Supabase Storage 的公网 URL")
+
+
+@app.post("/api/user/health-profile/submit-report-extraction-task")
+async def submit_report_extraction_task(
+    body: SubmitReportExtractionTaskRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    提交病历信息提取任务，由 Worker 子进程在后台处理。
+    完成后自动写入 user_health_documents 并更新 weapp_user.health_condition.report_extract。
+    用户无需等待，保存档案后即可退出。
+    """
+    user_id = user_info["user_id"]
+    if not body.imageUrl or not body.imageUrl.strip():
+        raise HTTPException(status_code=400, detail="imageUrl 不能为空")
+    try:
+        task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_id,
+            task_type="health_report",
+            image_url=body.imageUrl.strip(),
+            payload={},
+        )
+        return {"taskId": str(task["id"])}
+    except Exception as e:
+        print(f"[submit_report_extraction_task] 错误: {e}")
+        raise HTTPException(status_code=500, detail="提交任务失败")
+
+
 @app.post("/api/user/health-profile/ocr-extract")
 async def health_report_ocr_extract(
     body: HealthReportOcrRequest,
@@ -1688,6 +1807,7 @@ class SaveFoodRecordRequest(BaseModel):
     pfc_ratio_comment: Optional[str] = Field(default=None, description="PFC 比例评价")
     absorption_notes: Optional[str] = Field(default=None, description="吸收率说明")
     context_advice: Optional[str] = Field(default=None, description="情境建议")
+    source_task_id: Optional[str] = Field(default=None, description="来源识别任务 ID（从 analysis_tasks 保存而来时传入）")
 
 
 @app.post("/api/food-record/save")
@@ -1737,6 +1857,7 @@ async def save_food_record(
             pfc_ratio_comment=body.pfc_ratio_comment,
             absorption_notes=body.absorption_notes,
             context_advice=body.context_advice,
+            source_task_id=body.source_task_id,
         )
         return {"id": row.get("id"), "message": "记录成功"}
     except Exception as e:

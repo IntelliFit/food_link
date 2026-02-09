@@ -1,7 +1,7 @@
 import { View, Text, Image, Textarea, Switch } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { imageToBase64, uploadAnalyzeImage, analyzeFoodImage, analyzeFoodImageCompare, AnalyzeResponse, CompareAnalyzeResponse } from '../../utils/api'
+import { imageToBase64, uploadAnalyzeImage, analyzeFoodImage, analyzeFoodImageCompare, submitAnalyzeTask, getAccessToken, AnalyzeResponse, CompareAnalyzeResponse } from '../../utils/api'
 
 import './index.scss'
 
@@ -62,19 +62,19 @@ export default function AnalyzePage() {
   }
 
   const doAnalyze = async () => {
+    if (!getAccessToken()) {
+      Taro.showToast({ title: '请先登录后再使用识别功能', icon: 'none' })
+      return
+    }
     setIsAnalyzing(true)
-    Taro.showLoading({
-      title: compareMode ? '双模型对比分析中...' : '分析中...',
-      mask: true
-    })
+    Taro.showLoading({ title: '提交中...', mask: true })
 
     try {
-      // 1. 将图片转为 base64，先上传到 Supabase 获取公网 URL
       const base64Image = await imageToBase64(imagePath!)
       const { imageUrl } = await uploadAnalyzeImage(base64Image)
 
       if (compareMode) {
-        // 对比模式：同时调用千问和 Gemini
+        Taro.showLoading({ title: '双模型对比分析中...', mask: true })
         const compareResult: CompareAnalyzeResponse = await analyzeFoodImageCompare({
           image_url: imageUrl,
           additionalContext: additionalInfo,
@@ -83,51 +83,31 @@ export default function AnalyzePage() {
           diet_goal: dietGoal as any,
           activity_timing: activityTiming as any
         })
-
-        // 保存对比结果
         Taro.setStorageSync('analyzeImagePath', imageUrl)
         Taro.setStorageSync('analyzeCompareResult', JSON.stringify(compareResult))
         Taro.setStorageSync('analyzeCompareMode', true)
         Taro.setStorageSync('analyzeMealType', mealType)
         Taro.setStorageSync('analyzeDietGoal', dietGoal)
         Taro.setStorageSync('analyzeActivityTiming', activityTiming)
-        
         Taro.hideLoading()
-        
-        // 跳转到对比结果页面
-        Taro.redirectTo({
-          url: '/pages/result/index'
-        })
-      } else {
-        // 普通模式：只调用千问
-        const result: AnalyzeResponse = await analyzeFoodImage({
-          image_url: imageUrl,
-          additionalContext: additionalInfo,
-          modelName: 'qwen-vl-max',
-          meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-          diet_goal: dietGoal as any,
-          activity_timing: activityTiming as any
-        })
-
-        // 保存分析结果
-        Taro.setStorageSync('analyzeImagePath', imageUrl)
-        Taro.setStorageSync('analyzeResult', JSON.stringify(result))
-        Taro.setStorageSync('analyzeCompareMode', false)
-        Taro.setStorageSync('analyzeMealType', mealType)
-        Taro.setStorageSync('analyzeDietGoal', dietGoal)
-        Taro.setStorageSync('analyzeActivityTiming', activityTiming)
-        
-        Taro.hideLoading()
-        
-        // 跳转到结果页面
-        Taro.redirectTo({
-          url: '/pages/result/index'
-        })
+        Taro.redirectTo({ url: '/pages/result/index' })
+        return
       }
+
+      // 普通模式：提交异步任务，进入加载页等待
+      const { task_id } = await submitAnalyzeTask({
+        image_url: imageUrl,
+        meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+        diet_goal: dietGoal,
+        activity_timing: activityTiming,
+        additionalContext: additionalInfo || undefined,
+        modelName: 'qwen-vl-max'
+      })
+      Taro.hideLoading()
+      Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}` })
     } catch (error: any) {
       Taro.hideLoading()
       setIsAnalyzing(false)
-      
       Taro.showModal({
         title: '分析失败',
         content: error.message || '分析失败，请重试',
@@ -302,8 +282,14 @@ export default function AnalyzePage() {
           onClick={!isAnalyzing ? handleConfirm : undefined}
         >
           <Text className='confirm-btn-text'>
-            {isAnalyzing ? '分析中...' : '确认并开始分析'}
+            {isAnalyzing ? '提交中...' : '确认并开始分析'}
           </Text>
+        </View>
+        <View
+          className='history-link'
+          onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
+        >
+          <Text className='history-link-text'>查看分析历史</Text>
         </View>
       </View>
     </View>

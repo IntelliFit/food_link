@@ -1,0 +1,117 @@
+.analyze-loading-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f0fdf4 0%, #fff 40%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  box-sizing: border-box;
+}
+
+.spinner-wrap {
+  width: 120rpx;
+  height: 120rpx;
+  position: relative;
+  margin-bottom: 48rpx;
+  .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 6rpx solid rgba(0, 188, 125, 0.15);
+  }
+  .spin {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 6rpx solid #00bc7d;
+    border-top-color: transparent;
+    animation: spin 0.8s linear infinite;
+  }
+  .icon-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 44rpx;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 12rpx;
+}
+
+.subtitle {
+  font-size: 24rpx;
+  color: #00bc7d;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  margin-bottom: 48rpx;
+}
+
+.tip-card {
+  width: 100%;
+  max-width: 560rpx;
+  background: rgba(0, 188, 125, 0.06);
+  border: 1rpx solid rgba(0, 188, 125, 0.2);
+  border-radius: 24rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 40rpx;
+  .tip-label {
+    font-size: 22rpx;
+    color: #059669;
+    font-weight: 700;
+    margin-bottom: 12rpx;
+  }
+  .tip-text {
+    font-size: 26rpx;
+    color: #047857;
+    line-height: 1.6;
+  }
+}
+
+.leave-hint {
+  font-size: 24rpx;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 32rpx;
+}
+
+.btn-leave {
+  width: 100%;
+  max-width: 400rpx;
+  padding: 24rpx;
+  font-size: 28rpx;
+  color: #00bc7d;
+  background: #fff;
+  border: 2rpx solid #00bc7d;
+  border-radius: 48rpx;
+}
+
+.error-wrap {
+  text-align: center;
+  padding: 32rpx;
+  .error-msg {
+    font-size: 28rpx;
+    color: #dc2626;
+    margin-bottom: 24rpx;
+  }
+  .btn-history {
+    padding: 24rpx 48rpx;
+    font-size: 28rpx;
+    color: #fff;
+    background: #00bc7d;
+    border-radius: 48rpx;
+  }
+}

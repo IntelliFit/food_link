@@ -305,6 +305,7 @@ export default function ResultPage() {
           // 既然用户已经在分析页选了详细状态，这里 context_state 传 'none' 即可，
           // 重要的是 diet_goal 和 activity_timing 字段。
           
+          const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
           const payload = {
             meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
             image_path: imagePath || undefined,
@@ -329,15 +330,16 @@ export default function ResultPage() {
             total_carbs: nutritionStats.carbs,
             total_fat: nutritionStats.fat,
             total_weight_grams: totalWeight,
-            // 兼容旧字段，实际逻辑已迁移到 diet_goal 和 activity_timing
-            context_state: 'none', 
+            context_state: 'none',
             diet_goal: dietGoal,
             activity_timing: activityTiming,
             pfc_ratio_comment: pfcRatioComment ?? undefined,
             absorption_notes: absorptionNotes ?? undefined,
-            context_advice: contextAdvice ?? undefined
+            context_advice: contextAdvice ?? undefined,
+            source_task_id: sourceTaskId
           }
           await saveFoodRecord(payload)
+          if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
           Taro.showToast({ title: '记录成功', icon: 'success' })
           setTimeout(() => {
             // 返回两层：结果页 -> 分析页 -> 首页/记录页

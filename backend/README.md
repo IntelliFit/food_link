@@ -42,11 +42,21 @@ DASHSCOPE_API_KEY=your_dashscope_api_key_here
 
 ## 运行
 
+**推荐（含异步分析 Worker）**：启动多个 Worker 子进程 + API 服务，处理后台食物分析任务：
+
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python run_backend.py
 ```
 
-服务将在 `http://localhost:8000` 启动。
+可通过环境变量 `WORKER_COUNT`（默认 2，范围 1~8）、`PORT`（默认 3010）调整。
+
+**仅 API（无 Worker）**：
+
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 3010
+```
+
+服务将在 `http://localhost:3010` 启动（或你配置的端口）。
 
 ## API 文档
 
