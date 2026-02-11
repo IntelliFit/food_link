@@ -79,7 +79,8 @@ export default function AnalyzeHistoryPage() {
           <View className="loading-wrap">加载中...</View>
         ) : tasks.length === 0 ? (
           <View className="empty">
-            <Text className="empty-text">暂无分析任务，去拍一张食物照片开始识别吧</Text>
+            <View className="empty-icon">📷</View>
+            <Text className="empty-text">暂时没有记录，快去拍一张吧~</Text>
           </View>
         ) : (
           tasks.map(t => (
@@ -95,7 +96,10 @@ export default function AnalyzeHistoryPage() {
               </View>
               <View className="body">
                 <Text className="time">{formatTime(t.created_at)}</Text>
-                <Text className={`status status-${t.status}`}>{STATUS_MAP[t.status] || t.status}</Text>
+                <View className={`status-row status-${t.status}`}>
+                  <View className="status-dot"></View>
+                  <Text className="status-text">{STATUS_MAP[t.status] || t.status}</Text>
+                </View>
               </View>
               {(t.status === 'done' || t.status === 'failed') && (
                 <Text className="arrow">›</Text>

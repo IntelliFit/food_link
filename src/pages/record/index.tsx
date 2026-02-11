@@ -127,8 +127,8 @@ export default function RecordPage() {
     setTextCalculating(true)
     Taro.showLoading({ title: '分析中...', mask: true })
     try {
-      const result = await analyzeFoodText({ 
-        text: inputText, 
+      const result = await analyzeFoodText({
+        text: inputText,
         diet_goal: textDietGoal as any,
         activity_timing: textActivityTiming as any
       })
@@ -335,7 +335,6 @@ export default function RecordPage() {
             className='history-entry'
             onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
           >
-            <Text className='history-entry-icon'>📋</Text>
             <Text className='history-entry-text'>查看分析历史</Text>
           </View>
         </View>
@@ -364,41 +363,32 @@ export default function RecordPage() {
       {/* 文字记录区域 */}
       {activeMethod === 'text' && (
         <View className='text-record-section'>
-          {/* 顶部说明卡片 */}
-          <View className='text-intro-card'>
-            <View className='text-intro-icon'>✍️</View>
-            <View className='text-intro-content'>
-              <Text className='text-intro-title'>文字描述记录</Text>
-              <Text className='text-intro-desc'>输入食物名称和数量，AI 智能分析营养成分</Text>
+          {/* 输入主卡片 */}
+          <View className='text-input-card'>
+            <View className='card-header'>
+              <Text className='card-title'>✍️ 描述您的饮食</Text>
             </View>
-          </View>
 
-          {/* 主输入区域 */}
-          <View className='text-main-input'>
-            <View className='input-section'>
-              <View className='input-header'>
-                <Text className='input-title'>🍽️ 今天吃了什么？</Text>
-                <Text className='input-counter'>{foodText.length}/500</Text>
-              </View>
+            <View className='input-wrapper'>
               <Textarea
-                className='food-textarea'
-                placeholder='描述你的食物，例如：&#10;• 一碗白米饭&#10;• 红烧肉三块&#10;• 清炒西兰花一份'
+                className='food-textarea-premium'
+                placeholder='今天吃了什么？例如：&#10;• 一碗红烧牛肉面&#10;• 一个苹果'
                 placeholderClass='textarea-placeholder'
                 value={foodText}
                 onInput={(e) => setFoodText(e.detail.value)}
                 maxlength={500}
                 autoHeight
               />
+              <View className='textarea-footer'>
+                <Text className='char-counter'>{foodText.length}/500</Text>
+              </View>
             </View>
 
-            <View className='input-section'>
-              <View className='input-header'>
-                <Text className='input-title'>📏 补充数量（可选）</Text>
-                <Text className='input-counter'>{foodAmount.length}/200</Text>
-              </View>
+            <View className='amount-wrapper'>
+              <Text className='amount-label'>补充份量</Text>
               <Textarea
-                className='amount-textarea-new'
-                placeholder='补充具体重量或份量，例如：&#10;• 米饭 200g&#10;• 红烧肉 约150g'
+                className='amount-textarea-premium'
+                placeholder='例如：200g，一碗'
                 placeholderClass='textarea-placeholder'
                 value={foodAmount}
                 onInput={(e) => setFoodAmount(e.detail.value)}
@@ -406,76 +396,72 @@ export default function RecordPage() {
                 autoHeight
               />
             </View>
-          </View>
 
-          {/* 快捷标签 */}
-          <View className='quick-tags-section'>
-            <Text className='quick-tags-title'>💡 快捷添加</Text>
-            <View className='quick-tags-list'>
-              {commonFoods.slice(0, 12).map((food, index) => (
-                <View
-                  key={index}
-                  className={`quick-tag ${foodText.includes(food) ? 'selected' : ''}`}
-                  onClick={() => handleCommonFoodClick(food)}
-                >
-                  <Text className='quick-tag-text'>{food}</Text>
-                </View>
-              ))}
+            {/* 快捷标签 */}
+            <View className='quick-tags-box'>
+              <Text className='tags-label'>大家常吃:</Text>
+              <View className='quick-tags-row'>
+                {commonFoods.slice(0, 8).map((food, index) => (
+                  <View
+                    key={index}
+                    className={`quick-tag-pill ${foodText.includes(food) ? 'active' : ''}`}
+                    onClick={() => handleCommonFoodClick(food)}
+                  >
+                    {food}
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
 
-          {/* 配置选项折叠区 */}
-          <View className='config-section'>
-            <View className='config-card'>
-              <View className='config-header'>
-                <Text className='config-title'>⚙️ 分析配置</Text>
-                <Text className='config-hint'>可选，帮助 AI 给出更精准建议</Text>
+          {/* 配置选项卡片 */}
+          <View className='config-card-premium'>
+            <View className='config-item'>
+              <Text className='config-label'>餐次</Text>
+              <View className='meal-selector-row'>
+                {meals.map((meal) => (
+                  <View
+                    key={meal.id}
+                    className={`meal-option ${selectedMeal === meal.id ? 'active' : ''}`}
+                    onClick={() => handleMealSelect(meal.id)}
+                  >
+                    <Text className='meal-icon'>{meal.icon}</Text>
+                    <Text className='meal-name'>{meal.name}</Text>
+                  </View>
+                ))}
               </View>
-              
-              {/* 餐次选择 */}
-              <View className='config-row'>
-                <Text className='config-label'>用餐类型</Text>
-                <View className='meal-chips'>
-                  {meals.map((meal) => (
-                    <View
-                      key={meal.id}
-                      className={`meal-chip ${selectedMeal === meal.id ? 'active' : ''}`}
-                      onClick={() => handleMealSelect(meal.id)}
-                    >
-                      <Text className='meal-chip-icon'>{meal.icon}</Text>
-                      <Text className='meal-chip-text'>{meal.name}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
+            </View>
 
-              {/* 饮食目标 */}
-              <View className='config-row'>
-                <Text className='config-label'>饮食目标</Text>
-                <View className='option-chips'>
-                  {DIET_GOAL_OPTIONS.map((opt) => (
+            <View className='config-divider'></View>
+
+            <View className='config-vertical-stack'>
+              <View className='config-item'>
+                <Text className='config-label'>目标</Text>
+                <View className='options-row'>
+                  {DIET_GOAL_OPTIONS.map(opt => (
                     <View
                       key={opt.value}
-                      className={`option-chip ${textDietGoal === opt.value ? 'active' : ''}`}
+                      className={`mini-chip ${textDietGoal === opt.value ? 'active' : ''}`}
                       onClick={() => setTextDietGoal(opt.value)}
                     >
-                      <Text className='option-chip-text'>{opt.label}</Text>
+                      {opt.label}
                     </View>
                   ))}
                 </View>
               </View>
 
-              {/* 运动时机 */}
-              <View className='config-row'>
-                <Text className='config-label'>进食时机</Text>
-                <View className='option-chips'>
-                  {ACTIVITY_TIMING_OPTIONS.map((opt) => (
+              <View className='config-divider'></View>
+
+              <View className='config-item'>
+                <Text className='config-label'>时机</Text>
+                <View className='options-row'>
+                  {ACTIVITY_TIMING_OPTIONS.map(opt => (
                     <View
                       key={opt.value}
-                      className={`option-chip ${textActivityTiming === opt.value ? 'active' : ''}`}
+                      className={`mini-chip ${textActivityTiming === opt.value ? 'active' : ''}`}
                       onClick={() => setTextActivityTiming(opt.value)}
                     >
-                      <Text className='option-chip-text'>{opt.label}</Text>
+                      {opt.label}
                     </View>
                   ))}
                 </View>
@@ -483,26 +469,18 @@ export default function RecordPage() {
             </View>
           </View>
 
-          {/* 底部操作按钮 */}
-          <View className='text-action-area'>
+          {/* 底部悬浮操作按钮 */}
+          <View className='text-action-floating'>
             <View
-              className={`analyze-btn ${!foodText.trim() ? 'disabled' : ''} ${textCalculating ? 'loading' : ''}`}
+              className={`analyze-btn-premium ${!foodText.trim() ? 'disabled' : ''} ${textCalculating ? 'loading' : ''}`}
               onClick={handleStartCalculate}
             >
-              {textCalculating ? (
-                <View className='btn-loading'>
-                  <View className='loading-dot'></View>
-                  <Text className='btn-text'>AI 分析中...</Text>
-                </View>
-              ) : (
-                <>
-                  <Text className='btn-icon'>🔍</Text>
-                  <Text className='btn-text'>开始智能分析</Text>
-                </>
-              )}
+              {textCalculating ? 'AI 分析中...' : '开始智能分析'}
             </View>
-            <Text className='action-hint'>AI 将识别食物并计算营养成分</Text>
           </View>
+
+          {/* 占位，防止底部按钮遮挡内容 */}
+          <View style={{ height: '140rpx' }}></View>
         </View>
       )}
 

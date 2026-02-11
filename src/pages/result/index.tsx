@@ -46,7 +46,7 @@ export default function ResultPage() {
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [hasSavedCritical, setHasSavedCritical] = useState(false)
-  
+
   // 双模型对比模式状态
   const [isCompareMode, setIsCompareMode] = useState(false)
   const [compareResult, setCompareResult] = useState<CompareAnalyzeResponse | null>(null)
@@ -87,7 +87,7 @@ export default function ResultPage() {
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     )
     setNutritionStats(stats)
-    
+
     // 计算总摄入重量
     const total = items.reduce((sum, item) => sum + item.intake, 0)
     setTotalWeight(Math.round(total))
@@ -104,13 +104,13 @@ export default function ResultPage() {
       setContextAdvice(null)
       return
     }
-    
+
     setDescription(result.description || '')
     setHealthAdvice(result.insight || '保持健康饮食！')
     setPfcRatioComment(result.pfc_ratio_comment ?? null)
     setAbsorptionNotes(result.absorption_notes ?? null)
     setContextAdvice(result.context_advice ?? null)
-    
+
     const items = convertApiDataToItems(result.items || [])
     setNutritionItems(items)
     calculateNutritionStats(items)
@@ -120,7 +120,7 @@ export default function ResultPage() {
   const handleModelSwitch = (model: 'qwen' | 'gemini') => {
     if (!compareResult) return
     setSelectedModel(model)
-    
+
     const result = model === 'qwen' ? compareResult.qwen_result : compareResult.gemini_result
     setDataFromModelResult(result)
   }
@@ -143,7 +143,7 @@ export default function ResultPage() {
         if (storedCompareResult) {
           const result: CompareAnalyzeResponse = JSON.parse(storedCompareResult)
           setCompareResult(result)
-          
+
           // 默认显示千问结果（如果成功），否则显示 Gemini 结果
           if (result.qwen_result.success) {
             setSelectedModel('qwen')
@@ -156,7 +156,7 @@ export default function ResultPage() {
             setDescription('两个模型分析均失败')
             setHealthAdvice(result.qwen_result.error || result.gemini_result.error || '')
           }
-          
+
           // 清理缓存
           Taro.removeStorageSync('analyzeCompareResult')
           Taro.removeStorageSync('analyzeCompareMode')
@@ -176,7 +176,7 @@ export default function ResultPage() {
         const storedResult = Taro.getStorageSync('analyzeResult')
         if (storedResult) {
           const result: AnalyzeResponse = JSON.parse(storedResult)
-          
+
           // 设置描述和健康建议
           setDescription(result.description || '')
           setHealthAdvice(result.insight || '保持健康饮食！')
@@ -186,7 +186,7 @@ export default function ResultPage() {
           // 转换并设置食物项
           const items = convertApiDataToItems(result.items)
           setNutritionItems(items)
-          
+
           // 计算营养统计
           calculateNutritionStats(items)
         } else {
@@ -237,10 +237,10 @@ export default function ResultPage() {
         }
         return item
       })
-      
+
       // 重新计算营养统计
       calculateNutritionStats(updatedItems)
-      
+
       return updatedItems
     })
   }
@@ -263,10 +263,10 @@ export default function ResultPage() {
         }
         return item
       })
-      
+
       // 重新计算营养统计
       calculateNutritionStats(updatedItems)
-      
+
       return updatedItems
     })
   }
@@ -304,7 +304,7 @@ export default function ResultPage() {
           // 为了兼容旧接口，我们可以把它们拼接到 context_state 或者传 'none'
           // 既然用户已经在分析页选了详细状态，这里 context_state 传 'none' 即可，
           // 重要的是 diet_goal 和 activity_timing 字段。
-          
+
           const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
           const payload = {
             meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
@@ -427,18 +427,20 @@ export default function ResultPage() {
     Taro.showModal({
       title: '保存为食谱',
       content: '请输入食谱名称',
+      // @ts-ignore
       editable: true,
+      // @ts-ignore
       placeholderText: '例如：我的标配减脂早餐',
       success: async (res) => {
-        if (res.confirm && res.content) {
-          const recipeName = res.content.trim()
+        if (res.confirm && (res as any).content) {
+          const recipeName = (res as any).content.trim()
           if (!recipeName) {
             Taro.showToast({ title: '请输入食谱名称', icon: 'none' })
             return
           }
 
           Taro.showLoading({ title: '保存中...', mask: true })
-          
+
           try {
             // 构建食谱数据
             const recipeItems = nutritionItems.map(nutritionItem => ({
@@ -488,6 +490,15 @@ export default function ResultPage() {
     })
   }
 
+  // 预览大图
+  const handlePreviewImage = () => {
+    if (imagePath) {
+      Taro.previewImage({
+        urls: [imagePath]
+      })
+    }
+  }
+
   return (
     <View className='result-page'>
       <ScrollView
@@ -496,19 +507,23 @@ export default function ResultPage() {
         enhanced
         showScrollbar={false}
       >
-        {/* 图片区域 */}
-        <View className='image-section'>
+        {/* 顶部图片区域 - 沉浸式设计 */}
+        <View className='hero-section'>
           {imagePath ? (
             <Image
               src={imagePath}
               mode='aspectFill'
-              className='result-image'
+              className='hero-image'
+              onClick={handlePreviewImage}
             />
           ) : (
-            <View className='no-image-placeholder'>
+            <View className='hero-placeholder'>
+              <Text className='placeholder-icon'>📷</Text>
               <Text className='placeholder-text'>暂无图片</Text>
             </View>
           )}
+          <View className='hero-overlay'></View>
+
           <View className='favorite-btn' onClick={handleFavorite}>
             <Text className={`favorite-icon ${isFavorited ? 'favorited' : ''}`}>
               {isFavorited ? '❤️' : '🤍'}
@@ -516,209 +531,193 @@ export default function ResultPage() {
           </View>
         </View>
 
-        {/* 双模型对比切换区域 */}
-        {isCompareMode && compareResult && (
-          <View className='model-switch-section'>
-            <View className='model-switch-header'>
-              <Text className='model-switch-icon'>🔬</Text>
-              <Text className='model-switch-title'>模型对比分析</Text>
-            </View>
-            <View className='model-tabs'>
-              <View
-                className={`model-tab ${selectedModel === 'qwen' ? 'active' : ''} ${!compareResult.qwen_result.success ? 'error' : ''}`}
-                onClick={() => handleModelSwitch('qwen')}
-              >
-                <Text className='model-tab-icon'>🤖</Text>
-                <Text className='model-tab-name'>千问</Text>
-                {compareResult.qwen_result.success ? (
-                  <Text className='model-tab-status success'>✓</Text>
-                ) : (
-                  <Text className='model-tab-status fail'>✗</Text>
-                )}
-              </View>
-              <View
-                className={`model-tab ${selectedModel === 'gemini' ? 'active' : ''} ${!compareResult.gemini_result.success ? 'error' : ''}`}
-                onClick={() => handleModelSwitch('gemini')}
-              >
-                <Text className='model-tab-icon'>✨</Text>
-                <Text className='model-tab-name'>Gemini</Text>
-                {compareResult.gemini_result.success ? (
-                  <Text className='model-tab-status success'>✓</Text>
-                ) : (
-                  <Text className='model-tab-status fail'>✗</Text>
-                )}
-              </View>
-            </View>
-            <Text className='model-switch-hint'>
-              当前显示: {selectedModel === 'qwen' ? '千问 (Qwen-VL-Max)' : 'Gemini (2.0-Flash)'} 的分析结果
-            </Text>
-          </View>
-        )}
-
-        {/* AI 健康透视（含 PFC、吸收率、情境建议） */}
-        <View className='health-section'>
-          <View className='section-header'>
-            <Text className='section-icon'>🌿</Text>
-            <Text className='section-title'>AI 健康透视</Text>
-          </View>
-          {description && (
-            <View className='advice-box'>
-              <Text className='advice-text'>{description}</Text>
-            </View>
-          )}
-          <View className='advice-box'>
-            <Text className='advice-text'>{healthAdvice}</Text>
-          </View>
-          {pfcRatioComment && (
-            <View className='advice-box pro-box'>
-              <Text className='advice-label'>📊 PFC 比例</Text>
-              <Text className='advice-text'>{pfcRatioComment}</Text>
-            </View>
-          )}
-          {absorptionNotes && (
-            <View className='advice-box pro-box'>
-              <Text className='advice-label'>🔬 吸收与利用</Text>
-              <Text className='advice-text'>{absorptionNotes}</Text>
-            </View>
-          )}
-          {contextAdvice && (
-            <View className='advice-box pro-box'>
-              <Text className='advice-label'>💡 情境建议</Text>
-              <Text className='advice-text'>{contextAdvice}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* 营养统计 */}
-        <View className='nutrition-section'>
-          <View className='nutrition-header'>
-            <Text className='nutrition-title'>营养统计</Text>
-            <View className='total-weight'>
-              <Text className='weight-label'>总预估重量</Text>
-              <View className='weight-value-wrapper'>
-                <Text className='weight-value'>{totalWeight}</Text>
-                <Text className='weight-unit'>克</Text>
-                <Text className='weight-arrow'>↕️</Text>
-              </View>
-            </View>
-          </View>
-
-          <View className='nutrition-grid'>
-            <View className='nutrition-card'>
-              <Text className='nutrition-icon'>🔥</Text>
-              <Text className='nutrition-label'>热量</Text>
-              <Text className='nutrition-value'>
-                {Math.round(nutritionStats.calories * 10) / 10} kcal
-              </Text>
-            </View>
-            <View className='nutrition-card'>
-              <Text className='nutrition-icon'>💧</Text>
-              <Text className='nutrition-label'>蛋白质</Text>
-              <Text className='nutrition-value'>
-                {Math.round(nutritionStats.protein * 10) / 10} g
-              </Text>
-            </View>
-            <View className='nutrition-card'>
-              <Text className='nutrition-icon'>⚡</Text>
-              <Text className='nutrition-label'>总碳水</Text>
-              <Text className='nutrition-value'>
-                {Math.round(nutritionStats.carbs * 10) / 10} g
-              </Text>
-            </View>
-            <View className='nutrition-card'>
-              <Text className='nutrition-icon'>🩸</Text>
-              <Text className='nutrition-label'>总脂肪</Text>
-              <Text className='nutrition-value'>
-                {Math.round(nutritionStats.fat * 10) / 10} g
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 包含成分 */}
-        <View className='ingredients-section'>
-          <View className='section-header'>
-            <Text className='section-title'>包含成分 ({nutritionItems.length})</Text>
-          </View>
-          <View className='ingredients-list'>
-            {nutritionItems.map((item) => (
-              <View key={item.id} className='ingredient-item'>
-                <View className='ingredient-header'>
-                  <View className='ingredient-info'>
-                    <Text className='ingredient-name'>{item.name}</Text>
-                    <Text className='ingredient-weight'>估算: {item.weight} g</Text>
-                  </View>
-                  <View className='ingredient-actions'>
-                    <View 
-                      className='action-btn minus-btn'
-                      onClick={() => handleWeightAdjust(item.id, -10)}
-                    >
-                      <Text className='action-icon'>−</Text>
-                    </View>
-                    <View 
-                      className='action-btn plus-btn'
-                      onClick={() => handleWeightAdjust(item.id, 10)}
-                    >
-                      <Text className='action-icon'>+</Text>
-                    </View>
-                    <Text className='divider'>|</Text>
-                    <Text className='intake-text'>实际摄入: {item.intake}g</Text>
-                  </View>
+        <View className='content-container'>
+          {/* 核心营养概览 */}
+          <View className='nutrition-overview-card'>
+            <View className='nutrition-header'>
+              <View className='calories-main'>
+                <Text className='calories-value'>{Math.round(nutritionStats.calories)}</Text>
+                <View className='calories-unit-row'>
+                  <Text className='calories-unit'>kcal</Text>
+                  <Text className='calories-label'>总热量</Text>
                 </View>
-                <View className='ingredient-footer'>
-                  <View className='calorie-info'>
-                    <Text className='calorie-value'>
-                      {Math.round(item.calorie * (item.ratio / 100))} kcal
-                    </Text>
-                    <Text className='calorie-arrow'>↓</Text>
+              </View>
+              <View className='total-weight-badge'>
+                <Text className='weight-icon'>⚖️</Text>
+                <Text className='weight-text'>约 {totalWeight}g</Text>
+              </View>
+            </View>
+
+            <View className='macro-grid'>
+              <View className='macro-item protein'>
+                <View className='macro-bar'>
+                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.protein / 50) * 100, 100)}%` }}></View>
+                </View>
+                <Text className='macro-value'>{Math.round(nutritionStats.protein * 10) / 10}</Text>
+                <Text className='macro-label'>蛋白质</Text>
+              </View>
+              <View className='macro-item carbs'>
+                <View className='macro-bar'>
+                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.carbs / 100) * 100, 100)}%` }}></View>
+                </View>
+                <Text className='macro-value'>{Math.round(nutritionStats.carbs * 10) / 10}</Text>
+                <Text className='macro-label'>碳水</Text>
+              </View>
+              <View className='macro-item fat'>
+                <View className='macro-bar'>
+                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.fat / 40) * 100, 100)}%` }}></View>
+                </View>
+                <Text className='macro-value'>{Math.round(nutritionStats.fat * 10) / 10}</Text>
+                <Text className='macro-label'>脂肪</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 双模型对比切换区域 */}
+          {isCompareMode && compareResult && (
+            <View className='model-switch-card'>
+              <View className='card-header'>
+                <Text className='card-title'>🔬 模型对比</Text>
+              </View>
+              <View className='model-tabs'>
+                <View
+                  className={`model-tab ${selectedModel === 'qwen' ? 'active' : ''} ${!compareResult.qwen_result.success ? 'error' : ''}`}
+                  onClick={() => handleModelSwitch('qwen')}
+                >
+                  <Text className='model-name'>千问 VL</Text>
+                  {compareResult.qwen_result.success && <Text className='model-status'>✓</Text>}
+                </View>
+                <View
+                  className={`model-tab ${selectedModel === 'gemini' ? 'active' : ''} ${!compareResult.gemini_result.success ? 'error' : ''}`}
+                  onClick={() => handleModelSwitch('gemini')}
+                >
+                  <Text className='model-name'>Gemini</Text>
+                  {compareResult.gemini_result.success && <Text className='model-status'>✓</Text>}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* AI 健康透视 */}
+          <View className='insight-card'>
+            <View className='card-header'>
+              <Text className='card-title'>🌿 AI 饮食分析</Text>
+            </View>
+
+            {description && (
+              <View className='insight-item'>
+                <Text className='insight-icon'>📋</Text>
+                <Text className='insight-content'>{description}</Text>
+              </View>
+            )}
+
+            <View className='insight-item highlight'>
+              <Text className='insight-icon'>💡</Text>
+              <Text className='insight-content'>{healthAdvice}</Text>
+            </View>
+
+            {pfcRatioComment && (
+              <View className='insight-item'>
+                <Text className='insight-icon'>📊</Text>
+                <View className='insight-body'>
+                  <Text className='insight-label'>营养比例</Text>
+                  <Text className='insight-content'>{pfcRatioComment}</Text>
+                </View>
+              </View>
+            )}
+
+            {(absorptionNotes || contextAdvice) && (
+              <View className='insight-tags'>
+                {absorptionNotes && <View className='insight-tag'>吸收建议</View>}
+                {contextAdvice && <View className='insight-tag'>情境建议</View>}
+              </View>
+            )}
+          </View>
+
+          {/* 包含成分 */}
+          <View className='ingredients-section'>
+            <View className='section-title-row'>
+              <Text className='section-title'>包含成分</Text>
+              <Text className='section-count'>{nutritionItems.length}种</Text>
+            </View>
+
+            <View className='ingredients-list'>
+              {nutritionItems.map((item) => (
+                <View key={item.id} className='ingredient-card'>
+                  <View className='ingredient-main'>
+                    <Text className='ingredient-name'>{item.name}</Text>
+                    <View className='ingredient-calories'>
+                      <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
+                      <Text className='cal-unit'>kcal</Text>
+                    </View>
                   </View>
-                  <View className='ratio-info'>
-                    <Text className='ratio-label'>摄入比例</Text>
-                    <View className='ratio-slider-wrapper'>
+
+                  <View className='ingredient-controls'>
+                    <View className='weight-control'>
+                      <Text className='control-label'>估算重量</Text>
+                      <View className='weight-adjuster'>
+                        <View
+                          className='adjust-btn minus'
+                          onClick={() => handleWeightAdjust(item.id, -10)}
+                        >–</View>
+                        <Text className='weight-display'>{item.weight}g</Text>
+                        <View
+                          className='adjust-btn plus'
+                          onClick={() => handleWeightAdjust(item.id, 10)}
+                        >+</View>
+                      </View>
+                    </View>
+
+                    <View className='ratio-control'>
+                      <View className='ratio-header'>
+                        <Text className='control-label'>实际摄入</Text>
+                        <Text className='ratio-display'>{item.ratio}%</Text>
+                      </View>
                       <Slider
-                        className='ratio-slider'
+                        className='ratio-slider-modern'
                         value={item.ratio}
                         min={0}
                         max={100}
                         step={5}
-                        activeColor='#10b981'
+                        activeColor='#00bc7d'
                         backgroundColor='#e5e7eb'
-                        blockSize={24}
-                        blockColor='#10b981'
+                        blockSize={16}
+                        blockColor='#ffffff'
                         showValue={false}
                         onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
                       />
-                      <Text className='ratio-value'>{item.ratio}%</Text>
                     </View>
                   </View>
                 </View>
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
-        </View>
 
-        {/* 确认按钮 */}
-        <View className='confirm-section'>
-          <View className='confirm-btn' onClick={handleConfirm} style={{ opacity: saving ? 0.7 : 1 }}>
-            <Text className='confirm-btn-text'>
-              {saving ? '保存中...' : '确认记录并完成'}
-            </Text>
-          </View>
-          
-          {/* 保存为食谱按钮 */}
-          <View className='save-recipe-btn' onClick={handleSaveAsRecipe}>
-            <Text className='save-recipe-icon'>📖</Text>
-            <Text className='save-recipe-text'>保存为食谱</Text>
-          </View>
-          
-          <View
-            className={`warning-section ${hasSavedCritical ? 'warning-section--done' : ''}`}
-            onClick={hasSavedCritical ? undefined : handleMarkSample}
-          >
-            <Text className='warning-icon'>{hasSavedCritical ? '✓' : '⚠️'}</Text>
-            <Text className='warning-text'>
-              {hasSavedCritical ? '已标记为偏差样本' : '认为AI估算偏差大?点击标记样本'}
-            </Text>
+          {/* 底部操作区域 */}
+          <View className='footer-actions'>
+            <View className='pba-safe-area'>
+              <View className='action-grid'>
+                <View className='secondary-btn' onClick={handleSaveAsRecipe}>
+                  <Text className='btn-icon'>📖</Text>
+                  <Text className='btn-text'>存为食谱</Text>
+                </View>
+                <View
+                  className={`primary-btn ${saving ? 'loading' : ''}`}
+                  onClick={handleConfirm}
+                >
+                  <Text className='btn-text'>{saving ? '保存中...' : '确认记录'}</Text>
+                </View>
+              </View>
+
+              <View
+                className={`feedback-link ${hasSavedCritical ? 'disabled' : ''}`}
+                onClick={hasSavedCritical ? undefined : handleMarkSample}
+              >
+                <Text className='feedback-text'>
+                  {hasSavedCritical ? '已标记偏差样本 ✓' : '估算不准？点击标记样本'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
       </ScrollView>

@@ -814,7 +814,7 @@ export default function ProfilePage() {
                 <View className='progress-inner' style={{ width: `${Math.min((recordDays / 365) * 100, 100)}%` }}></View>
               </View>
             </View>
-            <Text className='card-tip'>再记录 {365 - recordDays > 0 ? 365 - recordDays : 0} 天可升级为大咖会员 {'>'}</Text>
+            <Text className='card-tip'>再记录 {365 - recordDays > 0 ? 365 - recordDays : 0} 天可升级为大会员 {'>'}</Text>
           </View>
 
           <View className='card-bg-icon'>
@@ -871,7 +871,6 @@ export default function ProfilePage() {
       {
         isLoggedIn ? (
           <View className='logout-btn' onClick={handleLogout}>
-            <Text className='logout-icon'>🚪</Text>
             <Text className='logout-text'>退出登录</Text>
           </View>
         ) : (

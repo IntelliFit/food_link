@@ -276,23 +276,34 @@
 
   // 图标颜色
   .taroify-icon {
-    color: #6b7280;
+    font-size: 35rpx; // 调大图标
+    color: #4b5563; // 加深图标颜色
+    margin-right: 32rpx; // 增加图标与文字的间距
+  }
+
+  .taroify-cell {
+    padding-top: 32rpx;
+    padding-bottom: 32rpx;
+    align-items: center;
+    font-size: 28rpx; // 调大文字
+    color: #1f2937; // 加深文字颜色
   }
 }
 
 
 // 登录/退出登录按钮 - 优化设计
+// 登录/退出登录按钮 - 优化设计
 .login-btn,
 .logout-btn {
   background: #ffffff;
-  border-radius: 28rpx;
-  padding: 36rpx 48rpx;
+  border-radius: 24rpx;
+  padding: 32rpx;
   margin: 40rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.08);
+  gap: 16rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2rpx solid transparent;
   line-height: normal;
@@ -308,44 +319,44 @@
   &[plain] {
     border: 2rpx solid #d1fae5 !important;
     background: #ffffff !important;
-    color: inherit !important; // Prevent text from turning black if plain does that
+    color: inherit !important;
   }
 
   &:active {
-    background: #f0fdf4 !important; // Ensure active state still works
-    transform: scale(0.97);
-    box-shadow: 0 2rpx 12rpx rgba(0, 188, 125, 0.15);
+    background: #f0fdf4 !important;
+    transform: scale(0.98);
+    box-shadow: 0 2rpx 8rpx rgba(0, 188, 125, 0.15);
   }
 }
 
 .logout-btn {
-  border-color: #fee2e2;
+  background: #ffffff;
+  margin-top: 60rpx; // 增加顶部间距，与其功能区分开
 
   &:active {
     background: #fef2f2;
-    transform: scale(0.97);
-    box-shadow: 0 2rpx 12rpx rgba(239, 68, 68, 0.15);
+    transform: scale(0.98);
+    box-shadow: 0 2rpx 8rpx rgba(239, 68, 68, 0.1);
   }
 }
 
-.login-icon,
-.logout-icon {
-  font-size: 44rpx;
-  line-height: 44rpx;
+.login-icon {
+  font-size: 40rpx;
+  line-height: 40rpx;
 }
 
 .login-text {
-  font-size: 34rpx;
+  font-size: 32rpx;
   font-weight: 600;
   color: #00bc7d;
-  line-height: 48rpx;
+  line-height: normal;
 }
 
 .logout-text {
-  font-size: 34rpx;
-  font-weight: 600;
-  color: #dc2626;
-  line-height: 48rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+  color: #ef4444; // 更柔和的红色
+  line-height: normal;
 }
 
 // 头像昵称填写弹窗 - 优化设计
