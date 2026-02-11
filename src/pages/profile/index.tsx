@@ -127,26 +127,26 @@ export default function ProfilePage() {
   const services = [
     {
       id: 0,
-      icon: <TodoListOutlined size="35" />,
+      icon: <TodoListOutlined size="32" />,
       title: '健康档案',
       desc: '生理指标、BMR/TDEE、病史与饮食偏好'
     },
     {
       id: 1,
-      icon: <NotesOutlined size="35" />,
+      icon: <NotesOutlined size="32" />,
       title: '我的食谱',
       desc: '常吃的食物组合，一键记录',
       path: '/pages/recipes/index'
     },
     {
       id: 3,
-      icon: <ChartTrendingOutlined size="35" />,
+      icon: <ChartTrendingOutlined size="32" />,
       title: '数据统计',
       desc: '查看详细的饮食和运动数据'
     },
     {
       id: 5,
-      icon: <LocationOutlined size="35" />,
+      icon: <LocationOutlined size="32" />,
       title: '附近美食',
       desc: '发现附近健康美食推荐'
     }
