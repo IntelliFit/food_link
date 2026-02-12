@@ -25,6 +25,8 @@ declare namespace NodeJS {
     TARO_APP_ID: string
     /** 后端 API 基础 URL，在 .env.development / .env.production 中配置 */
     TARO_APP_API_BASE_URL?: string
+    /** 天地图 API Key */
+    TARO_APP_TIANDITU_TK?: string
   }
 }
 

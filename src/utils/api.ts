@@ -634,21 +634,21 @@ export function clearAllStorage() {
   try {
     // 清除 token 相关
     clearTokens()
-    
+
     // 清除用户信息相关
     Taro.removeStorageSync('isLoggedIn')
     Taro.removeStorageSync('userInfo')
     Taro.removeStorageSync('openid')
     Taro.removeStorageSync('unionid')
     Taro.removeStorageSync('phoneNumber')
-    
+
     // 清除业务数据（可选，根据需求决定是否清除）
     // Taro.removeStorageSync('analyzeImagePath')
     // Taro.removeStorageSync('analyzeResult')
-    
+
     // 如果需要清空所有存储，可以使用：
     // Taro.clearStorageSync()
-    
+
     console.log('已清除所有本地存储数据')
   } catch (error) {
     console.error('清除本地存储失败:', error)
@@ -667,7 +667,7 @@ export async function authenticatedRequest(
   options: Omit<Taro.request.Option, 'url'> = {}
 ): Promise<any> {
   const token = getAccessToken()
-  
+
   if (!token) {
     throw new Error('未登录，请先登录')
   }
@@ -694,7 +694,7 @@ export async function login(code: string, phoneCode?: string): Promise<LoginResp
     const requestData: LoginRequestParams = {
       code: code
     }
-    
+
     if (phoneCode) {
       requestData.phoneCode = phoneCode
     }
@@ -1114,6 +1114,7 @@ export interface PublicFoodLibraryItem {
   longitude?: number | null
   city?: string | null
   district?: string | null
+  detail_address?: string | null
   status: string
   like_count: number
   comment_count: number
@@ -1160,6 +1161,7 @@ export interface CreatePublicFoodLibraryRequest {
   longitude?: number
   city?: string
   district?: string
+  detail_address?: string
 }
 
 /** 公共食物库列表查询参数 */

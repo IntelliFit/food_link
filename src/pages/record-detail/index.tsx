@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import type { FoodRecord } from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT } from '../../utils/poster'
+import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import logoPng from '../../assets/icons/home-active.png'
 
 import './index.scss'
@@ -14,12 +15,12 @@ const MEAL_TYPE_NAMES: Record<string, string> = {
   snack: '加餐'
 }
 
-const MEAL_TYPE_ICONS: Record<string, string> = {
-  breakfast: '🌅',
-  lunch: '☀️',
-  dinner: '🌙',
-  snack: '🍎'
-}
+const MEAL_ICON_CONFIG = {
+  breakfast: { Icon: IconBreakfast, color: '#ff6900' },
+  lunch: { Icon: IconLunch, color: '#00c950' },
+  dinner: { Icon: IconDinner, color: '#2b7fff' },
+  snack: { Icon: IconSnack, color: '#ad46ff' }
+} as const
 
 const CONTEXT_STATE_LABELS: Record<string, string> = {
   post_workout: '刚健身完',
@@ -81,7 +82,7 @@ export default function RecordDetailPage() {
   }
 
   const mealName = MEAL_TYPE_NAMES[record.meal_type] || record.meal_type
-  const mealIcon = MEAL_TYPE_ICONS[record.meal_type] || '🍽️'
+  const mealIconConfig = MEAL_ICON_CONFIG[record.meal_type as keyof typeof MEAL_ICON_CONFIG] || MEAL_ICON_CONFIG.snack
   const timeStr = formatRecordTime(record.record_time)
   const items = record.items || []
 
@@ -213,7 +214,7 @@ export default function RecordDetailPage() {
         <View className="detail-header">
           <View className="meal-badge">
             <View className="meal-icon">
-              <Text>{mealIcon}</Text>
+              <mealIconConfig.Icon size={40} color={mealIconConfig.color} />
             </View>
             <View className="meal-badge-text">
               <Text className="meal-name">{mealName}</Text>

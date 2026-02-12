@@ -1209,6 +1209,47 @@ async def health():
     return {"status": "healthy"}
 
 
+# ---------- 天地图地名搜索代理 ----------
+
+class LocationSearchRequest(BaseModel):
+    """天地图地名搜索请求"""
+    keyWord: str = Field(..., description="搜索关键字")
+    count: int = Field(default=10, description="返回结果数量")
+
+
+@app.post("/api/location/search")
+async def location_search(body: LocationSearchRequest):
+    """
+    代理天地图地名搜索 API（避免小程序直连域名限制）
+    """
+    tk = os.getenv("TIANDITU_TK", "")
+    if not tk:
+        raise HTTPException(status_code=500, detail="后端未配置天地图 API Key")
+
+    post_str = json.dumps({
+        "keyWord": body.keyWord,
+        "level": 12,
+        "mapBound": "73.44696044921875,3.408477306060791,135.08583068847656,53.557926071870545",
+        "queryType": 1,
+        "start": 0,
+        "count": body.count
+    })
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://api.tianditu.gov.cn/v2/search",
+                params={"postStr": post_str, "type": "query", "tk": tk}
+            )
+            data = resp.json()
+            return data
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="天地图 API 请求超时")
+    except Exception as e:
+        print(f"[location_search] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"位置搜索失败: {str(e)}")
+
+
 class UpdateUserInfoRequest(BaseModel):
     nickname: Optional[str] = None
     avatar: Optional[str] = None

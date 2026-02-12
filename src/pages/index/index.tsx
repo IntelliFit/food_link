@@ -2,10 +2,9 @@ import { View, Text } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { getHomeDashboard, getAccessToken, type HomeIntakeData, type HomeMealItem } from '../../utils/api'
-import { IconCamera, IconText, IconClock, IconProtein, IconCarbs, IconFat } from '../../components/iconfont'
+import { IconCamera, IconText, IconClock, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import { Empty, Button } from '@taroify/core'
-import { FlowerOutlined, FireOutlined, HomeOutlined, BirthdayCakeOutlined } from '@taroify/icons'
-import '@taroify/icons/style'
+import CustomNavBar from '../../components/CustomNavBar'
 
 import './index.scss'
 
@@ -27,12 +26,12 @@ function getGreeting(): string {
   return '晚上好'
 }
 
-// 餐次对应的 Taroify 图标及颜色
+// 餐次对应的 iconfont 图标及颜色
 const MEAL_ICON_CONFIG = {
-  breakfast: { Icon: FlowerOutlined, color: '#ff6900' },
-  lunch: { Icon: FireOutlined, color: '#00c950' },
-  dinner: { Icon: HomeOutlined, color: '#2b7fff' },
-  snack: { Icon: BirthdayCakeOutlined, color: '#ad46ff' }
+  breakfast: { Icon: IconBreakfast, color: '#ff6900' },
+  lunch: { Icon: IconLunch, color: '#00c950' },
+  dinner: { Icon: IconDinner, color: '#2b7fff' },
+  snack: { Icon: IconSnack, color: '#ad46ff' }
 } as const
 
 export default function IndexPage() {
@@ -77,6 +76,11 @@ export default function IndexPage() {
 
   return (
     <View className='home-page'>
+      {/* 自定义渐变导航栏 */}
+      <CustomNavBar
+        title='首页'
+        background='linear-gradient(to right, #00bc7d 0%, #00bba7 100%)'
+      />
       {/* 顶部渐变区域 */}
       <View className='header-section'>
         <View className='header-content'>
@@ -102,8 +106,8 @@ export default function IndexPage() {
             <Text className='calorie-target'>/{intakeData.target} kcal</Text>
           </View>
           <View className='progress-bar'>
-            <View 
-              className='progress-fill' 
+            <View
+              className='progress-fill'
               style={{ width: `${intakeData.progress}%` }}
             />
           </View>
@@ -140,7 +144,7 @@ export default function IndexPage() {
       <View className='quick-record-section'>
         <Text className='section-title'>快捷记录</Text>
         <View className='quick-buttons'>
-          <View 
+          <View
             className='quick-button photo-btn'
             onClick={() => handleQuickRecord('photo')}
           >
@@ -149,7 +153,7 @@ export default function IndexPage() {
             </View>
             <Text className='button-text'>拍照识别</Text>
           </View>
-          <View 
+          <View
             className='quick-button text-btn'
             onClick={() => handleQuickRecord('text')}
           >
@@ -158,7 +162,7 @@ export default function IndexPage() {
             </View>
             <Text className='button-text'>文字记录</Text>
           </View>
-          <View 
+          <View
             className='quick-button history-btn'
             onClick={() => handleQuickRecord('history')}
           >
@@ -184,9 +188,9 @@ export default function IndexPage() {
             <Empty>
               <Empty.Image />
               <Empty.Description>暂无今日餐食</Empty.Description>
-              <Button 
-                shape="round" 
-                color="primary" 
+              <Button
+                shape="round"
+                color="primary"
                 className="empty-record-btn"
                 onClick={() => handleQuickRecord('photo')}
               >
@@ -194,49 +198,49 @@ export default function IndexPage() {
               </Button>
             </Empty>
           ) : (
-          meals.map((meal, index) => (
-            <View key={`${meal.type}-${index}`} className='meal-card'>
-              <View className='meal-header'>
-                <View className='meal-info'>
-                  <View className={`meal-icon ${meal.type}-icon`}>
-                    {(() => {
-                      const { Icon, color } = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
-                      return <Icon size={28} color={color} />
-                    })()}
-                  </View>
-                  <View className='meal-details'>
-                    <Text className='meal-name'>{meal.name}</Text>
-                    <Text className='meal-time'>{meal.time}</Text>
-                  </View>
-                </View>
-                <View className='meal-calorie'>
-                  <Text className='calorie-text'>{meal.calorie} kcal</Text>
-                  <Text className='calorie-label'>目标 {meal.target} kcal</Text>
-                </View>
-              </View>
-              <View className='meal-progress'>
-                <View className='meal-progress-bar'>
-                  <View 
-                    className={`meal-progress-fill ${meal.type}-progress`}
-                    style={{ width: `${meal.progress}%` }}
-                  />
-                </View>
-                <Text className='progress-percent'>{Number(meal.progress).toFixed(0)}%</Text>
-              </View>
-              {meal.tags && meal.tags.length > 0 && (
-                <View className='meal-tags'>
-                  {meal.tags.map((tag, tagIndex) => (
-                    <View
-                      key={tagIndex}
-                      className={`meal-tag ${meal.type}-tag`}
-                    >
-                      <Text className='tag-text'>{tag}</Text>
+            meals.map((meal, index) => (
+              <View key={`${meal.type}-${index}`} className='meal-card'>
+                <View className='meal-header'>
+                  <View className='meal-info'>
+                    <View className={`meal-icon ${meal.type}-icon`}>
+                      {(() => {
+                        const { Icon, color } = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
+                        return <Icon size={40} color={color} />
+                      })()}
                     </View>
-                  ))}
+                    <View className='meal-details'>
+                      <Text className='meal-name'>{meal.name}</Text>
+                      <Text className='meal-time'>{meal.time}</Text>
+                    </View>
+                  </View>
+                  <View className='meal-calorie'>
+                    <Text className='calorie-text'>{meal.calorie} kcal</Text>
+                    <Text className='calorie-label'>目标 {meal.target} kcal</Text>
+                  </View>
                 </View>
-              )}
-            </View>
-          )))}
+                <View className='meal-progress'>
+                  <View className='meal-progress-bar'>
+                    <View
+                      className={`meal-progress-fill ${meal.type}-progress`}
+                      style={{ width: `${meal.progress}%` }}
+                    />
+                  </View>
+                  <Text className='progress-percent'>{Number(meal.progress).toFixed(0)}%</Text>
+                </View>
+                {meal.tags && meal.tags.length > 0 && (
+                  <View className='meal-tags'>
+                    {meal.tags.map((tag, tagIndex) => (
+                      <View
+                        key={tagIndex}
+                        className={`meal-tag ${meal.type}-tag`}
+                      >
+                        <Text className='tag-text'>{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )))}
         </View>
       </View>
     </View>

@@ -143,6 +143,15 @@ export default function AnalyzePage() {
     })
   }
 
+  const handlePreviewImage = () => {
+    if (imagePath) {
+      Taro.previewImage({
+        current: imagePath,
+        urls: [imagePath]
+      })
+    }
+  }
+
   return (
     <View className='analyze-page'>
       {/* 图片预览区域 */}
@@ -152,6 +161,7 @@ export default function AnalyzePage() {
             src={imagePath}
             mode='aspectFill'
             className='preview-image'
+            onClick={handlePreviewImage}
           />
         ) : (
           <View className='no-image-placeholder'>
@@ -257,7 +267,7 @@ export default function AnalyzePage() {
         <Text className='section-hint'>
           提供更多上下文能显著提高识别准确率(如:这是我的500ml 标准便当盒)。
         </Text>
-        
+
         <View className='input-wrapper'>
           <Textarea
             className='details-input'
@@ -277,7 +287,7 @@ export default function AnalyzePage() {
 
       {/* 确认按钮 */}
       <View className='confirm-section'>
-        <View 
+        <View
           className={`confirm-btn ${!imagePath || isAnalyzing ? 'disabled' : ''}`}
           onClick={!isAnalyzing ? handleConfirm : undefined}
         >

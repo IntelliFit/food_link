@@ -14,10 +14,10 @@ const MEAL_TYPE_NAMES: Record<string, string> = {
 }
 
 const MEAL_TYPE_ICONS: Record<string, string> = {
-  breakfast: '🌅',
-  lunch: '☀️',
-  dinner: '🌙',
-  snack: '🍎'
+  breakfast: 'icon-zaocan',
+  lunch: 'icon-wucan',
+  dinner: 'icon-wancan',
+  snack: 'icon-lingshi'
 }
 
 /** 饮食目标（状态一） */
@@ -85,10 +85,10 @@ export default function RecordPage() {
 
 
   const meals = [
-    { id: 'breakfast', name: '早餐', icon: '🌅', color: '#ff6900' },
-    { id: 'lunch', name: '午餐', icon: '☀️', color: '#00c950' },
-    { id: 'dinner', name: '晚餐', icon: '🌙', color: '#2b7fff' },
-    { id: 'snack', name: '加餐', icon: '🍎', color: '#ad46ff' }
+    { id: 'breakfast', name: '早餐', icon: 'icon-zaocan', color: '#ff6900' },
+    { id: 'lunch', name: '午餐', icon: 'icon-wucan', color: '#00c950' },
+    { id: 'dinner', name: '晚餐', icon: 'icon-wancan', color: '#2b7fff' },
+    { id: 'snack', name: '加餐', icon: 'icon-lingshi', color: '#ad46ff' }
   ]
 
   const commonFoods = [
@@ -366,7 +366,10 @@ export default function RecordPage() {
           {/* 输入主卡片 */}
           <View className='text-input-card'>
             <View className='card-header'>
-              <Text className='card-title'>✍️ 描述您的饮食</Text>
+              <View className='card-title-wrapper'>
+                <Text className='iconfont icon-shouxieqianming card-title-icon'></Text>
+                <Text className='card-title'>描述您的饮食</Text>
+              </View>
             </View>
 
             <View className='input-wrapper'>
@@ -425,7 +428,7 @@ export default function RecordPage() {
                     className={`meal-option ${selectedMeal === meal.id ? 'active' : ''}`}
                     onClick={() => handleMealSelect(meal.id)}
                   >
-                    <Text className='meal-icon'>{meal.icon}</Text>
+                    <Text className={`iconfont ${meal.icon} meal-icon`}></Text>
                     <Text className='meal-name'>{meal.name}</Text>
                   </View>
                 ))}
@@ -505,7 +508,7 @@ export default function RecordPage() {
                 }}
               >
                 <Text className='date-text'>{formatDate(selectedDate)}</Text>
-                <Text className='date-icon'>📅</Text>
+                <Text className='iconfont icon-shizhong date-icon'></Text>
               </View>
             </View>
             <View className='date-stats'>
@@ -543,7 +546,7 @@ export default function RecordPage() {
                   <View className='meal-card-header'>
                     <View className='meal-header-left'>
                       <View className={`meal-type-icon ${meal.mealType}-icon`}>
-                        <Text>{MEAL_TYPE_ICONS[meal.mealType] || '🍽️'}</Text>
+                        <Text className={`iconfont ${MEAL_TYPE_ICONS[meal.mealType] || 'icon-shiwu'}`}></Text>
                       </View>
                       <View className='meal-header-info'>
                         <Text className='meal-card-name'>{meal.mealName}</Text>
@@ -553,11 +556,11 @@ export default function RecordPage() {
                     <View className='meal-header-right'>
                       <Text className='meal-calorie'>{meal.totalCalorie} kcal</Text>
                       <View className='meal-actions'>
-                        <View className='action-icon' onClick={(e) => handleEditRecord(e, meal.id)}>
-                          <Text>✏️</Text>
+                        <View className='action-icon edit-icon' onClick={(e) => handleEditRecord(e, meal.id)}>
+                          <Text className='iconfont icon-ic_detail'></Text>
                         </View>
-                        <View className='action-icon' onClick={(e) => handleDeleteRecord(e, meal.id)}>
-                          <Text>🗑️</Text>
+                        <View className='action-icon delete-icon' onClick={(e) => handleDeleteRecord(e, meal.id)}>
+                          <Text className='iconfont icon-shangzhang delete-icon-rotate'></Text>
                         </View>
                       </View>
                     </View>

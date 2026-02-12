@@ -267,6 +267,17 @@
   margin-bottom: 8rpx;
 }
 
+.card-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.card-title-icon {
+  font-size: 32rpx;
+  color: #1e2939;
+}
+
 .card-title {
   font-size: 32rpx;
   font-weight: 700;
@@ -410,6 +421,11 @@
 
   .meal-icon {
     font-size: 36rpx;
+    color: #64748b;
+  }
+
+  &.active .meal-icon {
+    color: #00bc7d;
   }
 
   .meal-name {
@@ -472,7 +488,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  padding: 12rpx 32rpx calc(12rpx + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
   z-index: 100;
@@ -717,6 +733,9 @@
 .date-icon {
   font-size: 32rpx;
   color: #6a7282;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .date-stats {
@@ -789,22 +808,30 @@
   justify-content: center;
   font-size: 28rpx;
   flex-shrink: 0;
+
+  .iconfont {
+    font-size: 28rpx;
+  }
 }
 
 .breakfast-icon {
   background: #ffedd4;
+  color: #ff6900;
 }
 
 .lunch-icon {
   background: #dcfce7;
+  color: #00c950;
 }
 
 .dinner-icon {
   background: #dbeafe;
+  color: #2b7fff;
 }
 
 .snack-icon {
   background: #f3e8ff;
+  color: #ad46ff;
 }
 
 .meal-header-info {
@@ -855,13 +882,31 @@
   border-radius: 10rpx;
   background: #f9fafb;
   transition: all 0.2s ease;
-  font-size: 24rpx;
+  font-size: 20rpx;
   cursor: pointer;
+
+  .iconfont {
+    font-size: 20rpx;
+    color: #6a7282;
+  }
+
+  &.edit-icon .iconfont {
+    color: #2b7fff;
+  }
+
+  &.delete-icon .iconfont {
+    color: #ef4444;
+  }
 }
 
 .action-icon:active {
   background: #f3f4f6;
   transform: scale(0.95);
+}
+
+.delete-icon-rotate {
+  display: inline-block;
+  transform: rotate(180deg);
 }
 
 // 食物列表

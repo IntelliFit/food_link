@@ -57,5 +57,13 @@ export default defineAppConfig({
         selectedIconPath: 'assets/icons/profile-active.png'
       }
     ]
-  }
+  },
+  permission: {
+    'scope.userLocation': {
+      desc: '你的位置信息将用于分享食物时标记商家位置'
+    }
+  },
+  requiredPrivateInfos: [
+    'getLocation'
+  ]
 })

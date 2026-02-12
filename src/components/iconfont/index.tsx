@@ -69,3 +69,43 @@ export const IconCarbs = ({ size = 48, color = '#000000', className = '' }: Icon
     />
   )
 }
+
+/** 早餐图标 */
+export const IconBreakfast = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-zaocan ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 午餐图标 */
+export const IconLunch = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-wucan ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 晚餐图标 */
+export const IconDinner = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-wancan ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 加餐/零食图标 */
+export const IconSnack = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-lingshi ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}

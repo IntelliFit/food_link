@@ -10,6 +10,20 @@ import {
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment
 } from '../../utils/api'
+import {
+  ShopOutlined,
+  LocationOutlined,
+  GuideOutlined,
+  Star,
+  Like,
+  LikeOutlined,
+  CommentOutlined,
+  Cross,
+  StarOutlined,
+  FireOutlined,
+  UserOutlined
+} from '@taroify/icons'
+import '@taroify/icons/style'
 import './index.scss'
 
 function formatTime(timeStr: string | null | undefined): string {
@@ -141,7 +155,10 @@ export default function FoodLibraryDetailPage() {
       <View className="info-card">
         <View className="info-header">
           <Text className="info-title">{item.description || '健康餐'}</Text>
-          <Text className="info-calories">{item.total_calories.toFixed(0)} kcal</Text>
+          <View className="info-calories-badge">
+            <FireOutlined size="16" />
+            <Text className="info-calories">{item.total_calories.toFixed(0)} kcal</Text>
+          </View>
         </View>
         {item.insight && (
           <Text className="info-insight">{item.insight}</Text>
@@ -166,7 +183,9 @@ export default function FoodLibraryDetailPage() {
               <Image className="author-avatar-img" src={item.author.avatar} />
             </View>
           ) : (
-            <View className="author-avatar" />
+            <View className="author-avatar">
+              <UserOutlined size="20" color="#9ca3af" />
+            </View>
           )}
           <View className="author-info">
             <Text className="author-name">{item.author?.nickname || '用户'}</Text>
@@ -181,25 +200,25 @@ export default function FoodLibraryDetailPage() {
           <Text className="card-title">商家信息</Text>
           {item.merchant_name && (
             <View className="merchant-item">
-              <Text className="merchant-icon">🏪</Text>
+              <View className="merchant-icon-wrapper"><ShopOutlined size="18" /></View>
               <Text className="merchant-text">{item.merchant_name}</Text>
             </View>
           )}
           {item.merchant_address && (
             <View className="merchant-item">
-              <Text className="merchant-icon">📍</Text>
+              <View className="merchant-icon-wrapper"><LocationOutlined size="18" /></View>
               <Text className="merchant-text">{item.merchant_address}</Text>
             </View>
           )}
           {item.city && (
             <View className="merchant-item">
-              <Text className="merchant-icon">🗺️</Text>
+              <View className="merchant-icon-wrapper"><GuideOutlined size="18" /></View>
               <Text className="merchant-text">{item.city}{item.district ? ` ${item.district}` : ''}</Text>
             </View>
           )}
           {item.taste_rating && (
             <View className="merchant-item">
-              <Text className="merchant-icon">⭐</Text>
+              <View className="merchant-icon-wrapper"><Star size="18" className="star-icon" /></View>
               <Text className="merchant-text">口味评分：{item.taste_rating} 分</Text>
             </View>
           )}
@@ -244,14 +263,20 @@ export default function FoodLibraryDetailPage() {
                       <Image className="comment-avatar-img" src={c.avatar} />
                     </View>
                   ) : (
-                    <View className="comment-avatar" />
+                    <View className="comment-avatar">
+                      <UserOutlined size="16" color="#9ca3af" />
+                    </View>
                   )}
                   <View className="comment-info">
                     <Text className="comment-name">{c.nickname}</Text>
                     <Text className="comment-time">{formatTime(c.created_at)}</Text>
                   </View>
                   {c.rating && (
-                    <Text className="comment-rating">{'⭐'.repeat(c.rating)}</Text>
+                    <View className="comment-rating-stars">
+                      {Array.from({ length: c.rating }).map((_, i) => (
+                        <Star key={i} size="12" className="star-filled" />
+                      ))}
+                    </View>
                   )}
                 </View>
                 <Text className="comment-content">{c.content}</Text>
@@ -264,12 +289,12 @@ export default function FoodLibraryDetailPage() {
       {/* 底部操作栏 */}
       <View className="bottom-bar">
         <View className={`action-btn like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
-          <Text className="btn-icon">{item.liked ? '❤️' : '🤍'}</Text>
-          <Text>{item.like_count} 赞</Text>
+          {item.liked ? <Like size="20" /> : <LikeOutlined size="20" />}
+          <Text className="action-text">{item.like_count > 0 ? item.like_count : '点赞'}</Text>
         </View>
         <View className="action-btn comment-btn" onClick={() => setShowCommentModal(true)}>
-          <Text className="btn-icon">💬</Text>
-          <Text>评论</Text>
+          <CommentOutlined size="20" />
+          <Text className="action-text">评论</Text>
         </View>
       </View>
 
@@ -279,19 +304,21 @@ export default function FoodLibraryDetailPage() {
           <View className="comment-modal-content" onClick={e => e.stopPropagation()}>
             <View className="modal-header">
               <Text className="modal-title">发表评论</Text>
-              <Text className="modal-close" onClick={() => setShowCommentModal(false)}>✕</Text>
+              <View className="modal-close" onClick={() => setShowCommentModal(false)}>
+                <Cross size="24" color="#9ca3af" />
+              </View>
             </View>
             <View className="rating-row">
               <Text className="rating-label">评分（可选）：</Text>
               <View className="rating-stars">
                 {[1, 2, 3, 4, 5].map(n => (
-                  <Text
+                  <View
                     key={n}
-                    className={`rating-star ${n <= commentRating ? 'active' : ''}`}
+                    className={`rating-star-wrapper ${n <= commentRating ? 'active' : ''}`}
                     onClick={() => setCommentRating(n === commentRating ? 0 : n)}
                   >
-                    ★
-                  </Text>
+                    {n <= commentRating ? <Star size="28" /> : <StarOutlined size="28" />}
+                  </View>
                 ))}
               </View>
             </View>

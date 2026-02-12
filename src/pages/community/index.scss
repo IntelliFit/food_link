@@ -212,7 +212,7 @@
   align-items: center;
   gap: 8rpx;
   transition: all 0.2s ease;
-  
+
   &:active {
     opacity: 0.7;
   }
@@ -251,7 +251,7 @@
   transition: all 0.25s ease;
   box-sizing: border-box;
   border: 1rpx solid rgba(0, 188, 125, 0.06);
-  
+
   &:active {
     transform: scale(0.98);
     box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.12);
@@ -313,7 +313,7 @@
   justify-content: space-between;
   box-shadow: 0 12rpx 40rpx rgba(255, 105, 0, 0.3), 0 4rpx 16rpx rgba(255, 105, 0, 0.2);
   transition: all 0.25s ease;
-  
+
   &:active {
     transform: scale(0.99);
   }
@@ -419,7 +419,7 @@
   transition: all 0.2s ease;
   min-width: fit-content;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-  
+
   &:active {
     transform: scale(0.96);
     background: #ecfdf5;
@@ -451,11 +451,11 @@
   margin-bottom: 0;
   border: 1rpx solid rgba(0, 188, 125, 0.04);
   transition: all 0.2s ease;
-  
+
   &:active {
     transform: scale(0.998);
   }
-  
+
   &:last-child {
     margin-bottom: 0;
   }
@@ -522,7 +522,7 @@
   flex-shrink: 0;
   line-height: 1;
   transition: all 0.2s ease;
-  
+
   &:active {
     transform: scale(0.9);
     opacity: 0.7;
@@ -539,7 +539,7 @@
 }
 
 /* 食物描述与图片之间的间隔 */
-.feed-content + .feed-image {
+.feed-content+.feed-image {
   margin-top: 28rpx;
 }
 
@@ -569,7 +569,7 @@
   font-size: 30rpx;
   color: #fff;
   font-weight: 600;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
   padding: 10rpx 24rpx;
   border-radius: 32rpx;
   box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
@@ -649,7 +649,7 @@
   gap: 16rpx;
   min-width: 0;
   transition: all 0.2s ease;
-  
+
   &:active {
     opacity: 0.7;
     transform: scale(0.95);
@@ -790,7 +790,7 @@
   bottom: 200rpx;
   width: 112rpx;
   height: 112rpx;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -799,7 +799,7 @@
   z-index: 100;
   transition: all 0.25s ease;
   border: 4rpx solid rgba(255, 255, 255, 0.9);
-  
+
   &:active {
     transform: scale(0.95);
   }
@@ -947,12 +947,12 @@
   font-size: 24rpx;
   padding: 8rpx 20rpx;
   border-radius: 8rpx;
-  
+
   &.added {
     background: #f3f4f6;
     color: #6a7282;
   }
-  
+
   &.pending {
     background: #fef3c7;
     color: #b45309;

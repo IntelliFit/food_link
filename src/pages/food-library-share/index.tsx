@@ -14,6 +14,9 @@ import './index.scss'
 
 const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '自制', '健身餐']
 
+// 后端 API 基础地址（编译时替换）
+const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
+
 export default function FoodLibrarySharePage() {
   // 选择来源：record（从记录分享）或 upload（直接上传）
   const [sourceType, setSourceType] = useState<'record' | 'upload'>('upload')
@@ -48,8 +51,15 @@ export default function FoodLibrarySharePage() {
   // 位置
   const [city, setCity] = useState('')
   const [district, setDistrict] = useState('')
+  const [detailAddress, setDetailAddress] = useState('')
   const [latitude, setLatitude] = useState<number | undefined>(undefined)
   const [longitude, setLongitude] = useState<number | undefined>(undefined)
+
+  // 位置搜索
+  const [showLocationSearch, setShowLocationSearch] = useState(false)
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const [searchResults, setSearchResults] = useState<Array<{ name: string; address: string; lonlat: string; promptCity: string }>>([])
+  const [searching, setSearching] = useState(false)
 
   // 提交状态
   const [submitting, setSubmitting] = useState(false)
@@ -152,6 +162,74 @@ export default function FoodLibrarySharePage() {
     }
   }
 
+  // 天地图地名搜索（通过后端代理）
+  const handleLocationSearch = async () => {
+    const kw = searchKeyword.trim()
+    if (!kw) {
+      Taro.showToast({ title: '请输入搜索关键字', icon: 'none' })
+      return
+    }
+    setSearching(true)
+    try {
+      const res = await Taro.request({
+        url: `${API_BASE_URL}/api/location/search`,
+        method: 'POST',
+        header: { 'Content-Type': 'application/json' },
+        data: { keyWord: kw, count: 10 }
+      })
+      const data = res.data as any
+      if (data?.pois && Array.isArray(data.pois)) {
+        // 从 prompt.admins 提取搜索结果对应城市
+        const promptCity = data.prompt?.[0]?.admins?.[0]?.adminName || ''
+        setSearchResults(data.pois.map((poi: any) => ({
+          name: poi.name || '',
+          address: poi.address || '',
+          lonlat: poi.lonlat || '',
+          promptCity
+        })))
+      } else {
+        setSearchResults([])
+        Taro.showToast({ title: '未找到相关位置', icon: 'none' })
+      }
+    } catch (e: any) {
+      console.error('位置搜索失败:', e)
+      Taro.showToast({ title: '搜索失败', icon: 'none' })
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  // 选择搜索结果中的位置
+  const handleSelectLocation = (poi: { name: string; address: string; lonlat: string; promptCity: string }) => {
+    const addr = poi.address || ''
+    // 尝试从地址解析城市和区域
+    const cityMatch = addr.match(/^(.+?[市省])/)
+    const districtMatch = addr.match(/[市省](.+?[区县市])/)
+    // 优先用地址中的城市，否则用 prompt 中的城市
+    setCity(cityMatch ? cityMatch[1] : poi.promptCity)
+    // 解析区域
+    if (districtMatch) {
+      setDistrict(districtMatch[1])
+    } else {
+      // 地址没有城市前缀时，尝试从开头匹配区域（如 "长宁区xxx"）
+      const districtOnly = addr.match(/^(.+?[区县市])/)
+      setDistrict(districtOnly ? districtOnly[1] : '')
+    }
+    // 详细地址 = address + name
+    setDetailAddress(addr + (poi.name ? ' ' + poi.name : ''))
+    // 解析经纬度
+    if (poi.lonlat) {
+      const parts = poi.lonlat.split(',')
+      if (parts.length === 2) {
+        setLongitude(parseFloat(parts[0]))
+        setLatitude(parseFloat(parts[1]))
+      }
+    }
+    setShowLocationSearch(false)
+    setSearchKeyword('')
+    setSearchResults([])
+  }
+
   // 添加标签
   const handleAddTag = () => {
     const tag = customTag.trim()
@@ -192,7 +270,7 @@ export default function FoodLibrarySharePage() {
     setSubmitting(true)
     try {
       await createPublicFoodLibraryItem({
-        image_path: imageUrl || selectedRecord?.image_path,
+        image_path: imageUrl || selectedRecord?.image_path || undefined,
         source_record_id: selectedRecord?.id,
         total_calories: totalCalories,
         total_protein: totalProtein,
@@ -210,7 +288,8 @@ export default function FoodLibrarySharePage() {
         latitude,
         longitude,
         city: city.trim() || undefined,
-        district: district.trim() || undefined
+        district: district.trim() || undefined,
+        detail_address: detailAddress.trim() || undefined
       })
       Taro.showToast({ title: '分享成功', icon: 'success' })
       setTimeout(() => {
@@ -235,14 +314,14 @@ export default function FoodLibrarySharePage() {
             className={`source-option ${sourceType === 'upload' ? 'active' : ''}`}
             onClick={() => setSourceType('upload')}
           >
-            <Text className="source-icon">📷</Text>
+            <Text className="source-icon iconfont icon-paizhao-xianxing" />
             <Text className="source-text">拍照上传</Text>
           </View>
           <View
             className={`source-option ${sourceType === 'record' ? 'active' : ''}`}
             onClick={() => { setSourceType('record'); setShowRecordModal(true) }}
           >
-            <Text className="source-icon">📋</Text>
+            <Text className="source-icon iconfont icon-ic_detail" />
             <Text className="source-text">从记录选择</Text>
           </View>
         </View>
@@ -262,7 +341,7 @@ export default function FoodLibrarySharePage() {
           />
         ) : (
           <View className="image-upload-area" onClick={handleChooseImage}>
-            <Text className="upload-icon">📷</Text>
+            <Text className="upload-icon iconfont icon-paizhao-xianxing" />
             <Text className="upload-text">点击上传食物图片</Text>
           </View>
         )}
@@ -380,7 +459,13 @@ export default function FoodLibrarySharePage() {
 
       {/* 位置 */}
       <View className="location-section">
-        <Text className="section-title">位置信息（可选）</Text>
+        <View className="location-title-row">
+          <Text className="section-title">位置信息（可选）</Text>
+          <View className="search-location-btn" onClick={() => setShowLocationSearch(true)}>
+            <Text className="iconfont icon-dizhi" />
+            <Text>搜索位置</Text>
+          </View>
+        </View>
         <View className="form-item">
           <Text className="form-label">城市</Text>
           <Input
@@ -400,13 +485,22 @@ export default function FoodLibrarySharePage() {
           />
         </View>
         <View className="form-item">
+          <Text className="form-label">详细地址</Text>
+          <Input
+            className="form-input"
+            placeholder="如：XX路XX号"
+            value={detailAddress}
+            onInput={e => setDetailAddress(e.detail.value)}
+          />
+        </View>
+        <View className="form-item">
           {latitude && longitude ? (
             <View className="location-info">
-              <Text className="location-text">📍 已获取位置 ({latitude.toFixed(4)}, {longitude.toFixed(4)})</Text>
+              <Text className="location-text"><Text className="iconfont icon-dizhi" /> 已获取位置 ({latitude.toFixed(4)}, {longitude.toFixed(4)})</Text>
             </View>
           ) : (
             <View className="location-btn" onClick={handleGetLocation}>
-              <Text className="location-icon">📍</Text>
+              <Text className="location-icon iconfont icon-dizhi" />
               <Text>获取当前位置</Text>
             </View>
           )}
@@ -452,7 +546,7 @@ export default function FoodLibrarySharePage() {
                     {r.image_path ? (
                       <Image className="record-image" src={r.image_path} mode="aspectFill" />
                     ) : (
-                      <View className="record-image-placeholder">🍽️</View>
+                      <View className="record-image-placeholder"><Text className="iconfont icon-shiwu" /></View>
                     )}
                     <View className="record-info">
                       <Text className="record-desc">{r.description || '饮食记录'}</Text>
@@ -461,6 +555,44 @@ export default function FoodLibrarySharePage() {
                   </View>
                 ))}
               </ScrollView>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* 位置搜索弹窗 */}
+      {showLocationSearch && (
+        <View className="location-search-modal" onClick={() => setShowLocationSearch(false)}>
+          <View className="location-search-content" onClick={e => e.stopPropagation()}>
+            <View className="modal-header">
+              <Text className="modal-title">搜索位置</Text>
+              <Text className="modal-close" onClick={() => setShowLocationSearch(false)}>✕</Text>
+            </View>
+            <View className="search-input-row">
+              <Input
+                className="search-input"
+                placeholder="输入地名、商家名等关键字"
+                value={searchKeyword}
+                onInput={e => setSearchKeyword(e.detail.value)}
+                onConfirm={handleLocationSearch}
+              />
+              <View className="search-do-btn" onClick={handleLocationSearch}>
+                {searching ? '搜索中...' : '搜索'}
+              </View>
+            </View>
+            {searchResults.length > 0 ? (
+              <ScrollView className="search-result-list" scrollY enhanced showScrollbar={false}>
+                {searchResults.map((poi, idx) => (
+                  <View key={idx} className="search-result-item" onClick={() => handleSelectLocation(poi)}>
+                    <Text className="result-name">{poi.name}</Text>
+                    <Text className="result-address">{poi.address}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View className="search-empty">
+                {searching ? '正在搜索...' : '输入关键字搜索位置'}
+              </View>
             )}
           </View>
         </View>

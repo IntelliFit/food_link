@@ -1,541 +1,540 @@
 .home-page {
-    min-height: 100vh;
-    background: #f9fafb;
-    padding-bottom: 100rpx;
-    position: relative;
-  }
-  
-  // 顶部浅绿过渡到底色（对应设计稿整体背景）
-  .home-page::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 360rpx;
-    background: linear-gradient(to bottom, #ecfdf5 0%, rgba(236, 253, 245, 0) 100%);
-    pointer-events: none;
-    z-index: 0;
-  }
-  
-  // 顶部渐变区域
-  .header-section {
-    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-    padding: 48rpx 24rpx 32rpx;
-    position: relative;
-    z-index: 1;
-    min-height: 400rpx;
-    box-sizing: border-box;
-  }
-  
-  .header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 32rpx;
-  }
-  
-  .greeting-section {
-    flex: 1;
-  }
-  
-  .greeting-title {
-    display: block;
-    font-size: 38rpx;
-    font-weight: bold;
-    color: #ffffff;
-    line-height: 52rpx;
-    margin-bottom: 10rpx;
-  }
-  
-  .greeting-subtitle {
-    display: block;
-    font-size: 28rpx;
-    color: #d0fae5;
-    line-height: 40rpx;
-  }
-  
-  .trend-icon {
-    width: 56rpx;
-    height: 56rpx;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
+  min-height: 100vh;
+  background: #f9fafb;
+  padding-bottom: 100rpx;
+  position: relative;
+}
 
-  .trend-icon-symbol {
-    font-size: 36rpx;
-    color: #ffffff;
-  }
-  
-  // 今日摄入卡片
-  .intake-card {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 24rpx;
-    padding: 24rpx;
-  }
-  
-  .intake-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24rpx;
-  }
-  
-  .intake-label {
-    font-size: 28rpx;
-    color: #d0fae5;
-    line-height: 40rpx;
-  }
-  
-  .target-label {
-    font-size: 26rpx;
-    color: #d0fae5;
-    line-height: 36rpx;
-  }
-  
-  .calorie-section {
-    display: flex;
-    align-items: baseline;
-    margin-bottom: 24rpx;
-  }
-  
-  .calorie-value {
-    font-size: 72rpx;
-    font-weight: bold;
-    color: #ffffff;
-    line-height: 84rpx;
-    margin-right: 12rpx;
-  }
-  
-  .calorie-target {
-    font-size: 32rpx;
-    color: #d0fae5;
-    line-height: 48rpx;
-  }
-  
-  .progress-bar {
-    width: 100%;
-    height: 12rpx;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 9999rpx;
-    margin-bottom: 24rpx;
-    overflow: hidden;
-  }
-  
-  .progress-fill {
-    height: 100%;
-    background: #ffffff;
-    border-radius: 9999rpx;
-  }
-  
-  .macros-section {
-    display: flex;
-    justify-content: space-between;
-    gap: 16rpx;
-  }
-  
-  .macro-item {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8rpx;
-  }
-  
-  .macro-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 6rpx;
-  }
-  
-  .macro-label {
-    font-size: 26rpx;
-    color: #d0fae5;
-    line-height: 36rpx;
-  }
-  
-  .macro-value {
-    font-size: 32rpx;
-    font-weight: 600;
-    color: #ffffff;
-    line-height: 48rpx;
-  }
-  
-  .macro-target {
-    font-size: 26rpx;
-    color: #d0fae5;
-    line-height: 36rpx;
-  }
-  
-  // 快捷记录
-  .quick-record-section {
-    background: #ffffff;
-    // 上浮叠在 header 上（设计稿效果）
-    margin: -16rpx 24rpx 24rpx;
-    padding: 24rpx;
-    border-radius: 24rpx;
-    box-shadow: 0px 10rpx 15rpx rgba(0, 0, 0, 0.1), 0px 4rpx 6rpx rgba(0, 0, 0, 0.1);
-    position: relative;
-    z-index: 2;
-  }
-  
-  .section-title {
-    font-size: 34rpx;
-    font-weight: 600;
-    color: #1e2939;
-    line-height: 48rpx;
-    margin-bottom: 32rpx;
-  }
-  
-  .quick-buttons {
-    display: flex;
-    gap: 24rpx;
-  }
-  
-  .quick-button {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 32rpx 20rpx;
-    border-radius: 20rpx;
-    gap: 16rpx;
-  }
-  
-  .photo-btn {
-    background: linear-gradient(144.85deg, #ecfdf5 0%, #f0fdfa 100%);
-  }
-  
-  .text-btn {
-    background: linear-gradient(144.85deg, #eff6ff 0%, #ecfeff 100%);
-  }
-  
-  .history-btn {
-    background: linear-gradient(144.85deg, #faf5ff 0%, #fdf2f8 100%);
-  }
-  
-  .button-icon {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 36rpx;
-    color: #ffffff;
-    overflow: hidden;
-    
-    // 确保 iconfont 图标居中
-    .iconfont {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-    }
-  }
-  
-  .photo-icon {
-    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  }
-  
-  .text-icon {
-    background: linear-gradient(to right, #2b7fff 0%, #00b8db 100%);
-  }
-  
-  .history-icon {
-    background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
-  }
-  
-  .button-text {
-    font-size: 28rpx;
-    color: #364153;
-    line-height: 40rpx;
-    font-weight: 500;
-  }
-  
-  // 今日餐食
-  .meals-section {
-    padding: 0 24rpx;
-    margin-top: 20rpx;
-  }
-  
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20rpx;
-  }
-  
-  .view-all-btn {
-    display: flex;
-    align-items: center;
-    gap: 8rpx;
-    padding: 6rpx 0;
-  }
-  
-  .view-all-text {
-    font-size: 28rpx;
-    color: #009966;
-    line-height: 40rpx;
-    font-weight: 500;
-  }
-  
-  .arrow {
-    font-size: 28rpx;
-    color: #009966;
-  }
-  
-  .meals-list {
-    display: flex;
-    flex-direction: column;
-    gap: 20rpx;
-  }
+// 顶部浅绿过渡到底色（对应设计稿整体背景）
+.home-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 360rpx;
+  background: linear-gradient(to bottom, #ecfdf5 0%, rgba(236, 253, 245, 0) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
 
-  // Taroify Empty 组件按钮样式
-  .empty-record-btn {
-    margin-top: 32rpx;
-    width: 240rpx;
-    height: 72rpx;
-    background: linear-gradient(135deg, #00bc7d 0%, #0d9488 100%);
-    border: none;
-    font-size: 28rpx;
-  }
-  
-  .meal-card {
-    background: #ffffff;
-    border-radius: 22rpx;
-    padding: 24rpx;
-    box-shadow: 0px 1rpx 3rpx rgba(0, 0, 0, 0.1), 0px 1rpx 2rpx rgba(0, 0, 0, 0.1);
-  }
-  
-  .meal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 20rpx;
-  }
-  
-  .meal-info {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-  }
-  
-  .meal-icon {
-    width: 52rpx;
-    height: 52rpx;
-    border-radius: 14rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 36rpx;
-  }
-  
-  .breakfast-icon,
-  .lunch-icon,
-  .dinner-icon,
-  .snack-icon {
-    background: transparent;
-  }
-  
-  .meal-details {
-    display: flex;
-    flex-direction: column;
-    gap: 6rpx;
-  }
-  
-  .meal-name {
-    font-size: 34rpx;
-    font-weight: 600;
-    color: #1e2939;
-    line-height: 48rpx;
-  }
-  
-  .meal-time {
-    font-size: 26rpx;
-    color: #6a7282;
-    line-height: 36rpx;
-  }
-  
-  .meal-calorie {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6rpx;
-  }
-  
-  .calorie-text {
-    font-size: 34rpx;
-    font-weight: 600;
-    color: #1e2939;
-    line-height: 48rpx;
-  }
-  
-  .calorie-label {
-    font-size: 26rpx;
-    color: #6a7282;
-    line-height: 36rpx;
-  }
-  
-  .meal-progress {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-    margin-bottom: 20rpx;
-  }
-  
-  .meal-progress-bar {
-    flex: 1;
-    height: 10rpx;
-    background: #f3f4f6;
-    border-radius: 9999rpx;
-    overflow: hidden;
-  }
-  
-  .meal-progress-fill {
-    height: 100%;
-    border-radius: 9999rpx;
-  }
-  
-  .breakfast-progress {
-    background: #ff6900;
-  }
-  
-  .lunch-progress {
-    background: #00c950;
-  }
-  
-  .dinner-progress {
-    background: #2b7fff;
-  }
-  
-  .snack-progress {
-    background: #ad46ff;
-  }
-  
-  .progress-percent {
-    font-size: 26rpx;
-    color: #6a7282;
-    line-height: 36rpx;
-    min-width: 44rpx;
-    font-weight: 500;
-  }
-  
-  .meal-tags {
-    display: flex;
-    gap: 12rpx;
-    flex-wrap: wrap;
-  }
-  
-  .meal-tag {
-    padding: 8rpx 16rpx;
-    border-radius: 8rpx;
-    height: 32rpx;
-    display: flex;
-    align-items: center;
-  }
-  
-  .breakfast-tag {
-    background: #fff7ed;
-  }
-  
-  .lunch-tag {
-    background: #f0fdf4;
-  }
-  
-  .dinner-tag {
-    background: #eff6ff;
-  }
-  
-  .snack-tag {
-    background: #f5f3ff;
-  }
-  
-  .tag-text {
-    font-size: 26rpx;
-    line-height: 36rpx;
-    font-weight: 500;
-  }
-  
-  .breakfast-tag .tag-text {
-    color: #f54900;
-  }
-  
-  .lunch-tag .tag-text {
-    color: #00a63e;
-  }
-  
-  .dinner-tag .tag-text {
-    color: #1d4ed8;
-  }
-  
-  .snack-tag .tag-text {
-    color: #7c3aed;
-  }
-  
-  // AI建议
-  .ai-suggestion-section {
-    background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
-    margin: 24rpx;
-    padding: 24rpx;
-    border-radius: 24rpx;
-  }
-  
-  .ai-content {
-    display: flex;
-    gap: 20rpx;
-    margin-bottom: 20rpx;
-  }
-  
-  .ai-icon {
-    width: 56rpx;
-    height: 56rpx;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 40rpx;
-    flex-shrink: 0;
-  }
-  
-  .ai-text-content {
-    flex: 1;
-  }
-  
-  .ai-title {
-    display: block;
-    font-size: 34rpx;
-    font-weight: 600;
-    color: #ffffff;
-    line-height: 48rpx;
-    margin-bottom: 10rpx;
-  }
-  
-  .ai-description {
-    display: block;
-    font-size: 28rpx;
-    color: #f3e8ff;
-    line-height: 40rpx;
-  }
-  
-  .ai-button {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 14rpx;
-    height: 52rpx;
+// 顶部渐变区域
+.header-section {
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+  padding: 16rpx 24rpx 32rpx;
+  position: relative;
+  z-index: 1;
+  min-height: 400rpx;
+  box-sizing: border-box;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32rpx;
+}
+
+.greeting-section {
+  flex: 1;
+}
+
+.greeting-title {
+  display: block;
+  font-size: 38rpx;
+  font-weight: bold;
+  color: #ffffff;
+  line-height: 52rpx;
+  margin-bottom: 10rpx;
+}
+
+.greeting-subtitle {
+  display: block;
+  font-size: 28rpx;
+  color: #d0fae5;
+  line-height: 40rpx;
+}
+
+.trend-icon {
+  width: 56rpx;
+  height: 56rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trend-icon-symbol {
+  font-size: 36rpx;
+  color: #ffffff;
+}
+
+// 今日摄入卡片
+.intake-card {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 24rpx;
+  padding: 24rpx;
+}
+
+.intake-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.intake-label {
+  font-size: 28rpx;
+  color: #d0fae5;
+  line-height: 40rpx;
+}
+
+.target-label {
+  font-size: 26rpx;
+  color: #d0fae5;
+  line-height: 36rpx;
+}
+
+.calorie-section {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 24rpx;
+}
+
+.calorie-value {
+  font-size: 72rpx;
+  font-weight: bold;
+  color: #ffffff;
+  line-height: 84rpx;
+  margin-right: 12rpx;
+}
+
+.calorie-target {
+  font-size: 32rpx;
+  color: #d0fae5;
+  line-height: 48rpx;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 12rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999rpx;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #ffffff;
+  border-radius: 9999rpx;
+}
+
+.macros-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.macro-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.macro-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6rpx;
+}
+
+.macro-label {
+  font-size: 26rpx;
+  color: #d0fae5;
+  line-height: 36rpx;
+}
+
+.macro-value {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 48rpx;
+}
+
+.macro-target {
+  font-size: 26rpx;
+  color: #d0fae5;
+  line-height: 36rpx;
+}
+
+// 快捷记录
+.quick-record-section {
+  background: #ffffff;
+  // 上浮叠在 header 上（设计稿效果）
+  margin: -16rpx 24rpx 24rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  box-shadow: 0px 10rpx 15rpx rgba(0, 0, 0, 0.1), 0px 4rpx 6rpx rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 2;
+}
+
+.section-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 48rpx;
+  margin-bottom: 32rpx;
+}
+
+.quick-buttons {
+  display: flex;
+  gap: 24rpx;
+}
+
+.quick-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32rpx 20rpx;
+  border-radius: 20rpx;
+  gap: 16rpx;
+}
+
+.photo-btn {
+  background: linear-gradient(144.85deg, #ecfdf5 0%, #f0fdfa 100%);
+}
+
+.text-btn {
+  background: linear-gradient(144.85deg, #eff6ff 0%, #ecfeff 100%);
+}
+
+.history-btn {
+  background: linear-gradient(144.85deg, #faf5ff 0%, #fdf2f8 100%);
+}
+
+.button-icon {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  color: #ffffff;
+  overflow: hidden;
+
+  // 确保 iconfont 图标居中
+  .iconfont {
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1;
   }
-  
-  .ai-button-text {
-    font-size: 28rpx;
-    color: #ffffff;
-    line-height: 40rpx;
-    font-weight: 500;
-  }
-  
+}
+
+.photo-icon {
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+}
+
+.text-icon {
+  background: linear-gradient(to right, #2b7fff 0%, #00b8db 100%);
+}
+
+.history-icon {
+  background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
+}
+
+.button-text {
+  font-size: 28rpx;
+  color: #364153;
+  line-height: 40rpx;
+  font-weight: 500;
+}
+
+// 今日餐食
+.meals-section {
+  padding: 0 24rpx;
+  margin-top: 20rpx;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.view-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 6rpx 0;
+}
+
+.view-all-text {
+  font-size: 28rpx;
+  color: #009966;
+  line-height: 40rpx;
+  font-weight: 500;
+}
+
+.arrow {
+  font-size: 28rpx;
+  color: #009966;
+}
+
+.meals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+// Taroify Empty 组件按钮样式
+.empty-record-btn {
+  margin-top: 32rpx;
+  width: 240rpx;
+  height: 72rpx;
+  background: linear-gradient(135deg, #00bc7d 0%, #0d9488 100%);
+  border: none;
+  font-size: 28rpx;
+}
+
+.meal-card {
+  background: #ffffff;
+  border-radius: 22rpx;
+  padding: 24rpx;
+  box-shadow: 0px 1rpx 3rpx rgba(0, 0, 0, 0.1), 0px 1rpx 2rpx rgba(0, 0, 0, 0.1);
+}
+
+.meal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20rpx;
+}
+
+.meal-info {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.meal-icon {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+}
+
+.breakfast-icon,
+.lunch-icon,
+.dinner-icon,
+.snack-icon {
+  background: transparent;
+}
+
+.meal-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.meal-name {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 48rpx;
+}
+
+.meal-time {
+  font-size: 26rpx;
+  color: #6a7282;
+  line-height: 36rpx;
+}
+
+.meal-calorie {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6rpx;
+}
+
+.calorie-text {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1e2939;
+  line-height: 48rpx;
+}
+
+.calorie-label {
+  font-size: 26rpx;
+  color: #6a7282;
+  line-height: 36rpx;
+}
+
+.meal-progress {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.meal-progress-bar {
+  flex: 1;
+  height: 10rpx;
+  background: #f3f4f6;
+  border-radius: 9999rpx;
+  overflow: hidden;
+}
+
+.meal-progress-fill {
+  height: 100%;
+  border-radius: 9999rpx;
+}
+
+.breakfast-progress {
+  background: #ff6900;
+}
+
+.lunch-progress {
+  background: #00c950;
+}
+
+.dinner-progress {
+  background: #2b7fff;
+}
+
+.snack-progress {
+  background: #ad46ff;
+}
+
+.progress-percent {
+  font-size: 26rpx;
+  color: #6a7282;
+  line-height: 36rpx;
+  min-width: 44rpx;
+  font-weight: 500;
+}
+
+.meal-tags {
+  display: flex;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.meal-tag {
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+  height: 32rpx;
+  display: flex;
+  align-items: center;
+}
+
+.breakfast-tag {
+  background: #fff7ed;
+}
+
+.lunch-tag {
+  background: #f0fdf4;
+}
+
+.dinner-tag {
+  background: #eff6ff;
+}
+
+.snack-tag {
+  background: #f5f3ff;
+}
+
+.tag-text {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 500;
+}
+
+.breakfast-tag .tag-text {
+  color: #f54900;
+}
+
+.lunch-tag .tag-text {
+  color: #00a63e;
+}
+
+.dinner-tag .tag-text {
+  color: #1d4ed8;
+}
+
+.snack-tag .tag-text {
+  color: #7c3aed;
+}
+
+// AI建议
+.ai-suggestion-section {
+  background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
+  margin: 24rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+}
+
+.ai-content {
+  display: flex;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.ai-icon {
+  width: 56rpx;
+  height: 56rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  flex-shrink: 0;
+}
+
+.ai-text-content {
+  flex: 1;
+}
+
+.ai-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 48rpx;
+  margin-bottom: 10rpx;
+}
+
+.ai-description {
+  display: block;
+  font-size: 28rpx;
+  color: #f3e8ff;
+  line-height: 40rpx;
+}
+
+.ai-button {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 14rpx;
+  height: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-button-text {
+  font-size: 28rpx;
+  color: #ffffff;
+  line-height: 40rpx;
+  font-weight: 500;
+}
