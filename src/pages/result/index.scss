@@ -50,36 +50,6 @@
   pointer-events: none;
 }
 
-.favorite-btn {
-  position: absolute;
-  top: 100rpx; // 避开状态栏
-  right: 32rpx;
-  width: 88rpx;
-  height: 88rpx;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
-  z-index: 10;
-  transition: all 0.2s ease;
-
-  &:active {
-    transform: scale(0.9);
-  }
-}
-
-.favorite-icon {
-  font-size: 44rpx;
-  line-height: 1;
-
-  &.favorited {
-    animation: pulse 0.3s ease;
-  }
-}
-
 // 内容容器 - 上移覆盖图片
 .content-container {
   position: relative;
@@ -596,6 +566,19 @@
   }
 }
 
+.confirm-only-link {
+  display: flex;
+  justify-content: center;
+  margin-top: -6rpx;
+  padding: 4rpx 0 2rpx;
+}
+
+.confirm-only-text {
+  font-size: 24rpx;
+  color: #64748b;
+  text-decoration: underline;
+}
+
 .feedback-link {
   display: flex;
   justify-content: center;
@@ -611,18 +594,4 @@
   font-size: 24rpx;
   color: #94a3b8;
   text-decoration: underline;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.2);
-  }
-
-  100% {
-    transform: scale(1);
-  }
 }

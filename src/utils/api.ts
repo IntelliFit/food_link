@@ -1,10 +1,10 @@
 import Taro from '@tarojs/taro'
 
-// API 基础 URL：从环境变量读取，未配置时使用生产地址
-// 开发：.env.development 中 TARO_APP_API_BASE_URL
-// 生产：.env.production 中 TARO_APP_API_BASE_URL
-const API_BASE_URL =
-  process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
+// API 基础 URL：开发环境使用本地，生产环境使用生产地址
+// 注意：小程序运行时没有 process 对象，所以直接使用条件判断
+// 如果需要切换环境，修改下面的值即可
+const API_BASE_URL = 'http://localhost:8888' // 开发环境
+// const API_BASE_URL = 'https://healthymax.cn' // 生产环境
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {

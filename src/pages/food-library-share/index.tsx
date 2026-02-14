@@ -14,8 +14,8 @@ import './index.scss'
 
 const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '自制', '健身餐']
 
-// 后端 API 基础地址（编译时替换）
-const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
+// 后端 API 基础地址（开发联调）
+const API_BASE_URL = 'http://localhost:8888'
 
 export default function FoodLibrarySharePage() {
   // 选择来源：record（从记录分享）或 upload（直接上传）

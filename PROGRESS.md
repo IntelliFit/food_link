@@ -4,49 +4,12 @@
 
 ---
 
-## 2026-02-10
+## 2026-02-07
 
-- 🐛 fix: 个人中心页头像改为 aspectFit 模式，完整显示在圆形内不被裁剪 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
-- ✨ feat: 个人中心页「账号设置」改为「设置」，点击打开个人设置弹窗 `src/pages/profile/index.tsx`
-- 🎨 style: 个人中心页健康档案、我的食谱、数据统计、附近美食四个图标变大 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
-
-## 2026-02-09
-
-- 🔧 refactor: 健康档案页确认按钮改为 Taroify Button 组件 `src/pages/health-profile/index.tsx` `src/pages/health-profile/index.scss`
-- 🎨 style: 圈子页公共食物库和打卡排行榜图标改为灰黑色，与文字颜色统一 `src/pages/community/index.scss`
-- ✨ feat: 记录页拍照识别区域增加「查看分析历史」入口，可跳转分析历史页查看任务状态 `src/pages/record/index.tsx` `src/pages/record/index.scss`
-- ✨ feat: 健康档案体检报告上传优化：上传后仅展示图片、点击放大预览；保存档案时提交病历提取任务，由 Worker 后台异步处理并更新到档案，用户无感知 `src/pages/health-profile/` `src/utils/api.ts` `backend/main.py` `backend/worker.py` `backend/database.py` `backend/run_backend.py`
-- 🎨 style: 个人中心页移除贡献值卡片 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
-- ✨ feat: 食物分析小程序优化：提交后进入加载页（旋转动画+健身小知识轮播+可离开提示），任务完成后自动跳转结果页；新增分析历史页可查看任务状态并将结果保存为饮食记录；分析页改为异步提交并增加「查看分析历史」入口 `src/pages/analyze-loading/` `src/pages/analyze-history/` `src/pages/analyze/index.tsx` `src/pages/result/index.tsx` `src/utils/api.ts` `src/app.config.ts`
-- ✨ feat: 食物分析异步任务：Supabase 存储任务、多子进程 Worker 消费，提交即返回 task_id，用户可退出后从识别历史查看结果；任务表与饮食记录关联 source_task_id `backend/database/analysis_tasks.sql` `backend/database/user_food_records_source_task.sql` `backend/database.py` `backend/worker.py` `backend/run_backend.py` `backend/main.py`
-
-## 2026-02-08
-
-- 🎨 style: 社区页全面样式优化：渐变背景、卡片阴影、营养 pill 展示、评论区样式、弹窗与 FAB 按钮等 `src/pages/community/index.scss`
-- ✨ feat: 记录详情页图片支持点击全屏预览 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
-- 🔧 refactor: 登录 token 改为永不过期（约 100 年），解决 token 过期需重新登录问题 `backend/auth.py` `backend/main.py`
-- 🎨 style: 优化记录详情页样式和文字间距，提升观感 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
-- ✨ feat: 圈子页评论优化，点击评论按钮在卡片下展开输入框，每张卡片展示前 5 条评论（头像+文字） `src/pages/community/index.tsx` `src/pages/community/index.scss`
-- 🎨 style: 首页餐次图标改为 Taroify 图标，早餐 ClockOutlined、午餐 HotOutlined、晚餐 HomeOutlined、加餐 BirthdayCakeOutlined `src/pages/index/index.tsx` `src/pages/index/index.scss`
-- 🎨 style: 首页今日餐食为空时使用 Taroify Empty 组件显示空状态，添加"去记录一餐"按钮 `src/pages/index/index.tsx` `src/pages/index/index.scss`
-- 🔧 refactor: 移除首页的 AI 营养建议入口 `src/pages/index/index.tsx`
-- 🐛 fix: 修复首页快捷记录跳转 tabBar 页面报错，改用 switchTab + storage 传参 `src/pages/index/index.tsx` `src/pages/record/index.tsx`
-- 🐛 fix: 修复真机（iOS/Android）选择头像不触发上传的问题，兼容 wxfile:// 等多种临时路径格式 `src/pages/profile/index.tsx`
-- 🐛 fix: 修复好友重复添加 bug，后端添加去重检查，搜索时显示"已添加/已发送"状态，页面加载时自动清理重复记录 `backend/database.py` `backend/main.py` `src/pages/community/index.tsx` `src/utils/api.ts`
-- 🎨 style: 社区页好友列表支持左右滑动，好友较多时可水平滚动查看 `src/pages/community/index.tsx` `src/pages/community/index.scss`
-- ✨ feat: 健康档案病史题目支持自定义输入，用户可添加预设列表外的病史项，点击切换选中状态，长按删除 `src/pages/health-profile/index.tsx` `src/pages/health-profile/index.scss`
-- 🎨 style: 个人中心页使用 Taroify 图标替换 emoji 图标，包括服务列表、设置列表、贡献值卡片等 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
-- 🎨 style: 个人中心页使用 Taroify Cell 组件重构服务导航和设置列表，统一带箭头的单元格样式 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`
-- ✨ feat: 引入 Taroify 组件库，配置 vite-plugin-style-import 实现按需引入样式，添加 H5 适配 `config/index.ts` `package.json`
-- 🎨 style: 增大文字记录区域的选项按钮尺寸（餐次、饮食目标、运动时机、快捷标签），提升点击体验 `src/pages/record/index.scss`
-- 🎨 style: 优化记录页文字记录部分的布局和样式：重新设计输入区域、添加顶部介绍卡片、改用快捷标签形式、折叠配置选项、优化底部按钮交互，整体更美观人性化 `src/pages/record/index.tsx` `src/pages/record/index.scss`
-- 🔧 chore: 从 tabBar 中移除 AI助手入口 `src/app.config.ts`
-- 🔒 security: 测试后台添加登录认证，账号密码验证后才能访问，使用 Cookie 保持会话，不影响其他 API 接口 `backend/main.py` `backend/static/test_backend/login.html` `backend/static/test_backend/index.html` `backend/static/test_backend/app.js` `backend/static/test_backend/style.css`
-- ✨ feat: 实现提示词动态管理功能，支持在测试后台为千问/Gemini模型分别配置和修改提示词，提示词存储在数据库中，支持创建、编辑、激活、删除和历史记录 `backend/database/model_prompts.sql` `backend/database.py` `backend/main.py` `backend/test_backend/single_processor.py` `backend/static/test_backend/`
-- ✨ feat: 实现食物分析测试后台系统，支持批量（ZIP）和单张图片测试，对比千问/Gemini模型重量估算偏差，提供可视化表格展示和CSV导出功能 `backend/test_backend/` `backend/static/test_backend/` `backend/main.py`
-- 📝 docs: 优化测试后台开发需求文档，添加清晰的结构化说明、API 接口设计、技术实现要求和验收标准，便于 AI 理解需求 `backend/docs/测试后台开发需求.md`
-- 🔧 refactor: Gemini 调用改为通过 OpenRouter API 接入，移除 google-genai SDK 依赖，使用 OpenAI 兼容格式简化代码 `backend/main.py` `backend/.env` `backend/requirements.txt`
-- ✨ feat: 接入 Gemini 双模型对比分析功能：后端添加 `/api/analyze-compare` 接口，支持同时调用千问和 Gemini 模型；前端分析页添加对比模式开关；结果页添加模型切换选项卡，可对比查看两个模型的分析结果并选择保存 `backend/main.py` `backend/.env` `backend/requirements.txt` `src/utils/api.ts` `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss` `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 📝 docs: 创建登录配置说明文档，详细说明如何配置微信小程序 AppID 和 AppSecret `docs/登录配置说明.md`
+- 🐛 fix: 修复小程序运行时 process is not defined 错误，改用直接配置 API 地址避免使用 process.env `src/utils/api.ts`
+- 📝 docs: 创建微信小程序调试指南，包含完整调试流程、常见问题排查和调试技巧 `docs/微信小程序调试指南.md`
+- 🔧 fix: 创建开发环境配置文件，配置本地 API 地址指向 localhost:8888 `.env.development`
 
 ## 2026-02-05
 

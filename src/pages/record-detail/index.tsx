@@ -2,7 +2,8 @@ import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/component
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import type { FoodRecord } from '../../utils/api'
-import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT } from '../../utils/poster'
+import { drawSmartPoster, POSTER_WIDTH, POSTER_HEIGHT, THEME_PREVIEWS, detectPersona } from '../../utils/posterV2'
+import type { PosterPersona, SmartPosterOptions, PosterUserContext, PosterStatsContext } from '../../utils/posterV2'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import logoPng from '../../assets/icons/home-active.png'
 
@@ -51,11 +52,18 @@ function formatRecordTime(recordTime: string): string {
   }
 }
 
+const PERSONA_ORDER: PosterPersona[] = ['fitness', 'slim', 'balanced', 'foodie']
+
 export default function RecordDetailPage() {
   const [record, setRecord] = useState<FoodRecord | null>(null)
   const [posterGenerating, setPosterGenerating] = useState(false)
   const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
   const [showPosterModal, setShowPosterModal] = useState(false)
+  // 智能海报新增状态
+  const [selectedPersona, setSelectedPersona] = useState<PosterPersona | undefined>(undefined)
+  const [autoPersona, setAutoPersona] = useState<PosterPersona>('balanced')
+  const [userContext, setUserContext] = useState<PosterUserContext>({})
+  const [statsContext, setStatsContext] = useState<PosterStatsContext>({})
 
   useEffect(() => {
     try {
@@ -71,7 +79,41 @@ export default function RecordDetailPage() {
       Taro.showToast({ title: '加载失败', icon: 'none' })
       setTimeout(() => Taro.navigateBack(), 1500)
     }
+    // 读取缓存的用户信息和统计数据，用于智能海报个性化
+    try {
+      const userInfo = Taro.getStorageSync('userInfo')
+      if (userInfo) {
+        setUserContext({
+          nickname: userInfo.nickname,
+          gender: userInfo.gender,
+          activity_level: userInfo.activity_level,
+          diet_goal: (userInfo.health_condition as any)?.diet_preference?.[0],
+          tdee: userInfo.tdee,
+        })
+      }
+    } catch { /* 无缓存则使用默认 */ }
+    try {
+      const stats = Taro.getStorageSync('weekStats')
+      if (stats) {
+        setStatsContext({
+          streak_days: stats.streak_days,
+          today_calories: stats.total_calories,
+          target_calories: stats.tdee,
+        })
+      }
+    } catch { /* 无缓存则使用默认 */ }
   }, [])
+
+  // 当 record 和 userContext 就绪后，自动检测最佳画像
+  useEffect(() => {
+    if (record) {
+      const auto = detectPersona({
+        width: POSTER_WIDTH, height: POSTER_HEIGHT,
+        record, image: null, userContext, statsContext,
+      })
+      setAutoPersona(auto)
+    }
+  }, [record, userContext, statsContext])
 
   if (!record) {
     return (
@@ -164,20 +206,24 @@ export default function RecordDetailPage() {
               return
             }
             ctx.scale(dpr, dpr)
-            drawRecordPoster(ctx, {
+            // 使用智能海报系统（根据用户画像选择模板）
+            drawSmartPoster(ctx, {
               width: POSTER_WIDTH,
               height: POSTER_HEIGHT,
               record,
               image: mainImg,
               logoImage: logoImg,
-              qrCodeImage: null // 暂时使用占位符
+              qrCodeImage: null,
+              userContext,
+              statsContext,
+              forcePersona: selectedPersona,
             })
             exportCanvas()
           } catch (e) {
             Taro.hideLoading()
             setPosterGenerating(false)
             Taro.showToast({ title: '绘制失败', icon: 'none' })
-            console.error('drawRecordPoster error', e)
+            console.error('drawSmartPoster error', e)
           }
         })
       })
@@ -280,6 +326,31 @@ export default function RecordDetailPage() {
         ) : null}
 
         <View className="poster-actions">
+          {/* 模板选择器 */}
+          <View className="poster-theme-picker">
+            <Text className="theme-picker-label">选择海报风格</Text>
+            <View className="theme-picker-row">
+              {PERSONA_ORDER.map((p) => {
+                const preview = THEME_PREVIEWS[p]
+                const isAuto = !selectedPersona && p === autoPersona
+                const isSelected = selectedPersona === p
+                const active = isAuto || isSelected
+                return (
+                  <View
+                    key={p}
+                    className={`theme-option ${active ? 'active' : ''}`}
+                    onClick={() => setSelectedPersona(isSelected ? undefined : p)}
+                  >
+                    <View className="theme-dot" style={{ background: preview.color }}>
+                      <Text className="theme-dot-icon">{preview.icon}</Text>
+                    </View>
+                    <Text className="theme-name">{preview.label}</Text>
+                    {isAuto && !selectedPersona && <Text className="theme-auto-tag">推荐</Text>}
+                  </View>
+                )
+              })}
+            </View>
+          </View>
           <Button className="poster-btn" onClick={handleGeneratePoster} disabled={posterGenerating}>
             {posterGenerating ? '生成中...' : '生成分享海报'}
           </Button>

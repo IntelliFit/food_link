@@ -1,24 +1,10 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
-import { useState, useEffect } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
-import { getFoodRecordList, analyzeFoodText, type FoodRecord } from '../../utils/api'
+import { useState } from 'react'
+import Taro from '@tarojs/taro'
+import { analyzeFoodText } from '../../utils/api'
 import { IconCamera, IconText, IconClock } from '../../components/iconfont'
 
 import './index.scss'
-
-const MEAL_TYPE_NAMES: Record<string, string> = {
-  breakfast: '早餐',
-  lunch: '午餐',
-  dinner: '晚餐',
-  snack: '加餐'
-}
-
-const MEAL_TYPE_ICONS: Record<string, string> = {
-  breakfast: 'icon-zaocan',
-  lunch: 'icon-wucan',
-  dinner: 'icon-wancan',
-  snack: 'icon-lingshi'
-}
 
 /** 饮食目标（状态一） */
 const DIET_GOAL_OPTIONS = [
@@ -47,7 +33,7 @@ export default function RecordPage() {
   const recordMethods = [
     { id: 'photo', text: '拍照识别', iconClass: 'photo-icon' },
     { id: 'text', text: '文字记录', iconClass: 'text-icon' },
-    { id: 'history', text: '历史记录', iconClass: 'history-icon' }
+    { id: 'favorites', text: '收藏食物', iconClass: 'favorites-icon' }
   ]
 
   const getMethodIconColor = (methodId: string) => {
@@ -56,6 +42,10 @@ export default function RecordPage() {
   }
 
   const handleMethodClick = (methodId: string) => {
+    if (methodId === 'favorites') {
+      Taro.navigateTo({ url: '/pages/recipes/index' })
+      return
+    }
     setActiveMethod(methodId)
   }
 
@@ -146,139 +136,6 @@ export default function RecordPage() {
     }
   }
 
-  // 历史记录：按日期从接口拉取
-  const getTodayDate = () => new Date().toISOString().split('T')[0]
-  const [selectedDate, setSelectedDate] = useState(getTodayDate())
-  const [historyRecords, setHistoryRecords] = useState<Array<{
-    date: string
-    meals: Array<{
-      id: string
-      mealType: string
-      mealName: string
-      time: string
-      foods: Array<{ name: string; amount: string; calorie: number }>
-      totalCalorie: number
-    }>
-    totalCalorie: number
-  }>>([])
-  const [rawRecords, setRawRecords] = useState<FoodRecord[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyError, setHistoryError] = useState<string | null>(null)
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + 'T12:00:00')
-    const month = date.getMonth() + 1
-    const day = date.getDate()
-    const weekdays = ['日', '一', '二', '三', '四', '五', '六']
-    const weekday = weekdays[date.getDay()]
-    const today = new Date()
-    const todayStr = today.toISOString().split('T')[0]
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
-    if (dateStr === todayStr) return `${month}月${day}日 今天`
-    if (dateStr === yesterdayStr) return `${month}月${day}日 昨天`
-    return `${month}月${day}日 周${weekday}`
-  }
-
-  const formatRecordTime = (recordTime: string) => {
-    try {
-      const d = new Date(recordTime)
-      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-    } catch {
-      return '--:--'
-    }
-  }
-
-  const loadHistory = async (date: string) => {
-    setHistoryLoading(true)
-    setHistoryError(null)
-    try {
-      const { records } = await getFoodRecordList(date)
-      const meals = records.map((r: FoodRecord) => ({
-        id: r.id,
-        mealType: r.meal_type,
-        mealName: MEAL_TYPE_NAMES[r.meal_type] || r.meal_type,
-        time: formatRecordTime(r.record_time),
-        foods: (r.items || []).map((item: { name: string; intake: number; ratio?: number; nutrients?: { calories?: number } }) => {
-          const ratio = (item as { ratio?: number }).ratio ?? 100
-          const fullCal = (item.nutrients?.calories ?? 0)
-          const consumedCal = fullCal * (ratio / 100)
-          return {
-            name: item.name,
-            amount: `${item.intake ?? 0}g`,
-            calorie: Math.round(consumedCal * 10) / 10
-          }
-        }),
-        totalCalorie: Math.round((r.total_calories ?? 0) * 10) / 10
-      }))
-      const totalCalorie = meals.reduce((sum, m) => sum + m.totalCalorie, 0)
-      setHistoryRecords([{ date, meals, totalCalorie }])
-      setRawRecords(records)
-    } catch (e: any) {
-      const msg = e.message || '获取记录失败'
-      setHistoryError(msg)
-      setHistoryRecords([])
-      setRawRecords([])
-    } finally {
-      setHistoryLoading(false)
-    }
-  }
-
-  // 处理从首页跳转过来的 tab 切换
-  useDidShow(() => {
-    const tab = Taro.getStorageSync('recordPageTab')
-    if (tab) {
-      setActiveMethod(tab)
-      Taro.removeStorageSync('recordPageTab') // 用完即删，避免重复触发
-    }
-  })
-
-  useEffect(() => {
-    if (activeMethod === 'history') {
-      loadHistory(selectedDate)
-    }
-  }, [activeMethod, selectedDate])
-
-  /** 点击记录卡片：跳转识别记录详情页 */
-  const handleRecordCardClick = (mealId: string) => {
-    const r = rawRecords.find((rec) => rec.id === mealId)
-    if (!r) return
-    Taro.setStorageSync('recordDetail', r)
-    Taro.navigateTo({ url: '/pages/record-detail/index' })
-  }
-
-  const handleEditRecord = (e: any, _recordId: string) => {
-    e.stopPropagation()
-    Taro.showToast({ title: '编辑功能开发中', icon: 'none' })
-  }
-
-  const handleDeleteRecord = (e: any, _recordId: string) => {
-    e.stopPropagation()
-    Taro.showModal({
-      title: '确认删除',
-      content: '确定要删除这条记录吗？',
-      success: (res) => {
-        if (res.confirm) {
-          Taro.showToast({ title: '删除功能开发中', icon: 'none' })
-        }
-      }
-    })
-  }
-
-  /** 生成最近 6 天的日期选项（微信 showActionSheet 最多 6 项） */
-  const getDateOptions = () => {
-    const options: { dateStr: string; label: string }[] = []
-    const today = new Date()
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(today)
-      d.setDate(d.getDate() - i)
-      const dateStr = d.toISOString().split('T')[0]
-      options.push({ dateStr, label: formatDate(dateStr) })
-    }
-    return options
-  }
-
   const tips = [
     '拍照时请确保食物清晰可见，光线充足',
     '尽量将食物放在白色或浅色背景上',
@@ -305,7 +162,7 @@ export default function RecordPage() {
             <View className={`method-icon ${method.iconClass}`}>
               {method.id === 'photo' && <IconCamera size={40} color={getMethodIconColor(method.id)} />}
               {method.id === 'text' && <IconText size={40} color={getMethodIconColor(method.id)} />}
-              {method.id === 'history' && <IconClock size={40} color={getMethodIconColor(method.id)} />}
+              {method.id === 'favorites' && <IconClock size={40} color={getMethodIconColor(method.id)} />}
             </View>
             <Text className='method-text'>{method.text}</Text>
           </View>
@@ -335,7 +192,7 @@ export default function RecordPage() {
             className='history-entry'
             onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
           >
-            <Text className='history-entry-text'>查看分析历史</Text>
+            <Text className='history-entry-text'>查看识别历史</Text>
           </View>
         </View>
       )}
@@ -487,107 +344,6 @@ export default function RecordPage() {
         </View>
       )}
 
-      {/* 历史记录区域 */}
-      {activeMethod === 'history' && (
-        <View className='history-section'>
-          {/* 日期选择 */}
-          <View className='date-selector'>
-            <View className='date-card'>
-              <Text className='date-label'>选择日期</Text>
-              <View
-                className='date-display'
-                onClick={() => {
-                  const options = getDateOptions()
-                  Taro.showActionSheet({
-                    itemList: options.map((o) => o.label),
-                    success: (res) => {
-                      const opt = options[res.tapIndex]
-                      if (opt) setSelectedDate(opt.dateStr)
-                    }
-                  })
-                }}
-              >
-                <Text className='date-text'>{formatDate(selectedDate)}</Text>
-                <Text className='iconfont icon-shizhong date-icon'></Text>
-              </View>
-            </View>
-            <View className='date-stats'>
-              <View className='stat-item'>
-                <Text className='stat-label'>总摄入</Text>
-                <Text className='stat-value'>{historyRecords[0]?.totalCalorie ?? 0} kcal</Text>
-              </View>
-              <View className='stat-item'>
-                <Text className='stat-label'>目标</Text>
-                <Text className='stat-value'>2000 kcal</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* 记录列表 */}
-          {historyLoading ? (
-            <View className='empty-state'>
-              <Text className='empty-icon'>⏳</Text>
-              <Text className='empty-text'>加载中...</Text>
-            </View>
-          ) : historyError ? (
-            <View className='empty-state'>
-              <Text className='empty-icon'>🔐</Text>
-              <Text className='empty-text'>{historyError}</Text>
-              <Text className='empty-hint'>请先登录后查看历史记录</Text>
-            </View>
-          ) : historyRecords.length > 0 && historyRecords[0].meals.length > 0 ? (
-            <View className='history-list'>
-              {historyRecords[0].meals.map((meal) => (
-                <View
-                  key={meal.id}
-                  className='history-meal-card'
-                  onClick={() => handleRecordCardClick(meal.id)}
-                >
-                  <View className='meal-card-header'>
-                    <View className='meal-header-left'>
-                      <View className={`meal-type-icon ${meal.mealType}-icon`}>
-                        <Text className={`iconfont ${MEAL_TYPE_ICONS[meal.mealType] || 'icon-shiwu'}`}></Text>
-                      </View>
-                      <View className='meal-header-info'>
-                        <Text className='meal-card-name'>{meal.mealName}</Text>
-                        <Text className='meal-card-time'>{meal.time}</Text>
-                      </View>
-                    </View>
-                    <View className='meal-header-right'>
-                      <Text className='meal-calorie'>{meal.totalCalorie} kcal</Text>
-                      <View className='meal-actions'>
-                        <View className='action-icon edit-icon' onClick={(e) => handleEditRecord(e, meal.id)}>
-                          <Text className='iconfont icon-ic_detail'></Text>
-                        </View>
-                        <View className='action-icon delete-icon' onClick={(e) => handleDeleteRecord(e, meal.id)}>
-                          <Text className='iconfont icon-shangzhang delete-icon-rotate'></Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                  <View className='food-list'>
-                    {meal.foods.map((food, index) => (
-                      <View key={index} className='food-item'>
-                        <View className='food-info'>
-                          <Text className='food-name'>{food.name}</Text>
-                          <Text className='food-amount'>{food.amount}</Text>
-                        </View>
-                        <Text className='food-calorie'>{food.calorie} kcal</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View className='empty-state'>
-              <Text className='empty-icon'>📝</Text>
-              <Text className='empty-text'>暂无记录</Text>
-              <Text className='empty-hint'>拍照识别并确认记录后，将显示在这里</Text>
-            </View>
-          )}
-        </View>
-      )}
     </View>
   )
 }

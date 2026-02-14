@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Slider } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, CompareAnalyzeResponse, ModelAnalyzeResult } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, CompareAnalyzeResponse, ModelAnalyzeResult, FoodRecord } from '../../utils/api'
 
 import './index.scss'
 
@@ -30,7 +30,6 @@ interface NutritionItem {
 
 export default function ResultPage() {
   const [imagePath, setImagePath] = useState<string>('')
-  const [isFavorited, setIsFavorited] = useState(false)
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
   const [nutritionStats, setNutritionStats] = useState({
@@ -211,14 +210,6 @@ export default function ResultPage() {
     }
   }, [])
 
-  const handleFavorite = () => {
-    setIsFavorited(!isFavorited)
-    Taro.showToast({
-      title: isFavorited ? '已取消收藏' : '已收藏',
-      icon: 'none'
-    })
-  }
-
   // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
     setNutritionItems(items => {
@@ -271,8 +262,7 @@ export default function ResultPage() {
     })
   }
 
-  /** 确认记录：直接提示保存（状态已在分析页选择或不需要） */
-  const handleConfirm = () => {
+  const saveRecord = async (saveOnly: boolean) => {
     // 从缓存获取分析时选择的状态
     const savedMealType = Taro.getStorageSync('analyzeMealType')
     const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
@@ -288,7 +278,7 @@ export default function ResultPage() {
     const activityTiming = savedActivityTiming || 'none'
 
     Taro.showModal({
-      title: '确认记录',
+      title: saveOnly ? '确认记录' : '确认并分享',
       content: `餐次：${mealLabel}\n确定保存当前饮食记录吗？`,
       success: async (res) => {
         if (!res.confirm) return
@@ -338,13 +328,57 @@ export default function ResultPage() {
             context_advice: contextAdvice ?? undefined,
             source_task_id: sourceTaskId
           }
-          await saveFoodRecord(payload)
+          const saveResult = await saveFoodRecord(payload)
           if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
-          Taro.showToast({ title: '记录成功', icon: 'success' })
+          const nowISO = new Date().toISOString()
+          const savedRecord: FoodRecord = {
+            id: saveResult.id,
+            user_id: '',
+            meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+            image_path: imagePath || null,
+            description: description || null,
+            insight: healthAdvice || null,
+            context_state: 'none',
+            pfc_ratio_comment: pfcRatioComment,
+            absorption_notes: absorptionNotes,
+            context_advice: contextAdvice,
+            items: nutritionItems.map((item) => ({
+              name: item.name,
+              weight: item.weight,
+              ratio: item.ratio,
+              intake: item.intake,
+              nutrients: {
+                calories: item.calorie,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                fiber: 0,
+                sugar: 0,
+              }
+            })),
+            total_calories: nutritionStats.calories,
+            total_protein: nutritionStats.protein,
+            total_carbs: nutritionStats.carbs,
+            total_fat: nutritionStats.fat,
+            total_weight_grams: totalWeight,
+            record_time: nowISO,
+            created_at: nowISO,
+          }
+
+          if (saveOnly) {
+            Taro.showToast({ title: '记录成功', icon: 'success' })
+            setTimeout(() => {
+              // 返回两层：结果页 -> 分析页 -> 首页/记录页
+              Taro.navigateBack({ delta: 2 })
+            }, 1200)
+            return
+          }
+
+          Taro.showToast({ title: '已保存，去分享', icon: 'success' })
+          Taro.setStorageSync('recordDetail', savedRecord)
           setTimeout(() => {
-            // 返回两层：结果页 -> 分析页 -> 首页/记录页
-            Taro.navigateBack({ delta: 2 })
-          }, 1500)
+            Taro.navigateTo({ url: '/pages/record-detail/index' })
+          }, 500)
         } catch (e: any) {
           Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
         } finally {
@@ -353,6 +387,12 @@ export default function ResultPage() {
       }
     })
   }
+
+  /** 仅保存记录 */
+  const handleConfirmOnly = () => saveRecord(true)
+
+  /** 保存后立即进入分享海报 */
+  const handleConfirmAndShare = () => saveRecord(false)
 
   /** 标记样本：将当前有重量偏差的项提交为偏差样本（参考 hkh 实现） */
   const handleMarkSample = async () => {
@@ -408,7 +448,7 @@ export default function ResultPage() {
     })
   }
 
-  // 保存为食谱
+  // 收藏食物（保存为可复用模板）
   const handleSaveAsRecipe = () => {
     // 检查登录
     const token = getAccessToken()
@@ -423,10 +463,10 @@ export default function ResultPage() {
       ? savedMealType
       : undefined
 
-    // 弹窗输入食谱名称
+    // 弹窗输入收藏名称
     Taro.showModal({
-      title: '保存为食谱',
-      content: '请输入食谱名称',
+      title: '收藏食物',
+      content: '请输入收藏名称',
       // @ts-ignore
       editable: true,
       // @ts-ignore
@@ -474,8 +514,8 @@ export default function ResultPage() {
 
             Taro.hideLoading()
             Taro.showModal({
-              title: '保存成功',
-              content: '食谱已保存，可在"我的"-"我的食谱"中查看和使用',
+              title: '收藏成功',
+              content: '已收藏，可在“我的食谱”中快速复用记录',
               showCancel: false
             })
           } catch (error: any) {
@@ -523,12 +563,6 @@ export default function ResultPage() {
             </View>
           )}
           <View className='hero-overlay'></View>
-
-          <View className='favorite-btn' onClick={handleFavorite}>
-            <Text className={`favorite-icon ${isFavorited ? 'favorited' : ''}`}>
-              {isFavorited ? '❤️' : '🤍'}
-            </Text>
-          </View>
         </View>
 
         <View className='content-container'>
@@ -699,14 +733,17 @@ export default function ResultPage() {
               <View className='action-grid'>
                 <View className='secondary-btn' onClick={handleSaveAsRecipe}>
                   <Text className='btn-icon'>📖</Text>
-                  <Text className='btn-text'>存为食谱</Text>
+                  <Text className='btn-text'>收藏食物</Text>
                 </View>
                 <View
                   className={`primary-btn ${saving ? 'loading' : ''}`}
-                  onClick={handleConfirm}
+                  onClick={handleConfirmAndShare}
                 >
-                  <Text className='btn-text'>{saving ? '保存中...' : '确认记录'}</Text>
+                  <Text className='btn-text'>{saving ? '保存中...' : '确认并分享'}</Text>
                 </View>
+              </View>
+              <View className='confirm-only-link' onClick={saving ? undefined : handleConfirmOnly}>
+                <Text className='confirm-only-text'>仅确认记录</Text>
               </View>
 
               <View
