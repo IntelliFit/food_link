@@ -1,35 +1,46 @@
--- ============================================================
--- 拍照识别后的饮食记录表（确认记录并选择餐次后落库）
---
--- 【必须执行】确认记录接口依赖本脚本：
--- 1. 打开 Supabase Dashboard → SQL Editor
--- 2. 新建查询，粘贴本文件全部内容并执行
--- ============================================================
+create table public.user_food_records (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid not null,
+  meal_type text not null,
+  image_path text null,
+  description text null,
+  insight text null,
+  items jsonb not null default '[]'::jsonb,
+  total_calories numeric null default 0,
+  total_protein numeric null default 0,
+  total_carbs numeric null default 0,
+  total_fat numeric null default 0,
+  total_weight_grams integer null default 0,
+  record_time timestamp with time zone null default now(),
+  created_at timestamp with time zone null default now(),
+  context_state text null,
+  pfc_ratio_comment text null,
+  absorption_notes text null,
+  context_advice text null,
+  diet_goal text null,
+  activity_timing text null,
+  source_task_id uuid null,
+  constraint user_food_records_pkey primary key (id),
+  constraint user_food_records_source_task_id_fkey foreign KEY (source_task_id) references analysis_tasks (id) on delete set null,
+  constraint user_food_records_user_id_fkey foreign KEY (user_id) references weapp_user (id) on delete CASCADE,
+  constraint user_food_records_meal_type_check check (
+    (
+      meal_type = any (
+        array[
+          'breakfast'::text,
+          'lunch'::text,
+          'dinner'::text,
+          'snack'::text
+        ]
+      )
+    )
+  )
+) TABLESPACE pg_default;
 
--- 饮食记录表：每一条为一次「确认记录」的餐食（含餐次、识别结果、营养汇总）
-CREATE TABLE IF NOT EXISTS public.user_food_records (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES public.weapp_user(id) ON DELETE CASCADE,
-  meal_type text NOT NULL CHECK (meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
-  image_path text,
-  description text,
-  insight text,
-  items jsonb NOT NULL DEFAULT '[]',
-  total_calories numeric DEFAULT 0,
-  total_protein numeric DEFAULT 0,
-  total_carbs numeric DEFAULT 0,
-  total_fat numeric DEFAULT 0,
-  total_weight_grams integer DEFAULT 0,
-  record_time timestamp with time zone DEFAULT now(),
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT user_food_records_pkey PRIMARY KEY (id)
-);
+create index IF not exists idx_user_food_records_user_id on public.user_food_records using btree (user_id) TABLESPACE pg_default;
 
-CREATE INDEX IF NOT EXISTS idx_user_food_records_user_id ON public.user_food_records(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_food_records_record_time ON public.user_food_records(record_time);
-CREATE INDEX IF NOT EXISTS idx_user_food_records_meal_type ON public.user_food_records(meal_type);
+create index IF not exists idx_user_food_records_record_time on public.user_food_records using btree (record_time) TABLESPACE pg_default;
 
-COMMENT ON TABLE public.user_food_records IS '用户拍照识别后确认记录的饮食条目（含餐次：早餐/午餐/晚餐/加餐）';
-COMMENT ON COLUMN public.user_food_records.meal_type IS '餐次: breakfast/lunch/dinner/snack';
-COMMENT ON COLUMN public.user_food_records.items IS '食物项 JSON 数组：name, weight, ratio, intake, nutrients';
-COMMENT ON COLUMN public.user_food_records.record_time IS '记录时间（用户确认时）';
+create index IF not exists idx_user_food_records_meal_type on public.user_food_records using btree (meal_type) TABLESPACE pg_default;
+
+create index IF not exists idx_user_food_records_source_task_id on public.user_food_records using btree (source_task_id) TABLESPACE pg_default;

@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-02-15
+
+- 🎨 style: 放大食物库页面介绍文案字号，统一列表与详情的可读性（介绍内容不再过小） `src/pages/food-library/index.scss` `src/pages/food-library-detail/index.scss`
+- 🎨 style: 图标字体默认字号单位统一为 `rpx`，将 `iconfont.css` 中默认 `font-size` 从 `px` 调整为 `rpx` `src/assets/iconfont/iconfont.css`
+- 🐛 fix: 临时评论用户信息读取优先使用 `userInfo.name` 与 `userInfo.avatar`，与当前本地存储结构保持一致 `src/pages/community/index.tsx` `src/pages/food-library-detail/index.tsx`
+- 🐛 fix: 修复临时评论昵称兜底读取错误，兼容从本地 `userInfo` 的 `name/nickname` 取值，避免评论展示为“用户” `src/pages/community/index.tsx` `src/pages/food-library-detail/index.tsx`
+- 🐛 fix: 修复评论临时缓存展示与刷新覆盖问题：本地临时评论优先使用真实头像和昵称，社区页新评论改为插入列表前部；页面刷新后仅展示后端返回评论并清理本地临时缓存 `src/pages/community/index.tsx` `src/pages/food-library-detail/index.tsx` `backend/main.py`
+- ✨ feat: 评论异步审核功能（无感知审核）：用户评论立即显示（与正常评论样式一致），后台 Worker 异步 AI 审核，通过则入库，违规则自动清理；新建 comment_tasks 评论任务表和 public_food_library_comments 表；圈子和食物库评论接口返回临时评论数据；前端实现本地缓存合并逻辑，刷新时自动清理已通过或超过5分钟的临时评论；用户无感知审核过程；启动独立评论审核 Worker 进程 `backend/database/comment_tasks.sql` `backend/database/public_food_library_comments.sql` `backend/database.py` `backend/worker.py` `backend/run_backend.py` `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx` `src/pages/food-library-detail/index.tsx` `COMMENT_MODERATION_QUICKSTART.md`
+- ✨ feat: AI 内容审核功能：Worker 在分析前调用 DashScope AI 审核用户提交的图片/文本，检测色情/暴力/政治/无关内容等违规；新建 content_violations 违规记录表；analysis_tasks 新增 is_violated/violation_reason 字段和 violated 状态；前端历史页展示违规标记并拦截查看详情，加载页检测到违规展示专属提示页 `backend/database/content_violations.sql` `backend/database/migrate_add_violation_fields.sql` `backend/worker.py` `backend/database.py` `src/utils/api.ts` `src/pages/analyze-history/index.tsx` `src/pages/analyze-history/index.scss` `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss`
+- ✨ feat: 文字分析功能改造为异步接口（与图片分析流程一致），用户提交任务后进入加载页面等待后台处理完成；新增 POST /api/analyze-text/submit 接口、food_text Worker、数据库表支持文字输入字段 `backend/database/migrate_analysis_tasks_for_text.sql` `backend/database.py` `backend/main.py` `backend/worker.py` `backend/run_backend.py` `src/utils/api.ts` `src/pages/record/index.tsx` `src/pages/analyze-loading/index.tsx` `backend/database/README_TEXT_ANALYSIS.md`
+- 🐛 fix: 修复文字记录功能 500 错误，后端 AnalyzeTextRequest 模型添加 diet_goal 和 activity_timing 字段，前端 analyzeFoodText 函数支持传递这两个参数 `backend/main.py` `src/utils/api.ts`
+
+## 2026-02-13
+
+- ⚡ perf: 食物库页面性能优化（缓存+下拉刷新+骨架屏）：实现本地缓存机制立即展示数据、条件刷新策略（5分钟内不重复请求）、下拉刷新支持、乐观更新点赞、首次加载骨架屏动画；同时缓存筛选条件，避免每次进入页面数据都是空的 `src/pages/food-library/index.tsx` `src/pages/food-library/index.scss`
+- ⚡ perf: 社区页性能优化（缓存+条件刷新+骨架屏）：实现本地缓存机制立即展示数据、条件刷新策略（5分钟内不重复请求）、乐观更新（点赞/评论立即反馈）、首次加载骨架屏动画；用户体验从2-3秒空白优化至<100ms展示 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- ✨ feat: 分析历史页支持展示文字识别任务，同时加载图片和文字两种类型的任务，文字任务显示文字图标占位符和类型标签；更新 AnalysisTask 接口支持可选的 image_url 和 text_input 字段 `src/pages/analyze-history/index.tsx` `src/pages/analyze-history/index.scss` `src/utils/api.ts`
+- 🎨 style: 社区页评论发送按钮改为 Taroify Button（圆角、绿色渐变、loading 状态），评论成功后自动收起输入框 `src/pages/community/index.tsx`
+- ⚡ perf: 优化社区页接口性能，将帖子+评论整合为一个接口返回（支持分页），前端移除多次评论请求；后端批量查询评论并包含在 feed 列表中，每个帖子返回前5条评论 `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx`
+- 🐛 fix: 修复结果页吸收建议和情境建议未展示的问题，改为完整展示内容（原先只显示了标签） `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🔧 refactor: 记录页历史记录按时间倒序排列，最新的记录排在最前面（后端查询改为 desc=True） `backend/database.py`
+- ✨ feat: 记录详情页完善分析结果展示，新增用户目标/运动时机标签、更完整的营养数据（纤维/糖分）、优化食物明细展示（营养素标签）、重新设计营养汇总为卡片网格布局 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🔧 refactor: 记录详情页改为从数据库获取数据，通过 URL 参数传递记录 ID 而非本地缓存；新增后端 GET /api/food-record/{record_id} 接口；兼容食谱等特殊场景仍使用 storage `backend/main.py` `src/utils/api.ts` `src/pages/record/index.tsx` `src/pages/record-detail/index.tsx` `src/pages/community/index.tsx`
+- 🎨 style: 食谱列表页优化：布局修复、样式美化（圆角/阴影/绿色主调）、所有 Emoji 替换为 iconfont 图标、优化创建按钮 `src/pages/recipes/index.tsx` `src/pages/recipes/index.scss`
+- ✨ feat: 记录页历史记录的目标卡路里与首页一致，通过 getHomeDashboard 获取 intakeData.target 展示，未登录或失败时默认 2000 `src/pages/record/index.tsx`
+- 🐛 fix: 修复食物库分享页城市选择器样式导入问题，将 `index.css` 改为 `style` 路径 `config/index.ts`
+- 🐛 fix: 修复食物库分享页城市选择后不显示问题，AreaPicker 返回 code 数组需从 areaList 查找名称；改用 View+Text 替代 disabled Input `src/pages/food-library-share/index.tsx` `src/pages/food-library-share/index.scss`
+- ✨ feat: 食物库分享页城市选择增加省份显示，普通城市显示"省+市+区"，直辖市显示"直辖市+区"；提交时正确处理直辖市的 city 字段 `src/pages/food-library-share/index.tsx`
+- 🗃️ db: public_food_library 表增加 province 字段，支持存储省份信息；更新前后端接口和数据模型 `backend/database/add_province_to_public_food_library.sql` `backend/main.py` `backend/database.py` `src/utils/api.ts` `src/pages/food-library-share/index.tsx`
+- 🔧 refactor: 食物库分享页去掉商家地址输入框，将位置信息改为商家地址，提交时自动组合省市区和详细地址作为商家地址 `src/pages/food-library-share/index.tsx`
+- ✨ feat: 食物库分享页新增食物名称输入框（必填项），作为商家信息第一项；更新表单验证逻辑 `src/pages/food-library-share/index.tsx`
+- 🗃️ db: public_food_library 表增加 food_name 字段，支持存储食物名称；更新前后端接口和数据模型 `backend/database/add_food_name_to_public_food_library.sql` `backend/main.py` `backend/database.py` `src/utils/api.ts` `backend/database/README_MIGRATION.md`
+- 🎨 style: 食物库列表页卡片优化：食物名称作为主标题（加大加粗），食物描述弱化为副标题（浅色小字），新增口味评分显示（星星+评分），地址显示完整信息（省市区或商家地址） `src/pages/food-library/index.tsx` `src/pages/food-library/index.scss`
+- 🎨 style: 食物库详情页优化：食物名称作为页面主标题，卡路里标签在右侧；食物描述作为副标题显示在食物名称下方 `src/pages/food-library-detail/index.tsx` `src/pages/food-library-detail/index.scss`
+
 ## 2026-02-10
 
 - 🐛 fix: 个人中心页头像改为 aspectFit 模式，完整显示在圆形内不被裁剪 `src/pages/profile/index.tsx` `src/pages/profile/index.scss`

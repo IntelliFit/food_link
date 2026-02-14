@@ -1,0 +1,232 @@
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: #ffffff;
+    padding: 0 40rpx;
+
+    .login-header {
+        margin-top: 160rpx;
+        margin-bottom: 200rpx;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+        .app-logo {
+            width: 160rpx;
+            height: 160rpx;
+            margin-bottom: 32rpx;
+            border-radius: 32rpx;
+        }
+
+        .app-name {
+            font-size: 40rpx;
+            font-weight: bold;
+            color: #333333;
+            margin-bottom: 12rpx;
+        }
+
+        .app-slogan {
+            font-size: 28rpx;
+            color: #999999;
+        }
+    }
+
+    .login-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 32rpx;
+
+        .wx-login-btn {
+            width: 100%;
+            --button-default-height: 96rpx;
+            --button-border-radius: 48rpx;
+            font-size: 32rpx;
+            font-weight: 500;
+
+            // 覆盖 Taroify 默认样式以匹配设计
+            background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+            border: none;
+            color: #ffffff;
+        }
+
+        .skip-login-btn {
+            width: 100%;
+            --button-default-height: 96rpx;
+            --button-border-radius: 48rpx;
+            font-size: 30rpx;
+            color: #666666;
+            background: transparent;
+            border: none;
+        }
+    }
+
+    .login-footer {
+        margin-top: auto;
+        margin-bottom: 60rpx;
+        display: flex;
+        justify-content: center;
+
+        .agreement-text {
+            font-size: 24rpx;
+            color: #999999;
+            display: flex;
+            align-items: center;
+            gap: 8rpx;
+
+            .link {
+                color: #00bc7d;
+            }
+        }
+    }
+}
+
+// 完善信息弹窗样式（复用 profile 页面的样式，稍作调整）
+.profile-form-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8rpx);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.profile-form-content {
+    background: #ffffff;
+    border-radius: 40rpx;
+    width: 90%;
+    max-width: 600rpx;
+    padding: 56rpx 40rpx;
+    box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(40rpx);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.profile-form-header {
+    margin-bottom: 48rpx;
+    text-align: center;
+}
+
+.profile-form-title {
+    font-size: 40rpx;
+    font-weight: 700;
+    color: #111827;
+}
+
+.profile-form-body {
+    display: flex;
+    flex-direction: column;
+    gap: 48rpx;
+    margin-bottom: 48rpx;
+}
+
+.avatar-choose-wrapper {
+    width: 180rpx;
+    height: 180rpx;
+    margin: 0 auto;
+    border-radius: 50%;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 4rpx solid #e5e7eb;
+    position: relative;
+    overflow: hidden;
+
+    .avatar-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .camera-icon {
+        font-size: 60rpx;
+        color: #9ca3af;
+    }
+
+    .choose-tip {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.3);
+        color: white;
+        font-size: 20rpx;
+        text-align: center;
+        padding: 4rpx 0;
+    }
+}
+
+.avatar-choose-btn {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    background: transparent;
+    border: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+
+    &::after {
+        border: none;
+    }
+}
+
+.nickname-input {
+    width: 100%;
+    height: 96rpx;
+    background: #f9fafb;
+    border-radius: 16rpx;
+    padding: 0 32rpx;
+    font-size: 30rpx;
+    border: 2rpx solid #e5e7eb;
+    box-sizing: border-box;
+
+    &:focus {
+        border-color: #00bc7d;
+        background: #ffffff;
+    }
+}
+
+.save-btn {
+    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+    color: white;
+    border-radius: 48rpx;
+    font-size: 32rpx;
+    font-weight: 600;
+    box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.2);
+    border: none;
+
+    &:active {
+        opacity: 0.9;
+        transform: scale(0.98);
+    }
+}

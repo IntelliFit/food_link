@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/components'
 import { useState, useEffect } from 'react'
-import Taro from '@tarojs/taro'
-import type { FoodRecord } from '../../utils/api'
+import Taro, { useRouter } from '@tarojs/taro'
+import { getFoodRecordById, type FoodRecord } from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT } from '../../utils/poster'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import logoPng from '../../assets/icons/home-active.png'
@@ -22,20 +22,21 @@ const MEAL_ICON_CONFIG = {
   snack: { Icon: IconSnack, color: '#ad46ff' }
 } as const
 
-const CONTEXT_STATE_LABELS: Record<string, string> = {
-  post_workout: '刚健身完',
-  fasting: '空腹/餐前',
+const DIET_GOAL_NAMES: Record<string, string> = {
   fat_loss: '减脂期',
   muscle_gain: '增肌期',
   maintain: '维持体重',
-  none: '无特殊'
+  none: '无特殊目标'
 }
 
-const STORAGE_KEY = 'recordDetail'
-
-function formatContextState(value: string): string {
-  return CONTEXT_STATE_LABELS[value] || value
+const ACTIVITY_TIMING_NAMES: Record<string, string> = {
+  post_workout: '练后',
+  daily: '日常',
+  before_sleep: '睡前',
+  none: '无'
 }
+
+
 
 /** 格式化记录时间 */
 function formatRecordTime(recordTime: string): string {
@@ -52,31 +53,57 @@ function formatRecordTime(recordTime: string): string {
 }
 
 export default function RecordDetailPage() {
+  const router = useRouter()
   const [record, setRecord] = useState<FoodRecord | null>(null)
   const [posterGenerating, setPosterGenerating] = useState(false)
   const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
   const [showPosterModal, setShowPosterModal] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    try {
-      const stored = Taro.getStorageSync(STORAGE_KEY)
-      if (stored) {
-        setRecord(stored as FoodRecord)
-        Taro.removeStorageSync(STORAGE_KEY)
-      } else {
-        Taro.showToast({ title: '记录不存在', icon: 'none' })
-        setTimeout(() => Taro.navigateBack(), 1500)
-      }
-    } catch {
-      Taro.showToast({ title: '加载失败', icon: 'none' })
-      setTimeout(() => Taro.navigateBack(), 1500)
-    }
-  }, [])
+    const loadRecord = async () => {
+      const recordId = router.params?.id
 
-  if (!record) {
+      // 优先从 URL 参数获取 recordId（真实记录），否则从 storage 读取（食谱等特殊情况）
+      if (recordId) {
+        // 从数据库获取真实记录
+        try {
+          setLoading(true)
+          const { record: fetchedRecord } = await getFoodRecordById(recordId)
+          setRecord(fetchedRecord)
+        } catch (e: any) {
+          const msg = e.message || '加载记录失败'
+          Taro.showToast({ title: msg, icon: 'none' })
+          setTimeout(() => Taro.navigateBack(), 1500)
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        // 兼容旧方式：从 storage 读取（用于食谱等非真实记录场景）
+        try {
+          const stored = Taro.getStorageSync('recordDetail')
+          if (stored) {
+            setRecord(stored as FoodRecord)
+            Taro.removeStorageSync('recordDetail')
+            setLoading(false)
+          } else {
+            Taro.showToast({ title: '记录不存在', icon: 'none' })
+            setTimeout(() => Taro.navigateBack(), 1500)
+          }
+        } catch {
+          Taro.showToast({ title: '加载失败', icon: 'none' })
+          setTimeout(() => Taro.navigateBack(), 1500)
+        }
+      }
+    }
+
+    loadRecord()
+  }, [router.params?.id])
+
+  if (loading || !record) {
     return (
       <View className="record-detail-page">
-        <View className="empty-tip">加载中...</View>
+        <View className="empty-tip">{loading ? '加载中...' : '记录不存在'}</View>
       </View>
     )
   }
@@ -109,14 +136,14 @@ export default function RecordDetailPage() {
           Taro.showToast({ title: '画布未就绪，请重试', icon: 'none' })
           return
         }
-        const canvas = res[0].node as HTMLCanvasElement & { createImage?: () => { src: string; onload: () => void; onerror: () => void; width: number; height: number } }
+        const canvas = res[0].node as HTMLCanvasElement & { createImage?: () => { src: string; onload: () => void; onerror: (err?: any) => void; width: number; height: number } }
         const dpr = 2
         canvas.width = POSTER_WIDTH * dpr
         canvas.height = POSTER_HEIGHT * dpr
 
         const exportCanvas = () => {
           Taro.canvasToTempFilePath({
-            canvas,
+            canvas: canvas as any,
             destWidth: POSTER_WIDTH * 2,
             destHeight: POSTER_HEIGHT * 2,
             fileType: 'png',
@@ -222,74 +249,114 @@ export default function RecordDetailPage() {
             </View>
           </View>
           <View className="total-calorie">
-            {Math.round((record.total_calories ?? 0) * 10) / 10}
+            <Text className="num">{Math.round((record.total_calories ?? 0) * 10) / 10}</Text>
             <Text className="unit">kcal</Text>
           </View>
         </View>
 
-        {record.image_path ? (
-          <View
-            className="detail-image"
-            onClick={() => {
-              Taro.previewImage({
-                urls: [record.image_path!],
-                current: record.image_path!
-              })
-            }}
-          >
-            <Image src={record.image_path} mode="aspectFill" />
-          </View>
-        ) : null}
+        {
+          record.image_path ? (
+            <View
+              className="detail-image"
+              onClick={() => {
+                Taro.previewImage({
+                  urls: [record.image_path!],
+                  current: record.image_path!
+                })
+              }}
+            >
+              <Image src={record.image_path} mode="aspectFill" />
+            </View>
+          ) : null
+        }
 
-        {record.description ? (
-          <View className="detail-desc">
-            <Text className="label">识别描述</Text>
-            <Text>{record.description}</Text>
+        {/* 用户选择的目标与状态 */}
+        {(record.diet_goal || record.activity_timing) && (
+          <View className="context-tags">
+            {record.diet_goal && record.diet_goal !== 'none' && (
+              <View className="context-tag goal-tag">
+                <Text className="tag-icon iconfont icon-shangzhang"></Text>
+                <Text className="tag-text">{DIET_GOAL_NAMES[record.diet_goal] || record.diet_goal}</Text>
+              </View>
+            )}
+            {record.activity_timing && record.activity_timing !== 'none' && (
+              <View className="context-tag timing-tag">
+                <Text className="tag-icon iconfont icon-shizhong"></Text>
+                <Text className="tag-text">{ACTIVITY_TIMING_NAMES[record.activity_timing] || record.activity_timing}</Text>
+              </View>
+            )}
           </View>
-        ) : null}
+        )}
 
-        {record.insight ? (
-          <View className="detail-insight">
-            <Text className="label">健康建议</Text>
-            <Text>{record.insight}</Text>
-          </View>
-        ) : null}
-        {record.context_state ? (
-          <View className="detail-insight">
-            <Text className="label">当时状态</Text>
-            <Text>{formatContextState(record.context_state)}</Text>
-          </View>
-        ) : null}
-        {record.pfc_ratio_comment ? (
-          <View className="detail-insight">
-            <Text className="label">PFC 比例</Text>
-            <Text>{record.pfc_ratio_comment}</Text>
-          </View>
-        ) : null}
-        {record.absorption_notes ? (
-          <View className="detail-insight">
-            <Text className="label">吸收与利用</Text>
-            <Text>{record.absorption_notes}</Text>
-          </View>
-        ) : null}
-        {record.context_advice ? (
-          <View className="detail-insight">
-            <Text className="label">情境建议</Text>
-            <Text>{record.context_advice}</Text>
-          </View>
-        ) : null}
+        {
+          record.description ? (
+            <View className="detail-desc">
+              <Text className="label">
+                <Text className="iconfont icon-shiwu" style={{ marginRight: 6 }}></Text>
+                识别描述
+              </Text>
+              <Text>{record.description}</Text>
+            </View>
+          ) : null
+        }
+
+        {
+          record.insight ? (
+            <View className="detail-insight">
+              <Text className="label">
+                <Text className="iconfont icon-a-144-lvye" style={{ marginRight: 6 }}></Text>
+                AI 健康建议
+              </Text>
+              <Text>{record.insight}</Text>
+            </View>
+          ) : null
+        }
+
+        {
+          record.pfc_ratio_comment ? (
+            <View className="detail-insight">
+              <Text className="label">
+                <Text className="iconfont icon-tubiao-zhuzhuangtu" style={{ marginRight: 6 }}></Text>
+                PFC 比例分析
+              </Text>
+              <Text>{record.pfc_ratio_comment}</Text>
+            </View>
+          ) : null
+        }
+        {
+          record.absorption_notes ? (
+            <View className="detail-insight">
+              <Text className="label">
+                <Text className="iconfont icon-huore" style={{ marginRight: 6 }}></Text>
+                吸收与利用
+              </Text>
+              <Text>{record.absorption_notes}</Text>
+            </View>
+          ) : null
+        }
+        {
+          record.context_advice ? (
+            <View className="detail-insight">
+              <Text className="label">
+                <Text className="iconfont icon-shizhong" style={{ marginRight: 6 }}></Text>
+                情境建议
+              </Text>
+              <Text>{record.context_advice}</Text>
+            </View>
+          ) : null
+        }
 
         <View className="poster-actions">
           <Button className="poster-btn" onClick={handleGeneratePoster} disabled={posterGenerating}>
             {posterGenerating ? '生成中...' : '生成分享海报'}
           </Button>
         </View>
-      </View>
+      </View >
 
       {/* 离屏 Canvas 用于绘制海报 */}
-      <View className="poster-canvas-wrap">
+      < View className="poster-canvas-wrap" >
         <Canvas type="2d" id="recordPosterCanvas" className="poster-canvas" />
-      </View>
+      </View >
 
       <View className="detail-card">
         <Text className="food-list-title">食物明细</Text>
@@ -300,6 +367,8 @@ export default function RecordDetailPage() {
             const protein = ((item.nutrients?.protein ?? 0) * ratio) / 100
             const carbs = ((item.nutrients?.carbs ?? 0) * ratio) / 100
             const fat = ((item.nutrients?.fat ?? 0) * ratio) / 100
+            const fiber = ((item.nutrients?.fiber ?? 0) * ratio) / 100
+            const sugar = ((item.nutrients?.sugar ?? 0) * ratio) / 100
             return (
               <View key={index} className="food-item">
                 <View className="food-info">
@@ -308,10 +377,16 @@ export default function RecordDetailPage() {
                     摄入 {item.intake ?? 0}g
                     {ratio !== 100 ? ` · 约 ${ratio}%` : ''}
                   </Text>
+                  <View className="food-nutrients-detail">
+                    <Text className="nutrient-item">蛋白 {protein.toFixed(1)}g</Text>
+                    <Text className="nutrient-item">碳水 {carbs.toFixed(1)}g</Text>
+                    <Text className="nutrient-item">脂肪 {fat.toFixed(1)}g</Text>
+                    {fiber > 0 && <Text className="nutrient-item">纤维 {fiber.toFixed(1)}g</Text>}
+                    {sugar > 0 && <Text className="nutrient-item">糖 {sugar.toFixed(1)}g</Text>}
+                  </View>
                 </View>
                 <View className="food-nutrients">
                   <Text className="food-calorie">{Math.round(cal * 10) / 10} kcal</Text>
-                  <Text className="food-macros">P {protein.toFixed(0)} · C {carbs.toFixed(0)} · F {fat.toFixed(0)}g</Text>
                 </View>
               </View>
             )
@@ -320,40 +395,82 @@ export default function RecordDetailPage() {
           <View className="empty-tip">暂无食物明细</View>
         )}
 
-        <View className="summary-row">
-          <Text>总重量</Text>
-          <Text className="value">{record.total_weight_grams ?? 0} g</Text>
-        </View>
-        <View className="summary-row">
-          <Text>蛋白质</Text>
-          <Text className="value">{Math.round((record.total_protein ?? 0) * 10) / 10} g</Text>
-        </View>
-        <View className="summary-row">
-          <Text>碳水</Text>
-          <Text className="value">{Math.round((record.total_carbs ?? 0) * 10) / 10} g</Text>
-        </View>
-        <View className="summary-row">
-          <Text>脂肪</Text>
-          <Text className="value">{Math.round((record.total_fat ?? 0) * 10) / 10} g</Text>
+        <View className="nutrition-summary-section">
+          <Text className="summary-title">营养汇总</Text>
+          <View className="summary-grid">
+            <View className="summary-item">
+              <Text className="summary-label">总热量</Text>
+              <Text className="summary-value highlight">{Math.round((record.total_calories ?? 0) * 10) / 10}</Text>
+              <Text className="summary-unit">kcal</Text>
+            </View>
+            <View className="summary-item">
+              <Text className="summary-label">总重量</Text>
+              <Text className="summary-value">{record.total_weight_grams ?? 0}</Text>
+              <Text className="summary-unit">g</Text>
+            </View>
+            <View className="summary-item">
+              <Text className="summary-label">蛋白质</Text>
+              <Text className="summary-value">{Math.round((record.total_protein ?? 0) * 10) / 10}</Text>
+              <Text className="summary-unit">g</Text>
+            </View>
+            <View className="summary-item">
+              <Text className="summary-label">碳水</Text>
+              <Text className="summary-value">{Math.round((record.total_carbs ?? 0) * 10) / 10}</Text>
+              <Text className="summary-unit">g</Text>
+            </View>
+            <View className="summary-item">
+              <Text className="summary-label">脂肪</Text>
+              <Text className="summary-value">{Math.round((record.total_fat ?? 0) * 10) / 10}</Text>
+              <Text className="summary-unit">g</Text>
+            </View>
+            {(() => {
+              const totalFiber = items.reduce((sum, item) => {
+                const ratio = (item.ratio ?? 100) / 100
+                return sum + ((item.nutrients?.fiber ?? 0) * ratio)
+              }, 0)
+              return totalFiber > 0 ? (
+                <View className="summary-item">
+                  <Text className="summary-label">膳食纤维</Text>
+                  <Text className="summary-value">{Math.round(totalFiber * 10) / 10}</Text>
+                  <Text className="summary-unit">g</Text>
+                </View>
+              ) : null
+            })()}
+            {(() => {
+              const totalSugar = items.reduce((sum, item) => {
+                const ratio = (item.ratio ?? 100) / 100
+                return sum + ((item.nutrients?.sugar ?? 0) * ratio)
+              }, 0)
+              return totalSugar > 0 ? (
+                <View className="summary-item">
+                  <Text className="summary-label">糖分</Text>
+                  <Text className="summary-value">{Math.round(totalSugar * 10) / 10}</Text>
+                  <Text className="summary-unit">g</Text>
+                </View>
+              ) : null
+            })()}
+          </View>
         </View>
       </View>
 
       {/* 海报预览弹窗 */}
-      {showPosterModal && posterImageUrl && (
-        <View className="poster-modal" catchMove>
-          <View className="poster-modal-mask" onClick={() => setShowPosterModal(false)} />
-          <View className="poster-modal-content">
-            <Text className="poster-modal-title">分享海报</Text>
-            <ScrollView scrollY className="poster-scroll-area">
-              <Image src={posterImageUrl} mode="widthFix" className="poster-modal-image" />
-            </ScrollView>
-            <View className="poster-modal-actions">
-              <Button className="poster-modal-btn secondary" onClick={() => setShowPosterModal(false)}>关闭</Button>
-              <Button className="poster-modal-btn primary" onClick={handleSavePoster}>保存到相册</Button>
+      {
+        showPosterModal && posterImageUrl && (
+          <View className="poster-modal" catchMove>
+            <View className="poster-modal-mask" onClick={() => setShowPosterModal(false)} />
+            <View className="poster-modal-content">
+              <Text className="poster-modal-title">分享海报</Text>
+              <ScrollView scrollY className="poster-scroll-area">
+                <Image src={posterImageUrl} mode="widthFix" className="poster-modal-image" />
+              </ScrollView>
+              <View className="poster-modal-actions">
+                <Button className="poster-modal-btn secondary" onClick={() => setShowPosterModal(false)}>关闭</Button>
+                <Button className="poster-modal-btn primary" onClick={handleSavePoster}>保存到相册</Button>
+              </View>
             </View>
           </View>
-        </View>
-      )}
-    </ScrollView>
+        )
+      }
+    </ScrollView >
   )
 }

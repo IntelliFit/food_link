@@ -1,6 +1,10 @@
 import { View, Text, ScrollView, Image, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
+import { Popup, AreaPicker } from '@taroify/core'
+import '@taroify/core/popup/style'
+import '@taroify/core/picker/style'
+import { areaList } from '@vant/area-data'
 import {
   getFoodRecordList,
   createPublicFoodLibraryItem,
@@ -13,6 +17,9 @@ import {
 import './index.scss'
 
 const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '自制', '健身餐']
+
+// 城市区域数据（示例）
+
 
 // 后端 API 基础地址（编译时替换）
 const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
@@ -36,8 +43,8 @@ export default function FoodLibrarySharePage() {
   const [insight, setInsight] = useState('')
 
   // 商家信息
+  const [foodName, setFoodName] = useState('')
   const [merchantName, setMerchantName] = useState('')
-  const [merchantAddress, setMerchantAddress] = useState('')
   const [tasteRating, setTasteRating] = useState(0)
 
   // 标签
@@ -49,11 +56,15 @@ export default function FoodLibrarySharePage() {
   const [userNotes, setUserNotes] = useState('')
 
   // 位置
+  const [province, setProvince] = useState('')
   const [city, setCity] = useState('')
   const [district, setDistrict] = useState('')
   const [detailAddress, setDetailAddress] = useState('')
   const [latitude, setLatitude] = useState<number | undefined>(undefined)
   const [longitude, setLongitude] = useState<number | undefined>(undefined)
+
+  // 城市选择器
+  const [showCityPicker, setShowCityPicker] = useState(false)
 
   // 位置搜索
   const [showLocationSearch, setShowLocationSearch] = useState(false)
@@ -202,11 +213,22 @@ export default function FoodLibrarySharePage() {
   // 选择搜索结果中的位置
   const handleSelectLocation = (poi: { name: string; address: string; lonlat: string; promptCity: string }) => {
     const addr = poi.address || ''
-    // 尝试从地址解析城市和区域
-    const cityMatch = addr.match(/^(.+?[市省])/)
+    // 尝试从地址解析省、市、区
+    const provinceMatch = addr.match(/^(.+?[省市])/)
+    const cityMatch = addr.match(/^.+?[省](.+?市)/)
     const districtMatch = addr.match(/[市省](.+?[区县市])/)
-    // 优先用地址中的城市，否则用 prompt 中的城市
-    setCity(cityMatch ? cityMatch[1] : poi.promptCity)
+
+    // 设置省份
+    setProvince(provinceMatch ? provinceMatch[1] : poi.promptCity)
+
+    // 设置城市（如果是直辖市则不设置城市）
+    const prov = provinceMatch ? provinceMatch[1] : ''
+    if (prov.includes('北京') || prov.includes('上海') || prov.includes('天津') || prov.includes('重庆')) {
+      setCity('')
+    } else {
+      setCity(cityMatch ? cityMatch[1] : '')
+    }
+
     // 解析区域
     if (districtMatch) {
       setDistrict(districtMatch[1])
@@ -215,6 +237,7 @@ export default function FoodLibrarySharePage() {
       const districtOnly = addr.match(/^(.+?[区县市])/)
       setDistrict(districtOnly ? districtOnly[1] : '')
     }
+
     // 详细地址 = address + name
     setDetailAddress(addr + (poi.name ? ' ' + poi.name : ''))
     // 解析经纬度
@@ -262,6 +285,10 @@ export default function FoodLibrarySharePage() {
       Taro.showToast({ title: '请先选择或上传图片', icon: 'none' })
       return
     }
+    if (!foodName.trim()) {
+      Taro.showToast({ title: '请填写食物名称', icon: 'none' })
+      return
+    }
     if (!merchantName.trim()) {
       Taro.showToast({ title: '请填写商家名称', icon: 'none' })
       return
@@ -269,6 +296,14 @@ export default function FoodLibrarySharePage() {
 
     setSubmitting(true)
     try {
+      // 构建完整的商家地址
+      const fullAddress = [
+        province,
+        city,
+        district,
+        detailAddress
+      ].filter(Boolean).join(' ').trim()
+      
       await createPublicFoodLibraryItem({
         image_path: imageUrl || selectedRecord?.image_path || undefined,
         source_record_id: selectedRecord?.id,
@@ -279,14 +314,16 @@ export default function FoodLibrarySharePage() {
         items,
         description,
         insight,
+        food_name: foodName.trim(),
         merchant_name: merchantName.trim(),
-        merchant_address: merchantAddress.trim() || undefined,
+        merchant_address: fullAddress || undefined,
         taste_rating: tasteRating > 0 ? tasteRating : undefined,
         suitable_for_fat_loss: suitableForFatLoss,
         user_tags: userTags,
         user_notes: userNotes.trim() || undefined,
         latitude,
         longitude,
+        province: province.trim() || undefined,
         city: city.trim() || undefined,
         district: district.trim() || undefined,
         detail_address: detailAddress.trim() || undefined
@@ -302,7 +339,7 @@ export default function FoodLibrarySharePage() {
     }
   }
 
-  const canSubmit = (imageUrl || selectedRecord?.image_path) && merchantName.trim() && !submitting && !analyzing
+  const canSubmit = (imageUrl || selectedRecord?.image_path) && foodName.trim() && merchantName.trim() && !submitting && !analyzing
 
   return (
     <View className="share-page">
@@ -376,6 +413,17 @@ export default function FoodLibrarySharePage() {
         <Text className="section-title">商家信息</Text>
         <View className="form-item">
           <Text className="form-label">
+            食物名称 <Text className="required">*</Text>
+          </Text>
+          <Input
+            className="form-input"
+            placeholder="如：麻辣香锅、烤鸡腿饭等"
+            value={foodName}
+            onInput={e => setFoodName(e.detail.value)}
+          />
+        </View>
+        <View className="form-item">
+          <Text className="form-label">
             商家名称 <Text className="required">*</Text>
           </Text>
           <Input
@@ -383,15 +431,6 @@ export default function FoodLibrarySharePage() {
             placeholder="如：沙县小吃、肯德基等"
             value={merchantName}
             onInput={e => setMerchantName(e.detail.value)}
-          />
-        </View>
-        <View className="form-item">
-          <Text className="form-label">商家地址（可选）</Text>
-          <Input
-            className="form-input"
-            placeholder="详细地址"
-            value={merchantAddress}
-            onInput={e => setMerchantAddress(e.detail.value)}
           />
         </View>
         <View className="form-item">
@@ -457,32 +496,24 @@ export default function FoodLibrarySharePage() {
         )}
       </View>
 
-      {/* 位置 */}
+      {/* 商家地址 */}
       <View className="location-section">
         <View className="location-title-row">
-          <Text className="section-title">位置信息（可选）</Text>
+          <Text className="section-title">商家地址（可选）</Text>
           <View className="search-location-btn" onClick={() => setShowLocationSearch(true)}>
             <Text className="iconfont icon-dizhi" />
-            <Text>搜索位置</Text>
+            <Text>搜索地址</Text>
           </View>
         </View>
-        <View className="form-item">
-          <Text className="form-label">城市</Text>
-          <Input
-            className="form-input"
-            placeholder="如：北京"
-            value={city}
-            onInput={e => setCity(e.detail.value)}
-          />
-        </View>
-        <View className="form-item">
-          <Text className="form-label">区域</Text>
-          <Input
-            className="form-input"
-            placeholder="如：朝阳区"
-            value={district}
-            onInput={e => setDistrict(e.detail.value)}
-          />
+        <View className="form-item" onClick={() => setShowCityPicker(true)}>
+          <Text className="form-label">城市/区域</Text>
+          <View className="form-input city-display">
+            <Text className={province ? 'city-value' : 'city-placeholder'}>
+              {province
+                ? `${province}${city ? ' ' + city : ''} ${district}`.trim()
+                : '点击选择城市/区域'}
+            </Text>
+          </View>
         </View>
         <View className="form-item">
           <Text className="form-label">详细地址</Text>
@@ -528,6 +559,38 @@ export default function FoodLibrarySharePage() {
           {submitting ? '提交中...' : analyzing ? '识别中...' : '分享到公共库'}
         </View>
       </View>
+
+      {/* 城市选择弹窗 */}
+      <Popup open={showCityPicker} placement="bottom" onClose={() => setShowCityPicker(false)}>
+        <AreaPicker
+          title="选择城市/区域"
+          areaList={areaList}
+          onConfirm={(values: any[]) => {
+            // values 是 code 数组，如 ["110000", "110100", "110101"]
+            // 需要从 areaList 中查找对应的名称
+            const provinceCode = values[0] || ''
+            const cityCode = values[1] || ''
+            const districtCode = values[2] || ''
+
+            const p = areaList.province_list?.[provinceCode] || ''
+            const c = areaList.city_list?.[cityCode] || ''
+            const d = areaList.county_list?.[districtCode] || ''
+
+            // 直辖市处理：省名=市名=直辖市名，区名在第三级
+            if (p.includes('北京') || p.includes('上海') || p.includes('天津') || p.includes('重庆')) {
+              setProvince(p)
+              setCity('')
+              setDistrict(d || c)
+            } else {
+              setProvince(p)
+              setCity(c)
+              setDistrict(d)
+            }
+            setShowCityPicker(false)
+          }}
+          onCancel={() => setShowCityPicker(false)}
+        />
+      </Popup>
 
       {/* 从记录选择弹窗 */}
       {showRecordModal && (

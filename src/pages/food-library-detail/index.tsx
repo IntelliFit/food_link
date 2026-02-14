@@ -8,7 +8,9 @@ import {
   getPublicFoodLibraryComments,
   postPublicFoodLibraryComment,
   type PublicFoodLibraryItem,
-  type PublicFoodLibraryComment
+  type PublicFoodLibraryComment,
+  collectPublicFoodLibraryItem,
+  uncollectPublicFoodLibraryItem
 } from '../../utils/api'
 import {
   ShopOutlined,
@@ -25,6 +27,19 @@ import {
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import './index.scss'
+
+function getLocalUserDisplay(): { nickname: string; avatar: string } {
+  try {
+    const raw = Taro.getStorageSync('userInfo')
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return {
+      nickname: parsed?.name || parsed?.nickname || '用户',
+      avatar: parsed?.avatar || ''
+    }
+  } catch {
+    return { nickname: '用户', avatar: '' }
+  }
+}
 
 function formatTime(timeStr: string | null | undefined): string {
   if (!timeStr) return ''
@@ -70,7 +85,17 @@ export default function FoodLibraryDetailPage() {
   const loadComments = async () => {
     try {
       const res = await getPublicFoodLibraryComments(itemId)
-      setComments(res.list || [])
+      const serverComments = res.list || []
+
+      // 刷新后仅展示后端返回评论，并清理本地临时评论缓存
+      const tempCommentsKey = `temp_library_comments_${itemId}`
+      try {
+        Taro.removeStorageSync(tempCommentsKey)
+      } catch (e) {
+        console.error('清理临时评论缓存失败:', e)
+      }
+
+      setComments(serverComments)
     } catch (e) {
       console.error('加载评论失败:', e)
     }
@@ -92,6 +117,22 @@ export default function FoodLibraryDetailPage() {
     }
   }
 
+  // 收藏/取消
+  const handleCollect = async () => {
+    if (!item) return
+    try {
+      if (item.collected) {
+        await uncollectPublicFoodLibraryItem(item.id)
+        setItem({ ...item, collected: false, collection_count: Math.max(0, (item.collection_count || 0) - 1) })
+      } else {
+        await collectPublicFoodLibraryItem(item.id)
+        setItem({ ...item, collected: true, collection_count: (item.collection_count || 0) + 1 })
+      }
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
+    }
+  }
+
   // 提交评论
   const handleSubmitComment = async () => {
     if (!commentContent.trim()) {
@@ -100,12 +141,37 @@ export default function FoodLibraryDetailPage() {
     }
     setSubmitting(true)
     try {
-      await postPublicFoodLibraryComment(itemId, commentContent, commentRating > 0 ? commentRating : undefined)
+      // 调用新接口，获取临时评论数据
+      const { task_id, temp_comment } = await postPublicFoodLibraryComment(
+        itemId, 
+        commentContent, 
+        commentRating > 0 ? commentRating : undefined
+      )
+      const localUserDisplay = getLocalUserDisplay()
+      const displayTempComment = {
+        ...temp_comment,
+        nickname: temp_comment.nickname || localUserDisplay.nickname,
+        avatar: temp_comment.avatar || localUserDisplay.avatar
+      }
+      
+      // 立即将临时评论添加到评论列表开头（乐观更新）
+      setComments(prev => [displayTempComment, ...prev])
+      
+      // 将临时评论缓存到本地存储
+      const tempCommentsKey = `temp_library_comments_${itemId}`
+      try {
+        const existingTemp = Taro.getStorageSync(tempCommentsKey) || []
+        existingTemp.push({ task_id, comment: displayTempComment, timestamp: Date.now() })
+        Taro.setStorageSync(tempCommentsKey, existingTemp)
+      } catch (e) {
+        console.error('缓存临时评论失败:', e)
+      }
+      
       Taro.showToast({ title: '评论成功', icon: 'success' })
       setShowCommentModal(false)
       setCommentContent('')
       setCommentRating(0)
-      loadComments()
+      
       // 更新评论数
       if (item) {
         setItem({ ...item, comment_count: item.comment_count + 1 })
@@ -119,9 +185,65 @@ export default function FoodLibraryDetailPage() {
 
   if (loading) {
     return (
-      <View className="food-detail-page">
-        <View className="loading-state">
-          <Text className="loading-text">加载中...</Text>
+      <View className="food-detail-page skeleton-wrapper">
+        {/* 图片骨架 */}
+        <View className="skeleton-image" />
+
+        {/* 基础信息骨架 */}
+        <View className="skeleton-card info-card">
+          <View className="skeleton-row between">
+            <View className="skeleton-block title-block" />
+            <View className="skeleton-block tag-block" />
+          </View>
+          <View className="skeleton-block text-block" />
+          <View className="skeleton-block text-block short" />
+
+          <View className="nutrients-block">
+            <View className="skeleton-block nutrient-item-block" />
+            <View className="skeleton-block nutrient-item-block" />
+            <View className="skeleton-block nutrient-item-block" />
+          </View>
+
+          <View className="skeleton-row">
+            <View className="skeleton-block avatar-block" />
+            <View className="info-block">
+              <View className="skeleton-block text-block" style={{ width: '40%', marginBottom: '8rpx' }} />
+              <View className="skeleton-block text-block" style={{ width: '30%', marginBottom: 0 }} />
+            </View>
+          </View>
+        </View>
+
+        {/* 商家信息骨架 */}
+        <View className="skeleton-card">
+          <View className="skeleton-block text-block" style={{ width: '30%', marginBottom: '32rpx', height: '40rpx' }} />
+          <View className="skeleton-row">
+            <View className="skeleton-block" style={{ width: '40rpx', height: '40rpx' }} />
+            <View className="skeleton-block text-block" style={{ flex: 1, marginBottom: 0 }} />
+          </View>
+          <View className="skeleton-row">
+            <View className="skeleton-block" style={{ width: '40rpx', height: '40rpx' }} />
+            <View className="skeleton-block text-block" style={{ flex: 1, marginBottom: 0 }} />
+          </View>
+        </View>
+
+        {/* 评论骨架 */}
+        <View className="skeleton-card">
+          <View className="skeleton-row between">
+            <View className="skeleton-block text-block" style={{ width: '20%', marginBottom: '24rpx', height: '40rpx' }} />
+            <View className="skeleton-block tag-block" style={{ width: '80rpx', height: '32rpx' }} />
+          </View>
+
+          <View style={{ marginTop: '24rpx' }}>
+            <View className="skeleton-row">
+              <View className="skeleton-block avatar-block" style={{ width: '72rpx', height: '72rpx' }} />
+              <View className="info-block">
+                <View className="skeleton-block text-block" style={{ width: '30%', marginBottom: '8rpx' }} />
+                <View className="skeleton-block text-block" style={{ width: '20%', marginBottom: 0 }} />
+              </View>
+            </View>
+            <View className="skeleton-block text-block" style={{ width: '100%', marginTop: '16rpx' }} />
+            <View className="skeleton-block text-block short" />
+          </View>
         </View>
       </View>
     )
@@ -154,12 +276,15 @@ export default function FoodLibraryDetailPage() {
       {/* 基础信息 */}
       <View className="info-card">
         <View className="info-header">
-          <Text className="info-title">{item.description || '健康餐'}</Text>
+          <Text className="info-title">{item.food_name || item.description || '健康餐'}</Text>
           <View className="info-calories-badge">
             <FireOutlined size="16" />
             <Text className="info-calories">{item.total_calories.toFixed(0)} kcal</Text>
           </View>
         </View>
+        {item.description && (
+          <Text className="info-description">{item.description}</Text>
+        )}
         {item.insight && (
           <Text className="info-insight">{item.insight}</Text>
         )}
@@ -291,6 +416,10 @@ export default function FoodLibraryDetailPage() {
         <View className={`action-btn like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
           {item.liked ? <Like size="20" /> : <LikeOutlined size="20" />}
           <Text className="action-text">{item.like_count > 0 ? item.like_count : '点赞'}</Text>
+        </View>
+        <View className={`action-btn collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
+          {item.collected ? <Star size="20" className="star-filled" /> : <StarOutlined size="20" />}
+          <Text className="action-text">{item.collection_count && item.collection_count > 0 ? item.collection_count : '收藏'}</Text>
         </View>
         <View className="action-btn comment-btn" onClick={() => setShowCommentModal(true)}>
           <CommentOutlined size="20" />

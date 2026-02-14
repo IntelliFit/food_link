@@ -1,40 +1,40 @@
 import { View, Text, Image, Textarea, Switch } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { imageToBase64, uploadAnalyzeImage, analyzeFoodImage, analyzeFoodImageCompare, submitAnalyzeTask, getAccessToken, AnalyzeResponse, CompareAnalyzeResponse } from '../../utils/api'
+import { imageToBase64, uploadAnalyzeImage, analyzeFoodImageCompare, submitAnalyzeTask, getAccessToken, CompareAnalyzeResponse, MealType, DietGoal, ActivityTiming } from '../../utils/api'
 
 import './index.scss'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
-const MEAL_OPTIONS: Array<{ value: MealType; label: string; icon: string }> = [
-  { value: 'breakfast', label: '早餐', icon: '🌅' },
-  { value: 'lunch', label: '午餐', icon: '☀️' },
-  { value: 'dinner', label: '晚餐', icon: '🌙' },
-  { value: 'snack', label: '加餐', icon: '🍎' }
+const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
+  { value: 'breakfast', label: '早餐', iconClass: 'icon-zaocan1' },
+  { value: 'lunch', label: '午餐', iconClass: 'icon-wucan' },
+  { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
+  { value: 'snack', label: '加餐', iconClass: 'icon-lingshi' }
 ]
 
 /** 饮食目标（状态一） */
-const DIET_GOAL_OPTIONS: Array<{ value: DietGoal; label: string; icon: string }> = [
-  { value: 'fat_loss', label: '减脂期', icon: '🔥' },
-  { value: 'muscle_gain', label: '增肌期', icon: '💪' },
-  { value: 'maintain', label: '维持体重', icon: '⚖️' },
-  { value: 'none', label: '无', icon: '⚪' }
+const DIET_GOAL_OPTIONS: Array<{ value: DietGoal; label: string; iconClass: string }> = [
+  { value: 'fat_loss', label: '减脂期', iconClass: 'icon-huore' },
+  { value: 'muscle_gain', label: '增肌期', iconClass: 'icon-zengji' },
+  { value: 'maintain', label: '维持体重', iconClass: 'icon-tianpingzuo' },
+  { value: 'none', label: '无', iconClass: 'icon-nothing' }
 ]
 
 /** 运动时机（状态二） */
-const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; icon: string }> = [
-  { value: 'post_workout', label: '练后', icon: '🏋️' },
-  { value: 'daily', label: '日常', icon: '🚶' },
-  { value: 'before_sleep', label: '睡前', icon: '🛌' },
-  { value: 'none', label: '无', icon: '⚪' }
+const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; iconClass: string }> = [
+  { value: 'post_workout', label: '练后', iconClass: 'icon-juzhong' },
+  { value: 'daily', label: '日常', iconClass: 'icon-duoren' },
+  { value: 'before_sleep', label: '睡前', iconClass: 'icon-shuijue' },
+  { value: 'none', label: '无', iconClass: 'icon-nothing' }
 ]
 
 export default function AnalyzePage() {
-  const [imagePath, setImagePath] = useState<string>('')
+  const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
-  const [mealType, setMealType] = useState<string>('breakfast')
-  const [dietGoal, setDietGoal] = useState<string>('none')
-  const [activityTiming, setActivityTiming] = useState<string>('none')
+  const [mealType, setMealType] = useState<MealType>('breakfast')
+  const [dietGoal, setDietGoal] = useState<DietGoal>('none')
+  const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   // 双模型对比模式开关
   const [compareMode, setCompareMode] = useState(false)
@@ -44,7 +44,7 @@ export default function AnalyzePage() {
     try {
       const storedPath = Taro.getStorageSync('analyzeImagePath')
       if (storedPath) {
-        setImagePath(storedPath)
+        setImagePaths([storedPath])
         // 清除存储，避免下次进入页面时误用
         Taro.removeStorageSync('analyzeImagePath')
       }
@@ -53,11 +53,34 @@ export default function AnalyzePage() {
     }
   }, [])
 
-  const handleDietGoalSelect = (value: string) => {
+  const handleChooseImage = async () => {
+    try {
+      const res = await Taro.chooseMedia({
+        count: 3 - imagePaths.length,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+      })
+      const newPaths = res.tempFiles.map(f => f.tempFilePath)
+      setImagePaths(prev => [...prev, ...newPaths])
+    } catch (e) {
+      // cancelled
+      console.log('选择图片取消/失败', e)
+    }
+  }
+
+  const handleRemoveImage = (index: number) => {
+    setImagePaths(prev => {
+      const newPaths = [...prev]
+      newPaths.splice(index, 1)
+      return newPaths
+    })
+  }
+
+  const handleDietGoalSelect = (value: DietGoal) => {
     setDietGoal(value)
   }
 
-  const handleActivityTimingSelect = (value: string) => {
+  const handleActivityTimingSelect = (value: ActivityTiming) => {
     setActivityTiming(value)
   }
 
@@ -66,24 +89,41 @@ export default function AnalyzePage() {
       Taro.showToast({ title: '请先登录后再使用识别功能', icon: 'none' })
       return
     }
+    if (imagePaths.length === 0) {
+      Taro.showToast({ title: '请先选择图片', icon: 'none' })
+      return
+    }
+
     setIsAnalyzing(true)
-    Taro.showLoading({ title: '提交中...', mask: true })
+    Taro.showLoading({ title: '上传图片...', mask: true })
 
     try {
-      const base64Image = await imageToBase64(imagePath!)
-      const { imageUrl } = await uploadAnalyzeImage(base64Image)
+      // 1. 依次上传所有图片获取 URL
+      const imageUrls: string[] = []
+      for (const path of imagePaths) {
+        const base64 = await imageToBase64(path)
+        const { imageUrl } = await uploadAnalyzeImage(base64)
+        imageUrls.push(imageUrl)
+      }
+
+      // 兼容旧接口，取第一张作为 primary
+      const primaryImageUrl = imageUrls[0]
 
       if (compareMode) {
         Taro.showLoading({ title: '双模型对比分析中...', mask: true })
+        // 注意：目前 compare 接口后端主要使用 image_url，若需支持多图需后端 analyze_food_compare 支持
+        // 这里传入 image_urls，若后端支持则会使用
         const compareResult: CompareAnalyzeResponse = await analyzeFoodImageCompare({
-          image_url: imageUrl,
+          image_url: primaryImageUrl,
+          image_urls: imageUrls,
           additionalContext: additionalInfo,
           modelName: 'qwen-vl-max',
-          meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-          diet_goal: dietGoal as any,
-          activity_timing: activityTiming as any
+          meal_type: mealType,
+          diet_goal: dietGoal,
+          activity_timing: activityTiming
         })
-        Taro.setStorageSync('analyzeImagePath', imageUrl)
+        // 存储第一张用于展示，或者 stored result 里包含 items
+        Taro.setStorageSync('analyzeImagePath', primaryImageUrl)
         Taro.setStorageSync('analyzeCompareResult', JSON.stringify(compareResult))
         Taro.setStorageSync('analyzeCompareMode', true)
         Taro.setStorageSync('analyzeMealType', mealType)
@@ -95,9 +135,11 @@ export default function AnalyzePage() {
       }
 
       // 普通模式：提交异步任务，进入加载页等待
+      Taro.showLoading({ title: '提交任务...', mask: true })
       const { task_id } = await submitAnalyzeTask({
-        image_url: imageUrl,
-        meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+        image_url: primaryImageUrl,
+        image_urls: imageUrls,
+        meal_type: mealType,
         diet_goal: dietGoal,
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
@@ -118,16 +160,13 @@ export default function AnalyzePage() {
   }
 
   const handleConfirm = () => {
-    if (!imagePath) {
-      Taro.showToast({
-        title: '图片不存在',
-        icon: 'none'
-      })
+    if (imagePaths.length === 0) {
+      handleChooseImage() // 如果没图片，点击确认直接触发选择
       return
     }
     Taro.showModal({
       title: '确认分析',
-      content: '确定开始分析当前图片吗？',
+      content: `确定开始分析这 ${imagePaths.length} 张图片吗？`,
       confirmText: '确定',
       cancelText: '取消',
       success: (res) => {
@@ -143,29 +182,49 @@ export default function AnalyzePage() {
     })
   }
 
-  const handlePreviewImage = () => {
-    if (imagePath) {
-      Taro.previewImage({
-        current: imagePath,
-        urls: [imagePath]
-      })
-    }
+  const handlePreviewImage = (current: string) => {
+    Taro.previewImage({
+      current,
+      urls: imagePaths
+    })
   }
 
   return (
     <View className='analyze-page'>
-      {/* 图片预览区域 */}
+      {/* 图片预览区域 (Grid) */}
       <View className='image-preview-section'>
-        {imagePath ? (
-          <Image
-            src={imagePath}
-            mode='aspectFill'
-            className='preview-image'
-            onClick={handlePreviewImage}
-          />
+        {imagePaths.length > 0 ? (
+          <View className='image-grid'>
+            {imagePaths.map((path, index) => (
+              <View key={index} className='grid-item'>
+                <Image
+                  src={path}
+                  mode='aspectFill'
+                  className='grid-image'
+                  onClick={() => handlePreviewImage(path)}
+                />
+                <View className='remove-btn' onClick={(e) => {
+                  e.stopPropagation()
+                  handleRemoveImage(index)
+                }}>
+                  <Text className='close-icon'>×</Text>
+                </View>
+              </View>
+            ))}
+            {imagePaths.length < 3 && (
+              <View className='grid-item add-btn' onClick={handleChooseImage}>
+                <Text className='add-icon'>+</Text>
+                <Text className='add-text'>添加</Text>
+              </View>
+            )}
+          </View>
         ) : (
-          <View className='no-image-placeholder'>
-            <Text className='placeholder-text'>暂无图片</Text>
+          <View className='no-image-placeholder' onClick={handleChooseImage}>
+            <View className='placeholder-content'>
+              <Text className='iconfont icon-xiangji' style={{ fontSize: '64rpx', color: '#9ca3af', marginBottom: '16rpx' }} />
+              <Text className='placeholder-text'>点击拍摄/上传食物</Text>
+              <Text className='placeholder-sub'>支持多图 (最多3张)</Text>
+            </View>
           </View>
         )}
       </View>
@@ -173,7 +232,7 @@ export default function AnalyzePage() {
       {/* 餐次（AI 将结合餐次分析） */}
       <View className='meal-section'>
         <View className='section-header'>
-          <Text className='section-icon iconfont icon-canciguanli' />
+
           <Text className='section-title'>餐次</Text>
         </View>
         <Text className='section-hint'>
@@ -186,7 +245,7 @@ export default function AnalyzePage() {
               className={`meal-option ${mealType === opt.value ? 'active' : ''}`}
               onClick={() => setMealType(opt.value)}
             >
-              <Text className='meal-icon'>{opt.icon}</Text>
+              <Text className={`meal-icon iconfont ${opt.iconClass}`} />
               <Text className='meal-label'>{opt.label}</Text>
             </View>
           ))}
@@ -196,7 +255,7 @@ export default function AnalyzePage() {
       {/* 饮食目标（状态一） */}
       <View className='state-section'>
         <View className='section-header'>
-          <Text className='section-icon iconfont icon-shentinianling' />
+
           <Text className='section-title'>饮食目标</Text>
         </View>
         <Text className='section-hint'>
@@ -209,7 +268,7 @@ export default function AnalyzePage() {
               className={`state-option ${dietGoal === opt.value ? 'active' : ''}`}
               onClick={() => handleDietGoalSelect(opt.value)}
             >
-              <Text className='state-icon'>{opt.icon}</Text>
+              <Text className={`state-icon iconfont ${opt.iconClass}`} />
               <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
@@ -219,7 +278,7 @@ export default function AnalyzePage() {
       {/* 运动时机（状态二） */}
       <View className='state-section'>
         <View className='section-header'>
-          <Text className='section-icon iconfont icon-canciguanli' />
+
           <Text className='section-title'>运动时机</Text>
         </View>
         <Text className='section-hint'>
@@ -232,7 +291,7 @@ export default function AnalyzePage() {
               className={`state-option ${activityTiming === opt.value ? 'active' : ''}`}
               onClick={() => handleActivityTimingSelect(opt.value)}
             >
-              <Text className='state-icon'>{opt.icon}</Text>
+              <Text className={`state-icon iconfont ${opt.iconClass}`} />
               <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
@@ -242,7 +301,7 @@ export default function AnalyzePage() {
       {/* 双模型对比模式 */}
       <View className='compare-section'>
         <View className='section-header'>
-          <Text className='section-icon'>🔬</Text>
+
           <Text className='section-title'>模型对比</Text>
         </View>
         <View className='compare-toggle'>
@@ -261,7 +320,7 @@ export default function AnalyzePage() {
       {/* 补充细节区域 */}
       <View className='details-section'>
         <View className='section-header'>
-          <Text className='section-icon iconfont icon-ic_detail' />
+
           <Text className='section-title'>补充细节</Text>
         </View>
         <Text className='section-hint'>
@@ -288,11 +347,11 @@ export default function AnalyzePage() {
       {/* 确认按钮 */}
       <View className='confirm-section'>
         <View
-          className={`confirm-btn ${!imagePath || isAnalyzing ? 'disabled' : ''}`}
+          className={`confirm-btn ${imagePaths.length === 0 || isAnalyzing ? 'disabled' : ''}`}
           onClick={!isAnalyzing ? handleConfirm : undefined}
         >
           <Text className='confirm-btn-text'>
-            {isAnalyzing ? '提交中...' : '确认并开始分析'}
+            {isAnalyzing ? '提交中...' : (imagePaths.length === 0 ? '请先拍照' : `分析 ${imagePaths.length} 张图片`)}
           </Text>
         </View>
         <View
@@ -305,4 +364,3 @@ export default function AnalyzePage() {
     </View>
   )
 }
-

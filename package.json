@@ -63,6 +63,7 @@
     "@tarojs/runtime": "4.1.10",
     "@tarojs/shared": "4.1.10",
     "@tarojs/taro": "4.1.10",
+    "@vant/area-data": "^2.1.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "taro-plugin-canvas": "^1.0.10",
@@ -70,8 +71,6 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.4",
-    "consola": "^3.2.3",
-    "vite-plugin-style-import": "^2.0.0",
     "@babel/plugin-transform-class-properties": "7.25.9",
     "@babel/preset-react": "^7.24.1",
     "@commitlint/cli": "^19.8.1",
@@ -83,6 +82,7 @@
     "@types/react": "^18.0.0",
     "@vitejs/plugin-react": "^4.3.0",
     "babel-preset-taro": "4.1.10",
+    "consola": "^3.2.3",
     "eslint": "^8.57.0",
     "eslint-config-taro": "4.1.10",
     "eslint-plugin-react": "^7.34.1",
@@ -98,6 +98,7 @@
     "taro-iconfont-cli": "^3.3.0",
     "terser": "^5.30.4",
     "typescript": "^5.4.5",
-    "vite": "^4.2.0"
+    "vite": "^4.2.0",
+    "vite-plugin-style-import": "^2.0.0"
   }
 }

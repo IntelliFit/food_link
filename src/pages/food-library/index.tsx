@@ -1,14 +1,27 @@
 import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
   getPublicFoodLibraryList,
   likePublicFoodLibraryItem,
   unlikePublicFoodLibraryItem,
+  collectPublicFoodLibraryItem,
+  uncollectPublicFoodLibraryItem,
   type PublicFoodLibraryItem
 } from '../../utils/api'
+import { Star, StarOutlined } from '@taroify/icons'
 import './index.scss'
+
+// 缓存键名常量
+const CACHE_KEYS = {
+  LIST: 'food_library_list_cache',
+  TIMESTAMP: 'food_library_timestamp',
+  FILTERS: 'food_library_filters_cache' // 缓存筛选条件
+}
+
+// 缓存有效期（5分钟）
+const CACHE_DURATION = 5 * 60 * 1000
 
 export default function FoodLibraryPage() {
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
@@ -19,10 +32,95 @@ export default function FoodLibraryPage() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchMerchant, setSearchMerchant] = useState('')
 
-  // 加载列表
-  const loadList = useCallback(async () => {
+  // 性能优化相关状态
+  const [refreshing, setRefreshing] = useState(false)
+  const [isFirstLoad, setIsFirstLoad] = useState(true)
+  const [showSkeleton, setShowSkeleton] = useState(false)
+  const lastRefreshTime = useRef<number>(0)
+
+  /**
+   * 从缓存加载数据
+   */
+  const loadFromCache = useCallback(() => {
+    try {
+      const cachedList = Taro.getStorageSync(CACHE_KEYS.LIST)
+      const cachedFilters = Taro.getStorageSync(CACHE_KEYS.FILTERS)
+
+      if (cachedList && cachedFilters) {
+        try {
+          const parsedList = JSON.parse(cachedList)
+          const parsedFilters = JSON.parse(cachedFilters)
+
+          // 恢复筛选条件
+          setSortBy(parsedFilters.sortBy || 'latest')
+          setFilterFatLoss(parsedFilters.filterFatLoss)
+          setSearchMerchant(parsedFilters.searchMerchant || '')
+
+          // 恢复列表
+          if (Array.isArray(parsedList) && parsedList.length > 0) {
+            setList(parsedList)
+            return true
+          }
+        } catch (e) {
+          console.error('解析缓存失败:', e)
+        }
+      }
+      return false
+    } catch (e) {
+      console.error('加载缓存失败:', e)
+      return false
+    }
+  }, [])
+
+  /**
+   * 保存数据到缓存
+   */
+  const saveToCache = useCallback((listData: PublicFoodLibraryItem[]) => {
+    try {
+      // 只缓存前50条
+      const dataToCache = listData.slice(0, 50)
+      Taro.setStorageSync(CACHE_KEYS.LIST, JSON.stringify(dataToCache))
+      Taro.setStorageSync(CACHE_KEYS.TIMESTAMP, Date.now().toString())
+
+      // 缓存筛选条件
+      Taro.setStorageSync(CACHE_KEYS.FILTERS, JSON.stringify({
+        sortBy,
+        filterFatLoss,
+        searchMerchant
+      }))
+    } catch (e) {
+      console.error('保存缓存失败:', e)
+    }
+  }, [sortBy, filterFatLoss, searchMerchant])
+
+  /**
+   * 清除缓存
+   */
+  const clearCache = useCallback(() => {
+    try {
+      Taro.removeStorageSync(CACHE_KEYS.LIST)
+      Taro.removeStorageSync(CACHE_KEYS.TIMESTAMP)
+      Taro.removeStorageSync(CACHE_KEYS.FILTERS)
+    } catch (e) {
+      console.error('清除缓存失败:', e)
+    }
+  }, [])
+
+  /**
+   * 加载列表（支持静默刷新和强制刷新）
+   */
+  const loadList = useCallback(async (silent = false, force = false) => {
     if (!getAccessToken()) return
-    setLoading(true)
+
+    // 条件刷新：检查是否需要刷新
+    const now = Date.now()
+    if (!force && now - lastRefreshTime.current < CACHE_DURATION) {
+      console.log('食物库刷新间隔未到，跳过刷新')
+      return
+    }
+
+    if (!silent) setLoading(true)
+
     try {
       const res = await getPublicFoodLibraryList({
         sort_by: sortBy,
@@ -30,44 +128,136 @@ export default function FoodLibraryPage() {
         merchant_name: searchMerchant || undefined,
         limit: 50
       })
-      setList(res.list || [])
+      const newList = res.list || []
+      setList(newList)
+
+      // 保存到缓存
+      saveToCache(newList)
+
+      // 更新刷新时间
+      lastRefreshTime.current = Date.now()
     } catch (e: any) {
       console.error('加载公共食物库失败:', e)
-      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+      if (!silent) {
+        Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+      }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
+      setRefreshing(false)
+      setShowSkeleton(false)
     }
-  }, [sortBy, filterFatLoss, searchMerchant])
+  }, [sortBy, filterFatLoss, searchMerchant, saveToCache])
 
+  // 【核心优化】智能加载策略
   useDidShow(() => {
     setLoggedIn(!!getAccessToken())
-    if (getAccessToken()) {
-      loadList()
+    if (!getAccessToken()) return
+
+    // 1. 立即从缓存加载数据
+    const hasCache = loadFromCache()
+
+    // 2. 判断是否需要刷新
+    const now = Date.now()
+    const needRefresh = (
+      list.length === 0 ||
+      now - lastRefreshTime.current > CACHE_DURATION
+    )
+
+    // 3. 根据情况决定刷新策略
+    if (needRefresh) {
+      if (hasCache || !isFirstLoad) {
+        // 有缓存或非首次：静默刷新
+        loadList(true, false)
+      } else {
+        // 首次且无缓存：显示骨架屏
+        setShowSkeleton(true)
+        loadList(false, true)
+        setIsFirstLoad(false)
+      }
     }
   })
 
+  // 筛选条件变化时刷新（清除缓存）
   useEffect(() => {
     if (loggedIn) {
-      loadList()
+      clearCache()
+      loadList(false, true)
     }
-  }, [sortBy, filterFatLoss, loggedIn])
+  }, [sortBy, filterFatLoss, searchMerchant, loggedIn])
+
+  // 下拉刷新处理
+  const handleRefresherRefresh = useCallback(() => {
+    if (!getAccessToken()) {
+      setRefreshing(false)
+      return
+    }
+    setRefreshing(true)
+    loadList(false, true) // 强制刷新
+  }, [loadList])
 
   // 搜索
   const handleSearch = () => {
     setSearchMerchant(searchKeyword.trim())
   }
 
-  // 点赞/取消
+  // 点赞/取消（乐观更新）
   const handleLike = async (item: PublicFoodLibraryItem) => {
+    // 1. 乐观更新：立即更新 UI
+    const newList = list.map(it =>
+      it.id === item.id
+        ? {
+          ...it,
+          liked: !it.liked,
+          like_count: it.liked ? Math.max(0, it.like_count - 1) : it.like_count + 1
+        }
+        : it
+    )
+    setList(newList)
+    saveToCache(newList)
+
+    // 2. 后台发送请求
     try {
       if (item.liked) {
         await unlikePublicFoodLibraryItem(item.id)
-        setList(prev => prev.map(it => it.id === item.id ? { ...it, liked: false, like_count: Math.max(0, it.like_count - 1) } : it))
       } else {
         await likePublicFoodLibraryItem(item.id)
-        setList(prev => prev.map(it => it.id === item.id ? { ...it, liked: true, like_count: it.like_count + 1 } : it))
       }
     } catch (e: any) {
+      // 3. 失败则回滚
+      setList(list)
+      saveToCache(list)
+      Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
+    }
+  }
+
+  // 收藏/取消（乐观更新）
+  const handleCollect = async (e: any, item: PublicFoodLibraryItem) => {
+    e.stopPropagation()
+
+    // 1. 乐观更新：立即更新 UI
+    const newList = list.map(it =>
+      it.id === item.id
+        ? {
+          ...it,
+          collected: !it.collected,
+          collection_count: it.collected ? Math.max(0, (it.collection_count || 0) - 1) : (it.collection_count || 0) + 1
+        }
+        : it
+    )
+    setList(newList)
+    saveToCache(newList)
+
+    // 2. 后台发送请求
+    try {
+      if (item.collected) {
+        await uncollectPublicFoodLibraryItem(item.id)
+      } else {
+        await collectPublicFoodLibraryItem(item.id)
+      }
+    } catch (e: any) {
+      // 3. 失败则回滚
+      setList(list)
+      saveToCache(list)
       Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
     }
   }
@@ -151,9 +341,32 @@ export default function FoodLibraryPage() {
       </View>
 
       {/* 列表 */}
-      <ScrollView className="list-scroll" scrollY enhanced showScrollbar={false}>
+      <ScrollView
+        className="list-scroll"
+        scrollY
+        enhanced
+        showScrollbar={false}
+        refresherEnabled
+        refresherTriggered={refreshing}
+        onRefresherRefresh={handleRefresherRefresh}
+        refresherDefaultStyle='black'
+      >
         <View className="list-content">
-          {loading ? (
+          {showSkeleton ? (
+            // 骨架屏
+            <View className="skeleton-container">
+              {[1, 2, 3].map(i => (
+                <View key={i} className="skeleton-food-card">
+                  <View className="skeleton-image" />
+                  <View className="skeleton-info">
+                    <View className="skeleton-line" style={{ width: '60%', height: '32rpx', marginBottom: '16rpx' }} />
+                    <View className="skeleton-line" style={{ width: '100%', height: '24rpx', marginBottom: '12rpx' }} />
+                    <View className="skeleton-line" style={{ width: '80%', height: '24rpx' }} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : loading && list.length === 0 ? (
             <View className="loading-state">
               <Text className="loading-text">加载中...</Text>
             </View>
@@ -178,19 +391,33 @@ export default function FoodLibraryPage() {
                 </View>
                 <View className="food-info">
                   <View className="food-header">
-                    <Text className="food-title">{item.description || '健康餐'}</Text>
+                    <Text className="food-title">{item.food_name || item.description || '健康餐'}</Text>
                     <Text className="food-calories">{item.total_calories.toFixed(0)} kcal</Text>
                   </View>
+                  {item.description && (
+                    <View className="food-description">
+                      <Text className="description-text">{item.description}</Text>
+                    </View>
+                  )}
                   {item.merchant_name && (
                     <View className="food-merchant">
                       <Text className="merchant-icon iconfont icon-shiwu" />
                       <Text className="merchant-name">{item.merchant_name}</Text>
+                      {item.taste_rating && item.taste_rating > 0 && (
+                        <View className="taste-rating">
+                          <Text className="rating-icon">★</Text>
+                          <Text className="rating-text">{item.taste_rating}</Text>
+                        </View>
+                      )}
                     </View>
                   )}
-                  {item.city && (
+                  {(item.merchant_address || item.province || item.city) && (
                     <View className="food-location">
                       <Text className="location-icon iconfont icon-dizhi" />
-                      <Text className="location-text">{item.city}{item.district ? ` ${item.district}` : ''}</Text>
+                      <Text className="location-text">
+                        {item.merchant_address ||
+                          [item.province, item.city, item.district].filter(Boolean).join(' ')}
+                      </Text>
                     </View>
                   )}
                   {item.user_tags && item.user_tags.length > 0 && (
@@ -218,6 +445,17 @@ export default function FoodLibraryPage() {
                       >
                         <Text className={`stat-icon iconfont icon-good ${item.liked ? 'liked' : ''}`} />
                         <Text className="stat-count">{item.like_count}</Text>
+                      </View>
+                      <View
+                        className="stat-item"
+                        onClick={e => handleCollect(e, item)}
+                      >
+                        {item.collected ? (
+                          <Star size="16" style={{ color: '#fbbf24' }} />
+                        ) : (
+                          <StarOutlined size="16" color="#6b7280" />
+                        )}
+                        <Text className="stat-count">{item.collection_count || 0}</Text>
                       </View>
                       <View className="stat-item">
                         <Text className="stat-icon iconfont icon-pinglun" />

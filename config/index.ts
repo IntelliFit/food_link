@@ -46,7 +46,7 @@ export default defineConfig<'vite'>(async (merge) => {
             {
               libraryName: '@taroify/core',
               esModule: true,
-              resolveStyle: (name: string) => `@taroify/core/${name}/index.css`,
+              resolveStyle: (name: string) => `@taroify/core/${name}/style`,
             },
             {
               libraryName: '@taroify/icons',

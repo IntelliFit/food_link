@@ -12,15 +12,7 @@ const MEAL_OPTIONS = [
   { value: 'snack' as const, label: '加餐' }
 ]
 
-/** 用户当前状态（确认记录时选择，≤6 项） */
-const CONTEXT_STATE_OPTIONS = [
-  { value: 'post_workout', label: '刚健身完' },
-  { value: 'fasting', label: '空腹/餐前' },
-  { value: 'fat_loss', label: '减脂期' },
-  { value: 'muscle_gain', label: '增肌期' },
-  { value: 'maintain', label: '维持体重' },
-  { value: 'none', label: '无特殊' }
-]
+
 
 interface NutritionItem {
   id: number
@@ -130,80 +122,58 @@ export default function ResultTextPage() {
     })
   }
 
-  /** 确认记录：若记录页已选状态则直接用，否则先选状态；再选餐次，保存 */
+
+  /** 确认记录：选择餐次，保存 */
   const handleConfirm = () => {
-    const savedContextState = Taro.getStorageSync('analyzeContextState')
-    const contextStateValue = savedContextState && typeof savedContextState === 'string' ? savedContextState : null
-    const contextStateLabel = contextStateValue
-      ? (CONTEXT_STATE_OPTIONS.find((o) => o.value === contextStateValue)?.label ?? contextStateValue)
-      : null
-
-    const doSave = (stateValue: string, stateLabel: string) => {
-      Taro.showActionSheet({
-        itemList: MEAL_OPTIONS.map((o) => o.label),
-        success: async (mealRes) => {
-          const meal = MEAL_OPTIONS[mealRes.tapIndex]
-          if (!meal) return
-          const { confirm } = await Taro.showModal({
-            title: '确认记录',
-            content: `当前状态：${stateLabel}\n餐次：${meal.label}\n确定保存吗？`
-          })
-          if (!confirm) return
-          setSaving(true)
-          try {
-            if (contextStateValue) Taro.removeStorageSync('analyzeContextState')
-            const payload = {
-              meal_type: meal.value,
-              description: description || undefined,
-              insight: healthAdvice || undefined,
-              items: nutritionItems.map((item) => ({
-                name: item.name,
-                weight: item.weight,
-                ratio: item.ratio,
-                intake: item.intake,
-                nutrients: {
-                  calories: item.calorie,
-                  protein: item.protein,
-                  carbs: item.carbs,
-                  fat: item.fat,
-                  fiber: 0,
-                  sugar: 0
-                }
-              })),
-              total_calories: nutritionStats.calories,
-              total_protein: nutritionStats.protein,
-              total_carbs: nutritionStats.carbs,
-              total_fat: nutritionStats.fat,
-              total_weight_grams: totalWeight,
-              context_state: stateValue,
-              pfc_ratio_comment: pfcRatioComment ?? undefined,
-              absorption_notes: absorptionNotes ?? undefined,
-              context_advice: contextAdvice ?? undefined
-            }
-            await saveFoodRecord(payload)
-            Taro.showToast({ title: '记录成功', icon: 'success' })
-            setTimeout(() => {
-              Taro.navigateBack({ delta: 1 })
-            }, 1500)
-          } catch (e: any) {
-            Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
-          } finally {
-            setSaving(false)
-          }
-        }
-      })
-    }
-
-    if (contextStateValue && contextStateLabel) {
-      doSave(contextStateValue, contextStateLabel)
-      return
-    }
     Taro.showActionSheet({
-      itemList: CONTEXT_STATE_OPTIONS.map((o) => o.label),
-      success: (stateRes) => {
-        const contextState = CONTEXT_STATE_OPTIONS[stateRes.tapIndex]
-        if (!contextState) return
-        doSave(contextState.value, contextState.label)
+      itemList: MEAL_OPTIONS.map((o) => o.label),
+      success: async (mealRes) => {
+        const meal = MEAL_OPTIONS[mealRes.tapIndex]
+        if (!meal) return
+        const { confirm } = await Taro.showModal({
+          title: '确认记录',
+          content: `餐次：${meal.label}\n确定保存吗？`
+        })
+        if (!confirm) return
+        setSaving(true)
+        try {
+          const payload = {
+            meal_type: meal.value,
+            description: description || undefined,
+            insight: healthAdvice || undefined,
+            items: nutritionItems.map((item) => ({
+              name: item.name,
+              weight: item.weight,
+              ratio: item.ratio,
+              intake: item.intake,
+              nutrients: {
+                calories: item.calorie,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                fiber: 0,
+                sugar: 0
+              }
+            })),
+            total_calories: nutritionStats.calories,
+            total_protein: nutritionStats.protein,
+            total_carbs: nutritionStats.carbs,
+            total_fat: nutritionStats.fat,
+            total_weight_grams: totalWeight,
+            pfc_ratio_comment: pfcRatioComment ?? undefined,
+            absorption_notes: absorptionNotes ?? undefined,
+            context_advice: contextAdvice ?? undefined
+          }
+          await saveFoodRecord(payload)
+          Taro.showToast({ title: '记录成功', icon: 'success' })
+          setTimeout(() => {
+            Taro.navigateBack({ delta: 1 })
+          }, 1500)
+        } catch (e: any) {
+          Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+        } finally {
+          setSaving(false)
+        }
       }
     })
   }
@@ -212,7 +182,7 @@ export default function ResultTextPage() {
     return (
       <View className='result-text-page'>
         <View className='empty-state'>
-          <Text className='empty-icon'>📝</Text>
+          <Text className='empty-icon iconfont icon-nothing'></Text>
           <Text className='empty-text'>未找到分析结果</Text>
           <Text className='empty-hint'>请从记录页使用「文字记录」并点击「开始计算」</Text>
         </View>
@@ -224,7 +194,7 @@ export default function ResultTextPage() {
     return (
       <View className='result-text-page'>
         <View className='empty-state'>
-          <Text className='empty-icon'>⏳</Text>
+          <Text className='empty-icon iconfont icon-shizhong'></Text>
           <Text className='empty-text'>加载中...</Text>
         </View>
       </View>
@@ -236,13 +206,16 @@ export default function ResultTextPage() {
       <ScrollView className='result-scroll' scrollY enhanced showScrollbar={false}>
         {/* 文字记录标题区（无图片） */}
         <View className='text-result-header'>
-          <Text className='text-result-title'>✏️ 文字记录分析</Text>
+          <Text className='text-result-title'>
+            <Text className='iconfont icon-jishiben' style={{ marginRight: 8, fontSize: 20 }}></Text>
+            文字记录分析
+          </Text>
         </View>
 
         {/* AI 健康透视（含 PFC、吸收率、情境建议） */}
         <View className='health-section'>
           <View className='section-header'>
-            <Text className='section-icon'>🌿</Text>
+            <Text className='section-icon iconfont icon-a-144-lvye'></Text>
             <Text className='section-title'>AI 健康透视</Text>
           </View>
           {description && (
@@ -255,19 +228,28 @@ export default function ResultTextPage() {
           </View>
           {pfcRatioComment && (
             <View className='advice-box pro-box'>
-              <Text className='advice-label'>📊 PFC 比例</Text>
+              <Text className='advice-label'>
+                <Text className='iconfont icon-tubiao-zhuzhuangtu' style={{ marginRight: 6 }}></Text>
+                PFC 比例
+              </Text>
               <Text className='advice-text'>{pfcRatioComment}</Text>
             </View>
           )}
           {absorptionNotes && (
             <View className='advice-box pro-box'>
-              <Text className='advice-label'>🔬 吸收与利用</Text>
+              <Text className='advice-label'>
+                <Text className='iconfont icon-huore' style={{ marginRight: 6 }}></Text>
+                吸收与利用
+              </Text>
               <Text className='advice-text'>{absorptionNotes}</Text>
             </View>
           )}
           {contextAdvice && (
             <View className='advice-box pro-box'>
-              <Text className='advice-label'>💡 情境建议</Text>
+              <Text className='advice-label'>
+                <Text className='iconfont icon-shizhong' style={{ marginRight: 6 }}></Text>
+                情境建议
+              </Text>
               <Text className='advice-text'>{contextAdvice}</Text>
             </View>
           )}
@@ -287,28 +269,28 @@ export default function ResultTextPage() {
           </View>
           <View className='nutrition-grid'>
             <View className='nutrition-card'>
-              <Text className='nutrition-icon'>🔥</Text>
+              <Text className='nutrition-icon iconfont icon-huore'></Text>
               <Text className='nutrition-label'>热量</Text>
               <Text className='nutrition-value'>
                 {Math.round(nutritionStats.calories * 10) / 10} kcal
               </Text>
             </View>
             <View className='nutrition-card'>
-              <Text className='nutrition-icon'>💧</Text>
+              <Text className='nutrition-icon iconfont icon-danbaizhi'></Text>
               <Text className='nutrition-label'>蛋白质</Text>
               <Text className='nutrition-value'>
                 {Math.round(nutritionStats.protein * 10) / 10} g
               </Text>
             </View>
             <View className='nutrition-card'>
-              <Text className='nutrition-icon'>⚡</Text>
+              <Text className='nutrition-icon iconfont icon-tanshui-dabiao'></Text>
               <Text className='nutrition-label'>总碳水</Text>
               <Text className='nutrition-value'>
                 {Math.round(nutritionStats.carbs * 10) / 10} g
               </Text>
             </View>
             <View className='nutrition-card'>
-              <Text className='nutrition-icon'>🩸</Text>
+              <Text className='nutrition-icon iconfont icon-zhifangyouheruhuazhifangzhipin'></Text>
               <Text className='nutrition-label'>总脂肪</Text>
               <Text className='nutrition-value'>
                 {Math.round(nutritionStats.fat * 10) / 10} g

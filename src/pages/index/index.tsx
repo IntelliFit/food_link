@@ -39,7 +39,8 @@ export default function IndexPage() {
   const [meals, setMeals] = useState<HomeMealItem[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  // 每次显示页面时刷新数据
+  Taro.useDidShow(() => {
     if (!getAccessToken()) {
       setLoading(false)
       return
@@ -54,7 +55,12 @@ export default function IndexPage() {
         setMeals([])
       })
       .finally(() => setLoading(false))
+  })
+
+  useEffect(() => {
+    // 首次加载逻辑保留，或者可以依赖 useDidShow
   }, [])
+
 
   const handleQuickRecord = (type: string) => {
     // 记录页面是 tabBar 页面，需要使用 switchTab

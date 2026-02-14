@@ -47,6 +47,15 @@
     background: #f9fafb;
   }
 
+  &.task-card-violated {
+    border: 1rpx solid #fecaca;
+    background: #fff5f5;
+
+    &:active {
+      background: #fef2f2;
+    }
+  }
+
   .thumb {
     width: 120rpx;
     height: 120rpx;
@@ -63,6 +72,15 @@
     }
   }
 
+  .thumb-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  }
+
   .body {
     flex: 1;
     min-width: 0;
@@ -75,6 +93,24 @@
     font-size: 24rpx;
     color: #9ca3af;
     line-height: 32rpx;
+  }
+
+  .task-type-tag {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    padding: 4rpx 12rpx;
+    border-radius: 8rpx;
+    background: linear-gradient(135deg, #dcfce7 0%, #d1fae5 100%);
+    border: 1rpx solid #bbf7d0;
+    margin-bottom: 4rpx;
+
+    .task-type-text {
+      font-size: 22rpx;
+      color: #15803d;
+      font-weight: 600;
+      line-height: 28rpx;
+    }
   }
 
   .status-row {
@@ -132,6 +168,37 @@
     .status-text {
       color: #ef4444;
     }
+  }
+
+  .status-violated {
+    .status-dot {
+      background: #dc2626;
+    }
+
+    .status-text {
+      color: #dc2626;
+    }
+  }
+
+  .violation-reason {
+    font-size: 22rpx;
+    color: #dc2626;
+    line-height: 30rpx;
+    margin-top: 4rpx;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .thumb-violated {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
   }
 
   .arrow {

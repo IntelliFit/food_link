@@ -1,7 +1,7 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getFoodRecordList, analyzeFoodText, type FoodRecord } from '../../utils/api'
+import { getFoodRecordList, submitTextAnalyzeTask, getHomeDashboard, getAccessToken, type FoodRecord } from '../../utils/api'
 import { IconCamera, IconText, IconClock } from '../../components/iconfont'
 
 import './index.scss'
@@ -110,7 +110,7 @@ export default function RecordPage() {
 
   const [textCalculating, setTextCalculating] = useState(false)
 
-  /** 文字记录：开始计算前确认 → 调大模型分析 → 跳转结果页 */
+  /** 文字记录：开始计算前确认 → 提交异步任务 → 跳转加载页 */
   const handleStartCalculate = async () => {
     const trimmed = foodText.trim()
     if (!trimmed) {
@@ -122,25 +122,27 @@ export default function RecordPage() {
       content: '确定根据当前描述开始计算营养分析吗？'
     })
     if (!confirm) return
+
     let inputText = trimmed
     if (foodAmount.trim()) inputText += `\n数量：${foodAmount.trim()}`
+
     setTextCalculating(true)
-    Taro.showLoading({ title: '分析中...', mask: true })
+    Taro.showLoading({ title: '提交任务中...', mask: true })
     try {
-      const result = await analyzeFoodText({
+      const { task_id } = await submitTextAnalyzeTask({
         text: inputText,
+        meal_type: selectedMeal as any,
         diet_goal: textDietGoal as any,
         activity_timing: textActivityTiming as any
       })
       Taro.hideLoading()
-      Taro.setStorageSync('analyzeTextResult', JSON.stringify(result))
-      Taro.setStorageSync('analyzeTextSource', 'text')
-      Taro.setStorageSync('analyzeDietGoal', textDietGoal)
-      Taro.setStorageSync('analyzeActivityTiming', textActivityTiming)
-      Taro.navigateTo({ url: '/pages/result-text/index' })
+      // 跳转到加载页面，传递任务 ID 和任务类型
+      Taro.navigateTo({
+        url: `/pages/analyze-loading/index?task_id=${task_id}&task_type=food_text`
+      })
     } catch (e: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: e.message || '分析失败', icon: 'none' })
+      Taro.showToast({ title: e.message || '提交任务失败', icon: 'none' })
     } finally {
       setTextCalculating(false)
     }
@@ -161,9 +163,10 @@ export default function RecordPage() {
     }>
     totalCalorie: number
   }>>([])
-  const [rawRecords, setRawRecords] = useState<FoodRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  /** 目标卡路里：与首页一致，来自 getHomeDashboard().intakeData.target，未登录或请求失败时默认 2000 */
+  const [targetCalories, setTargetCalories] = useState(2000)
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr + 'T12:00:00')
@@ -214,12 +217,10 @@ export default function RecordPage() {
       }))
       const totalCalorie = meals.reduce((sum, m) => sum + m.totalCalorie, 0)
       setHistoryRecords([{ date, meals, totalCalorie }])
-      setRawRecords(records)
     } catch (e: any) {
       const msg = e.message || '获取记录失败'
       setHistoryError(msg)
       setHistoryRecords([])
-      setRawRecords([])
     } finally {
       setHistoryLoading(false)
     }
@@ -237,15 +238,18 @@ export default function RecordPage() {
   useEffect(() => {
     if (activeMethod === 'history') {
       loadHistory(selectedDate)
+      // 与首页一致：从首页仪表盘接口获取目标卡路里
+      if (getAccessToken()) {
+        getHomeDashboard()
+          .then((res) => setTargetCalories(res.intakeData.target))
+          .catch(() => { /* 失败保持默认 2000 */ })
+      }
     }
   }, [activeMethod, selectedDate])
 
-  /** 点击记录卡片：跳转识别记录详情页 */
+  /** 点击记录卡片：跳转识别记录详情页（通过 URL 参数传递记录 ID） */
   const handleRecordCardClick = (mealId: string) => {
-    const r = rawRecords.find((rec) => rec.id === mealId)
-    if (!r) return
-    Taro.setStorageSync('recordDetail', r)
-    Taro.navigateTo({ url: '/pages/record-detail/index' })
+    Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(mealId)}` })
   }
 
   const handleEditRecord = (e: any, _recordId: string) => {
@@ -518,7 +522,7 @@ export default function RecordPage() {
               </View>
               <View className='stat-item'>
                 <Text className='stat-label'>目标</Text>
-                <Text className='stat-value'>2000 kcal</Text>
+                <Text className='stat-value'>{targetCalories} kcal</Text>
               </View>
             </View>
           </View>
@@ -526,12 +530,12 @@ export default function RecordPage() {
           {/* 记录列表 */}
           {historyLoading ? (
             <View className='empty-state'>
-              <Text className='empty-icon'>⏳</Text>
+              <Text className='iconfont icon-jiazaixiao empty-icon'></Text>
               <Text className='empty-text'>加载中...</Text>
             </View>
           ) : historyError ? (
             <View className='empty-state'>
-              <Text className='empty-icon'>🔐</Text>
+              <Text className='iconfont icon-jiesuo empty-icon'></Text>
               <Text className='empty-text'>{historyError}</Text>
               <Text className='empty-hint'>请先登录后查看历史记录</Text>
             </View>
@@ -581,7 +585,7 @@ export default function RecordPage() {
             </View>
           ) : (
             <View className='empty-state'>
-              <Text className='empty-icon'>📝</Text>
+              <Text className='iconfont icon-jishiben empty-icon'></Text>
               <Text className='empty-text'>暂无记录</Text>
               <Text className='empty-hint'>拍照识别并确认记录后，将显示在这里</Text>
             </View>
