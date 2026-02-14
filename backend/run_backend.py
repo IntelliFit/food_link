@@ -98,7 +98,7 @@ def main() -> None:
     uvicorn.run(
         "main:app",
         host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", "3010")),
+        port=int(os.getenv("PORT", "8888")),
         log_level="info",
     )
 
