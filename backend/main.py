@@ -42,7 +42,7 @@ from database import (
     respond_friend_request,
     get_friends_with_profile,
     cleanup_duplicate_friends,
-    list_friends_today_records,
+    list_friends_feed_records,
     add_feed_like,
     remove_feed_like,
     get_feed_likes_for_records,
@@ -56,6 +56,9 @@ from database import (
     add_public_food_library_like,
     remove_public_food_library_like,
     get_public_food_library_likes_for_items,
+    add_public_food_library_collection,
+    remove_public_food_library_collection,
+    get_public_food_library_collections_for_items,
     add_public_food_library_comment,
     list_public_food_library_comments,
     get_food_record_by_id,
@@ -65,7 +68,12 @@ from database import (
     get_user_recipe,
     update_user_recipe,
     delete_user_recipe,
+    delete_user_recipe,
     use_recipe_record,
+    update_analysis_task_result,
+    # 评论任务
+    create_comment_task_sync,
+    list_comment_tasks_by_user_sync,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -109,11 +117,12 @@ class FoodItemResponse(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     base64Image: Optional[str] = Field(None, description="Base64 编码的图片数据（与 image_url 二选一）")
+    base64Image: Optional[str] = Field(None, description="Base64 编码的图片数据（与 image_url 二选一）")
     image_url: Optional[str] = Field(None, description="Supabase 等公网图片 URL（与 base64Image 二选一，分析时用此 URL 获取图片）")
+    image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
     additionalContext: Optional[str] = Field(default="", description="用户补充的上下文信息")
     modelName: Optional[str] = Field(default="qwen-vl-max", description="使用的模型名称")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain，用于 PFC 评价")
-    context_state: Optional[str] = Field(default=None, description="用户当前状态，用于情境建议（已废弃，兼容旧版）")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss(减脂期) / muscle_gain(增肌期) / maintain(维持体重) / none(无)")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout(练后) / daily(日常) / before_sleep(睡前) / none(无)")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal，用于建议下一餐")
@@ -494,15 +503,15 @@ async def analyze_food(
                 detail="缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量"
             )
 
-        if not request.base64Image and not request.image_url:
+        if not request.base64Image and not request.image_url and not request.image_urls:
             raise HTTPException(
                 status_code=400,
-                detail="请提供 base64Image 或 image_url 之一"
+                detail="请提供 base64Image 或 image_url 或 image_urls"
             )
-        if request.base64Image and request.image_url:
+        if (request.base64Image and request.image_url) or (request.base64Image and request.image_urls):
             raise HTTPException(
                 status_code=400,
-                detail="base64Image 与 image_url 只能传其一"
+                detail="base64Image 不能与 image_url/image_urls 同时传"
             )
 
         # 构建 API URL
@@ -527,9 +536,7 @@ async def analyze_food(
             state_parts = [s for s in [diet_text, activity_text] if s]
             if state_parts:
                 state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
-        elif request.context_state:
-            # 兼容旧版
-            state_hint = f"\n用户当前状态: {request.context_state}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
+
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
         if request.meal_type:
@@ -589,15 +596,22 @@ async def analyze_food(
 """.strip()
 
         # 图片入参：优先使用 image_url（Supabase 公网 URL），否则使用 base64
-        if request.image_url:
-            image_url_for_api = request.image_url
-        else:
+        # 图片入参：
+        # 1. 优先使用 image_urls (多图)
+        # 2. 其次 image_url (单图 URL)
+        # 3. 最后 base64Image (单图 base64)
+        image_urls_for_api = []
+        if request.image_urls:
+            image_urls_for_api = request.image_urls
+        elif request.image_url:
+            image_urls_for_api = [request.image_url]
+        elif request.base64Image:
             image_data = (
                 request.base64Image.split(",")[1]
                 if "," in request.base64Image
                 else request.base64Image
             )
-            image_url_for_api = f"data:image/jpeg;base64,{image_data}"
+            image_urls_for_api = [f"data:image/jpeg;base64,{image_data}"]
 
         # 调用 DashScope API
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -617,12 +631,10 @@ async def analyze_food(
                                     "type": "text",
                                     "text": prompt
                                 },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": image_url_for_api
-                                    }
-                                }
+                                *[
+                                    {"type": "image_url", "image_url": {"url": url}}
+                                    for url in image_urls_for_api
+                                ]
                             ]
                         }
                     ],
@@ -771,7 +783,8 @@ async def upload_analyze_image(body: UploadAnalyzeImageRequest):
 
 class AnalyzeSubmitRequest(BaseModel):
     """提交食物分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
-    image_url: str = Field(..., description="Supabase 公网图片 URL（需先调 upload-analyze-image）")
+    image_url: Optional[str] = Field(None, description="Supabase 公网图片 URL（需先调 upload-analyze-image）")
+    image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
     meal_type: Optional[str] = Field(default=None, description="餐次: breakfast / lunch / dinner / snack")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
@@ -790,8 +803,8 @@ async def analyze_submit(
     提交食物分析任务（异步）。立即返回 task_id，Worker 子进程会在后台执行分析，
     完成后可通过 GET /api/analyze/tasks/{task_id} 或列表接口查看结果。
     """
-    if not body.image_url or not body.image_url.strip():
-        raise HTTPException(status_code=400, detail="image_url 不能为空")
+    if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
+        raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
     payload = {
         "meal_type": body.meal_type,
         "diet_goal": body.diet_goal,
@@ -806,7 +819,8 @@ async def analyze_submit(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
             task_type="food",
-            image_url=body.image_url.strip(),
+            image_url=body.image_url.strip() if body.image_url else None,
+            image_urls=body.image_urls,
             payload=payload,
         )
         return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
@@ -822,7 +836,7 @@ async def list_analyze_tasks(
     limit: int = 50,
     user_info: dict = Depends(get_current_user_info),
 ):
-    """查询当前用户的识别任务列表，支持按 task_type、status 筛选。"""
+    """查询当前用户的识别任务列表，支持按 task_type, status 筛选。"""
     try:
         tasks = await asyncio.to_thread(
             list_analysis_tasks_by_user_sync,
@@ -851,6 +865,45 @@ async def get_analyze_task(
     return task
 
 
+class UpdateAnalysisResultRequest(BaseModel):
+    """更新分析结果请求（用于修正食物名称等）"""
+    result: Dict[str, Any] = Field(..., description="新的分析结果 JSON（完整覆盖）")
+
+
+@app.patch("/api/analyze/tasks/{task_id}/result")
+async def update_task_result(
+    task_id: str,
+    body: UpdateAnalysisResultRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    更新指定分析任务的 result 字段。
+    主要用于用户在结果页手动修改食物名称后，同步更新后端记录（task.result）。
+    """
+    try:
+        # 先确认任务存在且属于当前用户
+        task = await asyncio.to_thread(get_analysis_task_by_id_sync, task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        if task["user_id"] != user_info["user_id"]:
+            raise HTTPException(status_code=403, detail="无权操作此任务")
+
+        updated = await update_analysis_task_result(task_id, body.result)
+        return {
+            "message": "更新成功",
+            "task": {
+                **updated,
+                "created_at": updated["created_at"].replace("+00:00", "Z"),
+                "updated_at": updated["updated_at"].replace("+00:00", "Z")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[update_task_result] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ---------- 双模型对比分析接口 ----------
 
 @app.post("/api/analyze-compare", response_model=CompareAnalyzeResponse)
@@ -859,7 +912,7 @@ async def analyze_food_compare(
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
-    双模型对比分析：同时使用千问和 Gemini 分析同一张食物图片，返回两个模型的结果供对比。
+    双模型对比分析：同时使用千问和 Gemini 模型分析同一张食物图片，返回两个模型的结果供对比。
     
     - 千问模型 (qwen-vl-max): 通过 DashScope API 调用
     - Gemini 模型 (gemini-2.0-flash): 通过 Google AI SDK 调用
@@ -888,8 +941,7 @@ async def analyze_food_compare(
         state_parts = [s for s in [diet_text, activity_text] if s]
         if state_parts:
             state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
-    elif request.context_state:
-        state_hint = f"\n用户当前状态: {request.context_state}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
+
     
     remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
     
@@ -1011,8 +1063,9 @@ class AnalyzeTextRequest(BaseModel):
     """文字描述食物，请求营养成分分析"""
     text: str = Field(..., description="用户描述的食物内容，如：一碗米饭、一个苹果、200g 鸡胸肉")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
-    context_state: Optional[str] = Field(default=None, description="用户当前状态")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
 
 
 @app.post("/api/analyze-text", response_model=AnalyzeResponse)
@@ -1054,9 +1107,7 @@ async def analyze_food_text(
             state_parts = [s for s in [diet_text, activity_text] if s]
             if state_parts:
                 state_hint = f" 用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性建议。"
-        elif request.context_state:
-            # 兼容旧版
-            state_hint = f" 用户当前状态: {request.context_state}，请在 context_advice 中给出针对性建议。"
+
         remain_hint = f" 当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示。" if request.remaining_calories is not None else ""
 
         # 若已登录，拉取健康档案并注入 prompt
@@ -1195,6 +1246,50 @@ async def analyze_food_text(
             status_code=500,
             detail=str(e) or "连接 AI 服务失败"
         )
+
+
+class AnalyzeTextSubmitRequest(BaseModel):
+    """提交文字分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
+    text: str = Field(..., description="用户描述的食物内容")
+    meal_type: Optional[str] = Field(default=None, description="餐次: breakfast / lunch / dinner / snack")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
+    user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
+    remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
+
+
+@app.post("/api/analyze-text/submit")
+async def analyze_text_submit(
+    body: AnalyzeTextSubmitRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    提交文字分析任务（异步）。立即返回 task_id，Worker 子进程会在后台执行分析，
+    完成后可通过 GET /api/analyze/tasks/{task_id} 或列表接口查看结果。
+    """
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=400, detail="text 不能为空")
+    
+    payload = {
+        "meal_type": body.meal_type,
+        "diet_goal": body.diet_goal,
+        "activity_timing": body.activity_timing,
+        "user_goal": body.user_goal,
+        "remaining_calories": body.remaining_calories,
+    }
+    
+    try:
+        task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_info["user_id"],
+            task_type="food_text",
+            text_input=body.text.strip(),
+            payload=payload,
+        )
+        return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
+    except Exception as e:
+        print(f"[analyze-text/submit] 错误: {e}")
+        raise HTTPException(status_code=500, detail="提交任务失败")
 
 
 @app.get("/api")
@@ -1842,7 +1937,6 @@ class SaveFoodRecordRequest(BaseModel):
     total_carbs: float = Field(0, description="总碳水 g")
     total_fat: float = Field(0, description="总脂肪 g")
     total_weight_grams: int = Field(0, description="总预估重量 g")
-    context_state: Optional[str] = Field(default=None, description="用户当前状态（已废弃，兼容旧版）")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     pfc_ratio_comment: Optional[str] = Field(default=None, description="PFC 比例评价")
@@ -1892,7 +1986,6 @@ async def save_food_record(
             total_carbs=body.total_carbs,
             total_fat=body.total_fat,
             total_weight_grams=body.total_weight_grams,
-            context_state=body.context_state,
             diet_goal=body.diet_goal,
             activity_timing=body.activity_timing,
             pfc_ratio_comment=body.pfc_ratio_comment,
@@ -1921,6 +2014,30 @@ async def get_food_record_list(
     except Exception as e:
         print(f"[get_food_record_list] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取记录失败")
+
+
+@app.get("/api/food-record/{record_id}")
+async def get_food_record_detail(
+    record_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    获取单条饮食记录详情。需验证记录属于当前用户。
+    """
+    user_id = user_info["user_id"]
+    try:
+        record = await get_food_record_by_id(record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="记录不存在")
+        # 验证权限：记录必须属于当前用户
+        if record.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="无权访问此记录")
+        return {"record": record}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_food_record_detail] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取记录详情失败")
 
 
 # ---------- 首页仪表盘（今日摄入 + 今日餐食，不含运动） ----------
@@ -2207,28 +2324,63 @@ async def api_friend_cleanup_duplicates(user_info: dict = Depends(get_current_us
 @app.get("/api/community/feed")
 async def api_community_feed(
     date: Optional[str] = None,
+    offset: int = 0,
+    limit: int = 20,
+    include_comments: bool = True,
+    comments_limit: int = 5,
     user_info: dict = Depends(get_current_user_info),
 ):
-    """圈子 Feed：好友 + 自己在指定日期（默认今天）的饮食记录，带点赞数与当前用户是否已点赞。"""
+    """
+    圈子 Feed：好友 + 自己的饮食记录（支持分页），带点赞数、是否已点赞、评论列表。
+    
+    Args:
+        date: 可选日期筛选（YYYY-MM-DD）
+        offset: 分页偏移量
+        limit: 每页记录数
+        include_comments: 是否包含评论（默认 True）
+        comments_limit: 每条记录返回的评论数（默认 5）
+    
+    Returns:
+        { "list": [{ record, author, like_count, liked, is_mine, comments, comment_count }], "has_more": bool }
+    """
     try:
         current_user_id = user_info["user_id"]
-        items = await list_friends_today_records(current_user_id, date=date)
+        items = await list_friends_feed_records(
+            current_user_id, 
+            date=date, 
+            offset=offset, 
+            limit=limit,
+            include_comments=include_comments,
+            comments_limit=comments_limit
+        )
         record_ids = [item["record"]["id"] for item in items]
         likes_map = await get_feed_likes_for_records(record_ids, current_user_id) if record_ids else {}
+        
         out = []
         for item in items:
             rec = item["record"]
             rid = rec["id"]
             like_info = likes_map.get(rid, {"count": 0, "liked": False})
             is_mine = rec.get("user_id") == current_user_id
-            out.append({
+            
+            feed_item = {
                 "record": rec,
                 "author": item["author"],
                 "like_count": like_info["count"],
                 "liked": like_info["liked"],
                 "is_mine": is_mine,
-            })
-        return {"list": out}
+            }
+            
+            if include_comments:
+                comments = item.get("comments", [])
+                feed_item["comments"] = comments
+                feed_item["comment_count"] = len(comments)
+            
+            out.append(feed_item)
+        
+        # 返回是否还有更多数据
+        has_more = len(items) >= limit
+        return {"list": out, "has_more": has_more}
     except Exception as e:
         print(f"[api/community/feed] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取动态失败")
@@ -2282,13 +2434,49 @@ async def api_community_comment_post(
     body: dict,
     user_info: dict = Depends(get_current_user_info),
 ):
-    """发表评论。body: { "content": "评论内容" }"""
+    """
+    发表评论（异步审核版本）。
+    body: { "content": "评论内容" }
+    返回任务 ID，前端需要本地缓存显示，后台审核通过后才会真正入库。
+    """
     content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
     if not content:
         raise HTTPException(status_code=400, detail="评论内容不能为空")
+    if len(content) > 500:
+        raise HTTPException(status_code=400, detail="评论内容不能超过 500 字")
     try:
-        comment = await add_feed_comment(user_info["user_id"], record_id, content.strip())
-        return {"comment": comment}
+        profile = await get_user_by_id(user_info["user_id"])
+        nickname = (
+            user_info.get("nickname")
+            or (profile or {}).get("nickname")
+            or "用户"
+        )
+        avatar = (
+            user_info.get("avatar")
+            or (profile or {}).get("avatar")
+            or ""
+        )
+        # 创建评论审核任务
+        task = create_comment_task_sync(
+            user_id=user_info["user_id"],
+            comment_type="feed",
+            target_id=record_id,
+            content=content,
+        )
+        # 返回任务 ID 和临时评论数据（前端本地显示用）
+        return {
+            "task_id": task["id"],
+            "temp_comment": {
+                "id": task["id"],  # 使用任务 ID 作为临时 ID
+                "user_id": user_info["user_id"],
+                "record_id": record_id,
+                "content": content,
+                "created_at": task["created_at"],
+                "nickname": nickname,
+                "avatar": avatar,
+                "_is_temp": True,  # 标记为临时评论
+            }
+        }
     except Exception as e:
         print(f"[api/community/feed/comment] 错误: {e}")
         raise HTTPException(status_code=500, detail="发表失败")
@@ -2309,6 +2497,7 @@ class PublicFoodLibraryCreateRequest(BaseModel):
     description: Optional[str] = Field(default=None)
     insight: Optional[str] = Field(default=None)
     # 用户标签
+    food_name: Optional[str] = Field(default=None, description="食物名称")
     merchant_name: Optional[str] = Field(default=None, description="商家名称")
     merchant_address: Optional[str] = Field(default=None, description="商家地址")
     taste_rating: Optional[int] = Field(default=None, ge=1, le=5, description="口味评分 1-5")
@@ -2318,6 +2507,7 @@ class PublicFoodLibraryCreateRequest(BaseModel):
     # 地理位置
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
+    province: Optional[str] = Field(default=None, description="省份/直辖市")
     city: Optional[str] = Field(default=None)
     district: Optional[str] = Field(default=None)
 
@@ -2353,6 +2543,7 @@ async def api_create_public_food_library(
             items=body.items or (src_record.get("items") if src_record else []),
             description=body.description or (src_record.get("description") if src_record else None),
             insight=body.insight or (src_record.get("insight") if src_record else None),
+            food_name=body.food_name,
             merchant_name=body.merchant_name,
             merchant_address=body.merchant_address,
             taste_rating=body.taste_rating,
@@ -2361,6 +2552,7 @@ async def api_create_public_food_library(
             user_notes=body.user_notes,
             latitude=body.latitude,
             longitude=body.longitude,
+            province=body.province,
             city=body.city,
             district=body.district,
         )
@@ -2404,6 +2596,8 @@ async def api_list_public_food_library(
         # 批量查询点赞状态
         item_ids = [it["id"] for it in items]
         likes_map = await get_public_food_library_likes_for_items(item_ids, user_info["user_id"]) if item_ids else {}
+        # 批量查询收藏状态
+        collections_map = await get_public_food_library_collections_for_items(item_ids, user_info["user_id"]) if item_ids else {}
         # 批量查询作者信息
         author_ids = list({it["user_id"] for it in items})
         from database import get_supabase_client
@@ -2413,11 +2607,14 @@ async def api_list_public_food_library(
         out = []
         for it in items:
             like_info = likes_map.get(it["id"], {"count": 0, "liked": False})
+            collection_info = collections_map.get(it["id"], {"collected": False})
             author = author_map.get(it["user_id"], {})
             out.append({
                 **it,
                 "like_count": like_info["count"],
                 "liked": like_info["liked"],
+                "collection_count": it.get("collection_count", 0),
+                "collected": collection_info["collected"],
                 "author": {
                     "id": author.get("id"),
                     "nickname": author.get("nickname") or "用户",
@@ -2458,10 +2655,16 @@ async def api_get_public_food_library_item(
         # 查询点赞状态
         likes_map = await get_public_food_library_likes_for_items([item_id], user_info["user_id"])
         like_info = likes_map.get(item_id, {"count": 0, "liked": False})
+        # 查询收藏状态
+        collections_map = await get_public_food_library_collections_for_items([item_id], user_info["user_id"])
+        collection_info = collections_map.get(item_id, {"collected": False})
+
         return {
             **item,
             "like_count": like_info["count"],
             "liked": like_info["liked"],
+            "collection_count": item.get("collection_count", 0),
+            "collected": collection_info["collected"],
             "author": {
                 "id": author.get("id") if author else None,
                 "nickname": author.get("nickname") or "用户" if author else "用户",
@@ -2503,6 +2706,34 @@ async def api_public_food_library_unlike(
         raise HTTPException(status_code=500, detail="取消失败")
 
 
+@app.post("/api/public-food-library/{item_id}/collect")
+async def api_public_food_library_collect(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """收藏公共食物库条目"""
+    try:
+        await add_public_food_library_collection(user_info["user_id"], item_id)
+        return {"message": "已收藏"}
+    except Exception as e:
+        print(f"[api/public-food-library/{item_id}/collect] 错误: {e}")
+        raise HTTPException(status_code=500, detail="收藏失败")
+
+
+@app.delete("/api/public-food-library/{item_id}/collect")
+async def api_public_food_library_uncollect(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """取消收藏"""
+    try:
+        await remove_public_food_library_collection(user_info["user_id"], item_id)
+        return {"message": "已取消"}
+    except Exception as e:
+        print(f"[api/public-food-library/{item_id}/uncollect] 错误: {e}")
+        raise HTTPException(status_code=500, detail="取消失败")
+
+
 @app.get("/api/public-food-library/{item_id}/comments")
 async def api_public_food_library_comments(
     item_id: str,
@@ -2524,19 +2755,54 @@ async def api_public_food_library_comment_post(
     user_info: dict = Depends(get_current_user_info),
 ):
     """
-    发表公共食物库评论。
+    发表公共食物库评论（异步审核版本）。
     body: { "content": "评论内容", "rating": 5 }  # rating 可选 1-5
+    返回任务 ID，前端需要本地缓存显示，后台审核通过后才会真正入库。
     """
     content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
     if not content:
         raise HTTPException(status_code=400, detail="评论内容不能为空")
+    if len(content) > 500:
+        raise HTTPException(status_code=400, detail="评论内容不能超过 500 字")
     rating = body.get("rating")
     if rating is not None:
         if not isinstance(rating, int) or rating < 1 or rating > 5:
             raise HTTPException(status_code=400, detail="评分须为 1-5 的整数")
     try:
-        comment = await add_public_food_library_comment(user_info["user_id"], item_id, content, rating)
-        return {"comment": comment}
+        profile = await get_user_by_id(user_info["user_id"])
+        nickname = (
+            user_info.get("nickname")
+            or (profile or {}).get("nickname")
+            or "用户"
+        )
+        avatar = (
+            user_info.get("avatar")
+            or (profile or {}).get("avatar")
+            or ""
+        )
+        # 创建评论审核任务
+        task = create_comment_task_sync(
+            user_id=user_info["user_id"],
+            comment_type="public_food_library",
+            target_id=item_id,
+            content=content,
+            rating=rating,
+        )
+        # 返回任务 ID 和临时评论数据（前端本地显示用）
+        return {
+            "task_id": task["id"],
+            "temp_comment": {
+                "id": task["id"],  # 使用任务 ID 作为临时 ID
+                "user_id": user_info["user_id"],
+                "library_item_id": item_id,
+                "content": content,
+                "rating": rating,
+                "created_at": task["created_at"],
+                "nickname": nickname,
+                "avatar": avatar,
+                "_is_temp": True,  # 标记为临时评论
+            }
+        }
     except Exception as e:
         print(f"[api/public-food-library/{item_id}/comments] 发表错误: {e}")
         raise HTTPException(status_code=500, detail="发表失败")
@@ -2960,9 +3226,14 @@ async def delete_recipe(
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
 
+
+class UseRecipeRequest(BaseModel):
+    meal_type: Optional[str] = None
+
 @app.post("/api/recipes/{recipe_id}/use")
 async def use_recipe(
     recipe_id: str,
+    body: UseRecipeRequest = None,
     user_info: dict = Depends(get_current_user_info)
 ):
     """使用食谱创建记录（一键记录）"""
@@ -2973,8 +3244,8 @@ async def use_recipe(
         if not recipe:
             raise HTTPException(status_code=404, detail="食谱不存在")
         
-        # 创建饮食记录（餐次为空或不合法时回退到 snack）
-        meal_type = recipe.get("meal_type") or "snack"
+        # 创建饮食记录（优先使用传入的 meal_type，否则用餐谱默认，否则 snack）
+        meal_type = (body and body.meal_type) or recipe.get("meal_type") or "snack"
         if meal_type not in {"breakfast", "lunch", "dinner", "snack"}:
             meal_type = "snack"
 

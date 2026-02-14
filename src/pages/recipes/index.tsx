@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
-import Taro from '@tarojs/taro'
-import { getUserRecipes, deleteUserRecipe, useUserRecipe, type UserRecipe } from '../../utils/api'
+import Taro, { useDidShow } from '@tarojs/taro'
+import { getUserRecipes, deleteUserRecipe, useUserRecipe, type UserRecipe, type FoodRecord } from '../../utils/api'
 import './index.scss'
 
 /** 餐次映射 */
@@ -37,6 +37,10 @@ export default function RecipesPage() {
     }
   }
 
+  useDidShow(() => {
+    loadRecipes()
+  })
+
   useEffect(() => {
     loadRecipes()
   }, [activeTab])
@@ -48,32 +52,80 @@ export default function RecipesPage() {
   }
 
   // 注册下拉刷新回调
-  useEffect(() => {
-    Taro.usePullDownRefresh(() => {
-      handlePullDownRefresh()
-    })
-  }, [activeTab])
+  Taro.usePullDownRefresh(() => {
+    handlePullDownRefresh()
+  })
 
   /** 使用食谱（一键记录） */
   const handleUseRecipe = async (recipe: UserRecipe) => {
     try {
+      const MEAL_KEYS = ['breakfast', 'lunch', 'dinner', 'snack']
+      const MEAL_NAMES = ['早餐', '午餐', '晚餐', '加餐']
+      const { tapIndex } = await Taro.showActionSheet({
+        itemList: MEAL_NAMES,
+        alertText: `将"${recipe.recipe_name}"记录为：`
+      })
+
+      const selectedMealType = MEAL_KEYS[tapIndex]
+      const selectedMealName = MEAL_NAMES[tapIndex]
+
+      const { confirm } = await Taro.showModal({
+        title: '确认记录',
+        content: `确定将"${recipe.recipe_name}"记录为${selectedMealName}吗？`
+      })
+      if (!confirm) return
+
       Taro.showLoading({ title: '记录中...', mask: true })
-      await useUserRecipe(recipe.id)
+      await useUserRecipe(recipe.id, selectedMealType)
       Taro.hideLoading()
       Taro.showToast({ title: '已添加到饮食记录', icon: 'success' })
       // 刷新列表以更新使用次数
       setTimeout(() => loadRecipes(), 500)
     } catch (e: any) {
+      // 点击取消也会抛出错误，需区分
+      if (e.errMsg && e.errMsg.includes('cancel')) return
+
       Taro.hideLoading()
       Taro.showToast({ title: e.message || '记录失败', icon: 'none' })
     }
   }
 
-  /** 编辑食谱 */
-  const handleEditRecipe = (recipe: UserRecipe) => {
-    Taro.setStorageSync('editRecipe', recipe)
-    Taro.navigateTo({ url: '/pages/recipe-edit/index' })
+  /** 
+   * 查看食谱详情（以记录详情形式展示）
+   * 注意：食谱不是真实的饮食记录，这里构造临时对象用于复用记录详情页展示。
+   * 保留 storage 传参方式，因为食谱 ID 不对应 user_food_records 表中的记录。
+   * 未来可考虑为食谱创建专门的详情页。
+   */
+  const handleViewDetail = (recipe: UserRecipe) => {
+    // 构造临时 record 对象用于展示
+    const record: FoodRecord = {
+      id: recipe.id,
+      user_id: recipe.user_id,
+      meal_type: (['breakfast', 'lunch', 'dinner', 'snack'].includes(recipe.meal_type || '')
+        ? recipe.meal_type
+        : 'snack') as any,
+      image_path: recipe.image_path,
+      description: recipe.description,
+      insight: null,
+      context_state: null,
+      pfc_ratio_comment: null,
+      absorption_notes: null,
+      context_advice: null,
+      items: recipe.items,
+      total_calories: recipe.total_calories,
+      total_protein: recipe.total_protein,
+      total_carbs: recipe.total_carbs,
+      total_fat: recipe.total_fat,
+      total_weight_grams: recipe.total_weight_grams,
+      record_time: recipe.created_at,
+      created_at: recipe.created_at
+    }
+
+    Taro.setStorageSync('recordDetail', record)
+    Taro.navigateTo({ url: '/pages/record-detail/index' })
   }
+
+
 
   /** 删除食谱 */
   const handleDeleteRecipe = async (recipe: UserRecipe) => {
@@ -108,18 +160,22 @@ export default function RecipesPage() {
   return (
     <View className='recipes-page'>
       {/* 标签切换 */}
-      <View className='tabs'>
-        <View
-          className={`tab ${activeTab === 'all' ? 'active' : ''}`}
-          onClick={() => setActiveTab('all')}
-        >
-          <Text className='tab-text'>全部食谱</Text>
-        </View>
-        <View
-          className={`tab ${activeTab === 'favorite' ? 'active' : ''}`}
-          onClick={() => setActiveTab('favorite')}
-        >
-          <Text className='tab-text'>我的收藏</Text>
+      <View className='tabs-container'>
+        <View className='tabs'>
+          <View
+            className={`tab ${activeTab === 'all' ? 'active' : ''}`}
+            onClick={() => setActiveTab('all')}
+          >
+            <Text className='tab-text'>全部食谱</Text>
+            <View className='tab-indicator' />
+          </View>
+          <View
+            className={`tab ${activeTab === 'favorite' ? 'active' : ''}`}
+            onClick={() => setActiveTab('favorite')}
+          >
+            <Text className='tab-text'>我的收藏</Text>
+            <View className='tab-indicator' />
+          </View>
         </View>
       </View>
 
@@ -127,121 +183,139 @@ export default function RecipesPage() {
       <ScrollView className='recipe-list' scrollY>
         {loading ? (
           <View className='empty-state'>
-            <Text className='empty-icon'>⏳</Text>
+            <Text className='iconfont icon-shizhong empty-icon'></Text>
             <Text className='empty-text'>加载中...</Text>
           </View>
         ) : recipes.length > 0 ? (
-          recipes.map((recipe) => (
-            <View key={recipe.id} className='recipe-card'>
-              {/* 食谱图片 */}
-              {recipe.image_path && (
-                <Image
-                  src={recipe.image_path}
-                  mode='aspectFill'
-                  className='recipe-image'
-                />
-              )}
-
-              <View className='recipe-content'>
-                {/* 标题 */}
-                <View className='recipe-header'>
-                  <Text className='recipe-name'>{recipe.recipe_name}</Text>
-                  {recipe.is_favorite && (
-                    <Text className='favorite-icon'>⭐</Text>
+          <View className='recipes-grid'>
+            {recipes.map((recipe) => (
+              <View key={recipe.id} className='recipe-card'>
+                {/* 食谱图片 */}
+                <View className='recipe-image-wrapper'>
+                  {recipe.image_path ? (
+                    <Image
+                      src={recipe.image_path}
+                      mode='aspectFill'
+                      className='recipe-image'
+                    />
+                  ) : (
+                    <View className='recipe-image-placeholder'>
+                      <Text className='iconfont icon-shiwu placeholder-icon'></Text>
+                    </View>
                   )}
-                </View>
-
-                {/* 描述 */}
-                {recipe.description && (
-                  <Text className='recipe-desc'>{recipe.description}</Text>
-                )}
-
-                {/* 营养摘要 */}
-                <View className='nutrition-summary'>
-                  <View className='nutrition-item'>
-                    <Text className='nutrition-value'>
-                      {formatNutrition(recipe.total_calories)}
-                    </Text>
-                    <Text className='nutrition-label'>千卡</Text>
-                  </View>
-                  <View className='nutrition-item'>
-                    <Text className='nutrition-value'>
-                      {formatNutrition(recipe.total_protein)}g
-                    </Text>
-                    <Text className='nutrition-label'>蛋白质</Text>
-                  </View>
-                  <View className='nutrition-item'>
-                    <Text className='nutrition-value'>
-                      {formatNutrition(recipe.total_carbs)}g
-                    </Text>
-                    <Text className='nutrition-label'>碳水</Text>
-                  </View>
-                  <View className='nutrition-item'>
-                    <Text className='nutrition-value'>
-                      {formatNutrition(recipe.total_fat)}g
-                    </Text>
-                    <Text className='nutrition-label'>脂肪</Text>
-                  </View>
-                </View>
-
-                {/* 标签 */}
-                {recipe.tags && recipe.tags.length > 0 && (
-                  <View className='tags'>
-                    {recipe.meal_type && (
-                      <Text className='tag'>
+                  {recipe.is_favorite && (
+                    <View className='favorite-badge'>
+                      <Text className='iconfont icon-shoucang-yishoucang'></Text>
+                    </View>
+                  )}
+                  {recipe.meal_type && (
+                    <View className='meal-type-badge'>
+                      <Text className='meal-type-text'>
                         {MEAL_TYPE_NAMES[recipe.meal_type] || recipe.meal_type}
                       </Text>
-                    )}
-                    {recipe.tags.map((tag, index) => (
-                      <Text key={index} className='tag'>
-                        {tag}
-                      </Text>
-                    ))}
-                  </View>
-                )}
-
-                {/* 使用统计 */}
-                <View className='recipe-stats'>
-                  <Text className='stats-text'>使用 {recipe.use_count} 次</Text>
-                  {recipe.last_used_at && (
-                    <Text className='stats-text'>
-                      最近使用：{new Date(recipe.last_used_at).toLocaleDateString()}
-                    </Text>
+                    </View>
                   )}
                 </View>
 
-                {/* 操作按钮 */}
-                <View className='recipe-actions'>
-                  <View
-                    className='action-btn use-btn'
-                    onClick={() => handleUseRecipe(recipe)}
-                  >
-                    <Text className='action-icon'>✅</Text>
-                    <Text className='action-text'>使用</Text>
+                <View className='recipe-content'>
+                  {/* 标题 */}
+                  <View className='recipe-header'>
+                    <Text className='recipe-name'>{recipe.recipe_name}</Text>
                   </View>
-                  <View
-                    className='action-btn edit-btn'
-                    onClick={() => handleEditRecipe(recipe)}
-                  >
-                    <Text className='action-icon'>✏️</Text>
-                    <Text className='action-text'>编辑</Text>
+
+                  {/* 描述 */}
+                  {recipe.description && (
+                    <Text className='recipe-desc' numberOfLines={2}>{recipe.description}</Text>
+                  )}
+
+                  {/* 营养摘要 */}
+                  <View className='nutrition-summary'>
+                    <View className='nutrition-item highlight'>
+                      <Text className='nutrition-value'>
+                        {formatNutrition(recipe.total_calories)}
+                      </Text>
+                      <Text className='nutrition-unit'>kcal</Text>
+                    </View>
+                    <View className='nutrition-divider' />
+                    <View className='nutrition-item'>
+                      <Text className='nutrition-label'>蛋白质</Text>
+                      <Text className='nutrition-sub-value'>{formatNutrition(recipe.total_protein)}g</Text>
+                    </View>
+                    <View className='nutrition-item'>
+                      <Text className='nutrition-label'>碳水</Text>
+                      <Text className='nutrition-sub-value'>{formatNutrition(recipe.total_carbs)}g</Text>
+                    </View>
+                    <View className='nutrition-item'>
+                      <Text className='nutrition-label'>脂肪</Text>
+                      <Text className='nutrition-sub-value'>{formatNutrition(recipe.total_fat)}g</Text>
+                    </View>
                   </View>
-                  <View
-                    className='action-btn delete-btn'
-                    onClick={() => handleDeleteRecipe(recipe)}
-                  >
-                    <Text className='action-icon'>🗑️</Text>
-                    <Text className='action-text'>删除</Text>
+                  {/* 标签 */}
+                  {recipe.tags && recipe.tags.length > 0 && (
+                    <ScrollView scrollX className='tags-scroll' showScrollbar={false}>
+                      <View className='tags'>
+                        {recipe.tags.map((tag, index) => (
+                          <Text key={index} className='tag'>
+                            #{tag}
+                          </Text>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  )}
+
+                  <View className='card-footer'>
+                    {/* 使用统计 */}
+                    <View className='recipe-stats'>
+                      <Text className='iconfont icon-shizhong stats-icon'></Text>
+                      <Text className='stats-text'>
+                        {recipe.last_used_at
+                          ? `${new Date(recipe.last_used_at).getMonth() + 1}月${new Date(recipe.last_used_at).getDate()}日`
+                          : '未使用'}
+                      </Text>
+                      <Text className='stats-dot'>·</Text>
+                      <Text className='stats-text'>用过 {recipe.use_count} 次</Text>
+                    </View>
+
+                    {/* 操作按钮 */}
+                    <View className='recipe-actions'>
+                      <View
+                        className='action-btn delete-btn'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteRecipe(recipe)
+                        }}
+                      >
+                        {/* 使用 icon-shanchu */}
+                        <Text className='iconfont icon-shanchu'></Text>
+                      </View>
+                      <View
+                        className='action-btn edit-btn'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleViewDetail(recipe)
+                        }}
+                      >
+                        <Text className='iconfont icon-ic_detail'></Text>
+                      </View>
+                      <View
+                        className='action-btn use-btn'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleUseRecipe(recipe)
+                        }}
+                      >
+                        <Text className='iconfont icon-jishiben'></Text>
+                        <Text className='btn-text'>记录</Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
-          ))
+            ))}
+          </View>
         ) : (
           <View className='empty-state'>
-            <Text className='empty-icon'>
-              {activeTab === 'favorite' ? '⭐' : '📝'}
-            </Text>
+            <Text className={`iconfont ${activeTab === 'favorite' ? 'icon-shoucang-yishoucang' : 'icon-jishiben'} empty-icon`}></Text>
             <Text className='empty-text'>
               {activeTab === 'favorite' ? '暂无收藏的食谱' : '暂无食谱'}
             </Text>
@@ -250,6 +324,8 @@ export default function RecipesPage() {
             </Text>
           </View>
         )}
+        {/* 底部占位 */}
+        <View className='safe-area-bottom' />
       </ScrollView>
 
       {/* 创建按钮 */}

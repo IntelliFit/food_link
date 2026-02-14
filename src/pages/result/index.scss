@@ -12,10 +12,41 @@
   background: #e2e8f0;
 }
 
+.hero-swiper {
+  width: 100%;
+  height: 100%;
+}
+
+.hero-swiper-item {
+  width: 100%;
+  height: 100%;
+}
+
 .hero-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.image-counter {
+  position: absolute;
+  bottom: 48rpx;
+  right: 32rpx;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  padding: 8rpx 20rpx;
+  border-radius: 200rpx;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.counter-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 2rpx;
 }
 
 .hero-placeholder {
@@ -50,6 +81,37 @@
   pointer-events: none;
 }
 
+.favorite-btn {
+  position: absolute;
+  top: 100rpx; // 避开状态栏
+  right: 32rpx;
+  width: 88rpx;
+  height: 88rpx;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.9);
+  }
+}
+
+.favorite-icon {
+  font-size: 44rpx;
+  line-height: 1;
+  color: #94a3b8; // 默认灰色
+
+  &.favorited {
+    color: #ef4444; // 收藏后红色
+    animation: pulse 0.3s ease;
+  }
+}
 // 内容容器 - 上移覆盖图片
 .content-container {
   position: relative;
@@ -196,6 +258,13 @@
   font-weight: 700;
   color: #1e293b;
   font-family: 'DIN Alternate', sans-serif;
+
+  .macro-unit {
+    font-size: 24rpx;
+    font-weight: 500;
+    color: #64748b;
+    margin-left: 4rpx;
+  }
 }
 
 .macro-label {
@@ -220,6 +289,12 @@
   font-size: 32rpx;
   font-weight: 700;
   color: #0f172a;
+
+  .iconfont {
+    margin-right: 12rpx;
+    font-size: 36rpx;
+    opacity: 0.9;
+  }
 }
 
 .model-tabs {
@@ -288,15 +363,81 @@
     margin-bottom: 0;
   }
 
+  // 基础样式
+  border: 1rpx solid transparent;
+  transition: all 0.2s ease;
+
   &.highlight {
     background: #f0fdf4;
-    border: 1rpx solid #d1fae5;
+    border-color: rgba(0, 188, 125, 0.2);
+    align-items: flex-start;
+  }
+
+  &.intro {
+    background: #f1f5f9;
+    align-items: flex-start;
+  }
+
+  &.ratio {
+    background: #fff7ed;
+    border-color: rgba(249, 115, 22, 0.15);
+    align-items: flex-start;
+  }
+}
+
+.insight-icon-wrapper {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.green {
+    background: rgba(0, 188, 125, 0.1);
+
+    .insight-icon {
+      color: #00bc7d;
+    }
+  }
+
+  &.blue {
+    background: rgba(59, 130, 246, 0.1);
+
+    .insight-icon {
+      color: #3b82f6;
+    }
+  }
+
+  &.orange {
+    background: rgba(249, 115, 22, 0.1);
+
+    .insight-icon {
+      color: #f97316;
+    }
+  }
+
+  &.purple {
+    background: rgba(168, 85, 247, 0.1);
+
+    .insight-icon {
+      color: #a855f7;
+    }
+  }
+
+  &.teal {
+    background: rgba(20, 184, 166, 0.1);
+
+    .insight-icon {
+      color: #14b8a6;
+    }
   }
 }
 
 .insight-icon {
-  font-size: 40rpx;
-  line-height: 1.2;
+  font-size: 32rpx !important; // 调整图标大小适配圆圈
+  line-height: 1;
 }
 
 .insight-body {
@@ -314,8 +455,9 @@
 .insight-content {
   font-size: 28rpx;
   color: #334155;
-  line-height: 44rpx;
+  line-height: 48rpx; // 增加行高，提升阅读体验
   text-align: justify;
+  margin-top: 8rpx; // 对齐图标中心
 }
 
 .insight-tags {
@@ -360,9 +502,19 @@
   font-weight: 500;
 }
 
+.ingredients-list {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+}
+
 .ingredient-card {
   @extend %card-base;
   padding: 0; // 内部布局控制内边距
+  border: 1rpx solid rgba(0, 0, 0, 0.03);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.06); // 加深阴影，提升层次感
+  transition: all 0.3s ease;
+
 }
 
 .ingredient-main {
@@ -371,6 +523,33 @@
   justify-content: space-between;
   align-items: center;
   border-bottom: 1rpx solid #f1f5f9;
+}
+
+.ingredient-header {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.edit-icon-wrapper {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+
+  .iconfont {
+    font-size: 24rpx;
+    color: #94a3b8;
+  }
+
+  &:active {
+    background: #e2e8f0;
+    transform: scale(0.9);
+  }
 }
 
 .ingredient-name {

@@ -1,7 +1,8 @@
-import { View, Text, Image, ScrollView, Slider } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, CompareAnalyzeResponse, ModelAnalyzeResult, FoodRecord } from '../../utils/api'
+import { updateAnalysisTaskResult } from '../../utils/api'
 
 import './index.scss'
 
@@ -29,7 +30,9 @@ interface NutritionItem {
 }
 
 export default function ResultPage() {
-  const [imagePath, setImagePath] = useState<string>('')
+  const [imagePaths, setImagePaths] = useState<string[]>([])
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
   const [nutritionStats, setNutritionStats] = useState({
@@ -127,9 +130,15 @@ export default function ResultPage() {
   useEffect(() => {
     // 获取传递的图片路径和分析结果
     try {
+      const storedPaths = Taro.getStorageSync('analyzeImagePaths')
       const storedPath = Taro.getStorageSync('analyzeImagePath')
-      if (storedPath) {
+
+      if (storedPaths && Array.isArray(storedPaths) && storedPaths.length > 0) {
+        setImagePaths(storedPaths)
+        setImagePath(storedPaths[0]) // Primary for compatibility
+      } else if (storedPath) {
         setImagePath(storedPath)
+        setImagePaths([storedPath])
       }
 
       // 检查是否是对比模式
@@ -262,6 +271,93 @@ export default function ResultPage() {
     })
   }
 
+  // 修改食物名称
+  const handleEditName = (id: number, currentName: string) => {
+    // @ts-ignore
+    Taro.showModal({
+      title: '修改食物名称',
+      content: currentName,
+      // @ts-ignore
+      editable: true,
+      placeholderText: '请输入新的食物名称',
+      success: (res) => {
+        if (res.confirm) {
+          const newName = (res as any).content.trim()
+          if (!newName) {
+            Taro.showToast({
+              title: '名称不能为空',
+              icon: 'none'
+            })
+            return
+          }
+
+          // 确认保存修改
+          Taro.showModal({
+            title: '确认保存',
+            content: `确定将食物名称修改为"${newName}"吗？`,
+            success: async (confirmRes) => {
+              if (confirmRes.confirm) {
+                // 1. 更新本地状态
+                const updatedItems = nutritionItems.map(item =>
+                  item.id === id ? { ...item, name: newName } : item
+                )
+                setNutritionItems(updatedItems)
+
+                // 2. 尝试同步更新后端 analysis_tasks 记录（如果有 taskId）
+                const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId')
+                if (sourceTaskId) {
+                  try {
+                    Taro.showLoading({ title: '同步中...' })
+
+                    // 构建新的 result 对象（基于当前页面状态）
+                    // 注意：后端 updateAnalysisTaskResult 接收整个 result 对象
+                    // 我们尽量还原 AnalyzeResponse 的结构
+                    const newResult: AnalyzeResponse = {
+                      description,
+                      insight: healthAdvice,
+                      items: updatedItems.map(item => ({
+                        name: item.name,
+                        estimatedWeightGrams: item.weight,
+                        originalWeightGrams: item.originalWeight,
+                        nutrients: {
+                          calories: item.calorie,
+                          protein: item.protein,
+                          carbs: item.carbs,
+                          fat: item.fat,
+                          fiber: 0,
+                          sugar: 0
+                        }
+                      })),
+                      pfc_ratio_comment: pfcRatioComment || undefined,
+                      absorption_notes: absorptionNotes || undefined,
+                      context_advice: contextAdvice || undefined
+                    }
+
+                    await updateAnalysisTaskResult(sourceTaskId, newResult)
+
+                    // 同时更新本地缓存的 analyzeResult，以免用户刷新后丢失修改
+                    Taro.setStorageSync('analyzeResult', JSON.stringify(newResult))
+
+                    Taro.hideLoading()
+                    Taro.showToast({ title: '已更新并同步', icon: 'success' })
+                  } catch (error) {
+                    console.error('同步更新 analysis_tasks 失败:', error)
+                    Taro.hideLoading()
+                    // 即使后端同步失败，本地已经修改了，也提示成功但告知同步失败
+                    Taro.showToast({ title: '本地已更新(同步失败)', icon: 'none' })
+                  }
+                } else {
+                  // 没有 taskId，仅本地更新
+                  Taro.showToast({ title: '已更新', icon: 'success' })
+                }
+              }
+            }
+          })
+        }
+      }
+    })
+  }
+
   const saveRecord = async (saveOnly: boolean) => {
     // 从缓存获取分析时选择的状态
     const savedMealType = Taro.getStorageSync('analyzeMealType')
@@ -299,6 +395,7 @@ export default function ResultPage() {
           const payload = {
             meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
             image_path: imagePath || undefined,
+            image_paths: imagePaths.length > 0 ? imagePaths : undefined,
             description: description || undefined,
             insight: healthAdvice || undefined,
             items: nutritionItems.map((item) => ({
@@ -320,7 +417,6 @@ export default function ResultPage() {
             total_carbs: nutritionStats.carbs,
             total_fat: nutritionStats.fat,
             total_weight_grams: totalWeight,
-            context_state: 'none',
             diet_goal: dietGoal,
             activity_timing: activityTiming,
             pfc_ratio_comment: pfcRatioComment ?? undefined,
@@ -531,10 +627,11 @@ export default function ResultPage() {
   }
 
   // 预览大图
-  const handlePreviewImage = () => {
-    if (imagePath) {
+  const handlePreviewImage = (current: string) => {
+    if (imagePaths.length > 0) {
       Taro.previewImage({
-        urls: [imagePath]
+        current,
+        urls: imagePaths
       })
     }
   }
@@ -549,17 +646,35 @@ export default function ResultPage() {
       >
         {/* 顶部图片区域 - 沉浸式设计 */}
         <View className='hero-section'>
-          {imagePath ? (
-            <Image
-              src={imagePath}
-              mode='aspectFill'
-              className='hero-image'
-              onClick={handlePreviewImage}
-            />
+          {imagePaths.length > 0 ? (
+            <Swiper
+              className='hero-swiper'
+              circular
+              indicatorDots={false}
+              onChange={(e) => setCurrentImageIndex(e.detail.current)}
+              current={currentImageIndex}
+            >
+              {imagePaths.map((path, index) => (
+                <SwiperItem key={index} className='hero-swiper-item'>
+                  <Image
+                    src={path}
+                    mode='aspectFill'
+                    className='hero-image'
+                    onClick={() => handlePreviewImage(path)}
+                  />
+                </SwiperItem>
+              ))}
+            </Swiper>
           ) : (
             <View className='hero-placeholder'>
-              <Text className='placeholder-icon'>📷</Text>
+              <Text className='placeholder-icon iconfont icon-paizhao-xianxing'></Text>
               <Text className='placeholder-text'>暂无图片</Text>
+            </View>
+          )}
+          {/* Image Counter Badge */}
+          {imagePaths.length > 1 && (
+            <View className='image-counter'>
+              <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
             </View>
           )}
           <View className='hero-overlay'></View>
@@ -577,7 +692,7 @@ export default function ResultPage() {
                 </View>
               </View>
               <View className='total-weight-badge'>
-                <Text className='weight-icon'>⚖️</Text>
+                <Text className='weight-icon iconfont icon-tianpingzuo'></Text>
                 <Text className='weight-text'>约 {totalWeight}g</Text>
               </View>
             </View>
@@ -587,21 +702,21 @@ export default function ResultPage() {
                 <View className='macro-bar'>
                   <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.protein / 50) * 100, 100)}%` }}></View>
                 </View>
-                <Text className='macro-value'>{Math.round(nutritionStats.protein * 10) / 10}</Text>
+                <Text className='macro-value'>{Math.round(nutritionStats.protein * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>蛋白质</Text>
               </View>
               <View className='macro-item carbs'>
                 <View className='macro-bar'>
                   <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.carbs / 100) * 100, 100)}%` }}></View>
                 </View>
-                <Text className='macro-value'>{Math.round(nutritionStats.carbs * 10) / 10}</Text>
+                <Text className='macro-value'>{Math.round(nutritionStats.carbs * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>碳水</Text>
               </View>
               <View className='macro-item fat'>
                 <View className='macro-bar'>
                   <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.fat / 40) * 100, 100)}%` }}></View>
                 </View>
-                <Text className='macro-value'>{Math.round(nutritionStats.fat * 10) / 10}</Text>
+                <Text className='macro-value'>{Math.round(nutritionStats.fat * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>脂肪</Text>
               </View>
             </View>
@@ -611,7 +726,10 @@ export default function ResultPage() {
           {isCompareMode && compareResult && (
             <View className='model-switch-card'>
               <View className='card-header'>
-                <Text className='card-title'>🔬 模型对比</Text>
+                <Text className='card-title'>
+                  <Text className='iconfont icon-shangzhang'></Text>
+                  模型对比
+                </Text>
               </View>
               <View className='model-tabs'>
                 <View
@@ -635,24 +753,33 @@ export default function ResultPage() {
           {/* AI 健康透视 */}
           <View className='insight-card'>
             <View className='card-header'>
-              <Text className='card-title'>🌿 AI 饮食分析</Text>
+              <Text className='card-title'>
+                <Text className='iconfont icon-a-144-lvye'></Text>
+                AI 饮食分析
+              </Text>
             </View>
 
             {description && (
-              <View className='insight-item'>
-                <Text className='insight-icon'>📋</Text>
+              <View className='insight-item intro'>
+                <View className='insight-icon-wrapper blue'>
+                  <Text className='insight-icon iconfont icon-jishiben'></Text>
+                </View>
                 <Text className='insight-content'>{description}</Text>
               </View>
             )}
 
             <View className='insight-item highlight'>
-              <Text className='insight-icon'>💡</Text>
+              <View className='insight-icon-wrapper green'>
+                <Text className='insight-icon iconfont icon-good'></Text>
+              </View>
               <Text className='insight-content'>{healthAdvice}</Text>
             </View>
 
             {pfcRatioComment && (
-              <View className='insight-item'>
-                <Text className='insight-icon'>📊</Text>
+              <View className='insight-item ratio'>
+                <View className='insight-icon-wrapper orange'>
+                  <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
+                </View>
                 <View className='insight-body'>
                   <Text className='insight-label'>营养比例</Text>
                   <Text className='insight-content'>{pfcRatioComment}</Text>
@@ -660,10 +787,27 @@ export default function ResultPage() {
               </View>
             )}
 
-            {(absorptionNotes || contextAdvice) && (
-              <View className='insight-tags'>
-                {absorptionNotes && <View className='insight-tag'>吸收建议</View>}
-                {contextAdvice && <View className='insight-tag'>情境建议</View>}
+            {absorptionNotes && (
+              <View className='insight-item absorption'>
+                <View className='insight-icon-wrapper purple'>
+                  <Text className='insight-icon iconfont icon-huore'></Text>
+                </View>
+                <View className='insight-body'>
+                  <Text className='insight-label'>吸收与利用</Text>
+                  <Text className='insight-content'>{absorptionNotes}</Text>
+                </View>
+              </View>
+            )}
+
+            {contextAdvice && (
+              <View className='insight-item context'>
+                <View className='insight-icon-wrapper teal'>
+                  <Text className='insight-icon iconfont icon-shizhong'></Text>
+                </View>
+                <View className='insight-body'>
+                  <Text className='insight-label'>情境建议</Text>
+                  <Text className='insight-content'>{contextAdvice}</Text>
+                </View>
               </View>
             )}
           </View>
@@ -679,7 +823,12 @@ export default function ResultPage() {
               {nutritionItems.map((item) => (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
-                    <Text className='ingredient-name'>{item.name}</Text>
+                    <View className='ingredient-header'>
+                      <Text className='ingredient-name'>{item.name}</Text>
+                      <View className='edit-icon-wrapper' onClick={() => handleEditName(item.id, item.name)}>
+                        <Text className='iconfont icon-shouxieqianming'></Text>
+                      </View>
+                    </View>
                     <View className='ingredient-calories'>
                       <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
                       <Text className='cal-unit'>kcal</Text>
@@ -732,8 +881,8 @@ export default function ResultPage() {
             <View className='pba-safe-area'>
               <View className='action-grid'>
                 <View className='secondary-btn' onClick={handleSaveAsRecipe}>
-                  <Text className='btn-icon'>📖</Text>
-                  <Text className='btn-text'>收藏食物</Text>
+                  <Text className='btn-icon iconfont icon-shuben'></Text>
+                  <Text className='btn-text'>存为餐食</Text>
                 </View>
                 <View
                   className={`primary-btn ${saving ? 'loading' : ''}`}

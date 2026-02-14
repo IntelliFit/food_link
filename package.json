@@ -63,6 +63,7 @@
     "@tarojs/runtime": "4.1.10",
     "@tarojs/shared": "4.1.10",
     "@tarojs/taro": "4.1.10",
+    "@vant/area-data": "^2.1.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "taro-plugin-canvas": "^1.0.10",

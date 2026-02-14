@@ -128,6 +128,22 @@
   box-sizing: border-box;
 }
 
+.city-display {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.city-value {
+  font-size: 28rpx;
+  color: #1e2939;
+}
+
+.city-placeholder {
+  font-size: 28rpx;
+  color: #999;
+}
+
 .form-textarea {
   width: 100%;
   height: 160rpx;

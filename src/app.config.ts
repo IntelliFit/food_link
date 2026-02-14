@@ -18,7 +18,10 @@ export default defineAppConfig({
     'pages/record-detail/index',
     'pages/food-library/index',
     'pages/food-library-detail/index',
-    'pages/food-library-share/index'
+
+    'pages/food-library-share/index',
+    'pages/login/index',
+    'pages/about/index'
   ],
   window: {
     backgroundTextStyle: 'light',

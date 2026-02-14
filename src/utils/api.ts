@@ -6,19 +6,26 @@ import Taro from '@tarojs/taro'
 const API_BASE_URL = 'http://localhost:8888' // 开发环境
 // const API_BASE_URL = 'https://healthymax.cn' // 生产环境
 
+// 基础类型定义
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
+export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
+export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
+
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
   base64Image?: string
   /** Supabase 等公网图片 URL，分析时用此 URL 获取图片；标记样本/保存记录时也存此 URL */
   image_url?: string
+  /** 多图 URL 列表 */
+  image_urls?: string[]
   additionalContext?: string
   modelName?: string
-  user_goal?: 'muscle_gain' | 'fat_loss' | 'maintain'
-  context_state?: string
-  diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
-  activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
+  user_goal?: UserGoal
+  diet_goal?: DietGoal
+  activity_timing?: ActivityTiming
   remaining_calories?: number
-  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  meal_type?: MealType
 }
 
 // 营养成分接口
@@ -83,6 +90,7 @@ export interface FoodRecordItemPayload {
 export interface SaveFoodRecordRequest {
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   image_path?: string
+  image_paths?: string[]
   description?: string
   insight?: string
   items: FoodRecordItemPayload[]
@@ -91,7 +99,6 @@ export interface SaveFoodRecordRequest {
   total_carbs: number
   total_fat: number
   total_weight_grams: number
-  context_state?: string
   diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
   activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
   pfc_ratio_comment?: string
@@ -116,9 +123,10 @@ export interface FoodRecord {
   user_id: string
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   image_path?: string | null
+  image_paths?: string[] | null
   description?: string | null
   insight?: string | null
-  context_state?: string | null
+  // context_state?: string | null (已移除)
   pfc_ratio_comment?: string | null
   absorption_notes?: string | null
   context_advice?: string | null
@@ -136,6 +144,10 @@ export interface FoodRecord {
   total_weight_grams: number
   record_time: string
   created_at: string
+  // 新增字段
+  diet_goal?: string | null
+  activity_timing?: string | null
+  source_task_id?: string | null
 }
 
 /** 首页今日摄入与宏量 */
@@ -338,10 +350,10 @@ export async function analyzeFoodImage(
       data: {
         ...(request.base64Image != null && { base64Image: request.base64Image }),
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
+        ...(request.image_urls != null && { image_urls: request.image_urls }),
         additionalContext: request.additionalContext || '',
         modelName: request.modelName || 'qwen-vl-max',
         ...(request.user_goal != null && { user_goal: request.user_goal }),
-        ...(request.context_state != null && request.context_state !== '' && { context_state: request.context_state }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
         ...(request.meal_type != null && { meal_type: request.meal_type })
       },
@@ -381,10 +393,10 @@ export async function analyzeFoodImageCompare(
       data: {
         ...(request.base64Image != null && { base64Image: request.base64Image }),
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
+        ...(request.image_urls != null && { image_urls: request.image_urls }),
         additionalContext: request.additionalContext || '',
         modelName: request.modelName || 'qwen-vl-max',
         ...(request.user_goal != null && { user_goal: request.user_goal }),
-        ...(request.context_state != null && request.context_state !== '' && { context_state: request.context_state }),
         ...(request.diet_goal != null && { diet_goal: request.diet_goal }),
         ...(request.activity_timing != null && { activity_timing: request.activity_timing }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
@@ -417,14 +429,15 @@ export interface AnalyzeTextParams {
 
 /**
  * 根据文字描述分析食物营养成分（与图片分析返回结构一致）
- * @param params 文本内容及可选的 user_goal、context_state、remaining_calories
+ * @param params 文本内容及可选的 user_goal、diet_goal、activity_timing、remaining_calories
  * @returns Promise<AnalyzeResponse>
  */
 export async function analyzeFoodText(params: AnalyzeTextParams | string): Promise<AnalyzeResponse> {
   const payload = typeof params === 'string' ? { text: params.trim() } : {
     text: params.text.trim(),
     ...(params.user_goal != null && { user_goal: params.user_goal }),
-    ...(params.context_state != null && params.context_state !== '' && { context_state: params.context_state }),
+    ...(params.diet_goal != null && { diet_goal: params.diet_goal }),
+    ...(params.activity_timing != null && { activity_timing: params.activity_timing }),
     ...(params.remaining_calories != null && { remaining_calories: params.remaining_calories })
   }
   try {
@@ -467,6 +480,7 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ 
 
 export interface AnalyzeTaskSubmitParams {
   image_url: string
+  image_urls?: string[]
   meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   diet_goal?: string
   activity_timing?: string
@@ -480,11 +494,15 @@ export interface AnalysisTask {
   id: string
   user_id: string
   task_type: string
-  image_url: string
-  status: 'pending' | 'processing' | 'done' | 'failed'
+  image_url?: string | null  // 图片分析时有值，文字分析时为空
+  image_paths?: string[] | null // 多图分析时有值
+  text_input?: string | null  // 文字分析时有值，图片分析时为空
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated'
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
+  is_violated?: boolean          // AI 审核是否违规
+  violation_reason?: string | null // 违规原因
   created_at: string
   updated_at: string
 }
@@ -492,6 +510,30 @@ export interface AnalysisTask {
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
   const res = await authenticatedRequest('/api/analyze/submit', {
+    method: 'POST',
+    data: body,
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '提交任务失败'
+    throw new Error(msg)
+  }
+  return res.data as { task_id: string; message: string }
+}
+
+/** 文字分析提交参数 */
+export interface AnalyzeTextTaskSubmitParams {
+  text: string
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+}
+
+/** 提交文字分析任务（异步） */
+export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
     data: body,
     timeout: 10000
@@ -528,6 +570,25 @@ export async function listAnalyzeTasks(params?: { task_type?: string; status?: s
 }
 
 /**
+ * 更新分析任务结果（修正食物名称等）
+ * PATCH /api/analyze/tasks/{task_id}/result
+ */
+export async function updateAnalysisTaskResult(taskId: string, result: AnalyzeResponse | ModelAnalyzeResult): Promise<{ message: string; task: AnalysisTask }> {
+  // 注意：后端接收的 result 是 AnalyzeResponse 结构（description, insight, items 等）
+  // 或者 ModelAnalyzeResult 结构（items, description, insight...）
+  // 这里直接传整个对象即可，后端会覆盖 result 字段
+  const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}/result`, {
+    method: 'PATCH',
+    data: { result }
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '更新分析结果失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; task: AnalysisTask }
+}
+
+/**
  * 提交偏差样本（用户点击「认为 AI 估算偏差大，点击标记样本」）
  * 需登录。items 中每条为：食物名、AI 重量、用户修正重量、偏差百分比。
  */
@@ -555,6 +616,21 @@ export async function getFoodRecordList(date?: string): Promise<{ records: FoodR
     throw new Error(msg)
   }
   return res.data as { records: FoodRecord[] }
+}
+
+/**
+ * 获取单条饮食记录详情（通过 ID，从数据库获取最新数据）
+ */
+export async function getFoodRecordById(recordId: string): Promise<{ record: FoodRecord }> {
+  const res = await authenticatedRequest(`/api/food-record/${encodeURIComponent(recordId)}`, {
+    method: 'GET',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取记录详情失败'
+    throw new Error(msg)
+  }
+  return res.data as { record: FoodRecord }
 }
 
 /**
@@ -989,6 +1065,10 @@ export interface CommunityFeedItem {
   liked: boolean
   /** 是否为当前用户自己的帖子 */
   is_mine?: boolean
+  /** 评论列表（已包含前 N 条） */
+  comments?: FeedCommentItem[]
+  /** 评论总数（前端展示用） */
+  comment_count?: number
 }
 
 /** 评论项 */
@@ -1000,6 +1080,7 @@ export interface FeedCommentItem {
   created_at: string
   nickname: string
   avatar: string
+  _is_temp?: boolean  // 标记为临时评论（未通过审核）
 }
 
 /** 搜索用户（昵称模糊 / 手机号精确） */
@@ -1049,11 +1130,21 @@ export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
 }
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */
-export async function communityGetFeed(date?: string): Promise<{ list: CommunityFeedItem[] }> {
-  const q = date ? `?date=${date}` : ''
+/** 圈子 Feed：好友饮食记录（分页，可选 date YYYY-MM-DD） */
+export async function communityGetFeed(
+  date?: string,
+  offset: number = 0,
+  limit: number = 20,
+  includeComments: boolean = true,
+  commentsLimit: number = 5
+): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
+  let q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
+  if (date) {
+    q += `&date=${date}`
+  }
   const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
-  return response.data as { list: CommunityFeedItem[] }
+  return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
 }
 
 /** 点赞某条动态 */
@@ -1075,14 +1166,17 @@ export async function communityGetComments(recordId: string): Promise<{ list: Fe
   return response.data as { list: FeedCommentItem[] }
 }
 
-/** 发表评论 */
-export async function communityPostComment(recordId: string, content: string): Promise<{ comment: FeedCommentItem }> {
+/** 
+ * 发表评论（异步审核版本）
+ * 返回任务 ID 和临时评论数据，前端需要本地缓存显示
+ */
+export async function communityPostComment(recordId: string, content: string): Promise<{ task_id: string; temp_comment: FeedCommentItem }> {
   const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, {
     method: 'POST',
     data: { content: content.trim() }
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发表失败')
-  return response.data as { comment: FeedCommentItem }
+  return response.data as { task_id: string; temp_comment: FeedCommentItem }
 }
 
 // ---------- 公共食物库 ----------
@@ -1104,6 +1198,7 @@ export interface PublicFoodLibraryItem {
   }>
   description?: string | null
   insight?: string | null
+  food_name?: string | null
   merchant_name?: string | null
   merchant_address?: string | null
   taste_rating?: number | null
@@ -1112,6 +1207,7 @@ export interface PublicFoodLibraryItem {
   user_notes?: string | null
   latitude?: number | null
   longitude?: number | null
+  province?: string | null
   city?: string | null
   district?: string | null
   detail_address?: string | null
@@ -1124,6 +1220,10 @@ export interface PublicFoodLibraryItem {
   updated_at: string
   /** 当前用户是否已点赞 */
   liked?: boolean
+  /** 收藏数 */
+  collection_count?: number
+  /** 当前用户是否已收藏 */
+  collected?: boolean
   /** 作者信息 */
   author?: { id: string; nickname: string; avatar: string }
 }
@@ -1138,6 +1238,7 @@ export interface PublicFoodLibraryComment {
   created_at: string
   nickname: string
   avatar: string
+  _is_temp?: boolean  // 标记为临时评论（未通过审核）
 }
 
 /** 创建公共食物库条目请求 */
@@ -1151,6 +1252,7 @@ export interface CreatePublicFoodLibraryRequest {
   items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }>
   description?: string
   insight?: string
+  food_name?: string
   merchant_name?: string
   merchant_address?: string
   taste_rating?: number
@@ -1159,6 +1261,7 @@ export interface CreatePublicFoodLibraryRequest {
   user_notes?: string
   latitude?: number
   longitude?: number
+  province?: string
   city?: string
   district?: string
   detail_address?: string
@@ -1247,6 +1350,22 @@ export async function unlikePublicFoodLibraryItem(itemId: string): Promise<void>
   }
 }
 
+/** 收藏公共食物库条目 */
+export async function collectPublicFoodLibraryItem(itemId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/collect`, { method: 'POST' })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '收藏失败')
+  }
+}
+
+/** 取消收藏公共食物库条目 */
+export async function uncollectPublicFoodLibraryItem(itemId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/collect`, { method: 'DELETE' })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '取消收藏失败')
+  }
+}
+
 /** 获取公共食物库条目的评论列表 */
 export async function getPublicFoodLibraryComments(itemId: string): Promise<{ list: PublicFoodLibraryComment[] }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, { method: 'GET', timeout: 10000 })
@@ -1256,12 +1375,15 @@ export async function getPublicFoodLibraryComments(itemId: string): Promise<{ li
   return response.data as { list: PublicFoodLibraryComment[] }
 }
 
-/** 发表公共食物库评论（可选评分 1-5） */
+/** 
+ * 发表公共食物库评论（异步审核版本，可选评分 1-5）
+ * 返回任务 ID 和临时评论数据，前端需要本地缓存显示
+ */
 export async function postPublicFoodLibraryComment(
   itemId: string,
   content: string,
   rating?: number
-): Promise<{ comment: PublicFoodLibraryComment }> {
+): Promise<{ task_id: string; temp_comment: PublicFoodLibraryComment }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, {
     method: 'POST',
     data: { content: content.trim(), ...(rating !== undefined && { rating }) }
@@ -1269,7 +1391,7 @@ export async function postPublicFoodLibraryComment(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '发表失败')
   }
-  return response.data as { comment: PublicFoodLibraryComment }
+  return response.data as { task_id: string; temp_comment: PublicFoodLibraryComment }
 }
 
 // ---------- 用户私人食谱 ----------
@@ -1404,10 +1526,11 @@ export async function deleteUserRecipe(recipeId: string): Promise<{ message: str
   return response.data as { message: string }
 }
 
-/** 使用食谱（一键记录） */
-export async function useUserRecipe(recipeId: string): Promise<{ message: string; record_id: string }> {
+/** 使用食谱（一键记录，可指定餐次） */
+export async function useUserRecipe(recipeId: string, mealType?: string): Promise<{ message: string; record_id: string }> {
   const response = await authenticatedRequest(`/api/recipes/${recipeId}/use`, {
     method: 'POST',
+    data: { meal_type: mealType },
     timeout: 15000
   })
   if (response.statusCode !== 200) {

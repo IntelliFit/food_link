@@ -95,6 +95,14 @@
   line-height: 1;
 }
 
+.info-description {
+  font-size: 30rpx;
+  color: #6b7280;
+  line-height: 46rpx;
+  margin-bottom: 16rpx;
+  display: block;
+}
+
 .info-insight {
   font-size: 28rpx;
   color: #4b5563;
@@ -568,4 +576,130 @@
 .loading-text {
   font-size: 28rpx;
   color: #6b7280;
+}
+
+// 骨架屏样式
+.skeleton-wrapper {
+  animation: fadeIn 0.3s ease;
+}
+
+.skeleton-image {
+  width: 100%;
+  height: 560rpx;
+  background: #e5e7eb;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    animation: skeleton-shimmer 1.5s infinite;
+  }
+}
+
+.skeleton-card {
+  background: #fff;
+  margin: 0 24rpx 24rpx;
+  border-radius: 32rpx;
+  padding: 40rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+
+  &.info-card {
+    margin-top: -60rpx;
+    position: relative;
+    z-index: 10;
+  }
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24rpx;
+  gap: 20rpx;
+
+  &.between {
+    justify-content: space-between;
+  }
+}
+
+.skeleton-block {
+  background: #f3f4f6;
+  border-radius: 8rpx;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+    animation: skeleton-shimmer 1.5s infinite;
+  }
+}
+
+.title-block {
+  height: 56rpx;
+  width: 60%;
+}
+
+.tag-block {
+  height: 48rpx;
+  width: 120rpx;
+  border-radius: 24rpx;
+}
+
+.text-block {
+  height: 32rpx;
+  width: 100%;
+  margin-bottom: 16rpx;
+
+  &.short {
+    width: 70%;
+  }
+}
+
+.nutrients-block {
+  display: flex;
+  justify-content: space-between;
+  padding: 32rpx 0;
+  border-top: 2rpx solid #f3f4f6;
+  border-bottom: 2rpx solid #f3f4f6;
+  margin: 32rpx 0;
+}
+
+.nutrient-item-block {
+  width: 120rpx;
+  height: 80rpx;
+  background: #f3f4f6;
+  border-radius: 8rpx;
+}
+
+.avatar-block {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: #f3f4f6;
+}
+
+.info-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }

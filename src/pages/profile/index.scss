@@ -106,9 +106,9 @@
 .member-card {
   margin: 0 40rpx;
   padding: 40rpx;
-  background: linear-gradient(135deg, #bfa070 0%, #a88b5e 100%); // 仿照截图的金色/棕色，或者改成绿色
+  // background: linear-gradient(135deg, #bfa070 0%, #a88b5e 100%); // 仿照截图的金色/棕色，或者改成绿色
   // 如果要符合“小程序整体颜色”，可以用绿色渐变：
-  background: linear-gradient(135deg, #00bc7d 0%, #009462 100%);
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
 
   border-radius: 24rpx;
   color: #ffffff;
@@ -236,6 +236,12 @@
   justify-content: center;
   overflow: hidden;
   border: 2rpx solid #e5e7eb;
+
+  &.no-border {
+    background: transparent;
+    border: none;
+    margin-left: 12rpx;
+  }
 }
 
 .user-avatar-image {
@@ -245,6 +251,17 @@
 
 .user-avatar {
   font-size: 48rpx;
+}
+
+.user-avatar-icon {
+  font-size: 100rpx;
+  line-height: 1;
+  color: #cbd5e1; // 颜色加深
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .login-link-button {

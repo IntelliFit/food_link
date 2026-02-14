@@ -264,6 +264,7 @@ async def insert_food_record(
     user_id: str,
     meal_type: str,
     image_path: Optional[str] = None,
+    image_paths: Optional[List[str]] = None,
     description: Optional[str] = None,
     insight: Optional[str] = None,
     items: Optional[List[Dict[str, Any]]] = None,
@@ -272,7 +273,6 @@ async def insert_food_record(
     total_carbs: float = 0,
     total_fat: float = 0,
     total_weight_grams: int = 0,
-    context_state: Optional[str] = None,
     diet_goal: Optional[str] = None,
     activity_timing: Optional[str] = None,
     pfc_ratio_comment: Optional[str] = None,
@@ -292,7 +292,8 @@ async def insert_food_record(
         items: 食物项列表，每项含 name, weight, ratio, intake, nutrients 等
         total_calories, total_protein, total_carbs, total_fat: 总营养
         total_weight_grams: 总预估重量（克）
-        context_state: 用户当前状态（提交时选择）
+        diet_goal: 饮食目标
+        activity_timing: 运动时机
         pfc_ratio_comment: PFC 比例评价
         absorption_notes: 吸收率说明
         context_advice: 情境建议
@@ -315,10 +316,11 @@ async def insert_food_record(
         "total_fat": total_fat,
         "total_weight_grams": total_weight_grams,
     }
-    if context_state is not None:
-        row["context_state"] = context_state
+    if image_paths:
+        row["image_paths"] = image_paths
     if diet_goal is not None:
         row["diet_goal"] = diet_goal
+
     if activity_timing is not None:
         row["activity_timing"] = activity_timing
     if pfc_ratio_comment is not None:
@@ -353,7 +355,7 @@ async def list_food_records(
         limit: 最多返回条数
 
     Returns:
-        记录列表，按 record_time 升序（同一天内按时间正序）
+        记录列表，按 record_time 倒序（最新的记录排在前面）
     """
     check_supabase_configured()
     supabase = get_supabase_client()
@@ -364,7 +366,7 @@ async def list_food_records(
             end_d = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
             end_ts = end_d.isoformat().replace("+00:00", "Z")
             q = q.gte("record_time", start_ts).lt("record_time", end_ts)
-        q = q.order("record_time", desc=False).limit(limit)
+        q = q.order("record_time", desc=True).limit(limit)
         result = q.execute()
         return list(result.data or [])
     except Exception as e:
@@ -461,19 +463,38 @@ async def insert_critical_samples(
 def create_analysis_task_sync(
     user_id: str,
     task_type: str,
-    image_url: str,
+    image_url: Optional[str] = None,
+    image_urls: Optional[List[str]] = None,
+    text_input: Optional[str] = None,
     payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """创建一条分析任务（pending），返回任务记录。供 API 调用。"""
+    """
+    创建一条分析任务（pending），返回任务记录。供 API 调用。
+    - image_url: 图片分析时必填（兼容旧版）
+    - image_urls: 多图分析时传入（新版）
+    - text_input: 文字分析时必填
+    """
     check_supabase_configured()
     supabase = get_supabase_client()
+    
+    # 兼容逻辑：若传了 image_urls 但没传 image_url，取第一个作为 image_url
+    if image_urls and len(image_urls) > 0 and not image_url:
+        image_url = image_urls[0]
+        
     row = {
         "user_id": user_id,
         "task_type": task_type,
-        "image_url": image_url,
         "status": "pending",
         "payload": payload or {},
     }
+    # 根据任务类型添加对应字段
+    if image_url:
+        row["image_url"] = image_url
+    if image_urls:
+         row["image_paths"] = image_urls  # 复用 image_paths 字段存 urls JSON
+    if text_input:
+        row["text_input"] = text_input
+    
     try:
         result = supabase.table("analysis_tasks").insert(row).execute()
         if result.data and len(result.data) > 0:
@@ -543,11 +564,109 @@ def update_analysis_task_result_sync(
         raise
 
 
+def mark_task_violated_sync(task_id: str, violation_reason: str) -> None:
+    """将分析任务标记为违规：status='violated', is_violated=True, 记录违规原因。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "status": "violated",
+        "is_violated": True,
+        "violation_reason": violation_reason,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        supabase.table("analysis_tasks").update(row).eq("id", task_id).execute()
+    except Exception as e:
+        print(f"[mark_task_violated_sync] 错误: {e}")
+        raise
+
+
+def get_user_openid_by_id_sync(user_id: str) -> Optional[str]:
+    """通过 user_id 查询用户 openid，用于违规记录关联。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("weapp_user").select("openid").eq("id", user_id).limit(1).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0].get("openid")
+        return None
+    except Exception as e:
+        print(f"[get_user_openid_by_id_sync] 错误: {e}")
+        raise
+
+
+def create_violation_record_sync(
+    task: Dict[str, Any],
+    moderation_result: Dict[str, Any],
+    violation_type: str = "food_analysis",
+) -> None:
+    """
+    创建一条违规记录，写入 content_violations 表。
+    task: 原始分析任务数据
+    moderation_result: AI 审核返回结果，包含 category 和 reason
+    violation_type: 违规来源类型，默认 'food_analysis'
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    user_id = task.get("user_id", "")
+    # 获取用户 openid
+    user_openid = get_user_openid_by_id_sync(user_id) or ""
+    # 获取违规图片 URL（多图取第一张，或单图）
+    image_url = None
+    image_paths = task.get("image_paths")
+    if image_paths and isinstance(image_paths, list) and len(image_paths) > 0:
+        image_url = image_paths[0]
+    elif task.get("image_url"):
+        image_url = task["image_url"]
+    row = {
+        "user_openid": user_openid,
+        "user_id": user_id,
+        "violation_type": violation_type,
+        "violation_category": moderation_result.get("category", "other"),
+        "violation_reason": moderation_result.get("reason", "未知违规原因"),
+        "reference_id": task.get("id"),
+        "image_url": image_url,
+        "text_content": task.get("text_input"),
+    }
+    try:
+        supabase.table("content_violations").insert(row).execute()
+    except Exception as e:
+        print(f"[create_violation_record_sync] 错误: {e}")
+        raise
+
+
+async def update_analysis_task_result(
+    task_id: str,
+    result: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    更新分析任务结果（异步）。
+    用于用户手动修正分析结果（如修改食物名称）后回写数据库。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        data = {
+            "result": result,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        res = supabase.table("analysis_tasks").update(data).eq("id", task_id).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0]
+        # 如果更新失败（如 ID 不存在），这里可能需要抛错或返回 None
+        # Supabase update 如果没匹配到行，data 为空列表
+        raise Exception("更新任务失败：任务不存在或无权限")
+    except Exception as e:
+        print(f"[update_analysis_task_result] 错误: {e}")
+        raise
+
+
 def get_analysis_task_by_id_sync(task_id: str) -> Optional[Dict[str, Any]]:
     """按 ID 查询单条任务。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        print(f"[get_analysis_task_by_id_sync] Querying task_id: {task_id}")
         r = supabase.table("analysis_tasks").select("*").eq("id", task_id).limit(1).execute()
         if r.data and len(r.data) > 0:
             return r.data[0]
@@ -576,6 +695,140 @@ def list_analysis_tasks_by_user_sync(
         return list(r.data or [])
     except Exception as e:
         print(f"[list_analysis_tasks_by_user_sync] 错误: {e}")
+        raise
+
+
+# ==================== 评论任务相关函数 ====================
+
+def create_comment_task_sync(
+    user_id: str,
+    comment_type: str,
+    target_id: str,
+    content: str,
+    rating: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    创建一条评论审核任务（pending），返回任务记录。
+    comment_type: 'feed' 或 'public_food_library'
+    target_id: record_id 或 library_item_id
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "comment_type": comment_type,
+        "target_id": target_id,
+        "content": content.strip(),
+        "status": "pending",
+    }
+    if rating is not None:
+        row["rating"] = rating
+    try:
+        result = supabase.table("comment_tasks").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建评论任务失败")
+    except Exception as e:
+        print(f"[create_comment_task_sync] 错误: {e}")
+        raise
+
+
+def claim_next_pending_comment_task_sync(comment_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    原子抢占一条 pending 评论任务，将其置为 processing 并返回。
+    comment_type: 可选，筛选特定类型的任务
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 取一条 pending 任务
+        q = (
+            supabase.table("comment_tasks")
+            .select("*")
+            .eq("status", "pending")
+            .order("created_at")
+            .limit(1)
+        )
+        if comment_type:
+            q = q.eq("comment_type", comment_type)
+        r = q.execute()
+        rows = list(r.data or [])
+        if not rows:
+            return None
+        task_id = rows[0]["id"]
+        # 仅当仍为 pending 时更新为 processing，避免多 Worker 重复抢
+        up = (
+            supabase.table("comment_tasks")
+            .update({"status": "processing", "updated_at": datetime.now(timezone.utc).isoformat()})
+            .eq("id", task_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        if up.data and len(up.data) > 0:
+            return up.data[0]
+        return None
+    except Exception as e:
+        print(f"[claim_next_pending_comment_task_sync] 错误: {e}")
+        raise
+
+
+def update_comment_task_result_sync(
+    task_id: str,
+    status: str,
+    result: Optional[Dict[str, Any]] = None,
+    error_message: Optional[str] = None,
+) -> None:
+    """更新评论任务结果（done / failed）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if result is not None:
+        row["result"] = result
+    if error_message is not None:
+        row["error_message"] = error_message
+    try:
+        supabase.table("comment_tasks").update(row).eq("id", task_id).execute()
+    except Exception as e:
+        print(f"[update_comment_task_result_sync] 错误: {e}")
+        raise
+
+
+def mark_comment_task_violated_sync(task_id: str, violation_reason: str) -> None:
+    """将评论任务标记为违规：status='violated', is_violated=True, 记录违规原因。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "status": "violated",
+        "is_violated": True,
+        "violation_reason": violation_reason,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        supabase.table("comment_tasks").update(row).eq("id", task_id).execute()
+    except Exception as e:
+        print(f"[mark_comment_task_violated_sync] 错误: {e}")
+        raise
+
+
+def list_comment_tasks_by_user_sync(
+    user_id: str,
+    comment_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """按用户查询评论任务列表，支持按 comment_type、status 筛选。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        q = supabase.table("comment_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
+        if comment_type:
+            q = q.eq("comment_type", comment_type)
+        if status:
+            q = q.eq("status", status)
+        r = q.execute()
+        return list(r.data or [])
+    except Exception as e:
+        print(f"[list_comment_tasks_by_user_sync] 错误: {e}")
         raise
 
 
@@ -933,40 +1186,110 @@ async def cleanup_duplicate_friends(user_id: str) -> Dict[str, Any]:
 
 # ---------- 圈子动态（好友今日饮食 + 点赞评论）----------
 
-async def list_friends_today_records(user_id: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
-    """获取好友 + 自己在指定日期（默认今天）的饮食记录，用于圈子 Feed"""
+
+async def list_friends_feed_records(
+    user_id: str,
+    date: Optional[str] = None,
+    offset: int = 0,
+    limit: int = 20,
+    include_comments: bool = True,
+    comments_limit: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    获取好友 + 自己的饮食记录（支持分页），用于圈子 Feed。
+    
+    Args:
+        user_id: 当前用户 ID
+        date: 可选日期筛选
+        offset: 分页偏移
+        limit: 每页记录数
+        include_comments: 是否包含评论（默认 True）
+        comments_limit: 每条记录返回的评论数（默认 5）
+        
+    Returns:
+        列表，每项包含 record、author、comments（可选）
+    """
     friend_ids = await get_friend_ids(user_id)
     # 包含自己：圈子 Feed 同时展示自己的今日食物
     author_ids = list(set(friend_ids) | {user_id})
     if not author_ids:
         author_ids = [user_id]
-    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    start_ts = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-    end_d = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
-    end_ts = end_d.isoformat().replace("+00:00", "Z")
+    
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        records = supabase.table("user_food_records").select("*").in_("user_id", author_ids).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=True).execute()
+        q = supabase.table("user_food_records").select("*").in_("user_id", author_ids)
+        
+        if date:
+            start_ts = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+            end_d = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            end_ts = end_d.isoformat().replace("+00:00", "Z")
+            q = q.gte("record_time", start_ts).lt("record_time", end_ts)
+            
+        q = q.order("record_time", desc=True).range(offset, offset + limit - 1)
+        records = q.execute()
+        
         rec_list = list(records.data or [])
         if not rec_list:
             return []
-        authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute()
+            
+        # 获取作者信息（仅查询结果中涉及的用户）
+        involved_user_ids = list(set(r["user_id"] for r in rec_list))
+        authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
         author_map = {a["id"]: a for a in (authors.data or [])}
+        
+        # 批量获取评论（如果需要）
+        comments_map: Dict[str, List[Dict[str, Any]]] = {}
+        if include_comments:
+            record_ids = [r["id"] for r in rec_list]
+            # 批量查询所有记录的评论
+            comments_result = supabase.table("feed_comments").select("id, user_id, record_id, content, created_at").in_("record_id", record_ids).order("created_at", desc=False).execute()
+            all_comments = list(comments_result.data or [])
+            
+            # 获取评论者信息
+            if all_comments:
+                commenter_ids = list(set(c["user_id"] for c in all_comments))
+                commenters = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", commenter_ids).execute()
+                commenter_map = {u["id"]: u for u in (commenters.data or [])}
+                
+                # 按 record_id 分组评论
+                for comment in all_comments:
+                    rid = comment["record_id"]
+                    if rid not in comments_map:
+                        comments_map[rid] = []
+                    
+                    u = commenter_map.get(comment["user_id"], {})
+                    comments_map[rid].append({
+                        "id": comment["id"],
+                        "user_id": comment["user_id"],
+                        "record_id": comment["record_id"],
+                        "content": comment["content"],
+                        "created_at": comment["created_at"],
+                        "nickname": u.get("nickname") or "用户",
+                        "avatar": u.get("avatar") or "",
+                    })
+                
+                # 每个记录只保留前 N 条评论
+                for rid in comments_map:
+                    comments_map[rid] = comments_map[rid][:comments_limit]
+        
         out = []
         for r in rec_list:
             author = author_map.get(r["user_id"], {})
-            out.append({
+            item = {
                 "record": r,
                 "author": {
                     "id": author.get("id"),
                     "nickname": author.get("nickname") or "用户",
                     "avatar": author.get("avatar") or "",
                 },
-            })
+            }
+            if include_comments:
+                item["comments"] = comments_map.get(r["id"], [])
+            out.append(item)
         return out
     except Exception as e:
-        print(f"[list_friends_today_records] 错误: {e}")
+        print(f"[list_friends_feed_records] 错误: {e}")
         raise
 
 
@@ -1029,6 +1352,20 @@ async def add_feed_comment(user_id: str, record_id: str, content: str) -> Dict[s
         raise
 
 
+def add_feed_comment_sync(user_id: str, record_id: str, content: str) -> Dict[str, Any]:
+    """发表评论（同步版本，供 Worker 使用）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("feed_comments").insert({"user_id": user_id, "record_id": record_id, "content": content.strip()}).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("发表评论失败")
+    except Exception as e:
+        print(f"[add_feed_comment_sync] 错误: {e}")
+        raise
+
+
 async def list_feed_comments(record_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """某条动态的评论列表，含评论者 nickname、avatar"""
     check_supabase_configured()
@@ -1072,6 +1409,7 @@ async def create_public_food_library_item(
     items: Optional[List[Dict[str, Any]]] = None,
     description: Optional[str] = None,
     insight: Optional[str] = None,
+    food_name: Optional[str] = None,
     merchant_name: Optional[str] = None,
     merchant_address: Optional[str] = None,
     taste_rating: Optional[int] = None,
@@ -1080,6 +1418,7 @@ async def create_public_food_library_item(
     user_notes: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+    province: Optional[str] = None,
     city: Optional[str] = None,
     district: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -1099,6 +1438,7 @@ async def create_public_food_library_item(
         "items": items or [],
         "description": description or "",
         "insight": insight or "",
+        "food_name": food_name or "",
         "merchant_name": merchant_name or "",
         "merchant_address": merchant_address or "",
         "taste_rating": taste_rating,
@@ -1107,6 +1447,7 @@ async def create_public_food_library_item(
         "user_notes": user_notes or "",
         "latitude": latitude,
         "longitude": longitude,
+        "province": province or "",
         "city": city or "",
         "district": district or "",
         "status": "published",  # 暂时直接发布，后续可改为 pending_review
@@ -1237,6 +1578,55 @@ async def get_public_food_library_likes_for_items(item_ids: List[str], current_u
         raise
 
 
+async def add_public_food_library_collection(user_id: str, item_id: str) -> None:
+    """收藏公共食物库条目"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("public_food_library_collections").insert({"user_id": user_id, "library_item_id": item_id}).execute()
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            return
+        print(f"[add_public_food_library_collection] 错误: {e}")
+        raise
+
+
+async def remove_public_food_library_collection(user_id: str, item_id: str) -> None:
+    """取消收藏"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("public_food_library_collections").delete().eq("user_id", user_id).eq("library_item_id", item_id).execute()
+    except Exception as e:
+        print(f"[remove_public_food_library_collection] 错误: {e}")
+        raise
+
+
+async def get_public_food_library_collections_for_items(item_ids: List[str], current_user_id: str) -> Dict[str, Any]:
+    """批量查询公共食物库收藏数及当前用户是否已收藏。返回 { item_id: { count, collected } }"""
+    if not item_ids:
+        return {}
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # collection_count 已在主表中维护，这里主要查当前用户是否收藏
+        # 不过为了统一接口，也可以查 count，但主表已有 count 字段，这里仅查 collected 状态即可
+        # 为保持一致性，我们还是返回 { count, collected }，count 从主表拿，collected 从关联表拿
+        
+        # 1. 查当前用户的收藏
+        my = supabase.table("public_food_library_collections").select("library_item_id").eq("user_id", current_user_id).in_("library_item_id", item_ids).execute()
+        my_set = {m["library_item_id"] for m in (my.data or [])}
+        
+        # 2. count 直接用主表的 collection_count 字段，这里仅返回 collected 状态辅助主流程
+        # 或者为了接口一致性，返回 count (但需从主表查，已有 list_public_food_library 查了)
+        # 这里仅返回 collected 状态 map: { item_id: boolean } 
+        # 但为了函数签名一致性，返回 { item_id: { collected: bool } }
+        return {iid: {"collected": iid in my_set} for iid in item_ids}
+    except Exception as e:
+        print(f"[get_public_food_library_collections_for_items] 错误: {e}")
+        raise
+
+
 async def add_public_food_library_comment(
     user_id: str,
     item_id: str,
@@ -1260,6 +1650,32 @@ async def add_public_food_library_comment(
         raise Exception("发表评论失败")
     except Exception as e:
         print(f"[add_public_food_library_comment] 错误: {e}")
+        raise
+
+
+def add_public_food_library_comment_sync(
+    user_id: str,
+    item_id: str,
+    content: str,
+    rating: Optional[int] = None,
+) -> Dict[str, Any]:
+    """发表公共食物库评论（同步版本，供 Worker 使用）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "library_item_id": item_id,
+        "content": content.strip(),
+    }
+    if rating is not None:
+        row["rating"] = rating
+    try:
+        result = supabase.table("public_food_library_comments").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("发表评论失败")
+    except Exception as e:
+        print(f"[add_public_food_library_comment_sync] 错误: {e}")
         raise
 
 
