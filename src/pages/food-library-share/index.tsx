@@ -31,9 +31,10 @@ export default function FoodLibrarySharePage() {
   const [records, setRecords] = useState<FoodRecord[]>([])
   const [selectedRecord, setSelectedRecord] = useState<FoodRecord | null>(null)
 
-  // 图片与营养数据
-  const [imagePath, setImagePath] = useState('')
-  const [imageUrl, setImageUrl] = useState('')
+  // 图片：最多 3 张，每张单独 AI 识别后叠加营养数据
+  const [imagePaths, setImagePaths] = useState<string[]>([])
+  const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [imageUrl, setImageUrl] = useState('') // 首图 URL，用于识别与提交
   const [totalCalories, setTotalCalories] = useState(0)
   const [totalProtein, setTotalProtein] = useState(0)
   const [totalCarbs, setTotalCarbs] = useState(0)
@@ -41,6 +42,8 @@ export default function FoodLibrarySharePage() {
   const [items, setItems] = useState<Array<{ name: string; weight?: number; nutrients?: Nutrients }>>([])
   const [description, setDescription] = useState('')
   const [insight, setInsight] = useState('')
+  // 缓存每张图片的识别结果，避免重复识别
+  const [analyzeResultsMap, setAnalyzeResultsMap] = useState<Record<string, Awaited<ReturnType<typeof analyzeFoodImage>>>>({})
 
   // 商家信息
   const [foodName, setFoodName] = useState('')
@@ -90,11 +93,15 @@ export default function FoodLibrarySharePage() {
     }
   }
 
-  // 选择记录
+  // 选择记录：优先使用多图 image_paths，否则用 image_path；后端会根据 source_record_id 从分析任务拉取多图
   const handleSelectRecord = (record: FoodRecord) => {
     setSelectedRecord(record)
-    setImagePath('')
-    setImageUrl(record.image_path || '')
+    setImagePaths([])
+    const urls = (record.image_paths && record.image_paths.length > 0)
+      ? record.image_paths.slice(0, MAX_IMAGES)
+      : (record.image_path ? [record.image_path] : [])
+    setImageUrls(urls)
+    setImageUrl(urls[0] || record.image_path || '')
     setTotalCalories(record.total_calories)
     setTotalProtein(record.total_protein)
     setTotalCarbs(record.total_carbs)
@@ -102,75 +109,140 @@ export default function FoodLibrarySharePage() {
     setItems(record.items || [])
     setDescription(record.description || '')
     setInsight(record.insight || '')
+    setAnalyzeResultsMap({}) // 清空识别缓存
     setShowRecordModal(false)
   }
 
-  // 选择图片并识别
+  const MAX_IMAGES = 3
+
+  /** 根据缓存的识别结果聚合计算营养数据 */
+  const aggregateFromMap = (urls: string[], resultsMap: Record<string, Awaited<ReturnType<typeof analyzeFoodImage>>>) => {
+    if (urls.length === 0) {
+      setDescription('')
+      setInsight('')
+      setItems([])
+      setTotalCalories(0)
+      setTotalProtein(0)
+      setTotalCarbs(0)
+      setTotalFat(0)
+      return
+    }
+    const results = urls.map(url => resultsMap[url]).filter(Boolean)
+    const descriptions = results.map(r => r.description).filter(Boolean)
+    const insights = results.map(r => r.insight).filter(Boolean)
+    setDescription(descriptions.join('；'))
+    setInsight(insights.join('；'))
+    const allItems = results.flatMap(r =>
+      (r.items || []).map(it => ({
+        name: it.name,
+        weight: it.estimatedWeightGrams,
+        nutrients: it.nutrients
+      }))
+    )
+    setItems(allItems)
+    let cal = 0
+    let pro = 0
+    let carb = 0
+    let fat = 0
+    results.forEach(r => {
+      (r.items || []).forEach(it => {
+        cal += it.nutrients?.calories || 0
+        pro += it.nutrients?.protein || 0
+        carb += it.nutrients?.carbs || 0
+        fat += it.nutrients?.fat || 0
+      })
+    })
+    setTotalCalories(cal)
+    setTotalProtein(pro)
+    setTotalCarbs(carb)
+    setTotalFat(fat)
+  }
+
+  // 选择图片：最多 3 张，逐张上传后只识别新图片并叠加已有结果
   const handleChooseImage = async () => {
+    const remain = MAX_IMAGES - imagePaths.length
+    if (remain <= 0) return
     try {
       const res = await Taro.chooseImage({
-        count: 1,
+        count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera']
       })
-      const tempPath = res.tempFilePaths[0]
-      setImagePath(tempPath)
+      const tempPaths = res.tempFilePaths || []
+      if (tempPaths.length === 0) return
       setSelectedRecord(null)
+      const prevPaths = imagePaths
+      const prevUrls = imageUrls
+      const prevResultsMap = analyzeResultsMap
+      setImagePaths(p => [...p, ...tempPaths])
 
-      // 上传并识别
       setAnalyzing(true)
-      Taro.showLoading({ title: '识别中...' })
+      Taro.showLoading({ title: '上传中...', mask: true })
       try {
-        const base64 = await imageToBase64(tempPath)
-        const uploadRes = await uploadAnalyzeImage(base64)
-        setImageUrl(uploadRes.imageUrl)
+        const newUrls: string[] = []
+        for (let i = 0; i < tempPaths.length; i++) {
+          const base64 = await imageToBase64(tempPaths[i])
+          const uploadRes = await uploadAnalyzeImage(base64)
+          newUrls.push(uploadRes.imageUrl)
+        }
+        const allUrls = [...prevUrls, ...newUrls]
+        setImageUrls(allUrls)
+        setImageUrl(allUrls[0] || '')
+        Taro.hideLoading()
 
-        const analyzeRes = await analyzeFoodImage({ image_url: uploadRes.imageUrl })
-        setDescription(analyzeRes.description || '')
-        setInsight(analyzeRes.insight || '')
-        setItems(analyzeRes.items.map(it => ({
-          name: it.name,
-          weight: it.estimatedWeightGrams,
-          nutrients: it.nutrients
-        })))
-        const cal = analyzeRes.items.reduce((s, it) => s + (it.nutrients?.calories || 0), 0)
-        const pro = analyzeRes.items.reduce((s, it) => s + (it.nutrients?.protein || 0), 0)
-        const carb = analyzeRes.items.reduce((s, it) => s + (it.nutrients?.carbs || 0), 0)
-        const fat = analyzeRes.items.reduce((s, it) => s + (it.nutrients?.fat || 0), 0)
-        setTotalCalories(cal)
-        setTotalProtein(pro)
-        setTotalCarbs(carb)
-        setTotalFat(fat)
-        Taro.showToast({ title: '识别成功', icon: 'success' })
+        // 只识别新上传的图片
+        const newResultsMap = { ...prevResultsMap }
+        for (let i = 0; i < newUrls.length; i++) {
+          Taro.showLoading({ title: `识别中 (${i + 1}/${newUrls.length})...`, mask: true })
+          const analyzeRes = await analyzeFoodImage({ image_url: newUrls[i] })
+          newResultsMap[newUrls[i]] = analyzeRes
+        }
+        setAnalyzeResultsMap(newResultsMap)
+        aggregateFromMap(allUrls, newResultsMap)
+        Taro.showToast({
+          title: newUrls.length > 1 ? `已识别 ${newUrls.length} 张并叠加` : '识别成功',
+          icon: 'success'
+        })
       } catch (e: any) {
-        Taro.showToast({ title: e.message || '识别失败', icon: 'none' })
+        setImagePaths(prevPaths)
+        setImageUrls(prevUrls)
+        setImageUrl(prevUrls[0] || '')
+        setAnalyzeResultsMap(prevResultsMap)
+        Taro.showToast({ title: e.message || '上传或识别失败', icon: 'none' })
       } finally {
         Taro.hideLoading()
         setAnalyzing(false)
       }
     } catch (e) {
-      console.error('选择图片失败:', e)
+      console.error('选择图片失败', e)
     }
   }
 
-  // 获取位置
-  const handleGetLocation = async () => {
-    try {
-      const setting = await Taro.getSetting()
-      if (!setting.authSetting['scope.userLocation']) {
-        await Taro.authorize({ scope: 'scope.userLocation' })
-      }
-      Taro.showLoading({ title: '获取位置...' })
-      const loc = await Taro.getLocation({ type: 'gcj02' })
-      setLatitude(loc.latitude)
-      setLongitude(loc.longitude)
-      // 逆地理编码（简化处理，只存经纬度，城市由用户填写）
-      Taro.hideLoading()
-      Taro.showToast({ title: '位置已获取', icon: 'success' })
-    } catch (e: any) {
-      Taro.hideLoading()
-      Taro.showToast({ title: '获取位置失败', icon: 'none' })
+  /** 全屏预览已上传的图片 */
+  const handlePreviewImage = (index: number) => {
+    const len = Math.max(imagePaths.length, imageUrls.length)
+    const urls = Array.from({ length: len })
+      .map((_, i) => imageUrls[i] || imagePaths[i])
+      .filter(Boolean) as string[]
+    const current = urls[index]
+    if (urls.length > 0 && current) {
+      Taro.previewImage({ urls, current })
     }
+  }
+
+  const handleRemoveImage = (index: number) => {
+    const removedUrl = imageUrls[index]
+    const nextPaths = imagePaths.filter((_, i) => i !== index)
+    const nextUrls = imageUrls.filter((_, i) => i !== index)
+    setImagePaths(nextPaths)
+    setImageUrls(nextUrls)
+    setImageUrl(nextUrls[0] || '')
+    setSelectedRecord(null)
+    // 从缓存中移除对应结果
+    const newResultsMap = { ...analyzeResultsMap }
+    delete newResultsMap[removedUrl]
+    setAnalyzeResultsMap(newResultsMap)
+    aggregateFromMap(nextUrls, newResultsMap)
   }
 
   // 天地图地名搜索（通过后端代理）
@@ -279,9 +351,10 @@ export default function FoodLibrarySharePage() {
     setUserTags(userTags.filter(t => t !== tag))
   }
 
-  // 提交
+  /** 点击提交：校验后弹窗确认，用户确认后再提交 */
   const handleSubmit = async () => {
-    if (!imageUrl && !selectedRecord?.image_path) {
+    const hasImages = imageUrls.length > 0 || imageUrl || selectedRecord?.image_path
+    if (!hasImages) {
       Taro.showToast({ title: '请先选择或上传图片', icon: 'none' })
       return
     }
@@ -289,11 +362,20 @@ export default function FoodLibrarySharePage() {
       Taro.showToast({ title: '请填写食物名称', icon: 'none' })
       return
     }
-    if (!merchantName.trim()) {
-      Taro.showToast({ title: '请填写商家名称', icon: 'none' })
-      return
-    }
 
+    const { confirm } = await Taro.showModal({
+      title: '确认提交',
+      content: '确定要将该食物分享到公共食物库吗？提交后其他用户可查看。',
+      confirmText: '确定提交',
+      cancelText: '取消'
+    })
+    if (!confirm) return
+
+    await doSubmit()
+  }
+
+  /** 实际执行提交到公共库 */
+  const doSubmit = async () => {
     setSubmitting(true)
     try {
       // 构建完整的商家地址
@@ -303,9 +385,10 @@ export default function FoodLibrarySharePage() {
         district,
         detailAddress
       ].filter(Boolean).join(' ').trim()
-      
+
       await createPublicFoodLibraryItem({
         image_path: imageUrl || selectedRecord?.image_path || undefined,
+        image_paths: imageUrls.length > 0 ? imageUrls : undefined,
         source_record_id: selectedRecord?.id,
         total_calories: totalCalories,
         total_protein: totalProtein,
@@ -315,7 +398,7 @@ export default function FoodLibrarySharePage() {
         description,
         insight,
         food_name: foodName.trim(),
-        merchant_name: merchantName.trim(),
+        merchant_name: merchantName.trim() || undefined,
         merchant_address: fullAddress || undefined,
         taste_rating: tasteRating > 0 ? tasteRating : undefined,
         suitable_for_fat_loss: suitableForFatLoss,
@@ -329,6 +412,7 @@ export default function FoodLibrarySharePage() {
         detail_address: detailAddress.trim() || undefined
       })
       Taro.showToast({ title: '分享成功', icon: 'success' })
+      Taro.setStorageSync('food_library_need_refresh', '1')
       setTimeout(() => {
         Taro.navigateBack()
       }, 1500)
@@ -339,7 +423,9 @@ export default function FoodLibrarySharePage() {
     }
   }
 
-  const canSubmit = (imageUrl || selectedRecord?.image_path) && foodName.trim() && merchantName.trim() && !submitting && !analyzing
+  const hasImages = imageUrls.length > 0 || imageUrl || selectedRecord?.image_path
+  const canSubmit = hasImages && foodName.trim() && !submitting && !analyzing
+  const displayLength = Math.max(imagePaths.length, imageUrls.length)
 
   return (
     <View className="share-page">
@@ -364,22 +450,41 @@ export default function FoodLibrarySharePage() {
         </View>
       </View>
 
-      {/* 图片区域 */}
+      {/* 图片区域：最多 3 张，每张识别后叠加计算 */}
       <View className="image-section">
         <Text className="section-title">
           食物图片 <Text className="required">*</Text>
+          {displayLength > 0 && <Text className="image-count">（{displayLength}/3）</Text>}
         </Text>
-        {imageUrl || imagePath ? (
-          <Image
-            className="preview-image"
-            src={imageUrl || imagePath}
-            mode="aspectFill"
-            onClick={handleChooseImage}
-          />
+        {displayLength > 0 ? (
+          <View className="share-image-grid">
+            {Array.from({ length: displayLength }).map((_, index) => (
+              <View key={index} className="share-grid-item">
+                <Image
+                  src={imageUrls[index] || imagePaths[index]}
+                  mode="aspectFill"
+                  className="share-grid-image"
+                  onClick={() => handlePreviewImage(index)}
+                />
+                <View
+                  className="share-remove-btn"
+                  onClick={(e) => { e.stopPropagation(); handleRemoveImage(index) }}
+                >
+                  <Text className="share-close-icon">×</Text>
+                </View>
+              </View>
+            ))}
+            {displayLength < MAX_IMAGES && (
+              <View className="share-grid-item share-add-btn" onClick={handleChooseImage}>
+                <Text className="share-add-icon">+</Text>
+                <Text className="share-add-text">添加</Text>
+              </View>
+            )}
+          </View>
         ) : (
           <View className="image-upload-area" onClick={handleChooseImage}>
             <Text className="upload-icon iconfont icon-paizhao-xianxing" />
-            <Text className="upload-text">点击上传食物图片</Text>
+            <Text className="upload-text">点击上传食物图片（最多 3 张，每张识别后叠加计算）</Text>
           </View>
         )}
       </View>
@@ -423,9 +528,7 @@ export default function FoodLibrarySharePage() {
           />
         </View>
         <View className="form-item">
-          <Text className="form-label">
-            商家名称 <Text className="required">*</Text>
-          </Text>
+          <Text className="form-label">商家名称（可选）</Text>
           <Input
             className="form-input"
             placeholder="如：沙县小吃、肯德基等"
@@ -523,18 +626,6 @@ export default function FoodLibrarySharePage() {
             value={detailAddress}
             onInput={e => setDetailAddress(e.detail.value)}
           />
-        </View>
-        <View className="form-item">
-          {latitude && longitude ? (
-            <View className="location-info">
-              <Text className="location-text"><Text className="iconfont icon-dizhi" /> 已获取位置 ({latitude.toFixed(4)}, {longitude.toFixed(4)})</Text>
-            </View>
-          ) : (
-            <View className="location-btn" onClick={handleGetLocation}>
-              <Text className="location-icon iconfont icon-dizhi" />
-              <Text>获取当前位置</Text>
-            </View>
-          )}
         </View>
       </View>
 

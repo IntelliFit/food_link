@@ -1,8 +1,9 @@
 import { View, Text, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { getStatsSummary, type StatsSummary } from '../../utils/api'
-
+import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
+import '../../assets/iconfont/iconfont.css'
 import './index.scss'
 
 const MEAL_NAMES: Record<string, string> = {
@@ -10,6 +11,20 @@ const MEAL_NAMES: Record<string, string> = {
   lunch: '午餐',
   dinner: '晚餐',
   snack: '加餐'
+}
+
+const MEAL_ICONS = {
+  breakfast: IconBreakfast,
+  lunch: IconLunch,
+  dinner: IconDinner,
+  snack: IconSnack
+} as const
+
+const MEAL_ICON_COLORS: Record<string, string> = {
+  breakfast: '#f59e0b',
+  lunch: '#00bc7d',
+  dinner: '#2b7fff',
+  snack: '#ad46ff'
 }
 
 export default function StatsPage() {
@@ -41,10 +56,15 @@ export default function StatsPage() {
     fetchStats(range)
   }, [range, fetchStats])
 
+  useDidShow(() => {
+    fetchStats(range)
+  })
+
   if (loading && !data) {
     return (
       <View className='stats-page'>
         <View className='loading-wrap'>
+          <Text className='iconfont icon-jiazaixiao loading-icon' />
           <Text className='loading-text'>加载中...</Text>
         </View>
       </View>
@@ -55,6 +75,7 @@ export default function StatsPage() {
     return (
       <View className='stats-page'>
         <View className='error-wrap'>
+          <Text className='iconfont icon-jiesuo error-icon' />
           <Text className='error-text'>{error}</Text>
           <View className='btn-primary' onClick={() => fetchStats(range)}>
             <Text className='btn-text'>重试</Text>
@@ -81,18 +102,24 @@ export default function StatsPage() {
           <Text className='page-subtitle'>掌握您的热量收支与营养结构</Text>
         </View>
 
-        {/* 周/月切换 - Segmented Control */}
+        {/* 周/月切换 - Segmented Control，切换时显示加载 */}
         <View className='tabs-container'>
-          <View className='segmented-control'>
+          <View className={`segmented-control ${loading ? 'is-loading' : ''}`}>
+            {loading && (
+              <View className='tabs-loading'>
+                <Text className='iconfont icon-jiazaixiao tabs-loading-icon' />
+                <Text className='tabs-loading-text'>加载中</Text>
+              </View>
+            )}
             <View
               className={`segment-item ${range === 'week' ? 'active' : ''}`}
-              onClick={() => setRange('week')}
+              onClick={() => !loading && setRange('week')}
             >
               <Text>近一周</Text>
             </View>
             <View
               className={`segment-item ${range === 'month' ? 'active' : ''}`}
-              onClick={() => setRange('month')}
+              onClick={() => !loading && setRange('month')}
             >
               <Text>近一月</Text>
             </View>
@@ -104,7 +131,8 @@ export default function StatsPage() {
           <View className='hero-header'>
             <Text className='hero-title'>平均每日{isSurplus ? '盈余' : '缺口'}</Text>
             <View className='hero-badge'>
-              {isSurplus ? '⚠️ 热量超标' : '✅ 保持良好'}
+              <Text className={`iconfont ${isSurplus ? 'icon-huore' : 'icon-good'} hero-badge-icon`} />
+              <Text>{isSurplus ? '热量超标' : '保持良好'}</Text>
             </View>
           </View>
 
@@ -128,7 +156,9 @@ export default function StatsPage() {
 
         {/* 连续记录天数 - Streak Card */}
         <View className='stats-card streak-card'>
-          <View className='streak-icon'>🔥</View>
+          <View className='streak-icon'>
+            <Text className='iconfont icon-huore streak-icon-font' />
+          </View>
           <View className='streak-content'>
             <Text className='streak-title'>连续记录</Text>
             <View className='streak-number-row'>
@@ -142,16 +172,16 @@ export default function StatsPage() {
         </View>
 
         {/* 每日摄入趋势 - Bar Chart */}
-        {d.daily_calories.length > 0 && (
-          <View className='stats-card chart-card'>
-            <View className='card-header'>
-              <Text className='card-title'>摄入趋势</Text>
-            </View>
+        {/* 每日摄入趋势 - Bar Chart */}
+        <View className='stats-card chart-card'>
+          <View className='card-header'>
+            <Text className='iconfont icon-shangzhang chart-title-icon' />
+            <Text className='card-title'>摄入趋势</Text>
+          </View>
+          {d.daily_calories.length > 0 ? (
             <View className='bar-chart-container'>
               {d.daily_calories.slice(-7).map((item) => {
                 const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10);
-                const isToday = item.date === new Date().toISOString().split('T')[0]; // Simple check, might need improve
-                // Actually simplified date check for demo
                 return (
                   <View key={item.date} className='chart-col'>
                     <View className='bar-wrapper'>
@@ -165,19 +195,27 @@ export default function StatsPage() {
                 )
               })}
             </View>
-          </View>
-        )}
+          ) : (
+            <View className='chart-empty-state'>
+              <Text className='empty-text'>暂无数据</Text>
+            </View>
+          )}
+        </View>
 
         {/* 宏量营养素占比 - Macro Card */}
         <View className='stats-card macro-card'>
           <View className='card-header'>
+            <Text className='iconfont icon-tianpingzuo chart-title-icon' />
             <Text className='card-title'>营养素占比</Text>
           </View>
 
           <View className='macro-list'>
             <View className='macro-row'>
               <View className='macro-info'>
-                <Text className='macro-name'>蛋白质</Text>
+                <View className='macro-label-wrap'>
+                  <Text className='iconfont icon-danbaizhi macro-icon protein' />
+                  <Text className='macro-name'>蛋白质</Text>
+                </View>
                 <Text className='macro-detail'>{d.total_protein.toFixed(0)}g / {d.macro_percent.protein}%</Text>
               </View>
               <View className='progress-track'>
@@ -187,7 +225,10 @@ export default function StatsPage() {
 
             <View className='macro-row'>
               <View className='macro-info'>
-                <Text className='macro-name'>碳水化合物</Text>
+                <View className='macro-label-wrap'>
+                  <Text className='iconfont icon-tanshui-dabiao macro-icon carbs' />
+                  <Text className='macro-name'>碳水化合物</Text>
+                </View>
                 <Text className='macro-detail'>{d.total_carbs.toFixed(0)}g / {d.macro_percent.carbs}%</Text>
               </View>
               <View className='progress-track'>
@@ -197,7 +238,10 @@ export default function StatsPage() {
 
             <View className='macro-row'>
               <View className='macro-info'>
-                <Text className='macro-name'>脂肪</Text>
+                <View className='macro-label-wrap'>
+                  <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin macro-icon fat' />
+                  <Text className='macro-name'>脂肪</Text>
+                </View>
                 <Text className='macro-detail'>{d.total_fat.toFixed(0)}g / {d.macro_percent.fat}%</Text>
               </View>
               <View className='progress-track'>
@@ -208,18 +252,20 @@ export default function StatsPage() {
         </View>
 
         {/* 饮食结构 - Meal Structure */}
-        <View className='stats-card'>
+        <View className='stats-card meal-structure-card'>
           <View className='card-header'>
+            <Text className='iconfont icon-canciguanli chart-title-icon' />
             <Text className='card-title'>餐次结构</Text>
           </View>
           <View className='meal-grid'>
             {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((key) => {
               const cal = d.by_meal[key];
               const pct = d.avg_calories_per_day > 0 ? (cal / d.avg_calories_per_day) * 100 : 0;
+              const MealIcon = MEAL_ICONS[key];
               return (
                 <View key={key} className='meal-item'>
-                  <View className='meal-icon-box'>
-                    <Text>{MEAL_NAMES[key].slice(0, 1)}</Text>
+                  <View className='meal-icon-box' style={{ backgroundColor: `${MEAL_ICON_COLORS[key]}14` }}>
+                    <MealIcon size={36} color={MEAL_ICON_COLORS[key]} />
                   </View>
                   <View className='meal-data'>
                     <Text className='meal-name'>{MEAL_NAMES[key]}</Text>
@@ -238,7 +284,7 @@ export default function StatsPage() {
         {d.analysis_summary && (
           <View className='stats-card analysis-card'>
             <View className='card-header'>
-              <Text className='card-title'>💡 AI 营养洞察</Text>
+              <Text className='card-title'>AI 营养洞察</Text>
             </View>
             <Text className='analysis-content'>{d.analysis_summary}</Text>
           </View>

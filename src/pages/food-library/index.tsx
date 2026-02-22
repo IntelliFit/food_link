@@ -4,6 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
   getPublicFoodLibraryList,
+  getPublicFoodLibraryCollections,
   likePublicFoodLibraryItem,
   unlikePublicFoodLibraryItem,
   collectPublicFoodLibraryItem,
@@ -11,6 +12,8 @@ import {
   type PublicFoodLibraryItem
 } from '../../utils/api'
 import { Star, StarOutlined } from '@taroify/icons'
+import { Divider } from '@taroify/core'
+import '@taroify/core/divider/style'
 import './index.scss'
 
 // 缓存键名常量
@@ -23,10 +26,15 @@ const CACHE_KEYS = {
 // 缓存有效期（5分钟）
 const CACHE_DURATION = 5 * 60 * 1000
 
+type TabMode = 'all' | 'collections'
+
 export default function FoodLibraryPage() {
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
+  const [tabMode, setTabMode] = useState<TabMode>('all')
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<PublicFoodLibraryItem[]>([])
+  const [collectionList, setCollectionList] = useState<PublicFoodLibraryItem[]>([])
+  const [collectionLoading, setCollectionLoading] = useState(false)
   const [sortBy, setSortBy] = useState<'latest' | 'hot' | 'rating'>('latest')
   const [filterFatLoss, setFilterFatLoss] = useState<boolean | undefined>(undefined)
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -148,10 +156,44 @@ export default function FoodLibraryPage() {
     }
   }, [sortBy, filterFatLoss, searchMerchant, saveToCache])
 
+  /** 加载收藏夹列表，force=true 时忽略缓存强制请求 */
+  const loadCollectionList = useCallback(async (force = false) => {
+    if (!getAccessToken()) return
+    if (!force && collectionList.length > 0) return
+    setCollectionLoading(true)
+    try {
+      const res = await getPublicFoodLibraryCollections()
+      setCollectionList(res.list || [])
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '加载收藏失败', icon: 'none' })
+    } finally {
+      setCollectionLoading(false)
+    }
+  }, [])
+
+  // 从分享页提交成功返回时需强制刷新列表
+  const NEED_REFRESH_KEY = 'food_library_need_refresh'
+
   // 【核心优化】智能加载策略
   useDidShow(() => {
     setLoggedIn(!!getAccessToken())
     if (!getAccessToken()) return
+
+    const needRefreshFromShare = Taro.getStorageSync(NEED_REFRESH_KEY)
+    if (needRefreshFromShare) {
+      try { Taro.removeStorageSync(NEED_REFRESH_KEY) } catch (_) {}
+      if (tabMode === 'collections') {
+        loadCollectionList(true)
+      } else {
+        loadList(true, true)
+      }
+      return
+    }
+
+    if (tabMode === 'collections') {
+      loadCollectionList(true)
+      return
+    }
 
     // 1. 立即从缓存加载数据
     const hasCache = loadFromCache()
@@ -177,13 +219,13 @@ export default function FoodLibraryPage() {
     }
   })
 
-  // 筛选条件变化时刷新（清除缓存）
+  // 筛选条件变化时刷新（仅全部列表）
   useEffect(() => {
-    if (loggedIn) {
+    if (loggedIn && tabMode === 'all') {
       clearCache()
       loadList(false, true)
     }
-  }, [sortBy, filterFatLoss, searchMerchant, loggedIn])
+  }, [sortBy, filterFatLoss, searchMerchant, loggedIn, tabMode])
 
   // 下拉刷新处理
   const handleRefresherRefresh = useCallback(() => {
@@ -192,8 +234,12 @@ export default function FoodLibraryPage() {
       return
     }
     setRefreshing(true)
-    loadList(false, true) // 强制刷新
-  }, [loadList])
+    if (tabMode === 'collections') {
+      loadCollectionList(true).finally(() => setRefreshing(false))
+    } else {
+      loadList(false, true)
+    }
+  }, [loadList, tabMode, loadCollectionList])
 
   // 搜索
   const handleSearch = () => {
@@ -234,7 +280,9 @@ export default function FoodLibraryPage() {
   const handleCollect = async (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation()
 
-    // 1. 乐观更新：立即更新 UI
+    const isUncollect = item.collected
+
+    // 1. 乐观更新：全部列表
     const newList = list.map(it =>
       it.id === item.id
         ? {
@@ -247,6 +295,11 @@ export default function FoodLibraryPage() {
     setList(newList)
     saveToCache(newList)
 
+    // 收藏夹内取消收藏：从收藏夹列表移除
+    if (tabMode === 'collections' && isUncollect) {
+      setCollectionList(prev => prev.filter(it => it.id !== item.id))
+    }
+
     // 2. 后台发送请求
     try {
       if (item.collected) {
@@ -255,9 +308,11 @@ export default function FoodLibraryPage() {
         await collectPublicFoodLibraryItem(item.id)
       }
     } catch (e: any) {
-      // 3. 失败则回滚
       setList(list)
       saveToCache(list)
+      if (tabMode === 'collections' && isUncollect) {
+        setCollectionList(prev => [...prev, item])
+      }
       Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
     }
   }
@@ -288,57 +343,83 @@ export default function FoodLibraryPage() {
     )
   }
 
+  const displayList = tabMode === 'all' ? list : collectionList
+  const isLoading = tabMode === 'all' ? loading : collectionLoading
+
   return (
     <View className="food-library-page">
-      {/* 筛选区 */}
-      <View className="filter-section">
-        <View className="filter-row">
-          <View
-            className={`filter-tag ${filterFatLoss === undefined ? 'active' : ''}`}
-            onClick={() => setFilterFatLoss(undefined)}
-          >
-            全部
-          </View>
-          <View
-            className={`filter-tag ${filterFatLoss === true ? 'active' : ''}`}
-            onClick={() => setFilterFatLoss(true)}
-          >
-            适合减脂
-          </View>
+      {/* Tab：全部 / 收藏夹 */}
+      <View className="tab-section">
+        <View
+          className={`tab-item ${tabMode === 'all' ? 'active' : ''}`}
+          onClick={() => setTabMode('all')}
+        >
+          全部
         </View>
-        <View className="search-row">
-          <Input
-            className="search-input"
-            placeholder="搜索商家名称"
-            value={searchKeyword}
-            onInput={e => setSearchKeyword(e.detail.value)}
-            onConfirm={handleSearch}
-          />
-          <Button className="search-btn" onClick={handleSearch}>搜索</Button>
+        <View
+          className={`tab-item ${tabMode === 'collections' ? 'active' : ''}`}
+          onClick={() => {
+            setTabMode('collections')
+            loadCollectionList(true)
+          }}
+        >
+          收藏夹
         </View>
       </View>
 
-      {/* 排序区 */}
-      <View className="sort-section">
-        <View
-          className={`sort-item ${sortBy === 'latest' ? 'active' : ''}`}
-          onClick={() => setSortBy('latest')}
-        >
-          最新
+      {/* 筛选区（仅全部时显示） */}
+      {tabMode === 'all' && (
+        <View className="filter-section">
+          <View className="filter-row">
+            <View
+              className={`filter-tag ${filterFatLoss === undefined ? 'active' : ''}`}
+              onClick={() => setFilterFatLoss(undefined)}
+            >
+              全部
+            </View>
+            <View
+              className={`filter-tag ${filterFatLoss === true ? 'active' : ''}`}
+              onClick={() => setFilterFatLoss(true)}
+            >
+              适合减脂
+            </View>
+          </View>
+          <View className="search-row">
+            <Input
+              className="search-input"
+              placeholder="搜索商家名称"
+              value={searchKeyword}
+              onInput={e => setSearchKeyword(e.detail.value)}
+              onConfirm={handleSearch}
+            />
+            <Button className="search-btn" onClick={handleSearch}>搜索</Button>
+          </View>
         </View>
-        <View
-          className={`sort-item ${sortBy === 'hot' ? 'active' : ''}`}
-          onClick={() => setSortBy('hot')}
-        >
-          最热
+      )}
+
+      {/* 排序区（仅全部时显示） */}
+      {tabMode === 'all' && (
+        <View className="sort-section">
+          <View
+            className={`sort-item ${sortBy === 'latest' ? 'active' : ''}`}
+            onClick={() => setSortBy('latest')}
+          >
+            最新
+          </View>
+          <View
+            className={`sort-item ${sortBy === 'hot' ? 'active' : ''}`}
+            onClick={() => setSortBy('hot')}
+          >
+            最热
+          </View>
+          <View
+            className={`sort-item ${sortBy === 'rating' ? 'active' : ''}`}
+            onClick={() => setSortBy('rating')}
+          >
+            评分
+          </View>
         </View>
-        <View
-          className={`sort-item ${sortBy === 'rating' ? 'active' : ''}`}
-          onClick={() => setSortBy('rating')}
-        >
-          评分
-        </View>
-      </View>
+      )}
 
       {/* 列表 */}
       <ScrollView
@@ -352,7 +433,8 @@ export default function FoodLibraryPage() {
         refresherDefaultStyle='black'
       >
         <View className="list-content">
-          {showSkeleton ? (
+          <Divider className="refresh-divider">下拉刷新</Divider>
+          {tabMode === 'all' && showSkeleton ? (
             // 骨架屏
             <View className="skeleton-container">
               {[1, 2, 3].map(i => (
@@ -366,18 +448,24 @@ export default function FoodLibraryPage() {
                 </View>
               ))}
             </View>
-          ) : loading && list.length === 0 ? (
+          ) : isLoading && displayList.length === 0 ? (
             <View className="loading-state">
               <Text className="loading-text">加载中...</Text>
             </View>
-          ) : list.length === 0 ? (
+          ) : tabMode === 'collections' && displayList.length === 0 ? (
+            <View className="empty-state">
+              <Text className="empty-icon iconfont icon-shoucang-yishoucang" />
+              <Text className="empty-text">暂无收藏，去逛逛收藏喜欢的餐食</Text>
+              <View className="empty-btn" onClick={() => setTabMode('all')}>去逛逛</View>
+            </View>
+          ) : displayList.length === 0 ? (
             <View className="empty-state">
               <Text className="empty-icon iconfont icon-shiwu" />
               <Text className="empty-text">暂无内容，快来分享第一份健康餐吧</Text>
               <View className="empty-btn" onClick={goShare}>去分享</View>
             </View>
           ) : (
-            list.map(item => (
+            displayList.map(item => (
               <View key={item.id} className="food-card" onClick={() => goDetail(item.id)}>
                 <View className="food-image-wrap">
                   {item.image_path ? (

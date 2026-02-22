@@ -26,6 +26,7 @@ export interface AnalyzeRequest {
   activity_timing?: ActivityTiming
   remaining_calories?: number
   meal_type?: MealType
+  is_multi_view?: boolean
 }
 
 // 营养成分接口
@@ -37,6 +38,7 @@ export interface Nutrients {
   fiber: number
   sugar: number
 }
+
 
 // 食物项接口
 export interface FoodItem {
@@ -221,6 +223,7 @@ export interface LoginResponse {
   phoneNumber?: string
   purePhoneNumber?: string
   countryCode?: string
+  diet_goal?: string
 }
 
 // 用户信息接口
@@ -264,6 +267,7 @@ export interface HealthProfile {
   bmr?: number | null
   tdee?: number | null
   onboarding_completed?: boolean
+  diet_goal?: string | null
 }
 
 /** 提交健康档案问卷请求 */
@@ -280,6 +284,7 @@ export interface HealthProfileUpdateRequest {
   report_extract?: Record<string, unknown>
   /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
   report_image_url?: string
+  diet_goal?: string
 }
 
 // 更新用户信息请求接口
@@ -488,6 +493,7 @@ export interface AnalyzeTaskSubmitParams {
   remaining_calories?: number
   additionalContext?: string
   modelName?: string
+  is_multi_view?: boolean
 }
 
 export interface AnalysisTask {
@@ -794,6 +800,13 @@ export async function login(code: string, phoneCode?: string): Promise<LoginResp
 
     // 保存 token 到本地存储
     saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
+
+    // 缓存用户目标
+    if (loginData.diet_goal) {
+      Taro.setStorageSync('dietGoal', loginData.diet_goal)
+    } else {
+      Taro.removeStorageSync('dietGoal')
+    }
 
     return loginData
   } catch (error: any) {
@@ -1187,6 +1200,8 @@ export interface PublicFoodLibraryItem {
   user_id: string
   source_record_id?: string | null
   image_path?: string | null
+  /** 多图 URL 列表，展示时优先于 image_path */
+  image_paths?: string[] | null
   total_calories: number
   total_protein: number
   total_carbs: number
@@ -1244,6 +1259,8 @@ export interface PublicFoodLibraryComment {
 /** 创建公共食物库条目请求 */
 export interface CreatePublicFoodLibraryRequest {
   image_path?: string
+  /** 多图 URL 列表，优先于 image_path */
+  image_paths?: string[]
   source_record_id?: string
   total_calories?: number
   total_protein?: number
@@ -1321,6 +1338,15 @@ export async function getMyPublicFoodLibrary(): Promise<{ list: PublicFoodLibrar
   const response = await authenticatedRequest('/api/public-food-library/mine', { method: 'GET', timeout: 10000 })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取失败')
+  }
+  return response.data as { list: PublicFoodLibraryItem[] }
+}
+
+/** 获取当前用户收藏的公共食物库条目（收藏夹） */
+export async function getPublicFoodLibraryCollections(): Promise<{ list: PublicFoodLibraryItem[] }> {
+  const response = await authenticatedRequest('/api/public-food-library/collections', { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取收藏列表失败')
   }
   return response.data as { list: PublicFoodLibraryItem[] }
 }

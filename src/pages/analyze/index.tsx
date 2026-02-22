@@ -1,7 +1,8 @@
-import { View, Text, Image, Textarea, Switch } from '@tarojs/components'
+import { View, Text, Image, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { imageToBase64, uploadAnalyzeImage, analyzeFoodImageCompare, submitAnalyzeTask, getAccessToken, CompareAnalyzeResponse, MealType, DietGoal, ActivityTiming } from '../../utils/api'
+import { Switch } from '@taroify/core'
+import { imageToBase64, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
 
 import './index.scss'
 
@@ -35,12 +36,33 @@ export default function AnalyzePage() {
   const [mealType, setMealType] = useState<MealType>('breakfast')
   const [dietGoal, setDietGoal] = useState<DietGoal>('none')
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
+  const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  // 双模型对比模式开关
-  const [compareMode, setCompareMode] = useState(false)
 
   useEffect(() => {
-    // 从本地存储获取图片路径
+    // 1. 获取饮食目标
+    const initDietGoal = async () => {
+      try {
+        const cachedGoal = Taro.getStorageSync('dietGoal')
+        if (cachedGoal) {
+          setDietGoal(cachedGoal as DietGoal)
+        } else {
+          // 本地无缓存，尝试请求
+          if (getAccessToken()) {
+            const profile = await getHealthProfile()
+            if (profile.diet_goal) {
+              setDietGoal(profile.diet_goal as DietGoal)
+              Taro.setStorageSync('dietGoal', profile.diet_goal)
+            }
+          }
+        }
+      } catch (err) {
+        console.error('初始化饮食目标失败:', err)
+      }
+    }
+    initDietGoal()
+
+    // 2. 从本地存储获取图片路径 (用于拍照后的跳转)
     try {
       const storedPath = Taro.getStorageSync('analyzeImagePath')
       if (storedPath) {
@@ -106,35 +128,8 @@ export default function AnalyzePage() {
         imageUrls.push(imageUrl)
       }
 
-      // 兼容旧接口，取第一张作为 primary
       const primaryImageUrl = imageUrls[0]
 
-      if (compareMode) {
-        Taro.showLoading({ title: '双模型对比分析中...', mask: true })
-        // 注意：目前 compare 接口后端主要使用 image_url，若需支持多图需后端 analyze_food_compare 支持
-        // 这里传入 image_urls，若后端支持则会使用
-        const compareResult: CompareAnalyzeResponse = await analyzeFoodImageCompare({
-          image_url: primaryImageUrl,
-          image_urls: imageUrls,
-          additionalContext: additionalInfo,
-          modelName: 'qwen-vl-max',
-          meal_type: mealType,
-          diet_goal: dietGoal,
-          activity_timing: activityTiming
-        })
-        // 存储第一张用于展示，或者 stored result 里包含 items
-        Taro.setStorageSync('analyzeImagePath', primaryImageUrl)
-        Taro.setStorageSync('analyzeCompareResult', JSON.stringify(compareResult))
-        Taro.setStorageSync('analyzeCompareMode', true)
-        Taro.setStorageSync('analyzeMealType', mealType)
-        Taro.setStorageSync('analyzeDietGoal', dietGoal)
-        Taro.setStorageSync('analyzeActivityTiming', activityTiming)
-        Taro.hideLoading()
-        Taro.redirectTo({ url: '/pages/result/index' })
-        return
-      }
-
-      // 普通模式：提交异步任务，进入加载页等待
       Taro.showLoading({ title: '提交任务...', mask: true })
       const { task_id } = await submitAnalyzeTask({
         image_url: primaryImageUrl,
@@ -143,7 +138,8 @@ export default function AnalyzePage() {
         diet_goal: dietGoal,
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
-        modelName: 'qwen-vl-max'
+        modelName: 'gemini',
+        is_multi_view: isMultiView
       })
       Taro.hideLoading()
       Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}` })
@@ -232,7 +228,6 @@ export default function AnalyzePage() {
       {/* 餐次（AI 将结合餐次分析） */}
       <View className='meal-section'>
         <View className='section-header'>
-
           <Text className='section-title'>餐次</Text>
         </View>
         <Text className='section-hint'>
@@ -250,6 +245,24 @@ export default function AnalyzePage() {
             </View>
           ))}
         </View>
+      </View>
+
+      {/* 多视角辅助模式 */}
+      <View className='multiview-section'>
+        <View className='section-header-row'>
+          <View>
+            <Text className='section-title'>多视角辅助模式</Text>
+            <Text className='section-subtitle'>Multi-view Assist Mode</Text>
+          </View>
+          <Switch
+            checked={isMultiView}
+            onChange={setIsMultiView}
+            style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+          />
+        </View>
+        <Text className='section-hint'>
+          开启后，模型将把上传的多张图片视为同一食物的不同视角，有助于更精准地估算分量。
+        </Text>
       </View>
 
       {/* 饮食目标（状态一） */}
@@ -295,25 +308,6 @@ export default function AnalyzePage() {
               <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
-        </View>
-      </View>
-
-      {/* 双模型对比模式 */}
-      <View className='compare-section'>
-        <View className='section-header'>
-
-          <Text className='section-title'>模型对比</Text>
-        </View>
-        <View className='compare-toggle'>
-          <View className='compare-info'>
-            <Text className='compare-label'>启用双模型对比</Text>
-            <Text className='compare-hint'>同时使用千问和 Gemini 分析，对比结果</Text>
-          </View>
-          <Switch
-            checked={compareMode}
-            onChange={(e) => setCompareMode(e.detail.value)}
-            color='#00bc7d'
-          />
         </View>
       </View>
 

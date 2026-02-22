@@ -676,6 +676,25 @@ def get_analysis_task_by_id_sync(task_id: str) -> Optional[Dict[str, Any]]:
         raise
 
 
+async def get_analysis_tasks_by_ids(task_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """按 ID 列表批量查询分析任务，返回 task_id -> task 字典。用于给记录列表补全 image_paths。"""
+    if not task_ids:
+        return {}
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        r = supabase.table("analysis_tasks").select("id, image_paths, image_url").in_("id", task_ids).execute()
+        out = {}
+        for row in (r.data or []):
+            tid = row.get("id")
+            if tid:
+                out[tid] = row
+        return out
+    except Exception as e:
+        print(f"[get_analysis_tasks_by_ids] 错误: {e}")
+        return {}
+
+
 def list_analysis_tasks_by_user_sync(
     user_id: str,
     task_type: Optional[str] = None,
@@ -1401,6 +1420,7 @@ async def list_feed_comments(record_id: str, limit: int = 50) -> List[Dict[str, 
 async def create_public_food_library_item(
     user_id: str,
     image_path: Optional[str] = None,
+    image_paths: Optional[List[str]] = None,
     source_record_id: Optional[str] = None,
     total_calories: float = 0,
     total_protein: float = 0,
@@ -1427,9 +1447,12 @@ async def create_public_food_library_item(
     """
     check_supabase_configured()
     supabase = get_supabase_client()
+    paths = image_paths if image_paths else ([image_path] if image_path else [])
+    first_path = paths[0] if paths else image_path
     row = {
         "user_id": user_id,
-        "image_path": image_path,
+        "image_path": first_path,
+        "image_paths": paths,
         "source_record_id": source_record_id,
         "total_calories": total_calories,
         "total_protein": total_protein,
@@ -1610,20 +1633,48 @@ async def get_public_food_library_collections_for_items(item_ids: List[str], cur
     supabase = get_supabase_client()
     try:
         # collection_count 已在主表中维护，这里主要查当前用户是否收藏
-        # 不过为了统一接口，也可以查 count，但主表已有 count 字段，这里仅查 collected 状态即可
-        # 为保持一致性，我们还是返回 { count, collected }，count 从主表拿，collected 从关联表拿
-        
-        # 1. 查当前用户的收藏
         my = supabase.table("public_food_library_collections").select("library_item_id").eq("user_id", current_user_id).in_("library_item_id", item_ids).execute()
         my_set = {m["library_item_id"] for m in (my.data or [])}
-        
-        # 2. count 直接用主表的 collection_count 字段，这里仅返回 collected 状态辅助主流程
-        # 或者为了接口一致性，返回 count (但需从主表查，已有 list_public_food_library 查了)
-        # 这里仅返回 collected 状态 map: { item_id: boolean } 
-        # 但为了函数签名一致性，返回 { item_id: { collected: bool } }
         return {iid: {"collected": iid in my_set} for iid in item_ids}
     except Exception as e:
         print(f"[get_public_food_library_collections_for_items] 错误: {e}")
+        raise
+
+
+async def list_collected_public_food_library(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """获取当前用户收藏的公共食物库条目（按收藏时间倒序）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        rows = (
+            supabase.table("public_food_library_collections")
+            .select("library_item_id, created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        data = list(rows.data or [])
+        if not data:
+            return []
+        item_ids_ordered = [r["library_item_id"] for r in data]
+        # 只查已发布的
+        result = (
+            supabase.table("public_food_library")
+            .select("*")
+            .in_("id", item_ids_ordered)
+            .eq("status", "published")
+            .execute()
+        )
+        items_by_id = {it["id"]: it for it in (result.data or [])}
+        # 按收藏顺序返回，已删除或未发布的条目跳过
+        out = []
+        for iid in item_ids_ordered:
+            if iid in items_by_id:
+                out.append(items_by_id[iid])
+        return out
+    except Exception as e:
+        print(f"[list_collected_public_food_library] 错误: {e}")
         raise
 
 

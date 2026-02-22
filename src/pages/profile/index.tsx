@@ -34,6 +34,17 @@ interface UserInfo {
   meta: string
 }
 
+/** 注册时间格式化为 YYYY-MM-DD */
+function formatRegisterDate(value: string | undefined | null): string {
+  if (!value) return '--'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '--'
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export default function ProfilePage() {
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -47,7 +58,7 @@ export default function ProfilePage() {
 
   // 用户信息
   const [userInfo, setUserInfo] = useState<UserInfo>({
-    avatar: '👤',
+    avatar: '',
     name: '用户昵称',
     meta: '已记录 0 天'
   })
@@ -57,6 +68,7 @@ export default function ProfilePage() {
 
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
+  const [registerDate, setRegisterDate] = useState('--')
 
   // 每次显示页面时检查登录状态并刷新数据
   useDidShow(() => {
@@ -83,14 +95,25 @@ export default function ProfilePage() {
           }
 
           setUserInfo({
-            avatar: apiUserInfo.avatar || '👤',
+            avatar: apiUserInfo.avatar || '',
             name: apiUserInfo.nickname || '用户昵称',
             meta: `已记录 ${days} 天`
           })
-          setOnboardingCompleted(apiUserInfo.onboarding_completed ?? true)
+          const registerTime = apiUserInfo.create_time || Taro.getStorageSync('userRegisterTime') || ''
+          if (apiUserInfo.create_time) {
+            Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
+          }
+          setRegisterDate(formatRegisterDate(registerTime))
+          const completed = apiUserInfo.onboarding_completed ?? true
+          setOnboardingCompleted(completed)
+          // 首次登录未填写健康档案时，先跳转到答题页面
+          if (!completed) {
+            Taro.redirectTo({ url: '/pages/health-profile/index' })
+            return
+          }
           // 同步到 storage
           Taro.setStorageSync('userInfo', {
-            avatar: apiUserInfo.avatar || '👤',
+            avatar: apiUserInfo.avatar || '',
             name: apiUserInfo.nickname || '用户昵称',
             meta: `已记录 ${days} 天`
           })
@@ -101,14 +124,16 @@ export default function ProfilePage() {
           if (storedUserInfo) {
             setUserInfo(storedUserInfo)
           }
+          setRegisterDate(formatRegisterDate(Taro.getStorageSync('userRegisterTime') || ''))
         }
       } else {
         setIsLoggedIn(false)
         setUserInfo({
-          avatar: '👤',
+          avatar: '',
           name: '用户昵称',
           meta: '已记录 0 天'
         })
+        setRegisterDate('--')
       }
     } catch (error) {
       console.error('读取登录状态失败:', error)
@@ -126,7 +151,7 @@ export default function ProfilePage() {
     {
       id: 1,
       icon: <NotesOutlined size="32" />,
-      title: '我的食谱',
+      title: '收藏餐食',
       desc: '常吃的食物组合，一键记录',
       path: '/pages/recipes/index'
     },
@@ -298,10 +323,12 @@ export default function ProfilePage() {
             clearAllStorage()
             setIsLoggedIn(false)
             setUserInfo({
-              avatar: '👤',
+              avatar: '',
               name: '用户昵称',
               meta: '已记录 0 天'
             })
+            setRegisterDate('--')
+            Taro.removeStorageSync('userRegisterTime')
             Taro.showToast({ title: '已退出登录', icon: 'success' })
           } catch (error) {
             console.error('退出登录失败:', error)
@@ -329,7 +356,7 @@ export default function ProfilePage() {
                   className='user-avatar-image'
                 />
               ) : (
-                <Text className='user-avatar'>{userInfo.avatar}</Text>
+                <Text className='iconfont icon-weidenglu user-avatar-icon' />
               )}
             </View>
             <View className='user-text-info'>
@@ -358,31 +385,32 @@ export default function ProfilePage() {
           </View>
         </View>
 
-        {/* 第二行：会员卡片 */}
-        <View className='member-card'>
-          <View className='card-header'>
-            <View>
-              <Text className='card-validity'>有效期至 2026-02-08</Text>
-              <Text className='card-title'>食探会员</Text>
-            </View>
-            <View className='card-btn'>会员权益</View>
-          </View>
-
-          <View className='card-body'>
-            <View className='progress-info'>
-              <Text className='progress-text'>{recordDays}/365</Text>
-              <View className='progress-bar'>
-                <View className='progress-inner' style={{ width: `${Math.min((recordDays / 365) * 100, 100)}%` }}></View>
+        {/* 第二行：会员卡片（仅登录后展示） */}
+        {isLoggedIn && (
+          <View className='member-card'>
+            <View className='card-header'>
+              <View>
+                <Text className='card-validity'>注册时间 {registerDate}</Text>
+                <Text className='card-title'>食探会员</Text>
               </View>
             </View>
-            <Text className='card-tip'>再记录 {365 - recordDays > 0 ? 365 - recordDays : 0} 天可升级为大会员 {'>'}</Text>
-          </View>
 
-          <View className='card-bg-icon'>
-            {/* 装饰背景图标 */}
-            <ShieldOutlined size="120" color="rgba(255,255,255,0.1)" />
+            <View className='card-body'>
+              <View className='progress-info'>
+                <Text className='progress-text'>{recordDays}/365</Text>
+                <View className='progress-bar'>
+                  <View className='progress-inner' style={{ width: `${Math.min((recordDays / 365) * 100, 100)}%` }}></View>
+                </View>
+              </View>
+              <Text className='card-tip'>您已在食探记录了 {recordDays} 天</Text>
+            </View>
+
+            <View className='card-bg-icon'>
+              {/* 装饰背景图标 */}
+              <ShieldOutlined size="120" color="rgba(255,255,255,0.1)" />
+            </View>
           </View>
-        </View>
+        )}
 
         {/* 服务网格 (原 services 列表) */}
         <View className='services-grid'>

@@ -49,6 +49,97 @@
   color: #6a7282;
 }
 
+.share-preview-swiper {
+  width: 100%;
+  height: 320rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.share-preview-swiper .taro-swiper-slide,
+.share-preview-swiper swiper-item {
+  height: 100%;
+}
+
+.image-count {
+  color: #6b7280;
+  font-size: 24rpx;
+  font-weight: normal;
+  margin-left: 8rpx;
+}
+
+/* 图片网格（最多 3 张，每张识别后叠加） */
+.share-image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+}
+
+.share-grid-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%;
+  border-radius: 16rpx;
+  overflow: hidden;
+  background: #f3f4f6;
+
+  &.share-add-btn {
+    border: 2rpx dashed #d1d5db;
+    background: #f9fafb;
+  }
+}
+
+.share-grid-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.share-add-btn .share-add-icon {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 64rpx;
+  color: #9ca3af;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.share-add-btn .share-add-text {
+  position: absolute;
+  top: 75%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24rpx;
+  color: #9ca3af;
+}
+
+.share-remove-btn {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  width: 40rpx;
+  height: 40rpx;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+
+  .share-close-icon {
+    font-size: 32rpx;
+    color: #fff;
+    line-height: 1;
+    margin-top: -4rpx;
+  }
+}
+
 .preview-image {
   width: 100%;
   height: 320rpx;

@@ -1,40 +1,746 @@
 .result-text-page {
   min-height: 100vh;
   background: #f8fafc;
-  /* Lighter blue-gray */
-  padding-bottom: 200rpx;
-  box-sizing: border-box;
+  padding-bottom: 240rpx; // Space for fixed footer
 }
 
-.result-scroll {
-  height: 100vh;
-}
-
-.text-result-header {
-  background: #ffffff;
-  margin: 32rpx;
-  border-radius: 32rpx;
-  padding: 40rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.03);
+// Hero Section (Text Version)
+.hero-section {
+  position: relative;
+  width: 100%;
+  height: 400rpx; // Shorter than image version
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-}
+  gap: 16rpx;
+  overflow: hidden;
 
-.text-result-title {
-  font-size: 36rpx;
-  font-weight: 600;
-  color: #1e293b;
-  display: flex;
-  align-items: center;
-
-  .iconfont {
-    font-size: 40rpx;
-    color: #00bc7d;
-    /* Theme green */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: radial-gradient(#94a3b8 1px, transparent 1px);
+    background-size: 20px 20px;
+    opacity: 0.2;
   }
 }
 
+.hero-icon-wrapper {
+  width: 120rpx;
+  height: 120rpx;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
+
+  .iconfont {
+    font-size: 64rpx;
+    color: #475569;
+  }
+}
+
+.hero-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #334155;
+  letter-spacing: 2rpx;
+}
+
+.hero-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 160rpx;
+  background: linear-gradient(to bottom, transparent 0%, #f8fafc 100%);
+  pointer-events: none;
+}
+
+// Content Container
+.content-container {
+  position: relative;
+  margin-top: -100rpx;
+  padding: 0 32rpx 40rpx;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+}
+
+// Card Base
+%card-base {
+  background: #ffffff;
+  border-radius: 32rpx;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+// Nutrition Overview Card
+.nutrition-overview-card {
+  @extend %card-base;
+  padding: 40rpx;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1rpx solid rgba(255, 255, 255, 0.6);
+}
+
+.nutrition-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 48rpx;
+}
+
+.calories-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.calories-value {
+  font-size: 80rpx;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+  font-family: 'DIN Alternate', sans-serif;
+  letter-spacing: -2rpx;
+}
+
+.calories-unit-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+
+.calories-unit {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.calories-label {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.total-weight-badge {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 10rpx 20rpx;
+  background: #f1f5f9;
+  border-radius: 200rpx;
+}
+
+.weight-icon {
+  font-size: 24rpx;
+}
+
+.weight-text {
+  font-size: 24rpx;
+  color: #475569;
+  font-weight: 600;
+}
+
+.macro-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24rpx;
+}
+
+.macro-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+
+  &.protein {
+    .macro-progress {
+      background: #00bc7d;
+    }
+
+    .macro-label {
+      color: #00bc7d;
+    }
+  }
+
+  &.carbs {
+    .macro-progress {
+      background: #3b82f6;
+    }
+
+    .macro-label {
+      color: #3b82f6;
+    }
+  }
+
+  &.fat {
+    .macro-progress {
+      background: #f59e0b;
+    }
+
+    .macro-label {
+      color: #f59e0b;
+    }
+  }
+}
+
+.macro-bar {
+  height: 8rpx;
+  background: #e2e8f0;
+  border-radius: 4rpx;
+  overflow: hidden;
+  width: 100%;
+}
+
+.macro-progress {
+  height: 100%;
+  border-radius: 4rpx;
+}
+
+.macro-value {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1e293b;
+  font-family: 'DIN Alternate', sans-serif;
+
+  .macro-unit {
+    font-size: 24rpx;
+    font-weight: 500;
+    color: #64748b;
+    margin-left: 4rpx;
+  }
+}
+
+.macro-label {
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+// Insight Card
+.insight-card {
+  @extend %card-base;
+  padding: 32rpx;
+}
+
+.card-header {
+  margin-bottom: 24rpx;
+}
+
+.card-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #0f172a;
+
+  .iconfont {
+    margin-right: 12rpx;
+    font-size: 36rpx;
+    opacity: 0.9;
+  }
+}
+
+.insight-item {
+  display: flex;
+  gap: 20rpx;
+  padding: 24rpx;
+  background: #f8fafc;
+  border-radius: 20rpx;
+  margin-bottom: 20rpx;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  border: 1rpx solid transparent;
+  transition: all 0.2s ease;
+
+  &.highlight {
+    background: #f0fdf4;
+    border-color: rgba(0, 188, 125, 0.2);
+    align-items: flex-start;
+  }
+
+  &.intro {
+    background: #f1f5f9;
+    align-items: flex-start;
+  }
+
+  &.ratio {
+    background: #fff7ed;
+    border-color: rgba(249, 115, 22, 0.15);
+    align-items: flex-start;
+  }
+
+  &.absorption {
+    background: #faf5ff;
+    border-color: rgba(168, 85, 247, 0.15);
+    align-items: flex-start;
+  }
+}
+
+.insight-icon-wrapper {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.green {
+    background: rgba(0, 188, 125, 0.1);
+
+    .insight-icon {
+      color: #00bc7d;
+    }
+  }
+
+  &.blue {
+    background: rgba(59, 130, 246, 0.1);
+
+    .insight-icon {
+      color: #3b82f6;
+    }
+  }
+
+  &.orange {
+    background: rgba(249, 115, 22, 0.1);
+
+    .insight-icon {
+      color: #f97316;
+    }
+  }
+
+  &.purple {
+    background: rgba(168, 85, 247, 0.1);
+
+    .insight-icon {
+      color: #a855f7;
+    }
+  }
+}
+
+.insight-icon {
+  font-size: 32rpx !important;
+  line-height: 1;
+}
+
+.insight-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.insight-label {
+  font-size: 24rpx;
+  color: #059669;
+  font-weight: 600;
+}
+
+.insight-content {
+  font-size: 28rpx;
+  color: #334155;
+  line-height: 48rpx;
+  text-align: justify;
+  margin-top: 8rpx;
+}
+
+// Ingredients Section
+.ingredients-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 8rpx;
+}
+
+.section-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.section-count {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.ingredients-list {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+}
+
+.ingredient-card {
+  @extend %card-base;
+  padding: 0; // 内部布局控制内边距
+  border: 1rpx solid rgba(0, 0, 0, 0.03);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.06); // 加深阴影，提升层次感
+}
+
+.ingredient-main {
+  padding: 32rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.ingredient-header {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.edit-icon-wrapper {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+
+  .iconfont {
+    font-size: 24rpx;
+    color: #94a3b8;
+  }
+
+  &:active {
+    background: #e2e8f0;
+    transform: scale(0.9);
+  }
+}
+
+.ingredient-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.ingredient-calories {
+  display: flex;
+  align-items: baseline;
+  gap: 4rpx;
+}
+
+.cal-val {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #f59e0b;
+  font-family: 'DIN Alternate', sans-serif;
+}
+
+.cal-unit {
+  font-size: 22rpx;
+  color: #94a3b8;
+}
+
+.ingredient-controls {
+  padding: 24rpx 32rpx;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.control-label {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.weight-control {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.weight-adjuster {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  background: #ffffff;
+  padding: 8rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.02);
+}
+
+.adjust-btn {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  transition: all 0.2s ease;
+
+  &:active {
+    background: #e2e8f0;
+    transform: scale(0.95);
+  }
+
+  &.plus {
+    color: #059669;
+    background: #ecfdf5;
+
+    &:active {
+      background: #d1fae5;
+    }
+  }
+}
+
+.weight-display {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 80rpx;
+  text-align: center;
+}
+
+.ratio-control {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.ratio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ratio-display {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #059669;
+  font-family: 'DIN Alternate', sans-serif;
+}
+
+.ratio-slider-modern {
+  margin: 0;
+  padding: 0;
+}
+
+// Footer Actions
+.footer-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  border-radius: 32rpx 32rpx 0 0;
+}
+
+.pba-safe-area {
+  padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.action-grid {
+  display: flex;
+  gap: 24rpx;
+}
+
+.secondary-btn {
+  flex: 1;
+  height: 96rpx;
+  border-radius: 20rpx;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+
+  &:active {
+    background: #e2e8f0;
+    transform: scale(0.98);
+  }
+
+  .btn-icon {
+    font-size: 32rpx;
+  }
+
+  .btn-text {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #475569;
+  }
+}
+
+.primary-btn {
+  flex: 2;
+  height: 96rpx;
+  border-radius: 20rpx;
+  background: #00bc7d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.25);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.98);
+    background: #059669;
+  }
+
+  &.loading {
+    opacity: 0.8;
+    pointer-events: none;
+  }
+
+  .btn-text {
+    font-size: 32rpx;
+    font-weight: 600;
+    color: #ffffff;
+  }
+}
+
+// Meal Selector Modal
+.meal-selector-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.meal-selector-card {
+  width: 600rpx;
+  background: #ffffff;
+  border-radius: 32rpx;
+  padding: 40rpx;
+  transform: scale(0.9);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 12rpx 48rpx rgba(0, 0, 0, 0.15);
+
+  .visible & {
+    transform: scale(1);
+  }
+}
+
+.selector-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: center;
+  margin-bottom: 40rpx;
+}
+
+.meal-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24rpx;
+  margin-bottom: 40rpx;
+}
+
+.meal-option-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 24rpx;
+  background: #f8fafc;
+  border: 2rpx solid transparent;
+  border-radius: 24rpx;
+  transition: all 0.2s ease;
+
+  &.active {
+    background: #ecfdf5;
+    border-color: #00bc7d;
+    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.1);
+
+    .option-icon {
+      color: #00bc7d;
+      transform: scale(1.1);
+    }
+
+    .option-label {
+      color: #059669;
+      font-weight: 700;
+    }
+  }
+
+  .option-icon {
+    font-size: 48rpx;
+    color: #94a3b8;
+    transition: all 0.2s ease;
+  }
+
+  .option-label {
+    font-size: 28rpx;
+    color: #64748b;
+    font-weight: 500;
+  }
+}
+
+.selector-actions {
+  display: flex;
+  gap: 24rpx;
+
+  .cancel-btn,
+  .confirm-btn {
+    flex: 1;
+    height: 88rpx;
+    border-radius: 20rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30rpx;
+    font-weight: 600;
+  }
+
+  .cancel-btn {
+    background: #f1f5f9;
+    color: #64748b;
+  }
+
+  .confirm-btn {
+    background: #00bc7d;
+    color: #ffffff;
+    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.2);
+  }
+}
+
+// Empty State
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -62,358 +768,4 @@
   color: #94a3b8;
   text-align: center;
   line-height: 1.6;
-}
-
-/* Sections */
-.health-section,
-.nutrition-section,
-.ingredients-section {
-  background: #ffffff;
-  margin: 0 32rpx 32rpx;
-  border-radius: 32rpx;
-  padding: 40rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.03);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  margin-bottom: 32rpx;
-}
-
-.section-icon {
-  font-size: 40rpx;
-  color: #00bc7d;
-}
-
-.section-title {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-/* Advice Boxes */
-.advice-box {
-  background: #f1fdf9;
-  /* Very light green bg */
-  border-radius: 20rpx;
-  padding: 28rpx;
-  border-left: 6rpx solid #00bc7d;
-  margin-bottom: 24rpx;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-/* Pro Box (Context/PFC) */
-.advice-box.pro-box {
-  background: #f8fafc;
-  border-left-color: #94a3b8;
-}
-
-.advice-text {
-  font-size: 28rpx;
-  color: #334155;
-  line-height: 1.7;
-  text-align: justify;
-}
-
-.advice-label {
-  display: flex;
-  align-items: center;
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #475569;
-  margin-bottom: 12rpx;
-
-  .iconfont {
-    font-size: 30rpx;
-    color: #64748b;
-  }
-}
-
-/* Nutrition Grid */
-.nutrition-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32rpx;
-}
-
-.nutrition-title {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.total-weight {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.weight-label {
-  font-size: 22rpx;
-  color: #94a3b8;
-  margin-bottom: 4rpx;
-}
-
-.weight-value-wrapper {
-  display: flex;
-  align-items: baseline;
-  gap: 4rpx;
-}
-
-.weight-value {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: #1e293b;
-  font-family: DINAlternate-Bold, sans-serif;
-}
-
-.weight-unit {
-  font-size: 24rpx;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.nutrition-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20rpx;
-}
-
-.nutrition-card {
-  background: #f8fafc;
-  border-radius: 24rpx;
-  padding: 32rpx 24rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16rpx;
-  border: 1px solid transparent;
-  transition: all 0.3s;
-}
-
-.nutrition-icon {
-  font-size: 48rpx;
-  margin-bottom: 4rpx;
-}
-
-/* Specific colors for icons */
-.nutrition-card:nth-child(1) .nutrition-icon {
-  color: #f59e0b;
-}
-
-/* Calorie - Amber */
-.nutrition-card:nth-child(2) .nutrition-icon {
-  color: #3b82f6;
-}
-
-/* Protein - Blue */
-.nutrition-card:nth-child(3) .nutrition-icon {
-  color: #10b981;
-}
-
-/* Carbs - Emerald */
-.nutrition-card:nth-child(4) .nutrition-icon {
-  color: #f97316;
-}
-
-/* Fat - Orange */
-
-.nutrition-label {
-  font-size: 24rpx;
-  color: #64748b;
-}
-
-.nutrition-value {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #1e293b;
-  font-family: DINAlternate-Bold, sans-serif;
-}
-
-/* Ingredients */
-.ingredients-list {
-  display: flex;
-  flex-direction: column;
-  gap: 24rpx;
-  margin-top: 24rpx;
-}
-
-.ingredient-item {
-  background: #f8fafc;
-  border-radius: 24rpx;
-  padding: 28rpx;
-  border: 1rpx solid #e2e8f0;
-}
-
-.ingredient-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24rpx;
-}
-
-.ingredient-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.ingredient-name {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.ingredient-weight {
-  font-size: 24rpx;
-  color: #64748b;
-}
-
-.ingredient-actions {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  background: #fff;
-  padding: 8rpx 12rpx;
-  border-radius: 16rpx;
-  border: 1rpx solid #f1f5f9;
-}
-
-.action-btn {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f1f5f9;
-
-  &.minus-btn {
-    color: #64748b;
-  }
-
-  &.plus-btn {
-    color: #00bc7d;
-    background: #ecfdf5;
-  }
-}
-
-.action-icon {
-  font-size: 32rpx;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.divider {
-  font-size: 20rpx;
-  color: #cbd5e1;
-  margin: 0 4rpx;
-}
-
-.intake-text {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #334155;
-  font-family: DINAlternate-Bold, sans-serif;
-}
-
-.ingredient-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24rpx;
-}
-
-.calorie-info {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.calorie-value {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #00bc7d;
-  line-height: 40rpx;
-}
-
-.ratio-info {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  flex: 1;
-}
-
-.ratio-label {
-  font-size: 24rpx;
-  color: #6a7282;
-  line-height: 32rpx;
-  white-space: nowrap;
-}
-
-.ratio-slider-wrapper {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  min-height: 40rpx;
-}
-
-.ratio-slider {
-  flex: 1;
-  margin: 0;
-  padding: 0;
-}
-
-.ratio-value {
-  font-size: 24rpx;
-  color: #00bc7d;
-  font-weight: 600;
-  line-height: 32rpx;
-  white-space: nowrap;
-  min-width: 60rpx;
-  text-align: right;
-}
-
-.confirm-section {
-  padding: 0 24rpx 40rpx;
-  margin-top: 24rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.confirm-btn {
-  width: 100%;
-  max-width: 100%;
-  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
-  border-radius: 22rpx;
-  padding: 36rpx 32rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 188, 125, 0.15), 0px 1rpx 3rpx rgba(0, 188, 125, 0.1);
-  transition: all 0.3s ease;
-  box-sizing: border-box;
-
-  &:active {
-    transform: translateY(2rpx);
-  }
-}
-
-.confirm-btn-text {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #ffffff;
-  line-height: 48rpx;
-  letter-spacing: 0.5rpx;
-  text-align: center;
-  width: 100%;
 }

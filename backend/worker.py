@@ -252,7 +252,7 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无"}
 
     user_goal = payload.get("user_goal")
-    goal_hint = f"\n用户目标为「{goal_map.get(user_goal, user_goal or '')}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。" if user_goal else ""
+    goal_hint = f"\n用户目标为「{goal_map.get(user_goal, user_goal or '')}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标（请忽略健康档案中的任何目标设定，以此为准）。" if user_goal else ""
 
     diet_goal = payload.get("diet_goal")
     activity_timing = payload.get("activity_timing")
@@ -274,7 +274,11 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     additional = (payload.get("additionalContext") or "").strip()
     additional_line = f'\n用户补充背景信息: "{additional}"。请根据此信息调整对隐形成分或烹饪方式的判断。' if additional else ""
 
+    is_multi_view = payload.get("is_multi_view")
+    multi_view_hint = "\n注意：提供的图片是**同一份食物**的不同视角拍摄（用于辅助展示侧面或厚度）。请综合所有图片来估算这份食物的体积和重量，**不要**将它们视为多份不同的食物。" if is_multi_view else ""
+
     return f"""
+{multi_view_hint}
 请作为专业的营养师分析这些食物图片。
 1. 识别图中所有不同的食物单品。
 2. 估算每种食物的重量（克）和详细营养成分。
@@ -305,29 +309,28 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 """.strip()
 
 
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+GEMINI_MODEL = "google/gemini-2.0-flash-001"
+
+
 def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    同步执行食物分析：调 DashScope，解析 JSON，返回与 /api/analyze 一致结构的 result。
+    同步执行食物分析：使用 OpenRouter Gemini，解析 JSON，返回与 /api/analyze 一致结构的 result。
     失败时抛出异常，由调用方捕获并写 failed。
     """
-    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not api_key:
-        raise RuntimeError("缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量")
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key or api_key == "your_openrouter_api_key_here":
+        raise RuntimeError("缺少 OPENROUTER_API_KEY 环境变量")
 
-    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    api_url = f"{base_url}/chat/completions"
-    api_url = f"{base_url}/chat/completions"
-    
-    # 获取图片列表：优先使用 image_paths (多图)，兼容 image_url (单图)
+    api_url = f"{OPENROUTER_BASE_URL}/chat/completions"
+
     image_url = task.get("image_url")
-    image_paths = task.get("image_paths") # 在 create_analysis_task_sync 中我们把 urls 存到了 image_paths 字段
-    
+    image_paths = task.get("image_paths")
     target_image_urls = []
     if image_paths and isinstance(image_paths, list) and len(image_paths) > 0:
         target_image_urls = image_paths
     elif image_url:
         target_image_urls = [image_url]
-        
     if not target_image_urls:
         raise ValueError("任务缺少图片")
 
@@ -343,47 +346,62 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             )
 
     prompt = _build_food_prompt(task, profile_block)
-    model = (task.get("payload") or {}).get("modelName") or "qwen-vl-max"
+    content_parts = [{"type": "text", "text": prompt}]
+    for url in target_image_urls:
+        content_parts.append({"type": "image_url", "image_url": {"url": url}})
 
-    with httpx.Client(timeout=60.0) as client:
-        response = client.post(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            *[
-                                {"type": "image_url", "image_url": {"url": url}}
-                                for url in target_image_urls
-                            ]
-                        ],
-                    }
-                ],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.7,
-            },
-        )
+    max_retries = 3
+    parsed = None
+    
+    for attempt in range(max_retries):
+        try:
+            with httpx.Client(timeout=90.0) as client:
+                response = client.post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://healthymax.cn",
+                        "X-Title": "Food Link",
+                    },
+                    json={
+                        "model": GEMINI_MODEL,
+                        "messages": [{"role": "user", "content": content_parts}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.7,
+                    },
+                )
 
-        if not response.is_success:
-            err = response.json() if response.content else {}
-            msg = err.get("error", {}).get("message") or f"DashScope API 错误: {response.status_code}"
-            raise RuntimeError(msg)
+                if not response.is_success:
+                    err = response.json() if response.content else {}
+                    msg = err.get("error", {}).get("message") or f"API 错误: {response.status_code}"
+                    print(f"[worker] Food analysis attempt {attempt + 1} failed: {msg}")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    raise RuntimeError("API 请求失败")
 
-        data = response.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content")
-        if not content:
-            raise RuntimeError("AI 返回了空响应")
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content")
+                if not content:
+                    print(f"[worker] Food analysis attempt {attempt + 1} empty response")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    raise RuntimeError("AI 返回了空响应")
 
-        json_str = re.sub(r"```json", "", content)
-        json_str = re.sub(r"```", "", json_str).strip()
-        parsed = json.loads(json_str)
+                json_str = re.sub(r"```json", "", content)
+                json_str = re.sub(r"```", "", json_str).strip()
+                parsed = json.loads(json_str)
+                break  # 成功，跳出重试循环
+
+        except Exception as e:
+            print(f"[worker] Food analysis attempt {attempt + 1} exception: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+            else:
+                # hide internal model details
+                raise RuntimeError("系统繁忙，请稍后重试")
 
     # 转为与 API 一致的 result 结构（供前端与保存记录使用）
     items = []
@@ -444,7 +462,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无"}
 
     user_goal = payload.get("user_goal")
-    goal_hint = f" 用户目标为「{goal_map.get(user_goal, user_goal or '')}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。" if user_goal else ""
+    goal_hint = f" 用户目标为「{goal_map.get(user_goal, user_goal or '')}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标（请忽略健康档案中的任何目标设定，以此为准）。" if user_goal else ""
 
     diet_goal = payload.get("diet_goal")
     activity_timing = payload.get("activity_timing")
@@ -501,15 +519,14 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 
 def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    同步执行文字食物分析：调 DashScope，解析 JSON，返回与 /api/analyze 一致结构的 result。
+    同步执行文字食物分析：使用 OpenRouter Gemini，解析 JSON，返回与 /api/analyze 一致结构的 result。
     失败时抛出异常，由调用方捕获并写 failed。
     """
-    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not api_key:
-        raise RuntimeError("缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量")
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key or api_key == "your_openrouter_api_key_here":
+        raise RuntimeError("缺少 OPENROUTER_API_KEY 环境变量")
 
-    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    api_url = f"{base_url}/chat/completions"
+    api_url = f"{OPENROUTER_BASE_URL}/chat/completions"
     text_input = task.get("text_input") or ""
     if not text_input:
         raise ValueError("任务缺少 text_input")
@@ -521,41 +538,59 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
         profile_block = _format_health_profile_sync(user)
 
     prompt = _build_text_food_prompt(task, profile_block)
-    model = (task.get("payload") or {}).get("modelName") or "qwen-plus"
 
-    with httpx.Client(timeout=60.0) as client:
-        response = client.post(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.7,
-            },
-        )
+    max_retries = 3
+    parsed = None
 
-        if not response.is_success:
-            err = response.json() if response.content else {}
-            msg = err.get("error", {}).get("message") or f"DashScope API 错误: {response.status_code}"
-            raise RuntimeError(msg)
+    for attempt in range(max_retries):
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://healthymax.cn",
+                        "X-Title": "Food Link",
+                    },
+                    json={
+                        "model": GEMINI_MODEL,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.5,
+                    },
+                )
 
-        data = response.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content")
-        if not content:
-            raise RuntimeError("AI 返回了空响应")
+                if not response.is_success:
+                    err = response.json() if response.content else {}
+                    msg = err.get("error", {}).get("message") or f"API 错误: {response.status_code}"
+                    print(f"[worker] Text food analysis attempt {attempt + 1} failed: {msg}")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    raise RuntimeError("API 请求失败")
 
-        json_str = re.sub(r"```json", "", content)
-        json_str = re.sub(r"```", "", json_str).strip()
-        parsed = json.loads(json_str)
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content")
+                if not content:
+                    print(f"[worker] Text food analysis attempt {attempt + 1} empty response")
+                    if attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    raise RuntimeError("AI 返回了空响应")
+
+                json_str = re.sub(r"```json", "", content)
+                json_str = re.sub(r"```", "", json_str).strip()
+                parsed = json.loads(json_str)
+                break # 成功，跳出重试循环
+
+        except Exception as e:
+            print(f"[worker] Text food analysis attempt {attempt + 1} exception: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+            else:
+                # hide internal model details
+                raise RuntimeError("系统繁忙，请稍后重试")
 
     # 转为与 API 一致的 result 结构
     items = []
@@ -609,13 +644,18 @@ def process_one_text_food_task(task: Dict[str, Any]) -> None:
 def _ocr_report_prompt() -> str:
     """体检报告 OCR 提示词（与 main.py 一致）"""
     return """
-请识别这张体检报告或病例截图中的健康相关信息。
-请用简体中文，按以下 JSON 格式返回（若某项无法识别则填空数组或空字符串）：
+你是一个专业的 OCR 文字识别助手。请识别这张体检报告或病例截图中的所有文字内容。
+任务要求：
+1. **仅提取**图片中实际存在的文字，**严禁**进行总结、概括、分析或生成医疗建议。
+2. 如果图片中包含指标数据，请精确提取数值和单位。
+3. 如果图片中包含诊断结论，请按原文提取。
+
+请严格按以下 JSON 格式返回（若某项图片中不存在则填空数组或空字符串）：
 {
-  "indicators": [{"name": "指标名称", "value": "数值", "unit": "单位"}],
-  "conclusions": ["结论1", "结论2"],
-  "suggestions": ["建议1"],
-  "medical_notes": "其他与病史、过敏、饮食禁忌相关的文字摘要"
+  "indicators": [{"name": "项目名称", "value": "测定值", "unit": "单位", "flag": "异常标记(如↑/↓)"}],
+  "conclusions": ["诊断结论1(原文)", "诊断结论2(原文)"],
+  "suggestions": ["医学建议(仅提取报告原文中的建议，不要自己生成)"],
+  "medical_notes": "其他主要文字内容的原文提取"
 }
 只返回上述 JSON，不要其他说明。
 """.strip()

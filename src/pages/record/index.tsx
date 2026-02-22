@@ -1,6 +1,8 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
+import { Calendar } from '@taroify/core'
+import '@taroify/core/calendar/style'
 import { getFoodRecordList, submitTextAnalyzeTask, getHomeDashboard, getAccessToken, type FoodRecord } from '../../utils/api'
 import { IconCamera, IconText, IconClock } from '../../components/iconfont'
 
@@ -74,6 +76,9 @@ export default function RecordPage() {
         })
       },
       fail: (err) => {
+        if (err.errMsg.indexOf('cancel') > -1) {
+          return
+        }
         console.error('选择图片失败:', err)
         Taro.showToast({
           title: '选择图片失败',
@@ -151,18 +156,17 @@ export default function RecordPage() {
   // 历史记录：按日期从接口拉取
   const getTodayDate = () => new Date().toISOString().split('T')[0]
   const [selectedDate, setSelectedDate] = useState(getTodayDate())
-  const [historyRecords, setHistoryRecords] = useState<Array<{
-    date: string
-    meals: Array<{
-      id: string
-      mealType: string
-      mealName: string
-      time: string
-      foods: Array<{ name: string; amount: string; calorie: number }>
-      totalCalorie: number
-    }>
+  /** 日历弹层显隐，用于 Taroify Calendar 选择日期 */
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [historyMeals, setHistoryMeals] = useState<Array<{
+    id: string
+    mealType: string
+    mealName: string
+    time: string
+    foods: Array<{ name: string; amount: string; calorie: number }>
     totalCalorie: number
   }>>([])
+  const [historyTotalCalorie, setHistoryTotalCalorie] = useState(0)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   /** 目标卡路里：与首页一致，来自 getHomeDashboard().intakeData.target，未登录或请求失败时默认 2000 */
@@ -193,12 +197,23 @@ export default function RecordPage() {
     }
   }
 
+  /** 统一按本地时区格式化为 YYYY-MM-DD，避免时区导致跨天显示错误 */
+  const getLocalDateStr = (value: string) => {
+    const d = new Date(value)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
   const loadHistory = async (date: string) => {
     setHistoryLoading(true)
     setHistoryError(null)
     try {
       const { records } = await getFoodRecordList(date)
-      const meals = records.map((r: FoodRecord) => ({
+      // 二次按所选日期过滤，确保页面仅展示该日期记录
+      const filtered = records.filter((r: FoodRecord) => getLocalDateStr(r.record_time) === date)
+      const meals = filtered.map((r: FoodRecord) => ({
         id: r.id,
         mealType: r.meal_type,
         mealName: MEAL_TYPE_NAMES[r.meal_type] || r.meal_type,
@@ -216,11 +231,13 @@ export default function RecordPage() {
         totalCalorie: Math.round((r.total_calories ?? 0) * 10) / 10
       }))
       const totalCalorie = meals.reduce((sum, m) => sum + m.totalCalorie, 0)
-      setHistoryRecords([{ date, meals, totalCalorie }])
+      setHistoryMeals(meals)
+      setHistoryTotalCalorie(totalCalorie)
     } catch (e: any) {
       const msg = e.message || '获取记录失败'
       setHistoryError(msg)
-      setHistoryRecords([])
+      setHistoryMeals([])
+      setHistoryTotalCalorie(0)
     } finally {
       setHistoryLoading(false)
     }
@@ -252,36 +269,26 @@ export default function RecordPage() {
     Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(mealId)}` })
   }
 
-  const handleEditRecord = (e: any, _recordId: string) => {
-    e.stopPropagation()
-    Taro.showToast({ title: '编辑功能开发中', icon: 'none' })
+  /** 将 Date 转为本地 YYYY-MM-DD，供 Calendar 确认后更新 selectedDate */
+  const dateToDateStr = (d: Date) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
   }
 
-  const handleDeleteRecord = (e: any, _recordId: string) => {
-    e.stopPropagation()
-    Taro.showModal({
-      title: '确认删除',
-      content: '确定要删除这条记录吗？',
-      success: (res) => {
-        if (res.confirm) {
-          Taro.showToast({ title: '删除功能开发中', icon: 'none' })
-        }
-      }
-    })
-  }
-
-  /** 生成最近 6 天的日期选项（微信 showActionSheet 最多 6 项） */
-  const getDateOptions = () => {
-    const options: { dateStr: string; label: string }[] = []
-    const today = new Date()
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(today)
-      d.setDate(d.getDate() - i)
-      const dateStr = d.toISOString().split('T')[0]
-      options.push({ dateStr, label: formatDate(dateStr) })
-    }
-    return options
-  }
+  /** 日历可选范围：最近 6 个月到今天 */
+  const calendarMinDate = useMemo(() => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 6)
+    return d
+  }, [])
+  const calendarMaxDate = useMemo(() => new Date(), [])
+  /** 当前选中日期转成 Date 供 Calendar value 使用（中午 12 点避免时区偏差） */
+  const calendarValue = useMemo(
+    () => (selectedDate ? new Date(selectedDate + 'T12:00:00') : new Date()),
+    [selectedDate]
+  )
 
   const tips = [
     '拍照时请确保食物清晰可见，光线充足',
@@ -494,31 +501,35 @@ export default function RecordPage() {
       {/* 历史记录区域 */}
       {activeMethod === 'history' && (
         <View className='history-section'>
-          {/* 日期选择 */}
+          {/* 日期选择：点击打开 Taroify 日历弹层 */}
           <View className='date-selector'>
             <View className='date-card'>
               <Text className='date-label'>选择日期</Text>
-              <View
-                className='date-display'
-                onClick={() => {
-                  const options = getDateOptions()
-                  Taro.showActionSheet({
-                    itemList: options.map((o) => o.label),
-                    success: (res) => {
-                      const opt = options[res.tapIndex]
-                      if (opt) setSelectedDate(opt.dateStr)
-                    }
-                  })
-                }}
-              >
+              <View className='date-display' onClick={() => setCalendarOpen(true)}>
                 <Text className='date-text'>{formatDate(selectedDate)}</Text>
                 <Text className='iconfont icon-shizhong date-icon'></Text>
               </View>
             </View>
+            <Calendar
+              className='record-calendar'
+              style={{ '--calendar-active-color': '#00bc7d' } as React.CSSProperties}
+              type='single'
+              value={calendarValue}
+              min={calendarMinDate}
+              max={calendarMaxDate}
+              poppable
+              showPopup={calendarOpen}
+              onClose={setCalendarOpen}
+              onChange={(val) => setSelectedDate(dateToDateStr(val as Date))}
+              onConfirm={(val) => {
+                setSelectedDate(dateToDateStr(val as Date))
+                setCalendarOpen(false)
+              }}
+            />
             <View className='date-stats'>
               <View className='stat-item'>
                 <Text className='stat-label'>总摄入</Text>
-                <Text className='stat-value'>{historyRecords[0]?.totalCalorie ?? 0} kcal</Text>
+                <Text className='stat-value'>{historyTotalCalorie} kcal</Text>
               </View>
               <View className='stat-item'>
                 <Text className='stat-label'>目标</Text>
@@ -539,9 +550,9 @@ export default function RecordPage() {
               <Text className='empty-text'>{historyError}</Text>
               <Text className='empty-hint'>请先登录后查看历史记录</Text>
             </View>
-          ) : historyRecords.length > 0 && historyRecords[0].meals.length > 0 ? (
+          ) : historyMeals.length > 0 ? (
             <View className='history-list'>
-              {historyRecords[0].meals.map((meal) => (
+              {historyMeals.map((meal) => (
                 <View
                   key={meal.id}
                   className='history-meal-card'
@@ -559,14 +570,6 @@ export default function RecordPage() {
                     </View>
                     <View className='meal-header-right'>
                       <Text className='meal-calorie'>{meal.totalCalorie} kcal</Text>
-                      <View className='meal-actions'>
-                        <View className='action-icon edit-icon' onClick={(e) => handleEditRecord(e, meal.id)}>
-                          <Text className='iconfont icon-ic_detail'></Text>
-                        </View>
-                        <View className='action-icon delete-icon' onClick={(e) => handleDeleteRecord(e, meal.id)}>
-                          <Text className='iconfont icon-shangzhang delete-icon-rotate'></Text>
-                        </View>
-                      </View>
                     </View>
                   </View>
                   <View className='food-list'>

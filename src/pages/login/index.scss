@@ -50,6 +50,19 @@
             color: #ffffff;
         }
 
+        .wx-phone-auth-btn {
+            width: 100%;
+            font-size: 26rpx;
+            color: #00bc7d;
+            background: transparent;
+            border: none;
+            line-height: 1.4;
+
+            &::after {
+                border: none;
+            }
+        }
+
         .skip-login-btn {
             width: 100%;
             --button-default-height: 96rpx;

@@ -50,14 +50,7 @@
   text-align: right;
 }
 
-/* 左滑下一题提示（方案 D） */
-.progress-swipe-hint {
-  font-size: 22rpx;
-  color: #94a3b8;
-  font-weight: normal;
-}
-
-/* 卡片滑动容器：铺满屏幕 */
+/* 卡片容器：铺满屏幕 */
 .cards-wrap {
   flex: 1;
   width: 100%;
@@ -86,6 +79,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -144,16 +138,17 @@
 /* 所有带图标的选项：图标在文字前（横向），宽度仅比内容略宽 */
 .option-card {
   flex: 0 0 auto;
-  border-radius: 24rpx;
-  border: 4rpx solid #e2e8f0;
+  border-radius: 20rpx;
+  background: #f8fafc;
+  border: 2rpx solid transparent;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  padding: 28rpx 32rpx;
-  transition: all 0.25s ease;
-  background: #fff;
+  padding: 24rpx 32rpx;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   gap: 16rpx;
+  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.02);
 
   &.big {
     min-height: 100rpx;
@@ -161,68 +156,95 @@
 
   &.active,
   &:active {
-    border-color: #00bc7d;
-    background: linear-gradient(145deg, #f0fdf9 0%, #e6fffa 100%);
-    box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.15);
+    background: #e6fffa !important;
+    border-color: #00bc7d !important;
+    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.1);
+
+    .option-icon {
+      transform: scale(1.1);
+    }
+
+    .option-label {
+      color: #00bc7d !important;
+      font-weight: 600;
+    }
+
+    .option-desc {
+      color: #34d399 !important;
+    }
   }
 
   .option-icon {
-    font-size: 64rpx;
+    font-size: 48rpx;
     margin-bottom: 0;
     margin-right: 0;
     line-height: 1;
     flex-shrink: 0;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .option-label {
+    font-size: 30rpx;
+    font-weight: 500;
+    color: #334155;
+    transition: color 0.2s;
+  }
+
+  .option-desc {
+    font-size: 24rpx;
+    color: #94a3b8;
+    margin-top: 0;
+    text-align: left;
+    transition: color 0.2s;
+  }
+}
+
+/* 活动水平 / 目标 - 列表，选项不超出卡片宽度 */
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 活动水平/目标：图标在文字前，描述换行，不超出容器 */
+.option-card.with-desc {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  padding: 32rpx 36rpx;
+  text-align: left;
+  min-height: auto;
+  gap: 28rpx;
+  box-sizing: border-box;
+
+  .option-icon {
+    font-size: 52rpx;
+  }
+
+  .option-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8rpx;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .option-label {
     font-size: 32rpx;
     font-weight: 600;
-    color: #1a1a1a;
+    line-height: 1.2;
   }
 
   .option-desc {
-    font-size: 22rpx;
-    color: #64748b;
     margin-top: 0;
-    text-align: left;
-  }
-}
-
-/* 活动水平 - 列表，选项宽度仅比文字略宽 */
-.option-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-  align-items: flex-start;
-}
-
-/* 活动水平：图标在文字前，描述换行，宽度随内容 */
-.option-card.with-desc {
-  flex: 0 0 auto;
-  width: auto;
-  max-width: 100%;
-  flex-direction: row;
-  justify-content: flex-start;
-  padding: 24rpx 28rpx;
-  text-align: left;
-  min-height: auto;
-  gap: 20rpx;
-
-  .option-icon {
-    font-size: 40rpx;
-    margin-bottom: 0;
-    margin-right: 0;
-    flex-shrink: 0;
-  }
-
-  .option-label {
-    font-size: 30rpx;
-  }
-
-  .option-desc {
-    margin-top: 4rpx;
-    text-align: left;
-    font-size: 24rpx;
+    font-size: 26rpx;
+    line-height: 1.4;
   }
 }
 
@@ -237,25 +259,34 @@
 /* 多选小卡片：图标在文字前，宽度随内容 */
 .option-card.small {
   flex: 0 0 auto;
-  min-width: 160rpx;
-  min-height: 88rpx;
-  padding: 20rpx 24rpx;
-  justify-content: flex-start;
-  gap: 12rpx;
-
-  .option-icon {
-    font-size: 34rpx;
-    margin-bottom: 0;
-    flex-shrink: 0;
-  }
+  min-width: auto;
+  border-radius: 40rpx;
+  padding: 18rpx 32rpx;
+  justify-content: center;
+  background: #f1f5f9;
+  border: 1px solid transparent;
 
   .option-label {
-    font-size: 26rpx;
+    font-size: 28rpx;
+    font-weight: 500;
   }
 
   /* 自定义标签样式 */
   &.custom-tag {
     border-style: dashed;
+    border-color: #cbd5e1;
+    background: #fff;
+    color: #64748b;
+  }
+
+  &.active {
+    background: #00bc7d;
+    border-color: #00bc7d;
+    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.25);
+
+    .option-label {
+      color: #fff;
+    }
   }
 }
 
@@ -407,11 +438,11 @@
   }
 
   &.primary {
-    flex: none;
+    flex: 1;
     max-width: none;
     color: #fff;
     background: linear-gradient(135deg, #00bc7d 0%, #0d9488 100%);
-    margin-bottom: 24rpx;
+    margin-bottom: 0;
   }
 
   &[disabled] {
@@ -575,6 +606,181 @@
 
   &.prev {
     color: #0d9488;
+    color: #0d9488;
     background: #f0fdf9;
   }
+}
+
+/* 优化后的上传体检报告卡片样式 */
+.step-card.upload-step {
+  padding-bottom: 96rpx;
+}
+
+.upload-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 40rpx;
+  padding: 20rpx 0;
+}
+
+.hero-icon-wrapper {
+  width: 140rpx;
+  height: 140rpx;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24rpx;
+  box-shadow: 0 8rpx 24rpx rgba(16, 185, 129, 0.15);
+  border: 4rpx solid #ffffff;
+}
+
+.hero-icon {
+  font-size: 72rpx;
+  color: #00bc7d;
+}
+
+.upload-area {
+  width: 100%;
+  height: 380rpx;
+  background: #f8fafc;
+  border-radius: 24rpx;
+  border: 3rpx dashed #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 40rpx;
+  box-sizing: border-box;
+
+  &:active {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    transform: scale(0.995);
+  }
+
+  &.has-image {
+    background: #000;
+    border-style: solid;
+    border-color: #f1f5f9;
+    padding: 0;
+  }
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.upload-icon-font {
+  font-size: 80rpx;
+  color: #94a3b8;
+  margin-bottom: 8rpx;
+  line-height: 1;
+}
+
+.upload-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #475569;
+}
+
+.upload-desc {
+  font-size: 24rpx;
+  color: #94a3b8;
+  max-width: 80%;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.reupload-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+
+  .upload-area.has-image:active & {
+    opacity: 1;
+  }
+}
+
+.reupload-text {
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-top: 16rpx;
+  letter-spacing: 1px;
+}
+
+.benefit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 0 16rpx;
+  margin-bottom: 48rpx;
+}
+
+.benefit-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.benefit-icon-wrap {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: #ecfdf5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2rpx;
+}
+
+.benefit-icon {
+  font-size: 24rpx;
+  color: #00bc7d;
+}
+
+.benefit-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.benefit-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #334155;
+}
+
+.benefit-text {
+  font-size: 24rpx;
+  color: #64748b;
+  line-height: 1.5;
 }

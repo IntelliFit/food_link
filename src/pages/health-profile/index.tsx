@@ -1,4 +1,4 @@
-import { View, Text, Input, Picker, Image } from '@tarojs/components'
+import { View, Text, Input, Image } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
 import { useState, useEffect } from 'react'
@@ -13,6 +13,9 @@ import {
 } from '../../utils/api'
 
 import './index.scss'
+import HeightRuler from '../../components/HeightRuler'
+import AgePicker from '../../components/AgePicker'
+import WeightRuler from '../../components/WeightRuler'
 
 /** 活动水平选项 */
 const ACTIVITY_OPTIONS = [
@@ -23,14 +26,14 @@ const ACTIVITY_OPTIONS = [
   { label: '极高', desc: '体力劳动/每天训练', value: 'very_active', icon: '🔥' }
 ]
 
-/** 既往病史选项 */
+/** 既往病史选项（无图标） */
 const MEDICAL_OPTIONS = [
-  { label: '糖尿病', value: 'diabetes', icon: '🩸' },
-  { label: '高血压', value: 'hypertension', icon: '❤️' },
-  { label: '痛风', value: 'gout', icon: '🦴' },
-  { label: '高血脂', value: 'hyperlipidemia', icon: '📊' },
-  { label: '甲状腺疾病', value: 'thyroid', icon: '🦋' },
-  { label: '无', value: 'none', icon: '✅' }
+  { label: '糖尿病', value: 'diabetes' },
+  { label: '高血压', value: 'hypertension' },
+  { label: '痛风', value: 'gout' },
+  { label: '高血脂', value: 'hyperlipidemia' },
+  { label: '甲状腺疾病', value: 'thyroid' },
+  { label: '无', value: 'none' }
 ]
 
 /** 特殊饮食选项 */
@@ -43,26 +46,32 @@ const DIET_OPTIONS = [
   { label: '无', value: 'none', icon: '✨' }
 ]
 
-const TOTAL_STEPS = 10 // 性别、生日、身高、体重、活动、病史、饮食、过敏、上传体检报告、最后一步保存
+/** 目标选项 */
+const GOAL_OPTIONS = [
+  { label: '减重', desc: '健康瘦身', value: 'fat_loss', icon: 'icon-huore' },
+  { label: '保持', desc: '维持当前体重', value: 'maintain', icon: 'icon-tianpingzuo' },
+  { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: 'icon-zengji' }
+]
+
+const TOTAL_STEPS = 10 // 性别、生日、身高、体重、目标、活动、病史、饮食、过敏、体检报告
 
 export default function HealthProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
-  const [direction, setDirection] = useState<'next' | 'prev'>('next')
 
   const [gender, setGender] = useState<string>('')
   const [birthday, setBirthday] = useState<string>('')
+  const [age, setAge] = useState<number>(25) // Default age
   const [height, setHeight] = useState<string>('')
   const [weight, setWeight] = useState<string>('')
+  const [dietGoal, setDietGoal] = useState<string>('')
   const [activityLevel, setActivityLevel] = useState<string>('')
   const [medicalHistory, setMedicalHistory] = useState<string[]>([])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
   const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
-  const [bmr, setBmr] = useState<number | null>(null)
-  const [tdee, setTdee] = useState<number | null>(null)
-  const [touchStartX, setTouchStartX] = useState(0)
+
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([]) // 被选中的自定义病史
@@ -71,16 +80,26 @@ export default function HealthProfilePage() {
     try {
       const profile = await getHealthProfile()
       if (profile.gender) setGender(profile.gender)
-      if (profile.birthday) setBirthday(profile.birthday)
+      if (profile.birthday) {
+        setBirthday(profile.birthday)
+        // Calculate age
+        const birthYear = new Date(profile.birthday).getFullYear()
+        const currentYear = new Date().getFullYear()
+        setAge(currentYear - birthYear)
+      } else {
+        // Default birthday to 25 years ago if not set
+        const year = new Date().getFullYear() - 25
+        setBirthday(`${year}-01-01`)
+        setAge(25)
+      }
       if (profile.height != null) setHeight(String(profile.height))
       if (profile.weight != null) setWeight(String(profile.weight))
+      if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
       const hc = profile.health_condition
       if (hc?.medical_history?.length) setMedicalHistory(hc.medical_history)
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
-      if (profile.bmr != null) setBmr(profile.bmr)
-      if (profile.tdee != null) setTdee(profile.tdee)
     } catch {
       Taro.showToast({ title: '获取档案失败', icon: 'none' })
     } finally {
@@ -104,25 +123,12 @@ export default function HealthProfilePage() {
       }
       return
     }
-    setDirection('next')
     setCurrentStep((s) => s + 1)
   }
 
   const goPrev = () => {
     if (currentStep <= 0) return
-    setDirection('prev')
     setCurrentStep((s) => s - 1)
-  }
-
-  /** 左滑下一题 / 右滑上一题（方案 D 手势） */
-  const handleTouchStart = (e: any) => {
-    setTouchStartX(e.touches?.[0]?.clientX ?? e.detail?.touches?.[0]?.clientX ?? 0)
-  }
-  const handleTouchEnd = (e: any) => {
-    const endX = e.changedTouches?.[0]?.clientX ?? e.detail?.changedTouches?.[0]?.clientX ?? 0
-    const delta = endX - touchStartX
-    if (delta < -50 && currentStep < TOTAL_STEPS - 1) goNext()
-    else if (delta > 50 && currentStep > 0) goPrev()
   }
 
   const toggleMedical = (value: string) => {
@@ -211,11 +217,13 @@ export default function HealthProfilePage() {
         return !!height && Number(height) >= 100 && Number(height) <= 250
       case 3:
         return !!weight && Number(weight) >= 30 && Number(weight) <= 200
-      case 4:
-        return !!activityLevel
+      case 4: // New step for dietGoal
+        return !!dietGoal
       case 5:
+        return !!activityLevel
       case 6:
       case 7:
+      case 8:
         return true
       default:
         return true
@@ -230,13 +238,14 @@ export default function HealthProfilePage() {
       birthday: birthday || undefined,
       height: height ? Number(height) : undefined,
       weight: weight ? Number(weight) : undefined,
+      diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
       report_image_url: reportImageUrl || undefined
     }
-    if (!req.gender || !req.birthday || !req.height || !req.weight || !req.activity_level) {
+    if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
       Taro.showToast({ title: '请完成前几项必填', icon: 'none' })
       return
     }
@@ -249,9 +258,7 @@ export default function HealthProfilePage() {
     if (!confirm) return
     setSaving(true)
     try {
-      const res = await updateHealthProfile(req)
-      setBmr(res.bmr ?? null)
-      setTdee(res.tdee ?? null)
+      await updateHealthProfile(req)
       // 若有上传的体检报告图片，提交后台病历提取任务（用户无感知）
       if (reportImageUrl) {
         submitReportExtractionTask(reportImageUrl).catch(() => {
@@ -285,13 +292,6 @@ export default function HealthProfilePage() {
     }
   }
 
-  /** 点击图片放大预览 */
-  const handlePreviewReportImage = () => {
-    if (reportImageUrl) {
-      Taro.previewImage({ urls: [reportImageUrl] })
-    }
-  }
-
   if (loading) {
     return (
       <View className="health-profile-page">
@@ -301,8 +301,6 @@ export default function HealthProfilePage() {
       </View>
     )
   }
-
-  const isLastStep = currentStep === TOTAL_STEPS - 1
 
   return (
     <View className="health-profile-page">
@@ -318,18 +316,11 @@ export default function HealthProfilePage() {
         </View>
         <Text className="progress-text">
           {currentStep + 1} / {TOTAL_STEPS}
-          {!isLastStep && (
-            <Text className="progress-swipe-hint"> · 左滑下一题</Text>
-          )}
         </Text>
       </View>
 
-      {/* 卡片滑动容器：支持左滑下一题 / 右滑上一题 */}
-      <View
-        className="cards-wrap"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
+      {/* 卡片容器：通过上一题/确认切换 */}
+      <View className="cards-wrap">
         <View
           className="cards-track"
           style={{
@@ -346,14 +337,14 @@ export default function HealthProfilePage() {
                 className={`option-card big ${gender === 'male' ? 'active' : ''}`}
                 onClick={() => handleSelectGender('male')}
               >
-                <Text className="option-icon">👨</Text>
+                <Text className="option-icon iconfont icon-nannv-nan" />
                 <Text className="option-label">男</Text>
               </View>
               <View
                 className={`option-card big ${gender === 'female' ? 'active' : ''}`}
                 onClick={() => handleSelectGender('female')}
               >
-                <Text className="option-icon">👩</Text>
+                <Text className="option-icon iconfont icon-nannv-nv" />
                 <Text className="option-label">女</Text>
               </View>
             </View>
@@ -364,21 +355,23 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 1: 出生日期 */}
+          {/* Step 1: 出生日期 (Changed to Age Selection) */}
           <View className="card step-card">
             <Text className="step-card-step">第 2 题</Text>
-            <Text className="step-card-title">你的出生日期？</Text>
-            <Picker
-              mode="date"
-              end={new Date().toISOString().slice(0, 10)}
-              value={birthday || '1990-01-01'}
-              onChange={(e) => setBirthday(e.detail.value)}
-            >
-              <View className="picker-card">
-                <Text className="picker-card-value">{birthday || '点击选择日期'}</Text>
-                <Text className="picker-card-hint">用于计算年龄与代谢</Text>
-              </View>
-            </Picker>
+            <Text className="step-card-title">您的年龄是？</Text>
+            <View style={{ width: '100%', marginBottom: '24px' }}>
+              <AgePicker
+                value={age}
+                onChange={(val) => {
+                  setAge(val)
+                  // Update birthday state automatically
+                  const year = new Date().getFullYear() - val
+                  setBirthday(`${year}-01-01`)
+                }}
+                min={1}
+                max={100}
+              />
+            </View>
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
               <Button block color="primary" shape="round" className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
@@ -391,25 +384,13 @@ export default function HealthProfilePage() {
           <View className="card step-card">
             <Text className="step-card-step">第 3 题</Text>
             <Text className="step-card-title">你的身高是？</Text>
-            <View className="quick-numbers">
-              {[160, 165, 170, 175, 180].map((n) => (
-                <View
-                  key={n}
-                  className={`quick-num ${height === String(n) ? 'active' : ''}`}
-                  onClick={() => setHeight(String(n))}
-                >
-                  <Text>{n}</Text>
-                  <Text className="quick-num-unit">cm</Text>
-                </View>
-              ))}
-            </View>
-            <View className="input-card">
-              <Input
-                className="card-input"
-                type="number"
-                placeholder="或输入其他身高 (cm)"
-                value={height}
-                onInput={(e) => setHeight(e.detail.value)}
+            {/* 使用 HeightRuler 替换原有的输入 */}
+            <View style={{ width: '100%', marginBottom: '24px' }}>
+              <HeightRuler
+                value={height ? Number(height) : 170}
+                onChange={(val) => setHeight(String(val))}
+                min={100}
+                max={250}
               />
             </View>
             <View className="card-footer">
@@ -423,28 +404,14 @@ export default function HealthProfilePage() {
           {/* Step 3: 体重 */}
           <View className="card step-card">
             <Text className="step-card-step">第 4 题</Text>
-            <Text className="step-card-title">你的体重是？</Text>
-            <View className="quick-numbers">
-              {[50, 55, 60, 65, 70].map((n) => (
-                <View
-                  key={n}
-                  className={`quick-num ${weight === String(n) ? 'active' : ''}`}
-                  onClick={() => setWeight(String(n))}
-                >
-                  <Text>{n}</Text>
-                  <Text className="quick-num-unit">kg</Text>
-                </View>
-              ))}
-            </View>
-            <View className="input-card">
-              <Input
-                className="card-input"
-                type="digit"
-                placeholder="或输入其他体重 (kg)"
-                value={weight}
-                onInput={(e) => setWeight(e.detail.value)}
-              />
-            </View>
+            {/* Title is handled inside WeightRuler for better layout */}
+            <WeightRuler
+              value={weight ? Number(weight) : 60}
+              onChange={(val) => setWeight(String(val))}
+              min={30}
+              max={200}
+              height={height ? Number(height) : 170}
+            />
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
               <Button block color="primary" shape="round" className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
@@ -453,9 +420,36 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 4: 活动水平 */}
+          {/* Step 4: 目标选择 */}
           <View className="card step-card">
             <Text className="step-card-step">第 5 题</Text>
+            <Text className="step-card-title">您的目标？</Text>
+            <View className="option-list">
+              {GOAL_OPTIONS.map((opt) => (
+                <View
+                  key={opt.value}
+                  className={`option-card with-desc ${dietGoal === opt.value ? 'active' : ''}`}
+                  onClick={() => setDietGoal(opt.value)}
+                >
+                  <Text className={`option-icon iconfont ${opt.icon}`}></Text>
+                  <View className="option-info">
+                    <Text className="option-label">{opt.label}</Text>
+                    <Text className="option-desc">{opt.desc}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+            <View className="card-footer">
+              <View className="card-prev-link" onClick={goPrev}>上一题</View>
+              <Button block color="primary" shape="round" className={`card-next-btn ${dietGoal ? 'ready' : ''}`} onClick={goNext} disabled={!dietGoal}>
+                确认
+              </Button>
+            </View>
+          </View>
+
+          {/* Step 5: 活动水平 */}
+          <View className="card step-card">
+            <Text className="step-card-step">第 6 题</Text>
             <Text className="step-card-title">日常活动水平？</Text>
             <View className="option-list">
               {ACTIVITY_OPTIONS.map((o) => (
@@ -478,9 +472,9 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 5: 既往病史（多选） */}
+          {/* Step 6: 既往病史（多选） */}
           <View className="card step-card">
-            <Text className="step-card-step">第 6 题</Text>
+            <Text className="step-card-step">第 7 题</Text>
             <Text className="step-card-title">是否有以下病史？（可多选）</Text>
             <View className="option-grid">
               {MEDICAL_OPTIONS.map((o) => (
@@ -489,7 +483,6 @@ export default function HealthProfilePage() {
                   className={`option-card small ${medicalHistory.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleMedical(o.value)}
                 >
-                  <Text className="option-icon">{o.icon}</Text>
                   <Text className="option-label">{o.label}</Text>
                 </View>
               ))}
@@ -501,7 +494,6 @@ export default function HealthProfilePage() {
                   onClick={() => toggleCustomMedical(item)}
                   onLongPress={() => handleRemoveCustomMedical(item)}
                 >
-                  <Text className="option-icon">🏥</Text>
                   <Text className="option-label">{item}</Text>
                 </View>
               ))}
@@ -527,9 +519,9 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 6: 特殊饮食（多选） */}
+          {/* Step 7: 特殊饮食（多选） */}
           <View className="card step-card">
-            <Text className="step-card-step">第 7 题</Text>
+            <Text className="step-card-step">第 8 题</Text>
             <Text className="step-card-title">特殊饮食习惯？（可多选）</Text>
             <View className="option-grid">
               {DIET_OPTIONS.map((o) => (
@@ -551,9 +543,9 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 7: 过敏源 */}
+          {/* Step 8: 过敏源 */}
           <View className="card step-card">
-            <Text className="step-card-step">第 8 题（选填）</Text>
+            <Text className="step-card-step">第 9 题（选填）</Text>
             <Text className="step-card-title">有过敏源吗？</Text>
             <View className="input-card">
               <Input
@@ -572,45 +564,80 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 8: 上传体检报告（仅上传展示，点击放大预览；保存时后台自动识别并写入档案） */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 9 题（选填）</Text>
-            <Text className="step-card-title">上传体检报告/病例截图</Text>
-            <Text className="report-card-desc">上传后点击图片可放大预览。保存档案时，系统会在后台自动识别并更新到档案中。</Text>
-            <Button block variant="outlined" color="primary" className="report-upload-btn" onClick={handleReportUpload}>
-              {reportImageUrl ? '✓ 已上传，可重新选择' : '选择报告截图'}
-            </Button>
-            {reportImageUrl && (
-              <View className="report-image-preview" onClick={handlePreviewReportImage}>
-                <Image
-                  className="report-image-thumb"
-                  src={reportImageUrl}
-                  mode="aspectFit"
-                />
-                <Text className="report-preview-hint">点击放大预览</Text>
+          {/* Step 9: 体检报告上传 */}
+          <View className="card step-card upload-step">
+            <View className="upload-hero">
+              <View className="hero-icon-wrapper">
+                <Text className="hero-icon iconfont icon-yiliaohangyedeICON-"></Text>
               </View>
-            )}
+              <Text className="step-card-title" style={{ marginBottom: '16rpx' }}>上传体检报告</Text>
+              <Text className="step-card-subtitle" style={{ textAlign: 'center', marginBottom: '0' }}>AI 深度分析关键指标，定制专属方案</Text>
+            </View>
+
+            <View
+              className={`upload-area ${reportImageUrl ? 'has-image' : ''}`}
+              onClick={handleReportUpload}
+            >
+              {reportImageUrl ? (
+                <>
+                  <Image src={reportImageUrl} mode="aspectFit" className="preview-image" />
+                  <View className="reupload-mask">
+                    <Text className="iconfont icon-xiangji" style={{ fontSize: '48rpx', color: '#fff' }}></Text>
+                    <Text className="reupload-text">点击更换图片</Text>
+                  </View>
+                </>
+              ) : (
+                <View className="upload-placeholder">
+                  <Text className="upload-icon-font iconfont icon-paizhao-xianxing"></Text>
+                  <Text className="upload-title">点击上传报告</Text>
+                  <Text className="upload-desc">支持 JPG / PNG 格式图片</Text>
+                </View>
+              )}
+            </View>
+
+            <View className="benefit-list">
+              <View className="benefit-item">
+                <View className="benefit-icon-wrap">
+                  <Text className="benefit-icon iconfont icon-jiesuo"></Text>
+                </View>
+                <View className="benefit-content">
+                  <Text className="benefit-title">精准提取</Text>
+                  <Text className="benefit-text">自动识别血糖、血脂等关键指标</Text>
+                </View>
+              </View>
+              <View className="benefit-item">
+                <View className="benefit-icon-wrap">
+                  <Text className="benefit-icon iconfont icon-shentinianling"></Text>
+                </View>
+                <View className="benefit-content">
+                  <Text className="benefit-title">风险评估</Text>
+                  <Text className="benefit-text">结合个人情况评估潜在健康风险</Text>
+                </View>
+              </View>
+              <View className="benefit-item">
+                <View className="benefit-icon-wrap">
+                  <Text className="benefit-icon iconfont icon-shuben"></Text>
+                </View>
+                <View className="benefit-content">
+                  <Text className="benefit-title">饮食建议</Text>
+                  <Text className="benefit-text">根据指标生成针对性饮食指导</Text>
+                </View>
+              </View>
+            </View>
+
             <View className="card-footer">
               <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
-                确认
+              <Button
+                block
+                color="primary"
+                shape="round"
+                className="card-next-btn ready primary"
+                onClick={handleSubmit}
+                loading={saving}
+              >
+                {reportImageUrl ? '确认并开启分析' : '以后再说，直接完成'}
               </Button>
             </View>
-          </View>
-
-          {/* Step 9（最后一步）: 保存健康信息 */}
-          <View className="card step-card last">
-            <Text className="step-card-step">最后一步</Text>
-            <Text className="step-card-title">保存健康信息</Text>
-            <Text className="save-hint">将保存：个人身体情况 + 病史与饮食偏好{reportImageUrl ? '（体检报告将在后台识别后更新）' : ''}</Text>
-            <Button block color="primary" shape="round" className="card-next-btn primary" onClick={handleSubmit} disabled={saving} loading={saving}>
-              {saving ? '保存中...' : '保存健康信息'}
-            </Button>
-            {bmr != null && tdee != null && (
-              <View className="result-mini">
-                <Text>BMR {bmr.toFixed(0)} · TDEE {tdee.toFixed(0)} kcal/天</Text>
-              </View>
-            )}
           </View>
         </View>
       </View>

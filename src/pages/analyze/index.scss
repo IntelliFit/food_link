@@ -1,6 +1,6 @@
 .analyze-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #f0fdf4 0%, #f9fafb 100%);
+  background: #ffffff;
   padding: 32rpx 24rpx 200rpx;
 }
 
@@ -261,43 +261,6 @@
   transition: all 0.2s ease;
 }
 
-// 双模型对比区域
-.compare-section {
-  @extend %card-style;
-}
-
-.compare-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24rpx;
-  background: #f9fafb;
-  border-radius: 20rpx;
-  border: 2rpx solid transparent;
-  transition: all 0.3s ease;
-
-  &:active {
-    background: #f0fdf9;
-  }
-}
-
-.compare-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.compare-label {
-  font-size: 30rpx;
-  color: #111827;
-  font-weight: 600;
-}
-
-.compare-hint {
-  font-size: 24rpx;
-  color: #6b7280;
-}
-
 // 补充细节区域
 .details-section {
   @extend %card-style;
@@ -482,4 +445,24 @@
   font-weight: 600;
   color: #ffffff;
   letter-spacing: 2rpx;
+}
+
+// 多视角辅助模式
+.multiview-section {
+  @extend %card-style;
+
+  .section-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24rpx;
+
+    .section-subtitle {
+      display: block;
+      font-size: 24rpx;
+      color: #9ca3af;
+      font-weight: 400;
+      padding-left: 20rpx;
+    }
+  }
 }

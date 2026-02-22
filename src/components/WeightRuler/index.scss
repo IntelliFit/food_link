@@ -1,0 +1,257 @@
+.weight-ruler-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 800px;
+    width: 100%;
+    position: relative;
+    background: transparent;
+
+    /* Value Display Area (Top) */
+    .value-display-area {
+        margin-bottom: 40px;
+        margin-top: -60px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+
+        .label-question {
+            font-size: 36px;
+            font-weight: 500;
+            color: #1f2937;
+            margin-bottom: 24px;
+        }
+
+        .unit-toggle {
+            display: flex;
+            background: #e5e7eb;
+            border-radius: 32px;
+            padding: 4px;
+            margin-bottom: 40px;
+
+            .toggle-item {
+                padding: 8px 32px;
+                border-radius: 28px;
+                font-size: 26px;
+                color: #6b7280;
+
+                &.active {
+                    background: #1f2937;
+                    color: #fff;
+                    font-weight: 500;
+                }
+            }
+        }
+
+        .current-value-display {
+            display: flex;
+            align-items: baseline;
+
+            .val-text {
+                font-size: 110px;
+                /* Larger */
+                font-weight: 600;
+                color: #111827;
+                line-height: 1;
+            }
+
+            .unit-text {
+                font-size: 32px;
+                color: #111827;
+                margin-left: 8px;
+                font-weight: 500;
+            }
+        }
+    }
+
+    /* BMI Card (Middle) - Floating card above ruler */
+    .bmi-card {
+        background: #fff;
+        border-radius: 24px;
+        padding: 24px 32px;
+        width: 80%;
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 80px;
+        /* Space between BMI and ruler */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        align-items: center;
+
+        .bmi-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            width: 100%;
+            justify-content: flex-start;
+
+            .bmi-label {
+                font-size: 28px;
+                color: #374151;
+                margin-right: 8px;
+            }
+
+            .bmi-value {
+                font-size: 36px;
+                font-weight: bold;
+                margin-right: 16px;
+
+                &.status-normal {
+                    color: #10b981;
+                }
+
+                &.status-underweight {
+                    color: #3b82f6;
+                }
+
+                &.status-overweight {
+                    color: #f59e0b;
+                }
+
+                &.status-obese {
+                    color: #ef4444;
+                }
+            }
+
+            .bmi-tag {
+                padding: 2px 10px;
+                border-radius: 8px;
+                font-size: 24px;
+                color: #fff;
+
+                &.status-normal {
+                    background: #10b981;
+                }
+
+                &.status-underweight {
+                    background: #3b82f6;
+                }
+
+                &.status-overweight {
+                    background: #f59e0b;
+                }
+
+                &.status-obese {
+                    background: #ef4444;
+                }
+            }
+        }
+
+        .bmi-desc {
+            font-size: 26px;
+            color: #6b7280;
+            width: 100%;
+            text-align: left;
+        }
+    }
+
+    /* Horizontal Ruler (Bottom) */
+    .ruler-container {
+        width: 100%;
+        height: 240px;
+        /* Taller ruler area */
+        position: relative;
+        overflow: hidden;
+
+        /* Fixed Center Indicator */
+        .center-indicator {
+            position: absolute;
+            left: 50%;
+            width: 4px;
+            background-color: #00bc7d;
+            transform: translateX(-50%);
+            z-index: 10;
+            border-radius: 2px;
+            height: 140px;
+            /* Taller line */
+            top: 50px;
+            /* Aligned */
+        }
+
+        .ruler-scroll-view {
+            width: 100%;
+            height: 100%;
+            white-space: nowrap;
+
+            /* Hide scrollbar */
+            ::-webkit-scrollbar {
+                display: none;
+                width: 0;
+                height: 0;
+                color: transparent;
+            }
+
+            .ruler-track {
+                display: inline-flex;
+                align-items: flex-start;
+                /* Align ticks to top */
+                height: 100%;
+                /* Front/End padding to center min/max */
+                padding-left: 50vw;
+                /* Center the first item */
+                padding-right: 50vw;
+                padding-top: 40px;
+                /* Offset for ticks */
+            }
+
+            .ruler-tick {
+                position: relative;
+                flex-shrink: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                /* Width per 0.1kg step? No, typically 1 tick = 0.1kg or 1 tick = 1kg? */
+                /* Assuming 1 tick = 1 unit for now, or 0.1 unit. */
+                /* Let's say 1 tick = 0.5kg or 1kg. The image shows big numbers like 69, 70, 71. */
+                /* And smaller ticks in between. */
+                width: 20px;
+                /* Distance between ticks */
+
+                .tick-mark {
+                    width: 2px;
+                    background-color: #d1d5db;
+                    /* Light gray */
+                    transition: height 0.2s, background-color 0.2s;
+                }
+
+                /* Number Label */
+                .tick-label {
+                    position: absolute;
+                    top: -40px;
+                    /* Above the tick */
+                    font-size: 28px;
+                    color: #1f2937;
+                    font-weight: 500;
+                    transform: translateX(-50%);
+                    left: 50%;
+                }
+
+                /* 1cm / 1kg Tick (Major) */
+                &.tick-major {
+                    .tick-mark {
+                        height: 80px;
+                        background-color: #1f2937;
+                        /* Darker */
+                        width: 3px;
+                    }
+                }
+
+                /* 0.5 Tick (Medium) */
+                &.tick-medium {
+                    .tick-mark {
+                        height: 50px;
+                        background-color: #9ca3af;
+                    }
+                }
+
+                /* 0.1 Tick (Minor) */
+                &.tick-minor {
+                    .tick-mark {
+                        height: 30px;
+                        background-color: #d1d5db;
+                    }
+                }
+            }
+        }
+    }
+}

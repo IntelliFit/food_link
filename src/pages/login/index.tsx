@@ -13,7 +13,6 @@ import {
     getUserRecordDays
 } from '../../utils/api'
 
-import logo from '../../assets/logo.png'
 import './index.scss'
 
 interface UserInfo {
@@ -21,6 +20,8 @@ interface UserInfo {
     name: string
     meta: string
 }
+
+const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
 
 export default function LoginPage() {
     const [loading, setLoading] = useState(false)
@@ -33,10 +34,6 @@ export default function LoginPage() {
     // 获取手机号并登录
     const handleGetPhoneNumber = async (e: any) => {
         if (loading) return
-
-        // 检查是否同意协议（这里简化处理，实际项目应有 checkbox）
-
-        console.log('handleGetPhoneNumber', e)
 
         // 检查事件详情
         if (!e || !e.detail) {
@@ -84,18 +81,34 @@ export default function LoginPage() {
         }
     }
 
-    // 仅登录（不获取手机号）
-    const handleLoginOnly = async () => {
+    /** 微信一键登录：仅用 code 登录。若用户库中已有手机号，后端会直接带回，无需再次授权手机号 */
+    const handleWxLogin = async () => {
         if (loading) return
         setLoading(true)
-
         try {
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
-
             const loginData: LoginResponse = await login(loginRes.code)
             await handleLoginSuccess(loginData)
+        } catch (error: any) {
+            console.error('登录失败:', error)
+            Taro.showToast({
+                title: error.message || '登录失败',
+                icon: 'none'
+            })
+            setLoading(false)
+        }
+    }
 
+    /** 仅登录（不获取手机号），用于 getPhoneNumber 失败时的降级 */
+    const handleLoginOnly = async () => {
+        if (loading) return
+        setLoading(true)
+        try {
+            const loginRes = await Taro.login()
+            if (!loginRes.code) throw new Error('获取登录凭证失败')
+            const loginData: LoginResponse = await login(loginRes.code)
+            await handleLoginSuccess(loginData)
         } catch (error: any) {
             console.error('登录失败:', error)
             Taro.showToast({
@@ -117,10 +130,13 @@ export default function LoginPage() {
         // 获取用户信息 check 是否完善
         try {
             const apiUserInfo = await getUserProfile()
+            if (apiUserInfo.create_time) {
+                Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
+            }
 
             // 保存用户信息到 storage
             const userInfo: UserInfo = {
-                avatar: apiUserInfo.avatar || '👤',
+                avatar: apiUserInfo.avatar || '',
                 name: apiUserInfo.nickname || '用户昵称',
                 meta: '已记录 0 天' // 初始值，profile 页面会刷新
             }
@@ -222,7 +238,7 @@ export default function LoginPage() {
     return (
         <View className='login-page'>
             <View className='login-header'>
-                <Image src={logo} className='app-logo' style={{ backgroundColor: '#f0fdf4' }} />
+                <Image src={APP_LOGO_URL} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
                 <Text className='app-name'>智健食探</Text>
                 <Text className='app-slogan'>记录饮食，连接健康</Text>
             </View>
@@ -231,13 +247,11 @@ export default function LoginPage() {
                 <TaroifyButton
                     className='wx-login-btn'
                     shape="round"
-                    openType='getPhoneNumber'
-                    onGetPhoneNumber={handleGetPhoneNumber}
+                    onClick={handleWxLogin}
                     loading={loading && !showProfileForm}
                 >
                     微信一键登录
                 </TaroifyButton>
-
                 <TaroifyButton
                     className='skip-login-btn'
                     variant="text"

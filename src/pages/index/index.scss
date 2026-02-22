@@ -279,7 +279,10 @@
 
 .view-all-text {
   font-size: 28rpx;
-  color: #009966;
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
   line-height: 40rpx;
   font-weight: 500;
 }

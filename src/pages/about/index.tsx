@@ -1,20 +1,20 @@
-import { View, Text } from '@tarojs/components'
+import { View, Text, Image } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import {
-    FireOutlined
-} from '@taroify/icons'
 import { Cell } from '@taroify/core'
 import '@taroify/core/cell/style'
 import '@taroify/icons/style'
 import './index.scss'
 
 export default function AboutPage() {
+    const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
 
-    const handleCopyWeChat = () => {
+    const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
+
+    const handleCopyEmail = () => {
         Taro.setClipboardData({
-            data: 'food_link_official',
+            data: OFFICIAL_EMAIL,
             success: () => {
-                Taro.showToast({ title: '已复制微信号', icon: 'success' })
+                Taro.showToast({ title: '已复制邮箱', icon: 'success' })
             }
         })
     }
@@ -23,9 +23,9 @@ export default function AboutPage() {
         <View className="about-page">
             <View className="header-section">
                 <View className="logo-wrapper">
-                    <FireOutlined size="48" color="#fff" />
+                    <Image className="logo-image" src={APP_LOGO_URL} mode="aspectFit" />
                 </View>
-                <Text className="app-name">食探</Text>
+                <Text className="app-name">智健食探</Text>
                 <Text className="app-version">Version 1.0.0</Text>
             </View>
 
@@ -38,12 +38,9 @@ export default function AboutPage() {
                 </View>
 
                 <View className="cell-group">
-                    <Cell title="用户协议" clickable isLink />
-                    <Cell title="隐私政策" clickable isLink />
-                    <Cell title="官方微信" clickable isLink onClick={handleCopyWeChat}>
-                        <Text style={{ color: '#9ca3af', fontSize: '14px' }}>food_link_official</Text>
+                    <Cell title="官方邮箱" clickable isLink onClick={handleCopyEmail}>
+                        <Text className="cell-value">{OFFICIAL_EMAIL}</Text>
                     </Cell>
-                    <Cell title="联系客服" clickable isLink />
                 </View>
 
                 <View className="card">

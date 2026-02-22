@@ -24,6 +24,8 @@ CREATE TABLE public.content_violations (
       'irrelevant_image'::text,
       'inappropriate_text'::text,
       'crime'::text,
+      'harassment'::text,
+      'spam'::text,
       'other'::text
     ])
   )

@@ -20,8 +20,9 @@ import {
   type CommunityFeedItem
 } from '../../utils/api'
 import { IconCamera } from '../../components/iconfont'
-import { Button as TaroifyButton } from '@taroify/core'
+import { Button as TaroifyButton, Divider } from '@taroify/core'
 import '@taroify/core/button/style'
+import '@taroify/core/divider/style'
 
 import './index.scss'
 
@@ -125,6 +126,7 @@ export default function CommunityPage() {
           const parsed = JSON.parse(cachedFeed)
           if (Array.isArray(parsed) && parsed.length > 0) {
             setFeedList(parsed)
+            setOffset(parsed.length) // 同步更新 offset，确保后续 loadMore 正确
             hasCache = true
           }
         } catch (e) {
@@ -249,7 +251,7 @@ export default function CommunityPage() {
       // 获取帖子列表，包含每条帖子的前5条评论
       const res = await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5)
       const list = res.list || []
-      
+
       // 刷新后仅展示后端返回评论，并清理本地临时评论缓存
       list.forEach(item => {
         const tempCommentsKey = `temp_comments_${item.record.id}`
@@ -324,13 +326,18 @@ export default function CommunityPage() {
 
     if (!token) return
 
+    // 如果已经有数据，说明是从其他页面返回，保持当前列表状态，不触发自动重用缓存或静默刷新
+    // 这样可以解决从详情页返回时，已加载的多页数据被重置为第一页或缓存页的问题
+    if (feedList.length > 0) {
+      return
+    }
+
     // 1. 立即从缓存加载数据（无等待，立即展示）
     const hasCache = loadFromCache()
 
     // 2. 判断是否需要刷新
     const now = Date.now()
     const needRefreshFeed = (
-      feedList.length === 0 || // 无数据（首次或缓存失败）
       now - lastFeedRefreshTime.current > CACHE_DURATION // 超过刷新间隔
     )
     const needRefreshFriends = (
@@ -477,7 +484,7 @@ export default function CommunityPage() {
         nickname: temp_comment.nickname || localUserDisplay.nickname,
         avatar: temp_comment.avatar || localUserDisplay.avatar
       }
-      
+
       // 立即将临时评论添加到当前记录的评论列表（乐观更新）
       const newList = feedList.map(item =>
         item.record.id === expandedCommentRecordId
@@ -559,6 +566,7 @@ export default function CommunityPage() {
           lowerThreshold={100}
         >
           <View className='community-scroll-content'>
+            <Divider className="refresh-divider">下拉刷新</Divider>
             <View className='page-header'>
               <Text className='page-title'>健康圈子</Text>
               <Text className='page-subtitle'>与好友一起分享健康饮食</Text>

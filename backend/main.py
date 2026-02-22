@@ -28,6 +28,7 @@ from database import (
     insert_food_record,
     create_analysis_task_sync,
     get_analysis_task_by_id_sync,
+    get_analysis_tasks_by_ids,
     list_analysis_tasks_by_user_sync,
     list_food_records,
     list_food_records_by_range,
@@ -59,6 +60,7 @@ from database import (
     add_public_food_library_collection,
     remove_public_food_library_collection,
     get_public_food_library_collections_for_items,
+    list_collected_public_food_library,
     add_public_food_library_comment,
     list_public_food_library_comments,
     get_food_record_by_id,
@@ -211,54 +213,44 @@ def _build_gemini_prompt(
 
 async def _analyze_with_gemini(
     image_url: str = None,
+    image_urls: list = None,
     base64_image: str = None,
     prompt: str = "",
     model_name: str = "google/gemini-2.0-flash-001"
 ) -> Dict[str, Any]:
     """
-    使用 Gemini 模型分析食物图片（通过 OpenRouter API）
-    OpenRouter 提供 OpenAI 兼容的 API 格式，支持多种模型包括 Gemini
+    使用 Gemini 模型分析食物图片（通过 OpenRouter API）。
+    支持单图（image_url / base64_image）或多图（image_urls）。
     """
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key or api_key == "your_openrouter_api_key_here":
         raise Exception("请在 .env 中配置有效的 OPENROUTER_API_KEY")
-    
-    # 准备图片数据（OpenRouter 支持 URL 和 base64 两种格式）
-    if image_url:
-        image_content = {"type": "image_url", "image_url": {"url": image_url}}
+
+    content_parts = [{"type": "text", "text": prompt}]
+    if image_urls and len(image_urls) > 0:
+        for u in image_urls:
+            content_parts.append({"type": "image_url", "image_url": {"url": u}})
+    elif image_url:
+        content_parts.append({"type": "image_url", "image_url": {"url": image_url}})
     elif base64_image:
-        # 确保 base64 格式正确
-        if "," in base64_image:
-            image_data = base64_image
-        else:
-            image_data = f"data:image/jpeg;base64,{base64_image}"
-        image_content = {"type": "image_url", "image_url": {"url": image_data}}
+        image_data = base64_image if "," in base64_image else f"data:image/jpeg;base64,{base64_image}"
+        content_parts.append({"type": "image_url", "image_url": {"url": image_data}})
     else:
-        raise Exception("请提供 image_url 或 base64_image")
-    
-    # 构建 OpenAI 兼容格式的请求
+        raise Exception("请提供 image_url、image_urls 或 base64_image")
+
     api_url = f"{OPENROUTER_BASE_URL}/chat/completions"
-    
     async with httpx.AsyncClient(timeout=90.0) as client:
         response = await client.post(
             api_url,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://healthymax.cn",  # OpenRouter 需要
-                "X-Title": "Food Link",  # 应用名称
+                "HTTP-Referer": "https://healthymax.cn",
+                "X-Title": "Food Link",
             },
             json={
                 "model": model_name,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            image_content
-                        ]
-                    }
-                ],
+                "messages": [{"role": "user", "content": content_parts}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.7,
             }
@@ -288,6 +280,40 @@ async def _analyze_with_gemini(
             raise Exception("Gemini 返回的 JSON 格式解析失败")
         
         return parsed
+
+
+async def _analyze_text_with_gemini(prompt: str, model_name: str = "google/gemini-2.0-flash-001") -> Dict[str, Any]:
+    """调用 OpenRouter Gemini 做纯文本分析（如文字描述食物），返回解析后的 JSON。"""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key or api_key == "your_openrouter_api_key_here":
+        raise Exception("请在 .env 中配置有效的 OPENROUTER_API_KEY")
+    api_url = f"{OPENROUTER_BASE_URL}/chat/completions"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            api_url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://healthymax.cn",
+                "X-Title": "Food Link",
+            },
+            json={
+                "model": model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.5,
+            },
+        )
+        if not response.is_success:
+            error_data = response.json() if response.content else {}
+            raise Exception(error_data.get("error", {}).get("message") or f"OpenRouter API 错误: {response.status_code}")
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content")
+        if not content:
+            raise Exception("Gemini 返回了空响应")
+        json_str = re.sub(r"```json", "", content)
+        json_str = re.sub(r"```", "", json_str).strip()
+        return json.loads(json_str)
 
 
 async def _analyze_with_qwen(
@@ -398,6 +424,7 @@ class LoginResponse(BaseModel):
     phoneNumber: Optional[str] = None
     purePhoneNumber: Optional[str] = None
     countryCode: Optional[str] = None
+    diet_goal: Optional[str] = None
 
 
 # 活动水平中文映射（用于健康档案摘要）
@@ -487,46 +514,22 @@ async def analyze_food(
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
-    分析食物图片，返回营养成分和健康建议
-
-    - **base64Image**: Base64 编码的图片数据（必需）
-    - **additionalContext**: 用户补充的上下文信息（可选）
-    - **modelName**: 使用的模型名称（默认: qwen-vl-max）
-    - 若请求头带有效 Authorization，将结合该用户的健康档案给出更贴合体质与健康状况的建议。
+    分析食物图片，返回营养成分和健康建议。使用 OpenRouter 的 Gemini 模型。
     """
     try:
-        # 获取 API Key
-        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-        if not api_key:
-            raise HTTPException(
-                status_code=500,
-                detail="缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量"
-            )
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_key or openrouter_key == "your_openrouter_api_key_here":
+            raise HTTPException(status_code=500, detail="缺少 OPENROUTER_API_KEY 环境变量")
 
         if not request.base64Image and not request.image_url and not request.image_urls:
-            raise HTTPException(
-                status_code=400,
-                detail="请提供 base64Image 或 image_url 或 image_urls"
-            )
+            raise HTTPException(status_code=400, detail="请提供 base64Image 或 image_url 或 image_urls")
         if (request.base64Image and request.image_url) or (request.base64Image and request.image_urls):
-            raise HTTPException(
-                status_code=400,
-                detail="base64Image 不能与 image_url/image_urls 同时传"
-            )
-
-        # 构建 API URL
-        base_url = os.getenv(
-            "DASHSCOPE_BASE_URL",
-            "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        )
-        api_url = f"{base_url}/chat/completions"
+            raise HTTPException(status_code=400, detail="base64Image 不能与 image_url/image_urls 同时传")
 
         goal_hint = ""
         if request.user_goal:
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
-        
-        # 拼接状态提示（优先使用新版 diet_goal + activity_timing，兼容旧版 context_state）
         state_hint = ""
         if request.diet_goal or request.activity_timing:
             diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
@@ -536,206 +539,89 @@ async def analyze_food(
             state_parts = [s for s in [diet_text, activity_text] if s]
             if state_parts:
                 state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
-
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
         if request.meal_type:
             meal_map = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
             meal_name = meal_map.get(request.meal_type, request.meal_type)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
-
-        # 若已登录，拉取健康档案并注入 prompt
         profile_block = ""
         if user_info:
             user = await get_user_by_id(user_info["user_id"])
             if user:
                 profile_block = _format_health_profile_for_analysis(user)
                 if profile_block:
-                    profile_block = (
-                        "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
-                        + profile_block
-                    )
+                    profile_block = "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n" + profile_block
 
-        # 构建提示词
-        prompt = f"""
-请作为专业的营养师分析这张食物图片。
-1. 识别图中所有不同的食物单品。
-2. 估算每种食物的重量（克）和详细营养成分。
-3. description: 提供这顿饭的简短中文描述。
-4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
-5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
-6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（如维生素C促铁吸收、油脂助脂溶性维生素等，一两句话）。
-7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
+        prompt = _build_gemini_prompt(
+            additional_context=request.additionalContext or "",
+            goal_hint=goal_hint,
+            state_hint=state_hint,
+            remain_hint=remain_hint,
+            meal_hint=meal_hint,
+            profile_block=profile_block or "",
+        )
 
-{('用户补充背景信息: "' + request.additionalContext + '"。请根据此信息调整对隐形成分或烹饪方式的判断。') if request.additionalContext else ''}
-
-重要：请务必使用**简体中文**返回所有文本内容。
-请严格按照以下 JSON 格式返回，不要包含任何其他文本：
-
-{{
-  "items": [
-    {{
-      "name": "食物名称（简体中文）",
-      "estimatedWeightGrams": 重量（数字）,
-      "nutrients": {{
-        "calories": 热量,
-        "protein": 蛋白质,
-        "carbs": 碳水,
-        "fat": 脂肪,
-        "fiber": 纤维,
-        "sugar": 糖分
-      }}
-    }}
-  ],
-  "description": "餐食描述（简体中文）",
-  "insight": "健康建议（简体中文）",
-  "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
-  "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
-  "context_advice": "情境建议（简体中文，若无则空字符串）"
-}}
-""".strip()
-
-        # 图片入参：优先使用 image_url（Supabase 公网 URL），否则使用 base64
-        # 图片入参：
-        # 1. 优先使用 image_urls (多图)
-        # 2. 其次 image_url (单图 URL)
-        # 3. 最后 base64Image (单图 base64)
         image_urls_for_api = []
+        base64_for_gemini = None
         if request.image_urls:
             image_urls_for_api = request.image_urls
         elif request.image_url:
             image_urls_for_api = [request.image_url]
         elif request.base64Image:
-            image_data = (
-                request.base64Image.split(",")[1]
-                if "," in request.base64Image
-                else request.base64Image
-            )
-            image_urls_for_api = [f"data:image/jpeg;base64,{image_data}"]
+            base64_for_gemini = request.base64Image.split(",")[1] if "," in request.base64Image else request.base64Image
 
-        # 调用 DashScope API
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": request.modelName,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": prompt
-                                },
-                                *[
-                                    {"type": "image_url", "image_url": {"url": url}}
-                                    for url in image_urls_for_api
-                                ]
-                            ]
-                        }
-                    ],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.7,
-                }
-            )
+        if image_urls_for_api:
+            parsed = await _analyze_with_gemini(image_urls=image_urls_for_api, prompt=prompt, model_name="google/gemini-2.0-flash-001")
+        else:
+            parsed = await _analyze_with_gemini(base64_image=base64_for_gemini, prompt=prompt, model_name="google/gemini-2.0-flash-001")
 
-            if not response.is_success:
-                error_data = response.json() if response.content else {}
-                error_message = (
-                    error_data.get("error", {}).get("message")
-                    or f"DashScope API 错误: {response.status_code}"
+        valid_items = []
+        if isinstance(parsed.get("items"), list):
+            for item in parsed["items"]:
+                nutrients = Nutrients(
+                    calories=float(item.get("nutrients", {}).get("calories", 0) or 0),
+                    protein=float(item.get("nutrients", {}).get("protein", 0) or 0),
+                    carbs=float(item.get("nutrients", {}).get("carbs", 0) or 0),
+                    fat=float(item.get("nutrients", {}).get("fat", 0) or 0),
+                    fiber=float(item.get("nutrients", {}).get("fiber", 0) or 0),
+                    sugar=float(item.get("nutrients", {}).get("sugar", 0) or 0),
                 )
-                raise HTTPException(
-                    status_code=500,
-                    detail=error_message
-                )
-
-            data = response.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content")
-
-            if not content:
-                raise HTTPException(
-                    status_code=500,
-                    detail="AI 返回了空响应，请检查图片或稍后重试。"
-                )
-
-            # 清理可能的 markdown 代码块标记
-            json_str = re.sub(r"```json", "", content)
-            json_str = re.sub(r"```", "", json_str)
-            json_str = json_str.strip()
-
-            # 解析 JSON
-            try:
-                parsed = json.loads(json_str)
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=500,
-                    detail="AI 数据解析失败，请重试。"
-                )
-
-            # 验证和转换 items
-            valid_items = []
-            if isinstance(parsed.get("items"), list):
-                for item in parsed["items"]:
-                    nutrients = Nutrients(
-                        calories=float(item.get("nutrients", {}).get("calories", 0) or 0),
-                        protein=float(item.get("nutrients", {}).get("protein", 0) or 0),
-                        carbs=float(item.get("nutrients", {}).get("carbs", 0) or 0),
-                        fat=float(item.get("nutrients", {}).get("fat", 0) or 0),
-                        fiber=float(item.get("nutrients", {}).get("fiber", 0) or 0),
-                        sugar=float(item.get("nutrients", {}).get("sugar", 0) or 0),
+                weight = float(item.get("estimatedWeightGrams", 0) or 0)
+                valid_items.append(
+                    FoodItemResponse(
+                        name=str(item.get("name", "未知食物")),
+                        estimatedWeightGrams=weight,
+                        originalWeightGrams=weight,
+                        nutrients=nutrients,
                     )
-                    weight = float(item.get("estimatedWeightGrams", 0) or 0)
-                    valid_items.append(
-                        FoodItemResponse(
-                            name=str(item.get("name", "未知食物")),
-                            estimatedWeightGrams=weight,
-                            originalWeightGrams=weight,
-                            nutrients=nutrients,
-                        )
-                    )
+                )
 
-            def _opt_str(v):
-                if v is None or v == "":
-                    return None
-                s = str(v).strip()
-                return s if s else None
+        def _opt_str(v):
+            if v is None or v == "":
+                return None
+            s = str(v).strip()
+            return s if s else None
 
-            return AnalyzeResponse(
-                description=str(parsed.get("description", "无法获取描述")),
-                insight=str(parsed.get("insight", "保持健康饮食！")),
-                items=valid_items,
-                pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
-                absorption_notes=_opt_str(parsed.get("absorption_notes")),
-                context_advice=_opt_str(parsed.get("context_advice")),
-            )
-
+        return AnalyzeResponse(
+            description=str(parsed.get("description", "无法获取描述")),
+            insight=str(parsed.get("insight", "保持健康饮食！")),
+            items=valid_items,
+            pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
+            absorption_notes=_opt_str(parsed.get("absorption_notes")),
+            context_advice=_opt_str(parsed.get("context_advice")),
+        )
     except HTTPException:
         raise
     except httpx.TimeoutException:
-        print("[api/analyze] error: DashScope 请求超时")
-        raise HTTPException(
-            status_code=500,
-            detail="AI 服务超时，请稍后重试"
-        )
+        print("[api/analyze] error: OpenRouter 请求超时")
+        raise HTTPException(status_code=500, detail="AI 服务超时，请稍后重试")
     except httpx.HTTPError as e:
-        msg = str(e) or "连接 AI 服务失败"
-        print(f"[api/analyze] error: {msg}")
-        raise HTTPException(
-            status_code=500,
-            detail=msg
-        )
+        raise HTTPException(status_code=500, detail=str(e) or "连接 AI 服务失败")
     except Exception as e:
         msg = str(e) or f"未知错误: {type(e).__name__}"
         print(f"[api/analyze] error: {msg}")
-        raise HTTPException(
-            status_code=500,
-            detail=msg
-        )
+        raise HTTPException(status_code=500, detail=msg)
 
 
 class UploadAnalyzeImageRequest(BaseModel):
@@ -792,6 +678,7 @@ class AnalyzeSubmitRequest(BaseModel):
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
     additionalContext: Optional[str] = Field(default=None, description="用户补充上下文")
     modelName: Optional[str] = Field(default="qwen-vl-max", description="模型名称")
+    is_multi_view: Optional[bool] = Field(default=False, description="是否开启多视角辅助模式")
 
 
 @app.post("/api/analyze/submit")
@@ -813,6 +700,7 @@ async def analyze_submit(
         "remaining_calories": body.remaining_calories,
         "additionalContext": body.additionalContext,
         "modelName": body.modelName,
+        "is_multi_view": body.is_multi_view,
     }
     try:
         task = await asyncio.to_thread(
@@ -1074,60 +962,43 @@ async def analyze_food_text(
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
-    根据用户文字描述分析食物营养成分，返回与 /api/analyze 相同结构（description, insight, items）。
-    若请求头带有效 Authorization，将结合该用户的健康档案给出更贴合体质与健康状况的建议。
+    根据用户文字描述分析食物营养成分，使用 OpenRouter Gemini。返回与 /api/analyze 相同结构。
     """
     try:
-        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-        if not api_key:
-            raise HTTPException(
-                status_code=500,
-                detail="缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量"
-            )
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_key or openrouter_key == "your_openrouter_api_key_here":
+            raise HTTPException(status_code=500, detail="缺少 OPENROUTER_API_KEY 环境变量")
         if not (request.text or request.text.strip()):
             raise HTTPException(status_code=400, detail="text 不能为空")
 
-        base_url = os.getenv(
-            "DASHSCOPE_BASE_URL",
-            "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        )
-        api_url = f"{base_url}/chat/completions"
         goal_hint = ""
         if request.user_goal:
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f" 用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价 P/C/F 占比是否适合。"
-        
-        # 拼接状态提示（优先使用新版 diet_goal + activity_timing，兼容旧版 context_state）
         state_hint = ""
         if request.diet_goal or request.activity_timing:
-            diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体权", "none": "无特殊目标"}
+            diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
             activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
             diet_text = diet_map.get(request.diet_goal, request.diet_goal) if request.diet_goal and request.diet_goal != "none" else ""
             activity_text = activity_map.get(request.activity_timing, request.activity_timing) if request.activity_timing and request.activity_timing != "none" else ""
             state_parts = [s for s in [diet_text, activity_text] if s]
             if state_parts:
                 state_hint = f" 用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性建议。"
-
         remain_hint = f" 当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示。" if request.remaining_calories is not None else ""
-
-        # 若已登录，拉取健康档案并注入 prompt
         profile_block = ""
         if user_info:
             user = await get_user_by_id(user_info["user_id"])
             if user:
                 profile_block = _format_health_profile_for_analysis(user)
                 if profile_block:
-                    profile_block = (
-                        " 若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
-                        + profile_block
-                    )
+                    profile_block = " 若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议。\n\n" + profile_block
 
         prompt = f"""
 请作为专业营养师，根据用户对食物的**文字描述**，分析营养成分。
 用户描述内容：
-"""
-        prompt += f'"{request.text.strip()}"\n\n'
-        prompt += f"""请完成：
+"{request.text.strip()}"
+
+请完成：
 1. 从描述中识别出所有食物单品（若有多项请分别列出）。
 2. 估算每种食物的重量（克）和详细营养成分（热量、蛋白质、碳水、脂肪、纤维、糖分）。
 3. description: 用一句简短中文概括这餐/这些食物。
@@ -1136,116 +1007,53 @@ async def analyze_food_text(
 6. absorption_notes: 食物组合或烹饪对吸收率、生物利用度的简要说明（一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则空字符串）。{state_hint}{remain_hint}{profile_block}
 
-重要：请务必使用**简体中文**返回所有文本。
-请**严格按照**以下 JSON 格式返回，不要包含任何其他文字：
+重要：请务必使用**简体中文**返回所有文本。请**严格按照**以下 JSON 格式返回，不要包含任何其他文字：
 
-{{
-  "items": [
-    {{
-      "name": "食物名称（简体中文）",
-      "estimatedWeightGrams": 重量数字,
-      "nutrients": {{
-        "calories": 热量数字,
-        "protein": 蛋白质数字,
-        "carbs": 碳水数字,
-        "fat": 脂肪数字,
-        "fiber": 纤维数字,
-        "sugar": 糖分数字
-      }}
-    }}
-  ],
-  "description": "餐食描述（简体中文）",
-  "insight": "健康建议（简体中文）",
-  "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
-  "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
-  "context_advice": "情境建议（简体中文，若无则空字符串）"
-}}
+{{"items": [{{"name": "食物名称（简体中文）", "estimatedWeightGrams": 重量数字, "nutrients": {{"calories", "protein", "carbs", "fat", "fiber", "sugar"}}}}], "description": "餐食描述", "insight": "健康建议", "pfc_ratio_comment": "PFC 比例评价", "absorption_notes": "吸收率说明", "context_advice": "情境建议"}}
 """.strip()
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "qwen-turbo",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.5,
-                },
-            )
-            if not response.is_success:
-                error_data = response.json() if response.content else {}
-                error_message = (
-                    error_data.get("error", {}).get("message")
-                    or f"API 错误: {response.status_code}"
-                )
-                raise HTTPException(status_code=500, detail=error_message)
+        parsed = await _analyze_text_with_gemini(prompt, model_name="google/gemini-2.0-flash-001")
 
-            data = response.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content")
-            if not content:
-                raise HTTPException(
-                    status_code=500,
-                    detail="AI 返回了空响应，请稍后重试。"
-                )
-
-            json_str = re.sub(r"```json", "", content)
-            json_str = re.sub(r"```", "", json_str)
-            json_str = json_str.strip()
-            try:
-                parsed = json.loads(json_str)
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=500,
-                    detail="AI 数据解析失败，请重试。"
-                )
-
-            valid_items = []
-            if isinstance(parsed.get("items"), list):
-                for item in parsed["items"]:
-                    nutrients = Nutrients(
-                        calories=float(item.get("nutrients", {}).get("calories", 0) or 0),
-                        protein=float(item.get("nutrients", {}).get("protein", 0) or 0),
-                        carbs=float(item.get("nutrients", {}).get("carbs", 0) or 0),
-                        fat=float(item.get("nutrients", {}).get("fat", 0) or 0),
-                        fiber=float(item.get("nutrients", {}).get("fiber", 0) or 0),
-                        sugar=float(item.get("nutrients", {}).get("sugar", 0) or 0),
+        valid_items = []
+        if isinstance(parsed.get("items"), list):
+            for item in parsed["items"]:
+                n = item.get("nutrients") or {}
+                weight = float(item.get("estimatedWeightGrams", 0) or 0)
+                valid_items.append(
+                    FoodItemResponse(
+                        name=str(item.get("name", "未知食物")),
+                        estimatedWeightGrams=weight,
+                        originalWeightGrams=weight,
+                        nutrients=Nutrients(
+                            calories=float(n.get("calories", 0) or 0),
+                            protein=float(n.get("protein", 0) or 0),
+                            carbs=float(n.get("carbs", 0) or 0),
+                            fat=float(n.get("fat", 0) or 0),
+                            fiber=float(n.get("fiber", 0) or 0),
+                            sugar=float(n.get("sugar", 0) or 0),
+                        ),
                     )
-                    weight = float(item.get("estimatedWeightGrams", 0) or 0)
-                    valid_items.append(
-                        FoodItemResponse(
-                            name=str(item.get("name", "未知食物")),
-                            estimatedWeightGrams=weight,
-                            originalWeightGrams=weight,
-                            nutrients=nutrients,
-                        )
-                    )
+                )
 
-            def _opt_str(v):
-                if v is None or v == "":
-                    return None
-                s = str(v).strip()
-                return s if s else None
+        def _opt_str(v):
+            if v is None or v == "":
+                return None
+            s = str(v).strip()
+            return s if s else None
 
-            return AnalyzeResponse(
-                description=str(parsed.get("description", "无法获取描述")),
-                insight=str(parsed.get("insight", "保持健康饮食！")),
-                items=valid_items,
-                pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
-                absorption_notes=_opt_str(parsed.get("absorption_notes")),
-                context_advice=_opt_str(parsed.get("context_advice")),
-            )
+        return AnalyzeResponse(
+            description=str(parsed.get("description", "无法获取描述")),
+            insight=str(parsed.get("insight", "保持健康饮食！")),
+            items=valid_items,
+            pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
+            absorption_notes=_opt_str(parsed.get("absorption_notes")),
+            context_advice=_opt_str(parsed.get("context_advice")),
+        )
     except HTTPException:
         raise
     except Exception as e:
         print(f"[api/analyze-text] error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=str(e) or "连接 AI 服务失败"
-        )
+        raise HTTPException(status_code=500, detail=str(e) or "连接 AI 服务失败")
 
 
 class AnalyzeTextSubmitRequest(BaseModel):
@@ -1368,23 +1176,36 @@ class HealthProfileUpdateRequest(BaseModel):
     )
     diet_preference: Optional[List[str]] = Field(
         default_factory=list,
-        description="特殊饮食：如 keto, vegetarian, vegan 等"
+        description="饮食偏好：如 keto, vegetarian, vegan 等"
     )
-    allergies: Optional[List[str]] = Field(default_factory=list, description="过敏源")
+    allergies: Optional[List[str]] = Field(
+        default_factory=list,
+        description="过敏原：如 peanuts, seafood 等"
+    )
     report_extract: Optional[Dict[str, Any]] = Field(
         None,
-        description="体检报告 OCR 识别结果（保存时一并写入 user_health_documents）"
+        description="体检报告 OCR 识别结果JSON"
     )
     report_image_url: Optional[str] = Field(
         None,
-        description="体检报告图片在 Supabase Storage 的 URL（保存时写入 user_health_documents.image_url）"
+        description="体检报告图片公网 URL"
+    )
+    diet_goal: Optional[str] = Field(
+        None,
+        description="目标：fat_loss, muscle_gain, maintain"
     )
 
-
-class HealthReportOcrRequest(BaseModel):
-    """健康报告/体检报告 OCR 识别请求：传 imageUrl（推荐）或 base64Image"""
-    base64Image: Optional[str] = Field(None, description="Base64 编码的体检报告或病例截图")
-    imageUrl: Optional[str] = Field(None, description="已上传到 Supabase Storage 的图片公网 URL，供多模态模型识别")
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "gender": "male",
+                "birthday": "1990-01-01",
+                "height": 175,
+                "weight": 70,
+                "activity_level": "moderate",
+                "diet_goal": "fat_loss"
+            }
+        }
 
 
 @app.get("/api/user/profile")
@@ -1413,6 +1234,7 @@ async def get_user_profile(
         "bmr": float(user["bmr"]) if user.get("bmr") is not None else None,
         "tdee": float(user["tdee"]) if user.get("tdee") is not None else None,
         "onboarding_completed": bool(user.get("onboarding_completed")),
+        "diet_goal": user.get("diet_goal"),
     }
     return {
         "id": user["id"],
@@ -1540,6 +1362,7 @@ async def get_health_profile(user_info: dict = Depends(get_current_user_info)):
         "bmr": float(user["bmr"]) if user.get("bmr") is not None else None,
         "tdee": float(user["tdee"]) if user.get("tdee") is not None else None,
         "onboarding_completed": bool(user.get("onboarding_completed")),
+        "diet_goal": user.get("diet_goal"),
     }
 
 
@@ -1567,6 +1390,8 @@ async def update_health_profile(
         update_dict["weight"] = body.weight
     if body.activity_level is not None:
         update_dict["activity_level"] = body.activity_level
+    if body.diet_goal is not None:
+        update_dict["diet_goal"] = body.diet_goal
 
     health_condition = dict(user.get("health_condition") or {})
     if body.medical_history is not None:
@@ -1642,6 +1467,7 @@ async def update_health_profile(
             "bmr": float(updated["bmr"]) if updated.get("bmr") is not None else None,
             "tdee": float(updated["tdee"]) if updated.get("tdee") is not None else None,
             "onboarding_completed": bool(updated.get("onboarding_completed")),
+            "diet_goal": updated.get("diet_goal"),
         }
     except Exception as e:
         err_msg = str(e).lower()
@@ -1655,14 +1481,20 @@ async def update_health_profile(
 
 
 def _ocr_report_prompt() -> str:
+    """体检报告 OCR 提示词"""
     return """
-请识别这张体检报告或病例截图中的健康相关信息。
-请用简体中文，按以下 JSON 格式返回（若某项无法识别则填空数组或空字符串）：
+你是一个专业的 OCR 文字识别助手。请识别这张体检报告或病例截图中的所有文字内容。
+任务要求：
+1. **仅提取**图片中实际存在的文字，**严禁**进行总结、概括、分析或生成医疗建议。
+2. 如果图片中包含指标数据，请精确提取数值和单位。
+3. 如果图片中包含诊断结论，请按原文提取。
+
+请严格按以下 JSON 格式返回（若某项图片中不存在则填空数组或空字符串）：
 {
-  "indicators": [{"name": "指标名称", "value": "数值", "unit": "单位"}],
-  "conclusions": ["结论1", "结论2"],
-  "suggestions": ["建议1"],
-  "medical_notes": "其他与病史、过敏、饮食禁忌相关的文字摘要"
+  "indicators": [{"name": "项目名称", "value": "测定值", "unit": "单位", "flag": "异常标记(如↑/↓)"}],
+  "conclusions": ["诊断结论1(原文)", "诊断结论2(原文)"],
+  "suggestions": ["医学建议(仅提取报告原文中的建议，不要自己生成)"],
+  "medical_notes": "其他主要文字内容的原文提取"
 }
 只返回上述 JSON，不要其他说明。
 """.strip()
@@ -1800,6 +1632,12 @@ async def submit_report_extraction_task(
     except Exception as e:
         print(f"[submit_report_extraction_task] 错误: {e}")
         raise HTTPException(status_code=500, detail="提交任务失败")
+
+
+class HealthReportOcrRequest(BaseModel):
+    """体检报告 OCR 请求：imageUrl 或 base64Image 二选一"""
+    imageUrl: Optional[str] = Field(None, description="体检报告图片公网 URL")
+    base64Image: Optional[str] = Field(None, description="Base64 编码的报告图片")
 
 
 @app.post("/api/user/health-profile/ocr-extract")
@@ -2006,10 +1844,33 @@ async def get_food_record_list(
 ):
     """
     获取当前用户饮食记录列表。可选按日期筛选（date=YYYY-MM-DD），不传则返回最近记录。
+    若记录有 source_task_id 且无 image_paths，则从 analysis_tasks 补全 image_paths 供多图展示。
     """
     user_id = user_info["user_id"]
     try:
         records = await list_food_records(user_id=user_id, date=date, limit=100)
+        # 补全多图：有 source_task_id 且 record 无 image_paths 时从任务表拉取
+        task_ids = [
+            r["source_task_id"]
+            for r in records
+            if r.get("source_task_id")
+            and (not r.get("image_paths") or (isinstance(r.get("image_paths"), list) and len(r.get("image_paths") or []) == 0))
+        ]
+        if task_ids:
+            tasks_map = await get_analysis_tasks_by_ids(list(set(task_ids)))
+            for r in records:
+                tid = r.get("source_task_id")
+                if not tid or (r.get("image_paths") and isinstance(r.get("image_paths"), list) and len(r["image_paths"]) > 0):
+                    continue
+                task = tasks_map.get(tid)
+                if task:
+                    paths = task.get("image_paths")
+                    if paths and isinstance(paths, list) and len(paths) > 0:
+                        r["image_paths"] = list(paths)
+                    elif task.get("image_url"):
+                        r["image_paths"] = [task["image_url"]]
+                    elif r.get("image_path"):
+                        r["image_paths"] = [r["image_path"]]
         return {"records": records}
     except Exception as e:
         print(f"[get_food_record_list] 错误: {e}")
@@ -2147,10 +2008,14 @@ async def get_stats_summary(
         start_d = (now - timedelta(days=29)).date()
     start_date = start_d.strftime("%Y-%m-%d")
     end_date = today
+    print(f"[get_stats_summary] Range: {range}, Start: {start_date}, End: {end_date}, User: {user_id}")
     try:
         user = await get_user_by_id(user_id)
         tdee = (user.get("tdee") and float(user["tdee"])) or 2000
         records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
+        print(f"[get_stats_summary] Records found: {len(records)}")
+        if records:
+            print(f"[get_stats_summary] First record time: {records[0].get('record_time')} type: {type(records[0].get('record_time'))}")
         streak_days = await get_streak_days(user_id)
     except Exception as e:
         print(f"[get_stats_summary] 错误: {e}")
@@ -2182,9 +2047,11 @@ async def get_stats_summary(
             try:
                 dt_str = rt[:10] if isinstance(rt, str) else str(rt)[:10]
                 daily_cal[dt_str] = daily_cal.get(dt_str, 0) + float(r.get("total_calories") or 0)
-            except Exception:
+            except Exception as e:
+                print(f"[get_stats_summary] Date parse error for {rt}: {e}")
                 pass
     daily_list = [{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())]
+    print(f"[get_stats_summary] Daily list: {daily_list}")
 
     total_macros = total_protein * 4 + total_carbs * 4 + total_fat * 9
     if total_macros <= 0:
@@ -2486,7 +2353,8 @@ async def api_community_comment_post(
 
 class PublicFoodLibraryCreateRequest(BaseModel):
     """创建公共食物库条目请求"""
-    image_path: Optional[str] = Field(default=None, description="图片 URL")
+    image_path: Optional[str] = Field(default=None, description="单图 URL（兼容）")
+    image_paths: Optional[List[str]] = Field(default=None, description="多图 URL 列表，优先于 image_path")
     source_record_id: Optional[str] = Field(default=None, description="若从个人记录分享，传来源记录 ID")
     # AI 标签（若从记录分享可自动带入，否则需前端先识别）
     total_calories: float = Field(default=0)
@@ -2531,10 +2399,21 @@ async def api_create_public_food_library(
             raise HTTPException(status_code=404, detail="来源记录不存在")
         if src_record.get("user_id") != user_id:
             raise HTTPException(status_code=403, detail="无权分享他人记录")
+    # 多图：优先 body.image_paths；从记录分享时取来源任务的 image_paths，否则用 [record.image_path]
+    image_paths: Optional[List[str]] = body.image_paths if body.image_paths else None
+    if image_paths is None and src_record and src_record.get("source_task_id"):
+        task = await asyncio.to_thread(get_analysis_task_by_id_sync, src_record["source_task_id"])
+        if task and task.get("image_paths") and isinstance(task["image_paths"], list) and len(task["image_paths"]) > 0:
+            image_paths = list(task["image_paths"])
+        elif src_record.get("image_path"):
+            image_paths = [src_record["image_path"]]
+    if image_paths is None and (body.image_path or (src_record.get("image_path") if src_record else None)):
+        image_paths = [body.image_path or (src_record.get("image_path") if src_record else None)]
     try:
         item = await create_public_food_library_item(
             user_id=user_id,
             image_path=body.image_path or (src_record.get("image_path") if src_record else None),
+            image_paths=image_paths,
             source_record_id=body.source_record_id,
             total_calories=body.total_calories or (float(src_record.get("total_calories") or 0) if src_record else 0),
             total_protein=body.total_protein or (float(src_record.get("total_protein") or 0) if src_record else 0),
@@ -2638,6 +2517,44 @@ async def api_my_public_food_library(
     except Exception as e:
         print(f"[api/public-food-library/mine] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取失败")
+
+
+@app.get("/api/public-food-library/collections")
+async def api_public_food_library_collections(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取当前用户收藏的公共食物库条目（与列表接口同结构：含 author、liked、collected）"""
+    try:
+        items = await list_collected_public_food_library(user_info["user_id"], limit=50)
+        item_ids = [it["id"] for it in items]
+        likes_map = await get_public_food_library_likes_for_items(item_ids, user_info["user_id"]) if item_ids else {}
+        collections_map = await get_public_food_library_collections_for_items(item_ids, user_info["user_id"]) if item_ids else {}
+        author_ids = list({it["user_id"] for it in items})
+        from database import get_supabase_client
+        supabase = get_supabase_client()
+        authors_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
+        author_map = {a["id"]: a for a in (authors_result.data or [])} if authors_result else {}
+        out = []
+        for it in items:
+            like_info = likes_map.get(it["id"], {"count": 0, "liked": False})
+            collection_info = collections_map.get(it["id"], {"collected": False})
+            author = author_map.get(it["user_id"], {})
+            out.append({
+                **it,
+                "like_count": like_info["count"],
+                "liked": like_info["liked"],
+                "collection_count": it.get("collection_count", 0),
+                "collected": collection_info["collected"],
+                "author": {
+                    "id": author.get("id"),
+                    "nickname": author.get("nickname") or "用户",
+                    "avatar": author.get("avatar") or "",
+                },
+            })
+        return {"list": out}
+    except Exception as e:
+        print(f"[api/public-food-library/collections] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取收藏列表失败")
 
 
 @app.get("/api/public-food-library/{item_id}")
@@ -3058,7 +2975,12 @@ async def login(request: LoginRequest):
             user_id = user["id"]
             print(f"[api/login] 新用户创建成功，user_id: {user_id}")
         
-        # 5. 生成 JWT token
+        # 5. 若未通过本次请求获取到手机号，但用户库中已有手机号，则从库中带回前端（免二次授权）
+        if not pure_phone_number and user.get("telephone"):
+            pure_phone_number = user.get("telephone")
+            phone_number = user.get("telephone")
+
+        # 6. 生成 JWT token
         token_data = {
             "user_id": user_id,
             "openid": openid,
@@ -3078,7 +3000,7 @@ async def login(request: LoginRequest):
             expires_delta=timedelta(days=36525)
         )
         
-        # 6. 返回登录结果
+        # 7. 返回登录结果
         return LoginResponse(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -3089,7 +3011,8 @@ async def login(request: LoginRequest):
             unionid=unionid,
             phoneNumber=phone_number,
             purePhoneNumber=pure_phone_number,
-            countryCode=country_code
+            countryCode=country_code,
+            diet_goal=user.get("diet_goal")
         )
     
     except HTTPException:

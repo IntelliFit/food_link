@@ -4,8 +4,63 @@
 
 ---
 
+## 2026-02-17
+
+- 🔧 refactor: 食物库分享页去掉「获取当前位置」功能，保留搜索地址与城市/详细地址填写 `src/pages/food-library-share/index.tsx`
+- ✨ feat: 个人中心页首次登录未填写健康档案时自动跳转到答题页（pages/health-profile/index） `src/pages/profile/index.tsx`
+- 🔧 refactor: 分析页去掉模型对比；食物分析（图片/文字）统一使用 OpenRouter Gemini，图片/评论/内容审核继续使用千问 `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss` `src/pages/result/index.tsx` `backend/main.py` `backend/worker.py`
+- 🎨 style: 关于页仅保留「官方邮箱」一项，移除用户协议、隐私政策、官方微信、联系客服；点击邮箱可复制 `src/pages/about/index.tsx` `src/pages/about/index.scss`
+- ⚡ perf: 登录优化：若用户库中已存手机号则不再要求授权手机号，仅用 code 即可登录；后端在仅 code 登录时从库中带回 telephone 至响应，前端主按钮改为「微信一键登录」仅发 code，可选「授权手机号登录」供新用户绑定 `backend/main.py` `src/pages/login/index.tsx` `src/pages/login/index.scss`
+- 🎨 style: 圈子页与食物库页顶部「下拉刷新」分割线去掉绿色背景，改为无背景 `src/pages/community/index.scss` `src/pages/food-library/index.scss`
+- 🎨 style: 圈子页与食物库页顶部增加「下拉刷新」分割线提示（Taroify Divider），并补充对应样式 `src/pages/community/index.tsx` `src/pages/food-library/index.tsx` `src/pages/community/index.scss` `src/pages/food-library/index.scss`
+- 🎨 style: 健康档案编辑页性别选项改为 iconfont 图标（男 icon-nannv-nan，女 icon-nannv-nv） `src/pages/health-profile-edit/index.tsx`
+- 🔧 refactor: 食物库分享页商家名称改为可选，移除必填校验与表单项星号，提交时空值传 undefined `src/pages/food-library-share/index.tsx`
+- ✨ feat: 食物库分享页保存前弹窗确认「确定要将该食物分享到公共食物库吗？」，用户确认后再提交 `src/pages/food-library-share/index.tsx`
+
+## 2026-02-16
+
+- 🐛 fix: 健康档案编辑页既往病史默认选中「无」；拉取档案无病史时也设为「无」 `src/pages/health-profile-edit/index.tsx`
+- 🎨 style: 健康档案编辑页体检报告上传区与底部按钮右侧被遮挡：上传区/占位文案/提示/底部栏与保存按钮加 max-width、box-sizing，底部栏预留左右安全区 `src/pages/health-profile-edit/index.scss`
+- 🎨 style: 健康档案编辑页防止内容超出右侧屏幕：页面与区块 box-sizing/max-width/overflow，选项与标签 min-width:0、文字省略，尺子外层容器限制宽度 `src/pages/health-profile-edit/index.tsx` `src/pages/health-profile-edit/index.scss`
+- ✨ feat: 分享到公共库提交成功后返回食物库列表页时自动刷新列表（storage 标记 + useDidShow 强制刷新） `src/pages/food-library-share/index.tsx` `src/pages/food-library/index.tsx`
+- ✨ feat: 食物库分享页上传的图片支持点击全屏预览（Taro.previewImage） `src/pages/food-library-share/index.tsx`
+- ✨ feat: 公共食物库详情页多图时展示当前张数/总张数（如 2/5），位于图片区域右下角 `src/pages/food-library-detail/index.tsx` `src/pages/food-library-detail/index.scss`
+- 🐛 fix: 食物库分享页从记录选择时支持多图导入：前端优先使用 record.image_paths 并限制最多 3 张；记录列表接口对含 source_task_id 且无 image_paths 的记录从 analysis_tasks 补全 image_paths `src/pages/food-library-share/index.tsx` `backend/main.py` `backend/database.py`
+- 🎨 style: 数据统计页「摄入趋势」卡片标题图标改为 icon-shangzhang `src/pages/stats/index.tsx`
+- ✨ feat: 数据统计页切换近一周/近一月时显示「加载中」并禁用切换，防止重复请求 `src/pages/stats/index.tsx` `src/pages/stats/index.scss`
+- 🐛 fix: 修复数据统计页「摄入趋势」柱状图不显示：图表列使用 align-items:stretch 与 bar-wrapper flex:1+min-height:0，避免 height:100% 父高度由内容决定导致的循环依赖，柱子可正确渲染 `src/pages/stats/index.scss`
+- ✨ feat: 新增健康档案编辑页面，用户修改档案时跳转到表单式编辑页（而非答题页），同时支持"重新填写"选项跳转到答题模式；健康档案查看页按钮优化为"修改档案"和"重新填写"并排显示 `src/pages/health-profile-edit/` `src/pages/health-profile-view/index.tsx` `src/app.config.ts`
+- ⚡ perf: 食物库分享页多图增量识别优化：缓存每张图片的识别结果（analyzeResultsMap），上传时只识别新图片并与已有结果叠加，避免重复识别；删除时从缓存移除并重新聚合 `src/pages/food-library-share/index.tsx`
+- ✨ feat: 食物库分享页多图每张单独 AI 识别并叠加计算营养：新增 runAnalyzeAndAggregate，上传/删除后对当前全部图片逐张识别并汇总热量/蛋白/碳水/脂肪与 items；上限 3 张 `src/pages/food-library-share/index.tsx` `src/pages/food-library-share/index.scss`
+- ✨ feat: 食物库分享页图片上传改为最多 3 张、支持上传一张后继续添加；前端交互参考分析页（网格 + 添加/删除），选图后逐张上传、首张自动识别填充营养，后端能力保持不变 `src/pages/food-library-share/index.tsx` `src/pages/food-library-share/index.scss`
+- 🎨 style: 数据统计页优化：用阿里云 iconfont 替换所有表情（热量超标/保持良好/连续记录/AI 洞察/餐次/营养素），卡片标题带图标、餐次用早午晚加餐图标与配色、加载与错误态带图标；卡片与背景视觉统一、按钮渐变与阴影 `src/pages/stats/index.tsx` `src/pages/stats/index.scss`
+- ✨ feat: 公共食物库多图支持：详情页多图轮播展示；上传支持多选最多 9 张并提交 image_paths；从记录导入时后端从 analysis_tasks 拉取 image_paths 全量导入；新增 DB 迁移 image_paths 列 `backend/database/migrate_public_food_library_image_paths.sql` `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/food-library-detail/index.tsx` `src/pages/food-library-share/index.tsx`
+- ✨ feat: 食物库页增加「收藏夹」Tab，可查看我收藏的餐食；后端新增 list_collected_public_food_library 与 GET /api/public-food-library/collections，前端 Tab 全部/收藏夹、收藏夹空态与取消收藏乐观更新 `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/food-library/index.tsx` `src/pages/food-library/index.scss`
+- ✨ feat: 食物库详情页评论与圈子一致走异步审核：发布评论返回 task_id + temp_comment，前端乐观展示并缓存临时评论，加载评论时合并 5 分钟内未去重临时评论并展示「审核中」角标，提交成功提示改为「评论已提交审核」 `src/pages/food-library-detail/index.tsx` `src/pages/food-library-detail/index.scss`
+- ✨ feat: 历史记录页日期选择改为 Taroify Calendar 日历弹层，支持单日选择、最近 6 个月范围，点击确认后刷新当日记录 `src/pages/record/index.tsx`
+
 ## 2026-02-15
 
+- 🎨 style: 健康档案目标/活动水平选项按钮宽度修正，不超出屏幕：卡片与选项列表加 max-width/min-width/box-sizing，防止右侧被裁切 `src/pages/health-profile/index.scss`
+- 🎨 style: 健康档案既往病史选项去掉表情图标，仅显示文字标签；自定义病史项同步去掉图标 `src/pages/health-profile/index.tsx`
+- 🎨 style: 体重尺组件中心指示线颜色由蓝色改为绿色（#00bc7d），与主题色一致 `src/components/WeightRuler/index.scss`
+- 🔧 refactor: 健康档案页去掉左右滑切换题目，仅保留「上一题/确认」按钮切换，并移除左滑下一题提示与相关样式 `src/pages/health-profile/index.tsx` `src/pages/health-profile/index.scss`
+- 🎨 style: 体重尺组件移除磅单位切换，仅保留公斤显示，与项目统一使用克/公斤规范一致 `src/components/WeightRuler/index.tsx`
+- 🎨 style: 个人中心默认头像改为 icon（icon-weidenglu），不再使用表情占位；默认 avatar 状态与登录页统一为空字符串 `src/pages/profile/index.tsx` `src/pages/login/index.tsx`
+- 🎨 style: 个人中心未登录时不展示会员卡片，仅登录后显示注册时间与记录天数等会员信息 `src/pages/profile/index.tsx`
+- 🎨 style: 放大关于页头部与底部文案字号（食探/版本号/版权），提升小程序端可读性 `src/pages/about/index.scss`
+- 🎨 style: 关于页 icon 背景色与尺寸对齐登录页（浅绿色背景、160rpx 尺寸、32rpx 圆角），统一品牌图标视觉规范 `src/pages/about/index.scss`
+- 🎨 style: 登录页品牌图标由本地 `logo.png` 改为远程 URL 引入，统一关于页与登录页视觉资源 `src/pages/login/index.tsx`
+- 🎨 style: 关于页头部图标由本地图标组件改为远程透明底品牌图标 URL，统一品牌视觉 `src/pages/about/index.tsx` `src/pages/about/index.scss`
+- ✨ feat: 登录成功后获取并缓存用户注册时间，个人中心会员卡改为展示“注册时间 YYYY-MM-DD”并支持本地兜底读取 `src/pages/login/index.tsx` `src/pages/profile/index.tsx`
+- 🎨 style: 个人中心记录提示文案改为展示累计记录天数（“您已在食探记录了 X 天”），去除会员升级倒计时表达 `src/pages/profile/index.tsx`
+- 🐛 fix: 修复结果页保存流程报错，移除无效的本地详情缓存构造逻辑并统一为 `saveRecord` 保存函数，保存后直接按记录 ID 跳转详情 `src/pages/result/index.tsx`
+- 🎨 style: 调整公共食物库详情页底部操作区：点赞/收藏改为纯图标样式（无独立背景框），评论按钮加长突出主操作 `src/pages/food-library-detail/index.tsx` `src/pages/food-library-detail/index.scss`
+- 🎨 style: 底部三按钮升级为轻玻璃 iOS 风格，优化模糊质感、按钮圆角与按压反馈，整体更轻盈细腻 `src/pages/food-library-detail/index.scss`
+- 🎨 style: 优化公共食物库详情页底部三个操作按钮样式，统一间距与圆角层级，补齐收藏按钮激活态并增强评论主按钮视觉 `src/pages/food-library-detail/index.scss`
+- 🔧 refactor: 记录页历史模块精简为仅保留“历史记录”，移除无效编辑/删除占位操作，并按所选日期二次过滤后展示对应记录内容 `src/pages/record/index.tsx`
+- 🐛 fix: 修复记录详情页海报功能报错，移除未接入完成的模板选择残留代码并恢复稳定绘制流程 `src/pages/record-detail/index.tsx`
+- 🎨 style: 调整关于页“关于食探/特别鸣谢”标题与正文字号为 `rpx` 并放大，提升文案可读性 `src/pages/about/index.scss`
 - 🎨 style: 放大食物库页面介绍文案字号，统一列表与详情的可读性（介绍内容不再过小） `src/pages/food-library/index.scss` `src/pages/food-library-detail/index.scss`
 - 🎨 style: 图标字体默认字号单位统一为 `rpx`，将 `iconfont.css` 中默认 `font-size` 从 `px` 调整为 `rpx` `src/assets/iconfont/iconfont.css`
 - 🐛 fix: 临时评论用户信息读取优先使用 `userInfo.name` 与 `userInfo.avatar`，与当前本地存储结构保持一致 `src/pages/community/index.tsx` `src/pages/food-library-detail/index.tsx`

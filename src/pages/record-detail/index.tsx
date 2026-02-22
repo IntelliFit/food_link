@@ -191,20 +191,21 @@ export default function RecordDetailPage() {
               return
             }
             ctx.scale(dpr, dpr)
+            // 使用当前稳定海报绘制逻辑
             drawRecordPoster(ctx, {
               width: POSTER_WIDTH,
               height: POSTER_HEIGHT,
               record,
               image: mainImg,
               logoImage: logoImg,
-              qrCodeImage: null // 暂时使用占位符
+              qrCodeImage: null,
             })
             exportCanvas()
           } catch (e) {
             Taro.hideLoading()
             setPosterGenerating(false)
             Taro.showToast({ title: '绘制失败', icon: 'none' })
-            console.error('drawRecordPoster error', e)
+            console.error('drawSmartPoster error', e)
           }
         })
       })
@@ -351,12 +352,12 @@ export default function RecordDetailPage() {
             {posterGenerating ? '生成中...' : '生成分享海报'}
           </Button>
         </View>
-      </View >
+      </View>
 
       {/* 离屏 Canvas 用于绘制海报 */}
-      < View className="poster-canvas-wrap" >
+      <View className="poster-canvas-wrap">
         <Canvas type="2d" id="recordPosterCanvas" className="poster-canvas" />
-      </View >
+      </View>
 
       <View className="detail-card">
         <Text className="food-list-title">食物明细</Text>
@@ -471,6 +472,6 @@ export default function RecordDetailPage() {
           </View>
         )
       }
-    </ScrollView >
+    </ScrollView>
   )
 }

@@ -14,6 +14,7 @@ export default defineAppConfig({
     'pages/recipe-edit/index',
     'pages/health-profile/index',
     'pages/health-profile-view/index',
+    'pages/health-profile-edit/index',
     'pages/stats/index',
     'pages/record-detail/index',
     'pages/food-library/index',

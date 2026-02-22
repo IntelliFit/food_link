@@ -1,0 +1,86 @@
+.age-picker-wrapper {
+    width: 100%;
+    height: 800px;
+    /* Increased from 600px */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: transparent;
+
+    .label-question {
+        font-size: 32px;
+        font-weight: 500;
+        color: #1f2937;
+        margin-bottom: 40px;
+        margin-top: -80px;
+        /* Adjusted pull up */
+    }
+
+    .picker-view-container {
+        width: 70%;
+        /* Slightly wider */
+        height: 600px;
+        /* Increased from 400px */
+        /* Visible scroll area */
+        position: relative;
+
+        /* The core PickerView */
+        .age-picker-view {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Customize the selection indicator */
+        .picker-indicator {
+            height: 120px;
+            /* Increased from 100px */
+            /* Make background transparent */
+            background: transparent;
+
+            /* Remove default borders if possible or style them */
+            &::before,
+            &::after {
+                border: none !important;
+                display: none !important;
+            }
+        }
+
+        /* Item styling */
+        .picker-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 120px;
+            /* Match indicator height */
+            line-height: 120px;
+            transition: all 0.3s ease;
+
+            .age-number {
+                font-size: 40px;
+                color: #9ca3af;
+                /* Default gray for unselected */
+                font-weight: 400;
+                transition: all 0.2s;
+            }
+
+            /* ... unit removed here ... */
+        }
+    }
+
+    /* Static Unit Label (Floating next to center) */
+    .static-unit-label {
+        position: absolute;
+        top: 50%;
+        left: 70%;
+        /* Moved further right to avoid overlap */
+        transform: translateY(-50%);
+        font-size: 32px;
+        /* Slightly larger */
+        color: #6b7280;
+        pointer-events: none;
+        margin-top: 10px;
+        /* Adjusted offset */
+    }
+}

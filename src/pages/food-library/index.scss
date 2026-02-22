@@ -60,6 +60,32 @@
   }
 }
 
+// Tab：全部 / 收藏夹
+.tab-section {
+  display: flex;
+  background: #fff;
+  padding: 24rpx 32rpx 0;
+  border-bottom: 1rpx solid #e5e7eb;
+}
+
+.tab-item {
+  padding: 20rpx 32rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #6b7280;
+  margin-bottom: -1rpx;
+  border-bottom: 4rpx solid transparent;
+
+  &.active {
+    color: #00bc7d;
+    border-bottom-color: #00bc7d;
+  }
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
 // 筛选区域
 .filter-section {
   background: #fff;
@@ -156,6 +182,14 @@
 
 .list-content {
   padding: 24rpx 32rpx 200rpx;
+}
+
+// 顶部下拉刷新提示分割线（无背景）
+.food-library-page .refresh-divider {
+  margin: 24rpx 0 16rpx;
+  font-size: 24rpx;
+  color: #94a3b8;
+  background: none !important;
 }
 
 // 食物卡片

@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, CompareAnalyzeResponse, ModelAnalyzeResult, updateAnalysisTaskResult } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult } from '../../utils/api'
 
 import './index.scss'
 
@@ -11,6 +11,13 @@ const MEAL_OPTIONS = [
   { value: 'dinner' as const, label: '晚餐' },
   { value: 'snack' as const, label: '加餐' }
 ]
+
+const MEAL_ICONS = {
+  breakfast: 'icon-zaocan',
+  lunch: 'icon-wucan',
+  dinner: 'icon-wancan',
+  snack: 'icon-lingshi'
+}
 
 // 移除未使用的 CONTEXT_STATE_OPTIONS
 
@@ -48,10 +55,9 @@ export default function ResultPage() {
   const [saving, setSaving] = useState(false)
   const [hasSavedCritical, setHasSavedCritical] = useState(false)
 
-  // 双模型对比模式状态
-  const [isCompareMode, setIsCompareMode] = useState(false)
-  const [compareResult, setCompareResult] = useState<CompareAnalyzeResponse | null>(null)
-  const [selectedModel, setSelectedModel] = useState<'qwen' | 'gemini'>('qwen')
+  // 餐次选择弹窗状态
+  const [showMealSelector, setShowMealSelector] = useState(false)
+  const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast')
 
   // 将API返回的数据转换为页面需要的格式（保留 originalWeight 用于标记样本时计算偏差）
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
@@ -94,38 +100,6 @@ export default function ResultPage() {
     setTotalWeight(Math.round(total))
   }
 
-  // 从模型结果设置当前显示的数据
-  const setDataFromModelResult = (result: ModelAnalyzeResult) => {
-    if (!result.success) {
-      setDescription(result.error || '分析失败')
-      setHealthAdvice('')
-      setNutritionItems([])
-      setPfcRatioComment(null)
-      setAbsorptionNotes(null)
-      setContextAdvice(null)
-      return
-    }
-
-    setDescription(result.description || '')
-    setHealthAdvice(result.insight || '保持健康饮食！')
-    setPfcRatioComment(result.pfc_ratio_comment ?? null)
-    setAbsorptionNotes(result.absorption_notes ?? null)
-    setContextAdvice(result.context_advice ?? null)
-
-    const items = convertApiDataToItems(result.items || [])
-    setNutritionItems(items)
-    calculateNutritionStats(items)
-  }
-
-  // 切换模型时更新显示数据
-  const handleModelSwitch = (model: 'qwen' | 'gemini') => {
-    if (!compareResult) return
-    setSelectedModel(model)
-
-    const result = model === 'qwen' ? compareResult.qwen_result : compareResult.gemini_result
-    setDataFromModelResult(result)
-  }
-
   useEffect(() => {
     // 获取传递的图片路径和分析结果
     try {
@@ -140,74 +114,27 @@ export default function ResultPage() {
         setImagePaths([storedPath])
       }
 
-      // 检查是否是对比模式
-      const isCompare = Taro.getStorageSync('analyzeCompareMode')
-      setIsCompareMode(!!isCompare)
-
-      if (isCompare) {
-        // 对比模式：读取对比结果
-        const storedCompareResult = Taro.getStorageSync('analyzeCompareResult')
-        if (storedCompareResult) {
-          const result: CompareAnalyzeResponse = JSON.parse(storedCompareResult)
-          setCompareResult(result)
-
-          // 默认显示千问结果（如果成功），否则显示 Gemini 结果
-          if (result.qwen_result.success) {
-            setSelectedModel('qwen')
-            setDataFromModelResult(result.qwen_result)
-          } else if (result.gemini_result.success) {
-            setSelectedModel('gemini')
-            setDataFromModelResult(result.gemini_result)
-          } else {
-            // 两个模型都失败了
-            setDescription('两个模型分析均失败')
-            setHealthAdvice(result.qwen_result.error || result.gemini_result.error || '')
-          }
-
-          // 清理缓存
-          Taro.removeStorageSync('analyzeCompareResult')
-          Taro.removeStorageSync('analyzeCompareMode')
-        } else {
-          Taro.showModal({
-            title: '提示',
-            content: '未找到对比分析结果，请重新分析',
-            showCancel: false,
-            confirmText: '确定',
-            success: () => {
-              Taro.navigateBack()
-            }
-          })
-        }
+      const storedResult = Taro.getStorageSync('analyzeResult')
+      if (storedResult) {
+        const result: AnalyzeResponse = JSON.parse(storedResult)
+        setDescription(result.description || '')
+        setHealthAdvice(result.insight || '保持健康饮食！')
+        setPfcRatioComment(result.pfc_ratio_comment ?? null)
+        setAbsorptionNotes(result.absorption_notes ?? null)
+        setContextAdvice(result.context_advice ?? null)
+        const items = convertApiDataToItems(result.items)
+        setNutritionItems(items)
+        calculateNutritionStats(items)
       } else {
-        // 普通模式：读取单一结果
-        const storedResult = Taro.getStorageSync('analyzeResult')
-        if (storedResult) {
-          const result: AnalyzeResponse = JSON.parse(storedResult)
-
-          // 设置描述和健康建议
-          setDescription(result.description || '')
-          setHealthAdvice(result.insight || '保持健康饮食！')
-          setPfcRatioComment(result.pfc_ratio_comment ?? null)
-          setAbsorptionNotes(result.absorption_notes ?? null)
-          setContextAdvice(result.context_advice ?? null)
-          // 转换并设置食物项
-          const items = convertApiDataToItems(result.items)
-          setNutritionItems(items)
-
-          // 计算营养统计
-          calculateNutritionStats(items)
-        } else {
-          // 如果没有分析结果，提示用户
-          Taro.showModal({
-            title: '提示',
-            content: '未找到分析结果，请重新分析',
-            showCancel: false,
-            confirmText: '确定',
-            success: () => {
-              Taro.navigateBack()
-            }
-          })
-        }
+        Taro.showModal({
+          title: '提示',
+          content: '未找到分析结果，请重新分析',
+          showCancel: false,
+          confirmText: '确定',
+          success: () => {
+            Taro.navigateBack()
+          }
+        })
       }
     } catch (error) {
       console.error('获取数据失败:', error)
@@ -359,87 +286,120 @@ export default function ResultPage() {
     })
   }
 
-  /** 确认记录：直接提示保存（状态已在分析页选择或不需要） */
-  const handleConfirm = () => {
+  /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
+  const saveRecord = async (saveOnly: boolean, confirmedMealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
     // 从缓存获取分析时选择的状态
     const savedMealType = Taro.getStorageSync('analyzeMealType')
     const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
     const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
 
-    // 映射餐次，未找到默认早餐（防止空指针，虽理论上必定有值）
-    const mealFromStorage = savedMealType && MEAL_OPTIONS.find((o) => o.value === savedMealType)
-    const mealType = mealFromStorage?.value || 'breakfast'
-    const mealLabel = mealFromStorage?.label || '早餐'
+    // 确定餐次：优先使用确认过的餐次，否则尝试从缓存读取，最后默认早餐
+    let mealType = confirmedMealType
+    if (!mealType) {
+      const mealFromStorage = savedMealType && MEAL_OPTIONS.find((o) => o.value === savedMealType)
+      mealType = (mealFromStorage?.value || 'breakfast') as 'breakfast' | 'lunch' | 'dinner' | 'snack'
+    }
+    const mealLabel = MEAL_OPTIONS.find((o) => o.value === mealType)?.label || '早餐'
 
     // 饮食目标和时机，未找到默认无
     const dietGoal = savedDietGoal || 'none'
     const activityTiming = savedActivityTiming || 'none'
 
-    Taro.showModal({
-      title: '确认记录',
-      content: `餐次：${mealLabel}\n确定保存当前饮食记录吗？`,
-      success: async (res) => {
-        if (!res.confirm) return
-        setSaving(true)
-        try {
-          // 清除相关缓存
-          Taro.removeStorageSync('analyzeMealType')
-          Taro.removeStorageSync('analyzeDietGoal')
-          Taro.removeStorageSync('analyzeActivityTiming')
-          // 这里不做状态映射了，直接传空字符串或者特定的状态值给后端
-          // 注意：后端可能需要 context_state 字段兼容旧逻辑，
-          // 这里我们优先使用 diet_goal 和 activity_timing
-          // 为了兼容旧接口，我们可以把它们拼接到 context_state 或者传 'none'
-          // 既然用户已经在分析页选了详细状态，这里 context_state 传 'none' 即可，
-          // 重要的是 diet_goal 和 activity_timing 字段。
+    const doSave = async () => {
+      setSaving(true)
+      try {
+        // 清除相关缓存
+        Taro.removeStorageSync('analyzeMealType')
+        Taro.removeStorageSync('analyzeDietGoal')
+        Taro.removeStorageSync('analyzeActivityTiming')
 
-          const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
-          const payload = {
-            meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-            image_path: imagePath || undefined,
-            image_paths: imagePaths.length > 0 ? imagePaths : undefined,
-            description: description || undefined,
-            insight: healthAdvice || undefined,
-            items: nutritionItems.map((item) => ({
-              name: item.name,
-              weight: item.weight,
-              ratio: item.ratio,
-              intake: item.intake,
-              nutrients: {
-                calories: item.calorie,
-                protein: item.protein,
-                carbs: item.carbs,
-                fat: item.fat,
-                fiber: 0,
-                sugar: 0
-              }
-            })),
-            total_calories: nutritionStats.calories,
-            total_protein: nutritionStats.protein,
-            total_carbs: nutritionStats.carbs,
-            total_fat: nutritionStats.fat,
-            total_weight_grams: totalWeight,
-            diet_goal: dietGoal,
-            activity_timing: activityTiming,
-            pfc_ratio_comment: pfcRatioComment ?? undefined,
-            absorption_notes: absorptionNotes ?? undefined,
-            context_advice: contextAdvice ?? undefined,
-            source_task_id: sourceTaskId
-          }
-          await saveFoodRecord(payload)
-          if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
+        const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
+        const payload = {
+          meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+          image_path: imagePath || undefined,
+          image_paths: imagePaths.length > 0 ? imagePaths : undefined,
+          description: description || undefined,
+          insight: healthAdvice || undefined,
+          items: nutritionItems.map((item) => ({
+            name: item.name,
+            weight: item.weight,
+            ratio: item.ratio,
+            intake: item.intake,
+            nutrients: {
+              calories: item.calorie,
+              protein: item.protein,
+              carbs: item.carbs,
+              fat: item.fat,
+              fiber: 0,
+              sugar: 0
+            }
+          })),
+          total_calories: nutritionStats.calories,
+          total_protein: nutritionStats.protein,
+          total_carbs: nutritionStats.carbs,
+          total_fat: nutritionStats.fat,
+          total_weight_grams: totalWeight,
+          diet_goal: dietGoal,
+          activity_timing: activityTiming,
+          pfc_ratio_comment: pfcRatioComment ?? undefined,
+          absorption_notes: absorptionNotes ?? undefined,
+          context_advice: contextAdvice ?? undefined,
+          source_task_id: sourceTaskId
+        }
+        const saveResult = await saveFoodRecord(payload)
+        if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
+
+        if (saveOnly) {
           Taro.showToast({ title: '记录成功', icon: 'success' })
           setTimeout(() => {
-            // 返回两层：结果页 -> 分析页 -> 首页/记录页
             Taro.navigateBack({ delta: 2 })
-          }, 1500)
-        } catch (e: any) {
-          Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
-        } finally {
-          setSaving(false)
+          }, 1200)
+          return
         }
+
+        Taro.showToast({ title: '已保存，去分享', icon: 'success' })
+        setTimeout(() => {
+          Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
+        }, 500)
+      } catch (e: any) {
+        Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+      } finally {
+        setSaving(false)
       }
-    })
+    }
+
+    // 如果已经传了 confirmedMealType，说明是经过弹窗确认的，直接保存
+    if (confirmedMealType) {
+      await doSave()
+    } else {
+      // 否则走旧的确认流程（防止直接调用时没有确认）
+      Taro.showModal({
+        title: '确认记录',
+        content: `餐次：${mealLabel}\n确定保存当前饮食记录吗？`,
+        success: async (res) => {
+          if (!res.confirm) return
+          await doSave()
+        }
+      })
+    }
+  }
+
+  /** 点击保存按钮：打开餐次选择弹窗 */
+  const handleConfirmAndShare = () => {
+    // 初始化选中的餐次：缓存 > 默认早餐
+    const savedMealType = Taro.getStorageSync('analyzeMealType')
+    if (savedMealType && ['breakfast', 'lunch', 'dinner', 'snack'].includes(savedMealType)) {
+      setSelectedMealType(savedMealType as any)
+    } else {
+      setSelectedMealType('breakfast')
+    }
+    setShowMealSelector(true)
+  }
+
+  /** 弹窗确认保存 */
+  const handleConfirmMealType = () => {
+    setShowMealSelector(false)
+    saveRecord(false, selectedMealType)
   }
 
   /** 标记样本：将当前有重量偏差的项提交为偏差样本（参考 hkh 实现） */
@@ -496,7 +456,7 @@ export default function ResultPage() {
     })
   }
 
-  // 保存为食谱
+  // 收藏食物（保存为可复用模板）
   const handleSaveAsRecipe = () => {
     // 检查登录
     const token = getAccessToken()
@@ -511,10 +471,10 @@ export default function ResultPage() {
       ? savedMealType
       : undefined
 
-    // 弹窗输入食谱名称
+    // 弹窗输入收藏名称
     Taro.showModal({
-      title: '保存为食谱',
-      content: '请输入食谱名称',
+      title: '收藏食物',
+      content: '请输入收藏名称',
       // @ts-ignore
       editable: true,
       // @ts-ignore
@@ -562,8 +522,8 @@ export default function ResultPage() {
 
             Taro.hideLoading()
             Taro.showModal({
-              title: '保存成功',
-              content: '食谱已保存，可在"我的"-"我的食谱"中查看和使用',
+              title: '收藏成功',
+              content: '已收藏，可在“我的食谱”中快速复用记录',
               showCancel: false
             })
           } catch (error: any) {
@@ -675,34 +635,6 @@ export default function ResultPage() {
               </View>
             </View>
           </View>
-
-          {/* 双模型对比切换区域 */}
-          {isCompareMode && compareResult && (
-            <View className='model-switch-card'>
-              <View className='card-header'>
-                <Text className='card-title'>
-                  <Text className='iconfont icon-shangzhang'></Text>
-                  模型对比
-                </Text>
-              </View>
-              <View className='model-tabs'>
-                <View
-                  className={`model-tab ${selectedModel === 'qwen' ? 'active' : ''} ${!compareResult.qwen_result.success ? 'error' : ''}`}
-                  onClick={() => handleModelSwitch('qwen')}
-                >
-                  <Text className='model-name'>千问 VL</Text>
-                  {compareResult.qwen_result.success && <Text className='model-status'>✓</Text>}
-                </View>
-                <View
-                  className={`model-tab ${selectedModel === 'gemini' ? 'active' : ''} ${!compareResult.gemini_result.success ? 'error' : ''}`}
-                  onClick={() => handleModelSwitch('gemini')}
-                >
-                  <Text className='model-name'>Gemini</Text>
-                  {compareResult.gemini_result.success && <Text className='model-status'>✓</Text>}
-                </View>
-              </View>
-            </View>
-          )}
 
           {/* AI 健康透视 */}
           <View className='insight-card'>
@@ -835,14 +767,13 @@ export default function ResultPage() {
             <View className='pba-safe-area'>
               <View className='action-grid'>
                 <View className='secondary-btn' onClick={handleSaveAsRecipe}>
-                  <Text className='btn-icon iconfont icon-shuben'></Text>
-                  <Text className='btn-text'>存为餐食</Text>
+                  <Text className='btn-text'>收藏餐食</Text>
                 </View>
                 <View
                   className={`primary-btn ${saving ? 'loading' : ''}`}
-                  onClick={handleConfirm}
+                  onClick={handleConfirmAndShare}
                 >
-                  <Text className='btn-text'>{saving ? '保存中...' : '确认记录'}</Text>
+                  <Text className='btn-text'>{saving ? '保存中...' : '记录'}</Text>
                 </View>
               </View>
 
@@ -858,6 +789,47 @@ export default function ResultPage() {
           </View>
         </View>
       </ScrollView>
+
+      {/* 餐次选择弹窗 */}
+      <View
+        className={`meal-selector-overlay ${showMealSelector ? 'visible' : ''}`}
+        onClick={() => setShowMealSelector(false)}
+      >
+        <View
+          className='meal-selector-card'
+          onClick={(e) => e.stopPropagation()}
+        >
+          <View className='selector-title'>确认记录</View>
+
+          <View className='meal-options-grid'>
+            {MEAL_OPTIONS.map((option) => (
+              <View
+                key={option.value}
+                className={`meal-option-item ${selectedMealType === option.value ? 'active' : ''}`}
+                onClick={() => setSelectedMealType(option.value)}
+              >
+                <Text className={`option-icon iconfont ${MEAL_ICONS[option.value]}`}></Text>
+                <Text className='option-label'>{option.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View className='selector-actions'>
+            <View
+              className='cancel-btn'
+              onClick={() => setShowMealSelector(false)}
+            >
+              取消
+            </View>
+            <View
+              className='confirm-btn'
+              onClick={handleConfirmMealType}
+            >
+              确定记录
+            </View>
+          </View>
+        </View>
+      </View>
     </View>
   )
 }

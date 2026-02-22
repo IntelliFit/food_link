@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Image, Textarea } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Textarea, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
 import {
@@ -62,6 +62,7 @@ export default function FoodLibraryDetailPage() {
   const [commentContent, setCommentContent] = useState('')
   const [commentRating, setCommentRating] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   // 加载详情
   useEffect(() => {
@@ -72,6 +73,7 @@ export default function FoodLibraryDetailPage() {
 
   const loadDetail = async () => {
     setLoading(true)
+    setCurrentImageIndex(0)
     try {
       const data = await getPublicFoodLibraryItem(itemId)
       setItem(data)
@@ -87,15 +89,52 @@ export default function FoodLibraryDetailPage() {
       const res = await getPublicFoodLibraryComments(itemId)
       const serverComments = res.list || []
 
-      // 刷新后仅展示后端返回评论，并清理本地临时评论缓存
+      // 合并本地临时评论（审核中）到列表顶部：最多保留 5 分钟，避免用户返回页面后“评论消失”
       const tempCommentsKey = `temp_library_comments_${itemId}`
+      const now = Date.now()
+      let cachedTemp: Array<{ task_id: string; comment: PublicFoodLibraryComment; timestamp: number }> = []
       try {
-        Taro.removeStorageSync(tempCommentsKey)
+        const raw = Taro.getStorageSync(tempCommentsKey)
+        cachedTemp = Array.isArray(raw) ? raw : []
       } catch (e) {
-        console.error('清理临时评论缓存失败:', e)
+        console.error('读取临时评论缓存失败:', e)
       }
 
-      setComments(serverComments)
+      const MAX_TEMP_AGE_MS = 5 * 60 * 1000
+      const DEDUPE_WINDOW_MS = 10 * 60 * 1000
+
+      const validTemp = cachedTemp
+        .filter((t) => t && typeof t.timestamp === 'number' && now - t.timestamp <= MAX_TEMP_AGE_MS)
+        .map((t) => ({
+          ...t,
+          comment: { ...t.comment, _is_temp: true }
+        }))
+
+      const remainingTemp = validTemp.filter((t) => {
+        const tTime = new Date(t.comment.created_at).getTime()
+        return !serverComments.some((sc) => {
+          const scTime = new Date(sc.created_at).getTime()
+          return (
+            sc.user_id === t.comment.user_id &&
+            sc.content === t.comment.content &&
+            (sc.rating ?? null) === (t.comment.rating ?? null) &&
+            (Number.isNaN(tTime) || Number.isNaN(scTime) ? false : Math.abs(scTime - tTime) <= DEDUPE_WINDOW_MS)
+          )
+        })
+      })
+
+      // 回写缓存（仅保留仍在窗口期内的临时评论）
+      try {
+        if (remainingTemp.length) {
+          Taro.setStorageSync(tempCommentsKey, remainingTemp)
+        } else {
+          Taro.removeStorageSync(tempCommentsKey)
+        }
+      } catch (e) {
+        console.error('更新临时评论缓存失败:', e)
+      }
+
+      setComments([...remainingTemp.map((t) => t.comment), ...serverComments])
     } catch (e) {
       console.error('加载评论失败:', e)
     }
@@ -167,7 +206,7 @@ export default function FoodLibraryDetailPage() {
         console.error('缓存临时评论失败:', e)
       }
       
-      Taro.showToast({ title: '评论成功', icon: 'success' })
+      Taro.showToast({ title: '评论已提交审核', icon: 'success' })
       setShowCommentModal(false)
       setCommentContent('')
       setCommentRating(0)
@@ -259,12 +298,37 @@ export default function FoodLibraryDetailPage() {
     )
   }
 
+  const imageList: string[] = (item.image_paths && item.image_paths.length > 0)
+    ? item.image_paths
+    : (item.image_path ? [item.image_path] : [])
+
   return (
     <View className="food-detail-page">
-      {/* 图片 */}
+      {/* 图片（支持多图轮播） */}
       <View className="image-section">
-        {item.image_path ? (
-          <Image className="detail-image" src={item.image_path} mode="aspectFill" />
+        {imageList.length > 0 ? (
+          <>
+            <Swiper
+              className="detail-swiper"
+              indicatorDots
+              indicatorColor="rgba(255,255,255,0.5)"
+              indicatorActiveColor="#fff"
+              autoplay={false}
+              circular
+              onAnimationFinish={(e) => setCurrentImageIndex(e.detail.current)}
+            >
+              {imageList.map((src, index) => (
+                <SwiperItem key={index} className="detail-swiper-item">
+                  <Image className="detail-image" src={src} mode="aspectFill" />
+                </SwiperItem>
+              ))}
+            </Swiper>
+            {imageList.length > 1 && (
+              <View className="image-counter">
+                <Text className="image-counter-text">{currentImageIndex + 1}/{imageList.length}</Text>
+              </View>
+            )}
+          </>
         ) : (
           <View className="image-placeholder">暂无图片</View>
         )}
@@ -413,17 +477,15 @@ export default function FoodLibraryDetailPage() {
 
       {/* 底部操作栏 */}
       <View className="bottom-bar">
-        <View className={`action-btn like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
+        <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
           {item.liked ? <Like size="20" /> : <LikeOutlined size="20" />}
-          <Text className="action-text">{item.like_count > 0 ? item.like_count : '点赞'}</Text>
         </View>
-        <View className={`action-btn collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
+        <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
           {item.collected ? <Star size="20" className="star-filled" /> : <StarOutlined size="20" />}
-          <Text className="action-text">{item.collection_count && item.collection_count > 0 ? item.collection_count : '收藏'}</Text>
         </View>
         <View className="action-btn comment-btn" onClick={() => setShowCommentModal(true)}>
           <CommentOutlined size="20" />
-          <Text className="action-text">评论</Text>
+          <Text className="action-text">写评论</Text>
         </View>
       </View>
 

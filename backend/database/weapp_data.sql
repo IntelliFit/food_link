@@ -1,33 +1,60 @@
 -- 创建 weapp_user 表
-CREATE TABLE public.weapp_user (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  openid text NOT NULL,
-  unionid text,
-  avatar text DEFAULT '',
-  nickname text DEFAULT '',
-  telephone text,
-  create_time timestamp with time zone DEFAULT now(),
-  update_time timestamp with time zone DEFAULT now(),
-  CONSTRAINT weapp_user_pkey PRIMARY KEY (id),
-  CONSTRAINT weapp_user_openid_unique UNIQUE (openid),
-  CONSTRAINT weapp_user_unionid_unique UNIQUE (unionid)
-);
+create table public.weapp_user (
+  id uuid not null default gen_random_uuid (),
+  openid text not null,
+  unionid text null,
+  avatar text null default ''::text,
+  nickname text null default ''::text,
+  telephone text null,
+  create_time timestamp with time zone null default now(),
+  update_time timestamp with time zone null default now(),
+  height numeric null,
+  weight numeric null,
+  birthday date null,
+  gender text null,
+  activity_level text null,
+  health_condition jsonb null default '{}'::jsonb,
+  bmr numeric null,
+  tdee numeric null,
+  onboarding_completed boolean null default false,
+  diet_goal character varying(50) null,
+  constraint weapp_user_pkey primary key (id),
+  constraint weapp_user_openid_unique unique (openid),
+  constraint weapp_user_unionid_unique unique (unionid),
+  constraint weapp_user_activity_level_check check (
+    (
+      activity_level = any (
+        array[
+          'sedentary'::text,
+          'light'::text,
+          'moderate'::text,
+          'active'::text,
+          'very_active'::text,
+          ''::text
+        ]
+      )
+    )
+  ),
+  constraint weapp_user_gender_check check (
+    (
+      gender = any (
+        array[
+          'male'::text,
+          'female'::text,
+          'other'::text,
+          ''::text
+        ]
+      )
+    )
+  )
+) TABLESPACE pg_default;
 
--- 创建索引（提升查询性能）
-CREATE INDEX idx_weapp_user_openid ON public.weapp_user(openid);
-CREATE INDEX idx_weapp_user_unionid ON public.weapp_user(unionid) WHERE unionid IS NOT NULL;
+create index IF not exists idx_weapp_user_openid on public.weapp_user using btree (openid) TABLESPACE pg_default;
 
--- 创建更新时间触发器函数
-CREATE OR REPLACE FUNCTION update_weapp_user_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.update_time = now();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+create index IF not exists idx_weapp_user_unionid on public.weapp_user using btree (unionid) TABLESPACE pg_default
+where
+  (unionid is not null);
 
--- 创建触发器（自动更新 update_time）
-CREATE TRIGGER trigger_update_weapp_user_updated_at
-    BEFORE UPDATE ON public.weapp_user
-    FOR EACH ROW
-    EXECUTE FUNCTION update_weapp_user_updated_at();
+create trigger trigger_update_weapp_user_updated_at BEFORE
+update on weapp_user for EACH row
+execute FUNCTION update_weapp_user_updated_at ();

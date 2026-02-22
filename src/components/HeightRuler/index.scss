@@ -1,0 +1,148 @@
+.height-ruler-wrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: 800px;
+    /* Further increased height */
+    /* Significantly increased height */
+    position: relative;
+    background: transparent;
+    /* Minimalist: remove background block */
+    border-radius: 0;
+    width: 100%;
+    box-sizing: border-box;
+
+    /* Left Side: The Ruler Scroll View */
+    .ruler-scroll-view {
+        width: 320px;
+        /* Wider ruler area */
+        height: 100%;
+        position: relative;
+
+        /* Hide scrollbar */
+        ::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+            color: transparent;
+        }
+
+        .ruler-content {
+            padding-top: 300px;
+            /* Half of wrapper height */
+            padding-bottom: 300px;
+        }
+
+        .ruler-item {
+            position: relative;
+            display: flex;
+            align-items: center;
+            box-sizing: border-box;
+
+            .tick-mark {
+                position: absolute;
+                left: 0;
+                background-color: #e5e7eb;
+                height: 2px;
+                /* Thicker standard tick */
+                border-radius: 2px;
+                transition: width 0.2s, background-color 0.2s;
+            }
+
+            /* Long Tick (Every 10cm) */
+            &.tick-10 {
+                .tick-mark {
+                    width: 140px;
+                    /* Much longer */
+                    background-color: #1f2937;
+                    height: 3px;
+                }
+
+                .tick-text {
+                    position: absolute;
+                    left: 156px;
+                    font-size: 32px;
+                    /* Larger font */
+                    font-weight: 600;
+                    color: #374151;
+                    transform: translateY(-50%);
+                    white-space: nowrap;
+                }
+            }
+
+            /* Medium Tick (Every 5cm) */
+            &.tick-5 {
+                .tick-mark {
+                    width: 90px;
+                    background-color: #9ca3af;
+                }
+            }
+
+            /* Short Tick (Every 1cm) */
+            &.tick-1 {
+                .tick-mark {
+                    width: 50px;
+                    background-color: #e5e7eb;
+                    height: 2px;
+                }
+            }
+        }
+    }
+
+    /* Fixed Indicator Line */
+    .center-indicator {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        width: 160px;
+        /* Wider to match new ticks */
+        height: 3px;
+        /* Slightly thicker */
+        background-color: #00bc7d;
+        transform: translateY(-50%);
+        z-index: 10;
+        pointer-events: none;
+    }
+
+    /* Right Side: Value Display */
+    .value-display-area {
+        flex: 1;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding-right: 20px;
+
+        .label-question {
+            font-size: 28px;
+            color: #4b5563;
+            margin-bottom: 24px;
+            font-weight: 400;
+        }
+
+        /* Removed unit toggle styles as HTML removed */
+
+        .current-value-display {
+            display: flex;
+            align-items: baseline;
+
+            .val-text {
+                font-size: 80px;
+                /* Slightly smaller but bold */
+                font-weight: 600;
+                color: #111827;
+                line-height: 1;
+                letter-spacing: -1px;
+            }
+
+            .unit-text {
+                font-size: 28px;
+                color: #6b7280;
+                margin-left: 8px;
+                font-weight: 400;
+            }
+        }
+    }
+}

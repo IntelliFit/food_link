@@ -730,6 +730,17 @@
   font-weight: 600;
 }
 
+// 日历弹层：确认按钮与选中日使用绿色渐变/主题绿
+.record-calendar {
+  --calendar-active-color: #00bc7d;
+
+  .taroify-calendar__confirm {
+    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%) !important;
+    border: none !important;
+    color: #fff !important;
+  }
+}
+
 .date-icon {
   font-size: 32rpx;
   color: #6a7282;

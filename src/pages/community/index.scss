@@ -46,6 +46,19 @@
   box-sizing: border-box;
 }
 
+// 顶部下拉刷新提示分割线（白底遮住页面绿色渐变，视觉上无绿色）
+.community-page .refresh-divider {
+  margin: 0 32rpx;
+  padding: 24rpx 0 16rpx;
+  font-size: 24rpx;
+  color: #94a3b8;
+  background: #fff !important;
+
+  .taroify-divider {
+    background: #fff !important;
+  }
+}
+
 // 页面头部
 .page-header {
   background: linear-gradient(135deg, #ffffff 0%, #f8fffc 100%);
