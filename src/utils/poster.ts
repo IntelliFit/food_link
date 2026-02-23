@@ -38,226 +38,442 @@ function getRecordDateInfo(recordTime: string) {
 
 /** 海报尺寸 */
 export const POSTER_WIDTH = 375
-export const POSTER_HEIGHT = 750
+export const POSTER_HEIGHT = 812
+
+export function computePosterHeight(
+  ctx: CanvasRenderingContext2D,
+  record: FoodRecord,
+  width: number = POSTER_WIDTH
+): number {
+  let currentY = 30 // cardY
+  currentY += 260 // imgH
+  currentY += 24 // date padding
+  currentY += 56 // macros
+  currentY += 24 // divider
+
+  const items = record.items || []
+  const maxItems = 4
+  currentY += Math.min(items.length, maxItems) * 30
+  if (items.length > maxItems) currentY += 20
+  if (items.length <= 2) currentY += 20
+
+  if (record.insight) {
+    currentY += 10 + 96
+  } else {
+    currentY += 30
+  }
+
+  const cardW = width - 40
+  const boxW = cardW - 48
+
+  ctx.save()
+  ctx.font = '13px sans-serif'
+  const measureLines = (text: string, maxW: number) => {
+    const chars = text.split('')
+    let line = ''
+    let lines = 1
+    for (let i = 0; i < chars.length; i++) {
+      const test = line + chars[i]
+      if (ctx.measureText(test).width > maxW && line.length > 0) {
+        lines++
+        line = chars[i]
+      } else {
+        line = test
+      }
+    }
+    return lines
+  }
+
+  const addBlock = (text: string, maxLines: number) => {
+    currentY += 10
+    currentY += 24 // title
+    const lines = Math.min(measureLines(text, boxW), maxLines)
+    currentY += lines * 20
+    currentY += 16
+  }
+
+  if (record.description) addBlock(record.description, 3)
+  if (record.pfc_ratio_comment) addBlock(record.pfc_ratio_comment, 4)
+  if (record.absorption_notes) addBlock(record.absorption_notes, 4)
+  if (record.context_advice) addBlock(record.context_advice, 4)
+  ctx.restore()
+
+  return Math.max(currentY + 180, POSTER_HEIGHT)
+}
 
 export interface PosterDrawOptions {
   width: number
   height: number
   record: FoodRecord
   image: { width: number; height: number } | null
-  logoImage?: { width: number; height: number } | null
   qrCodeImage?: { width: number; height: number } | null
 }
 
 // 风格配色
-const THEME_BG = '#97B498' // 森系灰绿 (Sage Green)
-const TEXT_WHITE = '#FFFFFF'
-const DIVIDER_COLOR = 'rgba(255, 255, 255, 0.4)'
+const CARD_BG = 'rgba(255, 255, 255, 0.82)' // 毛玻璃半透明背景
+const TEXT_MAIN = '#1e293b'
+const TEXT_SECONDARY = '#64748b'
+const TEXT_LIGHT = '#94a3b8'
+const DIVIDER_COLOR = '#f1f5f9'
+const BRAND_GREEN = '#00bc7d'
+
+/** 绘制圆角矩形辅助函数 */
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number | { tl: number; tr: number; br: number; bl: number }
+) {
+  let tl = 0, tr = 0, br = 0, bl = 0;
+  if (typeof radius === 'number') {
+    tl = tr = br = bl = radius;
+  } else {
+    tl = radius.tl || 0;
+    tr = radius.tr || 0;
+    br = radius.br || 0;
+    bl = radius.bl || 0;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + width - tr, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + tr);
+  ctx.lineTo(x + width, y + height - br);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - br, y + height);
+  ctx.lineTo(x + bl, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - bl);
+  ctx.lineTo(x, y + tl);
+  ctx.quadraticCurveTo(x, y, x + tl, y);
+  ctx.closePath();
+}
+
 
 export function drawRecordPoster(
   ctx: CanvasRenderingContext2D,
   options: PosterDrawOptions
 ): void {
-  const { width: W, height: H, record, image, logoImage, qrCodeImage } = options
+  const { width: W, height: H, record, image, qrCodeImage } = options
 
-  // 1. 背景
-  ctx.fillStyle = THEME_BG
+  // 1. 底层背景：更浅的颜色，加上光晕效果（毛玻璃的背景）
+  const bgGradient = ctx.createLinearGradient(0, 0, W, H)
+  bgGradient.addColorStop(0, '#e6fffa')
+  bgGradient.addColorStop(1, '#f1f8e9')
+  ctx.fillStyle = bgGradient
   ctx.fillRect(0, 0, W, H)
 
-  // 增加一点噪点或纹理感？Canvas 2d 比较难做，用微弱的渐变增加质感
-  const gradient = ctx.createLinearGradient(0, 0, 0, H)
-  gradient.addColorStop(0, '#9EBCA0')
-  gradient.addColorStop(1, '#8FA892')
-  ctx.fillStyle = gradient
+  // 背景装饰色块1 (浅绿)
+  const blob1 = ctx.createRadialGradient(W * 0.8, H * 0.1, 0, W * 0.8, H * 0.1, 200)
+  blob1.addColorStop(0, 'rgba(0, 188, 125, 0.15)')
+  blob1.addColorStop(1, 'rgba(0, 188, 125, 0)')
+  ctx.fillStyle = blob1
   ctx.fillRect(0, 0, W, H)
 
-  const centerX = W / 2
-  let y = 60
+  // 背景装饰色块2 (偏淡蓝)
+  const blob2 = ctx.createRadialGradient(W * 0.1, H * 0.8, 0, W * 0.1, H * 0.8, 250)
+  blob2.addColorStop(0, 'rgba(56, 189, 248, 0.1)')
+  blob2.addColorStop(1, 'rgba(56, 189, 248, 0)')
+  ctx.fillStyle = blob2
+  ctx.fillRect(0, 0, W, H)
 
-  // 2. 圆形主图 (Circle Image with White Ring)
-  const circleSize = 240
-  const radius = circleSize / 2
-  const circleX = centerX
-  const circleY = y + radius
 
-  // 外圈白环（带一点透明度让它柔和，或者纯白）
-  ctx.beginPath()
-  ctx.arc(circleX, circleY, radius + 6, 0, Math.PI * 2)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)' // 半透明外晕
-  ctx.fill()
-  
-  ctx.beginPath()
-  ctx.arc(circleX, circleY, radius + 2, 0, Math.PI * 2)
-  ctx.fillStyle = '#FFFFFF' // 纯白描边
-  ctx.fill()
+  // 2. 主卡片参数
+  const cardMargin = 20
+  const cardX = cardMargin
+  const cardY = 30
+  const cardW = W - cardMargin * 2
+  const cardH = H - 60
+  const cardRadius = 24
 
+  // 绘制卡片底色 & 阴影（毛玻璃效果）
   ctx.save()
-  ctx.beginPath()
-  ctx.arc(circleX, circleY, radius, 0, Math.PI * 2)
+  // 加深阴影以突出晶莹剔透感
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.08)'
+  ctx.shadowBlur = 32
+  ctx.shadowOffsetY = 12
+
+  drawRoundedRect(ctx, cardX, cardY, cardW, cardH, cardRadius)
+  ctx.fillStyle = CARD_BG
+  ctx.fill()
+
+  // 卡片内发光边缘（玻璃反光效果）
+  ctx.lineWidth = 2
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+  ctx.stroke()
+  ctx.restore() // 清除阴影属性，避免影响后续绘制
+
+  let currentY = cardY
+
+  // 3. 顶部主图区域
+  const imgH = 260
+  ctx.save()
+  // 裁剪主图区域（仅上圆角）
+  drawRoundedRect(ctx, cardX, currentY, cardW, imgH, { tl: cardRadius, tr: cardRadius, br: 0, bl: 0 })
   ctx.clip()
 
   if (image && image.width && image.height) {
     const sw = image.width
     const sh = image.height
-    // cover 模式裁剪
-    const scale = Math.max(circleSize / sw, circleSize / sh)
+    const scale = Math.max(cardW / sw, imgH / sh)
     const dw = sw * scale
     const dh = sh * scale
-    const dx = circleX - dw / 2
-    const dy = circleY - dh / 2
+    const dx = cardX - (dw - cardW) / 2
+    const dy = currentY - (dh - imgH) / 2
     ctx.drawImage(image as CanvasImageSource, 0, 0, sw, sh, dx, dy, dw, dh)
   } else {
     ctx.fillStyle = '#E5E7EB'
-    ctx.fillRect(circleX - radius, circleY - radius, circleSize, circleSize)
+    ctx.fillRect(cardX, currentY, cardW, imgH)
     ctx.fillStyle = '#9CA3AF'
-    ctx.font = '20px sans-serif'
+    ctx.font = '16px sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('No Image', circleX, circleY)
+    ctx.fillText('No Image', cardX + cardW / 2, currentY + imgH / 2)
   }
   ctx.restore()
 
-  y += circleSize + 50
+  // 在图片上叠加一层半透明渐变，让底部文字清晰
+  const imgGradient = ctx.createLinearGradient(0, currentY + imgH * 0.6, 0, currentY + imgH)
+  imgGradient.addColorStop(0, 'rgba(0,0,0,0)')
+  imgGradient.addColorStop(1, 'rgba(0,0,0,0.6)')
+  ctx.fillStyle = imgGradient
+  ctx.fillRect(cardX, currentY + imgH * 0.5, cardW, imgH * 0.5)
 
-  // 3. 居中文字 (Handwritten Vibe)
+  // 在图片左下角绘制时间、餐次
   const dateInfo = getRecordDateInfo(record.record_time)
-  const mealName = MEAL_NAMES[record.meal_type] || '饮食记录'
+  const mealName = MEAL_NAMES[record.meal_type] || '记录'
 
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
-  
-  // 第一行：我在 Food Link 记录
-  ctx.fillStyle = TEXT_WHITE
-  ctx.font = 'italic 18px sans-serif' // 尝试 italic 模拟手写感
-  ctx.fillText('我在 Food Link 坚持健康饮食', centerX, y)
-  
-  y += 36
-  
-  // 第二行：日期 / 餐次 (Big Title)
-  // 参考图是 "第 365 天"，这里用 "2月3日 · 早餐"
-  const titleText = `${dateInfo.month} ${dateInfo.day} · ${mealName}`
+  const textPaddingX = cardX + 24
+  const textPaddingY = currentY + imgH - 24
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+
+  ctx.fillStyle = '#FFFFFF'
   ctx.font = 'bold 32px sans-serif'
-  ctx.fillText(titleText, centerX, y)
-  
-  y += 60
+  ctx.fillText(dateInfo.day, textPaddingX, textPaddingY)
 
-  // 4. 分割线
-  ctx.strokeStyle = DIVIDER_COLOR
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(40, y)
-  ctx.lineTo(W - 40, y)
-  ctx.stroke()
-  
-  y += 30
+  const dayWidth = ctx.measureText(dateInfo.day).width
+  ctx.font = '16px sans-serif'
+  ctx.fillText(` ${dateInfo.month}.`, textPaddingX + dayWidth, textPaddingY - 4)
 
-  // 5. 数据展示 (Two Columns)
-  // 左侧：热量
-  const colY = y
-  const leftX = W * 0.35
-  const rightX = W * 0.65
-  
-  // Left: Calories Icon & Value
-  // 画一个叶子图标 (简化为圆)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'
-  ctx.beginPath()
-  ctx.arc(leftX - 30, colY + 16, 16, 0, Math.PI * 2)
-  ctx.fill()
-  // 叶子芯
-  ctx.fillStyle = TEXT_WHITE
-  ctx.beginPath()
-  ctx.ellipse(leftX - 30, colY + 16, 6, 10, Math.PI / 4, 0, Math.PI * 2)
+  // 餐次 Tag
+  ctx.font = 'bold 16px sans-serif'
+  const tagW = ctx.measureText(mealName).width + 16
+  const tagH = 26
+
+  ctx.save()
+  drawRoundedRect(ctx, textPaddingX, textPaddingY - imgH + 40, tagW, tagH, 13) // 左上角Tag
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)' // 降低透明度，更显眼
   ctx.fill()
 
+  ctx.fillStyle = '#0f172a' // 降低透明度后文字改成深色以保持对比度
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = 'bold 13px sans-serif'
+  ctx.fillText(mealName, textPaddingX + tagW / 2, textPaddingY - imgH + 40 + tagH / 2)
+  ctx.restore()
+
+  currentY += imgH + 24
+
+  // 4. 营养数据总览
   const cal = Math.round((record.total_calories ?? 0))
-  ctx.textAlign = 'left'
-  ctx.fillStyle = TEXT_WHITE
-  ctx.font = 'bold 36px sans-serif'
-  ctx.fillText(String(cal), leftX - 6, colY - 6)
-  
-  ctx.font = '12px sans-serif'
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-  ctx.fillText('本餐热量 (kcal)', leftX - 6, colY + 36)
-
-  // Right: Macros Summary
-  // 画一个对号图标 (简化为圆)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'
-  ctx.beginPath()
-  ctx.arc(rightX - 20, colY + 16, 12, 0, Math.PI * 2)
-  ctx.fill()
-  // 对号
-  ctx.strokeStyle = TEXT_WHITE
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.moveTo(rightX - 26, colY + 16)
-  ctx.lineTo(rightX - 22, colY + 20)
-  ctx.lineTo(rightX - 14, colY + 12)
-  ctx.stroke()
-
-  ctx.textAlign = 'left'
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
-  ctx.font = '12px sans-serif'
-  ctx.fillText('营养摄入', rightX + 4, colY + 2)
-  
   const p = Math.round(record.total_protein ?? 0)
   const c = Math.round(record.total_carbs ?? 0)
   const f = Math.round(record.total_fat ?? 0)
-  ctx.font = 'bold 16px sans-serif'
-  ctx.fillStyle = TEXT_WHITE
-  ctx.fillText(`P${p} C${c} F${f}`, rightX + 4, colY + 24)
 
-  y += 100
-
-  // 6. 底部 Footer (Logo & QR)
-  // 参考图底部是 "没旁健康..." + 角标
-  // 这里放 Logo + Slogan + QR
-  
-  // 底部文字 Slogan
-  const tagline = record.insight || '记录健康，分享美味'
-  ctx.textAlign = 'center'
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-  ctx.font = 'italic 14px sans-serif'
-  wrapText(ctx, tagline, centerX, y, W - 60, 20, 2)
-  
-  // Logo & QR at very bottom
-  const footerY = H - 80
-  const qrSize = 60
-  
-  // 居中放置 Logo 和 QR，或者左右分开放
-  // 既然是 Ins 风，通常 Logo 居中，或者 QR 居中。
-  // 尝试：Logo 在左下，QR 在右下
-  
-  const logoSize = 40
-  const paddingX = 40
-  
-  // Left: Logo + App Name
-  ctx.save()
-  if (logoImage) {
-    ctx.beginPath()
-    ctx.arc(paddingX + logoSize / 2, footerY + logoSize / 2, logoSize / 2, 0, Math.PI * 2)
-    ctx.clip()
-    ctx.drawImage(logoImage as CanvasImageSource, paddingX, footerY, logoSize, logoSize)
-  }
-  ctx.restore()
-  
+  // Calories
   ctx.textAlign = 'left'
-  ctx.fillStyle = TEXT_WHITE
+  ctx.textBaseline = 'alphabetic' // 恢复默认基线，方便排版
+
+  ctx.fillStyle = TEXT_MAIN
+  ctx.font = 'bold 44px sans-serif'
+  ctx.fillText(String(cal), textPaddingX, currentY + 32)
+
+  const calW = ctx.measureText(String(cal)).width
+  ctx.fillStyle = TEXT_LIGHT
+  ctx.font = '14px sans-serif'
+  ctx.fillText('kcal', textPaddingX + calW + 4, currentY + 30)
+
+  // Macros (P C F) - 放在右侧
+  const macrosX = cardX + cardW - 24
+  ctx.textAlign = 'right'
+
+  // F
+  ctx.fillStyle = '#FF9F43'
   ctx.font = 'bold 16px sans-serif'
-  ctx.fillText('Food Link', paddingX + logoSize + 12, footerY + 4)
+  ctx.fillText(`${f}g`, macrosX, currentY + 30)
+  const fW = ctx.measureText(`${f}g`).width
+  ctx.fillStyle = TEXT_LIGHT
+  ctx.font = '12px sans-serif'
+  ctx.fillText('脂 ', macrosX - fW - 2, currentY + 30)
+
+  // C
+  ctx.fillStyle = '#E1A25B'
+  ctx.font = 'bold 16px sans-serif'
+  const cText = `${c}g`
+  ctx.fillText(cText, macrosX - 52, currentY + 30)
+  const cW = ctx.measureText(cText).width
+  ctx.fillStyle = TEXT_LIGHT
+  ctx.font = '12px sans-serif'
+  ctx.fillText('碳 ', macrosX - 52 - cW - 2, currentY + 30)
+
+  // P
+  ctx.fillStyle = BRAND_GREEN
+  ctx.font = 'bold 16px sans-serif'
+  const pText = `${p}g`
+  ctx.fillText(pText, macrosX - 108, currentY + 30)
+  const pW = ctx.measureText(pText).width
+  ctx.fillStyle = TEXT_LIGHT
+  ctx.font = '12px sans-serif'
+  ctx.fillText('蛋 ', macrosX - 108 - pW - 2, currentY + 30)
+
+  currentY += 56
+
+  // 5. 分割线
+  ctx.beginPath()
+  ctx.moveTo(textPaddingX, currentY)
+  ctx.lineTo(cardX + cardW - 24, currentY)
+  ctx.strokeStyle = DIVIDER_COLOR
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  currentY += 24
+
+  // 6. 食物明细列表 (最多显示4个，超出的显示提示)
+  const items = record.items || []
+  const maxItems = 4
+  ctx.textAlign = 'left'
+
+  for (let i = 0; i < Math.min(items.length, maxItems); i++) {
+    const item = items[i]
+    // 左侧：名称
+    ctx.fillStyle = TEXT_MAIN
+    ctx.font = '15px sans-serif'
+    ctx.fillText(item.name.length > 8 ? item.name.slice(0, 8) + '...' : item.name, textPaddingX, currentY)
+
+    // 右侧：重量和热量
+    const ratio = (item.ratio ?? 100) / 100
+    const itemCal = Math.round((item.nutrients?.calories ?? 0) * ratio)
+
+    ctx.textAlign = 'right'
+    ctx.fillStyle = TEXT_SECONDARY
+    ctx.font = '13px sans-serif'
+    ctx.fillText(`${item.intake ?? 0}g  |  ${itemCal} kcal`, macrosX, currentY)
+
+    ctx.textAlign = 'left'
+    currentY += 30
+  }
+
+  if (items.length > maxItems) {
+    ctx.fillStyle = TEXT_LIGHT
+    ctx.font = '13px sans-serif'
+    ctx.fillText(`...还有 ${items.length - maxItems} 项食物`, textPaddingX, currentY - 6)
+    currentY += 20
+  }
+
+  // 如果食物比较少，留点空隙
+  if (items.length <= 2) {
+    currentY += 20
+  }
+
+  // 7. AI 评语 (Insight Box)
+  if (record.insight) {
+    currentY += 10
+
+    const insightBoxX = textPaddingX
+    const insightBoxY = currentY
+    const insightBoxW = cardW - 48
+
+    ctx.save()
+    // AI 建议框也稍微增加通透感
+    drawRoundedRect(ctx, insightBoxX, insightBoxY, insightBoxW, 70, 12)
+    ctx.fillStyle = 'rgba(0, 188, 125, 0.06)' // 淡淡的一层绿
+    ctx.fill()
+    ctx.lineWidth = 1
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'
+    ctx.stroke()
+
+    // 引号装饰
+    ctx.fillStyle = '#00bc7d'
+    ctx.font = 'italic bold 28px serif'
+    ctx.fillText('“', insightBoxX + 12, insightBoxY + 30)
+
+    // 文本内容
+    ctx.fillStyle = '#047857' // 小程序目标tag的深绿色
+    ctx.font = '13px sans-serif'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top' // wrapText以top为基准好算
+
+    // 简单截断处理
+    const text = record.insight
+    wrapText(ctx, text, insightBoxX + 34, insightBoxY + 16, insightBoxW - 50, 20, 2)
+    currentY += 96
+    ctx.restore()
+  } else {
+    currentY += 30
+  }
+
+  // 追加记录额外信息
+  const drawBlock = (title: string, text: string, maxLines: number) => {
+    currentY += 10
+    ctx.fillStyle = '#0cab79ff' // 稍暗一些的绿色，避免过于刺眼
+    ctx.font = 'bold 15px sans-serif'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillText(title, textPaddingX, currentY)
+    currentY += 24
+
+    ctx.fillStyle = TEXT_SECONDARY
+    ctx.font = '13px sans-serif'
+    const newY = wrapText(ctx, text, textPaddingX, currentY, cardW - 48, 20, maxLines)
+    currentY = newY + 16
+  }
+
+  ctx.save()
+  if (record.description) drawBlock('识别描述', record.description, 3)
+  if (record.pfc_ratio_comment) drawBlock('PFC 比例分析', record.pfc_ratio_comment, 4)
+  if (record.absorption_notes) drawBlock('吸收与利用', record.absorption_notes, 4)
+  if (record.context_advice) drawBlock('情境建议', record.context_advice, 4)
+  ctx.restore()
+
+  // 8. 底部 Footer (Logo & QR & App Name)
+  // 放在最后面了
+  const footerY = cardY + cardH - 84
+
+  // Left: Title
+  const textStartX = textPaddingX
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = TEXT_MAIN
+  ctx.font = 'bold 15px sans-serif'
+  ctx.fillText('智健食探', textStartX, footerY + 14)
+
+  ctx.fillStyle = TEXT_LIGHT
   ctx.font = '10px sans-serif'
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-  ctx.fillText('Your AI Nutritionist', paddingX + logoSize + 12, footerY + 24)
+  ctx.fillText('你的智能健康管理助手', textStartX, footerY + 32)
 
   // Right: QR Code
+  const qrSize = 80
+  const qrX = cardX + cardW - 24 - qrSize
+  const qrY = footerY - 24
+
   if (qrCodeImage) {
-    // 画一个白色底框给二维码，防止背景色干扰扫描
-    ctx.fillStyle = '#FFFFFF'
-    ctx.fillRect(W - paddingX - qrSize - 4, footerY - 4, qrSize + 8, qrSize + 8)
-    ctx.drawImage(qrCodeImage as CanvasImageSource, W - paddingX - qrSize, footerY, qrSize, qrSize)
+    ctx.drawImage(qrCodeImage as CanvasImageSource, qrX, qrY, qrSize, qrSize)
   } else {
-    // Placeholder
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
-    ctx.fillRect(W - paddingX - qrSize, footerY, qrSize, qrSize)
+    // 画一个模拟的圆角二维码框，同样用半透明
+    drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 8)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'
+    ctx.fill()
+
+    ctx.fillStyle = '#94a3b8'
+    ctx.font = '10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('去记录', qrX + qrSize / 2, qrY + qrSize / 2)
   }
 }
 
@@ -269,7 +485,7 @@ function wrapText(
   maxWidth: number,
   lineHeight: number,
   maxLines: number
-): void {
+): number {
   const chars = text.split('')
   let line = ''
   let lines = 0
@@ -277,17 +493,25 @@ function wrapText(
     const test = line + chars[i]
     const m = ctx.measureText(test)
     if (m.width > maxWidth && line.length > 0) {
-      ctx.fillText(line, x, y)
-      y += lineHeight
-      line = chars[i]
-      lines++
+      if (lines === maxLines - 1 && i < chars.length - 1) {
+        // Last line, add ellipsis
+        ctx.fillText(line.slice(0, -1) + '...', x, y)
+        return y + lineHeight
+      } else {
+        ctx.fillText(line, x, y)
+        y += lineHeight
+        line = chars[i]
+        lines++
+      }
     } else {
       line = test
     }
   }
   if (line && lines < maxLines) {
     ctx.fillText(line, x, y)
+    y += lineHeight
   }
+  return y
 }
 
 export type { FoodRecord }

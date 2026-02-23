@@ -92,7 +92,7 @@ export default function HeightRuler({
                 enhanced
                 showScrollbar={false}
             >
-                <View className="ruler-content" style={{ padding: '400px 0' }}>
+                <View className="ruler-content" style={{ paddingTop: `calc(400rpx - ${ITEM_HEIGHT / 2}px)`, paddingBottom: `calc(400rpx - ${ITEM_HEIGHT / 2}px)` }}>
                     {ticks.map((val) => {
                         const isTen = val % 10 === 0
                         const isFive = val % 5 === 0 && !isTen

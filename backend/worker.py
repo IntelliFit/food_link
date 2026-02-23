@@ -30,6 +30,7 @@ from database import (
     mark_comment_task_violated_sync,
     add_feed_comment_sync,
     add_public_food_library_comment_sync,
+    update_public_food_library_status_sync,
 )
 from metabolic import get_age_from_birthday
 
@@ -197,7 +198,7 @@ def run_content_moderation_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
                     },
                 )
 
-        elif task_type == "food_text":
+        elif task_type in ("food_text", "public_food_library_text"):
             # 文本审核：使用文本模型
             text_input = task.get("text_input") or ""
             if not text_input.strip():
@@ -641,6 +642,30 @@ def process_one_text_food_task(task: Dict[str, Any]) -> None:
         update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
 
 
+def process_one_public_library_moderation_task(task: Dict[str, Any]) -> None:
+    """处理公共食物库文本审核任务。若违规，则标记失败且更新 library_item 状态为 rejected；若通过则更新为 published。"""
+    task_id = task["id"]
+    payload = task.get("payload") or {}
+    item_id = payload.get("item_id")
+    try:
+        if not item_id:
+            raise ValueError("任务 payload 中缺少 item_id")
+        
+        moderation = run_content_moderation_sync(task)
+        if moderation and moderation.get("is_violation"):
+            reason = moderation.get("reason", "内容违规")
+            print(f"[worker] 任务 {task_id} 文本违规: {reason}")
+            mark_task_violated_sync(task_id, reason)
+            create_violation_record_sync(task, moderation, violation_type="public_food_library")
+            update_public_food_library_status_sync(item_id, "rejected")
+        else:
+            update_public_food_library_status_sync(item_id, "published")
+            update_analysis_task_result_sync(task_id, status="done", result={"status": "approved"})
+    except Exception as e:
+        err_msg = str(e) or type(e).__name__
+        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+
+
 def _ocr_report_prompt() -> str:
     """体检报告 OCR 提示词（与 main.py 一致）"""
     return """
@@ -909,6 +934,7 @@ def run_worker(worker_id: int, task_type: str = "food", poll_interval: float = 2
         "food": process_one_food_task,
         "food_text": process_one_text_food_task,
         "health_report": process_one_health_report_task,
+        "public_food_library_text": process_one_public_library_moderation_task,
     }
     processor = processor_map.get(task_type)
     if not processor:

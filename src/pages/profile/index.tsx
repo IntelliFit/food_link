@@ -9,11 +9,10 @@ import {
   ChartTrendingOutlined,
   LocationOutlined,
   SettingOutlined,
-  Bell,
   ShieldOutlined,
-  CommentOutlined,
   InfoOutlined,
-  CalendarOutlined
+  CalendarOutlined,
+  EnvelopOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -172,10 +171,9 @@ export default function ProfilePage() {
   // 设置项
   const settings = [
     { id: 1, icon: <SettingOutlined size="20" />, title: '个人设置' }, // 将 “设置” 改为 “个人设置” 更直观
-    { id: 2, icon: <Bell size="20" />, title: '消息通知' },
     { id: 3, icon: <ShieldOutlined size="20" />, title: '隐私设置' },
-    { id: 4, icon: <CommentOutlined size="20" />, title: '意见反馈' },
-    { id: 5, icon: <InfoOutlined size="20" />, title: '关于我们' }
+    { id: 5, icon: <InfoOutlined size="20" />, title: '关于我们' },
+    { id: 6, icon: <EnvelopOutlined size="20" />, title: '联系邮箱', text: 'jianwen_ma@stu.pku.edu.cn' }
   ]
 
   const handleServiceClick = (service: typeof services[0]) => {
@@ -215,7 +213,24 @@ export default function ProfilePage() {
     })
   }
 
-  const handleSettingClick = (setting: typeof settings[0]) => {
+  const handleSettingClick = (setting: any) => {
+    // 复制邮箱
+    if (setting.id === 6) {
+      Taro.setClipboardData({
+        data: setting.text,
+        success: () => {
+          Taro.showToast({ title: '已复制邮箱', icon: 'success' })
+        }
+      })
+      return
+    }
+
+    // 关于我们
+    if (setting.id === 5) {
+      Taro.navigateTo({ url: '/pages/about/index' })
+      return
+    }
+
     if (!isLoggedIn) {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
@@ -225,11 +240,12 @@ export default function ProfilePage() {
       handleSettings()
       return
     }
-    // 关于我们
-    if (setting.id === 5) {
-      Taro.navigateTo({ url: '/pages/about/index' })
+    // 隐私设置
+    if (setting.id === 3) {
+      Taro.navigateTo({ url: '/pages/privacy-settings/index' })
       return
     }
+
     Taro.showToast({
       title: `打开${setting.title}`,
       icon: 'none'
@@ -446,9 +462,11 @@ export default function ProfilePage() {
               key={setting.id}
               title={setting.title}
               icon={setting.icon}
-              isLink
+              isLink={!(setting as any).text}
               onClick={() => handleSettingClick(setting)}
-            />
+            >
+              {(setting as any).text ? <Text style={{ fontSize: '28rpx', color: '#64748b' }}>{(setting as any).text}</Text> : null}
+            </Cell>
           ))}
         </Cell.Group>
       </View>

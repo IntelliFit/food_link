@@ -22,7 +22,10 @@ export default defineAppConfig({
 
     'pages/food-library-share/index',
     'pages/login/index',
-    'pages/about/index'
+    'pages/about/index',
+    'pages/agreement/index',
+    'pages/privacy/index',
+    'pages/privacy-settings/index'
   ],
   window: {
     backgroundTextStyle: 'light',

@@ -19,6 +19,7 @@ WORKER_COUNT = max(1, min(WORKER_COUNT, 8))  # 1~8
 TEXT_WORKER_COUNT = int(os.getenv("TEXT_WORKER_COUNT", "1"))  # 文字分析 Worker
 HEALTH_REPORT_WORKER_COUNT = int(os.getenv("HEALTH_REPORT_WORKER_COUNT", "1"))  # 病历提取 Worker
 COMMENT_WORKER_COUNT = int(os.getenv("COMMENT_WORKER_COUNT", "1"))  # 评论审核 Worker
+PUBLIC_LIBRARY_MODERATION_WORKER_COUNT = int(os.getenv("PUBLIC_LIBRARY_MODERATION_WORKER_COUNT", "1"))  # 食物库审核
 
 
 def run_food_worker_process(worker_id: int) -> None:
@@ -37,6 +38,11 @@ def run_health_report_worker_process(worker_id: int) -> None:
     """子进程入口：运行病历提取 Worker。"""
     from worker import run_worker
     run_worker(worker_id=worker_id, task_type="health_report", poll_interval=2.0)
+
+def run_public_library_moderation_worker_process(worker_id: int) -> None:
+    """子进程入口：运行食物库文本审核 Worker。"""
+    from worker import run_worker
+    run_worker(worker_id=worker_id, task_type="public_food_library_text", poll_interval=2.0)
 
 
 def run_comment_worker_process(worker_id: int) -> None:
@@ -71,12 +77,19 @@ def main() -> None:
         p = multiprocessing.Process(target=run_comment_worker_process, args=(i,), daemon=True)
         p.start()
         workers.append(p)
+
+    # 启动食物库审核 Worker
+    for i in range(PUBLIC_LIBRARY_MODERATION_WORKER_COUNT):
+        p = multiprocessing.Process(target=run_public_library_moderation_worker_process, args=(i,), daemon=True)
+        p.start()
+        workers.append(p)
     
     print(
         f"[run_backend] 已启动 {WORKER_COUNT} 个图片分析 Worker + "
         f"{TEXT_WORKER_COUNT} 个文字分析 Worker + "
         f"{HEALTH_REPORT_WORKER_COUNT} 个病历提取 Worker + "
-        f"{COMMENT_WORKER_COUNT} 个评论审核 Worker",
+        f"{COMMENT_WORKER_COUNT} 个评论审核 Worker + "
+        f"{PUBLIC_LIBRARY_MODERATION_WORKER_COUNT} 个食物库审核 Worker",
         flush=True
     )
 

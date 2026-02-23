@@ -967,6 +967,28 @@ def upload_user_avatar(user_id: str, base64_image: str) -> str:
         return getattr(result, "publicUrl", "")
     return str(result)
 
+def delete_image_from_storage(image_url: str, bucket_name: str = FOOD_ANALYZE_BUCKET) -> None:
+    """
+    根据图片公网 URL 从 Supabase Storage 中删除指定图片。
+    如果 URL 含有类似 '/storage/v1/object/public/bucket_name/XXX.jpg'，则提取 XXX.jpg 作为 path 删除。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 提取 path，例如 "https://..../food-images/1234.jpg" 提取出 "1234.jpg"
+        # 简单粗暴的方式：由于 bucket 为 bucket_name，可以找这个字符串之后的部分
+        if bucket_name in image_url:
+            parts = image_url.split(f"{bucket_name}/")
+            if len(parts) == 2:
+                path = parts[1].split("?")[0]  # 忽略 query string
+                supabase.storage.from_(bucket_name).remove([path])
+                print(f"[delete_image_from_storage] 删除成功: {path}")
+            else:
+                print(f"[delete_image_from_storage] URL 对应路径解析失败: {image_url}")
+        else:
+             print(f"[delete_image_from_storage] URL 中未找到 bucket_name: {image_url}")
+    except Exception as e:
+        print(f"[delete_image_from_storage] 删除失败: {e}")
 
 # ---------- 好友系统 ----------
 
@@ -1473,8 +1495,8 @@ async def create_public_food_library_item(
         "province": province or "",
         "city": city or "",
         "district": district or "",
-        "status": "published",  # 暂时直接发布，后续可改为 pending_review
-        "published_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pending",  # 初始状态设为 pending
+        "published_at": None, # 审核通过后再更新发帖时间
     }
     try:
         result = supabase.table("public_food_library").insert(row).execute()
@@ -1485,6 +1507,24 @@ async def create_public_food_library_item(
         print(f"[create_public_food_library_item] 错误: {e}")
         raise
 
+def update_public_food_library_status_sync(item_id: str, status: str) -> None:
+    """
+    更新公共食物库条目的状态。如果是 published，同时更新 published_at。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "status": status,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if status == "published":
+        row["published_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        supabase.table("public_food_library").update(row).eq("id", item_id).execute()
+    except Exception as e:
+        print(f"[update_public_food_library_status_sync] 错误: {e}")
+        raise
+        
 
 async def list_public_food_library(
     city: Optional[str] = None,

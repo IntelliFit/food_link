@@ -107,7 +107,6 @@ export default function RecipesPage() {
       image_path: recipe.image_path,
       description: recipe.description,
       insight: null,
-      context_state: null,
       pfc_ratio_comment: null,
       absorption_notes: null,
       context_advice: null,

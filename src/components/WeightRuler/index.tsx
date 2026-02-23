@@ -126,7 +126,7 @@ export default function WeightRuler({
                 <Text className="bmi-desc">您的身材{bmiLabel === '健康' ? '很棒，请保持！' : '需要注意哦'}</Text>
             </View>
 
-            <View className="ruler-container" style={{ height: '240px', width: '100%' }}>
+            <View className="ruler-container" style={{ width: '100%' }}>
                 <View className="center-indicator" />
                 <ScrollView
                     className="ruler-scroll-view"
@@ -137,7 +137,7 @@ export default function WeightRuler({
                     enhanced
                     showScrollbar={false}
                 >
-                    <View className="ruler-track" style={{ paddingLeft: '50vw', paddingRight: '50vw' }}>
+                    <View className="ruler-track" style={{ paddingLeft: `calc(50% - ${TICK_WIDTH / 2}px)`, paddingRight: `calc(50% - ${TICK_WIDTH / 2}px)` }}>
                         {ticks.map((val, idx) => {
                             const isMajor = idx % 10 === 0 // Integer kg
                             const isMedium = idx % 5 === 0 && !isMajor // 0.5 kg

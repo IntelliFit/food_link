@@ -423,28 +423,57 @@
   display: block;
 }
 
-.poster-modal-actions {
+.poster-modal-actions-col {
   display: flex;
+  flex-direction: column;
   gap: 24rpx;
-  justify-content: center;
-}
 
-.poster-modal-btn {
-  flex: 1;
-  height: 88rpx;
-  line-height: 88rpx;
-  font-size: 30rpx;
-  font-weight: 500;
-  border-radius: 44rpx;
-  border: none;
+  .share-row {
+    display: flex;
+    gap: 20rpx;
+    width: 100%;
 
-  &.secondary {
-    background: #f1f5f9;
-    color: #64748b;
+    .poster-modal-btn {
+      flex: 1;
+      height: 88rpx;
+      line-height: 88rpx;
+      font-size: 30rpx;
+      font-weight: 500;
+      border-radius: 44rpx;
+      border: none;
+      margin: 0;
+
+      &::after {
+        border: none;
+      }
+
+      &.share-chat-btn {
+        background: #f1f8e9;
+        color: #00bc7d;
+        border: 2rpx solid #c6f6d5;
+      }
+
+      &.share-moments-btn {
+        background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+        color: #fff;
+      }
+    }
   }
 
-  &.primary {
-    background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
-    color: #fff;
+  .close-btn {
+    width: 100%;
+    height: 88rpx;
+    line-height: 88rpx;
+    font-size: 30rpx;
+    font-weight: 500;
+    border-radius: 44rpx;
+    border: none;
+    background: #f1f5f9;
+    color: #64748b;
+    margin: 0;
+
+    &::after {
+      border: none;
+    }
   }
 }

@@ -246,6 +246,8 @@ export interface UserInfo {
   bmr?: number | null
   tdee?: number | null
   onboarding_completed?: boolean
+  searchable?: boolean
+  public_records?: boolean
 }
 
 /** 健康档案中的病史/饮食/过敏等 JSON */
@@ -292,6 +294,8 @@ export interface UpdateUserInfoRequest {
   nickname?: string
   avatar?: string
   telephone?: string
+  searchable?: boolean
+  public_records?: boolean
 }
 
 /**
@@ -637,6 +641,26 @@ export async function getFoodRecordById(recordId: string): Promise<{ record: Foo
     throw new Error(msg)
   }
   return res.data as { record: FoodRecord }
+}
+
+/**
+ * 获取小程序无限拉新二维码（Base64）
+ */
+export async function getUnlimitedQRCode(scene: string, page?: string): Promise<{ base64: string }> {
+  const payload: any = { scene }
+  if (page) payload.page = page
+
+  const res = await authenticatedRequest('/api/qrcode', {
+    method: 'POST',
+    data: payload,
+    timeout: 15000
+  })
+
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取分享二维码失败'
+    throw new Error(msg)
+  }
+  return res.data as { base64: string }
 }
 
 /**

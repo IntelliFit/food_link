@@ -1,0 +1,53 @@
+.document-page {
+    min-height: 100vh;
+    background-color: #f9fafb;
+    padding: 32rpx;
+    box-sizing: border-box;
+
+    .document-content {
+        background: #fff;
+        border-radius: 24rpx;
+        padding: 40rpx;
+        box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+    }
+
+    .title {
+        display: block;
+        font-size: 40rpx;
+        font-weight: 600;
+        color: #1e293b;
+        text-align: center;
+        margin-bottom: 16rpx;
+    }
+
+    .update-time {
+        display: block;
+        font-size: 24rpx;
+        color: #94a3b8;
+        text-align: center;
+        margin-bottom: 48rpx;
+        padding-bottom: 32rpx;
+        border-bottom: 2rpx dashed #e2e8f0;
+    }
+
+    .section {
+        margin-bottom: 40rpx;
+
+        .section-title {
+            display: block;
+            font-size: 30rpx;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 16rpx;
+        }
+
+        .paragraph {
+            display: block;
+            font-size: 28rpx;
+            color: #475569;
+            line-height: 1.8;
+            margin-bottom: 12rpx;
+            text-align: justify;
+        }
+    }
+}

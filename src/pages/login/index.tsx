@@ -9,8 +9,7 @@ import {
     getUserProfile,
     updateUserInfo,
     uploadUserAvatar,
-    imageToBase64,
-    getUserRecordDays
+    imageToBase64
 } from '../../utils/api'
 
 import './index.scss'
@@ -31,77 +30,8 @@ export default function LoginPage() {
     const [tempAvatar, setTempAvatar] = useState('')
     const [tempNickname, setTempNickname] = useState('')
 
-    // 获取手机号并登录
-    const handleGetPhoneNumber = async (e: any) => {
-        if (loading) return
-
-        // 检查事件详情
-        if (!e || !e.detail) {
-            Taro.showToast({ title: '获取手机号失败', icon: 'none' })
-            return
-        }
-
-        if (e.detail.errMsg !== 'getPhoneNumber:ok') {
-            // 获取手机号失败，提示用户并尝试普通登录
-            console.warn('获取手机号失败:', e.detail.errMsg)
-            if (e.detail.errMsg === 'getPhoneNumber:fail no permission') {
-                Taro.showModal({
-                    title: '提示',
-                    content: '无法获取手机号，是否继续使用微信账号直接登录？',
-                    confirmText: '继续登录',
-                    success: (res) => {
-                        if (res.confirm) {
-                            handleLoginOnly()
-                        }
-                    }
-                })
-                return
-            }
-            // 其他错误
-            await handleLoginOnly()
-            return
-        }
-
-        setLoading(true)
-        try {
-            const phoneCode = e.detail.code
-            const loginRes = await Taro.login()
-            if (!loginRes.code) throw new Error('获取登录凭证失败')
-
-            const loginData: LoginResponse = await login(loginRes.code, phoneCode)
-            await handleLoginSuccess(loginData)
-
-        } catch (error: any) {
-            console.error('登录失败:', error)
-            Taro.showToast({
-                title: error.message || '登录失败',
-                icon: 'none'
-            })
-            setLoading(false)
-        }
-    }
-
     /** 微信一键登录：仅用 code 登录。若用户库中已有手机号，后端会直接带回，无需再次授权手机号 */
     const handleWxLogin = async () => {
-        if (loading) return
-        setLoading(true)
-        try {
-            const loginRes = await Taro.login()
-            if (!loginRes.code) throw new Error('获取登录凭证失败')
-            const loginData: LoginResponse = await login(loginRes.code)
-            await handleLoginSuccess(loginData)
-        } catch (error: any) {
-            console.error('登录失败:', error)
-            Taro.showToast({
-                title: error.message || '登录失败',
-                icon: 'none'
-            })
-            setLoading(false)
-        }
-    }
-
-    /** 仅登录（不获取手机号），用于 getPhoneNumber 失败时的降级 */
-    const handleLoginOnly = async () => {
         if (loading) return
         setLoading(true)
         try {
@@ -263,7 +193,7 @@ export default function LoginPage() {
 
             <View className='login-footer'>
                 <View className='agreement-text'>
-                    登录即代表同意 <Text className='link'>用户协议</Text> 和 <Text className='link'>隐私政策</Text>
+                    登录即代表同意 <Text className='link' onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>用户协议</Text> 和 <Text className='link' onClick={() => Taro.navigateTo({ url: '/pages/privacy/index' })}>隐私政策</Text>
                 </View>
             </View>
 

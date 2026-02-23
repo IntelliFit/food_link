@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
@@ -70,12 +70,12 @@ from database import (
     get_user_recipe,
     update_user_recipe,
     delete_user_recipe,
-    delete_user_recipe,
     use_recipe_record,
     update_analysis_task_result,
     # 评论任务
     create_comment_task_sync,
     list_comment_tasks_by_user_sync,
+    delete_image_from_storage,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -181,6 +181,8 @@ def _build_gemini_prompt(
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（如维生素C促铁吸收、油脂助脂溶性维生素等，一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
+8. is_violation: 布尔值。必须进行内容安全和相关性检查。如果图片【完全与食物无关】（例如纯粹的风景、人物自拍、截图、动物等）或【包含色情、血腥暴力、政治敏感、违法犯罪内容】，必须返回 true。（注意：只要图片中包含任何可食用的食物或饮品，就不算违规）。
+9. violation_reason: 若 is_violation 为 true，说明简短的中文原因（如"未检测到食物"或"涉及不良内容"），否则为空字符串。
 
 {('用户补充背景信息: "' + additional_context + '"。请根据此信息调整对隐形成分或烹饪方式的判断。') if additional_context else ''}
 
@@ -206,7 +208,9 @@ def _build_gemini_prompt(
   "insight": "健康建议（简体中文）",
   "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
   "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
-  "context_advice": "情境建议（简体中文，若无则空字符串）"
+  "context_advice": "情境建议（简体中文，若无则空字符串）",
+  "is_violation": false,
+  "violation_reason": ""
 }}
 """.strip()
 
@@ -511,6 +515,7 @@ def _format_health_profile_for_analysis(user: Dict[str, Any]) -> str:
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_food(
     request: AnalyzeRequest,
+    background_tasks: BackgroundTasks,
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
@@ -575,6 +580,14 @@ async def analyze_food(
             parsed = await _analyze_with_gemini(image_urls=image_urls_for_api, prompt=prompt, model_name="google/gemini-2.0-flash-001")
         else:
             parsed = await _analyze_with_gemini(base64_image=base64_for_gemini, prompt=prompt, model_name="google/gemini-2.0-flash-001")
+
+        is_violation = parsed.get("is_violation", False)
+        if is_violation:
+            reason = parsed.get("violation_reason", "图片内容违规")
+            if image_urls_for_api:
+                for url in image_urls_for_api:
+                    background_tasks.add_task(delete_image_from_storage, url)
+            raise HTTPException(status_code=400, detail=f"图片违规: {reason}")
 
         valid_items = []
         if isinstance(parsed.get("items"), list):
@@ -1157,7 +1170,8 @@ class UpdateUserInfoRequest(BaseModel):
     nickname: Optional[str] = None
     avatar: Optional[str] = None
     telephone: Optional[str] = None
-
+    searchable: Optional[bool] = None
+    public_records: Optional[bool] = None
 
 # ---------- 健康档案 (Professional Onboarding) ----------
 class HealthProfileUpdateRequest(BaseModel):
@@ -1235,6 +1249,8 @@ async def get_user_profile(
         "tdee": float(user["tdee"]) if user.get("tdee") is not None else None,
         "onboarding_completed": bool(user.get("onboarding_completed")),
         "diet_goal": user.get("diet_goal"),
+        "searchable": user.get("searchable", True),
+        "public_records": user.get("public_records", True),
     }
     return {
         "id": user["id"],
@@ -1295,6 +1311,10 @@ async def update_user_profile(
         update_dict["avatar"] = update_data.avatar
     if update_data.telephone is not None:
         update_dict["telephone"] = update_data.telephone
+    if update_data.searchable is not None:
+        update_dict["searchable"] = update_data.searchable
+    if update_data.public_records is not None:
+        update_dict["public_records"] = update_data.public_records
     
     if not update_dict:
         raise HTTPException(status_code=400, detail="没有要更新的字段")
@@ -1310,7 +1330,9 @@ async def update_user_profile(
             "avatar": updated_user.get("avatar", ""),
             "telephone": updated_user.get("telephone"),
             "create_time": updated_user.get("create_time"),
-            "update_time": updated_user.get("update_time")
+            "update_time": updated_user.get("update_time"),
+            "searchable": updated_user.get("searchable"),
+            "public_records": updated_user.get("public_records")
         }
     except Exception as e:
         print(f"[update_user_profile] 错误: {e}")
@@ -2435,6 +2457,22 @@ async def api_create_public_food_library(
             city=body.city,
             district=body.district,
         )
+        # 将用户提交的文字部分拼接起来用于文本审核
+        text_content = f"{body.food_name or ''} {body.merchant_name or ''} {body.merchant_address or ''} {body.description or ''} {body.insight or ''} {body.user_notes or ''}".strip()
+        # 创建后台审核任务
+        if text_content:
+            await asyncio.to_thread(
+                create_analysis_task_sync,
+                user_id=user_id,
+                task_type="public_food_library_text",
+                text_input=text_content,
+                payload={"item_id": item.get("id")},
+            )
+        else:
+            # 如果没有文字内容，直接将状态置为发布
+            from database import update_public_food_library_status_sync
+            await asyncio.to_thread(update_public_food_library_status_sync, item.get("id"), "published")
+
         return {"id": item.get("id"), "message": "分享成功"}
     except HTTPException:
         raise
@@ -2732,11 +2770,17 @@ async def get_access_token() -> str:
     """
     global _access_token_cache
     
-    # 检查缓存是否有效（提前 5 分钟刷新）
+    # 按照需求：第一次获取后缓存，如果过去一个半小时（1.5 * 3600 = 5400秒），重新获取
     current_time = int(time.time())
-    if _access_token_cache["token"] and _access_token_cache["expires_at"] > current_time + 300:
+    
+    # 确保 cache 字典拥有 fetched_at 字段
+    if "fetched_at" not in _access_token_cache:
+        _access_token_cache["fetched_at"] = 0
+
+    # 如果 token 存在，且当前时间距离上次获取时间还未超过一个半小时（5400秒）
+    if _access_token_cache["token"] and (current_time - _access_token_cache["fetched_at"] < 5400):
         print(f"[get_access_token] 使用缓存的 access_token: {_access_token_cache['token']}")
-        print(f"[get_access_token] 缓存过期时间: {_access_token_cache['expires_at']} (时间戳)")
+        print(f"[get_access_token] 距离上次获取已过: {current_time - _access_token_cache['fetched_at']} 秒 (缓存有效期: 5400秒)")
         return _access_token_cache["token"]
     
     appid = os.getenv("APPID")
@@ -2782,14 +2826,63 @@ async def get_access_token() -> str:
         
         # 打印 access_token
         print(f"[get_access_token] access_token: {access_token}")
-        print(f"[get_access_token] expires_in: {expires_in} 秒")
-        print(f"[get_access_token] 过期时间: {current_time + expires_in} (时间戳)")
+        print(f"[get_access_token] 微信返回的 expires_in: {expires_in} 秒 (实际按1.5小时刷新)")
         
-        # 更新缓存
+        # 更新缓存: 记录获取时间，并计算理论过期时间
         _access_token_cache["token"] = access_token
+        _access_token_cache["fetched_at"] = current_time
         _access_token_cache["expires_at"] = current_time + expires_in
         
         return access_token
+
+
+class QRCodeRequest(BaseModel):
+    """请求小程序二维码参数"""
+    scene: str = Field(..., description="最大32个可见字符，只支持数字，大小写英文以及部分特殊字符")
+    page: Optional[str] = Field(None, description="必须是已经发布的小程序存在的页面")
+    width: Optional[int] = Field(430, description="二维码的宽度，单位 px，最小 280px，最大 1280px")
+    check_path: Optional[bool] = Field(False, description="检查 page 是否存在")
+    env_version: Optional[str] = Field("release", description="要打开的小程序版本")
+
+@app.post("/api/qrcode")
+async def get_unlimited_qrcode(request: QRCodeRequest):
+    """
+    获取小程序二维码并返回 Base64 编码的图片
+    """
+    import base64
+    
+    access_token = await get_access_token()
+    url = f"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={access_token}"
+    
+    payload = {
+        "scene": request.scene,
+        "width": request.width,
+        "check_path": request.check_path,
+        "env_version": request.env_version
+    }
+    if request.page is not None:
+        payload["page"] = request.page
+        
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(url, json=payload)
+        
+        if not response.is_success:
+            raise HTTPException(status_code=500, detail="请求微信二维码接口失败")
+        
+        # 微信接口失败时会返回 JSON 格式数据，成功时返回图片二进制
+        # 根据 content-type 区分
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            err_data = response.json()
+            raise HTTPException(status_code=500, detail=f"生成二维码失败: {err_data.get('errmsg', '未知错误')}")
+        
+        # 成功，读取二进制并转 Base64
+        image_bytes = response.content
+        base64_str = base64.b64encode(image_bytes).decode("utf-8")
+        # 组装成可以直接作为 src 使用的格式
+        data_uri = f"data:image/jpeg;base64,{base64_str}"
+        
+        return {"base64": data_uri}
 
 
 async def get_phone_number(phone_code: str) -> dict:

@@ -43,11 +43,13 @@
             .tick-mark {
                 position: absolute;
                 left: 0;
+                top: 50%;
                 background-color: #e5e7eb;
                 height: 2px;
                 /* Thicker standard tick */
                 border-radius: 2px;
                 transition: width 0.2s, background-color 0.2s;
+                transform: translateY(-50%);
             }
 
             /* Long Tick (Every 10cm) */
@@ -62,6 +64,7 @@
                 .tick-text {
                     position: absolute;
                     left: 156px;
+                    top: 50%;
                     font-size: 32px;
                     /* Larger font */
                     font-weight: 600;

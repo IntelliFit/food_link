@@ -1,10 +1,9 @@
 import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/components'
 import { useState, useEffect } from 'react'
-import Taro, { useRouter } from '@tarojs/taro'
-import { getFoodRecordById, type FoodRecord } from '../../utils/api'
-import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT } from '../../utils/poster'
+import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import { getFoodRecordById, getUnlimitedQRCode, type FoodRecord } from '../../utils/api'
+import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../utils/poster'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
-import logoPng from '../../assets/icons/home-active.png'
 
 import './index.scss'
 
@@ -100,6 +99,22 @@ export default function RecordDetailPage() {
     loadRecord()
   }, [router.params?.id])
 
+  useShareAppMessage(() => {
+    return {
+      title: '来看看我的健康饮食记录吧！',
+      path: `/pages/record-detail/index?id=${record?.id || router.params?.id || ''}`,
+      imageUrl: posterImageUrl || undefined
+    }
+  })
+
+  useShareTimeline(() => {
+    return {
+      title: '来看看我的健康饮食记录吧！',
+      query: `id=${record?.id || router.params?.id || ''}`,
+      imageUrl: posterImageUrl || undefined
+    }
+  })
+
   if (loading || !record) {
     return (
       <View className="record-detail-page">
@@ -141,27 +156,6 @@ export default function RecordDetailPage() {
         canvas.width = POSTER_WIDTH * dpr
         canvas.height = POSTER_HEIGHT * dpr
 
-        const exportCanvas = () => {
-          Taro.canvasToTempFilePath({
-            canvas: canvas as any,
-            destWidth: POSTER_WIDTH * 2,
-            destHeight: POSTER_HEIGHT * 2,
-            fileType: 'png',
-            success: (resp) => {
-              Taro.hideLoading()
-              setPosterGenerating(false)
-              setPosterImageUrl(resp.tempFilePath)
-              setShowPosterModal(true)
-            },
-            fail: (err) => {
-              Taro.hideLoading()
-              setPosterGenerating(false)
-              Taro.showToast({ title: '生成失败', icon: 'none' })
-              console.error('canvasToTempFilePath fail', err)
-            }
-          })
-        }
-
         const loadImage = (src: string) => {
           return new Promise<{ width: number; height: number } | null>((resolve) => {
             if (!src || !canvas.createImage) {
@@ -178,10 +172,21 @@ export default function RecordDetailPage() {
           })
         }
 
+        const loadQRImage = async () => {
+          try {
+            // scene 最大 32 个可见字符。当前 UUID 太长，改用简短字符串（例如 share=1）
+            const { base64 } = await getUnlimitedQRCode('share=1', 'pages/index/index')
+            return await loadImage(base64)
+          } catch (e) {
+            console.error('Failed to load real QR code', e)
+            return null // fallback to fake QR code in poster
+          }
+        }
+
         Promise.all([
           loadImage(record.image_path || ''),
-          loadImage(logoPng)
-        ]).then(([mainImg, logoImg]) => {
+          loadQRImage()
+        ]).then(([mainImg, qrImg]) => {
           try {
             const ctx = canvas.getContext('2d')
             if (!ctx) {
@@ -190,17 +195,39 @@ export default function RecordDetailPage() {
               Taro.showToast({ title: '画布不可用', icon: 'none' })
               return
             }
+
+            const dynamicHeight = computePosterHeight(ctx, record, POSTER_WIDTH)
+            canvas.width = POSTER_WIDTH * dpr
+            canvas.height = dynamicHeight * dpr
             ctx.scale(dpr, dpr)
+
             // 使用当前稳定海报绘制逻辑
             drawRecordPoster(ctx, {
               width: POSTER_WIDTH,
-              height: POSTER_HEIGHT,
+              height: dynamicHeight,
               record,
               image: mainImg,
-              logoImage: logoImg,
-              qrCodeImage: null,
+              qrCodeImage: qrImg,
             })
-            exportCanvas()
+
+            Taro.canvasToTempFilePath({
+              canvas: canvas as any,
+              destWidth: POSTER_WIDTH * 2,
+              destHeight: dynamicHeight * 2,
+              fileType: 'png',
+              success: (resp) => {
+                Taro.hideLoading()
+                setPosterGenerating(false)
+                setPosterImageUrl(resp.tempFilePath)
+                setShowPosterModal(true)
+              },
+              fail: (err) => {
+                Taro.hideLoading()
+                setPosterGenerating(false)
+                Taro.showToast({ title: '生成失败', icon: 'none' })
+                console.error('canvasToTempFilePath fail', err)
+              }
+            })
           } catch (e) {
             Taro.hideLoading()
             setPosterGenerating(false)
@@ -354,9 +381,8 @@ export default function RecordDetailPage() {
         </View>
       </View>
 
-      {/* 离屏 Canvas 用于绘制海报 */}
       <View className="poster-canvas-wrap">
-        <Canvas type="2d" id="recordPosterCanvas" className="poster-canvas" />
+        <Canvas type="2d" id="recordPosterCanvas" className="poster-canvas" style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }} />
       </View>
 
       <View className="detail-card">
@@ -464,9 +490,16 @@ export default function RecordDetailPage() {
               <ScrollView scrollY className="poster-scroll-area">
                 <Image src={posterImageUrl} mode="widthFix" className="poster-modal-image" />
               </ScrollView>
-              <View className="poster-modal-actions">
-                <Button className="poster-modal-btn secondary" onClick={() => setShowPosterModal(false)}>关闭</Button>
-                <Button className="poster-modal-btn primary" onClick={handleSavePoster}>保存到相册</Button>
+              <View className="poster-modal-actions-col">
+                <View className="share-row">
+                  <Button className="poster-modal-btn share-chat-btn" openType="share">
+                    微信好友/群聊
+                  </Button>
+                  <Button className="poster-modal-btn share-moments-btn" onClick={handleSavePoster}>
+                    保存图片
+                  </Button>
+                </View>
+                <Button className="poster-modal-btn close-btn" onClick={() => setShowPosterModal(false)}>关闭</Button>
               </View>
             </View>
           </View>

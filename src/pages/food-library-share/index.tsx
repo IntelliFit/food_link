@@ -365,7 +365,7 @@ export default function FoodLibrarySharePage() {
 
     const { confirm } = await Taro.showModal({
       title: '确认提交',
-      content: '确定要将该食物分享到公共食物库吗？提交后其他用户可查看。',
+      content: '确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。',
       confirmText: '确定提交',
       cancelText: '取消'
     })
@@ -411,11 +411,11 @@ export default function FoodLibrarySharePage() {
         district: district.trim() || undefined,
         detail_address: detailAddress.trim() || undefined
       })
-      Taro.showToast({ title: '分享成功', icon: 'success' })
+      Taro.showToast({ title: '提交成功，审核通过后将展示', icon: 'none', duration: 2500 })
       Taro.setStorageSync('food_library_need_refresh', '1')
       setTimeout(() => {
         Taro.navigateBack()
-      }, 1500)
+      }, 2500)
     } catch (e: any) {
       Taro.showToast({ title: e.message || '分享失败', icon: 'none' })
     } finally {
