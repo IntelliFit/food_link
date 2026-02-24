@@ -250,11 +250,27 @@ export interface UserInfo {
   public_records?: boolean
 }
 
+export interface ReportExtractIndicator {
+  name: string
+  value: string
+  unit: string
+  flag: string
+}
+
+export interface ReportExtract {
+  indicators?: ReportExtractIndicator[]
+  conclusions?: string[]
+  suggestions?: string[]
+  medical_notes?: string
+}
+
 /** 健康档案中的病史/饮食/过敏等 JSON */
 export interface HealthCondition {
   medical_history?: string[]
   diet_preference?: string[]
   allergies?: string[]
+  health_notes?: string
+  report_extract?: ReportExtract | null
   [key: string]: unknown
 }
 
@@ -282,8 +298,9 @@ export interface HealthProfileUpdateRequest {
   medical_history?: string[]
   diet_preference?: string[]
   allergies?: string[]
+  health_notes?: string
   /** 体检报告 OCR 识别结果，保存时与问卷一并写入 user_health_documents */
-  report_extract?: Record<string, unknown>
+  report_extract?: ReportExtract | null
   /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
   report_image_url?: string
   diet_goal?: string

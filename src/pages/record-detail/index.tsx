@@ -483,8 +483,8 @@ export default function RecordDetailPage() {
       {/* 海报预览弹窗 */}
       {
         showPosterModal && posterImageUrl && (
-          <View className="poster-modal" catchMove>
-            <View className="poster-modal-mask" onClick={() => setShowPosterModal(false)} />
+          <View className="poster-modal">
+            <View className="poster-modal-mask" onClick={() => setShowPosterModal(false)} catchMove />
             <View className="poster-modal-content">
               <Text className="poster-modal-title">分享海报</Text>
               <ScrollView scrollY className="poster-scroll-area">

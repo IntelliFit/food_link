@@ -1211,6 +1211,10 @@ class HealthProfileUpdateRequest(BaseModel):
         None,
         description="目标：fat_loss, muscle_gain, maintain"
     )
+    health_notes: Optional[str] = Field(
+        None,
+        description="特殊情况/补充"
+    )
 
     class Config:
         json_schema_extra = {
@@ -1425,6 +1429,8 @@ async def update_health_profile(
         health_condition["diet_preference"] = body.diet_preference
     if body.allergies is not None:
         health_condition["allergies"] = body.allergies
+    if body.health_notes is not None:
+        health_condition["health_notes"] = body.health_notes
     # 若有体检报告 OCR 结果，一并写入 user_health_documents（含 image_url 与识别结果）
     if body.report_extract:
         try:

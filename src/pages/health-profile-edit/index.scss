@@ -11,7 +11,7 @@
     align-items: center;
     justify-content: center;
     height: 100vh;
-    
+
     .loading-text {
       font-size: 32rpx;
       color: #8a9199;
@@ -291,6 +291,12 @@
     font-size: 28rpx;
     color: #333;
     box-sizing: border-box;
+
+    &.textarea-input {
+      height: 160rpx;
+      text-align: left;
+      line-height: 1.5;
+    }
   }
 
   // 体检报告上传区域（避免右侧被遮挡）

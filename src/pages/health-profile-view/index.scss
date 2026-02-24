@@ -135,3 +135,39 @@
 .error-wrap .btn-primary {
   margin-top: 24rpx;
 }
+
+/* 提取指标列表 */
+.indicators-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.indicator-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+}
+
+.ind-name {
+  font-size: 26rpx;
+  color: #334155;
+  flex: 1;
+}
+
+.ind-val {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #1e293b;
+  text-align: right;
+
+  &.abnormal {
+    color: #ef4444;
+    /* 异常标红 */
+  }
+}

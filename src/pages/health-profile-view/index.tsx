@@ -1,6 +1,6 @@
 import { View, Text, ScrollView } from '@tarojs/components'
-import { useState, useEffect } from 'react'
-import Taro from '@tarojs/taro'
+import { useState } from 'react'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { getHealthProfile, type HealthProfile } from '../../utils/api'
 
 import './index.scss'
@@ -40,12 +40,12 @@ export default function HealthProfileViewPage() {
   const [profile, setProfile] = useState<HealthProfile | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  useDidShow(() => {
     getHealthProfile()
       .then(setProfile)
       .catch((e: Error) => setError(e.message || '获取失败'))
       .finally(() => setLoading(false))
-  }, [])
+  })
 
   const handleEdit = () => {
     Taro.navigateTo({ url: '/pages/health-profile-edit/index' })
@@ -96,6 +96,16 @@ export default function HealthProfileViewPage() {
   const medicalHistory = (hc?.medical_history as string[] | undefined) || []
   const dietPreference = (hc?.diet_preference as string[] | undefined) || []
   const allergies = (hc?.allergies as string[] | undefined) || []
+  const healthNotes = hc?.health_notes as string | undefined
+  const reportExtract = hc?.report_extract
+
+  // 判断是否真的有数据
+  const hasIndicators = reportExtract?.indicators && reportExtract.indicators.length > 0
+  const hasConclusions = reportExtract?.conclusions && reportExtract.conclusions.length > 0
+  const hasSuggestions = reportExtract?.suggestions && reportExtract.suggestions.length > 0
+  const hasMedicalNotes = !!reportExtract?.medical_notes
+
+  const hasReportData = hasIndicators || hasConclusions || hasSuggestions || hasMedicalNotes
 
   return (
     <View className='health-profile-view-page'>
@@ -169,6 +179,58 @@ export default function HealthProfileViewPage() {
               {allergies.length > 0 ? allergies.join('、') : '无'}
             </Text>
           </View>
+          <View className='row column'>
+            <Text className='label'>特殊情况和补充</Text>
+            <Text className='value'>
+              {healthNotes ? healthNotes : '无'}
+            </Text>
+          </View>
+        </View>
+
+        {/* 体检/病例识别结果 */}
+        <View className='block'>
+          <Text className='block-title'>体检/病例识别结果</Text>
+          {!hasReportData ? (
+            <View className='row column'>
+              <Text className='value'>无</Text>
+            </View>
+          ) : (
+            <>
+              {hasConclusions && (
+                <View className='row column'>
+                  <Text className='label'>诊断结论</Text>
+                  <Text className='value'>{reportExtract!.conclusions!.join('、')}</Text>
+                </View>
+              )}
+              {hasIndicators && (
+                <View className='row column'>
+                  <Text className='label'>提取指标</Text>
+                  <View className='indicators-list'>
+                    {reportExtract!.indicators!.map((ind, idx) => (
+                      <View key={idx} className='indicator-item'>
+                        <Text className='ind-name'>{ind.name}</Text>
+                        <Text className={`ind-val ${ind.flag ? 'abnormal' : ''}`}>
+                          {ind.value} {ind.unit} {ind.flag}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+              {hasSuggestions && (
+                <View className='row column'>
+                  <Text className='label'>医学建议</Text>
+                  <Text className='value'>{reportExtract!.suggestions!.join('、')}</Text>
+                </View>
+              )}
+              {hasMedicalNotes && (
+                <View className='row column'>
+                  <Text className='label'>其他记录</Text>
+                  <Text className='value'>{reportExtract!.medical_notes}</Text>
+                </View>
+              )}
+            </>
+          )}
         </View>
 
         <View className='footer-actions'>

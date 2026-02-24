@@ -1,4 +1,4 @@
-import { View, Text, Input, Image } from '@tarojs/components'
+import { View, Text, Input, Textarea, Image } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
 import { useState, useEffect } from 'react'
@@ -53,7 +53,7 @@ const GOAL_OPTIONS = [
   { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: 'icon-zengji' }
 ]
 
-const TOTAL_STEPS = 10 // 性别、生日、身高、体重、目标、活动、病史、饮食、过敏、体检报告
+const TOTAL_STEPS = 11 // 性别、生日、身高、体重、目标、活动、病史、饮食、过敏、特殊情况、体检报告
 
 export default function HealthProfilePage() {
   const [loading, setLoading] = useState(true)
@@ -75,6 +75,8 @@ export default function HealthProfilePage() {
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([]) // 被选中的自定义病史
+
+  const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
 
   const loadProfile = async () => {
     try {
@@ -100,6 +102,7 @@ export default function HealthProfilePage() {
       if (hc?.medical_history?.length) setMedicalHistory(hc.medical_history)
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
+      if (hc?.health_notes) setHealthNotes(hc.health_notes)
     } catch {
       Taro.showToast({ title: '获取档案失败', icon: 'none' })
     } finally {
@@ -224,6 +227,7 @@ export default function HealthProfilePage() {
       case 6:
       case 7:
       case 8:
+      case 9:
         return true
       default:
         return true
@@ -243,6 +247,7 @@ export default function HealthProfilePage() {
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
+      health_notes: healthNotes || undefined,
       report_image_url: reportImageUrl || undefined
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
@@ -548,11 +553,12 @@ export default function HealthProfilePage() {
             <Text className="step-card-step">第 9 题（选填）</Text>
             <Text className="step-card-title">有过敏源吗？</Text>
             <View className="input-card">
-              <Input
-                className="card-input"
+              <Textarea
+                className="card-textarea"
                 placeholder="如：海鲜、花生，多个用顿号分隔"
                 value={allergies}
                 onInput={(e) => setAllergies(e.detail.value)}
+                maxlength={200}
               />
             </View>
             <Text className="skip-hint">没有可留空</Text>
@@ -564,7 +570,30 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 9: 体检报告上传 */}
+          {/* Step 9: 特殊情况和问题补充 */}
+          <View className="card step-card">
+            <Text className="step-card-step">第 10 题（选填）</Text>
+            <Text className="step-card-title">特殊情况和补充？</Text>
+            <View className="input-card">
+              {/* 这里使用 textarea 或者普通的 Input 都行。原项目设计风格用 Input 为主 */}
+              <Textarea
+                className="card-textarea"
+                placeholder="例如：孕期、哺乳期、手术恢复期等"
+                value={healthNotes}
+                onInput={(e) => setHealthNotes(e.detail.value)}
+                maxlength={500}
+              />
+            </View>
+            <Text className="skip-hint">记录身体的特殊情况，让分析更准确（没有可留空）</Text>
+            <View className="card-footer">
+              <View className="card-prev-link" onClick={goPrev}>上一题</View>
+              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
+                确认
+              </Button>
+            </View>
+          </View>
+
+          {/* Step 10: 体检报告上传 */}
           <View className="card step-card upload-step">
             <View className="upload-hero">
               <View className="hero-icon-wrapper">

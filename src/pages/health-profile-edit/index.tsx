@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, ScrollView } from '@tarojs/components'
+import { View, Text, Input, Textarea, Image, ScrollView } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
 import { useState, useEffect } from 'react'
@@ -73,6 +73,8 @@ export default function HealthProfileEditPage() {
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([])
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([])
 
+  const [healthNotes, setHealthNotes] = useState<string>('')
+
   const loadProfile = async () => {
     try {
       const profile = await getHealthProfile()
@@ -96,7 +98,7 @@ export default function HealthProfileEditPage() {
         const predefinedValues = MEDICAL_OPTIONS.map(opt => opt.value)
         const presetMedical: string[] = []
         const customMedical: string[] = []
-        
+
         hc.medical_history.forEach((item: string) => {
           if (predefinedValues.includes(item)) {
             presetMedical.push(item)
@@ -104,7 +106,7 @@ export default function HealthProfileEditPage() {
             customMedical.push(item)
           }
         })
-        
+
         setMedicalHistory(presetMedical)
         setCustomMedicalList(customMedical)
         setSelectedCustomMedical(customMedical)
@@ -113,6 +115,7 @@ export default function HealthProfileEditPage() {
       }
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
+      if (hc?.health_notes) setHealthNotes(hc.health_notes)
     } catch {
       Taro.showToast({ title: '获取档案失败', icon: 'none' })
     } finally {
@@ -198,12 +201,13 @@ export default function HealthProfileEditPage() {
       weight: weight ? Number(weight) : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
-      medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
-      diet_preference: dietPreference.length ? dietPreference : undefined,
-      allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
+      medical_history: allMedicalHistory,
+      diet_preference: dietPreference.filter(v => v !== 'none'),
+      allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : [],
+      health_notes: healthNotes,
       report_image_url: reportImageUrl || undefined
     }
-    
+
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
       Taro.showToast({ title: '请完成必填项（前 6 项）', icon: 'none' })
       return
@@ -226,7 +230,7 @@ export default function HealthProfileEditPage() {
         : '确定将修改后的健康信息保存到个人档案吗？'
     })
     if (!confirm) return
-    
+
     setSaving(true)
     try {
       await updateHealthProfile(req)
@@ -238,7 +242,7 @@ export default function HealthProfileEditPage() {
       }
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setTimeout(() => {
-        Taro.navigateBack()
+        Taro.redirectTo({ url: '/pages/health-profile-view/index' })
       }, 1500)
     } catch (e: any) {
       Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
@@ -290,7 +294,7 @@ export default function HealthProfileEditPage() {
         {/* 基础信息 */}
         <View className="section">
           <Text className="section-title">基础信息</Text>
-          
+
           <View className="form-item">
             <Text className="form-label">
               性别 <Text className="required">*</Text>
@@ -349,11 +353,11 @@ export default function HealthProfileEditPage() {
             </Text>
             <View className="ruler-container">
               <WeightRuler
-              value={weight ? Number(weight) : 60}
-              onChange={(val) => setWeight(String(val))}
-              min={30}
-              max={200}
-              height={height ? Number(height) : 170}
+                value={weight ? Number(weight) : 60}
+                onChange={(val) => setWeight(String(val))}
+                min={30}
+                max={200}
+                height={height ? Number(height) : 170}
               />
             </View>
           </View>
@@ -402,7 +406,7 @@ export default function HealthProfileEditPage() {
         {/* 健康状况 */}
         <View className="section">
           <Text className="section-title">健康状况</Text>
-          
+
           <View className="form-item">
             <Text className="form-label">既往病史（可多选）</Text>
             <View className="option-grid">
@@ -458,11 +462,23 @@ export default function HealthProfileEditPage() {
 
           <View className="form-item">
             <Text className="form-label">过敏源</Text>
-            <Input
-              className="text-input"
+            <Textarea
+              className="text-input textarea-input"
               placeholder="如：海鲜、花生，多个用顿号分隔"
               value={allergies}
               onInput={(e) => setAllergies(e.detail.value)}
+              maxlength={200}
+            />
+          </View>
+
+          <View className="form-item">
+            <Text className="form-label">特殊情况和补充</Text>
+            <Textarea
+              className="text-input textarea-input"
+              placeholder="例如：孕期、哺乳期、手术恢复期等"
+              value={healthNotes}
+              onInput={(e) => setHealthNotes(e.detail.value)}
+              maxlength={500}
             />
           </View>
         </View>
