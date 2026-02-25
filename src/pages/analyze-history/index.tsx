@@ -67,11 +67,16 @@ export default function AnalyzeHistoryPage() {
     if (task.status === 'done' && task.result) {
       const result = task.result as AnalyzeResponse
       const payload = task.payload || {}
-      // 图片分析任务有 image_url，文字分析任务有 text_input
-      if (task.image_url) {
+      // 图片分析任务有 image_url / image_paths，文字分析任务有 text_input
+      if (task.image_paths && task.image_paths.length > 0) {
+        Taro.setStorageSync('analyzeImagePaths', task.image_paths)
+        Taro.setStorageSync('analyzeImagePath', task.image_paths[0])
+      } else if (task.image_url) {
+        Taro.setStorageSync('analyzeImagePaths', [task.image_url])
         Taro.setStorageSync('analyzeImagePath', task.image_url)
       } else {
         // 文字分析任务，清空图片路径
+        Taro.removeStorageSync('analyzeImagePaths')
         Taro.removeStorageSync('analyzeImagePath')
       }
       Taro.setStorageSync('analyzeResult', JSON.stringify(result))

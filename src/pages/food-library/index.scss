@@ -1,9 +1,10 @@
 // 公共食物库列表页样式
 .food-library-page {
-  min-height: 100vh;
+  height: 100vh;
   background: #f9fafb;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 // ========== 骨架屏样式 ==========
@@ -42,6 +43,7 @@
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }

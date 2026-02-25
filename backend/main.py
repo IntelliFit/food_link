@@ -522,12 +522,12 @@ async def analyze_food(
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
-    分析食物图片，返回营养成分和健康建议。使用 OpenRouter 的 Gemini 模型。
+    分析食物图片，返回营养成分和健康建议。使用 DashScope 千问 qwen-vl-max 模型。
     """
     try:
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        if not openrouter_key or openrouter_key == "your_openrouter_api_key_here":
-            raise HTTPException(status_code=500, detail="缺少 OPENROUTER_API_KEY 环境变量")
+        dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+        if not dashscope_key:
+            raise HTTPException(status_code=500, detail="缺少 DASHSCOPE_API_KEY 环境变量")
 
         if not request.base64Image and not request.image_url and not request.image_urls:
             raise HTTPException(status_code=400, detail="请提供 base64Image 或 image_url 或 image_urls")
@@ -570,26 +570,62 @@ async def analyze_food(
             profile_block=profile_block or "",
         )
 
+        # 构建图片 content parts
         image_urls_for_api = []
-        base64_for_gemini = None
         if request.image_urls:
             image_urls_for_api = request.image_urls
         elif request.image_url:
             image_urls_for_api = [request.image_url]
         elif request.base64Image:
-            base64_for_gemini = request.base64Image.split(",")[1] if "," in request.base64Image else request.base64Image
+            image_data = request.base64Image.split(",")[1] if "," in request.base64Image else request.base64Image
+            image_urls_for_api = [f"data:image/jpeg;base64,{image_data}"]
 
-        if image_urls_for_api:
-            parsed = await _analyze_with_gemini(image_urls=image_urls_for_api, prompt=prompt, model_name="google/gemini-2.0-flash-001")
-        else:
-            parsed = await _analyze_with_gemini(base64_image=base64_for_gemini, prompt=prompt, model_name="google/gemini-2.0-flash-001")
+        content_parts = [{"type": "text", "text": prompt}]
+        for url in image_urls_for_api:
+            content_parts.append({"type": "image_url", "image_url": {"url": url}})
+
+        base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        api_url = f"{base_url}/chat/completions"
+
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {dashscope_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "qwen-vl-max",
+                    "messages": [{"role": "user", "content": content_parts}],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.7,
+                },
+            )
+
+            if not response.is_success:
+                error_data = response.json() if response.content else {}
+                error_message = (
+                    error_data.get("error", {}).get("message")
+                    or f"DashScope API 错误: {response.status_code}"
+                )
+                raise Exception(error_message)
+
+            data = response.json()
+            content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
+            if not content_str:
+                raise Exception("千问返回了空响应")
+
+            json_str = re.sub(r"```json", "", content_str)
+            json_str = re.sub(r"```", "", json_str).strip()
+            parsed = json.loads(json_str)
 
         is_violation = parsed.get("is_violation", False)
         if is_violation:
             reason = parsed.get("violation_reason", "图片内容违规")
             if image_urls_for_api:
                 for url in image_urls_for_api:
-                    background_tasks.add_task(delete_image_from_storage, url)
+                    if not url.startswith("data:"):
+                        background_tasks.add_task(delete_image_from_storage, url)
             raise HTTPException(status_code=400, detail=f"图片违规: {reason}")
 
         valid_items = []
@@ -630,7 +666,7 @@ async def analyze_food(
     except HTTPException:
         raise
     except httpx.TimeoutException:
-        print("[api/analyze] error: OpenRouter 请求超时")
+        print("[api/analyze] error: DashScope 请求超时")
         raise HTTPException(status_code=500, detail="AI 服务超时，请稍后重试")
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=str(e) or "连接 AI 服务失败")
@@ -978,12 +1014,12 @@ async def analyze_food_text(
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
-    根据用户文字描述分析食物营养成分，使用 OpenRouter Gemini。返回与 /api/analyze 相同结构。
+    根据用户文字描述分析食物营养成分，使用 DashScope 千问 qwen-plus。返回与 /api/analyze 相同结构。
     """
     try:
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        if not openrouter_key or openrouter_key == "your_openrouter_api_key_here":
-            raise HTTPException(status_code=500, detail="缺少 OPENROUTER_API_KEY 环境变量")
+        dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+        if not dashscope_key:
+            raise HTTPException(status_code=500, detail="缺少 DASHSCOPE_API_KEY 环境变量")
         if not (request.text or request.text.strip()):
             raise HTTPException(status_code=400, detail="text 不能为空")
 
@@ -1028,7 +1064,33 @@ async def analyze_food_text(
 {{"items": [{{"name": "食物名称（简体中文）", "estimatedWeightGrams": 重量数字, "nutrients": {{"calories", "protein", "carbs", "fat", "fiber", "sugar"}}}}], "description": "餐食描述", "insight": "健康建议", "pfc_ratio_comment": "PFC 比例评价", "absorption_notes": "吸收率说明", "context_advice": "情境建议"}}
 """.strip()
 
-        parsed = await _analyze_text_with_gemini(prompt, model_name="google/gemini-2.0-flash-001")
+        # 使用 DashScope 千问 qwen-plus 进行文本分析
+        base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        api_url = f"{base_url}/chat/completions"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                api_url,
+                headers={
+                    "Authorization": f"Bearer {dashscope_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "qwen-plus",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.5,
+                },
+            )
+            if not response.is_success:
+                error_data = response.json() if response.content else {}
+                raise Exception(error_data.get("error", {}).get("message") or f"DashScope API 错误: {response.status_code}")
+            data = response.json()
+            content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
+            if not content_str:
+                raise Exception("千问返回了空响应")
+            json_str = re.sub(r"```json", "", content_str)
+            json_str = re.sub(r"```", "", json_str).strip()
+            parsed = json.loads(json_str)
 
         valid_items = []
         if isinstance(parsed.get("items"), list):
