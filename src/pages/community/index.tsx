@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
 import {
   getAccessToken,
@@ -317,7 +317,21 @@ export default function CommunityPage() {
 
   useEffect(() => {
     setLoggedIn(!!getAccessToken())
+    Taro.showShareMenu({
+      withShareTicket: true,
+      // @ts-ignore
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
   }, [])
+
+  useShareAppMessage(() => ({
+    title: '食探 - 和好友一起健康饮食',
+    path: '/pages/community/index'
+  }))
+
+  useShareTimeline(() => ({
+    title: '食探 - 和好友一起健康饮食'
+  }))
 
   // 【核心优化】每次页面显示时的智能加载策略
   Taro.useDidShow(() => {

@@ -31,8 +31,8 @@ export default function HeightRuler({
     // Render list: from min to max
     // Example: 100, 101, ..., 250
 
-    // Create ticks array
-    const ticks = Array.from({ length: max - min + 1 }, (_, i) => min + i)
+    // Create ticks array (larger values at the top)
+    const ticks = Array.from({ length: max - min + 1 }, (_, i) => max - i)
 
     // Current scroll top
     // If value is 100 (min), scroll top = 0
@@ -46,10 +46,10 @@ export default function HeightRuler({
     // Initialize scroll position based on value
     useEffect(() => {
         if (!isScrolling.current) {
-            const initialScroll = (value - min) * ITEM_HEIGHT
+            const initialScroll = (max - value) * ITEM_HEIGHT
             setScrollTop(initialScroll)
         }
-    }, [value, min])
+    }, [value, max])
 
     const handleScroll = useCallback((e: any) => {
         isScrolling.current = true
@@ -63,7 +63,7 @@ export default function HeightRuler({
         if (index < 0) index = 0
         if (index > max - min) index = max - min
 
-        const newValue = min + index
+        const newValue = max - index
 
         if (newValue !== value) {
             onChange(newValue)

@@ -1994,6 +1994,36 @@ async def get_food_record_detail(
         raise HTTPException(status_code=500, detail="获取记录详情失败")
 
 
+@app.get("/api/food-record/share/{record_id}")
+async def get_shared_food_record(record_id: str):
+    """
+    公开分享接口，无需登录。用于别人通过分享链接查看饮食记录。
+    若记录所有者关闭了「公开饮食记录」隐私设置，则返回 403。
+    """
+    try:
+        record = await get_food_record_by_id(record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="记录不存在")
+        # 检查记录所有者的隐私设置（public_records 默认为 True）
+        owner_id = record.get("user_id")
+        if owner_id:
+            try:
+                owner = await get_user_by_id(owner_id)
+                # public_records 为 False 时才拒绝，None / True 均允许
+                if owner and owner.get("public_records") is False:
+                    raise HTTPException(status_code=403, detail="该用户已关闭饮食记录公开，无法查看")
+            except HTTPException:
+                raise
+            except Exception:
+                pass  # 查询用户失败时降级允许访问，避免阻断正常分享
+        return {"record": record}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_shared_food_record] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取记录详情失败")
+
+
 # ---------- 首页仪表盘（今日摄入 + 今日餐食，不含运动） ----------
 
 # 各餐次默认目标热量（kcal），可与 TDEE 联动

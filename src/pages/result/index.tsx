@@ -1,7 +1,7 @@
-import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask } from '../../utils/api'
 
 import './index.scss'
 
@@ -58,6 +58,12 @@ export default function ResultPage() {
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast')
+
+  // 二次纠错抽屉状态
+  const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
+  const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
+  const [additionalContext, setAdditionalContext] = useState('')
+  const [isResubmitting, setIsResubmitting] = useState(false)
 
   // 将API返回的数据转换为页面需要的格式（保留 originalWeight 用于标记样本时计算偏差）
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
@@ -538,6 +544,138 @@ export default function ResultPage() {
     })
   }
 
+  // --- 二次纠错功能相关方法 ---
+
+  // 打开纠错抽屉
+  const openCorrectionDrawer = () => {
+    // 拷贝当前营养项到纠错列表
+    setCorrectionItems(JSON.parse(JSON.stringify(nutritionItems)))
+    setAdditionalContext('')
+    setShowCorrectionDrawer(true)
+  }
+
+  // 修改纠错项的名称
+  const handleCorrectionNameChange = (id: number, val: string) => {
+    setCorrectionItems(prev => prev.map(item => item.id === id ? { ...item, name: val } : item))
+  }
+
+  // 修改纠错项的重量
+  const handleCorrectionWeightChange = (id: number, val: string) => {
+    const num = parseInt(val, 10) || 0
+    setCorrectionItems(prev => prev.map(item => item.id === id ? { ...item, weight: num } : item))
+  }
+
+  // 删除纠错项
+  const handleRemoveCorrectionItem = (id: number) => {
+    setCorrectionItems(prev => prev.filter(item => item.id !== id))
+  }
+
+  // 添加新的空白食物项
+  const handleAddCorrectionItem = () => {
+    setCorrectionItems(prev => [
+      ...prev,
+      {
+        id: Date.now(), // 临时 ID
+        name: '',
+        weight: 100, // 默认 100g
+        originalWeight: 100,
+        calorie: 0,
+        intake: 100,
+        ratio: 100,
+        protein: 0,
+        carbs: 0,
+        fat: 0
+      }
+    ])
+  }
+
+  // 提交二次纠正重新分析
+  const handleSubmitCorrection = async () => {
+    if (correctionItems.length === 0) {
+      Taro.showToast({ title: '食物列表不能为空', icon: 'none' })
+      return
+    }
+
+    // 检查是否有空名称
+    if (correctionItems.some(item => !item.name.trim())) {
+      Taro.showToast({ title: '请填写所有食物名称', icon: 'none' })
+      return
+    }
+
+    Taro.showModal({
+      title: '重新智能分析',
+      content: '确定要根据当前的纠正内容重新进行饮食分析吗？',
+      confirmText: '确定',
+      cancelText: '取消',
+      success: async (modalRes) => {
+        if (!modalRes.confirm) return
+
+        try {
+          setIsResubmitting(true)
+          Taro.showLoading({ title: '提交分析中...', mask: true })
+
+          // 1. 构建提示文本 context
+          const correctionsText = correctionItems.map((item, idx) => `${idx + 1}. ${item.name} ${item.weight}g`).join('; ')
+          let finalContext = `用户已将识别结果纠正为：${correctionsText}。请根据最新的列表和重量重新进行详细的营养分析。`
+
+          if (additionalContext.trim()) {
+            finalContext += `\n补充说明：${additionalContext.trim()}`
+          }
+
+          // 为了保留第一次分析带过来的上下文（例如菜谱偏好等），如果有 description 也可以带上，但更重要的是传上面构成的 finalContext
+
+          // 2. 获取原请求的基础配置
+          const savedMealType = Taro.getStorageSync('analyzeMealType') as 'breakfast' | 'lunch' | 'dinner' | 'snack' | undefined
+          const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
+          const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
+
+          let taskId = ''
+
+          // 3. 区分是图片分析还是纯文字分析
+          if (imagePaths.length > 0 || imagePath) {
+            // 图片分析
+            const res = await submitAnalyzeTask({
+              image_url: imagePaths[0] || imagePath,
+              image_urls: imagePaths.length > 0 ? imagePaths : undefined,
+              additionalContext: finalContext,
+              meal_type: savedMealType,
+              diet_goal: savedDietGoal,
+              activity_timing: savedActivityTiming
+            })
+            taskId = res.task_id
+          } else {
+            // 纯文本分析
+            // 因为没有保留第一次的原始输入的完整的文本，我们可以直接用修正后的列表作为主 text
+            const textPayload = `${correctionsText}\n${additionalContext.trim()}`
+            const { submitTextAnalyzeTask } = await import('../../utils/api') // 如果没引入可以直接用
+            const res = await submitTextAnalyzeTask({
+              text: textPayload,
+              meal_type: savedMealType,
+              diet_goal: savedDietGoal,
+              activity_timing: savedActivityTiming
+            })
+            taskId = res.task_id
+          }
+
+          Taro.hideLoading()
+          setShowCorrectionDrawer(false)
+
+          // 4. 跳转到 loading 页面重新走解析流程
+          const taskType = (imagePaths.length > 0 || imagePath) ? 'food_image' : 'food_text'
+          Taro.navigateTo({
+            url: `/pages/analyze-loading/index?task_id=${taskId}&task_type=${taskType}`
+          })
+
+        } catch (e: any) {
+          Taro.hideLoading()
+          Taro.showToast({ title: e.message || '重新分析失败', icon: 'none' })
+        } finally {
+          setIsResubmitting(false)
+        }
+      }
+    })
+  }
+
   // 预览大图
   const handlePreviewImage = (current: string) => {
     if (imagePaths.length > 0) {
@@ -778,12 +916,20 @@ export default function ResultPage() {
               </View>
 
               <View
-                className={`feedback-link ${hasSavedCritical ? 'disabled' : ''}`}
-                onClick={hasSavedCritical ? undefined : handleMarkSample}
+                className={`feedback-link-row`}
               >
-                <Text className='feedback-text'>
-                  {hasSavedCritical ? '已标记偏差样本 ✓' : '估算不准？点击标记样本'}
-                </Text>
+                <View className='correction-entry' onClick={openCorrectionDrawer}>
+                  <Text className='iconfont icon-shouxieqianming correction-icon'></Text>
+                  <Text className='correction-text'>识别有误？点击纠错</Text>
+                </View>
+                <View
+                  className={`feedback-link ${hasSavedCritical ? 'disabled' : ''}`}
+                  onClick={hasSavedCritical ? undefined : handleMarkSample}
+                >
+                  <Text className='feedback-text'>
+                    {hasSavedCritical ? '已标记偏差样本 ✓' : '估算不准？点击标记样本'}
+                  </Text>
+                </View>
               </View>
             </View>
           </View>
@@ -799,33 +945,99 @@ export default function ResultPage() {
           className='meal-selector-card'
           onClick={(e) => e.stopPropagation()}
         >
-          <View className='selector-title'>确认记录</View>
-
+          <View className='selector-title'>选择餐次</View>
           <View className='meal-options-grid'>
-            {MEAL_OPTIONS.map((option) => (
+            {MEAL_OPTIONS.map((meal) => (
               <View
-                key={option.value}
-                className={`meal-option-item ${selectedMealType === option.value ? 'active' : ''}`}
-                onClick={() => setSelectedMealType(option.value)}
+                key={meal.value}
+                className={`meal-option-item ${selectedMealType === meal.value ? 'active' : ''}`}
+                onClick={() => setSelectedMealType(meal.value)}
               >
-                <Text className={`option-icon iconfont ${MEAL_ICONS[option.value]}`}></Text>
-                <Text className='option-label'>{option.label}</Text>
+                <Text className={`iconfont ${MEAL_ICONS[meal.value]} option-icon`}></Text>
+                <Text className='option-label'>{meal.label}</Text>
               </View>
             ))}
           </View>
-
           <View className='selector-actions'>
-            <View
-              className='cancel-btn'
-              onClick={() => setShowMealSelector(false)}
-            >
-              取消
+            <View className='cancel-btn' onClick={() => setShowMealSelector(false)}>取消</View>
+            <View className='confirm-btn' onClick={handleConfirmMealType}>保存</View>
+          </View>
+        </View>
+      </View>
+
+      {/* 二次纠错抽屉弹窗 */}
+      <View
+        className={`correction-drawer-overlay ${showCorrectionDrawer ? 'visible' : ''}`}
+        onClick={() => setShowCorrectionDrawer(false)}
+      >
+        <View
+          className={`correction-drawer-content ${showCorrectionDrawer ? 'slide-up' : ''}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <View className='drawer-header'>
+            <Text className='drawer-title'>二次分析纠正</Text>
+            <View className='drawer-close' onClick={() => setShowCorrectionDrawer(false)}>
+              <Text className='close-icon'>✕</Text>
             </View>
+          </View>
+
+          <ScrollView className='drawer-scroll' scrollY>
+            <View className='correction-list'>
+              {correctionItems.map((item, index) => (
+                <View key={item.id} className='correction-row'>
+                  <View className='correction-index'>{index + 1}.</View>
+                  <View className='correction-inputs'>
+                    <Input
+                      className='correction-input name-input'
+                      value={item.name}
+                      placeholder='食物名称'
+                      onInput={(e: any) => handleCorrectionNameChange(item.id, e.detail.value)}
+                    />
+                    <View className='weight-input-wrapper'>
+                      <Input
+                        className='correction-input weight-input'
+                        type='number'
+                        value={item.weight.toString()}
+                        onInput={(e: any) => handleCorrectionWeightChange(item.id, e.detail.value)}
+                      />
+                      <Text className='weight-unit'>g</Text>
+                    </View>
+                  </View>
+                  <View className='correction-remove' onClick={() => handleRemoveCorrectionItem(item.id)}>
+                    <Text className='iconfont icon-close'></Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View className='add-correction-btn' onClick={handleAddCorrectionItem}>
+              <Text className='iconfont icon-plus'></Text>
+              <Text>添加食物</Text>
+            </View>
+
+            <View className='additional-context-wrapper'>
+              <View className='context-label'>
+                <Text className='iconfont icon-jishiben'></Text>
+                <Text>补充说明（可选）</Text>
+              </View>
+              <Textarea
+                className='context-textarea'
+                placeholder='例如：这碗饭大概有 300g，鸡腿是整只未去骨，我只吃了蛋白'
+                value={additionalContext}
+                onInput={(e: any) => setAdditionalContext(e.detail.value)}
+                maxlength={200}
+                autoHeight
+              />
+            </View>
+          </ScrollView>
+
+          <View className='drawer-footer'>
             <View
-              className='confirm-btn'
-              onClick={handleConfirmMealType}
+              className={`drawer-submit-btn ${isResubmitting ? 'loading' : ''}`}
+              onClick={handleSubmitCorrection}
             >
-              确定记录
+              <Text className='iconfont icon-loading'></Text>
+              <Text>{isResubmitting ? '提交中...' : '重新智能分析'}</Text>
             </View>
           </View>
         </View>
@@ -833,4 +1045,3 @@ export default function ResultPage() {
     </View>
   )
 }
-

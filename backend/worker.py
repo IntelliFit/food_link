@@ -317,14 +317,22 @@ QWEN_TEXT_MODEL = "qwen-plus"
 
 def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    同步执行食物分析：使用 DashScope 千问 qwen-vl-max，解析 JSON，返回与 /api/analyze 一致结构的 result。
+    同步执行食物分析：使用配置的模型，解析 JSON，返回与 /api/analyze 一致结构的 result。
     失败时抛出异常，由调用方捕获并写 failed。
     """
-    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not api_key:
-        raise RuntimeError("缺少 DASHSCOPE_API_KEY 环境变量")
-
-    api_url = f"{DASHSCOPE_BASE_URL}/chat/completions"
+    llm_provider = os.getenv("LLM_PROVIDER", "qwen").lower()
+    if llm_provider == "gemini":
+        api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+        if not api_key:
+            raise RuntimeError("缺少 OFOXAI_API_KEY 环境变量")
+        api_url = "https://api.ofox.ai/v1/chat/completions"
+        model = "gemini-3-flash-preview"
+    else:
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+        if not api_key:
+            raise RuntimeError("缺少 DASHSCOPE_API_KEY 环境变量")
+        api_url = f"{DASHSCOPE_BASE_URL}/chat/completions"
+        model = QWEN_VL_MODEL
 
     image_url = task.get("image_url")
     image_paths = task.get("image_paths")
@@ -365,7 +373,7 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                         "Content-Type": "application/json",
                     },
                     json={
-                        "model": QWEN_VL_MODEL,
+                        "model": model,
                         "messages": [{"role": "user", "content": content_parts}],
                         "response_format": {"type": "json_object"},
                         "temperature": 0.7,
@@ -519,14 +527,22 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 
 def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    同步执行文字食物分析：使用 DashScope 千问 qwen-plus，解析 JSON，返回与 /api/analyze 一致结构的 result。
+    同步执行文字食物分析：使用配置的模型，解析 JSON，返回与 /api/analyze 一致结构的 result。
     失败时抛出异常，由调用方捕获并写 failed。
     """
-    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not api_key:
-        raise RuntimeError("缺少 DASHSCOPE_API_KEY 环境变量")
-
-    api_url = f"{DASHSCOPE_BASE_URL}/chat/completions"
+    llm_provider = os.getenv("LLM_PROVIDER", "qwen").lower()
+    if llm_provider == "gemini":
+        api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+        if not api_key:
+            raise RuntimeError("缺少 OFOXAI_API_KEY 环境变量")
+        api_url = "https://api.ofox.ai/v1/chat/completions"
+        model = "gemini-3-flash-preview"
+    else:
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+        if not api_key:
+            raise RuntimeError("缺少 DASHSCOPE_API_KEY 环境变量")
+        api_url = f"{DASHSCOPE_BASE_URL}/chat/completions"
+        model = QWEN_TEXT_MODEL
     text_input = task.get("text_input") or ""
     if not text_input:
         raise ValueError("任务缺少 text_input")
@@ -552,7 +568,7 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
                         "Content-Type": "application/json",
                     },
                     json={
-                        "model": QWEN_TEXT_MODEL,
+                        "model": model,
                         "messages": [{"role": "user", "content": prompt}],
                         "response_format": {"type": "json_object"},
                         "temperature": 0.5,

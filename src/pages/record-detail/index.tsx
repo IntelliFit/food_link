@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
-import { getFoodRecordById, getUnlimitedQRCode, type FoodRecord } from '../../utils/api'
+import { getFoodRecordById, getSharedFoodRecord, getAccessToken, getUnlimitedQRCode, type FoodRecord } from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../utils/poster'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 
@@ -65,10 +65,25 @@ export default function RecordDetailPage() {
 
       // 优先从 URL 参数获取 recordId（真实记录），否则从 storage 读取（食谱等特殊情况）
       if (recordId) {
-        // 从数据库获取真实记录
         try {
           setLoading(true)
-          const { record: fetchedRecord } = await getFoodRecordById(recordId)
+          const token = getAccessToken()
+          let fetchedRecord: FoodRecord
+          if (token) {
+            // 已登录：先尝试作为拥有者查看鉴权接口
+            try {
+              const res = await getFoodRecordById(recordId)
+              fetchedRecord = res.record
+            } catch (e) {
+              // 失败（如无权限、非创建者），降级为使用公开分享接口
+              const res = await getSharedFoodRecord(recordId)
+              fetchedRecord = res.record
+            }
+          } else {
+            // 未登录（通过分享链接进入）：使用公开分享接口
+            const res = await getSharedFoodRecord(recordId)
+            fetchedRecord = res.record
+          }
           setRecord(fetchedRecord)
         } catch (e: any) {
           const msg = e.message || '加载记录失败'

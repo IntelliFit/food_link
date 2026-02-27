@@ -1,4 +1,6 @@
 export default definePageConfig({
   navigationBarTitleText: '食探',
-  navigationStyle: 'custom'
+  navigationStyle: 'custom',
+  enableShareAppMessage: true,
+  enableShareTimeline: true
 })

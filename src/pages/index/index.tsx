@@ -1,6 +1,6 @@
 import { View, Text } from '@tarojs/components'
 import { useState, useEffect } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { getHomeDashboard, getAccessToken, type HomeIntakeData, type HomeMealItem } from '../../utils/api'
 import { IconCamera, IconText, IconClock, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import { Empty, Button } from '@taroify/core'
@@ -57,8 +57,21 @@ export default function IndexPage() {
       .finally(() => setLoading(false))
   })
 
+  useShareAppMessage(() => ({
+    title: '食探 - AI 智能饮食记录',
+    path: '/pages/index/index'
+  }))
+
+  useShareTimeline(() => ({
+    title: '食探 - AI 智能饮食记录'
+  }))
+
   useEffect(() => {
-    // 首次加载逻辑保留，或者可以依赖 useDidShow
+    Taro.showShareMenu({
+      withShareTicket: true,
+      // @ts-ignore
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
   }, [])
 
 

@@ -661,6 +661,23 @@ export async function getFoodRecordById(recordId: string): Promise<{ record: Foo
 }
 
 /**
+ * 获取分享的饮食记录详情（无需登录，供别人通过分享链接查看）
+ * 若记录所有者设置了「不公开饮食记录」则后端会返回 403。
+ */
+export async function getSharedFoodRecord(recordId: string): Promise<{ record: FoodRecord }> {
+  const res = await Taro.request({
+    url: `${API_BASE_URL}/api/food-record/share/${encodeURIComponent(recordId)}`,
+    method: 'GET',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取记录详情失败'
+    throw new Error(msg)
+  }
+  return res.data as { record: FoodRecord }
+}
+
+/**
  * 获取小程序无限拉新二维码（Base64）
  */
 export async function getUnlimitedQRCode(scene: string, page?: string): Promise<{ base64: string }> {

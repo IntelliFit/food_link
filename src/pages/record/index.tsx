@@ -1,6 +1,6 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
 import { useState, useEffect, useMemo } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Calendar } from '@taroify/core'
 import '@taroify/core/calendar/style'
 import { getFoodRecordList, submitTextAnalyzeTask, getHomeDashboard, getAccessToken, type FoodRecord } from '../../utils/api'
@@ -251,6 +251,23 @@ export default function RecordPage() {
       Taro.removeStorageSync('recordPageTab') // 用完即删，避免重复触发
     }
   })
+
+  useShareAppMessage(() => ({
+    title: '食探 - 记录每一餐，健康看得见',
+    path: '/pages/record/index'
+  }))
+
+  useShareTimeline(() => ({
+    title: '食探 - 记录每一餐，健康看得见'
+  }))
+
+  useEffect(() => {
+    Taro.showShareMenu({
+      withShareTicket: true,
+      // @ts-ignore
+      menus: ['shareAppMessage', 'shareTimeline']
+    })
+  }, [])
 
   useEffect(() => {
     if (activeMethod === 'history') {
