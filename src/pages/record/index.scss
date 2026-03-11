@@ -866,9 +866,9 @@
 
 .meal-header-right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12rpx;
+  flex-direction: row;
+  align-items: center;
+  gap: 16rpx;
 }
 
 .meal-calorie {
@@ -876,6 +876,17 @@
   font-weight: 600;
   color: #1e2939;
   line-height: 48rpx;
+}
+
+/* 删除入口：弱化样式，不影响整体美观 */
+.meal-card-delete {
+  padding: 8rpx;
+  margin: -8rpx;
+}
+
+.meal-card-delete-icon {
+  font-size: 32rpx;
+  color: #9ca3af;
 }
 
 .meal-actions {

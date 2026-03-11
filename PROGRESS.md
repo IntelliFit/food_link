@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-03-10
+
+- ✨ feat: 记录页历史记录支持删除：卡片右侧弱化删除图标，先 ActionSheet 再二次确认后调用删除接口并刷新列表 `src/pages/record/index.tsx` `src/utils/api.ts` `backend/main.py` `backend/database.py`
+- 🐛 fix: 数据统计页餐次结构百分比改为保留一位小数，避免整数四舍五入导致数据不准确 `src/pages/stats/index.tsx`
+- ✨ feat: 食物库分享页商家地址搜索改为跳转新页面，进入即定位并使用天地图周边模糊搜索，选中后回填地址与经纬度 `src/pages/food-library-share/index.tsx` `src/pages/location-search/index.tsx` `backend/main.py` `src/app.config.ts`
+- ✨ feat: 位置选择页改为天地图地图选点：全屏 web-view 嵌入地图，支持点击取点（自动逆地理）、模糊搜索后地图自动定位到结果并选点，确认后回传 `backend/main.py` `src/pages/location-search/index.tsx` 新增 `GET /map-picker`、`POST /api/location/reverse`
+- 🐛 fix: 位置选择页不展示地图/无法搜索：改为小程序原生 Map+搜索列表，不依赖 web-view，进入即定位、点击地图取点（逆地理）、关键字搜索（天地图）后点结果地图定位并选点 `src/pages/location-search/index.tsx` `src/pages/location-search/index.scss`
+
 ## 2026-02-17
 
 - 🔧 refactor: 食物库分享页去掉「获取当前位置」功能，保留搜索地址与城市/详细地址填写 `src/pages/food-library-share/index.tsx`

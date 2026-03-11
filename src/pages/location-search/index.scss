@@ -1,0 +1,247 @@
+.location-search-page {
+  min-height: 100vh;
+  background: #f0f2f5;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-wrap {
+  position: relative;
+  width: 100%;
+  height: 380rpx;
+  flex-shrink: 0;
+  border-radius: 0 0 24rpx 24rpx;
+  overflow: hidden;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
+}
+
+.map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-center-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32rpx;
+  height: 32rpx;
+  margin-left: -16rpx;
+  margin-top: -32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.map-center-pin-inner {
+  width: 18rpx;
+  height: 18rpx;
+  border-radius: 50%;
+  border: 4rpx solid #00bc7d;
+  background: #ffffff;
+  box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.15);
+}
+
+.map-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  color: #666;
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  padding: 28rpx 24rpx;
+  padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  margin-top: -16rpx;
+  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.04);
+}
+
+.search-row {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.search-input {
+  flex: 1;
+  height: 76rpx;
+  padding: 0 24rpx;
+  background: #f5f6f8;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  box-sizing: border-box;
+}
+
+.search-btn {
+  flex-shrink: 0;
+  height: 76rpx;
+  padding: 0 32rpx;
+  background: #00bc7d;
+  color: #fff;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 当前选中地址：突出显示 */
+.selected-address-card {
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  border-radius: 16rpx;
+  background: linear-gradient(135deg, #e8f8f2 0%, #f0fdf9 100%);
+  border: 2rpx solid #00bc7d;
+  min-height: 88rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.selected-address-label {
+  font-size: 22rpx;
+  color: #00bc7d;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+  letter-spacing: 0.5rpx;
+}
+
+.selected-address-text {
+  font-size: 26rpx;
+  color: #8c8c8c;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.selected-address-card--filled .selected-address-text {
+  font-size: 28rpx;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.result-section {
+  margin-bottom: 28rpx;
+}
+
+.result-section-title {
+  display: block;
+  font-size: 24rpx;
+  color: #00bc7d;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+  padding-left: 4rpx;
+}
+
+.result-list {
+  max-height: 400rpx;
+  margin-bottom: 0;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 20rpx;
+  margin-bottom: 16rpx;
+  background: #f8fafb;
+  border-radius: 16rpx;
+  border: 2rpx solid #e8ecef;
+  transition: background 0.15s ease;
+
+  &:active {
+    background: #e8f8f2;
+    border-color: #00bc7d;
+  }
+}
+
+.result-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.result-item-index {
+  flex-shrink: 0;
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #00bc7d;
+  background: rgba(0, 188, 125, 0.12);
+  border-radius: 50%;
+}
+
+.result-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.result-address {
+  font-size: 24rpx;
+  color: #666;
+  line-height: 1.45;
+  display: block;
+}
+
+.result-item-action {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #00bc7d;
+  font-weight: 500;
+  margin-left: 16rpx;
+}
+
+.result-list-more {
+  padding: 16rpx 0 8rpx;
+  text-align: center;
+}
+
+.result-list-more-text {
+  font-size: 22rpx;
+  color: #9ca3af;
+}
+
+.btn-use {
+  width: 100%;
+  height: 92rpx;
+  line-height: 92rpx;
+  text-align: center;
+  background: #00bc7d;
+  color: #fff;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.35);
+
+  &.disabled {
+    background: #c9cdd4;
+    color: #fff;
+    box-shadow: none;
+  }
+}

@@ -661,6 +661,20 @@ export async function getFoodRecordById(recordId: string): Promise<{ record: Foo
 }
 
 /**
+ * 删除当前用户的饮食记录
+ */
+export async function deleteFoodRecord(recordId: string): Promise<void> {
+  const res = await authenticatedRequest(`/api/food-record/${encodeURIComponent(recordId)}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '删除失败'
+    throw new Error(msg)
+  }
+}
+
+/**
  * 获取分享的饮食记录详情（无需登录，供别人通过分享链接查看）
  * 若记录所有者设置了「不公开饮食记录」则后端会返回 403。
  */

@@ -21,9 +21,6 @@ const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外
 // 城市区域数据（示例）
 
 
-// 后端 API 基础地址（编译时替换）
-const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
-
 export default function FoodLibrarySharePage() {
   // 选择来源：record（从记录分享）或 upload（直接上传）
   const [sourceType, setSourceType] = useState<'record' | 'upload'>('upload')
@@ -68,12 +65,6 @@ export default function FoodLibrarySharePage() {
 
   // 城市选择器
   const [showCityPicker, setShowCityPicker] = useState(false)
-
-  // 位置搜索
-  const [showLocationSearch, setShowLocationSearch] = useState(false)
-  const [searchKeyword, setSearchKeyword] = useState('')
-  const [searchResults, setSearchResults] = useState<Array<{ name: string; address: string; lonlat: string; promptCity: string }>>([])
-  const [searching, setSearching] = useState(false)
 
   // 提交状态
   const [submitting, setSubmitting] = useState(false)
@@ -245,84 +236,81 @@ export default function FoodLibrarySharePage() {
     aggregateFromMap(nextUrls, newResultsMap)
   }
 
-  // 天地图地名搜索（通过后端代理）
-  const handleLocationSearch = async () => {
-    const kw = searchKeyword.trim()
-    if (!kw) {
-      Taro.showToast({ title: '请输入搜索关键字', icon: 'none' })
-      return
-    }
-    setSearching(true)
-    try {
-      const res = await Taro.request({
-        url: `${API_BASE_URL}/api/location/search`,
-        method: 'POST',
-        header: { 'Content-Type': 'application/json' },
-        data: { keyWord: kw, count: 10 }
-      })
-      const data = res.data as any
-      if (data?.pois && Array.isArray(data.pois)) {
-        // 从 prompt.admins 提取搜索结果对应城市
-        const promptCity = data.prompt?.[0]?.admins?.[0]?.adminName || ''
-        setSearchResults(data.pois.map((poi: any) => ({
-          name: poi.name || '',
-          address: poi.address || '',
-          lonlat: poi.lonlat || '',
-          promptCity
-        })))
-      } else {
-        setSearchResults([])
-        Taro.showToast({ title: '未找到相关位置', icon: 'none' })
-      }
-    } catch (e: any) {
-      console.error('位置搜索失败:', e)
-      Taro.showToast({ title: '搜索失败', icon: 'none' })
-    } finally {
-      setSearching(false)
-    }
+  type SelectedLocation = {
+    name?: string
+    address?: string
+    lonlat?: string
+    longitude?: number
+    latitude?: number
+    promptCity?: string
   }
 
-  // 选择搜索结果中的位置
-  const handleSelectLocation = (poi: { name: string; address: string; lonlat: string; promptCity: string }) => {
-    const addr = poi.address || ''
+  const applySelectedLocation = (poi: SelectedLocation) => {
+    const addr = (poi.address || '').trim()
+
     // 尝试从地址解析省、市、区
     const provinceMatch = addr.match(/^(.+?[省市])/)
     const cityMatch = addr.match(/^.+?[省](.+?市)/)
     const districtMatch = addr.match(/[市省](.+?[区县市])/)
 
-    // 设置省份
-    setProvince(provinceMatch ? provinceMatch[1] : poi.promptCity)
+    // 设置省份：优先从地址解析，兜底用 promptCity
+    const nextProvince = (provinceMatch ? provinceMatch[1] : (poi.promptCity || '')).trim()
+    setProvince(nextProvince)
 
     // 设置城市（如果是直辖市则不设置城市）
-    const prov = provinceMatch ? provinceMatch[1] : ''
-    if (prov.includes('北京') || prov.includes('上海') || prov.includes('天津') || prov.includes('重庆')) {
+    if (nextProvince.includes('北京') || nextProvince.includes('上海') || nextProvince.includes('天津') || nextProvince.includes('重庆')) {
       setCity('')
     } else {
-      setCity(cityMatch ? cityMatch[1] : '')
+      setCity((cityMatch ? cityMatch[1] : '').trim())
     }
 
     // 解析区域
-    if (districtMatch) {
-      setDistrict(districtMatch[1])
-    } else {
-      // 地址没有城市前缀时，尝试从开头匹配区域（如 "长宁区xxx"）
+    const districtStr = districtMatch ? districtMatch[1].trim() : (() => {
       const districtOnly = addr.match(/^(.+?[区县市])/)
-      setDistrict(districtOnly ? districtOnly[1] : '')
-    }
+      return (districtOnly ? districtOnly[1] : '').trim()
+    })()
+    setDistrict(districtStr)
 
-    // 详细地址 = address + name
-    setDetailAddress(addr + (poi.name ? ' ' + poi.name : ''))
-    // 解析经纬度
+    // 详细地址：去掉省、市、区，只保留街道及门牌等
+    const cityStr = (nextProvince.includes('北京') || nextProvince.includes('上海') || nextProvince.includes('天津') || nextProvince.includes('重庆'))
+      ? '' : (cityMatch ? cityMatch[1].trim() : '')
+    let detailOnly = addr
+    if (nextProvince && detailOnly.startsWith(nextProvince)) detailOnly = detailOnly.slice(nextProvince.length).trim()
+    if (cityStr && detailOnly.startsWith(cityStr)) detailOnly = detailOnly.slice(cityStr.length).trim()
+    if (districtStr && detailOnly.startsWith(districtStr)) detailOnly = detailOnly.slice(districtStr.length).trim()
+    const name = (poi.name || '').trim()
+    const namePart = name && name !== '地图选点' ? name : ''
+    const mergedDetail = [detailOnly, namePart].filter(Boolean).join(' ').trim()
+    setDetailAddress(mergedDetail)
+
+    // 经纬度：优先用拆分 lonlat，其次用单独字段
     if (poi.lonlat) {
       const parts = poi.lonlat.split(',')
       if (parts.length === 2) {
-        setLongitude(parseFloat(parts[0]))
-        setLatitude(parseFloat(parts[1]))
+        const a = Number(parts[0])
+        const b = Number(parts[1])
+        if (Number.isFinite(a) && Number.isFinite(b)) {
+          setLongitude(a)
+          setLatitude(b)
+          return
+        }
       }
     }
-    setShowLocationSearch(false)
-    setSearchKeyword('')
-    setSearchResults([])
+    if (poi.longitude != null && poi.latitude != null) {
+      setLongitude(poi.longitude)
+      setLatitude(poi.latitude)
+    }
+  }
+
+  const handleNavigateLocationSearch = () => {
+    Taro.navigateTo({
+      url: '/pages/location-search/index',
+      success: (res) => {
+        res.eventChannel.on('locationSelected', (poi: SelectedLocation) => {
+          applySelectedLocation(poi)
+        })
+      }
+    })
   }
 
   // 添加标签
@@ -603,7 +591,7 @@ export default function FoodLibrarySharePage() {
       <View className="location-section">
         <View className="location-title-row">
           <Text className="section-title">商家地址（可选）</Text>
-          <View className="search-location-btn" onClick={() => setShowLocationSearch(true)}>
+          <View className="search-location-btn" onClick={handleNavigateLocationSearch}>
             <Text className="iconfont icon-dizhi" />
             <Text>搜索地址</Text>
           </View>
@@ -714,43 +702,6 @@ export default function FoodLibrarySharePage() {
         </View>
       )}
 
-      {/* 位置搜索弹窗 */}
-      {showLocationSearch && (
-        <View className="location-search-modal" onClick={() => setShowLocationSearch(false)}>
-          <View className="location-search-content" onClick={e => e.stopPropagation()}>
-            <View className="modal-header">
-              <Text className="modal-title">搜索位置</Text>
-              <Text className="modal-close" onClick={() => setShowLocationSearch(false)}>✕</Text>
-            </View>
-            <View className="search-input-row">
-              <Input
-                className="search-input"
-                placeholder="输入地名、商家名等关键字"
-                value={searchKeyword}
-                onInput={e => setSearchKeyword(e.detail.value)}
-                onConfirm={handleLocationSearch}
-              />
-              <View className="search-do-btn" onClick={handleLocationSearch}>
-                {searching ? '搜索中...' : '搜索'}
-              </View>
-            </View>
-            {searchResults.length > 0 ? (
-              <ScrollView className="search-result-list" scrollY enhanced showScrollbar={false}>
-                {searchResults.map((poi, idx) => (
-                  <View key={idx} className="search-result-item" onClick={() => handleSelectLocation(poi)}>
-                    <Text className="result-name">{poi.name}</Text>
-                    <Text className="result-address">{poi.address}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <View className="search-empty">
-                {searching ? '正在搜索...' : '输入关键字搜索位置'}
-              </View>
-            )}
-          </View>
-        </View>
-      )}
     </View>
   )
 }

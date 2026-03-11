@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Calendar } from '@taroify/core'
 import '@taroify/core/calendar/style'
-import { getFoodRecordList, submitTextAnalyzeTask, getHomeDashboard, getAccessToken, type FoodRecord } from '../../utils/api'
+import { getFoodRecordList, deleteFoodRecord, submitTextAnalyzeTask, getHomeDashboard, getAccessToken, type FoodRecord } from '../../utils/api'
 import { IconCamera, IconText, IconClock } from '../../components/iconfont'
 
 import './index.scss'
@@ -284,6 +284,33 @@ export default function RecordPage() {
   /** 点击记录卡片：跳转识别记录详情页（通过 URL 参数传递记录 ID） */
   const handleRecordCardClick = (mealId: string) => {
     Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(mealId)}` })
+  }
+
+  /** 删除记录：不显眼入口，先 ActionSheet 再确认后删除并刷新 */
+  const handleDeleteRecord = (e: { stopPropagation: () => void }, mealId: string) => {
+    e.stopPropagation()
+    Taro.showActionSheet({
+      itemList: ['删除该记录', '取消'],
+      success: (res) => {
+        if (res.tapIndex !== 0) return
+        Taro.showModal({
+          title: '确认删除',
+          content: '删除这条饮食记录后不可恢复，确定删除吗？',
+          confirmText: '删除',
+          confirmColor: '#e53e3e',
+          success: async (modalRes) => {
+            if (!modalRes.confirm) return
+            try {
+              await deleteFoodRecord(mealId)
+              Taro.showToast({ title: '已删除', icon: 'success' })
+              loadHistory(selectedDate)
+            } catch (err: any) {
+              Taro.showToast({ title: err.message || '删除失败', icon: 'none' })
+            }
+          }
+        })
+      }
+    })
   }
 
   /** 将 Date 转为本地 YYYY-MM-DD，供 Calendar 确认后更新 selectedDate */
@@ -587,6 +614,12 @@ export default function RecordPage() {
                     </View>
                     <View className='meal-header-right'>
                       <Text className='meal-calorie'>{meal.totalCalorie} kcal</Text>
+                      <View
+                        className='meal-card-delete'
+                        onClick={(e) => handleDeleteRecord(e as any, meal.id)}
+                      >
+                        <Text className='iconfont icon-shanchu meal-card-delete-icon' />
+                      </View>
                     </View>
                   </View>
                   <View className='food-list'>

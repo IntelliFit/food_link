@@ -1815,6 +1815,18 @@ async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
         raise
 
 
+async def delete_food_record(user_id: str, record_id: str) -> bool:
+    """删除用户自己的饮食记录，仅当记录属于该用户时删除。返回是否删除了记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_food_records").delete().eq("id", record_id).eq("user_id", user_id).execute()
+        return result.data is not None and len(result.data) > 0
+    except Exception as e:
+        print(f"[delete_food_record] 错误: {e}")
+        raise
+
+
 # ---------- 用户私人食谱 ----------
 
 async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:

@@ -21,6 +21,7 @@ export default defineAppConfig({
     'pages/food-library-detail/index',
 
     'pages/food-library-share/index',
+    'pages/location-search/index',
     'pages/login/index',
     'pages/about/index',
     'pages/agreement/index',

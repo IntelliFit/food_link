@@ -31,6 +31,8 @@ create table public.public_food_library (
   detail_address text null,
   province text null,
   food_name text null,
+  collection_count integer null default 0,
+  image_paths jsonb not null default '[]'::jsonb,
   constraint public_food_library_pkey primary key (id),
   constraint public_food_library_source_record_id_fkey foreign KEY (source_record_id) references user_food_records (id) on delete set null,
   constraint public_food_library_user_id_fkey foreign KEY (user_id) references weapp_user (id) on delete CASCADE,
@@ -38,11 +40,9 @@ create table public.public_food_library (
     (
       status = any (
         array[
-          'draft'::text,
-          'pending_review'::text,
+          'pending'::text,
           'published'::text,
-          'rejected'::text,
-          'hidden'::text
+          'rejected'::text
         ]
       )
     )
@@ -61,6 +61,8 @@ create table public.public_food_library (
 create index IF not exists idx_public_food_library_province on public.public_food_library using btree (province) TABLESPACE pg_default;
 
 create index IF not exists idx_public_food_library_food_name on public.public_food_library using btree (food_name) TABLESPACE pg_default;
+
+create index IF not exists idx_public_food_library_collection_count on public.public_food_library using btree (collection_count desc) TABLESPACE pg_default;
 
 create index IF not exists idx_public_food_library_user_id on public.public_food_library using btree (user_id) TABLESPACE pg_default;
 

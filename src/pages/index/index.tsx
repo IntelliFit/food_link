@@ -198,7 +198,7 @@ export default function IndexPage() {
         <View className='section-header'>
           <Text className='section-title'>今日餐食</Text>
           <View className='view-all-btn' onClick={handleViewAllMeals}>
-            <Text className='view-all-text'>查看全部</Text>
+            <Text className='view-all-text'>今日餐食记录</Text>
             <Text className='arrow'>→</Text>
           </View>
         </View>

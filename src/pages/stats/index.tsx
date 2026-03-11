@@ -260,7 +260,7 @@ export default function StatsPage() {
           <View className='meal-grid'>
             {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((key) => {
               const cal = d.by_meal[key];
-              const pct = d.avg_calories_per_day > 0 ? (cal / d.avg_calories_per_day) * 100 : 0;
+              const pct = d.total_calories > 0 ? (cal / d.total_calories) * 100 : 0;
               const MealIcon = MEAL_ICONS[key];
               return (
                 <View key={key} className='meal-item'>
@@ -272,7 +272,7 @@ export default function StatsPage() {
                     <Text className='meal-cal'>{cal.toFixed(0)}</Text>
                   </View>
                   <View className='meal-pct'>
-                    <Text>{pct.toFixed(0)}%</Text>
+                    <Text>{pct.toFixed(1)}%</Text>
                   </View>
                 </View>
               )
