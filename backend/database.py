@@ -9,6 +9,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 
+# 中国时区（UTC+8），用于按本地自然日统计
+CHINA_TZ = timezone(timedelta(hours=8))
+
 # 体检报告图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
 HEALTH_REPORTS_BUCKET = "health-reports"
 
@@ -381,14 +384,16 @@ async def list_food_records_by_range(
 ) -> List[Dict[str, Any]]:
     """
     查询用户在日期范围内的饮食记录（用于数据统计）。
-    start_date/end_date: YYYY-MM-DD，含首含尾（end_date 当天 24:00 前）。
+    start_date/end_date: YYYY-MM-DD（按中国时区自然日，含首含尾）。
     """
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        start_ts = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-        end_d = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
-        end_ts = end_d.isoformat().replace("+00:00", "Z")
+        # 将中国区自然日转换为 UTC 时间范围
+        start_local = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
+        end_local = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
+        start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         q = supabase.table("user_food_records").select("*").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=False)
         result = q.execute()
         return list(result.data or [])
@@ -405,13 +410,16 @@ async def get_streak_days(user_id: str) -> int:
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        today = datetime.now(timezone.utc).date()
+        # 使用中国时区的自然日计算连续天数
+        today = datetime.now(CHINA_TZ).date()
         streak = 0
         d = today
         while True:
             day_str = d.strftime("%Y-%m-%d")
-            start_ts = datetime.combine(d, datetime.min.time().replace(tzinfo=timezone.utc)).isoformat().replace("+00:00", "Z")
-            end_ts = datetime.combine(d + timedelta(days=1), datetime.min.time().replace(tzinfo=timezone.utc)).isoformat().replace("+00:00", "Z")
+            start_local = datetime.combine(d, datetime.min.time()).replace(tzinfo=CHINA_TZ)
+            end_local = datetime.combine(d + timedelta(days=1), datetime.min.time()).replace(tzinfo=CHINA_TZ)
+            start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
             r = supabase.table("user_food_records").select("id").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).limit(1).execute()
             if not r.data or len(r.data) == 0:
                 break
@@ -420,6 +428,70 @@ async def get_streak_days(user_id: str) -> int:
         return streak
     except Exception as e:
         print(f"[get_streak_days] 错误: {e}")
+        raise
+
+
+async def get_cached_insight(user_id: str, range_type: str, generated_date: str) -> Optional[Dict[str, Any]]:
+    """
+    查询 AI 营养洞察缓存。
+    generated_date: YYYY-MM-DD
+    返回 { data_fingerprint, insight_text } 或 None
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("ai_stats_insights")
+            .select("data_fingerprint, insight_text")
+            .eq("user_id", user_id)
+            .eq("range_type", range_type)
+            .eq("generated_date", generated_date)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_cached_insight] 错误: {e}")
+        return None
+
+
+async def upsert_insight_cache(
+    user_id: str,
+    range_type: str,
+    generated_date: str,
+    data_fingerprint: str,
+    insight_text: str,
+) -> None:
+    """
+    写入或更新 AI 营养洞察缓存。
+    利用 (user_id, range_type, generated_date) 唯一约束做 upsert。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        row = {
+            "user_id": user_id,
+            "range_type": range_type,
+            "generated_date": generated_date,
+            "data_fingerprint": data_fingerprint,
+            "insight_text": insight_text,
+        }
+        # 确保所有字段可 JSON 序列化，防止意外传入非基本类型
+        try:
+            import json as _json  # 局部导入，避免循环依赖
+
+            safe_row = _json.loads(_json.dumps(row, ensure_ascii=False, default=str))
+        except Exception:
+            safe_row = row
+
+        supabase.table("ai_stats_insights").upsert(
+            safe_row,
+            on_conflict="user_id,range_type,generated_date",
+        ).execute()
+    except Exception as e:
+        print(f"[upsert_insight_cache] 错误: {e}")
         raise
 
 
@@ -1334,6 +1406,87 @@ async def list_friends_feed_records(
         raise
 
 
+async def list_public_feed_records(
+    offset: int = 0,
+    limit: int = 20,
+    include_comments: bool = True,
+    comments_limit: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    获取公共饮食记录（来自 public_records=true 的用户），无需登录。
+    用于未登录用户浏览圈子。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 找出 public_records=true 的用户
+        public_users = supabase.table("weapp_user").select("id").eq("public_records", True).execute()
+        public_user_ids = [u["id"] for u in (public_users.data or [])]
+        if not public_user_ids:
+            return []
+
+        q = (
+            supabase.table("user_food_records")
+            .select("*")
+            .in_("user_id", public_user_ids)
+            .order("record_time", desc=True)
+            .range(offset, offset + limit - 1)
+        )
+        records = q.execute()
+        rec_list = list(records.data or [])
+        if not rec_list:
+            return []
+
+        involved_user_ids = list(set(r["user_id"] for r in rec_list))
+        authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
+        author_map = {a["id"]: a for a in (authors.data or [])}
+
+        comments_map: Dict[str, List[Dict[str, Any]]] = {}
+        if include_comments:
+            record_ids = [r["id"] for r in rec_list]
+            comments_result = supabase.table("feed_comments").select("id, user_id, record_id, content, created_at").in_("record_id", record_ids).order("created_at", desc=False).execute()
+            all_comments = list(comments_result.data or [])
+            if all_comments:
+                commenter_ids = list(set(c["user_id"] for c in all_comments))
+                commenters = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", commenter_ids).execute()
+                commenter_map = {u["id"]: u for u in (commenters.data or [])}
+                for comment in all_comments:
+                    rid = comment["record_id"]
+                    if rid not in comments_map:
+                        comments_map[rid] = []
+                    u = commenter_map.get(comment["user_id"], {})
+                    comments_map[rid].append({
+                        "id": comment["id"],
+                        "user_id": comment["user_id"],
+                        "record_id": comment["record_id"],
+                        "content": comment["content"],
+                        "created_at": comment["created_at"],
+                        "nickname": u.get("nickname") or "用户",
+                        "avatar": u.get("avatar") or "",
+                    })
+                for rid in comments_map:
+                    comments_map[rid] = comments_map[rid][:comments_limit]
+
+        out = []
+        for r in rec_list:
+            author = author_map.get(r["user_id"], {})
+            item: Dict[str, Any] = {
+                "record": r,
+                "author": {
+                    "id": author.get("id"),
+                    "nickname": author.get("nickname") or "用户",
+                    "avatar": author.get("avatar") or "",
+                },
+            }
+            if include_comments:
+                item["comments"] = comments_map.get(r["id"], [])
+            out.append(item)
+        return out
+    except Exception as e:
+        print(f"[list_public_feed_records] 错误: {e}")
+        raise
+
+
 async def add_feed_like(user_id: str, record_id: str) -> None:
     """对某条饮食记录点赞"""
     check_supabase_configured()
@@ -1358,7 +1511,7 @@ async def remove_feed_like(user_id: str, record_id: str) -> None:
         raise
 
 
-async def get_feed_likes_for_records(record_ids: List[str], current_user_id: str) -> Dict[str, Any]:
+async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Optional[str]) -> Dict[str, Any]:
     """批量查询点赞数及当前用户是否已点赞。返回 { record_id: { count, liked } }"""
     if not record_ids:
         return {}
@@ -1371,8 +1524,10 @@ async def get_feed_likes_for_records(record_ids: List[str], current_user_id: str
         for row in rows:
             rid = row["record_id"]
             count_map[rid] = count_map.get(rid, 0) + 1
-        my = supabase.table("feed_likes").select("record_id").eq("user_id", current_user_id).in_("record_id", record_ids).execute()
-        my_set = {m["record_id"] for m in (my.data or [])}
+        my_set: set = set()
+        if current_user_id:
+            my = supabase.table("feed_likes").select("record_id").eq("user_id", current_user_id).in_("record_id", record_ids).execute()
+            my_set = {m["record_id"] for m in (my.data or [])}
         return {rid: {"count": count_map.get(rid, 0), "liked": rid in my_set} for rid in record_ids}
     except Exception as e:
         print(f"[get_feed_likes_for_records] 错误: {e}")
@@ -1812,6 +1967,26 @@ async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         print(f"[get_food_record_by_id] 错误: {e}")
+        raise
+
+
+async def update_food_record(user_id: str, record_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """更新用户自己的饮食记录，仅当记录属于该用户时更新。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_food_records")
+            .update(data)
+            .eq("id", record_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[update_food_record] 错误: {e}")
         raise
 
 

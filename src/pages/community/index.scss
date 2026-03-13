@@ -1,7 +1,7 @@
-/* 页面根节点：占满可视高度，flex 让 ScrollView 获得准确高度，与屏幕滚动同步 */
+/* 页面根节点：高度由 JS 通过 getSystemInfoSync 设定固定像素值（避免 100vh 随键盘变化）；
+   100vh 仅作兜底（JS 未就绪时）。flex 让 ScrollView 获得准确高度。 */
 .community-page {
   height: 100vh;
-  min-height: 100vh;
   background: linear-gradient(180deg, #f0fdf4 0%, #f8fafc 30%, #f1f5f9 100%);
   display: flex;
   flex-direction: column;
@@ -44,6 +44,74 @@
 .community-scroll-content {
   padding-bottom: 320rpx;
   box-sizing: border-box;
+}
+
+/* 触底加载更多 */
+.load-more-wrapper {
+  padding: 32rpx 48rpx 16rpx;
+}
+
+.load-more-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+
+.spinner-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: dotBounce 1.4s ease-in-out infinite both;
+
+  &:nth-child(1) {
+    animation-delay: -0.32s;
+  }
+  &:nth-child(2) {
+    animation-delay: -0.16s;
+  }
+  &:nth-child(3) {
+    animation-delay: 0s;
+  }
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.load-more-idle,
+.load-more-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+}
+
+.load-more-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #e2e8f0, transparent);
+}
+
+.load-more-text {
+  font-size: 24rpx;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
 // 顶部下拉刷新提示分割线（白底遮住页面绿色渐变，视觉上无绿色）
@@ -825,36 +893,95 @@
   margin-right: 8rpx;
 }
 
-
-
-// 卡片内评论输入框
-.feed-comment-input-wrap {
+// 内联评论输入：在帖子下方，键盘弹起时帖子自然在键盘正上方
+.feed-inline-comment {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: 16rpx;
   margin-top: 24rpx;
-  padding-top: 24rpx;
+  padding-top: 20rpx;
   border-top: 1rpx solid #f1f5f9;
 }
 
-.feed-comment-input {
+.feed-inline-comment-input {
   flex: 1;
   height: 72rpx;
   padding: 0 24rpx;
-  background: #f8fafc;
+  background: #f5f6f8;
   border-radius: 36rpx;
   font-size: 28rpx;
   border: 1rpx solid #e2e8f0;
+  box-sizing: border-box;
 }
 
-.feed-comment-send {
-  padding: 0 32rpx;
+.feed-inline-comment-send {
+  flex-shrink: 0;
+  padding: 0 28rpx;
   height: 72rpx;
   line-height: 72rpx;
   font-size: 28rpx;
   color: #fff;
   background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
   border-radius: 36rpx;
+  border: none;
+
+  &::after {
+    border: none;
+  }
+}
+
+// 旧版：卡片内评论输入框（已弃用，保留兼容）
+.feed-comment-input-wrap {
+  display: none;
+}
+
+// 评论栏蒙层：点击收起
+.comment-bar-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 998;
+  background: transparent;
+}
+
+// 底部评论输入栏：不用 fixed，放在页面底部流式布局，键盘弹起时整页上推、输入框自然在键盘上方
+.comment-bar-fixed {
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 24rpx;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1rpx solid #e5e7eb;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  z-index: 999;
+}
+
+.comment-bar-input {
+  flex: 1;
+  height: 76rpx;
+  padding: 0 28rpx;
+  background: #f5f6f8;
+  border-radius: 38rpx;
+  font-size: 28rpx;
+  border: 1rpx solid #e2e8f0;
+  box-sizing: border-box;
+}
+
+.comment-bar-send {
+  flex-shrink: 0;
+  padding: 0 32rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 28rpx;
+  color: #fff;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+  border-radius: 38rpx;
   border: none;
   box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.25);
 
@@ -925,6 +1052,91 @@
   width: 100%;
   box-sizing: border-box;
   box-shadow: 0 24rpx 64rpx rgba(0, 0, 0, 0.2);
+}
+
+// 底部评论输入栏蒙层（始终渲染，通过 CSS 切换，避免 DOM 增删触发原生布局重算）
+.comment-bottom-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+// 底部评论输入栏：固定在底部，滑入滑出
+.comment-bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  display: flex;
+  align-items: flex-end;
+  gap: 16rpx;
+  padding: 20rpx 24rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  // margin-bottom: 3rpx;
+  background: #fff;
+  border-top: 1rpx solid #e5e7eb;
+  box-shadow: 0 -4rpx 24rpx rgba(0, 0, 0, 0.08);
+  transform: translateY(100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.visible {
+    transform: translateY(0);
+  }
+}
+
+.comment-bottom-input {
+  flex: 1;
+  min-height: 72rpx;
+  max-height: 240rpx;
+  padding: 18rpx 28rpx;
+  background: #f1f5f9;
+  border-radius: 32rpx;
+  font-size: 28rpx;
+  line-height: 1.5;
+  color: #1e293b;
+  caret-color: #1e293b;
+  border: 1rpx solid #e2e8f0;
+  box-sizing: border-box;
+}
+
+.comment-bottom-placeholder {
+  color: #94a3b8;
+}
+
+.comment-bottom-send {
+  flex-shrink: 0;
+  padding: 0 32rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 28rpx;
+  color: #fff;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+  border-radius: 38rpx;
+  text-align: center;
+  box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.25);
+  transition: opacity 0.2s ease;
+
+  &.disabled {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  &:active {
+    opacity: 0.8;
+  }
 }
 
 .modal-title {

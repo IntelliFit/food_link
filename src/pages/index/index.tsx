@@ -76,6 +76,11 @@ export default function IndexPage() {
 
 
   const handleQuickRecord = (type: string) => {
+    // 拍照识别需先登录
+    if (type === 'photo' && !getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
     // 记录页面是 tabBar 页面，需要使用 switchTab
     // switchTab 不支持传参，通过 storage 传递
     if (type === 'text') {

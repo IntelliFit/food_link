@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
@@ -27,6 +27,7 @@ from database import (
     get_user_by_id,
     insert_health_document,
     insert_food_record,
+    update_food_record,
     create_analysis_task_sync,
     get_analysis_task_by_id_sync,
     get_analysis_tasks_by_ids,
@@ -34,6 +35,8 @@ from database import (
     list_food_records,
     list_food_records_by_range,
     get_streak_days,
+    get_cached_insight,
+    upsert_insight_cache,
     insert_critical_samples,
     upload_health_report_image,
     upload_food_analyze_image,
@@ -45,6 +48,7 @@ from database import (
     get_friends_with_profile,
     cleanup_duplicate_friends,
     list_friends_feed_records,
+    list_public_feed_records,
     add_feed_like,
     remove_feed_like,
     get_feed_likes_for_records,
@@ -84,6 +88,9 @@ from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
 
 # 从 .env 文件加载环境变量
 load_dotenv()
+
+# 中国时区（UTC+8），用于按本地自然日统计
+CHINA_TZ = timezone(timedelta(hours=8))
 
 app = FastAPI(title="食物分析 API", description="基于 DashScope 的食物图片分析服务")
 
@@ -1569,18 +1576,24 @@ async def get_user_record_days(
     """
     user_id = user_info["user_id"]
     try:
-        # 获取用户所有记录的日期（去重）
+        # 获取用户所有记录的日期（按中国时区自然日去重）
         records = await list_food_records(user_id)
         if not records:
             return {"record_days": 0}
         
-        # 提取所有记录日期（只取日期部分）
+        # 提取所有记录日期（北京时间 YYYY-MM-DD）
         record_dates = set()
         for record in records:
-            # record_time 格式：YYYY-MM-DD HH:MM:SS
-            date_str = record.get("record_time", "").split(" ")[0] if record.get("record_time") else ""
-            if date_str:
-                record_dates.add(date_str)
+            rt = record.get("record_time")
+            if rt:
+                try:
+                    dt_utc = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
+                    dt_local = dt_utc.astimezone(CHINA_TZ)
+                    date_str = dt_local.date().isoformat()
+                    record_dates.add(date_str)
+                except Exception as e:
+                    print(f"[get_user_record_days] Date parse error for {rt}: {e}")
+                    continue
         
         return {"record_days": len(record_dates)}
     except Exception as e:
@@ -1632,6 +1645,40 @@ async def update_user_profile(
     except Exception as e:
         print(f"[update_user_profile] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"更新用户信息失败: {str(e)}")
+
+
+class BindPhoneRequest(BaseModel):
+    """绑定手机号请求（用微信 getPhoneNumber 返回的 code 换手机号并写入库）"""
+    phoneCode: str = Field(..., description="微信 getPhoneNumber 返回的 code")
+
+
+@app.post("/api/user/bind-phone")
+async def bind_phone(
+    body: BindPhoneRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    已登录用户用微信手机号 code 绑定手机号并写入 weapp_user.telephone。
+    登录后若后端未返回手机号时可调用此接口补录。
+    """
+    user_id = user_info["user_id"]
+    if not body.phoneCode or not body.phoneCode.strip():
+        raise HTTPException(status_code=400, detail="phoneCode 不能为空")
+    try:
+        phone_info = await get_phone_number(body.phoneCode.strip())
+        pure_phone_number = phone_info.get("purePhoneNumber")
+        if not pure_phone_number:
+            raise HTTPException(status_code=400, detail="未能获取到手机号")
+        updated_user = await update_user(user_id, {"telephone": pure_phone_number})
+        return {
+            "telephone": updated_user.get("telephone"),
+            "purePhoneNumber": pure_phone_number,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[bind_phone] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"绑定手机号失败: {str(e)}")
 
 
 class UploadAvatarRequest(BaseModel):
@@ -2220,6 +2267,71 @@ async def get_food_record_detail(
         raise HTTPException(status_code=500, detail="获取记录详情失败")
 
 
+class UpdateFoodRecordRequest(BaseModel):
+    meal_type: Optional[str] = Field(default=None, description="餐次")
+    items: Optional[List[FoodRecordItem]] = Field(default=None, description="食物项列表")
+    total_calories: Optional[float] = Field(default=None, description="总热量 kcal")
+    total_protein: Optional[float] = Field(default=None, description="总蛋白质 g")
+    total_carbs: Optional[float] = Field(default=None, description="总碳水 g")
+    total_fat: Optional[float] = Field(default=None, description="总脂肪 g")
+    total_weight_grams: Optional[int] = Field(default=None, description="总重量 g")
+
+
+@app.put("/api/food-record/{record_id}")
+async def update_food_record_endpoint(
+    record_id: str,
+    body: UpdateFoodRecordRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """更新当前用户自己的饮食记录（修改食物参数、餐次等）。"""
+    user_id = user_info["user_id"]
+    data: Dict[str, Any] = {}
+    if body.meal_type is not None:
+        if body.meal_type not in ("breakfast", "lunch", "dinner", "snack"):
+            raise HTTPException(status_code=400, detail="meal_type 必须为 breakfast / lunch / dinner / snack")
+        data["meal_type"] = body.meal_type
+    if body.items is not None:
+        data["items"] = [
+            {
+                "name": item.name,
+                "weight": item.weight,
+                "ratio": item.ratio,
+                "intake": item.intake,
+                "nutrients": {
+                    "calories": item.nutrients.calories,
+                    "protein": item.nutrients.protein,
+                    "carbs": item.nutrients.carbs,
+                    "fat": item.nutrients.fat,
+                    "fiber": item.nutrients.fiber,
+                    "sugar": item.nutrients.sugar,
+                },
+            }
+            for item in body.items
+        ]
+    if body.total_calories is not None:
+        data["total_calories"] = body.total_calories
+    if body.total_protein is not None:
+        data["total_protein"] = body.total_protein
+    if body.total_carbs is not None:
+        data["total_carbs"] = body.total_carbs
+    if body.total_fat is not None:
+        data["total_fat"] = body.total_fat
+    if body.total_weight_grams is not None:
+        data["total_weight_grams"] = body.total_weight_grams
+    if not data:
+        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+    try:
+        updated = await update_food_record(user_id=user_id, record_id=record_id, data=data)
+        if not updated:
+            raise HTTPException(status_code=404, detail="记录不存在或无权修改")
+        return {"message": "更新成功", "record": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[update_food_record] 错误: {e}")
+        raise HTTPException(status_code=500, detail="更新记录失败")
+
+
 @app.delete("/api/food-record/{record_id}")
 async def delete_food_record_endpoint(
     record_id: str,
@@ -2355,7 +2467,94 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
     return {"intakeData": intake_data, "meals": meals_out}
 
 
-# ---------- 数据统计（周/月摄入、TDEE、连续天数、饮食结构） ----------
+# ---------- 数据统计（周/月摄入、TDEE、连续天数、饮食结构 + AI 洞察） ----------
+
+
+async def _generate_nutrition_insight(
+    user: Dict[str, Any],
+    range_type: str,
+    start_date: str,
+    end_date: str,
+    tdee: float,
+    streak_days: int,
+    total_calories: float,
+    avg_calories_per_day: float,
+    cal_surplus_deficit: float,
+    total_protein: float,
+    total_carbs: float,
+    total_fat: float,
+    by_meal: Dict[str, float],
+    daily_list: List[Dict[str, Any]],
+    macro_percent: Dict[str, float],
+) -> str:
+    """
+    调用大模型生成个性化营养洞察（200-300 字）。
+    使用 DashScope 千问 qwen-plus。
+    """
+    range_label = "近一周" if range_type == "week" else "近一月"
+    health_summary = _format_health_profile_for_analysis(user) if user else ""
+    diet_goal = user.get("diet_goal") or "none"
+    diet_goal_label = {"fat_loss": "减脂", "muscle_gain": "增肌", "maintain": "维持体重", "none": "无"}.get(diet_goal, diet_goal)
+
+    stats_str = f"""
+统计周期：{range_label}（{start_date} 至 {end_date}）
+用户 TDEE：{tdee:.0f} kcal/天
+饮食目标：{diet_goal_label}
+
+本期数据：
+- 总热量：{total_calories:.0f} kcal
+- 日均摄入：{avg_calories_per_day:.0f} kcal
+- 日均与 TDEE 差值：{cal_surplus_deficit:+.0f} kcal（正为盈余，负为亏损）
+- 连续记录天数：{streak_days} 天
+- 餐次分布：早餐 {by_meal.get('breakfast', 0):.0f} kcal、午餐 {by_meal.get('lunch', 0):.0f} kcal、晚餐 {by_meal.get('dinner', 0):.0f} kcal、加餐 {by_meal.get('snack', 0):.0f} kcal
+- 宏量营养素占比：蛋白质 {macro_percent.get('protein', 0):.1f}%、碳水 {macro_percent.get('carbs', 0):.1f}%、脂肪 {macro_percent.get('fat', 0):.1f}%
+- 总摄入：蛋白质 {total_protein:.1f}g、碳水 {total_carbs:.1f}g、脂肪 {total_fat:.1f}g
+"""
+    if daily_list:
+        daily_trend = "、".join([f"{d['date'][5:]}({d['calories']:.0f})" for d in daily_list[-5:]])
+        stats_str += f"- 每日热量趋势（最近5天）：{daily_trend}\n"
+
+    prompt = f"""你是一位专业的营养师。请根据以下用户健康档案和饮食统计数据，生成一段 200-300 字的个性化营养洞察。
+
+{health_summary}
+
+{stats_str}
+
+要求：
+1. 用温暖、鼓励的语气，结合用户体质和饮食目标
+2. 分析本期热量摄入与 TDEE 的关系，给出建议
+3. 简要评价宏量营养素比例是否合理
+4. 若有连续打卡，给予肯定
+5. 输出纯中文，不要 JSON 或代码块，直接输出正文
+"""
+    dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+    if not dashscope_key:
+        return "本期日均摄入与 TDEE 接近，热量控制良好。请继续保持。"
+
+    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    api_url = f"{base_url}/chat/completions"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            api_url,
+            headers={
+                "Authorization": f"Bearer {dashscope_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "qwen-plus",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.6,
+            },
+        )
+        if not response.is_success:
+            error_data = response.json() if response.content else {}
+            raise Exception(error_data.get("error", {}).get("message") or f"DashScope API 错误: {response.status_code}")
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content")
+        if not content or not content.strip():
+            raise Exception("千问返回了空响应")
+        return content.strip()
+
 
 @app.get("/api/stats/summary")
 async def get_stats_summary(
@@ -2393,9 +2592,114 @@ async def get_stats_summary(
     total_protein = sum(float(r.get("total_protein") or 0) for r in records)
     total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
     total_fat = sum(float(r.get("total_fat") or 0) for r in records)
-    days_in_range = 7 if range == "week" else 30
-    avg_cal_per_day = round(total_cal / days_in_range, 1) if days_in_range else 0
+    by_meal: Dict[str, float] = {}
+    for r in records:
+        mt = r.get("meal_type") or "snack"
+        by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
+    by_meal_out = {
+        "breakfast": round(by_meal.get("breakfast", 0), 1),
+        "lunch": round(by_meal.get("lunch", 0), 1),
+        "dinner": round(by_meal.get("dinner", 0), 1),
+        "snack": round(by_meal.get("snack", 0), 1),
+    }
+
+    daily_cal: Dict[str, float] = {}
+    for r in records:
+        rt = r.get("record_time")
+        if rt:
+            try:
+                # record_time 存的是 UTC 时间戳，这里转换为中国时区的自然日
+                dt_utc = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
+                dt_local = dt_utc.astimezone(CHINA_TZ)
+                dt_str = dt_local.date().isoformat()
+                daily_cal[dt_str] = daily_cal.get(dt_str, 0) + float(r.get("total_calories") or 0)
+            except Exception as e:
+                print(f"[get_stats_summary] Date parse error for {rt}: {e}")
+                pass
+    daily_list = [{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())]
+    print(f"[get_stats_summary] Daily list: {daily_list}")
+
+    recorded_days = len(daily_cal)
+    avg_cal_per_day = round(total_cal / recorded_days, 1) if recorded_days > 0 else 0
     cal_surplus_deficit = round(avg_cal_per_day - tdee, 1)
+
+    total_macros = total_protein * 4 + total_carbs * 4 + total_fat * 9
+    if total_macros <= 0:
+        pct_p, pct_c, pct_f = 0, 0, 0
+    else:
+        pct_p = round(total_protein * 4 / total_macros * 100, 1)
+        pct_c = round(total_carbs * 4 / total_macros * 100, 1)
+        pct_f = round(total_fat * 9 / total_macros * 100, 1)
+
+    # 只读缓存：不在该接口内调用大模型，避免统计接口超时
+    data_fingerprint = f"{total_cal:.0f}_{avg_cal_per_day:.1f}_{recorded_days}_{pct_p}_{pct_c}_{pct_f}"
+    cached = await get_cached_insight(user_id, range, today)
+    if cached and cached.get("data_fingerprint") == data_fingerprint:
+        analysis_summary = cached.get("insight_text", "")
+    else:
+        analysis_summary = ""
+
+    return {
+        "range": range,
+        "start_date": start_date,
+        "end_date": end_date,
+        "tdee": int(tdee),
+        "streak_days": streak_days,
+        "total_calories": round(total_cal, 1),
+        "avg_calories_per_day": avg_cal_per_day,
+        "cal_surplus_deficit": cal_surplus_deficit,
+        "total_protein": round(total_protein, 1),
+        "total_carbs": round(total_carbs, 1),
+        "total_fat": round(total_fat, 1),
+        "by_meal": by_meal_out,
+        "daily_calories": daily_list,
+        "macro_percent": {"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+        "analysis_summary": analysis_summary,
+    }
+
+
+class StatsInsightGenerateRequest(BaseModel):
+    range: str = Field(default="week", description="统计范围: week 或 month")
+
+
+class StatsInsightSaveRequest(BaseModel):
+    range: str = Field(default="week", description="统计范围: week 或 month")
+    analysis_summary: str = Field(..., description="完整的 AI 营养洞察文本")
+
+
+@app.post("/api/stats/insight/generate")
+async def generate_stats_insight(
+    body: StatsInsightGenerateRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    生成当前周期的 AI 营养洞察（只调用大模型，不落库）。
+    前端拿到完整文本后，本地打字展示，再调用 save 接口保存。
+    """
+    stats_range = body.range if body.range in ("week", "month") else "week"
+    user_id = user_info["user_id"]
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    if stats_range == "week":
+        start_d = (now - timedelta(days=6)).date()
+    else:
+        start_d = (now - timedelta(days=29)).date()
+    start_date = start_d.strftime("%Y-%m-%d")
+    end_date = today
+
+    try:
+        user = await get_user_by_id(user_id)
+        tdee = (user.get("tdee") and float(user["tdee"])) or 2000
+        records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
+        streak_days = await get_streak_days(user_id)
+    except Exception as e:
+        print(f"[generate_stats_insight] 准备数据失败: {e}")
+        raise HTTPException(status_code=500, detail="生成 AI 洞察失败")
+
+    total_cal = sum(float(r.get("total_calories") or 0) for r in records)
+    total_protein = sum(float(r.get("total_protein") or 0) for r in records)
+    total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
+    total_fat = sum(float(r.get("total_fat") or 0) for r in records)
 
     by_meal: Dict[str, float] = {}
     for r in records:
@@ -2413,13 +2717,18 @@ async def get_stats_summary(
         rt = r.get("record_time")
         if rt:
             try:
-                dt_str = rt[:10] if isinstance(rt, str) else str(rt)[:10]
+                dt_utc = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
+                dt_local = dt_utc.astimezone(CHINA_TZ)
+                dt_str = dt_local.date().isoformat()
                 daily_cal[dt_str] = daily_cal.get(dt_str, 0) + float(r.get("total_calories") or 0)
             except Exception as e:
-                print(f"[get_stats_summary] Date parse error for {rt}: {e}")
+                print(f"[generate_stats_insight] Date parse error for {rt}: {e}")
                 pass
     daily_list = [{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())]
-    print(f"[get_stats_summary] Daily list: {daily_list}")
+
+    recorded_days = len(daily_cal)
+    avg_cal_per_day = round(total_cal / recorded_days, 1) if recorded_days > 0 else 0
+    cal_surplus_deficit = round(avg_cal_per_day - tdee, 1)
 
     total_macros = total_protein * 4 + total_carbs * 4 + total_fat * 9
     if total_macros <= 0:
@@ -2429,35 +2738,210 @@ async def get_stats_summary(
         pct_c = round(total_carbs * 4 / total_macros * 100, 1)
         pct_f = round(total_fat * 9 / total_macros * 100, 1)
 
-    analysis_parts = []
-    if cal_surplus_deficit > 100:
-        analysis_parts.append(f"本期日均摄入比 TDEE 高约 {cal_surplus_deficit:.0f} kcal，注意控制总热量。")
-    elif cal_surplus_deficit < -100:
-        analysis_parts.append(f"本期日均摄入比 TDEE 低约 {-cal_surplus_deficit:.0f} kcal，减重期可接受，长期请保证营养。")
-    else:
-        analysis_parts.append("本期日均摄入与 TDEE 接近，热量控制良好。")
-    if streak_days > 0:
-        analysis_parts.append(f"已连续记录 {streak_days} 天，继续保持。")
-    if pct_p > 0:
-        analysis_parts.append(f"蛋白质占比约 {pct_p}%、碳水 {pct_c}%、脂肪 {pct_f}%，可根据目标微调比例。")
+    try:
+        insight = await _generate_nutrition_insight(
+            user=user,
+            range_type=range,
+            start_date=start_date,
+            end_date=end_date,
+            tdee=tdee,
+            streak_days=streak_days,
+            total_calories=total_cal,
+            avg_calories_per_day=avg_cal_per_day,
+            cal_surplus_deficit=cal_surplus_deficit,
+            total_protein=total_protein,
+            total_carbs=total_carbs,
+            total_fat=total_fat,
+            by_meal=by_meal_out,
+            daily_list=daily_list,
+            macro_percent={"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+        )
+        return {"analysis_summary": insight}
+    except Exception as e:
+        print(f"[generate_stats_insight] AI 生成失败: {e}")
+        raise HTTPException(status_code=500, detail="AI 洞察生成失败，请稍后重试")
 
-    return {
-        "range": range,
-        "start_date": start_date,
-        "end_date": end_date,
-        "tdee": int(tdee),
-        "streak_days": streak_days,
-        "total_calories": round(total_cal, 1),
-        "avg_calories_per_day": avg_cal_per_day,
-        "cal_surplus_deficit": cal_surplus_deficit,
-        "total_protein": round(total_protein, 1),
-        "total_carbs": round(total_carbs, 1),
-        "total_fat": round(total_fat, 1),
-        "by_meal": by_meal_out,
-        "daily_calories": daily_list,
-        "macro_percent": {"protein": pct_p, "carbs": pct_c, "fat": pct_f},
-        "analysis_summary": " ".join(analysis_parts),
-    }
+
+@app.post("/api/stats/insight/save")
+async def save_stats_insight(
+    body: StatsInsightSaveRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    保存前端完整的 AI 洞察文本到缓存表。
+    会基于当前数据重新计算指纹，确保与统计数据一致。
+    """
+    stats_range = body.range if body.range in ("week", "month") else "week"
+    text = (body.analysis_summary or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="analysis_summary 不能为空")
+
+    user_id = user_info["user_id"]
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    if stats_range == "week":
+        start_d = (now - timedelta(days=6)).date()
+    else:
+        start_d = (now - timedelta(days=29)).date()
+    start_date = start_d.strftime("%Y-%m-%d")
+    end_date = today
+
+    try:
+        records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
+    except Exception as e:
+        print(f"[save_stats_insight] 获取记录失败: {e}")
+        raise HTTPException(status_code=500, detail="保存失败")
+
+    total_cal = sum(float(r.get("total_calories") or 0) for r in records)
+    total_protein = sum(float(r.get("total_protein") or 0) for r in records)
+    total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
+    total_fat = sum(float(r.get("total_fat") or 0) for r in records)
+
+    daily_cal: Dict[str, float] = {}
+    for r in records:
+        rt = r.get("record_time")
+        if rt:
+            try:
+                dt_utc = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
+                dt_local = dt_utc.astimezone(CHINA_TZ)
+                dt_str = dt_local.date().isoformat()
+                daily_cal[dt_str] = daily_cal.get(dt_str, 0) + float(r.get("total_calories") or 0)
+            except Exception as e:
+                print(f"[save_stats_insight] Date parse error for {rt}: {e}")
+                pass
+
+    recorded_days = len(daily_cal)
+    avg_cal_per_day = round(total_cal / recorded_days, 1) if recorded_days > 0 else 0
+
+    total_macros = total_protein * 4 + total_carbs * 4 + total_fat * 9
+    if total_macros <= 0:
+        pct_p, pct_c, pct_f = 0, 0, 0
+    else:
+        pct_p = round(total_protein * 4 / total_macros * 100, 1)
+        pct_c = round(total_carbs * 4 / total_macros * 100, 1)
+        pct_f = round(total_fat * 9 / total_macros * 100, 1)
+
+    data_fingerprint = f"{total_cal:.0f}_{avg_cal_per_day:.1f}_{recorded_days}_{pct_p}_{pct_c}_{pct_f}"
+
+    try:
+        await upsert_insight_cache(user_id, stats_range, today, data_fingerprint, text)
+        return {"message": "ok"}
+    except Exception as e:
+        print(f"[save_stats_insight] 缓存写入失败: {e}")
+        raise HTTPException(status_code=500, detail="保存失败")
+
+
+@app.websocket("/ws/stats/insight")
+async def ws_stats_insight(websocket: WebSocket):
+    """
+    WebSocket：实时推送 AI 营养洞察内容（按小段文本流式输出）。
+
+    前端需在 query 参数中传入：
+    - range: week | month
+    - user_id: 当前用户 ID（前端从本地存储读取）
+    """
+    await websocket.accept()
+    try:
+        params = websocket.query_params
+        stats_range = params.get("range", "week")
+        if stats_range not in ("week", "month"):
+            stats_range = "week"
+        user_id = params.get("user_id")
+        if not user_id:
+            await websocket.close(code=1008)
+            return
+
+        now = datetime.now(timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+        if stats_range == "week":
+            start_d = (now - timedelta(days=6)).date()
+        else:
+            start_d = (now - timedelta(days=29)).date()
+        start_date = start_d.strftime("%Y-%m-%d")
+        end_date = today
+
+        # 准备统计数据（与 generate_stats_insight 相同）
+        user = await get_user_by_id(user_id)
+        tdee = (user.get("tdee") and float(user["tdee"])) or 2000
+        records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
+        streak_days = await get_streak_days(user_id)
+
+        total_cal = sum(float(r.get("total_calories") or 0) for r in records)
+        total_protein = sum(float(r.get("total_protein") or 0) for r in records)
+        total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
+        total_fat = sum(float(r.get("total_fat") or 0) for r in records)
+
+        by_meal: Dict[str, float] = {}
+        for r in records:
+            mt = r.get("meal_type") or "snack"
+            by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
+        by_meal_out = {
+            "breakfast": round(by_meal.get("breakfast", 0), 1),
+            "lunch": round(by_meal.get("lunch", 0), 1),
+            "dinner": round(by_meal.get("dinner", 0), 1),
+            "snack": round(by_meal.get("snack", 0), 1),
+        }
+
+        daily_cal: Dict[str, float] = {}
+        for r in records:
+            rt = r.get("record_time")
+            if rt:
+                try:
+                    dt_utc = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
+                    dt_local = dt_utc.astimezone(CHINA_TZ)
+                    dt_str = dt_local.date().isoformat()
+                    daily_cal[dt_str] = daily_cal.get(dt_str, 0) + float(r.get("total_calories") or 0)
+                except Exception as e:
+                    print(f"[ws_stats_insight] Date parse error for {rt}: {e}")
+                    pass
+        daily_list = [{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())]
+
+        recorded_days = len(daily_cal)
+        avg_cal_per_day = round(total_cal / recorded_days, 1) if recorded_days > 0 else 0
+        cal_surplus_deficit = round(avg_cal_per_day - tdee, 1)
+
+        total_macros = total_protein * 4 + total_carbs * 4 + total_fat * 9
+        if total_macros <= 0:
+            pct_p, pct_c, pct_f = 0, 0, 0
+        else:
+            pct_p = round(total_protein * 4 / total_macros * 100, 1)
+            pct_c = round(total_carbs * 4 / total_macros * 100, 1)
+            pct_f = round(total_fat * 9 / total_macros * 100, 1)
+
+        # 调用大模型生成完整洞察文本
+        insight = await _generate_nutrition_insight(
+            user=user,
+            range_type=range,
+            start_date=start_date,
+            end_date=end_date,
+            tdee=tdee,
+            streak_days=streak_days,
+            total_calories=total_cal,
+            avg_calories_per_day=avg_cal_per_day,
+            cal_surplus_deficit=cal_surplus_deficit,
+            total_protein=total_protein,
+            total_carbs=total_carbs,
+            total_fat=total_fat,
+            by_meal=by_meal_out,
+            daily_list=daily_list,
+            macro_percent={"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+        )
+
+        # 以小块文本流式发给前端（前端负责汇总完整文本并保存）
+        chunk_size = 8
+        for i in range(0, len(insight), chunk_size):
+            await websocket.send_text(insight[i:i + chunk_size])
+            await asyncio.sleep(0.04)
+
+        await websocket.close()
+    except WebSocketDisconnect:
+        print("[ws_stats_insight] 客户端断开连接")
+    except Exception as e:
+        print(f"[ws_stats_insight] 错误: {e}")
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
 
 
 # ---------- 好友与圈子 ----------
@@ -2554,6 +3038,52 @@ async def api_friend_cleanup_duplicates(user_info: dict = Depends(get_current_us
     except Exception as e:
         print(f"[api/friend/cleanup-duplicates] 错误: {e}")
         raise HTTPException(status_code=500, detail="清理失败")
+
+
+@app.get("/api/community/public-feed")
+async def api_community_public_feed(
+    offset: int = 0,
+    limit: int = 20,
+    include_comments: bool = True,
+    comments_limit: int = 5,
+):
+    """
+    公共 Feed：无需登录，返回 public_records=true 的用户的饮食记录。
+    带点赞数和评论列表（不含 liked / is_mine）。
+    """
+    try:
+        items = await list_public_feed_records(
+            offset=offset,
+            limit=limit,
+            include_comments=include_comments,
+            comments_limit=comments_limit,
+        )
+        record_ids = [item["record"]["id"] for item in items]
+        likes_map = await get_feed_likes_for_records(record_ids, None) if record_ids else {}
+
+        out = []
+        for item in items:
+            rec = item["record"]
+            rid = rec["id"]
+            like_info = likes_map.get(rid, {"count": 0, "liked": False})
+            feed_item: dict = {
+                "record": rec,
+                "author": item["author"],
+                "like_count": like_info["count"],
+                "liked": False,
+                "is_mine": False,
+            }
+            if include_comments:
+                comments = item.get("comments", [])
+                feed_item["comments"] = comments
+                feed_item["comment_count"] = len(comments)
+            out.append(feed_item)
+
+        has_more = len(items) >= limit
+        return {"list": out, "has_more": has_more}
+    except Exception as e:
+        print(f"[api/community/public-feed] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取动态失败")
 
 
 @app.get("/api/community/feed")

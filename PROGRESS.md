@@ -4,8 +4,39 @@
 
 ---
 
+## 2026-03-12
+
+- ✨ feat: 数据统计页 AI 营养洞察架构优化：统计接口仅返回数据+缓存结果，新增生成/保存洞察的独立接口，前端首次进入时先展示统计数据，再请求大模型并以打字方式输出，打字完成后再存库，避免统计接口因大模型超时 `backend/main.py` `backend/database.py` `src/utils/api.ts` `src/pages/stats/index.tsx` `src/pages/stats/index.scss`
+- 🐛 fix: 修复日均卡路里计算错误：之前用固定天数（7/30）作除数，现改为用实际有记录的天数计算 `backend/main.py`
+- ✨ feat: 重构食物参数编辑弹窗：名称/营养值改为只读展示，摄入克数支持加减按钮+手动输入，比例改为滑块控件，intake↔ratio 自动联动 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🎨 style: 优化圈子页面触底分页加载动效：加载中显示三点弹跳动画，空闲/到底状态用渐变分割线+文字 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🐛 fix: 修复"已记录天数"实际按记录次数计算的 bug：Supabase 返回 ISO 8601 时间戳（T 分隔），代码用空格 split 导致每条记录被当作不同天；改用 `[:10]` 截取日期部分 `backend/main.py`
+- 🐛 fix: 修复圈子页面键盘弹出时 ScrollView 跳到顶部的问题：1) 评论蒙层从条件渲染改为始终渲染+CSS切换，避免DOM增删触发原生布局重算 2) 移除程序化 focus 聚焦（改为用户点击输入框自然触发），避免原生层 focus 事件引发滚动重置 3) 移除 enhanced、添加 disableScroll、固定像素高度替代 100vh `src/pages/community/index.tsx` `src/pages/community/index.scss` `src/pages/community/index.config.ts`
+- ✨ feat: 圈子页面开放给所有用户（含未登录），未登录展示公共 Feed（来自公开记录的用户），好友/评论/点赞等需登录后可用；后端新增 GET /api/community/public-feed 公共接口 `src/pages/community/index.tsx` `src/utils/api.ts` `backend/main.py` `backend/database.py`
+- 🐛 fix: 修复登录成功后 navigateBack 在首页崩溃的问题，添加 safeNavigateBack 安全返回（无历史页时 switchTab 到首页） `src/pages/login/index.tsx`
+- 🔒 security: 登录页增加《用户服务协议》及《隐私政策》勾选校验，未勾选无法发起登录请求，避免用户在未同意条款时登录 `src/pages/login/index.tsx` `src/pages/login/index.scss`
+- ✨ feat: 记录详情页新增「修改记录」按钮，仅记录创建者可见，支持编辑食物名称、摄入量、营养参数等，后端新增 PUT /api/food-record/{record_id} 接口 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss` `src/utils/api.ts` `backend/main.py` `backend/database.py`
+- 🐛 fix: 修复底部评论栏 focus 导致页面跳顶：延迟 300ms 聚焦（等滑入动画完成）+ adjustPosition=false 阻止原生层滚动 `src/pages/community/index.tsx`
+- 🔧 refactor: 评论交互彻底重构为底部固定输入栏（类似微信朋友圈），去掉所有滚动位置计算和恢复逻辑，打开/关闭/发送评论均不影响列表滚动位置 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🔧 refactor: 圈子页评论交互简化、更丝滑：打开评论不再滚动列表，收起评论不做任何恢复滚动，去掉 scrollIntoView/scrollTo/相关 ref `src/pages/community/index.tsx`
+- 🔧 refactor: 圈子页评论改为弹层输入：点击评论弹出模态框，主列表不参与焦点与滚动 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🐛 fix: 圈子页评论弹层打开/关闭后列表回顶：打开前与关闭前（取消/发送）均用 scrollOffset 取当前滚动位置，弹层变化后 80ms 用 scrollTo 恢复 `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页评论输入框聚焦时文字不可见（失焦才显示）：用不透明颜色 rgb(30,41,59)、opacity:1、caret-color，输入区用透明底+外层 wrap 做背景，避免安卓原生层渲染透明 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🐛 fix: 登录后数据库未存手机号：登录页主按钮改为原生 Button（openType="getPhoneNumber"），授权后带 phoneCode 调用 login，后端写入 weapp_user.telephone；拒绝时仍仅用 code 登录 `src/pages/login/index.tsx` `src/pages/login/index.scss`
+- ✨ feat: 若数据库已有手机号则微信一键登录不再弹授权：先仅用 code 登录，后端有 telephone 则直接返回；无手机号时登录成功后再弹「完善账号」授权手机号弹窗，可调用 POST /api/user/bind-phone 绑定 `backend/main.py` `src/utils/api.ts` `src/pages/login/index.tsx` `src/pages/login/index.scss`
+- ✨ feat: 前端 token 校验：无 token 或接口返回 401/403 时清除登录态并 redirectTo 登录页，并 Toast 提示 `src/utils/api.ts`
+
 ## 2026-03-10
 
+- 🐛 fix: 圈子页点击评论再点别处收起后仍跳顶：改为延迟 120ms 再设 scrollTop 恢复（等键盘收起+布局稳定），720ms 后释放 `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页收起评论后跳顶：收起时保存滚动位置并用 scrollTop 短暂恢复 300ms，避免列表重排导致 ScrollView 重置 `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页评论栏改为页面底部流式布局（非 fixed），解决键盘弹起后看不到输入框、占位顶到顶端的问题 `src/pages/community/index.scss`
+- ✨ feat: 圈子页点击评论后直接弹出键盘，底部固定输入栏紧贴键盘上方（类似朋友圈），无需再点输入框 `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页内联评论聚焦键盘后跳顶、占位到顶端：关闭 Input adjustPosition，点击评论时用 scroll-into-view 把该帖滚到顶部并设大 cursorSpacing，避免系统自动滚动导致跳顶 `src/pages/community/index.tsx`
+- ✨ feat: 圈子页评论改为帖子下方内联输入框，点击评论后输入框出现在该帖下方，点输入框弹出键盘时帖子自然保持在键盘正上方可见 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🐛 fix: 圈子页评论时键盘挡住帖子：改为 scroll-top + createSelectorQuery 在键盘弹起后计算目标滚动位置并滚动，使被评论帖子出现在键盘上方 `src/pages/community/index.tsx`
+- ⚡ perf: 圈子页列表滑动卡顿：ScrollView 仅在打开评论时临时受控 scrollTop，滚动后清空，不再在每次 onScroll 时 setState `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页点击评论输入框跳回顶部：去掉受控 scrollTop，改用 scroll-into-view 并在键盘弹起后延迟 480ms 触发，清空时不会重置列表位置 `src/pages/community/index.tsx`
 - ✨ feat: 记录页历史记录支持删除：卡片右侧弱化删除图标，先 ActionSheet 再二次确认后调用删除接口并刷新列表 `src/pages/record/index.tsx` `src/utils/api.ts` `backend/main.py` `backend/database.py`
 - 🐛 fix: 数据统计页餐次结构百分比改为保留一位小数，避免整数四舍五入导致数据不准确 `src/pages/stats/index.tsx`
 - ✨ feat: 食物库分享页商家地址搜索改为跳转新页面，进入即定位并使用天地图周边模糊搜索，选中后回填地址与经纬度 `src/pages/food-library-share/index.tsx` `src/pages/location-search/index.tsx` `backend/main.py` `src/app.config.ts`

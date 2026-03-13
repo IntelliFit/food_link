@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Input, Textarea, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
@@ -11,6 +11,7 @@ import {
   friendGetList,
   friendCleanupDuplicates,
   communityGetFeed,
+  communityGetPublicFeed,
   communityLike,
   communityUnlike,
   communityPostComment,
@@ -92,10 +93,14 @@ export default function CommunityPage() {
   const lastFeedRefreshTime = useRef<number>(0)
   const lastFriendsRefreshTime = useRef<number>(0)
 
-  // 评论：当前展开评论输入的 recordId、输入内容、提交中
+  // 评论：当前评论的 recordId、输入内容、提交中、延迟聚焦
   const [expandedCommentRecordId, setExpandedCommentRecordId] = useState<string | null>(null)
   const [commentContent, setCommentContent] = useState('')
   const [commentSubmitting, setCommentSubmitting] = useState(false)
+  const [commentInputFocus, setCommentInputFocus] = useState(false)
+
+  // 固定页面高度
+  const [pageHeight, setPageHeight] = useState(0)
 
   // 分页状态
   const [offset, setOffset] = useState(0)
@@ -236,23 +241,21 @@ export default function CommunityPage() {
    * @param force 是否强制刷新（忽略时间间隔）
    */
   const refreshFeed = useCallback(async (silent = false, force = false) => {
-    if (!getAccessToken()) return
-
-    // 条件刷新：检查是否需要刷新
     const now = Date.now()
     if (!force && now - lastFeedRefreshTime.current < CACHE_DURATION) {
-      console.log('Feed 刷新间隔未到，跳过刷新')
       return
     }
 
     if (!silent) setLoadingFeed(true)
 
     try {
-      // 获取帖子列表，包含每条帖子的前5条评论
-      const res = await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5)
+      const token = getAccessToken()
+      // 已登录：好友 Feed；未登录：公共 Feed
+      const res = token
+        ? await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5)
+        : await communityGetPublicFeed(0, PAGE_SIZE, true, 5)
       const list = res.list || []
 
-      // 刷新后仅展示后端返回评论，并清理本地临时评论缓存
       list.forEach(item => {
         const tempCommentsKey = `temp_comments_${item.record.id}`
         try {
@@ -264,13 +267,9 @@ export default function CommunityPage() {
 
       setFeedList(list)
       setOffset(list.length)
-      // 使用后端返回的 has_more 字段，如果没有则按列表长度判断
       setHasMore(res.has_more ?? list.length >= PAGE_SIZE)
 
-      // 保存到缓存
       saveToCache(list)
-
-      // 更新刷新时间
       lastFeedRefreshTime.current = Date.now()
     } catch (e) {
       if (!silent) {
@@ -284,15 +283,16 @@ export default function CommunityPage() {
   }, [saveToCache])
 
   const loadMoreFeed = useCallback(async () => {
-    if (!getAccessToken() || !hasMore || loadingMore) return
+    if (!hasMore || loadingMore) return
     setLoadingMore(true)
     try {
-      // 获取更多帖子，包含每条帖子的前5条评论
-      const res = await communityGetFeed(undefined, offset, PAGE_SIZE, true, 5)
+      const token = getAccessToken()
+      const res = token
+        ? await communityGetFeed(undefined, offset, PAGE_SIZE, true, 5)
+        : await communityGetPublicFeed(offset, PAGE_SIZE, true, 5)
       const list = res.list || []
       setFeedList(prev => [...prev, ...list])
       setOffset(prev => prev + list.length)
-      // 使用后端返回的 has_more 字段，如果没有则按列表长度判断
       setHasMore(res.has_more ?? list.length >= PAGE_SIZE)
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '加载更多失败', icon: 'none' })
@@ -303,17 +303,32 @@ export default function CommunityPage() {
 
   // ScrollView 自带下拉刷新（页面级下拉被内部 ScrollView 接管，需用 refresher）
   const handleRefresherRefresh = useCallback(() => {
-    if (!getAccessToken()) {
-      setRefreshing(false)
-      return
-    }
     setRefreshing(true)
-    // 下拉刷新强制更新，不使用缓存
-    Promise.all([
-      loadFriendsAndRequests(false),
-      refreshFeed(false, true) // force = true
-    ])
+    const tasks: Promise<void>[] = [refreshFeed(false, true)]
+    if (getAccessToken()) {
+      tasks.push(loadFriendsAndRequests(false))
+    }
+    Promise.all(tasks)
   }, [loadFriendsAndRequests, refreshFeed])
+
+  // 评论栏弹出后延迟聚焦，等滑入动画完成
+  useEffect(() => {
+    if (expandedCommentRecordId) {
+      const t = setTimeout(() => setCommentInputFocus(true), 300)
+      return () => clearTimeout(t)
+    }
+    setCommentInputFocus(false)
+  }, [expandedCommentRecordId])
+
+  // 获取固定页面高度
+  useEffect(() => {
+    try {
+      const info = Taro.getSystemInfoSync()
+      setPageHeight(info.windowHeight)
+    } catch (e) {
+      console.error('获取系统信息失败:', e)
+    }
+  }, [])
 
   useEffect(() => {
     setLoggedIn(!!getAccessToken())
@@ -333,43 +348,32 @@ export default function CommunityPage() {
     title: '食探 - 和好友一起健康饮食'
   }))
 
-  // 【核心优化】每次页面显示时的智能加载策略
+  // 每次页面显示时的智能加载策略（已登录 / 未登录均可）
   Taro.useDidShow(() => {
     const token = getAccessToken()
     setLoggedIn(!!token)
 
-    if (!token) return
+    // 已有数据（从其他页面返回）→ 保持当前列表
+    if (feedList.length > 0) return
 
-    // 如果已经有数据，说明是从其他页面返回，保持当前列表状态，不触发自动重用缓存或静默刷新
-    // 这样可以解决从详情页返回时，已加载的多页数据被重置为第一页或缓存页的问题
-    if (feedList.length > 0) {
-      return
-    }
-
-    // 1. 立即从缓存加载数据（无等待，立即展示）
+    // 1. 立即从缓存加载
     const hasCache = loadFromCache()
 
     // 2. 判断是否需要刷新
     const now = Date.now()
-    const needRefreshFeed = (
-      now - lastFeedRefreshTime.current > CACHE_DURATION // 超过刷新间隔
-    )
-    const needRefreshFriends = (
-      friends.length === 0 ||
-      now - lastFriendsRefreshTime.current > CACHE_DURATION
+    const needRefreshFeed = now - lastFeedRefreshTime.current > CACHE_DURATION
+    const needRefreshFriends = token && (
+      friends.length === 0 || now - lastFriendsRefreshTime.current > CACHE_DURATION
     )
 
-    // 3. 根据情况决定刷新策略
     if (needRefreshFeed || needRefreshFriends) {
       if (hasCache || !isFirstLoad) {
-        // 有缓存或非首次：静默刷新（不显示 loading）
         if (needRefreshFeed) refreshFeed(true, false)
         if (needRefreshFriends) loadFriendsAndRequests(true)
       } else {
-        // 首次且无缓存：显示骨架屏 + 正常加载
         setShowSkeleton(true)
         refreshFeed(false, true)
-        loadFriendsAndRequests(false)
+        if (token) loadFriendsAndRequests(false)
         setIsFirstLoad(false)
       }
     }
@@ -472,18 +476,35 @@ export default function CommunityPage() {
     }
   }
 
-  const toggleCommentInput = (recordId: string) => {
+  /** 暂存草稿的 key */
+  const draftKey = (recordId: string) => `comment_draft_${recordId}`
+
+  /** 关闭评论输入栏并暂存草稿 */
+  const closeCommentModal = () => {
+    if (expandedCommentRecordId == null) return
+    if (commentContent.trim()) {
+      try { Taro.setStorageSync(draftKey(expandedCommentRecordId), commentContent) } catch (_) {}
+    }
+    setExpandedCommentRecordId(null)
+  }
+
+  /** 点击评论：打开底部输入栏，同一帖再点则关闭 */
+  const openCommentModal = (recordId: string) => {
     if (!getAccessToken()) {
       Taro.showToast({ title: '请先登录', icon: 'none' })
       return
     }
     if (expandedCommentRecordId === recordId) {
-      setExpandedCommentRecordId(null)
-      setCommentContent('')
-    } else {
-      setExpandedCommentRecordId(recordId)
-      setCommentContent('')
+      closeCommentModal()
+      return
     }
+    if (expandedCommentRecordId && commentContent.trim()) {
+      try { Taro.setStorageSync(draftKey(expandedCommentRecordId), commentContent) } catch (_) {}
+    }
+    let draft = ''
+    try { draft = Taro.getStorageSync(draftKey(recordId)) || '' } catch (_) {}
+    setCommentContent(draft)
+    setExpandedCommentRecordId(recordId)
   }
 
   const submitComment = async () => {
@@ -521,10 +542,9 @@ export default function CommunityPage() {
         console.error('缓存临时评论失败:', e)
       }
 
-      // 更新缓存
       saveToCache(newList)
 
-      // 评论成功后关闭输入框
+      try { Taro.removeStorageSync(draftKey(expandedCommentRecordId)) } catch (_) {}
       setCommentContent('')
       setExpandedCommentRecordId(null)
       Taro.showToast({ title: '评论成功', icon: 'success' })
@@ -536,9 +556,13 @@ export default function CommunityPage() {
   }
 
   /**
-   * 拍照识别：直接进入拍照分析流程
+   * 拍照识别：直接进入拍照分析流程（需先登录）
    */
   const handlePhotoAnalyze = () => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
     Taro.chooseImage({
       count: 1,
       sizeType: ['original', 'compressed'],
@@ -565,12 +589,15 @@ export default function CommunityPage() {
   ]
 
   return (
-    <View className='community-page'>
+    <View
+      className='community-page'
+      style={pageHeight ? { height: `${pageHeight}px` } : undefined}
+    >
       <View className='community-scroll-wrap'>
         <ScrollView
+          id='community-main-scroll'
           className='community-scroll'
           scrollY
-          enhanced
           showScrollbar={false}
           refresherEnabled
           refresherTriggered={refreshing}
@@ -586,286 +613,312 @@ export default function CommunityPage() {
               <Text className='page-subtitle'>与好友一起分享健康饮食</Text>
             </View>
 
-            {!loggedIn ? (
+            {/* 好友区域（仅登录后显示） */}
+            {loggedIn && (
+              <View className='friends-section'>
+                <View className='section-header'>
+                  <Text className='section-title'>好友</Text>
+                  <View className='header-actions'>
+                    {requests.length > 0 && (
+                      <View className='requests-badge' onClick={() => setShowRequests(true)}>
+                        <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
+                      </View>
+                    )}
+                    <View className='view-all-btn' onClick={() => setShowAddFriend(true)}>
+                      <Text className='view-all-text'>添加好友</Text>
+                      <Text className='arrow'>{'>'}</Text>
+                    </View>
+                  </View>
+                </View>
+                {loadingFriends ? (
+                  <Text className='loading-text'>加载中...</Text>
+                ) : friends.length === 0 ? (
+                  <Text className='empty-text'>暂无好友，点击「添加好友」搜索昵称或手机号添加</Text>
+                ) : (
+                  <ScrollView
+                    className='friends-list'
+                    scrollX
+                    enhanced
+                    showScrollbar={false}
+                  >
+                    <View className='friends-list-inner'>
+                      {friends.map((f) => (
+                        <View key={f.id} className='friend-item'>
+                          <View className='friend-avatar'>
+                            {f.avatar ? (
+                              <Image src={f.avatar} mode='aspectFill' className='friend-avatar-img' />
+                            ) : (
+                              <Text className='friend-avatar-placeholder'>👤</Text>
+                            )}
+                          </View>
+                          <Text className='friend-name' numberOfLines={1}>{f.nickname || '用户'}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
+            )}
+
+            {/* 未登录提示条 */}
+            {!loggedIn && (
               <View className='login-tip'>
-                <Text className='login-tip-text'>登录后查看好友动态、添加好友</Text>
+                <Text className='login-tip-text'>登录后可添加好友、点赞和评论</Text>
                 <TaroifyButton
                   className='login-tip-btn'
                   shape="round"
-
                   style={{ background: 'linear-gradient(to right, #00bc7d 0%, #00bba7 100%)', border: 'none', color: '#fff' }}
                   onClick={() => Taro.navigateTo({ url: '/pages/login/index' })}
                 >
                   去登录
                 </TaroifyButton>
               </View>
-            ) : (
-              <>
-                {/* 好友区域 */}
-                <View className='friends-section'>
-                  <View className='section-header'>
-                    <Text className='section-title'>好友</Text>
-                    <View className='header-actions'>
-                      {requests.length > 0 && (
-                        <View className='requests-badge' onClick={() => setShowRequests(true)}>
-                          <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
-                        </View>
-                      )}
-                      <View className='view-all-btn' onClick={() => setShowAddFriend(true)}>
-                        <Text className='view-all-text'>添加好友</Text>
-                        <Text className='arrow'>{'>'}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  {loadingFriends ? (
-                    <Text className='loading-text'>加载中...</Text>
-                  ) : friends.length === 0 ? (
-                    <Text className='empty-text'>暂无好友，点击「添加好友」搜索昵称或手机号添加</Text>
-                  ) : (
-                    <ScrollView
-                      className='friends-list'
-                      scrollX
-                      enhanced
-                      showScrollbar={false}
-                    >
-                      <View className='friends-list-inner'>
-                        {friends.map((f) => (
-                          <View key={f.id} className='friend-item'>
-                            <View className='friend-avatar'>
-                              {f.avatar ? (
-                                <Image src={f.avatar} mode='aspectFill' className='friend-avatar-img' />
-                              ) : (
-                                <Text className='friend-avatar-placeholder'>👤</Text>
-                              )}
-                            </View>
-                            <Text className='friend-name' numberOfLines={1}>{f.nickname || '用户'}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  )}
-                </View>
+            )}
 
-                {/* 我的圈子 */}
-                <View className='my-circles-section'>
-                  <View className='section-header'>
-                    <Text className='section-title'>发现</Text>
-                  </View>
-                  <View className='circles-list'>
-                    <View
-                      className='circle-card'
-                      onClick={() => Taro.navigateTo({ url: '/pages/food-library/index' })}
-                    >
-                      <Text className='circle-icon iconfont icon-shiwu' />
-                      <Text className='circle-name'>公共食物库</Text>
-                      <View className='circle-members'>
-                        {/* <Text className='member-icon iconfont icon-dizhi' /> */}
-                        <Text className='member-count'>健康外卖推荐</Text>
-                      </View>
-                    </View>
-                    <View
-                      className='circle-card'
-                      onClick={() => Taro.showToast({ title: '敬请期待', icon: 'none' })}
-                    >
-                      <Text className='circle-icon iconfont icon-weibiaoti-_huabanfuben' />
-                      <Text className='circle-name'>打卡排行榜</Text>
-                      <View className='circle-members'>
-                        {/* <Text className='member-icon iconfont icon-duoren' /> */}
-                        <Text className='member-count'>本周活跃</Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-
-                {/* 本周打卡排行榜（占位） */}
+            {/* 发现 */}
+            <View className='my-circles-section'>
+              <View className='section-header'>
+                <Text className='section-title'>发现</Text>
+              </View>
+              <View className='circles-list'>
                 <View
-                  className='ranking-banner'
+                  className='circle-card'
+                  onClick={() => Taro.navigateTo({ url: '/pages/food-library/index' })}
+                >
+                  <Text className='circle-icon iconfont icon-shiwu' />
+                  <Text className='circle-name'>公共食物库</Text>
+                  <View className='circle-members'>
+                    <Text className='member-count'>健康外卖推荐</Text>
+                  </View>
+                </View>
+                <View
+                  className='circle-card'
                   onClick={() => Taro.showToast({ title: '敬请期待', icon: 'none' })}
                 >
-                  <View className='ranking-content'>
-                    <View className='ranking-text'>
-                      <Text className='ranking-title'>本周打卡排行榜</Text>
-                      <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
-                    </View>
+                  <Text className='circle-icon iconfont icon-weibiaoti-_huabanfuben' />
+                  <Text className='circle-name'>打卡排行榜</Text>
+                  <View className='circle-members'>
+                    <Text className='member-count'>本周活跃</Text>
                   </View>
-                  <Text className='ranking-arrow'>{'>'}</Text>
                 </View>
+              </View>
+            </View>
 
-                {/* 热门话题 */}
-                <View className='topics-section'>
-                  <View className='section-header'>
-                    <View className='section-title-wrapper'>
-                      <Text className='section-title-icon iconfont icon-shangzhang' />
-                      <Text className='section-title'>热门话题</Text>
+            {/* 本周打卡排行榜 */}
+            <View
+              className='ranking-banner'
+              onClick={() => Taro.showToast({ title: '敬请期待', icon: 'none' })}
+            >
+              <View className='ranking-content'>
+                <View className='ranking-text'>
+                  <Text className='ranking-title'>本周打卡排行榜</Text>
+                  <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
+                </View>
+              </View>
+              <Text className='ranking-arrow'>{'>'}</Text>
+            </View>
+
+            {/* 热门话题 */}
+            <View className='topics-section'>
+              <View className='section-header'>
+                <View className='section-title-wrapper'>
+                  <Text className='section-title-icon iconfont icon-shangzhang' />
+                  <Text className='section-title'>热门话题</Text>
+                </View>
+              </View>
+              <ScrollView className='topics-list-wrapper' scrollX enhanced showScrollbar={false}>
+                <View className='topics-list'>
+                  {topics.map((t) => (
+                    <View key={t.id} className='topic-tag'>
+                      <Text>{t.name}</Text>
                     </View>
-                  </View>
-                  <ScrollView className='topics-list-wrapper' scrollX enhanced showScrollbar={false}>
-                    <View className='topics-list'>
-                      {topics.map((t) => (
-                        <View key={t.id} className='topic-tag'>
-                          <Text>{t.name}</Text>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+
+            {/* 饮食动态 */}
+            <View className='feed-section'>
+              <View className='section-header'>
+                <Text className='section-title'>{loggedIn ? '好友饮食动态' : '饮食动态'}</Text>
+              </View>
+              {showSkeleton ? (
+                <View className='skeleton-container'>
+                  {[1, 2, 3].map(i => (
+                    <View key={i} className='skeleton-feed-card'>
+                      <View className='skeleton-feed-header'>
+                        <View className='skeleton-avatar' />
+                        <View className='skeleton-user-info'>
+                          <View className='skeleton-line' style={{ width: '120rpx', height: '28rpx' }} />
+                          <View className='skeleton-line' style={{ width: '200rpx', height: '24rpx', marginTop: '8rpx' }} />
                         </View>
-                      ))}
+                      </View>
+                      <View className='skeleton-content'>
+                        <View className='skeleton-line' style={{ width: '100%', height: '24rpx' }} />
+                        <View className='skeleton-line' style={{ width: '80%', height: '24rpx', marginTop: '12rpx' }} />
+                      </View>
+                      <View className='skeleton-image' />
+                      <View className='skeleton-meta'>
+                        <View className='skeleton-line' style={{ width: '150rpx', height: '24rpx' }} />
+                      </View>
                     </View>
-                  </ScrollView>
+                  ))}
                 </View>
-
-                {/* 好友今日饮食动态 */}
-                <View className='feed-section'>
-                  <View className='section-header'>
-                    <Text className='section-title'>好友饮食动态</Text>
-                  </View>
-                  {showSkeleton ? (
-                    // 骨架屏：首次加载时显示
-                    <View className='skeleton-container'>
-                      {[1, 2, 3].map(i => (
-                        <View key={i} className='skeleton-feed-card'>
-                          <View className='skeleton-feed-header'>
-                            <View className='skeleton-avatar' />
-                            <View className='skeleton-user-info'>
-                              <View className='skeleton-line' style={{ width: '120rpx', height: '28rpx' }} />
-                              <View className='skeleton-line' style={{ width: '200rpx', height: '24rpx', marginTop: '8rpx' }} />
+              ) : loadingFeed && feedList.length === 0 ? (
+                <Text className='loading-text'>加载中...</Text>
+              ) : feedList.length === 0 ? (
+                <View className='feed-empty'>
+                  <Text className='feed-empty-text'>
+                    {loggedIn ? '暂无好友今日饮食动态，添加好友后这里会显示他们的记录' : '暂无动态'}
+                  </Text>
+                </View>
+              ) : (
+                <View className='feed-list'>
+                  {feedList.map((item) => (
+                    <View
+                      key={item.record.id}
+                      id={`feed-card-${item.record.id}`}
+                      className='feed-card'
+                      onClick={() => handleViewDetail(item.record)}
+                    >
+                      <View className='feed-header'>
+                        <View className='user-avatar'>
+                          {item.author.avatar ? (
+                            <Image src={item.author.avatar} mode='aspectFill' className='user-avatar-img' />
+                          ) : (
+                            <Text className='user-avatar-placeholder'>👤</Text>
+                          )}
+                        </View>
+                        <View className='user-info'>
+                          <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
+                          <Text className='post-time'>
+                            {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
+                          </Text>
+                        </View>
+                      </View>
+                      {item.record.description && (
+                        <Text className='feed-content'>{item.record.description}</Text>
+                      )}
+                      {item.record.image_path && (
+                        <View className='feed-image'>
+                          <Image
+                            src={item.record.image_path}
+                            mode='aspectFill'
+                            className='feed-image-content'
+                          />
+                        </View>
+                      )}
+                      <View className='feed-meta'>
+                        <Text className='feed-calorie'>
+                          {Number(item.record.total_calories || 0).toFixed(0)} kcal
+                        </Text>
+                        <Text className='feed-macros'>
+                          蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
+                        </Text>
+                      </View>
+                      <View
+                        className='feed-actions'
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <View
+                          className='action-item'
+                          onClick={() => handleLike(item)}
+                        >
+                          <Text
+                            className={`action-icon iconfont icon-good ${item.liked ? 'liked' : ''}`}
+                          />
+                          <Text className='action-count'>{item.like_count}</Text>
+                        </View>
+                        <View
+                          className='action-item'
+                          onClick={() => openCommentModal(item.record.id)}
+                        >
+                          <Text className='action-icon iconfont icon-pinglun' />
+                          <Text className='action-count'>评论</Text>
+                        </View>
+                      </View>
+                      {/* 前 5 条评论 */}
+                      {(item.comments?.length ?? 0) > 0 && (
+                        <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
+                          {(item.comments || []).map((c) => (
+                            <View key={c.id} className='feed-comment-item'>
+                              <View className='comment-avatar'>
+                                {c.avatar ? (
+                                  <Image src={c.avatar} mode='aspectFill' className='comment-avatar-img' />
+                                ) : (
+                                  <Text className='comment-avatar-placeholder'>👤</Text>
+                                )}
+                              </View>
+                              <View className='comment-body'>
+                                <Text className='comment-text'>
+                                  <Text className='comment-author'>{c.nickname || '用户'}</Text>
+                                  <Text> {c.content}</Text>
+                                </Text>
+                              </View>
                             </View>
-                          </View>
-                          <View className='skeleton-content'>
-                            <View className='skeleton-line' style={{ width: '100%', height: '24rpx' }} />
-                            <View className='skeleton-line' style={{ width: '80%', height: '24rpx', marginTop: '12rpx' }} />
-                          </View>
-                          <View className='skeleton-image' />
-                          <View className='skeleton-meta'>
-                            <View className='skeleton-line' style={{ width: '150rpx', height: '24rpx' }} />
-                          </View>
+                          ))}
                         </View>
-                      ))}
+                      )}
                     </View>
-                  ) : loadingFeed && feedList.length === 0 ? (
-                    <Text className='loading-text'>加载中...</Text>
-                  ) : feedList.length === 0 ? (
-                    <View className='feed-empty'>
-                      <Text className='feed-empty-text'>暂无好友今日饮食动态，添加好友后这里会显示他们的记录</Text>
+                  ))}
+                </View>
+              )}
+              {/* 加载更多提示 */}
+              {feedList.length > 0 && (
+                <View className='load-more-wrapper'>
+                  {loadingMore ? (
+                    <View className='load-more-loading'>
+                      <View className='loading-spinner'>
+                        <View className='spinner-dot' />
+                        <View className='spinner-dot' />
+                        <View className='spinner-dot' />
+                      </View>
+                      <Text className='load-more-text'>正在加载</Text>
+                    </View>
+                  ) : hasMore ? (
+                    <View className='load-more-idle'>
+                      <View className='load-more-line' />
+                      <Text className='load-more-text'>上拉加载更多</Text>
+                      <View className='load-more-line' />
                     </View>
                   ) : (
-                    <View className='feed-list'>
-                      {feedList.map((item) => (
-                        <View
-                          key={item.record.id}
-                          className='feed-card'
-                          onClick={() => handleViewDetail(item.record)}
-                        >
-                          <View className='feed-header'>
-                            <View className='user-avatar'>
-                              {item.author.avatar ? (
-                                <Image src={item.author.avatar} mode='aspectFill' className='user-avatar-img' />
-                              ) : (
-                                <Text className='user-avatar-placeholder'>👤</Text>
-                              )}
-                            </View>
-                            <View className='user-info'>
-                              <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
-                              <Text className='post-time'>
-                                {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
-                              </Text>
-                            </View>
-                          </View>
-                          {item.record.description && (
-                            <Text className='feed-content'>{item.record.description}</Text>
-                          )}
-                          {item.record.image_path && (
-                            <View className='feed-image'>
-                              <Image
-                                src={item.record.image_path}
-                                mode='aspectFill'
-                                className='feed-image-content'
-                              />
-                            </View>
-                          )}
-                          <View className='feed-meta'>
-                            <Text className='feed-calorie'>
-                              {Number(item.record.total_calories || 0).toFixed(0)} kcal
-                            </Text>
-                            <Text className='feed-macros'>
-                              蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
-                            </Text>
-                          </View>
-                          <View
-                            className='feed-actions'
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <View
-                              className='action-item'
-                              onClick={() => handleLike(item)}
-                            >
-                              <Text
-                                className={`action-icon iconfont icon-good ${item.liked ? 'liked' : ''}`}
-                              />
-                              <Text className='action-count'>{item.like_count}</Text>
-                            </View>
-                            <View
-                              className='action-item'
-                              onClick={() => toggleCommentInput(item.record.id)}
-                            >
-                              <Text className='action-icon iconfont icon-pinglun' />
-                              <Text className='action-count'>评论</Text>
-                            </View>
-                          </View>
-                          {/* 前 5 条评论 */}
-                          {(item.comments?.length ?? 0) > 0 && (
-                            <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
-                              {(item.comments || []).map((c) => (
-                                <View key={c.id} className='feed-comment-item'>
-                                  <View className='comment-avatar'>
-                                    {c.avatar ? (
-                                      <Image src={c.avatar} mode='aspectFill' className='comment-avatar-img' />
-                                    ) : (
-                                      <Text className='comment-avatar-placeholder'>👤</Text>
-                                    )}
-                                  </View>
-                                  <View className='comment-body'>
-                                    <Text className='comment-text'>
-                                      <Text className='comment-author'>{c.nickname || '用户'}</Text>
-                                      <Text> {c.content}</Text>
-                                    </Text>
-                                  </View>
-                                </View>
-                              ))}
-                            </View>
-                          )}
-                          {/* 评论输入框（点击评论后展开） */}
-                          {expandedCommentRecordId === item.record.id && (
-                            <View className='feed-comment-input-wrap' onClick={(e) => e.stopPropagation()}>
-                              <Input
-                                className='feed-comment-input'
-                                placeholder='说点什么...'
-                                value={commentContent}
-                                onInput={(e) => setCommentContent(e.detail.value)}
-                              />
-                              <TaroifyButton
-                                className='feed-comment-send'
-                                size='small'
-                                shape='round'
-                                onClick={submitComment}
-                                disabled={commentSubmitting || !commentContent.trim()}
-                                loading={commentSubmitting}
-                              >
-                                {commentSubmitting ? '发送中' : '发送'}
-                              </TaroifyButton>
-                            </View>
-                          )}
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                  {/* 加载更多提示 */}
-                  {feedList.length > 0 && (
-                    <View className='load-more-tip' style={{ textAlign: 'center', padding: '20rpx', color: '#999', fontSize: '24rpx' }}>
-                      {loadingMore ? '加载更多...' : hasMore ? '上拉加载更多' : '没有更多了'}
+                    <View className='load-more-end'>
+                      <View className='load-more-line' />
+                      <Text className='load-more-text'>已经到底啦</Text>
+                      <View className='load-more-line' />
                     </View>
                   )}
                 </View>
-              </>
-            )}
+              )}
+            </View>
           </View>
         </ScrollView>
+      </View>
+
+      {/* 底部评论输入栏：mask 和 bar 始终渲染，通过 CSS 切换可见性，避免 DOM 增删导致 ScrollView 重置 */}
+      <View
+        className={`comment-bottom-mask ${expandedCommentRecordId ? 'visible' : ''}`}
+        onClick={closeCommentModal}
+      />
+      <View className={`comment-bottom-bar ${expandedCommentRecordId ? 'visible' : ''}`}>
+        <Textarea
+          className='comment-bottom-input'
+          placeholder='说点什么...'
+          placeholderClass='comment-bottom-placeholder'
+          value={commentContent}
+          onInput={(e) => setCommentContent(e.detail.value)}
+          confirmType='send'
+          onConfirm={submitComment}
+          focus={commentInputFocus}
+          autoHeight
+          maxlength={500}
+        />
+        <View
+          className={`comment-bottom-send ${(!commentContent.trim() || commentSubmitting) ? 'disabled' : ''}`}
+          onClick={submitComment}
+        >
+          <Text>{commentSubmitting ? '...' : '发送'}</Text>
+        </View>
       </View>
 
       {/* 添加好友弹窗 */}

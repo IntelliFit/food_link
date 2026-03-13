@@ -1,7 +1,7 @@
 import { View, Text, ScrollView } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getStatsSummary, type StatsSummary } from '../../utils/api'
+import { API_BASE_URL, getStatsSummary, saveStatsInsight, type StatsSummary } from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
@@ -32,6 +32,12 @@ export default function StatsPage() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<StatsSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [aiDisplayText, setAiDisplayText] = useState('')
+  const typingTimerRef = useRef<any>(null)
+  const [isTyping, setIsTyping] = useState(false)
+  const isGeneratingRef = useRef(false)
+  const fullTextRef = useRef('')
+  const hasSavedRef = useRef(false)
 
   const fetchStats = useCallback(async (r: 'week' | 'month') => {
     setLoading(true)
@@ -59,6 +65,134 @@ export default function StatsPage() {
   useDidShow(() => {
     fetchStats(range)
   })
+
+  // 如果统计数据返回但后端还没有缓存的 AI 洞察，则通过 WebSocket 请求大模型并流式接收
+  useEffect(() => {
+    if (!data) return
+    if (data.analysis_summary) {
+      // 已命中缓存，后面打字效果会处理
+      return
+    }
+    if (isGeneratingRef.current) return
+    isGeneratingRef.current = true
+
+    const userId = Taro.getStorageSync('user_id')
+    if (!userId) {
+      isGeneratingRef.current = false
+      return
+    }
+
+    const wsBase = API_BASE_URL.replace(/^http/, 'ws')
+    const wsUrl = `${wsBase}/ws/stats/insight?range=${range}&user_id=${encodeURIComponent(userId)}`
+
+    fullTextRef.current = ''
+
+    // 建立 WebSocket 连接（微信小程序端使用全局事件）
+    Taro.connectSocket({
+      url: wsUrl,
+      header: {},
+      protocols: [],
+      tcpNoDelay: true
+    })
+
+    const handleMessage = (res: Taro.SocketTask.OnMessageCallbackResult) => {
+      const chunk = typeof res.data === 'string' ? res.data : ''
+      if (!chunk) return
+      fullTextRef.current += chunk
+      setAiDisplayText(prev => prev + chunk)
+    }
+
+    const handleClose = () => {
+      isGeneratingRef.current = false
+      // 连接关闭后，若有完整文本且尚未保存，则保存到后端
+      const full = fullTextRef.current.trim()
+      if (full && !hasSavedRef.current) {
+        hasSavedRef.current = true
+        saveStatsInsight(range, full).catch((e) => {
+          console.error('保存 AI 洞察失败:', e)
+        })
+        // 同时更新 data，以便后续再次进入时使用缓存（触发打字效果）
+        setData(prev => (prev ? { ...prev, analysis_summary: full } : prev))
+      }
+    }
+
+    const handleError = (err: any) => {
+      console.error('AI 洞察 WebSocket 连接错误:', err)
+      isGeneratingRef.current = false
+    }
+
+    Taro.onSocketMessage(handleMessage)
+    Taro.onSocketClose(handleClose)
+    Taro.onSocketError(handleError)
+
+    return () => {
+      // 交由服务端正常关闭本次连接，避免重复关闭导致报错
+      isGeneratingRef.current = false
+    }
+  }, [data, range])
+
+  // AI 洞察打字机效果：当 analysis_summary 从空变为非空时，按字符逐步显示
+  useEffect(() => {
+    const full = data?.analysis_summary || ''
+
+    // 如果还没有洞察，清空显示并停止打字
+    if (!full) {
+      setAiDisplayText('')
+      setIsTyping(false)
+      hasSavedRef.current = false
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current)
+        typingTimerRef.current = null
+      }
+      return
+    }
+
+    // 已经完全展示，无需重新打字
+    if (aiDisplayText === full && !isTyping) {
+      return
+    }
+
+    if (typingTimerRef.current) {
+      clearInterval(typingTimerRef.current)
+      typingTimerRef.current = null
+    }
+
+    let index = 0
+    const step = 2 // 每次输出的字符数
+    setAiDisplayText('')
+    setIsTyping(true)
+
+    const timer = setInterval(() => {
+      index += step
+      if (index >= full.length) {
+        setAiDisplayText(full)
+        setIsTyping(false)
+        // 打字完成后，将完整文本保存到后端（忽略错误，避免影响体验）
+        if (!hasSavedRef.current) {
+          hasSavedRef.current = true
+          saveStatsInsight(range, full).catch((e) => {
+            console.error('保存 AI 洞察失败:', e)
+          })
+        }
+        if (typingTimerRef.current) {
+          clearInterval(typingTimerRef.current)
+          typingTimerRef.current = null
+        }
+      } else {
+        setAiDisplayText(full.slice(0, index))
+      }
+    }, 40)
+
+    typingTimerRef.current = timer
+
+    return () => {
+      if (typingTimerRef.current) {
+        clearInterval(typingTimerRef.current)
+        typingTimerRef.current = null
+      }
+    }
+    // 只在后端完整洞察文本变化时重新触发打字
+  }, [data?.analysis_summary])
 
   if (loading && !data) {
     return (
@@ -281,14 +415,23 @@ export default function StatsPage() {
         </View>
 
         {/* 分析报告 */}
-        {d.analysis_summary && (
-          <View className='stats-card analysis-card'>
-            <View className='card-header'>
-              <Text className='card-title'>AI 营养洞察</Text>
-            </View>
-            <Text className='analysis-content'>{d.analysis_summary}</Text>
+        <View className='stats-card analysis-card'>
+          <View className='card-header'>
+            <Text className='card-title'>AI 营养洞察</Text>
+            <Text className='card-subtitle'>基于大模型分析</Text>
           </View>
-        )}
+          <View className='ai-disclaimer'>
+            <Text className='ai-disclaimer-text'>本内容由人工智能生成，仅供健康参考，不代替专业医疗建议。</Text>
+          </View>
+          {aiDisplayText ? (
+            <Text className='analysis-content'>{aiDisplayText}</Text>
+          ) : (
+            <View className='analysis-loading'>
+              <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
+              <Text className='analysis-loading-text'>AI 正在分析最近的饮食记录，请稍候...</Text>
+            </View>
+          )}
+        </View>
 
         <View className='footer-placeholder' />
       </ScrollView>

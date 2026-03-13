@@ -3,7 +3,7 @@ import Taro from '@tarojs/taro'
 // API 基础 URL：从环境变量读取，未配置时使用生产地址
 // 开发：.env.development 中 TARO_APP_API_BASE_URL
 // 生产：.env.production 中 TARO_APP_API_BASE_URL
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
 
 // 基础类型定义
@@ -660,6 +660,33 @@ export async function getFoodRecordById(recordId: string): Promise<{ record: Foo
   return res.data as { record: FoodRecord }
 }
 
+/** 更新饮食记录请求 */
+export interface UpdateFoodRecordRequest {
+  meal_type?: string
+  items?: FoodRecordItemPayload[]
+  total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  total_weight_grams?: number
+}
+
+/**
+ * 更新当前用户的饮食记录（修改食物参数等）
+ */
+export async function updateFoodRecord(recordId: string, data: UpdateFoodRecordRequest): Promise<{ message: string; record: FoodRecord }> {
+  const res = await authenticatedRequest(`/api/food-record/${encodeURIComponent(recordId)}`, {
+    method: 'PUT',
+    data,
+    timeout: 15000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '更新记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; record: FoodRecord }
+}
+
 /**
  * 删除当前用户的饮食记录
  */
@@ -740,6 +767,43 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
 }
 
 /**
+ * 请求大模型生成当前统计周期的 AI 营养洞察（不落库）
+ */
+export async function generateStatsInsight(range: 'week' | 'month'): Promise<{ analysis_summary: string }> {
+  const res = await authenticatedRequest(
+    '/api/stats/insight/generate',
+    {
+      method: 'POST',
+      data: { range },
+      timeout: 30000
+    }
+  )
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || 'AI 洞察生成失败'
+    throw new Error(msg)
+  }
+  return res.data as { analysis_summary: string }
+}
+
+/**
+ * 保存完整的 AI 营养洞察到缓存表
+ */
+export async function saveStatsInsight(range: 'week' | 'month', analysis_summary: string): Promise<void> {
+  const res = await authenticatedRequest(
+    '/api/stats/insight/save',
+    {
+      method: 'POST',
+      data: { range, analysis_summary },
+      timeout: 10000
+    }
+  )
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '保存 AI 洞察失败'
+    throw new Error(msg)
+  }
+}
+
+/**
  * 获取存储的 access token
  * @returns string | null
  */
@@ -810,8 +874,29 @@ export function clearAllStorage() {
   }
 }
 
+/** 登录页路径，token 失效时统一跳转 */
+const LOGIN_PAGE_URL = '/pages/login/index'
+
+/**
+ * 清除登录态并跳转登录页（token 失效或未登录时调用）
+ * @param message 可选，Toast 提示文案
+ */
+function redirectToLogin(message: string = '登录已失效，请重新登录') {
+  try {
+    clearAllStorage()
+  } catch {
+    try {
+      clearTokens()
+    } catch (_) {}
+  }
+  Taro.showToast({ title: message, icon: 'none' })
+  Taro.redirectTo({ url: LOGIN_PAGE_URL })
+}
+
 /**
  * 带认证的请求
+ * - 无 token 时清除本地并跳转登录页
+ * - 响应 401/403 时视为 token 失效，清除登录态并跳转登录页
  * @param url 请求 URL
  * @param options 请求选项
  * @returns Promise<any>
@@ -823,10 +908,11 @@ export async function authenticatedRequest(
   const token = getAccessToken()
 
   if (!token) {
+    redirectToLogin('未登录，请先登录')
     throw new Error('未登录，请先登录')
   }
 
-  return Taro.request({
+  const res = await Taro.request({
     url: `${API_BASE_URL}${url}`,
     ...options,
     header: {
@@ -835,6 +921,22 @@ export async function authenticatedRequest(
       ...(options.header || {})
     }
   })
+
+  if (res.statusCode === 401 || res.statusCode === 403) {
+    redirectToLogin('登录已失效，请重新登录')
+    throw new Error('登录已失效，请重新登录')
+  }
+
+  // 特殊处理 openid 相关错误：视为登录状态异常，强制重新登录
+  if (res.statusCode >= 400 && res.statusCode < 500) {
+    const detail = (res.data as any)?.detail as string | undefined
+    if (detail && (detail.includes('openid') || detail.includes('Token 中缺少 openid'))) {
+      redirectToLogin('登录状态异常，请重新登录')
+      throw new Error(detail || '登录状态异常，请重新登录')
+    }
+  }
+
+  return res
 }
 
 /**
@@ -941,6 +1043,23 @@ export async function updateUserInfo(userInfo: UpdateUserInfoRequest): Promise<U
     console.error('更新用户信息失败:', error)
     throw new Error(error.message || '更新用户信息失败')
   }
+}
+
+/**
+ * 已登录用户用微信手机号 code 绑定手机号（写入 weapp_user.telephone）
+ * @param phoneCode 微信 getPhoneNumber 返回的 code
+ * @returns Promise<{ telephone?: string; purePhoneNumber?: string }>
+ */
+export async function bindPhone(phoneCode: string): Promise<{ telephone?: string; purePhoneNumber?: string }> {
+  const response = await authenticatedRequest('/api/user/bind-phone', {
+    method: 'POST',
+    data: { phoneCode }
+  })
+  if (response.statusCode !== 200) {
+    const errorMsg = (response.data as any)?.detail || '绑定手机号失败'
+    throw new Error(errorMsg)
+  }
+  return response.data as { telephone?: string; purePhoneNumber?: string }
 }
 
 /**
@@ -1228,6 +1347,23 @@ export async function communityGetFeed(
     q += `&date=${date}`
   }
   const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
+  return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
+}
+
+/** 公共 Feed：无需登录，返回公开用户的饮食记录 */
+export async function communityGetPublicFeed(
+  offset: number = 0,
+  limit: number = 20,
+  includeComments: boolean = true,
+  commentsLimit: number = 5
+): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
+  const q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/community/public-feed${q}`,
+    method: 'GET',
+    timeout: 10000
+  })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
 }

@@ -62,6 +62,10 @@ export default function RecordPage() {
   }
 
   const handleChooseImage = () => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
     Taro.chooseImage({
       count: 1,
       sizeType: ['original', 'compressed'],

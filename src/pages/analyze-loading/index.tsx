@@ -79,7 +79,8 @@ const getNextTipIndex = (current?: number) => {
 }
 
 const POLL_INTERVAL = 2000
-const TIP_ROTATE_INTERVAL = 3000
+// 健康小知识轮播间隔（ms）——从 3 秒放慢到 6 秒
+const TIP_ROTATE_INTERVAL = 6000
 
 export default function AnalyzeLoadingPage() {
   const [taskId, setTaskId] = useState<string>('')
@@ -210,7 +211,7 @@ export default function AnalyzeLoadingPage() {
           <Text className="violated-reason">{violationReason}</Text>
           <Text className="violated-hint">您提交的内容不符合平台使用规范，请确保上传与食物相关的图片或文字描述。</Text>
           <Text className="btn-history" onClick={handleGoHistory}>返回分析历史</Text>
-          <Text className="ai-notice">本服务由人工智能提供分析，生成内容仅供参考</Text>
+          <Text className="ai-notice"> 食探 - 您的智能健康管理助手</Text>
         </View>
       </View>
     )
@@ -222,7 +223,7 @@ export default function AnalyzeLoadingPage() {
         <View className="error-wrap">
           <Text className="error-msg">识别失败：{errorMessage}</Text>
           <Text className="btn-history" onClick={handleGoHistory}>去分析历史</Text>
-          <Text className="ai-notice">本服务由人工智能提供分析，生成内容仅供参考</Text>
+          <Text className="ai-notice"> 食探 - 您的智能健康管理助手</Text>
         </View>
       </View>
     )
@@ -236,9 +237,9 @@ export default function AnalyzeLoadingPage() {
         <Text className="icon-center iconfont icon-shiwu" />
       </View>
       <Text className="title">
-        {taskType === 'food_text' ? 'AI 文字分析中...' : 'AI 视觉识别中...'}
+        {taskType === 'food_text' ? '食探正在分析您的餐食...' : '食探正在分析您的餐食...'}
       </Text>
-      <Text className="subtitle">正在智能分析您的餐食</Text>
+      <Text className="subtitle">分析结果由 AI 生成，仅供参考</Text>
       <View className="tip-card">
         <View className="tip-header">
           <Text className="tip-icon iconfont icon-dengpao" />
@@ -252,7 +253,7 @@ export default function AnalyzeLoadingPage() {
           <Text className="iconfont icon-shizhong" style={{ marginRight: 6, fontSize: 16 }} />
           <Text>先离开，稍后查看</Text>
         </View>
-        <Text className="ai-notice">本服务由人工智能提供分析，生成内容仅供参考</Text>
+        <Text className="ai-notice">食探 - 您的智能健康管理助手</Text>
       </View>
     </View>
   )

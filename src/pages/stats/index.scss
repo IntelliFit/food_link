@@ -129,6 +129,12 @@
   color: #1e2939;
 }
 
+.card-subtitle {
+  font-size: 22rpx;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
 // Hero Card
 .hero-card {
   padding: 40rpx;
@@ -496,12 +502,42 @@
   .card-title {
     color: #1d4ed8;
   }
+
+  .card-subtitle {
+    color: rgba(29, 78, 216, 0.6);
+  }
 }
 
 .analysis-content {
   font-size: 28rpx;
   color: #334155;
   line-height: 1.6;
+}
+
+.ai-disclaimer {
+  margin-bottom: 8rpx;
+}
+
+.ai-disclaimer-text {
+  font-size: 22rpx;
+  color: #64748b;
+}
+
+.analysis-loading {
+  padding: 12rpx 4rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.analysis-loading-icon {
+  font-size: 28rpx;
+  color: #1d4ed8;
+}
+
+.analysis-loading-text {
+  font-size: 24rpx;
+  color: #1e293b;
 }
 
 // Loading & Error

@@ -50,6 +50,22 @@
             color: #ffffff;
         }
 
+        /* 原生 Button（getPhoneNumber）与主按钮同风格 */
+        .wx-login-btn-native {
+            height: 96rpx;
+            line-height: 96rpx;
+            border-radius: 48rpx;
+            font-size: 32rpx;
+            font-weight: 500;
+            background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+            border: none;
+            color: #ffffff;
+
+            &::after {
+                border: none;
+            }
+        }
+
         .wx-phone-auth-btn {
             width: 100%;
             font-size: 26rpx;
@@ -79,18 +95,46 @@
         margin-bottom: 60rpx;
         display: flex;
         justify-content: center;
+    }
 
-        .agreement-text {
-            font-size: 24rpx;
-            color: #999999;
-            display: flex;
-            align-items: center;
-            gap: 8rpx;
+    .agreement-row {
+        display: flex;
+        align-items: center;
+        gap: 12rpx;
+        font-size: 24rpx;
+        color: #999999;
+    }
 
-            .link {
-                color: #00bc7d;
-            }
+    .agreement-checkbox {
+        width: 32rpx;
+        height: 32rpx;
+        border-radius: 8rpx;
+        border: 2rpx solid #cbd5e1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        background: #ffffff;
+
+        &.checked {
+            border-color: #00bc7d;
+            background: #00bc7d;
         }
+    }
+
+    .agreement-check-icon {
+        font-size: 22rpx;
+        color: #ffffff;
+    }
+
+    .agreement-text {
+        line-height: 1.6;
+    }
+
+    .agreement-link {
+        color: #00bc7d;
+        text-decoration: underline;
+        margin: 0 4rpx;
     }
 }
 
@@ -151,6 +195,48 @@
     font-size: 40rpx;
     font-weight: 700;
     color: #111827;
+}
+
+.profile-form-desc {
+    display: block;
+    margin-top: 16rpx;
+    font-size: 28rpx;
+    color: #6b7280;
+    line-height: 1.5;
+}
+
+.phone-bind-modal .profile-form-header {
+    margin-bottom: 40rpx;
+}
+
+.phone-bind-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 24rpx;
+    align-items: center;
+}
+
+.phone-bind-btn {
+    width: 100%;
+    height: 88rpx;
+    line-height: 88rpx;
+    border-radius: 44rpx;
+    font-size: 32rpx;
+    font-weight: 500;
+    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+    border: none;
+    color: #ffffff;
+
+    &::after {
+        border: none;
+    }
+}
+
+.phone-bind-modal .skip-phone-btn {
+    font-size: 28rpx;
+    color: #6b7280;
+    background: transparent;
+    border: none;
 }
 
 .profile-form-body {

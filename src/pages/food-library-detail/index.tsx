@@ -319,7 +319,12 @@ export default function FoodLibraryDetailPage() {
             >
               {imageList.map((src, index) => (
                 <SwiperItem key={index} className="detail-swiper-item">
-                  <Image className="detail-image" src={src} mode="aspectFill" />
+                  <Image
+                    className="detail-image"
+                    src={src}
+                    mode="aspectFill"
+                    onClick={() => Taro.previewImage({ urls: imageList, current: src })}
+                  />
                 </SwiperItem>
               ))}
             </Swiper>

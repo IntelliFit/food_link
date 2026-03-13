@@ -6,6 +6,7 @@ import '@taroify/core/button/style'
 import {
     login,
     LoginResponse,
+    bindPhone,
     getUserProfile,
     updateUserInfo,
     uploadUserAvatar,
@@ -22,16 +23,37 @@ interface UserInfo {
 
 const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
 
+/** 安全返回：若当前是第一个页面则跳转首页 */
+function safeNavigateBack() {
+    const pages = Taro.getCurrentPages()
+    if (pages.length > 1) {
+        Taro.navigateBack()
+    } else {
+        Taro.switchTab({ url: '/pages/index/index' })
+    }
+}
+
 export default function LoginPage() {
     const [loading, setLoading] = useState(false)
     const [showProfileForm, setShowProfileForm] = useState(false)
+    /** 登录成功但库中无手机号时展示，引导用户授权绑定 */
+    const [showPhoneBindModal, setShowPhoneBindModal] = useState(false)
+    /** 是否已同意用户协议与隐私政策 */
+    const [agreed, setAgreed] = useState(false)
 
     // 临时头像和昵称（用于完善信息）
     const [tempAvatar, setTempAvatar] = useState('')
     const [tempNickname, setTempNickname] = useState('')
 
-    /** 微信一键登录：仅用 code 登录。若用户库中已有手机号，后端会直接带回，无需再次授权手机号 */
+    /** 微信一键登录：仅用 code，后端若已有手机号会直接带回，无需再授权 */
     const handleWxLogin = async () => {
+        if (!agreed) {
+            Taro.showToast({
+                title: '请先阅读并勾选同意《用户服务协议》及《隐私政策》',
+                icon: 'none'
+            })
+            return
+        }
         if (loading) return
         setLoading(true)
         try {
@@ -45,7 +67,32 @@ export default function LoginPage() {
                 title: error.message || '登录失败',
                 icon: 'none'
             })
+        } finally {
             setLoading(false)
+        }
+    }
+
+    /** 登录后无手机号时，授权手机号并调用绑定接口 */
+    const handleBindPhone = async (e: any) => {
+        const phoneCode = e.detail?.code
+        if (!phoneCode) {
+            setShowPhoneBindModal(false)
+            Taro.showToast({ title: '未授权手机号', icon: 'none' })
+            setTimeout(() => safeNavigateBack(), 800)
+            return
+        }
+        try {
+            Taro.showLoading({ title: '绑定中...' })
+            const res = await bindPhone(phoneCode)
+            const num = res.purePhoneNumber || res.telephone
+            if (num) Taro.setStorageSync('phoneNumber', num)
+            Taro.hideLoading()
+            Taro.showToast({ title: '绑定成功', icon: 'success' })
+            setShowPhoneBindModal(false)
+            setTimeout(() => safeNavigateBack(), 1000)
+        } catch (err: any) {
+            Taro.hideLoading()
+            Taro.showToast({ title: err.message || '绑定失败', icon: 'none' })
         }
     }
 
@@ -82,12 +129,15 @@ export default function LoginPage() {
             // API 返回的 avatar 可能为空字符串，nickname 可能为空
             if (!apiUserInfo.nickname || !apiUserInfo.avatar || apiUserInfo.avatar === '' || apiUserInfo.nickname === '微信用户') {
                 setLoading(false)
-                setShowProfileForm(true) // 显示完善信息通过
+                setShowProfileForm(true) // 显示完善信息弹窗
             } else {
-                // 信息齐全，直接返回
-                setTimeout(() => {
-                    Taro.navigateBack()
-                }, 1500)
+                setLoading(false)
+                // 库中已有手机号则直接返回；否则弹出授权手机号弹窗
+                if (loginData.purePhoneNumber) {
+                    setTimeout(() => safeNavigateBack(), 1500)
+                } else {
+                    setShowPhoneBindModal(true)
+                }
             }
 
         } catch (error) {
@@ -101,7 +151,7 @@ export default function LoginPage() {
 
     // 跳过登录
     const handleSkip = () => {
-        Taro.navigateBack()
+        safeNavigateBack()
     }
 
     // 处理头像选择
@@ -156,7 +206,7 @@ export default function LoginPage() {
             Taro.showToast({ title: '保存成功', icon: 'success' })
 
             setTimeout(() => {
-                Taro.navigateBack()
+                safeNavigateBack()
             }, 1500)
 
         } catch (err: any) {
@@ -192,10 +242,68 @@ export default function LoginPage() {
             </View>
 
             <View className='login-footer'>
-                <View className='agreement-text'>
-                    登录即代表同意 <Text className='link' onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>用户协议</Text> 和 <Text className='link' onClick={() => Taro.navigateTo({ url: '/pages/privacy/index' })}>隐私政策</Text>
+                <View
+                    className='agreement-row'
+                    onClick={() => setAgreed(prev => !prev)}
+                >
+                    <View className={`agreement-checkbox ${agreed ? 'checked' : ''}`}>
+                        {agreed && <Text className='agreement-check-icon'>✓</Text>}
+                    </View>
+                    <Text className='agreement-text'>
+                        我已阅读并同意
+                        <Text
+                            className='agreement-link'
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                Taro.navigateTo({ url: '/pages/agreement/index' })
+                            }}
+                        >
+                            《用户服务协议》
+                        </Text>
+                        和
+                        <Text
+                            className='agreement-link'
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                Taro.navigateTo({ url: '/pages/privacy/index' })
+                            }}
+                        >
+                            《隐私政策》
+                        </Text>
+                    </Text>
                 </View>
             </View>
+
+            {/* 登录成功但库中无手机号：引导授权绑定 */}
+            {showPhoneBindModal && (
+                <View className='profile-form-modal phone-bind-modal'>
+                    <View className='profile-form-content'>
+                        <View className='profile-form-header'>
+                            <Text className='profile-form-title'>完善账号</Text>
+                            <Text className='profile-form-desc'>授权手机号便于好友搜索与账号安全</Text>
+                        </View>
+                        <View className='phone-bind-actions'>
+                            <Button
+                                className='wx-login-btn-native phone-bind-btn'
+                                openType='getPhoneNumber'
+                                onGetPhoneNumber={handleBindPhone}
+                            >
+                                授权手机号
+                            </Button>
+                            <TaroifyButton
+                                className='skip-phone-btn'
+                                variant="text"
+                                onClick={() => {
+                                    setShowPhoneBindModal(false)
+                                    safeNavigateBack()
+                                }}
+                            >
+                                暂不绑定
+                            </TaroifyButton>
+                        </View>
+                    </View>
+                </View>
+            )}
 
             {/* 完善信息弹窗 */}
             {showProfileForm && (

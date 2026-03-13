@@ -202,6 +202,17 @@ export default function ProfilePage() {
       Taro.navigateTo({ url: '/pages/stats/index' })
       return
     }
+    // 附近美食（开发中）
+    if (service.id === 5) {
+      Taro.showModal({
+        title: '🍜 功能开发中',
+        content: '「附近美食」功能正在紧锣密鼓地开发中，即将上线，敬请期待！',
+        showCancel: false,
+        confirmText: '好的',
+        confirmColor: '#00bc7d'
+      })
+      return
+    }
     const path = (service as { path?: string }).path
     if (path) {
       Taro.navigateTo({ url: path })

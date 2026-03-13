@@ -1,7 +1,7 @@
-import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { View, Text, Image, ScrollView, Canvas, Button, Input, Slider } from '@tarojs/components'
+import { useState, useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
-import { getFoodRecordById, getSharedFoodRecord, getAccessToken, getUnlimitedQRCode, type FoodRecord } from '../../utils/api'
+import { getSharedFoodRecord, getAccessToken, getUnlimitedQRCode, updateFoodRecord, type FoodRecord, type Nutrients } from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../utils/poster'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 
@@ -58,6 +58,16 @@ export default function RecordDetailPage() {
   const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
   const [showPosterModal, setShowPosterModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [isOwner, setIsOwner] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editItems, setEditItems] = useState<Array<{
+    name: string
+    weight: number
+    ratio: number
+    intake: number
+    nutrients: Nutrients
+  }>>([])
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     const loadRecord = async () => {
@@ -67,24 +77,17 @@ export default function RecordDetailPage() {
       if (recordId) {
         try {
           setLoading(true)
-          const token = getAccessToken()
-          let fetchedRecord: FoodRecord
-          if (token) {
-            // 已登录：先尝试作为拥有者查看鉴权接口
-            try {
-              const res = await getFoodRecordById(recordId)
-              fetchedRecord = res.record
-            } catch (e) {
-              // 失败（如无权限、非创建者），降级为使用公开分享接口
-              const res = await getSharedFoodRecord(recordId)
-              fetchedRecord = res.record
-            }
-          } else {
-            // 未登录（通过分享链接进入）：使用公开分享接口
-            const res = await getSharedFoodRecord(recordId)
-            fetchedRecord = res.record
-          }
+          // 统一使用公开分享接口加载记录（无需登录，任何人可访问）
+          const res = await getSharedFoodRecord(recordId)
+          const fetchedRecord = res.record
           setRecord(fetchedRecord)
+          // 判断当前用户是否为记录创建者（用于显示编辑按钮）
+          try {
+            const currentUserId = Taro.getStorageSync('user_id')
+            if (currentUserId && fetchedRecord.user_id === currentUserId) {
+              setIsOwner(true)
+            }
+          } catch { /* ignore */ }
         } catch (e: any) {
           const msg = e.message || '加载记录失败'
           Taro.showToast({ title: msg, icon: 'none' })
@@ -130,12 +133,132 @@ export default function RecordDetailPage() {
     }
   })
 
+  /** 打开编辑弹窗，复制当前食物项数据 */
+  const handleOpenEdit = useCallback(() => {
+    if (!record) return
+    setEditItems(
+      (record.items || []).map(item => ({
+        name: item.name,
+        weight: item.weight,
+        ratio: item.ratio ?? 100,
+        intake: item.intake ?? 0,
+        nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
+      }))
+    )
+    setShowEditModal(true)
+  }, [record])
+
+  /** 更新摄入克数，联动比例（允许超过 100%） */
+  const updateIntake = useCallback((index: number, newIntake: number) => {
+    setEditItems(prev => {
+      const next = [...prev]
+      const item = { ...next[index] }
+      item.intake = Math.max(0, Math.round(newIntake * 10) / 10)
+      if (item.weight > 0) {
+        item.ratio = Math.round((item.intake / item.weight) * 100)
+      }
+      next[index] = item
+      return next
+    })
+  }, [])
+
+  /** 更新比例（滑块 0-100），联动摄入克数 */
+  const updateRatio = useCallback((index: number, newRatio: number) => {
+    setEditItems(prev => {
+      const next = [...prev]
+      const item = { ...next[index] }
+      item.ratio = Math.max(0, Math.min(100, newRatio))
+      item.intake = Math.round(item.weight * item.ratio / 100 * 10) / 10
+      next[index] = item
+      return next
+    })
+  }, [])
+
+  /** 摄入克数加减按钮（允许超过原始重量） */
+  const adjustIntake = useCallback((index: number, delta: number) => {
+    setEditItems(prev => {
+      const item = prev[index]
+      if (!item) return prev
+      const next = [...prev]
+      const updated = { ...next[index] }
+      updated.intake = Math.max(0, Math.round(((item.intake || 0) + delta) * 10) / 10)
+      if (updated.weight > 0) {
+        updated.ratio = Math.round((updated.intake / updated.weight) * 100)
+      }
+      next[index] = updated
+      return next
+    })
+  }, [])
+
+  /** 删除编辑中的某个食物项（需用户确认） */
+  const removeEditItem = useCallback(async (index: number) => {
+    const { confirm } = await Taro.showModal({
+      title: '删除确认',
+      content: `确定删除「${editItems[index]?.name || '该食物'}」吗？`,
+      confirmText: '删除',
+      confirmColor: '#ef4444'
+    })
+    if (!confirm) return
+    setEditItems(prev => prev.filter((_, i) => i !== index))
+  }, [editItems])
+
   if (loading || !record) {
     return (
       <View className="record-detail-page">
         <View className="empty-tip">{loading ? '加载中...' : '记录不存在'}</View>
       </View>
     )
+  }
+
+  /** 提交编辑 */
+  const handleSaveEdit = async () => {
+    if (editItems.length === 0) {
+      Taro.showToast({ title: '至少保留一项食物', icon: 'none' })
+      return
+    }
+    if (!record) return
+    const { confirm } = await Taro.showModal({
+      title: '确认修改',
+      content: '确定保存对食物参数的修改吗？',
+      confirmText: '确定',
+      confirmColor: '#00bc7d'
+    })
+    if (!confirm) return
+    setEditSaving(true)
+    Taro.showLoading({ title: '保存中...', mask: true })
+    try {
+      const totalCalories = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.calories * (item.ratio / 100))
+      }, 0)
+      const totalProtein = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.protein * (item.ratio / 100))
+      }, 0)
+      const totalCarbs = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.carbs * (item.ratio / 100))
+      }, 0)
+      const totalFat = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.fat * (item.ratio / 100))
+      }, 0)
+      const totalWeight = editItems.reduce((sum, item) => sum + item.intake, 0)
+
+      const { record: updated } = await updateFoodRecord(record.id, {
+        items: editItems,
+        total_calories: Math.round(totalCalories * 10) / 10,
+        total_protein: Math.round(totalProtein * 10) / 10,
+        total_carbs: Math.round(totalCarbs * 10) / 10,
+        total_fat: Math.round(totalFat * 10) / 10,
+        total_weight_grams: Math.round(totalWeight)
+      })
+      setRecord(updated)
+      setShowEditModal(false)
+      Taro.hideLoading()
+      Taro.showToast({ title: '修改成功', icon: 'success' })
+    } catch (e: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   const mealName = MEAL_TYPE_NAMES[record.meal_type] || record.meal_type
@@ -390,6 +513,12 @@ export default function RecordDetailPage() {
         }
 
         <View className="poster-actions">
+          {isOwner && (
+            <Button className="edit-record-btn" onClick={handleOpenEdit}>
+              <Text className="iconfont icon-bianji" style={{ marginRight: 8 }}></Text>
+              修改记录
+            </Button>
+          )}
           <Button className="poster-btn" onClick={handleGeneratePoster} disabled={posterGenerating}>
             {posterGenerating ? '生成中...' : '生成分享海报'}
           </Button>
@@ -494,6 +623,104 @@ export default function RecordDetailPage() {
           </View>
         </View>
       </View>
+
+      {/* 编辑记录弹窗 */}
+      {showEditModal && (
+        <View className="edit-modal" catchMove>
+          <View className="edit-modal-mask" onClick={() => setShowEditModal(false)} />
+          <View className="edit-modal-content">
+            <View className="edit-modal-header">
+              <Text className="edit-modal-title">修改食物参数</Text>
+              <View className="edit-modal-close" onClick={() => setShowEditModal(false)} />
+            </View>
+            <ScrollView scrollY enhanced showScrollbar={false} className="edit-modal-body">
+              {editItems.map((item, idx) => {
+                const r = (item.ratio ?? 100) / 100
+                const cal = Math.round(item.nutrients.calories * r * 10) / 10
+                const pro = Math.round(item.nutrients.protein * r * 10) / 10
+                const carb = Math.round(item.nutrients.carbs * r * 10) / 10
+                const fat = Math.round(item.nutrients.fat * r * 10) / 10
+                return (
+                  <View key={idx} className="edit-food-card">
+                    <View className="edit-food-header">
+                      <Text className="edit-food-name">{item.name}</Text>
+                      {editItems.length > 1 && (
+                        <View className="edit-food-delete" onClick={() => removeEditItem(idx)}>
+                          <Text className="iconfont icon-shanchu"></Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* 摄入克数：加减按钮 + 手动输入 */}
+                    <View className="edit-intake-section">
+                      <Text className="edit-section-label">摄入克数</Text>
+                      <View className="intake-adjuster">
+                        <View className="adjust-btn minus" onClick={() => adjustIntake(idx, -10)}>
+                          <Text className="adjust-btn-text">−</Text>
+                        </View>
+                        <Input
+                          className="intake-input"
+                          type="digit"
+                          value={String(item.intake)}
+                          onBlur={(e) => updateIntake(idx, parseFloat(e.detail.value) || 0)}
+                        />
+                        <Text className="intake-unit">g</Text>
+                        <View className="adjust-btn plus" onClick={() => adjustIntake(idx, 10)}>
+                          <Text className="adjust-btn-text">+</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* 比例：滑块 */}
+                    <View className="edit-ratio-section">
+                      <View className="ratio-header">
+                        <Text className="edit-section-label">摄入比例</Text>
+                        <Text className={`ratio-value ${item.ratio > 100 ? 'over' : ''}`}>{item.ratio}%</Text>
+                      </View>
+                      <Slider
+                        className="ratio-slider"
+                        value={Math.min(100, item.ratio)}
+                        min={0}
+                        max={100}
+                        step={5}
+                        activeColor={item.ratio > 100 ? '#f59e0b' : '#00bc7d'}
+                        blockSize={20}
+                        onChange={(e) => updateRatio(idx, e.detail.value)}
+                      />
+                    </View>
+
+                    {/* 营养值只读展示 */}
+                    <View className="edit-nutrients-readonly">
+                      <View className="nutrient-chip">
+                        <Text className="nutrient-chip-label">热量</Text>
+                        <Text className="nutrient-chip-value">{cal}<Text className="nutrient-chip-unit">kcal</Text></Text>
+                      </View>
+                      <View className="nutrient-chip">
+                        <Text className="nutrient-chip-label">蛋白质</Text>
+                        <Text className="nutrient-chip-value">{pro}<Text className="nutrient-chip-unit">g</Text></Text>
+                      </View>
+                      <View className="nutrient-chip">
+                        <Text className="nutrient-chip-label">碳水</Text>
+                        <Text className="nutrient-chip-value">{carb}<Text className="nutrient-chip-unit">g</Text></Text>
+                      </View>
+                      <View className="nutrient-chip">
+                        <Text className="nutrient-chip-label">脂肪</Text>
+                        <Text className="nutrient-chip-value">{fat}<Text className="nutrient-chip-unit">g</Text></Text>
+                      </View>
+                    </View>
+                  </View>
+                )
+              })}
+            </ScrollView>
+            <View className="edit-modal-footer">
+              <Button className="edit-cancel-btn" onClick={() => setShowEditModal(false)}>取消</Button>
+              <Button className="edit-save-btn" onClick={handleSaveEdit} disabled={editSaving}>
+                {editSaving ? '保存中...' : '保存修改'}
+              </Button>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* 海报预览弹窗 */}
       {

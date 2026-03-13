@@ -294,6 +294,8 @@ export default function ResultPage() {
 
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+    // 避免用户快速连续点击导致重复保存
+    if (saving) return
     // 从缓存获取分析时选择的状态
     const savedMealType = Taro.getStorageSync('analyzeMealType')
     const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
