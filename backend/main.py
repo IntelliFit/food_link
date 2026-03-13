@@ -2197,6 +2197,12 @@ async def save_food_record(
             context_advice=body.context_advice,
             source_task_id=body.source_task_id,
         )
+        # 后台预刷新 AI 营养洞察（周/月），不阻塞本次保存
+        try:
+            asyncio.create_task(_refresh_stats_insight_for_user(user_id))
+        except Exception as bg_err:
+            print(f"[save_food_record] 启动后台刷新 AI 洞察失败: {bg_err}")
+
         return {"id": row.get("id"), "message": "记录成功"}
     except Exception as e:
         print(f"[save_food_record] 错误: {e}")
@@ -2829,6 +2835,118 @@ async def save_stats_insight(
     except Exception as e:
         print(f"[save_stats_insight] 缓存写入失败: {e}")
         raise HTTPException(status_code=500, detail="保存失败")
+
+
+async def _refresh_stats_insight_for_user(user_id: str) -> None:
+    """
+    后台刷新指定用户的 AI 营养洞察缓存（周 + 月）。
+    在保存记录成功后调用，将耗时从「看统计页」前移到「记完餐」之后。
+    为控制成本：同一用户同一 range 每天最多生成一次（按 generated_date=today 判断）。
+    """
+    now = datetime.now(CHINA_TZ)
+    today = now.strftime("%Y-%m-%d")
+    try:
+        user = await get_user_by_id(user_id)
+        if not user:
+            return
+        tdee = (user.get("tdee") and float(user["tdee"])) or 2000
+    except Exception as e:
+        print(f"[_refresh_stats_insight_for_user] 获取用户信息失败: {e}")
+        return
+
+    for stats_range in ("week", "month"):
+        try:
+            # 如果今天已经为该范围生成过洞察，则跳过，避免一天多次调用模型
+            existing = await get_cached_insight(user_id, stats_range, today)
+            if existing:
+                continue
+
+            if stats_range == "week":
+                start_d = (now - timedelta(days=6)).date()
+            else:
+                start_d = (now - timedelta(days=29)).date()
+            start_date = start_d.strftime("%Y-%m-%d")
+            end_date = today
+
+            records = await list_food_records_by_range(
+                user_id=user_id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            if not records:
+                continue
+
+            total_cal = sum(float(r.get("total_calories") or 0) for r in records)
+            total_protein = sum(float(r.get("total_protein") or 0) for r in records)
+            total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
+            total_fat = sum(float(r.get("total_fat") or 0) for r in records)
+
+            by_meal: Dict[str, float] = {}
+            for r in records:
+                mt = r.get("meal_type") or "snack"
+                by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
+            by_meal_out = {
+                "breakfast": round(by_meal.get("breakfast", 0), 1),
+                "lunch": round(by_meal.get("lunch", 0), 1),
+                "dinner": round(by_meal.get("dinner", 0), 1),
+                "snack": round(by_meal.get("snack", 0), 1),
+            }
+
+            daily_cal: Dict[str, float] = {}
+            for r in records:
+                rt = r.get("record_time")
+                if rt:
+                    try:
+                        dt_utc = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
+                        dt_local = dt_utc.astimezone(CHINA_TZ)
+                        dt_str = dt_local.date().isoformat()
+                        daily_cal[dt_str] = daily_cal.get(dt_str, 0) + float(r.get("total_calories") or 0)
+                    except Exception as e:
+                        print(f"[_refresh_stats_insight_for_user] Date parse error for {rt}: {e}")
+                        pass
+
+            recorded_days = len(daily_cal)
+            if recorded_days <= 0:
+                continue
+
+            avg_cal_per_day = round(total_cal / recorded_days, 1)
+            cal_surplus_deficit = round(avg_cal_per_day - tdee, 1)
+
+            total_macros = total_protein * 4 + total_carbs * 4 + total_fat * 9
+            if total_macros <= 0:
+                pct_p, pct_c, pct_f = 0, 0, 0
+            else:
+                pct_p = round(total_protein * 4 / total_macros * 100, 1)
+                pct_c = round(total_carbs * 4 / total_macros * 100, 1)
+                pct_f = round(total_fat * 9 / total_macros * 100, 1)
+
+            # 若 fingerprint 与已有缓存相同，可跳过生成；此处已确认 today 无缓存，直接生成即可
+            try:
+                insight = await _generate_nutrition_insight(
+                    user=user,
+                    range_type=stats_range,
+                    start_date=start_date,
+                    end_date=end_date,
+                    tdee=tdee,
+                    streak_days=await get_streak_days(user_id),
+                    total_calories=total_cal,
+                    avg_calories_per_day=avg_cal_per_day,
+                    cal_surplus_deficit=cal_surplus_deficit,
+                    total_protein=total_protein,
+                    total_carbs=total_carbs,
+                    total_fat=total_fat,
+                    by_meal=by_meal_out,
+                    daily_list=[{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())],
+                    macro_percent={"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+                )
+                data_fingerprint = f"{total_cal:.0f}_{avg_cal_per_day:.1f}_{recorded_days}_{pct_p}_{pct_c}_{pct_f}"
+                await upsert_insight_cache(user_id, stats_range, today, data_fingerprint, insight)
+            except Exception as e:
+                print(f"[_refresh_stats_insight_for_user] 生成 {stats_range} 洞察失败: {e}")
+                continue
+        except Exception as e:
+            print(f"[_refresh_stats_insight_for_user] 处理 {stats_range} 失败: {e}")
+            continue
 
 
 @app.websocket("/ws/stats/insight")
