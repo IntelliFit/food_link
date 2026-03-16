@@ -59,43 +59,17 @@ SECRET=your-wechat-secret
 - `APPID`: 微信小程序 AppID
 - `SECRET`: 微信小程序 AppSecret
 
-#### 1.3 初始化数据库
+#### 1.3 启动后端服务
 
-确保 Supabase 中已创建 `weapp_user` 表，表结构参考 `登录设计文档.md`：
+在项目根目录下运行：
 
-```sql
-CREATE TABLE weapp_user (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  openid VARCHAR(255) NOT NULL UNIQUE,
-  unionid VARCHAR(255) UNIQUE,
-  avatar TEXT DEFAULT '',
-  nickname VARCHAR(255) DEFAULT '',
-  telephone VARCHAR(20),
-  create_time TIMESTAMP DEFAULT NOW(),
-  update_time TIMESTAMP DEFAULT NOW()
-);
-```
-
-#### 1.4 启动后端服务
-
-**方式 1: 使用 run.sh 脚本（Linux/Mac）**
 ```bash
-cd backend
-chmod +x run.sh
-./run.sh
+python run_backend.py
 ```
-
-**方式 2: 直接使用 uvicorn**
-```bash
-cd backend
-uvicorn main:app --reload --host 0.0.0.0 --port 8888
-```
-
-后端服务将在 `http://localhost:8888` 启动。
 
 **验证后端是否运行：**
-- 访问 `http://localhost:8888/docs` 查看 Swagger API 文档
-- 访问 `http://localhost:8888/health` 检查健康状态
+- 访问 `http://localhost:3010/docs` 查看 Swagger API 文档
+- 访问 `http://localhost:3010/health` 检查健康状态
 
 ### 2. 前端设置
 
@@ -111,7 +85,7 @@ npm install
 编辑 `src/utils/api.ts`，确保 `API_BASE_URL` 指向正确的后端地址：
 
 ```typescript
-const API_BASE_URL = 'http://localhost:8888'  // 开发环境
+const API_BASE_URL = 'http://localhost:3010'  // 开发环境
 // 或
 const API_BASE_URL = 'https://your-production-api.com'  // 生产环境
 ```
@@ -172,14 +146,14 @@ npm run dev:qq        # QQ 小程序
 
 ### 后端端口
 
-默认后端运行在 `8888` 端口（可在 `run.sh` 或启动命令中修改）。
+默认后端运行在 `3010` 端口（可在启动命令中修改）。
 
 ### 前端 API 配置
 
 前端 API 地址在 `src/utils/api.ts` 中配置：
 
 ```typescript
-const API_BASE_URL = 'http://localhost:8888'
+const API_BASE_URL = 'http://localhost:3010'
 ```
 
 ### 环境变量文件
