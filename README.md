@@ -205,6 +205,43 @@ const API_BASE_URL = 'http://localhost:3010'
 3. 配置反向代理（如 Nginx）
 4. 启用 HTTPS
 
+#### 手动部署后端（服务器上直接运行）
+
+如需在服务器上**手动部署/临时运行后端**，可以按以下步骤操作（假设代码已在服务器某目录如 `/var/www/food_link` 下）：
+
+```bash
+# 1. SSH 登录到服务器
+ssh your_user@your_server_ip
+
+# 2. 进入项目目录
+cd /var/www/food_link
+
+# 3. （推荐）创建并激活虚拟环境
+python3 -m venv venv
+source venv/bin/activate
+
+# 4. 安装后端依赖
+pip install -r backend/requirements.txt
+
+# 5. 确保已在 backend 目录下配置好 .env 生产环境变量
+#    backend/.env
+
+# 6. 从项目根目录启动后端
+python backend/run_backend.py
+```
+
+> 上述命令在**项目根目录**执行，通过 `python backend/run_backend.py` 启动服务（内部会使用生产端口和配置）；若使用 `systemd`/`supervisor` 等进程管理器，可将这条启动命令写入对应配置。
+
+#### 自动化部署（GitHub Actions）
+
+- 当前项目已配置 **GitHub Actions + 服务器自动部署脚本**
+- **只要将后端代码推送到 GitHub 的 `main` 分支**：
+  - GitHub Actions 会自动触发部署流程
+  - 通过 SSH 连接到服务器
+  - 在服务器上拉取最新代码并执行 `deploy_backend.sh`，完成后端更新与重启
+
+> 因此，本地只需要正常开发并将代码合并/推送到 `main` 分支，无需手动登录服务器执行部署命令。
+
 ### 前端部署
 
 1. 构建生产版本：
