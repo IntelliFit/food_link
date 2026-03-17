@@ -17,8 +17,8 @@ import math
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
-# OpenRouter API 用于调用 Gemini 模型（OpenAI 兼容格式）
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# OFOX API 用于调用 Gemini 模型（OpenAI 兼容格式）
+OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
 from auth import create_access_token
 from database import (
     get_user_by_openid,
@@ -232,15 +232,15 @@ async def _analyze_with_gemini(
     image_urls: list = None,
     base64_image: str = None,
     prompt: str = "",
-    model_name: str = "google/gemini-2.0-flash-001"
+    model_name: str = "gemini-3-flash-preview"
 ) -> Dict[str, Any]:
     """
-    使用 Gemini 模型分析食物图片（通过 OpenRouter API）。
+    使用 Gemini 模型分析食物图片（通过 OFOX API）。
     支持单图（image_url / base64_image）或多图（image_urls）。
     """
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key or api_key == "your_openrouter_api_key_here":
-        raise Exception("请在 .env 中配置有效的 OPENROUTER_API_KEY")
+    api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+    if not api_key:
+        raise Exception("请在 .env 中配置有效的 OFOXAI_API_KEY")
 
     content_parts = [{"type": "text", "text": prompt}]
     if image_urls and len(image_urls) > 0:
@@ -254,15 +254,13 @@ async def _analyze_with_gemini(
     else:
         raise Exception("请提供 image_url、image_urls 或 base64_image")
 
-    api_url = f"{OPENROUTER_BASE_URL}/chat/completions"
+    api_url = f"{OFOXAI_BASE_URL}/chat/completions"
     async with httpx.AsyncClient(timeout=90.0) as client:
         response = await client.post(
             api_url,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://healthymax.cn",
-                "X-Title": "Food Link",
             },
             json={
                 "model": model_name,
@@ -276,7 +274,7 @@ async def _analyze_with_gemini(
             error_data = response.json() if response.content else {}
             error_message = (
                 error_data.get("error", {}).get("message")
-                or f"OpenRouter API 错误: {response.status_code}"
+                or f"OFOX API 错误: {response.status_code}"
             )
             raise Exception(error_message)
         
@@ -284,7 +282,7 @@ async def _analyze_with_gemini(
         content = data.get("choices", [{}])[0].get("message", {}).get("content")
         
         if not content:
-            raise Exception("Gemini (via OpenRouter) 返回了空响应")
+            raise Exception("Gemini 返回了空响应")
         
         # 清理可能的 markdown 代码块标记
         json_str = re.sub(r"```json", "", content)
@@ -298,20 +296,18 @@ async def _analyze_with_gemini(
         return parsed
 
 
-async def _analyze_text_with_gemini(prompt: str, model_name: str = "google/gemini-2.0-flash-001") -> Dict[str, Any]:
-    """调用 OpenRouter Gemini 做纯文本分析（如文字描述食物），返回解析后的 JSON。"""
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key or api_key == "your_openrouter_api_key_here":
-        raise Exception("请在 .env 中配置有效的 OPENROUTER_API_KEY")
-    api_url = f"{OPENROUTER_BASE_URL}/chat/completions"
+async def _analyze_text_with_gemini(prompt: str, model_name: str = "gemini-3-flash-preview") -> Dict[str, Any]:
+    """调用 OFOX Gemini 做纯文本分析（如文字描述食物），返回解析后的 JSON。"""
+    api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+    if not api_key:
+        raise Exception("请在 .env 中配置有效的 OFOXAI_API_KEY")
+    api_url = f"{OFOXAI_BASE_URL}/chat/completions"
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             api_url,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://healthymax.cn",
-                "X-Title": "Food Link",
             },
             json={
                 "model": model_name,
@@ -322,7 +318,7 @@ async def _analyze_text_with_gemini(prompt: str, model_name: str = "google/gemin
         )
         if not response.is_success:
             error_data = response.json() if response.content else {}
-            raise Exception(error_data.get("error", {}).get("message") or f"OpenRouter API 错误: {response.status_code}")
+            raise Exception(error_data.get("error", {}).get("message") or f"OFOX API 错误: {response.status_code}")
         data = response.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content")
         if not content:
@@ -864,7 +860,7 @@ async def analyze_food_compare(
     双模型对比分析：同时使用千问和 Gemini 模型分析同一张食物图片，返回两个模型的结果供对比。
     
     - 千问模型 (qwen-vl-max): 通过 DashScope API 调用
-    - Gemini 模型 (gemini-2.0-flash): 通过 Google AI SDK 调用
+    - Gemini 模型 (gemini-3-flash-preview): 通过 OFOX API 调用
     
     前端可以展示两个结果，让用户选择保存哪个。
     """
@@ -873,7 +869,7 @@ async def analyze_food_compare(
     
     # 获取 API Key
     dashscope_api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+    ofox_api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
     
     # 构建提示词参数
     goal_hint = ""
@@ -937,7 +933,7 @@ async def analyze_food_compare(
     
     # 并行调用两个模型
     qwen_result = ModelAnalyzeResult(model_name="qwen-vl-max", success=False)
-    gemini_result = ModelAnalyzeResult(model_name="gemini-2.0-flash", success=False)
+    gemini_result = ModelAnalyzeResult(model_name="gemini-3-flash-preview", success=False)
     
     async def call_qwen():
         nonlocal qwen_result
@@ -970,19 +966,19 @@ async def analyze_food_compare(
     async def call_gemini():
         nonlocal gemini_result
         try:
-            if not openrouter_api_key or openrouter_api_key == "your_openrouter_api_key_here":
-                raise Exception("请在 .env 中配置有效的 OPENROUTER_API_KEY")
+            if not ofox_api_key:
+                raise Exception("请在 .env 中配置有效的 OFOXAI_API_KEY")
             
             parsed = await _analyze_with_gemini(
                 image_url=request.image_url,
                 base64_image=base64_for_gemini,
                 prompt=prompt,
-                model_name="google/gemini-2.0-flash-001",  # OpenRouter 模型名称
+                model_name="gemini-3-flash-preview",
             )
             items, desc, insight, pfc, absorption, context = _parse_analyze_result(parsed)
             
             gemini_result = ModelAnalyzeResult(
-                model_name="gemini-2.0-flash",
+                model_name="gemini-3-flash-preview",
                 success=True,
                 description=desc,
                 insight=insight,
@@ -992,9 +988,9 @@ async def analyze_food_compare(
                 context_advice=context,
             )
         except Exception as e:
-            print(f"[analyze-compare] Gemini (OpenRouter) 分析失败: {e}")
+            print(f"[analyze-compare] Gemini (OFOX) 分析失败: {e}")
             gemini_result = ModelAnalyzeResult(
-                model_name="gemini-2.0-flash",
+                model_name="gemini-3-flash-preview",
                 success=False,
                 error=str(e),
             )
