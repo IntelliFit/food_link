@@ -334,3 +334,7 @@
 **当前版本：** v0.2.0-alpha  
 **最后更新：** 2026-02-03
 
+## 2026-03-17
+
+- ✨ feat: 后台食物分析 Gemini 接口切换为通过 OfoxAI OpenAI 兼容接口调用 `backend/main.py`
+

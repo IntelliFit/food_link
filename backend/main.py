@@ -17,7 +17,7 @@ import math
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
-# OFOX API 用于调用 Gemini 模型（OpenAI 兼容格式）
+# OfoxAI API（OpenAI 兼容格式，用于调用 Gemini）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
 from auth import create_access_token
 from database import (
@@ -235,11 +235,11 @@ async def _analyze_with_gemini(
     model_name: str = "gemini-3-flash-preview"
 ) -> Dict[str, Any]:
     """
-    使用 Gemini 模型分析食物图片（通过 OFOX API）。
+    使用 Gemini 模型分析食物图片（通过 OfoxAI OpenAI 兼容 API）。
     支持单图（image_url / base64_image）或多图（image_urls）。
     """
     api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
-    if not api_key:
+    if not api_key or api_key == "your_ofoxai_api_key_here":
         raise Exception("请在 .env 中配置有效的 OFOXAI_API_KEY")
 
     content_parts = [{"type": "text", "text": prompt}]
@@ -274,7 +274,7 @@ async def _analyze_with_gemini(
             error_data = response.json() if response.content else {}
             error_message = (
                 error_data.get("error", {}).get("message")
-                or f"OFOX API 错误: {response.status_code}"
+                or f"OfoxAI API 错误: {response.status_code}"
             )
             raise Exception(error_message)
         
@@ -282,7 +282,7 @@ async def _analyze_with_gemini(
         content = data.get("choices", [{}])[0].get("message", {}).get("content")
         
         if not content:
-            raise Exception("Gemini 返回了空响应")
+            raise Exception("Gemini (via OfoxAI) 返回了空响应")
         
         # 清理可能的 markdown 代码块标记
         json_str = re.sub(r"```json", "", content)
@@ -297,9 +297,9 @@ async def _analyze_with_gemini(
 
 
 async def _analyze_text_with_gemini(prompt: str, model_name: str = "gemini-3-flash-preview") -> Dict[str, Any]:
-    """调用 OFOX Gemini 做纯文本分析（如文字描述食物），返回解析后的 JSON。"""
+    """调用 OfoxAI Gemini 做纯文本分析（如文字描述食物），返回解析后的 JSON。"""
     api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
-    if not api_key:
+    if not api_key or api_key == "your_ofoxai_api_key_here":
         raise Exception("请在 .env 中配置有效的 OFOXAI_API_KEY")
     api_url = f"{OFOXAI_BASE_URL}/chat/completions"
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -318,7 +318,7 @@ async def _analyze_text_with_gemini(prompt: str, model_name: str = "gemini-3-fla
         )
         if not response.is_success:
             error_data = response.json() if response.content else {}
-            raise Exception(error_data.get("error", {}).get("message") or f"OFOX API 错误: {response.status_code}")
+            raise Exception(error_data.get("error", {}).get("message") or f"OfoxAI API 错误: {response.status_code}")
         data = response.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content")
         if not content:
