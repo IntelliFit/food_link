@@ -14,8 +14,10 @@ import time
 import asyncio
 import base64
 import math
+import mimetypes
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
+from test_backend.utils import calculate_deviation
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
@@ -100,6 +102,9 @@ _access_token_cache = {
     "token": None,
     "expires_at": 0
 }
+
+# 测试后台批量任务（仅进程内存）
+_test_backend_batches: Dict[str, Dict[str, Any]] = {}
 
 # 配置 CORS
 app.add_middleware(
@@ -4380,6 +4385,155 @@ def _get_test_processors():
     )
 
 
+async def _run_test_backend_single_model_analysis(
+    image_bytes: bytes,
+    filename: str,
+    notes: str = "",
+    is_multi_view: bool = False,
+    reference_weight: Optional[float] = None,
+) -> Dict[str, Any]:
+    """测试后台单模型分析的共享实现。"""
+    mime_type = mimetypes.guess_type(filename)[0] or "image/jpeg"
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    data_uri = f"data:{mime_type};base64,{image_base64}"
+
+    try:
+        image_url = await asyncio.to_thread(upload_food_analyze_image, data_uri)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上传图片失败: {str(e)}")
+
+    task = {
+        "task_type": "food",
+        "image_url": image_url,
+        "image_paths": [image_url],
+        "payload": {
+            "additionalContext": (notes or "").strip(),
+            "is_multi_view": is_multi_view,
+        },
+    }
+
+    try:
+        from worker import run_content_moderation_sync, run_food_analysis_sync
+
+        moderation = await asyncio.to_thread(run_content_moderation_sync, task)
+        if moderation and moderation.get("is_violation"):
+            reason = moderation.get("reason", "图片不符合食物分析要求")
+            raise HTTPException(status_code=400, detail=reason)
+
+        result = await asyncio.to_thread(run_food_analysis_sync, task)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+    provider = os.getenv("LLM_PROVIDER", "qwen").lower()
+    model_name = "gemini-3-flash-preview" if provider == "gemini" else "qwen-vl-max"
+    estimated_weight = round(sum(float((item or {}).get("estimatedWeightGrams") or 0) for item in (result.get("items") or [])), 1)
+    deviation = None
+    if reference_weight is not None and reference_weight >= 0:
+        deviation = calculate_deviation(estimated_weight, reference_weight)
+
+    return {
+        "data": result,
+        "meta": {
+            "provider": provider,
+            "model": model_name,
+            "image_count": 1,
+            "image_urls": [image_url],
+            "is_multi_view": is_multi_view,
+            "notes": (notes or "").strip(),
+            "reference_weight": reference_weight,
+            "estimated_weight": estimated_weight,
+            "deviation": deviation,
+        },
+    }
+
+
+def _build_test_backend_batch_progress(batch: Dict[str, Any]) -> Dict[str, Any]:
+    total = len(batch["items"])
+    completed = sum(1 for item in batch["items"] if item["status"] == "done")
+    failed = sum(1 for item in batch["items"] if item["status"] == "failed")
+    processed = completed + failed
+    current_item = next((item for item in batch["items"] if item["status"] == "processing"), None)
+    percent = round((processed / total) * 100, 1) if total else 0.0
+    return {
+        "total": total,
+        "processed": processed,
+        "completed": completed,
+        "failed": failed,
+        "percent": percent,
+        "current_file": current_item["filename"] if current_item else None,
+    }
+
+
+def _serialize_test_backend_batch(batch: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "success": True,
+        "batch_id": batch["batch_id"],
+        "status": batch["status"],
+        "summary": batch["summary"],
+        "progress": _build_test_backend_batch_progress(batch),
+        "items": [
+            {
+                "filename": item["filename"],
+                "trueWeight": item["trueWeight"],
+                "status": item["status"],
+                "estimatedWeight": item.get("estimatedWeight"),
+                "deviation": item.get("deviation"),
+                "description": item.get("description"),
+                "insight": item.get("insight"),
+                "pfc_ratio_comment": item.get("pfc_ratio_comment"),
+                "absorption_notes": item.get("absorption_notes"),
+                "context_advice": item.get("context_advice"),
+                "items": item.get("items"),
+                "error": item.get("error"),
+            }
+            for item in batch["items"]
+        ],
+    }
+
+
+async def _process_test_backend_batch(batch_id: str) -> None:
+    batch = _test_backend_batches.get(batch_id)
+    if not batch:
+        return
+
+    batch["status"] = "running"
+    for item in batch["items"]:
+        item["status"] = "processing"
+        try:
+            image_bytes = base64.b64decode(item.pop("imageBytesB64"))
+            analysis = await _run_test_backend_single_model_analysis(
+                image_bytes=image_bytes,
+                filename=item["filename"],
+                notes=batch.get("notes", ""),
+                is_multi_view=batch.get("is_multi_view", False),
+                reference_weight=item["trueWeight"],
+            )
+            result = analysis["data"]
+            meta = analysis["meta"]
+            item.update({
+                "status": "done",
+                "estimatedWeight": meta.get("estimated_weight"),
+                "deviation": meta.get("deviation"),
+                "description": result.get("description"),
+                "insight": result.get("insight"),
+                "pfc_ratio_comment": result.get("pfc_ratio_comment"),
+                "absorption_notes": result.get("absorption_notes"),
+                "context_advice": result.get("context_advice"),
+                "items": result.get("items"),
+                "error": None,
+            })
+        except Exception as e:
+            error_message = e.detail if isinstance(e, HTTPException) else str(e)
+            item.update({
+                "status": "failed",
+                "error": error_message,
+            })
+
+    batch["status"] = "completed" if all(item["status"] == "done" for item in batch["items"]) else "failed"
+
+
 @app.post("/api/test-backend/analyze")
 async def test_backend_analyze(
     images: List[UploadFile] = File(...),
@@ -4397,79 +4551,150 @@ async def test_backend_analyze(
     if len(images) > 3:
         raise HTTPException(status_code=400, detail="最多上传 3 张图片")
 
-    valid_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
-    image_urls: List[str] = []
+    if len(images) > 1 and not is_multi_view:
+        raise HTTPException(status_code=400, detail="多张图片分析请开启多视角辅助模式")
 
-    for image in images:
+    valid_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    merged_bytes = None
+    merged_name = images[0].filename or "uploaded_image.jpg"
+
+    for index, image in enumerate(images):
         if image.content_type not in valid_types:
             raise HTTPException(status_code=400, detail="请上传有效的图片文件（jpg, png, gif, webp）")
-
-        try:
-            image_bytes = await image.read()
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"图片读取失败: {str(e)}")
-
+        image_bytes = await image.read()
         if not image_bytes:
             raise HTTPException(status_code=400, detail="存在空图片文件，请重新上传")
         if len(image_bytes) > 10 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="单张图片大小超过限制（最大 10MB）")
-
-        mime_type = image.content_type or "image/jpeg"
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-        data_uri = f"data:{mime_type};base64,{image_base64}"
-
-        try:
-            image_url = await asyncio.to_thread(upload_food_analyze_image, data_uri)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"上传图片失败: {str(e)}")
-        image_urls.append(image_url)
-
-    task = {
-        "task_type": "food",
-        "image_url": image_urls[0],
-        "image_paths": image_urls,
-        "payload": {
-            "additionalContext": (notes or "").strip(),
-            "is_multi_view": is_multi_view,
-        },
-    }
+        if index == 0:
+            merged_bytes = image_bytes
 
     try:
-        from worker import run_content_moderation_sync, run_food_analysis_sync
-
-        moderation = await asyncio.to_thread(run_content_moderation_sync, task)
-        if moderation and moderation.get("is_violation"):
-            reason = moderation.get("reason", "图片不符合食物分析要求")
-            raise HTTPException(status_code=400, detail=reason)
-
-        result = await asyncio.to_thread(run_food_analysis_sync, task)
-        provider = os.getenv("LLM_PROVIDER", "qwen").lower()
-        model_name = "gemini-3-flash-preview" if provider == "gemini" else "qwen-vl-max"
-        estimated_weight = round(sum(float((item or {}).get("estimatedWeightGrams") or 0) for item in (result.get("items") or [])), 1)
-        deviation = None
-        if reference_weight is not None and reference_weight > 0:
-            deviation = round(abs(estimated_weight - reference_weight) / reference_weight * 100, 2)
-
+        analysis = await _run_test_backend_single_model_analysis(
+            image_bytes=merged_bytes,
+            filename=merged_name,
+            notes=notes or "",
+            is_multi_view=is_multi_view,
+            reference_weight=reference_weight,
+        )
         return {
             "success": True,
-            "data": result,
+            "data": analysis["data"],
             "meta": {
-                "provider": provider,
-                "model": model_name,
-                "image_count": len(image_urls),
-                "image_urls": image_urls,
-                "is_multi_view": is_multi_view,
-                "notes": (notes or "").strip(),
-                "reference_weight": reference_weight,
-                "estimated_weight": estimated_weight,
-                "deviation": deviation,
-            }
+                **analysis["meta"],
+                "image_count": len(images),
+            },
         }
     except HTTPException:
         raise
     except Exception as e:
         print(f"[test-backend/analyze] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+
+@app.post("/api/test-backend/batch/prepare")
+async def test_backend_batch_prepare(
+    file: UploadFile = File(...),
+    _auth: None = Depends(require_test_backend_auth),
+):
+    """准备测试后台批量任务：解析 ZIP 和 labels.txt，返回待处理清单。"""
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="请上传 ZIP 文件")
+
+    zip_bytes = await file.read()
+    if len(zip_bytes) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件大小超过限制（最大 50MB）")
+
+    batch_processor, _ = _get_test_processors()
+    try:
+        images, labels = batch_processor._extract_zip(zip_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not images:
+        raise HTTPException(status_code=400, detail="ZIP 文件中没有找到有效的图片文件")
+    if not labels:
+        raise HTTPException(status_code=400, detail="ZIP 文件中缺少 labels.txt 文件")
+
+    items = []
+    skipped = []
+    for filename, true_weight in labels.items():
+        image_bytes = images.get(filename)
+        if not image_bytes:
+            skipped.append(filename)
+            continue
+        items.append({
+            "filename": filename,
+            "trueWeight": true_weight,
+            "status": "pending",
+            "imageBytesB64": base64.b64encode(image_bytes).decode("utf-8"),
+            "estimatedWeight": None,
+            "deviation": None,
+            "description": None,
+            "insight": None,
+            "pfc_ratio_comment": None,
+            "absorption_notes": None,
+            "context_advice": None,
+            "items": None,
+            "error": None,
+        })
+
+    unlabeled_images = [filename for filename in images.keys() if filename not in labels]
+    skipped.extend(unlabeled_images)
+
+    if not items:
+        raise HTTPException(status_code=400, detail="没有找到可处理的图片和标签匹配项")
+
+    batch_id = secrets.token_hex(12)
+    batch = {
+        "batch_id": batch_id,
+        "status": "pending",
+        "notes": "",
+        "is_multi_view": False,
+        "items": items,
+        "summary": {
+            "total": len(items),
+            "pending": len(items),
+            "skipped": skipped,
+        },
+    }
+    _test_backend_batches[batch_id] = batch
+    return _serialize_test_backend_batch(batch)
+
+
+@app.post("/api/test-backend/batch/start")
+async def test_backend_batch_start(
+    batch_id: str = Form(...),
+    notes: Optional[str] = Form(default=""),
+    is_multi_view: bool = Form(default=False),
+    _auth: None = Depends(require_test_backend_auth),
+):
+    """启动测试后台批量任务。"""
+    batch = _test_backend_batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="批量任务不存在")
+    if batch["status"] == "running":
+        return _serialize_test_backend_batch(batch)
+    if batch["status"] in {"completed", "failed"}:
+        return _serialize_test_backend_batch(batch)
+
+    batch["notes"] = (notes or "").strip()
+    batch["is_multi_view"] = is_multi_view
+    batch["status"] = "running"
+    asyncio.create_task(_process_test_backend_batch(batch_id))
+    return _serialize_test_backend_batch(batch)
+
+
+@app.get("/api/test-backend/batch/{batch_id}")
+async def test_backend_batch_status(
+    batch_id: str,
+    _auth: None = Depends(require_test_backend_auth),
+):
+    """获取测试后台批量任务状态。"""
+    batch = _test_backend_batches.get(batch_id)
+    if not batch:
+        raise HTTPException(status_code=404, detail="批量任务不存在")
+    return _serialize_test_backend_batch(batch)
 
 
 @app.post("/api/test/batch-upload")

@@ -355,6 +355,70 @@ header .subtitle {
     gap: 20px;
 }
 
+.batch-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.analyze-btn.secondary {
+    background: #fff;
+    color: #667eea;
+    border: 1px solid #667eea;
+}
+
+.batch-file-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-top: 16px;
+    padding: 14px 16px;
+    background: #f8faff;
+    border: 1px solid #dbe4ff;
+    border-radius: 12px;
+}
+
+.batch-file-name {
+    font-weight: 600;
+    color: #333;
+}
+
+.batch-file-meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #666;
+}
+
+.batch-status-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.batch-status-tag.pending {
+    background: #eef2ff;
+    color: #4c5fc1;
+}
+
+.batch-status-tag.processing {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+.batch-status-tag.done {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.batch-status-tag.failed {
+    background: #ffebee;
+    color: #c62828;
+}
+
 .result-header {
     display: flex;
     justify-content: space-between;

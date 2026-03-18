@@ -3,6 +3,11 @@
  */
 
 let selectedFiles = [];
+let batchFile = null;
+let currentBatchId = null;
+let currentBatchStatus = null;
+let batchPollTimer = null;
+let currentBatchItems = [];
 
 // 提示词管理状态
 let currentModelType = 'qwen';
@@ -37,9 +42,35 @@ const elements = {
     loadingOverlay: document.getElementById('loading-overlay')
 };
 
+Object.assign(elements, {
+    batchUploadArea: document.getElementById('batch-upload-area'),
+    batchFileInput: document.getElementById('batch-file-input'),
+    chooseBatchBtn: document.getElementById('choose-batch-btn'),
+    batchFileCard: document.getElementById('batch-file-card'),
+    batchFileName: document.getElementById('batch-file-name'),
+    batchFileMeta: document.getElementById('batch-file-meta'),
+    clearBatchBtn: document.getElementById('clear-batch-btn'),
+    batchNotesInput: document.getElementById('batch-notes-input'),
+    batchIsMultiView: document.getElementById('batch-is-multi-view'),
+    prepareBatchBtn: document.getElementById('prepare-batch-btn'),
+    startBatchBtn: document.getElementById('start-batch-btn'),
+    batchSummaryCard: document.getElementById('batch-summary-card'),
+    batchSummaryGrid: document.getElementById('batch-summary-grid'),
+    batchProgressFill: document.getElementById('batch-progress-fill'),
+    batchProgressText: document.getElementById('batch-progress-text'),
+    batchListCard: document.getElementById('batch-list-card'),
+    batchResultBadges: document.getElementById('batch-result-badges'),
+    batchItemsBody: document.getElementById('batch-items-body'),
+    batchDetailModal: document.getElementById('batch-detail-modal'),
+    batchDetailTitle: document.getElementById('batch-detail-title'),
+    batchDetailBody: document.getElementById('batch-detail-body'),
+    batchDetailClose: document.getElementById('batch-detail-close'),
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initAnalyzePanel();
+    initBatchPanel();
     initPromptsManagement();
 });
 
@@ -47,6 +78,11 @@ function chooseAnalyzeFiles() {
     elements.analyzeFileInput?.click();
 }
 window.chooseAnalyzeFiles = chooseAnalyzeFiles;
+
+function chooseBatchFile() {
+    elements.batchFileInput?.click();
+}
+window.chooseBatchFile = chooseBatchFile;
 
 function initTabs() {
     elements.tabBtns.forEach((btn) => {
@@ -102,6 +138,84 @@ function initAnalyzePanel() {
 
     elements.analyzeBtn.addEventListener('click', startAnalyze);
     updateAnalyzeBtn();
+}
+
+function initBatchPanel() {
+    const area = elements.batchUploadArea;
+    const input = elements.batchFileInput;
+
+    area?.addEventListener('click', (e) => {
+        if (e.target.closest('.upload-trigger')) return;
+        chooseBatchFile();
+    });
+    elements.chooseBatchBtn?.addEventListener('click', chooseBatchFile);
+
+    area?.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        area.classList.add('dragover');
+    });
+
+    area?.addEventListener('dragleave', () => {
+        area.classList.remove('dragover');
+    });
+
+    area?.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            setBatchFile(file);
+        }
+    });
+
+    input?.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (file) {
+            setBatchFile(file);
+        }
+        input.value = '';
+    });
+
+    elements.clearBatchBtn?.addEventListener('click', resetBatchState);
+    elements.prepareBatchBtn?.addEventListener('click', prepareBatchZip);
+    elements.startBatchBtn?.addEventListener('click', startBatchProcessing);
+    elements.batchDetailClose?.addEventListener('click', closeBatchDetail);
+    elements.batchDetailModal?.addEventListener('click', (e) => {
+        if (e.target === elements.batchDetailModal) {
+            closeBatchDetail();
+        }
+    });
+}
+
+function setBatchFile(file) {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+        alert('请上传 ZIP 文件');
+        return;
+    }
+    batchFile = file;
+    currentBatchId = null;
+    currentBatchStatus = null;
+    stopBatchPolling();
+    elements.batchFileCard.style.display = 'flex';
+    elements.batchFileName.textContent = file.name;
+    elements.batchFileMeta.textContent = `${formatFileSize(file.size)} · 等待解析`;
+    elements.batchSummaryCard.style.display = 'none';
+    elements.batchListCard.style.display = 'none';
+    elements.startBatchBtn.disabled = true;
+}
+
+function resetBatchState() {
+    batchFile = null;
+    currentBatchId = null;
+    currentBatchStatus = null;
+    stopBatchPolling();
+    elements.batchFileInput.value = '';
+    elements.batchFileCard.style.display = 'none';
+    elements.batchSummaryCard.style.display = 'none';
+    elements.batchListCard.style.display = 'none';
+    elements.startBatchBtn.disabled = true;
+    elements.batchItemsBody.innerHTML = '';
+    currentBatchItems = [];
 }
 
 function addFiles(files) {
@@ -204,6 +318,225 @@ async function startAnalyze() {
     }
 }
 
+async function prepareBatchZip() {
+    if (!batchFile) {
+        alert('请先选择 ZIP 文件');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', batchFile);
+
+    try {
+        showLoading();
+        const response = await authFetch('/api/test-backend/batch/prepare', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || '解析失败');
+        }
+
+        currentBatchId = result.batch_id;
+        currentBatchStatus = result.status;
+        renderBatchStatus(result);
+        elements.startBatchBtn.disabled = false;
+        elements.batchFileMeta.textContent = `${formatFileSize(batchFile.size)} · 已解析 ${result.summary.total} 项`;
+    } catch (error) {
+        alert('解析失败: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function startBatchProcessing() {
+    if (!currentBatchId) {
+        alert('请先解析 ZIP');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('batch_id', currentBatchId);
+    formData.append('notes', elements.batchNotesInput.value.trim());
+    formData.append('is_multi_view', String(elements.batchIsMultiView.checked));
+
+    try {
+        const response = await authFetch('/api/test-backend/batch/start', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || '启动失败');
+        }
+        renderBatchStatus(result);
+        elements.startBatchBtn.disabled = true;
+        startBatchPolling();
+    } catch (error) {
+        alert('启动失败: ' + error.message);
+    }
+}
+
+async function fetchBatchStatus() {
+    if (!currentBatchId) return;
+    try {
+        const response = await authFetch(`/api/test-backend/batch/${currentBatchId}`);
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || '获取进度失败');
+        }
+        renderBatchStatus(result);
+        if (result.status === 'completed' || result.status === 'failed') {
+            stopBatchPolling();
+        }
+    } catch (error) {
+        stopBatchPolling();
+        alert('获取批量进度失败: ' + error.message);
+    }
+}
+
+function startBatchPolling() {
+    stopBatchPolling();
+    batchPollTimer = window.setInterval(fetchBatchStatus, 1000);
+}
+
+function stopBatchPolling() {
+    if (batchPollTimer) {
+        window.clearInterval(batchPollTimer);
+        batchPollTimer = null;
+    }
+}
+
+function renderBatchStatus(payload) {
+    currentBatchStatus = payload.status;
+    currentBatchItems = payload.items || [];
+    const progress = payload.progress || {};
+    const summary = payload.summary || {};
+    const skipped = summary.skipped || [];
+
+    elements.batchSummaryCard.style.display = 'block';
+    elements.batchListCard.style.display = 'block';
+    elements.batchSummaryGrid.innerHTML = `
+        <div class="stat-card">
+            <div class="label">总数</div>
+            <div class="value">${progress.total ?? summary.total ?? 0}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">已完成</div>
+            <div class="value good">${progress.completed ?? 0}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">失败</div>
+            <div class="value bad">${progress.failed ?? 0}</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">跳过</div>
+            <div class="value">${skipped.length}</div>
+        </div>
+    `;
+    elements.batchProgressFill.style.width = `${progress.percent || 0}%`;
+    elements.batchProgressText.textContent = progress.current_file
+        ? `正在处理：${progress.current_file}`
+        : (payload.status === 'completed' ? '批量处理已完成' : payload.status === 'failed' ? '批量处理已结束（含失败项）' : '等待开始');
+
+    elements.batchResultBadges.innerHTML = `
+        <span class="result-badge">${payload.status}</span>
+        ${elements.batchIsMultiView.checked ? '<span class="result-badge success">多视角</span>' : ''}
+        ${skipped.length ? `<span class="result-badge">跳过 ${skipped.length} 项</span>` : ''}
+    `;
+
+    elements.batchItemsBody.innerHTML = currentBatchItems.map((item, index) => `
+        <tr>
+            <td>${escapeHtml(item.filename)}</td>
+            <td>${formatNumber(item.trueWeight)}</td>
+            <td>${renderBatchStatusTag(item.status)}</td>
+            <td>${item.estimatedWeight != null ? formatNumber(item.estimatedWeight) : '-'}</td>
+            <td>${item.deviation != null ? item.deviation + '%' : '-'}</td>
+            <td>${escapeHtml(item.error || item.description || item.insight || '-')}</td>
+            <td><button type="button" class="detail-btn" ${item.status === 'pending' ? 'disabled' : ''} onclick="showBatchDetail(${index})">查看详情</button></td>
+        </tr>
+    `).join('');
+}
+
+function renderBatchStatusTag(status) {
+    const labelMap = {
+        pending: '待处理',
+        processing: '处理中',
+        done: '已完成',
+        failed: '失败',
+    };
+    return `<span class="batch-status-tag ${status}">${labelMap[status] || status}</span>`;
+}
+
+function showBatchDetail(index) {
+    const item = currentBatchItems[index];
+    if (!item) return;
+
+    elements.batchDetailTitle.textContent = `${item.filename} - 识别详情`;
+
+    if (item.error) {
+        elements.batchDetailBody.innerHTML = `
+            <div class="detail-section">
+                <h4>基础信息</h4>
+                <div class="detail-item"><span class="label">真实重量</span><span class="value">${formatNumber(item.trueWeight)}g</span></div>
+                <div class="detail-item"><span class="label">状态</span><span class="value">失败</span></div>
+            </div>
+            <div class="detail-section">
+                <h4>错误信息</h4>
+                <p style="color:#c62828;">${escapeHtml(item.error)}</p>
+            </div>
+        `;
+    } else {
+        const foodItems = (item.items || []).map((food) => `
+            <div class="food-item">
+                <div class="name">${escapeHtml(food.name || '-')}</div>
+                <div class="weight">${formatNumber(food.estimatedWeightGrams)}g | ${formatNumber(food.nutrients?.calories)} kcal</div>
+            </div>
+        `).join('') || '<p>无识别明细</p>';
+
+        elements.batchDetailBody.innerHTML = `
+            <div class="detail-section">
+                <h4>基础信息</h4>
+                <div class="detail-item"><span class="label">真实重量</span><span class="value">${formatNumber(item.trueWeight)}g</span></div>
+                <div class="detail-item"><span class="label">估算重量</span><span class="value">${item.estimatedWeight != null ? formatNumber(item.estimatedWeight) + 'g' : '-'}</span></div>
+                <div class="detail-item"><span class="label">偏差</span><span class="value">${item.deviation != null ? item.deviation + '%' : '-'}</span></div>
+            </div>
+            <div class="detail-section">
+                <h4>餐食描述</h4>
+                <p>${escapeHtml(item.description || '-')}</p>
+            </div>
+            <div class="detail-section">
+                <h4>健康建议</h4>
+                <p>${escapeHtml(item.insight || '-')}</p>
+            </div>
+            <div class="detail-section">
+                <h4>PFC 比例评价</h4>
+                <p>${escapeHtml(item.pfc_ratio_comment || '-')}</p>
+            </div>
+            <div class="detail-section">
+                <h4>吸收率说明</h4>
+                <p>${escapeHtml(item.absorption_notes || '-')}</p>
+            </div>
+            <div class="detail-section">
+                <h4>情境建议</h4>
+                <p>${escapeHtml(item.context_advice || '-')}</p>
+            </div>
+            <div class="detail-section">
+                <h4>识别食物明细</h4>
+                <div class="food-list">${foodItems}</div>
+            </div>
+        `;
+    }
+
+    elements.batchDetailModal.classList.add('active');
+}
+window.showBatchDetail = showBatchDetail;
+
+function closeBatchDetail() {
+    elements.batchDetailModal?.classList.remove('active');
+}
+
 function renderAnalyzeResult(result, meta) {
     const items = result.items || [];
     const totals = items.reduce((acc, item) => {
@@ -279,6 +612,13 @@ function renderAnalyzeResult(result, meta) {
 
 function formatNumber(value) {
     return Number(value || 0).toFixed(1);
+}
+
+function formatFileSize(size) {
+    if (!size) return '0 B';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 window.showAddPromptModal = showAddPromptModal;
