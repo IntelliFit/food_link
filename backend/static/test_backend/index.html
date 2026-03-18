@@ -4,97 +4,149 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>食物分析测试后台</title>
-    <link rel="stylesheet" href="/static/test_backend/style.css">
+    <link rel="stylesheet" href="/static/test_backend/style.css?v=20260318a">
 </head>
 <body>
     <div class="container">
         <header>
             <div class="header-content">
                 <div>
-                    <h1>🍎 食物分析测试后台</h1>
-                    <p class="subtitle">对比千问模型与 Gemini 模型的食物重量估算准确性</p>
+                    <h1>食物分析测试后台</h1>
+                    <p class="subtitle">独立模拟小程序拍照分析流程，支持多图与多视角辅助模式</p>
                 </div>
                 <button class="logout-btn" onclick="logout()">退出登录</button>
             </div>
         </header>
 
-        <!-- 选项卡 -->
         <div class="tabs">
-            <button class="tab-btn active" data-tab="batch">批量测试 (ZIP)</button>
-            <button class="tab-btn" data-tab="single">单张图片测试</button>
+            <button class="tab-btn active" data-tab="analyze">分析体验</button>
             <button class="tab-btn" data-tab="prompts">提示词管理</button>
         </div>
 
-        <!-- 批量测试面板 -->
-        <div class="tab-panel active" id="batch-panel">
-            <div class="upload-section">
-                <div class="upload-area" id="batch-upload-area">
-                    <div class="upload-icon">📦</div>
-                    <p>拖拽 ZIP 文件到此处，或点击选择文件</p>
-                    <p class="upload-hint">ZIP 文件应包含图片和 labels.txt 标签文件</p>
-                    <input type="file" id="batch-file-input" accept=".zip" hidden>
+        <div class="tab-panel active" id="analyze-panel">
+            <div class="analyze-shell">
+                <div class="upload-section">
+                    <div class="upload-area" id="analyze-upload-area">
+                        <div class="upload-icon">📷</div>
+                        <p>点击或拖拽上传食物图片</p>
+                        <p class="upload-hint">最多 3 张，建议从正面、俯视、侧面补充信息</p>
+                        <button type="button" class="upload-trigger" id="choose-files-btn">选择图片</button>
+                    </div>
+                    <input class="visually-hidden-file" type="file" id="analyze-file-input" accept="image/*" multiple>
+                    <div class="preview-grid" id="preview-grid"></div>
                 </div>
-                <div class="file-info" id="batch-file-info" style="display: none;">
-                    <span class="file-name"></span>
-                    <button class="clear-btn" onclick="clearBatchFile()">✕</button>
+
+                <div class="config-grid">
+                    <div class="form-group input-card">
+                        <label for="notes-input">文字补充（选填）</label>
+                        <textarea id="notes-input" class="notes-textarea" placeholder="例如：这是同一份食物的不同角度；里面有鸡胸肉、糙米和西兰花；酱汁较少。"></textarea>
+                        <p class="field-hint">这段文字会和图片一起发给模型，帮助它理解食材、做法或隐藏内容。</p>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="reference-weight-input">参考克数（选填）</label>
+                        <input type="number" id="reference-weight-input" min="0" step="0.1" placeholder="例如：320">
+                        <p class="field-hint">填写后会用 AI 估算总重量和你输入的克数做对比，并计算偏差。</p>
+                    </div>
+
+                    <div class="form-group checkbox-card">
+                        <label class="checkbox-line">
+                            <input type="checkbox" id="is-multi-view">
+                            <span>多视角辅助模式</span>
+                        </label>
+                        <p class="field-hint">开启后会提示模型“这是同一份食物的不同角度”，避免被当成多份食物。</p>
+                    </div>
                 </div>
-                <button class="analyze-btn" id="batch-analyze-btn" disabled>开始分析</button>
+
+                <div class="tips-card">
+                    <h3>拍摄建议</h3>
+                    <p>尽量保持光线充足，主图拍全餐盘；如果食物较厚或被遮挡，再补一张侧面或近景。</p>
+                </div>
+
+                <button class="analyze-btn" id="analyze-btn" disabled>开始分析</button>
             </div>
 
-            <!-- 进度条 -->
-            <div class="progress-section" id="batch-progress" style="display: none;">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill"></div>
+            <div class="analysis-result" id="analysis-result" style="display: none;">
+                <div class="summary-card">
+                    <h3>分析摘要</h3>
+                    <div class="summary-grid" id="summary-grid"></div>
                 </div>
-                <p class="progress-text" id="progress-text">准备中...</p>
+
+                <div class="result-card">
+                    <div class="result-header">
+                        <h3>AI 分析结果</h3>
+                        <div class="result-badges" id="result-badges"></div>
+                    </div>
+                    <div class="result-section">
+                        <h4>餐食描述</h4>
+                        <p id="result-description">-</p>
+                    </div>
+                    <div class="result-section">
+                        <h4>文字补充</h4>
+                        <p id="result-notes">-</p>
+                    </div>
+                    <div class="result-section">
+                        <h4>健康建议</h4>
+                        <p id="result-insight">-</p>
+                    </div>
+                    <div class="result-grid">
+                        <div class="result-section">
+                            <h4>PFC 比例评价</h4>
+                            <p id="result-pfc">-</p>
+                        </div>
+                        <div class="result-section">
+                            <h4>吸收率说明</h4>
+                            <p id="result-absorption">-</p>
+                        </div>
+                    </div>
+                    <div class="result-section">
+                        <h4>情境建议</h4>
+                        <p id="result-context">-</p>
+                    </div>
+                </div>
+
+                <div class="result-card">
+                    <div class="result-header">
+                        <h3>识别食物明细</h3>
+                    </div>
+                    <div class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>食物</th>
+                                    <th>重量 (g)</th>
+                                    <th>热量</th>
+                                    <th>蛋白质</th>
+                                    <th>碳水</th>
+                                    <th>脂肪</th>
+                                    <th>纤维</th>
+                                    <th>糖分</th>
+                                </tr>
+                            </thead>
+                            <tbody id="food-items-body"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- 单张图片测试面板 -->
-        <div class="tab-panel" id="single-panel">
-            <div class="upload-section">
-                <div class="single-upload-row">
-                    <div class="upload-area small" id="single-upload-area">
-                        <div class="upload-icon">🖼️</div>
-                        <p>选择图片</p>
-                        <input type="file" id="single-file-input" accept="image/*" hidden>
-                    </div>
-                    <div class="image-preview" id="image-preview" style="display: none;">
-                        <img id="preview-img" src="" alt="预览">
-                        <button class="clear-btn" onclick="clearSingleFile()">✕</button>
-                    </div>
-                    <div class="weight-input">
-                        <label for="true-weight">真实重量 (克)</label>
-                        <input type="number" id="true-weight" placeholder="例如：100" min="0" step="0.1">
-                    </div>
-                </div>
-                <button class="analyze-btn" id="single-analyze-btn" disabled>开始分析</button>
-            </div>
-        </div>
-
-        <!-- 提示词管理面板 -->
         <div class="tab-panel" id="prompts-panel">
             <div class="prompts-section">
-                <!-- 模型选择 -->
                 <div class="model-tabs">
                     <button class="model-tab active" data-model="qwen">千问模型</button>
                     <button class="model-tab" data-model="gemini">Gemini 模型</button>
                 </div>
 
-                <!-- 提示词列表 -->
                 <div class="prompts-list-section">
                     <div class="prompts-header">
-                        <h3>📝 提示词列表</h3>
+                        <h3>提示词列表</h3>
                         <button class="add-prompt-btn" onclick="showAddPromptModal()">+ 新建提示词</button>
                     </div>
-                    <div class="prompts-list" id="prompts-list">
-                        <!-- 动态渲染 -->
-                    </div>
+                    <div class="prompts-list" id="prompts-list"></div>
                 </div>
 
-                <!-- 当前激活提示词编辑区 -->
                 <div class="active-prompt-section">
-                    <h3>✏️ 当前激活提示词</h3>
+                    <h3>当前激活提示词</h3>
                     <div class="prompt-editor">
                         <div class="prompt-meta">
                             <input type="text" id="active-prompt-name" placeholder="提示词名称" class="prompt-name-input">
@@ -102,15 +154,14 @@
                         </div>
                         <textarea id="active-prompt-content" class="prompt-textarea" placeholder="请输入提示词内容..."></textarea>
                         <div class="prompt-actions">
-                            <button class="save-prompt-btn" onclick="saveActivePrompt()">💾 保存修改</button>
-                            <button class="reset-prompt-btn" onclick="resetActivePrompt()">↩️ 重置</button>
+                            <button class="save-prompt-btn" onclick="saveActivePrompt()">保存修改</button>
+                            <button class="reset-prompt-btn" onclick="resetActivePrompt()">重置</button>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 新建/编辑提示词弹窗 -->
         <div class="modal" id="prompt-modal">
             <div class="modal-content">
                 <div class="modal-header">
@@ -144,72 +195,12 @@
             </div>
         </div>
 
-        <!-- 结果区域 -->
-        <div class="results-section" id="results-section" style="display: none;">
-            <!-- 汇总统计 -->
-            <div class="summary-card" id="summary-card" style="display: none;">
-                <h3>📊 汇总统计</h3>
-                <div class="summary-grid" id="summary-grid"></div>
-            </div>
-
-            <!-- 结果表格 -->
-            <div class="table-controls">
-                <div class="sort-controls">
-                    <label>排序：</label>
-                    <select id="sort-select">
-                        <option value="name">文件名</option>
-                        <option value="qwen-deviation">千问偏差 ↑</option>
-                        <option value="qwen-deviation-desc">千问偏差 ↓</option>
-                        <option value="gemini-deviation">Gemini偏差 ↑</option>
-                        <option value="gemini-deviation-desc">Gemini偏差 ↓</option>
-                    </select>
-                </div>
-                <button class="export-btn" id="export-btn">导出 CSV</button>
-            </div>
-            
-            <div class="results-table-wrapper">
-                <table class="results-table" id="results-table">
-                    <thead>
-                        <tr>
-                            <th>图片</th>
-                            <th>真实重量 (g)</th>
-                            <th colspan="2">千问模型</th>
-                            <th colspan="2">Gemini 模型</th>
-                            <th>详情</th>
-                        </tr>
-                        <tr class="sub-header">
-                            <th></th>
-                            <th></th>
-                            <th>估算 (g)</th>
-                            <th>偏差 (%)</th>
-                            <th>估算 (g)</th>
-                            <th>偏差 (%)</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="results-body"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 详情弹窗 -->
-        <div class="modal" id="detail-modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3 id="modal-title">分析详情</h3>
-                    <button class="close-btn" onclick="closeModal()">✕</button>
-                </div>
-                <div class="modal-body" id="modal-body"></div>
-            </div>
-        </div>
-
-        <!-- 加载遮罩 -->
         <div class="loading-overlay" id="loading-overlay">
             <div class="loading-spinner"></div>
             <p>分析中，请稍候...</p>
         </div>
     </div>
 
-    <script src="/static/test_backend/app.js"></script>
+    <script src="/static/test_backend/app.js?v=20260318a"></script>
 </body>
 </html>

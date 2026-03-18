@@ -17,7 +17,7 @@ import math
 from datetime import timedelta, datetime, timezone
 from dotenv import load_dotenv
 
-# OfoxAI API（OpenAI 兼容格式，用于调用 Gemini）
+# OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
 from auth import create_access_token
 from database import (
@@ -88,6 +88,7 @@ from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
 
 # 从 .env 文件加载环境变量
 load_dotenv()
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "google/gemini-2.5-flash")
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
@@ -231,8 +232,9 @@ async def _analyze_with_gemini(
     image_url: str = None,
     image_urls: list = None,
     base64_image: str = None,
+    image_mime_type: str = "image/jpeg",
     prompt: str = "",
-    model_name: str = "gemini-3-flash-preview"
+    model_name: str = GEMINI_MODEL_NAME
 ) -> Dict[str, Any]:
     """
     使用 Gemini 模型分析食物图片（通过 OfoxAI OpenAI 兼容 API）。
@@ -249,7 +251,11 @@ async def _analyze_with_gemini(
     elif image_url:
         content_parts.append({"type": "image_url", "image_url": {"url": image_url}})
     elif base64_image:
-        image_data = base64_image if "," in base64_image else f"data:image/jpeg;base64,{base64_image}"
+        image_data = (
+            base64_image
+            if "," in base64_image
+            else f"data:{image_mime_type};base64,{base64_image}"
+        )
         content_parts.append({"type": "image_url", "image_url": {"url": image_data}})
     else:
         raise Exception("请提供 image_url、image_urls 或 base64_image")
@@ -296,7 +302,7 @@ async def _analyze_with_gemini(
         return parsed
 
 
-async def _analyze_text_with_gemini(prompt: str, model_name: str = "gemini-3-flash-preview") -> Dict[str, Any]:
+async def _analyze_text_with_gemini(prompt: str, model_name: str = GEMINI_MODEL_NAME) -> Dict[str, Any]:
     """调用 OfoxAI Gemini 做纯文本分析（如文字描述食物），返回解析后的 JSON。"""
     api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
     if not api_key or api_key == "your_ofoxai_api_key_here":
@@ -860,7 +866,7 @@ async def analyze_food_compare(
     双模型对比分析：同时使用千问和 Gemini 模型分析同一张食物图片，返回两个模型的结果供对比。
     
     - 千问模型 (qwen-vl-max): 通过 DashScope API 调用
-    - Gemini 模型 (gemini-3-flash-preview): 通过 OFOX API 调用
+    - Gemini 模型: 通过 OfoxAI 的 OpenAI 兼容接口调用
     
     前端可以展示两个结果，让用户选择保存哪个。
     """
@@ -869,7 +875,7 @@ async def analyze_food_compare(
     
     # 获取 API Key
     dashscope_api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    ofox_api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+    ofoxai_api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
     
     # 构建提示词参数
     goal_hint = ""
@@ -933,7 +939,7 @@ async def analyze_food_compare(
     
     # 并行调用两个模型
     qwen_result = ModelAnalyzeResult(model_name="qwen-vl-max", success=False)
-    gemini_result = ModelAnalyzeResult(model_name="gemini-3-flash-preview", success=False)
+    gemini_result = ModelAnalyzeResult(model_name=GEMINI_MODEL_NAME, success=False)
     
     async def call_qwen():
         nonlocal qwen_result
@@ -966,19 +972,20 @@ async def analyze_food_compare(
     async def call_gemini():
         nonlocal gemini_result
         try:
-            if not ofox_api_key:
+            if not ofoxai_api_key or ofoxai_api_key == "your_ofoxai_api_key_here":
                 raise Exception("请在 .env 中配置有效的 OFOXAI_API_KEY")
             
             parsed = await _analyze_with_gemini(
                 image_url=request.image_url,
                 base64_image=base64_for_gemini,
+                image_mime_type="image/jpeg",
                 prompt=prompt,
-                model_name="gemini-3-flash-preview",
+                model_name=GEMINI_MODEL_NAME,
             )
             items, desc, insight, pfc, absorption, context = _parse_analyze_result(parsed)
             
             gemini_result = ModelAnalyzeResult(
-                model_name="gemini-3-flash-preview",
+                model_name=GEMINI_MODEL_NAME,
                 success=True,
                 description=desc,
                 insight=insight,
@@ -988,9 +995,9 @@ async def analyze_food_compare(
                 context_advice=context,
             )
         except Exception as e:
-            print(f"[analyze-compare] Gemini (OFOX) 分析失败: {e}")
+            print(f"[analyze-compare] Gemini (OfoxAI) 分析失败: {e}")
             gemini_result = ModelAnalyzeResult(
-                model_name="gemini-3-flash-preview",
+                model_name=GEMINI_MODEL_NAME,
                 success=False,
                 error=str(e),
             )
@@ -4371,6 +4378,98 @@ def _get_test_processors():
         qwen_api_key=qwen_api_key,
         qwen_base_url=qwen_base_url
     )
+
+
+@app.post("/api/test-backend/analyze")
+async def test_backend_analyze(
+    images: List[UploadFile] = File(...),
+    notes: Optional[str] = Form(default=""),
+    reference_weight: Optional[float] = Form(default=None),
+    is_multi_view: bool = Form(default=False),
+    _auth: None = Depends(require_test_backend_auth),
+):
+    """
+    测试后台专用食物分析接口。
+    行为尽量与小程序拍照分析一致，但走独立接口，不复用小程序提交任务接口。
+    """
+    if not images:
+        raise HTTPException(status_code=400, detail="请至少上传 1 张图片")
+    if len(images) > 3:
+        raise HTTPException(status_code=400, detail="最多上传 3 张图片")
+
+    valid_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    image_urls: List[str] = []
+
+    for image in images:
+        if image.content_type not in valid_types:
+            raise HTTPException(status_code=400, detail="请上传有效的图片文件（jpg, png, gif, webp）")
+
+        try:
+            image_bytes = await image.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"图片读取失败: {str(e)}")
+
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="存在空图片文件，请重新上传")
+        if len(image_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="单张图片大小超过限制（最大 10MB）")
+
+        mime_type = image.content_type or "image/jpeg"
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        data_uri = f"data:{mime_type};base64,{image_base64}"
+
+        try:
+            image_url = await asyncio.to_thread(upload_food_analyze_image, data_uri)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"上传图片失败: {str(e)}")
+        image_urls.append(image_url)
+
+    task = {
+        "task_type": "food",
+        "image_url": image_urls[0],
+        "image_paths": image_urls,
+        "payload": {
+            "additionalContext": (notes or "").strip(),
+            "is_multi_view": is_multi_view,
+        },
+    }
+
+    try:
+        from worker import run_content_moderation_sync, run_food_analysis_sync
+
+        moderation = await asyncio.to_thread(run_content_moderation_sync, task)
+        if moderation and moderation.get("is_violation"):
+            reason = moderation.get("reason", "图片不符合食物分析要求")
+            raise HTTPException(status_code=400, detail=reason)
+
+        result = await asyncio.to_thread(run_food_analysis_sync, task)
+        provider = os.getenv("LLM_PROVIDER", "qwen").lower()
+        model_name = "gemini-3-flash-preview" if provider == "gemini" else "qwen-vl-max"
+        estimated_weight = round(sum(float((item or {}).get("estimatedWeightGrams") or 0) for item in (result.get("items") or [])), 1)
+        deviation = None
+        if reference_weight is not None and reference_weight > 0:
+            deviation = round(abs(estimated_weight - reference_weight) / reference_weight * 100, 2)
+
+        return {
+            "success": True,
+            "data": result,
+            "meta": {
+                "provider": provider,
+                "model": model_name,
+                "image_count": len(image_urls),
+                "image_urls": image_urls,
+                "is_multi_view": is_multi_view,
+                "notes": (notes or "").strip(),
+                "reference_weight": reference_weight,
+                "estimated_weight": estimated_weight,
+                "deviation": deviation,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[test-backend/analyze] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
 
 
 @app.post("/api/test/batch-upload")

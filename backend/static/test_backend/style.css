@@ -120,6 +120,8 @@ header .subtitle {
 }
 
 .upload-area {
+    display: block;
+    position: relative;
     border: 2px dashed #d1d5db;
     border-radius: 12px;
     padding: 40px;
@@ -149,9 +151,258 @@ header .subtitle {
     margin: 4px 0;
 }
 
+.upload-trigger {
+    display: inline-flex;
+    margin-top: 16px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.25);
+}
+
+.upload-trigger:hover {
+    transform: translateY(-1px);
+}
+
 .upload-hint {
     font-size: 12px;
     color: #999 !important;
+}
+
+.visually-hidden-file {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.analyze-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.preview-card {
+    position: relative;
+    background: #fff;
+    border: 1px solid #e1e5eb;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.preview-card img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    display: block;
+}
+
+.preview-name {
+    padding: 10px 12px 14px;
+    font-size: 12px;
+    color: #555;
+    word-break: break-all;
+}
+
+.preview-remove-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.text-btn {
+    padding: 10px 16px;
+    border: 1px dashed #c5cbe3;
+    background: #fff;
+    border-radius: 10px;
+    color: #667eea;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.clear-all-btn {
+    align-self: center;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    align-items: stretch;
+}
+
+.config-grid .form-group {
+    margin-bottom: 0;
+}
+
+.config-grid select,
+.config-grid input[type="number"],
+.modal-body input[type="text"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid #e1e5eb;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+}
+
+.config-grid select:focus,
+.config-grid input[type="number"]:focus,
+.modal-body input[type="text"]:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.input-card,
+.checkbox-card {
+    background: #f8faff;
+    border: 1px solid #dbe4ff;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.input-card label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.notes-textarea {
+    width: 100%;
+    min-height: 110px;
+    padding: 12px 14px;
+    border: 1px solid #e1e5eb;
+    border-radius: 10px;
+    resize: vertical;
+    font-size: 14px;
+    line-height: 1.6;
+    background: #fff;
+}
+
+.notes-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.checkbox-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    color: #333;
+    cursor: pointer;
+}
+
+.checkbox-line input {
+    width: 16px;
+    height: 16px;
+}
+
+.field-hint {
+    margin-top: 8px;
+    color: #666;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.tips-card,
+.result-card {
+    background: #fff;
+    border: 1px solid #e8ebf3;
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.tips-card h3,
+.result-card h3 {
+    font-size: 18px;
+    color: #1f2937;
+    margin-bottom: 10px;
+}
+
+.tips-card p,
+.result-section p {
+    color: #556070;
+    line-height: 1.8;
+}
+
+.analysis-result {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.result-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.result-badge {
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: #eef2ff;
+    color: #4c5fc1;
+}
+
+.result-badge.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.result-section {
+    margin-top: 16px;
+}
+
+.result-section h4 {
+    font-size: 14px;
+    color: #667eea;
+    margin-bottom: 8px;
+}
+
+.result-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.empty-row {
+    text-align: center;
+    color: #888;
+    padding: 24px !important;
 }
 
 .file-info {
@@ -349,6 +600,14 @@ header .subtitle {
 
 .stat-card .value.good {
     color: #4caf50;
+}
+
+.stat-card .value.medium {
+    color: #f57c00;
+}
+
+.stat-card .value.bad {
+    color: #c62828;
 }
 
 /* 表格控制 */
@@ -976,6 +1235,39 @@ header .subtitle {
 .form-group input[type="text"]:focus {
     outline: none;
     border-color: #667eea;
+}
+
+@media (max-width: 768px) {
+    body {
+        padding: 12px;
+    }
+
+    .tab-panel,
+    .results-section,
+    header {
+        padding: 20px;
+    }
+
+    .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .tabs {
+        flex-direction: column;
+    }
+
+    .summary-grid,
+    .config-grid,
+    .result-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .results-table th,
+    .results-table td {
+        white-space: nowrap;
+    }
 }
 
 .checkbox-group label {

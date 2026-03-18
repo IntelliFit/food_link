@@ -3,6 +3,7 @@
 """
 import base64
 import asyncio
+import mimetypes
 from typing import Dict, Any, Optional
 
 from .utils import format_model_result
@@ -111,6 +112,7 @@ class SingleProcessor:
         """
         # 转换为 base64
         base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        image_mime_type = mimetypes.guess_type(filename)[0] or "image/jpeg"
         
         # 从数据库获取各自的提示词
         qwen_prompt = await self._get_prompt_for_model('qwen')
@@ -137,6 +139,7 @@ class SingleProcessor:
             try:
                 gemini_result = await self._analyze_with_gemini(
                     base64_image=base64_image,
+                    image_mime_type=image_mime_type,
                     prompt=gemini_prompt
                 )
             except Exception as e:
