@@ -1,5 +1,5 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import React from 'react'
 import Taro from '@tarojs/taro'
 import { Switch } from '@taroify/core'
 import { imageToBase64, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
@@ -30,16 +30,107 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
   { value: 'none', label: '无', iconClass: 'icon-nothing' }
 ]
 
-export default function AnalyzePage() {
-  const [imagePaths, setImagePaths] = useState<string[]>([])
-  const [additionalInfo, setAdditionalInfo] = useState<string>('')
-  const [mealType, setMealType] = useState<MealType>('breakfast')
-  const [dietGoal, setDietGoal] = useState<DietGoal>('none')
-  const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
-  const [isMultiView, setIsMultiView] = useState(false)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+const normalizeTmpPath = (path: string): string => {
+  const raw = (path || '').trim()
+  if (!raw) return ''
+  if (/^https?:\/\/tmp\//i.test(raw)) {
+    return raw.replace(/^https?:\/\/tmp\//i, 'wxfile://tmp/')
+  }
+  return raw
+}
 
-  useEffect(() => {
+const isTempImagePath = (path: string): boolean => {
+  const raw = (path || '').trim()
+  if (!raw) return false
+  return /^https?:\/\/tmp\//i.test(raw) || /^wxfile:\/\/tmp\//i.test(raw)
+}
+
+/**
+ * 选图后立刻将临时图保存到 USER_DATA_PATH，避免微信开发者工具 tmp 路径失效
+ */
+const persistImagePathIfNeeded = async (path: string): Promise<string> => {
+  const raw = (path || '').trim()
+  if (!raw) return ''
+  if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) return raw
+  const normalized = normalizeTmpPath(raw)
+  if (!isTempImagePath(raw) && !isTempImagePath(normalized)) return raw
+
+  const userDataPath = (Taro as any)?.env?.USER_DATA_PATH as string | undefined
+  if (!userDataPath) return raw
+
+  const candidates: string[] = []
+  const pushCandidate = (nextPath?: string) => {
+    const next = (nextPath || '').trim()
+    if (!next) return
+    if (!candidates.includes(next)) {
+      candidates.push(next)
+    }
+  }
+
+  pushCandidate(raw)
+  pushCandidate(normalized)
+
+  // devtools 不同版本返回路径格式不一致，尝试通过 getImageInfo 再取一轮可读路径
+  for (const src of [raw, normalized]) {
+    if (!src) continue
+    try {
+      const info = await Taro.getImageInfo({ src })
+      pushCandidate(info.path)
+    } catch {
+      // ignore
+    }
+  }
+
+  for (const tempFilePath of candidates) {
+    const ext = (tempFilePath.match(/\.(jpg|jpeg|png|webp|heic|gif)(?:\?.*)?$/i)?.[0] || '.jpg').replace(/\?.*$/, '')
+    const targetPath = `${userDataPath}/analyze_${Date.now()}_${Math.floor(Math.random() * 1000000)}${ext}`
+    try {
+      const savedFilePath = await new Promise<string>((resolve, reject) => {
+        Taro.getFileSystemManager().saveFile({
+          tempFilePath,
+          filePath: targetPath,
+          success: (res: any) => resolve(String(res?.savedFilePath || targetPath)),
+          fail: reject
+        })
+      })
+      if (savedFilePath) {
+        return savedFilePath
+      }
+      return targetPath
+    } catch (err) {
+      console.warn('保存临时图片失败，尝试下一个路径:', tempFilePath, err)
+    }
+  }
+
+  console.warn('临时图片持久化全部失败，回退原路径:', { raw, normalized, candidates })
+  return raw
+}
+
+export default function AnalyzePage() {
+  const [imagePaths, setImagePaths] = React.useState<string[]>([])
+  const [imageBase64Map, setImageBase64Map] = React.useState<Record<string, string>>({})
+  const [additionalInfo, setAdditionalInfo] = React.useState<string>('')
+  const [mealType, setMealType] = React.useState<MealType>('breakfast')
+  const [dietGoal, setDietGoal] = React.useState<DietGoal>('none')
+  const [activityTiming, setActivityTiming] = React.useState<ActivityTiming>('none')
+  const [isMultiView, setIsMultiView] = React.useState(false)
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false)
+
+  const warmupBase64 = React.useCallback((paths: string[]) => {
+    for (const rawPath of paths) {
+      const path = String(rawPath || '').trim()
+      if (!path) continue
+      imageToBase64(path)
+        .then((base64) => {
+          setImageBase64Map(prev => (prev[path] ? prev : { ...prev, [path]: base64 }))
+        })
+        .catch((err) => {
+          console.warn('预读取图片 base64 失败，分析时重试:', path, err)
+        })
+    }
+  }, [])
+
+  React.useEffect(() => {
     // 1. 获取饮食目标
     const initDietGoal = async () => {
       try {
@@ -63,27 +154,37 @@ export default function AnalyzePage() {
     initDietGoal()
 
     // 2. 从本地存储获取图片路径 (用于拍照后的跳转)
-    try {
-      const storedPath = Taro.getStorageSync('analyzeImagePath')
-      if (storedPath) {
-        setImagePaths([storedPath])
-        // 清除存储，避免下次进入页面时误用
-        Taro.removeStorageSync('analyzeImagePath')
+    const initStoredImagePath = async () => {
+      try {
+        const storedPath = Taro.getStorageSync('analyzeImagePath')
+        if (storedPath) {
+          const path = String(storedPath)
+          setImagePaths([path])
+          warmupBase64([path])
+          // 清除存储，避免下次进入页面时误用
+          Taro.removeStorageSync('analyzeImagePath')
+        }
+      } catch (error) {
+        console.error('获取图片路径失败:', error)
       }
-    } catch (error) {
-      console.error('获取图片路径失败:', error)
     }
+    initStoredImagePath()
   }, [])
 
   const handleChooseImage = async () => {
+    const remain = 3 - imagePaths.length
+    if (remain <= 0) return
     try {
-      const res = await Taro.chooseMedia({
-        count: 3 - imagePaths.length,
-        mediaType: ['image'],
+      // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
+      const res = await Taro.chooseImage({
+        count: remain,
+        sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
       })
-      const newPaths = res.tempFiles.map(f => f.tempFilePath)
+      // 预览阶段优先保留原始路径，避免 devtools 特殊路径在 Image 组件中无法展示
+      const newPaths = (res.tempFilePaths || []).map(p => String(p || '').trim()).filter(Boolean)
       setImagePaths(prev => [...prev, ...newPaths])
+      warmupBase64(newPaths)
     } catch (e) {
       // cancelled
       console.log('选择图片取消/失败', e)
@@ -93,7 +194,16 @@ export default function AnalyzePage() {
   const handleRemoveImage = (index: number) => {
     setImagePaths(prev => {
       const newPaths = [...prev]
+      const removed = newPaths[index]
       newPaths.splice(index, 1)
+      if (removed) {
+        setImageBase64Map(base64Prev => {
+          if (!(removed in base64Prev)) return base64Prev
+          const next = { ...base64Prev }
+          delete next[removed]
+          return next
+        })
+      }
       return newPaths
     })
   }
@@ -123,7 +233,12 @@ export default function AnalyzePage() {
       // 1. 依次上传所有图片获取 URL
       const imageUrls: string[] = []
       for (const path of imagePaths) {
-        const base64 = await imageToBase64(path)
+        let base64 = imageBase64Map[path]
+        if (!base64) {
+          const stablePath = await persistImagePathIfNeeded(path)
+          base64 = await imageToBase64(stablePath || path)
+          setImageBase64Map(prev => (prev[path] ? prev : { ...prev, [path]: base64! }))
+        }
         const { imageUrl } = await uploadAnalyzeImage(base64)
         imageUrls.push(imageUrl)
       }
@@ -179,9 +294,10 @@ export default function AnalyzePage() {
   }
 
   const handlePreviewImage = (current: string) => {
+    const urls = imagePaths.map(p => imageBase64Map[p] || p)
     Taro.previewImage({
-      current,
-      urls: imagePaths
+      current: imageBase64Map[current] || current,
+      urls
     })
   }
 
@@ -194,7 +310,7 @@ export default function AnalyzePage() {
             {imagePaths.map((path, index) => (
               <View key={index} className='grid-item'>
                 <Image
-                  src={path}
+                  src={imageBase64Map[path] || path}
                   mode='aspectFill'
                   className='grid-image'
                   onClick={() => handlePreviewImage(path)}
@@ -223,6 +339,32 @@ export default function AnalyzePage() {
             </View>
           </View>
         )}
+      </View>
+
+      {/* 文字补充区域（放在照片下方，拍完再补充上下文） */}
+      <View className='details-section'>
+        <View className='section-header'>
+          <Text className='section-title'>文字补充</Text>
+        </View>
+        <Text className='section-hint'>
+          提供更多上下文能显著提高识别准确率，例如分量、容器大小、额外配料等。
+        </Text>
+
+        <View className='input-wrapper'>
+          <Textarea
+            className='details-input'
+            placeholder='例如：这是学校食堂的大份，额外加了辣油，用的是 500ml 便当盒...'
+            placeholderClass='input-placeholder'
+            value={additionalInfo}
+            onInput={(e) => setAdditionalInfo(e.detail.value)}
+            maxlength={200}
+            autoHeight
+            showConfirmBar={false}
+          />
+          <View className='voice-btn' onClick={handleVoiceInput}>
+            <Text className='voice-icon iconfont icon--yuyinshuruzhong' />
+          </View>
+        </View>
       </View>
 
       {/* 餐次（AI 将结合餐次分析） */}
@@ -308,33 +450,6 @@ export default function AnalyzePage() {
               <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
-        </View>
-      </View>
-
-      {/* 补充细节区域 */}
-      <View className='details-section'>
-        <View className='section-header'>
-
-          <Text className='section-title'>补充细节</Text>
-        </View>
-        <Text className='section-hint'>
-          提供更多上下文能显著提高识别准确率(如:这是我的500ml 标准便当盒)。
-        </Text>
-
-        <View className='input-wrapper'>
-          <Textarea
-            className='details-input'
-            placeholder='例如:这是学校食堂的大份,或者额外加了辣油...'
-            placeholderClass='input-placeholder'
-            value={additionalInfo}
-            onInput={(e) => setAdditionalInfo(e.detail.value)}
-            maxlength={200}
-            autoHeight
-            showConfirmBar={false}
-          />
-          <View className='voice-btn' onClick={handleVoiceInput}>
-            <Text className='voice-icon iconfont icon--yuyinshuruzhong' />
-          </View>
         </View>
       </View>
 

@@ -2,6 +2,7 @@ export default defineAppConfig({
   pages: [
     'pages/index/index',
     'pages/community/index',
+    'pages/checkin-leaderboard/index',
     'pages/record/index',
     'pages/analyze/index',
     'pages/analyze-loading/index',

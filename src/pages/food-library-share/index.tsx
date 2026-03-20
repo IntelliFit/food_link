@@ -7,6 +7,7 @@ import '@taroify/core/picker/style'
 import { areaList } from '@vant/area-data'
 import {
   getFoodRecordList,
+  getFoodRecordById,
   createPublicFoodLibraryItem,
   uploadAnalyzeImage,
   analyzeFoodImage,
@@ -16,17 +17,22 @@ import {
 } from '../../utils/api'
 import './index.scss'
 
-const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '自制', '健身餐']
+const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '健身餐']
 
 // 城市区域数据（示例）
 
 
 export default function FoodLibrarySharePage() {
+  const routerParams = Taro.getCurrentInstance().router?.params
+  const sourceRecordId = routerParams?.source_record_id
+  const quickUploadMode = routerParams?.quick_upload === '1'
+
   // 选择来源：record（从记录分享）或 upload（直接上传）
   const [sourceType, setSourceType] = useState<'record' | 'upload'>('upload')
   const [showRecordModal, setShowRecordModal] = useState(false)
   const [records, setRecords] = useState<FoodRecord[]>([])
   const [selectedRecord, setSelectedRecord] = useState<FoodRecord | null>(null)
+  const [loadingSourceRecord, setLoadingSourceRecord] = useState(false)
 
   // 图片：最多 3 张，每张单独 AI 识别后叠加营养数据
   const [imagePaths, setImagePaths] = useState<string[]>([])
@@ -49,6 +55,7 @@ export default function FoodLibrarySharePage() {
 
   // 标签
   const [suitableForFatLoss, setSuitableForFatLoss] = useState(false)
+  const [isHomemade, setIsHomemade] = useState(false)
   const [userTags, setUserTags] = useState<string[]>([])
   const [customTag, setCustomTag] = useState('')
 
@@ -75,6 +82,43 @@ export default function FoodLibrarySharePage() {
     loadRecords()
   }, [])
 
+  useEffect(() => {
+    if (!sourceRecordId) return
+
+    const initSourceRecord = async () => {
+      setSourceType('record')
+      setLoadingSourceRecord(true)
+      try {
+        const { record } = await getFoodRecordById(sourceRecordId)
+        handleSelectRecord(record)
+      } catch (e: any) {
+        console.error('加载来源记录失败:', e)
+        Taro.showToast({ title: e.message || '加载识别结果失败', icon: 'none' })
+      } finally {
+        setLoadingSourceRecord(false)
+      }
+    }
+
+    initSourceRecord()
+  }, [sourceRecordId])
+
+  const inferFoodName = (record?: FoodRecord | null, nextItems?: Array<{ name: string }>, nextDescription?: string) => {
+    const itemNames = (nextItems || record?.items || [])
+      .map(item => item.name?.trim())
+      .filter(Boolean)
+      .slice(0, 3) as string[]
+    if (itemNames.length > 0) {
+      return itemNames.join('、')
+    }
+
+    const desc = (nextDescription || record?.description || '').trim()
+    if (desc) {
+      return desc.slice(0, 20)
+    }
+
+    return ''
+  }
+
   const loadRecords = async () => {
     try {
       const res = await getFoodRecordList()
@@ -100,6 +144,10 @@ export default function FoodLibrarySharePage() {
     setItems(record.items || [])
     setDescription(record.description || '')
     setInsight(record.insight || '')
+    const inferredName = inferFoodName(record)
+    if (inferredName) {
+      setFoodName(prev => prev.trim() || inferredName)
+    }
     setAnalyzeResultsMap({}) // 清空识别缓存
     setShowRecordModal(false)
   }
@@ -147,6 +195,10 @@ export default function FoodLibrarySharePage() {
     setTotalProtein(pro)
     setTotalCarbs(carb)
     setTotalFat(fat)
+    const inferredName = inferFoodName(null, allItems, descriptions.join('；'))
+    if (inferredName) {
+      setFoodName(prev => prev.trim() || inferredName)
+    }
   }
 
   // 选择图片：最多 3 张，逐张上传后只识别新图片并叠加已有结果
@@ -339,6 +391,11 @@ export default function FoodLibrarySharePage() {
     setUserTags(userTags.filter(t => t !== tag))
   }
 
+  const buildSubmitTags = () => {
+    const baseTags = userTags.filter(tag => tag !== '自制')
+    return isHomemade ? [...baseTags, '自制'] : baseTags
+  }
+
   /** 点击提交：校验后弹窗确认，用户确认后再提交 */
   const handleSubmit = async () => {
     const hasImages = imageUrls.length > 0 || imageUrl || selectedRecord?.image_path
@@ -346,14 +403,20 @@ export default function FoodLibrarySharePage() {
       Taro.showToast({ title: '请先选择或上传图片', icon: 'none' })
       return
     }
-    if (!foodName.trim()) {
+    const finalFoodName = foodName.trim() || inferFoodName(selectedRecord, items, description)
+    if (!finalFoodName) {
       Taro.showToast({ title: '请填写食物名称', icon: 'none' })
       return
+    }
+    if (finalFoodName !== foodName.trim()) {
+      setFoodName(finalFoodName)
     }
 
     const { confirm } = await Taro.showModal({
       title: '确认提交',
-      content: '确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。',
+      content: quickUploadMode
+        ? '确定上传到公共食物库吗？审核通过后其他用户即可查看。'
+        : '确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。',
       confirmText: '确定提交',
       cancelText: '取消'
     })
@@ -374,6 +437,9 @@ export default function FoodLibrarySharePage() {
         detailAddress
       ].filter(Boolean).join(' ').trim()
 
+      const finalFoodName = foodName.trim() || inferFoodName(selectedRecord, items, description)
+      const submitTags = buildSubmitTags()
+
       await createPublicFoodLibraryItem({
         image_path: imageUrl || selectedRecord?.image_path || undefined,
         image_paths: imageUrls.length > 0 ? imageUrls : undefined,
@@ -385,12 +451,12 @@ export default function FoodLibrarySharePage() {
         items,
         description,
         insight,
-        food_name: foodName.trim(),
+        food_name: finalFoodName,
         merchant_name: merchantName.trim() || undefined,
         merchant_address: fullAddress || undefined,
         taste_rating: tasteRating > 0 ? tasteRating : undefined,
         suitable_for_fat_loss: suitableForFatLoss,
-        user_tags: userTags,
+        user_tags: submitTags,
         user_notes: userNotes.trim() || undefined,
         latitude,
         longitude,
@@ -402,6 +468,10 @@ export default function FoodLibrarySharePage() {
       Taro.showToast({ title: '提交成功，审核通过后将展示', icon: 'none', duration: 2500 })
       Taro.setStorageSync('food_library_need_refresh', '1')
       setTimeout(() => {
+        if (quickUploadMode) {
+          Taro.redirectTo({ url: '/pages/food-library/index' })
+          return
+        }
         Taro.navigateBack()
       }, 2500)
     } catch (e: any) {
@@ -412,31 +482,42 @@ export default function FoodLibrarySharePage() {
   }
 
   const hasImages = imageUrls.length > 0 || imageUrl || selectedRecord?.image_path
-  const canSubmit = hasImages && foodName.trim() && !submitting && !analyzing
+  const canSubmit = hasImages && !submitting && !analyzing && !loadingSourceRecord
   const displayLength = Math.max(imagePaths.length, imageUrls.length)
 
   return (
     <View className="share-page">
+      {quickUploadMode && (
+        <View className="quick-upload-tip">
+          <Text className="quick-upload-title">上传到公共食物库</Text>
+          <Text className="quick-upload-subtitle">
+            已自动带入刚识别的餐食，补充商家、位置或是否自制后即可上传。
+          </Text>
+        </View>
+      )}
+
       {/* 选择来源 */}
-      <View className="source-section">
-        <Text className="section-title">选择来源</Text>
-        <View className="source-options">
-          <View
-            className={`source-option ${sourceType === 'upload' ? 'active' : ''}`}
-            onClick={() => setSourceType('upload')}
-          >
-            <Text className="source-icon iconfont icon-paizhao-xianxing" />
-            <Text className="source-text">拍照上传</Text>
-          </View>
-          <View
-            className={`source-option ${sourceType === 'record' ? 'active' : ''}`}
-            onClick={() => { setSourceType('record'); setShowRecordModal(true) }}
-          >
-            <Text className="source-icon iconfont icon-ic_detail" />
-            <Text className="source-text">从记录选择</Text>
+      {!quickUploadMode && !sourceRecordId && (
+        <View className="source-section">
+          <Text className="section-title">选择来源</Text>
+          <View className="source-options">
+            <View
+              className={`source-option ${sourceType === 'upload' ? 'active' : ''}`}
+              onClick={() => setSourceType('upload')}
+            >
+              <Text className="source-icon iconfont icon-paizhao-xianxing" />
+              <Text className="source-text">拍照上传</Text>
+            </View>
+            <View
+              className={`source-option ${sourceType === 'record' ? 'active' : ''}`}
+              onClick={() => { setSourceType('record'); setShowRecordModal(true) }}
+            >
+              <Text className="source-icon iconfont icon-ic_detail" />
+              <Text className="source-text">从记录选择</Text>
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {/* 图片区域：最多 3 张，每张识别后叠加计算 */}
       <View className="image-section">
@@ -506,7 +587,7 @@ export default function FoodLibrarySharePage() {
         <Text className="section-title">商家信息</Text>
         <View className="form-item">
           <Text className="form-label">
-            食物名称 <Text className="required">*</Text>
+            食物名称（已自动带入，可修改）
           </Text>
           <Input
             className="form-input"
@@ -519,10 +600,27 @@ export default function FoodLibrarySharePage() {
           <Text className="form-label">商家名称（可选）</Text>
           <Input
             className="form-input"
-            placeholder="如：沙县小吃、肯德基等"
+            placeholder={isHomemade ? '自制餐食可不填' : '如：沙县小吃、肯德基等'}
             value={merchantName}
             onInput={e => setMerchantName(e.detail.value)}
           />
+        </View>
+        <View className="form-item">
+          <Text className="form-label">餐食来源</Text>
+          <View className="source-tag-row">
+            <View
+              className={`source-tag-chip ${isHomemade ? 'active' : ''}`}
+              onClick={() => setIsHomemade(true)}
+            >
+              自制
+            </View>
+            <View
+              className={`source-tag-chip ${!isHomemade ? 'active' : ''}`}
+              onClick={() => setIsHomemade(false)}
+            >
+              外卖/堂食
+            </View>
+          </View>
         </View>
         <View className="form-item">
           <Text className="form-label">口味评分（可选）</Text>

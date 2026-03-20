@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-03-21
+
+- ✨ feat: 将历史记录明确为按天回看的饮食档案，在“我的”页新增长期入口，并在统计页加入记录热图与跳转当日明细联动 `src/pages/profile/index.tsx` `src/pages/profile/index.scss` `src/pages/stats/index.tsx` `src/pages/stats/index.scss` `src/pages/record/index.tsx` `src/pages/record/index.scss` `backend/main.py`
+- 🐛 fix: 隐藏记录页与首页主入口中的“历史记录”并统一饮食记录按东八区自然日查询，修复凌晨时首页/历史页错天、漏餐和时间显示异常 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/record/index.tsx` `src/pages/record/index.scss` `backend/main.py` `backend/database.py`
+
+## 2026-03-20
+
+- 🎨 style: 首页三大营养素改为三个紧凑环形图（conic 饼图式达成度），去掉营养结构标题与说明文案 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- ✨ feat: 拍照识别结果保存后新增“顺手上传公共食物库”流程，自动带入刚识别的记录并只需补充商家/位置/是否自制等信息 `src/pages/result/index.tsx` `src/pages/food-library-share/index.tsx` `src/pages/food-library-share/index.scss`
+- 🐛 fix: 拍照识别页「文字补充」放在照片区域下方，拍完再补充上下文 `src/pages/analyze/index.tsx`
+- 🐛 fix: 修复开发者工具下图片临时路径 `http://tmp/...` 导致 `readFile` 失败的问题：拍照页改用 `chooseImage`，并在 `imageToBase64` 中增加临时路径归一化与兜底校验 `src/pages/analyze/index.tsx` `src/utils/api.ts`
+- 🐛 fix: 进一步修复开发者工具临时文件偶发失效：`imageToBase64` 改为多候选路径读取（原路径、downloadFile、getImageInfo 回填路径）逐个兜底，避免 `wxfile://tmp/... no such file` `src/utils/api.ts`
+- ✨ feat: 文字记录页新增“快速带入”来源选择：支持直接从历史记录或公共食物库选条目，一键进入与拍照识别相同的结果编辑页（可改食物/重量/比例后再保存） `src/pages/record/index.tsx` `src/pages/record/index.scss`
+- ✨ feat: 首页支持编辑每日热量与蛋白质/碳水/脂肪目标，配置持久化到用户健康档案 JSON，并新增营养结构可视化与目标达成进度展示 `backend/main.py` `src/utils/api.ts` `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🔧 refactor: 摄入目标保存兼容线上旧后端：独立接口 404 时回退 PUT 健康档案并合并 `dashboard_targets`，仍无法落库则本机暂存 `src/utils/api.ts` `src/pages/index/index.tsx` `backend/main.py`
+
 ## 2026-03-17
 
 - 📝 docs: 更新 README，说明推送 GitHub `main` 分支后由 GitHub Actions 自动触发服务器拉取代码并部署后端 `README.md`

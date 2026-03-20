@@ -7,6 +7,7 @@ import {
   TodoListOutlined,
   NotesOutlined,
   ChartTrendingOutlined,
+  ClockOutlined,
   LocationOutlined,
   SettingOutlined,
   ShieldOutlined,
@@ -161,6 +162,12 @@ export default function ProfilePage() {
       desc: '查看详细的饮食和运动数据'
     },
     {
+      id: 4,
+      icon: <ClockOutlined size="32" />,
+      title: '饮食档案',
+      desc: '按日期回看你的每一餐'
+    },
+    {
       id: 5,
       icon: <LocationOutlined size="32" />,
       title: '附近美食',
@@ -200,6 +207,12 @@ export default function ProfilePage() {
     // 数据统计
     if (service.id === 3) {
       Taro.navigateTo({ url: '/pages/stats/index' })
+      return
+    }
+    // 饮食档案
+    if (service.id === 4) {
+      Taro.setStorageSync('recordPageTab', 'history')
+      Taro.switchTab({ url: '/pages/record/index' })
       return
     }
     // 附近美食（开发中）

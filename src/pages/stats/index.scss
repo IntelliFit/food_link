@@ -113,6 +113,12 @@
   gap: 12rpx;
 }
 
+.card-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
 .chart-title-icon {
   font-size: 36rpx;
   color: #00bc7d;
@@ -296,6 +302,106 @@
   background: #fff1f2;
   padding: 8rpx 20rpx;
   border-radius: 100rpx;
+  font-weight: 600;
+}
+
+.heatmap-card .card-header {
+  align-items: flex-start;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.heatmap-cell {
+  min-height: 96rpx;
+  border-radius: 18rpx;
+  padding: 12rpx 8rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1rpx solid rgba(148, 163, 184, 0.18);
+}
+
+.heatmap-cell.is-clickable {
+  border-color: rgba(0, 188, 125, 0.2);
+}
+
+.heatmap-cell.intensity-0 {
+  background: #f8fafc;
+}
+
+.heatmap-cell.intensity-1 {
+  background: #ecfdf5;
+}
+
+.heatmap-cell.intensity-2 {
+  background: #bbf7d0;
+}
+
+.heatmap-cell.intensity-3 {
+  background: #4ade80;
+}
+
+.heatmap-cell.intensity-4 {
+  background: #16a34a;
+}
+
+.heatmap-cell-label {
+  font-size: 18rpx;
+  line-height: 24rpx;
+  color: #64748b;
+}
+
+.heatmap-cell.intensity-3 .heatmap-cell-label,
+.heatmap-cell.intensity-4 .heatmap-cell-label {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.heatmap-cell-value {
+  font-size: 22rpx;
+  line-height: 28rpx;
+  color: #1e2939;
+  font-weight: 700;
+}
+
+.heatmap-cell.intensity-3 .heatmap-cell-value,
+.heatmap-cell.intensity-4 .heatmap-cell-value {
+  color: #ffffff;
+}
+
+.heatmap-summary {
+  margin-top: 20rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 20rpx;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.heatmap-summary-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #475569;
+}
+
+.heatmap-link-btn {
+  flex-shrink: 0;
+  padding: 12rpx 20rpx;
+  border-radius: 999rpx;
+  background: #ecfdf5;
+}
+
+.heatmap-link-btn-text {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #059669;
   font-weight: 600;
 }
 

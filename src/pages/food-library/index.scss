@@ -7,6 +7,27 @@
   overflow: hidden;
 }
 
+.pick-mode-tip {
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+  padding: 24rpx 32rpx 20rpx;
+  border-bottom: 1rpx solid rgba(0, 188, 125, 0.1);
+}
+
+.pick-mode-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.pick-mode-subtitle {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: #475569;
+  line-height: 1.5;
+}
+
 // ========== 骨架屏样式 ==========
 .skeleton-container {
   padding: 32rpx;
@@ -471,6 +492,10 @@
   &:active {
     transform: scale(0.95);
   }
+}
+
+.food-card.is-pick-mode {
+  border: 2rpx solid rgba(0, 188, 125, 0.14);
 }
 
 .fab-icon {

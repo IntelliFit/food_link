@@ -8,6 +8,7 @@ import base64
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
+from collections import Counter
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
@@ -350,7 +351,7 @@ async def list_food_records(
     limit: int = 100,
 ) -> List[Dict[str, Any]]:
     """
-    查询用户饮食记录列表。可选按日期筛选（UTC 日）。
+    查询用户饮食记录列表。可选按日期筛选（中国时区自然日）。
 
     Args:
         user_id: 用户 ID (UUID)
@@ -365,9 +366,10 @@ async def list_food_records(
     try:
         q = supabase.table("user_food_records").select("*").eq("user_id", user_id)
         if date:
-            start_ts = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-            end_d = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
-            end_ts = end_d.isoformat().replace("+00:00", "Z")
+            start_local = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
+            end_local = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
+            start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
             q = q.gte("record_time", start_ts).lt("record_time", end_ts)
         q = q.order("record_time", desc=True).limit(limit)
         result = q.execute()
@@ -1065,12 +1067,22 @@ def delete_image_from_storage(image_url: str, bucket_name: str = FOOD_ANALYZE_BU
 # ---------- 好友系统 ----------
 
 async def get_friend_ids(user_id: str) -> List[str]:
-    """获取用户的好友 ID 列表"""
+    """获取用户的好友 ID 列表（双向：我→对方 与 对方→我，兼容仅存在单向历史数据的情况）"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("user_friends").select("friend_id").eq("user_id", user_id).execute()
-        return [r["friend_id"] for r in (result.data or [])]
+        out = set()
+        r1 = supabase.table("user_friends").select("friend_id").eq("user_id", user_id).execute()
+        for row in r1.data or []:
+            fid = row.get("friend_id")
+            if fid:
+                out.add(fid)
+        r2 = supabase.table("user_friends").select("user_id").eq("friend_id", user_id).execute()
+        for row in r2.data or []:
+            uid = row.get("user_id")
+            if uid:
+                out.add(uid)
+        return list(out)
     except Exception as e:
         print(f"[get_friend_ids] 错误: {e}")
         raise
@@ -1403,6 +1415,91 @@ async def list_friends_feed_records(
         return out
     except Exception as e:
         print(f"[list_friends_feed_records] 错误: {e}")
+        raise
+
+
+async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dict[str, Any]:
+    """
+    本周打卡排行榜：统计「自己 + 好友」在 user_food_records 中的记录条数。
+    自然周按北京时间：周一 00:00 至下周一 00:00（不含）。
+    """
+    friend_ids = await get_friend_ids(viewer_user_id)
+    author_ids = list(set(friend_ids) | {viewer_user_id})
+    if not author_ids:
+        author_ids = [viewer_user_id]
+
+    now_cn = datetime.now(CHINA_TZ)
+    weekday = now_cn.weekday()  # Monday = 0
+    week_start_cn = (now_cn - timedelta(days=weekday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week_end_cn = week_start_cn + timedelta(days=7)
+
+    start_ts = week_start_cn.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    end_ts = week_end_cn.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    counts: Counter = Counter()
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        page_size = 1000
+        offset = 0
+        while True:
+            q = (
+                supabase.table("user_food_records")
+                .select("user_id")
+                .in_("user_id", author_ids)
+                .gte("record_time", start_ts)
+                .lt("record_time", end_ts)
+                .range(offset, offset + page_size - 1)
+            )
+            batch = q.execute()
+            rows = list(batch.data or [])
+            for r in rows:
+                uid = r.get("user_id")
+                if uid:
+                    counts[uid] += 1
+            if len(rows) < page_size:
+                break
+            offset += page_size
+
+        users_result = (
+            supabase.table("weapp_user")
+            .select("id, nickname, avatar")
+            .in_("id", author_ids)
+            .execute()
+        )
+        profile_map = {u["id"]: u for u in (users_result.data or [])}
+
+        items = []
+        for uid in author_ids:
+            p = profile_map.get(uid, {})
+            items.append(
+                {
+                    "user_id": uid,
+                    "nickname": (p.get("nickname") or "用户") if p else "用户",
+                    "avatar": (p.get("avatar") or "") if p else "",
+                    "checkin_count": int(counts.get(uid, 0)),
+                    "is_me": uid == viewer_user_id,
+                }
+            )
+
+        items.sort(
+            key=lambda x: (-x["checkin_count"], x["nickname"] or ""),
+        )
+        for i, row in enumerate(items, start=1):
+            row["rank"] = i
+
+        week_start_str = week_start_cn.strftime("%Y-%m-%d")
+        week_end_inclusive = (week_start_cn + timedelta(days=6)).strftime("%Y-%m-%d")
+
+        return {
+            "week_start": week_start_str,
+            "week_end": week_end_inclusive,
+            "list": items,
+        }
+    except Exception as e:
+        print(f"[get_friend_circle_week_checkin_leaderboard] 错误: {e}")
         raise
 
 

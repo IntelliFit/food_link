@@ -1,9 +1,18 @@
-import { View, Text, Image, Textarea } from '@tarojs/components'
+import { View, Text, Image, Textarea, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useMemo } from 'react'
 import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Calendar } from '@taroify/core'
 import '@taroify/core/calendar/style'
-import { getFoodRecordList, deleteFoodRecord, submitTextAnalyzeTask, getHomeDashboard, getAccessToken, type FoodRecord } from '../../utils/api'
+import {
+  getFoodRecordList,
+  deleteFoodRecord,
+  submitTextAnalyzeTask,
+  getHomeDashboard,
+  getAccessToken,
+  getPublicFoodLibraryList,
+  type FoodRecord,
+  type PublicFoodLibraryItem
+} from '../../utils/api'
 import { IconCamera, IconText, IconClock } from '../../components/iconfont'
 
 import './index.scss'
@@ -38,6 +47,9 @@ const ACTIVITY_TIMING_OPTIONS = [
   { value: 'none', label: '无' }
 ]
 
+const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
+const RECORD_HISTORY_DATE_KEY = 'recordHistoryDate'
+
 export default function RecordPage() {
   const [activeMethod, setActiveMethod] = useState('photo')
   const [foodText, setFoodText] = useState('')
@@ -48,9 +60,15 @@ export default function RecordPage() {
 
   const recordMethods = [
     { id: 'photo', text: '拍照识别', iconClass: 'photo-icon' },
-    { id: 'text', text: '文字记录', iconClass: 'text-icon' },
-    { id: 'history', text: '历史记录', iconClass: 'history-icon' }
+    { id: 'text', text: '文字记录', iconClass: 'text-icon' }
   ]
+
+  const formatDateKey = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
 
   const getMethodIconColor = (methodId: string) => {
     if (methodId === 'photo') return '#ffffff'
@@ -102,7 +120,7 @@ export default function RecordPage() {
 
   const commonFoods = [
     '米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包',
-    '蔬菜', '水果', '鱼', '牛肉', '豆腐', '酸奶', '坚果', '更多'
+    '蔬菜', '水果', '鱼', '牛肉', '豆腐', '酸奶', '坚果', '公共食物库'
   ]
 
   const handleMealSelect = (mealId: string) => {
@@ -110,14 +128,121 @@ export default function RecordPage() {
   }
 
   const handleCommonFoodClick = (food: string) => {
-    if (food === '更多') {
-      // 可以打开更多食物选择
+    if (food === '公共食物库') {
+      if (!getAccessToken()) {
+        Taro.navigateTo({ url: '/pages/login/index' })
+        return
+      }
+      Taro.navigateTo({ url: '/pages/food-library/index?from=record' })
       return
     }
     setFoodText(food)
   }
 
   const [textCalculating, setTextCalculating] = useState(false)
+  const [showTextSourcePicker, setShowTextSourcePicker] = useState(false)
+  const [textSourceType, setTextSourceType] = useState<'history' | 'library'>('history')
+  const [textSourceLoading, setTextSourceLoading] = useState(false)
+  const [textHistoryRecords, setTextHistoryRecords] = useState<FoodRecord[]>([])
+  const [textLibraryItems, setTextLibraryItems] = useState<PublicFoodLibraryItem[]>([])
+
+  const toSafeNutrients = (src?: { calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number; sugar?: number }) => ({
+    calories: src?.calories ?? 0,
+    protein: src?.protein ?? 0,
+    carbs: src?.carbs ?? 0,
+    fat: src?.fat ?? 0,
+    fiber: src?.fiber ?? 0,
+    sugar: src?.sugar ?? 0
+  })
+
+  const openResultWithData = (params: {
+    imagePaths?: string[]
+    mealType?: string
+    dietGoal?: string
+    activityTiming?: string
+    description?: string
+    insight?: string
+    items: Array<{ name: string; estimatedWeightGrams: number; originalWeightGrams: number; nutrients: ReturnType<typeof toSafeNutrients> }>
+  }) => {
+    const normalizedImagePaths = (params.imagePaths || []).filter(Boolean)
+    Taro.setStorageSync('analyzeImagePaths', normalizedImagePaths)
+    Taro.setStorageSync('analyzeImagePath', normalizedImagePaths[0] || '')
+    Taro.setStorageSync('analyzeResult', JSON.stringify({
+      description: params.description || '',
+      insight: params.insight || '保持健康饮食！',
+      items: params.items
+    }))
+    Taro.setStorageSync('analyzeCompareMode', false)
+    Taro.setStorageSync('analyzeMealType', params.mealType || selectedMeal || 'breakfast')
+    Taro.setStorageSync('analyzeDietGoal', params.dietGoal || textDietGoal || 'none')
+    Taro.setStorageSync('analyzeActivityTiming', params.activityTiming || textActivityTiming || 'none')
+    Taro.removeStorageSync('analyzeSourceTaskId')
+    Taro.navigateTo({ url: '/pages/result/index' })
+  }
+
+  const mapRecordToResult = (record: FoodRecord) => {
+    const mappedItems = (record.items || []).map((it) => {
+      const weight = Math.max(1, Number(it.weight ?? it.intake ?? 0) || 0)
+      return {
+        name: it.name || '食物',
+        estimatedWeightGrams: weight,
+        originalWeightGrams: weight,
+        nutrients: toSafeNutrients(it.nutrients)
+      }
+    })
+    openResultWithData({
+      imagePaths: (record.image_paths && record.image_paths.length > 0 ? record.image_paths : (record.image_path ? [record.image_path] : [])) || [],
+      mealType: record.meal_type,
+      dietGoal: record.diet_goal || undefined,
+      activityTiming: record.activity_timing || undefined,
+      description: record.description || '',
+      insight: record.insight || '参考历史记录生成',
+      items: mappedItems
+    })
+  }
+
+  const mapLibraryToResult = (item: PublicFoodLibraryItem) => {
+    const mappedItems = (item.items || []).map((it) => {
+      const weight = Math.max(1, Number(it.weight ?? 0) || 100)
+      return {
+        name: it.name || item.food_name || '食物',
+        estimatedWeightGrams: weight,
+        originalWeightGrams: weight,
+        nutrients: toSafeNutrients(it.nutrients)
+      }
+    })
+    const description = item.description || item.food_name || '来自公共食物库'
+    const insight = item.insight || [item.merchant_name, item.merchant_address].filter(Boolean).join(' · ') || '来自公共食物库'
+    openResultWithData({
+      imagePaths: (item.image_paths && item.image_paths.length > 0 ? item.image_paths : (item.image_path ? [item.image_path] : [])) || [],
+      description,
+      insight,
+      items: mappedItems
+    })
+  }
+
+  const openTextSourcePicker = async (type: 'history' | 'library') => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    setTextSourceType(type)
+    setShowTextSourcePicker(true)
+    setTextSourceLoading(true)
+    try {
+      if (type === 'history') {
+        const { records } = await getFoodRecordList()
+        setTextHistoryRecords(records || [])
+      } else {
+        const { list } = await getPublicFoodLibraryList({ sort_by: 'latest', limit: 30, offset: 0 })
+        setTextLibraryItems(list || [])
+      }
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      setTextSourceLoading(false)
+    }
+  }
 
   /** 文字记录：开始计算前确认 → 提交异步任务 → 跳转加载页 */
   const handleStartCalculate = async () => {
@@ -157,8 +282,8 @@ export default function RecordPage() {
     }
   }
 
-  // 历史记录：按日期从接口拉取
-  const getTodayDate = () => new Date().toISOString().split('T')[0]
+  // 历史记录：按本地自然日拉取，避免凌晨受 UTC 跨天影响
+  const getTodayDate = () => formatDateKey(new Date())
   const [selectedDate, setSelectedDate] = useState(getTodayDate())
   /** 日历弹层显隐，用于 Taroify Calendar 选择日期 */
   const [calendarOpen, setCalendarOpen] = useState(false)
@@ -183,10 +308,10 @@ export default function RecordPage() {
     const weekdays = ['日', '一', '二', '三', '四', '五', '六']
     const weekday = weekdays[date.getDay()]
     const today = new Date()
-    const todayStr = today.toISOString().split('T')[0]
-    const yesterday = new Date(today)
+    const todayStr = formatDateKey(today)
+    const yesterday = new Date(today.getTime())
     yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
+    const yesterdayStr = formatDateKey(yesterday)
     if (dateStr === todayStr) return `${month}月${day}日 今天`
     if (dateStr === yesterdayStr) return `${month}月${day}日 昨天`
     return `${month}月${day}日 周${weekday}`
@@ -203,11 +328,7 @@ export default function RecordPage() {
 
   /** 统一按本地时区格式化为 YYYY-MM-DD，避免时区导致跨天显示错误 */
   const getLocalDateStr = (value: string) => {
-    const d = new Date(value)
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
+    return formatDateKey(new Date(value))
   }
 
   const loadHistory = async (date: string) => {
@@ -215,9 +336,7 @@ export default function RecordPage() {
     setHistoryError(null)
     try {
       const { records } = await getFoodRecordList(date)
-      // 二次按所选日期过滤，确保页面仅展示该日期记录
-      const filtered = records.filter((r: FoodRecord) => getLocalDateStr(r.record_time) === date)
-      const meals = filtered.map((r: FoodRecord) => ({
+      const meals = records.map((r: FoodRecord) => ({
         id: r.id,
         mealType: r.meal_type,
         mealName: MEAL_TYPE_NAMES[r.meal_type] || r.meal_type,
@@ -249,10 +368,27 @@ export default function RecordPage() {
 
   // 处理从首页跳转过来的 tab 切换
   useDidShow(() => {
-    const tab = Taro.getStorageSync('recordPageTab')
-    if (tab) {
+    const tab = Taro.getStorageSync('recordPageTab') as string | undefined
+    const historyDate = Taro.getStorageSync(RECORD_HISTORY_DATE_KEY) as string | undefined
+    if (tab === 'photo' || tab === 'text' || tab === 'history') {
       setActiveMethod(tab)
       Taro.removeStorageSync('recordPageTab') // 用完即删，避免重复触发
+    } else if (tab) {
+      setActiveMethod('photo')
+      Taro.removeStorageSync('recordPageTab')
+    }
+    if (historyDate) {
+      setSelectedDate(historyDate)
+      setActiveMethod('history')
+      Taro.removeStorageSync(RECORD_HISTORY_DATE_KEY)
+    }
+
+    const picked = Taro.getStorageSync(RECORD_TEXT_LIBRARY_SELECTION_KEY)
+    if (picked?.text) {
+      setActiveMethod('text')
+      setFoodText(picked.text)
+      Taro.removeStorageSync(RECORD_TEXT_LIBRARY_SELECTION_KEY)
+      Taro.showToast({ title: '已带入文字记录', icon: 'success' })
     }
   })
 
@@ -318,12 +454,7 @@ export default function RecordPage() {
   }
 
   /** 将 Date 转为本地 YYYY-MM-DD，供 Calendar 确认后更新 selectedDate */
-  const dateToDateStr = (d: Date) => {
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
+  const dateToDateStr = (d: Date) => formatDateKey(d)
 
   /** 日历可选范围：最近 6 个月到今天 */
   const calendarMinDate = useMemo(() => {
@@ -364,12 +495,20 @@ export default function RecordPage() {
             <View className={`method-icon ${method.iconClass}`}>
               {method.id === 'photo' && <IconCamera size={40} color={getMethodIconColor(method.id)} />}
               {method.id === 'text' && <IconText size={40} color={getMethodIconColor(method.id)} />}
-              {method.id === 'history' && <IconClock size={40} color={getMethodIconColor(method.id)} />}
             </View>
             <Text className='method-text'>{method.text}</Text>
           </View>
         ))}
       </View>
+
+      {activeMethod !== 'history' && (
+        <View className='history-shortcut' onClick={() => setActiveMethod('history')}>
+          <View className='history-shortcut-icon'>
+            <IconClock size={18} color='#ad46ff' />
+          </View>
+          <Text className='history-shortcut-text'>查看历史记录</Text>
+        </View>
+      )}
 
       {/* AI拍照识别区域 */}
       {activeMethod === 'photo' && (
@@ -422,6 +561,20 @@ export default function RecordPage() {
       {/* 文字记录区域 */}
       {activeMethod === 'text' && (
         <View className='text-record-section'>
+          <View className='text-source-card'>
+            <Text className='config-label'>快速带入（同拍照识别结果页可编辑）</Text>
+            <View className='text-source-actions'>
+              <View className='text-source-btn' onClick={() => openTextSourcePicker('history')}>
+                <Text className='text-source-btn-title'>从历史记录选择</Text>
+                <Text className='text-source-btn-sub'>复用你已记录过的餐食</Text>
+              </View>
+              <View className='text-source-btn' onClick={() => openTextSourcePicker('library')}>
+                <Text className='text-source-btn-title'>从公共食物库选择</Text>
+                <Text className='text-source-btn-sub'>直接套用公共食物条目</Text>
+              </View>
+            </View>
+          </View>
+
           {/* 输入主卡片 */}
           <View className='text-input-card'>
             <View className='card-header'>
@@ -546,9 +699,71 @@ export default function RecordPage() {
         </View>
       )}
 
+      {showTextSourcePicker && (
+        <View className='text-picker-mask' onClick={() => setShowTextSourcePicker(false)}>
+          <View className='text-picker-panel' onClick={(e) => e.stopPropagation()}>
+            <View className='text-picker-header'>
+              <Text className='text-picker-title'>{textSourceType === 'history' ? '选择历史记录' : '选择公共食物库条目'}</Text>
+              <Text className='text-picker-close' onClick={() => setShowTextSourcePicker(false)}>✕</Text>
+            </View>
+            {textSourceLoading ? (
+              <View className='text-picker-empty'>加载中...</View>
+            ) : textSourceType === 'history' ? (
+              textHistoryRecords.length > 0 ? (
+                <ScrollView className='text-picker-list' scrollY>
+                  {textHistoryRecords.map((record) => (
+                    <View
+                      key={record.id}
+                      className='text-picker-item'
+                      onClick={() => {
+                        setShowTextSourcePicker(false)
+                        mapRecordToResult(record)
+                      }}
+                    >
+                      <Text className='text-picker-item-title'>{record.description || '历史记录'}</Text>
+                      <Text className='text-picker-item-sub'>
+                        {(MEAL_TYPE_NAMES[record.meal_type] || record.meal_type)} · {Math.round(record.total_calories || 0)} kcal
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View className='text-picker-empty'>暂无历史记录</View>
+              )
+            ) : (
+              textLibraryItems.length > 0 ? (
+                <ScrollView className='text-picker-list' scrollY>
+                  {textLibraryItems.map((item) => (
+                    <View
+                      key={item.id}
+                      className='text-picker-item'
+                      onClick={() => {
+                        setShowTextSourcePicker(false)
+                        mapLibraryToResult(item)
+                      }}
+                    >
+                      <Text className='text-picker-item-title'>{item.food_name || item.description || '公共食物库条目'}</Text>
+                      <Text className='text-picker-item-sub'>
+                        {[item.merchant_name, `${Math.round(item.total_calories || 0)} kcal`].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View className='text-picker-empty'>公共食物库暂无可用条目</View>
+              )
+            )}
+          </View>
+        </View>
+      )}
+
       {/* 历史记录区域 */}
       {activeMethod === 'history' && (
         <View className='history-section'>
+          <View className='history-header-card'>
+            <Text className='history-header-title'>饮食档案</Text>
+            <Text className='history-header-subtitle'>按天查看已记录的餐食明细，支持进入详情和删除整条记录</Text>
+          </View>
           {/* 日期选择：点击打开 Taroify 日历弹层 */}
           <View className='date-selector'>
             <View className='date-card'>

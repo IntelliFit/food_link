@@ -50,6 +50,7 @@ from database import (
     get_friends_with_profile,
     cleanup_duplicate_friends,
     list_friends_feed_records,
+    get_friend_circle_week_checkin_leaderboard,
     list_public_feed_records,
     add_feed_like,
     remove_feed_like,
@@ -94,6 +95,24 @@ GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "google/gemini-2.5-flash")
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
+
+
+def _get_china_today_str() -> str:
+    """返回中国时区的今天日期字符串。"""
+    return datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+
+
+def _format_china_time_hhmm(value: Any) -> str:
+    """将 ISO 时间戳格式化为中国时区 HH:mm。"""
+    if not value:
+        return "00:00"
+    try:
+        dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(CHINA_TZ).strftime("%H:%M")
+    except Exception:
+        return "00:00"
 
 app = FastAPI(title="食物分析 API", description="基于 DashScope 的食物图片分析服务")
 
@@ -1480,6 +1499,16 @@ class UpdateUserInfoRequest(BaseModel):
     public_records: Optional[bool] = None
 
 # ---------- 健康档案 (Professional Onboarding) ----------
+
+
+class DashboardTargetsUpdateRequest(BaseModel):
+    """首页仪表盘目标热量与三大营养素（与 PUT /api/user/dashboard-targets 共用结构）"""
+    calorie_target: float = Field(..., ge=500, le=6000, description="每日目标热量 kcal")
+    protein_target: float = Field(..., ge=0, le=500, description="蛋白质目标 g")
+    carbs_target: float = Field(..., ge=0, le=1000, description="碳水目标 g")
+    fat_target: float = Field(..., ge=0, le=300, description="脂肪目标 g")
+
+
 class HealthProfileUpdateRequest(BaseModel):
     """首次/更新健康档案问卷"""
     gender: Optional[str] = Field(None, description="性别: male / female")
@@ -1517,6 +1546,10 @@ class HealthProfileUpdateRequest(BaseModel):
     health_notes: Optional[str] = Field(
         None,
         description="特殊情况/补充"
+    )
+    dashboard_targets: Optional[DashboardTargetsUpdateRequest] = Field(
+        None,
+        description="首页摄入目标（写入 health_condition.dashboard_targets，兼容未部署独立接口的旧服务）",
     )
 
     class Config:
@@ -1774,6 +1807,14 @@ async def update_health_profile(
         health_condition["allergies"] = body.allergies
     if body.health_notes is not None:
         health_condition["health_notes"] = body.health_notes
+    if body.dashboard_targets is not None:
+        dt = body.dashboard_targets
+        health_condition["dashboard_targets"] = {
+            "calorie_target": round(float(dt.calorie_target), 1),
+            "protein_target": round(float(dt.protein_target), 1),
+            "carbs_target": round(float(dt.carbs_target), 1),
+            "fat_target": round(float(dt.fat_target), 1),
+        }
     # 若有体检报告 OCR 结果，一并写入 user_health_documents（含 image_url 与识别结果）
     if body.report_extract:
         try:
@@ -2400,6 +2441,61 @@ async def get_shared_food_record(record_id: str):
 # 各餐次默认目标热量（kcal），可与 TDEE 联动
 MEAL_TARGETS = {"breakfast": 500, "lunch": 800, "dinner": 700, "snack": 200}
 MEAL_NAMES = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
+DASHBOARD_DEFAULT_MACRO_TARGETS = {"protein": 120.0, "carbs": 250.0, "fat": 65.0}
+
+
+def _get_dashboard_targets(user: Dict[str, Any]) -> Dict[str, float]:
+    """从用户健康档案 JSON 中读取首页目标值，缺失时回退到默认值。"""
+    health_condition = user.get("health_condition") or {}
+    dashboard_targets = health_condition.get("dashboard_targets") or {}
+
+    calorie_target = dashboard_targets.get("calorie_target")
+    if calorie_target is None:
+        calorie_target = (user.get("tdee") and float(user["tdee"])) or 2000
+
+    return {
+        "calorie_target": round(float(calorie_target or 2000), 1),
+        "protein_target": round(float(dashboard_targets.get("protein_target") or DASHBOARD_DEFAULT_MACRO_TARGETS["protein"]), 1),
+        "carbs_target": round(float(dashboard_targets.get("carbs_target") or DASHBOARD_DEFAULT_MACRO_TARGETS["carbs"]), 1),
+        "fat_target": round(float(dashboard_targets.get("fat_target") or DASHBOARD_DEFAULT_MACRO_TARGETS["fat"]), 1),
+    }
+
+
+@app.get("/api/user/dashboard-targets")
+async def get_dashboard_targets(user_info: dict = Depends(get_current_user_info)):
+    """获取当前用户首页仪表盘目标值。"""
+    user_id = user_info["user_id"]
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return _get_dashboard_targets(user)
+
+
+@app.put("/api/user/dashboard-targets")
+async def update_dashboard_targets(
+    body: DashboardTargetsUpdateRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """更新当前用户首页仪表盘目标值，持久化到 health_condition.dashboard_targets。"""
+    user_id = user_info["user_id"]
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    health_condition = dict(user.get("health_condition") or {})
+    health_condition["dashboard_targets"] = {
+        "calorie_target": round(float(body.calorie_target), 1),
+        "protein_target": round(float(body.protein_target), 1),
+        "carbs_target": round(float(body.carbs_target), 1),
+        "fat_target": round(float(body.fat_target), 1),
+    }
+
+    try:
+        updated = await update_user(user_id, {"health_condition": health_condition})
+        return _get_dashboard_targets(updated)
+    except Exception as e:
+        print(f"[update_dashboard_targets] 错误: {e}")
+        raise HTTPException(status_code=500, detail="更新首页目标失败")
 
 
 @app.get("/api/home/dashboard")
@@ -2409,10 +2505,11 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
     运动数据不返回，由前端静态展示或后续接口提供。
     """
     user_id = user_info["user_id"]
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = _get_china_today_str()
     try:
         user = await get_user_by_id(user_id)
-        tdee = (user.get("tdee") and float(user["tdee"])) or 2000
+        targets = _get_dashboard_targets(user)
+        calorie_target = float(targets["calorie_target"])
         records = await list_food_records(user_id=user_id, date=today, limit=100)
     except Exception as e:
         print(f"[get_home_dashboard] 错误: {e}")
@@ -2424,16 +2521,15 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
     total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
     total_fat = sum(float(r.get("total_fat") or 0) for r in records)
 
-    # 宏量目标（可后续按 TDEE 比例算，此处用常用默认）
-    protein_target = 120
-    carbs_target = 250
-    fat_target = 65
-    progress = (total_cal / tdee * 100) if tdee else 0
+    protein_target = targets["protein_target"]
+    carbs_target = targets["carbs_target"]
+    fat_target = targets["fat_target"]
+    progress = (total_cal / calorie_target * 100) if calorie_target else 0
     progress = min(100.0, round(progress, 1))
 
     intake_data = {
         "current": round(total_cal, 1),
-        "target": int(tdee),
+        "target": round(calorie_target, 1),
         "progress": progress,
         "macros": {
             "protein": {"current": round(total_protein, 1), "target": protein_target},
@@ -2463,11 +2559,7 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
         times = [x.get("record_time") for x in items if x.get("record_time")]
         time_str = "00:00"
         if times:
-            try:
-                dt = times[0] if isinstance(times[0], str) else str(times[0])
-                time_str = dt[:16].replace("T", " ").split(" ")[-1][:5]
-            except Exception:
-                pass
+            time_str = _format_china_time_hhmm(times[0])
         meals_out.append({
             "type": meal_type,
             "name": MEAL_NAMES.get(meal_type, meal_type),
@@ -2581,7 +2673,7 @@ async def get_stats_summary(
     if range not in ("week", "month"):
         range = "week"
     user_id = user_info["user_id"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(CHINA_TZ)
     today = now.strftime("%Y-%m-%d")
     if range == "week":
         start_d = (now - timedelta(days=6)).date()
@@ -2630,7 +2722,14 @@ async def get_stats_summary(
             except Exception as e:
                 print(f"[get_stats_summary] Date parse error for {rt}: {e}")
                 pass
-    daily_list = [{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())]
+    full_daily_list = []
+    cursor = start_d
+    end_day = now.date()
+    while cursor <= end_day:
+        date_key = cursor.isoformat()
+        full_daily_list.append({"date": date_key, "calories": round(daily_cal.get(date_key, 0.0), 1)})
+        cursor += timedelta(days=1)
+    daily_list = full_daily_list
     print(f"[get_stats_summary] Daily list: {daily_list}")
 
     recorded_days = len(daily_cal)
@@ -3275,6 +3374,19 @@ async def api_community_feed(
     except Exception as e:
         print(f"[api/community/feed] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取动态失败")
+
+
+@app.get("/api/community/checkin-leaderboard")
+async def api_community_checkin_leaderboard(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """本周打卡排行榜：自己 + 好友按饮食记录条数排名（北京时间自然周）。"""
+    try:
+        data = await get_friend_circle_week_checkin_leaderboard(user_info["user_id"])
+        return data
+    except Exception as e:
+        print(f"[api/community/checkin-leaderboard] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取排行榜失败")
 
 
 @app.post("/api/community/feed/{record_id}/like")

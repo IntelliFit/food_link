@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import {
   getAccessToken,
   getPublicFoodLibraryList,
@@ -27,8 +27,11 @@ const CACHE_KEYS = {
 const CACHE_DURATION = 5 * 60 * 1000
 
 type TabMode = 'all' | 'collections'
+const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
 
 export default function FoodLibraryPage() {
+  const router = useRouter()
+  const fromRecord = router.params.from === 'record'
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
   const [tabMode, setTabMode] = useState<TabMode>('all')
   const [loading, setLoading] = useState(false)
@@ -322,6 +325,21 @@ export default function FoodLibraryPage() {
     Taro.navigateTo({ url: `/pages/food-library-detail/index?id=${itemId}` })
   }
 
+  const pickForRecord = (item: PublicFoodLibraryItem) => {
+    const pickedText = item.food_name
+      || item.description
+      || item.items?.map((food) => food.name).filter(Boolean).slice(0, 4).join('、')
+      || '健康餐'
+    Taro.setStorageSync(RECORD_TEXT_LIBRARY_SELECTION_KEY, {
+      text: pickedText,
+      source: 'public_food_library'
+    })
+    Taro.showToast({ title: '已带回文字记录', icon: 'success' })
+    setTimeout(() => {
+      Taro.navigateBack()
+    }, 250)
+  }
+
   // 跳转分享页
   const goShare = () => {
     Taro.navigateTo({ url: '/pages/food-library-share/index' })
@@ -335,8 +353,14 @@ export default function FoodLibraryPage() {
   if (!loggedIn) {
     return (
       <View className="food-library-page">
+        {fromRecord && (
+          <View className="pick-mode-tip">
+            <Text className="pick-mode-title">从公共食物库选择</Text>
+            <Text className="pick-mode-subtitle">点任意餐食卡片，可直接带回到文字记录里</Text>
+          </View>
+        )}
         <View className="login-tip">
-          <Text className="login-tip-text">登录后查看公共食物库</Text>
+          <Text className="login-tip-text">{fromRecord ? '登录后才能从公共食物库带回记录' : '登录后查看公共食物库'}</Text>
           <Button className="login-tip-btn" onClick={goLogin}>去登录</Button>
         </View>
       </View>
@@ -348,6 +372,12 @@ export default function FoodLibraryPage() {
 
   return (
     <View className="food-library-page">
+      {fromRecord && (
+        <View className="pick-mode-tip">
+          <Text className="pick-mode-title">从公共食物库选择</Text>
+          <Text className="pick-mode-subtitle">点任意餐食卡片，可直接带回到文字记录里</Text>
+        </View>
+      )}
       {/* Tab：全部 / 收藏夹 */}
       <View className="tab-section">
         <View
@@ -466,7 +496,11 @@ export default function FoodLibraryPage() {
             </View>
           ) : (
             displayList.map(item => (
-              <View key={item.id} className="food-card" onClick={() => goDetail(item.id)}>
+              <View
+                key={item.id}
+                className={`food-card ${fromRecord ? 'is-pick-mode' : ''}`}
+                onClick={() => (fromRecord ? pickForRecord(item) : goDetail(item.id))}
+              >
                 <View className="food-image-wrap">
                   {item.image_path ? (
                     <Image className="food-image" src={item.image_path} mode="aspectFill" />

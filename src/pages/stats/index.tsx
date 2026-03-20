@@ -27,6 +27,14 @@ const MEAL_ICON_COLORS: Record<string, string> = {
   snack: '#ad46ff'
 }
 
+const RECORD_HISTORY_DATE_KEY = 'recordHistoryDate'
+
+type HeatmapCell = {
+  date: string
+  calories: number
+  intensity: 0 | 1 | 2 | 3 | 4
+}
+
 export default function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
@@ -222,11 +230,35 @@ export default function StatsPage() {
   const d = data!
   const surplusDeficit = d.cal_surplus_deficit
   const isSurplus = surplusDeficit > 0
+  const chartDays = range === 'week' ? d.daily_calories.slice(-7) : d.daily_calories.slice(-14)
 
   // Calculate max calories for the chart scaling
   const maxDailyCalories = d.daily_calories.length > 0
     ? Math.max(...d.daily_calories.map(i => i.calories))
     : 2000
+  const heatmapMaxCalories = d.daily_calories.length > 0
+    ? Math.max(...d.daily_calories.map(i => i.calories), 1)
+    : 1
+  const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
+    const ratio = item.calories <= 0 ? 0 : item.calories / heatmapMaxCalories
+    let intensity: HeatmapCell['intensity'] = 0
+    if (ratio > 0.75) intensity = 4
+    else if (ratio > 0.5) intensity = 3
+    else if (ratio > 0.25) intensity = 2
+    else if (ratio > 0) intensity = 1
+    return {
+      date: item.date,
+      calories: item.calories,
+      intensity
+    }
+  })
+  const activeHeatmapCell = [...heatmapCells].reverse().find((item) => item.calories > 0) || heatmapCells[heatmapCells.length - 1]
+
+  const openHistoryForDate = (date: string) => {
+    Taro.setStorageSync('recordPageTab', 'history')
+    Taro.setStorageSync(RECORD_HISTORY_DATE_KEY, date)
+    Taro.switchTab({ url: '/pages/record/index' })
+  }
 
   return (
     <View className='stats-page'>
@@ -305,16 +337,61 @@ export default function StatsPage() {
           </View>
         </View>
 
+        <View className='stats-card heatmap-card'>
+          <View className='card-header'>
+            <Text className='iconfont icon-rili chart-title-icon' />
+            <View className='card-header-copy'>
+              <Text className='card-title'>记录热图</Text>
+              <Text className='card-subtitle'>看最近是否持续记录，点击某天可直达饮食档案</Text>
+            </View>
+          </View>
+          {heatmapCells.length > 0 ? (
+            <>
+              <View className='heatmap-grid'>
+                {heatmapCells.map((item) => (
+                  <View
+                    key={item.date}
+                    className={`heatmap-cell intensity-${item.intensity} ${item.calories > 0 ? 'is-clickable' : ''}`}
+                    onClick={() => item.calories > 0 && openHistoryForDate(item.date)}
+                  >
+                    <Text className='heatmap-cell-label'>{item.date.slice(5).replace('-', '/')}</Text>
+                    <Text className='heatmap-cell-value'>{item.calories > 0 ? Math.round(item.calories) : '-'}</Text>
+                  </View>
+                ))}
+              </View>
+              {activeHeatmapCell ? (
+                <View className='heatmap-summary'>
+                  <Text className='heatmap-summary-text'>
+                    最近一次有记录的是 {activeHeatmapCell.date}，摄入 {Math.round(activeHeatmapCell.calories)} kcal
+                  </Text>
+                  {activeHeatmapCell.calories > 0 && (
+                    <View className='heatmap-link-btn' onClick={() => openHistoryForDate(activeHeatmapCell.date)}>
+                      <Text className='heatmap-link-btn-text'>查看当日明细</Text>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <View className='chart-empty-state'>
+              <Text className='empty-text'>暂无记录热图</Text>
+            </View>
+          )}
+        </View>
+
         {/* 每日摄入趋势 - Bar Chart */}
         {/* 每日摄入趋势 - Bar Chart */}
         <View className='stats-card chart-card'>
           <View className='card-header'>
             <Text className='iconfont icon-shangzhang chart-title-icon' />
-            <Text className='card-title'>摄入趋势</Text>
+            <View className='card-header-copy'>
+              <Text className='card-title'>摄入趋势</Text>
+              <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '最近 14 天'}</Text>
+            </View>
           </View>
-          {d.daily_calories.length > 0 ? (
+          {chartDays.length > 0 ? (
             <View className='bar-chart-container'>
-              {d.daily_calories.slice(-7).map((item) => {
+              {chartDays.map((item) => {
                 const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10);
                 return (
                   <View key={item.date} className='chart-col'>

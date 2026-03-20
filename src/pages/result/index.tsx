@@ -65,6 +65,12 @@ export default function ResultPage() {
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
 
+  const openQuickUpload = (recordId: string) => {
+    Taro.navigateTo({
+      url: `/pages/food-library-share/index?source_record_id=${encodeURIComponent(recordId)}&quick_upload=1`
+    })
+  }
+
   // 将API返回的数据转换为页面需要的格式（保留 originalWeight 用于标记样本时计算偏差）
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
     return items.map((item, index) => {
@@ -365,10 +371,28 @@ export default function ResultPage() {
           return
         }
 
-        Taro.showToast({ title: '已保存，去分享', icon: 'success' })
-        setTimeout(() => {
-          Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
-        }, 500)
+        const hasUploadableImage = imagePaths.length > 0 || !!imagePath
+        if (!hasUploadableImage) {
+          Taro.showToast({ title: '记录成功', icon: 'success' })
+          setTimeout(() => {
+            Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
+          }, 500)
+          return
+        }
+
+        const { confirm } = await Taro.showModal({
+          title: '记录成功',
+          content: '要不要顺手上传到公共食物库？只需补充商家、位置或是否自制等信息。',
+          confirmText: '去上传',
+          cancelText: '先不用'
+        })
+
+        if (confirm) {
+          openQuickUpload(saveResult.id)
+          return
+        }
+
+        Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
       } catch (e: any) {
         Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
       } finally {

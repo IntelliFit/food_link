@@ -1,8 +1,17 @@
-import { View, Text } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { View, Text, Input } from '@tarojs/components'
+import { useState, useEffect, useCallback } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
-import { getHomeDashboard, getAccessToken, type HomeIntakeData, type HomeMealItem } from '../../utils/api'
-import { IconCamera, IconText, IconClock, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
+import {
+  getHomeDashboard,
+  getAccessToken,
+  updateDashboardTargets,
+  mergeHomeIntakeWithTargets,
+  getStoredDashboardTargets,
+  type DashboardTargets,
+  type HomeIntakeData,
+  type HomeMealItem
+} from '../../utils/api'
+import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import { Empty, Button } from '@taroify/core'
 import CustomNavBar from '../../components/CustomNavBar'
 
@@ -19,11 +28,40 @@ const DEFAULT_INTAKE: HomeIntakeData = {
   }
 }
 
+type MacroKey = keyof HomeIntakeData['macros']
+
+interface TargetFormState {
+  calorieTarget: string
+  proteinTarget: string
+  carbsTarget: string
+  fatTarget: string
+}
+
 function getGreeting(): string {
   const h = new Date().getHours()
   if (h < 12) return '早上好'
   if (h < 18) return '下午好'
   return '晚上好'
+}
+
+function formatDisplayNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function clampProgress(current: number, target: number): number {
+  if (target <= 0) {
+    return current > 0 ? 100 : 0
+  }
+  return Math.min(100, Math.max(0, Number(((current / target) * 100).toFixed(1))))
+}
+
+function createTargetForm(intake: HomeIntakeData): TargetFormState {
+  return {
+    calorieTarget: formatDisplayNumber(intake.target),
+    proteinTarget: formatDisplayNumber(intake.macros.protein.target),
+    carbsTarget: formatDisplayNumber(intake.macros.carbs.target),
+    fatTarget: formatDisplayNumber(intake.macros.fat.target)
+  }
 }
 
 // 餐次对应的 iconfont 图标及颜色
@@ -34,27 +72,56 @@ const MEAL_ICON_CONFIG = {
   snack: { Icon: IconSnack, color: '#ad46ff' }
 } as const
 
+const MACRO_CONFIGS: Array<{
+  key: MacroKey
+  label: string
+  color: string
+  unit: string
+  Icon: typeof IconProtein
+}> = [
+  { key: 'protein', label: '蛋白质', color: '#3b82f6', unit: 'g', Icon: IconProtein },
+  { key: 'carbs', label: '碳水', color: '#00bc7d', unit: 'g', Icon: IconCarbs },
+  { key: 'fat', label: '脂肪', color: '#f59e0b', unit: 'g', Icon: IconFat }
+]
+
 export default function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
   const [meals, setMeals] = useState<HomeMealItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [showTargetEditor, setShowTargetEditor] = useState(false)
+  const [savingTargets, setSavingTargets] = useState(false)
+  const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
 
-  // 每次显示页面时刷新数据
-  Taro.useDidShow(() => {
+  const loadDashboard = useCallback(async () => {
     if (!getAccessToken()) {
+      setIntakeData(DEFAULT_INTAKE)
+      setMeals([])
+      setTargetForm(createTargetForm(DEFAULT_INTAKE))
       setLoading(false)
       return
     }
-    getHomeDashboard()
-      .then((res) => {
-        setIntakeData(res.intakeData)
-        setMeals(res.meals || [])
-      })
-      .catch(() => {
-        setIntakeData(DEFAULT_INTAKE)
-        setMeals([])
-      })
-      .finally(() => setLoading(false))
+
+    setLoading(true)
+    try {
+      const res = await getHomeDashboard()
+      const storedTargets = getStoredDashboardTargets()
+      const intake =
+        storedTargets != null ? mergeHomeIntakeWithTargets(res.intakeData, storedTargets) : res.intakeData
+      setIntakeData(intake)
+      setMeals(res.meals || [])
+      setTargetForm(createTargetForm(intake))
+    } catch {
+      setIntakeData(DEFAULT_INTAKE)
+      setMeals([])
+      setTargetForm(createTargetForm(DEFAULT_INTAKE))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // 每次显示页面时刷新数据
+  Taro.useDidShow(() => {
+    loadDashboard()
   })
 
   useShareAppMessage(() => ({
@@ -74,8 +141,74 @@ export default function IndexPage() {
     })
   }, [])
 
+  const openTargetEditor = () => {
+    if (!getAccessToken()) {
+      Taro.showToast({ title: '登录后可编辑目标', icon: 'none' })
+      return
+    }
+    setTargetForm(createTargetForm(intakeData))
+    setShowTargetEditor(true)
+  }
 
-  const handleQuickRecord = (type: string) => {
+  const handleTargetInput = (key: keyof TargetFormState, value: string) => {
+    setTargetForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSaveTargets = async () => {
+    const payload: DashboardTargets = {
+      calorie_target: Number(targetForm.calorieTarget),
+      protein_target: Number(targetForm.proteinTarget),
+      carbs_target: Number(targetForm.carbsTarget),
+      fat_target: Number(targetForm.fatTarget)
+    }
+
+    if (Object.values(payload).some((value) => !Number.isFinite(value))) {
+      Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
+      return
+    }
+
+    if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
+      Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
+      return
+    }
+
+    if (payload.protein_target < 0 || payload.protein_target > 500) {
+      Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
+      return
+    }
+
+    if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
+      Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
+      return
+    }
+
+    if (payload.fat_target < 0 || payload.fat_target > 300) {
+      Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
+      return
+    }
+
+    setSavingTargets(true)
+    try {
+      const { saveScope } = await updateDashboardTargets(payload)
+      setShowTargetEditor(false)
+      await loadDashboard()
+      if (saveScope === 'local') {
+        Taro.showToast({
+          title: '已暂存本机；部署最新后端后将自动同步云端',
+          icon: 'none',
+          duration: 3200,
+        })
+      } else {
+        Taro.showToast({ title: '目标已更新', icon: 'success' })
+      }
+    } catch (error) {
+      Taro.showToast({ title: (error as Error).message || '保存失败', icon: 'none' })
+    } finally {
+      setSavingTargets(false)
+    }
+  }
+
+  const handleQuickRecord = (type: 'photo' | 'text') => {
     // 拍照识别需先登录
     if (type === 'photo' && !getAccessToken()) {
       Taro.navigateTo({ url: '/pages/login/index' })
@@ -83,13 +216,7 @@ export default function IndexPage() {
     }
     // 记录页面是 tabBar 页面，需要使用 switchTab
     // switchTab 不支持传参，通过 storage 传递
-    if (type === 'text') {
-      Taro.setStorageSync('recordPageTab', 'text')
-    } else if (type === 'history') {
-      Taro.setStorageSync('recordPageTab', 'history')
-    } else {
-      Taro.setStorageSync('recordPageTab', 'photo')
-    }
+    Taro.setStorageSync('recordPageTab', type)
     Taro.switchTab({ url: '/pages/record/index' })
   }
 
@@ -97,6 +224,8 @@ export default function IndexPage() {
     Taro.setStorageSync('recordPageTab', 'history')
     Taro.switchTab({ url: '/pages/record/index' })
   }
+
+  const remainingCalories = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
 
   return (
     <View className='home-page'>
@@ -121,13 +250,18 @@ export default function IndexPage() {
         <View className='intake-card'>
           <View className='intake-header'>
             <Text className='intake-label'>今日摄入</Text>
-            <Text className='target-label'>目标 {intakeData.target} kcal</Text>
+            <View className='target-actions'>
+              <Text className='target-label'>目标 {formatDisplayNumber(intakeData.target)} kcal</Text>
+              <View className='target-edit-btn' onClick={openTargetEditor}>
+                <Text className='target-edit-btn-text'>编辑目标</Text>
+              </View>
+            </View>
           </View>
           <View className='calorie-section'>
             <Text className='calorie-value'>
-              {loading ? '--' : intakeData.current}
+              {loading ? '--' : formatDisplayNumber(intakeData.current)}
             </Text>
-            <Text className='calorie-target'>/{intakeData.target} kcal</Text>
+            <Text className='calorie-target'>/{formatDisplayNumber(intakeData.target)} kcal</Text>
           </View>
           <View className='progress-bar'>
             <View
@@ -135,31 +269,33 @@ export default function IndexPage() {
               style={{ width: `${intakeData.progress}%` }}
             />
           </View>
-          <View className='macros-section'>
-            <View className='macro-item'>
-              <View className='macro-icon'>
-                <IconProtein size={28} color="#ffffff" />
-              </View>
-              <Text className='macro-label'>蛋白质</Text>
-              <Text className='macro-value'>{intakeData.macros.protein.current}</Text>
-              <Text className='macro-target'>/{intakeData.macros.protein.target}g</Text>
-            </View>
-            <View className='macro-item'>
-              <View className='macro-icon'>
-                <IconCarbs size={28} color="#ffffff" />
-              </View>
-              <Text className='macro-label'>碳水</Text>
-              <Text className='macro-value'>{intakeData.macros.carbs.current}</Text>
-              <Text className='macro-target'>/{intakeData.macros.carbs.target}g</Text>
-            </View>
-            <View className='macro-item'>
-              <View className='macro-icon'>
-                <IconFat size={28} color="#ffffff" />
-              </View>
-              <Text className='macro-label'>脂肪</Text>
-              <Text className='macro-value'>{intakeData.macros.fat.current}</Text>
-              <Text className='macro-target'>/{intakeData.macros.fat.target}g</Text>
-            </View>
+          <View className='intake-summary-row'>
+            <Text className='intake-summary-text'>已完成 {intakeData.progress.toFixed(0)}%</Text>
+            <Text className='intake-summary-text'>剩余 {formatDisplayNumber(remainingCalories)} kcal</Text>
+          </View>
+
+          <View className='macro-donuts-row'>
+            {MACRO_CONFIGS.map(({ key, label, unit, color, Icon }) => {
+              const macro = intakeData.macros[key]
+              const progress = clampProgress(macro.current, macro.target)
+              const ringBg = `conic-gradient(${color} 0% ${progress}%, rgba(255,255,255,0.2) ${progress}% 100%)`
+
+              return (
+                <View key={key} className='macro-donut-col'>
+                  <View className='macro-donut-wrap'>
+                    <View className='macro-donut-ring' style={{ background: ringBg }} />
+                    <View className='macro-donut-inner'>
+                      <Icon size={20} color={color} />
+                    </View>
+                  </View>
+                  <Text className='macro-donut-name'>{label}</Text>
+                  <Text className='macro-donut-value'>
+                    {formatDisplayNumber(macro.current)}/{formatDisplayNumber(macro.target)}
+                    {unit}
+                  </Text>
+                </View>
+              )
+            })}
           </View>
         </View>
       </View>
@@ -185,15 +321,6 @@ export default function IndexPage() {
               <IconText size={44} color="#ffffff" />
             </View>
             <Text className='button-text'>文字记录</Text>
-          </View>
-          <View
-            className='quick-button history-btn'
-            onClick={() => handleQuickRecord('history')}
-          >
-            <View className='button-icon history-icon'>
-              <IconClock size={44} color="#ffffff" />
-            </View>
-            <Text className='button-text'>历史记录</Text>
           </View>
         </View>
       </View>
@@ -267,6 +394,81 @@ export default function IndexPage() {
             )))}
         </View>
       </View>
+
+      {showTargetEditor && (
+        <View className='target-modal' catchMove>
+          <View className='target-modal-mask' onClick={() => !savingTargets && setShowTargetEditor(false)} />
+          <View className='target-modal-content'>
+            <View className='target-modal-header'>
+              <Text className='target-modal-title'>编辑今日目标</Text>
+              <Text className='target-modal-desc'>保存后会同步到账号，下次登录仍会保留。</Text>
+            </View>
+
+            <View className='target-form-list'>
+              <View className='target-form-item'>
+                <Text className='target-form-label'>今日摄入目标</Text>
+                <View className='target-input-wrap'>
+                  <Input
+                    className='target-input'
+                    type='digit'
+                    value={targetForm.calorieTarget}
+                    onInput={(e) => handleTargetInput('calorieTarget', e.detail.value)}
+                  />
+                  <Text className='target-input-unit'>kcal</Text>
+                </View>
+              </View>
+
+              <View className='target-form-item'>
+                <Text className='target-form-label'>蛋白质目标</Text>
+                <View className='target-input-wrap'>
+                  <Input
+                    className='target-input'
+                    type='digit'
+                    value={targetForm.proteinTarget}
+                    onInput={(e) => handleTargetInput('proteinTarget', e.detail.value)}
+                  />
+                  <Text className='target-input-unit'>g</Text>
+                </View>
+              </View>
+
+              <View className='target-form-item'>
+                <Text className='target-form-label'>碳水目标</Text>
+                <View className='target-input-wrap'>
+                  <Input
+                    className='target-input'
+                    type='digit'
+                    value={targetForm.carbsTarget}
+                    onInput={(e) => handleTargetInput('carbsTarget', e.detail.value)}
+                  />
+                  <Text className='target-input-unit'>g</Text>
+                </View>
+              </View>
+
+              <View className='target-form-item'>
+                <Text className='target-form-label'>脂肪目标</Text>
+                <View className='target-input-wrap'>
+                  <Input
+                    className='target-input'
+                    type='digit'
+                    value={targetForm.fatTarget}
+                    onInput={(e) => handleTargetInput('fatTarget', e.detail.value)}
+                  />
+                  <Text className='target-input-unit'>g</Text>
+                </View>
+              </View>
+            </View>
+
+            <View className='target-modal-actions'>
+              <View className='target-modal-btn secondary' onClick={() => !savingTargets && setShowTargetEditor(false)}>
+                <Text className='target-modal-btn-text secondary'>取消</Text>
+              </View>
+              <View className='target-modal-btn primary' onClick={handleSaveTargets}>
+                <Text className='target-modal-btn-text primary'>{savingTargets ? '保存中...' : '保存'}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

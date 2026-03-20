@@ -181,6 +181,81 @@ export interface HomeDashboard {
   meals: HomeMealItem[]
 }
 
+/** 首页仪表盘可编辑目标值 */
+export interface DashboardTargets {
+  calorie_target: number
+  protein_target: number
+  carbs_target: number
+  fat_target: number
+}
+
+/** 更新首页目标的结果：服务端成功或仅写入本机（线上未升级接口时） */
+export interface DashboardTargetsUpdateResult {
+  targets: DashboardTargets
+  /** server：已写入数据库；local：仅本机 storage（需部署后端或检查网络） */
+  saveScope: 'server' | 'local'
+}
+
+const DASHBOARD_TARGETS_STORAGE_KEY = 'food_link_dashboard_targets_v1'
+
+/** 将服务端返回的摄入数据与本机暂存的目标合并（用于线上尚未返回自定义目标时） */
+export function mergeHomeIntakeWithTargets(intake: HomeIntakeData, t: DashboardTargets): HomeIntakeData {
+  const calorie_target = t.calorie_target
+  const progress =
+    calorie_target > 0
+      ? Math.min(100.0, Math.round((intake.current / calorie_target) * 1000) / 10)
+      : 0
+  return {
+    ...intake,
+    target: calorie_target,
+    progress,
+    macros: {
+      protein: { ...intake.macros.protein, target: t.protein_target },
+      carbs: { ...intake.macros.carbs, target: t.carbs_target },
+      fat: { ...intake.macros.fat, target: t.fat_target },
+    },
+  }
+}
+
+function parseDashboardTargetsFromUnknown(raw: unknown): DashboardTargets | null {
+  if (raw == null || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const calorie_target = Number(o.calorie_target)
+  const protein_target = Number(o.protein_target)
+  const carbs_target = Number(o.carbs_target)
+  const fat_target = Number(o.fat_target)
+  if (![calorie_target, protein_target, carbs_target, fat_target].every(Number.isFinite)) {
+    return null
+  }
+  return { calorie_target, protein_target, carbs_target, fat_target }
+}
+
+/** 本机暂存的摄入目标（无后端或接口 404 时使用） */
+export function getStoredDashboardTargets(): DashboardTargets | null {
+  try {
+    const raw = Taro.getStorageSync(DASHBOARD_TARGETS_STORAGE_KEY)
+    return parseDashboardTargetsFromUnknown(raw)
+  } catch {
+    return null
+  }
+}
+
+function clearStoredDashboardTargets(): void {
+  try {
+    Taro.removeStorageSync(DASHBOARD_TARGETS_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistDashboardTargetsLocal(data: DashboardTargets): void {
+  try {
+    Taro.setStorageSync(DASHBOARD_TARGETS_STORAGE_KEY, data)
+  } catch (e) {
+    console.error('写入本机摄入目标失败:', e)
+  }
+}
+
 /** 数据统计接口返回（周/月） */
 export interface StatsSummary {
   range: 'week' | 'month'
@@ -304,6 +379,8 @@ export interface HealthProfileUpdateRequest {
   /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
   report_image_url?: string
   diet_goal?: string
+  /** 首页摄入目标，写入 health_condition.dashboard_targets（兼容未部署独立接口的生产环境） */
+  dashboard_targets?: DashboardTargets
 }
 
 // 更新用户信息请求接口
@@ -316,25 +393,143 @@ export interface UpdateUserInfoRequest {
 }
 
 /**
- * 将图片路径转换为base64
- * @param imagePath 图片路径
- * @returns Promise<string> base64字符串
+ * 将本地或网络可访问的图片转为 base64（供上传接口使用）
+ * 说明：新版微信开发者工具在「webview 渲染」下，chooseMedia 等 API 可能返回
+ * `http://tmp/...` 形式的临时地址，FileSystemManager.readFile 无法直接读取；
+ * 需先 downloadFile 或 getImageInfo 得到可读本地路径。
  */
 export async function imageToBase64(imagePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    Taro.getFileSystemManager().readFile({
-      filePath: imagePath,
-      encoding: 'base64',
-      success: (res) => {
-        // 返回完整的data URL格式
-        resolve(`data:image/jpeg;base64,${res.data}`)
-      },
-      fail: (err) => {
-        console.error('图片转base64失败:', err)
-        reject(new Error('图片转换失败'))
+  const raw = (imagePath || '').trim()
+  if (!raw) {
+    throw new Error('图片路径为空')
+  }
+
+  const inferMimeType = (path: string): string => {
+    const ext = ((path.match(/\.([a-zA-Z0-9]+)(?:\?.*)?$/)?.[1]) || '').toLowerCase()
+    if (ext === 'png') return 'image/png'
+    if (ext === 'webp') return 'image/webp'
+    if (ext === 'gif') return 'image/gif'
+    if (ext === 'heic' || ext === 'heif') return 'image/heic'
+    return 'image/jpeg'
+  }
+
+  const requestBase64FromHttp = async (url: string): Promise<string | null> => {
+    try {
+      const res = await Taro.request<ArrayBuffer>({
+        url,
+        method: 'GET',
+        responseType: 'arraybuffer',
+        timeout: 15000,
+      })
+      if (res.statusCode < 200 || res.statusCode >= 300 || !res.data) {
+        throw new Error(`http status ${res.statusCode}`)
       }
+      const toBase64 = (Taro as any).arrayBufferToBase64 || (globalThis as any)?.wx?.arrayBufferToBase64
+      if (typeof toBase64 !== 'function') {
+        throw new Error('arrayBufferToBase64 不可用')
+      }
+      const b64 = String(toBase64(res.data) || '')
+      if (!b64) {
+        throw new Error('arrayBuffer 转 base64 结果为空')
+      }
+      return `data:${inferMimeType(url)};base64,${b64}`
+    } catch (err) {
+      console.warn('HTTP 转 base64 失败:', url, err)
+      return null
+    }
+  }
+
+  const readBase64FromPath = (path: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      Taro.getFileSystemManager().readFile({
+        filePath: path,
+        encoding: 'base64',
+        success: (res) => resolve(String(res.data || '')),
+        fail: (err) => reject(err)
+      })
     })
-  })
+  }
+
+  const normalizeTmpPath = (path: string) => {
+    // 开发者工具 webview 渲染下常见临时路径：http://tmp/xxx
+    if (/^https?:\/\/tmp\//i.test(path)) {
+      return path.replace(/^https?:\/\/tmp\//i, 'wxfile://tmp/')
+    }
+    return path
+  }
+
+  const candidatePaths: string[] = []
+  const pushCandidate = (path?: string) => {
+    const next = (path || '').trim()
+    if (!next) return
+    if (!candidatePaths.includes(next)) {
+      candidatePaths.push(next)
+    }
+  }
+
+  pushCandidate(raw)
+  const normalizedRaw = normalizeTmpPath(raw)
+  pushCandidate(normalizedRaw)
+
+  if (/^https?:\/\//i.test(raw) && !/^https?:\/\/tmp\//i.test(raw)) {
+    try {
+      const dl = await Taro.downloadFile({ url: raw })
+      if (dl.statusCode !== 200 || !dl.tempFilePath) {
+        throw new Error(`download status ${dl.statusCode ?? 'unknown'}`)
+      }
+      pushCandidate(dl.tempFilePath)
+
+      // downloadFile 成功后再尝试 getImageInfo，部分环境可得到更稳定的本地路径
+      try {
+        const info = await Taro.getImageInfo({ src: dl.tempFilePath })
+        pushCandidate(info.path)
+      } catch (infoErr) {
+        console.warn('download 后 getImageInfo 失败:', infoErr)
+      }
+    } catch (firstErr) {
+      console.warn('downloadFile 失败，尝试 getImageInfo:', firstErr)
+    }
+  }
+
+  // 无论原始路径是否 http，都尝试通过 getImageInfo 拿可读路径（对 devtools 临时路径失效更稳）
+  for (const src of [raw, normalizedRaw]) {
+    if (!src) continue
+    try {
+      const info = await Taro.getImageInfo({ src })
+      pushCandidate(info.path)
+    } catch (e) {
+      console.warn('getImageInfo 失败:', src, e)
+    }
+  }
+
+  let lastErr: unknown = null
+  for (const path of candidatePaths) {
+    if (/^https?:\/\//i.test(path)) {
+      continue
+    }
+    try {
+      const base64 = await readBase64FromPath(path)
+      if (base64) {
+        return `data:image/jpeg;base64,${base64}`
+      }
+    } catch (err) {
+      lastErr = err
+      console.warn('读取图片失败，尝试下一个路径:', path, err)
+    }
+  }
+
+  // 针对 devtools 的 http://tmp 场景，绕过文件系统直接按 HTTP 取字节转 base64
+  if (/^https?:\/\//i.test(raw)) {
+    const viaHttp = await requestBase64FromHttp(raw)
+    if (viaHttp) return viaHttp
+  }
+  if (/^https?:\/\//i.test(normalizedRaw) && normalizedRaw !== raw) {
+    const viaHttp = await requestBase64FromHttp(normalizedRaw)
+    if (viaHttp) return viaHttp
+  }
+
+  console.error('图片转base64失败:', { raw, candidatePaths, lastErr })
+  throw new Error('图片读取失败，请重新拍照/选择后再试')
 }
 
 /**
@@ -748,6 +943,79 @@ export async function getHomeDashboard(): Promise<HomeDashboard> {
     throw new Error(msg)
   }
   return res.data as HomeDashboard
+}
+
+/**
+ * 获取首页可编辑目标值
+ */
+export async function getDashboardTargets(): Promise<DashboardTargets> {
+  const res = await authenticatedRequest('/api/user/dashboard-targets', { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取首页目标失败'
+    throw new Error(msg)
+  }
+  return res.data as DashboardTargets
+}
+
+/**
+ * 更新首页可编辑目标值。
+ * - 优先 PUT /api/user/dashboard-targets
+ * - 若线上返回 404（旧后端），则回退为 PUT /api/user/health-profile 并携带 dashboard_targets
+ * - 若服务端仍未持久化（极旧版本），则写入本机 storage 并返回 saveScope: 'local'
+ */
+export async function updateDashboardTargets(data: DashboardTargets): Promise<DashboardTargetsUpdateResult> {
+  const res = await authenticatedRequest('/api/user/dashboard-targets', {
+    method: 'PUT',
+    data,
+    timeout: 10000
+  })
+  if (res.statusCode === 200) {
+    clearStoredDashboardTargets()
+    return { targets: res.data as DashboardTargets, saveScope: 'server' }
+  }
+
+  if (res.statusCode === 404) {
+    try {
+      const profile = await getHealthProfile()
+      const hc = profile.health_condition || {}
+      const payload: HealthProfileUpdateRequest = {
+        gender: profile.gender ?? undefined,
+        birthday: profile.birthday ?? undefined,
+        height: profile.height ?? undefined,
+        weight: profile.weight ?? undefined,
+        activity_level: profile.activity_level ?? undefined,
+        diet_goal: profile.diet_goal ?? undefined,
+        medical_history: Array.isArray(hc.medical_history) ? (hc.medical_history as string[]) : [],
+        diet_preference: Array.isArray(hc.diet_preference) ? (hc.diet_preference as string[]) : [],
+        allergies: Array.isArray(hc.allergies) ? (hc.allergies as string[]) : [],
+        health_notes: typeof hc.health_notes === 'string' ? hc.health_notes : undefined,
+        dashboard_targets: data,
+      }
+      if (hc.report_extract != null) {
+        payload.report_extract = hc.report_extract as ReportExtract
+      }
+      const res2 = await authenticatedRequest('/api/user/health-profile', {
+        method: 'PUT',
+        data: payload,
+        timeout: 15000,
+      })
+      if (res2.statusCode === 200) {
+        const updated = res2.data as HealthProfile
+        const saved = parseDashboardTargetsFromUnknown(updated.health_condition?.dashboard_targets)
+        if (saved) {
+          clearStoredDashboardTargets()
+          return { targets: saved, saveScope: 'server' }
+        }
+      }
+    } catch (e) {
+      console.error('回退保存摄入目标失败:', e)
+    }
+    persistDashboardTargetsLocal(data)
+    return { targets: data, saveScope: 'local' }
+  }
+
+  const msg = (res.data as any)?.detail || '更新首页目标失败'
+  throw new Error(msg)
 }
 
 /**
@@ -1261,6 +1529,16 @@ export interface FriendListItem {
   avatar: string
 }
 
+/** 本周好友圈打卡排行榜条目 */
+export interface CheckinLeaderboardItem {
+  rank: number
+  user_id: string
+  nickname: string
+  avatar: string
+  checkin_count: number
+  is_me: boolean
+}
+
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
 export interface CommunityFeedItem {
   record: FoodRecord
@@ -1349,6 +1627,21 @@ export async function communityGetFeed(
   const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
+}
+
+/** 本周打卡排行榜（自己 + 好友，按饮食记录条数） */
+export async function communityGetCheckinLeaderboard(): Promise<{
+  week_start: string
+  week_end: string
+  list: CheckinLeaderboardItem[]
+}> {
+  const response = await authenticatedRequest('/api/community/checkin-leaderboard', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取排行榜失败')
+  return response.data as {
+    week_start: string
+    week_end: string
+    list: CheckinLeaderboardItem[]
+  }
 }
 
 /** 公共 Feed：无需登录，返回公开用户的饮食记录 */
@@ -1772,4 +2065,3 @@ export async function useUserRecipe(recipeId: string, mealType?: string): Promis
   }
   return response.data as { message: string; record_id: string }
 }
-

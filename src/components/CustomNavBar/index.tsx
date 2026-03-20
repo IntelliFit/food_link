@@ -15,6 +15,23 @@ interface CustomNavBarProps {
     className?: string
 }
 
+function getStatusBarHeightSafe(): number {
+    // 新版基础库优先使用拆分 API，避免 getSystemInfoSync 废弃告警
+    try {
+        const win = (Taro as any).getWindowInfo?.()
+        const h = Number(win?.statusBarHeight)
+        if (Number.isFinite(h) && h > 0) return h
+    } catch {
+        // ignore
+    }
+    try {
+        const sysInfo = Taro.getSystemInfoSync()
+        return sysInfo.statusBarHeight || 20
+    } catch {
+        return 20
+    }
+}
+
 export default function CustomNavBar({
     title = '',
     color = '#ffffff',
@@ -23,9 +40,8 @@ export default function CustomNavBar({
     className = ''
 }: CustomNavBarProps) {
     const [navInfo] = useState(() => {
-        const sysInfo = Taro.getSystemInfoSync()
         const menuBtn = Taro.getMenuButtonBoundingClientRect()
-        const statusBarHeight = sysInfo.statusBarHeight || 20
+        const statusBarHeight = getStatusBarHeightSafe()
         // 导航栏内容区高度 = (胶囊按钮上边距 - 状态栏高度) * 2 + 胶囊按钮高度
         const navBarHeight = (menuBtn.top - statusBarHeight) * 2 + menuBtn.height
         return { statusBarHeight, navBarHeight }
@@ -64,9 +80,8 @@ export default function CustomNavBar({
  * 获取自定义导航栏的总高度（状态栏 + 导航栏），用于页面内容定位
  */
 export function getNavBarHeight(): number {
-    const sysInfo = Taro.getSystemInfoSync()
     const menuBtn = Taro.getMenuButtonBoundingClientRect()
-    const statusBarHeight = sysInfo.statusBarHeight || 20
+    const statusBarHeight = getStatusBarHeightSafe()
     const navBarHeight = (menuBtn.top - statusBarHeight) * 2 + menuBtn.height
     return statusBarHeight + navBarHeight
 }
