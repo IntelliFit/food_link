@@ -107,7 +107,8 @@ from middleware import get_current_user_info, get_current_user_id, get_current_o
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
 
 # 从 .env 文件加载环境变量
-load_dotenv()
+BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(BACKEND_ENV_PATH, override=True)
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "google/gemini-2.5-flash")
 
 # 中国时区（UTC+8），用于按本地自然日统计

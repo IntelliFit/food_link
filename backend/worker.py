@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 
 # 确保 backend 目录在 path 中
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-load_dotenv()
+BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(BACKEND_ENV_PATH, override=True)
 
 import httpx
 from database import (
