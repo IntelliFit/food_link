@@ -351,6 +351,41 @@ export interface UserInfo {
   public_records?: boolean
 }
 
+export interface MembershipPlan {
+  code: string
+  name: string
+  amount: number
+  duration_months: number
+  description?: string | null
+}
+
+export interface MembershipStatus {
+  is_pro: boolean
+  status: 'inactive' | 'active' | 'expired' | 'cancelled'
+  current_plan_code?: string | null
+  first_activated_at?: string | null
+  current_period_start?: string | null
+  expires_at?: string | null
+  last_paid_at?: string | null
+}
+
+export interface MembershipPlansResponse {
+  list: MembershipPlan[]
+}
+
+export interface CreateMembershipPaymentResponse {
+  order_no: string
+  plan_code: string
+  amount: number
+  pay_params: {
+    timeStamp: string
+    nonceStr: string
+    package: string
+    signType: 'RSA'
+    paySign: string
+  }
+}
+
 export interface ReportExtractIndicator {
   name: string
   value: string
@@ -1322,6 +1357,76 @@ export async function getUserProfile(): Promise<UserInfo> {
   } catch (error: any) {
     console.error('获取用户信息失败:', error)
     throw new Error(error.message || '获取用户信息失败')
+  }
+}
+
+/**
+ * 获取会员套餐列表
+ */
+export async function getMembershipPlans(): Promise<MembershipPlan[]> {
+  try {
+    const response = await Taro.request({
+      url: `${API_BASE_URL}/api/membership/plans`,
+      method: 'GET',
+      header: {
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取会员套餐失败'
+      throw new Error(errorMsg)
+    }
+
+    return ((response.data as MembershipPlansResponse)?.list || []) as MembershipPlan[]
+  } catch (error: any) {
+    console.error('获取会员套餐失败:', error)
+    throw new Error(error.message || '获取会员套餐失败')
+  }
+}
+
+/**
+ * 获取当前用户会员状态
+ */
+export async function getMyMembership(): Promise<MembershipStatus> {
+  try {
+    const response = await authenticatedRequest('/api/membership/me', {
+      method: 'GET'
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取会员状态失败'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as MembershipStatus
+  } catch (error: any) {
+    console.error('获取会员状态失败:', error)
+    throw new Error(error.message || '获取会员状态失败')
+  }
+}
+
+/**
+ * 创建会员支付单
+ */
+export async function createMembershipPayment(planCode: string): Promise<CreateMembershipPaymentResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/pay/create', {
+      method: 'POST',
+      data: {
+        plan_code: planCode
+      }
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '创建会员支付单失败'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as CreateMembershipPaymentResponse
+  } catch (error: any) {
+    console.error('创建会员支付单失败:', error)
+    throw new Error(error.message || '创建会员支付单失败')
   }
 }
 
