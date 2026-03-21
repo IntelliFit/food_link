@@ -21,7 +21,7 @@
 // 顶部渐变区域
 .header-section {
   background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  padding: 14rpx 20rpx 24rpx;
+  padding: 14rpx 20rpx 18rpx;
   position: relative;
   z-index: 1;
   min-height: 340rpx;
@@ -75,6 +75,129 @@
   background: rgba(255, 255, 255, 0.1);
   border-radius: 20rpx;
   padding: 18rpx 18rpx 14rpx;
+}
+
+.home-week-card {
+  margin-top: 14rpx;
+  padding: 18rpx;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1rpx solid rgba(255, 255, 255, 0.14);
+  border-radius: 20rpx;
+}
+
+.home-week-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12rpx;
+  margin-bottom: 14rpx;
+}
+
+.home-week-title {
+  display: block;
+  font-size: 26rpx;
+  line-height: 34rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.home-week-subtitle {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: #d0fae5;
+}
+
+.home-week-link {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 4rpx 0;
+}
+
+.home-week-link-text,
+.home-week-link-arrow {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.home-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10rpx;
+}
+
+.home-week-cell {
+  min-height: 72rpx;
+  border-radius: 16rpx;
+  padding: 10rpx 8rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
+}
+
+.home-week-cell.none {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.home-week-cell.surplus.level-1 {
+  background: #fca5a5;
+}
+
+.home-week-cell.surplus.level-2 {
+  background: #f87171;
+}
+
+.home-week-cell.surplus.level-3 {
+  background: #ef4444;
+}
+
+.home-week-cell.deficit.level-1 {
+  background: #93c5fd;
+}
+
+.home-week-cell.deficit.level-2 {
+  background: #60a5fa;
+}
+
+.home-week-cell.deficit.level-3 {
+  background: #3b82f6;
+}
+
+.home-week-cell-date {
+  font-size: 22rpx;
+  line-height: 28rpx;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.home-week-cell.none .home-week-cell-date {
+  color: #d0fae5;
+}
+
+.home-week-cell-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.home-week-cell.none .home-week-cell-dot {
+  background: rgba(208, 250, 229, 0.72);
+}
+
+.home-week-summary {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #e7fff4;
 }
 
 .intake-header {
@@ -235,8 +358,8 @@
 .quick-record-section {
   background: #ffffff;
   // 上浮叠在 header 上（设计稿效果）
-  margin: -16rpx 24rpx 24rpx;
-  padding: 24rpx;
+  margin: -10rpx 24rpx 18rpx;
+  padding: 20rpx;
   border-radius: 24rpx;
   box-shadow: 0px 10rpx 15rpx rgba(0, 0, 0, 0.1), 0px 4rpx 6rpx rgba(0, 0, 0, 0.1);
   position: relative;
@@ -244,16 +367,16 @@
 }
 
 .section-title {
-  font-size: 34rpx;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1e2939;
-  line-height: 48rpx;
-  margin-bottom: 32rpx;
+  line-height: 44rpx;
+  margin-bottom: 22rpx;
 }
 
 .quick-buttons {
   display: flex;
-  gap: 24rpx;
+  gap: 18rpx;
 }
 
 .quick-button {
@@ -261,9 +384,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 32rpx 20rpx;
+  padding: 24rpx 18rpx;
   border-radius: 20rpx;
-  gap: 16rpx;
+  gap: 12rpx;
 }
 
 .photo-btn {
@@ -307,23 +430,23 @@
 }
 
 .button-text {
-  font-size: 28rpx;
+  font-size: 26rpx;
   color: #364153;
-  line-height: 40rpx;
+  line-height: 36rpx;
   font-weight: 500;
 }
 
 // 今日餐食
 .meals-section {
   padding: 0 24rpx;
-  margin-top: 20rpx;
+  margin-top: 14rpx;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20rpx;
+  margin-bottom: 16rpx;
 }
 
 .view-all-btn {
@@ -351,7 +474,7 @@
 .meals-list {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: 16rpx;
 }
 
 // Taroify Empty 组件按钮样式
@@ -367,7 +490,7 @@
 .meal-card {
   background: #ffffff;
   border-radius: 22rpx;
-  padding: 24rpx;
+  padding: 20rpx;
   box-shadow: 0px 1rpx 3rpx rgba(0, 0, 0, 0.1), 0px 1rpx 2rpx rgba(0, 0, 0, 0.1);
 }
 
@@ -375,7 +498,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 20rpx;
+  margin-bottom: 16rpx;
 }
 
 .meal-info {
@@ -688,6 +811,41 @@
   font-size: 24rpx;
   color: #6a7282;
   line-height: 34rpx;
+}
+
+.target-relation-hint {
+  margin-top: 18rpx;
+  border-radius: 16rpx;
+  padding: 16rpx 18rpx;
+  background: #f0fdf4;
+  border: 1rpx solid #bbf7d0;
+}
+
+.target-relation-hint-title {
+  display: block;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #166534;
+  font-weight: 600;
+}
+
+.target-relation-hint-value {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  line-height: 32rpx;
+
+  &.aligned {
+    color: #047857;
+  }
+
+  &.adjusting {
+    color: #b45309;
+  }
+
+  &.pending {
+    color: #6a7282;
+  }
 }
 
 .target-modal-actions {

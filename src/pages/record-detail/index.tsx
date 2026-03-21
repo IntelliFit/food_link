@@ -1,7 +1,16 @@
 import { View, Text, Image, ScrollView, Canvas, Button, Input, Slider } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
-import { getSharedFoodRecord, getAccessToken, getUnlimitedQRCode, updateFoodRecord, type FoodRecord, type Nutrients } from '../../utils/api'
+import {
+  getSharedFoodRecord,
+  getAccessToken,
+  getUnlimitedQRCode,
+  getFriendInviteProfile,
+  acceptFriendInvite,
+  updateFoodRecord,
+  type FoodRecord,
+  type Nutrients
+} from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../utils/poster'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 
@@ -51,6 +60,11 @@ function formatRecordTime(recordTime: string): string {
   }
 }
 
+function getInviteCodeFromUserId(userId: string): string {
+  const raw = (userId || '').replace(/-/g, '').toLowerCase()
+  return raw.length >= 8 ? raw.slice(0, 8) : ''
+}
+
 export default function RecordDetailPage() {
   const router = useRouter()
   const [record, setRecord] = useState<FoodRecord | null>(null)
@@ -68,6 +82,9 @@ export default function RecordDetailPage() {
     nutrients: Nutrients
   }>>([])
   const [editSaving, setEditSaving] = useState(false)
+  const [ownerNickname, setOwnerNickname] = useState('')
+  const [ownerInviteCode, setOwnerInviteCode] = useState('')
+  const [inviteLoading, setInviteLoading] = useState(false)
 
   useEffect(() => {
     const loadRecord = async () => {
@@ -81,6 +98,13 @@ export default function RecordDetailPage() {
           const res = await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
+          try {
+            const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
+            setOwnerNickname(inviterProfile.nickname || '')
+            setOwnerInviteCode(inviterProfile.invite_code || getInviteCodeFromUserId(fetchedRecord.user_id))
+          } catch {
+            setOwnerInviteCode(getInviteCodeFromUserId(fetchedRecord.user_id))
+          }
           // 判断当前用户是否为记录创建者（用于显示编辑按钮）
           try {
             const currentUserId = Taro.getStorageSync('user_id')
@@ -117,10 +141,15 @@ export default function RecordDetailPage() {
     loadRecord()
   }, [router.params?.id])
 
+  const shareRecordId = record?.id || router.params?.id || ''
+  const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
+  const inviteCode = ownerInviteCode || getInviteCodeFromUserId(shareOwnerId)
+  const sharePath = `/pages/record-detail/index?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
+
   useShareAppMessage(() => {
     return {
       title: '来看看我的健康饮食记录吧！',
-      path: `/pages/record-detail/index?id=${record?.id || router.params?.id || ''}`,
+      path: sharePath,
       imageUrl: posterImageUrl || undefined
     }
   })
@@ -128,10 +157,32 @@ export default function RecordDetailPage() {
   useShareTimeline(() => {
     return {
       title: '来看看我的健康饮食记录吧！',
-      query: `id=${record?.id || router.params?.id || ''}`,
+      query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
       imageUrl: posterImageUrl || undefined
     }
   })
+
+  useEffect(() => {
+    const autoAcceptInvite = async () => {
+      if (!inviteCode || isOwner || !getAccessToken()) return
+      const cacheKey = `friend_invite_auto_${shareRecordId}_${inviteCode}`
+      try {
+        if (Taro.getStorageSync(cacheKey)) return
+        Taro.setStorageSync(cacheKey, 1)
+      } catch {
+        // ignore storage errors
+      }
+      try {
+        const res = await acceptFriendInvite(inviteCode)
+        if (res.status === 'added') {
+          Taro.showToast({ title: `已和${res.nickname || '对方'}成为好友`, icon: 'success' })
+        }
+      } catch {
+        // 自动处理失败不打断页面浏览
+      }
+    }
+    autoAcceptInvite()
+  }, [inviteCode, isOwner, shareRecordId])
 
   /** 打开编辑弹窗，复制当前食物项数据 */
   const handleOpenEdit = useCallback(() => {
@@ -272,6 +323,33 @@ export default function RecordDetailPage() {
     return ((item.nutrients?.calories ?? 0) * ratio)
   }
 
+  const handleAcceptInvite = async () => {
+    if (!inviteCode) {
+      Taro.showToast({ title: '邀请码无效', icon: 'none' })
+      return
+    }
+    if (!getAccessToken()) {
+      const redirectUrl = sharePath
+      Taro.navigateTo({
+        url: `/pages/login/index?invite_code=${encodeURIComponent(inviteCode)}&redirect=${encodeURIComponent(redirectUrl)}`
+      })
+      return
+    }
+    if (inviteLoading) return
+    setInviteLoading(true)
+    try {
+      const res = await acceptFriendInvite(inviteCode)
+      Taro.showToast({
+        title: res.status === 'added' ? `已和${res.nickname || '对方'}成为好友` : '你们已是好友',
+        icon: 'success'
+      })
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '添加好友失败', icon: 'none' })
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
   /** 生成海报并导出为临时图片 */
   const handleGeneratePoster = () => {
     if (!record || posterGenerating) return
@@ -312,8 +390,9 @@ export default function RecordDetailPage() {
 
         const loadQRImage = async () => {
           try {
-            // scene 最大 32 个可见字符。当前 UUID 太长，改用简短字符串（例如 share=1）
-            const { base64 } = await getUnlimitedQRCode('share=1', 'pages/index/index')
+            // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
+            const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
+            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index')
             return await loadImage(base64)
           } catch (e) {
             console.error('Failed to load real QR code', e)
@@ -346,6 +425,7 @@ export default function RecordDetailPage() {
               record,
               image: mainImg,
               qrCodeImage: qrImg,
+              sharerNickname: ownerNickname,
             })
 
             Taro.canvasToTempFilePath({
@@ -511,6 +591,18 @@ export default function RecordDetailPage() {
             </View>
           ) : null
         }
+
+        {!isOwner && inviteCode && (
+          <View className="friend-invite-card">
+            <Text className="friend-invite-title">
+              {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
+            </Text>
+            <Text className="friend-invite-desc">未注册会先登录，登录后自动成为好友</Text>
+            <Button className="friend-invite-btn" onClick={handleAcceptInvite} disabled={inviteLoading}>
+              {inviteLoading ? '处理中...' : (getAccessToken() ? '立即成为好友' : '登录并成为好友')}
+            </Button>
+          </View>
+        )}
 
         <View className="poster-actions">
           {isOwner && (

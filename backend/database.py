@@ -6,6 +6,7 @@ from supabase import create_client
 import os
 import base64
 import uuid
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
@@ -1306,6 +1307,44 @@ async def cleanup_duplicate_friends(user_id: str) -> Dict[str, Any]:
         return {"cleaned": deleted_count, "user_id": user_id}
     except Exception as e:
         print(f"[cleanup_duplicate_friends] 错误: {e}")
+        raise
+
+
+def build_friend_invite_code(user_id: str) -> str:
+    """基于用户 ID 生成短邀请码（默认 8 位十六进制字符）。"""
+    raw = (user_id or "").replace("-", "").lower()
+    if len(raw) < 8:
+        raise ValueError("用户 ID 无法生成邀请码")
+    return raw[:8]
+
+
+async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[str, Any]]:
+    """根据短邀请码解析用户（匹配 user_id 前缀），返回公开资料。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    code = (invite_code or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{6,12}", code):
+        return None
+    try:
+        # user_id 为 UUID 字符串，允许通过前缀匹配解析邀请人
+        result = (
+            supabase
+            .table("weapp_user")
+            .select("id, nickname, avatar")
+            .like("id", f"{code}%")
+            .limit(2)
+            .execute()
+        )
+        rows = list(result.data or [])
+        if not rows:
+            return None
+        if len(rows) > 1:
+            raise ValueError("邀请码存在歧义，请使用更长邀请码")
+        return rows[0]
+    except ValueError:
+        raise
+    except Exception as e:
+        print(f"[resolve_user_by_friend_invite_code] 错误: {e}")
         raise
 
 

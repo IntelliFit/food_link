@@ -6,6 +6,11 @@
 
 ## 2026-03-21
 
+- 🎨 style: 我的页入口统一改为“饮食记录”，统计页改成“饮食记录”整合页并将顶部热图重做为更干净的红蓝灰日历图，直观显示每天吃多/吃少/未记录 `src/pages/profile/index.tsx` `src/pages/profile/index.scss` `src/pages/stats/index.tsx` `src/pages/stats/index.scss` `src/pages/stats/index.config.ts`
+- 🎨 style: 目标编辑弹窗新增“按热量自动校准”实时提示，展示当前宏量换算热量与是否需要保存时自动校准，降低用户心算负担 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🐛 fix: 目标保存改为“以热量为准自动校准宏量营养素”，不再要求用户手动满足 4/4/9；保存成功提示是否自动校准 `src/pages/index/index.tsx`
+- 🐛 fix: 首页目标编辑新增热量-三大营养素联动与一致性约束：调整总热量时宏量按比例变化，调整任一宏量时总热量按 4/4/9 自动更新并在保存前校验关系 `src/pages/index/index.tsx`
+- ✨ feat: 分享记录海报新增“昵称+扫码加好友”引导，支持邀请码直加好友；未注册用户扫码后先登录并自动建立好友关系 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss` `src/utils/poster.ts` `src/utils/api.ts` `src/pages/login/index.tsx` `src/app.ts` `backend/main.py` `backend/database.py`
 - ✨ feat: 将历史记录明确为按天回看的饮食档案，在“我的”页新增长期入口，并在统计页加入记录热图与跳转当日明细联动 `src/pages/profile/index.tsx` `src/pages/profile/index.scss` `src/pages/stats/index.tsx` `src/pages/stats/index.scss` `src/pages/record/index.tsx` `src/pages/record/index.scss` `backend/main.py`
 - 🐛 fix: 隐藏记录页与首页主入口中的“历史记录”并统一饮食记录按东八区自然日查询，修复凌晨时首页/历史页错天、漏餐和时间显示异常 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/record/index.tsx` `src/pages/record/index.scss` `backend/main.py` `backend/database.py`
 

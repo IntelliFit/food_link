@@ -107,6 +107,7 @@ export interface PosterDrawOptions {
   record: FoodRecord
   image: { width: number; height: number } | null
   qrCodeImage?: { width: number; height: number } | null
+  sharerNickname?: string
 }
 
 // 风格配色
@@ -153,7 +154,7 @@ export function drawRecordPoster(
   ctx: CanvasRenderingContext2D,
   options: PosterDrawOptions
 ): void {
-  const { width: W, height: H, record, image, qrCodeImage } = options
+  const { width: W, height: H, record, image, qrCodeImage, sharerNickname } = options
 
   // 1. 底层背景：更浅的颜色，加上光晕效果（毛玻璃的背景）
   const bgGradient = ctx.createLinearGradient(0, 0, W, H)
@@ -447,11 +448,16 @@ export function drawRecordPoster(
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_MAIN
   ctx.font = 'bold 15px sans-serif'
-  ctx.fillText('智健食探', textStartX, footerY + 14)
+  const displayName = (sharerNickname || '').trim()
+  if (displayName) {
+    ctx.fillText(`${displayName} 的饮食分享`, textStartX, footerY + 14)
+  } else {
+    ctx.fillText('智健食探', textStartX, footerY + 14)
+  }
 
   ctx.fillStyle = TEXT_LIGHT
   ctx.font = '10px sans-serif'
-  ctx.fillText('你的智能健康管理助手', textStartX, footerY + 32)
+  ctx.fillText('扫码登录食探，可一键成为好友', textStartX, footerY + 32)
 
   // Right: QR Code
   const qrSize = 80

@@ -187,7 +187,7 @@
 // 服务网格
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20rpx 8rpx;
   padding: 40rpx 40rpx 0;
   margin-bottom: 20rpx;

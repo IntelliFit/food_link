@@ -32,7 +32,9 @@ const RECORD_HISTORY_DATE_KEY = 'recordHistoryDate'
 type HeatmapCell = {
   date: string
   calories: number
-  intensity: 0 | 1 | 2 | 3 | 4
+  delta: number
+  level: 0 | 1 | 2 | 3
+  state: 'none' | 'surplus' | 'deficit'
 }
 
 export default function StatsPage() {
@@ -236,20 +238,20 @@ export default function StatsPage() {
   const maxDailyCalories = d.daily_calories.length > 0
     ? Math.max(...d.daily_calories.map(i => i.calories))
     : 2000
-  const heatmapMaxCalories = d.daily_calories.length > 0
-    ? Math.max(...d.daily_calories.map(i => i.calories), 1)
-    : 1
   const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
-    const ratio = item.calories <= 0 ? 0 : item.calories / heatmapMaxCalories
-    let intensity: HeatmapCell['intensity'] = 0
-    if (ratio > 0.75) intensity = 4
-    else if (ratio > 0.5) intensity = 3
-    else if (ratio > 0.25) intensity = 2
-    else if (ratio > 0) intensity = 1
+    const hasRecord = item.calories > 0
+    const delta = hasRecord ? item.calories - d.tdee : 0
+    const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(d.tdee, 1) : 0
+    let level: HeatmapCell['level'] = 0
+    if (deltaRatio > 0.3) level = 3
+    else if (deltaRatio > 0.15) level = 2
+    else if (deltaRatio > 0) level = 1
     return {
       date: item.date,
       calories: item.calories,
-      intensity
+      delta,
+      level,
+      state: !hasRecord ? 'none' : delta > 0 ? 'surplus' : 'deficit'
     }
   })
   const activeHeatmapCell = [...heatmapCells].reverse().find((item) => item.calories > 0) || heatmapCells[heatmapCells.length - 1]
@@ -264,8 +266,8 @@ export default function StatsPage() {
     <View className='stats-page'>
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         <View className='page-header'>
-          <Text className='page-title'>数据统计</Text>
-          <Text className='page-subtitle'>掌握您的热量收支与营养结构</Text>
+          <Text className='page-title'>饮食记录</Text>
+          <Text className='page-subtitle'>先看日历图，再往下看趋势和营养结构</Text>
         </View>
 
         {/* 周/月切换 - Segmented Control，切换时显示加载 */}
@@ -290,6 +292,64 @@ export default function StatsPage() {
               <Text>近一月</Text>
             </View>
           </View>
+        </View>
+
+        <View className='stats-card heatmap-card'>
+          <View className='card-header'>
+            <Text className='iconfont icon-rili chart-title-icon' />
+            <View className='card-header-copy'>
+              <Text className='card-title'>日历图</Text>
+              <Text className='card-subtitle'>灰色未记录，红色吃多了，蓝色吃少了</Text>
+            </View>
+          </View>
+          <View className='heatmap-legend'>
+            <View className='heatmap-legend-item'>
+              <View className='heatmap-legend-swatch none' />
+              <Text className='heatmap-legend-text'>未记录</Text>
+            </View>
+            <View className='heatmap-legend-item'>
+              <View className='heatmap-legend-swatch surplus' />
+              <Text className='heatmap-legend-text'>吃多了</Text>
+            </View>
+            <View className='heatmap-legend-item'>
+              <View className='heatmap-legend-swatch deficit' />
+              <Text className='heatmap-legend-text'>吃少了</Text>
+            </View>
+          </View>
+          {heatmapCells.length > 0 ? (
+            <>
+              <View className='heatmap-grid'>
+                {heatmapCells.map((item) => (
+                  <View
+                    key={item.date}
+                    className={`heatmap-cell ${item.state} level-${item.level} ${item.calories > 0 ? 'is-clickable' : ''}`}
+                    onClick={() => item.calories > 0 && openHistoryForDate(item.date)}
+                  >
+                    <Text className='heatmap-cell-label'>{item.date.slice(-2)}</Text>
+                    <View className='heatmap-cell-dot' />
+                  </View>
+                ))}
+              </View>
+              {activeHeatmapCell ? (
+                <View className='heatmap-summary'>
+                  <Text className='heatmap-summary-text'>
+                    {activeHeatmapCell.calories > 0
+                      ? `${activeHeatmapCell.date} ${activeHeatmapCell.state === 'surplus' ? '吃多了' : '吃少了'} ${Math.abs(Math.round(activeHeatmapCell.delta))} kcal`
+                      : `最近周期内暂无饮食记录`}
+                  </Text>
+                  {activeHeatmapCell.calories > 0 && (
+                    <View className='heatmap-link-btn' onClick={() => openHistoryForDate(activeHeatmapCell.date)}>
+                      <Text className='heatmap-link-btn-text'>查看当天记录</Text>
+                    </View>
+                  )}
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <View className='chart-empty-state'>
+              <Text className='empty-text'>暂无记录热图</Text>
+            </View>
+          )}
         </View>
 
         {/* 热量盈缺看板 - Hero Card */}
@@ -335,48 +395,6 @@ export default function StatsPage() {
           <View className='streak-badge'>
             坚持就是胜利
           </View>
-        </View>
-
-        <View className='stats-card heatmap-card'>
-          <View className='card-header'>
-            <Text className='iconfont icon-rili chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>记录热图</Text>
-              <Text className='card-subtitle'>看最近是否持续记录，点击某天可直达饮食档案</Text>
-            </View>
-          </View>
-          {heatmapCells.length > 0 ? (
-            <>
-              <View className='heatmap-grid'>
-                {heatmapCells.map((item) => (
-                  <View
-                    key={item.date}
-                    className={`heatmap-cell intensity-${item.intensity} ${item.calories > 0 ? 'is-clickable' : ''}`}
-                    onClick={() => item.calories > 0 && openHistoryForDate(item.date)}
-                  >
-                    <Text className='heatmap-cell-label'>{item.date.slice(5).replace('-', '/')}</Text>
-                    <Text className='heatmap-cell-value'>{item.calories > 0 ? Math.round(item.calories) : '-'}</Text>
-                  </View>
-                ))}
-              </View>
-              {activeHeatmapCell ? (
-                <View className='heatmap-summary'>
-                  <Text className='heatmap-summary-text'>
-                    最近一次有记录的是 {activeHeatmapCell.date}，摄入 {Math.round(activeHeatmapCell.calories)} kcal
-                  </Text>
-                  {activeHeatmapCell.calories > 0 && (
-                    <View className='heatmap-link-btn' onClick={() => openHistoryForDate(activeHeatmapCell.date)}>
-                      <Text className='heatmap-link-btn-text'>查看当日明细</Text>
-                    </View>
-                  )}
-                </View>
-              ) : null}
-            </>
-          ) : (
-            <View className='chart-empty-state'>
-              <Text className='empty-text'>暂无记录热图</Text>
-            </View>
-          )}
         </View>
 
         {/* 每日摄入趋势 - Bar Chart */}

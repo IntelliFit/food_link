@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '数据统计'
+  navigationBarTitleText: '饮食记录'
 })

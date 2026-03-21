@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,
+  getStatsSummary,
   getAccessToken,
   updateDashboardTargets,
   mergeHomeIntakeWithTargets,
@@ -29,12 +30,26 @@ const DEFAULT_INTAKE: HomeIntakeData = {
 }
 
 type MacroKey = keyof HomeIntakeData['macros']
+type WeekHeatmapState = 'none' | 'surplus' | 'deficit'
+
+interface WeekHeatmapCell {
+  date: string
+  calories: number
+  state: WeekHeatmapState
+  level: 0 | 1 | 2 | 3
+}
 
 interface TargetFormState {
   calorieTarget: string
   proteinTarget: string
   carbsTarget: string
   fatTarget: string
+}
+
+interface MacroTargets {
+  protein: number
+  carbs: number
+  fat: number
 }
 
 function getGreeting(): string {
@@ -46,6 +61,85 @@ function getGreeting(): string {
 
 function formatDisplayNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseCompleteNumber(value: string): number | null {
+  const normalized = value.trim()
+  if (!normalized || !/^\d+(\.\d+)?$/.test(normalized)) {
+    return null
+  }
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatTargetInput(value: number): string {
+  const rounded = Math.max(0, Number(value.toFixed(1)))
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+function parseMacroTargets(form: TargetFormState): MacroTargets | null {
+  const protein = parseCompleteNumber(form.proteinTarget)
+  const carbs = parseCompleteNumber(form.carbsTarget)
+  const fat = parseCompleteNumber(form.fatTarget)
+
+  if (protein == null || carbs == null || fat == null) {
+    return null
+  }
+
+  return { protein, carbs, fat }
+}
+
+function calcCaloriesFromMacros(macros: MacroTargets): number {
+  return macros.protein * 4 + macros.carbs * 4 + macros.fat * 9
+}
+
+function scaleMacrosByCalorieTarget(nextCalorie: number, baseMacros: MacroTargets): MacroTargets {
+  const baseCalories = calcCaloriesFromMacros(baseMacros)
+
+  if (baseCalories <= 0) {
+    // 当前无有效宏量目标时，回退为常见配比（30/40/30）并保证热量关系成立。
+    const protein = (nextCalorie * 0.3) / 4
+    const carbs = (nextCalorie * 0.4) / 4
+    const fat = (nextCalorie * 0.3) / 9
+    return { protein, carbs, fat }
+  }
+
+  const ratio = nextCalorie / baseCalories
+  return {
+    protein: baseMacros.protein * ratio,
+    carbs: baseMacros.carbs * ratio,
+    fat: baseMacros.fat * ratio
+  }
+}
+
+function alignPayloadWithCalorieTarget(payload: DashboardTargets): { payload: DashboardTargets; adjusted: boolean } {
+  const caloriesFromMacros = payload.protein_target * 4 + payload.carbs_target * 4 + payload.fat_target * 9
+  if (Math.abs(caloriesFromMacros - payload.calorie_target) <= 1) {
+    return { payload, adjusted: false }
+  }
+
+  const scaledMacros = scaleMacrosByCalorieTarget(payload.calorie_target, {
+    protein: payload.protein_target,
+    carbs: payload.carbs_target,
+    fat: payload.fat_target
+  })
+
+  return {
+    adjusted: true,
+    payload: {
+      calorie_target: payload.calorie_target,
+      protein_target: Number(formatTargetInput(scaledMacros.protein)),
+      carbs_target: Number(formatTargetInput(scaledMacros.carbs)),
+      fat_target: Number(formatTargetInput(scaledMacros.fat))
+    }
+  }
 }
 
 function clampProgress(current: number, target: number): number {
@@ -84,9 +178,28 @@ const MACRO_CONFIGS: Array<{
   { key: 'fat', label: '脂肪', color: '#f59e0b', unit: 'g', Icon: IconFat }
 ]
 
+const RECORD_HISTORY_DATE_KEY = 'recordHistoryDate'
+
+function createEmptyWeekHeatmapCells(): WeekHeatmapCell[] {
+  const today = new Date()
+  const cells: WeekHeatmapCell[] = []
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const date = new Date(today)
+    date.setDate(today.getDate() - offset)
+    cells.push({
+      date: formatDateKey(date),
+      calories: 0,
+      state: 'none',
+      level: 0
+    })
+  }
+  return cells
+}
+
 export default function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
   const [meals, setMeals] = useState<HomeMealItem[]>([])
+  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>([])
   const [loading, setLoading] = useState(true)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
@@ -103,16 +216,36 @@ export default function IndexPage() {
 
     setLoading(true)
     try {
-      const res = await getHomeDashboard()
+      const [res, stats] = await Promise.all([
+        getHomeDashboard(),
+        getStatsSummary('week')
+      ])
       const storedTargets = getStoredDashboardTargets()
       const intake =
         storedTargets != null ? mergeHomeIntakeWithTargets(res.intakeData, storedTargets) : res.intakeData
+      const nextWeekHeatmapCells: WeekHeatmapCell[] = stats.daily_calories.slice(-7).map((item) => {
+        const hasRecord = item.calories > 0
+        const delta = hasRecord ? item.calories - stats.tdee : 0
+        const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(stats.tdee, 1) : 0
+        let level: WeekHeatmapCell['level'] = 0
+        if (deltaRatio > 0.3) level = 3
+        else if (deltaRatio > 0.15) level = 2
+        else if (deltaRatio > 0) level = 1
+        return {
+          date: item.date,
+          calories: item.calories,
+          state: !hasRecord ? 'none' : delta > 0 ? 'surplus' : 'deficit',
+          level
+        }
+      })
       setIntakeData(intake)
       setMeals(res.meals || [])
+      setWeekHeatmapCells(nextWeekHeatmapCells)
       setTargetForm(createTargetForm(intake))
     } catch {
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
+      setWeekHeatmapCells([])
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
     } finally {
       setLoading(false)
@@ -151,11 +284,43 @@ export default function IndexPage() {
   }
 
   const handleTargetInput = (key: keyof TargetFormState, value: string) => {
-    setTargetForm((prev) => ({ ...prev, [key]: value }))
+    setTargetForm((prev) => {
+      const nextForm: TargetFormState = { ...prev, [key]: value }
+
+      if (key === 'calorieTarget') {
+        const nextCalorie = parseCompleteNumber(value)
+        const baseMacros = parseMacroTargets(prev)
+        if (nextCalorie == null || baseMacros == null) {
+          return nextForm
+        }
+
+        const scaledMacros = scaleMacrosByCalorieTarget(nextCalorie, baseMacros)
+        return {
+          calorieTarget: formatTargetInput(nextCalorie),
+          proteinTarget: formatTargetInput(scaledMacros.protein),
+          carbsTarget: formatTargetInput(scaledMacros.carbs),
+          fatTarget: formatTargetInput(scaledMacros.fat)
+        }
+      }
+
+      if (key === 'proteinTarget' || key === 'carbsTarget' || key === 'fatTarget') {
+        const macros = parseMacroTargets(nextForm)
+        if (macros == null) {
+          return nextForm
+        }
+
+        return {
+          ...nextForm,
+          calorieTarget: formatTargetInput(calcCaloriesFromMacros(macros))
+        }
+      }
+
+      return nextForm
+    })
   }
 
   const handleSaveTargets = async () => {
-    const payload: DashboardTargets = {
+    let payload: DashboardTargets = {
       calorie_target: Number(targetForm.calorieTarget),
       protein_target: Number(targetForm.proteinTarget),
       carbs_target: Number(targetForm.carbsTarget),
@@ -187,6 +352,24 @@ export default function IndexPage() {
       return
     }
 
+    const normalized = alignPayloadWithCalorieTarget(payload)
+    payload = normalized.payload
+
+    if (payload.protein_target < 0 || payload.protein_target > 500) {
+      Taro.showToast({ title: '按热量换算后，蛋白质超出范围，请调整目标', icon: 'none' })
+      return
+    }
+
+    if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
+      Taro.showToast({ title: '按热量换算后，碳水超出范围，请调整目标', icon: 'none' })
+      return
+    }
+
+    if (payload.fat_target < 0 || payload.fat_target > 300) {
+      Taro.showToast({ title: '按热量换算后，脂肪超出范围，请调整目标', icon: 'none' })
+      return
+    }
+
     setSavingTargets(true)
     try {
       const { saveScope } = await updateDashboardTargets(payload)
@@ -194,12 +377,17 @@ export default function IndexPage() {
       await loadDashboard()
       if (saveScope === 'local') {
         Taro.showToast({
-          title: '已暂存本机；部署最新后端后将自动同步云端',
+          title: normalized.adjusted
+            ? '已按热量自动校准后暂存本机；后端升级后将自动同步云端'
+            : '已暂存本机；部署最新后端后将自动同步云端',
           icon: 'none',
           duration: 3200,
         })
       } else {
-        Taro.showToast({ title: '目标已更新', icon: 'success' })
+        Taro.showToast({
+          title: normalized.adjusted ? '已按热量自动校准并保存' : '目标已更新',
+          icon: 'success'
+        })
       }
     } catch (error) {
       Taro.showToast({ title: (error as Error).message || '保存失败', icon: 'none' })
@@ -226,6 +414,28 @@ export default function IndexPage() {
   }
 
   const remainingCalories = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
+  const displayWeekHeatmapCells = weekHeatmapCells.length > 0 ? weekHeatmapCells : createEmptyWeekHeatmapCells()
+  const recordedDaysThisWeek = displayWeekHeatmapCells.filter((item) => item.calories > 0).length
+  const openRecordDate = (date: string) => {
+    Taro.setStorageSync('recordPageTab', 'history')
+    Taro.setStorageSync(RECORD_HISTORY_DATE_KEY, date)
+    Taro.switchTab({ url: '/pages/record/index' })
+  }
+  const openRecordSummary = () => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    Taro.navigateTo({ url: '/pages/stats/index' })
+  }
+  const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
+  const macroInputValues = parseMacroTargets(targetForm)
+  const caloriesFromMacroInputs = macroInputValues ? calcCaloriesFromMacros(macroInputValues) : null
+  const calorieGap =
+    calorieInputValue != null && caloriesFromMacroInputs != null
+      ? Number((calorieInputValue - caloriesFromMacroInputs).toFixed(1))
+      : null
+  const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
 
   return (
     <View className='home-page'>
@@ -297,6 +507,34 @@ export default function IndexPage() {
               )
             })}
           </View>
+        </View>
+
+        <View className='home-week-card'>
+          <View className='home-week-header'>
+            <View>
+              <Text className='home-week-title'>本周饮食记录</Text>
+              <Text className='home-week-subtitle'>灰色未记录，红色吃多了，蓝色吃少了</Text>
+            </View>
+            <View className='home-week-link' onClick={openRecordSummary}>
+              <Text className='home-week-link-text'>饮食记录</Text>
+              <Text className='home-week-link-arrow'>→</Text>
+            </View>
+          </View>
+          <View className='home-week-grid'>
+            {displayWeekHeatmapCells.map((item) => (
+              <View
+                key={item.date}
+                className={`home-week-cell ${item.state} level-${item.level} ${item.calories > 0 ? 'is-clickable' : ''}`}
+                onClick={() => item.calories > 0 && openRecordDate(item.date)}
+              >
+                <Text className='home-week-cell-date'>{item.date.slice(-2)}</Text>
+                <View className='home-week-cell-dot' />
+              </View>
+            ))}
+          </View>
+          <Text className='home-week-summary'>
+            本周已记录 {recordedDaysThisWeek}/7 天
+          </Text>
         </View>
       </View>
 
@@ -456,6 +694,18 @@ export default function IndexPage() {
                   <Text className='target-input-unit'>g</Text>
                 </View>
               </View>
+            </View>
+
+            <View className='target-relation-hint'>
+              <Text className='target-relation-hint-title'>保存规则：以热量目标为准自动换算三大营养素</Text>
+              {calorieInputValue != null && caloriesFromMacroInputs != null ? (
+                <Text className={`target-relation-hint-value ${isRelationAligned ? 'aligned' : 'adjusting'}`}>
+                  当前三大营养素换算热量 {formatDisplayNumber(caloriesFromMacroInputs)} kcal
+                  {isRelationAligned ? '，已满足关系' : '，保存时会自动校准'}
+                </Text>
+              ) : (
+                <Text className='target-relation-hint-value pending'>请填写完整的数字目标</Text>
+              )}
             </View>
 
             <View className='target-modal-actions'>

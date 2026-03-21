@@ -44,6 +44,10 @@ from database import (
     upload_food_analyze_image,
     upload_user_avatar,
     search_users,
+    is_friend,
+    add_friend_pair,
+    build_friend_invite_code,
+    resolve_user_by_friend_invite_code,
     send_friend_request,
     get_friend_requests_received,
     respond_friend_request,
@@ -3263,6 +3267,106 @@ async def api_friend_cleanup_duplicates(user_info: dict = Depends(get_current_us
     except Exception as e:
         print(f"[api/friend/cleanup-duplicates] 错误: {e}")
         raise HTTPException(status_code=500, detail="清理失败")
+
+
+@app.get("/api/friend/invite/profile/{user_id}")
+async def api_friend_invite_profile(user_id: str):
+    """公开获取邀请资料（昵称、头像、邀请码），用于分享页和海报展示。"""
+    try:
+        user = await get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        return {
+            "user_id": user["id"],
+            "nickname": user.get("nickname") or "用户",
+            "avatar": user.get("avatar") or "",
+            "invite_code": build_friend_invite_code(user["id"]),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/friend/invite/profile] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取邀请信息失败")
+
+
+@app.get("/api/friend/invite/resolve")
+async def api_friend_invite_resolve(
+    code: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """登录后解析邀请码，返回邀请人资料与当前好友状态。"""
+    try:
+        inviter = await resolve_user_by_friend_invite_code(code)
+        if not inviter:
+            raise HTTPException(status_code=404, detail="邀请码无效")
+        current_user_id = user_info["user_id"]
+        inviter_id = inviter["id"]
+        if inviter_id == current_user_id:
+            return {
+                "user_id": inviter_id,
+                "nickname": inviter.get("nickname") or "用户",
+                "avatar": inviter.get("avatar") or "",
+                "already_friend": False,
+                "is_self": True,
+            }
+        already_friend = await is_friend(current_user_id, inviter_id)
+        return {
+            "user_id": inviter_id,
+            "nickname": inviter.get("nickname") or "用户",
+            "avatar": inviter.get("avatar") or "",
+            "already_friend": already_friend,
+            "is_self": False,
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[api/friend/invite/resolve] 错误: {e}")
+        raise HTTPException(status_code=500, detail="解析邀请码失败")
+
+
+class FriendInviteAcceptRequest(BaseModel):
+    code: str = Field(..., description="短邀请码（通常 8 位）")
+
+
+@app.post("/api/friend/invite/accept")
+async def api_friend_invite_accept(
+    body: FriendInviteAcceptRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """接受邀请码并直接建立双向好友关系。"""
+    try:
+        inviter = await resolve_user_by_friend_invite_code(body.code)
+        if not inviter:
+            raise HTTPException(status_code=404, detail="邀请码无效")
+        current_user_id = user_info["user_id"]
+        inviter_id = inviter["id"]
+        if inviter_id == current_user_id:
+            raise HTTPException(status_code=400, detail="不能添加自己为好友")
+
+        if await is_friend(current_user_id, inviter_id):
+            return {
+                "status": "already_friend",
+                "user_id": inviter_id,
+                "nickname": inviter.get("nickname") or "用户",
+                "avatar": inviter.get("avatar") or "",
+            }
+
+        await add_friend_pair(current_user_id, inviter_id)
+        return {
+            "status": "added",
+            "user_id": inviter_id,
+            "nickname": inviter.get("nickname") or "用户",
+            "avatar": inviter.get("avatar") or "",
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[api/friend/invite/accept] 错误: {e}")
+        raise HTTPException(status_code=500, detail="添加好友失败")
 
 
 @app.get("/api/community/public-feed")

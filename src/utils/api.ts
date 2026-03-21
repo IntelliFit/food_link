@@ -1529,6 +1529,31 @@ export interface FriendListItem {
   avatar: string
 }
 
+/** 好友邀请码资料（公开） */
+export interface FriendInviteProfile {
+  user_id: string
+  nickname: string
+  avatar: string
+  invite_code: string
+}
+
+/** 登录后解析邀请码返回 */
+export interface FriendInviteResolveResult {
+  user_id: string
+  nickname: string
+  avatar: string
+  already_friend: boolean
+  is_self: boolean
+}
+
+/** 接受邀请码返回 */
+export interface FriendInviteAcceptResult {
+  status: 'added' | 'already_friend'
+  user_id: string
+  nickname: string
+  avatar: string
+}
+
 /** 本周好友圈打卡排行榜条目 */
 export interface CheckinLeaderboardItem {
   rank: number
@@ -1609,6 +1634,41 @@ export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
   return response.data as { list: FriendListItem[] }
+}
+
+/** 公开获取邀请资料（用于分享海报昵称与邀请码） */
+export async function getFriendInviteProfile(userId: string): Promise<FriendInviteProfile> {
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/friend/invite/profile/${encodeURIComponent(userId)}`,
+    method: 'GET',
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取邀请资料失败')
+  }
+  return response.data as FriendInviteProfile
+}
+
+/** 登录后解析邀请码 */
+export async function resolveFriendInvite(code: string): Promise<FriendInviteResolveResult> {
+  const q = encodeURIComponent(code.trim())
+  const response = await authenticatedRequest(`/api/friend/invite/resolve?code=${q}`, { method: 'GET' })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '邀请码解析失败')
+  }
+  return response.data as FriendInviteResolveResult
+}
+
+/** 接受邀请码并直接建立好友关系 */
+export async function acceptFriendInvite(code: string): Promise<FriendInviteAcceptResult> {
+  const response = await authenticatedRequest('/api/friend/invite/accept', {
+    method: 'POST',
+    data: { code: code.trim() }
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '添加好友失败')
+  }
+  return response.data as FriendInviteAcceptResult
 }
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */

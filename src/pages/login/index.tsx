@@ -1,5 +1,5 @@
 import { View, Text, Image, Input, Button } from '@tarojs/components'
-import Taro from '@tarojs/taro'
+import Taro, { useRouter } from '@tarojs/taro'
 import { useState } from 'react'
 import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
@@ -10,7 +10,8 @@ import {
     getUserProfile,
     updateUserInfo,
     uploadUserAvatar,
-    imageToBase64
+    imageToBase64,
+    acceptFriendInvite
 } from '../../utils/api'
 
 import './index.scss'
@@ -33,7 +34,29 @@ function safeNavigateBack() {
     }
 }
 
+const TAB_PAGE_PATHS = new Set([
+    '/pages/index/index',
+    '/pages/community/index',
+    '/pages/record/index',
+    '/pages/profile/index'
+])
+
+function normalizePath(path: string): string {
+    const raw = (path || '').trim()
+    if (!raw) return ''
+    return raw.startsWith('/') ? raw : `/${raw}`
+}
+
+function safeDecodeURIComponent(value: string): string {
+    try {
+        return decodeURIComponent(value || '')
+    } catch {
+        return value || ''
+    }
+}
+
 export default function LoginPage() {
+    const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [showProfileForm, setShowProfileForm] = useState(false)
     /** 登录成功但库中无手机号时展示，引导用户授权绑定 */
@@ -44,6 +67,36 @@ export default function LoginPage() {
     // 临时头像和昵称（用于完善信息）
     const [tempAvatar, setTempAvatar] = useState('')
     const [tempNickname, setTempNickname] = useState('')
+
+    const inviteCodeFromQuery = (router.params?.invite_code || '').trim()
+    const redirectFromQuery = safeDecodeURIComponent((router.params?.redirect || '').trim())
+
+    const finishLoginFlow = async () => {
+        const pendingInviteCode = inviteCodeFromQuery || String(Taro.getStorageSync('pending_friend_invite_code') || '').trim()
+        if (pendingInviteCode) {
+            try {
+                const res = await acceptFriendInvite(pendingInviteCode)
+                if (res.status === 'added') {
+                    Taro.showToast({ title: `已和${res.nickname || '对方'}成为好友`, icon: 'success' })
+                }
+                Taro.removeStorageSync('pending_friend_invite_code')
+            } catch {
+                // 邀请处理失败不阻断登录跳转
+            }
+        }
+
+        const target = normalizePath(redirectFromQuery)
+        if (target) {
+            const tabPath = target.split('?')[0]
+            if (TAB_PAGE_PATHS.has(tabPath)) {
+                Taro.switchTab({ url: tabPath })
+            } else {
+                Taro.redirectTo({ url: target })
+            }
+            return
+        }
+        safeNavigateBack()
+    }
 
     /** 微信一键登录：仅用 code，后端若已有手机号会直接带回，无需再授权 */
     const handleWxLogin = async () => {
@@ -78,7 +131,7 @@ export default function LoginPage() {
         if (!phoneCode) {
             setShowPhoneBindModal(false)
             Taro.showToast({ title: '未授权手机号', icon: 'none' })
-            setTimeout(() => safeNavigateBack(), 800)
+            setTimeout(() => { finishLoginFlow() }, 800)
             return
         }
         try {
@@ -89,7 +142,7 @@ export default function LoginPage() {
             Taro.hideLoading()
             Taro.showToast({ title: '绑定成功', icon: 'success' })
             setShowPhoneBindModal(false)
-            setTimeout(() => safeNavigateBack(), 1000)
+            setTimeout(() => { finishLoginFlow() }, 1000)
         } catch (err: any) {
             Taro.hideLoading()
             Taro.showToast({ title: err.message || '绑定失败', icon: 'none' })
@@ -134,7 +187,7 @@ export default function LoginPage() {
                 setLoading(false)
                 // 库中已有手机号则直接返回；否则弹出授权手机号弹窗
                 if (loginData.purePhoneNumber) {
-                    setTimeout(() => safeNavigateBack(), 1500)
+                    setTimeout(() => { finishLoginFlow() }, 1500)
                 } else {
                     setShowPhoneBindModal(true)
                 }
@@ -206,7 +259,7 @@ export default function LoginPage() {
             Taro.showToast({ title: '保存成功', icon: 'success' })
 
             setTimeout(() => {
-                safeNavigateBack()
+                finishLoginFlow()
             }, 1500)
 
         } catch (err: any) {
@@ -295,7 +348,7 @@ export default function LoginPage() {
                                 variant="text"
                                 onClick={() => {
                                     setShowPhoneBindModal(false)
-                                    safeNavigateBack()
+                                    finishLoginFlow()
                                 }}
                             >
                                 暂不绑定
