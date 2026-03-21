@@ -42,6 +42,17 @@ ACTIVITY_LEVEL_LABELS = {
     "very_active": "极高活动",
 }
 
+MEAL_NAMES = {
+    "breakfast": "早餐",
+    "morning_snack": "早加餐",
+    "lunch": "午餐",
+    "afternoon_snack": "午加餐",
+    "dinner": "晚餐",
+    "evening_snack": "晚加餐",
+    # 兼容历史值
+    "snack": "午加餐",
+}
+
 
 def _format_health_profile_sync(user: Dict[str, Any]) -> str:
     """将 weapp_user 健康档案格式化为供 AI 参考的简短摘要（与 main 中逻辑一致）。"""
@@ -268,8 +279,7 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     remain_hint = f"\n用户当日剩余热量预算约 {remaining} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if remaining is not None else ""
 
     meal_type = payload.get("meal_type")
-    meal_map = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
-    meal_name = meal_map.get(meal_type, meal_type or "")
+    meal_name = MEAL_NAMES.get(meal_type, meal_type or "")
     meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
 
     additional = (payload.get("additionalContext") or "").strip()
@@ -277,6 +287,18 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 
     is_multi_view = payload.get("is_multi_view")
     multi_view_hint = "\n注意：提供的图片是**同一份食物**的不同视角拍摄（用于辅助展示侧面或厚度）。请综合所有图片来估算这份食物的体积和重量，**不要**将它们视为多份不同的食物。" if is_multi_view else ""
+    execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
+    if execution_mode not in {"standard", "strict"}:
+        execution_mode = "standard"
+    mode_hint = (
+        "\n执行模式：精准模式（strict）"
+        "\n- 优先识别单纯碳水或单纯瘦肉。"
+        "\n- 混合食物、重油烹饪、肥瘦不明时，不要给确定克数。"
+        "\n- 请在 insight/context_advice 明确提示“分开拍、拨开拍或重拍”。"
+    ) if execution_mode == "strict" else (
+        "\n执行模式：标准模式（standard）"
+        "\n- 可给出常规估算值，不确定时需提醒偏差风险。"
+    )
 
     return f"""
 {multi_view_hint}
@@ -288,6 +310,7 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
+8. 请遵守以下执行模式约束：{mode_hint}
 {additional_line}
 
 重要：请务必使用**简体中文**返回所有文本内容。
@@ -485,8 +508,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     remain_hint = f" 用户当日剩余热量预算约 {remaining} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if remaining is not None else ""
 
     meal_type = payload.get("meal_type")
-    meal_map = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
-    meal_name = meal_map.get(meal_type, meal_type or "")
+    meal_name = MEAL_NAMES.get(meal_type, meal_type or "")
     meal_hint = f" 用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
 
     profile_hint = f"\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议。\n\n{profile_block}" if profile_block else ""

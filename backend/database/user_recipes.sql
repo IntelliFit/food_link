@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS user_recipes (
     
     -- 标签与分类
     tags TEXT[],  -- 标签，如 ["早餐", "减脂", "快手"]
-    meal_type VARCHAR(20),  -- 常用餐次：breakfast/lunch/dinner/snack
+    meal_type VARCHAR(20),  -- 常用餐次：breakfast/morning_snack/lunch/afternoon_snack/dinner/evening_snack（兼容 legacy snack）
     is_favorite BOOLEAN DEFAULT false,  -- 是否收藏
     
     -- 使用统计

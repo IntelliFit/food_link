@@ -203,6 +203,35 @@ def update_user_sync(user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any
         raise
 
 
+def insert_user_mode_switch_log_sync(
+    user_id: str,
+    from_mode: str,
+    to_mode: str,
+    changed_by: str = "user_manual",
+    reason_code: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    写入用户执行模式切换日志（同步版，供 API 通过 asyncio.to_thread 调用）。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "from_mode": from_mode,
+        "to_mode": to_mode,
+        "changed_by": changed_by,
+        "reason_code": reason_code,
+    }
+    try:
+        result = supabase.table("user_mode_switch_logs").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("插入模式切换日志失败：返回数据为空")
+    except Exception as e:
+        print(f"[insert_user_mode_switch_log_sync] 错误: {e}")
+        raise
+
+
 async def insert_health_document(
     user_id: str,
     document_type: str = "report",
@@ -290,7 +319,7 @@ async def insert_food_record(
 
     Args:
         user_id: 用户 ID (UUID)
-        meal_type: 餐次 breakfast / lunch / dinner / snack
+        meal_type: 餐次 breakfast / morning_snack / lunch / afternoon_snack / dinner / evening_snack（兼容 legacy: snack）
         image_path: 图片本地路径或 URL（可选）
         description: AI 餐食描述（可选）
         insight: AI 健康建议（可选）

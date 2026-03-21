@@ -19,15 +19,21 @@ import './index.scss'
 
 const MEAL_TYPE_NAMES: Record<string, string> = {
   breakfast: '早餐',
+  morning_snack: '早加餐',
   lunch: '午餐',
+  afternoon_snack: '午加餐',
   dinner: '晚餐',
-  snack: '加餐'
+  evening_snack: '晚加餐',
+  snack: '午加餐'
 }
 
 const MEAL_TYPE_ICONS: Record<string, string> = {
   breakfast: 'icon-zaocan',
+  morning_snack: 'icon-lingshi',
   lunch: 'icon-wucan',
+  afternoon_snack: 'icon-lingshi',
   dinner: 'icon-wancan',
+  evening_snack: 'icon-lingshi',
   snack: 'icon-lingshi'
 }
 
@@ -86,7 +92,7 @@ export default function RecordPage() {
     }
     Taro.chooseImage({
       count: 1,
-      sizeType: ['original', 'compressed'],
+      sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
       success: (res) => {
         const imagePath = res.tempFilePaths[0]
@@ -113,9 +119,11 @@ export default function RecordPage() {
 
   const meals = [
     { id: 'breakfast', name: '早餐', icon: 'icon-zaocan', color: '#ff6900' },
+    { id: 'morning_snack', name: '早加餐', icon: 'icon-lingshi', color: '#7b61ff' },
     { id: 'lunch', name: '午餐', icon: 'icon-wucan', color: '#00c950' },
+    { id: 'afternoon_snack', name: '午加餐', icon: 'icon-lingshi', color: '#ad46ff' },
     { id: 'dinner', name: '晚餐', icon: 'icon-wancan', color: '#2b7fff' },
-    { id: 'snack', name: '加餐', icon: 'icon-lingshi', color: '#ad46ff' }
+    { id: 'evening_snack', name: '晚加餐', icon: 'icon-lingshi', color: '#5b21b6' }
   ]
 
   const commonFoods = [

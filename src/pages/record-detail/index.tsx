@@ -18,15 +18,21 @@ import './index.scss'
 
 const MEAL_TYPE_NAMES: Record<string, string> = {
   breakfast: '早餐',
+  morning_snack: '早加餐',
   lunch: '午餐',
+  afternoon_snack: '午加餐',
   dinner: '晚餐',
-  snack: '加餐'
+  evening_snack: '晚加餐',
+  snack: '午加餐'
 }
 
 const MEAL_ICON_CONFIG = {
   breakfast: { Icon: IconBreakfast, color: '#ff6900' },
+  morning_snack: { Icon: IconSnack, color: '#7b61ff' },
   lunch: { Icon: IconLunch, color: '#00c950' },
+  afternoon_snack: { Icon: IconSnack, color: '#ad46ff' },
   dinner: { Icon: IconDinner, color: '#2b7fff' },
+  evening_snack: { Icon: IconSnack, color: '#5b21b6' },
   snack: { Icon: IconSnack, color: '#ad46ff' }
 } as const
 

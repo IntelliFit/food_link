@@ -9,7 +9,8 @@ import {
   uploadReportImage,
   submitReportExtractionTask,
   imageToBase64,
-  type HealthProfileUpdateRequest
+  type HealthProfileUpdateRequest,
+  type ExecutionMode
 } from '../../utils/api'
 
 import './index.scss'
@@ -53,7 +54,12 @@ const GOAL_OPTIONS = [
   { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: 'icon-zengji' }
 ]
 
-const TOTAL_STEPS = 11 // 性别、生日、身高、体重、目标、活动、病史、饮食、过敏、特殊情况、体检报告
+const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
+  { value: 'strict', title: '精准模式（推荐）', desc: '要求分开拍、必要时重拍，准确性更高，适合减脂/增肌执行期。' },
+  { value: 'standard', title: '标准模式', desc: '记录更快，但估算波动更大，适合先建立习惯。' }
+]
+
+const TOTAL_STEPS = 12 // 性别、生日、身高、体重、目标、活动、执行模式、病史、饮食、过敏、特殊情况、体检报告
 
 export default function HealthProfilePage() {
   const [loading, setLoading] = useState(true)
@@ -67,6 +73,8 @@ export default function HealthProfilePage() {
   const [weight, setWeight] = useState<string>('')
   const [dietGoal, setDietGoal] = useState<string>('')
   const [activityLevel, setActivityLevel] = useState<string>('')
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
+  const [executionModeTouched, setExecutionModeTouched] = useState(false)
   const [medicalHistory, setMedicalHistory] = useState<string[]>([])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
@@ -98,6 +106,10 @@ export default function HealthProfilePage() {
       if (profile.weight != null) setWeight(String(profile.weight))
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
+      if (profile.execution_mode) {
+        setExecutionMode(profile.execution_mode)
+        setExecutionModeTouched(true)
+      }
       const hc = profile.health_condition
       if (hc?.medical_history?.length) setMedicalHistory(hc.medical_history)
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
@@ -210,6 +222,18 @@ export default function HealthProfilePage() {
     setActivityLevel(value)
   }
 
+  const recommendExecutionMode = (goal: string): ExecutionMode => {
+    if (goal === 'fat_loss' || goal === 'muscle_gain') return 'strict'
+    return 'standard'
+  }
+
+  const handleSelectDietGoal = (value: string) => {
+    setDietGoal(value)
+    if (!executionModeTouched) {
+      setExecutionMode(recommendExecutionMode(value))
+    }
+  }
+
   const canProceed = () => {
     switch (currentStep) {
       case 0:
@@ -225,9 +249,11 @@ export default function HealthProfilePage() {
       case 5:
         return !!activityLevel
       case 6:
+        return !!executionMode
       case 7:
       case 8:
       case 9:
+      case 10:
         return true
       default:
         return true
@@ -244,13 +270,14 @@ export default function HealthProfilePage() {
       weight: weight ? Number(weight) : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
+      execution_mode: executionMode,
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
       health_notes: healthNotes || undefined,
       report_image_url: reportImageUrl || undefined
     }
-    if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
+    if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level || !req.execution_mode) {
       Taro.showToast({ title: '请完成前几项必填', icon: 'none' })
       return
     }
@@ -434,7 +461,7 @@ export default function HealthProfilePage() {
                 <View
                   key={opt.value}
                   className={`option-card with-desc ${dietGoal === opt.value ? 'active' : ''}`}
-                  onClick={() => setDietGoal(opt.value)}
+                  onClick={() => handleSelectDietGoal(opt.value)}
                 >
                   <Text className={`option-icon iconfont ${opt.icon}`}></Text>
                   <View className="option-info">
@@ -477,9 +504,41 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 6: 既往病史（多选） */}
+          {/* Step 6: 执行模式 */}
           <View className="card step-card">
             <Text className="step-card-step">第 7 题</Text>
+            <Text className="step-card-title">选择你的执行模式</Text>
+            <View className="option-list">
+              {EXECUTION_MODE_OPTIONS.map((mode) => (
+                <View
+                  key={mode.value}
+                  className={`option-card with-desc ${executionMode === mode.value ? 'active' : ''}`}
+                  onClick={() => {
+                    setExecutionMode(mode.value)
+                    setExecutionModeTouched(true)
+                  }}
+                >
+                  <View className="option-info">
+                    <Text className="option-label">{mode.title}</Text>
+                    <Text className="option-desc">{mode.desc}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+            <Text className="skip-hint">
+              当前推荐：{recommendExecutionMode(dietGoal || 'maintain') === 'strict' ? '精准模式' : '标准模式'}
+            </Text>
+            <View className="card-footer">
+              <View className="card-prev-link" onClick={goPrev}>上一题</View>
+              <Button block color="primary" shape="round" className={`card-next-btn ${executionMode ? 'ready' : ''}`} onClick={goNext} disabled={!executionMode}>
+                确认
+              </Button>
+            </View>
+          </View>
+
+          {/* Step 7: 既往病史（多选） */}
+          <View className="card step-card">
+            <Text className="step-card-step">第 8 题</Text>
             <Text className="step-card-title">是否有以下病史？（可多选）</Text>
             <View className="option-grid">
               {MEDICAL_OPTIONS.map((o) => (
@@ -524,9 +583,9 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 7: 特殊饮食（多选） */}
+          {/* Step 8: 特殊饮食（多选） */}
           <View className="card step-card">
-            <Text className="step-card-step">第 8 题</Text>
+            <Text className="step-card-step">第 9 题</Text>
             <Text className="step-card-title">特殊饮食习惯？（可多选）</Text>
             <View className="option-grid">
               {DIET_OPTIONS.map((o) => (
@@ -548,9 +607,9 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 8: 过敏源 */}
+          {/* Step 9: 过敏源 */}
           <View className="card step-card">
-            <Text className="step-card-step">第 9 题（选填）</Text>
+            <Text className="step-card-step">第 10 题（选填）</Text>
             <Text className="step-card-title">有过敏源吗？</Text>
             <View className="input-card">
               <Textarea
@@ -570,9 +629,9 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 9: 特殊情况和问题补充 */}
+          {/* Step 10: 特殊情况和问题补充 */}
           <View className="card step-card">
-            <Text className="step-card-step">第 10 题（选填）</Text>
+            <Text className="step-card-step">第 11 题（选填）</Text>
             <Text className="step-card-title">特殊情况和补充？</Text>
             <View className="input-card">
               {/* 这里使用 textarea 或者普通的 Input 都行。原项目设计风格用 Input 为主 */}
@@ -593,12 +652,13 @@ export default function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 10: 体检报告上传 */}
+          {/* Step 11: 体检报告上传 */}
           <View className="card step-card upload-step">
             <View className="upload-hero">
               <View className="hero-icon-wrapper">
                 <Text className="hero-icon iconfont icon-yiliaohangyedeICON-"></Text>
               </View>
+              <Text className="step-card-step">第 12 题（选填）</Text>
               <Text className="step-card-title" style={{ marginBottom: '16rpx' }}>上传体检报告</Text>
               <Text className="step-card-subtitle" style={{ textAlign: 'center', marginBottom: '0' }}>AI 深度分析关键指标，定制专属方案</Text>
             </View>

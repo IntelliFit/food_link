@@ -89,6 +89,7 @@ from database import (
     create_comment_task_sync,
     list_comment_tasks_by_user_sync,
     delete_image_from_storage,
+    insert_user_mode_switch_log_sync,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -99,6 +100,9 @@ GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "google/gemini-2.5-flash")
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
+VALID_EXECUTION_MODES = {"standard", "strict"}
+DEFAULT_EXECUTION_MODE = "standard"
+VALID_MODE_SET_BY = {"system", "user_manual", "coach_manual"}
 
 
 def _get_china_today_str() -> str:
@@ -117,6 +121,131 @@ def _format_china_time_hhmm(value: Any) -> str:
         return dt.astimezone(CHINA_TZ).strftime("%H:%M")
     except Exception:
         return "00:00"
+
+
+# 餐次枚举：以 6 餐次为主，兼容历史 snack
+MEAL_TYPE_DESCRIPTION = (
+    "餐次: breakfast / morning_snack / lunch / afternoon_snack / dinner / evening_snack"
+    "（兼容 legacy: snack）"
+)
+MEAL_DISPLAY_ORDER = (
+    "breakfast",
+    "morning_snack",
+    "lunch",
+    "afternoon_snack",
+    "dinner",
+    "evening_snack",
+)
+MEAL_TARGETS = {
+    "breakfast": 450,
+    "morning_snack": 150,
+    "lunch": 700,
+    "afternoon_snack": 150,
+    "dinner": 600,
+    "evening_snack": 150,
+}
+MEAL_NAMES = {
+    "breakfast": "早餐",
+    "morning_snack": "早加餐",
+    "lunch": "午餐",
+    "afternoon_snack": "午加餐",
+    "dinner": "晚餐",
+    "evening_snack": "晚加餐",
+    # 兼容历史值：旧版本只有 snack
+    "snack": "午加餐",
+}
+VALID_MEAL_TYPES = set(MEAL_DISPLAY_ORDER) | {"snack"}
+
+
+def _normalize_execution_mode(value: Optional[str], default: str = DEFAULT_EXECUTION_MODE) -> str:
+    mode = (value or "").strip().lower()
+    if mode in VALID_EXECUTION_MODES:
+        return mode
+    return default
+
+
+def _parse_execution_mode_or_raise(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    mode = str(value).strip().lower()
+    if not mode:
+        return None
+    if mode not in VALID_EXECUTION_MODES:
+        raise HTTPException(status_code=400, detail="execution_mode 必须为 standard 或 strict")
+    return mode
+
+
+def _build_execution_mode_hint(execution_mode: str) -> str:
+    """构建执行模式提示词约束。"""
+    if execution_mode == "strict":
+        return """
+执行模式：精准模式（strict）
+- 优先识别“单纯碳水”或“单纯瘦肉”，例如米饭/馒头/红薯/面包、去皮鸡鸭肉/鱼肉/瘦畜肉。
+- 若为混合食物（盖浇饭、炒菜、油炸裹粉、肥瘦混合等）或无法判断肥瘦比例，请不要给确定克数。
+- 遇到以上情况，请在 insight/context_advice 中明确提示用户：分开拍、拨开拍或重拍后再分析。
+""".strip()
+    return """
+执行模式：标准模式（standard）
+- 可以给出常规估算值；若不确定，请给保守估算并提示存在偏差风险。
+""".strip()
+
+
+def _parse_china_datetime(value: Any) -> Optional[datetime]:
+    """将记录时间统一解析为中国时区 datetime，失败返回 None。"""
+    if not value:
+        return None
+    try:
+        dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(CHINA_TZ)
+    except Exception:
+        return None
+
+
+def _map_legacy_snack_to_slot(record_time: Any = None) -> str:
+    """
+    旧 snack 记录按时间段映射到新加餐：
+    - 00:00-10:59 -> 早加餐
+    - 11:00-16:59 -> 午加餐
+    - 17:00-23:59 -> 晚加餐
+    """
+    dt = _parse_china_datetime(record_time)
+    if not dt:
+        return "afternoon_snack"
+    h = dt.hour
+    if h < 11:
+        return "morning_snack"
+    if h < 17:
+        return "afternoon_snack"
+    return "evening_snack"
+
+
+def _normalize_meal_type(meal_type: Optional[str], record_time: Any = None, default: str = "afternoon_snack") -> str:
+    """将 meal_type 归一化到 6 餐次，兼容 legacy snack。"""
+    mt = (meal_type or "").strip()
+    if mt in MEAL_DISPLAY_ORDER:
+        return mt
+    if mt == "snack":
+        return _map_legacy_snack_to_slot(record_time)
+    return default
+
+
+def _meal_name(meal_type: Optional[str], record_time: Any = None) -> str:
+    normalized = _normalize_meal_type(meal_type, record_time=record_time, default="afternoon_snack")
+    return MEAL_NAMES.get(normalized, normalized)
+
+
+def _build_by_meal_calories(records: List[Dict[str, Any]]) -> Dict[str, float]:
+    """按 6 餐次聚合热量，并保留 snack 兼容字段。"""
+    totals: Dict[str, float] = {k: 0.0 for k in MEAL_DISPLAY_ORDER}
+    for r in records:
+        mt = _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time"))
+        totals[mt] = totals.get(mt, 0.0) + float(r.get("total_calories") or 0)
+    out = {k: round(totals.get(k, 0.0), 1) for k in MEAL_DISPLAY_ORDER}
+    # 兼容旧前端字段
+    out["snack"] = out["afternoon_snack"]
+    return out
 
 app = FastAPI(title="食物分析 API", description="基于 DashScope 的食物图片分析服务")
 
@@ -166,7 +295,8 @@ class AnalyzeRequest(BaseModel):
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss(减脂期) / muscle_gain(增肌期) / maintain(维持体重) / none(无)")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout(练后) / daily(日常) / before_sleep(睡前) / none(无)")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal，用于建议下一餐")
-    meal_type: Optional[str] = Field(default=None, description="餐次: breakfast / lunch / dinner / snack，用于结合餐次给出建议")
+    meal_type: Optional[str] = Field(default=None, description=f"{MEAL_TYPE_DESCRIPTION}，用于结合餐次给出建议")
+    execution_mode: Optional[str] = Field(default=None, description="执行模式: standard(标准) / strict(精准)")
 
 
 class AnalyzeResponse(BaseModel):
@@ -207,7 +337,8 @@ def _build_gemini_prompt(
     state_hint: str = "",
     remain_hint: str = "",
     meal_hint: str = "",
-    profile_block: str = ""
+    profile_block: str = "",
+    mode_hint: str = "",
 ) -> str:
     """构建 Gemini 分析的提示词"""
     return f"""
@@ -224,6 +355,7 @@ def _build_gemini_prompt(
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
 8. is_violation: 布尔值。必须进行内容安全和相关性检查。根据上面的第一步规则判定，如果是与食物无关的废图或违规图片，必须返回 true。（注意：只要图片中哪怕包含一丁点可食用的食物或饮品，就不算违规）。
 9. violation_reason: 若 is_violation 为 true，说明简短的中文原因（如"未检测到食物"或"涉及不良内容"），否则为空字符串。
+10. 请遵守以下执行模式约束：{mode_hint}
 
 {('用户补充背景信息: "' + additional_context + '"。请根据此信息调整对隐形成分或烹饪方式的判断。') if additional_context else ''}
 
@@ -589,16 +721,19 @@ async def analyze_food(
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
         if request.meal_type:
-            meal_map = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
-            meal_name = meal_map.get(request.meal_type, request.meal_type)
+            meal_name = _meal_name(request.meal_type)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
+        requested_mode = _parse_execution_mode_or_raise(request.execution_mode) if request.execution_mode is not None else None
         profile_block = ""
+        user = None
         if user_info:
             user = await get_user_by_id(user_info["user_id"])
             if user:
                 profile_block = _format_health_profile_for_analysis(user)
                 if profile_block:
                     profile_block = "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n" + profile_block
+        execution_mode = requested_mode or _normalize_execution_mode((user or {}).get("execution_mode"))
+        mode_hint = _build_execution_mode_hint(execution_mode)
 
         prompt = _build_gemini_prompt(
             additional_context=request.additionalContext or "",
@@ -607,6 +742,7 @@ async def analyze_food(
             remain_hint=remain_hint,
             meal_hint=meal_hint,
             profile_block=profile_block or "",
+            mode_hint=mode_hint,
         )
 
         # 构建图片 content parts
@@ -762,7 +898,7 @@ class AnalyzeSubmitRequest(BaseModel):
     """提交食物分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
     image_url: Optional[str] = Field(None, description="Supabase 公网图片 URL（需先调 upload-analyze-image）")
     image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
-    meal_type: Optional[str] = Field(default=None, description="餐次: breakfast / lunch / dinner / snack")
+    meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
@@ -770,6 +906,7 @@ class AnalyzeSubmitRequest(BaseModel):
     additionalContext: Optional[str] = Field(default=None, description="用户补充上下文")
     modelName: Optional[str] = Field(default="qwen-vl-max", description="模型名称")
     is_multi_view: Optional[bool] = Field(default=False, description="是否开启多视角辅助模式")
+    execution_mode: Optional[str] = Field(default=None, description="执行模式: standard / strict")
 
 
 @app.post("/api/analyze/submit")
@@ -783,6 +920,10 @@ async def analyze_submit(
     """
     if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
         raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
+    requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
+    user = await get_user_by_id(user_info["user_id"])
+    profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
+    effective_mode = requested_mode or profile_mode
     payload = {
         "meal_type": body.meal_type,
         "diet_goal": body.diet_goal,
@@ -792,6 +933,7 @@ async def analyze_submit(
         "additionalContext": body.additionalContext,
         "modelName": body.modelName,
         "is_multi_view": body.is_multi_view,
+        "execution_mode": effective_mode,
     }
     try:
         task = await asyncio.to_thread(
@@ -900,6 +1042,7 @@ async def analyze_food_compare(
     """
     if not request.base64Image and not request.image_url:
         raise HTTPException(status_code=400, detail="请提供 base64Image 或 image_url 之一")
+    requested_mode = _parse_execution_mode_or_raise(request.execution_mode) if request.execution_mode is not None else None
     
     # 获取 API Key
     dashscope_api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
@@ -926,12 +1069,12 @@ async def analyze_food_compare(
     
     meal_hint = ""
     if request.meal_type:
-        meal_map = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
-        meal_name = meal_map.get(request.meal_type, request.meal_type)
+        meal_name = _meal_name(request.meal_type)
         meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
     
     # 若已登录，拉取健康档案
     profile_block = ""
+    user = None
     if user_info:
         user = await get_user_by_id(user_info["user_id"])
         if user:
@@ -941,6 +1084,8 @@ async def analyze_food_compare(
                     "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
                     + profile_block
                 )
+    execution_mode = requested_mode or _normalize_execution_mode((user or {}).get("execution_mode"))
+    mode_hint = _build_execution_mode_hint(execution_mode)
     
     # 构建通用提示词
     prompt = _build_gemini_prompt(
@@ -950,6 +1095,7 @@ async def analyze_food_compare(
         remain_hint=remain_hint,
         meal_hint=meal_hint,
         profile_block=profile_block,
+        mode_hint=mode_hint,
     )
     
     # 准备图片 URL
@@ -1177,7 +1323,7 @@ async def analyze_food_text(
 class AnalyzeTextSubmitRequest(BaseModel):
     """提交文字分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
     text: str = Field(..., description="用户描述的食物内容")
-    meal_type: Optional[str] = Field(default=None, description="餐次: breakfast / lunch / dinner / snack")
+    meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
@@ -1555,6 +1701,18 @@ class HealthProfileUpdateRequest(BaseModel):
         None,
         description="首页摄入目标（写入 health_condition.dashboard_targets，兼容未部署独立接口的旧服务）",
     )
+    execution_mode: Optional[str] = Field(
+        None,
+        description="执行模式: standard / strict"
+    )
+    mode_set_by: Optional[str] = Field(
+        None,
+        description="模式设置来源: system / user_manual / coach_manual"
+    )
+    mode_reason: Optional[str] = Field(
+        None,
+        description="模式设置原因编码"
+    )
 
     class Config:
         json_schema_extra = {
@@ -1564,7 +1722,8 @@ class HealthProfileUpdateRequest(BaseModel):
                 "height": 175,
                 "weight": 70,
                 "activity_level": "moderate",
-                "diet_goal": "fat_loss"
+                "diet_goal": "fat_loss",
+                "execution_mode": "strict"
             }
         }
 
@@ -1596,6 +1755,12 @@ async def get_user_profile(
         "tdee": float(user["tdee"]) if user.get("tdee") is not None else None,
         "onboarding_completed": bool(user.get("onboarding_completed")),
         "diet_goal": user.get("diet_goal"),
+        "execution_mode": _normalize_execution_mode(user.get("execution_mode")),
+        "mode_set_by": user.get("mode_set_by"),
+        "mode_set_at": user.get("mode_set_at"),
+        "mode_reason": user.get("mode_reason"),
+        "mode_commitment_days": user.get("mode_commitment_days"),
+        "mode_switch_count_30d": user.get("mode_switch_count_30d"),
         "searchable": user.get("searchable", True),
         "public_records": user.get("public_records", True),
     }
@@ -1772,6 +1937,12 @@ async def get_health_profile(user_info: dict = Depends(get_current_user_info)):
         "tdee": float(user["tdee"]) if user.get("tdee") is not None else None,
         "onboarding_completed": bool(user.get("onboarding_completed")),
         "diet_goal": user.get("diet_goal"),
+        "execution_mode": _normalize_execution_mode(user.get("execution_mode")),
+        "mode_set_by": user.get("mode_set_by"),
+        "mode_set_at": user.get("mode_set_at"),
+        "mode_reason": user.get("mode_reason"),
+        "mode_commitment_days": user.get("mode_commitment_days"),
+        "mode_switch_count_30d": user.get("mode_switch_count_30d"),
     }
 
 
@@ -1801,6 +1972,29 @@ async def update_health_profile(
         update_dict["activity_level"] = body.activity_level
     if body.diet_goal is not None:
         update_dict["diet_goal"] = body.diet_goal
+
+    current_mode = _normalize_execution_mode(user.get("execution_mode"))
+    requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
+    mode_changed = False
+    mode_change_from = current_mode
+    mode_change_to = current_mode
+    mode_change_set_by = "user_manual"
+    mode_change_reason = None
+    if requested_mode is not None:
+        update_dict["execution_mode"] = requested_mode
+        mode_change_to = requested_mode
+        mode_changed = requested_mode != current_mode
+        if mode_changed:
+            raw_set_by = (body.mode_set_by or "user_manual").strip().lower() if body.mode_set_by else "user_manual"
+            if raw_set_by not in VALID_MODE_SET_BY:
+                raise HTTPException(status_code=400, detail="mode_set_by 不合法")
+            mode_change_set_by = raw_set_by
+            mode_change_reason = (body.mode_reason or "").strip() or None
+            update_dict["mode_set_by"] = mode_change_set_by
+            update_dict["mode_set_at"] = datetime.now(timezone.utc).isoformat()
+            update_dict["mode_reason"] = mode_change_reason
+            prev_count = int(user.get("mode_switch_count_30d") or 0)
+            update_dict["mode_switch_count_30d"] = prev_count + 1
 
     health_condition = dict(user.get("health_condition") or {})
     if body.medical_history is not None:
@@ -1865,6 +2059,18 @@ async def update_health_profile(
 
     try:
         updated = await update_user(user_id, update_dict)
+        if mode_changed:
+            try:
+                await asyncio.to_thread(
+                    insert_user_mode_switch_log_sync,
+                    user_id,
+                    mode_change_from,
+                    mode_change_to,
+                    mode_change_set_by,
+                    mode_change_reason,
+                )
+            except Exception as log_err:
+                print(f"[update_health_profile] 写入模式切换日志失败: {log_err}")
         # 二次查询验证：从数据库重新读一次，确认是否真正持久化
         verify = await get_user_by_id(user_id)
         verify_height = verify.get("height") if verify else None
@@ -1887,6 +2093,12 @@ async def update_health_profile(
             "tdee": float(updated["tdee"]) if updated.get("tdee") is not None else None,
             "onboarding_completed": bool(updated.get("onboarding_completed")),
             "diet_goal": updated.get("diet_goal"),
+            "execution_mode": _normalize_execution_mode(updated.get("execution_mode")),
+            "mode_set_by": updated.get("mode_set_by"),
+            "mode_set_at": updated.get("mode_set_at"),
+            "mode_reason": updated.get("mode_reason"),
+            "mode_commitment_days": updated.get("mode_commitment_days"),
+            "mode_switch_count_30d": updated.get("mode_switch_count_30d"),
         }
     except Exception as e:
         err_msg = str(e).lower()
@@ -2184,7 +2396,7 @@ async def save_critical_samples(
 
 
 class SaveFoodRecordRequest(BaseModel):
-    meal_type: str = Field(..., description="餐次: breakfast / lunch / dinner / snack")
+    meal_type: str = Field(..., description=MEAL_TYPE_DESCRIPTION)
     image_path: Optional[str] = Field(default=None, description="图片路径或 URL（可选）")
     description: Optional[str] = Field(default=None, description="AI 餐食描述")
     insight: Optional[str] = Field(default=None, description="AI 健康建议")
@@ -2208,11 +2420,12 @@ async def save_food_record(
     user_info: dict = Depends(get_current_user_info),
 ):
     """
-    拍照识别完成后确认记录：选择餐次（早餐/午餐/晚餐/加餐）后保存到 user_food_records。
+    拍照识别完成后确认记录：支持早/午/晚三餐 + 早/午/晚加餐。
     """
     user_id = user_info["user_id"]
-    if body.meal_type not in ("breakfast", "lunch", "dinner", "snack"):
-        raise HTTPException(status_code=400, detail="meal_type 必须为 breakfast / lunch / dinner / snack")
+    if body.meal_type not in VALID_MEAL_TYPES:
+        raise HTTPException(status_code=400, detail=f"meal_type 必须为 {MEAL_TYPE_DESCRIPTION}")
+    normalized_meal_type = _normalize_meal_type(body.meal_type)
     items_payload = [
         {
             "name": item.name,
@@ -2233,7 +2446,7 @@ async def save_food_record(
     try:
         row = await insert_food_record(
             user_id=user_id,
-            meal_type=body.meal_type,
+            meal_type=normalized_meal_type,
             image_path=body.image_path,
             description=body.description or "",
             insight=body.insight or "",
@@ -2296,6 +2509,8 @@ async def get_food_record_list(
                         r["image_paths"] = [task["image_url"]]
                     elif r.get("image_path"):
                         r["image_paths"] = [r["image_path"]]
+        for r in records:
+            r["meal_type"] = _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time"))
         return {"records": records}
     except Exception as e:
         print(f"[get_food_record_list] 错误: {e}")
@@ -2318,6 +2533,7 @@ async def get_food_record_detail(
         # 验证权限：记录必须属于当前用户
         if record.get("user_id") != user_id:
             raise HTTPException(status_code=403, detail="无权访问此记录")
+        record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
         return {"record": record}
     except HTTPException:
         raise
@@ -2346,9 +2562,9 @@ async def update_food_record_endpoint(
     user_id = user_info["user_id"]
     data: Dict[str, Any] = {}
     if body.meal_type is not None:
-        if body.meal_type not in ("breakfast", "lunch", "dinner", "snack"):
-            raise HTTPException(status_code=400, detail="meal_type 必须为 breakfast / lunch / dinner / snack")
-        data["meal_type"] = body.meal_type
+        if body.meal_type not in VALID_MEAL_TYPES:
+            raise HTTPException(status_code=400, detail=f"meal_type 必须为 {MEAL_TYPE_DESCRIPTION}")
+        data["meal_type"] = _normalize_meal_type(body.meal_type)
     if body.items is not None:
         data["items"] = [
             {
@@ -2432,6 +2648,7 @@ async def get_shared_food_record(record_id: str):
                 raise
             except Exception:
                 pass  # 查询用户失败时降级允许访问，避免阻断正常分享
+        record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
         return {"record": record}
     except HTTPException:
         raise
@@ -2442,9 +2659,6 @@ async def get_shared_food_record(record_id: str):
 
 # ---------- 首页仪表盘（今日摄入 + 今日餐食，不含运动） ----------
 
-# 各餐次默认目标热量（kcal），可与 TDEE 联动
-MEAL_TARGETS = {"breakfast": 500, "lunch": 800, "dinner": 700, "snack": 200}
-MEAL_NAMES = {"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐", "snack": "加餐"}
 DASHBOARD_DEFAULT_MACRO_TARGETS = {"protein": 120.0, "carbs": 250.0, "fat": 65.0}
 
 
@@ -2545,13 +2759,13 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
     # 按餐次聚合今日记录
     by_meal: Dict[str, List[dict]] = {}
     for r in records:
-        mt = r.get("meal_type") or "snack"
+        mt = _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time"))
         if mt not in by_meal:
             by_meal[mt] = []
         by_meal[mt].append(r)
 
     meals_out = []
-    for meal_type in ("breakfast", "lunch", "dinner", "snack"):
+    for meal_type in MEAL_DISPLAY_ORDER:
         if meal_type not in by_meal:
             continue
         items = by_meal[meal_type]
@@ -2616,7 +2830,7 @@ async def _generate_nutrition_insight(
 - 日均摄入：{avg_calories_per_day:.0f} kcal
 - 日均与 TDEE 差值：{cal_surplus_deficit:+.0f} kcal（正为盈余，负为亏损）
 - 连续记录天数：{streak_days} 天
-- 餐次分布：早餐 {by_meal.get('breakfast', 0):.0f} kcal、午餐 {by_meal.get('lunch', 0):.0f} kcal、晚餐 {by_meal.get('dinner', 0):.0f} kcal、加餐 {by_meal.get('snack', 0):.0f} kcal
+- 餐次分布：早餐 {by_meal.get('breakfast', 0):.0f} kcal、早加餐 {by_meal.get('morning_snack', 0):.0f} kcal、午餐 {by_meal.get('lunch', 0):.0f} kcal、午加餐 {by_meal.get('afternoon_snack', 0):.0f} kcal、晚餐 {by_meal.get('dinner', 0):.0f} kcal、晚加餐 {by_meal.get('evening_snack', 0):.0f} kcal
 - 宏量营养素占比：蛋白质 {macro_percent.get('protein', 0):.1f}%、碳水 {macro_percent.get('carbs', 0):.1f}%、脂肪 {macro_percent.get('fat', 0):.1f}%
 - 总摄入：蛋白质 {total_protein:.1f}g、碳水 {total_carbs:.1f}g、脂肪 {total_fat:.1f}g
 """
@@ -2702,16 +2916,7 @@ async def get_stats_summary(
     total_protein = sum(float(r.get("total_protein") or 0) for r in records)
     total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
     total_fat = sum(float(r.get("total_fat") or 0) for r in records)
-    by_meal: Dict[str, float] = {}
-    for r in records:
-        mt = r.get("meal_type") or "snack"
-        by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
-    by_meal_out = {
-        "breakfast": round(by_meal.get("breakfast", 0), 1),
-        "lunch": round(by_meal.get("lunch", 0), 1),
-        "dinner": round(by_meal.get("dinner", 0), 1),
-        "snack": round(by_meal.get("snack", 0), 1),
-    }
+    by_meal_out = _build_by_meal_calories(records)
 
     daily_cal: Dict[str, float] = {}
     for r in records:
@@ -2818,16 +3023,7 @@ async def generate_stats_insight(
     total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
     total_fat = sum(float(r.get("total_fat") or 0) for r in records)
 
-    by_meal: Dict[str, float] = {}
-    for r in records:
-        mt = r.get("meal_type") or "snack"
-        by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
-    by_meal_out = {
-        "breakfast": round(by_meal.get("breakfast", 0), 1),
-        "lunch": round(by_meal.get("lunch", 0), 1),
-        "dinner": round(by_meal.get("dinner", 0), 1),
-        "snack": round(by_meal.get("snack", 0), 1),
-    }
+    by_meal_out = _build_by_meal_calories(records)
 
     daily_cal: Dict[str, float] = {}
     for r in records:
@@ -2992,16 +3188,7 @@ async def _refresh_stats_insight_for_user(user_id: str) -> None:
             total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
             total_fat = sum(float(r.get("total_fat") or 0) for r in records)
 
-            by_meal: Dict[str, float] = {}
-            for r in records:
-                mt = r.get("meal_type") or "snack"
-                by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
-            by_meal_out = {
-                "breakfast": round(by_meal.get("breakfast", 0), 1),
-                "lunch": round(by_meal.get("lunch", 0), 1),
-                "dinner": round(by_meal.get("dinner", 0), 1),
-                "snack": round(by_meal.get("snack", 0), 1),
-            }
+            by_meal_out = _build_by_meal_calories(records)
 
             daily_cal: Dict[str, float] = {}
             for r in records:
@@ -3100,16 +3287,7 @@ async def ws_stats_insight(websocket: WebSocket):
         total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
         total_fat = sum(float(r.get("total_fat") or 0) for r in records)
 
-        by_meal: Dict[str, float] = {}
-        for r in records:
-            mt = r.get("meal_type") or "snack"
-            by_meal[mt] = by_meal.get(mt, 0) + float(r.get("total_calories") or 0)
-        by_meal_out = {
-            "breakfast": round(by_meal.get("breakfast", 0), 1),
-            "lunch": round(by_meal.get("lunch", 0), 1),
-            "dinner": round(by_meal.get("dinner", 0), 1),
-            "snack": round(by_meal.get("snack", 0), 1),
-        }
+        by_meal_out = _build_by_meal_calories(records)
 
         daily_cal: Dict[str, float] = {}
         for r in records:
@@ -4478,10 +4656,9 @@ async def use_recipe(
         if not recipe:
             raise HTTPException(status_code=404, detail="食谱不存在")
         
-        # 创建饮食记录（优先使用传入的 meal_type，否则用餐谱默认，否则 snack）
-        meal_type = (body and body.meal_type) or recipe.get("meal_type") or "snack"
-        if meal_type not in {"breakfast", "lunch", "dinner", "snack"}:
-            meal_type = "snack"
+        # 创建饮食记录（优先使用传入的 meal_type，否则用食谱默认，最终归一化到 6 餐次）
+        raw_meal_type = (body and body.meal_type) or recipe.get("meal_type") or "afternoon_snack"
+        meal_type = _normalize_meal_type(raw_meal_type)
 
         record = await insert_food_record(
             user_id=user_id,

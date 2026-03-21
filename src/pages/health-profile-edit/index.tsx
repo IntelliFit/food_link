@@ -9,7 +9,8 @@ import {
   uploadReportImage,
   submitReportExtractionTask,
   imageToBase64,
-  type HealthProfileUpdateRequest
+  type HealthProfileUpdateRequest,
+  type ExecutionMode
 } from '../../utils/api'
 
 import './index.scss'
@@ -53,6 +54,11 @@ const GOAL_OPTIONS = [
   { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: 'icon-zengji' }
 ]
 
+const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
+  { value: 'strict', title: '精准模式', desc: '分开拍/重拍约束更严格，准确性更高。' },
+  { value: 'standard', title: '标准模式', desc: '记录更便捷，但估算误差会更大。' }
+]
+
 export default function HealthProfileEditPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -64,6 +70,8 @@ export default function HealthProfileEditPage() {
   const [weight, setWeight] = useState<string>('')
   const [dietGoal, setDietGoal] = useState<string>('')
   const [activityLevel, setActivityLevel] = useState<string>('')
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
+  const [originalExecutionMode, setOriginalExecutionMode] = useState<ExecutionMode>('standard')
   const [medicalHistory, setMedicalHistory] = useState<string[]>(['none'])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
@@ -93,6 +101,10 @@ export default function HealthProfileEditPage() {
       if (profile.weight != null) setWeight(String(profile.weight))
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
+      if (profile.execution_mode) {
+        setExecutionMode(profile.execution_mode)
+        setOriginalExecutionMode(profile.execution_mode)
+      }
       const hc = profile.health_condition
       if (hc?.medical_history?.length) {
         const predefinedValues = MEDICAL_OPTIONS.map(opt => opt.value)
@@ -201,6 +213,7 @@ export default function HealthProfileEditPage() {
       weight: weight ? Number(weight) : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
+      execution_mode: executionMode,
       medical_history: allMedicalHistory,
       diet_preference: dietPreference.filter(v => v !== 'none'),
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : [],
@@ -221,6 +234,17 @@ export default function HealthProfileEditPage() {
     if (req.weight && (req.weight < 30 || req.weight > 200)) {
       Taro.showToast({ title: '请输入 30～200 之间的体重 (kg)', icon: 'none' })
       return
+    }
+
+    if (executionMode !== originalExecutionMode) {
+      const modeChangeTip = executionMode === 'standard'
+        ? '切换到标准模式后记录更便捷，但克数准确性会下降，可能影响减脂/增肌进度。'
+        : '切换到精准模式会增加拍照规范要求，但能提升饮食执行可靠性。'
+      const confirmSwitch = await Taro.showModal({
+        title: '确认切换执行模式',
+        content: modeChangeTip
+      })
+      if (!confirmSwitch.confirm) return
     }
 
     const { confirm } = await Taro.showModal({
@@ -397,6 +421,26 @@ export default function HealthProfileEditPage() {
                   <Text className="option-icon">{o.icon}</Text>
                   <Text className="option-label">{o.label}</Text>
                   <Text className="option-desc">{o.desc}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View className="form-item">
+            <Text className="form-label">
+              执行模式 <Text className="required">*</Text>
+            </Text>
+            <View className="option-list">
+              {EXECUTION_MODE_OPTIONS.map((opt) => (
+                <View
+                  key={opt.value}
+                  className={`option-card ${executionMode === opt.value ? 'active' : ''}`}
+                  onClick={() => setExecutionMode(opt.value)}
+                >
+                  <View className="option-info">
+                    <Text className="option-label">{opt.title}</Text>
+                    <Text className="option-desc">{opt.desc}</Text>
+                  </View>
                 </View>
               ))}
             </View>

@@ -7,9 +7,12 @@ import './index.scss'
 /** 餐次映射 */
 const MEAL_TYPE_NAMES: Record<string, string> = {
   breakfast: '早餐',
+  morning_snack: '早加餐',
   lunch: '午餐',
+  afternoon_snack: '午加餐',
   dinner: '晚餐',
-  snack: '加餐'
+  evening_snack: '晚加餐',
+  snack: '午加餐'
 }
 
 export default function RecipesPage() {
@@ -59,8 +62,8 @@ export default function RecipesPage() {
   /** 使用食谱（一键记录） */
   const handleUseRecipe = async (recipe: UserRecipe) => {
     try {
-      const MEAL_KEYS = ['breakfast', 'lunch', 'dinner', 'snack']
-      const MEAL_NAMES = ['早餐', '午餐', '晚餐', '加餐']
+      const MEAL_KEYS = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
+      const MEAL_NAMES = ['早餐', '早加餐', '午餐', '午加餐', '晚餐', '晚加餐']
       const { tapIndex } = await Taro.showActionSheet({
         itemList: MEAL_NAMES,
         alertText: `将"${recipe.recipe_name}"记录为：`
@@ -101,9 +104,9 @@ export default function RecipesPage() {
     const record: FoodRecord = {
       id: recipe.id,
       user_id: recipe.user_id,
-      meal_type: (['breakfast', 'lunch', 'dinner', 'snack'].includes(recipe.meal_type || '')
+      meal_type: (['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack', 'snack'].includes(recipe.meal_type || '')
         ? recipe.meal_type
-        : 'snack') as any,
+        : 'afternoon_snack') as any,
       image_path: recipe.image_path,
       description: recipe.description,
       insight: null,

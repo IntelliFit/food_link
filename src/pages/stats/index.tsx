@@ -8,22 +8,31 @@ import './index.scss'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
+  morning_snack: '早加餐',
   lunch: '午餐',
+  afternoon_snack: '午加餐',
   dinner: '晚餐',
-  snack: '加餐'
+  evening_snack: '晚加餐',
+  snack: '午加餐'
 }
 
 const MEAL_ICONS = {
   breakfast: IconBreakfast,
+  morning_snack: IconSnack,
   lunch: IconLunch,
+  afternoon_snack: IconSnack,
   dinner: IconDinner,
+  evening_snack: IconSnack,
   snack: IconSnack
 } as const
 
 const MEAL_ICON_COLORS: Record<string, string> = {
   breakfast: '#f59e0b',
+  morning_snack: '#7b61ff',
   lunch: '#00bc7d',
+  afternoon_snack: '#ad46ff',
   dinner: '#2b7fff',
+  evening_snack: '#5b21b6',
   snack: '#ad46ff'
 }
 
@@ -35,6 +44,11 @@ type HeatmapCell = {
   delta: number
   level: 0 | 1 | 2 | 3
   state: 'none' | 'surplus' | 'deficit'
+}
+
+function toSafeNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : fallback
 }
 
 export default function StatsPage() {
@@ -230,7 +244,26 @@ export default function StatsPage() {
   }
 
   const d = data!
-  const surplusDeficit = d.cal_surplus_deficit
+  const totalCalories = toSafeNumber(d.total_calories)
+  const tdee = toSafeNumber(d.tdee)
+  const avgCaloriesPerDay = toSafeNumber(d.avg_calories_per_day)
+  const surplusDeficit = toSafeNumber(d.cal_surplus_deficit)
+  const totalProtein = toSafeNumber(d.total_protein)
+  const totalCarbs = toSafeNumber(d.total_carbs)
+  const totalFat = toSafeNumber(d.total_fat)
+  const macroPercent = {
+    protein: toSafeNumber(d.macro_percent?.protein),
+    carbs: toSafeNumber(d.macro_percent?.carbs),
+    fat: toSafeNumber(d.macro_percent?.fat)
+  }
+  const byMeal = {
+    breakfast: toSafeNumber(d.by_meal?.breakfast),
+    morning_snack: toSafeNumber(d.by_meal?.morning_snack),
+    lunch: toSafeNumber(d.by_meal?.lunch),
+    afternoon_snack: toSafeNumber(d.by_meal?.afternoon_snack ?? d.by_meal?.snack),
+    dinner: toSafeNumber(d.by_meal?.dinner),
+    evening_snack: toSafeNumber(d.by_meal?.evening_snack)
+  } as const
   const isSurplus = surplusDeficit > 0
   const chartDays = range === 'week' ? d.daily_calories.slice(-7) : d.daily_calories.slice(-14)
 
@@ -240,8 +273,8 @@ export default function StatsPage() {
     : 2000
   const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
     const hasRecord = item.calories > 0
-    const delta = hasRecord ? item.calories - d.tdee : 0
-    const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(d.tdee, 1) : 0
+    const delta = hasRecord ? item.calories - tdee : 0
+    const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(tdee, 1) : 0
     let level: HeatmapCell['level'] = 0
     if (deltaRatio > 0.3) level = 3
     else if (deltaRatio > 0.15) level = 2
@@ -370,12 +403,12 @@ export default function StatsPage() {
           <View className='hero-grid'>
             <View className='hero-item'>
               <Text className='hero-label'>日均摄入</Text>
-              <Text className='hero-sub-value'>{d.avg_calories_per_day.toFixed(0)}</Text>
+              <Text className='hero-sub-value'>{avgCaloriesPerDay.toFixed(0)}</Text>
             </View>
             <View className='hero-divider'></View>
             <View className='hero-item'>
               <Text className='hero-label'>日均消耗(TDEE)</Text>
-              <Text className='hero-sub-value'>{d.tdee}</Text>
+              <Text className='hero-sub-value'>{tdee}</Text>
             </View>
           </View>
         </View>
@@ -407,18 +440,18 @@ export default function StatsPage() {
               <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '最近 14 天'}</Text>
             </View>
           </View>
-          {chartDays.length > 0 ? (
-            <View className='bar-chart-container'>
-              {chartDays.map((item) => {
-                const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10);
-                return (
-                  <View key={item.date} className='chart-col'>
-                    <View className='bar-wrapper'>
-                      <View
-                        className={`bar-fill ${item.calories > d.tdee ? 'over' : ''}`}
-                        style={{ height: `${heightPct}%` }}
-                      ></View>
-                    </View>
+            {chartDays.length > 0 ? (
+              <View className='bar-chart-container'>
+                {chartDays.map((item) => {
+                  const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10)
+                  return (
+                    <View key={item.date} className='chart-col'>
+                      <View className='bar-wrapper'>
+                        <View
+                          className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
+                          style={{ height: `${heightPct}%` }}
+                        ></View>
+                      </View>
                     <Text className='bar-label'>{item.date.slice(5)}</Text>
                   </View>
                 )
@@ -445,10 +478,10 @@ export default function StatsPage() {
                   <Text className='iconfont icon-danbaizhi macro-icon protein' />
                   <Text className='macro-name'>蛋白质</Text>
                 </View>
-                <Text className='macro-detail'>{d.total_protein.toFixed(0)}g / {d.macro_percent.protein}%</Text>
+                <Text className='macro-detail'>{totalProtein.toFixed(0)}g / {macroPercent.protein}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill protein' style={{ width: `${d.macro_percent.protein}%` }}></View>
+                <View className='progress-fill protein' style={{ width: `${macroPercent.protein}%` }}></View>
               </View>
             </View>
 
@@ -458,10 +491,10 @@ export default function StatsPage() {
                   <Text className='iconfont icon-tanshui-dabiao macro-icon carbs' />
                   <Text className='macro-name'>碳水化合物</Text>
                 </View>
-                <Text className='macro-detail'>{d.total_carbs.toFixed(0)}g / {d.macro_percent.carbs}%</Text>
+                <Text className='macro-detail'>{totalCarbs.toFixed(0)}g / {macroPercent.carbs}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill carbs' style={{ width: `${d.macro_percent.carbs}%` }}></View>
+                <View className='progress-fill carbs' style={{ width: `${macroPercent.carbs}%` }}></View>
               </View>
             </View>
 
@@ -471,10 +504,10 @@ export default function StatsPage() {
                   <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin macro-icon fat' />
                   <Text className='macro-name'>脂肪</Text>
                 </View>
-                <Text className='macro-detail'>{d.total_fat.toFixed(0)}g / {d.macro_percent.fat}%</Text>
+                <Text className='macro-detail'>{totalFat.toFixed(0)}g / {macroPercent.fat}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill fat' style={{ width: `${d.macro_percent.fat}%` }}></View>
+                <View className='progress-fill fat' style={{ width: `${macroPercent.fat}%` }}></View>
               </View>
             </View>
           </View>
@@ -487,11 +520,11 @@ export default function StatsPage() {
             <Text className='card-title'>餐次结构</Text>
           </View>
           <View className='meal-grid'>
-            {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((key) => {
-              const cal = d.by_meal[key];
-              const pct = d.total_calories > 0 ? (cal / d.total_calories) * 100 : 0;
-              const MealIcon = MEAL_ICONS[key];
-              return (
+              {(['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'] as const).map((key) => {
+                const cal = byMeal[key]
+                const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
+                const MealIcon = MEAL_ICONS[key]
+                return (
                 <View key={key} className='meal-item'>
                   <View className='meal-icon-box' style={{ backgroundColor: `${MEAL_ICON_COLORS[key]}14` }}>
                     <MealIcon size={36} color={MEAL_ICON_COLORS[key]} />
@@ -533,3 +566,4 @@ export default function StatsPage() {
     </View>
   )
 }
+

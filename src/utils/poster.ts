@@ -12,9 +12,12 @@ import type { FoodRecord } from './api'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
+  morning_snack: '早加餐',
   lunch: '午餐',
+  afternoon_snack: '午加餐',
   dinner: '晚餐',
-  snack: '加餐'
+  evening_snack: '晚加餐',
+  snack: '午加餐'
 }
 
 const MONTH_NAMES = [

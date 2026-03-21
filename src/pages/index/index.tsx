@@ -161,8 +161,11 @@ function createTargetForm(intake: HomeIntakeData): TargetFormState {
 // 餐次对应的 iconfont 图标及颜色
 const MEAL_ICON_CONFIG = {
   breakfast: { Icon: IconBreakfast, color: '#ff6900' },
+  morning_snack: { Icon: IconSnack, color: '#7b61ff' },
   lunch: { Icon: IconLunch, color: '#00c950' },
+  afternoon_snack: { Icon: IconSnack, color: '#ad46ff' },
   dinner: { Icon: IconDinner, color: '#2b7fff' },
+  evening_snack: { Icon: IconSnack, color: '#5b21b6' },
   snack: { Icon: IconSnack, color: '#ad46ff' }
 } as const
 
@@ -593,7 +596,7 @@ export default function IndexPage() {
                   <View className='meal-info'>
                     <View className={`meal-icon ${meal.type}-icon`}>
                       {(() => {
-                        const { Icon, color } = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
+                        const { Icon, color } = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.afternoon_snack
                         return <Icon size={40} color={color} />
                       })()}
                     </View>

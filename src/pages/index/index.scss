@@ -518,8 +518,11 @@
 }
 
 .breakfast-icon,
+.morning_snack-icon,
 .lunch-icon,
+.afternoon_snack-icon,
 .dinner-icon,
+.evening_snack-icon,
 .snack-icon {
   background: transparent;
 }
@@ -587,12 +590,24 @@
   background: #ff6900;
 }
 
+.morning_snack-progress {
+  background: #7b61ff;
+}
+
 .lunch-progress {
   background: #00c950;
 }
 
+.afternoon_snack-progress {
+  background: #ad46ff;
+}
+
 .dinner-progress {
   background: #2b7fff;
+}
+
+.evening_snack-progress {
+  background: #5b21b6;
 }
 
 .snack-progress {
@@ -625,12 +640,24 @@
   background: #fff7ed;
 }
 
+.morning_snack-tag {
+  background: #f1efff;
+}
+
 .lunch-tag {
   background: #f0fdf4;
 }
 
+.afternoon_snack-tag {
+  background: #f5f3ff;
+}
+
 .dinner-tag {
   background: #eff6ff;
+}
+
+.evening_snack-tag {
+  background: #ede9fe;
 }
 
 .snack-tag {
@@ -647,12 +674,24 @@
   color: #f54900;
 }
 
+.morning_snack-tag .tag-text {
+  color: #6d28d9;
+}
+
 .lunch-tag .tag-text {
   color: #00a63e;
 }
 
+.afternoon_snack-tag .tag-text {
+  color: #7c3aed;
+}
+
 .dinner-tag .tag-text {
   color: #1d4ed8;
+}
+
+.evening_snack-tag .tag-text {
+  color: #5b21b6;
 }
 
 .snack-tag .tag-text {

@@ -1,22 +1,33 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask } from '../../utils/api'
 
 import './index.scss'
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
+  { value: 'morning_snack' as const, label: '早加餐' },
   { value: 'lunch' as const, label: '午餐' },
+  { value: 'afternoon_snack' as const, label: '午加餐' },
   { value: 'dinner' as const, label: '晚餐' },
-  { value: 'snack' as const, label: '加餐' }
+  { value: 'evening_snack' as const, label: '晚加餐' }
 ]
+type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
+  morning_snack: 'icon-lingshi',
   lunch: 'icon-wucan',
+  afternoon_snack: 'icon-lingshi',
   dinner: 'icon-wancan',
-  snack: 'icon-lingshi'
+  evening_snack: 'icon-lingshi'
+}
+
+const toSelectableMealType = (value: unknown): SelectableMealType | undefined => {
+  if (value === 'snack') return 'afternoon_snack'
+  const hit = MEAL_OPTIONS.find((o) => o.value === value)
+  return hit?.value
 }
 
 // 移除未使用的 CONTEXT_STATE_OPTIONS
@@ -57,7 +68,7 @@ export default function ResultPage() {
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
-  const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast')
+  const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>('breakfast')
 
   // 二次纠错抽屉状态
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
@@ -166,12 +177,18 @@ export default function ResultPage() {
         if (item.id === id) {
           // 调节的是 weight（AI 估算的食物总重量）
           const newWeight = Math.max(10, item.weight + delta) // 最小 10g
+          const weightScale = item.weight > 0 ? newWeight / item.weight : 1
           // ratio 保持不变，重新计算 intake
           const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
             ...item,
             weight: newWeight,
-            intake: newIntake
+            intake: newIntake,
+            // 重量变化时，同步更新该食物对应的营养值
+            calorie: item.calorie * weightScale,
+            protein: item.protein * weightScale,
+            carbs: item.carbs * weightScale,
+            fat: item.fat * weightScale
             // ratio 不变
           }
         }
@@ -299,7 +316,7 @@ export default function ResultPage() {
   }
 
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
-  const saveRecord = async (saveOnly: boolean, confirmedMealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+  const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
     // 避免用户快速连续点击导致重复保存
     if (saving) return
     // 从缓存获取分析时选择的状态
@@ -310,8 +327,7 @@ export default function ResultPage() {
     // 确定餐次：优先使用确认过的餐次，否则尝试从缓存读取，最后默认早餐
     let mealType = confirmedMealType
     if (!mealType) {
-      const mealFromStorage = savedMealType && MEAL_OPTIONS.find((o) => o.value === savedMealType)
-      mealType = (mealFromStorage?.value || 'breakfast') as 'breakfast' | 'lunch' | 'dinner' | 'snack'
+      mealType = toSelectableMealType(savedMealType) || 'breakfast'
     }
     const mealLabel = MEAL_OPTIONS.find((o) => o.value === mealType)?.label || '早餐'
 
@@ -329,7 +345,7 @@ export default function ResultPage() {
 
         const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
         const payload = {
-          meal_type: mealType as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+          meal_type: mealType as MealType,
           image_path: imagePath || undefined,
           image_paths: imagePaths.length > 0 ? imagePaths : undefined,
           description: description || undefined,
@@ -420,8 +436,9 @@ export default function ResultPage() {
   const handleConfirmAndShare = () => {
     // 初始化选中的餐次：缓存 > 默认早餐
     const savedMealType = Taro.getStorageSync('analyzeMealType')
-    if (savedMealType && ['breakfast', 'lunch', 'dinner', 'snack'].includes(savedMealType)) {
-      setSelectedMealType(savedMealType as any)
+    const normalized = toSelectableMealType(savedMealType)
+    if (normalized) {
+      setSelectedMealType(normalized)
     } else {
       setSelectedMealType('breakfast')
     }
@@ -499,9 +516,7 @@ export default function ResultPage() {
 
     // 获取餐次信息
     const savedMealType = Taro.getStorageSync('analyzeMealType')
-    const mealType = savedMealType && MEAL_OPTIONS.find((o) => o.value === savedMealType)
-      ? savedMealType
-      : undefined
+    const mealType = toSelectableMealType(savedMealType)
 
     // 弹窗输入收藏名称
     Taro.showModal({
@@ -651,7 +666,7 @@ export default function ResultPage() {
           // 为了保留第一次分析带过来的上下文（例如菜谱偏好等），如果有 description 也可以带上，但更重要的是传上面构成的 finalContext
 
           // 2. 获取原请求的基础配置
-          const savedMealType = Taro.getStorageSync('analyzeMealType') as 'breakfast' | 'lunch' | 'dinner' | 'snack' | undefined
+          const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
           const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
 

@@ -6,6 +6,7 @@
 
 ## 2026-03-21
 
+- 📝 docs: 新增数据库分析报告，基于仓库内 SQL 与后端数据访问层梳理表结构、业务链路和结构风险 `docs/数据库分析报告.md`
 - 🎨 style: 我的页入口统一改为“饮食记录”，统计页改成“饮食记录”整合页并将顶部热图重做为更干净的红蓝灰日历图，直观显示每天吃多/吃少/未记录 `src/pages/profile/index.tsx` `src/pages/profile/index.scss` `src/pages/stats/index.tsx` `src/pages/stats/index.scss` `src/pages/stats/index.config.ts`
 - 🎨 style: 目标编辑弹窗新增“按热量自动校准”实时提示，展示当前宏量换算热量与是否需要保存时自动校准，降低用户心算负担 `src/pages/index/index.tsx` `src/pages/index/index.scss`
 - 🐛 fix: 目标保存改为“以热量为准自动校准宏量营养素”，不再要求用户手动满足 4/4/9；保存成功提示是否自动校准 `src/pages/index/index.tsx`

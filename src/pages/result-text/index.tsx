@@ -1,22 +1,27 @@
 import { View, Text, ScrollView, Slider } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, saveFoodRecord } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord } from '../../utils/api'
 
 import './index.scss'
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
+  { value: 'morning_snack' as const, label: '早加餐' },
   { value: 'lunch' as const, label: '午餐' },
+  { value: 'afternoon_snack' as const, label: '午加餐' },
   { value: 'dinner' as const, label: '晚餐' },
-  { value: 'snack' as const, label: '加餐' }
+  { value: 'evening_snack' as const, label: '晚加餐' }
 ]
+type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
+  morning_snack: 'icon-lingshi',
   lunch: 'icon-wucan',
+  afternoon_snack: 'icon-lingshi',
   dinner: 'icon-wancan',
-  snack: 'icon-lingshi'
+  evening_snack: 'icon-lingshi'
 }
 
 interface NutritionItem {
@@ -50,7 +55,7 @@ export default function ResultTextPage() {
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
-  const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('breakfast')
+  const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>('breakfast')
 
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
     return items.map((item, index) => ({
@@ -110,8 +115,17 @@ export default function ResultTextPage() {
       const updated = items.map((item) => {
         if (item.id !== id) return item
         const newWeight = Math.max(10, item.weight + delta)
+        const weightScale = item.weight > 0 ? newWeight / item.weight : 1
         const newIntake = Math.round(newWeight * (item.ratio / 100))
-        return { ...item, weight: newWeight, intake: newIntake }
+        return {
+          ...item,
+          weight: newWeight,
+          intake: newIntake,
+          calorie: item.calorie * weightScale,
+          protein: item.protein * weightScale,
+          carbs: item.carbs * weightScale,
+          fat: item.fat * weightScale
+        }
       })
       calculateNutritionStats(updated)
       return updated
@@ -154,14 +168,14 @@ export default function ResultTextPage() {
   }
 
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
-  const saveRecord = async (saveOnly: boolean, confirmedMealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+  const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
     // 确定餐次
     let mealType = confirmedMealType || 'breakfast'
 
     setSaving(true)
     try {
       const payload = {
-        meal_type: mealType,
+        meal_type: mealType as MealType,
         description: description || undefined,
         insight: healthAdvice || undefined,
         items: nutritionItems.map((item) => ({
@@ -451,7 +465,7 @@ export default function ResultTextPage() {
               <View
                 key={option.value}
                 className={`meal-option-item ${selectedMealType === option.value ? 'active' : ''}`}
-                onClick={() => setSelectedMealType(option.value as any)}
+                onClick={() => setSelectedMealType(option.value)}
               >
                 <Text className={`option-icon iconfont ${MEAL_ICONS[option.value]}`}></Text>
                 <Text className='option-label'>{option.label}</Text>

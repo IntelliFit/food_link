@@ -18,6 +18,10 @@ const GOAL_MAP: Record<string, string> = {
   maintain: '保持',
   muscle_gain: '增重'
 }
+const EXECUTION_MODE_MAP: Record<string, string> = {
+  strict: '精准模式（严格识别）',
+  standard: '标准模式（便捷估算）'
+}
 const MEDICAL_MAP: Record<string, string> = {
   diabetes: '糖尿病',
   hypertension: '高血压',
@@ -139,6 +143,12 @@ export default function HealthProfileViewPage() {
             <Text className='label'>活动水平</Text>
             <Text className='value'>
               {profile.activity_level ? ACTIVITY_MAP[profile.activity_level] || profile.activity_level : '—'}
+            </Text>
+          </View>
+          <View className='row'>
+            <Text className='label'>执行模式</Text>
+            <Text className='value'>
+              {profile.execution_mode ? EXECUTION_MODE_MAP[profile.execution_mode] || profile.execution_mode : '标准模式（便捷估算）'}
             </Text>
           </View>
         </View>

@@ -7,10 +7,20 @@ export const API_BASE_URL =
   process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
 
 // 基础类型定义
-export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+export type CanonicalMealType =
+  | 'breakfast'
+  | 'morning_snack'
+  | 'lunch'
+  | 'afternoon_snack'
+  | 'dinner'
+  | 'evening_snack'
+
+/** MealType 保留 snack 以兼容历史数据与旧客户端 */
+export type MealType = CanonicalMealType | 'snack'
 export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
+export type ExecutionMode = 'standard' | 'strict'
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
@@ -27,6 +37,7 @@ export interface AnalyzeRequest {
   remaining_calories?: number
   meal_type?: MealType
   is_multi_view?: boolean
+  execution_mode?: ExecutionMode
 }
 
 // 营养成分接口
@@ -90,7 +101,7 @@ export interface FoodRecordItemPayload {
 
 /** 确认记录请求：餐次 + 识别结果与营养汇总 + 用户状态与专业分析 */
 export interface SaveFoodRecordRequest {
-  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  meal_type: MealType
   image_path?: string
   image_paths?: string[]
   description?: string
@@ -123,7 +134,7 @@ export interface CriticalSamplePayload {
 export interface FoodRecord {
   id: string
   user_id: string
-  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  meal_type: MealType
   image_path?: string | null
   image_paths?: string[] | null
   description?: string | null
@@ -269,7 +280,16 @@ export interface StatsSummary {
   total_protein: number
   total_carbs: number
   total_fat: number
-  by_meal: { breakfast: number; lunch: number; dinner: number; snack: number }
+  by_meal: {
+    breakfast: number
+    morning_snack: number
+    lunch: number
+    afternoon_snack: number
+    dinner: number
+    evening_snack: number
+    /** 兼容旧字段，后端会镜像 afternoon_snack */
+    snack?: number
+  }
   daily_calories: Array<{ date: string; calories: number }>
   macro_percent: { protein: number; carbs: number; fat: number }
   analysis_summary: string
@@ -321,6 +341,12 @@ export interface UserInfo {
   bmr?: number | null
   tdee?: number | null
   onboarding_completed?: boolean
+  execution_mode?: ExecutionMode | null
+  mode_set_by?: string | null
+  mode_set_at?: string | null
+  mode_reason?: string | null
+  mode_commitment_days?: number | null
+  mode_switch_count_30d?: number | null
   searchable?: boolean
   public_records?: boolean
 }
@@ -361,6 +387,12 @@ export interface HealthProfile {
   tdee?: number | null
   onboarding_completed?: boolean
   diet_goal?: string | null
+  execution_mode?: ExecutionMode | null
+  mode_set_by?: string | null
+  mode_set_at?: string | null
+  mode_reason?: string | null
+  mode_commitment_days?: number | null
+  mode_switch_count_30d?: number | null
 }
 
 /** 提交健康档案问卷请求 */
@@ -379,6 +411,9 @@ export interface HealthProfileUpdateRequest {
   /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
   report_image_url?: string
   diet_goal?: string
+  execution_mode?: ExecutionMode
+  mode_set_by?: 'system' | 'user_manual' | 'coach_manual'
+  mode_reason?: string
   /** 首页摄入目标，写入 health_condition.dashboard_targets（兼容未部署独立接口的生产环境） */
   dashboard_targets?: DashboardTargets
 }
@@ -702,7 +737,7 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ 
 export interface AnalyzeTaskSubmitParams {
   image_url: string
   image_urls?: string[]
-  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  meal_type?: MealType
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -710,6 +745,7 @@ export interface AnalyzeTaskSubmitParams {
   additionalContext?: string
   modelName?: string
   is_multi_view?: boolean
+  execution_mode?: ExecutionMode
 }
 
 export interface AnalysisTask {
@@ -746,7 +782,7 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
 /** 文字分析提交参数 */
 export interface AnalyzeTextTaskSubmitParams {
   text: string
-  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+  meal_type?: MealType
   diet_goal?: string
   activity_timing?: string
   user_goal?: string

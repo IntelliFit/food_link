@@ -28,8 +28,11 @@ create table public.user_food_records (
       meal_type = any (
         array[
           'breakfast'::text,
+          'morning_snack'::text,
           'lunch'::text,
+          'afternoon_snack'::text,
           'dinner'::text,
+          'evening_snack'::text,
           'snack'::text
         ]
       )

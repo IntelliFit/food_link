@@ -3,15 +3,18 @@ import React from 'react'
 import Taro from '@tarojs/taro'
 import { Switch } from '@taroify/core'
 import { imageToBase64, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
+import type { ExecutionMode } from '../../utils/api'
 
 import './index.scss'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
   { value: 'breakfast', label: '早餐', iconClass: 'icon-zaocan1' },
+  { value: 'morning_snack', label: '早加餐', iconClass: 'icon-lingshi' },
   { value: 'lunch', label: '午餐', iconClass: 'icon-wucan' },
+  { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
   { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
-  { value: 'snack', label: '加餐', iconClass: 'icon-lingshi' }
+  { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' }
 ]
 
 /** 饮食目标（状态一） */
@@ -113,22 +116,9 @@ export default function AnalyzePage() {
   const [mealType, setMealType] = React.useState<MealType>('breakfast')
   const [dietGoal, setDietGoal] = React.useState<DietGoal>('none')
   const [activityTiming, setActivityTiming] = React.useState<ActivityTiming>('none')
+  const [executionMode, setExecutionMode] = React.useState<ExecutionMode>('standard')
   const [isMultiView, setIsMultiView] = React.useState(false)
   const [isAnalyzing, setIsAnalyzing] = React.useState(false)
-
-  const warmupBase64 = React.useCallback((paths: string[]) => {
-    for (const rawPath of paths) {
-      const path = String(rawPath || '').trim()
-      if (!path) continue
-      imageToBase64(path)
-        .then((base64) => {
-          setImageBase64Map(prev => (prev[path] ? prev : { ...prev, [path]: base64 }))
-        })
-        .catch((err) => {
-          console.warn('预读取图片 base64 失败，分析时重试:', path, err)
-        })
-    }
-  }, [])
 
   React.useEffect(() => {
     // 1. 获取饮食目标
@@ -137,14 +127,16 @@ export default function AnalyzePage() {
         const cachedGoal = Taro.getStorageSync('dietGoal')
         if (cachedGoal) {
           setDietGoal(cachedGoal as DietGoal)
-        } else {
-          // 本地无缓存，尝试请求
-          if (getAccessToken()) {
-            const profile = await getHealthProfile()
-            if (profile.diet_goal) {
-              setDietGoal(profile.diet_goal as DietGoal)
-              Taro.setStorageSync('dietGoal', profile.diet_goal)
-            }
+        }
+        // 无论是否有缓存，都尝试从健康档案同步执行模式
+        if (getAccessToken()) {
+          const profile = await getHealthProfile()
+          if (!cachedGoal && profile.diet_goal) {
+            setDietGoal(profile.diet_goal as DietGoal)
+            Taro.setStorageSync('dietGoal', profile.diet_goal)
+          }
+          if (profile.execution_mode) {
+            setExecutionMode(profile.execution_mode)
           }
         }
       } catch (err) {
@@ -160,7 +152,6 @@ export default function AnalyzePage() {
         if (storedPath) {
           const path = String(storedPath)
           setImagePaths([path])
-          warmupBase64([path])
           // 清除存储，避免下次进入页面时误用
           Taro.removeStorageSync('analyzeImagePath')
         }
@@ -184,7 +175,6 @@ export default function AnalyzePage() {
       // 预览阶段优先保留原始路径，避免 devtools 特殊路径在 Image 组件中无法展示
       const newPaths = (res.tempFilePaths || []).map(p => String(p || '').trim()).filter(Boolean)
       setImagePaths(prev => [...prev, ...newPaths])
-      warmupBase64(newPaths)
     } catch (e) {
       // cancelled
       console.log('选择图片取消/失败', e)
@@ -254,7 +244,8 @@ export default function AnalyzePage() {
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
         modelName: 'gemini',
-        is_multi_view: isMultiView
+        is_multi_view: isMultiView,
+        execution_mode: executionMode
       })
       Taro.hideLoading()
       Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}` })
@@ -339,6 +330,20 @@ export default function AnalyzePage() {
             </View>
           </View>
         )}
+
+        {/* 多视角辅助模式：作为图片区域的底部小条 */}
+        <View className='multiview-compact'>
+          <View className='multiview-compact-left'>
+            <Text className='multiview-compact-title'>多视角辅助</Text>
+            <Text className='multiview-compact-hint'>将多张图片视为同一食物的不同角度</Text>
+          </View>
+          <Switch
+            className='compact-switch'
+            checked={isMultiView}
+            onChange={setIsMultiView}
+            style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+          />
+        </View>
       </View>
 
       {/* 文字补充区域（放在照片下方，拍完再补充上下文） */}
@@ -373,7 +378,7 @@ export default function AnalyzePage() {
           <Text className='section-title'>餐次</Text>
         </View>
         <Text className='section-hint'>
-          选择本餐是早餐/午餐/晚餐/加餐，AI 将结合餐次给出建议。
+          选择本餐次（含早/午/晚加餐），AI 将结合场景给出建议。
         </Text>
         <View className='meal-options'>
           {MEAL_OPTIONS.map((opt) => (
@@ -389,23 +394,6 @@ export default function AnalyzePage() {
         </View>
       </View>
 
-      {/* 多视角辅助模式 */}
-      <View className='multiview-section'>
-        <View className='section-header-row'>
-          <View>
-            <Text className='section-title'>多视角辅助模式</Text>
-            <Text className='section-subtitle'>Multi-view Assist Mode</Text>
-          </View>
-          <Switch
-            checked={isMultiView}
-            onChange={setIsMultiView}
-            style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
-          />
-        </View>
-        <Text className='section-hint'>
-          开启后，模型将把上传的多张图片视为同一食物的不同视角，有助于更精准地估算分量。
-        </Text>
-      </View>
 
       {/* 饮食目标（状态一） */}
       <View className='state-section'>

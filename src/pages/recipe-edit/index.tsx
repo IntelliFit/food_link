@@ -6,9 +6,11 @@ import './index.scss'
 
 const MEAL_TYPES = [
   { id: 'breakfast', name: '早餐' },
+  { id: 'morning_snack', name: '早加餐' },
   { id: 'lunch', name: '午餐' },
+  { id: 'afternoon_snack', name: '午加餐' },
   { id: 'dinner', name: '晚餐' },
-  { id: 'snack', name: '加餐' }
+  { id: 'evening_snack', name: '晚加餐' }
 ]
 
 export default function RecipeEditPage() {
