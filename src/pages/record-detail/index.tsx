@@ -89,6 +89,7 @@ export default function RecordDetailPage() {
   }>>([])
   const [editSaving, setEditSaving] = useState(false)
   const [ownerNickname, setOwnerNickname] = useState('')
+  const [ownerAvatar, setOwnerAvatar] = useState('')
   const [ownerInviteCode, setOwnerInviteCode] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
 
@@ -107,6 +108,7 @@ export default function RecordDetailPage() {
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
             setOwnerNickname(inviterProfile.nickname || '')
+            setOwnerAvatar(inviterProfile.avatar || '')
             setOwnerInviteCode(inviterProfile.invite_code || getInviteCodeFromUserId(fetchedRecord.user_id))
           } catch {
             setOwnerInviteCode(getInviteCodeFromUserId(fetchedRecord.user_id))
@@ -153,16 +155,18 @@ export default function RecordDetailPage() {
   const sharePath = `/pages/record-detail/index?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
 
   useShareAppMessage(() => {
+    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
     return {
-      title: '来看看我的健康饮食记录吧！',
+      title,
       path: sharePath,
       imageUrl: posterImageUrl || undefined
     }
   })
 
   useShareTimeline(() => {
+    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
     return {
-      title: '来看看我的健康饮食记录吧！',
+      title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
       imageUrl: posterImageUrl || undefined
     }
@@ -408,8 +412,9 @@ export default function RecordDetailPage() {
 
         Promise.all([
           loadImage(record.image_path || ''),
-          loadQRImage()
-        ]).then(([mainImg, qrImg]) => {
+          loadQRImage(),
+          loadImage(ownerAvatar || '')
+        ]).then(([mainImg, qrImg, avatarImg]) => {
           try {
             const ctx = canvas.getContext('2d')
             if (!ctx) {
@@ -432,6 +437,7 @@ export default function RecordDetailPage() {
               image: mainImg,
               qrCodeImage: qrImg,
               sharerNickname: ownerNickname,
+              sharerAvatarImage: avatarImg,
             })
 
             Taro.canvasToTempFilePath({
@@ -600,9 +606,12 @@ export default function RecordDetailPage() {
 
         {!isOwner && inviteCode && (
           <View className="friend-invite-card">
-            <Text className="friend-invite-title">
-              {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
-            </Text>
+            <View className="friend-invite-header">
+              {ownerAvatar ? <Image className="friend-invite-avatar" src={ownerAvatar} mode="aspectFill" /> : null}
+              <Text className="friend-invite-title">
+                {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
+              </Text>
+            </View>
             <Text className="friend-invite-desc">未注册会先登录，登录后自动成为好友</Text>
             <Button className="friend-invite-btn" onClick={handleAcceptInvite} disabled={inviteLoading}>
               {inviteLoading ? '处理中...' : (getAccessToken() ? '立即成为好友' : '登录并成为好友')}
