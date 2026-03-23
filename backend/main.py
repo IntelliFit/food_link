@@ -336,8 +336,24 @@ def _normalize_meal_type(meal_type: Optional[str], record_time: Any = None, defa
     return default
 
 
-def _meal_name(meal_type: Optional[str], record_time: Any = None) -> str:
+def _meal_name(
+    meal_type: Optional[str],
+    record_time: Any = None,
+    timezone_offset_minutes: Optional[int] = None,
+) -> str:
     normalized = _normalize_meal_type(meal_type, record_time=record_time, default="afternoon_snack")
+    # 兼容 legacy snack：未提供记录时间时按客户端时区（兜底东八区）仅区分午后/晚间。
+    if (meal_type or "").strip() == "snack" and record_time is None:
+        now_hour = datetime.now(CHINA_TZ).hour
+        if timezone_offset_minutes is not None:
+            try:
+                offset = int(timezone_offset_minutes)
+                if -840 <= offset <= 840:
+                    # JS getTimezoneOffset 定义：UTC - local（分钟），因此 local = UTC - offset
+                    now_hour = (datetime.now(timezone.utc) - timedelta(minutes=offset)).hour
+            except Exception:
+                pass
+        normalized = "afternoon_snack" if 11 <= now_hour < 17 else "evening_snack"
     return MEAL_NAMES.get(normalized, normalized)
 
 
@@ -520,6 +536,7 @@ class AnalyzeRequest(BaseModel):
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout(练后) / daily(日常) / before_sleep(睡前) / none(无)")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal，用于建议下一餐")
     meal_type: Optional[str] = Field(default=None, description=f"{MEAL_TYPE_DESCRIPTION}，用于结合餐次给出建议")
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
     execution_mode: Optional[str] = Field(default=None, description="执行模式: standard(标准) / strict(精准)")
 
 
@@ -986,7 +1003,7 @@ async def analyze_food(
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
         if request.meal_type:
-            meal_name = _meal_name(request.meal_type)
+            meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
         requested_mode = _parse_execution_mode_or_raise(request.execution_mode) if request.execution_mode is not None else None
         profile_block = ""
@@ -1164,6 +1181,7 @@ class AnalyzeSubmitRequest(BaseModel):
     image_url: Optional[str] = Field(None, description="Supabase 公网图片 URL（需先调 upload-analyze-image）")
     image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
     meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
@@ -1191,6 +1209,7 @@ async def analyze_submit(
     effective_mode = requested_mode or profile_mode
     payload = {
         "meal_type": body.meal_type,
+        "timezone_offset_minutes": body.timezone_offset_minutes,
         "diet_goal": body.diet_goal,
         "activity_timing": body.activity_timing,
         "user_goal": body.user_goal,
@@ -1334,7 +1353,7 @@ async def analyze_food_compare(
     
     meal_hint = ""
     if request.meal_type:
-        meal_name = _meal_name(request.meal_type)
+        meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
         meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
     
     # 若已登录，拉取健康档案
@@ -1589,6 +1608,7 @@ class AnalyzeTextSubmitRequest(BaseModel):
     """提交文字分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
     text: str = Field(..., description="用户描述的食物内容")
     meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
@@ -1609,6 +1629,7 @@ async def analyze_text_submit(
     
     payload = {
         "meal_type": body.meal_type,
+        "timezone_offset_minutes": body.timezone_offset_minutes,
         "diet_goal": body.diet_goal,
         "activity_timing": body.activity_timing,
         "user_goal": body.user_goal,

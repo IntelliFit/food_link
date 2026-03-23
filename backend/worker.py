@@ -9,6 +9,7 @@ import json
 import re
 import time
 from typing import Dict, Any, Optional
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 
@@ -50,9 +51,28 @@ MEAL_NAMES = {
     "afternoon_snack": "午加餐",
     "dinner": "晚餐",
     "evening_snack": "晚加餐",
-    # 兼容历史值
-    "snack": "午加餐",
+    # 兼容历史值（具体映射由 _meal_name_for_hint 决定）
+    "snack": "加餐",
 }
+
+CHINA_TZ = timezone(timedelta(hours=8))
+
+
+def _meal_name_for_hint(meal_type: Optional[str], timezone_offset_minutes: Optional[Any] = None) -> str:
+    """将餐次转换为提示词展示名，兼容 legacy snack 按客户端时区（兜底东八区）映射。"""
+    mt = (meal_type or "").strip()
+    if mt != "snack":
+        return MEAL_NAMES.get(mt, mt)
+    hour = datetime.now(CHINA_TZ).hour
+    if timezone_offset_minutes is not None:
+        try:
+            offset = int(timezone_offset_minutes)
+            if -840 <= offset <= 840:
+                # JS getTimezoneOffset 定义：UTC - local（分钟），因此 local = UTC - offset
+                hour = (datetime.now(timezone.utc) - timedelta(minutes=offset)).hour
+        except Exception:
+            pass
+    return "午加餐" if 11 <= hour < 17 else "晚加餐"
 
 
 def _format_health_profile_sync(user: Dict[str, Any]) -> str:
@@ -280,7 +300,7 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     remain_hint = f"\n用户当日剩余热量预算约 {remaining} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if remaining is not None else ""
 
     meal_type = payload.get("meal_type")
-    meal_name = MEAL_NAMES.get(meal_type, meal_type or "")
+    meal_name = _meal_name_for_hint(meal_type, payload.get("timezone_offset_minutes"))
     meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
 
     additional = (payload.get("additionalContext") or "").strip()
@@ -509,7 +529,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     remain_hint = f" 用户当日剩余热量预算约 {remaining} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if remaining is not None else ""
 
     meal_type = payload.get("meal_type")
-    meal_name = MEAL_NAMES.get(meal_type, meal_type or "")
+    meal_name = _meal_name_for_hint(meal_type, payload.get("timezone_offset_minutes"))
     meal_hint = f" 用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
 
     profile_hint = f"\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议。\n\n{profile_block}" if profile_block else ""

@@ -7,21 +7,17 @@ import './index.scss'
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
-  { value: 'morning_snack' as const, label: '早加餐' },
   { value: 'lunch' as const, label: '午餐' },
-  { value: 'afternoon_snack' as const, label: '午加餐' },
+  { value: 'snack' as const, label: '加餐' },
   { value: 'dinner' as const, label: '晚餐' },
-  { value: 'evening_snack' as const, label: '晚加餐' }
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
-  morning_snack: 'icon-lingshi',
   lunch: 'icon-wucan',
-  afternoon_snack: 'icon-lingshi',
+  snack: 'icon-lingshi',
   dinner: 'icon-wancan',
-  evening_snack: 'icon-lingshi'
 }
 
 interface NutritionItem {

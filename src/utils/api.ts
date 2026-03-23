@@ -36,6 +36,7 @@ export interface AnalyzeRequest {
   activity_timing?: ActivityTiming
   remaining_calories?: number
   meal_type?: MealType
+  timezone_offset_minutes?: number
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
 }
@@ -632,6 +633,9 @@ export async function analyzeFoodImage(
     throw new Error('请提供 base64Image 或 image_url')
   }
   try {
+    const timezoneOffsetMinutes = Number.isFinite(request.timezone_offset_minutes)
+      ? request.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze`,
       method: 'POST',
@@ -646,7 +650,8 @@ export async function analyzeFoodImage(
         modelName: request.modelName || 'qwen-vl-max',
         ...(request.user_goal != null && { user_goal: request.user_goal }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
-        ...(request.meal_type != null && { meal_type: request.meal_type })
+        ...(request.meal_type != null && { meal_type: request.meal_type }),
+        timezone_offset_minutes: timezoneOffsetMinutes
       },
       timeout: 60000 // 60秒超时
     })
@@ -675,6 +680,9 @@ export async function analyzeFoodImageCompare(
     throw new Error('请提供 base64Image 或 image_url')
   }
   try {
+    const timezoneOffsetMinutes = Number.isFinite(request.timezone_offset_minutes)
+      ? request.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze-compare`,
       method: 'POST',
@@ -691,7 +699,8 @@ export async function analyzeFoodImageCompare(
         ...(request.diet_goal != null && { diet_goal: request.diet_goal }),
         ...(request.activity_timing != null && { activity_timing: request.activity_timing }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
-        ...(request.meal_type != null && { meal_type: request.meal_type })
+        ...(request.meal_type != null && { meal_type: request.meal_type }),
+        timezone_offset_minutes: timezoneOffsetMinutes
       },
       timeout: 120000 // 120秒超时（双模型调用需要更长时间）
     })
@@ -773,6 +782,7 @@ export interface AnalyzeTaskSubmitParams {
   image_url: string
   image_urls?: string[]
   meal_type?: MealType
+  timezone_offset_minutes?: number
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -802,9 +812,15 @@ export interface AnalysisTask {
 
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const payload: AnalyzeTaskSubmitParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
+  }
   const res = await authenticatedRequest('/api/analyze/submit', {
     method: 'POST',
-    data: body,
+    data: payload,
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -818,6 +834,7 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
 export interface AnalyzeTextTaskSubmitParams {
   text: string
   meal_type?: MealType
+  timezone_offset_minutes?: number
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -826,9 +843,15 @@ export interface AnalyzeTextTaskSubmitParams {
 
 /** 提交文字分析任务（异步） */
 export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const payload: AnalyzeTextTaskSubmitParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
+  }
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
-    data: body,
+    data: payload,
     timeout: 10000
   })
   if (res.statusCode !== 200) {
