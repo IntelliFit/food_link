@@ -6,6 +6,20 @@ import Taro from '@tarojs/taro'
 export const API_BASE_URL =
   process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
 
+function isNgrokFreeDomain(url: string): boolean {
+  return /^https:\/\/[^/]+\.ngrok-free\.dev(?:\/|$)/i.test(url)
+}
+
+function withNgrokBypassHeaders(
+  header?: Record<string, any>
+): Record<string, any> {
+  const merged = { ...(header || {}) }
+  if (isNgrokFreeDomain(API_BASE_URL)) {
+    merged['ngrok-skip-browser-warning'] = '1'
+  }
+  return merged
+}
+
 // 基础类型定义
 export type CanonicalMealType =
   | 'breakfast'
@@ -615,7 +629,7 @@ export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUr
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/upload-analyze-image`,
     method: 'POST',
-    header: { 'Content-Type': 'application/json' },
+    header: withNgrokBypassHeaders({ 'Content-Type': 'application/json' }),
     data: { base64Image },
     timeout: 15000
   })
@@ -639,9 +653,9 @@ export async function analyzeFoodImage(
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze`,
       method: 'POST',
-      header: {
+      header: withNgrokBypassHeaders({
         'Content-Type': 'application/json'
-      },
+      }),
       data: {
         ...(request.base64Image != null && { base64Image: request.base64Image }),
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
@@ -686,9 +700,9 @@ export async function analyzeFoodImageCompare(
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze-compare`,
       method: 'POST',
-      header: {
+      header: withNgrokBypassHeaders({
         'Content-Type': 'application/json'
-      },
+      }),
       data: {
         ...(request.base64Image != null && { base64Image: request.base64Image }),
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
@@ -744,7 +758,7 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze-text`,
       method: 'POST',
-      header: { 'Content-Type': 'application/json' },
+      header: withNgrokBypassHeaders({ 'Content-Type': 'application/json' }),
       data: payload,
       timeout: 60000
     })
@@ -998,6 +1012,7 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
   const res = await Taro.request({
     url: `${API_BASE_URL}/api/food-record/share/${encodeURIComponent(recordId)}`,
     method: 'GET',
+    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -1010,9 +1025,14 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
 /**
  * 获取小程序无限拉新二维码（Base64）
  */
-export async function getUnlimitedQRCode(scene: string, page?: string): Promise<{ base64: string }> {
+export async function getUnlimitedQRCode(
+  scene: string,
+  page?: string,
+  envVersion?: 'release' | 'trial' | 'develop'
+): Promise<{ base64: string }> {
   const payload: any = { scene }
   if (page) payload.page = page
+  if (envVersion) payload.env_version = envVersion
 
   const res = await authenticatedRequest('/api/qrcode', {
     method: 'POST',
@@ -1277,11 +1297,11 @@ export async function authenticatedRequest(
   const res = await Taro.request({
     url: `${API_BASE_URL}${url}`,
     ...options,
-    header: {
+    header: withNgrokBypassHeaders({
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       ...(options.header || {})
-    }
+    })
   })
 
   if (res.statusCode === 401 || res.statusCode === 403) {
@@ -1320,9 +1340,9 @@ export async function login(code: string, phoneCode?: string): Promise<LoginResp
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/login`,
       method: 'POST',
-      header: {
+      header: withNgrokBypassHeaders({
         'Content-Type': 'application/json'
-      },
+      }),
       data: requestData,
       timeout: 10000 // 10秒超时
     })
@@ -1391,9 +1411,9 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/membership/plans`,
       method: 'GET',
-      header: {
+      header: withNgrokBypassHeaders({
         'Content-Type': 'application/json'
-      }
+      })
     })
 
     if (response.statusCode !== 200) {
@@ -1805,6 +1825,7 @@ export async function getFriendInviteProfile(userId: string): Promise<FriendInvi
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile/${encodeURIComponent(userId)}`,
     method: 'GET',
+    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
   if (response.statusCode !== 200) {
@@ -1830,7 +1851,37 @@ export async function acceptFriendInvite(code: string): Promise<FriendInviteAcce
     data: { code: code.trim() }
   })
   if (response.statusCode !== 200) {
-    throw new Error((response.data as any)?.detail || '添加好友失败')
+    const detail = (response.data as any)?.detail
+    const errcode = (response.data as any)?.errcode
+    const errmsg = (response.data as any)?.errmsg
+    const backendMsg = detail || errmsg || ''
+    const baseMsg = backendMsg
+      ? `添加好友失败（HTTP ${response.statusCode}）：${backendMsg}`
+      : `添加好友失败（HTTP ${response.statusCode}）`
+    // 线上返回 500 时，补一层「解析邀请码」兜底，尽量给出可读原因
+    try {
+      const resolved = await resolveFriendInvite(code)
+      if (resolved.is_self) {
+        throw new Error('这是你自己的分享，无需重复添加好友')
+      }
+      if (resolved.already_friend) {
+        return {
+          status: 'already_friend',
+          user_id: resolved.user_id,
+          nickname: resolved.nickname,
+          avatar: resolved.avatar
+        }
+      }
+    } catch (e: any) {
+      // 若解析接口本身也失败，继续抛原始错误信息
+      if (e?.message === '这是你自己的分享，无需重复添加好友') {
+        throw e
+      }
+    }
+    if (errcode != null) {
+      throw new Error(`${baseMsg}（errcode=${errcode}）`)
+    }
+    throw new Error(baseMsg)
   }
   return response.data as FriendInviteAcceptResult
 }
@@ -1879,6 +1930,7 @@ export async function communityGetPublicFeed(
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/community/public-feed${q}`,
     method: 'GET',
+    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')

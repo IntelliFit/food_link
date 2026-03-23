@@ -4740,10 +4740,34 @@ async def get_access_token() -> str:
             detail="缺少 APPID 或 SECRET 环境变量"
         )
     
-    # 调用微信接口获取 access_token
-    token_url = "https://api.weixin.qq.com/cgi-bin/token"
-    
     async with httpx.AsyncClient(timeout=10.0) as client:
+        # 1) 优先使用微信推荐的 stable_token 接口，减少多实例并发导致 token 失效
+        stable_url = "https://api.weixin.qq.com/cgi-bin/stable_token"
+        stable_resp = await client.post(
+            stable_url,
+            json={
+                "grant_type": "client_credential",
+                "appid": appid,
+                "secret": secret,
+                "force_refresh": False,
+            },
+        )
+        if stable_resp.is_success:
+            data = stable_resp.json()
+            if not data.get("errcode"):
+                access_token = data.get("access_token")
+                expires_in = data.get("expires_in", 7200)
+                if access_token:
+                    _access_token_cache["token"] = access_token
+                    _access_token_cache["fetched_at"] = current_time
+                    _access_token_cache["expires_at"] = current_time + expires_in
+                    print(f"[get_access_token] 使用 stable_token，expires_in={expires_in}")
+                    return access_token
+            else:
+                print(f"[get_access_token] stable_token 返回错误: {data}")
+
+        # 2) 回退到老接口，兼容部分账号/环境
+        token_url = "https://api.weixin.qq.com/cgi-bin/token"
         response = await client.get(
             token_url,
             params={
@@ -4752,35 +4776,24 @@ async def get_access_token() -> str:
                 "secret": secret
             }
         )
-        
         if not response.is_success:
             raise HTTPException(
                 status_code=500,
                 detail=f"获取 access_token 失败: {response.status_code}"
             )
-        
         data = response.json()
-        
-        # 检查错误
         if "errcode" in data and data["errcode"] != 0:
             error_msg = data.get("errmsg", "未知错误")
             raise HTTPException(
                 status_code=500,
                 detail=f"获取 access_token 失败: {error_msg} (错误码: {data.get('errcode')})"
             )
-        
         access_token = data.get("access_token")
-        expires_in = data.get("expires_in", 7200)  # 默认 2 小时
-        
-        # 打印 access_token
-        print(f"[get_access_token] access_token: {access_token}")
-        print(f"[get_access_token] 微信返回的 expires_in: {expires_in} 秒 (实际按1.5小时刷新)")
-        
-        # 更新缓存: 记录获取时间，并计算理论过期时间
+        expires_in = data.get("expires_in", 7200)
         _access_token_cache["token"] = access_token
         _access_token_cache["fetched_at"] = current_time
         _access_token_cache["expires_at"] = current_time + expires_in
-        
+        print(f"[get_access_token] 回退 token 接口成功，expires_in={expires_in}")
         return access_token
 
 
@@ -4799,9 +4812,6 @@ async def get_unlimited_qrcode(request: QRCodeRequest):
     """
     import base64
     
-    access_token = await get_access_token()
-    url = f"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={access_token}"
-    
     payload = {
         "scene": request.scene,
         "width": request.width,
@@ -4810,27 +4820,37 @@ async def get_unlimited_qrcode(request: QRCodeRequest):
     }
     if request.page is not None:
         payload["page"] = request.page
-        
+
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(url, json=payload)
-        
-        if not response.is_success:
-            raise HTTPException(status_code=500, detail="请求微信二维码接口失败")
-        
-        # 微信接口失败时会返回 JSON 格式数据，成功时返回图片二进制
-        # 根据 content-type 区分
-        content_type = response.headers.get("Content-Type", "")
-        if "application/json" in content_type:
-            err_data = response.json()
-            raise HTTPException(status_code=500, detail=f"生成二维码失败: {err_data.get('errmsg', '未知错误')}")
-        
-        # 成功，读取二进制并转 Base64
-        image_bytes = response.content
-        base64_str = base64.b64encode(image_bytes).decode("utf-8")
-        # 组装成可以直接作为 src 使用的格式
-        data_uri = f"data:image/jpeg;base64,{base64_str}"
-        
-        return {"base64": data_uri}
+        # 最多尝试两次：第一次走缓存 token；若提示 token 无效则清缓存并强制刷新后再试一次
+        for attempt in range(2):
+            access_token = await get_access_token()
+            url = f"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={access_token}"
+            response = await client.post(url, json=payload)
+
+            if not response.is_success:
+                raise HTTPException(status_code=500, detail="请求微信二维码接口失败")
+
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                err_data = response.json()
+                errcode = int(err_data.get("errcode") or 0)
+                errmsg = err_data.get("errmsg", "未知错误")
+                # 40001/42001: token 无效或过期，自动清缓存重试
+                if attempt == 0 and errcode in (40001, 42001):
+                    print(f"[api/qrcode] token 失效，清缓存后重试: {err_data}")
+                    _access_token_cache["token"] = None
+                    _access_token_cache["fetched_at"] = 0
+                    _access_token_cache["expires_at"] = 0
+                    continue
+                raise HTTPException(status_code=500, detail=f"生成二维码失败: {errmsg}")
+
+            image_bytes = response.content
+            base64_str = base64.b64encode(image_bytes).decode("utf-8")
+            data_uri = f"data:image/jpeg;base64,{base64_str}"
+            return {"base64": data_uri}
+
+    raise HTTPException(status_code=500, detail="生成二维码失败")
 
 
 async def get_phone_number(phone_code: str) -> dict:

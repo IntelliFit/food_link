@@ -527,6 +527,9 @@ export default function ProfilePage() {
           </Button>
         )
       }
+      <View className='profile-version'>
+        <Text>版本号 v2.0.6</Text>
+      </View>
 
       {/* 个人设置弹窗 */}
       {showSettingsModal && (

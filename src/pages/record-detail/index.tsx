@@ -1,5 +1,5 @@
 import { View, Text, Image, ScrollView, Canvas, Button, Input, Slider } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getSharedFoodRecord,
@@ -73,25 +73,25 @@ function getInviteCodeFromUserId(userId: string): string {
 
 export default function RecordDetailPage() {
   const router = useRouter()
-  const [record, setRecord] = useState<FoodRecord | null>(null)
-  const [posterGenerating, setPosterGenerating] = useState(false)
-  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
-  const [showPosterModal, setShowPosterModal] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [isOwner, setIsOwner] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editItems, setEditItems] = useState<Array<{
+  const [record, setRecord] = React.useState<FoodRecord | null>(null)
+  const [posterGenerating, setPosterGenerating] = React.useState(false)
+  const [posterImageUrl, setPosterImageUrl] = React.useState<string | null>(null)
+  const [showPosterModal, setShowPosterModal] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  const [isOwner, setIsOwner] = React.useState(false)
+  const [showEditModal, setShowEditModal] = React.useState(false)
+  const [editItems, setEditItems] = React.useState<Array<{
     name: string
     weight: number
     ratio: number
     intake: number
     nutrients: Nutrients
   }>>([])
-  const [editSaving, setEditSaving] = useState(false)
-  const [ownerNickname, setOwnerNickname] = useState('')
-  const [ownerAvatar, setOwnerAvatar] = useState('')
-  const [ownerInviteCode, setOwnerInviteCode] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
+  const [editSaving, setEditSaving] = React.useState(false)
+  const [ownerNickname, setOwnerNickname] = React.useState('')
+  const [ownerAvatar, setOwnerAvatar] = React.useState('')
+  const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
+  const [inviteLoading, setInviteLoading] = React.useState(false)
 
   useEffect(() => {
     const loadRecord = async () => {
@@ -354,7 +354,13 @@ export default function RecordDetailPage() {
         icon: 'success'
       })
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '添加好友失败', icon: 'none' })
+      const msg = e?.message || '添加好友失败'
+      Taro.showModal({
+        title: '添加好友失败',
+        content: msg.length > 280 ? `${msg.slice(0, 280)}...` : msg,
+        showCancel: false,
+        confirmText: '我知道了'
+      })
     } finally {
       setInviteLoading(false)
     }
@@ -399,15 +405,24 @@ export default function RecordDetailPage() {
         }
 
         const loadQRImage = async () => {
-          try {
-            // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
-            const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index')
-            return await loadImage(base64)
-          } catch (e) {
-            console.error('Failed to load real QR code', e)
-            return null // fallback to fake QR code in poster
+          // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
+          const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
+          // 部分账号/环境下 develop 码不可用，按优先级自动回退，确保尽量拿到真实二维码。
+          const envCandidates: Array<'develop' | 'trial' | 'release'> =
+            process.env.NODE_ENV === 'development'
+              ? ['develop', 'trial', 'release']
+              : ['release', 'trial', 'develop']
+
+          for (const envVersion of envCandidates) {
+            try {
+              const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
+              const img = await loadImage(base64)
+              if (img) return img
+            } catch (e) {
+              console.warn(`QR code load failed for env=${envVersion}`, e)
+            }
           }
+          return null // fallback to fake QR code in poster
         }
 
         Promise.all([

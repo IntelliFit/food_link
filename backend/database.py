@@ -1355,16 +1355,31 @@ async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[
     if not re.fullmatch(r"[0-9a-f]{6,12}", code):
         return None
     try:
-        # user_id 为 UUID 字符串，允许通过前缀匹配解析邀请人
-        result = (
-            supabase
-            .table("weapp_user")
-            .select("id, nickname, avatar")
-            .like("id", f"{code}%")
-            .limit(2)
-            .execute()
-        )
-        rows = list(result.data or [])
+        # 避免对 UUID 字段使用 like 导致部分 Supabase/Cloudflare 环境异常，
+        # 改为分页拉取公开字段后在本地做前缀匹配。
+        rows: List[Dict[str, Any]] = []
+        page_size = 500
+        offset = 0
+        while True:
+            batch = (
+                supabase
+                .table("weapp_user")
+                .select("id, nickname, avatar")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            data = list(batch.data or [])
+            if not data:
+                break
+            for item in data:
+                raw = (item.get("id") or "").replace("-", "").lower()
+                if raw.startswith(code):
+                    rows.append(item)
+                    if len(rows) > 1:
+                        break
+            if len(rows) > 1 or len(data) < page_size:
+                break
+            offset += page_size
         if not rows:
             return None
         if len(rows) > 1:
