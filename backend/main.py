@@ -57,6 +57,8 @@ from database import (
     get_friend_requests_received,
     respond_friend_request,
     get_friends_with_profile,
+    delete_friend_pair,
+    get_friend_requests_overview,
     cleanup_duplicate_friends,
     list_friends_feed_records,
     get_friend_circle_week_checkin_leaderboard,
@@ -3988,6 +3990,37 @@ async def api_friend_list(user_info: dict = Depends(get_current_user_info)):
         raise HTTPException(status_code=500, detail="获取失败")
 
 
+@app.delete("/api/friend/{friend_id}")
+async def api_friend_delete(
+    friend_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """删除好友（双向删除）。"""
+    try:
+        current_user_id = user_info["user_id"]
+        if friend_id == current_user_id:
+            raise HTTPException(status_code=400, detail="不能删除自己")
+        result = await delete_friend_pair(current_user_id, friend_id)
+        if result.get("deleted", 0) <= 0:
+            raise HTTPException(status_code=404, detail="好友关系不存在")
+        return {"message": "已删除好友", **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/friend/delete] 错误: {e}")
+        raise HTTPException(status_code=500, detail="删除好友失败")
+
+
+@app.get("/api/friend/requests/all")
+async def api_friend_requests_overview(user_info: dict = Depends(get_current_user_info)):
+    """好友请求总览（收到 + 发出，含 pending/accepted/rejected）。"""
+    try:
+        return await get_friend_requests_overview(user_info["user_id"])
+    except Exception as e:
+        print(f"[api/friend/requests/all] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取失败")
+
+
 @app.post("/api/friend/cleanup-duplicates")
 async def api_friend_cleanup_duplicates(user_info: dict = Depends(get_current_user_info)):
     """清理当前用户的重复好友记录"""
@@ -4065,7 +4098,7 @@ async def api_friend_invite_accept(
     body: FriendInviteAcceptRequest,
     user_info: dict = Depends(get_current_user_info),
 ):
-    """接受邀请码并直接建立双向好友关系。"""
+    """通过邀请码发起好友申请（需对方同意后才会成为好友）。"""
     try:
         inviter = await resolve_user_by_friend_invite_code(body.code)
         if not inviter:
@@ -4083,9 +4116,10 @@ async def api_friend_invite_accept(
                 "avatar": inviter.get("avatar") or "",
             }
 
-        await add_friend_pair(current_user_id, inviter_id)
+        # 仅发起申请，不直接建立好友关系，必须由分享者在请求列表中同意。
+        await send_friend_request(current_user_id, inviter_id)
         return {
-            "status": "added",
+            "status": "request_sent",
             "user_id": inviter_id,
             "nickname": inviter.get("nickname") or "用户",
             "avatar": inviter.get("avatar") or "",

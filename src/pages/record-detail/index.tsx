@@ -172,28 +172,6 @@ export default function RecordDetailPage() {
     }
   })
 
-  useEffect(() => {
-    const autoAcceptInvite = async () => {
-      if (!inviteCode || isOwner || !getAccessToken()) return
-      const cacheKey = `friend_invite_auto_${shareRecordId}_${inviteCode}`
-      try {
-        if (Taro.getStorageSync(cacheKey)) return
-        Taro.setStorageSync(cacheKey, 1)
-      } catch {
-        // ignore storage errors
-      }
-      try {
-        const res = await acceptFriendInvite(inviteCode)
-        if (res.status === 'added') {
-          Taro.showToast({ title: `已和${res.nickname || '对方'}成为好友`, icon: 'success' })
-        }
-      } catch {
-        // 自动处理失败不打断页面浏览
-      }
-    }
-    autoAcceptInvite()
-  }, [inviteCode, isOwner, shareRecordId])
-
   /** 打开编辑弹窗，复制当前食物项数据 */
   const handleOpenEdit = useCallback(() => {
     if (!record) return
@@ -350,7 +328,7 @@ export default function RecordDetailPage() {
     try {
       const res = await acceptFriendInvite(inviteCode)
       Taro.showToast({
-        title: res.status === 'added' ? `已和${res.nickname || '对方'}成为好友` : '你们已是好友',
+        title: res.status === 'request_sent' ? `已向${res.nickname || '对方'}发送申请` : '你们已是好友',
         icon: 'success'
       })
     } catch (e: any) {
@@ -627,9 +605,9 @@ export default function RecordDetailPage() {
                 {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
               </Text>
             </View>
-            <Text className="friend-invite-desc">未注册会先登录，登录后自动成为好友</Text>
+            <Text className="friend-invite-desc">未注册会先登录，登录后发送申请，需对方同意</Text>
             <Button className="friend-invite-btn" onClick={handleAcceptInvite} disabled={inviteLoading}>
-              {inviteLoading ? '处理中...' : (getAccessToken() ? '立即成为好友' : '登录并成为好友')}
+              {inviteLoading ? '处理中...' : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
             </Button>
           </View>
         )}

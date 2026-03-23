@@ -808,6 +808,10 @@ export default function CommunityPage() {
                         <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
                       </View>
                     )}
+                    <View className='view-all-btn' onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}>
+                      <Text className='view-all-text'>好友管理</Text>
+                      <Text className='arrow'>{'>'}</Text>
+                    </View>
                     <View className='view-all-btn' onClick={() => setShowAddFriend(true)}>
                       <Text className='view-all-text'>添加好友</Text>
                       <Text className='arrow'>{'>'}</Text>

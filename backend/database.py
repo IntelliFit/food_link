@@ -1306,6 +1306,106 @@ async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
     return list(result.data or [])
 
 
+async def delete_friend_pair(user_id: str, friend_id: str) -> Dict[str, int]:
+    """删除双向好友关系，返回删除条数。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        deleted = 0
+        r1 = supabase.table("user_friends").delete().eq("user_id", user_id).eq("friend_id", friend_id).execute()
+        deleted += len(r1.data or [])
+        r2 = supabase.table("user_friends").delete().eq("user_id", friend_id).eq("friend_id", user_id).execute()
+        deleted += len(r2.data or [])
+        return {"deleted": deleted}
+    except Exception as e:
+        print(f"[delete_friend_pair] 错误: {e}")
+        raise
+
+
+async def get_friend_requests_overview(user_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    获取好友请求总览：
+    - received: 我收到的请求（pending/accepted/rejected）
+    - sent: 我发出的请求（pending/accepted/rejected）
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        received_result = (
+            supabase.table("friend_requests")
+            .select("id, from_user_id, to_user_id, status, created_at, updated_at")
+            .eq("to_user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        sent_result = (
+            supabase.table("friend_requests")
+            .select("id, from_user_id, to_user_id, status, created_at, updated_at")
+            .eq("from_user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        received_rows = list(received_result.data or [])
+        sent_rows = list(sent_result.data or [])
+
+        counterpart_ids = set()
+        for row in received_rows:
+            cid = row.get("from_user_id")
+            if cid:
+                counterpart_ids.add(cid)
+        for row in sent_rows:
+            cid = row.get("to_user_id")
+            if cid:
+                counterpart_ids.add(cid)
+
+        users_map: Dict[str, Dict[str, Any]] = {}
+        if counterpart_ids:
+            users_result = (
+                supabase.table("weapp_user")
+                .select("id, nickname, avatar")
+                .in_("id", list(counterpart_ids))
+                .execute()
+            )
+            users_map = {u["id"]: u for u in (users_result.data or [])}
+
+        received = []
+        for row in received_rows:
+            from_user_id = row.get("from_user_id")
+            user = users_map.get(from_user_id or "", {})
+            received.append({
+                "id": row.get("id"),
+                "from_user_id": from_user_id,
+                "to_user_id": row.get("to_user_id"),
+                "status": row.get("status"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "counterpart_user_id": from_user_id,
+                "counterpart_nickname": user.get("nickname") or "用户",
+                "counterpart_avatar": user.get("avatar") or "",
+            })
+
+        sent = []
+        for row in sent_rows:
+            to_user_id = row.get("to_user_id")
+            user = users_map.get(to_user_id or "", {})
+            sent.append({
+                "id": row.get("id"),
+                "from_user_id": row.get("from_user_id"),
+                "to_user_id": to_user_id,
+                "status": row.get("status"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "counterpart_user_id": to_user_id,
+                "counterpart_nickname": user.get("nickname") or "用户",
+                "counterpart_avatar": user.get("avatar") or "",
+            })
+
+        return {"received": received, "sent": sent}
+    except Exception as e:
+        print(f"[get_friend_requests_overview] 错误: {e}")
+        raise
+
+
 async def cleanup_duplicate_friends(user_id: str) -> Dict[str, Any]:
     """清理用户的重复好友记录，只保留每个好友的第一条记录"""
     check_supabase_configured()

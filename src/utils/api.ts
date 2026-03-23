@@ -1706,6 +1706,23 @@ export interface FriendRequestItem {
   from_avatar: string
 }
 
+export interface FriendRequestOverviewItem {
+  id: string
+  from_user_id: string
+  to_user_id: string
+  status: 'pending' | 'accepted' | 'rejected'
+  created_at: string
+  updated_at?: string
+  counterpart_user_id: string
+  counterpart_nickname: string
+  counterpart_avatar: string
+}
+
+export interface FriendRequestsOverview {
+  received: FriendRequestOverviewItem[]
+  sent: FriendRequestOverviewItem[]
+}
+
 /** 好友列表项 */
 export interface FriendListItem {
   id: string
@@ -1732,7 +1749,7 @@ export interface FriendInviteResolveResult {
 
 /** 接受邀请码返回 */
 export interface FriendInviteAcceptResult {
-  status: 'added' | 'already_friend'
+  status: 'request_sent' | 'already_friend'
   user_id: string
   nickname: string
   avatar: string
@@ -1818,6 +1835,19 @@ export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
   return response.data as { list: FriendListItem[] }
+}
+
+/** 删除好友（双向） */
+export async function friendDelete(friendId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend/${encodeURIComponent(friendId)}`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
+}
+
+/** 好友请求总览（收到 + 发出） */
+export async function friendGetRequestsOverview(): Promise<FriendRequestsOverview> {
+  const response = await authenticatedRequest('/api/friend/requests/all', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as FriendRequestsOverview
 }
 
 /** 公开获取邀请资料（用于分享海报昵称与邀请码） */

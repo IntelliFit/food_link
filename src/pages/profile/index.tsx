@@ -191,7 +191,7 @@ export default function ProfilePage() {
   // 设置项
   const settings = [
     { id: 1, icon: <SettingOutlined size='20' />, title: '个人设置' }, // 将 “设置” 改为 “个人设置” 更直观
-    { id: 2, icon: <Bell size='20' />, title: '消息通知' },
+    { id: 2, icon: <Bell size='20' />, title: '好友管理' },
     { id: 3, icon: <ShieldOutlined size='20' />, title: '隐私设置' },
     { id: 4, icon: <CommentOutlined size='20' />, title: '意见反馈' },
     { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' },
@@ -275,6 +275,11 @@ export default function ProfilePage() {
     // 设置：打开个人设置弹窗
     if (setting.id === 1) {
       handleSettings()
+      return
+    }
+    // 隐私设置
+    if (setting.id === 2) {
+      Taro.navigateTo({ url: '/pages/friends/index' })
       return
     }
     // 隐私设置

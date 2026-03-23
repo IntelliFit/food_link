@@ -28,7 +28,8 @@ export default defineAppConfig({
     'pages/about/index',
     'pages/agreement/index',
     'pages/privacy/index',
-    'pages/privacy-settings/index'
+    'pages/privacy-settings/index',
+    'pages/friends/index'
   ],
   window: {
     backgroundTextStyle: 'light',
