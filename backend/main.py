@@ -15,8 +15,13 @@ import asyncio
 import base64
 import math
 import mimetypes
+import calendar
 from datetime import timedelta, datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from test_backend.utils import calculate_deviation
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
@@ -46,13 +51,14 @@ from database import (
     search_users,
     is_friend,
     add_friend_pair,
-    remove_friend_pair,
     build_friend_invite_code,
     resolve_user_by_friend_invite_code,
     send_friend_request,
     get_friend_requests_received,
     respond_friend_request,
     get_friends_with_profile,
+    delete_friend_pair,
+    get_friend_requests_overview,
     cleanup_duplicate_friends,
     list_friends_feed_records,
     get_friend_circle_week_checkin_leaderboard,
@@ -91,12 +97,20 @@ from database import (
     list_comment_tasks_by_user_sync,
     delete_image_from_storage,
     insert_user_mode_switch_log_sync,
+    list_active_membership_plans,
+    get_membership_plan_by_code,
+    get_user_pro_membership,
+    save_user_pro_membership,
+    create_pro_membership_payment_record,
+    get_pro_membership_payment_record_by_order_no,
+    update_pro_membership_payment_record,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
 
 # 从 .env 文件加载环境变量
-load_dotenv()
+BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(BACKEND_ENV_PATH, override=True)
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "google/gemini-2.5-flash")
 
 # 中国时区（UTC+8），用于按本地自然日统计
@@ -204,6 +218,98 @@ def _parse_china_datetime(value: Any) -> Optional[datetime]:
         return None
 
 
+def _load_pem_value(value_or_path: Optional[str], env_name: str) -> str:
+    """从环境变量值或文件路径加载 PEM 内容。"""
+    raw = (value_or_path or "").strip()
+    if not raw:
+        raise HTTPException(status_code=500, detail=f"缺少环境变量：{env_name}")
+    if "BEGIN " in raw:
+        return raw
+    if os.path.exists(raw):
+        with open(raw, "r", encoding="utf-8") as fp:
+            return fp.read()
+    raise HTTPException(status_code=500, detail=f"{env_name} 配置无效，既不是 PEM 内容也不是可读文件路径")
+
+
+def _get_wechat_pay_config() -> Dict[str, str]:
+    """读取微信支付配置。"""
+    appid = os.getenv("APPID", "").strip()
+    mchid = os.getenv("WECHAT_PAY_MCHID", "").strip()
+    notify_url = os.getenv("WECHAT_PAY_NOTIFY_URL", "").strip()
+    serial_no = os.getenv("WECHAT_PAY_SERIAL_NO", "").strip()
+    api_v3_key = os.getenv("WECHAT_PAY_API_V3_KEY", "").strip()
+    private_key = _load_pem_value(
+        os.getenv("WECHAT_PAY_PRIVATE_KEY") or os.getenv("WECHAT_PAY_PRIVATE_KEY_PATH"),
+        "WECHAT_PAY_PRIVATE_KEY / WECHAT_PAY_PRIVATE_KEY_PATH",
+    )
+    public_key_raw = (os.getenv("WECHAT_PAY_PUBLIC_KEY") or os.getenv("WECHAT_PAY_PUBLIC_KEY_PATH") or "").strip()
+    public_key = _load_pem_value(
+        public_key_raw,
+        "WECHAT_PAY_PUBLIC_KEY / WECHAT_PAY_PUBLIC_KEY_PATH",
+    ) if public_key_raw else ""
+
+    missing = []
+    if not appid:
+        missing.append("APPID")
+    if not mchid:
+        missing.append("WECHAT_PAY_MCHID")
+    if not notify_url:
+        missing.append("WECHAT_PAY_NOTIFY_URL")
+    if not serial_no:
+        missing.append("WECHAT_PAY_SERIAL_NO")
+    if not api_v3_key:
+        missing.append("WECHAT_PAY_API_V3_KEY")
+    if missing:
+        raise HTTPException(status_code=500, detail=f"缺少微信支付配置：{', '.join(missing)}")
+
+    return {
+        "appid": appid,
+        "mchid": mchid,
+        "notify_url": notify_url,
+        "serial_no": serial_no,
+        "api_v3_key": api_v3_key,
+        "private_key": private_key,
+        "public_key": public_key,
+    }
+
+
+def _to_decimal_amount(value: Any) -> Decimal:
+    return Decimal(str(value or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _amount_to_fen(value: Any) -> int:
+    return int((_to_decimal_amount(value) * 100).to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _generate_membership_order_no() -> str:
+    timestamp = datetime.now(CHINA_TZ).strftime("%Y%m%d%H%M%S")
+    suffix = secrets.token_hex(4).upper()
+    return f"PM{timestamp}{suffix}"
+
+
+def _add_months(dt: datetime, months: int) -> datetime:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    total_month = dt.month - 1 + months
+    year = dt.year + total_month // 12
+    month = total_month % 12 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    day = min(dt.day, last_day)
+    return dt.replace(year=year, month=month, day=day)
+
+
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
 def _map_legacy_snack_to_slot(record_time: Any = None) -> str:
     """
     旧 snack 记录按时间段映射到新加餐：
@@ -232,8 +338,24 @@ def _normalize_meal_type(meal_type: Optional[str], record_time: Any = None, defa
     return default
 
 
-def _meal_name(meal_type: Optional[str], record_time: Any = None) -> str:
+def _meal_name(
+    meal_type: Optional[str],
+    record_time: Any = None,
+    timezone_offset_minutes: Optional[int] = None,
+) -> str:
     normalized = _normalize_meal_type(meal_type, record_time=record_time, default="afternoon_snack")
+    # 兼容 legacy snack：未提供记录时间时按客户端时区（兜底东八区）仅区分午后/晚间。
+    if (meal_type or "").strip() == "snack" and record_time is None:
+        now_hour = datetime.now(CHINA_TZ).hour
+        if timezone_offset_minutes is not None:
+            try:
+                offset = int(timezone_offset_minutes)
+                if -840 <= offset <= 840:
+                    # JS getTimezoneOffset 定义：UTC - local（分钟），因此 local = UTC - offset
+                    now_hour = (datetime.now(timezone.utc) - timedelta(minutes=offset)).hour
+            except Exception:
+                pass
+        normalized = "afternoon_snack" if 11 <= now_hour < 17 else "evening_snack"
     return MEAL_NAMES.get(normalized, normalized)
 
 
@@ -247,6 +369,125 @@ def _build_by_meal_calories(records: List[Dict[str, Any]]) -> Dict[str, float]:
     # 兼容旧前端字段
     out["snack"] = out["afternoon_snack"]
     return out
+
+
+def _build_json_datetime(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _format_membership_response(membership: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not membership:
+        return {
+            "is_pro": False,
+            "status": "inactive",
+            "current_plan_code": None,
+            "first_activated_at": None,
+            "current_period_start": None,
+            "expires_at": None,
+            "last_paid_at": None,
+        }
+
+    expires_at = _parse_datetime(membership.get("expires_at"))
+    status = membership.get("status") or "inactive"
+    if status == "active" and expires_at and expires_at <= datetime.now(timezone.utc):
+        status = "expired"
+
+    return {
+        "is_pro": status == "active" and bool(expires_at and expires_at > datetime.now(timezone.utc)),
+        "status": status,
+        "current_plan_code": membership.get("current_plan_code"),
+        "first_activated_at": membership.get("first_activated_at"),
+        "current_period_start": membership.get("current_period_start"),
+        "expires_at": membership.get("expires_at"),
+        "last_paid_at": membership.get("last_paid_at"),
+    }
+
+
+def _get_private_key(private_key_pem: str):
+    return serialization.load_pem_private_key(private_key_pem.encode("utf-8"), password=None)
+
+
+def _get_public_key(public_key_pem: str):
+    return serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+
+
+def _sign_with_rsa_sha256(message: str, private_key_pem: str) -> str:
+    private_key = _get_private_key(private_key_pem)
+    signature = private_key.sign(
+        message.encode("utf-8"),
+        padding.PKCS1v15(),
+        hashes.SHA256(),
+    )
+    return base64.b64encode(signature).decode("utf-8")
+
+
+def _verify_with_rsa_sha256(message: str, signature_b64: str, public_key_pem: str) -> bool:
+    try:
+        public_key = _get_public_key(public_key_pem)
+        public_key.verify(
+            base64.b64decode(signature_b64),
+            message.encode("utf-8"),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _build_wechatpay_authorization(
+    mchid: str,
+    serial_no: str,
+    private_key_pem: str,
+    method: str,
+    canonical_url: str,
+    body: str,
+) -> str:
+    timestamp = str(int(time.time()))
+    nonce_str = secrets.token_hex(16)
+    message = f"{method.upper()}\n{canonical_url}\n{timestamp}\n{nonce_str}\n{body}\n"
+    signature = _sign_with_rsa_sha256(message, private_key_pem)
+    return (
+        'WECHATPAY2-SHA256-RSA2048 '
+        f'mchid="{mchid}",'
+        f'nonce_str="{nonce_str}",'
+        f'signature="{signature}",'
+        f'timestamp="{timestamp}",'
+        f'serial_no="{serial_no}"'
+    )
+
+
+def _build_mini_program_pay_params(appid: str, prepay_id: str, private_key_pem: str) -> Dict[str, str]:
+    time_stamp = str(int(time.time()))
+    nonce_str = secrets.token_hex(16)
+    package_value = f"prepay_id={prepay_id}"
+    message = f"{appid}\n{time_stamp}\n{nonce_str}\n{package_value}\n"
+    pay_sign = _sign_with_rsa_sha256(message, private_key_pem)
+    return {
+        "timeStamp": time_stamp,
+        "nonceStr": nonce_str,
+        "package": package_value,
+        "signType": "RSA",
+        "paySign": pay_sign,
+    }
+
+
+def _decrypt_wechatpay_resource(resource: Dict[str, Any], api_v3_key: str) -> Dict[str, Any]:
+    ciphertext = resource.get("ciphertext")
+    nonce = resource.get("nonce")
+    associated_data = resource.get("associated_data", "")
+    if not ciphertext or not nonce:
+        raise HTTPException(status_code=400, detail="微信支付回调缺少加密资源字段")
+
+    aesgcm = AESGCM(api_v3_key.encode("utf-8"))
+    plaintext = aesgcm.decrypt(
+        nonce.encode("utf-8"),
+        base64.b64decode(ciphertext),
+        associated_data.encode("utf-8") if associated_data else None,
+    )
+    return json.loads(plaintext.decode("utf-8"))
 
 app = FastAPI(title="食物分析 API", description="基于 DashScope 的食物图片分析服务")
 
@@ -297,6 +538,7 @@ class AnalyzeRequest(BaseModel):
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout(练后) / daily(日常) / before_sleep(睡前) / none(无)")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal，用于建议下一餐")
     meal_type: Optional[str] = Field(default=None, description=f"{MEAL_TYPE_DESCRIPTION}，用于结合餐次给出建议")
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
     execution_mode: Optional[str] = Field(default=None, description="执行模式: standard(标准) / strict(精准)")
 
 
@@ -606,6 +848,47 @@ class LoginResponse(BaseModel):
     diet_goal: Optional[str] = None
 
 
+class MembershipPlanResponse(BaseModel):
+    code: str
+    name: str
+    amount: float
+    duration_months: int
+    description: Optional[str] = None
+
+
+class MembershipStatusResponse(BaseModel):
+    is_pro: bool
+    status: str
+    current_plan_code: Optional[str] = None
+    first_activated_at: Optional[str] = None
+    current_period_start: Optional[str] = None
+    expires_at: Optional[str] = None
+    last_paid_at: Optional[str] = None
+
+
+class MembershipPlansListResponse(BaseModel):
+    list: List[MembershipPlanResponse]
+
+
+class CreateMembershipPaymentRequest(BaseModel):
+    plan_code: str = Field(..., description="会员套餐编码，如 pro_monthly")
+
+
+class PaymentParamsResponse(BaseModel):
+    timeStamp: str
+    nonceStr: str
+    package: str
+    signType: str
+    paySign: str
+
+
+class CreateMembershipPaymentResponse(BaseModel):
+    order_no: str
+    plan_code: str
+    amount: float
+    pay_params: PaymentParamsResponse
+
+
 # 活动水平中文映射（用于健康档案摘要）
 ACTIVITY_LEVEL_LABELS = {
     "sedentary": "久坐",
@@ -722,7 +1005,7 @@ async def analyze_food(
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
         if request.meal_type:
-            meal_name = _meal_name(request.meal_type)
+            meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
         requested_mode = _parse_execution_mode_or_raise(request.execution_mode) if request.execution_mode is not None else None
         profile_block = ""
@@ -900,6 +1183,7 @@ class AnalyzeSubmitRequest(BaseModel):
     image_url: Optional[str] = Field(None, description="Supabase 公网图片 URL（需先调 upload-analyze-image）")
     image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
     meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
@@ -927,6 +1211,7 @@ async def analyze_submit(
     effective_mode = requested_mode or profile_mode
     payload = {
         "meal_type": body.meal_type,
+        "timezone_offset_minutes": body.timezone_offset_minutes,
         "diet_goal": body.diet_goal,
         "activity_timing": body.activity_timing,
         "user_goal": body.user_goal,
@@ -1070,7 +1355,7 @@ async def analyze_food_compare(
     
     meal_hint = ""
     if request.meal_type:
-        meal_name = _meal_name(request.meal_type)
+        meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
         meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
     
     # 若已登录，拉取健康档案
@@ -1325,6 +1610,7 @@ class AnalyzeTextSubmitRequest(BaseModel):
     """提交文字分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
     text: str = Field(..., description="用户描述的食物内容")
     meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
@@ -1345,6 +1631,7 @@ async def analyze_text_submit(
     
     payload = {
         "meal_type": body.meal_type,
+        "timezone_offset_minutes": body.timezone_offset_minutes,
         "diet_goal": body.diet_goal,
         "activity_timing": body.activity_timing,
         "user_goal": body.user_goal,
@@ -1810,6 +2097,272 @@ async def get_user_record_days(
     except Exception as e:
         print(f"[get_user_record_days] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取记录天数失败: {str(e)}")
+
+
+async def _get_effective_membership(user_id: str) -> Optional[Dict[str, Any]]:
+    """获取并按当前时间修正用户会员状态。"""
+    membership = await get_user_pro_membership(user_id)
+    if not membership:
+        return None
+
+    expires_at = _parse_datetime(membership.get("expires_at"))
+    status = membership.get("status")
+    if status == "active" and expires_at and expires_at <= datetime.now(timezone.utc):
+        membership = await save_user_pro_membership(
+            user_id,
+            {
+                "status": "expired",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    return membership
+
+
+@app.get("/api/membership/plans", response_model=MembershipPlansListResponse)
+async def get_membership_plans():
+    """获取启用中的会员套餐。"""
+    try:
+        plans = await list_active_membership_plans()
+        return {
+            "list": [
+                {
+                    "code": plan["code"],
+                    "name": plan["name"],
+                    "amount": float(plan.get("amount") or 0),
+                    "duration_months": int(plan.get("duration_months") or 1),
+                    "description": plan.get("description"),
+                }
+                for plan in plans
+            ]
+        }
+    except Exception as e:
+        print(f"[get_membership_plans] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取会员套餐失败: {str(e)}")
+
+
+@app.get("/api/membership/me", response_model=MembershipStatusResponse)
+async def get_my_membership(
+    user_info: dict = Depends(get_current_user_info)
+):
+    """获取当前登录用户的 Pro 会员状态。"""
+    try:
+        membership = await _get_effective_membership(user_info["user_id"])
+        return _format_membership_response(membership)
+    except Exception as e:
+        print(f"[get_my_membership] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取会员状态失败: {str(e)}")
+
+
+@app.post("/api/membership/pay/create", response_model=CreateMembershipPaymentResponse)
+async def create_membership_payment(
+    body: CreateMembershipPaymentRequest,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """创建 Pro 会员支付订单，并返回小程序调起支付参数。"""
+    try:
+        config = _get_wechat_pay_config()
+        plan = await get_membership_plan_by_code(body.plan_code)
+        if not plan or not plan.get("is_active"):
+            raise HTTPException(status_code=404, detail="会员套餐不存在或未启用")
+
+        user = await get_user_by_id(user_info["user_id"])
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        openid = (user.get("openid") or "").strip()
+        if not openid:
+            raise HTTPException(status_code=400, detail="当前用户缺少 openid，无法发起微信支付")
+
+        amount = _to_decimal_amount(plan.get("amount") or "0")
+        duration_months = int(plan.get("duration_months") or 1)
+        order_no = _generate_membership_order_no()
+        canonical_url = "/v3/pay/transactions/jsapi"
+        request_payload = {
+            "appid": config["appid"],
+            "mchid": config["mchid"],
+            "description": plan.get("name") or "Pro 月度会员",
+            "out_trade_no": order_no,
+            "notify_url": config["notify_url"],
+            "amount": {
+                "total": _amount_to_fen(amount),
+                "currency": "CNY",
+            },
+            "payer": {
+                "openid": openid,
+            },
+        }
+        request_body = json.dumps(request_payload, ensure_ascii=False, separators=(",", ":"))
+        authorization = _build_wechatpay_authorization(
+            mchid=config["mchid"],
+            serial_no=config["serial_no"],
+            private_key_pem=config["private_key"],
+            method="POST",
+            canonical_url=canonical_url,
+            body=request_body,
+        )
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"https://api.mch.weixin.qq.com{canonical_url}",
+                content=request_body.encode("utf-8"),
+                headers={
+                    "Authorization": authorization,
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "food-link/1.0",
+                },
+            )
+
+        if response.status_code not in (200, 201):
+            try:
+                error_data = response.json()
+                error_msg = error_data.get("message") or error_data.get("detail") or response.text
+            except Exception:
+                error_msg = response.text
+            raise HTTPException(status_code=502, detail=f"微信下单失败: {error_msg}")
+
+        response_data = response.json()
+        prepay_id = (response_data.get("prepay_id") or "").strip()
+        if not prepay_id:
+            raise HTTPException(status_code=502, detail="微信下单失败：未返回 prepay_id")
+
+        await create_pro_membership_payment_record(
+            {
+                "user_id": user_info["user_id"],
+                "plan_code": plan["code"],
+                "order_no": order_no,
+                "amount": float(amount),
+                "currency": "CNY",
+                "duration_months": duration_months,
+                "pay_channel": "wechat_mini_program",
+                "trade_type": "JSAPI",
+                "status": "pending",
+                "wx_openid": openid,
+                "wx_prepay_id": prepay_id,
+                "extra": {
+                    "create_order_payload": request_payload,
+                    "wechat_create_order_response": response_data,
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+        pay_params = _build_mini_program_pay_params(
+            appid=config["appid"],
+            prepay_id=prepay_id,
+            private_key_pem=config["private_key"],
+        )
+
+        return {
+            "order_no": order_no,
+            "plan_code": plan["code"],
+            "amount": float(amount),
+            "pay_params": pay_params,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[create_membership_payment] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"创建会员支付失败: {str(e)}")
+
+
+@app.post("/api/payment/wechat/notify/membership")
+async def wechat_membership_notify(request: Request):
+    """处理微信支付 Pro 会员支付回调。"""
+    config = _get_wechat_pay_config()
+    if not config.get("public_key"):
+        raise HTTPException(status_code=500, detail="缺少微信支付公钥配置，无法处理支付回调")
+    body_bytes = await request.body()
+    body_text = body_bytes.decode("utf-8")
+
+    signature = request.headers.get("Wechatpay-Signature", "")
+    timestamp = request.headers.get("Wechatpay-Timestamp", "")
+    nonce = request.headers.get("Wechatpay-Nonce", "")
+    if not signature or not timestamp or not nonce:
+        raise HTTPException(status_code=400, detail="微信支付回调缺少签名头")
+
+    sign_message = f"{timestamp}\n{nonce}\n{body_text}\n"
+    if not _verify_with_rsa_sha256(sign_message, signature, config["public_key"]):
+        raise HTTPException(status_code=401, detail="微信支付回调验签失败")
+
+    try:
+        notify_data = json.loads(body_text or "{}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"微信支付回调报文解析失败: {e}")
+
+    resource = notify_data.get("resource") or {}
+    decrypted = _decrypt_wechatpay_resource(resource, config["api_v3_key"])
+    order_no = (decrypted.get("out_trade_no") or "").strip()
+    if not order_no:
+        raise HTTPException(status_code=400, detail="微信支付回调缺少 out_trade_no")
+
+    payment_record = await get_pro_membership_payment_record_by_order_no(order_no)
+    if not payment_record:
+        raise HTTPException(status_code=404, detail="未找到对应的会员支付记录")
+
+    if payment_record.get("status") == "paid":
+        return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
+
+    trade_state = (decrypted.get("trade_state") or "").upper()
+    if trade_state != "SUCCESS":
+        return JSONResponse(content={"code": "SUCCESS", "message": "已接收"})
+
+    paid_total = int(((decrypted.get("amount") or {}).get("payer_total")) or ((decrypted.get("amount") or {}).get("total")) or 0)
+    expected_total = _amount_to_fen(payment_record.get("amount") or 0)
+    if paid_total != expected_total:
+        raise HTTPException(status_code=400, detail="微信支付金额与订单金额不一致")
+
+    paid_at = _parse_datetime(decrypted.get("success_time")) or datetime.now(timezone.utc)
+
+    await update_pro_membership_payment_record(
+        order_no,
+        {
+            "status": "paid",
+            "wx_transaction_id": decrypted.get("transaction_id"),
+            "wx_bank_type": decrypted.get("bank_type"),
+            "paid_at": paid_at.isoformat(),
+            "notify_payload": {
+                "headers": {
+                    "Wechatpay-Signature": signature,
+                    "Wechatpay-Timestamp": timestamp,
+                    "Wechatpay-Nonce": nonce,
+                },
+                "body": notify_data,
+                "resource_decrypted": decrypted,
+            },
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    membership = await get_user_pro_membership(payment_record["user_id"])
+    existing_expires_at = _parse_datetime(membership.get("expires_at")) if membership else None
+    existing_first_activated_at = _parse_datetime(membership.get("first_activated_at")) if membership else None
+    existing_period_start = _parse_datetime(membership.get("current_period_start")) if membership else None
+    duration_months = int(payment_record.get("duration_months") or 1)
+
+    if membership and membership.get("status") == "active" and existing_expires_at and existing_expires_at > paid_at:
+        current_period_start = existing_period_start or paid_at
+        expires_at = _add_months(existing_expires_at, duration_months)
+        first_activated_at = existing_first_activated_at or paid_at
+    else:
+        current_period_start = paid_at
+        expires_at = _add_months(paid_at, duration_months)
+        first_activated_at = existing_first_activated_at or paid_at
+
+    await save_user_pro_membership(
+        payment_record["user_id"],
+        {
+            "current_plan_code": payment_record.get("plan_code"),
+            "status": "active",
+            "first_activated_at": _build_json_datetime(first_activated_at),
+            "current_period_start": _build_json_datetime(current_period_start),
+            "expires_at": _build_json_datetime(expires_at),
+            "last_paid_at": paid_at.isoformat(),
+            "auto_renew": False,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
 
 
 @app.put("/api/user/profile")
@@ -3438,21 +3991,34 @@ async def api_friend_list(user_info: dict = Depends(get_current_user_info)):
 
 
 @app.delete("/api/friend/{friend_id}")
-async def api_friend_remove(
+async def api_friend_delete(
     friend_id: str,
     user_info: dict = Depends(get_current_user_info),
 ):
-    """移除好友关系。"""
-    if not friend_id:
-        raise HTTPException(status_code=400, detail="缺少 friend_id")
+    """删除好友（双向删除）。"""
     try:
-        await remove_friend_pair(user_info["user_id"], friend_id)
-        return {"message": "已移除好友"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        current_user_id = user_info["user_id"]
+        if friend_id == current_user_id:
+            raise HTTPException(status_code=400, detail="不能删除自己")
+        result = await delete_friend_pair(current_user_id, friend_id)
+        if result.get("deleted", 0) <= 0:
+            raise HTTPException(status_code=404, detail="好友关系不存在")
+        return {"message": "已删除好友", **result}
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[api/friend/remove] 错误: {e}")
-        raise HTTPException(status_code=500, detail="移除失败")
+        print(f"[api/friend/delete] 错误: {e}")
+        raise HTTPException(status_code=500, detail="删除好友失败")
+
+
+@app.get("/api/friend/requests/all")
+async def api_friend_requests_overview(user_info: dict = Depends(get_current_user_info)):
+    """好友请求总览（收到 + 发出，含 pending/accepted/rejected）。"""
+    try:
+        return await get_friend_requests_overview(user_info["user_id"])
+    except Exception as e:
+        print(f"[api/friend/requests/all] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取失败")
 
 
 @app.post("/api/friend/cleanup-duplicates")
@@ -3532,7 +4098,7 @@ async def api_friend_invite_accept(
     body: FriendInviteAcceptRequest,
     user_info: dict = Depends(get_current_user_info),
 ):
-    """接受邀请码并直接建立双向好友关系。"""
+    """通过邀请码发起好友申请（需对方同意后才会成为好友）。"""
     try:
         inviter = await resolve_user_by_friend_invite_code(body.code)
         if not inviter:
@@ -3550,9 +4116,10 @@ async def api_friend_invite_accept(
                 "avatar": inviter.get("avatar") or "",
             }
 
-        await add_friend_pair(current_user_id, inviter_id)
+        # 仅发起申请，不直接建立好友关系，必须由分享者在请求列表中同意。
+        await send_friend_request(current_user_id, inviter_id)
         return {
-            "status": "added",
+            "status": "request_sent",
             "user_id": inviter_id,
             "nickname": inviter.get("nickname") or "用户",
             "avatar": inviter.get("avatar") or "",
@@ -4207,10 +4774,34 @@ async def get_access_token() -> str:
             detail="缺少 APPID 或 SECRET 环境变量"
         )
     
-    # 调用微信接口获取 access_token
-    token_url = "https://api.weixin.qq.com/cgi-bin/token"
-    
     async with httpx.AsyncClient(timeout=10.0) as client:
+        # 1) 优先使用微信推荐的 stable_token 接口，减少多实例并发导致 token 失效
+        stable_url = "https://api.weixin.qq.com/cgi-bin/stable_token"
+        stable_resp = await client.post(
+            stable_url,
+            json={
+                "grant_type": "client_credential",
+                "appid": appid,
+                "secret": secret,
+                "force_refresh": False,
+            },
+        )
+        if stable_resp.is_success:
+            data = stable_resp.json()
+            if not data.get("errcode"):
+                access_token = data.get("access_token")
+                expires_in = data.get("expires_in", 7200)
+                if access_token:
+                    _access_token_cache["token"] = access_token
+                    _access_token_cache["fetched_at"] = current_time
+                    _access_token_cache["expires_at"] = current_time + expires_in
+                    print(f"[get_access_token] 使用 stable_token，expires_in={expires_in}")
+                    return access_token
+            else:
+                print(f"[get_access_token] stable_token 返回错误: {data}")
+
+        # 2) 回退到老接口，兼容部分账号/环境
+        token_url = "https://api.weixin.qq.com/cgi-bin/token"
         response = await client.get(
             token_url,
             params={
@@ -4219,35 +4810,24 @@ async def get_access_token() -> str:
                 "secret": secret
             }
         )
-        
         if not response.is_success:
             raise HTTPException(
                 status_code=500,
                 detail=f"获取 access_token 失败: {response.status_code}"
             )
-        
         data = response.json()
-        
-        # 检查错误
         if "errcode" in data and data["errcode"] != 0:
             error_msg = data.get("errmsg", "未知错误")
             raise HTTPException(
                 status_code=500,
                 detail=f"获取 access_token 失败: {error_msg} (错误码: {data.get('errcode')})"
             )
-        
         access_token = data.get("access_token")
-        expires_in = data.get("expires_in", 7200)  # 默认 2 小时
-        
-        # 打印 access_token
-        print(f"[get_access_token] access_token: {access_token}")
-        print(f"[get_access_token] 微信返回的 expires_in: {expires_in} 秒 (实际按1.5小时刷新)")
-        
-        # 更新缓存: 记录获取时间，并计算理论过期时间
+        expires_in = data.get("expires_in", 7200)
         _access_token_cache["token"] = access_token
         _access_token_cache["fetched_at"] = current_time
         _access_token_cache["expires_at"] = current_time + expires_in
-        
+        print(f"[get_access_token] 回退 token 接口成功，expires_in={expires_in}")
         return access_token
 
 
@@ -4266,9 +4846,6 @@ async def get_unlimited_qrcode(request: QRCodeRequest):
     """
     import base64
     
-    access_token = await get_access_token()
-    url = f"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={access_token}"
-    
     payload = {
         "scene": request.scene,
         "width": request.width,
@@ -4277,27 +4854,37 @@ async def get_unlimited_qrcode(request: QRCodeRequest):
     }
     if request.page is not None:
         payload["page"] = request.page
-        
+
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(url, json=payload)
-        
-        if not response.is_success:
-            raise HTTPException(status_code=500, detail="请求微信二维码接口失败")
-        
-        # 微信接口失败时会返回 JSON 格式数据，成功时返回图片二进制
-        # 根据 content-type 区分
-        content_type = response.headers.get("Content-Type", "")
-        if "application/json" in content_type:
-            err_data = response.json()
-            raise HTTPException(status_code=500, detail=f"生成二维码失败: {err_data.get('errmsg', '未知错误')}")
-        
-        # 成功，读取二进制并转 Base64
-        image_bytes = response.content
-        base64_str = base64.b64encode(image_bytes).decode("utf-8")
-        # 组装成可以直接作为 src 使用的格式
-        data_uri = f"data:image/jpeg;base64,{base64_str}"
-        
-        return {"base64": data_uri}
+        # 最多尝试两次：第一次走缓存 token；若提示 token 无效则清缓存并强制刷新后再试一次
+        for attempt in range(2):
+            access_token = await get_access_token()
+            url = f"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token={access_token}"
+            response = await client.post(url, json=payload)
+
+            if not response.is_success:
+                raise HTTPException(status_code=500, detail="请求微信二维码接口失败")
+
+            content_type = response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                err_data = response.json()
+                errcode = int(err_data.get("errcode") or 0)
+                errmsg = err_data.get("errmsg", "未知错误")
+                # 40001/42001: token 无效或过期，自动清缓存重试
+                if attempt == 0 and errcode in (40001, 42001):
+                    print(f"[api/qrcode] token 失效，清缓存后重试: {err_data}")
+                    _access_token_cache["token"] = None
+                    _access_token_cache["fetched_at"] = 0
+                    _access_token_cache["expires_at"] = 0
+                    continue
+                raise HTTPException(status_code=500, detail=f"生成二维码失败: {errmsg}")
+
+            image_bytes = response.content
+            base64_str = base64.b64encode(image_bytes).decode("utf-8")
+            data_uri = f"data:image/jpeg;base64,{base64_str}"
+            return {"base64": data_uri}
+
+    raise HTTPException(status_code=500, detail="生成二维码失败")
 
 
 async def get_phone_number(phone_code: str) -> dict:

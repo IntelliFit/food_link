@@ -1,12 +1,12 @@
 import { View, Text, Image, ScrollView, Canvas, Button, Input, Slider } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getSharedFoodRecord,
   getAccessToken,
   getUnlimitedQRCode,
   getFriendInviteProfile,
-  requestFriendByInviteCode,
+  acceptFriendInvite,
   updateFoodRecord,
   type FoodRecord,
   type Nutrients
@@ -73,25 +73,25 @@ function getInviteCodeFromUserId(userId: string): string {
 
 export default function RecordDetailPage() {
   const router = useRouter()
-  const [record, setRecord] = useState<FoodRecord | null>(null)
-  const [posterGenerating, setPosterGenerating] = useState(false)
-  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
-  const [showPosterModal, setShowPosterModal] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [isOwner, setIsOwner] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editItems, setEditItems] = useState<Array<{
+  const [record, setRecord] = React.useState<FoodRecord | null>(null)
+  const [posterGenerating, setPosterGenerating] = React.useState(false)
+  const [posterImageUrl, setPosterImageUrl] = React.useState<string | null>(null)
+  const [showPosterModal, setShowPosterModal] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  const [isOwner, setIsOwner] = React.useState(false)
+  const [showEditModal, setShowEditModal] = React.useState(false)
+  const [editItems, setEditItems] = React.useState<Array<{
     name: string
     weight: number
     ratio: number
     intake: number
     nutrients: Nutrients
   }>>([])
-  const [editSaving, setEditSaving] = useState(false)
-  const [ownerNickname, setOwnerNickname] = useState('')
-  const [ownerInviteCode, setOwnerInviteCode] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteRequestStatus, setInviteRequestStatus] = useState<'idle' | 'sending' | 'requested' | 'already_friend' | 'is_self'>('idle')
+  const [editSaving, setEditSaving] = React.useState(false)
+  const [ownerNickname, setOwnerNickname] = React.useState('')
+  const [ownerAvatar, setOwnerAvatar] = React.useState('')
+  const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
+  const [inviteLoading, setInviteLoading] = React.useState(false)
 
   useEffect(() => {
     const loadRecord = async () => {
@@ -108,6 +108,7 @@ export default function RecordDetailPage() {
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
             setOwnerNickname(inviterProfile.nickname || '')
+            setOwnerAvatar(inviterProfile.avatar || '')
             setOwnerInviteCode(inviterProfile.invite_code || getInviteCodeFromUserId(fetchedRecord.user_id))
           } catch {
             setOwnerInviteCode(getInviteCodeFromUserId(fetchedRecord.user_id))
@@ -152,80 +153,24 @@ export default function RecordDetailPage() {
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
   const inviteCode = ownerInviteCode || getInviteCodeFromUserId(shareOwnerId)
   const sharePath = `/pages/record-detail/index?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
-  const sendFriendRequestByInvite = useCallback(async (silent: boolean) => {
-    if (!inviteCode) return null
-    if (isOwner) {
-      setInviteRequestStatus('is_self')
-      return null
-    }
-
-    setInviteLoading(true)
-    setInviteRequestStatus('sending')
-    try {
-      const res = await requestFriendByInviteCode(inviteCode)
-      if (res.status === 'already_friend') {
-        setInviteRequestStatus('already_friend')
-        if (!silent) {
-          Taro.showToast({ title: `已和${res.nickname || '对方'}是好友`, icon: 'none' })
-        }
-      } else if (res.status === 'requested' || res.status === 'pending') {
-        setInviteRequestStatus('requested')
-        if (!silent) {
-          Taro.showToast({ title: `已向${res.nickname || '对方'}发起好友请求`, icon: 'success' })
-        }
-      } else if (res.status === 'is_self') {
-        setInviteRequestStatus('is_self')
-      }
-      return res
-    } catch (e: any) {
-      setInviteRequestStatus('idle')
-      if (!silent) {
-        Taro.showToast({ title: e.message || '发送好友请求失败', icon: 'none' })
-      }
-      throw e
-    } finally {
-      setInviteLoading(false)
-    }
-  }, [inviteCode, isOwner])
 
   useShareAppMessage(() => {
+    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
     return {
-      title: '来看看我的健康饮食记录吧！',
+      title,
       path: sharePath,
       imageUrl: posterImageUrl || undefined
     }
   })
 
   useShareTimeline(() => {
+    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
     return {
-      title: '来看看我的健康饮食记录吧！',
+      title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
       imageUrl: posterImageUrl || undefined
     }
   })
-
-  useEffect(() => {
-    const autoSendRequest = async () => {
-      if (!inviteCode || isOwner || !getAccessToken()) return
-      const cacheKey = `friend_request_auto_${shareRecordId}_${inviteCode}`
-      try {
-        if (Taro.getStorageSync(cacheKey)) return
-        Taro.setStorageSync(cacheKey, 1)
-      } catch {
-        // ignore storage errors
-      }
-      try {
-        await sendFriendRequestByInvite(true)
-      } catch {
-        try {
-          Taro.removeStorageSync(cacheKey)
-        } catch {
-          // ignore storage errors
-        }
-      }
-    }
-    autoSendRequest()
-  }, [inviteCode, isOwner, shareRecordId, sendFriendRequestByInvite])
 
   /** 打开编辑弹窗，复制当前食物项数据 */
   const handleOpenEdit = useCallback(() => {
@@ -379,10 +324,23 @@ export default function RecordDetailPage() {
       return
     }
     if (inviteLoading) return
+    setInviteLoading(true)
     try {
-      await sendFriendRequestByInvite(false)
-    } catch {
-      // 错误提示已在 sendFriendRequestByInvite 内处理
+      const res = await acceptFriendInvite(inviteCode)
+      Taro.showToast({
+        title: res.status === 'request_sent' ? `已向${res.nickname || '对方'}发送申请` : '你们已是好友',
+        icon: 'success'
+      })
+    } catch (e: any) {
+      const msg = e?.message || '添加好友失败'
+      Taro.showModal({
+        title: '添加好友失败',
+        content: msg.length > 280 ? `${msg.slice(0, 280)}...` : msg,
+        showCancel: false,
+        confirmText: '我知道了'
+      })
+    } finally {
+      setInviteLoading(false)
     }
   }
 
@@ -425,21 +383,31 @@ export default function RecordDetailPage() {
         }
 
         const loadQRImage = async () => {
-          try {
-            // scene 最大 32 个字符，使用短邀请码承接「扫码发起好友请求」
-            const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index')
-            return await loadImage(base64)
-          } catch (e) {
-            console.error('Failed to load real QR code', e)
-            return null // fallback to fake QR code in poster
+          // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
+          const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
+          // 部分账号/环境下 develop 码不可用，按优先级自动回退，确保尽量拿到真实二维码。
+          const envCandidates: Array<'develop' | 'trial' | 'release'> =
+            process.env.NODE_ENV === 'development'
+              ? ['develop', 'trial', 'release']
+              : ['release', 'trial', 'develop']
+
+          for (const envVersion of envCandidates) {
+            try {
+              const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
+              const img = await loadImage(base64)
+              if (img) return img
+            } catch (e) {
+              console.warn(`QR code load failed for env=${envVersion}`, e)
+            }
           }
+          return null // fallback to fake QR code in poster
         }
 
         Promise.all([
           loadImage(record.image_path || ''),
-          loadQRImage()
-        ]).then(([mainImg, qrImg]) => {
+          loadQRImage(),
+          loadImage(ownerAvatar || '')
+        ]).then(([mainImg, qrImg, avatarImg]) => {
           try {
             const ctx = canvas.getContext('2d')
             if (!ctx) {
@@ -462,6 +430,7 @@ export default function RecordDetailPage() {
               image: mainImg,
               qrCodeImage: qrImg,
               sharerNickname: ownerNickname,
+              sharerAvatarImage: avatarImg,
             })
 
             Taro.canvasToTempFilePath({
@@ -630,32 +599,15 @@ export default function RecordDetailPage() {
 
         {!isOwner && inviteCode && (
           <View className="friend-invite-card">
-            <Text className="friend-invite-title">
-              {ownerNickname ? `${ownerNickname} 想和你成为食探好友` : '想和你成为食探好友'}
-            </Text>
-            <Text className="friend-invite-desc">
-              {!getAccessToken()
-                ? '登录后将自动发起好友请求，需对方同意'
-                : inviteRequestStatus === 'already_friend'
-                  ? '你们已是好友，可在圈子查看彼此动态'
-                  : inviteRequestStatus === 'requested'
-                    ? '已自动发起好友请求，等待对方同意'
-                    : '系统会自动发起好友请求，需对方同意'}
-            </Text>
-            <Button
-              className="friend-invite-btn"
-              onClick={handleAcceptInvite}
-              disabled={inviteLoading || inviteRequestStatus === 'requested' || inviteRequestStatus === 'already_friend'}
-            >
-              {inviteLoading || inviteRequestStatus === 'sending'
-                ? '发送中...'
-                : !getAccessToken()
-                  ? '登录并自动发送请求'
-                  : inviteRequestStatus === 'already_friend'
-                    ? '你们已是好友'
-                    : inviteRequestStatus === 'requested'
-                      ? '已发送好友请求'
-                      : '重新发送好友请求'}
+            <View className="friend-invite-header">
+              {ownerAvatar ? <Image className="friend-invite-avatar" src={ownerAvatar} mode="aspectFill" /> : null}
+              <Text className="friend-invite-title">
+                {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
+              </Text>
+            </View>
+            <Text className="friend-invite-desc">未注册会先登录，登录后发送申请，需对方同意</Text>
+            <Button className="friend-invite-btn" onClick={handleAcceptInvite} disabled={inviteLoading}>
+              {inviteLoading ? '处理中...' : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
             </Button>
           </View>
         )}

@@ -333,6 +333,20 @@
   background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 100%);
   border: 2rpx solid #bbf7d0;
 
+  .friend-invite-header {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+  }
+
+  .friend-invite-avatar {
+    width: 52rpx;
+    height: 52rpx;
+    border-radius: 26rpx;
+    border: 2rpx solid rgba(255, 255, 255, 0.9);
+    flex-shrink: 0;
+  }
+
   .friend-invite-title {
     display: block;
     font-size: 28rpx;

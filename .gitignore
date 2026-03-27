@@ -84,3 +84,4 @@ coverage/
 *.tmp
 *.temp
 .cache/
+.env.development

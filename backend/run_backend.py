@@ -12,7 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # 必须在 import worker 前加载 .env，worker 内部也会 load_dotenv
 from dotenv import load_dotenv
-load_dotenv()
+BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(BACKEND_ENV_PATH, override=True)
 
 WORKER_COUNT = int(os.getenv("WORKER_COUNT", "2"))
 WORKER_COUNT = max(1, min(WORKER_COUNT, 8))  # 1~8
@@ -98,7 +99,7 @@ def main() -> None:
     uvicorn.run(
         "main:app",
         host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", "3010")),
+        port=int(os.getenv("PORT", "8888")),
         log_level="info",
     )
 

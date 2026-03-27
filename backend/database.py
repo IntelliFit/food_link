@@ -1330,6 +1330,106 @@ async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
     return list(result.data or [])
 
 
+async def delete_friend_pair(user_id: str, friend_id: str) -> Dict[str, int]:
+    """删除双向好友关系，返回删除条数。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        deleted = 0
+        r1 = supabase.table("user_friends").delete().eq("user_id", user_id).eq("friend_id", friend_id).execute()
+        deleted += len(r1.data or [])
+        r2 = supabase.table("user_friends").delete().eq("user_id", friend_id).eq("friend_id", user_id).execute()
+        deleted += len(r2.data or [])
+        return {"deleted": deleted}
+    except Exception as e:
+        print(f"[delete_friend_pair] 错误: {e}")
+        raise
+
+
+async def get_friend_requests_overview(user_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    获取好友请求总览：
+    - received: 我收到的请求（pending/accepted/rejected）
+    - sent: 我发出的请求（pending/accepted/rejected）
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        received_result = (
+            supabase.table("friend_requests")
+            .select("id, from_user_id, to_user_id, status, created_at, updated_at")
+            .eq("to_user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        sent_result = (
+            supabase.table("friend_requests")
+            .select("id, from_user_id, to_user_id, status, created_at, updated_at")
+            .eq("from_user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        received_rows = list(received_result.data or [])
+        sent_rows = list(sent_result.data or [])
+
+        counterpart_ids = set()
+        for row in received_rows:
+            cid = row.get("from_user_id")
+            if cid:
+                counterpart_ids.add(cid)
+        for row in sent_rows:
+            cid = row.get("to_user_id")
+            if cid:
+                counterpart_ids.add(cid)
+
+        users_map: Dict[str, Dict[str, Any]] = {}
+        if counterpart_ids:
+            users_result = (
+                supabase.table("weapp_user")
+                .select("id, nickname, avatar")
+                .in_("id", list(counterpart_ids))
+                .execute()
+            )
+            users_map = {u["id"]: u for u in (users_result.data or [])}
+
+        received = []
+        for row in received_rows:
+            from_user_id = row.get("from_user_id")
+            user = users_map.get(from_user_id or "", {})
+            received.append({
+                "id": row.get("id"),
+                "from_user_id": from_user_id,
+                "to_user_id": row.get("to_user_id"),
+                "status": row.get("status"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "counterpart_user_id": from_user_id,
+                "counterpart_nickname": user.get("nickname") or "用户",
+                "counterpart_avatar": user.get("avatar") or "",
+            })
+
+        sent = []
+        for row in sent_rows:
+            to_user_id = row.get("to_user_id")
+            user = users_map.get(to_user_id or "", {})
+            sent.append({
+                "id": row.get("id"),
+                "from_user_id": row.get("from_user_id"),
+                "to_user_id": to_user_id,
+                "status": row.get("status"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "counterpart_user_id": to_user_id,
+                "counterpart_nickname": user.get("nickname") or "用户",
+                "counterpart_avatar": user.get("avatar") or "",
+            })
+
+        return {"received": received, "sent": sent}
+    except Exception as e:
+        print(f"[get_friend_requests_overview] 错误: {e}")
+        raise
+
+
 async def cleanup_duplicate_friends(user_id: str) -> Dict[str, Any]:
     """清理用户的重复好友记录，只保留每个好友的第一条记录"""
     check_supabase_configured()
@@ -1379,16 +1479,31 @@ async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[
     if not re.fullmatch(r"[0-9a-f]{6,12}", code):
         return None
     try:
-        # user_id 为 UUID 字符串，允许通过前缀匹配解析邀请人
-        result = (
-            supabase
-            .table("weapp_user")
-            .select("id, nickname, avatar")
-            .like("id", f"{code}%")
-            .limit(2)
-            .execute()
-        )
-        rows = list(result.data or [])
+        # 避免对 UUID 字段使用 like 导致部分 Supabase/Cloudflare 环境异常，
+        # 改为分页拉取公开字段后在本地做前缀匹配。
+        rows: List[Dict[str, Any]] = []
+        page_size = 500
+        offset = 0
+        while True:
+            batch = (
+                supabase
+                .table("weapp_user")
+                .select("id, nickname, avatar")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            data = list(batch.data or [])
+            if not data:
+                break
+            for item in data:
+                raw = (item.get("id") or "").replace("-", "").lower()
+                if raw.startswith(code):
+                    rows.append(item)
+                    if len(rows) > 1:
+                        break
+            if len(rows) > 1 or len(data) < page_size:
+                break
+            offset += page_size
         if not rows:
             return None
         if len(rows) > 1:
@@ -2546,4 +2661,150 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
         return result.data or []
     except Exception as e:
         print(f"[get_prompt_history] 错误: {e}")
+        raise
+
+
+async def list_active_membership_plans() -> List[Dict[str, Any]]:
+    """获取所有启用中的会员套餐配置。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("membership_plan_config")\
+            .select("*")\
+            .eq("is_active", True)\
+            .order("created_at", desc=False)\
+            .execute()
+        return result.data or []
+    except Exception as e:
+        print(f"[list_active_membership_plans] 错误: {e}")
+        raise
+
+
+async def get_membership_plan_by_code(code: str) -> Optional[Dict[str, Any]]:
+    """按套餐编码获取会员套餐配置。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("membership_plan_config")\
+            .select("*")\
+            .eq("code", code)\
+            .limit(1)\
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_membership_plan_by_code] 错误: {e}")
+        raise
+
+
+async def get_user_pro_membership(user_id: str) -> Optional[Dict[str, Any]]:
+    """获取用户当前 Pro 会员状态。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_pro_memberships")\
+            .select("*")\
+            .eq("user_id", user_id)\
+            .limit(1)\
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_user_pro_membership] 错误: {e}")
+        raise
+
+
+async def create_user_pro_membership(data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建用户 Pro 会员状态记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_pro_memberships")\
+            .insert(data)\
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建用户会员状态失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_user_pro_membership] 错误: {e}")
+        raise
+
+
+async def update_user_pro_membership(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """更新用户 Pro 会员状态记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_pro_memberships")\
+            .update(data)\
+            .eq("user_id", user_id)\
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("更新用户会员状态失败：返回数据为空")
+    except Exception as e:
+        print(f"[update_user_pro_membership] 错误: {e}")
+        raise
+
+
+async def save_user_pro_membership(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """按 user_id 保存用户 Pro 会员状态，不存在则创建。"""
+    existing = await get_user_pro_membership(user_id)
+    if existing:
+        return await update_user_pro_membership(user_id, data)
+    row = data.copy()
+    row["user_id"] = user_id
+    return await create_user_pro_membership(row)
+
+
+async def create_pro_membership_payment_record(data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建 Pro 会员支付记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("pro_membership_payment_records")\
+            .insert(data)\
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建会员支付记录失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_pro_membership_payment_record] 错误: {e}")
+        raise
+
+
+async def get_pro_membership_payment_record_by_order_no(order_no: str) -> Optional[Dict[str, Any]]:
+    """按平台订单号获取 Pro 会员支付记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("pro_membership_payment_records")\
+            .select("*")\
+            .eq("order_no", order_no)\
+            .limit(1)\
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_pro_membership_payment_record_by_order_no] 错误: {e}")
+        raise
+
+
+async def update_pro_membership_payment_record(order_no: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """按平台订单号更新 Pro 会员支付记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("pro_membership_payment_records")\
+            .update(data)\
+            .eq("order_no", order_no)\
+            .execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("更新会员支付记录失败：返回数据为空")
+    except Exception as e:
+        print(f"[update_pro_membership_payment_record] 错误: {e}")
         raise
