@@ -1590,6 +1590,14 @@ export interface FriendInviteAcceptResult {
   avatar: string
 }
 
+/** 通过邀请码发起好友请求后的状态 */
+export interface FriendInviteRequestResult {
+  status: 'requested' | 'pending' | 'already_friend' | 'is_self'
+  user_id: string
+  nickname: string
+  avatar: string
+}
+
 /** 本周好友圈打卡排行榜条目 */
 export interface CheckinLeaderboardItem {
   rank: number
@@ -1672,6 +1680,12 @@ export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   return response.data as { list: FriendListItem[] }
 }
 
+/** 移除好友 */
+export async function friendRemove(friendId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend/${encodeURIComponent(friendId)}`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '移除失败')
+}
+
 /** 公开获取邀请资料（用于分享海报昵称与邀请码） */
 export async function getFriendInviteProfile(userId: string): Promise<FriendInviteProfile> {
   const response = await Taro.request({
@@ -1705,6 +1719,58 @@ export async function acceptFriendInvite(code: string): Promise<FriendInviteAcce
     throw new Error((response.data as any)?.detail || '添加好友失败')
   }
   return response.data as FriendInviteAcceptResult
+}
+
+/** 通过邀请码发起好友请求（不自动成为好友） */
+export async function requestFriendByInviteCode(code: string): Promise<FriendInviteRequestResult> {
+  const invite = await resolveFriendInvite(code)
+
+  if (invite.is_self) {
+    return {
+      status: 'is_self',
+      user_id: invite.user_id,
+      nickname: invite.nickname,
+      avatar: invite.avatar
+    }
+  }
+
+  if (invite.already_friend) {
+    return {
+      status: 'already_friend',
+      user_id: invite.user_id,
+      nickname: invite.nickname,
+      avatar: invite.avatar
+    }
+  }
+
+  try {
+    await friendSendRequest(invite.user_id)
+    return {
+      status: 'requested',
+      user_id: invite.user_id,
+      nickname: invite.nickname,
+      avatar: invite.avatar
+    }
+  } catch (error: any) {
+    const message = String(error?.message || '')
+    if (message.includes('已是好友')) {
+      return {
+        status: 'already_friend',
+        user_id: invite.user_id,
+        nickname: invite.nickname,
+        avatar: invite.avatar
+      }
+    }
+    if (message.includes('请求')) {
+      return {
+        status: 'pending',
+        user_id: invite.user_id,
+        nickname: invite.nickname,
+        avatar: invite.avatar
+      }
+    }
+    throw error
+  }
 }
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */

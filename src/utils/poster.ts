@@ -460,7 +460,7 @@ export function drawRecordPoster(
 
   ctx.fillStyle = TEXT_LIGHT
   ctx.font = '10px sans-serif'
-  ctx.fillText('扫码登录食探，可一键成为好友', textStartX, footerY + 32)
+  ctx.fillText('扫码登录食探，自动发起好友请求', textStartX, footerY + 32)
 
   // Right: QR Code
   const qrSize = 80

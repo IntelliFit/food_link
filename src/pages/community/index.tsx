@@ -9,6 +9,7 @@ import {
   friendGetRequests,
   friendRespondRequest,
   friendGetList,
+  friendRemove,
   friendCleanupDuplicates,
   communityGetFeed,
   communityGetPublicFeed,
@@ -132,6 +133,7 @@ export default function CommunityPage() {
   const [searchResults, setSearchResults] = useState<FriendSearchUser[]>([])
   const [searching, setSearching] = useState(false)
   const [sendingId, setSendingId] = useState<string | null>(null)
+  const [removingFriendId, setRemovingFriendId] = useState<string | null>(null)
 
   /** 打卡榜预览（横幅内展示前三名，点开看完整榜） */
   const [lbPreviewTop, setLbPreviewTop] = useState<CheckinLeaderboardItem[]>([])
@@ -514,6 +516,40 @@ export default function CommunityPage() {
     }
   }
 
+  const handleRemoveFriend = async (friend: FriendListItem) => {
+    if (removingFriendId) return
+    const nickname = friend.nickname || '该用户'
+    const modal = await Taro.showModal({
+      title: '移除好友',
+      content: `确定要移除「${nickname}」吗？`,
+      confirmText: '移除',
+      confirmColor: '#ef4444',
+      cancelText: '取消'
+    })
+    if (!modal.confirm) return
+
+    setRemovingFriendId(friend.id)
+    try {
+      await friendRemove(friend.id)
+      const nextFriends = friends.filter(f => f.id !== friend.id)
+      setFriends(nextFriends)
+      saveToCache(undefined, nextFriends, requests)
+      Taro.showToast({ title: '已移除好友', icon: 'success' })
+
+      // 清理缓存并刷新相关数据，避免好友移除后动态残留
+      clearCache()
+      await Promise.all([
+        loadFriendsAndRequests(true),
+        refreshFeed(true, true),
+        loadCheckinPreview(true)
+      ])
+    } catch (e) {
+      Taro.showToast({ title: (e as Error).message || '移除失败', icon: 'none' })
+    } finally {
+      setRemovingFriendId(null)
+    }
+  }
+
   const handleLike = async (item: CommunityFeedItem) => {
     if (!getAccessToken()) {
       Taro.showToast({ title: '请先登录', icon: 'none' })
@@ -838,6 +874,15 @@ export default function CommunityPage() {
                             )}
                           </View>
                           <Text className='friend-name' numberOfLines={1}>{f.nickname || '用户'}</Text>
+                          <Text
+                            className={`friend-remove-btn ${removingFriendId ? 'disabled' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRemoveFriend(f)
+                            }}
+                          >
+                            {removingFriendId === f.id ? '移除中' : '移除'}
+                          </Text>
                         </View>
                       ))}
                     </View>

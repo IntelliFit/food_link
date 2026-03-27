@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { listAnalyzeTasks, type AnalysisTask, type AnalyzeResponse } from '../../utils/api'
+import { listAnalyzeTasks, type AnalysisTask, type AnalyzeResponse, type ExecutionMode } from '../../utils/api'
 import './index.scss'
 
 const STATUS_MAP: Record<string, string> = {
@@ -10,6 +10,20 @@ const STATUS_MAP: Record<string, string> = {
   done: '已完成',
   failed: '识别失败',
   violated: '内容违规'
+}
+
+const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
+  strict: '精准模式',
+  standard: '标准模式'
+}
+
+const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
+  const taskAny = task as AnalysisTask & { execution_mode?: unknown }
+  if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'standard') {
+    return taskAny.execution_mode
+  }
+  const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
+  return payloadMode === 'strict' ? 'strict' : 'standard'
 }
 
 function formatTime(iso: string) {
@@ -84,12 +98,16 @@ export default function AnalyzeHistoryPage() {
       Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
       Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
       Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
+      Taro.setStorageSync('analyzeExecutionMode', pickExecutionMode(task))
       Taro.setStorageSync('analyzeSourceTaskId', task.id)
       Taro.navigateTo({ url: '/pages/result/index' })
       return
     }
     if (task.status === 'pending' || task.status === 'processing') {
-      Taro.showToast({ title: '任务仍在处理中，请稍后再看', icon: 'none' })
+      const mode = pickExecutionMode(task)
+      Taro.navigateTo({
+        url: `/pages/analyze-loading/index?task_id=${task.id}&task_type=${task.task_type}&execution_mode=${mode}`
+      })
       return
     }
     if (task.status === 'failed') {
@@ -114,49 +132,56 @@ export default function AnalyzeHistoryPage() {
             <Text className="empty-text">暂时没有记录，快去拍一张吧~</Text>
           </View>
         ) : (
-          tasks.map(t => (
-            <View
-              key={t.id}
-              className={`task-card ${t.status === 'violated' || t.is_violated ? 'task-card-violated' : ''}`}
-              onClick={() => onTaskTap(t)}
-            >
-              <View className="thumb">
-                {t.status === 'violated' || t.is_violated ? (
+          tasks.map(t => {
+            const mode = pickExecutionMode(t)
+            return (
+              <View
+                key={t.id}
+                className={`task-card ${t.status === 'violated' || t.is_violated ? 'task-card-violated' : ''}`}
+                onClick={() => onTaskTap(t)}
+              >
+                <View className="thumb">
+                  {t.status === 'violated' || t.is_violated ? (
                   // 违规任务显示警告图标，不展示原图
-                  <View className="thumb-violated">
-                    <Text className="iconfont icon-jinggao" style={{ fontSize: '48rpx', color: '#ef4444' }} />
-                  </View>
-                ) : t.image_url ? (
-                  <Image src={t.image_url} mode="aspectFill" />
-                ) : (
+                    <View className="thumb-violated">
+                      <Text className="iconfont icon-jinggao" style={{ fontSize: '48rpx', color: '#ef4444' }} />
+                    </View>
+                  ) : t.image_url ? (
+                    <Image src={t.image_url} mode="aspectFill" />
+                  ) : (
                   // 文字分析任务显示文字图标
-                  <View className="thumb-placeholder">
-                    <Text className="iconfont icon-xingzhuang-wenzi" style={{ fontSize: '48rpx', color: '#15803d' }} />
+                    <View className="thumb-placeholder">
+                      <Text className="iconfont icon-xingzhuang-wenzi" style={{ fontSize: '48rpx', color: '#15803d' }} />
+                    </View>
+                  )}
+                </View>
+                <View className="body">
+                  <Text className="time">{formatTime(t.created_at)}</Text>
+                  <View className="tag-row">
+                    <View className="task-type-tag">
+                      <Text className="task-type-text">
+                        {t.task_type === 'food_text' ? '文字识别' : '图片识别'}
+                      </Text>
+                    </View>
+                    <View className={`mode-tag mode-${mode}`}>
+                      <Text className="mode-tag-text">{EXECUTION_MODE_LABEL[mode]}</Text>
+                    </View>
                   </View>
+                  <View className={`status-row status-${t.status}`}>
+                    <View className="status-dot"></View>
+                    <Text className="status-text">{STATUS_MAP[t.status] || t.status}</Text>
+                  </View>
+                  {/* 违规任务显示违规原因 */}
+                  {(t.status === 'violated' || t.is_violated) && t.violation_reason && (
+                    <Text className="violation-reason">{t.violation_reason}</Text>
+                  )}
+                </View>
+                {(t.status === 'done' || t.status === 'failed') && !t.is_violated && (
+                  <Text className="arrow">›</Text>
                 )}
               </View>
-              <View className="body">
-                <Text className="time">{formatTime(t.created_at)}</Text>
-                {/* 显示任务类型标签 */}
-                <View className="task-type-tag">
-                  <Text className="task-type-text">
-                    {t.task_type === 'food_text' ? '文字识别' : '图片识别'}
-                  </Text>
-                </View>
-                <View className={`status-row status-${t.status}`}>
-                  <View className="status-dot"></View>
-                  <Text className="status-text">{STATUS_MAP[t.status] || t.status}</Text>
-                </View>
-                {/* 违规任务显示违规原因 */}
-                {(t.status === 'violated' || t.is_violated) && t.violation_reason && (
-                  <Text className="violation-reason">{t.violation_reason}</Text>
-                )}
-              </View>
-              {(t.status === 'done' || t.status === 'failed') && !t.is_violated && (
-                <Text className="arrow">›</Text>
-              )}
-            </View>
-          ))
+            )
+          })
         )}
       </ScrollView>
     </View>

@@ -1158,6 +1158,30 @@ async def add_friend_pair(user_id: str, friend_id: str) -> None:
         raise
 
 
+async def remove_friend_pair(user_id: str, friend_id: str) -> None:
+    """移除双向好友关系（删除两条 user_friends 记录）。"""
+    if user_id == friend_id:
+        raise ValueError("不能移除自己")
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        if not await is_friend(user_id, friend_id):
+            raise ValueError("你们还不是好友")
+
+        # 删除双向好友关系（兼容历史单向/重复数据）
+        supabase.table("user_friends").delete().eq("user_id", user_id).eq("friend_id", friend_id).execute()
+        supabase.table("user_friends").delete().eq("user_id", friend_id).eq("friend_id", user_id).execute()
+
+        # 清理双方之间可能残留的 pending 请求
+        supabase.table("friend_requests").delete().eq("from_user_id", user_id).eq("to_user_id", friend_id).eq("status", "pending").execute()
+        supabase.table("friend_requests").delete().eq("from_user_id", friend_id).eq("to_user_id", user_id).eq("status", "pending").execute()
+    except ValueError:
+        raise
+    except Exception as e:
+        print(f"[remove_friend_pair] 错误: {e}")
+        raise
+
+
 async def get_pending_request_to_user_ids(from_user_id: str) -> List[str]:
     """获取 from_user_id 已发出的、状态为 pending 的 to_user_id 列表"""
     check_supabase_configured()

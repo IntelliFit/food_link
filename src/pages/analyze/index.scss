@@ -4,6 +4,122 @@
   padding: 24rpx 20rpx 200rpx;
 }
 
+.mode-banner {
+  margin: 0 0 20rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.04);
+  background: #ffffff;
+  border: 2rpx solid rgba(17, 24, 39, 0.06);
+
+  &.strict {
+    background: linear-gradient(180deg, #f2fffa 0%, #ffffff 100%);
+    border-color: rgba(0, 188, 125, 0.24);
+  }
+
+  &.standard {
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+    border-color: rgba(59, 130, 246, 0.18);
+  }
+}
+
+.mode-banner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.mode-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.mode-title {
+  font-size: 30rpx;
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.mode-sub {
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.mode-link {
+  font-size: 24rpx;
+  color: #00bc7d;
+  font-weight: 600;
+  padding: 4rpx 10rpx;
+}
+
+.mode-switch-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.mode-switch-item {
+  flex: 1;
+  height: 68rpx;
+  border-radius: 16rpx;
+  border: 2rpx solid #d9dee6;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 26rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+
+  &.active {
+    color: #0f172a;
+    background: #ffffff;
+    border-color: #00bc7d;
+    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.14);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.mode-desc {
+  font-size: 24rpx;
+  color: #334155;
+  line-height: 1.6;
+  margin-bottom: 12rpx;
+}
+
+.mode-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.mode-tip-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+}
+
+.mode-tip-dot {
+  color: #00bc7d;
+  font-size: 24rpx;
+  line-height: 32rpx;
+}
+
+.mode-tip-text {
+  flex: 1;
+  color: #475569;
+  font-size: 23rpx;
+  line-height: 32rpx;
+}
+
 // 图标字体在本页的统一样式
 .analyze-page .iconfont {
   display: inline-flex;

@@ -46,6 +46,7 @@ from database import (
     search_users,
     is_friend,
     add_friend_pair,
+    remove_friend_pair,
     build_friend_invite_code,
     resolve_user_by_friend_invite_code,
     send_friend_request,
@@ -3434,6 +3435,24 @@ async def api_friend_list(user_info: dict = Depends(get_current_user_info)):
     except Exception as e:
         print(f"[api/friend/list] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取失败")
+
+
+@app.delete("/api/friend/{friend_id}")
+async def api_friend_remove(
+    friend_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """移除好友关系。"""
+    if not friend_id:
+        raise HTTPException(status_code=400, detail="缺少 friend_id")
+    try:
+        await remove_friend_pair(user_info["user_id"], friend_id)
+        return {"message": "已移除好友"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[api/friend/remove] 错误: {e}")
+        raise HTTPException(status_code=500, detail="移除失败")
 
 
 @app.post("/api/friend/cleanup-duplicates")

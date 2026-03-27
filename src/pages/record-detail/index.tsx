@@ -6,7 +6,7 @@ import {
   getAccessToken,
   getUnlimitedQRCode,
   getFriendInviteProfile,
-  acceptFriendInvite,
+  requestFriendByInviteCode,
   updateFoodRecord,
   type FoodRecord,
   type Nutrients
@@ -91,6 +91,7 @@ export default function RecordDetailPage() {
   const [ownerNickname, setOwnerNickname] = useState('')
   const [ownerInviteCode, setOwnerInviteCode] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteRequestStatus, setInviteRequestStatus] = useState<'idle' | 'sending' | 'requested' | 'already_friend' | 'is_self'>('idle')
 
   useEffect(() => {
     const loadRecord = async () => {
@@ -151,6 +152,41 @@ export default function RecordDetailPage() {
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
   const inviteCode = ownerInviteCode || getInviteCodeFromUserId(shareOwnerId)
   const sharePath = `/pages/record-detail/index?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
+  const sendFriendRequestByInvite = useCallback(async (silent: boolean) => {
+    if (!inviteCode) return null
+    if (isOwner) {
+      setInviteRequestStatus('is_self')
+      return null
+    }
+
+    setInviteLoading(true)
+    setInviteRequestStatus('sending')
+    try {
+      const res = await requestFriendByInviteCode(inviteCode)
+      if (res.status === 'already_friend') {
+        setInviteRequestStatus('already_friend')
+        if (!silent) {
+          Taro.showToast({ title: `已和${res.nickname || '对方'}是好友`, icon: 'none' })
+        }
+      } else if (res.status === 'requested' || res.status === 'pending') {
+        setInviteRequestStatus('requested')
+        if (!silent) {
+          Taro.showToast({ title: `已向${res.nickname || '对方'}发起好友请求`, icon: 'success' })
+        }
+      } else if (res.status === 'is_self') {
+        setInviteRequestStatus('is_self')
+      }
+      return res
+    } catch (e: any) {
+      setInviteRequestStatus('idle')
+      if (!silent) {
+        Taro.showToast({ title: e.message || '发送好友请求失败', icon: 'none' })
+      }
+      throw e
+    } finally {
+      setInviteLoading(false)
+    }
+  }, [inviteCode, isOwner])
 
   useShareAppMessage(() => {
     return {
@@ -169,9 +205,9 @@ export default function RecordDetailPage() {
   })
 
   useEffect(() => {
-    const autoAcceptInvite = async () => {
+    const autoSendRequest = async () => {
       if (!inviteCode || isOwner || !getAccessToken()) return
-      const cacheKey = `friend_invite_auto_${shareRecordId}_${inviteCode}`
+      const cacheKey = `friend_request_auto_${shareRecordId}_${inviteCode}`
       try {
         if (Taro.getStorageSync(cacheKey)) return
         Taro.setStorageSync(cacheKey, 1)
@@ -179,16 +215,17 @@ export default function RecordDetailPage() {
         // ignore storage errors
       }
       try {
-        const res = await acceptFriendInvite(inviteCode)
-        if (res.status === 'added') {
-          Taro.showToast({ title: `已和${res.nickname || '对方'}成为好友`, icon: 'success' })
-        }
+        await sendFriendRequestByInvite(true)
       } catch {
-        // 自动处理失败不打断页面浏览
+        try {
+          Taro.removeStorageSync(cacheKey)
+        } catch {
+          // ignore storage errors
+        }
       }
     }
-    autoAcceptInvite()
-  }, [inviteCode, isOwner, shareRecordId])
+    autoSendRequest()
+  }, [inviteCode, isOwner, shareRecordId, sendFriendRequestByInvite])
 
   /** 打开编辑弹窗，复制当前食物项数据 */
   const handleOpenEdit = useCallback(() => {
@@ -342,17 +379,10 @@ export default function RecordDetailPage() {
       return
     }
     if (inviteLoading) return
-    setInviteLoading(true)
     try {
-      const res = await acceptFriendInvite(inviteCode)
-      Taro.showToast({
-        title: res.status === 'added' ? `已和${res.nickname || '对方'}成为好友` : '你们已是好友',
-        icon: 'success'
-      })
-    } catch (e: any) {
-      Taro.showToast({ title: e.message || '添加好友失败', icon: 'none' })
-    } finally {
-      setInviteLoading(false)
+      await sendFriendRequestByInvite(false)
+    } catch {
+      // 错误提示已在 sendFriendRequestByInvite 内处理
     }
   }
 
@@ -396,7 +426,7 @@ export default function RecordDetailPage() {
 
         const loadQRImage = async () => {
           try {
-            // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
+            // scene 最大 32 个字符，使用短邀请码承接「扫码发起好友请求」
             const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
             const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index')
             return await loadImage(base64)
@@ -601,11 +631,31 @@ export default function RecordDetailPage() {
         {!isOwner && inviteCode && (
           <View className="friend-invite-card">
             <Text className="friend-invite-title">
-              {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
+              {ownerNickname ? `${ownerNickname} 想和你成为食探好友` : '想和你成为食探好友'}
             </Text>
-            <Text className="friend-invite-desc">未注册会先登录，登录后自动成为好友</Text>
-            <Button className="friend-invite-btn" onClick={handleAcceptInvite} disabled={inviteLoading}>
-              {inviteLoading ? '处理中...' : (getAccessToken() ? '立即成为好友' : '登录并成为好友')}
+            <Text className="friend-invite-desc">
+              {!getAccessToken()
+                ? '登录后将自动发起好友请求，需对方同意'
+                : inviteRequestStatus === 'already_friend'
+                  ? '你们已是好友，可在圈子查看彼此动态'
+                  : inviteRequestStatus === 'requested'
+                    ? '已自动发起好友请求，等待对方同意'
+                    : '系统会自动发起好友请求，需对方同意'}
+            </Text>
+            <Button
+              className="friend-invite-btn"
+              onClick={handleAcceptInvite}
+              disabled={inviteLoading || inviteRequestStatus === 'requested' || inviteRequestStatus === 'already_friend'}
+            >
+              {inviteLoading || inviteRequestStatus === 'sending'
+                ? '发送中...'
+                : !getAccessToken()
+                  ? '登录并自动发送请求'
+                  : inviteRequestStatus === 'already_friend'
+                    ? '你们已是好友'
+                    : inviteRequestStatus === 'requested'
+                      ? '已发送好友请求'
+                      : '重新发送好友请求'}
             </Button>
           </View>
         )}

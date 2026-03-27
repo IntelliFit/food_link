@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, type ExecutionMode } from '../../utils/api'
 
 import './index.scss'
 
@@ -14,6 +14,23 @@ const MEAL_OPTIONS = [
   { value: 'evening_snack' as const, label: '晚加餐' }
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
+
+const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; note: string }> = {
+  strict: {
+    title: '精准模式',
+    desc: '本次结果更强调执行准确度，会更严格地判断食物性质与定量可信度。',
+    note: '适合增肌/减脂阶段，建议搭配分开摆放和补充文字说明。'
+  },
+  standard: {
+    title: '标准模式',
+    desc: '本次结果更强调记录效率，适合快速记录日常餐食。',
+    note: '若你正在严格控脂控碳，建议切到精准模式再分析一次。'
+  }
+}
+
+const normalizeExecutionMode = (value: unknown): ExecutionMode => (
+  value === 'strict' ? 'strict' : 'standard'
+)
 
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
@@ -46,6 +63,24 @@ interface NutritionItem {
   fat: number
 }
 
+type MacroField = 'protein' | 'carbs' | 'fat'
+
+const MACRO_FIELDS: MacroField[] = ['protein', 'carbs', 'fat']
+
+const MACRO_FIELD_META: Record<MacroField, { label: string; className: string }> = {
+  protein: { label: '蛋白质', className: 'protein' },
+  carbs: { label: '碳水', className: 'carbs' },
+  fat: { label: '脂肪', className: 'fat' }
+}
+
+const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
+
+const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
+
+const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
+  roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
+)
+
 export default function ResultPage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
@@ -65,6 +100,7 @@ export default function ResultPage() {
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [hasSavedCritical, setHasSavedCritical] = useState(false)
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
@@ -128,6 +164,8 @@ export default function ResultPage() {
     try {
       const storedPaths = Taro.getStorageSync('analyzeImagePaths')
       const storedPath = Taro.getStorageSync('analyzeImagePath')
+      const storedMode = Taro.getStorageSync('analyzeExecutionMode')
+      setExecutionMode(normalizeExecutionMode(storedMode))
 
       if (storedPaths && Array.isArray(storedPaths) && storedPaths.length > 0) {
         setImagePaths(storedPaths)
@@ -168,6 +206,10 @@ export default function ResultPage() {
     }
   }, [])
 
+  const handleDefaultModeEdit = () => {
+    Taro.navigateTo({ url: '/pages/health-profile-edit/index' })
+  }
+
 
 
   // 调节食物估算重量（+- 按钮）
@@ -178,6 +220,9 @@ export default function ResultPage() {
           // 调节的是 weight（AI 估算的食物总重量）
           const newWeight = Math.max(10, item.weight + delta) // 最小 10g
           const weightScale = item.weight > 0 ? newWeight / item.weight : 1
+          const nextProtein = item.protein * weightScale
+          const nextCarbs = item.carbs * weightScale
+          const nextFat = item.fat * weightScale
           // ratio 保持不变，重新计算 intake
           const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
@@ -185,10 +230,10 @@ export default function ResultPage() {
             weight: newWeight,
             intake: newIntake,
             // 重量变化时，同步更新该食物对应的营养值
-            calorie: item.calorie * weightScale,
-            protein: item.protein * weightScale,
-            carbs: item.carbs * weightScale,
-            fat: item.fat * weightScale
+            calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
+            protein: nextProtein,
+            carbs: nextCarbs,
+            fat: nextFat
             // ratio 不变
           }
         }
@@ -199,6 +244,57 @@ export default function ResultPage() {
       calculateNutritionStats(updatedItems)
 
       return updatedItems
+    })
+  }
+
+  const updateMacroField = (
+    id: number,
+    field: MacroField,
+    nextValue: number | ((currentValue: number) => number)
+  ) => {
+    setNutritionItems(items => {
+      const updatedItems = items.map(item => {
+        if (item.id !== id) return item
+        const resolvedValue = typeof nextValue === 'function' ? nextValue(item[field]) : nextValue
+        const normalizedValue = Math.max(0, roundToSingleDecimal(resolvedValue))
+        const nextItem = {
+          ...item,
+          [field]: normalizedValue
+        } as NutritionItem
+        return {
+          ...nextItem,
+          calorie: calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
+        }
+      })
+
+      calculateNutritionStats(updatedItems)
+      return updatedItems
+    })
+  }
+
+  const handleMacroEdit = (id: number, field: MacroField, currentValue: number) => {
+    const meta = MACRO_FIELD_META[field]
+    Taro.showModal({
+      title: `修改${meta.label}(g)`,
+      content: formatMacroDisplay(currentValue),
+      // @ts-ignore
+      editable: true,
+      placeholderText: '请输入克数',
+      success: (res) => {
+        if (!res.confirm) return
+
+        const nextText = String((res as any).content ?? '').trim()
+        const parsed = Number(nextText)
+        if (!nextText || !Number.isFinite(parsed) || parsed < 0) {
+          Taro.showToast({
+            title: '请输入不小于0的数字',
+            icon: 'none'
+          })
+          return
+        }
+
+        updateMacroField(id, field, parsed)
+      }
     })
   }
 
@@ -669,6 +765,7 @@ export default function ResultPage() {
           const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
           const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
+          const savedExecutionMode = normalizeExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
 
           let taskId = ''
 
@@ -681,7 +778,8 @@ export default function ResultPage() {
               additionalContext: finalContext,
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
-              activity_timing: savedActivityTiming
+              activity_timing: savedActivityTiming,
+              execution_mode: savedExecutionMode
             })
             taskId = res.task_id
           } else {
@@ -704,7 +802,7 @@ export default function ResultPage() {
           // 4. 跳转到 loading 页面重新走解析流程
           const taskType = (imagePaths.length > 0 || imagePath) ? 'food_image' : 'food_text'
           Taro.navigateTo({
-            url: `/pages/analyze-loading/index?task_id=${taskId}&task_type=${taskType}`
+            url: `/pages/analyze-loading/index?task_id=${taskId}&task_type=${taskType}&execution_mode=${savedExecutionMode}`
           })
 
         } catch (e: any) {
@@ -774,6 +872,18 @@ export default function ResultPage() {
         </View>
 
         <View className='content-container'>
+          <View className={`mode-result-card ${executionMode}`}>
+            <View className='mode-result-header'>
+              <View className='mode-result-title-wrap'>
+                <Text className='mode-result-label'>本次识别模式</Text>
+                <Text className='mode-result-title'>{EXECUTION_MODE_META[executionMode].title}</Text>
+              </View>
+              <Text className='mode-result-action' onClick={handleDefaultModeEdit}>设为默认</Text>
+            </View>
+            <Text className='mode-result-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
+            <Text className='mode-result-note'>{EXECUTION_MODE_META[executionMode].note}</Text>
+          </View>
+
           {/* 核心营养概览 */}
           <View className='nutrition-overview-card'>
             <View className='nutrition-header'>
@@ -934,6 +1044,26 @@ export default function ResultPage() {
                         showValue={false}
                         onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
                       />
+                    </View>
+
+                    <View className='macro-editor'>
+                      <View className='macro-editor-grid'>
+                        {MACRO_FIELDS.map((field) => {
+                          const meta = MACRO_FIELD_META[field]
+                          const intakeMacro = item[field] * (item.ratio / 100)
+                          return (
+                            <View key={`${item.id}-${field}`} className={`macro-editor-item ${meta.className}`}>
+                              <View
+                                className='macro-editor-chip'
+                                onClick={() => handleMacroEdit(item.id, field, item[field])}
+                              >
+                                <Text className='macro-editor-item-label'>{meta.label}</Text>
+                                <Text className='macro-editor-value'>{formatMacroDisplay(intakeMacro)}g</Text>
+                              </View>
+                            </View>
+                          )
+                        })}
+                      </View>
                     </View>
                   </View>
                 </View>

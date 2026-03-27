@@ -124,6 +124,71 @@
   gap: 32rpx;
 }
 
+.mode-result-card {
+  padding: 28rpx 30rpx;
+  border: 1rpx solid transparent;
+  border-radius: 32rpx;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+
+  &.strict {
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+    border-color: #bbf7d0;
+  }
+
+  &.standard {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-color: #e2e8f0;
+  }
+}
+
+.mode-result-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 12rpx;
+}
+
+.mode-result-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.mode-result-label {
+  font-size: 22rpx;
+  color: #64748b;
+}
+
+.mode-result-title {
+  font-size: 31rpx;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mode-result-action {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #0f766e;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999rpx;
+  padding: 8rpx 20rpx;
+}
+
+.mode-result-desc {
+  font-size: 25rpx;
+  color: #1e293b;
+  line-height: 1.6;
+  margin-bottom: 8rpx;
+}
+
+.mode-result-note {
+  font-size: 22rpx;
+  color: #475569;
+  line-height: 1.6;
+}
+
 // 通用卡片样式
 %card-base {
   background: #ffffff;
@@ -506,20 +571,21 @@
 .ingredients-list {
   display: flex;
   flex-direction: column;
-  gap: 32rpx;
+  gap: 18rpx;
 }
 
 .ingredient-card {
   @extend %card-base;
   padding: 0; // 内部布局控制内边距
   border: 1rpx solid rgba(0, 0, 0, 0.03);
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.06); // 加深阴影，提升层次感
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 20rpx rgba(15, 23, 42, 0.05);
   transition: all 0.3s ease;
 
 }
 
 .ingredient-main {
-  padding: 32rpx;
+  padding: 22rpx 24rpx;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -529,7 +595,7 @@
 .ingredient-header {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 10rpx;
 }
 
 .edit-icon-wrapper {
@@ -554,7 +620,7 @@
 }
 
 .ingredient-name {
-  font-size: 32rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: #0f172a;
 }
@@ -566,27 +632,27 @@
 }
 
 .cal-val {
-  font-size: 32rpx;
+  font-size: 28rpx;
   font-weight: 700;
   color: #f59e0b;
   font-family: 'DIN Alternate', sans-serif;
 }
 
 .cal-unit {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #94a3b8;
 }
 
 .ingredient-controls {
-  padding: 24rpx 32rpx;
+  padding: 18rpx 24rpx 20rpx;
   background: #f8fafc;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 16rpx;
 }
 
 .control-label {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #64748b;
   font-weight: 500;
 }
@@ -601,21 +667,21 @@
 .weight-adjuster {
   display: flex;
   align-items: center;
-  gap: 24rpx;
+  gap: 16rpx;
   background: #ffffff;
-  padding: 8rpx;
-  border-radius: 16rpx;
+  padding: 6rpx;
+  border-radius: 14rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.02);
 }
 
 .adjust-btn {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 12rpx;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 10rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: #475569;
   background: #f1f5f9;
@@ -637,10 +703,10 @@
 }
 
 .weight-display {
-  font-size: 28rpx;
+  font-size: 26rpx;
   font-weight: 600;
   color: #0f172a;
-  min-width: 80rpx;
+  min-width: 72rpx;
   text-align: center;
 }
 
@@ -648,7 +714,7 @@
 .ratio-control {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 10rpx;
 }
 
 .ratio-header {
@@ -658,7 +724,7 @@
 }
 
 .ratio-display {
-  font-size: 28rpx;
+  font-size: 24rpx;
   font-weight: 700;
   color: #059669;
   font-family: 'DIN Alternate', sans-serif;
@@ -667,6 +733,66 @@
 .ratio-slider-modern {
   margin: 0;
   padding: 0;
+}
+
+.macro-editor {
+  margin-top: 2rpx;
+  padding: 0;
+}
+
+.macro-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10rpx;
+}
+
+.macro-editor-item {
+  &.protein {
+    .macro-editor-chip {
+      background: rgba(0, 188, 125, 0.07);
+      border-color: rgba(0, 188, 125, 0.18);
+    }
+  }
+
+  &.carbs {
+    .macro-editor-chip {
+      background: rgba(59, 130, 246, 0.07);
+      border-color: rgba(59, 130, 246, 0.16);
+    }
+  }
+
+  &.fat {
+    .macro-editor-chip {
+      background: rgba(245, 158, 11, 0.08);
+      border-color: rgba(245, 158, 11, 0.18);
+    }
+  }
+}
+
+.macro-editor-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 72rpx;
+  padding: 10rpx 12rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid #dbe3ec;
+  background: #ffffff;
+}
+
+.macro-editor-item-label {
+  font-size: 19rpx;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.macro-editor-value {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: 'DIN Alternate', sans-serif;
 }
 
 // 底部固定操作栏
