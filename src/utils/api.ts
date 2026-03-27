@@ -3,8 +3,11 @@ import Taro from '@tarojs/taro'
 // API 基础 URL：从环境变量读取，未配置时使用生产地址
 // 开发：.env.development 中 TARO_APP_API_BASE_URL
 // 生产：.env.production 中 TARO_APP_API_BASE_URL
+const ENV_API_BASE_URL =
+  (typeof process !== 'undefined' && process?.env?.TARO_APP_API_BASE_URL) || ''
+
 export const API_BASE_URL =
-  process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
+  ENV_API_BASE_URL || 'https://healthymax.cn'
 
 function isNgrokFreeDomain(url: string): boolean {
   return /^https:\/\/[^/]+\.ngrok-free\.dev(?:\/|$)/i.test(url)
@@ -35,6 +38,8 @@ export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode = 'standard' | 'strict'
+export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
+export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
@@ -82,6 +87,10 @@ export interface AnalyzeResponse {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
+  recognitionOutcome?: AnalyzeRecognitionOutcome
+  rejectionReason?: string
+  retakeGuidance?: string[]
+  allowedFoodCategory?: AllowedFoodCategory
 }
 
 // ---------- 双模型对比分析接口 ----------
@@ -97,6 +106,10 @@ export interface ModelAnalyzeResult {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
+  recognitionOutcome?: AnalyzeRecognitionOutcome
+  rejectionReason?: string
+  retakeGuidance?: string[]
+  allowedFoodCategory?: AllowedFoodCategory
 }
 
 /** 双模型对比分析响应 */
@@ -618,24 +631,60 @@ export async function imageToBase64(imagePath: string): Promise<string> {
 }
 
 /**
- * 调用后端API分析食物图片
- * @param request 分析请求参数
- * @returns Promise<AnalyzeResponse> 分析结果
+ * 上传前压缩本地图片，降低 JSON 请求体体积。
+ * 线上网关常限制单请求约 1MB，高清原图转 base64 易超限；精准模式用户更易拍大图。
+ * 压缩失败时返回原路径。
  */
+export async function compressImagePathForUpload(localPath: string): Promise<string> {
+  const raw = (localPath || '').trim()
+  if (!raw) return raw
+  if (typeof Taro.getEnv === 'function' && Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+    return raw
+  }
+  try {
+    const res = await Taro.compressImage({
+      src: raw,
+      quality: 72,
+    })
+    const next = (res as { tempFilePath?: string })?.tempFilePath
+    if (next && next.trim()) return next.trim()
+  } catch (e) {
+    console.warn('compressImagePathForUpload 失败，使用原图:', e)
+  }
+  return raw
+}
+
+function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string {
+  const d = data as { detail?: string; message?: string } | null | undefined
+  if (d && typeof d.detail === 'string' && d.detail.trim()) return d.detail.trim()
+  if (d && typeof d.message === 'string' && d.message.trim()) return d.message.trim()
+  if (statusCode === 413) {
+    return '图片体积过大，请重新拍照或选择较小的图片后再试'
+  }
+  if (statusCode === 401 || statusCode === 403) {
+    return '登录已失效，请重新登录后再试'
+  }
+  return `上传图片失败（HTTP ${statusCode}）`
+}
+
 /**
- * 食物分析前上传图片到 Supabase，返回公网 URL
+ * 食物分析前上传图片到 Supabase，返回公网 URL。
+ * 已登录时附带 Bearer，与异步分析任务一致；未登录的页面（如仅调试用）仍可上传。
  */
 export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUrl: string }> {
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/upload-analyze-image`,
     method: 'POST',
-    header: withNgrokBypassHeaders({ 'Content-Type': 'application/json' }),
+    header: withNgrokBypassHeaders({
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
     data: { base64Image },
-    timeout: 15000
+    timeout: 60000,
   })
   if (response.statusCode !== 200) {
-    const msg = (response.data as any)?.detail || '上传图片失败'
-    throw new Error(msg)
+    throw new Error(formatUploadAnalyzeHttpError(response.statusCode, response.data))
   }
   return response.data as { imageUrl: string }
 }
@@ -805,6 +854,11 @@ export interface AnalyzeTaskSubmitParams {
   modelName?: string
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
+  previousResult?: AnalyzeResponse
+  correctionItems?: Array<{
+    name: string
+    weight: number
+  }>
 }
 
 export interface AnalysisTask {
@@ -853,6 +907,13 @@ export interface AnalyzeTextTaskSubmitParams {
   activity_timing?: string
   user_goal?: string
   remaining_calories?: number
+  additionalContext?: string
+  execution_mode?: ExecutionMode
+  previousResult?: AnalyzeResponse
+  correctionItems?: Array<{
+    name: string
+    weight: number
+  }>
 }
 
 /** 提交文字分析任务（异步） */
@@ -1755,6 +1816,14 @@ export interface FriendInviteAcceptResult {
   avatar: string
 }
 
+/** @deprecated 兼容旧登录页返回结构 */
+export interface LegacyFriendInviteRequestResult {
+  status: 'requested' | 'already_friend'
+  user_id: string
+  nickname: string
+  avatar: string
+}
+
 /** 本周好友圈打卡排行榜条目 */
 export interface CheckinLeaderboardItem {
   rank: number
@@ -1830,6 +1899,14 @@ export async function friendRespondRequest(requestId: string, action: 'accept' |
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '操作失败')
 }
 
+/** 撤销本人发出的待处理好友请求 */
+export async function friendCancelSentRequest(requestId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend/request/${encodeURIComponent(requestId)}`, {
+    method: 'DELETE'
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '撤销失败')
+}
+
 /** 好友列表 */
 export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
@@ -1842,6 +1919,9 @@ export async function friendDelete(friendId: string): Promise<void> {
   const response = await authenticatedRequest(`/api/friend/${encodeURIComponent(friendId)}`, { method: 'DELETE' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
 }
+
+/** @deprecated 兼容旧调用名，后续统一使用 friendDelete */
+export const friendRemove = friendDelete
 
 /** 好友请求总览（收到 + 发出） */
 export async function friendGetRequestsOverview(): Promise<FriendRequestsOverview> {
@@ -1914,6 +1994,15 @@ export async function acceptFriendInvite(code: string): Promise<FriendInviteAcce
     throw new Error(baseMsg)
   }
   return response.data as FriendInviteAcceptResult
+}
+
+/** @deprecated 兼容旧调用名，后续统一使用 acceptFriendInvite */
+export async function requestFriendByInviteCode(code: string): Promise<LegacyFriendInviteRequestResult> {
+  const res = await acceptFriendInvite(code)
+  return {
+    ...res,
+    status: res.status === 'request_sent' ? 'requested' : 'already_friend'
+  }
 }
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */

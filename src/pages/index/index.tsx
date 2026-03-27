@@ -1,6 +1,6 @@
 import { View, Text, Input } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
-import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import React from 'react'
+import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,
   getStatsSummary,
@@ -200,15 +200,15 @@ function createEmptyWeekHeatmapCells(): WeekHeatmapCell[] {
 }
 
 export default function IndexPage() {
-  const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
-  const [meals, setMeals] = useState<HomeMealItem[]>([])
-  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showTargetEditor, setShowTargetEditor] = useState(false)
-  const [savingTargets, setSavingTargets] = useState(false)
-  const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
+  const [intakeData, setIntakeData] = React.useState<HomeIntakeData>(DEFAULT_INTAKE)
+  const [meals, setMeals] = React.useState<HomeMealItem[]>([])
+  const [weekHeatmapCells, setWeekHeatmapCells] = React.useState<WeekHeatmapCell[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [showTargetEditor, setShowTargetEditor] = React.useState(false)
+  const [savingTargets, setSavingTargets] = React.useState(false)
+  const [targetForm, setTargetForm] = React.useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = React.useCallback(async () => {
     if (!getAccessToken()) {
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
@@ -256,7 +256,7 @@ export default function IndexPage() {
   }, [])
 
   // 每次显示页面时刷新数据
-  Taro.useDidShow(() => {
+  useDidShow(() => {
     loadDashboard()
   })
 
@@ -269,7 +269,7 @@ export default function IndexPage() {
     title: '食探 - AI 智能饮食记录'
   }))
 
-  useEffect(() => {
+  React.useEffect(() => {
     Taro.showShareMenu({
       withShareTicket: true,
       // @ts-ignore

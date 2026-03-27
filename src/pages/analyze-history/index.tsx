@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { listAnalyzeTasks, type AnalysisTask, type AnalyzeResponse, type ExecutionMode } from '../../utils/api'
+import { listAnalyzeTasks, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome } from '../../utils/api'
 import './index.scss'
 
 const STATUS_MAP: Record<string, string> = {
@@ -15,6 +15,21 @@ const STATUS_MAP: Record<string, string> = {
 const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
   strict: '精准模式',
   standard: '标准模式'
+}
+
+const normalizeRecognitionOutcome = (value: unknown): AnalyzeRecognitionOutcome => (
+  value === 'soft_reject' || value === 'hard_reject' ? value : 'ok'
+)
+
+const RECOGNITION_OUTCOME_LABEL: Record<AnalyzeRecognitionOutcome, string> = {
+  ok: '精准通过',
+  soft_reject: '不建议执行',
+  hard_reject: '需重拍',
+}
+
+const pickRecognitionOutcome = (task: AnalysisTask): AnalyzeRecognitionOutcome => {
+  const result = task.result as AnalyzeResponse | undefined
+  return normalizeRecognitionOutcome(result?.recognitionOutcome)
 }
 
 const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
@@ -85,13 +100,19 @@ export default function AnalyzeHistoryPage() {
       if (task.image_paths && task.image_paths.length > 0) {
         Taro.setStorageSync('analyzeImagePaths', task.image_paths)
         Taro.setStorageSync('analyzeImagePath', task.image_paths[0])
+        Taro.removeStorageSync('analyzeTextInput')
+        Taro.removeStorageSync('analyzeTextAdditionalContext')
       } else if (task.image_url) {
         Taro.setStorageSync('analyzeImagePaths', [task.image_url])
         Taro.setStorageSync('analyzeImagePath', task.image_url)
+        Taro.removeStorageSync('analyzeTextInput')
+        Taro.removeStorageSync('analyzeTextAdditionalContext')
       } else {
         // 文字分析任务，清空图片路径
         Taro.removeStorageSync('analyzeImagePaths')
         Taro.removeStorageSync('analyzeImagePath')
+        Taro.setStorageSync('analyzeTextInput', task.text_input || '')
+        Taro.setStorageSync('analyzeTextAdditionalContext', ((payload as Record<string, unknown>).additionalContext as string) || '')
       }
       Taro.setStorageSync('analyzeResult', JSON.stringify(result))
       Taro.setStorageSync('analyzeCompareMode', false)
@@ -134,6 +155,7 @@ export default function AnalyzeHistoryPage() {
         ) : (
           tasks.map(t => {
             const mode = pickExecutionMode(t)
+            const recognitionOutcome = pickRecognitionOutcome(t)
             return (
               <View
                 key={t.id}
@@ -166,6 +188,11 @@ export default function AnalyzeHistoryPage() {
                     <View className={`mode-tag mode-${mode}`}>
                       <Text className="mode-tag-text">{EXECUTION_MODE_LABEL[mode]}</Text>
                     </View>
+                    {mode === 'strict' && t.status === 'done' && (
+                      <View className={`recognition-tag recognition-${recognitionOutcome}`}>
+                        <Text className="recognition-tag-text">{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
+                      </View>
+                    )}
                   </View>
                   <View className={`status-row status-${t.status}`}>
                     <View className="status-dot"></View>

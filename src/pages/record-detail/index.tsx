@@ -16,6 +16,8 @@ import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../component
 
 import './index.scss'
 
+const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/public-assets//logo.png'
+
 const MEAL_TYPE_NAMES: Record<string, string> = {
   breakfast: '早餐',
   morning_snack: '早加餐',
@@ -304,6 +306,8 @@ export default function RecordDetailPage() {
   const mealIconConfig = MEAL_ICON_CONFIG[record.meal_type as keyof typeof MEAL_ICON_CONFIG] || MEAL_ICON_CONFIG.snack
   const timeStr = formatRecordTime(record.record_time)
   const items = record.items || []
+  const hasRealRecordImage = Boolean(record.image_path)
+  const recordDisplayImage = record.image_path || APP_LOGO_URL
 
   /** 单条食物实际摄入热量（按 ratio） */
   const itemCalorie = (item: FoodRecord['items'][0]) => {
@@ -386,8 +390,10 @@ export default function RecordDetailPage() {
           // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
           const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
           // 部分账号/环境下 develop 码不可用，按优先级自动回退，确保尽量拿到真实二维码。
+          const isDevelopmentEnv =
+            typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
           const envCandidates: Array<'develop' | 'trial' | 'release'> =
-            process.env.NODE_ENV === 'development'
+            isDevelopmentEnv
               ? ['develop', 'trial', 'release']
               : ['release', 'trial', 'develop']
 
@@ -505,21 +511,21 @@ export default function RecordDetailPage() {
           </View>
         </View>
 
-        {
-          record.image_path ? (
-            <View
-              className="detail-image"
-              onClick={() => {
-                Taro.previewImage({
-                  urls: [record.image_path!],
-                  current: record.image_path!
-                })
-              }}
-            >
-              <Image src={record.image_path} mode="aspectFill" />
-            </View>
-          ) : null
-        }
+        <View
+          className={`detail-image ${hasRealRecordImage ? '' : 'detail-image--logo'}`}
+          onClick={() => {
+            if (!record.image_path) return
+            Taro.previewImage({
+              urls: [record.image_path],
+              current: record.image_path
+            })
+          }}
+        >
+          <Image src={recordDisplayImage} mode={hasRealRecordImage ? 'aspectFill' : 'aspectFit'} />
+          {!hasRealRecordImage && (
+            <Text className="detail-image-placeholder-text">未提供实物照片，已使用产品 logo</Text>
+          )}
+        </View>
 
         {/* 用户选择的目标与状态 */}
         {(record.diet_goal || record.activity_timing) && (

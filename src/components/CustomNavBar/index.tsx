@@ -1,5 +1,5 @@
 import { View, Text } from '@tarojs/components'
-import { useState } from 'react'
+import React from 'react'
 import Taro from '@tarojs/taro'
 import './index.scss'
 
@@ -39,7 +39,7 @@ export default function CustomNavBar({
     background = 'linear-gradient(to right, #00bc7d 0%, #00bba7 100%)',
     className = ''
 }: CustomNavBarProps) {
-    const [navInfo] = useState(() => {
+    const [navInfo] = React.useState(() => {
         const menuBtn = Taro.getMenuButtonBoundingClientRect()
         const statusBarHeight = getStatusBarHeightSafe()
         // 导航栏内容区高度 = (胶囊按钮上边距 - 状态栏高度) * 2 + 胶囊按钮高度

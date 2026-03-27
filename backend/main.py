@@ -56,6 +56,7 @@ from database import (
     send_friend_request,
     get_friend_requests_received,
     respond_friend_request,
+    cancel_sent_friend_request,
     get_friends_with_profile,
     delete_friend_pair,
     get_friend_requests_overview,
@@ -549,6 +550,10 @@ class AnalyzeResponse(BaseModel):
     pfc_ratio_comment: Optional[str] = Field(default=None, description="PFC 比例评价（蛋白质/脂肪/碳水占比）")
     absorption_notes: Optional[str] = Field(default=None, description="吸收率与生物利用度简要说明")
     context_advice: Optional[str] = Field(default=None, description="情境感知建议（结合用户状态）")
+    recognitionOutcome: Optional[str] = Field(default=None, description="精准模式结构化识别结果: ok / soft_reject / hard_reject")
+    rejectionReason: Optional[str] = Field(default=None, description="精准模式拒识或降级原因")
+    retakeGuidance: Optional[List[str]] = Field(default=None, description="精准模式下的重拍/拆拍建议")
+    allowedFoodCategory: Optional[str] = Field(default=None, description="精准模式允许识别的食物类别: carb / lean_protein / unknown")
 
 
 # ---------- 双模型对比分析响应模型 ----------
@@ -564,6 +569,10 @@ class ModelAnalyzeResult(BaseModel):
     pfc_ratio_comment: Optional[str] = Field(default=None)
     absorption_notes: Optional[str] = Field(default=None)
     context_advice: Optional[str] = Field(default=None)
+    recognitionOutcome: Optional[str] = Field(default=None)
+    rejectionReason: Optional[str] = Field(default=None)
+    retakeGuidance: Optional[List[str]] = Field(default=None)
+    allowedFoodCategory: Optional[str] = Field(default=None)
 
 
 class CompareAnalyzeResponse(BaseModel):
@@ -1121,6 +1130,10 @@ async def analyze_food(
             pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
             absorption_notes=_opt_str(parsed.get("absorption_notes")),
             context_advice=_opt_str(parsed.get("context_advice")),
+            recognitionOutcome=_opt_str(parsed.get("recognitionOutcome")),
+            rejectionReason=_opt_str(parsed.get("rejectionReason")),
+            retakeGuidance=parsed.get("retakeGuidance") if isinstance(parsed.get("retakeGuidance"), list) else None,
+            allowedFoodCategory=_opt_str(parsed.get("allowedFoodCategory")),
         )
     except HTTPException:
         raise
@@ -1192,6 +1205,8 @@ class AnalyzeSubmitRequest(BaseModel):
     modelName: Optional[str] = Field(default="qwen-vl-max", description="模型名称")
     is_multi_view: Optional[bool] = Field(default=False, description="是否开启多视角辅助模式")
     execution_mode: Optional[str] = Field(default=None, description="执行模式: standard / strict")
+    previousResult: Optional[Dict[str, Any]] = Field(default=None, description="上一轮分析结果")
+    correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
 
 
 @app.post("/api/analyze/submit")
@@ -1220,6 +1235,8 @@ async def analyze_submit(
         "modelName": body.modelName,
         "is_multi_view": body.is_multi_view,
         "execution_mode": effective_mode,
+        "previousResult": body.previousResult,
+        "correctionItems": body.correctionItems,
     }
     try:
         task = await asyncio.to_thread(
@@ -1598,6 +1615,10 @@ async def analyze_food_text(
             pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
             absorption_notes=_opt_str(parsed.get("absorption_notes")),
             context_advice=_opt_str(parsed.get("context_advice")),
+            recognitionOutcome=_opt_str(parsed.get("recognitionOutcome")),
+            rejectionReason=_opt_str(parsed.get("rejectionReason")),
+            retakeGuidance=parsed.get("retakeGuidance") if isinstance(parsed.get("retakeGuidance"), list) else None,
+            allowedFoodCategory=_opt_str(parsed.get("allowedFoodCategory")),
         )
     except HTTPException:
         raise
@@ -1615,6 +1636,10 @@ class AnalyzeTextSubmitRequest(BaseModel):
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
+    additionalContext: Optional[str] = Field(default=None, description="用户补充上下文或纠错说明")
+    execution_mode: Optional[str] = Field(default=None, description="执行模式: standard / strict")
+    previousResult: Optional[Dict[str, Any]] = Field(default=None, description="上一轮分析结果")
+    correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
 
 
 @app.post("/api/analyze-text/submit")
@@ -1628,7 +1653,12 @@ async def analyze_text_submit(
     """
     if not body.text or not body.text.strip():
         raise HTTPException(status_code=400, detail="text 不能为空")
-    
+
+    requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
+    user = await get_user_by_id(user_info["user_id"])
+    profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
+    effective_mode = requested_mode or profile_mode
+
     payload = {
         "meal_type": body.meal_type,
         "timezone_offset_minutes": body.timezone_offset_minutes,
@@ -1636,8 +1666,12 @@ async def analyze_text_submit(
         "activity_timing": body.activity_timing,
         "user_goal": body.user_goal,
         "remaining_calories": body.remaining_calories,
+        "additionalContext": body.additionalContext,
+        "execution_mode": effective_mode,
+        "previousResult": body.previousResult,
+        "correctionItems": body.correctionItems,
     }
-    
+
     try:
         task = await asyncio.to_thread(
             create_analysis_task_sync,
@@ -3977,6 +4011,22 @@ async def api_friend_respond(
     except Exception as e:
         print(f"[api/friend/respond] 错误: {e}")
         raise HTTPException(status_code=500, detail="操作失败")
+
+
+@app.delete("/api/friend/request/{request_id}")
+async def api_friend_request_cancel(
+    request_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """撤销本人发出的、对方尚未处理的待处理好友请求。"""
+    try:
+        await cancel_sent_friend_request(request_id, user_info["user_id"])
+        return {"message": "已撤销好友请求"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[api/friend/request/cancel] 错误: {e}")
+        raise HTTPException(status_code=500, detail="撤销失败")
 
 
 @app.get("/api/friend/list")

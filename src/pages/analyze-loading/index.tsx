@@ -98,6 +98,10 @@ const normalizeExecutionMode = (value: unknown): ExecutionMode => (
   value === 'strict' ? 'strict' : 'standard'
 )
 
+const normalizeTaskType = (value: unknown): 'food' | 'food_text' => (
+  value === 'food_text' ? 'food_text' : 'food'
+)
+
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
   if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'standard') {
@@ -124,7 +128,7 @@ export default function AnalyzeLoadingPage() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     const id = params?.task_id
-    const type = params?.task_type || 'food'
+    const type = normalizeTaskType(params?.task_type)
     const modeFromStorage = Taro.getStorageSync('analyzeExecutionMode')
     const mode = normalizeExecutionMode(params?.execution_mode || modeFromStorage)
     if (!id) {
@@ -136,6 +140,7 @@ export default function AnalyzeLoadingPage() {
     setTaskType(type)
     setExecutionMode(mode)
     Taro.setStorageSync('analyzeExecutionMode', mode)
+    Taro.setStorageSync('analyzeTaskType', type)
   }, [])
 
   useEffect(() => {
@@ -154,6 +159,8 @@ export default function AnalyzeLoadingPage() {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null
           }
+          Taro.removeStorageSync('analyzePendingCorrectionTaskId')
+          Taro.removeStorageSync('analyzePendingCorrectionItems')
           const result = task.result as AnalyzeResponse
           const payload = task.payload || {}
           const settledMode = taskMode || executionMode
@@ -162,16 +169,23 @@ export default function AnalyzeLoadingPage() {
           // 根据任务类型跳转到不同的结果页面
           if (taskType === 'food_text') {
             // 文字分析：跳转到统一的结果页（复用图片分析页）
-            Taro.removeStorageSync('analyzeImagePath') // 确保清除上一张图片
+            // 必须同时清空单图和多图缓存，避免上一次拍照识别残留的图片混入本次纯文字结果。
+            Taro.removeStorageSync('analyzeImagePath')
+            Taro.removeStorageSync('analyzeImagePaths')
+            Taro.setStorageSync('analyzeTextInput', task.text_input || '')
+            Taro.setStorageSync('analyzeTextAdditionalContext', (payload.additionalContext as string) || '')
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
             Taro.setStorageSync('analyzeCompareMode', false)
             Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
             Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
+            Taro.setStorageSync('analyzeTaskType', 'food_text')
             Taro.redirectTo({ url: '/pages/result/index' })
           } else {
             // 图片分析：跳转到图片分析结果页
+            Taro.removeStorageSync('analyzeTextInput')
+            Taro.removeStorageSync('analyzeTextAdditionalContext')
             Taro.setStorageSync('analyzeImagePath', task.image_url)
             Taro.setStorageSync('analyzeImagePaths', task.image_paths || (task.image_url ? [task.image_url] : []))
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
@@ -180,6 +194,7 @@ export default function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
+            Taro.setStorageSync('analyzeTaskType', 'food')
             Taro.redirectTo({ url: '/pages/result/index' })
           }
           return

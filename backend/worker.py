@@ -8,7 +8,7 @@ import sys
 import json
 import re
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
@@ -57,6 +57,46 @@ MEAL_NAMES = {
 
 CHINA_TZ = timezone(timedelta(hours=8))
 
+VALID_RECOGNITION_OUTCOMES = {"ok", "soft_reject", "hard_reject"}
+VALID_ALLOWED_FOOD_CATEGORIES = {"carb", "lean_protein", "unknown"}
+STRICT_HARD_REJECT_TAGS = {
+    "mixed_food",
+    "multiple_items",
+    "fatty_or_unclear_meat",
+    "heavy_sauce_or_fried",
+    "unsupported_food",
+    "unclear_main_subject",
+}
+STRICT_SOFT_REJECT_TAGS = {
+    "portion_unclear",
+    "view_insufficient",
+    "needs_reference",
+    "cook_method_unclear",
+    "weight_uncertain",
+}
+STRICT_REASON_BY_TAG = {
+    "mixed_food": "当前画面是混合食物，不适合精准模式直接估算。",
+    "multiple_items": "当前画面包含多个主体食物，精准模式下一次只建议拍一个主体。",
+    "fatty_or_unclear_meat": "当前肉类肥瘦比例不明，无法稳定按精准模式估算。",
+    "heavy_sauce_or_fried": "当前食物烹饪方式偏重油、裹粉或酱汁遮挡，无法稳定按精准模式估算。",
+    "unsupported_food": "当前食物不属于精准模式首期支持的单纯碳水或单纯瘦肉。",
+    "unclear_main_subject": "当前主体食物不够清晰，无法进行精准模式判断。",
+    "portion_unclear": "当前主体基本可识别，但分量边界不够清楚，结果不建议直接用于精准执行。",
+    "view_insufficient": "当前拍摄视角不足，重量估算可信度有限。",
+    "needs_reference": "当前缺少参照物，重量估算可信度有限。",
+    "cook_method_unclear": "当前烹饪方式不够明确，营养估算可信度有限。",
+    "weight_uncertain": "当前重量仍存在不确定性，结果不建议直接用于精准执行。",
+}
+STRICT_HARD_GUIDANCE_DEFAULT = [
+    "请只保留一个主体食物，分开单独拍摄。",
+    "请把食物拨开，避免酱汁、配菜或其他食物遮挡主体。",
+    "旁边放手掌、筷子或常见餐具作为参照物。",
+]
+STRICT_SOFT_GUIDANCE_DEFAULT = [
+    "建议补拍更清晰的正面和侧面，尽量完整展示主体。",
+    "建议旁边放手掌、筷子或餐具作为参照物。",
+]
+
 
 def _meal_name_for_hint(meal_type: Optional[str], timezone_offset_minutes: Optional[Any] = None) -> str:
     """将餐次转换为提示词展示名，兼容 legacy snack 按客户端时区（兜底东八区）映射。"""
@@ -73,6 +113,127 @@ def _meal_name_for_hint(meal_type: Optional[str], timezone_offset_minutes: Optio
         except Exception:
             pass
     return "午加餐" if 11 <= hour < 17 else "晚加餐"
+
+
+def _normalize_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
+
+
+def _normalize_string_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    seen = set()
+    result: List[str] = []
+    for item in value:
+        text = _normalize_text(item)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _normalize_scene_tags(value: Any) -> List[str]:
+    raw_tags = _normalize_string_list(value)
+    normalized: List[str] = []
+    seen = set()
+    for tag in raw_tags:
+        key = tag.strip().lower().replace("-", "_").replace(" ", "_")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        normalized.append(key)
+    return normalized
+
+
+def _normalize_allowed_food_category(value: Any) -> str:
+    category = (_normalize_text(value) or "unknown").lower()
+    if category not in VALID_ALLOWED_FOOD_CATEGORIES:
+        return "unknown"
+    return category
+
+
+def _normalize_recognition_outcome(value: Any) -> Optional[str]:
+    outcome = (_normalize_text(value) or "").lower()
+    if outcome in VALID_RECOGNITION_OUTCOMES:
+        return outcome
+    return None
+
+
+def _merge_guidance(primary: List[str], fallback: List[str]) -> List[str]:
+    merged: List[str] = []
+    seen = set()
+    for item in [*primary, *fallback]:
+        text = _normalize_text(item)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        merged.append(text)
+    return merged
+
+
+def _derive_recognition_fields(parsed: Dict[str, Any], items: List[Dict[str, Any]], execution_mode: str) -> Dict[str, Any]:
+    allowed_food_category = _normalize_allowed_food_category(parsed.get("allowedFoodCategory"))
+    recognition_outcome = _normalize_recognition_outcome(parsed.get("recognitionOutcome"))
+    scene_tags = _normalize_scene_tags(parsed.get("sceneTags"))
+    guidance = _normalize_string_list(parsed.get("retakeGuidance"))
+    model_reason = _normalize_text(parsed.get("rejectionReason"))
+
+    if execution_mode != "strict":
+        return {
+            "recognitionOutcome": recognition_outcome or "ok",
+            "rejectionReason": model_reason if recognition_outcome in {"soft_reject", "hard_reject"} else None,
+            "retakeGuidance": guidance or None,
+            "allowedFoodCategory": allowed_food_category,
+        }
+
+    hard_reasons: List[str] = []
+    soft_reasons: List[str] = []
+
+    if not items:
+        hard_reasons.append("当前未识别出可用于精准执行的主体食物。")
+    if len(items) > 1:
+        hard_reasons.append("精准模式下一次只建议拍一个主体食物，当前画面包含多个食物。")
+    if allowed_food_category == "unknown":
+        hard_reasons.append("当前食物不属于精准模式首期支持的单纯碳水或单纯瘦肉。")
+
+    for tag in scene_tags:
+        reason = STRICT_REASON_BY_TAG.get(tag)
+        if not reason:
+            continue
+        if tag in STRICT_HARD_REJECT_TAGS:
+            hard_reasons.append(reason)
+        elif tag in STRICT_SOFT_REJECT_TAGS:
+            soft_reasons.append(reason)
+
+    if recognition_outcome == "hard_reject" and model_reason:
+        hard_reasons.append(model_reason)
+    elif recognition_outcome == "soft_reject" and model_reason:
+        soft_reasons.append(model_reason)
+
+    if hard_reasons:
+        return {
+            "recognitionOutcome": "hard_reject",
+            "rejectionReason": hard_reasons[0],
+            "retakeGuidance": _merge_guidance(guidance, STRICT_HARD_GUIDANCE_DEFAULT),
+            "allowedFoodCategory": allowed_food_category,
+        }
+    if soft_reasons:
+        return {
+            "recognitionOutcome": "soft_reject",
+            "rejectionReason": soft_reasons[0],
+            "retakeGuidance": _merge_guidance(guidance, STRICT_SOFT_GUIDANCE_DEFAULT),
+            "allowedFoodCategory": allowed_food_category,
+        }
+    return {
+        "recognitionOutcome": "ok",
+        "rejectionReason": None,
+        "retakeGuidance": guidance or None,
+        "allowedFoodCategory": allowed_food_category,
+    }
 
 
 def _format_health_profile_sync(user: Dict[str, Any]) -> str:
@@ -277,6 +438,129 @@ def run_content_moderation_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
         return None
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _normalize_food_name(name: Any) -> str:
+    raw = str(name or "").strip().lower()
+    if not raw:
+        return ""
+    compact = re.sub(r"\s+", "", raw)
+    compact = re.sub(r"[()（）\[\]【】,，。./\\\-_:：;；·]", "", compact)
+    return compact
+
+
+def _find_match_index(items: list, target_name: str, used_indexes: set) -> Optional[int]:
+    target_norm = _normalize_food_name(target_name)
+    if not target_norm:
+        return None
+    fuzzy_index = None
+    for idx, item in enumerate(items):
+        if idx in used_indexes:
+            continue
+        item_norm = _normalize_food_name(item.get("name"))
+        if not item_norm:
+            continue
+        if item_norm == target_norm:
+            return idx
+        if (target_norm in item_norm) or (item_norm in target_norm):
+            if fuzzy_index is None:
+                fuzzy_index = idx
+    return fuzzy_index
+
+
+def _scale_nutrients(nutrients: Dict[str, Any], ratio: float) -> Dict[str, float]:
+    keys = ("calories", "protein", "carbs", "fat", "fiber", "sugar")
+    return {k: _safe_float((nutrients or {}).get(k), 0.0) * ratio for k in keys}
+
+
+def _build_item_from_fallback(
+    target_name: str,
+    target_weight: float,
+    fallback_item: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    nutrients = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0, "sugar": 0.0}
+    if fallback_item:
+        fallback_weight = _safe_float(
+            fallback_item.get("estimatedWeightGrams") or fallback_item.get("originalWeightGrams"),
+            0.0,
+        )
+        if fallback_weight > 0:
+            ratio = target_weight / fallback_weight
+            nutrients = _scale_nutrients(fallback_item.get("nutrients") or {}, ratio)
+    return {
+        "name": target_name,
+        "estimatedWeightGrams": target_weight,
+        "originalWeightGrams": target_weight,
+        "nutrients": nutrients,
+    }
+
+
+def _apply_image_correction_items(result_items: list, payload: Dict[str, Any]) -> list:
+    """
+    图片模式二次纠错的强约束兜底：
+    - correctionItems 给出的食物与克重作为本轮锚点
+    - 若模型返回和锚点不一致，按锚点回写并按比例缩放营养
+    """
+    correction_items_raw = payload.get("correctionItems") or []
+    correction_items = []
+    for raw in correction_items_raw:
+        name = str((raw or {}).get("name") or "").strip()
+        weight = _safe_float((raw or {}).get("weight"), 0.0)
+        if name and weight > 0:
+            correction_items.append({"name": name, "weight": weight})
+
+    if not correction_items:
+        return result_items
+
+    previous_items = ((payload.get("previousResult") or {}).get("items") or [])
+    used_result_indexes = set()
+    used_previous_indexes = set()
+    correction_name_norms = {_normalize_food_name(item["name"]) for item in correction_items}
+
+    corrected_items = []
+    for corr in correction_items:
+        target_name = corr["name"]
+        target_weight = corr["weight"]
+
+        result_idx = _find_match_index(result_items, target_name, used_result_indexes)
+        if result_idx is not None:
+            used_result_indexes.add(result_idx)
+            matched = result_items[result_idx]
+            matched_weight = _safe_float(matched.get("estimatedWeightGrams"), 0.0)
+            if matched_weight > 0:
+                ratio = target_weight / matched_weight
+                nutrients = _scale_nutrients(matched.get("nutrients") or {}, ratio)
+                corrected_items.append({
+                    "name": target_name,
+                    "estimatedWeightGrams": target_weight,
+                    "originalWeightGrams": target_weight,
+                    "nutrients": nutrients,
+                })
+                continue
+
+        prev_idx = _find_match_index(previous_items, target_name, used_previous_indexes)
+        fallback_item = None
+        if prev_idx is not None:
+            used_previous_indexes.add(prev_idx)
+            fallback_item = previous_items[prev_idx]
+        corrected_items.append(_build_item_from_fallback(target_name, target_weight, fallback_item))
+
+    for idx, item in enumerate(result_items):
+        if idx in used_result_indexes:
+            continue
+        item_name_norm = _normalize_food_name(item.get("name"))
+        if item_name_norm in correction_name_norms:
+            continue
+        corrected_items.append(item)
+
+    return corrected_items
+
+
 def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     """根据任务 payload 和用户档案构建千问分析用 prompt。"""
     payload = task.get("payload") or {}
@@ -303,8 +587,48 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     meal_name = _meal_name_for_hint(meal_type, payload.get("timezone_offset_minutes"))
     meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
 
+    def _fmt_weight(value: Any) -> str:
+        try:
+            return f"{float(value or 0):g}g"
+        except Exception:
+            return "0g"
+
+    previous_result = payload.get("previousResult") or {}
+    previous_items = previous_result.get("items") or []
+    previous_items_text = "；".join(
+        f"{idx + 1}. {str(item.get('name') or '').strip()} {_fmt_weight(item.get('estimatedWeightGrams'))}"
+        for idx, item in enumerate(previous_items)
+        if str(item.get("name") or "").strip()
+    )
+    previous_result_block = ""
+    if previous_result:
+        prev_desc = str(previous_result.get("description") or "").strip()
+        prev_insight = str(previous_result.get("insight") or "").strip()
+        parts = []
+        if prev_desc:
+            parts.append(f"上一轮餐食描述：{prev_desc}")
+        if previous_items_text:
+            parts.append(f"上一轮识别结果：{previous_items_text}")
+        if prev_insight:
+            parts.append(f"上一轮健康建议：{prev_insight}")
+        if parts:
+            previous_result_block = "\n第一轮分析输出（供本轮重算参考）：\n- " + "\n- ".join(parts)
+
+    correction_items = payload.get("correctionItems") or []
+    correction_items_text = "\n".join(
+        f"{idx + 1}. {str(item.get('name') or '').strip()} {_fmt_weight(item.get('weight'))}"
+        for idx, item in enumerate(correction_items)
+        if str(item.get("name") or "").strip()
+    )
+    correction_block = (
+        "\n第二轮结构化纠错清单（用户在纠错弹窗中提交）：\n" + correction_items_text
+    ) if correction_items_text else ""
+
     additional = (payload.get("additionalContext") or "").strip()
-    additional_line = f'\n用户补充背景信息: "{additional}"。请根据此信息调整对隐形成分或烹饪方式的判断。' if additional else ""
+    additional_line = (
+        f'\n用户本轮补充/纠错说明: "{additional}"。'
+        '\n若与第一轮结果或原图观感冲突，可用此说明修正；但若结构化纠错清单给了明确克重，则以纠错清单为锚点。'
+    ) if additional else ""
 
     is_multi_view = payload.get("is_multi_view")
     multi_view_hint = "\n注意：提供的图片是**同一份食物**的不同视角拍摄（用于辅助展示侧面或厚度）。请综合所有图片来估算这份食物的体积和重量，**不要**将它们视为多份不同的食物。" if is_multi_view else ""
@@ -324,15 +648,39 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     return f"""
 {multi_view_hint}
 请作为专业的营养师分析这些食物图片。
+这是一轮基于“原始图片 + 第一轮结果 + 第二轮反馈”的重新生成。
+{previous_result_block}
+{correction_block}
+{additional_line}
+
+信息优先级（高到低）：
+1. 第二轮结构化纠错清单（图片模式的主输入）
+2. 本轮用户补充/纠错说明
+3. 第一轮分析输出
+4. 原始图片视觉信息
+
+如果高优先级信息与低优先级冲突，必须以前者为准。
+如果结构化纠错清单给出了明确食物与克重，本轮结果中对应食物的 estimatedWeightGrams 必须与清单一致。
+
 1. 识别图中所有不同的食物单品。
-2. 估算每种食物的重量（克）和详细营养成分。
+2. 重新估算每种食物的重量（克）和详细营养成分；当第二轮反馈给出了更明确重量时，请体现到本轮结果中。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
 8. 请遵守以下执行模式约束：{mode_hint}
-{additional_line}
+9. 除了常规营养结果外，请额外做“精准模式判定”：
+   - recognitionOutcome: 只能是 ok / soft_reject / hard_reject
+   - allowedFoodCategory: 只能是 carb / lean_protein / unknown
+   - rejectionReason: 若为 soft_reject 或 hard_reject，给出简短中文原因；否则返回空字符串
+   - retakeGuidance: 若需用户重拍/拆拍，给 1-3 条简短中文建议；否则返回空数组
+   - sceneTags: 仅从以下枚举中选择 0 个或多个：
+     single_carb, single_lean_protein, mixed_food, multiple_items, fatty_or_unclear_meat, heavy_sauce_or_fried, unsupported_food, unclear_main_subject, portion_unclear, view_insufficient, needs_reference, cook_method_unclear, weight_uncertain
+10. 在精准模式下：
+   - 如果画面不是单纯碳水或单纯瘦肉，请倾向 hard_reject
+   - 如果主体对了，但视角、参照物、分量边界不够理想，请倾向 soft_reject
+   - 只有当主体清晰、食物性质明确、可稳定估重时，才返回 ok
 
 重要：请务必使用**简体中文**返回所有文本内容。
 请严格按照以下 JSON 格式返回，不要包含任何其他文本：
@@ -349,7 +697,12 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
   "insight": "健康建议（简体中文）",
   "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
   "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
-  "context_advice": "情境建议（简体中文，若无则空字符串）"
+  "context_advice": "情境建议（简体中文，若无则空字符串）",
+  "recognitionOutcome": "ok / soft_reject / hard_reject",
+  "rejectionReason": "若需拒识或降级，说明原因；否则空字符串",
+  "retakeGuidance": ["重拍建议1", "重拍建议2"],
+  "allowedFoodCategory": "carb / lean_protein / unknown",
+  "sceneTags": ["mixed_food", "needs_reference"]
 }}
 """.strip()
 
@@ -387,6 +740,10 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         target_image_urls = [image_url]
     if not target_image_urls:
         raise ValueError("任务缺少图片")
+    payload = task.get("payload") or {}
+    execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
+    if execution_mode not in {"standard", "strict"}:
+        execution_mode = "standard"
 
     user_id = task.get("user_id")
     user = get_user_by_id_sync(user_id) if user_id else None
@@ -474,6 +831,11 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             },
         })
 
+    # 图片模式下：二次纠错清单作为强约束兜底，防止模型忽略用户已确认克重
+    items = _apply_image_correction_items(items, payload)
+
+    recognition_fields = _derive_recognition_fields(parsed or {}, items, execution_mode)
+
     return {
         "description": str(parsed.get("description", "无法获取描述")),
         "insight": str(parsed.get("insight", "保持健康饮食！")),
@@ -481,6 +843,7 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "pfc_ratio_comment": (parsed.get("pfc_ratio_comment") or "").strip() or None,
         "absorption_notes": (parsed.get("absorption_notes") or "").strip() or None,
         "context_advice": (parsed.get("context_advice") or "").strip() or None,
+        **recognition_fields,
     }
 
 
@@ -532,21 +895,96 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     meal_name = _meal_name_for_hint(meal_type, payload.get("timezone_offset_minutes"))
     meal_hint = f" 用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
 
+    previous_result = payload.get("previousResult") or {}
+    previous_items = previous_result.get("items") or []
+    previous_items_text = "；".join(
+        f"{idx + 1}. {str(item.get('name') or '').strip()} {float(item.get('estimatedWeightGrams') or 0):g}g"
+        for idx, item in enumerate(previous_items)
+        if str(item.get("name") or "").strip()
+    )
+    previous_result_block = ""
+    if previous_result:
+        prev_desc = str(previous_result.get("description") or "").strip()
+        prev_insight = str(previous_result.get("insight") or "").strip()
+        parts = []
+        if prev_desc:
+            parts.append(f"上一轮餐食描述：{prev_desc}")
+        if previous_items_text:
+            parts.append(f"上一轮识别结果：{previous_items_text}")
+        if prev_insight:
+            parts.append(f"上一轮健康建议：{prev_insight}")
+        if parts:
+            previous_result_block = "\n上一轮分析输出 / 当前结果页基线（其中可能已包含用户在结果页直接手动修改后的名称与重量，请优先参考这里，再结合本轮文字说明继续修正）：\n- " + "\n- ".join(parts)
+
+    correction_items = payload.get("correctionItems") or []
+    correction_items_text = "\n".join(
+        f"{idx + 1}. {str(item.get('name') or '').strip()} {float(item.get('weight') or 0):g}g"
+        for idx, item in enumerate(correction_items)
+        if str(item.get("name") or "").strip()
+    )
+    correction_block = (
+        "\n第二轮结构化纠错清单（文字模式下仅作参考摘要，不是主输入）：\n" + correction_items_text
+    ) if correction_items_text else ""
+
+    additional = (payload.get("additionalContext") or "").strip()
+    additional_line = (
+        f'\n用户补充/纠错信息："{additional}"。'
+        '\n如果这段补充/纠错信息与原始描述或上一轮输出冲突，请优先采用这段补充/纠错信息。'
+    ) if additional else ""
+
+    execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
+    if execution_mode not in {"standard", "strict"}:
+        execution_mode = "standard"
+    mode_hint = (
+        "\n执行模式：精准模式（strict）"
+        "\n- 优先识别单纯碳水或单纯瘦肉。"
+        "\n- 混合描述、重量不明、烹饪方式不明时，不要过度自信。"
+        "\n- 如描述仍有歧义，请在 insight/context_advice 中明确指出不确定点。"
+    ) if execution_mode == "strict" else (
+        "\n执行模式：标准模式（standard）"
+        "\n- 可给出常规估算值，不确定时需提醒偏差风险。"
+    )
+
     profile_hint = f"\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议。\n\n{profile_block}" if profile_block else ""
 
     return f"""
 请作为专业的营养师分析用户描述的食物。
+这不是第一次分析，而是一次“基于上一轮结果的二次纠错分析”。
 
 用户描述：{text_input}
+{previous_result_block}
+{correction_block}
+{additional_line}
+
+信息优先级（高到低）：
+1. 本轮用户补充/纠错信息
+2. 上一轮分析输出 / 当前结果页基线
+3. 本轮结构化纠错清单
+4. 原始用户描述
+
+如果高优先级信息和低优先级信息冲突，必须以前者为准。
+不要机械复用上一轮结果；你需要根据本轮文字说明重新得出更新后的食物、重量与营养。
 
 任务：
 1. 识别描述中的所有食物单品。
-2. 估算每种食物的合理重量（克）和详细营养成分。
+2. 估算每种食物的合理重量（克）和详细营养成分；如果本轮补充说明中给出更晚的重量说明，按本轮补充说明确定。若没有更新重量说明，再参考当前结果页基线与结构化纠错清单。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_hint}
+8. 请遵守以下执行模式约束：{mode_hint}
+9. 除了常规营养结果外，请额外做“精准模式判定”：
+   - recognitionOutcome: 只能是 ok / soft_reject / hard_reject
+   - allowedFoodCategory: 只能是 carb / lean_protein / unknown
+   - rejectionReason: 若为 soft_reject 或 hard_reject，给出简短中文原因；否则返回空字符串
+   - retakeGuidance: 若需用户补充说明或重拍，给 1-3 条简短中文建议；否则返回空数组
+   - sceneTags: 仅从以下枚举中选择 0 个或多个：
+     single_carb, single_lean_protein, mixed_food, multiple_items, fatty_or_unclear_meat, unsupported_food, portion_unclear, cook_method_unclear, weight_uncertain
+10. 在精准模式下：
+   - 如果描述不是单纯碳水或单纯瘦肉，请倾向 hard_reject
+   - 如果主体类型基本对，但分量、烹饪方式或重量仍不够确定，请倾向 soft_reject
+   - 只有当主体明确且可稳定估重时，才返回 ok
 
 重要：请务必使用**简体中文**返回所有文本内容。
 请严格按照以下 JSON 格式返回，不要包含任何其他文本：
@@ -563,7 +1001,12 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
   "insight": "健康建议（简体中文）",
   "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
   "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
-  "context_advice": "情境建议（简体中文，若无则空字符串）"
+  "context_advice": "情境建议（简体中文，若无则空字符串）",
+  "recognitionOutcome": "ok / soft_reject / hard_reject",
+  "rejectionReason": "若需拒识或降级，说明原因；否则空字符串",
+  "retakeGuidance": ["建议1", "建议2"],
+  "allowedFoodCategory": "carb / lean_protein / unknown",
+  "sceneTags": ["mixed_food", "weight_uncertain"]
 }}
 """.strip()
 
@@ -589,6 +1032,10 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
     text_input = task.get("text_input") or ""
     if not text_input:
         raise ValueError("任务缺少 text_input")
+    payload = task.get("payload") or {}
+    execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
+    if execution_mode not in {"standard", "strict"}:
+        execution_mode = "standard"
 
     user_id = task.get("user_id")
     user = get_user_by_id_sync(user_id) if user_id else None
@@ -668,6 +1115,8 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
             },
         })
 
+    recognition_fields = _derive_recognition_fields(parsed or {}, items, execution_mode)
+
     return {
         "description": str(parsed.get("description", "无法获取描述")),
         "insight": str(parsed.get("insight", "保持健康饮食！")),
@@ -675,6 +1124,7 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
         "pfc_ratio_comment": (parsed.get("pfc_ratio_comment") or "").strip() or None,
         "absorption_notes": (parsed.get("absorption_notes") or "").strip() or None,
         "context_advice": (parsed.get("context_advice") or "").strip() or None,
+        **recognition_fields,
     }
 
 

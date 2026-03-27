@@ -338,21 +338,6 @@
   text-overflow: ellipsis;
 }
 
-.friend-remove-btn {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #ef4444;
-  line-height: 1;
-  padding: 4rpx 8rpx;
-  border-radius: 9999rpx;
-  background: rgba(239, 68, 68, 0.08);
-}
-
-.friend-remove-btn.disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
 // 我的圈子（保留类名兼容）
 .my-circles-section {
   padding: 32rpx;

@@ -2,7 +2,7 @@ import { View, Text, Image, Textarea } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Switch } from '@taroify/core'
-import { imageToBase64, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
+import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
 import type { ExecutionMode } from '../../utils/api'
 
 import './index.scss'
@@ -34,11 +34,11 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; tips: string[] }> = {
   strict: {
     title: '精准模式',
-    desc: '更强调可执行准确度，识别不确定时会倾向提醒你重拍或分开拍。',
+    desc: '这是受约束执行模式，只服务增肌减脂场景；不符合规则时会要求你分开拍、拨开拍或重拍。',
     tips: [
-      '碳水和蛋白尽量分开摆放再拍',
-      '混合菜请拨开食材主体后再拍',
-      '旁边放参照物（手掌/餐具）更稳'
+      '只拍单纯碳水或单纯瘦肉，混合菜不要直接拍',
+      '碳水和蛋白尽量分开摆放，混在一起就拨开再拍',
+      '旁边放手掌或餐具作参照，重量判断会更稳'
     ]
   },
   standard: {
@@ -265,7 +265,8 @@ export default function AnalyzePage() {
         let base64 = imageBase64Map[path]
         if (!base64) {
           const stablePath = await persistImagePathIfNeeded(path)
-          base64 = await imageToBase64(stablePath || path)
+          const readPath = await compressImagePathForUpload(stablePath || path)
+          base64 = await imageToBase64(readPath || stablePath || path)
           setImageBase64Map(prev => (prev[path] ? prev : { ...prev, [path]: base64! }))
         }
         const { imageUrl } = await uploadAnalyzeImage(base64)
@@ -339,7 +340,7 @@ export default function AnalyzePage() {
         <View className='mode-banner-header'>
           <View className='mode-title-wrap'>
             <Text className='mode-title'>当前模式：{EXECUTION_MODE_META[executionMode].title}</Text>
-            <Text className='mode-sub'>影响本次识别策略</Text>
+            <Text className='mode-sub'>影响本次执行规则</Text>
           </View>
           <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
         </View>

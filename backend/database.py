@@ -1317,6 +1317,32 @@ async def respond_friend_request(request_id: str, to_user_id: str, accept: bool)
         raise
 
 
+async def cancel_sent_friend_request(request_id: str, from_user_id: str) -> None:
+    """撤销当前用户发出的、仍为 pending 的好友请求（删除该条记录）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        req = (
+            supabase.table("friend_requests")
+            .select("*")
+            .eq("id", request_id)
+            .eq("from_user_id", from_user_id)
+            .single()
+            .execute()
+        )
+        if not req.data:
+            raise ValueError("请求不存在或无权撤销")
+        row = req.data
+        if row.get("status") != "pending":
+            raise ValueError("只能撤销待对方处理的请求")
+        supabase.table("friend_requests").delete().eq("id", request_id).execute()
+    except ValueError:
+        raise
+    except Exception as e:
+        print(f"[cancel_sent_friend_request] 错误: {e}")
+        raise
+
+
 async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
     """获取好友列表，含 nickname、avatar、id（去重）"""
     friend_ids = await get_friend_ids(user_id)

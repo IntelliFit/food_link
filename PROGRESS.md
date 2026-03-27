@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-03-28
+
+- ✨ feat: 精准模式升级为受约束执行模式，新增结构化结果状态 `recognitionOutcome/rejectionReason/retakeGuidance/allowedFoodCategory`，支持精准通过、软拒绝、硬拒绝三类结果 `src/utils/api.ts` `backend/main.py` `backend/worker.py`
+- 🐛 fix: 文字异步分析提交补齐 `execution_mode` 的档案回退逻辑，避免图片和文字任务在未显式传模式时行为不一致 `backend/main.py`
+- 🎨 style: 结果页新增精准模式状态卡与硬/软拒绝交互，历史页新增“精准通过 / 不建议执行 / 需重拍”标签，分析页文案改为受约束执行模式 `src/pages/result/index.tsx` `src/pages/result/index.scss` `src/pages/analyze-history/index.tsx` `src/pages/analyze-history/index.scss` `src/pages/analyze/index.tsx`
+
 ## 2026-03-21
 
 - 📝 docs: 新增数据库分析报告，基于仓库内 SQL 与后端数据访问层梳理表结构、业务链路和结构风险 `docs/数据库分析报告.md`

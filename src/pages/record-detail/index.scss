@@ -89,6 +89,33 @@
     height: 100%;
     object-fit: cover;
   }
+
+  &.detail-image--logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20rpx;
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.95) 0%, rgba(236, 253, 245, 0.92) 30%, rgba(209, 250, 229, 0.98) 100%);
+    cursor: default;
+
+    image {
+      width: 184rpx;
+      height: 184rpx;
+      object-fit: contain;
+      padding: 22rpx;
+      border-radius: 44rpx;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 14rpx 36rpx rgba(15, 23, 42, 0.08);
+    }
+  }
+}
+
+.detail-image-placeholder-text {
+  font-size: 24rpx;
+  color: #64748b;
+  line-height: 1.6;
 }
 
 // 用户目标与状态标签

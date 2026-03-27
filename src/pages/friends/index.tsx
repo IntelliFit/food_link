@@ -2,6 +2,7 @@ import { View, Text, Image, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
 import {
+  friendCancelSentRequest,
   friendDelete,
   friendGetList,
   friendGetRequestsOverview,
@@ -37,6 +38,7 @@ export default function FriendsPage() {
   const [friends, setFriends] = useState<FriendListItem[]>([])
   const [received, setReceived] = useState<FriendRequestOverviewItem[]>([])
   const [sent, setSent] = useState<FriendRequestOverviewItem[]>([])
+  const [revokingId, setRevokingId] = useState<string | null>(null)
 
   const receivedPendingCount = useMemo(
     () => received.filter((item) => item.status === 'pending').length,
@@ -94,6 +96,28 @@ export default function FriendsPage() {
     } catch (error: any) {
       Taro.hideLoading()
       Taro.showToast({ title: error?.message || '操作失败', icon: 'none' })
+    }
+  }
+
+  const handleCancelSent = async (item: FriendRequestOverviewItem) => {
+    if (item.status !== 'pending' || revokingId) return
+    const ok = await Taro.showModal({
+      title: '撤销申请',
+      content: `确定撤销对「${item.counterpart_nickname || '对方'}」的好友申请吗？`,
+      confirmText: '撤销',
+      confirmColor: '#ef4444'
+    })
+    if (!ok.confirm) return
+
+    setRevokingId(item.id)
+    try {
+      await friendCancelSentRequest(item.id)
+      Taro.showToast({ title: '已撤销申请', icon: 'success' })
+      await loadData()
+    } catch (error: any) {
+      Taro.showToast({ title: error?.message || '撤销失败', icon: 'none' })
+    } finally {
+      setRevokingId(null)
     }
   }
 
@@ -189,6 +213,17 @@ export default function FriendsPage() {
                   </View>
                   <Text className={`status ${item.status}`}>{STATUS_LABEL[item.status] || item.status}</Text>
                 </View>
+                {item.status === 'pending' && (
+                  <View className='actions'>
+                    <Button
+                      className='plain-btn'
+                      disabled={revokingId === item.id}
+                      onClick={() => handleCancelSent(item)}
+                    >
+                      {revokingId === item.id ? '撤销中...' : '撤销申请'}
+                    </Button>
+                  </View>
+                )}
               </View>
             ))
           )}

@@ -153,6 +153,48 @@
     }
   }
 
+  .recognition-tag {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    padding: 4rpx 12rpx;
+    border-radius: 8rpx;
+    border: 1rpx solid transparent;
+
+    .recognition-tag-text {
+      font-size: 22rpx;
+      font-weight: 600;
+      line-height: 28rpx;
+    }
+
+    &.recognition-ok {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+
+      .recognition-tag-text {
+        color: #047857;
+      }
+    }
+
+    &.recognition-soft_reject {
+      background: #fffbeb;
+      border-color: #fcd34d;
+
+      .recognition-tag-text {
+        color: #b45309;
+      }
+    }
+
+    &.recognition-hard_reject {
+      background: #fef2f2;
+      border-color: #fca5a5;
+
+      .recognition-tag-text {
+        color: #b91c1c;
+      }
+    }
+  }
+
   .status-row {
     display: flex;
     align-items: center;
