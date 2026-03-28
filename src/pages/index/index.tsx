@@ -14,7 +14,7 @@ import {
 } from '../../utils/api'
 import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight } from '../../components/iconfont'
 import { Empty, Button } from '@taroify/core'
-import CustomNavBar from '../../components/CustomNavBar'
+import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 
 import './index.scss'
 
@@ -494,8 +494,8 @@ export default function IndexPage() {
       {/* 背景渐变层 */}
       <View className='gradient-bg' />
       
-      {/* 页面内容 */}
-      <View className='page-content'>
+      {/* 页面内容 - 只保留状态栏高度，因为导航栏是透明的 */}
+      <View className='page-content' style={{ paddingTop: `${getStatusBarHeightSafe()}px` }}>
         {/* 问候区 */}
         <View className='greeting-section'>
           <View className='greeting-text'>
@@ -610,7 +610,7 @@ export default function IndexPage() {
           })}
         </View>
 
-        {/* 今日餐食区域 -->
+        {/* 今日餐食区域 */}
         <View className='meals-section'>
           <View className='section-header'>
             <Text className='section-title'>今日餐食</Text>
