@@ -216,23 +216,34 @@ $text-tertiary: #9ca3af;
   line-height: 40rpx;
 }
 
-.target-badge {
+.target-section {
   display: flex;
-  align-items: center;
-  gap: 4rpx;
-  padding: 8rpx 16rpx;
-  background: #f3f4f6;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8rpx;
+}
+
+.target-text {
+  font-size: 24rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+}
+
+.target-edit-btn {
+  padding: 6rpx 16rpx;
+  background: linear-gradient(90deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border-radius: 9999rpx;
   
   &:active {
-    background: #e5e7eb;
+    opacity: 0.8;
   }
 }
 
-.target-badge-text {
+.target-edit-text {
   font-size: 22rpx;
-  color: $text-secondary;
+  color: #ffffff;
   line-height: 32rpx;
+  font-weight: 500;
 }
 
 // 进度条
@@ -332,23 +343,43 @@ $text-tertiary: #9ca3af;
   gap: 8rpx;
 }
 
+.macro-value-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  flex-shrink: 0;
+}
+
 .macro-value-wrap {
   display: flex;
   align-items: baseline;
   gap: 6rpx;
-  flex-shrink: 0;
 }
 
 .macro-big-number {
-  font-size: 40rpx;
-  font-weight: 600;
-  line-height: 52rpx;
+  font-size: 44rpx;
+  font-weight: 700;
+  line-height: 56rpx;
 }
 
 .macro-unit-inline {
   font-size: 22rpx;
   color: $text-tertiary;
   line-height: 30rpx;
+}
+
+.macro-percent-below {
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+  margin-top: 4rpx;
+}
+
+.macro-detail-text {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+  margin-top: 2rpx;
 }
 
 // 大环形仪表盘 - 双层圆环（加宽加粗）

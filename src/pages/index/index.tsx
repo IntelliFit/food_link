@@ -533,9 +533,11 @@ export default function IndexPage() {
               <Text className='card-value'>{formatNumberWithComma(remainingCalories)}</Text>
               <Text className='card-unit'>kcal</Text>
             </View>
-            <View className='target-badge' onClick={openTargetEditor}>
-              <Text className='target-badge-text'>目标: {formatDisplayNumber(intakeData.target)}</Text>
-              <IconChevronRight size={14} color='#6b7280' />
+            <View className='target-section'>
+              <Text className='target-text'>目标: {formatDisplayNumber(intakeData.target)}</Text>
+              <View className='target-edit-btn' onClick={openTargetEditor}>
+                <Text className='target-edit-text'>编辑目标</Text>
+              </View>
             </View>
           </View>
           
@@ -554,7 +556,6 @@ export default function IndexPage() {
         <View className='macros-section'>
           {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
             const macro = intakeData.macros[key]
-            const remaining = getMacroRemaining(key)
             const progress = clampProgress(macro.current, macro.target)
             
             return (
@@ -571,19 +572,25 @@ export default function IndexPage() {
                 
                 {/* 主体内容 */}
                 <View className='macro-main'>
-                  {/* 左侧：数字+单位 同行显示 */}
-                  <View className='macro-value-wrap'>
-                    <Text className='macro-big-number' style={{ color }}>
-                      {loading ? '--' : formatDisplayNumber(remaining)}
+                  {/* 左侧：摄入数据 */}
+                  <View className='macro-value-section'>
+                    <View className='macro-value-wrap'>
+                      <Text className='macro-big-number' style={{ color }}>
+                        {loading ? '--' : formatDisplayNumber(macro.current)}
+                      </Text>
+                      <Text className='macro-unit-inline'>{unit}</Text>
+                    </View>
+                    <Text className='macro-percent-below' style={{ color }}>
+                      {progress.toFixed(0)}%
                     </Text>
-                    <Text className='macro-unit-inline'>{unit}</Text>
+                    <Text className='macro-detail-text'>
+                      {formatDisplayNumber(macro.current)} / {formatDisplayNumber(macro.target)}{unit}
+                    </Text>
                   </View>
                   
-                  {/* 右侧：环形仪表盘 - 正确显示进度 */}
+                  {/* 右侧：环形仪表盘（无数字） */}
                   <View className='macro-donut'>
-                    {/* 灰色背景圆环 */}
                     <View className='donut-bg-ring' />
-                    {/* 彩色进度圆环 */}
                     <View 
                       className='donut-progress-ring'
                       style={{
@@ -592,12 +599,6 @@ export default function IndexPage() {
                         opacity: progress > 0 ? 1 : 0
                       }}
                     />
-                    {/* 中心文字 */}
-                    <View className='donut-center'>
-                      <Text className='donut-text' style={{ color }}>
-                        {progress.toFixed(0)}%
-                      </Text>
-                    </View>
                   </View>
                 </View>
               </View>
