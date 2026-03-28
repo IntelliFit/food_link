@@ -9,7 +9,9 @@ import {
   ChartTrendingOutlined,
   LocationOutlined,
   SettingOutlined,
+  Bell,
   ShieldOutlined,
+  CommentOutlined,
   InfoOutlined,
   CalendarOutlined,
   EnvelopOutlined
@@ -32,6 +34,8 @@ interface UserInfo {
   name: string
   meta: string
 }
+
+const PRO_MEMBERSHIP_TEST_OPENID = 'oe4xm19XWerfUsnkIsd_7XWu_Q4A'
 
 /** 注册时间格式化为 YYYY-MM-DD */
 function formatRegisterDate(value: string | undefined | null): string {
@@ -68,6 +72,7 @@ export default function ProfilePage() {
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
   const [registerDate, setRegisterDate] = useState('--')
+  const [canAccessProMembershipTest, setCanAccessProMembershipTest] = useState(false)
 
   // 每次显示页面时检查登录状态并刷新数据
   useDidShow(() => {
@@ -103,6 +108,7 @@ export default function ProfilePage() {
             Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
           }
           setRegisterDate(formatRegisterDate(registerTime))
+          setCanAccessProMembershipTest(apiUserInfo.openid === PRO_MEMBERSHIP_TEST_OPENID)
           const completed = apiUserInfo.onboarding_completed ?? true
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
@@ -123,6 +129,7 @@ export default function ProfilePage() {
           if (storedUserInfo) {
             setUserInfo(storedUserInfo)
           }
+          setCanAccessProMembershipTest(Taro.getStorageSync('openid') === PRO_MEMBERSHIP_TEST_OPENID)
           setRegisterDate(formatRegisterDate(Taro.getStorageSync('userRegisterTime') || ''))
         }
       } else {
@@ -132,10 +139,13 @@ export default function ProfilePage() {
           name: '用户昵称',
           meta: '已记录 0 天'
         })
+        setRecordDays(0)
         setRegisterDate('--')
+        setCanAccessProMembershipTest(false)
       }
     } catch (error) {
       console.error('读取登录状态失败:', error)
+      setCanAccessProMembershipTest(false)
     }
   }
 
@@ -143,37 +153,49 @@ export default function ProfilePage() {
   const services = [
     {
       id: 0,
-      icon: <TodoListOutlined size="32" />,
+      icon: <TodoListOutlined size='32' />,
       title: '健康档案',
       desc: '生理指标、BMR/TDEE、病史与饮食偏好'
     },
     {
       id: 1,
-      icon: <NotesOutlined size="32" />,
+      icon: <NotesOutlined size='32' />,
       title: '收藏餐食',
       desc: '常吃的食物组合，一键记录',
       path: '/pages/recipes/index'
     },
     {
       id: 3,
-      icon: <ChartTrendingOutlined size="32" />,
+      icon: <ChartTrendingOutlined size='32' />,
       title: '饮食记录',
       desc: '日历图查看每天吃多吃少'
     },
     {
       id: 5,
-      icon: <LocationOutlined size="32" />,
+      icon: <LocationOutlined size='32' />,
       title: '附近美食',
       desc: '发现附近健康美食推荐'
     }
   ]
 
+  if (canAccessProMembershipTest) {
+    services.push({
+      id: 6,
+      icon: <ShieldOutlined size='32' />,
+      title: 'Pro会员',
+      desc: '测试 Pro 会员支付功能',
+      path: '/pages/pro-membership/index'
+    })
+  }
+
   // 设置项
   const settings = [
-    { id: 1, icon: <SettingOutlined size="20" />, title: '个人设置' }, // 将 “设置” 改为 “个人设置” 更直观
-    { id: 3, icon: <ShieldOutlined size="20" />, title: '隐私设置' },
-    { id: 5, icon: <InfoOutlined size="20" />, title: '关于我们' },
-    { id: 6, icon: <EnvelopOutlined size="20" />, title: '联系邮箱', text: 'jianwen_ma@stu.pku.edu.cn' }
+    { id: 1, icon: <SettingOutlined size='20' />, title: '个人设置' }, // 将 “设置” 改为 “个人设置” 更直观
+    { id: 2, icon: <Bell size='20' />, title: '好友管理' },
+    { id: 3, icon: <ShieldOutlined size='20' />, title: '隐私设置' },
+    { id: 4, icon: <CommentOutlined size='20' />, title: '意见反馈' },
+    { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' },
+    { id: 6, icon: <EnvelopOutlined size='20' />, title: '联系邮箱', text: 'jianwen_ma@stu.pku.edu.cn' }
   ]
 
   const handleServiceClick = (service: typeof services[0]) => {
@@ -213,6 +235,10 @@ export default function ProfilePage() {
       })
       return
     }
+    if (service.id === 6) {
+      Taro.navigateTo({ url: '/pages/pro-membership/index' })
+      return
+    }
     const path = (service as { path?: string }).path
     if (path) {
       Taro.navigateTo({ url: path })
@@ -249,6 +275,11 @@ export default function ProfilePage() {
     // 设置：打开个人设置弹窗
     if (setting.id === 1) {
       handleSettings()
+      return
+    }
+    // 隐私设置
+    if (setting.id === 2) {
+      Taro.navigateTo({ url: '/pages/friends/index' })
       return
     }
     // 隐私设置
@@ -354,7 +385,9 @@ export default function ProfilePage() {
               name: '用户昵称',
               meta: '已记录 0 天'
             })
+            setRecordDays(0)
             setRegisterDate('--')
+            setCanAccessProMembershipTest(false)
             Taro.removeStorageSync('userRegisterTime')
             Taro.showToast({ title: '已退出登录', icon: 'success' })
           } catch (error) {
@@ -394,7 +427,7 @@ export default function ProfilePage() {
                   </View>
                   <Text className='user-phone'>{Taro.getStorageSync('phoneNumber') || '188******46'}</Text>
                   <View className='user-meta-row'>
-                    <CalendarOutlined size="14" className="meta-icon" />
+                    <CalendarOutlined size='14' className='meta-icon' />
                     <Text className='user-meta-text'>{userInfo.meta}</Text>
                   </View>
                 </View>
@@ -434,7 +467,7 @@ export default function ProfilePage() {
 
             <View className='card-bg-icon'>
               {/* 装饰背景图标 */}
-              <ShieldOutlined size="120" color="rgba(255,255,255,0.1)" />
+              <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
             </View>
           </View>
         )}
@@ -499,6 +532,9 @@ export default function ProfilePage() {
           </Button>
         )
       }
+      <View className='profile-version'>
+        <Text>版本号 v2.0.7</Text>
+      </View>
 
       {/* 个人设置弹窗 */}
       {showSettingsModal && (

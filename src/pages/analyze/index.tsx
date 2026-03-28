@@ -1,8 +1,8 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
-import React from 'react'
 import Taro from '@tarojs/taro'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Switch } from '@taroify/core'
-import { imageToBase64, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
+import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
 import type { ExecutionMode } from '../../utils/api'
 
 import './index.scss'
@@ -10,11 +10,9 @@ import './index.scss'
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
   { value: 'breakfast', label: '早餐', iconClass: 'icon-zaocan1' },
-  { value: 'morning_snack', label: '早加餐', iconClass: 'icon-lingshi' },
   { value: 'lunch', label: '午餐', iconClass: 'icon-wucan' },
-  { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
   { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
-  { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' }
+  { value: 'snack', label: '加餐', iconClass: 'icon-lingshi' },
 ]
 
 /** 饮食目标（状态一） */
@@ -32,6 +30,27 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
   { value: 'before_sleep', label: '睡前', iconClass: 'icon-shuijue' },
   { value: 'none', label: '无', iconClass: 'icon-nothing' }
 ]
+
+const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; tips: string[] }> = {
+  strict: {
+    title: '精准模式',
+    desc: '这是受约束执行模式，只服务增肌减脂场景；不符合规则时会要求你分开拍、拨开拍或重拍。',
+    tips: [
+      '只拍单纯碳水或单纯瘦肉，混合菜不要直接拍',
+      '碳水和蛋白尽量分开摆放，混在一起就拨开再拍',
+      '旁边放手掌或餐具作参照，重量判断会更稳'
+    ]
+  },
+  standard: {
+    title: '标准模式',
+    desc: '更强调记录效率，允许常规估算，适合快速记一餐。',
+    tips: [
+      '尽量让食物主体完整入镜',
+      '复杂菜可在下方补充烹饪信息',
+      '多角度拍摄可打开多视角辅助'
+    ]
+  }
+}
 
 const normalizeTmpPath = (path: string): string => {
   const raw = (path || '').trim()
@@ -110,17 +129,33 @@ const persistImagePathIfNeeded = async (path: string): Promise<string> => {
 }
 
 export default function AnalyzePage() {
-  const [imagePaths, setImagePaths] = React.useState<string[]>([])
-  const [imageBase64Map, setImageBase64Map] = React.useState<Record<string, string>>({})
-  const [additionalInfo, setAdditionalInfo] = React.useState<string>('')
-  const [mealType, setMealType] = React.useState<MealType>('breakfast')
-  const [dietGoal, setDietGoal] = React.useState<DietGoal>('none')
-  const [activityTiming, setActivityTiming] = React.useState<ActivityTiming>('none')
-  const [executionMode, setExecutionMode] = React.useState<ExecutionMode>('standard')
-  const [isMultiView, setIsMultiView] = React.useState(false)
-  const [isAnalyzing, setIsAnalyzing] = React.useState(false)
+  const [imagePaths, setImagePaths] = useState<string[]>([])
+  const [imageBase64Map, setImageBase64Map] = useState<Record<string, string>>({})
+  const [additionalInfo, setAdditionalInfo] = useState<string>('')
+  const [mealType, setMealType] = useState<MealType>('breakfast')
+  const [dietGoal, setDietGoal] = useState<DietGoal>('none')
+  const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
+  const [isMultiView, setIsMultiView] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  React.useEffect(() => {
+  const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+    return value === 'strict' ? 'strict' : 'standard'
+  }
+
+  const handleMultiViewChange = (value: any) => {
+    if (typeof value === 'boolean') {
+      setIsMultiView(value)
+      return
+    }
+    if (value && typeof value === 'object' && typeof value.detail?.value === 'boolean') {
+      setIsMultiView(value.detail.value)
+      return
+    }
+    setIsMultiView(Boolean(value))
+  }
+
+  useEffect(() => {
     // 1. 获取饮食目标
     const initDietGoal = async () => {
       try {
@@ -136,7 +171,7 @@ export default function AnalyzePage() {
             Taro.setStorageSync('dietGoal', profile.diet_goal)
           }
           if (profile.execution_mode) {
-            setExecutionMode(profile.execution_mode)
+            setExecutionMode(normalizeExecutionMode(profile.execution_mode))
           }
         }
       } catch (err) {
@@ -206,6 +241,10 @@ export default function AnalyzePage() {
     setActivityTiming(value)
   }
 
+  const handleDefaultModeEdit = () => {
+    Taro.navigateTo({ url: '/pages/health-profile-edit/index' })
+  }
+
   const doAnalyze = async () => {
     if (!getAccessToken()) {
       Taro.showToast({ title: '请先登录后再使用识别功能', icon: 'none' })
@@ -226,7 +265,8 @@ export default function AnalyzePage() {
         let base64 = imageBase64Map[path]
         if (!base64) {
           const stablePath = await persistImagePathIfNeeded(path)
-          base64 = await imageToBase64(stablePath || path)
+          const readPath = await compressImagePathForUpload(stablePath || path)
+          base64 = await imageToBase64(readPath || stablePath || path)
           setImageBase64Map(prev => (prev[path] ? prev : { ...prev, [path]: base64! }))
         }
         const { imageUrl } = await uploadAnalyzeImage(base64)
@@ -247,8 +287,9 @@ export default function AnalyzePage() {
         is_multi_view: isMultiView,
         execution_mode: executionMode
       })
+      Taro.setStorageSync('analyzeExecutionMode', executionMode)
       Taro.hideLoading()
-      Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}` })
+      Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}&execution_mode=${executionMode}` })
     } catch (error: any) {
       Taro.hideLoading()
       setIsAnalyzing(false)
@@ -294,6 +335,42 @@ export default function AnalyzePage() {
 
   return (
     <View className='analyze-page'>
+      {/* 模式提示条（更接近网页信息架构：先告知规则，再执行上传） */}
+      <View className={`mode-banner ${executionMode}`}>
+        <View className='mode-banner-header'>
+          <View className='mode-title-wrap'>
+            <Text className='mode-title'>当前模式：{EXECUTION_MODE_META[executionMode].title}</Text>
+            <Text className='mode-sub'>影响本次执行规则</Text>
+          </View>
+          <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
+        </View>
+
+        <View className='mode-switch-row'>
+          <View
+            className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''}`}
+            onClick={() => setExecutionMode('strict')}
+          >
+            精准
+          </View>
+          <View
+            className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
+            onClick={() => setExecutionMode('standard')}
+          >
+            标准
+          </View>
+        </View>
+
+        <Text className='mode-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
+        <View className='mode-tips'>
+          {EXECUTION_MODE_META[executionMode].tips.map((tip, idx) => (
+            <View key={idx} className='mode-tip-item'>
+              <Text className='mode-tip-dot'>•</Text>
+              <Text className='mode-tip-text'>{tip}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
       {/* 图片预览区域 (Grid) */}
       <View className='image-preview-section'>
         {imagePaths.length > 0 ? (
@@ -340,8 +417,8 @@ export default function AnalyzePage() {
           <Switch
             className='compact-switch'
             checked={isMultiView}
-            onChange={setIsMultiView}
-            style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+            onChange={handleMultiViewChange}
+            style={{ '--switch-checked-background-color': '#00bc7d' } as CSSProperties}
           />
         </View>
       </View>
@@ -378,7 +455,7 @@ export default function AnalyzePage() {
           <Text className='section-title'>餐次</Text>
         </View>
         <Text className='section-hint'>
-          选择本餐次（含早/午/晚加餐），AI 将结合场景给出建议。
+          选择本餐次，AI 将结合场景给出建议。
         </Text>
         <View className='meal-options'>
           {MEAL_OPTIONS.map((opt) => (

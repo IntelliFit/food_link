@@ -175,6 +175,15 @@ export default function RecordPage() {
     const normalizedImagePaths = (params.imagePaths || []).filter(Boolean)
     Taro.setStorageSync('analyzeImagePaths', normalizedImagePaths)
     Taro.setStorageSync('analyzeImagePath', normalizedImagePaths[0] || '')
+    Taro.setStorageSync('analyzeTaskType', normalizedImagePaths.length > 0 ? 'food' : 'food_text')
+    if (normalizedImagePaths.length > 0) {
+      Taro.removeStorageSync('analyzeTextInput')
+      Taro.removeStorageSync('analyzeTextAdditionalContext')
+    } else {
+      const fallbackText = params.items.map((item) => `${item.name} ${item.estimatedWeightGrams}g`).join('；')
+      Taro.setStorageSync('analyzeTextInput', params.description || fallbackText)
+      Taro.removeStorageSync('analyzeTextAdditionalContext')
+    }
     Taro.setStorageSync('analyzeResult', JSON.stringify({
       description: params.description || '',
       insight: params.insight || '保持健康饮食！',
@@ -271,6 +280,8 @@ export default function RecordPage() {
     setTextCalculating(true)
     Taro.showLoading({ title: '提交任务中...', mask: true })
     try {
+      Taro.setStorageSync('analyzeTextInput', inputText)
+      Taro.removeStorageSync('analyzeTextAdditionalContext')
       const { task_id } = await submitTextAnalyzeTask({
         text: inputText,
         meal_type: selectedMeal as any,
@@ -875,5 +886,3 @@ export default function RecordPage() {
     </View>
   )
 }
-
-

@@ -7,21 +7,17 @@ import './index.scss'
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
-  { value: 'morning_snack' as const, label: '早加餐' },
   { value: 'lunch' as const, label: '午餐' },
-  { value: 'afternoon_snack' as const, label: '午加餐' },
+  { value: 'snack' as const, label: '加餐' },
   { value: 'dinner' as const, label: '晚餐' },
-  { value: 'evening_snack' as const, label: '晚加餐' }
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
-  morning_snack: 'icon-lingshi',
   lunch: 'icon-wucan',
-  afternoon_snack: 'icon-lingshi',
+  snack: 'icon-lingshi',
   dinner: 'icon-wancan',
-  evening_snack: 'icon-lingshi'
 }
 
 interface NutritionItem {
@@ -35,6 +31,24 @@ interface NutritionItem {
   carbs: number
   fat: number
 }
+
+type MacroField = 'protein' | 'carbs' | 'fat'
+
+const MACRO_FIELDS: MacroField[] = ['protein', 'carbs', 'fat']
+
+const MACRO_FIELD_META: Record<MacroField, { label: string; className: string }> = {
+  protein: { label: '蛋白质', className: 'protein' },
+  carbs: { label: '碳水', className: 'carbs' },
+  fat: { label: '脂肪', className: 'fat' }
+}
+
+const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
+
+const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
+
+const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
+  roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
+)
 
 export default function ResultTextPage() {
   const [totalWeight, setTotalWeight] = useState(0)
@@ -116,15 +130,18 @@ export default function ResultTextPage() {
         if (item.id !== id) return item
         const newWeight = Math.max(10, item.weight + delta)
         const weightScale = item.weight > 0 ? newWeight / item.weight : 1
+        const nextProtein = item.protein * weightScale
+        const nextCarbs = item.carbs * weightScale
+        const nextFat = item.fat * weightScale
         const newIntake = Math.round(newWeight * (item.ratio / 100))
         return {
           ...item,
           weight: newWeight,
           intake: newIntake,
-          calorie: item.calorie * weightScale,
-          protein: item.protein * weightScale,
-          carbs: item.carbs * weightScale,
-          fat: item.fat * weightScale
+          calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
+          protein: nextProtein,
+          carbs: nextCarbs,
+          fat: nextFat
         }
       })
       calculateNutritionStats(updated)
@@ -142,6 +159,51 @@ export default function ResultTextPage() {
       })
       calculateNutritionStats(updated)
       return updated
+    })
+  }
+
+  const updateMacroField = (
+    id: number,
+    field: MacroField,
+    nextValue: number | ((currentValue: number) => number)
+  ) => {
+    setNutritionItems((items) => {
+      const updated = items.map((item) => {
+        if (item.id !== id) return item
+        const resolvedValue = typeof nextValue === 'function' ? nextValue(item[field]) : nextValue
+        const normalizedValue = Math.max(0, roundToSingleDecimal(resolvedValue))
+        const nextItem = {
+          ...item,
+          [field]: normalizedValue
+        } as NutritionItem
+        return {
+          ...nextItem,
+          calorie: calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
+        }
+      })
+      calculateNutritionStats(updated)
+      return updated
+    })
+  }
+
+  const handleMacroEdit = (id: number, field: MacroField, currentValue: number) => {
+    const meta = MACRO_FIELD_META[field]
+    Taro.showModal({
+      title: `修改${meta.label}(g)`,
+      content: formatMacroDisplay(currentValue),
+      // @ts-ignore
+      editable: true,
+      placeholderText: '请输入克数',
+      success: (res) => {
+        if (!res.confirm) return
+        const nextText = String((res as any).content ?? '').trim()
+        const parsed = Number(nextText)
+        if (!nextText || !Number.isFinite(parsed) || parsed < 0) {
+          Taro.showToast({ title: '请输入不小于0的数字', icon: 'none' })
+          return
+        }
+        updateMacroField(id, field, parsed)
+      }
     })
   }
 
@@ -432,6 +494,26 @@ export default function ResultTextPage() {
                         showValue={false}
                         onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
                       />
+                    </View>
+
+                    <View className='macro-editor'>
+                      <View className='macro-editor-grid'>
+                        {MACRO_FIELDS.map((field) => {
+                          const meta = MACRO_FIELD_META[field]
+                          const intakeMacro = item[field] * (item.ratio / 100)
+                          return (
+                            <View key={`${item.id}-${field}`} className={`macro-editor-item ${meta.className}`}>
+                              <View
+                                className='macro-editor-chip'
+                                onClick={() => handleMacroEdit(item.id, field, item[field])}
+                              >
+                                <Text className='macro-editor-item-label'>{meta.label}</Text>
+                                <Text className='macro-editor-value'>{formatMacroDisplay(intakeMacro)}g</Text>
+                              </View>
+                            </View>
+                          )
+                        })}
+                      </View>
                     </View>
                   </View>
                 </View>

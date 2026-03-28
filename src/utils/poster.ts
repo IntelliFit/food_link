@@ -111,6 +111,7 @@ export interface PosterDrawOptions {
   image: { width: number; height: number } | null
   qrCodeImage?: { width: number; height: number } | null
   sharerNickname?: string
+  sharerAvatarImage?: { width: number; height: number } | null
 }
 
 // 风格配色
@@ -157,7 +158,7 @@ export function drawRecordPoster(
   ctx: CanvasRenderingContext2D,
   options: PosterDrawOptions
 ): void {
-  const { width: W, height: H, record, image, qrCodeImage, sharerNickname } = options
+  const { width: W, height: H, record, image, qrCodeImage, sharerNickname, sharerAvatarImage } = options
 
   // 1. 底层背景：更浅的颜色，加上光晕效果（毛玻璃的背景）
   const bgGradient = ctx.createLinearGradient(0, 0, W, H)
@@ -447,20 +448,34 @@ export function drawRecordPoster(
   // Left: Title
   const textStartX = textPaddingX
 
+  const avatarSize = 22
+  const avatarX = textStartX
+  const avatarY = footerY - 2
+  const titleX = sharerAvatarImage ? textStartX + avatarSize + 10 : textStartX
+
+  if (sharerAvatarImage) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.drawImage(sharerAvatarImage as CanvasImageSource, avatarX, avatarY, avatarSize, avatarSize)
+    ctx.restore()
+  }
+
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_MAIN
   ctx.font = 'bold 15px sans-serif'
   const displayName = (sharerNickname || '').trim()
   if (displayName) {
-    ctx.fillText(`${displayName} 的饮食分享`, textStartX, footerY + 14)
+    ctx.fillText(`${displayName} 的饮食分享`, titleX, footerY + 14)
   } else {
-    ctx.fillText('智健食探', textStartX, footerY + 14)
+    ctx.fillText('智健食探', titleX, footerY + 14)
   }
 
   ctx.fillStyle = TEXT_LIGHT
   ctx.font = '10px sans-serif'
-  ctx.fillText('扫码登录食探，可一键成为好友', textStartX, footerY + 32)
+  ctx.fillText('扫码登录食探，可一键成为好友', titleX, footerY + 32)
 
   // Right: QR Code
   const qrSize = 80

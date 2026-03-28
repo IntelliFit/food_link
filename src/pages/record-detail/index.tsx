@@ -1,5 +1,5 @@
 import { View, Text, Image, ScrollView, Canvas, Button, Input, Slider } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getSharedFoodRecord,
@@ -15,6 +15,8 @@ import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } fr
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 
 import './index.scss'
+
+const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/public-assets//logo.png'
 
 const MEAL_TYPE_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -73,24 +75,25 @@ function getInviteCodeFromUserId(userId: string): string {
 
 export default function RecordDetailPage() {
   const router = useRouter()
-  const [record, setRecord] = useState<FoodRecord | null>(null)
-  const [posterGenerating, setPosterGenerating] = useState(false)
-  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
-  const [showPosterModal, setShowPosterModal] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [isOwner, setIsOwner] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editItems, setEditItems] = useState<Array<{
+  const [record, setRecord] = React.useState<FoodRecord | null>(null)
+  const [posterGenerating, setPosterGenerating] = React.useState(false)
+  const [posterImageUrl, setPosterImageUrl] = React.useState<string | null>(null)
+  const [showPosterModal, setShowPosterModal] = React.useState(false)
+  const [loading, setLoading] = React.useState(true)
+  const [isOwner, setIsOwner] = React.useState(false)
+  const [showEditModal, setShowEditModal] = React.useState(false)
+  const [editItems, setEditItems] = React.useState<Array<{
     name: string
     weight: number
     ratio: number
     intake: number
     nutrients: Nutrients
   }>>([])
-  const [editSaving, setEditSaving] = useState(false)
-  const [ownerNickname, setOwnerNickname] = useState('')
-  const [ownerInviteCode, setOwnerInviteCode] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
+  const [editSaving, setEditSaving] = React.useState(false)
+  const [ownerNickname, setOwnerNickname] = React.useState('')
+  const [ownerAvatar, setOwnerAvatar] = React.useState('')
+  const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
+  const [inviteLoading, setInviteLoading] = React.useState(false)
 
   useEffect(() => {
     const loadRecord = async () => {
@@ -107,6 +110,7 @@ export default function RecordDetailPage() {
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
             setOwnerNickname(inviterProfile.nickname || '')
+            setOwnerAvatar(inviterProfile.avatar || '')
             setOwnerInviteCode(inviterProfile.invite_code || getInviteCodeFromUserId(fetchedRecord.user_id))
           } catch {
             setOwnerInviteCode(getInviteCodeFromUserId(fetchedRecord.user_id))
@@ -153,42 +157,22 @@ export default function RecordDetailPage() {
   const sharePath = `/pages/record-detail/index?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
 
   useShareAppMessage(() => {
+    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
     return {
-      title: '来看看我的健康饮食记录吧！',
+      title,
       path: sharePath,
       imageUrl: posterImageUrl || undefined
     }
   })
 
   useShareTimeline(() => {
+    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
     return {
-      title: '来看看我的健康饮食记录吧！',
+      title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
       imageUrl: posterImageUrl || undefined
     }
   })
-
-  useEffect(() => {
-    const autoAcceptInvite = async () => {
-      if (!inviteCode || isOwner || !getAccessToken()) return
-      const cacheKey = `friend_invite_auto_${shareRecordId}_${inviteCode}`
-      try {
-        if (Taro.getStorageSync(cacheKey)) return
-        Taro.setStorageSync(cacheKey, 1)
-      } catch {
-        // ignore storage errors
-      }
-      try {
-        const res = await acceptFriendInvite(inviteCode)
-        if (res.status === 'added') {
-          Taro.showToast({ title: `已和${res.nickname || '对方'}成为好友`, icon: 'success' })
-        }
-      } catch {
-        // 自动处理失败不打断页面浏览
-      }
-    }
-    autoAcceptInvite()
-  }, [inviteCode, isOwner, shareRecordId])
 
   /** 打开编辑弹窗，复制当前食物项数据 */
   const handleOpenEdit = useCallback(() => {
@@ -322,6 +306,8 @@ export default function RecordDetailPage() {
   const mealIconConfig = MEAL_ICON_CONFIG[record.meal_type as keyof typeof MEAL_ICON_CONFIG] || MEAL_ICON_CONFIG.snack
   const timeStr = formatRecordTime(record.record_time)
   const items = record.items || []
+  const hasRealRecordImage = Boolean(record.image_path)
+  const recordDisplayImage = record.image_path || APP_LOGO_URL
 
   /** 单条食物实际摄入热量（按 ratio） */
   const itemCalorie = (item: FoodRecord['items'][0]) => {
@@ -346,11 +332,17 @@ export default function RecordDetailPage() {
     try {
       const res = await acceptFriendInvite(inviteCode)
       Taro.showToast({
-        title: res.status === 'added' ? `已和${res.nickname || '对方'}成为好友` : '你们已是好友',
+        title: res.status === 'request_sent' ? `已向${res.nickname || '对方'}发送申请` : '你们已是好友',
         icon: 'success'
       })
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '添加好友失败', icon: 'none' })
+      const msg = e?.message || '添加好友失败'
+      Taro.showModal({
+        title: '添加好友失败',
+        content: msg.length > 280 ? `${msg.slice(0, 280)}...` : msg,
+        showCancel: false,
+        confirmText: '我知道了'
+      })
     } finally {
       setInviteLoading(false)
     }
@@ -395,21 +387,33 @@ export default function RecordDetailPage() {
         }
 
         const loadQRImage = async () => {
-          try {
-            // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
-            const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index')
-            return await loadImage(base64)
-          } catch (e) {
-            console.error('Failed to load real QR code', e)
-            return null // fallback to fake QR code in poster
+          // scene 最大 32 个字符，使用短邀请码承接「扫码加好友」
+          const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
+          // 部分账号/环境下 develop 码不可用，按优先级自动回退，确保尽量拿到真实二维码。
+          const isDevelopmentEnv =
+            typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
+          const envCandidates: Array<'develop' | 'trial' | 'release'> =
+            isDevelopmentEnv
+              ? ['develop', 'trial', 'release']
+              : ['release', 'trial', 'develop']
+
+          for (const envVersion of envCandidates) {
+            try {
+              const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
+              const img = await loadImage(base64)
+              if (img) return img
+            } catch (e) {
+              console.warn(`QR code load failed for env=${envVersion}`, e)
+            }
           }
+          return null // fallback to fake QR code in poster
         }
 
         Promise.all([
           loadImage(record.image_path || ''),
-          loadQRImage()
-        ]).then(([mainImg, qrImg]) => {
+          loadQRImage(),
+          loadImage(ownerAvatar || '')
+        ]).then(([mainImg, qrImg, avatarImg]) => {
           try {
             const ctx = canvas.getContext('2d')
             if (!ctx) {
@@ -432,6 +436,7 @@ export default function RecordDetailPage() {
               image: mainImg,
               qrCodeImage: qrImg,
               sharerNickname: ownerNickname,
+              sharerAvatarImage: avatarImg,
             })
 
             Taro.canvasToTempFilePath({
@@ -506,21 +511,21 @@ export default function RecordDetailPage() {
           </View>
         </View>
 
-        {
-          record.image_path ? (
-            <View
-              className="detail-image"
-              onClick={() => {
-                Taro.previewImage({
-                  urls: [record.image_path!],
-                  current: record.image_path!
-                })
-              }}
-            >
-              <Image src={record.image_path} mode="aspectFill" />
-            </View>
-          ) : null
-        }
+        <View
+          className={`detail-image ${hasRealRecordImage ? '' : 'detail-image--logo'}`}
+          onClick={() => {
+            if (!record.image_path) return
+            Taro.previewImage({
+              urls: [record.image_path],
+              current: record.image_path
+            })
+          }}
+        >
+          <Image src={recordDisplayImage} mode={hasRealRecordImage ? 'aspectFill' : 'aspectFit'} />
+          {!hasRealRecordImage && (
+            <Text className="detail-image-placeholder-text">未提供实物照片，已使用产品 logo</Text>
+          )}
+        </View>
 
         {/* 用户选择的目标与状态 */}
         {(record.diet_goal || record.activity_timing) && (
@@ -600,12 +605,15 @@ export default function RecordDetailPage() {
 
         {!isOwner && inviteCode && (
           <View className="friend-invite-card">
-            <Text className="friend-invite-title">
-              {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
-            </Text>
-            <Text className="friend-invite-desc">未注册会先登录，登录后自动成为好友</Text>
+            <View className="friend-invite-header">
+              {ownerAvatar ? <Image className="friend-invite-avatar" src={ownerAvatar} mode="aspectFill" /> : null}
+              <Text className="friend-invite-title">
+                {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
+              </Text>
+            </View>
+            <Text className="friend-invite-desc">未注册会先登录，登录后发送申请，需对方同意</Text>
             <Button className="friend-invite-btn" onClick={handleAcceptInvite} disabled={inviteLoading}>
-              {inviteLoading ? '处理中...' : (getAccessToken() ? '立即成为好友' : '登录并成为好友')}
+              {inviteLoading ? '处理中...' : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
             </Button>
           </View>
         )}

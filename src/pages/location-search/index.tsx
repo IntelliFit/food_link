@@ -3,7 +3,10 @@ import { useState, useEffect } from 'react'
 import Taro, { getCurrentInstance } from '@tarojs/taro'
 import './index.scss'
 
-const API_BASE_URL = process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
+const ENV_API_BASE_URL =
+  (typeof process !== 'undefined' && process?.env?.TARO_APP_API_BASE_URL) || ''
+
+const API_BASE_URL = ENV_API_BASE_URL || 'https://healthymax.cn'
 
 type PoiItem = {
   name: string

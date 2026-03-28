@@ -3,8 +3,25 @@ import Taro from '@tarojs/taro'
 // API 基础 URL：从环境变量读取，未配置时使用生产地址
 // 开发：.env.development 中 TARO_APP_API_BASE_URL
 // 生产：.env.production 中 TARO_APP_API_BASE_URL
+const ENV_API_BASE_URL =
+  (typeof process !== 'undefined' && process?.env?.TARO_APP_API_BASE_URL) || ''
+
 export const API_BASE_URL =
-  process.env.TARO_APP_API_BASE_URL || 'https://healthymax.cn'
+  ENV_API_BASE_URL || 'https://healthymax.cn'
+
+function isNgrokFreeDomain(url: string): boolean {
+  return /^https:\/\/[^/]+\.ngrok-free\.dev(?:\/|$)/i.test(url)
+}
+
+function withNgrokBypassHeaders(
+  header?: Record<string, any>
+): Record<string, any> {
+  const merged = { ...(header || {}) }
+  if (isNgrokFreeDomain(API_BASE_URL)) {
+    merged['ngrok-skip-browser-warning'] = '1'
+  }
+  return merged
+}
 
 // 基础类型定义
 export type CanonicalMealType =
@@ -21,6 +38,8 @@ export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode = 'standard' | 'strict'
+export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
+export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
@@ -36,6 +55,7 @@ export interface AnalyzeRequest {
   activity_timing?: ActivityTiming
   remaining_calories?: number
   meal_type?: MealType
+  timezone_offset_minutes?: number
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
 }
@@ -67,6 +87,10 @@ export interface AnalyzeResponse {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
+  recognitionOutcome?: AnalyzeRecognitionOutcome
+  rejectionReason?: string
+  retakeGuidance?: string[]
+  allowedFoodCategory?: AllowedFoodCategory
 }
 
 // ---------- 双模型对比分析接口 ----------
@@ -82,6 +106,10 @@ export interface ModelAnalyzeResult {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
+  recognitionOutcome?: AnalyzeRecognitionOutcome
+  rejectionReason?: string
+  retakeGuidance?: string[]
+  allowedFoodCategory?: AllowedFoodCategory
 }
 
 /** 双模型对比分析响应 */
@@ -351,6 +379,41 @@ export interface UserInfo {
   public_records?: boolean
 }
 
+export interface MembershipPlan {
+  code: string
+  name: string
+  amount: number
+  duration_months: number
+  description?: string | null
+}
+
+export interface MembershipStatus {
+  is_pro: boolean
+  status: 'inactive' | 'active' | 'expired' | 'cancelled'
+  current_plan_code?: string | null
+  first_activated_at?: string | null
+  current_period_start?: string | null
+  expires_at?: string | null
+  last_paid_at?: string | null
+}
+
+export interface MembershipPlansResponse {
+  list: MembershipPlan[]
+}
+
+export interface CreateMembershipPaymentResponse {
+  order_no: string
+  plan_code: string
+  amount: number
+  pay_params: {
+    timeStamp: string
+    nonceStr: string
+    package: string
+    signType: 'RSA'
+    paySign: string
+  }
+}
+
 export interface ReportExtractIndicator {
   name: string
   value: string
@@ -568,24 +631,60 @@ export async function imageToBase64(imagePath: string): Promise<string> {
 }
 
 /**
- * 调用后端API分析食物图片
- * @param request 分析请求参数
- * @returns Promise<AnalyzeResponse> 分析结果
+ * 上传前压缩本地图片，降低 JSON 请求体体积。
+ * 线上网关常限制单请求约 1MB，高清原图转 base64 易超限；精准模式用户更易拍大图。
+ * 压缩失败时返回原路径。
  */
+export async function compressImagePathForUpload(localPath: string): Promise<string> {
+  const raw = (localPath || '').trim()
+  if (!raw) return raw
+  if (typeof Taro.getEnv === 'function' && Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+    return raw
+  }
+  try {
+    const res = await Taro.compressImage({
+      src: raw,
+      quality: 72,
+    })
+    const next = (res as { tempFilePath?: string })?.tempFilePath
+    if (next && next.trim()) return next.trim()
+  } catch (e) {
+    console.warn('compressImagePathForUpload 失败，使用原图:', e)
+  }
+  return raw
+}
+
+function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string {
+  const d = data as { detail?: string; message?: string } | null | undefined
+  if (d && typeof d.detail === 'string' && d.detail.trim()) return d.detail.trim()
+  if (d && typeof d.message === 'string' && d.message.trim()) return d.message.trim()
+  if (statusCode === 413) {
+    return '图片体积过大，请重新拍照或选择较小的图片后再试'
+  }
+  if (statusCode === 401 || statusCode === 403) {
+    return '登录已失效，请重新登录后再试'
+  }
+  return `上传图片失败（HTTP ${statusCode}）`
+}
+
 /**
- * 食物分析前上传图片到 Supabase，返回公网 URL
+ * 食物分析前上传图片到 Supabase，返回公网 URL。
+ * 已登录时附带 Bearer，与异步分析任务一致；未登录的页面（如仅调试用）仍可上传。
  */
 export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUrl: string }> {
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/upload-analyze-image`,
     method: 'POST',
-    header: { 'Content-Type': 'application/json' },
+    header: withNgrokBypassHeaders({
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
     data: { base64Image },
-    timeout: 15000
+    timeout: 60000,
   })
   if (response.statusCode !== 200) {
-    const msg = (response.data as any)?.detail || '上传图片失败'
-    throw new Error(msg)
+    throw new Error(formatUploadAnalyzeHttpError(response.statusCode, response.data))
   }
   return response.data as { imageUrl: string }
 }
@@ -597,12 +696,15 @@ export async function analyzeFoodImage(
     throw new Error('请提供 base64Image 或 image_url')
   }
   try {
+    const timezoneOffsetMinutes = Number.isFinite(request.timezone_offset_minutes)
+      ? request.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze`,
       method: 'POST',
-      header: {
+      header: withNgrokBypassHeaders({
         'Content-Type': 'application/json'
-      },
+      }),
       data: {
         ...(request.base64Image != null && { base64Image: request.base64Image }),
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
@@ -611,7 +713,8 @@ export async function analyzeFoodImage(
         modelName: request.modelName || 'qwen-vl-max',
         ...(request.user_goal != null && { user_goal: request.user_goal }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
-        ...(request.meal_type != null && { meal_type: request.meal_type })
+        ...(request.meal_type != null && { meal_type: request.meal_type }),
+        timezone_offset_minutes: timezoneOffsetMinutes
       },
       timeout: 60000 // 60秒超时
     })
@@ -640,12 +743,15 @@ export async function analyzeFoodImageCompare(
     throw new Error('请提供 base64Image 或 image_url')
   }
   try {
+    const timezoneOffsetMinutes = Number.isFinite(request.timezone_offset_minutes)
+      ? request.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze-compare`,
       method: 'POST',
-      header: {
+      header: withNgrokBypassHeaders({
         'Content-Type': 'application/json'
-      },
+      }),
       data: {
         ...(request.base64Image != null && { base64Image: request.base64Image }),
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
@@ -656,7 +762,8 @@ export async function analyzeFoodImageCompare(
         ...(request.diet_goal != null && { diet_goal: request.diet_goal }),
         ...(request.activity_timing != null && { activity_timing: request.activity_timing }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
-        ...(request.meal_type != null && { meal_type: request.meal_type })
+        ...(request.meal_type != null && { meal_type: request.meal_type }),
+        timezone_offset_minutes: timezoneOffsetMinutes
       },
       timeout: 120000 // 120秒超时（双模型调用需要更长时间）
     })
@@ -700,7 +807,7 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/analyze-text`,
       method: 'POST',
-      header: { 'Content-Type': 'application/json' },
+      header: withNgrokBypassHeaders({ 'Content-Type': 'application/json' }),
       data: payload,
       timeout: 60000
     })
@@ -738,6 +845,7 @@ export interface AnalyzeTaskSubmitParams {
   image_url: string
   image_urls?: string[]
   meal_type?: MealType
+  timezone_offset_minutes?: number
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -746,6 +854,11 @@ export interface AnalyzeTaskSubmitParams {
   modelName?: string
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
+  previousResult?: AnalyzeResponse
+  correctionItems?: Array<{
+    name: string
+    weight: number
+  }>
 }
 
 export interface AnalysisTask {
@@ -767,9 +880,15 @@ export interface AnalysisTask {
 
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const payload: AnalyzeTaskSubmitParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
+  }
   const res = await authenticatedRequest('/api/analyze/submit', {
     method: 'POST',
-    data: body,
+    data: payload,
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -783,17 +902,31 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
 export interface AnalyzeTextTaskSubmitParams {
   text: string
   meal_type?: MealType
+  timezone_offset_minutes?: number
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
   remaining_calories?: number
+  additionalContext?: string
+  execution_mode?: ExecutionMode
+  previousResult?: AnalyzeResponse
+  correctionItems?: Array<{
+    name: string
+    weight: number
+  }>
 }
 
 /** 提交文字分析任务（异步） */
 export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const payload: AnalyzeTextTaskSubmitParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
+  }
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
-    data: body,
+    data: payload,
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -940,6 +1073,7 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
   const res = await Taro.request({
     url: `${API_BASE_URL}/api/food-record/share/${encodeURIComponent(recordId)}`,
     method: 'GET',
+    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -952,9 +1086,14 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
 /**
  * 获取小程序无限拉新二维码（Base64）
  */
-export async function getUnlimitedQRCode(scene: string, page?: string): Promise<{ base64: string }> {
+export async function getUnlimitedQRCode(
+  scene: string,
+  page?: string,
+  envVersion?: 'release' | 'trial' | 'develop'
+): Promise<{ base64: string }> {
   const payload: any = { scene }
   if (page) payload.page = page
+  if (envVersion) payload.env_version = envVersion
 
   const res = await authenticatedRequest('/api/qrcode', {
     method: 'POST',
@@ -1219,11 +1358,11 @@ export async function authenticatedRequest(
   const res = await Taro.request({
     url: `${API_BASE_URL}${url}`,
     ...options,
-    header: {
+    header: withNgrokBypassHeaders({
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       ...(options.header || {})
-    }
+    })
   })
 
   if (res.statusCode === 401 || res.statusCode === 403) {
@@ -1262,9 +1401,9 @@ export async function login(code: string, phoneCode?: string): Promise<LoginResp
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/login`,
       method: 'POST',
-      header: {
+      header: withNgrokBypassHeaders({
         'Content-Type': 'application/json'
-      },
+      }),
       data: requestData,
       timeout: 10000 // 10秒超时
     })
@@ -1322,6 +1461,76 @@ export async function getUserProfile(): Promise<UserInfo> {
   } catch (error: any) {
     console.error('获取用户信息失败:', error)
     throw new Error(error.message || '获取用户信息失败')
+  }
+}
+
+/**
+ * 获取会员套餐列表
+ */
+export async function getMembershipPlans(): Promise<MembershipPlan[]> {
+  try {
+    const response = await Taro.request({
+      url: `${API_BASE_URL}/api/membership/plans`,
+      method: 'GET',
+      header: withNgrokBypassHeaders({
+        'Content-Type': 'application/json'
+      })
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取会员套餐失败'
+      throw new Error(errorMsg)
+    }
+
+    return ((response.data as MembershipPlansResponse)?.list || []) as MembershipPlan[]
+  } catch (error: any) {
+    console.error('获取会员套餐失败:', error)
+    throw new Error(error.message || '获取会员套餐失败')
+  }
+}
+
+/**
+ * 获取当前用户会员状态
+ */
+export async function getMyMembership(): Promise<MembershipStatus> {
+  try {
+    const response = await authenticatedRequest('/api/membership/me', {
+      method: 'GET'
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取会员状态失败'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as MembershipStatus
+  } catch (error: any) {
+    console.error('获取会员状态失败:', error)
+    throw new Error(error.message || '获取会员状态失败')
+  }
+}
+
+/**
+ * 创建会员支付单
+ */
+export async function createMembershipPayment(planCode: string): Promise<CreateMembershipPaymentResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/pay/create', {
+      method: 'POST',
+      data: {
+        plan_code: planCode
+      }
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '创建会员支付单失败'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as CreateMembershipPaymentResponse
+  } catch (error: any) {
+    console.error('创建会员支付单失败:', error)
+    throw new Error(error.message || '创建会员支付单失败')
   }
 }
 
@@ -1558,6 +1767,23 @@ export interface FriendRequestItem {
   from_avatar: string
 }
 
+export interface FriendRequestOverviewItem {
+  id: string
+  from_user_id: string
+  to_user_id: string
+  status: 'pending' | 'accepted' | 'rejected'
+  created_at: string
+  updated_at?: string
+  counterpart_user_id: string
+  counterpart_nickname: string
+  counterpart_avatar: string
+}
+
+export interface FriendRequestsOverview {
+  received: FriendRequestOverviewItem[]
+  sent: FriendRequestOverviewItem[]
+}
+
 /** 好友列表项 */
 export interface FriendListItem {
   id: string
@@ -1584,7 +1810,15 @@ export interface FriendInviteResolveResult {
 
 /** 接受邀请码返回 */
 export interface FriendInviteAcceptResult {
-  status: 'added' | 'already_friend'
+  status: 'request_sent' | 'already_friend'
+  user_id: string
+  nickname: string
+  avatar: string
+}
+
+/** @deprecated 兼容旧登录页返回结构 */
+export interface LegacyFriendInviteRequestResult {
+  status: 'requested' | 'already_friend'
   user_id: string
   nickname: string
   avatar: string
@@ -1665,6 +1899,14 @@ export async function friendRespondRequest(requestId: string, action: 'accept' |
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '操作失败')
 }
 
+/** 撤销本人发出的待处理好友请求 */
+export async function friendCancelSentRequest(requestId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend/request/${encodeURIComponent(requestId)}`, {
+    method: 'DELETE'
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '撤销失败')
+}
+
 /** 好友列表 */
 export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
@@ -1672,11 +1914,28 @@ export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   return response.data as { list: FriendListItem[] }
 }
 
+/** 删除好友（双向） */
+export async function friendDelete(friendId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend/${encodeURIComponent(friendId)}`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
+}
+
+/** @deprecated 兼容旧调用名，后续统一使用 friendDelete */
+export const friendRemove = friendDelete
+
+/** 好友请求总览（收到 + 发出） */
+export async function friendGetRequestsOverview(): Promise<FriendRequestsOverview> {
+  const response = await authenticatedRequest('/api/friend/requests/all', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as FriendRequestsOverview
+}
+
 /** 公开获取邀请资料（用于分享海报昵称与邀请码） */
 export async function getFriendInviteProfile(userId: string): Promise<FriendInviteProfile> {
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile/${encodeURIComponent(userId)}`,
     method: 'GET',
+    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
   if (response.statusCode !== 200) {
@@ -1702,9 +1961,48 @@ export async function acceptFriendInvite(code: string): Promise<FriendInviteAcce
     data: { code: code.trim() }
   })
   if (response.statusCode !== 200) {
-    throw new Error((response.data as any)?.detail || '添加好友失败')
+    const detail = (response.data as any)?.detail
+    const errcode = (response.data as any)?.errcode
+    const errmsg = (response.data as any)?.errmsg
+    const backendMsg = detail || errmsg || ''
+    const baseMsg = backendMsg
+      ? `添加好友失败（HTTP ${response.statusCode}）：${backendMsg}`
+      : `添加好友失败（HTTP ${response.statusCode}）`
+    // 线上返回 500 时，补一层「解析邀请码」兜底，尽量给出可读原因
+    try {
+      const resolved = await resolveFriendInvite(code)
+      if (resolved.is_self) {
+        throw new Error('这是你自己的分享，无需重复添加好友')
+      }
+      if (resolved.already_friend) {
+        return {
+          status: 'already_friend',
+          user_id: resolved.user_id,
+          nickname: resolved.nickname,
+          avatar: resolved.avatar
+        }
+      }
+    } catch (e: any) {
+      // 若解析接口本身也失败，继续抛原始错误信息
+      if (e?.message === '这是你自己的分享，无需重复添加好友') {
+        throw e
+      }
+    }
+    if (errcode != null) {
+      throw new Error(`${baseMsg}（errcode=${errcode}）`)
+    }
+    throw new Error(baseMsg)
   }
   return response.data as FriendInviteAcceptResult
+}
+
+/** @deprecated 兼容旧调用名，后续统一使用 acceptFriendInvite */
+export async function requestFriendByInviteCode(code: string): Promise<LegacyFriendInviteRequestResult> {
+  const res = await acceptFriendInvite(code)
+  return {
+    ...res,
+    status: res.status === 'request_sent' ? 'requested' : 'already_friend'
+  }
 }
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */
@@ -1751,6 +2049,7 @@ export async function communityGetPublicFeed(
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/community/public-feed${q}`,
     method: 'GET',
+    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')

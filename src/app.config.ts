@@ -11,6 +11,7 @@ export default defineAppConfig({
     'pages/result-text/index',
     'pages/ai-assistant/index',
     'pages/profile/index',
+    'pages/pro-membership/index',
     'pages/recipes/index',
     'pages/recipe-edit/index',
     'pages/health-profile/index',
@@ -27,7 +28,8 @@ export default defineAppConfig({
     'pages/about/index',
     'pages/agreement/index',
     'pages/privacy/index',
-    'pages/privacy-settings/index'
+    'pages/privacy-settings/index',
+    'pages/friends/index'
   ],
   window: {
     backgroundTextStyle: 'light',

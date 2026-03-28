@@ -1,7 +1,7 @@
 import { View, Text } from '@tarojs/components'
 import { useState, useEffect, useRef } from 'react'
 import Taro from '@tarojs/taro'
-import { getAnalyzeTask, type AnalysisTask, type AnalyzeResponse } from '../../utils/api'
+import { getAnalyzeTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode } from '../../utils/api'
 import './index.scss'
 // 建议
 const HEALTH_TIPS = [
@@ -81,10 +81,43 @@ const getNextTipIndex = (current?: number) => {
 const POLL_INTERVAL = 2000
 // 健康小知识轮播间隔（ms）——从 3 秒放慢到 6 秒
 const TIP_ROTATE_INTERVAL = 6000
+const ANALYZE_PROGRESS_STEPS = ['校验图片质量', '识别食物与克重', '生成营养建议']
+
+const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }> = {
+  strict: {
+    title: '精准模式',
+    desc: '识别不确定时会优先提醒你重拍或分开拍，保证可执行准确度。'
+  },
+  standard: {
+    title: '标准模式',
+    desc: '优先保证记录效率，适合日常快速记录。'
+  }
+}
+
+const normalizeExecutionMode = (value: unknown): ExecutionMode => (
+  value === 'strict' ? 'strict' : 'standard'
+)
+
+const normalizeTaskType = (value: unknown): 'food' | 'food_text' => (
+  value === 'food_text' ? 'food_text' : 'food'
+)
+
+const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
+  const taskAny = task as AnalysisTask & { execution_mode?: unknown }
+  if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'standard') {
+    return taskAny.execution_mode
+  }
+  const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
+  if (payloadMode === 'strict' || payloadMode === 'standard') {
+    return payloadMode
+  }
+  return null
+}
 
 export default function AnalyzeLoadingPage() {
   const [taskId, setTaskId] = useState<string>('')
   const [taskType, setTaskType] = useState<string>('food') // food 或 food_text
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [status, setStatus] = useState<'loading' | 'done' | 'failed' | 'violated'>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [violationReason, setViolationReason] = useState<string>('')
@@ -95,7 +128,9 @@ export default function AnalyzeLoadingPage() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     const id = params?.task_id
-    const type = params?.task_type || 'food'
+    const type = normalizeTaskType(params?.task_type)
+    const modeFromStorage = Taro.getStorageSync('analyzeExecutionMode')
+    const mode = normalizeExecutionMode(params?.execution_mode || modeFromStorage)
     if (!id) {
       Taro.showToast({ title: '缺少任务 ID', icon: 'none' })
       setTimeout(() => Taro.navigateBack(), 1500)
@@ -103,6 +138,9 @@ export default function AnalyzeLoadingPage() {
     }
     setTaskId(id)
     setTaskType(type)
+    setExecutionMode(mode)
+    Taro.setStorageSync('analyzeExecutionMode', mode)
+    Taro.setStorageSync('analyzeTaskType', type)
   }, [])
 
   useEffect(() => {
@@ -110,28 +148,44 @@ export default function AnalyzeLoadingPage() {
     const poll = async () => {
       try {
         const task: AnalysisTask = await getAnalyzeTask(taskId)
+        const taskMode = pickExecutionModeFromTask(task)
+        if (taskMode) {
+          setExecutionMode(taskMode)
+          Taro.setStorageSync('analyzeExecutionMode', taskMode)
+        }
         if (task.status === 'done' && task.result) {
           setStatus('done')
           if (pollTimerRef.current) {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null
           }
+          Taro.removeStorageSync('analyzePendingCorrectionTaskId')
+          Taro.removeStorageSync('analyzePendingCorrectionItems')
           const result = task.result as AnalyzeResponse
           const payload = task.payload || {}
+          const settledMode = taskMode || executionMode
+          Taro.setStorageSync('analyzeExecutionMode', settledMode)
 
           // 根据任务类型跳转到不同的结果页面
           if (taskType === 'food_text') {
             // 文字分析：跳转到统一的结果页（复用图片分析页）
-            Taro.removeStorageSync('analyzeImagePath') // 确保清除上一张图片
+            // 必须同时清空单图和多图缓存，避免上一次拍照识别残留的图片混入本次纯文字结果。
+            Taro.removeStorageSync('analyzeImagePath')
+            Taro.removeStorageSync('analyzeImagePaths')
+            Taro.setStorageSync('analyzeTextInput', task.text_input || '')
+            Taro.setStorageSync('analyzeTextAdditionalContext', (payload.additionalContext as string) || '')
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
             Taro.setStorageSync('analyzeCompareMode', false)
             Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
             Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
+            Taro.setStorageSync('analyzeTaskType', 'food_text')
             Taro.redirectTo({ url: '/pages/result/index' })
           } else {
             // 图片分析：跳转到图片分析结果页
+            Taro.removeStorageSync('analyzeTextInput')
+            Taro.removeStorageSync('analyzeTextAdditionalContext')
             Taro.setStorageSync('analyzeImagePath', task.image_url)
             Taro.setStorageSync('analyzeImagePaths', task.image_paths || (task.image_url ? [task.image_url] : []))
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
@@ -140,6 +194,7 @@ export default function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
+            Taro.setStorageSync('analyzeTaskType', 'food')
             Taro.redirectTo({ url: '/pages/result/index' })
           }
           return
@@ -170,7 +225,7 @@ export default function AnalyzeLoadingPage() {
     return () => {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     }
-  }, [taskId, taskType, status])
+  }, [taskId, taskType, status, executionMode])
 
   useEffect(() => {
     if (status !== 'loading') return
@@ -240,6 +295,18 @@ export default function AnalyzeLoadingPage() {
         {taskType === 'food_text' ? '食探正在分析您的餐食...' : '食探正在分析您的餐食...'}
       </Text>
       <Text className="subtitle">分析结果由 AI 生成，仅供参考</Text>
+      <View className={`mode-pill ${executionMode}`}>
+        <Text className="mode-pill-title">当前：{EXECUTION_MODE_META[executionMode].title}</Text>
+        <Text className="mode-pill-desc">{EXECUTION_MODE_META[executionMode].desc}</Text>
+      </View>
+      <View className="progress-card">
+        {ANALYZE_PROGRESS_STEPS.map((step, index) => (
+          <View className="progress-row" key={step}>
+            <View className={`progress-node ${index === 0 ? 'active' : ''}`}>{index + 1}</View>
+            <Text className={`progress-text ${index === 0 ? 'active' : ''}`}>{step}</Text>
+          </View>
+        ))}
+      </View>
       <View className="tip-card">
         <View className="tip-header">
           <Text className="tip-icon iconfont icon-dengpao" />

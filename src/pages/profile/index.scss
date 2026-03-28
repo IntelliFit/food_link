@@ -618,3 +618,12 @@
     box-shadow: 0 2rpx 8rpx rgba(0, 188, 125, 0.3);
   }
 }
+
+.profile-version {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 28rpx 0 44rpx;
+  font-size: 24rpx;
+  color: #94a3b8;
+}

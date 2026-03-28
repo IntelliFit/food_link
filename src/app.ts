@@ -8,7 +8,8 @@ import './app.scss'
 function App({ children }: PropsWithChildren<any>) {
   useLaunch((options) => {
     console.log('App launched.')
-    const rawScene = String(options?.scene || '')
+    // 小程序码参数在 options.query.scene，不是 options.scene（后者是场景值数字）
+    const rawScene = String((options as any)?.query?.scene || '')
     const decodedScene = (() => {
       try {
         return decodeURIComponent(rawScene)
@@ -17,7 +18,9 @@ function App({ children }: PropsWithChildren<any>) {
       }
     })()
     const params = new URLSearchParams(decodedScene)
-    const inviteCode = (params.get('fi') || '').trim()
+    const inviteCodeFromScene = (params.get('fi') || '').trim()
+    const inviteCodeFromQuery = String((options as any)?.query?.fi || '').trim()
+    const inviteCode = inviteCodeFromScene || inviteCodeFromQuery
     if (!inviteCode) return
 
     try {

@@ -11,7 +11,7 @@ import {
     updateUserInfo,
     uploadUserAvatar,
     imageToBase64,
-    acceptFriendInvite
+    requestFriendByInviteCode
 } from '../../utils/api'
 
 import './index.scss'
@@ -75,9 +75,11 @@ export default function LoginPage() {
         const pendingInviteCode = inviteCodeFromQuery || String(Taro.getStorageSync('pending_friend_invite_code') || '').trim()
         if (pendingInviteCode) {
             try {
-                const res = await acceptFriendInvite(pendingInviteCode)
-                if (res.status === 'added') {
-                    Taro.showToast({ title: `已和${res.nickname || '对方'}成为好友`, icon: 'success' })
+                const res = await requestFriendByInviteCode(pendingInviteCode)
+                if (res.status === 'requested') {
+                    Taro.showToast({ title: `已向${res.nickname || '对方'}发起好友请求`, icon: 'success' })
+                } else if (res.status === 'already_friend') {
+                    Taro.showToast({ title: `已和${res.nickname || '对方'}是好友`, icon: 'none' })
                 }
                 Taro.removeStorageSync('pending_friend_invite_code')
             } catch {
