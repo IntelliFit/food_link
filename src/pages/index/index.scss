@@ -416,10 +416,6 @@ $text-tertiary: #9ca3af;
 }
 
 // 快捷记录区域
-.quick-record-section {
-  margin-bottom: 32rpx;
-}
-
 .section-title {
   font-size: 32rpx;
   font-weight: 700;
@@ -427,70 +423,6 @@ $text-tertiary: #9ca3af;
   line-height: 44rpx;
   margin-bottom: 20rpx;
   padding-left: 8rpx;
-}
-
-.quick-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-
-.quick-button {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  background: $card-bg;
-  border-radius: 24rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
-  
-  &:active {
-    background: #f9fafb;
-    transform: scale(0.995);
-  }
-}
-
-.photo-btn {
-  .quick-btn-icon {
-    background: linear-gradient(135deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
-  }
-}
-
-.text-btn {
-  .quick-btn-icon {
-    background: linear-gradient(135deg, $blue-color 0%, #00b8db 100%);
-  }
-}
-
-.quick-btn-icon {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 18rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
-}
-
-.quick-btn-text {
-  flex: 1;
-}
-
-.quick-btn-title {
-  display: block;
-  font-size: 30rpx;
-  font-weight: 600;
-  color: $text-primary;
-  line-height: 42rpx;
-  margin-bottom: 4rpx;
-}
-
-.quick-btn-desc {
-  display: block;
-  font-size: 24rpx;
-  color: $text-tertiary;
-  line-height: 34rpx;
 }
 
 // 今日餐食区域

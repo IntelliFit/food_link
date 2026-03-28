@@ -610,40 +610,7 @@ export default function IndexPage() {
           })}
         </View>
 
-        {/* 快捷记录区域 */}
-        <View className='quick-record-section'>
-          <Text className='section-title'>快捷记录</Text>
-          <View className='quick-buttons'>
-            <View
-              className='quick-button photo-btn'
-              onClick={() => handleQuickRecord('photo')}
-            >
-              <View className='quick-btn-icon'>
-                <IconCamera size={28} color='#ffffff' />
-              </View>
-              <View className='quick-btn-text'>
-                <Text className='quick-btn-title'>拍照识别</Text>
-                <Text className='quick-btn-desc'>AI 识别食物热量</Text>
-              </View>
-              <IconChevronRight size={16} color='#9ca3af' />
-            </View>
-            <View
-              className='quick-button text-btn'
-              onClick={() => handleQuickRecord('text')}
-            >
-              <View className='quick-btn-icon' style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #00b8db 100%)' }}>
-                <IconText size={28} color='#ffffff' />
-              </View>
-              <View className='quick-btn-text'>
-                <Text className='quick-btn-title'>文字记录</Text>
-                <Text className='quick-btn-desc'>手动输入饮食内容</Text>
-              </View>
-              <IconChevronRight size={16} color='#9ca3af' />
-            </View>
-          </View>
-        </View>
-
-        {/* 今日餐食区域 */}
+        {/* 今日餐食区域 -->
         <View className='meals-section'>
           <View className='section-header'>
             <Text className='section-title'>今日餐食</Text>

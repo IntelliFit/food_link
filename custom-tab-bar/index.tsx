@@ -1,17 +1,6 @@
-import { View, Text, Image } from '@tarojs/components'
+import { View, Text } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-
-import homeIcon from '../../assets/icons/home.png'
-import homeActiveIcon from '../../assets/icons/home-active.png'
-import communityIcon from '../../assets/icons/community.png'
-import communityActiveIcon from '../../assets/icons/community-active.png'
-import recordIcon from '../../assets/icons/record.png'
-import recordActiveIcon from '../../assets/icons/record-active.png'
-import aiIcon from '../../assets/icons/ai-assistant.png'
-import aiActiveIcon from '../../assets/icons/ai-assistant-active.png'
-import profileIcon from '../../assets/icons/profile.png'
-import profileActiveIcon from '../../assets/icons/profile-active.png'
 
 import './index.scss'
 
@@ -21,34 +10,24 @@ export default function CustomTabBar() {
   const tabList = [
     {
       pagePath: '/pages/index/index',
-      text: '首页',
-      iconPath: homeIcon,
-      selectedIconPath: homeActiveIcon
+      text: 'Home'
     },
     {
-      pagePath: '/pages/community/index',
-      text: '圈子',
-      iconPath: communityIcon,
-      selectedIconPath: communityActiveIcon
+      pagePath: '/pages/stats/index',
+      text: 'Analytics'
     },
     {
       pagePath: '/pages/record/index',
       text: '记录',
-      iconPath: recordIcon,
-      selectedIconPath: recordActiveIcon,
       isCenter: true
     },
     {
-      pagePath: '/pages/ai-assistant/index',
-      text: 'AI助手',
-      iconPath: aiIcon,
-      selectedIconPath: aiActiveIcon
+      pagePath: '/pages/community/index',
+      text: '圈子'
     },
     {
       pagePath: '/pages/profile/index',
-      text: '我的',
-      iconPath: profileIcon,
-      selectedIconPath: profileActiveIcon
+      text: '我的'
     }
   ]
 
@@ -70,10 +49,8 @@ export default function CustomTabBar() {
       }
     }
     
-    // 立即更新一次
     updateSelected()
     
-    // 使用定时器定期更新（确保页面切换时能及时更新）
     const timer = setInterval(() => {
       updateSelected()
     }, 300)
@@ -98,13 +75,12 @@ export default function CustomTabBar() {
           className={`tab-item ${item.isCenter ? 'center-item' : ''} ${selectedIndex === index ? 'selected' : ''}`}
           onClick={() => switchTab(index, item)}
         >
-          <View className='icon-wrapper'>
-            <Image
-              className='tab-icon'
-              src={selectedIndex === index ? item.selectedIconPath : item.iconPath}
-              lazyLoad={false}
-              mode='aspectFit'
-            />
+          <View className='icon-placeholder'>
+            {item.isCenter ? (
+              <View className='center-button'>+</View>
+            ) : (
+              <View className={`dot ${selectedIndex === index ? 'active' : ''}`} />
+            )}
           </View>
           <Text className='tab-text'>{item.text}</Text>
         </View>
@@ -112,4 +88,3 @@ export default function CustomTabBar() {
     </View>
   )
 }
-
