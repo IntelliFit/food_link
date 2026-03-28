@@ -571,34 +571,38 @@ export default function IndexPage() {
                 </View>
                 
                 {/* 主体内容 */}
-                <View className='macro-main'>
-                  {/* 左侧：摄入数据 */}
-                  <View className='macro-value-section'>
+                <View className='macro-content'>
+                  {/* 第一行：大数字 + 仪表盘 */}
+                  <View className='macro-row-first'>
                     <View className='macro-value-wrap'>
                       <Text className='macro-big-number' style={{ color }}>
                         {loading ? '--' : formatDisplayNumber(macro.current)}
                       </Text>
                       <Text className='macro-unit-inline'>{unit}</Text>
                     </View>
-                    <Text className='macro-percent-below' style={{ color }}>
-                      {progress.toFixed(0)}%
-                    </Text>
+                    
+                    {/* 右侧：大仪表盘（无数字） */}
+                    <View className='macro-donut-large'>
+                      <View className='donut-bg-ring' />
+                      <View 
+                        className='donut-progress-ring'
+                        style={{
+                          borderColor: color,
+                          transform: `rotate(${progress * 3.6 - 90}deg)`,
+                          opacity: progress > 0 ? 1 : 0
+                        }}
+                      />
+                    </View>
+                  </View>
+                  
+                  {/* 第二行：详情 + 百分比 */}
+                  <View className='macro-row-second'>
                     <Text className='macro-detail-text'>
                       {formatDisplayNumber(macro.current)} / {formatDisplayNumber(macro.target)}{unit}
                     </Text>
-                  </View>
-                  
-                  {/* 右侧：环形仪表盘（无数字） */}
-                  <View className='macro-donut'>
-                    <View className='donut-bg-ring' />
-                    <View 
-                      className='donut-progress-ring'
-                      style={{
-                        borderColor: color,
-                        transform: `rotate(${progress * 3.6 - 90}deg)`,
-                        opacity: progress > 0 ? 1 : 0
-                      }}
-                    />
+                    <Text className='macro-percent-right' style={{ color }}>
+                      {progress.toFixed(0)}%
+                    </Text>
                   </View>
                 </View>
               </View>

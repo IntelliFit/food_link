@@ -333,21 +333,20 @@ $text-tertiary: #9ca3af;
   color: $text-secondary;
 }
 
-// 主体内容区
-.macro-main {
+// 主体内容区 - 新布局
+.macro-content {
   flex: 1;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   padding: 8rpx 0;
   gap: 8rpx;
 }
 
-.macro-value-section {
+// 第一行：大数字 + 大仪表盘
+.macro-row-first {
   display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .macro-value-wrap {
@@ -368,24 +367,29 @@ $text-tertiary: #9ca3af;
   line-height: 30rpx;
 }
 
-.macro-percent-below {
-  font-size: 26rpx;
-  font-weight: 700;
-  line-height: 36rpx;
-  margin-top: 4rpx;
+// 第二行：详情 + 百分比
+.macro-row-second {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .macro-detail-text {
   font-size: 20rpx;
   color: $text-tertiary;
   line-height: 28rpx;
-  margin-top: 2rpx;
 }
 
-// 大环形仪表盘 - 双层圆环（加宽加粗）
-.macro-donut {
-  width: 80rpx;
-  height: 80rpx;
+.macro-percent-right {
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 32rpx;
+}
+
+// 大环形仪表盘 - 加大版
+.macro-donut-large {
+  width: 88rpx;
+  height: 88rpx;
   position: relative;
   flex-shrink: 0;
 }
@@ -402,29 +406,13 @@ $text-tertiary: #9ca3af;
 }
 
 .donut-bg-ring {
-  border: 10rpx solid #e5e7eb;
+  border: 12rpx solid #e5e7eb;
 }
 
 .donut-progress-ring {
-  border: 10rpx solid transparent;
+  border: 12rpx solid transparent;
   border-top-color: inherit;
   transition: transform 0.5s ease, opacity 0.3s ease;
-}
-
-.donut-center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.donut-text {
-  font-size: 18rpx;
-  font-weight: 600;
-  line-height: 26rpx;
 }
 
 // 快捷记录区域
