@@ -1,27 +1,20 @@
 .profile-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #f0fdf4 0%, #f9fafb 100%);
+  position: relative;
+  background: linear-gradient(180deg, 
+    rgba(0, 188, 125, 0.15) 0%,
+    rgba(0, 188, 125, 0.08) 25%,
+    #EFF1F4 60%,
+    #EFF1F4 100%
+  );
   padding-bottom: 200rpx;
 }
 
 // 顶部区域 - 包含头部信息和卡片
 .header-section {
-  background: #ffffff;
-  padding: 0 0 40rpx;
+  background: transparent;
+  padding: 0 24rpx 40rpx;
   position: relative;
-
-  // 底部圆弧效果
-  &::after {
-    content: '';
-    position: absolute;
-    bottom: -40rpx;
-    left: 0;
-    right: 0;
-    height: 80rpx;
-    background: #ffffff;
-    border-radius: 0 0 50% 50%;
-    z-index: 0;
-  }
 }
 
 // 第一行：用户信息 + 会员码
@@ -29,8 +22,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 40rpx 40rpx 30rpx;
-  background: #ffffff;
+  padding: 40rpx 0 30rpx;
+  background: transparent;
   position: relative;
   z-index: 1;
 }
@@ -102,19 +95,16 @@
   }
 }
 
-// 会员卡片
+// 会员卡片 - 采用首页风格的白色卡片设计
 .member-card {
-  margin: 0 40rpx;
-  padding: 40rpx;
-  // background: linear-gradient(135deg, #bfa070 0%, #a88b5e 100%); // 仿照截图的金色/棕色，或者改成绿色
-  // 如果要符合“小程序整体颜色”，可以用绿色渐变：
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-
+  margin: 0 24rpx;
+  padding: 32rpx;
+  background: #ffffff;
   border-radius: 24rpx;
-  color: #ffffff;
+  color: #1f2937;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.25);
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
   z-index: 2;
 }
 
@@ -136,21 +126,22 @@
   .card-validity {
     display: block;
     font-size: 22rpx;
-    opacity: 0.8;
+    color: #6b7280;
     margin-bottom: 8rpx;
   }
 
   .card-title {
     font-size: 40rpx;
     font-weight: bold;
+    color: #1f2937;
   }
 
   .card-btn {
-    background: rgba(255, 255, 255, 0.2);
+    background: #f3f4f6;
     padding: 12rpx 24rpx;
     border-radius: 30rpx;
     font-size: 24rpx;
-    backdrop-filter: blur(4px);
+    color: #6b7280;
   }
 }
 
@@ -161,26 +152,27 @@
 
   .progress-text {
     font-size: 24rpx;
+    color: #6b7280;
     margin-bottom: 8rpx;
     display: block;
   }
 
   .progress-bar {
-    height: 8rpx;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 4rpx;
+    height: 20rpx;
+    background: #e5e7eb;
+    border-radius: 9999rpx;
     overflow: hidden;
   }
 
   .progress-inner {
     height: 100%;
-    background: #ffffff;
-    border-radius: 4rpx;
+    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+    border-radius: 9999rpx;
   }
 
   .card-tip {
     font-size: 22rpx;
-    opacity: 0.9;
+    color: #6b7280;
   }
 }
 
