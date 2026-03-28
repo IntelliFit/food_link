@@ -23,6 +23,8 @@ from database import (
     claim_next_pending_task_sync,
     update_analysis_task_result_sync,
     get_user_by_id_sync,
+    get_food_record_by_id_sync,
+    get_feed_comment_by_id_sync,
     insert_health_document_sync,
     update_user_sync,
     mark_task_violated_sync,
@@ -32,6 +34,7 @@ from database import (
     mark_comment_task_violated_sync,
     add_feed_comment_sync,
     add_public_food_library_comment_sync,
+    create_feed_interaction_notification_sync,
     update_public_food_library_status_sync,
 )
 from metabolic import get_age_from_birthday
@@ -96,6 +99,13 @@ STRICT_SOFT_GUIDANCE_DEFAULT = [
     "建议补拍更清晰的正面和侧面，尽量完整展示主体。",
     "建议旁边放手掌、筷子或餐具作为参照物。",
 ]
+TEXT_STRICT_SOFT_GUIDANCE_DEFAULT = [
+    "请补充每种主体食物的名称、重量和烹饪方式。",
+    "如果一餐包含多种食物，请分别写清每种食物，不要只写整餐总量。",
+]
+TEXT_AMBIGUOUS_QUANTITY_PATTERN = re.compile(
+    r"(适量|少许|一点|一些|少量|若干|大概|大约|差不多|左右|一个?多|几个?|半碗|一碗|一勺|几勺|一点点)"
+)
 
 
 def _meal_name_for_hint(meal_type: Optional[str], timezone_offset_minutes: Optional[Any] = None) -> str:
@@ -233,6 +243,95 @@ def _derive_recognition_fields(parsed: Dict[str, Any], items: List[Dict[str, Any
         "rejectionReason": None,
         "retakeGuidance": guidance or None,
         "allowedFoodCategory": allowed_food_category,
+    }
+
+
+def _append_unique(target: List[str], value: Optional[str]) -> None:
+    text = _normalize_text(value)
+    if text and text not in target:
+        target.append(text)
+
+
+def _derive_text_followup_questions(
+    parsed: Dict[str, Any],
+    text_input: str,
+    items: List[Dict[str, Any]],
+    allowed_food_category: str,
+    scene_tags: List[str],
+) -> List[str]:
+    questions = _normalize_string_list(parsed.get("followupQuestions"))
+    raw_text = f"{text_input} {_normalize_text(parsed.get('description')) or ''}"
+
+    if not items:
+        _append_unique(questions, "请重新描述这顿饭的主体食物，并分别写出每种食物的大致重量。")
+    if len(items) > 1 or "mixed_food" in scene_tags or "multiple_items" in scene_tags:
+        _append_unique(questions, "如果这顿饭包含多种食物，请分别写出每种食物名称和重量，不要只写整餐总量。")
+    if allowed_food_category == "unknown" or "unsupported_food" in scene_tags:
+        _append_unique(questions, "如果你想按精准模式执行，请明确哪些是单纯碳水、哪些是单纯瘦肉，并分别描述。")
+    if (
+        "portion_unclear" in scene_tags
+        or "weight_uncertain" in scene_tags
+        or TEXT_AMBIGUOUS_QUANTITY_PATTERN.search(raw_text)
+    ):
+        _append_unique(questions, "请补充每种食物的大致克数或更具体的份量，例如米饭 180g、鸡胸肉 150g。")
+    if "cook_method_unclear" in scene_tags or "heavy_sauce_or_fried" in scene_tags:
+        _append_unique(questions, "请补充主要烹饪方式，例如水煮、清炒、煎炸、带酱汁等。")
+    if "fatty_or_unclear_meat" in scene_tags:
+        _append_unique(questions, "请说明肉类是否为去皮鸡胸、瘦牛肉、鱼肉等单纯瘦肉。")
+
+    return questions
+
+
+def _derive_text_recognition_fields(
+    parsed: Dict[str, Any],
+    items: List[Dict[str, Any]],
+    execution_mode: str,
+    text_input: str,
+) -> Dict[str, Any]:
+    allowed_food_category = _normalize_allowed_food_category(parsed.get("allowedFoodCategory"))
+    recognition_outcome = _normalize_recognition_outcome(parsed.get("recognitionOutcome"))
+    scene_tags = _normalize_scene_tags(parsed.get("sceneTags"))
+    guidance = _normalize_string_list(parsed.get("retakeGuidance"))
+    model_reason = _normalize_text(parsed.get("rejectionReason"))
+    followup_questions = _derive_text_followup_questions(
+        parsed,
+        text_input=text_input,
+        items=items,
+        allowed_food_category=allowed_food_category,
+        scene_tags=scene_tags,
+    )
+
+    if execution_mode != "strict":
+        return {
+            "recognitionOutcome": recognition_outcome or "ok",
+            "rejectionReason": model_reason if recognition_outcome in {"soft_reject", "hard_reject"} else None,
+            "retakeGuidance": guidance or None,
+            "allowedFoodCategory": allowed_food_category,
+            "followupQuestions": followup_questions or None,
+        }
+
+    soft_reasons: List[str] = []
+    if not items:
+        soft_reasons.append("当前描述还不足以稳定识别主体食物，建议补充更明确的食物名称和重量。")
+    if allowed_food_category == "unknown":
+        soft_reasons.append("当前描述还不能确认是精准模式支持的单纯碳水或单纯瘦肉。")
+
+    for tag in scene_tags:
+        reason = STRICT_REASON_BY_TAG.get(tag)
+        if reason and reason not in soft_reasons:
+            soft_reasons.append(reason)
+
+    if model_reason:
+        _append_unique(soft_reasons, model_reason)
+    if followup_questions and not soft_reasons:
+        soft_reasons.append("当前记录还缺少几个关键信息，补充后会更适合精准模式。")
+
+    return {
+        "recognitionOutcome": "soft_reject" if soft_reasons or followup_questions else "ok",
+        "rejectionReason": soft_reasons[0] if soft_reasons else None,
+        "retakeGuidance": _merge_guidance(guidance, TEXT_STRICT_SOFT_GUIDANCE_DEFAULT) if (soft_reasons or followup_questions) else (guidance or None),
+        "allowedFoodCategory": allowed_food_category,
+        "followupQuestions": followup_questions or None,
     }
 
 
@@ -834,7 +933,7 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     # 图片模式下：二次纠错清单作为强约束兜底，防止模型忽略用户已确认克重
     items = _apply_image_correction_items(items, payload)
 
-    recognition_fields = _derive_recognition_fields(parsed or {}, items, execution_mode)
+    recognition_fields = _derive_text_recognition_fields(parsed or {}, items, execution_mode, text_input)
 
     return {
         "description": str(parsed.get("description", "无法获取描述")),
@@ -939,7 +1038,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
         "\n执行模式：精准模式（strict）"
         "\n- 优先识别单纯碳水或单纯瘦肉。"
         "\n- 混合描述、重量不明、烹饪方式不明时，不要过度自信。"
-        "\n- 如描述仍有歧义，请在 insight/context_advice 中明确指出不确定点。"
+        "\n- 如描述仍有歧义，请给出初步结果，并列出还需要用户补充的问题，不要直接把记录链路堵死。"
     ) if execution_mode == "strict" else (
         "\n执行模式：标准模式（standard）"
         "\n- 可给出常规估算值，不确定时需提醒偏差风险。"
@@ -979,11 +1078,12 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
    - allowedFoodCategory: 只能是 carb / lean_protein / unknown
    - rejectionReason: 若为 soft_reject 或 hard_reject，给出简短中文原因；否则返回空字符串
    - retakeGuidance: 若需用户补充说明或重拍，给 1-3 条简短中文建议；否则返回空数组
+   - followupQuestions: 若当前描述仍缺少精准模式关键细节，请返回 1-3 条要追问用户的具体问题；否则返回空数组
    - sceneTags: 仅从以下枚举中选择 0 个或多个：
-     single_carb, single_lean_protein, mixed_food, multiple_items, fatty_or_unclear_meat, unsupported_food, portion_unclear, cook_method_unclear, weight_uncertain
+     single_carb, single_lean_protein, mixed_food, multiple_items, fatty_or_unclear_meat, unsupported_food, portion_unclear, cook_method_unclear, weight_uncertain, heavy_sauce_or_fried
 10. 在精准模式下：
-   - 如果描述不是单纯碳水或单纯瘦肉，请倾向 hard_reject
-   - 如果主体类型基本对，但分量、烹饪方式或重量仍不够确定，请倾向 soft_reject
+   - 如果描述不是单纯碳水或单纯瘦肉，优先返回 soft_reject，并通过 followupQuestions 引导用户拆开补充
+   - 如果主体类型基本对，但分量、烹饪方式或重量仍不够确定，请返回 soft_reject，并明确追问缺失信息
    - 只有当主体明确且可稳定估重时，才返回 ok
 
 重要：请务必使用**简体中文**返回所有文本内容。
@@ -1005,6 +1105,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
   "recognitionOutcome": "ok / soft_reject / hard_reject",
   "rejectionReason": "若需拒识或降级，说明原因；否则空字符串",
   "retakeGuidance": ["建议1", "建议2"],
+  "followupQuestions": ["请补充问题1", "请补充问题2"],
   "allowedFoodCategory": "carb / lean_protein / unknown",
   "sceneTags": ["mixed_food", "weight_uncertain"]
 }}
@@ -1367,6 +1468,7 @@ def process_one_comment_task(task: Dict[str, Any]) -> None:
     target_id = task["target_id"]
     content = task["content"]
     rating = task.get("rating")
+    extra = task.get("extra") or {}
     
     try:
         # 第一步：内容审核
@@ -1375,6 +1477,14 @@ def process_one_comment_task(task: Dict[str, Any]) -> None:
             reason = moderation.get("reason", "评论内容违规")
             print(f"[comment_worker] 任务 {task_id} 评论违规: {reason}")
             mark_comment_task_violated_sync(task_id, reason)
+            try:
+                create_feed_interaction_notification_sync(
+                    recipient_user_id=user_id,
+                    notification_type="comment_rejected",
+                    content_preview=reason[:120],
+                )
+            except Exception as notify_err:
+                print(f"[comment_worker] 创建评论拒绝通知失败: {notify_err}")
             # 记录违规日志
             create_violation_record_sync(
                 {
@@ -1389,12 +1499,63 @@ def process_one_comment_task(task: Dict[str, Any]) -> None:
         
         # 第二步：审核通过，写入评论表
         if comment_type == "feed":
-            comment = add_feed_comment_sync(user_id, target_id, content)
+            parent_comment_id = extra.get("parent_comment_id")
+            reply_to_user_id = extra.get("reply_to_user_id")
+            comment = add_feed_comment_sync(
+                user_id,
+                target_id,
+                content,
+                parent_comment_id=parent_comment_id,
+                reply_to_user_id=reply_to_user_id,
+            )
         elif comment_type == "public_food_library":
             comment = add_public_food_library_comment_sync(user_id, target_id, content, rating)
         else:
             raise ValueError(f"未知的评论类型: {comment_type}")
         
+        if comment_type == "feed":
+            try:
+                record = get_food_record_by_id_sync(target_id)
+                record_owner_id = (record or {}).get("user_id")
+                if record_owner_id and record_owner_id != user_id:
+                    create_feed_interaction_notification_sync(
+                        recipient_user_id=record_owner_id,
+                        actor_user_id=user_id,
+                        record_id=target_id,
+                        comment_id=comment.get("id"),
+                        parent_comment_id=extra.get("parent_comment_id"),
+                        notification_type="comment_received",
+                        content_preview=(content or "")[:120],
+                    )
+
+                reply_to_user_id = extra.get("reply_to_user_id")
+                parent_comment_id = extra.get("parent_comment_id")
+                if reply_to_user_id and reply_to_user_id != user_id:
+                    create_feed_interaction_notification_sync(
+                        recipient_user_id=reply_to_user_id,
+                        actor_user_id=user_id,
+                        record_id=target_id,
+                        comment_id=comment.get("id"),
+                        parent_comment_id=parent_comment_id,
+                        notification_type="reply_received",
+                        content_preview=(content or "")[:120],
+                    )
+                elif parent_comment_id:
+                    parent_comment = get_feed_comment_by_id_sync(parent_comment_id)
+                    parent_owner_id = (parent_comment or {}).get("user_id")
+                    if parent_owner_id and parent_owner_id != user_id:
+                        create_feed_interaction_notification_sync(
+                            recipient_user_id=parent_owner_id,
+                            actor_user_id=user_id,
+                            record_id=target_id,
+                            comment_id=comment.get("id"),
+                            parent_comment_id=parent_comment_id,
+                            notification_type="reply_received",
+                            content_preview=(content or "")[:120],
+                        )
+            except Exception as notify_err:
+                print(f"[comment_worker] 创建圈子互动通知失败: {notify_err}")
+
         # 第三步：更新任务状态为完成
         update_comment_task_result_sync(task_id, status="done", result={"comment_id": comment["id"]})
         print(f"[comment_worker] 任务 {task_id} 完成，评论 ID: {comment['id']}")

@@ -1271,6 +1271,10 @@
   &:last-child {
     margin-bottom: 0;
   }
+
+  &.is-temp {
+    opacity: 0.92;
+  }
 }
 
 .comment-avatar {
@@ -1311,6 +1315,33 @@
   font-weight: 600;
   color: #334155;
   margin-right: 8rpx;
+}
+
+.comment-reply-label {
+  color: #64748b;
+  margin-right: 8rpx;
+}
+
+.comment-status-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.feed-comments-more {
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #e2e8f0;
+}
+
+.feed-comments-more-text {
+  font-size: 24rpx;
+  color: #00a870;
 }
 
 // 内联评论输入：在帖子下方，键盘弹起时帖子自然在键盘正上方
@@ -1530,6 +1561,30 @@
   caret-color: #1e293b;
   border: 1rpx solid #e2e8f0;
   box-sizing: border-box;
+}
+
+.comment-reply-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+  padding: 12rpx 18rpx;
+  border-radius: 18rpx;
+  background: #f0fdf4;
+  border: 1rpx solid #dcfce7;
+}
+
+.comment-reply-tip-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #166534;
+}
+
+.comment-reply-tip-close {
+  font-size: 24rpx;
+  color: #16a34a;
 }
 
 .comment-bottom-placeholder {

@@ -1,11 +1,12 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, submitTextAnalyzeTask, type ExecutionMode, type AnalyzeRecognitionOutcome, type AllowedFoodCategory } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, submitTextAnalyzeTask, type ExecutionMode, type AnalyzeRecognitionOutcome, type AllowedFoodCategory } from '../../utils/api'
 
 import './index.scss'
 
 const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/public-assets//logo.png'
+const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
@@ -131,12 +132,12 @@ export default function ResultPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [hasSavedCritical, setHasSavedCritical] = useState(false)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [recognitionOutcome, setRecognitionOutcome] = useState<AnalyzeRecognitionOutcome>('ok')
   const [rejectionReason, setRejectionReason] = useState<string | null>(null)
   const [retakeGuidance, setRetakeGuidance] = useState<string[]>([])
   const [allowedFoodCategory, setAllowedFoodCategory] = useState<AllowedFoodCategory>('unknown')
+  const [followupQuestions, setFollowupQuestions] = useState<string[]>([])
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
@@ -148,9 +149,36 @@ export default function ResultPage() {
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
 
-  const openQuickUpload = (recordId: string) => {
+  const openQuickUpload = () => {
+    const draftImageUrls = (imagePaths.length > 0 ? imagePaths : (imagePath ? [imagePath] : []))
+      .map((path) => `${path || ''}`.trim())
+      .filter(Boolean)
+
+    const draft = {
+      imageUrls: draftImageUrls,
+      description: description || '',
+      insight: healthAdvice || '',
+      totalCalories: nutritionStats.calories,
+      totalProtein: nutritionStats.protein,
+      totalCarbs: nutritionStats.carbs,
+      totalFat: nutritionStats.fat,
+      items: nutritionItems.map((item) => ({
+        name: item.name,
+        weight: item.weight,
+        nutrients: {
+          calories: item.calorie,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          fiber: 0,
+          sugar: 0
+        }
+      }))
+    }
+
+    Taro.setStorageSync(FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY, draft)
     Taro.navigateTo({
-      url: `/pages/food-library-share/index?source_record_id=${encodeURIComponent(recordId)}&quick_upload=1`
+      url: '/pages/food-library-share/index?quick_upload=1'
     })
   }
 
@@ -230,6 +258,7 @@ export default function ResultPage() {
         setRejectionReason(result.rejectionReason?.trim() || null)
         setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
         setAllowedFoodCategory(normalizeAllowedFoodCategory(result.allowedFoodCategory))
+        setFollowupQuestions(Array.isArray(result.followupQuestions) ? result.followupQuestions.filter(Boolean) : [])
         const items = convertApiDataToItems(result.items)
         setNutritionItems(items)
         calculateNutritionStats(items)
@@ -261,6 +290,8 @@ export default function ResultPage() {
   const isStrictHardReject = isStrictMode && recognitionOutcome === 'hard_reject'
   const isStrictSoftReject = isStrictMode && recognitionOutcome === 'soft_reject'
   const shouldShowRecognitionCard = isStrictMode
+  const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0
+  const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
 
 
 
@@ -458,6 +489,7 @@ export default function ResultPage() {
                       rejectionReason: rejectionReason || undefined,
                       retakeGuidance: retakeGuidance.length > 0 ? retakeGuidance : undefined,
                       allowedFoodCategory,
+                      followupQuestions: followupQuestions.length > 0 ? followupQuestions : undefined,
                     }
 
                     await updateAnalysisTaskResult(sourceTaskId, newResult)
@@ -487,15 +519,6 @@ export default function ResultPage() {
 
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
-    if (isStrictHardReject) {
-      Taro.showModal({
-        title: '请先重拍',
-        content: rejectionReason || '当前结果不符合精准模式要求，请分开拍、拨开拍或重拍后再分析。',
-        showCancel: false,
-        confirmText: '我知道了',
-      })
-      return
-    }
     // 避免用户快速连续点击导致重复保存
     if (saving) return
     // 从缓存获取分析时选择的状态
@@ -523,11 +546,10 @@ export default function ResultPage() {
         Taro.removeStorageSync('analyzeActivityTiming')
 
         const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
-        const hasRealImages = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
         const payload = {
           meal_type: mealType as MealType,
-          image_path: hasRealImages ? (imagePath || undefined) : undefined,
-          image_paths: hasRealImages && imagePaths.length > 0 ? imagePaths : undefined,
+          image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
+          image_paths: hasUploadableImage && imagePaths.length > 0 ? imagePaths : undefined,
           description: description || undefined,
           insight: healthAdvice || undefined,
           items: nutritionItems.map((item) => ({
@@ -567,28 +589,10 @@ export default function ResultPage() {
           return
         }
 
-        const hasUploadableImage = hasRealImages
-        if (!hasUploadableImage) {
-          Taro.showToast({ title: '记录成功', icon: 'success' })
-          setTimeout(() => {
-            Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
-          }, 500)
-          return
-        }
-
-        const { confirm } = await Taro.showModal({
-          title: '记录成功',
-          content: '要不要顺手上传到公共食物库？只需补充商家、位置或是否自制等信息。',
-          confirmText: '去上传',
-          cancelText: '先不用'
-        })
-
-        if (confirm) {
-          openQuickUpload(saveResult.id)
-          return
-        }
-
-        Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
+        Taro.showToast({ title: '记录成功', icon: 'success' })
+        setTimeout(() => {
+          Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
+        }, 500)
       } catch (e: any) {
         Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
       } finally {
@@ -616,10 +620,17 @@ export default function ResultPage() {
   const handleConfirmAndShare = () => {
     if (isStrictHardReject) {
       Taro.showModal({
-        title: '当前结果不建议记录',
-        content: rejectionReason || '当前结果不符合精准模式要求，请先按提示重拍。',
-        showCancel: false,
-        confirmText: '我知道了',
+        title: '当前结果不建议直接用于精准执行',
+        content: `${rejectionReason || '当前结果不符合精准模式要求，建议优先重拍。'}\n如果你只是想先记一笔，也可以继续保存。`,
+        confirmText: '仍要记录',
+        cancelText: '先去重拍',
+        success: (res) => {
+          if (!res.confirm) return
+          const savedMealType = Taro.getStorageSync('analyzeMealType')
+          const normalized = toSelectableMealType(savedMealType)
+          setSelectedMealType(normalized || 'breakfast')
+          setShowMealSelector(true)
+        }
       })
       return
     }
@@ -650,64 +661,42 @@ export default function ResultPage() {
     setShowMealSelector(true)
   }
 
+  const handleOpenLibraryUpload = () => {
+    if (!hasUploadableImage) {
+      Taro.showToast({ title: '当前结果没有可上传的实物图片', icon: 'none' })
+      return
+    }
+    if (isStrictHardReject) {
+      Taro.showModal({
+        title: '当前结果不建议上传',
+        content: rejectionReason || '当前结果不符合精准模式要求，请先按提示重拍。',
+        showCancel: false,
+        confirmText: '我知道了',
+      })
+      return
+    }
+
+    if (isStrictSoftReject) {
+      Taro.showModal({
+        title: '当前图片条件一般',
+        content: `${rejectionReason || '建议补拍后再确认。'}\n如果你确认这次样本也要上传到公共库，可以继续。`,
+        confirmText: '继续上传',
+        cancelText: '先去重拍',
+        success: (res) => {
+          if (!res.confirm) return
+          openQuickUpload()
+        }
+      })
+      return
+    }
+
+    openQuickUpload()
+  }
+
   /** 弹窗确认保存 */
   const handleConfirmMealType = () => {
     setShowMealSelector(false)
     saveRecord(false, selectedMealType)
-  }
-
-  /** 标记样本：将当前有重量偏差的项提交为偏差样本（参考 hkh 实现） */
-  const handleMarkSample = async () => {
-    if (hasSavedCritical) {
-      Taro.showToast({ title: '已标记为偏差样本', icon: 'none' })
-      return
-    }
-    const token = getAccessToken()
-    if (!token) {
-      Taro.showToast({ title: '请先登录以保存偏差样本', icon: 'none' })
-      return
-    }
-    // 手动标记：只要有 1g 以上差异就记录（与 hkh 一致）
-    const thresholdGrams = 1
-    const samples = nutritionItems
-      .filter((item) => item.originalWeight > 0 && Math.abs(item.weight - item.originalWeight) > thresholdGrams)
-      .map((item) => {
-        const diff = item.weight - item.originalWeight
-        const percent = (diff / item.originalWeight) * 100
-        return {
-          image_path: imagePath || undefined,
-          food_name: item.name,
-          ai_weight: item.originalWeight,
-          user_weight: item.weight,
-          deviation_percent: Math.round(percent)
-        }
-      })
-    if (samples.length === 0) {
-      Taro.showToast({ title: '请先修改上方的重量数值，以便我们记录偏差', icon: 'none' })
-      return
-    }
-    Taro.showModal({
-      title: '确认标记样本',
-      content: `确定将当前 ${samples.length} 个食物的偏差标记为样本吗？将用于后续优化 AI 估算。`,
-      confirmText: '确定',
-      cancelText: '取消',
-      success: async (res) => {
-        if (!res.confirm) return
-        try {
-          await saveCriticalSamples(samples)
-          setHasSavedCritical(true)
-          Taro.showToast({
-            title: `已标记 ${samples.length} 个偏差样本`,
-            icon: 'none'
-          })
-        } catch (e: any) {
-          Taro.showToast({
-            title: e?.message || '保存偏差样本失败',
-            icon: 'none'
-          })
-        }
-      }
-    })
   }
 
   // 收藏食物（保存为可复用模板）
@@ -889,7 +878,12 @@ export default function ResultPage() {
             })),
             pfc_ratio_comment: pfcRatioComment || undefined,
             absorption_notes: absorptionNotes || undefined,
-            context_advice: contextAdvice || undefined
+            context_advice: contextAdvice || undefined,
+            recognitionOutcome,
+            rejectionReason: rejectionReason || undefined,
+            retakeGuidance: retakeGuidance.length > 0 ? retakeGuidance : undefined,
+            allowedFoodCategory,
+            followupQuestions: followupQuestions.length > 0 ? followupQuestions : undefined,
           }
           const structuredCorrectionItems = correctionItems.map((item) => ({
             name: item.name.trim(),
@@ -1072,6 +1066,29 @@ export default function ResultPage() {
                   ))}
                 </View>
               )}
+            </View>
+          )}
+
+          {shouldShowFollowupCard && (
+            <View className='followup-question-card'>
+              <View className='followup-question-header'>
+                <View className='followup-question-title-wrap'>
+                  <Text className='followup-question-label'>还需要你补充的信息</Text>
+                  <Text className='followup-question-title'>补充后再分析会更接近精准模式</Text>
+                </View>
+                <Text className='followup-question-action' onClick={openCorrectionDrawer}>去补充</Text>
+              </View>
+              <Text className='followup-question-desc'>
+                当前结果先给你一个初步估算；如果你愿意继续补充下面这些信息，再点“重新智能分析”会更准确。
+              </Text>
+              <View className='followup-question-list'>
+                {followupQuestions.map((question, idx) => (
+                  <View key={`${question}-${idx}`} className='followup-question-item'>
+                    <Text className='followup-question-dot'>{idx + 1}.</Text>
+                    <Text className='followup-question-text'>{question}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           )}
 
@@ -1276,11 +1293,11 @@ export default function ResultPage() {
                   <Text className='btn-text'>收藏餐食</Text>
                 </View>
                 <View
-                  className={`primary-btn ${saving ? 'loading' : ''} ${isStrictHardReject ? 'disabled' : ''} ${isStrictSoftReject ? 'soft-warning' : ''}`}
-                  onClick={isStrictHardReject ? undefined : handleConfirmAndShare}
+                  className={`primary-btn ${saving ? 'loading' : ''} ${(isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''}`}
+                  onClick={handleConfirmAndShare}
                 >
                   <Text className='btn-text'>
-                    {saving ? '保存中...' : (isStrictSoftReject ? '仍要记录' : '记录')}
+                    {saving ? '保存中...' : ((isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录')}
                   </Text>
                 </View>
               </View>
@@ -1292,17 +1309,18 @@ export default function ResultPage() {
                   <View className='correction-entry-icon-box'>
                     <Text className='iconfont icon-shouxieqianming correction-icon'></Text>
                   </View>
-                  <Text className='correction-text'>识别有误？点击纠错</Text>
+                  <Text className='correction-text'>{shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}</Text>
                   <Text className='correction-arrow'>›</Text>
                 </View>
-                <View
-                  className={`feedback-link ${hasSavedCritical ? 'disabled' : ''}`}
-                  onClick={hasSavedCritical ? undefined : handleMarkSample}
-                >
-                  <Text className='feedback-text'>
-                    {hasSavedCritical ? '已标记偏差样本 ✓' : '估算不准？点击标记样本'}
-                  </Text>
-                </View>
+                {hasUploadableImage ? (
+                  <View
+                    className={`library-upload-entry ${saving ? 'disabled' : ''}`}
+                    onClick={saving ? undefined : handleOpenLibraryUpload}
+                  >
+                    <Text className='library-upload-text'>上传公共库</Text>
+                    <Text className='library-upload-arrow'>›</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           </View>
@@ -1362,7 +1380,7 @@ export default function ResultPage() {
                   <Text>文字纠错说明</Text>
                 </View>
                 <Text className='placeholder-text'>
-                  名称和重量请先直接在结果页修改；这里主要补充“上一轮为什么不对、这次应该怎么理解”。
+                  名称和重量请先直接在结果页修改；这里主要补充“上一轮为什么不对、这次应该怎么理解”。如果上面列了待补充问题，也可以直接把答案写在这里。
                 </Text>
               </View>
             )}

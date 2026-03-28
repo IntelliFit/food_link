@@ -18,6 +18,18 @@ import {
 import './index.scss'
 
 const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '健身餐']
+const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
+
+type QuickUploadDraft = {
+  imageUrls?: string[]
+  description?: string
+  insight?: string
+  totalCalories?: number
+  totalProtein?: number
+  totalCarbs?: number
+  totalFat?: number
+  items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }>
+}
 
 // 城市区域数据（示例）
 
@@ -101,6 +113,45 @@ export default function FoodLibrarySharePage() {
 
     initSourceRecord()
   }, [sourceRecordId])
+
+  useEffect(() => {
+    if (!quickUploadMode || sourceRecordId) return
+
+    try {
+      const raw = Taro.getStorageSync(FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY)
+      if (!raw) return
+
+      const draft = (typeof raw === 'string' ? JSON.parse(raw) : raw) as QuickUploadDraft
+      const urls = Array.isArray(draft?.imageUrls)
+        ? draft.imageUrls.map((item) => `${item || ''}`.trim()).filter(Boolean)
+        : []
+
+      if (urls.length > 0) {
+        setSourceType('upload')
+        setSelectedRecord(null)
+        setImagePaths([])
+        setImageUrls(urls)
+        setImageUrl(urls[0] || '')
+      }
+
+      setTotalCalories(Number(draft?.totalCalories) || 0)
+      setTotalProtein(Number(draft?.totalProtein) || 0)
+      setTotalCarbs(Number(draft?.totalCarbs) || 0)
+      setTotalFat(Number(draft?.totalFat) || 0)
+      setItems(Array.isArray(draft?.items) ? draft.items : [])
+      setDescription(draft?.description || '')
+      setInsight(draft?.insight || '')
+
+      const inferredName = inferFoodName(null, draft?.items || [], draft?.description || '')
+      if (inferredName) {
+        setFoodName(prev => prev.trim() || inferredName)
+      }
+    } catch (e) {
+      console.error('加载公共库快捷上传草稿失败:', e)
+    } finally {
+      Taro.removeStorageSync(FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY)
+    }
+  }, [quickUploadMode, sourceRecordId])
 
   const inferFoodName = (record?: FoodRecord | null, nextItems?: Array<{ name: string }>, nextDescription?: string) => {
     const itemNames = (nextItems || record?.items || [])

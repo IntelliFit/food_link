@@ -622,13 +622,16 @@ export default function RecordPage() {
               <Text className='amount-label'>补充份量</Text>
               <Textarea
                 className='amount-textarea-premium'
-                placeholder='例如：200g，一碗'
+                placeholder='例如：200g；如果暂时不确定，也可以先写一碗、半份'
                 placeholderClass='textarea-placeholder'
                 value={foodAmount}
                 onInput={(e) => setFoodAmount(e.detail.value)}
                 maxlength={200}
                 autoHeight
               />
+              <Text className='precision-text-hint'>
+                精准模式下，如果重量描述不够明确，系统会继续追问你，而不是直接不让记录。
+              </Text>
             </View>
 
             {/* 快捷标签 */}

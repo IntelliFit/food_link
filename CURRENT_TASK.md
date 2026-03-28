@@ -1,5 +1,28 @@
 # CURRENT_TASK
 
+- Task: 社区评论初版补齐（审核状态闭环 / 单层回复 / 轻量互动消息 / 权限与评论数修正）
+- Status: done（代码已落地；本地编译和 weapp 构建通过，待用户在微信开发者工具或真机验证交互）
+- Scope:
+  - `backend/database/feed_likes_comments.sql`、`backend/database/migrate_feed_comments_reply_fields.sql`：`feed_comments` 新增 `parent_comment_id`、`reply_to_user_id`
+  - `backend/database/comment_tasks.sql`、`backend/database/migrate_comment_tasks_add_extra.sql`：评论任务新增 `extra`，用于回复上下文
+  - `backend/database/feed_interaction_notifications.sql`：新增轻量互动通知表，支持评论、回复、评论驳回三类事件
+  - `backend/database.py`：补圈子动态可见性判断、真实评论总数、回复评论读写、互动通知查询/已读
+  - `backend/main.py`：新增圈子评论任务状态接口、互动通知接口、评论/点赞权限校验、回复评论入参
+  - `backend/worker.py`：评论审核通过/违规后写入互动通知
+  - `src/utils/api.ts`：新增评论任务、互动通知、回复评论相关 API 类型与方法
+  - `src/pages/community/index.tsx`、`src/pages/community/index.scss`：评论提交文案改为“已提交审核”，支持审核中临时评论回显、单层回复、互动消息入口、展开全部评论
+  - `src/pages/interaction-notifications/*`、`src/app.config.ts`：新增互动消息页并挂到小程序路由
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py backend/worker.py` 通过
+  - `npm run build:weapp` 通过
+  - `ReadLints` 检查最近修改文件无报错
+  - `mrc where --port 9420`、`mrc errors 30 --port 9420` 失败：本机当前未开启微信开发者工具自动化端口 9420，未完成运行态截图/交互验证
+- Next step:
+  - 在微信开发者工具或真机验证四条链路：发评论、回复评论、违规评论提示、互动消息已读与跳转详情
+  - 执行新增 SQL/migration，确保 `feed_comments`、`comment_tasks`、`feed_interaction_notifications` 结构与代码一致
+
+---
+
 - Task: 精准模式升级为“受约束执行模式”
 - Status: done（已落地结构化判定、后端硬/软拒绝、结果页/历史页状态展示；等待用户用真实样本验证策略阈值）
 - Scope:
@@ -54,3 +77,24 @@
     - 文字记录：二次纠错主要看补充说明是否生效，不受弹窗列表干扰
   - 若仍异常，抓取异常任务的 `task.payload` 与 `task.result.items` 做逐项比对
 - Last updated: `2026-03-28`
+
+---
+
+- Task: 结果页移除“上传公共库”保存后弹窗，改为右下角直达上传按钮
+- Status: done（代码已改，等待用户自行验证）
+- Scope:
+  - `src/pages/result/index.tsx`、`src/pages/result/index.scss`：
+    - 删除底部右侧“估算不准？点击标记样本”入口
+    - 新增右下角“上传公共库”按钮
+    - 点击后不再走“选择餐次/保存记录”链路，而是把当前拍照分析结果写入快捷上传草稿并直接跳到公共库上传页
+    - 普通“记录”按钮保存成功后不再弹出“是否上传公共库”提醒，直接进入记录详情
+  - `src/pages/food-library-share/index.tsx`：
+    - 新增快捷上传草稿读取
+    - 当从结果页直达时，自动带入当前图片、营养结果与识别描述，用户只需要补充商家、地理位置、是否自制等信息
+- Verification:
+  - 按用户要求，本次未运行编译、weapp-devtools、截图或前端自动化验证
+- Next step:
+  - 用户验证两点：
+    - 结果页右下角“上传公共库”是否直接进入公共库上传页，且已自动带入本次拍照分析内容
+    - “记录”后是否不再弹“是否上传公共库”的提醒
+- Last updated: `2026-03-29`

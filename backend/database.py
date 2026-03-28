@@ -829,6 +829,7 @@ def create_comment_task_sync(
     target_id: str,
     content: str,
     rating: Optional[int] = None,
+    extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     创建一条评论审核任务（pending），返回任务记录。
@@ -846,6 +847,8 @@ def create_comment_task_sync(
     }
     if rating is not None:
         row["rating"] = rating
+    if extra:
+        row["extra"] = extra
     try:
         result = supabase.table("comment_tasks").insert(row).execute()
         if result.data and len(result.data) > 0:
@@ -1545,6 +1548,112 @@ async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[
 # ---------- 圈子动态（好友今日饮食 + 点赞评论）----------
 
 
+def _normalize_feed_comment_row(
+    row: Dict[str, Any],
+    user_map: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    author = user_map.get(row.get("user_id"), {})
+    reply_user = user_map.get(row.get("reply_to_user_id"), {})
+    return {
+        "id": row.get("id"),
+        "user_id": row.get("user_id"),
+        "record_id": row.get("record_id"),
+        "parent_comment_id": row.get("parent_comment_id"),
+        "reply_to_user_id": row.get("reply_to_user_id"),
+        "reply_to_nickname": reply_user.get("nickname") or "",
+        "content": row.get("content") or "",
+        "created_at": row.get("created_at"),
+        "nickname": author.get("nickname") or "用户",
+        "avatar": author.get("avatar") or "",
+    }
+
+
+def _slice_feed_comment_preview(comments: List[Dict[str, Any]], comments_limit: int) -> List[Dict[str, Any]]:
+    if comments_limit <= 0:
+        return []
+    if len(comments) <= comments_limit:
+        return comments
+    return comments[-comments_limit:]
+
+
+def _build_feed_comment_bundle(
+    all_comments: List[Dict[str, Any]],
+    user_map: Dict[str, Dict[str, Any]],
+    comments_limit: int,
+) -> Dict[str, Any]:
+    comments_map: Dict[str, List[Dict[str, Any]]] = {}
+    comment_count_map: Dict[str, int] = {}
+    for comment in all_comments:
+        rid = comment.get("record_id")
+        if not rid:
+            continue
+        comment_count_map[rid] = comment_count_map.get(rid, 0) + 1
+        comments_map.setdefault(rid, []).append(_normalize_feed_comment_row(comment, user_map))
+    for rid, comments in list(comments_map.items()):
+        comments_map[rid] = _slice_feed_comment_preview(comments, comments_limit)
+    return {"comments_map": comments_map, "comment_count_map": comment_count_map}
+
+
+def _query_feed_comments_bundle_sync(
+    supabase,
+    record_ids: List[str],
+    comments_limit: int,
+) -> Dict[str, Any]:
+    if not record_ids:
+        return {"comments_map": {}, "comment_count_map": {}}
+
+    comments_result = (
+        supabase.table("feed_comments")
+        .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
+        .in_("record_id", record_ids)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    all_comments = list(comments_result.data or [])
+    if not all_comments:
+        return {"comments_map": {}, "comment_count_map": {}}
+
+    user_ids = {
+        uid
+        for uid in ([c.get("user_id") for c in all_comments] + [c.get("reply_to_user_id") for c in all_comments])
+        if uid
+    }
+    user_map: Dict[str, Dict[str, Any]] = {}
+    if user_ids:
+        users = (
+            supabase.table("weapp_user")
+            .select("id, nickname, avatar")
+            .in_("id", list(user_ids))
+            .execute()
+        )
+        user_map = {u["id"]: u for u in (users.data or [])}
+
+    return _build_feed_comment_bundle(all_comments, user_map, comments_limit)
+
+
+async def get_feed_record_interaction_context(user_id: Optional[str], record_id: str) -> Dict[str, Any]:
+    """
+    判断用户是否可对某条圈子动态进行查看/评论/点赞。
+    允许范围：本人、好友、或作者开启 public_records。
+    """
+    record = await get_food_record_by_id(record_id)
+    if not record:
+        return {"allowed": False, "reason": "not_found", "record": None}
+
+    owner_id = record.get("user_id")
+    if user_id and owner_id == user_id:
+        return {"allowed": True, "reason": "owner", "record": record}
+
+    owner = await get_user_by_id(owner_id) if owner_id else None
+    if owner and owner.get("public_records"):
+        return {"allowed": True, "reason": "public", "record": record}
+
+    if user_id and owner_id and await is_friend(user_id, owner_id):
+        return {"allowed": True, "reason": "friend", "record": record}
+
+    return {"allowed": False, "reason": "forbidden", "record": record}
+
+
 async def list_friends_feed_records(
     user_id: str,
     date: Optional[str] = None,
@@ -1598,38 +1707,12 @@ async def list_friends_feed_records(
         
         # 批量获取评论（如果需要）
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
+        comment_count_map: Dict[str, int] = {}
         if include_comments:
             record_ids = [r["id"] for r in rec_list]
-            # 批量查询所有记录的评论
-            comments_result = supabase.table("feed_comments").select("id, user_id, record_id, content, created_at").in_("record_id", record_ids).order("created_at", desc=False).execute()
-            all_comments = list(comments_result.data or [])
-            
-            # 获取评论者信息
-            if all_comments:
-                commenter_ids = list(set(c["user_id"] for c in all_comments))
-                commenters = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", commenter_ids).execute()
-                commenter_map = {u["id"]: u for u in (commenters.data or [])}
-                
-                # 按 record_id 分组评论
-                for comment in all_comments:
-                    rid = comment["record_id"]
-                    if rid not in comments_map:
-                        comments_map[rid] = []
-                    
-                    u = commenter_map.get(comment["user_id"], {})
-                    comments_map[rid].append({
-                        "id": comment["id"],
-                        "user_id": comment["user_id"],
-                        "record_id": comment["record_id"],
-                        "content": comment["content"],
-                        "created_at": comment["created_at"],
-                        "nickname": u.get("nickname") or "用户",
-                        "avatar": u.get("avatar") or "",
-                    })
-                
-                # 每个记录只保留前 N 条评论
-                for rid in comments_map:
-                    comments_map[rid] = comments_map[rid][:comments_limit]
+            bundle = _query_feed_comments_bundle_sync(supabase, record_ids, comments_limit)
+            comments_map = bundle["comments_map"]
+            comment_count_map = bundle["comment_count_map"]
         
         out = []
         for r in rec_list:
@@ -1644,6 +1727,7 @@ async def list_friends_feed_records(
             }
             if include_comments:
                 item["comments"] = comments_map.get(r["id"], [])
+                item["comment_count"] = comment_count_map.get(r["id"], 0)
             out.append(item)
         return out
     except Exception as e:
@@ -1772,30 +1856,12 @@ async def list_public_feed_records(
         author_map = {a["id"]: a for a in (authors.data or [])}
 
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
+        comment_count_map: Dict[str, int] = {}
         if include_comments:
             record_ids = [r["id"] for r in rec_list]
-            comments_result = supabase.table("feed_comments").select("id, user_id, record_id, content, created_at").in_("record_id", record_ids).order("created_at", desc=False).execute()
-            all_comments = list(comments_result.data or [])
-            if all_comments:
-                commenter_ids = list(set(c["user_id"] for c in all_comments))
-                commenters = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", commenter_ids).execute()
-                commenter_map = {u["id"]: u for u in (commenters.data or [])}
-                for comment in all_comments:
-                    rid = comment["record_id"]
-                    if rid not in comments_map:
-                        comments_map[rid] = []
-                    u = commenter_map.get(comment["user_id"], {})
-                    comments_map[rid].append({
-                        "id": comment["id"],
-                        "user_id": comment["user_id"],
-                        "record_id": comment["record_id"],
-                        "content": comment["content"],
-                        "created_at": comment["created_at"],
-                        "nickname": u.get("nickname") or "用户",
-                        "avatar": u.get("avatar") or "",
-                    })
-                for rid in comments_map:
-                    comments_map[rid] = comments_map[rid][:comments_limit]
+            bundle = _query_feed_comments_bundle_sync(supabase, record_ids, comments_limit)
+            comments_map = bundle["comments_map"]
+            comment_count_map = bundle["comment_count_map"]
 
         out = []
         for r in rec_list:
@@ -1810,6 +1876,7 @@ async def list_public_feed_records(
             }
             if include_comments:
                 item["comments"] = comments_map.get(r["id"], [])
+                item["comment_count"] = comment_count_map.get(r["id"], 0)
             out.append(item)
         return out
     except Exception as e:
@@ -1864,12 +1931,25 @@ async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Opt
         raise
 
 
-async def add_feed_comment(user_id: str, record_id: str, content: str) -> Dict[str, Any]:
+async def add_feed_comment(
+    user_id: str,
+    record_id: str,
+    content: str,
+    parent_comment_id: Optional[str] = None,
+    reply_to_user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """发表评论"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("feed_comments").insert({"user_id": user_id, "record_id": record_id, "content": content.strip()}).execute()
+        row = {
+            "user_id": user_id,
+            "record_id": record_id,
+            "content": content.strip(),
+            "parent_comment_id": parent_comment_id,
+            "reply_to_user_id": reply_to_user_id,
+        }
+        result = supabase.table("feed_comments").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("发表评论失败")
@@ -1878,12 +1958,25 @@ async def add_feed_comment(user_id: str, record_id: str, content: str) -> Dict[s
         raise
 
 
-def add_feed_comment_sync(user_id: str, record_id: str, content: str) -> Dict[str, Any]:
+def add_feed_comment_sync(
+    user_id: str,
+    record_id: str,
+    content: str,
+    parent_comment_id: Optional[str] = None,
+    reply_to_user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """发表评论（同步版本，供 Worker 使用）"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("feed_comments").insert({"user_id": user_id, "record_id": record_id, "content": content.strip()}).execute()
+        row = {
+            "user_id": user_id,
+            "record_id": record_id,
+            "content": content.strip(),
+            "parent_comment_id": parent_comment_id,
+            "reply_to_user_id": reply_to_user_id,
+        }
+        result = supabase.table("feed_comments").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("发表评论失败")
@@ -1897,26 +1990,26 @@ async def list_feed_comments(record_id: str, limit: int = 50) -> List[Dict[str, 
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("feed_comments").select("id, user_id, record_id, content, created_at").eq("record_id", record_id).order("created_at", desc=False).limit(limit).execute()
+        result = (
+            supabase.table("feed_comments")
+            .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
+            .eq("record_id", record_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
         rows = list(result.data or [])
         if not rows:
             return []
-        user_ids = list({r["user_id"] for r in rows})
-        users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", user_ids).execute()
+        if limit > 0 and len(rows) > limit:
+            rows = rows[-limit:]
+        user_ids = {
+            uid
+            for uid in ([r.get("user_id") for r in rows] + [r.get("reply_to_user_id") for r in rows])
+            if uid
+        }
+        users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", list(user_ids)).execute()
         user_map = {u["id"]: u for u in (users.data or [])}
-        out = []
-        for r in rows:
-            u = user_map.get(r["user_id"], {})
-            out.append({
-                "id": r["id"],
-                "user_id": r["user_id"],
-                "record_id": r["record_id"],
-                "content": r["content"],
-                "created_at": r["created_at"],
-                "nickname": u.get("nickname") or "用户",
-                "avatar": u.get("avatar") or "",
-            })
-        return out
+        return [_normalize_feed_comment_row(r, user_map) for r in rows]
     except Exception as e:
         print(f"[list_feed_comments] 错误: {e}")
         raise
@@ -2297,6 +2390,165 @@ async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         print(f"[get_food_record_by_id] 错误: {e}")
+        raise
+
+
+def get_food_record_by_id_sync(record_id: str) -> Optional[Dict[str, Any]]:
+    """同步版：通过 ID 获取单条饮食记录，供 Worker 使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_food_records").select("*").eq("id", record_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_food_record_by_id_sync] 错误: {e}")
+        raise
+
+
+def get_feed_comment_by_id_sync(comment_id: str) -> Optional[Dict[str, Any]]:
+    """同步版：按 ID 获取圈子评论。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("feed_comments").select("*").eq("id", comment_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_feed_comment_by_id_sync] 错误: {e}")
+        raise
+
+
+async def get_feed_comment_by_id(comment_id: str) -> Optional[Dict[str, Any]]:
+    """按 ID 获取圈子评论。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("feed_comments").select("*").eq("id", comment_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_feed_comment_by_id] 错误: {e}")
+        raise
+
+
+def create_feed_interaction_notification_sync(
+    recipient_user_id: str,
+    notification_type: str,
+    actor_user_id: Optional[str] = None,
+    record_id: Optional[str] = None,
+    comment_id: Optional[str] = None,
+    parent_comment_id: Optional[str] = None,
+    content_preview: Optional[str] = None,
+) -> Dict[str, Any]:
+    """创建一条圈子互动通知。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row: Dict[str, Any] = {
+        "recipient_user_id": recipient_user_id,
+        "notification_type": notification_type,
+        "actor_user_id": actor_user_id,
+        "record_id": record_id,
+        "comment_id": comment_id,
+        "parent_comment_id": parent_comment_id,
+        "content_preview": content_preview,
+    }
+    try:
+        result = supabase.table("feed_interaction_notifications").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建互动通知失败")
+    except Exception as e:
+        print(f"[create_feed_interaction_notification_sync] 错误: {e}")
+        raise
+
+
+async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """查询用户收到的圈子互动通知列表。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("feed_interaction_notifications")
+            .select("*")
+            .eq("recipient_user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = list(result.data or [])
+        if not rows:
+            return []
+        actor_ids = list({row.get("actor_user_id") for row in rows if row.get("actor_user_id")})
+        actor_map: Dict[str, Dict[str, Any]] = {}
+        if actor_ids:
+            users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", actor_ids).execute()
+            actor_map = {u["id"]: u for u in (users.data or [])}
+        out = []
+        for row in rows:
+            actor = actor_map.get(row.get("actor_user_id"), {})
+            out.append({
+                "id": row.get("id"),
+                "notification_type": row.get("notification_type"),
+                "record_id": row.get("record_id"),
+                "comment_id": row.get("comment_id"),
+                "parent_comment_id": row.get("parent_comment_id"),
+                "content_preview": row.get("content_preview") or "",
+                "is_read": bool(row.get("is_read")),
+                "created_at": row.get("created_at"),
+                "actor": {
+                    "id": actor.get("id"),
+                    "nickname": actor.get("nickname") or "系统",
+                    "avatar": actor.get("avatar") or "",
+                },
+            })
+        return out
+    except Exception as e:
+        print(f"[list_feed_interaction_notifications] 错误: {e}")
+        raise
+
+
+async def count_unread_feed_interaction_notifications(user_id: str) -> int:
+    """统计未读圈子互动通知数。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("feed_interaction_notifications")
+            .select("id")
+            .eq("recipient_user_id", user_id)
+            .eq("is_read", False)
+            .execute()
+        )
+        return len(result.data or [])
+    except Exception as e:
+        print(f"[count_unread_feed_interaction_notifications] 错误: {e}")
+        raise
+
+
+async def mark_feed_interaction_notifications_read(
+    user_id: str,
+    notification_ids: Optional[List[str]] = None,
+) -> int:
+    """标记圈子互动通知为已读；未传 notification_ids 时标记全部已读。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        q = (
+            supabase.table("feed_interaction_notifications")
+            .update({"is_read": True, "read_at": datetime.now(timezone.utc).isoformat()})
+            .eq("recipient_user_id", user_id)
+            .eq("is_read", False)
+        )
+        if notification_ids:
+            q = q.in_("id", notification_ids)
+        result = q.execute()
+        return len(result.data or [])
+    except Exception as e:
+        print(f"[mark_feed_interaction_notifications_read] 错误: {e}")
         raise
 
 

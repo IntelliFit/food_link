@@ -316,6 +316,79 @@
   color: #475569;
 }
 
+.followup-question-card {
+  padding: 28rpx 30rpx;
+  border-radius: 32rpx;
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  border: 1rpx solid #93c5fd;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+}
+
+.followup-question-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 12rpx;
+}
+
+.followup-question-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.followup-question-label {
+  font-size: 22rpx;
+  color: #64748b;
+}
+
+.followup-question-title {
+  font-size: 31rpx;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.followup-question-action {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.followup-question-desc {
+  font-size: 25rpx;
+  color: #1e293b;
+  line-height: 1.6;
+}
+
+.followup-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  margin-top: 16rpx;
+}
+
+.followup-question-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10rpx;
+}
+
+.followup-question-dot {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.followup-question-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #334155;
+}
+
 // 通用卡片样式
 %card-base {
   background: #ffffff;
@@ -1038,10 +1111,22 @@
   }
 }
 
-.feedback-link {
+.library-upload-entry {
   display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 8rpx;
+  gap: 8rpx;
+  flex-shrink: 0;
+  padding: 14rpx 22rpx;
+  border-radius: 100rpx;
+  background: #ffffff;
+  border: 2rpx solid #bbf7d0;
+  box-shadow: 0 8rpx 20rpx rgba(15, 23, 42, 0.04);
+
+  &:active {
+    background: #f0fdf4;
+    transform: scale(0.97);
+  }
 
   &.disabled {
     opacity: 0.5;
@@ -1049,10 +1134,16 @@
   }
 }
 
-.feedback-text {
+.library-upload-text {
   font-size: 24rpx;
-  color: #94a3b8;
-  text-decoration: underline;
+  font-weight: 600;
+  color: #059669;
+}
+
+.library-upload-arrow {
+  font-size: 30rpx;
+  line-height: 1;
+  color: #059669;
 }
 
 @keyframes pulse {
@@ -1195,13 +1286,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
   margin-top: 16rpx;
-  padding: 0 12rpx;
+  padding: 0 4rpx;
 }
 
 .correction-entry {
   display: flex;
   align-items: center;
+  flex: 1;
   gap: 10rpx;
   padding: 14rpx 24rpx 14rpx 16rpx;
   background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);

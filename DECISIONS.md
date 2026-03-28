@@ -1,5 +1,11 @@
 # DECISIONS
 
+- `2026-03-29`: 社区评论初版只支持“动态评论 + 单层回复”，不做多层楼中楼；前端保持扁平渲染，通过 `parent_comment_id` 和 `reply_to_user_id` 展示“回复某人”。
+- `2026-03-29`: 社区评论继续沿用异步审核模型；前端提交成功文案必须表达“已提交审核”，并在社区页合并本地临时评论，避免用户误以为评论丢失。
+- `2026-03-29`: 互动消息初版不做独立复杂消息中心和推送，只做站内轻量通知表 `feed_interaction_notifications`，支持 `comment_received`、`reply_received`、`comment_rejected`。
+- `2026-03-29`: 圈子动态的评论和点赞必须经过可见性校验，允许范围限定为：本人、好友、或作者开启 `public_records` 的动态。
+- `2026-03-29`: 圈子 Feed 返回的 `comment_count` 必须是真实总数，不能再直接等于预览评论条数；卡片里评论仅作为预览，允许用户再拉完整列表。
+
 - `2026-03-27`: Added persistent state files so `food_link` context survives session resets and compaction better.
 - `2026-03-27`: Project ownership must come from `IDENTITY.md` plus state files, not stale transcript memory.
 - `2026-03-27`: Durable requirements, blockers, and handoffs must be written to files instead of relying on chat history alone.
@@ -18,3 +24,4 @@
 - `2026-03-28`: 图片记录模式新增后端强约束兜底：若模型未遵守纠错清单克重，按纠错清单回写 `estimatedWeightGrams` 并按比例缩放营养，避免“二次纠错后结果不变”。
 - `2026-03-28`: 精准模式不再只是提示词差异；分析结果统一新增 `recognitionOutcome`、`rejectionReason`、`retakeGuidance`、`allowedFoodCategory`，由后端在严格模式下做 hard/soft reject 后校验，前端结果页和历史页按结构化状态展示。
 - `2026-03-28`: 文字异步分析任务的 `execution_mode` 必须和图片任务一样做“请求优先、档案回退”的统一合并，避免未传模式时默认掉回 `standard`。
+- `2026-03-29`: 结果页的“上传公共库”必须是独立入口，点击后应直接进入公共库上传页并沿用当前拍照分析结果作为草稿；不要先走“记录餐次/保存记录”链路，也不要在“记录”成功后再弹上传提醒。

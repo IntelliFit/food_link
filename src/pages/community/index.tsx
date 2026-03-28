@@ -17,12 +17,16 @@ import {
   unlikePublicFoodLibraryItem,
   communityLike,
   communityUnlike,
+  communityGetComments,
+  communityGetCommentTasks,
+  communityGetNotifications,
   communityPostComment,
   communityGetCheckinLeaderboard,
   type FriendSearchUser,
   type FriendRequestItem,
   type FriendListItem,
   type CommunityFeedItem,
+  type FeedCommentItem,
   type CheckinLeaderboardItem,
   type PublicFoodLibraryItem
 } from '../../utils/api'
@@ -78,6 +82,8 @@ const CACHE_KEYS = {
 
 // 缓存有效期（5分钟）
 const CACHE_DURATION = 5 * 60 * 1000
+const TEMP_COMMENT_MAX_AGE_MS = 5 * 60 * 1000
+const COMMENT_DEDUPE_WINDOW_MS = 10 * 60 * 1000
 
 function getLocalUserDisplay(): { nickname: string; avatar: string } {
   try {
@@ -116,6 +122,8 @@ export default function CommunityPage() {
   const [commentContent, setCommentContent] = useState('')
   const [commentSubmitting, setCommentSubmitting] = useState(false)
   const [commentInputFocus, setCommentInputFocus] = useState(false)
+  const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
 
   // 固定页面高度
   const [pageHeight, setPageHeight] = useState(0)
@@ -178,6 +186,19 @@ export default function CommunityPage() {
       setLibraryRecommendList(res.list || [])
     } catch {
       // 保留上次推荐，避免页面闪空
+    }
+  }, [])
+
+  const loadInteractionNotificationsBadge = useCallback(async () => {
+    if (!getAccessToken()) {
+      setUnreadNotificationCount(0)
+      return
+    }
+    try {
+      const res = await communityGetNotifications(20)
+      setUnreadNotificationCount(res.unread_count || 0)
+    } catch (e) {
+      console.error('加载互动消息失败:', e)
     }
   }, [])
 
@@ -269,6 +290,84 @@ export default function CommunityPage() {
     }
   }, [])
 
+  const updateFeedItem = useCallback((recordId: string, updater: (item: CommunityFeedItem) => CommunityFeedItem) => {
+    setFeedList((prev) => {
+      const next = prev.map((item) => item.record.id === recordId ? updater(item) : item)
+      saveToCache(next)
+      return next
+    })
+  }, [saveToCache])
+
+  const getTempCommentsKey = useCallback((recordId: string) => `temp_comments_${recordId}`, [])
+
+  const mergeFeedTempComments = useCallback(async (list: CommunityFeedItem[], includeTaskState: boolean = false) => {
+    if (!getAccessToken()) return list
+
+    let taskMap = new Map<string, { status: string }>()
+    if (includeTaskState) {
+      try {
+        const res = await communityGetCommentTasks(100)
+        taskMap = new Map((res.list || []).map((task) => [task.id, { status: task.status }]))
+      } catch (e) {
+        console.error('获取评论任务状态失败:', e)
+      }
+    }
+
+    return list.map((item) => {
+      const tempCommentsKey = getTempCommentsKey(item.record.id)
+      let cachedTemp: Array<{ task_id: string; comment: FeedCommentItem; timestamp: number }> = []
+      try {
+        const raw = Taro.getStorageSync(tempCommentsKey)
+        cachedTemp = Array.isArray(raw) ? raw : []
+      } catch (e) {
+        console.error('读取临时评论缓存失败:', e)
+      }
+
+      const now = Date.now()
+      const serverComments = item.comments || []
+      const remainingTemp = cachedTemp.filter((entry) => {
+        if (!entry || typeof entry.timestamp !== 'number') return false
+        if (now - entry.timestamp > TEMP_COMMENT_MAX_AGE_MS) return false
+        const taskStatus = taskMap.get(entry.task_id)?.status
+        if (taskStatus === 'violated' || taskStatus === 'failed') return false
+
+        const tTime = new Date(entry.comment.created_at).getTime()
+        return !serverComments.some((serverComment) => {
+          const scTime = new Date(serverComment.created_at).getTime()
+          return (
+            serverComment.user_id === entry.comment.user_id &&
+            serverComment.content === entry.comment.content &&
+            serverComment.parent_comment_id === entry.comment.parent_comment_id &&
+            serverComment.reply_to_user_id === entry.comment.reply_to_user_id &&
+            (Number.isNaN(tTime) || Number.isNaN(scTime) ? false : Math.abs(scTime - tTime) <= COMMENT_DEDUPE_WINDOW_MS)
+          )
+        })
+      }).map((entry) => ({
+        ...entry,
+        comment: {
+          ...entry.comment,
+          _is_temp: true
+        }
+      }))
+
+      try {
+        if (remainingTemp.length > 0) {
+          Taro.setStorageSync(tempCommentsKey, remainingTemp)
+        } else {
+          Taro.removeStorageSync(tempCommentsKey)
+        }
+      } catch (e) {
+        console.error('更新临时评论缓存失败:', e)
+      }
+
+      return {
+        ...item,
+        comments: [...remainingTemp.map((entry) => entry.comment), ...serverComments],
+        comment_count: Math.max(item.comment_count || 0, serverComments.length) + remainingTemp.length
+      }
+    })
+  }, [getTempCommentsKey])
+
   const loadFriendsAndRequests = useCallback(async (silent = false) => {
     if (!getAccessToken()) return
     if (!silent) setLoadingFriends(true)
@@ -320,16 +419,8 @@ export default function CommunityPage() {
       const res = token
         ? await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5)
         : await communityGetPublicFeed(0, PAGE_SIZE, true, 5)
-      const list = res.list || []
-
-      list.forEach(item => {
-        const tempCommentsKey = `temp_comments_${item.record.id}`
-        try {
-          Taro.removeStorageSync(tempCommentsKey)
-        } catch (e) {
-          console.error('清理临时评论缓存失败:', e)
-        }
-      })
+      const baseList = res.list || []
+      const list = token ? await mergeFeedTempComments(baseList, true) : baseList
 
       setFeedList(list)
       setOffset(list.length)
@@ -346,7 +437,7 @@ export default function CommunityPage() {
       setRefreshing(false)
       setShowSkeleton(false)
     }
-  }, [saveToCache])
+  }, [mergeFeedTempComments, saveToCache])
 
   const loadMoreFeed = useCallback(async () => {
     if (!hasMore || loadingMore) return
@@ -356,7 +447,8 @@ export default function CommunityPage() {
       const res = token
         ? await communityGetFeed(undefined, offset, PAGE_SIZE, true, 5)
         : await communityGetPublicFeed(offset, PAGE_SIZE, true, 5)
-      const list = res.list || []
+      const baseList = res.list || []
+      const list = token ? await mergeFeedTempComments(baseList, false) : baseList
       setFeedList(prev => [...prev, ...list])
       setOffset(prev => prev + list.length)
       setHasMore(res.has_more ?? list.length >= PAGE_SIZE)
@@ -365,7 +457,7 @@ export default function CommunityPage() {
     } finally {
       setLoadingMore(false)
     }
-  }, [offset, hasMore, loadingMore])
+  }, [offset, hasMore, loadingMore, mergeFeedTempComments])
 
   // ScrollView 自带下拉刷新（页面级下拉被内部 ScrollView 接管，需用 refresher）
   const handleRefresherRefresh = useCallback(() => {
@@ -375,9 +467,10 @@ export default function CommunityPage() {
       tasks.push(loadFriendsAndRequests(false))
       tasks.push(loadCheckinPreview(false))
       tasks.push(loadLibraryRecommend())
+      tasks.push(loadInteractionNotificationsBadge())
     }
     Promise.all(tasks)
-  }, [loadFriendsAndRequests, refreshFeed, loadCheckinPreview, loadLibraryRecommend])
+  }, [loadFriendsAndRequests, refreshFeed, loadCheckinPreview, loadLibraryRecommend, loadInteractionNotificationsBadge])
 
   // 评论栏弹出后延迟聚焦，等滑入动画完成
   useEffect(() => {
@@ -424,10 +517,12 @@ export default function CommunityPage() {
     if (token) {
       loadCheckinPreview(true)
       loadLibraryRecommend()
+      loadInteractionNotificationsBadge()
     } else {
       setLbPreviewTop([])
       setLbPreviewMyRank(null)
       setLibraryRecommendList([])
+      setUnreadNotificationCount(0)
     }
 
     const now = Date.now()
@@ -438,6 +533,14 @@ export default function CommunityPage() {
 
     // 已有 Feed 时不再走下方冷启动，但仍需按需拉取好友（否则仅从缓存恢复 Feed 时会 early return，永远不请求 /api/friend/list）
     if (feedList.length > 0) {
+      if (token) {
+        mergeFeedTempComments(feedList, true)
+          .then((merged) => {
+            setFeedList(merged)
+            saveToCache(merged)
+          })
+          .catch((e) => console.error('同步临时评论状态失败:', e))
+      }
       if (needRefreshFriends) {
         loadFriendsAndRequests(true)
       }
@@ -678,15 +781,16 @@ export default function CommunityPage() {
       try { Taro.setStorageSync(draftKey(expandedCommentRecordId), commentContent) } catch (_) {}
     }
     setExpandedCommentRecordId(null)
+    setReplyTargetComment(null)
   }
 
   /** 点击评论：打开底部输入栏，同一帖再点则关闭 */
-  const openCommentModal = (recordId: string) => {
+  const openCommentModal = (recordId: string, replyComment?: FeedCommentItem | null) => {
     if (!getAccessToken()) {
       Taro.showToast({ title: '请先登录', icon: 'none' })
       return
     }
-    if (expandedCommentRecordId === recordId) {
+    if (expandedCommentRecordId === recordId && !replyComment) {
       closeCommentModal()
       return
     }
@@ -697,6 +801,35 @@ export default function CommunityPage() {
     try { draft = Taro.getStorageSync(draftKey(recordId)) || '' } catch (_) {}
     setCommentContent(draft)
     setExpandedCommentRecordId(recordId)
+    setReplyTargetComment(replyComment || null)
+  }
+
+  const handleLoadAllComments = async (recordId: string) => {
+    if (!getAccessToken()) {
+      Taro.showToast({ title: '请先登录', icon: 'none' })
+      return
+    }
+    try {
+      const res = await communityGetComments(recordId)
+      const comments = res.list || []
+      const mergedList = await mergeFeedTempComments(feedList.map((item) => item.record.id === recordId ? {
+        ...item,
+        comments,
+        comment_count: Math.max(item.comment_count || 0, comments.length)
+      } : item), true)
+      setFeedList(mergedList)
+      saveToCache(mergedList)
+    } catch (e) {
+      Taro.showToast({ title: (e as Error).message || '获取评论失败', icon: 'none' })
+    }
+  }
+
+  const handleOpenNotifications = () => {
+    if (!getAccessToken()) {
+      Taro.showToast({ title: '请先登录', icon: 'none' })
+      return
+    }
+    Taro.navigateTo({ url: '/pages/interaction-notifications/index' })
   }
 
   const submitComment = async () => {
@@ -704,24 +837,33 @@ export default function CommunityPage() {
     setCommentSubmitting(true)
     try {
       // 调用新接口，获取临时评论数据
-      const { task_id, temp_comment } = await communityPostComment(expandedCommentRecordId, commentContent.trim())
+      const { task_id, temp_comment } = await communityPostComment(
+        expandedCommentRecordId,
+        commentContent.trim(),
+        {
+          parent_comment_id: replyTargetComment?.id,
+          reply_to_user_id: replyTargetComment?.user_id
+        }
+      )
       const localUserDisplay = getLocalUserDisplay()
       const displayTempComment = {
         ...temp_comment,
+        reply_to_nickname: replyTargetComment?.nickname || temp_comment.reply_to_nickname || '',
         nickname: temp_comment.nickname || localUserDisplay.nickname,
         avatar: temp_comment.avatar || localUserDisplay.avatar
       }
 
       // 立即将临时评论添加到当前记录的评论列表（乐观更新）
-      const newList = feedList.map(item =>
-        item.record.id === expandedCommentRecordId
-          ? {
-            ...item,
-            comments: [displayTempComment, ...(item.comments || [])].slice(0, 5),
-            comment_count: (item.comment_count || 0) + 1
-          }
-          : item
-      )
+      const newList = feedList.map(item => {
+        if (item.record.id !== expandedCommentRecordId) return item
+        const currentComments = item.comments || []
+        const nextComments = [...currentComments, displayTempComment]
+        return {
+          ...item,
+          comments: nextComments.slice(-Math.max(5, nextComments.length)),
+          comment_count: (item.comment_count || 0) + 1
+        }
+      })
       setFeedList(newList)
 
       // 将临时评论缓存到本地存储
@@ -739,7 +881,8 @@ export default function CommunityPage() {
       try { Taro.removeStorageSync(draftKey(expandedCommentRecordId)) } catch (_) {}
       setCommentContent('')
       setExpandedCommentRecordId(null)
-      Taro.showToast({ title: '评论成功', icon: 'success' })
+      setReplyTargetComment(null)
+      Taro.showToast({ title: '评论已提交审核', icon: 'success' })
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
     } finally {
@@ -808,6 +951,12 @@ export default function CommunityPage() {
                         <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
                       </View>
                     )}
+                    <View className='view-all-btn notification-entry' onClick={handleOpenNotifications}>
+                      <Text className='view-all-text'>
+                        互动消息{unreadNotificationCount > 0 ? ` (${unreadNotificationCount})` : ''}
+                      </Text>
+                      <Text className='arrow'>{'>'}</Text>
+                    </View>
                     <View className='view-all-btn' onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}>
                       <Text className='view-all-text'>好友管理</Text>
                       <Text className='arrow'>{'>'}</Text>
@@ -1047,13 +1196,17 @@ export default function CommunityPage() {
                             onClick={() => openCommentModal(item.record.id)}
                           >
                             <Text className='action-icon iconfont icon-pinglun' />
-                            <Text className='action-count'>评论</Text>
+                          <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                           </View>
                         </View>
                         {(item.comments?.length ?? 0) > 0 && (
                           <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
                             {(item.comments || []).map((c) => (
-                              <View key={c.id} className='feed-comment-item'>
+                              <View
+                                key={c.id}
+                                className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''}`}
+                                onClick={() => openCommentModal(item.record.id, c)}
+                              >
                                 <View className='comment-avatar'>
                                   {c.avatar ? (
                                     <Image src={c.avatar} mode='aspectFill' className='comment-avatar-img' />
@@ -1064,11 +1217,24 @@ export default function CommunityPage() {
                                 <View className='comment-body'>
                                   <Text className='comment-text'>
                                     <Text className='comment-author'>{c.nickname || '用户'}</Text>
+                                    {c.reply_to_user_id ? (
+                                      <Text className='comment-reply-label'>
+                                        {' '}回复 {c.reply_to_nickname || '用户'}
+                                      </Text>
+                                    ) : null}
                                     <Text> {c.content}</Text>
                                   </Text>
+                                  {c._is_temp ? (
+                                    <Text className='comment-status-badge'>审核中</Text>
+                                  ) : null}
                                 </View>
                               </View>
                             ))}
+                            {(item.comment_count || 0) > (item.comments?.length || 0) ? (
+                              <View className='feed-comments-more' onClick={() => handleLoadAllComments(item.record.id)}>
+                                <Text className='feed-comments-more-text'>查看全部评论</Text>
+                              </View>
+                            ) : null}
                           </View>
                         )}
                       </View>
@@ -1121,9 +1287,15 @@ export default function CommunityPage() {
         onClick={closeCommentModal}
       />
       <View className={`comment-bottom-bar ${expandedCommentRecordId ? 'visible' : ''}`}>
+        {replyTargetComment ? (
+          <View className='comment-reply-tip'>
+            <Text className='comment-reply-tip-text'>正在回复 {replyTargetComment.nickname || '用户'}</Text>
+            <Text className='comment-reply-tip-close' onClick={() => setReplyTargetComment(null)}>取消</Text>
+          </View>
+        ) : null}
         <Textarea
           className='comment-bottom-input'
-          placeholder='说点什么...'
+          placeholder={replyTargetComment ? `回复 ${replyTargetComment.nickname || '用户'}...` : '说点什么...'}
           placeholderClass='comment-bottom-placeholder'
           value={commentContent}
           onInput={(e) => setCommentContent(e.detail.value)}

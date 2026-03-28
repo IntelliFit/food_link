@@ -28,7 +28,18 @@ CREATE TABLE IF NOT EXISTS public.feed_comments (
   CONSTRAINT feed_comments_pkey PRIMARY KEY (id)
 );
 
+-- 兼容老库：若 feed_comments 已存在旧结构，需要补回复相关字段
+ALTER TABLE public.feed_comments
+  ADD COLUMN IF NOT EXISTS parent_comment_id uuid NULL REFERENCES public.feed_comments(id) ON DELETE CASCADE;
+
+ALTER TABLE public.feed_comments
+  ADD COLUMN IF NOT EXISTS reply_to_user_id uuid NULL REFERENCES public.weapp_user(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_feed_comments_record_id ON public.feed_comments(record_id);
 CREATE INDEX IF NOT EXISTS idx_feed_comments_user_id ON public.feed_comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_feed_comments_parent_comment_id ON public.feed_comments(parent_comment_id);
+CREATE INDEX IF NOT EXISTS idx_feed_comments_reply_to_user_id ON public.feed_comments(reply_to_user_id);
 
 COMMENT ON TABLE public.feed_comments IS '圈子动态评论：对好友饮食记录的评论';
+COMMENT ON COLUMN public.feed_comments.parent_comment_id IS '父评论 ID；为空表示直接评论动态';
+COMMENT ON COLUMN public.feed_comments.reply_to_user_id IS '被回复用户 ID；为空表示直接评论动态';

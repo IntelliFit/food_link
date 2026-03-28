@@ -68,7 +68,12 @@ from database import (
     remove_feed_like,
     get_feed_likes_for_records,
     add_feed_comment,
+    get_feed_comment_by_id,
+    get_feed_record_interaction_context,
     list_feed_comments,
+    list_feed_interaction_notifications,
+    count_unread_feed_interaction_notifications,
+    mark_feed_interaction_notifications_read,
     # 公共食物库
     create_public_food_library_item,
     list_public_food_library,
@@ -554,6 +559,7 @@ class AnalyzeResponse(BaseModel):
     rejectionReason: Optional[str] = Field(default=None, description="精准模式拒识或降级原因")
     retakeGuidance: Optional[List[str]] = Field(default=None, description="精准模式下的重拍/拆拍建议")
     allowedFoodCategory: Optional[str] = Field(default=None, description="精准模式允许识别的食物类别: carb / lean_protein / unknown")
+    followupQuestions: Optional[List[str]] = Field(default=None, description="文字精准模式下还需补充的问题")
 
 
 # ---------- 双模型对比分析响应模型 ----------
@@ -573,6 +579,7 @@ class ModelAnalyzeResult(BaseModel):
     rejectionReason: Optional[str] = Field(default=None)
     retakeGuidance: Optional[List[str]] = Field(default=None)
     allowedFoodCategory: Optional[str] = Field(default=None)
+    followupQuestions: Optional[List[str]] = Field(default=None)
 
 
 class CompareAnalyzeResponse(BaseModel):
@@ -1134,6 +1141,7 @@ async def analyze_food(
             rejectionReason=_opt_str(parsed.get("rejectionReason")),
             retakeGuidance=parsed.get("retakeGuidance") if isinstance(parsed.get("retakeGuidance"), list) else None,
             allowedFoodCategory=_opt_str(parsed.get("allowedFoodCategory")),
+            followupQuestions=parsed.get("followupQuestions") if isinstance(parsed.get("followupQuestions"), list) else None,
         )
     except HTTPException:
         raise
@@ -1619,6 +1627,7 @@ async def analyze_food_text(
             rejectionReason=_opt_str(parsed.get("rejectionReason")),
             retakeGuidance=parsed.get("retakeGuidance") if isinstance(parsed.get("retakeGuidance"), list) else None,
             allowedFoodCategory=_opt_str(parsed.get("allowedFoodCategory")),
+            followupQuestions=parsed.get("followupQuestions") if isinstance(parsed.get("followupQuestions"), list) else None,
         )
     except HTTPException:
         raise
@@ -4182,6 +4191,24 @@ async def api_friend_invite_accept(
         print(f"[api/friend/invite/accept] 错误: {e}")
         raise HTTPException(status_code=500, detail="添加好友失败")
 
+class CommunityCommentCreateRequest(BaseModel):
+    content: str = Field(..., description="评论内容")
+    parent_comment_id: Optional[str] = Field(default=None, description="被回复的父评论 ID")
+    reply_to_user_id: Optional[str] = Field(default=None, description="被回复用户 ID")
+
+
+class MarkFeedNotificationsReadRequest(BaseModel):
+    notification_ids: Optional[List[str]] = Field(default=None, description="可选，指定要标记已读的通知 ID 列表")
+
+
+async def _ensure_feed_record_interactable(user_id: str, record_id: str) -> Dict[str, Any]:
+    context = await get_feed_record_interaction_context(user_id, record_id)
+    if not context.get("record"):
+        raise HTTPException(status_code=404, detail="动态不存在")
+    if not context.get("allowed"):
+        raise HTTPException(status_code=403, detail="无权操作该动态")
+    return context["record"]
+
 
 @app.get("/api/community/public-feed")
 async def api_community_public_feed(
@@ -4219,7 +4246,7 @@ async def api_community_public_feed(
             if include_comments:
                 comments = item.get("comments", [])
                 feed_item["comments"] = comments
-                feed_item["comment_count"] = len(comments)
+                feed_item["comment_count"] = item.get("comment_count", len(comments))
             out.append(feed_item)
 
         has_more = len(items) >= limit
@@ -4282,7 +4309,7 @@ async def api_community_feed(
             if include_comments:
                 comments = item.get("comments", [])
                 feed_item["comments"] = comments
-                feed_item["comment_count"] = len(comments)
+                feed_item["comment_count"] = item.get("comment_count", len(comments))
             
             out.append(feed_item)
         
@@ -4314,8 +4341,11 @@ async def api_community_like(
 ):
     """对某条动态点赞"""
     try:
+        await _ensure_feed_record_interactable(user_info["user_id"], record_id)
         await add_feed_like(user_info["user_id"], record_id)
         return {"message": "已点赞"}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[api/community/feed/like] 错误: {e}")
         raise HTTPException(status_code=500, detail="点赞失败")
@@ -4328,8 +4358,11 @@ async def api_community_unlike(
 ):
     """取消点赞"""
     try:
+        await _ensure_feed_record_interactable(user_info["user_id"], record_id)
         await remove_feed_like(user_info["user_id"], record_id)
         return {"message": "已取消"}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[api/community/feed/unlike] 错误: {e}")
         raise HTTPException(status_code=500, detail="取消失败")
@@ -4342,8 +4375,11 @@ async def api_community_comments(
 ):
     """某条动态的评论列表"""
     try:
+        await _ensure_feed_record_interactable(user_info["user_id"], record_id)
         comments = await list_feed_comments(record_id, limit=50)
         return {"list": comments}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[api/community/feed/comments] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取评论失败")
@@ -4352,7 +4388,7 @@ async def api_community_comments(
 @app.post("/api/community/feed/{record_id}/comments")
 async def api_community_comment_post(
     record_id: str,
-    body: dict,
+    body: CommunityCommentCreateRequest,
     user_info: dict = Depends(get_current_user_info),
 ):
     """
@@ -4360,12 +4396,26 @@ async def api_community_comment_post(
     body: { "content": "评论内容" }
     返回任务 ID，前端需要本地缓存显示，后台审核通过后才会真正入库。
     """
-    content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
+    await _ensure_feed_record_interactable(user_info["user_id"], record_id)
+
+    content = (body.content or "").strip()
     if not content:
         raise HTTPException(status_code=400, detail="评论内容不能为空")
     if len(content) > 500:
         raise HTTPException(status_code=400, detail="评论内容不能超过 500 字")
     try:
+        parent_comment_id = body.parent_comment_id
+        reply_to_user_id = body.reply_to_user_id
+        if reply_to_user_id and not parent_comment_id:
+            raise HTTPException(status_code=400, detail="回复评论时必须提供 parent_comment_id")
+
+        if parent_comment_id:
+            parent_comment = await get_feed_comment_by_id(parent_comment_id)
+            if not parent_comment or parent_comment.get("record_id") != record_id:
+                raise HTTPException(status_code=400, detail="被回复评论不存在或不属于当前动态")
+            if not reply_to_user_id:
+                reply_to_user_id = parent_comment.get("user_id")
+
         profile = await get_user_by_id(user_info["user_id"])
         nickname = (
             user_info.get("nickname")
@@ -4383,6 +4433,10 @@ async def api_community_comment_post(
             comment_type="feed",
             target_id=record_id,
             content=content,
+            extra={
+                "parent_comment_id": parent_comment_id,
+                "reply_to_user_id": reply_to_user_id,
+            } if parent_comment_id or reply_to_user_id else None,
         )
         # 返回任务 ID 和临时评论数据（前端本地显示用）
         return {
@@ -4391,6 +4445,9 @@ async def api_community_comment_post(
                 "id": task["id"],  # 使用任务 ID 作为临时 ID
                 "user_id": user_info["user_id"],
                 "record_id": record_id,
+                "parent_comment_id": parent_comment_id,
+                "reply_to_user_id": reply_to_user_id,
+                "reply_to_nickname": "",
                 "content": content,
                 "created_at": task["created_at"],
                 "nickname": nickname,
@@ -4398,9 +4455,81 @@ async def api_community_comment_post(
                 "_is_temp": True,  # 标记为临时评论
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[api/community/feed/comment] 错误: {e}")
         raise HTTPException(status_code=500, detail="发表失败")
+
+
+@app.get("/api/community/comment-tasks")
+async def api_community_comment_tasks(
+    limit: int = 50,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """查询当前用户最近的圈子评论审核任务状态。"""
+    try:
+        tasks = list_comment_tasks_by_user_sync(
+            user_info["user_id"],
+            comment_type="feed",
+            limit=max(1, min(limit, 100)),
+        )
+        out = []
+        for task in tasks:
+            extra = task.get("extra") or {}
+            out.append({
+                "id": task.get("id"),
+                "target_id": task.get("target_id"),
+                "content": task.get("content") or "",
+                "status": task.get("status"),
+                "created_at": task.get("created_at"),
+                "updated_at": task.get("updated_at"),
+                "violation_reason": task.get("violation_reason"),
+                "error_message": task.get("error_message"),
+                "result": task.get("result"),
+                "extra": {
+                    "parent_comment_id": extra.get("parent_comment_id"),
+                    "reply_to_user_id": extra.get("reply_to_user_id"),
+                }
+            })
+        return {"list": out}
+    except Exception as e:
+        print(f"[api/community/comment-tasks] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取评论状态失败")
+
+
+@app.get("/api/community/notifications")
+async def api_community_notifications(
+    limit: int = 50,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """查询圈子互动通知。"""
+    try:
+        size = max(1, min(limit, 100))
+        items = await list_feed_interaction_notifications(user_info["user_id"], limit=size)
+        unread_count = await count_unread_feed_interaction_notifications(user_info["user_id"])
+        return {"list": items, "unread_count": unread_count}
+    except Exception as e:
+        print(f"[api/community/notifications] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取互动消息失败")
+
+
+@app.post("/api/community/notifications/read")
+async def api_community_notifications_read(
+    body: MarkFeedNotificationsReadRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """标记圈子互动通知为已读。"""
+    try:
+        updated = await mark_feed_interaction_notifications_read(
+            user_info["user_id"],
+            notification_ids=body.notification_ids,
+        )
+        unread_count = await count_unread_feed_interaction_notifications(user_info["user_id"])
+        return {"updated": updated, "unread_count": unread_count}
+    except Exception as e:
+        print(f"[api/community/notifications/read] 错误: {e}")
+        raise HTTPException(status_code=500, detail="更新互动消息失败")
 
 
 # ---------- 公共食物库 ----------

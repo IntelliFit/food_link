@@ -91,6 +91,7 @@ export interface AnalyzeResponse {
   rejectionReason?: string
   retakeGuidance?: string[]
   allowedFoodCategory?: AllowedFoodCategory
+  followupQuestions?: string[]
 }
 
 // ---------- 双模型对比分析接口 ----------
@@ -110,6 +111,7 @@ export interface ModelAnalyzeResult {
   rejectionReason?: string
   retakeGuidance?: string[]
   allowedFoodCategory?: AllowedFoodCategory
+  followupQuestions?: string[]
 }
 
 /** 双模型对比分析响应 */
@@ -1853,11 +1855,46 @@ export interface FeedCommentItem {
   id: string
   user_id: string
   record_id: string
+  parent_comment_id?: string | null
+  reply_to_user_id?: string | null
+  reply_to_nickname?: string
   content: string
   created_at: string
   nickname: string
   avatar: string
   _is_temp?: boolean  // 标记为临时评论（未通过审核）
+}
+
+export interface CommunityCommentTask {
+  id: string
+  target_id: string
+  content: string
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated'
+  created_at: string
+  updated_at?: string
+  violation_reason?: string | null
+  error_message?: string | null
+  result?: Record<string, any> | null
+  extra?: {
+    parent_comment_id?: string | null
+    reply_to_user_id?: string | null
+  }
+}
+
+export interface FeedInteractionNotification {
+  id: string
+  notification_type: 'comment_received' | 'reply_received' | 'comment_rejected'
+  record_id?: string | null
+  comment_id?: string | null
+  parent_comment_id?: string | null
+  content_preview: string
+  is_read: boolean
+  created_at: string
+  actor: {
+    id?: string | null
+    nickname: string
+    avatar: string
+  }
 }
 
 /** 搜索用户（昵称模糊 / 手机号精确） */
@@ -2079,13 +2116,45 @@ export async function communityGetComments(recordId: string): Promise<{ list: Fe
  * 发表评论（异步审核版本）
  * 返回任务 ID 和临时评论数据，前端需要本地缓存显示
  */
-export async function communityPostComment(recordId: string, content: string): Promise<{ task_id: string; temp_comment: FeedCommentItem }> {
+export async function communityPostComment(
+  recordId: string,
+  content: string,
+  options?: { parent_comment_id?: string; reply_to_user_id?: string }
+): Promise<{ task_id: string; temp_comment: FeedCommentItem }> {
   const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, {
     method: 'POST',
-    data: { content: content.trim() }
+    data: {
+      content: content.trim(),
+      parent_comment_id: options?.parent_comment_id,
+      reply_to_user_id: options?.reply_to_user_id
+    }
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发表失败')
   return response.data as { task_id: string; temp_comment: FeedCommentItem }
+}
+
+/** 获取我最近的圈子评论审核任务 */
+export async function communityGetCommentTasks(limit: number = 50): Promise<{ list: CommunityCommentTask[] }> {
+  const response = await authenticatedRequest(`/api/community/comment-tasks?limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取评论状态失败')
+  return response.data as { list: CommunityCommentTask[] }
+}
+
+/** 获取圈子互动通知 */
+export async function communityGetNotifications(limit: number = 50): Promise<{ list: FeedInteractionNotification[]; unread_count: number }> {
+  const response = await authenticatedRequest(`/api/community/notifications?limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取互动消息失败')
+  return response.data as { list: FeedInteractionNotification[]; unread_count: number }
+}
+
+/** 标记圈子互动通知已读 */
+export async function communityMarkNotificationsRead(notificationIds?: string[]): Promise<{ updated: number; unread_count: number }> {
+  const response = await authenticatedRequest('/api/community/notifications/read', {
+    method: 'POST',
+    data: { notification_ids: notificationIds }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '更新互动消息失败')
+  return response.data as { updated: number; unread_count: number }
 }
 
 // ---------- 公共食物库 ----------
