@@ -2942,6 +2942,27 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
         raise
 
 
+async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
+    """统计用户今日（中国时区）的食物拍照分析次数（task_type 为 food 或 food_text）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # china_date_str 格式 "YYYY-MM-DD"，转换为 UTC 范围（UTC+8 = UTC-8h）
+        day_start_utc = f"{china_date_str}T00:00:00+08:00"
+        day_end_utc = f"{china_date_str}T23:59:59+08:00"
+        result = supabase.table("analysis_tasks")\
+            .select("id", count="exact")\
+            .eq("user_id", user_id)\
+            .in_("task_type", ["food", "food_text"])\
+            .gte("created_at", day_start_utc)\
+            .lte("created_at", day_end_utc)\
+            .execute()
+        return result.count or 0
+    except Exception as e:
+        print(f"[get_today_food_analysis_count] 错误: {e}")
+        return 0
+
+
 async def list_active_membership_plans() -> List[Dict[str, Any]]:
     """获取所有启用中的会员套餐配置。"""
     check_supabase_configured()

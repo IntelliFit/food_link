@@ -110,6 +110,7 @@ from database import (
     create_pro_membership_payment_record,
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
+    get_today_food_analysis_count,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -880,6 +881,9 @@ class MembershipStatusResponse(BaseModel):
     current_period_start: Optional[str] = None
     expires_at: Optional[str] = None
     last_paid_at: Optional[str] = None
+    daily_limit: int = 3
+    daily_used: int = 0
+    daily_remaining: int = 3
 
 
 class MembershipPlansListResponse(BaseModel):
@@ -1033,6 +1037,24 @@ async def analyze_food(
                 if profile_block:
                     profile_block = "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n" + profile_block
         execution_mode = requested_mode or _normalize_execution_mode((user or {}).get("execution_mode"))
+
+        # 配额检查（已登录用户）
+        if user_info:
+            membership = await _get_effective_membership(user_info["user_id"])
+            membership_resp = _format_membership_response(membership)
+            is_pro_sync = membership_resp["is_pro"]
+            quota_limit_sync = 20 if is_pro_sync else 3
+            today_str_sync = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+            daily_used_sync = await get_today_food_analysis_count(user_info["user_id"], today_str_sync)
+            if daily_used_sync >= quota_limit_sync:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"今日拍照次数已达上限（{quota_limit_sync}次），{'请明日再试' if is_pro_sync else '开通食探会员可提升至每日20次'}"
+                )
+            # strict 模式需要 Pro 会员
+            if execution_mode == "strict" and not is_pro_sync:
+                execution_mode = "standard"
+
         mode_hint = _build_execution_mode_hint(execution_mode)
 
         prompt = _build_gemini_prompt(
@@ -1228,10 +1250,29 @@ async def analyze_submit(
     """
     if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
         raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
+
+    # 配额检查
+    membership = await _get_effective_membership(user_info["user_id"])
+    membership_resp = _format_membership_response(membership)
+    is_pro = membership_resp["is_pro"]
+    quota_limit = 20 if is_pro else 3
+    today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+    daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
+    if daily_used >= quota_limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '开通食探会员可提升至每日20次'}"
+        )
+
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
     user = await get_user_by_id(user_info["user_id"])
     profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
     effective_mode = requested_mode or profile_mode
+
+    # strict 模式需要 Pro 会员
+    if effective_mode == "strict" and not is_pro:
+        effective_mode = "standard"
+
     payload = {
         "meal_type": body.meal_type,
         "timezone_offset_minutes": body.timezone_offset_minutes,
@@ -2187,13 +2228,102 @@ async def get_membership_plans():
 async def get_my_membership(
     user_info: dict = Depends(get_current_user_info)
 ):
-    """获取当前登录用户的 Pro 会员状态。"""
+    """获取当前登录用户的 Pro 会员状态（含今日配额）。"""
     try:
         membership = await _get_effective_membership(user_info["user_id"])
-        return _format_membership_response(membership)
+        result = _format_membership_response(membership)
+        is_pro = result["is_pro"]
+        daily_limit = 20 if is_pro else 3
+        today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+        daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
+        daily_used = min(daily_used, daily_limit)
+        result["daily_limit"] = daily_limit
+        result["daily_used"] = daily_used
+        result["daily_remaining"] = max(daily_limit - daily_used, 0)
+        return result
     except Exception as e:
         print(f"[get_my_membership] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取会员状态失败: {str(e)}")
+
+
+# ============================================================
+# TODO: [TEST] 以下测试接口在正式上线前必须删除
+# ============================================================
+TEST_MEMBERSHIP_USER_ID = "6646baaa-e86b-410b-a801-d56936d2b8ef"
+
+@app.post("/api/dev/toggle-test-membership")
+async def toggle_test_membership():
+    """
+    [TEST ONLY] 切换测试账号 (6646baaa…) 的会员状态。
+    active → expired；其他状态 → active（30天有效期）。
+    TODO: [TEST] 正式上线前删除此接口。
+    """
+    try:
+        membership = await get_user_pro_membership(TEST_MEMBERSHIP_USER_ID)
+        now = datetime.now(timezone.utc)
+
+        if membership:
+            expires_at = _parse_datetime(membership.get("expires_at"))
+            is_currently_active = (
+                membership.get("status") == "active"
+                and expires_at is not None
+                and expires_at > now
+            )
+            if is_currently_active:
+                # 已是会员 → 降为过期
+                updated = await save_user_pro_membership(
+                    TEST_MEMBERSHIP_USER_ID,
+                    {
+                        "status": "expired",
+                        "expires_at": (now - timedelta(seconds=1)).isoformat(),
+                        "updated_at": now.isoformat(),
+                    }
+                )
+                new_is_pro = False
+            else:
+                # 非会员 → 激活 30 天
+                updated = await save_user_pro_membership(
+                    TEST_MEMBERSHIP_USER_ID,
+                    {
+                        "status": "active",
+                        "current_plan_code": "pro_monthly",
+                        "current_period_start": now.isoformat(),
+                        "expires_at": (now + timedelta(days=30)).isoformat(),
+                        "last_paid_at": now.isoformat(),
+                        "updated_at": now.isoformat(),
+                    }
+                )
+                new_is_pro = True
+        else:
+            # 无记录 → 创建激活记录
+            updated = await save_user_pro_membership(
+                TEST_MEMBERSHIP_USER_ID,
+                {
+                    "user_id": TEST_MEMBERSHIP_USER_ID,
+                    "status": "active",
+                    "current_plan_code": "pro_monthly",
+                    "first_activated_at": now.isoformat(),
+                    "current_period_start": now.isoformat(),
+                    "expires_at": (now + timedelta(days=30)).isoformat(),
+                    "last_paid_at": now.isoformat(),
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                }
+            )
+            new_is_pro = True
+
+        return {
+            "ok": True,
+            "is_pro": new_is_pro,
+            "status": updated.get("status"),
+            "expires_at": updated.get("expires_at"),
+        }
+    except Exception as e:
+        print(f"[toggle_test_membership] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"切换会员状态失败: {str(e)}")
+# ============================================================
+# TODO: [TEST] 测试接口结束
+# ============================================================
 
 
 @app.post("/api/membership/pay/create", response_model=CreateMembershipPaymentResponse)
