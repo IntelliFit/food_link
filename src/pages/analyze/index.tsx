@@ -10,9 +10,11 @@ import './index.scss'
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
   { value: 'breakfast', label: '早餐', iconClass: 'icon-zaocan1' },
+  { value: 'morning_snack', label: '早加餐', iconClass: 'icon-lingshi' },
   { value: 'lunch', label: '午餐', iconClass: 'icon-wucan' },
+  { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
   { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
-  { value: 'snack', label: '加餐', iconClass: 'icon-lingshi' },
+  { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' },
 ]
 
 /** 饮食目标（状态一） */

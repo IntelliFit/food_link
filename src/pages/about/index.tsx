@@ -26,7 +26,7 @@ export default function AboutPage() {
                     <Image className="logo-image" src={APP_LOGO_URL} mode="aspectFit" />
                 </View>
                 <Text className="app-name">智健食探</Text>
-                <Text className="app-version">Version 1.0.0</Text>
+                <Text className="app-version">Version 2.0.8</Text>
             </View>
 
             <View className="content-section">

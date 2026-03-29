@@ -617,9 +617,24 @@
   text-align: right;
 }
 
-.metric {
-  font-size: 26rpx;
-  color: #334155;
+.metric-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  align-items: flex-end;
+}
+
+.metric-label {
+  font-size: 20rpx;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.metric-value {
+  font-size: 30rpx;
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .cal-val {
@@ -631,7 +646,12 @@
 
 .cal-unit {
   font-size: 22rpx;
-  color: #94a3b8;
+  color: #475569;
+}
+
+.metric-total-cal .ingredient-calories {
+  width: 100%;
+  justify-content: flex-end;
 }
 
 .ingredient-controls {

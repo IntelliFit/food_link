@@ -7,21 +7,25 @@ import './index.scss'
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
+  { value: 'morning_snack' as const, label: '早加餐' },
   { value: 'lunch' as const, label: '午餐' },
-  { value: 'snack' as const, label: '加餐' },
+  { value: 'afternoon_snack' as const, label: '午加餐' },
   { value: 'dinner' as const, label: '晚餐' },
+  { value: 'evening_snack' as const, label: '晚加餐' },
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
+  morning_snack: 'icon-lingshi',
   lunch: 'icon-wucan',
-  snack: 'icon-lingshi',
+  afternoon_snack: 'icon-lingshi',
   dinner: 'icon-wancan',
+  evening_snack: 'icon-lingshi',
 }
 
 const toSelectableMealType = (value: unknown): SelectableMealType | undefined => {
-  if (value === 'snack' || value === 'morning_snack' || value === 'afternoon_snack' || value === 'evening_snack') return 'snack'
+  if (value === 'snack') return 'afternoon_snack'
   const hit = MEAL_OPTIONS.find((o) => o.value === value)
   return hit?.value
 }
@@ -942,11 +946,20 @@ export default function ResultPage() {
                       </View>
                     </View>
                     <View className='ingredient-metrics-row'>
-                      <Text className='metric metric-weight'>{Math.round(item.weight)}</Text>
-                      <Text className='metric metric-unit-cal'>{Math.round(item.unitCaloriesPer100g)}</Text>
-                      <View className='ingredient-calories metric metric-total-cal'>
-                        <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
-                        <Text className='cal-unit'>kcal</Text>
+                      <View className='metric-cell metric-weight'>
+                        <Text className='metric-label'>重量(g)</Text>
+                        <Text className='metric-value'>{Math.round(item.weight)}</Text>
+                      </View>
+                      <View className='metric-cell metric-unit-cal'>
+                        <Text className='metric-label'>每100g(kcal)</Text>
+                        <Text className='metric-value'>{Math.round(item.unitCaloriesPer100g)}</Text>
+                      </View>
+                      <View className='metric-cell metric-total-cal'>
+                        <Text className='metric-label'>本次(kcal)</Text>
+                        <View className='ingredient-calories'>
+                          <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
+                          <Text className='cal-unit'>kcal</Text>
+                        </View>
                       </View>
                     </View>
                   </View>

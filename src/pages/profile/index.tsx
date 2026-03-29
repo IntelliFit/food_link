@@ -533,7 +533,7 @@ export default function ProfilePage() {
         )
       }
       <View className='profile-version'>
-        <Text>版本号 v2.0.7</Text>
+        <Text>版本号 v2.0.8</Text>
       </View>
 
       {/* 个人设置弹窗 */}
