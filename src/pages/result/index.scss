@@ -180,6 +180,13 @@
   font-weight: 500;
 }
 
+.pending-summary {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #b45309;
+  font-weight: 600;
+}
+
 .total-weight-badge {
   display: flex;
   align-items: center;
@@ -654,12 +661,47 @@
   justify-content: flex-end;
 }
 
+.pending-cal-text {
+  font-size: 24rpx;
+  color: #b45309;
+  font-weight: 600;
+}
+
 .ingredient-controls {
   padding: 24rpx 32rpx;
   background: #f8fafc;
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+}
+
+.resolve-actions {
+  display: flex;
+  gap: 14rpx;
+}
+
+.resolve-btn {
+  flex: 1;
+  height: 64rpx;
+  border-radius: 14rpx;
+  background: #ecfdf5;
+  color: #047857;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 600;
+  border: 1rpx solid #a7f3d0;
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.resolve-btn.secondary {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
 }
 
 .control-label {

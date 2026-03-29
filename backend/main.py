@@ -105,6 +105,7 @@ from database import (
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
     get_food_unresolved_top_sync,
+    search_food_nutrition_candidates_sync,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -1297,6 +1298,23 @@ async def get_food_unresolved_top(
     except Exception as e:
         print(f"[food-nutrition/unresolved/top] 错误: {e}")
         raise HTTPException(status_code=500, detail="查询未收录食物失败")
+
+
+@app.get("/api/food-nutrition/search")
+async def search_food_nutrition(
+    query: str,
+    limit: int = 5,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """按食物名称搜索标准食物库候选。"""
+    if not query or not query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+    try:
+        items = await asyncio.to_thread(search_food_nutrition_candidates_sync, query, limit)
+        return {"items": items}
+    except Exception as e:
+        print(f"[food-nutrition/search] 错误: {e}")
+        raise HTTPException(status_code=500, detail="查询食物候选失败")
 
 
 class UpdateAnalysisResultRequest(BaseModel):

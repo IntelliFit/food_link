@@ -794,6 +794,92 @@ def get_food_unresolved_top_sync(limit: int = 50) -> List[Dict[str, Any]]:
         return []
 
 
+def search_food_nutrition_candidates_sync(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """按名称搜索食物库候选（用于未收录项人工确认）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    raw_query = str(query or "").strip()
+    normalized_query = normalize_food_name(raw_query)
+    if not normalized_query:
+        return []
+
+    max_limit = max(1, min(int(limit or 5), 20))
+    by_food_id: Dict[str, Dict[str, Any]] = {}
+
+    def _score(a: str, b: str) -> float:
+        sim = _food_similarity(a, b)
+        if a in b or b in a:
+            sim = min(1.0, sim + 0.15)
+        return round(sim, 4)
+
+    try:
+        foods_res = (
+            supabase.table("food_nutrition_library")
+            .select("id, canonical_name, normalized_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g")
+            .eq("is_active", True)
+            .limit(600)
+            .execute()
+        )
+        for row in list(foods_res.data or []):
+            food_id = str(row.get("id") or "")
+            if not food_id:
+                continue
+            normalized_name = str(row.get("normalized_name") or "")
+            score = _score(normalized_query, normalized_name)
+            if score < 0.42:
+                continue
+            by_food_id[food_id] = {
+                "food_id": food_id,
+                "canonical_name": str(row.get("canonical_name") or ""),
+                "match_source": "canonical",
+                "score": score,
+                "unit_nutrition_per_100g": {
+                    "calories": float(row.get("kcal_per_100g") or 0),
+                    "protein": float(row.get("protein_per_100g") or 0),
+                    "carbs": float(row.get("carbs_per_100g") or 0),
+                    "fat": float(row.get("fat_per_100g") or 0),
+                },
+            }
+
+        alias_res = (
+            supabase.table("food_nutrition_aliases")
+            .select("normalized_alias, food_nutrition_library!inner(id, canonical_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, is_active)")
+            .limit(1200)
+            .execute()
+        )
+        for row in list(alias_res.data or []):
+            food = row.get("food_nutrition_library") or {}
+            if not food or not food.get("is_active", True):
+                continue
+            food_id = str(food.get("id") or "")
+            if not food_id:
+                continue
+            normalized_alias = str(row.get("normalized_alias") or "")
+            score = _score(normalized_query, normalized_alias)
+            if score < 0.42:
+                continue
+            prev = by_food_id.get(food_id)
+            if prev is None or score > float(prev.get("score") or 0):
+                by_food_id[food_id] = {
+                    "food_id": food_id,
+                    "canonical_name": str(food.get("canonical_name") or ""),
+                    "match_source": "alias",
+                    "score": score,
+                    "unit_nutrition_per_100g": {
+                        "calories": float(food.get("kcal_per_100g") or 0),
+                        "protein": float(food.get("protein_per_100g") or 0),
+                        "carbs": float(food.get("carbs_per_100g") or 0),
+                        "fat": float(food.get("fat_per_100g") or 0),
+                    },
+                }
+
+        ranked = sorted(by_food_id.values(), key=lambda x: float(x.get("score") or 0), reverse=True)
+        return ranked[:max_limit]
+    except Exception as e:
+        print(f"[search_food_nutrition_candidates_sync] 错误: {e}")
+        return []
+
+
 # ---------- 异步分析任务（analysis_tasks）：Worker 子进程消费 ----------
 
 def create_analysis_task_sync(

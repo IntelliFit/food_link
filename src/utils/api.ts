@@ -847,6 +847,19 @@ export interface UnresolvedFoodLogItem {
   sample_payload?: Record<string, unknown>
 }
 
+export interface FoodNutritionCandidate {
+  food_id: string
+  canonical_name: string
+  match_source: 'canonical' | 'alias' | string
+  score: number
+  unit_nutrition_per_100g: {
+    calories: number
+    protein: number
+    carbs: number
+    fat: number
+  }
+}
+
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
   const payload: AnalyzeTaskSubmitParams = {
@@ -934,6 +947,22 @@ export async function getUnresolvedFoodsTop(limit = 50): Promise<{ items: Unreso
     throw new Error(msg)
   }
   return res.data as { items: UnresolvedFoodLogItem[] }
+}
+
+/** 搜索食物库候选（用于未收录项人工确认） */
+export async function searchFoodNutritionCandidates(query: string, limit = 5): Promise<{ items: FoodNutritionCandidate[] }> {
+  const q = (query || '').trim()
+  if (!q) return { items: [] }
+  const safeLimit = Math.max(1, Math.min(20, Number(limit) || 5))
+  const res = await authenticatedRequest(`/api/food-nutrition/search?query=${encodeURIComponent(q)}&limit=${safeLimit}`, {
+    method: 'GET',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '查询食物候选失败'
+    throw new Error(msg)
+  }
+  return res.data as { items: FoodNutritionCandidate[] }
 }
 
 /**

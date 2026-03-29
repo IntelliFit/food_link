@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, searchFoodNutritionCandidates } from '../../utils/api'
 
 import './index.scss'
 
@@ -63,7 +63,8 @@ export default function ResultPage() {
     calories: 0,
     protein: 0,
     carbs: 0,
-    fat: 0
+    fat: 0,
+    pendingItems: 0
   })
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
@@ -136,14 +137,21 @@ export default function ResultPage() {
       (acc, item) => {
         // 使用 ratio 来计算实际摄入的营养
         const ratio = item.ratio / 100
+        if (item.isUnresolved && item.intake > 0) {
+          return {
+            ...acc,
+            pendingItems: acc.pendingItems + 1
+          }
+        }
         return {
           calories: acc.calories + item.calorie * ratio,
           protein: acc.protein + item.protein * ratio,
           carbs: acc.carbs + item.carbs * ratio,
-          fat: acc.fat + item.fat * ratio
+          fat: acc.fat + item.fat * ratio,
+          pendingItems: acc.pendingItems
         }
       },
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      { calories: 0, protein: 0, carbs: 0, fat: 0, pendingItems: 0 }
     )
     setNutritionStats(stats)
 
@@ -343,6 +351,91 @@ export default function ResultPage() {
     })
   }
 
+  const handleResolveByCandidate = async (id: number) => {
+    const current = nutritionItems.find((x) => x.id === id)
+    if (!current) return
+    try {
+      const { items } = await searchFoodNutritionCandidates(current.name, 6)
+      if (!items || items.length === 0) {
+        Taro.showToast({ title: '暂无近似食物，请手动输入', icon: 'none' })
+        return
+      }
+      const labels = items.map((x) => `${x.canonical_name} (${Math.round(x.unit_nutrition_per_100g.calories)} kcal/100g)`)
+      const tapIndex = await new Promise<number>((resolve, reject) => {
+        Taro.showActionSheet({
+          itemList: labels,
+          success: (res) => resolve(res.tapIndex),
+          fail: reject
+        })
+      })
+      const selected = items[tapIndex]
+      if (!selected) return
+      setNutritionItems((prev) => {
+        const updated = prev.map((x) => {
+          if (x.id !== id) return x
+          return {
+            ...x,
+            matchedFoodName: selected.canonical_name,
+            unitCaloriesPer100g: selected.unit_nutrition_per_100g.calories,
+            unitProteinPer100g: selected.unit_nutrition_per_100g.protein,
+            unitCarbsPer100g: selected.unit_nutrition_per_100g.carbs,
+            unitFatPer100g: selected.unit_nutrition_per_100g.fat,
+            calorie: calculateByUnit(x.weight, selected.unit_nutrition_per_100g.calories),
+            protein: calculateByUnit(x.weight, selected.unit_nutrition_per_100g.protein),
+            carbs: calculateByUnit(x.weight, selected.unit_nutrition_per_100g.carbs),
+            fat: calculateByUnit(x.weight, selected.unit_nutrition_per_100g.fat),
+            isUnresolved: false,
+            resolveStatus: 'manual_candidate'
+          }
+        })
+        calculateNutritionStats(updated)
+        return updated
+      })
+      Taro.showToast({ title: '已应用候选', icon: 'success' })
+    } catch {
+      // 用户取消或接口失败
+    }
+  }
+
+  const handleManualUnitCaloriesInput = (id: number) => {
+    // @ts-ignore
+    Taro.showModal({
+      title: '手动输入每100g热量',
+      content: '',
+      // @ts-ignore
+      editable: true,
+      placeholderText: '例如 156',
+      success: (res) => {
+        if (!res.confirm) return
+        const value = Number((res as any).content || 0)
+        if (!Number.isFinite(value) || value <= 0) {
+          Taro.showToast({ title: '请输入大于0的数字', icon: 'none' })
+          return
+        }
+        setNutritionItems((prev) => {
+          const updated = prev.map((x) => {
+            if (x.id !== id) return x
+            return {
+              ...x,
+              unitCaloriesPer100g: value,
+              calorie: calculateByUnit(x.weight, value),
+              unitProteinPer100g: 0,
+              unitCarbsPer100g: 0,
+              unitFatPer100g: 0,
+              protein: 0,
+              carbs: 0,
+              fat: 0,
+              isUnresolved: false,
+              resolveStatus: 'manual_kcal'
+            }
+          })
+          calculateNutritionStats(updated)
+          return updated
+        })
+      }
+    })
+  }
+
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
     // 避免用户快速连续点击导致重复保存
@@ -462,15 +555,30 @@ export default function ResultPage() {
 
   /** 点击保存按钮：打开餐次选择弹窗 */
   const handleConfirmAndShare = () => {
-    // 初始化选中的餐次：缓存 > 默认早餐
-    const savedMealType = Taro.getStorageSync('analyzeMealType')
-    const normalized = toSelectableMealType(savedMealType)
-    if (normalized) {
-      setSelectedMealType(normalized)
-    } else {
-      setSelectedMealType('breakfast')
+    const openSelector = () => {
+      // 初始化选中的餐次：缓存 > 默认早餐
+      const savedMealType = Taro.getStorageSync('analyzeMealType')
+      const normalized = toSelectableMealType(savedMealType)
+      if (normalized) {
+        setSelectedMealType(normalized)
+      } else {
+        setSelectedMealType('breakfast')
+      }
+      setShowMealSelector(true)
     }
-    setShowMealSelector(true)
+    if (nutritionStats.pendingItems > 0) {
+      Taro.showModal({
+        title: '仍有待确认食物',
+        content: `当前有 ${nutritionStats.pendingItems} 项未确认，未计入总热量。是否继续记录？`,
+        confirmText: '继续记录',
+        cancelText: '先处理',
+        success: (res) => {
+          if (res.confirm) openSelector()
+        }
+      })
+      return
+    }
+    openSelector()
   }
 
   /** 弹窗确认保存 */
@@ -816,8 +924,11 @@ export default function ResultPage() {
                 <Text className='calories-value'>{Math.round(nutritionStats.calories)}</Text>
                 <View className='calories-unit-row'>
                   <Text className='calories-unit'>kcal</Text>
-                  <Text className='calories-label'>总热量</Text>
+                  <Text className='calories-label'>已确认热量</Text>
                 </View>
+                {nutritionStats.pendingItems > 0 && (
+                  <Text className='pending-summary'>+ {nutritionStats.pendingItems} 项待确认</Text>
+                )}
               </View>
               <View className='total-weight-badge'>
                 <Text className='weight-icon iconfont icon-tianpingzuo'></Text>
@@ -922,7 +1033,7 @@ export default function ResultPage() {
             <View className='ingredients-list'>
               {nutritionItems.some(item => item.isUnresolved) && (
                 <View className='unresolved-notice'>
-                  <Text>部分食物未命中数据库，已自动记录到待补全列表。</Text>
+                  <Text>部分食物未命中数据库，已自动记录到待补全列表。你可以选择近似食物或手动输入每100g热量。</Text>
                 </View>
               )}
               <View className='ingredients-table-header'>
@@ -952,19 +1063,35 @@ export default function ResultPage() {
                       </View>
                       <View className='metric-cell metric-unit-cal'>
                         <Text className='metric-label'>每100g(kcal)</Text>
-                        <Text className='metric-value'>{Math.round(item.unitCaloriesPer100g)}</Text>
+                        <Text className='metric-value'>{item.isUnresolved ? '--' : Math.round(item.unitCaloriesPer100g)}</Text>
                       </View>
                       <View className='metric-cell metric-total-cal'>
                         <Text className='metric-label'>本次(kcal)</Text>
                         <View className='ingredient-calories'>
-                          <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
-                          <Text className='cal-unit'>kcal</Text>
+                          {item.isUnresolved ? (
+                            <Text className='pending-cal-text'>待确认</Text>
+                          ) : (
+                            <>
+                              <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
+                              <Text className='cal-unit'>kcal</Text>
+                            </>
+                          )}
                         </View>
                       </View>
                     </View>
                   </View>
 
                   <View className='ingredient-controls'>
+                    {item.isUnresolved && (
+                      <View className='resolve-actions'>
+                        <View className='resolve-btn' onClick={() => handleResolveByCandidate(item.id)}>
+                          <Text>选择近似食物</Text>
+                        </View>
+                        <View className='resolve-btn secondary' onClick={() => handleManualUnitCaloriesInput(item.id)}>
+                          <Text>手动输入每100g热量</Text>
+                        </View>
+                      </View>
+                    )}
                     <View className='weight-control'>
                       <Text className='control-label'>估算重量</Text>
                       <View className='weight-adjuster'>
