@@ -109,3 +109,23 @@ export const IconSnack = ({ size = 48, color = '#000000', className = '' }: Icon
     />
   )
 }
+
+/** 趋势/上涨图标 */
+export const IconTrendingUp = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-shangzhang ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 右箭头图标 */
+export const IconChevronRight = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-ic_detail ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}

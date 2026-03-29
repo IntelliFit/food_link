@@ -32,7 +32,12 @@ export default defineConfig<'vite'>(async (merge) => {
         {
           from: 'src/assets/page_icons',
           to: 'assets/page_icons'
-        }
+        },
+        {
+          from: 'custom-tab-bar',
+          to: 'custom-tab-bar'
+        },
+
       ],
       options: {
       }

@@ -1,474 +1,460 @@
+// 主题色变量
+$primary-color: #00bc7d;
+$primary-light: #ecfdf5;
+$primary-gradient-start: #00bc7d;
+$primary-gradient-end: #00bba7;
+
+// 营养素颜色：基于人们对营养素的直观印象
+$protein-color: #ef4444;    // 红色 - 肉类/肌肉
+$carbs-color: #eab308;      // 黄色 - 谷物/能量  
+$fat-color: #f97316;        // 橘黄色 - 油脂
+
+// 辅助色
+$blue-color: #3b82f6;       // 蓝色 - 用于文字记录按钮等
+$orange-color: #f97316;     // 橙色 - 用于热量盈余提示
+
+$purple-color: #8b5cf6;
+$purple-light: #f3e8ff;
+
+$bg-color: #f8fafc;
+$card-bg: #ffffff;
+$gradient-end: #EFF1F4;
+$text-primary: #1f2937;
+$text-secondary: #6b7280;
+$text-tertiary: #9ca3af;
+
+// 页面基础 - 整体渐变背景
 .home-page {
   min-height: 100vh;
-  background: #f9fafb;
-  padding-bottom: 100rpx;
   position: relative;
+  background: linear-gradient(180deg, 
+    rgba(0, 188, 125, 0.15) 0%,
+    rgba(0, 188, 125, 0.08) 25%,
+    #EFF1F4 60%,
+    #EFF1F4 100%
+  );
 }
 
-// 顶部浅绿过渡到底色（对应设计稿整体背景）
-.home-page::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 360rpx;
-  background: linear-gradient(to bottom, #ecfdf5 0%, rgba(236, 253, 245, 0) 100%);
-  pointer-events: none;
-  z-index: 0;
+// 渐变背景层（已合并到页面背景，保留空层用于兼容性）
+.gradient-bg {
+  display: none;
 }
 
-// 顶部渐变区域
-.header-section {
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  padding: 14rpx 20rpx 18rpx;
+// 页面内容
+.page-content {
   position: relative;
   z-index: 1;
-  min-height: 340rpx;
-  box-sizing: border-box;
+  padding: 0 24rpx 180rpx;
 }
 
-.header-content {
+// 问候区
+.greeting-section {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  padding-top: 4rpx;
   margin-bottom: 20rpx;
 }
 
-.greeting-section {
+.greeting-text {
   flex: 1;
 }
 
 .greeting-title {
   display: block;
-  font-size: 38rpx;
-  font-weight: bold;
-  color: #ffffff;
-  line-height: 52rpx;
-  margin-bottom: 10rpx;
+  font-size: 44rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 60rpx;
+  margin-bottom: 8rpx;
 }
 
 .greeting-subtitle {
   display: block;
   font-size: 28rpx;
-  color: #d0fae5;
+  color: $text-secondary;
   line-height: 40rpx;
 }
 
-.trend-icon {
-  width: 56rpx;
-  height: 56rpx;
-  background: rgba(255, 255, 255, 0.2);
+.greeting-icon {
+  width: 64rpx;
+  height: 64rpx;
+  background: $card-bg;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.15);
 }
 
-.trend-icon-symbol {
-  font-size: 36rpx;
-  color: #ffffff;
+// 日期选择器
+.date-selector-section {
+  margin-bottom: 32rpx;
 }
 
-// 今日摄入卡片
-.intake-card {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20rpx;
-  padding: 18rpx 18rpx 14rpx;
-}
-
-.home-week-card {
-  margin-top: 14rpx;
-  padding: 18rpx;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1rpx solid rgba(255, 255, 255, 0.14);
-  border-radius: 20rpx;
-}
-
-.home-week-header {
+.date-list {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  background: $card-bg;
+  border-radius: 24rpx;
+  padding: 20rpx 16rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+}
+
+.date-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 12rpx;
-  margin-bottom: 14rpx;
+  padding: 8rpx 0;
+  min-width: 80rpx;
+  border-radius: 16rpx;
+  transition: all 0.2s ease;
+  
+  &:active {
+    background: rgba(0, 188, 125, 0.05);
+  }
+  
+  &.is-selected {
+    .date-day-num {
+      background: $primary-color;
+      box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
+      
+      .date-num-text {
+        color: #ffffff;
+      }
+    }
+    
+    .date-day-name {
+      color: $primary-color;
+      font-weight: 600;
+    }
+  }
+  
+  &.is-today:not(.is-selected) {
+    .date-day-num {
+      border: 2rpx solid $primary-color;
+    }
+  }
+  
+  &.has-record:not(.is-selected) {
+    .date-day-num {
+      &.deficit {
+        background: rgba(59, 130, 246, 0.15);
+        .date-num-text { color: $blue-color; }
+      }
+      &.surplus {
+        background: rgba(249, 115, 22, 0.15);
+        .date-num-text { color: $orange-color; }
+      }
+    }
+  }
 }
 
-.home-week-title {
-  display: block;
-  font-size: 26rpx;
-  line-height: 34rpx;
-  color: #ffffff;
-  font-weight: 600;
+.date-day-name {
+  font-size: 22rpx;
+  color: $text-tertiary;
+  line-height: 30rpx;
 }
 
-.home-week-subtitle {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 20rpx;
-  line-height: 28rpx;
-  color: #d0fae5;
-}
-
-.home-week-link {
+.date-day-num {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #f3f4f6;
   display: flex;
   align-items: center;
-  gap: 6rpx;
-  padding: 4rpx 0;
+  justify-content: center;
+  transition: all 0.2s ease;
 }
 
-.home-week-link-text,
-.home-week-link-arrow {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.home-week-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 10rpx;
-}
-
-.home-week-cell {
-  min-height: 72rpx;
-  border-radius: 16rpx;
-  padding: 10rpx 8rpx;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-start;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1rpx solid rgba(255, 255, 255, 0.12);
-}
-
-.home-week-cell.none {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.home-week-cell.surplus.level-1 {
-  background: #fca5a5;
-}
-
-.home-week-cell.surplus.level-2 {
-  background: #f87171;
-}
-
-.home-week-cell.surplus.level-3 {
-  background: #ef4444;
-}
-
-.home-week-cell.deficit.level-1 {
-  background: #93c5fd;
-}
-
-.home-week-cell.deficit.level-2 {
-  background: #60a5fa;
-}
-
-.home-week-cell.deficit.level-3 {
-  background: #3b82f6;
-}
-
-.home-week-cell-date {
-  font-size: 22rpx;
-  line-height: 28rpx;
-  color: #ffffff;
-  font-weight: 700;
-}
-
-.home-week-cell.none .home-week-cell-date {
-  color: #d0fae5;
-}
-
-.home-week-cell-dot {
-  width: 10rpx;
-  height: 10rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.home-week-cell.none .home-week-cell-dot {
-  background: rgba(208, 250, 229, 0.72);
-}
-
-.home-week-summary {
-  display: block;
-  margin-top: 12rpx;
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #e7fff4;
-}
-
-.intake-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12rpx;
-}
-
-.intake-label {
-  font-size: 28rpx;
-  color: #d0fae5;
-  line-height: 40rpx;
-}
-
-.target-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6rpx;
-}
-
-.target-label {
+.date-num-text {
   font-size: 26rpx;
-  color: #d0fae5;
+  font-weight: 600;
+  color: $text-primary;
   line-height: 36rpx;
 }
 
-.target-edit-btn {
-  padding: 6rpx 14rpx;
-  border-radius: 9999rpx;
-  background: rgba(255, 255, 255, 0.16);
-  border: 1rpx solid rgba(255, 255, 255, 0.18);
+// 主卡片（热量总览）
+.main-card {
+  background: $card-bg;
+  border-radius: 32rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
 }
 
-.target-edit-btn-text {
-  font-size: 24rpx;
-  color: #ffffff;
-  line-height: 32rpx;
-  font-weight: 600;
+.main-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24rpx;
 }
 
-.calorie-section {
+.main-card-title {
   display: flex;
   align-items: baseline;
-  margin-bottom: 12rpx;
+  gap: 12rpx;
 }
 
-.calorie-value {
-  font-size: 60rpx;
-  font-weight: bold;
-  color: #ffffff;
-  line-height: 70rpx;
-  margin-right: 8rpx;
+.card-label {
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 36rpx;
 }
 
-.calorie-target {
+.card-value {
+  font-size: 56rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 72rpx;
+}
+
+.card-unit {
   font-size: 28rpx;
-  color: #d0fae5;
+  color: $text-tertiary;
   line-height: 40rpx;
 }
 
-.progress-bar {
+.target-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8rpx;
+}
+
+.target-text {
+  font-size: 24rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+}
+
+.target-edit-btn {
+  padding: 4rpx 12rpx;
+  background: #f3f4f6;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 9999rpx;
+  
+  &:active {
+    background: #e5e7eb;
+  }
+}
+
+.target-edit-text {
+  font-size: 20rpx;
+  color: #6b7280;
+  line-height: 28rpx;
+  font-weight: 400;
+}
+
+// 进度条
+.progress-section {
+  margin-top: 8rpx;
+}
+
+.progress-bar-bg {
   width: 100%;
-  height: 10rpx;
-  background: rgba(255, 255, 255, 0.2);
+  height: 12rpx;
+  background: #e5e7eb;
   border-radius: 9999rpx;
-  margin-bottom: 10rpx;
   overflow: hidden;
+  margin-bottom: 16rpx;
+
+  &.thick {
+    height: 20rpx;
+    margin-bottom: 0;
+  }
 }
 
-.progress-fill {
+.progress-bar-fill {
   height: 100%;
-  background: #ffffff;
+  background: linear-gradient(90deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border-radius: 9999rpx;
+  transition: width 0.3s ease;
+
+  &.thick {
+    border-radius: 9999rpx;
+  }
 }
 
-.intake-summary-row {
+.progress-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6rpx;
 }
 
-.intake-summary-text {
+.progress-text {
+  font-size: 24rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+}
+
+// 三大营养素区域
+.macros-section {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.macro-card {
+  flex: 1;
+  background: $card-bg;
+  border-radius: 24rpx;
+  padding: 20rpx 16rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  min-height: 160rpx;
+}
+
+.macro-card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.macro-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.macro-icon {
+  width: 32rpx;
+  height: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.macro-label {
+  font-size: 24rpx;
+  font-weight: 400;
+  line-height: 34rpx;
+  color: $text-secondary;
+}
+
+// 主体内容区 - 新布局
+.macro-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8rpx 0;
+  gap: 8rpx;
+}
+
+// 第一行：大数字 + 大仪表盘
+.macro-row-first {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.macro-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+}
+
+.macro-big-number {
+  font-size: 44rpx;
+  font-weight: 700;
+  line-height: 56rpx;
+}
+
+.macro-unit-inline {
   font-size: 22rpx;
-  color: #e7fff4;
+  color: $text-tertiary;
   line-height: 30rpx;
 }
 
-// 三大营养素：三个环形进度（饼图式），无标题与说明文案
-.macro-donuts-row {
+// 第二行：详情 + 百分比
+.macro-row-second {
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 20rpx;
-  padding-top: 10rpx;
-  margin-top: 4rpx;
-  border-top: 1rpx solid rgba(255, 255, 255, 0.14);
-}
-
-.macro-donut-col {
-  flex: 0 1 30%;
-  max-width: 200rpx;
-  display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  gap: 4rpx;
-  min-width: 0;
 }
 
-.macro-donut-wrap {
+.macro-detail-text {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+}
+
+.macro-percent-right {
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 32rpx;
+}
+
+// 大环形仪表盘 - 加大版
+.macro-donut-large {
+  width: 88rpx;
+  height: 88rpx;
   position: relative;
-  width: 84rpx;
-  height: 84rpx;
   flex-shrink: 0;
 }
 
-.macro-donut-ring {
+.donut-bg-ring,
+.donut-progress-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   border-radius: 50%;
   box-sizing: border-box;
 }
 
-.macro-donut-inner {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.donut-bg-ring {
+  border: 12rpx solid #e5e7eb;
 }
 
-.macro-donut-name {
-  font-size: 22rpx;
-  color: #ffffff;
-  line-height: 28rpx;
-  font-weight: 600;
-  text-align: center;
+.donut-progress-ring {
+  border: 12rpx solid transparent;
+  border-top-color: inherit;
+  transition: transform 0.5s ease, opacity 0.3s ease;
 }
 
-.macro-donut-value {
-  font-size: 20rpx;
-  color: #d0fae5;
-  line-height: 26rpx;
-  font-weight: 600;
-  text-align: center;
-  max-width: 100%;
-}
-
-// 快捷记录
-.quick-record-section {
-  background: #ffffff;
-  // 上浮叠在 header 上（设计稿效果）
-  margin: -10rpx 24rpx 18rpx;
-  padding: 20rpx;
-  border-radius: 24rpx;
-  box-shadow: 0px 10rpx 15rpx rgba(0, 0, 0, 0.1), 0px 4rpx 6rpx rgba(0, 0, 0, 0.1);
-  position: relative;
-  z-index: 2;
-}
-
+// 快捷记录区域
 .section-title {
   font-size: 32rpx;
-  font-weight: 600;
-  color: #1e2939;
+  font-weight: 700;
+  color: $text-primary;
   line-height: 44rpx;
-  margin-bottom: 22rpx;
+  margin-bottom: 20rpx;
+  padding-left: 8rpx;
 }
 
-.quick-buttons {
-  display: flex;
-  gap: 18rpx;
-}
-
-.quick-button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 24rpx 18rpx;
-  border-radius: 20rpx;
-  gap: 12rpx;
-}
-
-.photo-btn {
-  background: linear-gradient(144.85deg, #ecfdf5 0%, #f0fdfa 100%);
-}
-
-.text-btn {
-  background: linear-gradient(144.85deg, #eff6ff 0%, #ecfeff 100%);
-}
-
-.button-icon {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36rpx;
-  color: #ffffff;
-  overflow: hidden;
-
-  // 确保 iconfont 图标居中
-  .iconfont {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-  }
-}
-
-.photo-icon {
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-}
-
-.text-icon {
-  background: linear-gradient(to right, #2b7fff 0%, #00b8db 100%);
-}
-
-.history-icon {
-  background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
-}
-
-.button-text {
-  font-size: 26rpx;
-  color: #364153;
-  line-height: 36rpx;
-  font-weight: 500;
-}
-
-// 今日餐食
+// 今日餐食区域
 .meals-section {
-  padding: 0 24rpx;
-  margin-top: 14rpx;
+  margin-bottom: 32rpx;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
+  padding: 0 8rpx;
 }
 
 .view-all-btn {
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  padding: 6rpx 0;
+  gap: 4rpx;
+  padding: 8rpx 0;
+  
+  &:active {
+    opacity: 0.7;
+  }
 }
 
 .view-all-text {
-  font-size: 28rpx;
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  line-height: 40rpx;
+  font-size: 26rpx;
+  color: $primary-color;
   font-weight: 500;
-}
-
-.arrow {
-  font-size: 28rpx;
-  color: #009966;
+  line-height: 36rpx;
 }
 
 .meals-list {
@@ -477,287 +463,164 @@
   gap: 16rpx;
 }
 
-// Taroify Empty 组件按钮样式
+.meals-loading {
+  padding: 60rpx 0;
+  text-align: center;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: $text-tertiary;
+}
+
+.meals-empty {
+  padding: 40rpx 0;
+}
+
 .empty-record-btn {
   margin-top: 32rpx;
   width: 240rpx;
   height: 72rpx;
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+  background: linear-gradient(to right, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border: none;
   font-size: 28rpx;
 }
 
-.meal-card {
-  background: #ffffff;
-  border-radius: 22rpx;
-  padding: 20rpx;
-  box-shadow: 0px 1rpx 3rpx rgba(0, 0, 0, 0.1), 0px 1rpx 2rpx rgba(0, 0, 0, 0.1);
-}
-
-.meal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16rpx;
-}
-
-.meal-info {
+.meal-item {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 20rpx;
+  background: $card-bg;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
 }
 
-.meal-icon {
-  width: 52rpx;
-  height: 52rpx;
-  border-radius: 14rpx;
+.meal-icon-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 36rpx;
+  flex-shrink: 0;
 }
 
-.breakfast-icon,
-.morning_snack-icon,
-.lunch-icon,
-.afternoon_snack-icon,
-.dinner-icon,
-.evening_snack-icon,
-.snack-icon {
-  background: transparent;
+.meal-content {
+  flex: 1;
+  min-width: 0;
 }
 
-.meal-details {
+.meal-main {
   display: flex;
-  flex-direction: column;
-  gap: 6rpx;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
 }
 
 .meal-name {
-  font-size: 34rpx;
+  font-size: 30rpx;
   font-weight: 600;
-  color: #1e2939;
-  line-height: 48rpx;
-}
-
-.meal-time {
-  font-size: 26rpx;
-  color: #6a7282;
-  line-height: 36rpx;
+  color: $text-primary;
+  line-height: 42rpx;
 }
 
 .meal-calorie {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6rpx;
-}
-
-.calorie-text {
-  font-size: 34rpx;
+  font-size: 28rpx;
   font-weight: 600;
-  color: #1e2939;
-  line-height: 48rpx;
+  color: $text-primary;
+  line-height: 40rpx;
 }
 
-.calorie-label {
-  font-size: 26rpx;
-  color: #6a7282;
-  line-height: 36rpx;
-}
-
-.meal-progress {
+.meal-progress-wrap {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 8rpx;
 }
 
-.meal-progress-bar {
+.meal-progress-bar-bg {
   flex: 1;
-  height: 10rpx;
-  background: #f3f4f6;
+  height: 8rpx;
+  background: #e5e7eb;
   border-radius: 9999rpx;
   overflow: hidden;
 }
 
-.meal-progress-fill {
+.meal-progress-bar-fill {
   height: 100%;
   border-radius: 9999rpx;
+  transition: width 0.3s ease;
 }
 
-.breakfast-progress {
-  background: #ff6900;
-}
-
-.morning_snack-progress {
-  background: #7b61ff;
-}
-
-.lunch-progress {
-  background: #00c950;
-}
-
-.afternoon_snack-progress {
-  background: #ad46ff;
-}
-
-.dinner-progress {
-  background: #2b7fff;
-}
-
-.evening_snack-progress {
-  background: #5b21b6;
-}
-
-.snack-progress {
-  background: #ad46ff;
-}
-
-.progress-percent {
-  font-size: 26rpx;
-  color: #6a7282;
-  line-height: 36rpx;
+.meal-progress-text {
+  font-size: 22rpx;
+  color: $text-tertiary;
+  line-height: 32rpx;
   min-width: 44rpx;
-  font-weight: 500;
+  text-align: right;
 }
 
-.meal-tags {
-  display: flex;
-  gap: 12rpx;
-  flex-wrap: wrap;
+.meal-time {
+  font-size: 22rpx;
+  color: $text-tertiary;
+  line-height: 32rpx;
 }
 
-.meal-tag {
-  padding: 8rpx 16rpx;
-  border-radius: 8rpx;
-  height: 32rpx;
+// 统计入口区域
+.stats-entry-section {
+  margin-bottom: 32rpx;
+}
+
+.stats-entry-card {
   display: flex;
   align-items: center;
-}
-
-.breakfast-tag {
-  background: #fff7ed;
-}
-
-.morning_snack-tag {
-  background: #f1efff;
-}
-
-.lunch-tag {
-  background: #f0fdf4;
-}
-
-.afternoon_snack-tag {
-  background: #f5f3ff;
-}
-
-.dinner-tag {
-  background: #eff6ff;
-}
-
-.evening_snack-tag {
-  background: #ede9fe;
-}
-
-.snack-tag {
-  background: #f5f3ff;
-}
-
-.tag-text {
-  font-size: 26rpx;
-  line-height: 36rpx;
-  font-weight: 500;
-}
-
-.breakfast-tag .tag-text {
-  color: #f54900;
-}
-
-.morning_snack-tag .tag-text {
-  color: #6d28d9;
-}
-
-.lunch-tag .tag-text {
-  color: #00a63e;
-}
-
-.afternoon_snack-tag .tag-text {
-  color: #7c3aed;
-}
-
-.dinner-tag .tag-text {
-  color: #1d4ed8;
-}
-
-.evening_snack-tag .tag-text {
-  color: #5b21b6;
-}
-
-.snack-tag .tag-text {
-  color: #7c3aed;
-}
-
-// AI建议
-.ai-suggestion-section {
-  background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
-  margin: 24rpx;
-  padding: 24rpx;
-  border-radius: 24rpx;
-}
-
-.ai-content {
-  display: flex;
   gap: 20rpx;
-  margin-bottom: 20rpx;
+  background: linear-gradient(135deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
+  border-radius: 24rpx;
+  padding: 28rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.25);
+  
+  &:active {
+    transform: scale(0.995);
+    box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.2);
+  }
 }
 
-.ai-icon {
-  width: 56rpx;
-  height: 56rpx;
+.stats-entry-icon {
+  width: 64rpx;
+  height: 64rpx;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
+  border-radius: 16rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40rpx;
   flex-shrink: 0;
 }
 
-.ai-text-content {
+.stats-entry-text {
   flex: 1;
 }
 
-.ai-title {
+.stats-entry-title {
   display: block;
-  font-size: 34rpx;
+  font-size: 30rpx;
   font-weight: 600;
   color: #ffffff;
-  line-height: 48rpx;
-  margin-bottom: 10rpx;
+  line-height: 42rpx;
+  margin-bottom: 4rpx;
 }
 
-.ai-description {
+.stats-entry-desc {
   display: block;
-  font-size: 28rpx;
-  color: #f3e8ff;
-  line-height: 40rpx;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 34rpx;
 }
 
-.ai-button {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 14rpx;
-  height: 52rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ai-button-text {
-  font-size: 28rpx;
-  color: #ffffff;
-  line-height: 40rpx;
-  font-weight: 500;
+// 底部留白
+.bottom-spacer {
+  height: 60rpx;
 }
 
 // 目标编辑弹窗
@@ -780,50 +643,52 @@
 .target-modal-content {
   position: relative;
   width: 100%;
-  background: #ffffff;
-  border-radius: 32rpx 32rpx 0 0;
-  padding: 32rpx 28rpx 40rpx;
+  background: $card-bg;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 40rpx 32rpx 48rpx;
   box-sizing: border-box;
+  max-height: 85vh;
+  overflow-y: auto;
 }
 
 .target-modal-header {
-  margin-bottom: 24rpx;
+  margin-bottom: 32rpx;
 }
 
 .target-modal-title {
   display: block;
-  font-size: 34rpx;
-  color: #1e2939;
-  line-height: 48rpx;
+  font-size: 36rpx;
+  color: $text-primary;
+  line-height: 50rpx;
   font-weight: 700;
   margin-bottom: 8rpx;
 }
 
 .target-modal-desc {
   display: block;
-  font-size: 24rpx;
-  color: #6a7282;
-  line-height: 36rpx;
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 38rpx;
 }
 
 .target-form-list {
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
+  gap: 20rpx;
 }
 
 .target-form-item {
   background: #f8fafc;
   border-radius: 20rpx;
-  padding: 22rpx 20rpx;
+  padding: 24rpx;
 }
 
 .target-form-label {
   display: block;
-  font-size: 26rpx;
-  color: #364153;
-  line-height: 36rpx;
-  margin-bottom: 14rpx;
+  font-size: 28rpx;
+  color: $text-primary;
+  line-height: 40rpx;
+  margin-bottom: 16rpx;
   font-weight: 500;
 }
 
@@ -831,71 +696,72 @@
   display: flex;
   align-items: center;
   gap: 12rpx;
-  background: #ffffff;
+  background: $card-bg;
   border-radius: 16rpx;
-  padding: 0 18rpx;
+  padding: 0 20rpx;
   height: 88rpx;
   box-sizing: border-box;
+  border: 2rpx solid #e5e7eb;
 }
 
 .target-input {
   flex: 1;
   height: 100%;
-  font-size: 30rpx;
-  color: #1e2939;
+  font-size: 32rpx;
+  color: $text-primary;
   line-height: 88rpx;
 }
 
 .target-input-unit {
-  font-size: 24rpx;
-  color: #6a7282;
-  line-height: 34rpx;
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 36rpx;
 }
 
 .target-relation-hint {
-  margin-top: 18rpx;
+  margin-top: 24rpx;
   border-radius: 16rpx;
-  padding: 16rpx 18rpx;
-  background: #f0fdf4;
-  border: 1rpx solid #bbf7d0;
+  padding: 20rpx 24rpx;
+  background: $primary-light;
+  border: 2rpx solid rgba(0, 188, 125, 0.2);
 }
 
 .target-relation-hint-title {
   display: block;
-  font-size: 24rpx;
-  line-height: 34rpx;
-  color: #166534;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  color: $primary-color;
   font-weight: 600;
 }
 
 .target-relation-hint-value {
   display: block;
-  margin-top: 6rpx;
-  font-size: 22rpx;
-  line-height: 32rpx;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
 
   &.aligned {
-    color: #047857;
+    color: $primary-color;
   }
 
   &.adjusting {
-    color: #b45309;
+    color: $orange-color;
   }
 
   &.pending {
-    color: #6a7282;
+    color: $text-secondary;
   }
 }
 
 .target-modal-actions {
   display: flex;
-  gap: 16rpx;
-  margin-top: 28rpx;
+  gap: 20rpx;
+  margin-top: 32rpx;
 }
 
 .target-modal-btn {
   flex: 1;
-  height: 88rpx;
+  height: 96rpx;
   border-radius: 9999rpx;
   display: flex;
   align-items: center;
@@ -906,17 +772,18 @@
   }
 
   &.primary {
-    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+    background: linear-gradient(to right, $primary-gradient-start 0%, $primary-gradient-end 100%);
+    box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.3);
   }
 }
 
 .target-modal-btn-text {
-  font-size: 28rpx;
-  line-height: 40rpx;
+  font-size: 30rpx;
+  line-height: 42rpx;
   font-weight: 600;
 
   &.secondary {
-    color: #364153;
+    color: $text-primary;
   }
 
   &.primary {

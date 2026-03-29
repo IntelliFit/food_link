@@ -1,6 +1,6 @@
-import { View, Text, Input } from '@tarojs/components'
-import React from 'react'
-import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import { View, Text, Input, Image, Progress } from '@tarojs/components'
+import { useState, useEffect, useCallback } from 'react'
+import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,
   getStatsSummary,
@@ -12,9 +12,9 @@ import {
   type HomeIntakeData,
   type HomeMealItem
 } from '../../utils/api'
-import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
+import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight } from '../../components/iconfont'
 import { Empty, Button } from '@taroify/core'
-import CustomNavBar from '../../components/CustomNavBar'
+import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 
 import './index.scss'
 
@@ -34,9 +34,12 @@ type WeekHeatmapState = 'none' | 'surplus' | 'deficit'
 
 interface WeekHeatmapCell {
   date: string
+  dayName: string
+  dayNum: string
   calories: number
   state: WeekHeatmapState
   level: 0 | 1 | 2 | 3
+  isToday: boolean
 }
 
 interface TargetFormState {
@@ -52,6 +55,9 @@ interface MacroTargets {
   fat: number
 }
 
+const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const SHORT_DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
+
 function getGreeting(): string {
   const h = new Date().getHours()
   if (h < 12) return '早上好'
@@ -61,6 +67,10 @@ function getGreeting(): string {
 
 function formatDisplayNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function formatNumberWithComma(value: number): string {
+  return Math.round(value).toLocaleString('zh-CN')
 }
 
 function formatDateKey(date: Date): string {
@@ -104,7 +114,6 @@ function scaleMacrosByCalorieTarget(nextCalorie: number, baseMacros: MacroTarget
   const baseCalories = calcCaloriesFromMacros(baseMacros)
 
   if (baseCalories <= 0) {
-    // 当前无有效宏量目标时，回退为常见配比（30/40/30）并保证热量关系成立。
     const protein = (nextCalorie * 0.3) / 4
     const carbs = (nextCalorie * 0.4) / 4
     const fat = (nextCalorie * 0.3) / 9
@@ -160,59 +169,68 @@ function createTargetForm(intake: HomeIntakeData): TargetFormState {
 
 // 餐次对应的 iconfont 图标及颜色
 const MEAL_ICON_CONFIG = {
-  breakfast: { Icon: IconBreakfast, color: '#ff6900' },
-  morning_snack: { Icon: IconSnack, color: '#7b61ff' },
-  lunch: { Icon: IconLunch, color: '#00c950' },
-  afternoon_snack: { Icon: IconSnack, color: '#ad46ff' },
-  dinner: { Icon: IconDinner, color: '#2b7fff' },
-  evening_snack: { Icon: IconSnack, color: '#5b21b6' },
-  snack: { Icon: IconSnack, color: '#ad46ff' }
+  breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐' },
+  morning_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
+  lunch: { Icon: IconLunch, color: '#00bc7d', bgColor: '#ecfdf5', label: '午餐' },
+  afternoon_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
+  dinner: { Icon: IconDinner, color: '#00bc7d', bgColor: '#ecfdf5', label: '晚餐' },
+  evening_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
+  snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '零食' }
 } as const
 
+// 营养素配置：基于人们对营养素的直观印象
+// 蛋白质-蓝色(牛奶/蛋白粉)、碳水-黄色(谷物/能量)、脂肪-橘黄色(油脂)
 const MACRO_CONFIGS: Array<{
   key: MacroKey
   label: string
+  subLabel: string
   color: string
   unit: string
   Icon: typeof IconProtein
 }> = [
-  { key: 'protein', label: '蛋白质', color: '#3b82f6', unit: 'g', Icon: IconProtein },
-  { key: 'carbs', label: '碳水', color: '#00bc7d', unit: 'g', Icon: IconCarbs },
-  { key: 'fat', label: '脂肪', color: '#f59e0b', unit: 'g', Icon: IconFat }
+  { key: 'protein', label: '蛋白质', subLabel: '剩余', color: '#3b82f6', unit: 'g', Icon: IconProtein },
+  { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#eab308', unit: 'g', Icon: IconCarbs },
+  { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f97316', unit: 'g', Icon: IconFat }
 ]
 
 const RECORD_HISTORY_DATE_KEY = 'recordHistoryDate'
 
-function createEmptyWeekHeatmapCells(): WeekHeatmapCell[] {
+function createWeekHeatmapCells(): WeekHeatmapCell[] {
   const today = new Date()
   const cells: WeekHeatmapCell[] = []
-  for (let offset = 6; offset >= 0; offset -= 1) {
+  for (let offset = -3; offset <= 3; offset++) {
     const date = new Date(today)
-    date.setDate(today.getDate() - offset)
+    date.setDate(today.getDate() + offset)
+    const dateKey = formatDateKey(date)
     cells.push({
-      date: formatDateKey(date),
+      date: dateKey,
+      dayName: SHORT_DAY_NAMES[date.getDay()],
+      dayNum: String(date.getDate()),
       calories: 0,
       state: 'none',
-      level: 0
+      level: 0,
+      isToday: offset === 0
     })
   }
   return cells
 }
 
 export default function IndexPage() {
-  const [intakeData, setIntakeData] = React.useState<HomeIntakeData>(DEFAULT_INTAKE)
-  const [meals, setMeals] = React.useState<HomeMealItem[]>([])
-  const [weekHeatmapCells, setWeekHeatmapCells] = React.useState<WeekHeatmapCell[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [showTargetEditor, setShowTargetEditor] = React.useState(false)
-  const [savingTargets, setSavingTargets] = React.useState(false)
-  const [targetForm, setTargetForm] = React.useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
+  const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
+  const [meals, setMeals] = useState<HomeMealItem[]>([])
+  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(createWeekHeatmapCells())
+  const [loading, setLoading] = useState(true)
+  const [showTargetEditor, setShowTargetEditor] = useState(false)
+  const [savingTargets, setSavingTargets] = useState(false)
+  const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
+  const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()))
 
-  const loadDashboard = React.useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     if (!getAccessToken()) {
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
+      setWeekHeatmapCells(createWeekHeatmapCells())
       setLoading(false)
       return
     }
@@ -226,21 +244,34 @@ export default function IndexPage() {
       const storedTargets = getStoredDashboardTargets()
       const intake =
         storedTargets != null ? mergeHomeIntakeWithTargets(res.intakeData, storedTargets) : res.intakeData
-      const nextWeekHeatmapCells: WeekHeatmapCell[] = stats.daily_calories.slice(-7).map((item) => {
-        const hasRecord = item.calories > 0
-        const delta = hasRecord ? item.calories - stats.tdee : 0
+      
+      // 构建7天热力图数据（今天前后各3天）
+      const today = new Date()
+      const nextWeekHeatmapCells: WeekHeatmapCell[] = []
+      for (let offset = -3; offset <= 3; offset++) {
+        const date = new Date(today)
+        date.setDate(today.getDate() + offset)
+        const dateKey = formatDateKey(date)
+        const dayData = stats.daily_calories.find(d => d.date === dateKey)
+        const hasRecord = dayData && dayData.calories > 0
+        const delta = hasRecord ? dayData.calories - stats.tdee : 0
         const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(stats.tdee, 1) : 0
         let level: WeekHeatmapCell['level'] = 0
         if (deltaRatio > 0.3) level = 3
         else if (deltaRatio > 0.15) level = 2
         else if (deltaRatio > 0) level = 1
-        return {
-          date: item.date,
-          calories: item.calories,
+        
+        nextWeekHeatmapCells.push({
+          date: dateKey,
+          dayName: SHORT_DAY_NAMES[date.getDay()],
+          dayNum: String(date.getDate()),
+          calories: dayData?.calories || 0,
           state: !hasRecord ? 'none' : delta > 0 ? 'surplus' : 'deficit',
-          level
-        }
-      })
+          level,
+          isToday: offset === 0
+        })
+      }
+      
       setIntakeData(intake)
       setMeals(res.meals || [])
       setWeekHeatmapCells(nextWeekHeatmapCells)
@@ -248,7 +279,7 @@ export default function IndexPage() {
     } catch {
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
-      setWeekHeatmapCells([])
+      setWeekHeatmapCells(createWeekHeatmapCells())
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
     } finally {
       setLoading(false)
@@ -256,7 +287,7 @@ export default function IndexPage() {
   }, [])
 
   // 每次显示页面时刷新数据
-  useDidShow(() => {
+  Taro.useDidShow(() => {
     loadDashboard()
   })
 
@@ -269,7 +300,7 @@ export default function IndexPage() {
     title: '食探 - AI 智能饮食记录'
   }))
 
-  React.useEffect(() => {
+  useEffect(() => {
     Taro.showShareMenu({
       withShareTicket: true,
       // @ts-ignore
@@ -416,14 +447,6 @@ export default function IndexPage() {
     Taro.switchTab({ url: '/pages/record/index' })
   }
 
-  const remainingCalories = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
-  const displayWeekHeatmapCells = weekHeatmapCells.length > 0 ? weekHeatmapCells : createEmptyWeekHeatmapCells()
-  const recordedDaysThisWeek = displayWeekHeatmapCells.filter((item) => item.calories > 0).length
-  const openRecordDate = (date: string) => {
-    Taro.setStorageSync('recordPageTab', 'history')
-    Taro.setStorageSync(RECORD_HISTORY_DATE_KEY, date)
-    Taro.switchTab({ url: '/pages/record/index' })
-  }
   const openRecordSummary = () => {
     if (!getAccessToken()) {
       Taro.navigateTo({ url: '/pages/login/index' })
@@ -431,6 +454,20 @@ export default function IndexPage() {
     }
     Taro.navigateTo({ url: '/pages/stats/index' })
   }
+
+  const handleDateSelect = (date: string) => {
+    setSelectedDate(date)
+    const cell = weekHeatmapCells.find(c => c.date === date)
+    if (cell && cell.calories > 0) {
+      Taro.setStorageSync('recordPageTab', 'history')
+      Taro.setStorageSync(RECORD_HISTORY_DATE_KEY, date)
+      Taro.switchTab({ url: '/pages/record/index' })
+    }
+  }
+
+  const remainingCalories = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
+  const calorieProgress = clampProgress(intakeData.current, intakeData.target)
+  
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
   const caloriesFromMacroInputs = macroInputValues ? calcCaloriesFromMacros(macroInputValues) : null
@@ -440,202 +477,221 @@ export default function IndexPage() {
       : null
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
 
+  // 计算三大营养素剩余量
+  const getMacroRemaining = (key: MacroKey) => {
+    const macro = intakeData.macros[key]
+    return Math.max(0, Number((macro.target - macro.current).toFixed(1)))
+  }
+
   return (
     <View className='home-page'>
       {/* 自定义渐变导航栏 */}
       <CustomNavBar
-        title='首页'
-        background='linear-gradient(to right, #00bc7d 0%, #00bba7 100%)'
+        title=''
+        background='transparent'
       />
-      {/* 顶部渐变区域 */}
-      <View className='header-section'>
-        <View className='header-content'>
-          <View className='greeting-section'>
+      
+      {/* 背景渐变层 */}
+      <View className='gradient-bg' />
+      
+      {/* 页面内容 - 只保留状态栏高度，因为导航栏是透明的 */}
+      <View className='page-content' style={{ paddingTop: `${getStatusBarHeightSafe()}px` }}>
+        {/* 问候区 */}
+        <View className='greeting-section'>
+          <View className='greeting-text'>
             <Text className='greeting-title'>{getGreeting()}</Text>
             <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
           </View>
-          <View className='trend-icon'>
-            <Text className='iconfont icon-shangzhang trend-icon-symbol' />
+          <View className='greeting-icon'>
+            <IconTrendingUp size={24} color='#00bc7d' />
           </View>
         </View>
 
-        {/* 今日摄入卡片 */}
-        <View className='intake-card'>
-          <View className='intake-header'>
-            <Text className='intake-label'>今日摄入</Text>
-            <View className='target-actions'>
-              <Text className='target-label'>目标 {formatDisplayNumber(intakeData.target)} kcal</Text>
-              <View className='target-edit-btn' onClick={openTargetEditor}>
-                <Text className='target-edit-btn-text'>编辑目标</Text>
-              </View>
-            </View>
-          </View>
-          <View className='calorie-section'>
-            <Text className='calorie-value'>
-              {loading ? '--' : formatDisplayNumber(intakeData.current)}
-            </Text>
-            <Text className='calorie-target'>/{formatDisplayNumber(intakeData.target)} kcal</Text>
-          </View>
-          <View className='progress-bar'>
-            <View
-              className='progress-fill'
-              style={{ width: `${intakeData.progress}%` }}
-            />
-          </View>
-          <View className='intake-summary-row'>
-            <Text className='intake-summary-text'>已完成 {intakeData.progress.toFixed(0)}%</Text>
-            <Text className='intake-summary-text'>剩余 {formatDisplayNumber(remainingCalories)} kcal</Text>
-          </View>
-
-          <View className='macro-donuts-row'>
-            {MACRO_CONFIGS.map(({ key, label, unit, color, Icon }) => {
-              const macro = intakeData.macros[key]
-              const progress = clampProgress(macro.current, macro.target)
-              const ringBg = `conic-gradient(${color} 0% ${progress}%, rgba(255,255,255,0.2) ${progress}% 100%)`
-
-              return (
-                <View key={key} className='macro-donut-col'>
-                  <View className='macro-donut-wrap'>
-                    <View className='macro-donut-ring' style={{ background: ringBg }} />
-                    <View className='macro-donut-inner'>
-                      <Icon size={20} color={color} />
-                    </View>
-                  </View>
-                  <Text className='macro-donut-name'>{label}</Text>
-                  <Text className='macro-donut-value'>
-                    {formatDisplayNumber(macro.current)}/{formatDisplayNumber(macro.target)}
-                    {unit}
-                  </Text>
-                </View>
-              )
-            })}
-          </View>
-        </View>
-
-        <View className='home-week-card'>
-          <View className='home-week-header'>
-            <View>
-              <Text className='home-week-title'>本周饮食记录</Text>
-              <Text className='home-week-subtitle'>灰色未记录，红色吃多了，蓝色吃少了</Text>
-            </View>
-            <View className='home-week-link' onClick={openRecordSummary}>
-              <Text className='home-week-link-text'>饮食记录</Text>
-              <Text className='home-week-link-arrow'>→</Text>
-            </View>
-          </View>
-          <View className='home-week-grid'>
-            {displayWeekHeatmapCells.map((item) => (
+        {/* 日期选择器 */}
+        <View className='date-selector-section'>
+          <View className='date-list'>
+            {weekHeatmapCells.map((cell) => (
               <View
-                key={item.date}
-                className={`home-week-cell ${item.state} level-${item.level} ${item.calories > 0 ? 'is-clickable' : ''}`}
-                onClick={() => item.calories > 0 && openRecordDate(item.date)}
+                key={cell.date}
+                className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''} ${cell.calories > 0 ? 'has-record' : ''}`}
+                onClick={() => handleDateSelect(cell.date)}
               >
-                <Text className='home-week-cell-date'>{item.date.slice(-2)}</Text>
-                <View className='home-week-cell-dot' />
+                <Text className='date-day-name'>{cell.dayName}</Text>
+                <View className={`date-day-num ${cell.state} level-${cell.level}`}>
+                  <Text className='date-num-text'>{cell.dayNum}</Text>
+                </View>
               </View>
             ))}
           </View>
-          <Text className='home-week-summary'>
-            本周已记录 {recordedDaysThisWeek}/7 天
-          </Text>
         </View>
-      </View>
 
-      {/* 快捷记录 */}
-      <View className='quick-record-section'>
-        <Text className='section-title'>快捷记录</Text>
-        <View className='quick-buttons'>
-          <View
-            className='quick-button photo-btn'
-            onClick={() => handleQuickRecord('photo')}
-          >
-            <View className='button-icon photo-icon'>
-              <IconCamera size={44} color="#ffffff" />
+        {/* 热量总览卡片 */}
+        <View className='main-card'>
+          <View className='main-card-header'>
+            <View className='main-card-title'>
+              <Text className='card-label'>剩余可摄入</Text>
+              <Text className='card-value'>{formatNumberWithComma(remainingCalories)}</Text>
+              <Text className='card-unit'>kcal</Text>
             </View>
-            <Text className='button-text'>拍照识别</Text>
-          </View>
-          <View
-            className='quick-button text-btn'
-            onClick={() => handleQuickRecord('text')}
-          >
-            <View className='button-icon text-icon'>
-              <IconText size={44} color="#ffffff" />
-            </View>
-            <Text className='button-text'>文字记录</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* 今日餐食 */}
-      <View className='meals-section'>
-        <View className='section-header'>
-          <Text className='section-title'>今日餐食</Text>
-          <View className='view-all-btn' onClick={handleViewAllMeals}>
-            <Text className='view-all-text'>今日餐食记录</Text>
-            <Text className='arrow'>→</Text>
-          </View>
-        </View>
-        <View className='meals-list'>
-          {loading ? null : meals.length === 0 ? (
-            <Empty>
-              <Empty.Image />
-              <Empty.Description>暂无今日餐食</Empty.Description>
-              <Button
-                shape="round"
-                color="primary"
-                className="empty-record-btn"
-                onClick={() => handleQuickRecord('photo')}
-              >
-                去记录一餐
-              </Button>
-            </Empty>
-          ) : (
-            meals.map((meal, index) => (
-              <View key={`${meal.type}-${index}`} className='meal-card'>
-                <View className='meal-header'>
-                  <View className='meal-info'>
-                    <View className={`meal-icon ${meal.type}-icon`}>
-                      {(() => {
-                        const { Icon, color } = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.afternoon_snack
-                        return <Icon size={40} color={color} />
-                      })()}
-                    </View>
-                    <View className='meal-details'>
-                      <Text className='meal-name'>{meal.name}</Text>
-                      <Text className='meal-time'>{meal.time}</Text>
-                    </View>
-                  </View>
-                  <View className='meal-calorie'>
-                    <Text className='calorie-text'>{meal.calorie} kcal</Text>
-                    <Text className='calorie-label'>目标 {meal.target} kcal</Text>
-                  </View>
-                </View>
-                <View className='meal-progress'>
-                  <View className='meal-progress-bar'>
-                    <View
-                      className={`meal-progress-fill ${meal.type}-progress`}
-                      style={{ width: `${meal.progress}%` }}
-                    />
-                  </View>
-                  <Text className='progress-percent'>{Number(meal.progress).toFixed(0)}%</Text>
-                </View>
-                {meal.tags && meal.tags.length > 0 && (
-                  <View className='meal-tags'>
-                    {meal.tags.map((tag, tagIndex) => (
-                      <View
-                        key={tagIndex}
-                        className={`meal-tag ${meal.type}-tag`}
-                      >
-                        <Text className='tag-text'>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+            <View className='target-section'>
+              <Text className='target-text'>目标: {formatDisplayNumber(intakeData.target)}</Text>
+              <View className='target-edit-btn' onClick={openTargetEditor}>
+                <Text className='target-edit-text'>编辑目标</Text>
               </View>
-            )))}
+            </View>
+          </View>
+          
+          {/* 进度条 - 加厚样式 */}
+          <View className='progress-section'>
+            <View className='progress-bar-bg thick'>
+              <View
+                className='progress-bar-fill thick'
+                style={{ width: `${calorieProgress}%` }}
+              />
+            </View>
+          </View>
         </View>
+
+        {/* 三大营养素卡片 */}
+        <View className='macros-section'>
+          {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
+            const macro = intakeData.macros[key]
+            const progress = clampProgress(macro.current, macro.target)
+            
+            return (
+              <View key={key} className='macro-card'>
+                {/* 顶部标签栏 - 灰色系 */}
+                <View className='macro-card-header'>
+                  <View className='macro-title-wrap'>
+                    <View className='macro-icon'>
+                      <Icon size={16} color='#9ca3af' />
+                    </View>
+                    <Text className='macro-label'>{label}</Text>
+                  </View>
+                </View>
+                
+                {/* 主体内容 */}
+                <View className='macro-content'>
+                  {/* 第一行：大数字 + 仪表盘 */}
+                  <View className='macro-row-first'>
+                    <View className='macro-value-wrap'>
+                      <Text className='macro-big-number' style={{ color }}>
+                        {loading ? '--' : formatDisplayNumber(macro.current)}
+                      </Text>
+                      <Text className='macro-unit-inline'>{unit}</Text>
+                    </View>
+                    
+                    {/* 右侧：大仪表盘（无数字） */}
+                    <View className='macro-donut-large'>
+                      <View className='donut-bg-ring' />
+                      <View 
+                        className='donut-progress-ring'
+                        style={{
+                          borderColor: color,
+                          transform: `rotate(${progress * 3.6 - 90}deg)`,
+                          opacity: progress > 0 ? 1 : 0
+                        }}
+                      />
+                    </View>
+                  </View>
+                  
+                  {/* 第二行：详情 + 百分比 */}
+                  <View className='macro-row-second'>
+                    <Text className='macro-detail-text'>
+                      {formatDisplayNumber(macro.current)} / {formatDisplayNumber(macro.target)}{unit}
+                    </Text>
+                    <Text className='macro-percent-right' style={{ color }}>
+                      {progress.toFixed(0)}%
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )
+          })}
+        </View>
+
+        {/* 今日餐食区域 */}
+        <View className='meals-section'>
+          <View className='section-header'>
+            <Text className='section-title'>今日餐食</Text>
+            <View className='view-all-btn' onClick={handleViewAllMeals}>
+              <Text className='view-all-text'>查看全部</Text>
+              <IconChevronRight size={16} color='#00bc7d' />
+            </View>
+          </View>
+          
+          <View className='meals-list'>
+            {loading ? (
+              <View className='meals-loading'>
+                <Text className='loading-text'>加载中...</Text>
+              </View>
+            ) : meals.length === 0 ? (
+              <View className='meals-empty'>
+                <Empty>
+                  <Empty.Image />
+                  <Empty.Description>暂无今日餐食</Empty.Description>
+                  <Button
+                    shape='round'
+                    color='primary'
+                    className='empty-record-btn'
+                    onClick={() => handleQuickRecord('photo')}
+                  >
+                    去记录一餐
+                  </Button>
+                </Empty>
+              </View>
+            ) : (
+              meals.map((meal, index) => {
+                const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
+                const { Icon, color, bgColor, label } = config
+                
+                return (
+                  <View key={`${meal.type}-${index}`} className='meal-item'>
+                    <View className='meal-icon-wrap' style={{ backgroundColor: bgColor }}>
+                      <Icon size={24} color={color} />
+                    </View>
+                    <View className='meal-content'>
+                      <View className='meal-main'>
+                        <Text className='meal-name'>{meal.name || label}</Text>
+                        <Text className='meal-calorie'>{meal.calorie} kcal</Text>
+                      </View>
+                      <View className='meal-progress-wrap'>
+                        <View className='meal-progress-bar-bg'>
+                          <View
+                            className='meal-progress-bar-fill'
+                            style={{ width: `${Math.min(100, meal.progress)}%`, backgroundColor: color }}
+                          />
+                        </View>
+                        <Text className='meal-progress-text'>{meal.progress.toFixed(0)}%</Text>
+                      </View>
+                      {meal.time && <Text className='meal-time'>{meal.time}</Text>}
+                    </View>
+                  </View>
+                )
+              })
+            )}
+          </View>
+        </View>
+
+        {/* 查看统计入口 */}
+        <View className='stats-entry-section' onClick={openRecordSummary}>
+          <View className='stats-entry-card'>
+            <View className='stats-entry-icon'>
+              <IconTrendingUp size={24} color='#ffffff' />
+            </View>
+            <View className='stats-entry-text'>
+              <Text className='stats-entry-title'>查看饮食统计</Text>
+              <Text className='stats-entry-desc'>了解您的饮食趋势和营养分析</Text>
+            </View>
+            <IconChevronRight size={20} color='#ffffff' />
+          </View>
+        </View>
+
+        {/* 底部留白 */}
+        <View className='bottom-spacer' />
       </View>
 
+      {/* 目标编辑弹窗 */}
       {showTargetEditor && (
         <View className='target-modal' catchMove>
           <View className='target-modal-mask' onClick={() => !savingTargets && setShowTargetEditor(false)} />
@@ -725,5 +781,3 @@ export default function IndexPage() {
     </View>
   )
 }
-
-
