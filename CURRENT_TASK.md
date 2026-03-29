@@ -1,5 +1,17 @@
 # CURRENT_TASK
 
+- Task: 修复识别失败 `name 'text_input' is not defined`
+- Status: done（已修复图片分析链路误用文字模式字段派生的问题，后端编译校验通过）
+- Scope:
+  - `backend/worker.py`：图片分析结果收尾阶段错误调用 `_derive_text_recognition_fields(..., text_input)`，但图片任务上下文中并不存在 `text_input`
+  - 影响：异步图片识别任务在 worker 完成识别后写结果前抛 `NameError`，前端“识别中”页显示 `识别失败: name 'text_input' is not defined`
+- Verification:
+  - `python -m py_compile backend/worker.py` 通过
+- Next step:
+  - 用户重新发起一次图片识别，确认任务不再在“识别中”页以 `text_input` 未定义失败
+
+---
+
 - Task: 社区评论初版补齐（审核状态闭环 / 单层回复 / 轻量互动消息 / 权限与评论数修正）
 - Status: done（代码已落地；本地编译和 weapp 构建通过，待用户在微信开发者工具或真机验证交互）
 - Scope:

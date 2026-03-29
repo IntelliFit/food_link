@@ -933,7 +933,7 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     # 图片模式下：二次纠错清单作为强约束兜底，防止模型忽略用户已确认克重
     items = _apply_image_correction_items(items, payload)
 
-    recognition_fields = _derive_text_recognition_fields(parsed or {}, items, execution_mode, text_input)
+    recognition_fields = _derive_recognition_fields(parsed or {}, items, execution_mode)
 
     return {
         "description": str(parsed.get("description", "无法获取描述")),
