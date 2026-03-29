@@ -33,6 +33,8 @@ from database import (
     add_feed_comment_sync,
     add_public_food_library_comment_sync,
     update_public_food_library_status_sync,
+    batch_resolve_foods_sync,
+    log_unresolved_food_sync,
 )
 from metabolic import get_age_from_birthday
 
@@ -325,13 +327,14 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 {multi_view_hint}
 请作为专业的营养师分析这些食物图片。
 1. 识别图中所有不同的食物单品。
-2. 估算每种食物的重量（克）和详细营养成分。
+2. 仅估算每种食物的重量（克）。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
-8. 请遵守以下执行模式约束：{mode_hint}
+8. 不要输出任何营养成分（热量/蛋白质/碳水/脂肪），这些将由后端数据库查表计算。
+9. 请遵守以下执行模式约束：{mode_hint}
 {additional_line}
 
 重要：请务必使用**简体中文**返回所有文本内容。
@@ -341,8 +344,7 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
   "items": [
     {{
       "name": "食物名称（简体中文）",
-      "estimatedWeightGrams": 重量（数字）,
-      "nutrients": {{ "calories", "protein", "carbs", "fat", "fiber", "sugar" }}
+      "estimatedWeightGrams": 重量（数字）
     }}
   ],
   "description": "餐食描述（简体中文）",
@@ -357,6 +359,60 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 QWEN_VL_MODEL = "qwen-vl-max"
 QWEN_TEXT_MODEL = "qwen-plus"
+
+
+def _build_result_items_with_lookup(task: Dict[str, Any], parsed_items: Any) -> list:
+    """将模型识别出的 name + weight 转为带营养的统一结构（营养来自食物库）。"""
+    source_items = parsed_items if isinstance(parsed_items, list) else []
+    name_list = [str((item or {}).get("name", "")).strip() for item in source_items]
+    resolved_map = batch_resolve_foods_sync(name_list)
+    task_id = task.get("id")
+    out = []
+    for raw_item in source_items:
+        raw_name = str((raw_item or {}).get("name", "未知食物")).strip() or "未知食物"
+        weight = float((raw_item or {}).get("estimatedWeightGrams") or 0)
+        resolve = resolved_map.get(raw_name) or {
+            "resolved": False,
+            "resolve_status": "unresolved",
+            "matched_food_name": None,
+            "unit_nutrition_per_100g": None,
+            "normalized_name": raw_name,
+            "score": 0.0,
+        }
+        unit = resolve.get("unit_nutrition_per_100g") or {"calories": 0, "protein": 0, "carbs": 0, "fat": 0}
+        is_resolved = bool(resolve.get("resolved"))
+        if not is_resolved:
+            log_unresolved_food_sync(
+                task_id=task_id,
+                raw_name=raw_name,
+                normalized_name=str(resolve.get("normalized_name") or raw_name),
+                sample_payload={"estimatedWeightGrams": weight, "from": "worker_food_analysis"},
+            )
+        factor = max(weight, 0) / 100.0
+        out.append({
+            "name": raw_name,
+            "estimatedWeightGrams": weight,
+            "originalWeightGrams": weight,
+            "matched_food_name": resolve.get("matched_food_name"),
+            "resolve_status": resolve.get("resolve_status", "unresolved"),
+            "is_unresolved": not is_resolved,
+            "resolve_score": float(resolve.get("score") or 0),
+            "unit_nutrition_per_100g": {
+                "calories": float(unit.get("calories") or 0),
+                "protein": float(unit.get("protein") or 0),
+                "carbs": float(unit.get("carbs") or 0),
+                "fat": float(unit.get("fat") or 0),
+            },
+            "nutrients": {
+                "calories": round(float(unit.get("calories") or 0) * factor, 2),
+                "protein": round(float(unit.get("protein") or 0) * factor, 2),
+                "carbs": round(float(unit.get("carbs") or 0) * factor, 2),
+                "fat": round(float(unit.get("fat") or 0) * factor, 2),
+                "fiber": 0.0,
+                "sugar": 0.0,
+            },
+        })
+    return out
 
 
 def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -455,24 +511,8 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 # hide internal model details
                 raise RuntimeError("系统繁忙，请稍后重试")
 
-    # 转为与 API 一致的 result 结构（供前端与保存记录使用）
-    items = []
-    for item in (parsed.get("items") or []):
-        n = item.get("nutrients") or {}
-        w = float(item.get("estimatedWeightGrams") or 0)
-        items.append({
-            "name": str(item.get("name", "未知食物")),
-            "estimatedWeightGrams": w,
-            "originalWeightGrams": w,
-            "nutrients": {
-                "calories": float(n.get("calories") or 0),
-                "protein": float(n.get("protein") or 0),
-                "carbs": float(n.get("carbs") or 0),
-                "fat": float(n.get("fat") or 0),
-                "fiber": float(n.get("fiber") or 0),
-                "sugar": float(n.get("sugar") or 0),
-            },
-        })
+    # 转为与 API 一致的 result 结构（营养由食物库计算）
+    items = _build_result_items_with_lookup(task, parsed.get("items") or [])
 
     return {
         "description": str(parsed.get("description", "无法获取描述")),
@@ -541,12 +581,13 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 
 任务：
 1. 识别描述中的所有食物单品。
-2. 估算每种食物的合理重量（克）和详细营养成分。
+2. 仅估算每种食物的合理重量（克）。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_hint}
+8. 不要输出任何营养成分（热量/蛋白质/碳水/脂肪），这些将由后端数据库查表计算。
 
 重要：请务必使用**简体中文**返回所有文本内容。
 请严格按照以下 JSON 格式返回，不要包含任何其他文本：
@@ -555,8 +596,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
   "items": [
     {{
       "name": "食物名称（简体中文）",
-      "estimatedWeightGrams": 重量（数字）,
-      "nutrients": {{ "calories", "protein", "carbs", "fat", "fiber", "sugar" }}
+      "estimatedWeightGrams": 重量（数字）
     }}
   ],
   "description": "餐食描述（简体中文）",
@@ -649,24 +689,8 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
                 # hide internal model details
                 raise RuntimeError("系统繁忙，请稍后重试")
 
-    # 转为与 API 一致的 result 结构
-    items = []
-    for item in (parsed.get("items") or []):
-        n = item.get("nutrients") or {}
-        w = float(item.get("estimatedWeightGrams") or 0)
-        items.append({
-            "name": str(item.get("name", "未知食物")),
-            "estimatedWeightGrams": w,
-            "originalWeightGrams": w,
-            "nutrients": {
-                "calories": float(n.get("calories") or 0),
-                "protein": float(n.get("protein") or 0),
-                "carbs": float(n.get("carbs") or 0),
-                "fat": float(n.get("fat") or 0),
-                "fiber": float(n.get("fiber") or 0),
-                "sugar": float(n.get("sugar") or 0),
-            },
-        })
+    # 转为与 API 一致的 result 结构（营养由食物库计算）
+    items = _build_result_items_with_lookup(task, parsed.get("items") or [])
 
     return {
         "description": str(parsed.get("description", "无法获取描述")),

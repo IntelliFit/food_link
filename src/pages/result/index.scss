@@ -509,6 +509,36 @@
   gap: 32rpx;
 }
 
+.unresolved-notice {
+  background: #fffbeb;
+  border: 1rpx solid #fcd34d;
+  border-radius: 16rpx;
+  padding: 16rpx 20rpx;
+  color: #92400e;
+  font-size: 22rpx;
+}
+
+.ingredients-table-header {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr 1.2fr 1.2fr;
+  gap: 12rpx;
+  padding: 0 16rpx;
+  color: #64748b;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.th-food,
+.th-weight,
+.th-unit-cal,
+.th-total-cal {
+  text-align: right;
+}
+
+.th-food {
+  text-align: left;
+}
+
 .ingredient-card {
   @extend %card-base;
   padding: 0; // 内部布局控制内边距
@@ -530,6 +560,20 @@
   display: flex;
   align-items: center;
   gap: 12rpx;
+}
+
+.ingredient-name-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.unresolved-tag {
+  font-size: 20rpx;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 999rpx;
+  padding: 4rpx 12rpx;
 }
 
 .edit-icon-wrapper {
@@ -563,6 +607,19 @@
   display: flex;
   align-items: baseline;
   gap: 4rpx;
+}
+
+.ingredient-metrics-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1.2fr;
+  gap: 12rpx;
+  align-items: center;
+  text-align: right;
+}
+
+.metric {
+  font-size: 26rpx;
+  color: #334155;
 }
 
 .cal-val {

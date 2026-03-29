@@ -104,6 +104,7 @@ from database import (
     create_pro_membership_payment_record,
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
+    get_food_unresolved_top_sync,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -519,11 +520,23 @@ class Nutrients(BaseModel):
     sugar: float = 0
 
 
+class UnitNutritionPer100g(BaseModel):
+    calories: float = 0
+    protein: float = 0
+    carbs: float = 0
+    fat: float = 0
+
+
 class FoodItemResponse(BaseModel):
     name: str
     estimatedWeightGrams: float
     originalWeightGrams: float
     nutrients: Nutrients
+    unit_nutrition_per_100g: Optional[UnitNutritionPer100g] = None
+    matched_food_name: Optional[str] = None
+    is_unresolved: Optional[bool] = None
+    resolve_status: Optional[str] = None
+    resolve_score: Optional[float] = None
 
 
 class AnalyzeRequest(BaseModel):
@@ -1270,6 +1283,20 @@ async def get_analyze_task(
     if task.get("user_id") != user_info["user_id"]:
         raise HTTPException(status_code=403, detail="无权查看该任务")
     return task
+
+
+@app.get("/api/food-nutrition/unresolved/top")
+async def get_food_unresolved_top(
+    limit: int = 50,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """查询未收录食物高频列表（用于补库运营）。"""
+    try:
+        rows = await asyncio.to_thread(get_food_unresolved_top_sync, limit)
+        return {"items": rows}
+    except Exception as e:
+        print(f"[food-nutrition/unresolved/top] 错误: {e}")
+        raise HTTPException(status_code=500, detail="查询未收录食物失败")
 
 
 class UpdateAnalysisResultRequest(BaseModel):

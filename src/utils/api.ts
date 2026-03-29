@@ -65,6 +65,13 @@ export interface Nutrients {
   sugar: number
 }
 
+export interface UnitNutritionPer100g {
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
 
 // 食物项接口
 export interface FoodItem {
@@ -72,6 +79,11 @@ export interface FoodItem {
   estimatedWeightGrams: number
   originalWeightGrams: number
   nutrients: Nutrients
+  unit_nutrition_per_100g?: UnitNutritionPer100g
+  matched_food_name?: string | null
+  is_unresolved?: boolean
+  resolve_status?: string | null
+  resolve_score?: number
 }
 
 // 分析响应接口（含专业营养分析）
@@ -824,6 +836,17 @@ export interface AnalysisTask {
   updated_at: string
 }
 
+export interface UnresolvedFoodLogItem {
+  id: string
+  raw_name: string
+  normalized_name: string
+  hit_count: number
+  first_seen_at: string
+  last_seen_at: string
+  task_id?: string | null
+  sample_payload?: Record<string, unknown>
+}
+
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
   const payload: AnalyzeTaskSubmitParams = {
@@ -897,6 +920,20 @@ export async function listAnalyzeTasks(params?: { task_type?: string; status?: s
     throw new Error(msg)
   }
   return res.data as { tasks: AnalysisTask[] }
+}
+
+/** 查询未收录食物高频列表（用于后台补库） */
+export async function getUnresolvedFoodsTop(limit = 50): Promise<{ items: UnresolvedFoodLogItem[] }> {
+  const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50))
+  const res = await authenticatedRequest(`/api/food-nutrition/unresolved/top?limit=${safeLimit}`, {
+    method: 'GET',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取未收录食物失败'
+    throw new Error(msg)
+  }
+  return res.data as { items: UnresolvedFoodLogItem[] }
 }
 
 /**

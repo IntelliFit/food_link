@@ -7,6 +7,7 @@ import os
 import base64
 import uuid
 import re
+from difflib import SequenceMatcher
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
@@ -560,6 +561,237 @@ async def insert_critical_samples(
     except Exception as e:
         print(f"[insert_critical_samples] 错误: {e}")
         raise
+
+
+# ---------- 食物营养库（标准库 + 别名 + 未命中） ----------
+
+def normalize_food_name(name: str) -> str:
+    """
+    规范化食物名称，用于别名与模糊匹配。
+    - 转小写
+    - 去空白
+    - 去常见标点与括号
+    """
+    raw = str(name or "").strip().lower()
+    if not raw:
+        return ""
+    normalized = re.sub(r"[\s\r\n\t]+", "", raw)
+    normalized = re.sub(r"[()（）【】\[\]{}·,，。.!！:：;；'\"`~\-_/\\|]+", "", normalized)
+    return normalized
+
+
+def _food_similarity(a: str, b: str) -> float:
+    """简单相似度，范围 [0, 1]。"""
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any]:
+    """
+    解析食物名称到标准食物库。
+    返回示例：
+    {
+      "resolved": True/False,
+      "resolve_status": "exact_alias" | "exact_canonical" | "fuzzy" | "unresolved",
+      "matched_food_id": "...",
+      "matched_food_name": "...",
+      "unit_nutrition_per_100g": {"calories": ..., "protein": ..., "carbs": ..., "fat": ...},
+      "score": 0.0~1.0
+    }
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
+    raw_name = str(name or "").strip()
+    normalized = normalize_food_name(raw_name)
+    unresolved = {
+        "resolved": False,
+        "resolve_status": "unresolved",
+        "matched_food_id": None,
+        "matched_food_name": None,
+        "unit_nutrition_per_100g": None,
+        "score": 0.0,
+        "raw_name": raw_name,
+        "normalized_name": normalized,
+    }
+    if not normalized:
+        return unresolved
+
+    try:
+        alias_res = (
+            supabase.table("food_nutrition_aliases")
+            .select("normalized_alias, food_id, food_nutrition_library!inner(id, canonical_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, is_active)")
+            .eq("normalized_alias", normalized)
+            .limit(1)
+            .execute()
+        )
+        alias_rows = list(alias_res.data or [])
+        if alias_rows:
+            row = alias_rows[0]
+            food = row.get("food_nutrition_library") or {}
+            if food and food.get("is_active", True):
+                return {
+                    "resolved": True,
+                    "resolve_status": "exact_alias",
+                    "matched_food_id": str(food.get("id")),
+                    "matched_food_name": str(food.get("canonical_name") or raw_name),
+                    "unit_nutrition_per_100g": {
+                        "calories": float(food.get("kcal_per_100g") or 0),
+                        "protein": float(food.get("protein_per_100g") or 0),
+                        "carbs": float(food.get("carbs_per_100g") or 0),
+                        "fat": float(food.get("fat_per_100g") or 0),
+                    },
+                    "score": 1.0,
+                    "raw_name": raw_name,
+                    "normalized_name": normalized,
+                }
+
+        food_res = (
+            supabase.table("food_nutrition_library")
+            .select("id, canonical_name, normalized_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g")
+            .eq("is_active", True)
+            .eq("normalized_name", normalized)
+            .limit(1)
+            .execute()
+        )
+        food_rows = list(food_res.data or [])
+        if food_rows:
+            food = food_rows[0]
+            return {
+                "resolved": True,
+                "resolve_status": "exact_canonical",
+                "matched_food_id": str(food.get("id")),
+                "matched_food_name": str(food.get("canonical_name") or raw_name),
+                "unit_nutrition_per_100g": {
+                    "calories": float(food.get("kcal_per_100g") or 0),
+                    "protein": float(food.get("protein_per_100g") or 0),
+                    "carbs": float(food.get("carbs_per_100g") or 0),
+                    "fat": float(food.get("fat_per_100g") or 0),
+                },
+                "score": 1.0,
+                "raw_name": raw_name,
+                "normalized_name": normalized,
+            }
+
+        # 模糊兜底：限制候选数量避免全表扫描压力
+        all_foods_res = (
+            supabase.table("food_nutrition_library")
+            .select("id, canonical_name, normalized_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g")
+            .eq("is_active", True)
+            .limit(500)
+            .execute()
+        )
+        candidates = list(all_foods_res.data or [])
+        best = None
+        best_score = 0.0
+        for food in candidates:
+            score = _food_similarity(normalized, str(food.get("normalized_name") or ""))
+            if score > best_score:
+                best_score = score
+                best = food
+        if best and best_score >= fuzzy_threshold:
+            return {
+                "resolved": True,
+                "resolve_status": "fuzzy",
+                "matched_food_id": str(best.get("id")),
+                "matched_food_name": str(best.get("canonical_name") or raw_name),
+                "unit_nutrition_per_100g": {
+                    "calories": float(best.get("kcal_per_100g") or 0),
+                    "protein": float(best.get("protein_per_100g") or 0),
+                    "carbs": float(best.get("carbs_per_100g") or 0),
+                    "fat": float(best.get("fat_per_100g") or 0),
+                },
+                "score": round(float(best_score), 4),
+                "raw_name": raw_name,
+                "normalized_name": normalized,
+            }
+        return unresolved
+    except Exception as e:
+        print(f"[resolve_food_sync] 错误: {e}")
+        return unresolved
+
+
+def batch_resolve_foods_sync(names: List[str], fuzzy_threshold: float = 0.72) -> Dict[str, Dict[str, Any]]:
+    """批量解析食物名，返回 name -> resolve_result。"""
+    out: Dict[str, Dict[str, Any]] = {}
+    for name in names or []:
+        key = str(name or "").strip()
+        if key in out:
+            continue
+        out[key] = resolve_food_sync(key, fuzzy_threshold=fuzzy_threshold)
+    return out
+
+
+def log_unresolved_food_sync(
+    task_id: Optional[str],
+    raw_name: str,
+    normalized_name: str,
+    sample_payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    """记录未收录食物，按 normalized_name 累计频次。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    raw = str(raw_name or "").strip()
+    normalized = normalize_food_name(normalized_name or raw)
+    if not normalized:
+        return
+    try:
+        exists = (
+            supabase.table("food_unresolved_logs")
+            .select("id, hit_count")
+            .eq("normalized_name", normalized)
+            .limit(1)
+            .execute()
+        )
+        rows = list(exists.data or [])
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payload = sample_payload or {}
+        if rows:
+            row = rows[0]
+            next_count = int(row.get("hit_count") or 0) + 1
+            supabase.table("food_unresolved_logs").update({
+                "hit_count": next_count,
+                "last_seen_at": now_iso,
+                "raw_name": raw,
+                "sample_payload": payload,
+                "updated_at": now_iso,
+                "task_id": task_id,
+            }).eq("id", row.get("id")).execute()
+            return
+        supabase.table("food_unresolved_logs").insert({
+            "task_id": task_id,
+            "raw_name": raw,
+            "normalized_name": normalized,
+            "hit_count": 1,
+            "sample_payload": payload,
+            "first_seen_at": now_iso,
+            "last_seen_at": now_iso,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }).execute()
+    except Exception as e:
+        print(f"[log_unresolved_food_sync] 错误: {e}")
+
+
+def get_food_unresolved_top_sync(limit: int = 50) -> List[Dict[str, Any]]:
+    """按出现频次倒序返回未收录食物。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    size = max(1, min(int(limit or 50), 200))
+    try:
+        res = (
+            supabase.table("food_unresolved_logs")
+            .select("id, raw_name, normalized_name, hit_count, first_seen_at, last_seen_at, task_id, sample_payload")
+            .order("hit_count", desc=True)
+            .order("last_seen_at", desc=True)
+            .limit(size)
+            .execute()
+        )
+        return list(res.data or [])
+    except Exception as e:
+        print(f"[get_food_unresolved_top_sync] 错误: {e}")
+        return []
 
 
 # ---------- 异步分析任务（analysis_tasks）：Worker 子进程消费 ----------

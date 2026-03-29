@@ -35,11 +35,18 @@ interface NutritionItem {
   weight: number // 当前重量（用户可调节）
   originalWeight: number // AI 初始估算重量（用于标记样本时计算偏差）
   calorie: number // 基于 weight 的总热量
+  unitCaloriesPer100g: number // 每100g热量
   intake: number // 实际摄入量 = weight × ratio
   ratio: number // 摄入比例（0-100%，独立调节）
   protein: number
   carbs: number
   fat: number
+  unitProteinPer100g: number
+  unitCarbsPer100g: number
+  unitFatPer100g: number
+  matchedFoodName?: string | null
+  isUnresolved?: boolean
+  resolveStatus?: string | null
 }
 
 export default function ResultPage() {
@@ -72,6 +79,12 @@ export default function ResultPage() {
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
 
+  const calculateByUnit = (weight: number, unitPer100g: number): number => {
+    const safeWeight = Number.isFinite(weight) ? weight : 0
+    const safeUnit = Number.isFinite(unitPer100g) ? unitPer100g : 0
+    return Math.round((safeWeight * safeUnit) / 100 * 100) / 100
+  }
+
   const openQuickUpload = (recordId: string) => {
     Taro.navigateTo({
       url: `/pages/food-library-share/index?source_record_id=${encodeURIComponent(recordId)}&quick_upload=1`
@@ -82,17 +95,33 @@ export default function ResultPage() {
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
     return items.map((item, index) => {
       const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
+      const safeWeight = Number.isFinite(item.estimatedWeightGrams) ? item.estimatedWeightGrams : 0
+      const unitCaloriesPer100g = item.unit_nutrition_per_100g?.calories
+        ?? (safeWeight > 0 ? (item.nutrients.calories * 100) / safeWeight : 0)
+      const unitProteinPer100g = item.unit_nutrition_per_100g?.protein
+        ?? (safeWeight > 0 ? (item.nutrients.protein * 100) / safeWeight : 0)
+      const unitCarbsPer100g = item.unit_nutrition_per_100g?.carbs
+        ?? (safeWeight > 0 ? (item.nutrients.carbs * 100) / safeWeight : 0)
+      const unitFatPer100g = item.unit_nutrition_per_100g?.fat
+        ?? (safeWeight > 0 ? (item.nutrients.fat * 100) / safeWeight : 0)
       return {
         id: index + 1,
         name: item.name,
-        weight: item.estimatedWeightGrams,
+        weight: safeWeight,
         originalWeight: aiWeight,
-        calorie: item.nutrients.calories,
-        intake: item.estimatedWeightGrams,
+        calorie: calculateByUnit(safeWeight, unitCaloriesPer100g),
+        unitCaloriesPer100g,
+        intake: safeWeight,
         ratio: 100,
-        protein: item.nutrients.protein,
-        carbs: item.nutrients.carbs,
-        fat: item.nutrients.fat
+        protein: calculateByUnit(safeWeight, unitProteinPer100g),
+        carbs: calculateByUnit(safeWeight, unitCarbsPer100g),
+        fat: calculateByUnit(safeWeight, unitFatPer100g),
+        unitProteinPer100g,
+        unitCarbsPer100g,
+        unitFatPer100g,
+        matchedFoodName: item.matched_food_name,
+        isUnresolved: item.is_unresolved,
+        resolveStatus: item.resolve_status
       }
     })
   }
@@ -173,18 +202,17 @@ export default function ResultPage() {
         if (item.id === id) {
           // 调节的是 weight（AI 估算的食物总重量）
           const newWeight = Math.max(10, item.weight + delta) // 最小 10g
-          const weightScale = item.weight > 0 ? newWeight / item.weight : 1
           // ratio 保持不变，重新计算 intake
           const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
             ...item,
             weight: newWeight,
             intake: newIntake,
-            // 重量变化时，同步更新该食物对应的营养值
-            calorie: item.calorie * weightScale,
-            protein: item.protein * weightScale,
-            carbs: item.carbs * weightScale,
-            fat: item.fat * weightScale
+            // 由每100g单位值重新计算，避免累计误差
+            calorie: calculateByUnit(newWeight, item.unitCaloriesPer100g),
+            protein: calculateByUnit(newWeight, item.unitProteinPer100g),
+            carbs: calculateByUnit(newWeight, item.unitCarbsPer100g),
+            fat: calculateByUnit(newWeight, item.unitFatPer100g)
             // ratio 不变
           }
         }
@@ -617,11 +645,18 @@ export default function ResultPage() {
         weight: 100, // 默认 100g
         originalWeight: 100,
         calorie: 0,
+        unitCaloriesPer100g: 0,
         intake: 100,
         ratio: 100,
         protein: 0,
         carbs: 0,
-        fat: 0
+        fat: 0,
+        unitProteinPer100g: 0,
+        unitCarbsPer100g: 0,
+        unitFatPer100g: 0,
+        matchedFoodName: null,
+        isUnresolved: false,
+        resolveStatus: 'manual'
       }
     ])
   }
@@ -881,18 +916,38 @@ export default function ResultPage() {
             </View>
 
             <View className='ingredients-list'>
+              {nutritionItems.some(item => item.isUnresolved) && (
+                <View className='unresolved-notice'>
+                  <Text>部分食物未命中数据库，已自动记录到待补全列表。</Text>
+                </View>
+              )}
+              <View className='ingredients-table-header'>
+                <Text className='th-food'>食物</Text>
+                <Text className='th-weight'>重量(g)</Text>
+                <Text className='th-unit-cal'>每100g热量</Text>
+                <Text className='th-total-cal'>本次热量</Text>
+              </View>
               {nutritionItems.map((item) => (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
                     <View className='ingredient-header'>
-                      <Text className='ingredient-name'>{item.name}</Text>
+                      <View className='ingredient-name-wrapper'>
+                        <Text className='ingredient-name'>{item.name}</Text>
+                        {item.isUnresolved && (
+                          <Text className='unresolved-tag'>未收录</Text>
+                        )}
+                      </View>
                       <View className='edit-icon-wrapper' onClick={() => handleEditName(item.id, item.name)}>
                         <Text className='iconfont icon-shouxieqianming'></Text>
                       </View>
                     </View>
-                    <View className='ingredient-calories'>
-                      <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
-                      <Text className='cal-unit'>kcal</Text>
+                    <View className='ingredient-metrics-row'>
+                      <Text className='metric metric-weight'>{Math.round(item.weight)}</Text>
+                      <Text className='metric metric-unit-cal'>{Math.round(item.unitCaloriesPer100g)}</Text>
+                      <View className='ingredient-calories metric metric-total-cal'>
+                        <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
+                        <Text className='cal-unit'>kcal</Text>
+                      </View>
                     </View>
                   </View>
 
