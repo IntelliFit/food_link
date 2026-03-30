@@ -15,7 +15,7 @@ interface CustomNavBarProps {
     className?: string
 }
 
-function getStatusBarHeightSafe(): number {
+export function getStatusBarHeightSafe(): number {
     // 新版基础库优先使用拆分 API，避免 getSystemInfoSync 废弃告警
     try {
         const win = (Taro as any).getWindowInfo?.()

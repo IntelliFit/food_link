@@ -1,0 +1,24 @@
+<view class="custom-tab-bar">
+  <view 
+    wx:for="{{tabList}}" 
+    wx:key="index"
+    class="tab-item {{item.isCenter ? 'center-item' : ''}} {{selectedIndex === index ? 'selected' : ''}}"
+    data-index="{{index}}"
+    data-path="{{item.pagePath}}"
+    bindtap="switchTab"
+  >
+    <view class="icon-wrapper">
+      <block wx:if="{{item.id === 'stats'}}">
+        <view class="stats-icon {{selectedIndex === index ? 'active' : ''}}"></view>
+      </block>
+      <block wx:else>
+        <image 
+          class="tab-icon {{item.isCenter ? 'center' : ''}}" 
+          src="{{selectedIndex === index ? item.selectedIconPath : item.iconPath}}"
+          mode="aspectFit"
+        />
+      </block>
+    </view>
+    <text class="tab-text">{{item.text}}</text>
+  </view>
+</view>

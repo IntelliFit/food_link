@@ -1,0 +1,145 @@
+/* 底部导航栏 - 参考微信/小红书设计 */
+.custom-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100rpx;
+  background: #ffffff;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding: 8rpx 20rpx 0;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 8rpx);
+  box-shadow: 0px -1rpx 4rpx rgba(0, 0, 0, 0.06);
+  z-index: 999;
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2rpx;
+  transition: all 0.2s ease;
+  position: relative;
+  height: 100%;
+}
+
+.tab-item.selected .tab-text {
+  color: #07c160;
+  font-weight: 500;
+}
+
+.icon-wrapper {
+  width: 54rpx;
+  height: 54rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.tab-icon {
+  width: 44rpx;
+  height: 44rpx;
+  transition: all 0.2s ease;
+}
+
+/* 中间按钮图标 - 白色填充 */
+.tab-icon.center {
+  width: 48rpx;
+  height: 48rpx;
+  filter: brightness(0) invert(1);
+}
+
+.tab-item.selected .icon-wrapper {
+  transform: scale(1.05);
+}
+
+/* ===== 分析图标 - CSS 绘制精致柱状图 ===== */
+.stats-icon {
+  width: 44rpx;
+  height: 44rpx;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6rpx;
+  box-sizing: border-box;
+}
+
+/* 三根柱子 */
+.stats-icon::before {
+  content: '';
+  position: absolute;
+  width: 5rpx;
+  height: 12rpx;
+  background: #b0b0b0;
+  border-radius: 1rpx;
+  left: 5rpx;
+  bottom: 6rpx;
+  transition: all 0.2s ease;
+}
+
+.stats-icon::after {
+  content: '';
+  position: absolute;
+  width: 5rpx;
+  height: 22rpx;
+  background: #b0b0b0;
+  border-radius: 1rpx;
+  right: 5rpx;
+  bottom: 6rpx;
+  transition: all 0.2s ease;
+}
+
+/* 中间柱子 */
+.stats-icon {
+  background: linear-gradient(to top, transparent 6rpx, #b0b0b0 6rpx, #b0b0b0 24rpx, transparent 24rpx);
+  background-size: 5rpx 18rpx;
+  background-position: center bottom 6rpx;
+  background-repeat: no-repeat;
+  transition: all 0.2s ease;
+}
+
+/* 选中状态 - 微信绿 */
+.stats-icon.active::before,
+.stats-icon.active::after {
+  background: #07c160;
+}
+
+.stats-icon.active {
+  background: linear-gradient(to top, transparent 6rpx, #07c160 6rpx, #07c160 24rpx, transparent 24rpx);
+  background-size: 5rpx 18rpx;
+  background-position: center bottom 6rpx;
+  background-repeat: no-repeat;
+}
+
+/* ===== 中间记录按钮 - 填充背景设计 ===== */
+.tab-item.center-item .icon-wrapper {
+  width: 72rpx;
+  height: 72rpx;
+  margin-top: -20rpx;
+  background: #07c160;
+  border-radius: 50%;
+  box-shadow: 0px 4rpx 12rpx rgba(7, 193, 96, 0.3);
+}
+
+.tab-item.center-item.selected .icon-wrapper {
+  transform: scale(1.02);
+  box-shadow: 0px 6rpx 16rpx rgba(7, 193, 96, 0.4);
+}
+
+/* ===== 文字样式 ===== */
+.tab-text {
+  font-size: 20rpx;
+  color: #b0b0b0;
+  line-height: 28rpx;
+  transition: all 0.2s ease;
+}
+
+.tab-item.center-item .tab-text {
+  color: #666666;
+}

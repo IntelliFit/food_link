@@ -43,30 +43,27 @@ export default defineAppConfig({
     selectedColor: '#00bc7d',
     backgroundColor: '#f9fafb',
     borderStyle: 'black',
+    custom: true,
     list: [
       {
         pagePath: 'pages/index/index',
-        text: '首页',
-        iconPath: 'assets/icons/home.png',
-        selectedIconPath: 'assets/icons/home-active.png'
+        text: '首页'
       },
       {
-        pagePath: 'pages/community/index',
-        text: '圈子',
-        iconPath: 'assets/icons/community.png',
-        selectedIconPath: 'assets/icons/community-active.png'
+        pagePath: 'pages/stats/index',
+        text: '分析'
       },
       {
         pagePath: 'pages/record/index',
-        text: '记录',
-        iconPath: 'assets/icons/record.png',
-        selectedIconPath: 'assets/icons/record-active.png'
+        text: '记录'
+      },
+      {
+        pagePath: 'pages/community/index',
+        text: '圈子'
       },
       {
         pagePath: 'pages/profile/index',
-        text: '我的',
-        iconPath: 'assets/icons/profile.png',
-        selectedIconPath: 'assets/icons/profile-active.png'
+        text: '我的'
       }
     ]
   },
