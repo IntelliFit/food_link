@@ -23,8 +23,8 @@ const normalizeRecognitionOutcome = (value: unknown): AnalyzeRecognitionOutcome 
 
 const RECOGNITION_OUTCOME_LABEL: Record<AnalyzeRecognitionOutcome, string> = {
   ok: '精准通过',
-  soft_reject: '不建议执行',
-  hard_reject: '需重拍',
+  soft_reject: '建议重拍',
+  hard_reject: '建议拆拍',
 }
 
 const pickRecognitionOutcome = (task: AnalysisTask): AnalyzeRecognitionOutcome => {

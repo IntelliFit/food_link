@@ -10,17 +10,19 @@ const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
+  { value: 'morning_snack' as const, label: '早加餐' },
   { value: 'lunch' as const, label: '午餐' },
-  { value: 'snack' as const, label: '加餐' },
+  { value: 'afternoon_snack' as const, label: '午加餐' },
   { value: 'dinner' as const, label: '晚餐' },
+  { value: 'evening_snack' as const, label: '晚加餐' },
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; note: string }> = {
   strict: {
     title: '精准模式',
-    desc: '本次结果更强调执行准确度，会更严格地判断食物性质与定量可信度。',
-    note: '适合增肌/减脂阶段，建议搭配分开摆放和补充文字说明。'
+    desc: '本次结果更强调分项估计的准确度，优先处理主体少、边界清楚的样本。',
+    note: '单个食物最稳；混合餐最多 2-3 个主体，菜太多时建议拆开拍。'
   },
   standard: {
     title: '标准模式',
@@ -46,37 +48,44 @@ const normalizeAllowedFoodCategory = (value: unknown): AllowedFoodCategory => (
 )
 
 const FOOD_CATEGORY_LABEL: Record<AllowedFoodCategory, string> = {
-  carb: '单纯碳水',
-  lean_protein: '单纯瘦肉',
-  unknown: '未命中精准白名单'
+  carb: '单个碳水',
+  lean_protein: '单个瘦肉',
+  unknown: '混合/其他'
 }
 
 const RECOGNITION_OUTCOME_META: Record<AnalyzeRecognitionOutcome, { title: string; desc: string }> = {
   ok: {
     title: '符合精准模式',
-    desc: '当前结果可作为本次精准执行的参考。'
+    desc: '当前主体不多且边界清楚，可作为本次分项执行的参考。'
   },
   soft_reject: {
-    title: '不建议直接用于精准执行',
-    desc: '主体大致可识别，但当前图片条件还不够理想，建议补拍后再确认。'
+    title: '建议重拍',
+    desc: '主体大致可识别，但边界或参照物还不够理想，补拍后会更稳。'
   },
   hard_reject: {
-    title: '请分开拍或重拍',
-    desc: '当前画面不符合精准模式要求，这次结果不应直接用于记录和执行。'
+    title: '建议拆开拍',
+    desc: '这餐主体太多、遮挡太重或边界不清，不建议一次估完整餐。'
   }
 }
 
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
+  morning_snack: 'icon-lingshi',
   lunch: 'icon-wucan',
-  snack: 'icon-lingshi',
+  afternoon_snack: 'icon-lingshi',
   dinner: 'icon-wancan',
+  evening_snack: 'icon-lingshi',
 }
 
 const toSelectableMealType = (value: unknown): SelectableMealType | undefined => {
-  if (value === 'snack' || value === 'morning_snack' || value === 'afternoon_snack' || value === 'evening_snack') return 'snack'
+  if (value === 'snack') return 'afternoon_snack'
   const hit = MEAL_OPTIONS.find((o) => o.value === value)
   return hit?.value
+}
+
+const getSavedSelectableMealType = (): SelectableMealType | undefined => {
+  const savedMealType = Taro.getStorageSync('analyzeMealType')
+  return toSelectableMealType(savedMealType)
 }
 
 // 移除未使用的 CONTEXT_STATE_OPTIONS
@@ -621,14 +630,17 @@ export default function ResultPage() {
     if (isStrictHardReject) {
       Taro.showModal({
         title: '当前结果不建议直接用于精准执行',
-        content: `${rejectionReason || '当前结果不符合精准模式要求，建议优先重拍。'}\n如果你只是想先记一笔，也可以继续保存。`,
+        content: `${rejectionReason || '这餐更适合拆开拍后再估。'}\n如果你只是想先记一笔，也可以继续保存。`,
         confirmText: '仍要记录',
-        cancelText: '先去重拍',
+        cancelText: '先去拆拍',
         success: (res) => {
           if (!res.confirm) return
-          const savedMealType = Taro.getStorageSync('analyzeMealType')
-          const normalized = toSelectableMealType(savedMealType)
-          setSelectedMealType(normalized || 'breakfast')
+          const savedMealType = getSavedSelectableMealType()
+          if (savedMealType) {
+            saveRecord(false, savedMealType)
+            return
+          }
+          setSelectedMealType('breakfast')
           setShowMealSelector(true)
         }
       })
@@ -637,27 +649,28 @@ export default function ResultPage() {
     if (isStrictSoftReject) {
       Taro.showModal({
         title: '本次结果不建议直接用于精准执行',
-        content: `${rejectionReason || '当前图片条件一般，建议补拍后再确认。'}\n如果你只是想先记一笔，也可以继续保存。`,
+        content: `${rejectionReason || '当前边界或参照物不够理想，建议补拍后再确认。'}\n如果你只是想先记一笔，也可以继续保存。`,
         confirmText: '仍要记录',
         cancelText: '先去重拍',
         success: (res) => {
           if (!res.confirm) return
-          const savedMealType = Taro.getStorageSync('analyzeMealType')
-          const normalized = toSelectableMealType(savedMealType)
-          setSelectedMealType(normalized || 'breakfast')
+          const savedMealType = getSavedSelectableMealType()
+          if (savedMealType) {
+            saveRecord(false, savedMealType)
+            return
+          }
+          setSelectedMealType('breakfast')
           setShowMealSelector(true)
         }
       })
       return
     }
-    // 初始化选中的餐次：缓存 > 默认早餐
-    const savedMealType = Taro.getStorageSync('analyzeMealType')
-    const normalized = toSelectableMealType(savedMealType)
-    if (normalized) {
-      setSelectedMealType(normalized)
-    } else {
-      setSelectedMealType('breakfast')
+    const savedMealType = getSavedSelectableMealType()
+    if (savedMealType) {
+      saveRecord(false, savedMealType)
+      return
     }
+    setSelectedMealType('breakfast')
     setShowMealSelector(true)
   }
 
@@ -669,7 +682,7 @@ export default function ResultPage() {
     if (isStrictHardReject) {
       Taro.showModal({
         title: '当前结果不建议上传',
-        content: rejectionReason || '当前结果不符合精准模式要求，请先按提示重拍。',
+        content: rejectionReason || '这餐更适合拆开拍后再上传。',
         showCancel: false,
         confirmText: '我知道了',
       })

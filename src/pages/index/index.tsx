@@ -151,11 +151,15 @@ function alignPayloadWithCalorieTarget(payload: DashboardTargets): { payload: Da
   }
 }
 
-function clampProgress(current: number, target: number): number {
+function calculateProgressPercent(current: number, target: number): number {
   if (target <= 0) {
     return current > 0 ? 100 : 0
   }
-  return Math.min(100, Math.max(0, Number(((current / target) * 100).toFixed(1))))
+  return Math.max(0, Number(((current / target) * 100).toFixed(1)))
+}
+
+function clampVisualProgress(progress: number): number {
+  return Math.min(100, Math.max(0, progress))
 }
 
 function createTargetForm(intake: HomeIntakeData): TargetFormState {
@@ -177,6 +181,8 @@ const MEAL_ICON_CONFIG = {
   evening_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
   snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '零食' }
 } as const
+
+const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
 
 // 营养素配置：基于人们对营养素的直观印象
 // 蛋白质-蓝色(牛奶/蛋白粉)、碳水-黄色(谷物/能量)、脂肪-橘黄色(油脂)
@@ -466,7 +472,7 @@ export default function IndexPage() {
   }
 
   const remainingCalories = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
-  const calorieProgress = clampProgress(intakeData.current, intakeData.target)
+  const calorieProgress = calculateProgressPercent(intakeData.current, intakeData.target)
   
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
@@ -546,7 +552,7 @@ export default function IndexPage() {
             <View className='progress-bar-bg thick'>
               <View
                 className='progress-bar-fill thick'
-                style={{ width: `${calorieProgress}%` }}
+                style={{ width: `${clampVisualProgress(calorieProgress)}%` }}
               />
             </View>
           </View>
@@ -556,7 +562,8 @@ export default function IndexPage() {
         <View className='macros-section'>
           {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
             const macro = intakeData.macros[key]
-            const progress = clampProgress(macro.current, macro.target)
+            const progress = calculateProgressPercent(macro.current, macro.target)
+            const visualProgress = clampVisualProgress(progress)
             
             return (
               <View key={key} className='macro-card'>
@@ -588,8 +595,8 @@ export default function IndexPage() {
                         className='donut-progress-ring'
                         style={{
                           borderColor: color,
-                          transform: `rotate(${progress * 3.6 - 90}deg)`,
-                          opacity: progress > 0 ? 1 : 0
+                          transform: `rotate(${visualProgress * 3.6 - 90}deg)`,
+                          opacity: visualProgress > 0 ? 1 : 0
                         }}
                       />
                     </View>
@@ -644,6 +651,10 @@ export default function IndexPage() {
               meals.map((meal, index) => {
                 const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
                 const { Icon, color, bgColor, label } = config
+                const isSnackMeal = SNACK_MEAL_TYPES.has(meal.type)
+                const targetText = isSnackMeal
+                  ? `参考 ${formatDisplayNumber(meal.target)} kcal`
+                  : `目标 ${formatDisplayNumber(meal.target)} kcal`
                 
                 return (
                   <View key={`${meal.type}-${index}`} className='meal-item'>
@@ -659,12 +670,19 @@ export default function IndexPage() {
                         <View className='meal-progress-bar-bg'>
                           <View
                             className='meal-progress-bar-fill'
-                            style={{ width: `${Math.min(100, meal.progress)}%`, backgroundColor: color }}
+                            style={{ width: `${clampVisualProgress(meal.progress)}%`, backgroundColor: color }}
                           />
                         </View>
-                        <Text className='meal-progress-text'>{meal.progress.toFixed(0)}%</Text>
+                        <Text className='meal-progress-text'>{targetText}</Text>
                       </View>
                       {meal.time && <Text className='meal-time'>{meal.time}</Text>}
+                      {meal.tags?.length > 0 && (
+                        <View className='meal-tags'>
+                          {meal.tags.map((tag) => (
+                            <Text key={tag} className='meal-tag'>{tag}</Text>
+                          ))}
+                        </View>
+                      )}
                     </View>
                   </View>
                 )

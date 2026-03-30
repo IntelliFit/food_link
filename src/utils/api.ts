@@ -1,13 +1,9 @@
 import Taro from '@tarojs/taro'
 
-// API 基础 URL：从环境变量读取，未配置时使用生产地址
-// 开发：.env.development 中 TARO_APP_API_BASE_URL
-// 生产：.env.production 中 TARO_APP_API_BASE_URL
-const ENV_API_BASE_URL =
-  (typeof process !== 'undefined' && process?.env?.TARO_APP_API_BASE_URL) || ''
+declare const __API_BASE_URL__: string
 
 export const API_BASE_URL =
-  ENV_API_BASE_URL || 'https://healthymax.cn'
+  __API_BASE_URL__ || 'https://healthymax.cn'
 
 function isNgrokFreeDomain(url: string): boolean {
   return /^https:\/\/[^/]+\.ngrok-free\.dev(?:\/|$)/i.test(url)
@@ -632,10 +628,31 @@ export async function imageToBase64(imagePath: string): Promise<string> {
   throw new Error('图片读取失败，请重新拍照/选择后再试')
 }
 
+async function getLocalFileSize(localPath: string): Promise<number | null> {
+  const raw = (localPath || '').trim()
+  if (!raw || /^https?:\/\//i.test(raw)) return null
+
+  const fs = typeof Taro.getFileSystemManager === 'function' ? Taro.getFileSystemManager() : null
+  if (!fs) return null
+
+  try {
+    const res = await new Promise<any>((resolve, reject) => {
+      fs.getFileInfo({
+        filePath: raw,
+        success: resolve,
+        fail: reject,
+      })
+    })
+    const size = Number(res?.size)
+    return Number.isFinite(size) && size >= 0 ? size : null
+  } catch {
+    return null
+  }
+}
+
 /**
- * 上传前压缩本地图片，降低 JSON 请求体体积。
- * 线上网关常限制单请求约 1MB，高清原图转 base64 易超限；精准模式用户更易拍大图。
- * 压缩失败时返回原路径。
+ * 上传前压缩本地图片，尽量把请求体控制在安全范围。
+ * 小程序端优先走文件直传；若后端仍是旧版，再回退 base64 上传。
  */
 export async function compressImagePathForUpload(localPath: string): Promise<string> {
   const raw = (localPath || '').trim()
@@ -643,17 +660,43 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
   if (typeof Taro.getEnv === 'function' && Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
     return raw
   }
-  try {
-    const res = await Taro.compressImage({
-      src: raw,
-      quality: 72,
-    })
-    const next = (res as { tempFilePath?: string })?.tempFilePath
-    if (next && next.trim()) return next.trim()
-  } catch (e) {
-    console.warn('compressImagePathForUpload 失败，使用原图:', e)
+
+  const targetBytes = 760 * 1024
+  const originalSize = await getLocalFileSize(raw)
+  if (originalSize !== null && originalSize <= targetBytes) {
+    return raw
   }
-  return raw
+
+  const qualities = [72, 60, 48, 36]
+  let bestPath = raw
+  let bestSize = originalSize
+
+  for (const quality of qualities) {
+    try {
+      const res = await Taro.compressImage({
+        src: bestPath || raw,
+        quality,
+      })
+      const next = (res as { tempFilePath?: string })?.tempFilePath?.trim()
+      if (!next) continue
+
+      const nextSize = await getLocalFileSize(next)
+      if (nextSize !== null && (bestSize === null || nextSize < bestSize)) {
+        bestPath = next
+        bestSize = nextSize
+      } else if (!bestPath) {
+        bestPath = next
+      }
+
+      if (nextSize !== null && nextSize <= targetBytes) {
+        return next
+      }
+    } catch (e) {
+      console.warn(`compressImagePathForUpload 质量 ${quality} 压缩失败，尝试下一档:`, e)
+    }
+  }
+
+  return bestPath || raw
 }
 
 function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string {
@@ -667,6 +710,55 @@ function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string
     return '登录已失效，请重新登录后再试'
   }
   return `上传图片失败（HTTP ${statusCode}）`
+}
+
+function parseUploadAnalyzeResponseData(rawData: unknown): Record<string, any> | null {
+  if (rawData && typeof rawData === 'object') {
+    return rawData as Record<string, any>
+  }
+  if (typeof rawData !== 'string') return null
+
+  const text = rawData.trim()
+  if (!text) return null
+
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, any>) : null
+  } catch {
+    return null
+  }
+}
+
+export async function uploadAnalyzeImageFile(localPath: string): Promise<{ imageUrl: string }> {
+  const filePath = (localPath || '').trim()
+  if (!filePath) {
+    throw new Error('图片路径为空')
+  }
+
+  const token = getAccessToken()
+  const response = await new Promise<any>((resolve, reject) => {
+    Taro.uploadFile({
+      url: `${API_BASE_URL}/api/upload-analyze-image-file`,
+      filePath,
+      name: 'file',
+      header: withNgrokBypassHeaders({
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }),
+      success: resolve,
+      fail: reject,
+    })
+  })
+
+  const parsedData = parseUploadAnalyzeResponseData(response?.data)
+  if (response?.statusCode !== 200) {
+    throw new Error(formatUploadAnalyzeHttpError(Number(response?.statusCode || 0), parsedData))
+  }
+
+  const imageUrl = String(parsedData?.imageUrl || '').trim()
+  if (!imageUrl) {
+    throw new Error('上传图片失败：服务端未返回图片地址')
+  }
+  return { imageUrl }
 }
 
 /**
@@ -1836,6 +1928,17 @@ export interface CheckinLeaderboardItem {
   is_me: boolean
 }
 
+export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
+export type CommunityAuthorScope = 'all' | 'priority'
+
+export interface CommunityFeedQueryParams {
+  meal_type?: MealType
+  diet_goal?: DietGoal
+  sort_by?: CommunityFeedSortBy
+  priority_author_ids?: string[]
+  author_scope?: CommunityAuthorScope
+}
+
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
 export interface CommunityFeedItem {
   record: FoodRecord
@@ -1848,6 +1951,8 @@ export interface CommunityFeedItem {
   comments?: FeedCommentItem[]
   /** 评论总数（前端展示用） */
   comment_count?: number
+  /** 推荐理由（推荐排序时展示） */
+  recommend_reason?: string
 }
 
 /** 评论项 */
@@ -2049,11 +2154,19 @@ export async function communityGetFeed(
   offset: number = 0,
   limit: number = 20,
   includeComments: boolean = true,
-  commentsLimit: number = 5
+  commentsLimit: number = 5,
+  params?: CommunityFeedQueryParams
 ): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
   let q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
   if (date) {
     q += `&date=${date}`
+  }
+  if (params?.meal_type) q += `&meal_type=${encodeURIComponent(params.meal_type)}`
+  if (params?.diet_goal) q += `&diet_goal=${encodeURIComponent(params.diet_goal)}`
+  if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
+  if (params?.author_scope) q += `&author_scope=${encodeURIComponent(params.author_scope)}`
+  if (params?.priority_author_ids?.length) {
+    q += `&priority_author_ids=${encodeURIComponent(params.priority_author_ids.join(','))}`
   }
   const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
@@ -2080,9 +2193,13 @@ export async function communityGetPublicFeed(
   offset: number = 0,
   limit: number = 20,
   includeComments: boolean = true,
-  commentsLimit: number = 5
+  commentsLimit: number = 5,
+  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by'>
 ): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
-  const q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
+  let q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
+  if (params?.meal_type) q += `&meal_type=${encodeURIComponent(params.meal_type)}`
+  if (params?.diet_goal) q += `&diet_goal=${encodeURIComponent(params.diet_goal)}`
+  if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/community/public-feed${q}`,
     method: 'GET',
@@ -2198,6 +2315,8 @@ export interface PublicFoodLibraryItem {
   published_at?: string | null
   created_at: string
   updated_at: string
+  /** 推荐理由 */
+  recommend_reason?: string
   /** 当前用户是否已点赞 */
   liked?: boolean
   /** 收藏数 */
@@ -2256,7 +2375,7 @@ export interface PublicFoodLibraryListParams {
   merchant_name?: string
   min_calories?: number
   max_calories?: number
-  sort_by?: 'latest' | 'hot' | 'rating'
+  sort_by?: 'latest' | 'hot' | 'rating' | 'balanced' | 'high_protein' | 'low_calorie' | 'recommended'
   limit?: number
   offset?: number
 }

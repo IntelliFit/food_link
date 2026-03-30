@@ -10,6 +10,22 @@ import {
 
 import './index.scss'
 
+const COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY = 'community_notification_target_v1'
+
+function persistPendingCommunityTarget(item: FeedInteractionNotification) {
+  if (!item.record_id) return
+  try {
+    Taro.setStorageSync(COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY, {
+      recordId: item.record_id,
+      commentId: item.comment_id || '',
+      parentCommentId: item.parent_comment_id || '',
+      createdAt: Date.now()
+    })
+  } catch (e) {
+    console.error('缓存互动消息跳转目标失败:', e)
+  }
+}
+
 function formatTimeLabel(timeStr: string): string {
   if (!timeStr) return ''
   try {
@@ -78,9 +94,13 @@ export default function InteractionNotificationsPage() {
     }
   }
 
-  const handleOpenRecord = (item: FeedInteractionNotification) => {
-    if (!item.record_id) return
-    Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(item.record_id)}` })
+  const handleOpenNotification = (item: FeedInteractionNotification) => {
+    if (!item.record_id) {
+      Taro.showToast({ title: '未找到对应动态', icon: 'none' })
+      return
+    }
+    persistPendingCommunityTarget(item)
+    Taro.switchTab({ url: '/pages/community/index' })
   }
 
   return (
@@ -113,7 +133,7 @@ export default function InteractionNotificationsPage() {
             <View
               key={item.id}
               className={`notification-card ${item.is_read ? '' : 'unread'}`}
-              onClick={() => handleOpenRecord(item)}
+              onClick={() => handleOpenNotification(item)}
             >
               <View className='notification-avatar'>
                 {item.actor.avatar ? (

@@ -4,8 +4,20 @@
 
 ---
 
+## 2026-03-30
+
+- ⚡ perf: 精准模式收敛为“单食物 / 可拆分混合餐 / 复杂混合餐”简化判定，只保留主体数量、遮挡程度、参照物等核心信号，减少旧版严格模式的过细规则负担 `backend/worker.py`
+- 🎨 style: 分析页、结果页、历史页与档案页同步改写精准模式文案，统一成“单食物最稳、2-3 个主体可分项估、菜太多就拆拍”的用户心智 `src/pages/analyze/index.tsx` `src/pages/result/index.tsx` `src/pages/analyze-loading/index.tsx` `src/pages/analyze-history/index.tsx` `src/pages/health-profile/index.tsx` `src/pages/health-profile-edit/index.tsx` `src/pages/health-profile-view/index.tsx` `src/pages/record/index.tsx`
+- 📝 docs: 补充精准模式验证样本建议，固定单食物、可拆分混合餐、复杂混合餐三组评估口径 `backend/README.md`
+
 ## 2026-03-29
 
+- 🐛 fix: 食物分析提交接口新增主进程日志 `MODERATION_SKIPPED_CONFIRMED`，即使 worker 子进程日志不稳定也能在终端确认“该任务按无审核链路提交” `backend/main.py`
+- 🐛 fix: 为已去审核的食物分析链路补充 `MODERATION_SKIPPED` 终端标记，便于从后端日志确认请求未再经过审核步骤 `backend/worker.py` `backend/main.py`
+- ⚡ perf: 食物营养分析改为直接进入主模型识别，移除图片/文字分析的独立审核与同步分析中的违规判定字段，优先降低耗时和调用成本 `backend/worker.py` `backend/main.py`
+- 🐛 fix: 首页三大营养素比例改为按真实超额值显示，超过目标后不再被 `100%` 截断，同时保留圆环和进度条的视觉上限保护 `src/pages/index/index.tsx`
+- 🎨 style: 移除分析中页面无法反映真实状态的三步假进度，只保留加载动效、模式说明和健康小知识，避免误导用户 `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss`
+- ⚡ perf: 严格拆分标准模式与精准模式的食物分析 prompt，标准模式恢复轻量返回结构并停止附带精准判定字段，降低异步识别成本 `backend/worker.py`
 - ✨ feat: 社区评论初版补齐审核状态闭环、单层回复、互动消息入口与未读逻辑，并新增评论权限校验和真实评论数返回 `src/pages/community/index.tsx` `src/pages/interaction-notifications/index.tsx` `src/utils/api.ts` `backend/main.py` `backend/database.py` `backend/worker.py`
 - 🐛 fix: 修复评论相关初始化 SQL 对老库不兼容的问题，`feed_comments` 和 `comment_tasks` 改为先建表再 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` 补列，避免旧表缺字段时建索引直接报错 `backend/database/feed_likes_comments.sql` `backend/database/comment_tasks.sql`
 

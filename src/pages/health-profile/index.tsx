@@ -55,7 +55,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式（推荐）', desc: '要求分开拍、必要时重拍，准确性更高，适合减脂/增肌执行期。' },
+  { value: 'strict', title: '精准模式（推荐）', desc: '单食物或 2-3 个清晰主体时更准，复杂整餐会提醒拆拍。' },
   { value: 'standard', title: '标准模式', desc: '记录更快，但估算波动更大，适合先建立习惯。' }
 ]
 

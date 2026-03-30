@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
@@ -7,6 +7,17 @@ import secrets
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import os
+if os.name == "nt":
+    # 这台 Windows 环境下 _wmi.exec_query 可能卡死，进而导致 import httpx 阻塞。
+    # 强制让 platform 走非 WMI 的回退路径，避免后端启动卡住。
+    import platform as _platform
+
+    if hasattr(_platform, "_wmi_query"):
+        def _disabled_wmi_query(*_args, **_kwargs):
+            raise OSError("WMI query disabled for backend startup")
+
+        _platform._wmi_query = _disabled_wmi_query
+
 import httpx
 import json
 import re
@@ -47,6 +58,7 @@ from database import (
     insert_critical_samples,
     upload_health_report_image,
     upload_food_analyze_image,
+    upload_food_analyze_image_bytes,
     upload_user_avatar,
     search_users,
     is_friend,
@@ -101,7 +113,6 @@ from database import (
     # 评论任务
     create_comment_task_sync,
     list_comment_tasks_by_user_sync,
-    delete_image_from_storage,
     insert_user_mode_switch_log_sync,
     list_active_membership_plans,
     get_membership_plan_by_code,
@@ -117,7 +128,7 @@ from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
 # 从 .env 文件加载环境变量
 BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(BACKEND_ENV_PATH, override=True)
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "google/gemini-2.5-flash")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
@@ -157,14 +168,13 @@ MEAL_DISPLAY_ORDER = (
     "dinner",
     "evening_snack",
 )
-MEAL_TARGETS = {
-    "breakfast": 450,
-    "morning_snack": 150,
-    "lunch": 700,
-    "afternoon_snack": 150,
-    "dinner": 600,
-    "evening_snack": 150,
+MEAL_PLAN_WEIGHTS = {
+    "breakfast": 3,
+    "lunch": 4,
+    "dinner": 3,
 }
+SNACK_MEAL_TARGET_REFERENCE = 150.0
+SNACK_TARGET_TAG = "加餐参考，不计入总目标"
 MEAL_NAMES = {
     "breakfast": "早餐",
     "morning_snack": "早加餐",
@@ -176,6 +186,27 @@ MEAL_NAMES = {
     "snack": "午加餐",
 }
 VALID_MEAL_TYPES = set(MEAL_DISPLAY_ORDER) | {"snack"}
+
+
+def _build_dashboard_meal_targets(calorie_target: float) -> Dict[str, float]:
+    """三餐按总目标动态分配；加餐仅给统一参考值，不计入总目标。"""
+    total_weight = sum(MEAL_PLAN_WEIGHTS.values())
+    targets: Dict[str, float] = {meal_type: 0.0 for meal_type in MEAL_DISPLAY_ORDER}
+
+    if calorie_target > 0 and total_weight > 0:
+        main_meals = list(MEAL_PLAN_WEIGHTS.keys())
+        remaining = round(float(calorie_target), 1)
+        for meal_type in main_meals[:-1]:
+            weight = MEAL_PLAN_WEIGHTS[meal_type]
+            portion = round(float(calorie_target) * weight / total_weight, 1)
+            targets[meal_type] = portion
+            remaining = round(remaining - portion, 1)
+        targets[main_meals[-1]] = max(0.0, round(remaining, 1))
+
+    for snack_meal_type in ("morning_snack", "afternoon_snack", "evening_snack"):
+        targets[snack_meal_type] = SNACK_MEAL_TARGET_REFERENCE
+
+    return targets
 
 
 def _normalize_execution_mode(value: Optional[str], default: str = DEFAULT_EXECUTION_MODE) -> str:
@@ -194,6 +225,15 @@ def _parse_execution_mode_or_raise(value: Optional[str]) -> Optional[str]:
     if mode not in VALID_EXECUTION_MODES:
         raise HTTPException(status_code=400, detail="execution_mode 必须为 standard 或 strict")
     return mode
+
+
+def _is_food_debug_queue_enabled() -> bool:
+    return str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_food_task_type(base_task_type: str) -> str:
+    """调试模式下使用专用任务队列，避免被其他环境 Worker 抢占。"""
+    return f"{base_task_type}_debug" if _is_food_debug_queue_enabled() else base_task_type
 
 
 def _build_execution_mode_hint(execution_mode: str) -> str:
@@ -597,13 +637,42 @@ def _build_gemini_prompt(
     remain_hint: str = "",
     meal_hint: str = "",
     profile_block: str = "",
+    compact_tags: str = "",
     mode_hint: str = "",
+    execution_mode: str = "standard",
 ) -> str:
-    """构建 Gemini 分析的提示词"""
+    """构建 Gemini 分析的提示词（标准模式精简版，精准模式保留完整字段）。"""
+    additional_line = (
+        f'用户补充背景信息: "{additional_context}"。请根据此信息调整对隐形成分或烹饪方式的判断。'
+        if additional_context else ""
+    )
+    if execution_mode != "strict":
+        # ── 标准模式：精简 prompt，减少输出 token ──────────────────────────────
+        return f"""
+识别图片中的食物，估算重量和营养，仅返回 JSON。
+{compact_tags}{additional_line}
+估重时请优先看：占盘面积、厚度/高度、堆叠体积、容器大小、透视关系。
+若画面里有筷子、勺子、手掌、包装、餐盒、碗盘等参照物，请利用参照物。
+结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
+输出要求：
+- 简体中文
+- description <= 12字
+- insight <= 18字
+- context_advice <= 18字，无需则空字符串
+- 只返回 JSON
+
+JSON:
+{{
+  "items":[{{"name":"","estimatedWeightGrams":0,"nutrients":{{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}}}],
+  "description":"",
+  "insight":"",
+  "context_advice":""
+}}
+""".strip()
+
+    # ── 精准模式：保留完整字段 ─────────────────────────────────────────────────
     return f"""
 请作为专业的营养师分析这张图片。
-第一步：判断这张图片中是否包含任何可以食用的食物或饮品。
-如果图片【完全与食物无关】（例如纯粹的风景、人物自拍、截图、动物、证件照等）或【包含色情、血腥暴力、政治敏感、违法犯罪内容】，必须立刻判定为违规。
 
 1. 识别图中所有不同的食物单品。
 2. 估算每种食物的重量（克）和详细营养成分。
@@ -612,11 +681,9 @@ def _build_gemini_prompt(
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（如维生素C促铁吸收、油脂助脂溶性维生素等，一两句话）。
 7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
-8. is_violation: 布尔值。必须进行内容安全和相关性检查。根据上面的第一步规则判定，如果是与食物无关的废图或违规图片，必须返回 true。（注意：只要图片中哪怕包含一丁点可食用的食物或饮品，就不算违规）。
-9. violation_reason: 若 is_violation 为 true，说明简短的中文原因（如"未检测到食物"或"涉及不良内容"），否则为空字符串。
-10. 请遵守以下执行模式约束：{mode_hint}
+8. 请遵守以下执行模式约束：{mode_hint}
 
-{('用户补充背景信息: "' + additional_context + '"。请根据此信息调整对隐形成分或烹饪方式的判断。') if additional_context else ''}
+{additional_line}
 
 重要：请务必使用**简体中文**返回所有文本内容。
 请严格按照以下 JSON 格式返回，不要包含任何其他文本：
@@ -640,11 +707,10 @@ def _build_gemini_prompt(
   "insight": "健康建议（简体中文）",
   "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
   "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
-  "context_advice": "情境建议（简体中文，若无则空字符串）",
-  "is_violation": false,
-  "violation_reason": ""
+  "context_advice": "情境建议（简体中文，若无则空字符串）"
 }}
 """.strip()
+
 
 
 async def _analyze_with_gemini(
@@ -750,7 +816,7 @@ async def _analyze_text_with_gemini(prompt: str, model_name: str = GEMINI_MODEL_
             raise Exception("Gemini 返回了空响应")
         json_str = re.sub(r"```json", "", content)
         json_str = re.sub(r"```", "", json_str).strip()
-        return json.loads(json_str)
+        return _normalize_analysis_response_payload(json.loads(json_str))
 
 
 async def _analyze_with_qwen(
@@ -802,32 +868,61 @@ async def _analyze_with_qwen(
         
         json_str = re.sub(r"```json", "", content)
         json_str = re.sub(r"```", "", json_str).strip()
-        
-        return json.loads(json_str)
+
+        return _normalize_analysis_response_payload(json.loads(json_str))
+
+
+def _normalize_analysis_response_payload(parsed: Any) -> Dict[str, Any]:
+    """将模型返回归一化为对象结构，避免偶发数组响应导致后续 .get 崩溃。"""
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        dict_items = [
+            item for item in parsed
+            if isinstance(item, dict) and any(
+                key in item for key in ("name", "estimatedWeightGrams", "nutrients")
+            )
+        ]
+        if dict_items:
+            return {"items": dict_items}
+    raise ValueError("识别结果格式异常，请重试")
+
+
+def _parse_food_item_responses(parsed: Dict[str, Any]) -> List[FoodItemResponse]:
+    valid_items: List[FoodItemResponse] = []
+    raw_items = parsed.get("items")
+    if not isinstance(raw_items, list):
+        return valid_items
+
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        raw_nutrients = item.get("nutrients")
+        nutrients_dict = raw_nutrients if isinstance(raw_nutrients, dict) else {}
+        nutrients = Nutrients(
+            calories=float(nutrients_dict.get("calories", 0) or 0),
+            protein=float(nutrients_dict.get("protein", 0) or 0),
+            carbs=float(nutrients_dict.get("carbs", 0) or 0),
+            fat=float(nutrients_dict.get("fat", 0) or 0),
+            fiber=float(nutrients_dict.get("fiber", 0) or 0),
+            sugar=float(nutrients_dict.get("sugar", 0) or 0),
+        )
+        weight = float(item.get("estimatedWeightGrams", 0) or 0)
+        valid_items.append(
+            FoodItemResponse(
+                name=str(item.get("name", "未知食物")),
+                estimatedWeightGrams=weight,
+                originalWeightGrams=weight,
+                nutrients=nutrients,
+            )
+        )
+    return valid_items
 
 
 def _parse_analyze_result(parsed: Dict[str, Any]) -> tuple:
     """解析分析结果，返回 (items, description, insight, pfc, absorption, context)"""
-    valid_items = []
-    if isinstance(parsed.get("items"), list):
-        for item in parsed["items"]:
-            nutrients = Nutrients(
-                calories=float(item.get("nutrients", {}).get("calories", 0) or 0),
-                protein=float(item.get("nutrients", {}).get("protein", 0) or 0),
-                carbs=float(item.get("nutrients", {}).get("carbs", 0) or 0),
-                fat=float(item.get("nutrients", {}).get("fat", 0) or 0),
-                fiber=float(item.get("nutrients", {}).get("fiber", 0) or 0),
-                sugar=float(item.get("nutrients", {}).get("sugar", 0) or 0),
-            )
-            weight = float(item.get("estimatedWeightGrams", 0) or 0)
-            valid_items.append(
-                FoodItemResponse(
-                    name=str(item.get("name", "未知食物")),
-                    estimatedWeightGrams=weight,
-                    originalWeightGrams=weight,
-                    nutrients=nutrients,
-                )
-            )
+    parsed = _normalize_analysis_response_payload(parsed)
+    valid_items = _parse_food_item_responses(parsed)
     
     def _opt_str(v):
         if v is None or v == "":
@@ -843,6 +938,16 @@ def _parse_analyze_result(parsed: Dict[str, Any]) -> tuple:
         _opt_str(parsed.get("absorption_notes")),
         _opt_str(parsed.get("context_advice")),
     )
+
+
+def _strip_standard_mode_extras(
+    execution_mode: str,
+    pfc_ratio_comment: Optional[str],
+    absorption_notes: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    if execution_mode == "strict":
+        return pfc_ratio_comment, absorption_notes
+    return None, None
 
 
 class LoginRequest(BaseModel):
@@ -986,10 +1091,48 @@ def _format_health_profile_for_analysis(user: Dict[str, Any]) -> str:
     return "用户健康档案（供营养建议参考）：\n" + "\n".join(lines)
 
 
+def _format_health_risk_summary_for_analysis(user: Dict[str, Any]) -> str:
+    """标准模式只保留影响建议的最小风险摘要，避免长档案拉高 token。"""
+    hc = user.get("health_condition") or {}
+    if isinstance(hc, str):
+        try:
+            hc = json.loads(hc) if hc else {}
+        except Exception:
+            hc = {}
+
+    tags: List[str] = []
+    medical = hc.get("medical_history") or []
+    if isinstance(medical, list):
+        tags.extend(str(x).strip() for x in medical if str(x).strip())
+    elif medical:
+        tags.append(str(medical).strip())
+
+    allergies = hc.get("allergies") or []
+    if isinstance(allergies, list):
+        tags.extend(f"忌口{str(x).strip()}" for x in allergies if str(x).strip())
+    elif allergies:
+        tags.append(f"忌口{str(allergies).strip()}")
+
+    diet = hc.get("diet_preference") or []
+    if isinstance(diet, list):
+        tags.extend(str(x).strip() for x in diet if str(x).strip())
+    elif diet:
+        tags.append(str(diet).strip())
+
+    uniq: List[str] = []
+    seen = set()
+    for tag in tags:
+        if tag and tag not in seen:
+            seen.add(tag)
+            uniq.append(tag)
+    if not uniq:
+        return ""
+    return "健康摘要:" + "、".join(uniq[:4])
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_food(
     request: AnalyzeRequest,
-    background_tasks: BackgroundTasks,
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
@@ -1024,16 +1167,32 @@ async def analyze_food(
             meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
         requested_mode = _parse_execution_mode_or_raise(request.execution_mode) if request.execution_mode is not None else None
+        execution_mode = requested_mode
         profile_block = ""
+        compact_tags_list: List[str] = []
+        if request.meal_type:
+            compact_tags_list.append(f"餐次:{meal_name}")
+        if state_parts:
+            compact_tags_list.append("状态:" + "/".join(state_parts))
+        if request.remaining_calories is not None:
+            compact_tags_list.append(f"剩余:{float(request.remaining_calories):g}kcal")
         user = None
         if user_info:
             user = await get_user_by_id(user_info["user_id"])
+            execution_mode = requested_mode or _normalize_execution_mode((user or {}).get("execution_mode"))
             if user:
-                profile_block = _format_health_profile_for_analysis(user)
-                if profile_block:
-                    profile_block = "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n" + profile_block
-        execution_mode = requested_mode or _normalize_execution_mode((user or {}).get("execution_mode"))
+                if execution_mode == "strict":
+                    profile_block = _format_health_profile_for_analysis(user)
+                    if profile_block:
+                        profile_block = "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n" + profile_block
+                else:
+                    profile_summary = _format_health_risk_summary_for_analysis(user)
+                    if profile_summary:
+                        compact_tags_list.append(profile_summary)
+        if execution_mode is None:
+            execution_mode = _normalize_execution_mode(None)
         mode_hint = _build_execution_mode_hint(execution_mode)
+        compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
 
         prompt = _build_gemini_prompt(
             additional_context=request.additionalContext or "",
@@ -1042,7 +1201,9 @@ async def analyze_food(
             remain_hint=remain_hint,
             meal_hint=meal_hint,
             profile_block=profile_block or "",
+            compact_tags=compact_tags,
             mode_hint=mode_hint,
+            execution_mode=execution_mode,
         )
 
         # 构建图片 content parts
@@ -1092,37 +1253,9 @@ async def analyze_food(
 
             json_str = re.sub(r"```json", "", content_str)
             json_str = re.sub(r"```", "", json_str).strip()
-            parsed = json.loads(json_str)
+            parsed = _normalize_analysis_response_payload(json.loads(json_str))
 
-        is_violation = parsed.get("is_violation", False)
-        if is_violation:
-            reason = parsed.get("violation_reason", "图片内容违规")
-            if image_urls_for_api:
-                for url in image_urls_for_api:
-                    if not url.startswith("data:"):
-                        background_tasks.add_task(delete_image_from_storage, url)
-            raise HTTPException(status_code=400, detail=f"图片违规: {reason}")
-
-        valid_items = []
-        if isinstance(parsed.get("items"), list):
-            for item in parsed["items"]:
-                nutrients = Nutrients(
-                    calories=float(item.get("nutrients", {}).get("calories", 0) or 0),
-                    protein=float(item.get("nutrients", {}).get("protein", 0) or 0),
-                    carbs=float(item.get("nutrients", {}).get("carbs", 0) or 0),
-                    fat=float(item.get("nutrients", {}).get("fat", 0) or 0),
-                    fiber=float(item.get("nutrients", {}).get("fiber", 0) or 0),
-                    sugar=float(item.get("nutrients", {}).get("sugar", 0) or 0),
-                )
-                weight = float(item.get("estimatedWeightGrams", 0) or 0)
-                valid_items.append(
-                    FoodItemResponse(
-                        name=str(item.get("name", "未知食物")),
-                        estimatedWeightGrams=weight,
-                        originalWeightGrams=weight,
-                        nutrients=nutrients,
-                    )
-                )
+        valid_items = _parse_food_item_responses(parsed)
 
         def _opt_str(v):
             if v is None or v == "":
@@ -1130,12 +1263,18 @@ async def analyze_food(
             s = str(v).strip()
             return s if s else None
 
+        pfc_ratio_comment, absorption_notes = _strip_standard_mode_extras(
+            execution_mode,
+            _opt_str(parsed.get("pfc_ratio_comment")),
+            _opt_str(parsed.get("absorption_notes")),
+        )
+
         return AnalyzeResponse(
             description=str(parsed.get("description", "无法获取描述")),
             insight=str(parsed.get("insight", "保持健康饮食！")),
             items=valid_items,
-            pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
-            absorption_notes=_opt_str(parsed.get("absorption_notes")),
+            pfc_ratio_comment=pfc_ratio_comment,
+            absorption_notes=absorption_notes,
             context_advice=_opt_str(parsed.get("context_advice")),
             recognitionOutcome=_opt_str(parsed.get("recognitionOutcome")),
             rejectionReason=_opt_str(parsed.get("rejectionReason")),
@@ -1159,6 +1298,18 @@ async def analyze_food(
 class UploadAnalyzeImageRequest(BaseModel):
     """食物分析前上传图片，返回 Supabase 公网 URL"""
     base64Image: str = Field(..., description="Base64 编码的图片数据")
+
+
+def _guess_upload_image_suffix(filename: Optional[str], content_type: Optional[str]) -> str:
+    ext = os.path.splitext((filename or "").strip())[1].lower()
+    if ext in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"}:
+        return ext
+
+    guessed = mimetypes.guess_extension((content_type or "").strip()) or ""
+    guessed = guessed.lower()
+    if guessed in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"}:
+        return guessed
+    return ".jpg"
 
 
 @app.post("/api/upload-analyze-image")
@@ -1195,6 +1346,54 @@ async def upload_analyze_image(body: UploadAnalyzeImageRequest):
             )
         print(f"[upload_analyze_image] 错误: {error_msg}")
         raise HTTPException(status_code=500, detail=f"上传图片失败: {error_msg}")
+
+
+@app.post("/api/upload-analyze-image-file")
+async def upload_analyze_image_file(file: UploadFile = File(...)):
+    """
+    食物分析前上传单张图片文件，返回 Supabase 公网 URL。
+    相比 base64 JSON 上传更省请求体，优先给小程序端使用。
+    """
+    if file is None:
+        raise HTTPException(status_code=400, detail="图片文件不能为空")
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="仅支持图片文件上传")
+
+    try:
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="图片文件为空")
+
+        image_url = upload_food_analyze_image_bytes(
+            file_bytes=file_bytes,
+            extension=_guess_upload_image_suffix(file.filename, file.content_type),
+            content_type=file.content_type or "image/jpeg",
+        )
+        return {"imageUrl": image_url}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        print(f"[upload_analyze_image_file] 参数错误: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        error_msg = str(e) or "网络连接失败"
+        print(f"[upload_analyze_image_file] 网络错误: {error_msg}")
+        raise HTTPException(
+            status_code=500,
+            detail="上传图片时网络连接失败，请检查网络后重试"
+        )
+    except Exception as e:
+        error_msg = str(e) or f"未知错误: {type(e).__name__}"
+        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower():
+            print(f"[upload_analyze_image_file] 网络错误: {error_msg}")
+            raise HTTPException(
+                status_code=500,
+                detail="上传图片时网络连接失败，请检查网络后重试"
+            )
+        print(f"[upload_analyze_image_file] 错误: {error_msg}")
+        raise HTTPException(status_code=500, detail=f"上传图片失败: {error_msg}")
+    finally:
+        await file.close()
 
 
 # ---------- 异步分析任务（提交后由 Worker 子进程处理） ----------
@@ -1250,10 +1449,14 @@ async def analyze_submit(
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
-            task_type="food",
+            task_type=_get_food_task_type("food"),
             image_url=body.image_url.strip() if body.image_url else None,
             image_urls=body.image_urls,
             payload=payload,
+        )
+        print(
+            f"[food_analysis] MODERATION_SKIPPED_CONFIRMED task_id={task['id']} submit_type=image",
+            flush=True,
         )
         return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
     except Exception as e:
@@ -1385,18 +1588,34 @@ async def analyze_food_compare(
     
     # 若已登录，拉取健康档案
     profile_block = ""
+    compact_tags_list: List[str] = []
+    if request.meal_type:
+        compact_tags_list.append(f"餐次:{meal_name}")
+    if state_parts:
+        compact_tags_list.append("状态:" + "/".join(state_parts))
+    if request.remaining_calories is not None:
+        compact_tags_list.append(f"剩余:{float(request.remaining_calories):g}kcal")
     user = None
+    execution_mode = requested_mode
     if user_info:
         user = await get_user_by_id(user_info["user_id"])
+        execution_mode = requested_mode or _normalize_execution_mode((user or {}).get("execution_mode"))
         if user:
-            profile_block = _format_health_profile_for_analysis(user)
-            if profile_block:
-                profile_block = (
-                    "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
-                    + profile_block
-                )
-    execution_mode = requested_mode or _normalize_execution_mode((user or {}).get("execution_mode"))
+            if execution_mode == "strict":
+                profile_block = _format_health_profile_for_analysis(user)
+                if profile_block:
+                    profile_block = (
+                        "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n"
+                        + profile_block
+                    )
+            else:
+                profile_summary = _format_health_risk_summary_for_analysis(user)
+                if profile_summary:
+                    compact_tags_list.append(profile_summary)
+    if execution_mode is None:
+        execution_mode = _normalize_execution_mode(None)
     mode_hint = _build_execution_mode_hint(execution_mode)
+    compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
     
     # 构建通用提示词
     prompt = _build_gemini_prompt(
@@ -1406,7 +1625,9 @@ async def analyze_food_compare(
         remain_hint=remain_hint,
         meal_hint=meal_hint,
         profile_block=profile_block,
+        compact_tags=compact_tags,
         mode_hint=mode_hint,
+        execution_mode=execution_mode,
     )
     
     # 准备图片 URL
@@ -1436,6 +1657,7 @@ async def analyze_food_compare(
             parsed = await _analyze_with_qwen(request, prompt, image_url_for_api, dashscope_api_key, base_url)
             items, desc, insight, pfc, absorption, context = _parse_analyze_result(parsed)
             
+            pfc, absorption = _strip_standard_mode_extras(execution_mode, pfc, absorption)
             qwen_result = ModelAnalyzeResult(
                 model_name="qwen-vl-max",
                 success=True,
@@ -1540,7 +1762,8 @@ async def analyze_food_text(
             if user:
                 profile_block = _format_health_profile_for_analysis(user)
                 if profile_block:
-                    profile_block = " 若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议。\n\n" + profile_block
+                    profile_fields = "insight、absorption_notes、context_advice" if execution_mode == "strict" else "insight、context_advice"
+                    profile_block = f" 若以下存在「用户健康档案」，请结合档案在 {profile_fields} 中给出更贴合该用户体质与健康状况的建议。\n\n" + profile_block
 
         prompt = f"""
 请作为专业营养师，根据用户对食物的**文字描述**，分析营养成分。
@@ -1558,7 +1781,7 @@ async def analyze_food_text(
 
 重要：请务必使用**简体中文**返回所有文本。请**严格按照**以下 JSON 格式返回，不要包含任何其他文字：
 
-{{"items": [{{"name": "食物名称（简体中文）", "estimatedWeightGrams": 重量数字, "nutrients": {{"calories", "protein", "carbs", "fat", "fiber", "sugar"}}}}], "description": "餐食描述", "insight": "健康建议", "pfc_ratio_comment": "PFC 比例评价", "absorption_notes": "吸收率说明", "context_advice": "情境建议"}}
+{{"items": [{{"name": "食物名称（简体中文）", "estimatedWeightGrams": 重量数字, "nutrients": {{"calories", "protein", "carbs", "fat", "fiber", "sugar"}}], "description": "餐食描述", "insight": "健康建议", "pfc_ratio_comment": "PFC 比例评价", "absorption_notes": "吸收率说明", "context_advice": "情境建议"}}
 """.strip()
 
         # 使用 DashScope 千问 qwen-plus 进行文本分析
@@ -1616,12 +1839,18 @@ async def analyze_food_text(
             s = str(v).strip()
             return s if s else None
 
+        pfc_ratio_comment, absorption_notes = _strip_standard_mode_extras(
+            execution_mode,
+            _opt_str(parsed.get("pfc_ratio_comment")),
+            _opt_str(parsed.get("absorption_notes")),
+        )
+
         return AnalyzeResponse(
             description=str(parsed.get("description", "无法获取描述")),
             insight=str(parsed.get("insight", "保持健康饮食！")),
             items=valid_items,
-            pfc_ratio_comment=_opt_str(parsed.get("pfc_ratio_comment")),
-            absorption_notes=_opt_str(parsed.get("absorption_notes")),
+            pfc_ratio_comment=pfc_ratio_comment,
+            absorption_notes=absorption_notes,
             context_advice=_opt_str(parsed.get("context_advice")),
             recognitionOutcome=_opt_str(parsed.get("recognitionOutcome")),
             rejectionReason=_opt_str(parsed.get("rejectionReason")),
@@ -1685,9 +1914,13 @@ async def analyze_text_submit(
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
-            task_type="food_text",
+            task_type=_get_food_task_type("food_text"),
             text_input=body.text.strip(),
             payload=payload,
+        )
+        print(
+            f"[food_analysis] MODERATION_SKIPPED_CONFIRMED task_id={task['id']} submit_type=text",
+            flush=True,
         )
         return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
     except Exception as e:
@@ -3361,15 +3594,16 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
             by_meal[mt] = []
         by_meal[mt].append(r)
 
+    meal_targets = _build_dashboard_meal_targets(calorie_target)
     meals_out = []
     for meal_type in MEAL_DISPLAY_ORDER:
         if meal_type not in by_meal:
             continue
         items = by_meal[meal_type]
         meal_cal = sum(float(x.get("total_calories") or 0) for x in items)
-        meal_target = MEAL_TARGETS.get(meal_type, 200)
+        meal_target = meal_targets.get(meal_type, 0.0)
         meal_progress = (meal_cal / meal_target * 100) if meal_target else 0
-        meal_progress = min(100.0, round(meal_progress, 1))
+        meal_progress = round(meal_progress, 1)
         # 取该餐次最早一条记录的时间作为展示时间
         times = [x.get("record_time") for x in items if x.get("record_time")]
         time_str = "00:00"
@@ -3382,7 +3616,7 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
             "calorie": round(meal_cal, 1),
             "target": meal_target,
             "progress": meal_progress,
-            "tags": [],
+            "tags": [SNACK_TARGET_TAG] if "snack" in meal_type else [],
         })
 
     return {"intakeData": intake_data, "meals": meals_out}
@@ -4216,6 +4450,9 @@ async def api_community_public_feed(
     limit: int = 20,
     include_comments: bool = True,
     comments_limit: int = 5,
+    meal_type: Optional[str] = None,
+    diet_goal: Optional[str] = None,
+    sort_by: str = "recommended",
 ):
     """
     公共 Feed：无需登录，返回 public_records=true 的用户的饮食记录。
@@ -4227,26 +4464,28 @@ async def api_community_public_feed(
             limit=limit,
             include_comments=include_comments,
             comments_limit=comments_limit,
+            meal_type=meal_type,
+            diet_goal=diet_goal,
+            sort_by=sort_by,
         )
-        record_ids = [item["record"]["id"] for item in items]
-        likes_map = await get_feed_likes_for_records(record_ids, None) if record_ids else {}
 
         out = []
         for item in items:
             rec = item["record"]
-            rid = rec["id"]
-            like_info = likes_map.get(rid, {"count": 0, "liked": False})
             feed_item: dict = {
                 "record": rec,
                 "author": item["author"],
-                "like_count": like_info["count"],
+                "like_count": item.get("like_count", 0),
                 "liked": False,
                 "is_mine": False,
+                "recommend_reason": item.get("recommend_reason"),
             }
             if include_comments:
                 comments = item.get("comments", [])
                 feed_item["comments"] = comments
                 feed_item["comment_count"] = item.get("comment_count", len(comments))
+            else:
+                feed_item["comment_count"] = item.get("comment_count", 0)
             out.append(feed_item)
 
         has_more = len(items) >= limit
@@ -4263,6 +4502,11 @@ async def api_community_feed(
     limit: int = 20,
     include_comments: bool = True,
     comments_limit: int = 5,
+    meal_type: Optional[str] = None,
+    diet_goal: Optional[str] = None,
+    sort_by: str = "recommended",
+    priority_author_ids: Optional[str] = None,
+    author_scope: str = "all",
     user_info: dict = Depends(get_current_user_info),
 ):
     """
@@ -4286,30 +4530,33 @@ async def api_community_feed(
             offset=offset, 
             limit=limit,
             include_comments=include_comments,
-            comments_limit=comments_limit
+            comments_limit=comments_limit,
+            meal_type=meal_type,
+            diet_goal=diet_goal,
+            sort_by=sort_by,
+            priority_author_ids=[x.strip() for x in (priority_author_ids or "").split(",") if x.strip()],
+            author_scope=author_scope,
         )
-        record_ids = [item["record"]["id"] for item in items]
-        likes_map = await get_feed_likes_for_records(record_ids, current_user_id) if record_ids else {}
         
         out = []
         for item in items:
             rec = item["record"]
-            rid = rec["id"]
-            like_info = likes_map.get(rid, {"count": 0, "liked": False})
-            is_mine = rec.get("user_id") == current_user_id
             
             feed_item = {
                 "record": rec,
                 "author": item["author"],
-                "like_count": like_info["count"],
-                "liked": like_info["liked"],
-                "is_mine": is_mine,
+                "like_count": item.get("like_count", 0),
+                "liked": item.get("liked", False),
+                "is_mine": item.get("is_mine", rec.get("user_id") == current_user_id),
+                "recommend_reason": item.get("recommend_reason"),
             }
             
             if include_comments:
                 comments = item.get("comments", [])
                 feed_item["comments"] = comments
                 feed_item["comment_count"] = item.get("comment_count", len(comments))
+            else:
+                feed_item["comment_count"] = item.get("comment_count", 0)
             
             out.append(feed_item)
         
@@ -5591,13 +5838,9 @@ async def _run_test_backend_single_model_analysis(
     }
 
     try:
-        from worker import run_content_moderation_sync, run_food_analysis_sync
+        from worker import run_food_analysis_sync
 
-        moderation = await asyncio.to_thread(run_content_moderation_sync, task)
-        if moderation and moderation.get("is_violation"):
-            reason = moderation.get("reason", "图片不符合食物分析要求")
-            raise HTTPException(status_code=400, detail=reason)
-
+        print("[food_analysis] MODERATION_SKIPPED task_id=sync-direct type=image", flush=True)
         result = await asyncio.to_thread(run_food_analysis_sync, task)
     except HTTPException:
         raise
@@ -5605,7 +5848,7 @@ async def _run_test_backend_single_model_analysis(
         raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
 
     provider = os.getenv("LLM_PROVIDER", "qwen").lower()
-    model_name = "gemini-3-flash-preview" if provider == "gemini" else "qwen-vl-max"
+    model_name = GEMINI_MODEL_NAME if provider == "gemini" else "qwen-vl-max"
     estimated_weight = round(sum(float((item or {}).get("estimatedWeightGrams") or 0) for item in (result.get("items") or [])), 1)
     deviation = None
     if reference_weight is not None and reference_weight >= 0:

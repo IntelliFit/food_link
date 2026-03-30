@@ -81,12 +81,11 @@ const getNextTipIndex = (current?: number) => {
 const POLL_INTERVAL = 2000
 // 健康小知识轮播间隔（ms）——从 3 秒放慢到 6 秒
 const TIP_ROTATE_INTERVAL = 6000
-const ANALYZE_PROGRESS_STEPS = ['校验图片质量', '识别食物与克重', '生成营养建议']
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }> = {
   strict: {
     title: '精准模式',
-    desc: '识别不确定时会优先提醒你重拍或分开拍，保证可执行准确度。'
+    desc: '会优先判断这餐能否分项精估；菜太多或遮挡重时会提醒你拆拍。'
   },
   standard: {
     title: '标准模式',
@@ -298,14 +297,6 @@ export default function AnalyzeLoadingPage() {
       <View className={`mode-pill ${executionMode}`}>
         <Text className="mode-pill-title">当前：{EXECUTION_MODE_META[executionMode].title}</Text>
         <Text className="mode-pill-desc">{EXECUTION_MODE_META[executionMode].desc}</Text>
-      </View>
-      <View className="progress-card">
-        {ANALYZE_PROGRESS_STEPS.map((step, index) => (
-          <View className="progress-row" key={step}>
-            <View className={`progress-node ${index === 0 ? 'active' : ''}`}>{index + 1}</View>
-            <Text className={`progress-text ${index === 0 ? 'active' : ''}`}>{step}</Text>
-          </View>
-        ))}
       </View>
       <View className="tip-card">
         <View className="tip-header">

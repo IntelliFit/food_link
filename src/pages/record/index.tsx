@@ -630,7 +630,7 @@ export default function RecordPage() {
                 autoHeight
               />
               <Text className='precision-text-hint'>
-                精准模式下，如果重量描述不够明确，系统会继续追问你，而不是直接不让记录。
+                精准模式下，如果一段描述里主体太多或重量不清，系统会提示你拆开写或补充克数。
               </Text>
             </View>
 

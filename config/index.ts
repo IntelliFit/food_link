@@ -6,6 +6,12 @@ import prodConfig from './prod'
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
+  const apiBaseUrl =
+    process.env.TARO_APP_API_BASE_URL ||
+    (process.env.NODE_ENV === 'development'
+      ? 'http://127.0.0.1:3010'
+      : 'https://healthymax.cn')
+
   const baseConfig: UserConfigExport<'vite'> = {
     projectName: 'food_link',
     date: '2026-1-23',
@@ -22,6 +28,7 @@ export default defineConfig<'vite'>(async (merge) => {
       "@tarojs/plugin-generator"
     ],
     defineConstants: {
+      __API_BASE_URL__: JSON.stringify(apiBaseUrl),
     },
     copy: {
       patterns: [

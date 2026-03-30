@@ -26,11 +26,14 @@ import {
   type FriendRequestItem,
   type FriendListItem,
   type CommunityFeedItem,
+  type CommunityFeedSortBy,
+  type CommunityAuthorScope,
   type FeedCommentItem,
   type CheckinLeaderboardItem,
-  type PublicFoodLibraryItem
+  type PublicFoodLibraryItem,
+  type MealType,
+  type DietGoal
 } from '../../utils/api'
-import { IconCamera } from '../../components/iconfont'
 import { Button as TaroifyButton, Divider } from '@taroify/core'
 import '@taroify/core/button/style'
 import '@taroify/core/divider/style'
@@ -46,6 +49,35 @@ const MEAL_NAMES: Record<string, string> = {
   evening_snack: '晚加餐',
   snack: '午加餐'
 }
+
+const DIET_GOAL_NAMES: Record<string, string> = {
+  fat_loss: '减脂',
+  muscle_gain: '增肌',
+  maintain: '维持',
+  none: '不限'
+}
+
+const FEED_SORT_OPTIONS: Array<{ value: CommunityFeedSortBy; label: string }> = [
+  { value: 'recommended', label: '推荐' },
+  { value: 'latest', label: '最新' },
+  { value: 'hot', label: '高赞' },
+  { value: 'balanced', label: '均衡' },
+]
+
+const FEED_MEAL_OPTIONS: Array<{ value: MealType | 'all'; label: string }> = [
+  { value: 'all', label: '全部餐次' },
+  { value: 'breakfast', label: '早餐' },
+  { value: 'lunch', label: '午餐' },
+  { value: 'dinner', label: '晚餐' },
+  { value: 'afternoon_snack', label: '加餐' },
+]
+
+const FEED_GOAL_OPTIONS: Array<{ value: DietGoal | 'all'; label: string }> = [
+  { value: 'all', label: '全部目标' },
+  { value: 'fat_loss', label: '减脂' },
+  { value: 'muscle_gain', label: '增肌' },
+  { value: 'maintain', label: '维持' },
+]
 
 function formatFeedTime(recordTime: string): string {
   if (!recordTime) return ''
@@ -77,13 +109,63 @@ const CACHE_KEYS = {
   FRIENDS: 'community_friends_cache',
   REQUESTS: 'community_requests_cache',
   FEED_TIMESTAMP: 'community_feed_timestamp',
-  FRIENDS_TIMESTAMP: 'community_friends_timestamp'
+  FRIENDS_TIMESTAMP: 'community_friends_timestamp',
+  FEED_FILTERS: 'community_feed_filters_v2',
+  PRIORITY_AUTHORS: 'community_priority_authors_v1'
 }
 
 // 缓存有效期（5分钟）
 const CACHE_DURATION = 5 * 60 * 1000
 const TEMP_COMMENT_MAX_AGE_MS = 5 * 60 * 1000
 const COMMENT_DEDUPE_WINDOW_MS = 10 * 60 * 1000
+const COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY = 'community_notification_target_v1'
+const COMMUNITY_NOTIFICATION_TARGET_MAX_AGE_MS = 10 * 60 * 1000
+
+type PendingCommunityNotificationTarget = {
+  recordId: string
+  commentId?: string | null
+  parentCommentId?: string | null
+  createdAt?: number
+}
+
+function clearPendingCommunityNotificationTarget() {
+  try {
+    Taro.removeStorageSync(COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY)
+  } catch (e) {
+    console.error('清除互动消息跳转目标失败:', e)
+  }
+}
+
+function readPendingCommunityNotificationTarget(): PendingCommunityNotificationTarget | null {
+  try {
+    const raw = Taro.getStorageSync(COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY)
+    if (!raw) return null
+
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    const recordId = typeof parsed?.recordId === 'string' ? parsed.recordId.trim() : ''
+    if (!recordId) {
+      clearPendingCommunityNotificationTarget()
+      return null
+    }
+
+    const createdAt = Number(parsed?.createdAt)
+    if (Number.isFinite(createdAt) && Date.now() - createdAt > COMMUNITY_NOTIFICATION_TARGET_MAX_AGE_MS) {
+      clearPendingCommunityNotificationTarget()
+      return null
+    }
+
+    return {
+      recordId,
+      commentId: typeof parsed?.commentId === 'string' ? parsed.commentId.trim() : '',
+      parentCommentId: typeof parsed?.parentCommentId === 'string' ? parsed.parentCommentId.trim() : '',
+      createdAt: Number.isFinite(createdAt) ? createdAt : undefined
+    }
+  } catch (e) {
+    console.error('读取互动消息跳转目标失败:', e)
+    clearPendingCommunityNotificationTarget()
+    return null
+  }
+}
 
 function getLocalUserDisplay(): { nickname: string; avatar: string } {
   try {
@@ -96,6 +178,60 @@ function getLocalUserDisplay(): { nickname: string; avatar: string } {
   } catch {
     return { nickname: '用户', avatar: '' }
   }
+}
+
+function readPriorityAuthorIds(): string[] {
+  try {
+    const raw = Taro.getStorageSync(CACHE_KEYS.PRIORITY_AUTHORS)
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((id) => String(id || '').trim()).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
+function savePriorityAuthorIds(ids: string[]) {
+  try {
+    Taro.setStorageSync(CACHE_KEYS.PRIORITY_AUTHORS, JSON.stringify(Array.from(new Set(ids.filter(Boolean)))))
+  } catch (e) {
+    console.error('保存特别关注失败:', e)
+  }
+}
+
+function buildFeedQueryParams(
+  sortBy: CommunityFeedSortBy,
+  mealType: MealType | 'all',
+  dietGoal: DietGoal | 'all',
+  authorScope: CommunityAuthorScope,
+  priorityAuthorIds: string[],
+) {
+  return {
+    sort_by: sortBy,
+    meal_type: mealType === 'all' ? undefined : mealType,
+    diet_goal: dietGoal === 'all' ? undefined : dietGoal,
+    author_scope: authorScope,
+    priority_author_ids: authorScope === 'priority' ? priorityAuthorIds : undefined,
+  }
+}
+
+function getLibraryRecommendParams(
+  sortBy: CommunityFeedSortBy,
+  dietGoal: DietGoal | 'all',
+) {
+  if (sortBy === 'balanced') {
+    return { sort_by: 'balanced' as const }
+  }
+  if (sortBy === 'hot') {
+    return { sort_by: 'hot' as const }
+  }
+  if (dietGoal === 'fat_loss') {
+    return { sort_by: 'recommended' as const, suitable_for_fat_loss: true }
+  }
+  if (dietGoal === 'muscle_gain') {
+    return { sort_by: 'high_protein' as const }
+  }
+  return { sort_by: 'recommended' as const }
 }
 
 export default function CommunityPage() {
@@ -124,6 +260,7 @@ export default function CommunityPage() {
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
+  const [feedScrollIntoView, setFeedScrollIntoView] = useState('')
 
   // 固定页面高度
   const [pageHeight, setPageHeight] = useState(0)
@@ -149,6 +286,14 @@ export default function CommunityPage() {
   /** 任意请求进行中（含静默），用于首次进入时骨架 */
   const [lbPreviewFetching, setLbPreviewFetching] = useState(false)
   const [libraryRecommendList, setLibraryRecommendList] = useState<PublicFoodLibraryItem[]>([])
+  const [feedSortBy, setFeedSortBy] = useState<CommunityFeedSortBy>('recommended')
+  const [feedMealType, setFeedMealType] = useState<MealType | 'all'>('all')
+  const [feedDietGoal, setFeedDietGoal] = useState<DietGoal | 'all'>('all')
+  const [feedAuthorScope, setFeedAuthorScope] = useState<CommunityAuthorScope>('all')
+  const [priorityAuthorIds, setPriorityAuthorIds] = useState<string[]>([])
+  const pendingNotificationNavigationRef = useRef(false)
+  const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const skipNextFilterRefreshRef = useRef(true)
 
   const loadCheckinPreview = useCallback(async (silent = true) => {
     if (!getAccessToken()) {
@@ -179,15 +324,16 @@ export default function CommunityPage() {
       return
     }
     try {
+      const params = getLibraryRecommendParams(feedSortBy, feedDietGoal)
       const res = await getPublicFoodLibraryList({
-        sort_by: 'hot',
+        ...params,
         limit: 4
       })
       setLibraryRecommendList(res.list || [])
     } catch {
       // 保留上次推荐，避免页面闪空
     }
-  }, [])
+  }, [feedDietGoal, feedSortBy])
 
   const loadInteractionNotificationsBadge = useCallback(async () => {
     if (!getAccessToken()) {
@@ -210,8 +356,23 @@ export default function CommunityPage() {
       const cachedFeed = Taro.getStorageSync(CACHE_KEYS.FEED)
       const cachedFriends = Taro.getStorageSync(CACHE_KEYS.FRIENDS)
       const cachedRequests = Taro.getStorageSync(CACHE_KEYS.REQUESTS)
+      const cachedFeedFilters = Taro.getStorageSync(CACHE_KEYS.FEED_FILTERS)
 
       let hasCache = false
+
+      if (cachedFeedFilters) {
+        try {
+          const parsed = typeof cachedFeedFilters === 'string' ? JSON.parse(cachedFeedFilters) : cachedFeedFilters
+          setFeedSortBy((parsed?.sortBy as CommunityFeedSortBy) || 'recommended')
+          setFeedMealType((parsed?.mealType as MealType | 'all') || 'all')
+          setFeedDietGoal((parsed?.dietGoal as DietGoal | 'all') || 'all')
+          setFeedAuthorScope((parsed?.authorScope as CommunityAuthorScope) || 'all')
+        } catch (e) {
+          console.error('解析 Feed 筛选缓存失败:', e)
+        }
+      }
+
+      setPriorityAuthorIds(readPriorityAuthorIds())
 
       if (cachedFeed) {
         try {
@@ -266,6 +427,12 @@ export default function CommunityPage() {
         Taro.setStorageSync(CACHE_KEYS.FEED, JSON.stringify(dataToCache))
         Taro.setStorageSync(CACHE_KEYS.FEED_TIMESTAMP, Date.now().toString())
       }
+      Taro.setStorageSync(CACHE_KEYS.FEED_FILTERS, JSON.stringify({
+        sortBy: feedSortBy,
+        mealType: feedMealType,
+        dietGoal: feedDietGoal,
+        authorScope: feedAuthorScope,
+      }))
       if (friendsData !== undefined) {
         Taro.setStorageSync(CACHE_KEYS.FRIENDS, JSON.stringify(friendsData))
         Taro.setStorageSync(CACHE_KEYS.FRIENDS_TIMESTAMP, Date.now().toString())
@@ -288,7 +455,7 @@ export default function CommunityPage() {
     } catch (e) {
       console.error('清除缓存失败:', e)
     }
-  }, [])
+  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy])
 
   const updateFeedItem = useCallback((recordId: string, updater: (item: CommunityFeedItem) => CommunityFeedItem) => {
     setFeedList((prev) => {
@@ -385,6 +552,13 @@ export default function CommunityPage() {
 
       setFriends(friendsList)
       setRequests(requestsList)
+      setPriorityAuthorIds((prev) => {
+        const allowed = prev.filter((id) => friendsList.some((friend) => friend.id === id))
+        if (allowed.length !== prev.length) {
+          savePriorityAuthorIds(allowed)
+        }
+        return allowed
+      })
 
       // 保存到缓存
       saveToCache(undefined, friendsList, requestsList)
@@ -415,10 +589,17 @@ export default function CommunityPage() {
 
     try {
       const token = getAccessToken()
+      const params = buildFeedQueryParams(
+        feedSortBy,
+        feedMealType,
+        feedDietGoal,
+        token ? feedAuthorScope : 'all',
+        priorityAuthorIds,
+      )
       // 已登录：好友 Feed；未登录：公共 Feed
       const res = token
-        ? await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5)
-        : await communityGetPublicFeed(0, PAGE_SIZE, true, 5)
+        ? await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5, params)
+        : await communityGetPublicFeed(0, PAGE_SIZE, true, 5, params)
       const baseList = res.list || []
       const list = token ? await mergeFeedTempComments(baseList, true) : baseList
 
@@ -437,16 +618,23 @@ export default function CommunityPage() {
       setRefreshing(false)
       setShowSkeleton(false)
     }
-  }, [mergeFeedTempComments, saveToCache])
+  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, mergeFeedTempComments, priorityAuthorIds, saveToCache])
 
   const loadMoreFeed = useCallback(async () => {
     if (!hasMore || loadingMore) return
     setLoadingMore(true)
     try {
       const token = getAccessToken()
+      const params = buildFeedQueryParams(
+        feedSortBy,
+        feedMealType,
+        feedDietGoal,
+        token ? feedAuthorScope : 'all',
+        priorityAuthorIds,
+      )
       const res = token
-        ? await communityGetFeed(undefined, offset, PAGE_SIZE, true, 5)
-        : await communityGetPublicFeed(offset, PAGE_SIZE, true, 5)
+        ? await communityGetFeed(undefined, offset, PAGE_SIZE, true, 5, params)
+        : await communityGetPublicFeed(offset, PAGE_SIZE, true, 5, params)
       const baseList = res.list || []
       const list = token ? await mergeFeedTempComments(baseList, false) : baseList
       setFeedList(prev => [...prev, ...list])
@@ -457,7 +645,7 @@ export default function CommunityPage() {
     } finally {
       setLoadingMore(false)
     }
-  }, [offset, hasMore, loadingMore, mergeFeedTempComments])
+  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, hasMore, loadingMore, mergeFeedTempComments, offset, priorityAuthorIds])
 
   // ScrollView 自带下拉刷新（页面级下拉被内部 ScrollView 接管，需用 refresher）
   const handleRefresherRefresh = useCallback(() => {
@@ -489,6 +677,12 @@ export default function CommunityPage() {
     } catch (e) {
       console.error('获取系统信息失败:', e)
     }
+  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy])
+
+  useEffect(() => () => {
+    if (feedScrollResetTimerRef.current) {
+      clearTimeout(feedScrollResetTimerRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -499,6 +693,45 @@ export default function CommunityPage() {
       menus: ['shareAppMessage', 'shareTimeline']
     })
   }, [])
+
+  useEffect(() => {
+    try {
+      Taro.setStorageSync(CACHE_KEYS.FEED_FILTERS, JSON.stringify({
+        sortBy: feedSortBy,
+        mealType: feedMealType,
+        dietGoal: feedDietGoal,
+        authorScope: feedAuthorScope,
+      }))
+    } catch (e) {
+      console.error('保存 Feed 筛选状态失败:', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (skipNextFilterRefreshRef.current) {
+      skipNextFilterRefreshRef.current = false
+      return
+    }
+    clearCache()
+    setFeedList([])
+    setOffset(0)
+    setHasMore(true)
+    lastFeedRefreshTime.current = 0
+    refreshFeed(false, true)
+    if (loggedIn) {
+      loadLibraryRecommend()
+    }
+  }, [
+    clearCache,
+    feedAuthorScope,
+    feedDietGoal,
+    feedMealType,
+    feedSortBy,
+    loadLibraryRecommend,
+    loggedIn,
+    priorityAuthorIds,
+    refreshFeed,
+  ])
 
   useShareAppMessage(() => ({
     title: '食探 - 和好友一起健康饮食',
@@ -513,6 +746,10 @@ export default function CommunityPage() {
   Taro.useDidShow(() => {
     const token = getAccessToken()
     setLoggedIn(!!token)
+    setPriorityAuthorIds((prev) => {
+      const next = readPriorityAuthorIds()
+      return prev.join('|') === next.join('|') ? prev : next
+    })
 
     if (token) {
       loadCheckinPreview(true)
@@ -533,6 +770,7 @@ export default function CommunityPage() {
 
     // 已有 Feed 时不再走下方冷启动，但仍需按需拉取好友（否则仅从缓存恢复 Feed 时会 early return，永远不请求 /api/friend/list）
     if (feedList.length > 0) {
+      setIsFirstLoad(false)
       if (token) {
         mergeFeedTempComments(feedList, true)
           .then((merged) => {
@@ -544,6 +782,7 @@ export default function CommunityPage() {
       if (needRefreshFriends) {
         loadFriendsAndRequests(true)
       }
+      handlePendingNotificationNavigation()
       return
     }
 
@@ -555,6 +794,7 @@ export default function CommunityPage() {
 
     if (needRefreshFeed || needRefreshFriends) {
       if (hasCache || !isFirstLoad) {
+        if (hasCache) setIsFirstLoad(false)
         if (needRefreshFeed) refreshFeed(true, false)
         if (needRefreshFriends) loadFriendsAndRequests(true)
       } else {
@@ -564,7 +804,23 @@ export default function CommunityPage() {
         setIsFirstLoad(false)
       }
     }
+
+    handlePendingNotificationNavigation()
   })
+
+  const togglePriorityAuthor = useCallback((authorId: string) => {
+    if (!authorId) return
+    const already = priorityAuthorIds.includes(authorId)
+    const next = already
+      ? priorityAuthorIds.filter((id) => id !== authorId)
+      : [...priorityAuthorIds, authorId]
+    setPriorityAuthorIds(next)
+    savePriorityAuthorIds(next)
+    Taro.showToast({
+      title: already ? '已取消特别关注' : '已设为特别关注',
+      icon: 'none',
+    })
+  }, [priorityAuthorIds])
 
   const handleSearchUser = async () => {
     const kw = searchKeyword.trim()
@@ -727,7 +983,9 @@ export default function CommunityPage() {
         </View>
         <View className='library-feed-body'>
           <View className='library-feed-top'>
-            <Text className='library-feed-eyebrow'>公共食物库推荐</Text>
+            <Text className='library-feed-eyebrow'>
+              {libItem.recommend_reason ? `公共食物库推荐 · ${libItem.recommend_reason}` : '公共食物库推荐'}
+            </Text>
             <Text className='library-feed-title' numberOfLines={1}>
               {libItem.food_name || libItem.description || '健康餐'}
             </Text>
@@ -803,6 +1061,129 @@ export default function CommunityPage() {
     setExpandedCommentRecordId(recordId)
     setReplyTargetComment(replyComment || null)
   }
+
+  const scrollToFeedCard = useCallback((recordId: string) => {
+    const nextTarget = `feed-card-${recordId}`
+    setFeedScrollIntoView(nextTarget)
+    if (feedScrollResetTimerRef.current) {
+      clearTimeout(feedScrollResetTimerRef.current)
+    }
+    feedScrollResetTimerRef.current = setTimeout(() => {
+      setFeedScrollIntoView((current) => current === nextTarget ? '' : current)
+    }, 1200)
+  }, [])
+
+  const ensureFeedReadyForNotification = useCallback(async (
+    recordId: string,
+    targetCommentId?: string | null
+  ): Promise<CommunityFeedItem | null> => {
+    if (!getAccessToken()) return null
+
+    let accumulated = [...feedList]
+    let nextHasMore = hasMore
+
+    const syncAccumulatedState = (nextList: CommunityFeedItem[], hasMoreValue: boolean) => {
+      setFeedList(nextList)
+      setOffset(nextList.length)
+      setHasMore(hasMoreValue)
+      saveToCache(nextList)
+    }
+
+    const fetchFeedPage = async (nextOffset: number) => {
+      const res = await communityGetFeed(undefined, nextOffset, PAGE_SIZE, true, 5)
+      const mergedPage = await mergeFeedTempComments(res.list || [], nextOffset === 0)
+      return {
+        list: mergedPage,
+        hasMore: res.has_more ?? mergedPage.length >= PAGE_SIZE
+      }
+    }
+
+    if (!accumulated.some((item) => item.record.id === recordId)) {
+      if (accumulated.length === 0) {
+        const firstPage = await fetchFeedPage(0)
+        accumulated = firstPage.list
+        nextHasMore = firstPage.hasMore
+      }
+
+      let nextOffset = accumulated.length
+      while (!accumulated.some((item) => item.record.id === recordId) && nextHasMore) {
+        const page = await fetchFeedPage(nextOffset)
+        if (!page.list.length) {
+          nextHasMore = false
+          break
+        }
+
+        const existingIds = new Set(accumulated.map((item) => item.record.id))
+        const dedupedPage = page.list.filter((item) => !existingIds.has(item.record.id))
+        accumulated = [...accumulated, ...dedupedPage]
+        nextHasMore = page.hasMore
+        nextOffset = accumulated.length
+      }
+
+      syncAccumulatedState(accumulated, nextHasMore)
+    }
+
+    let targetItem = accumulated.find((item) => item.record.id === recordId) || null
+    if (!targetItem) return null
+
+    const previewComments = targetItem.comments || []
+    const needLoadAllComments = Boolean(targetCommentId) || (targetItem.comment_count || 0) > previewComments.length
+    if (!needLoadAllComments) {
+      return targetItem
+    }
+
+    const res = await communityGetComments(recordId)
+    const comments = res.list || []
+    accumulated = await mergeFeedTempComments(
+      accumulated.map((item) => item.record.id === recordId ? {
+        ...item,
+        comments,
+        comment_count: Math.max(item.comment_count || 0, comments.length)
+      } : item),
+      true
+    )
+    syncAccumulatedState(accumulated, nextHasMore)
+    targetItem = accumulated.find((item) => item.record.id === recordId) || null
+    return targetItem
+  }, [PAGE_SIZE, feedList, hasMore, mergeFeedTempComments, saveToCache])
+
+  const handlePendingNotificationNavigation = useCallback(async () => {
+    if (pendingNotificationNavigationRef.current) return
+
+    const pendingTarget = readPendingCommunityNotificationTarget()
+    if (!pendingTarget?.recordId) return
+
+    clearPendingCommunityNotificationTarget()
+    pendingNotificationNavigationRef.current = true
+    try {
+      const targetItem = await ensureFeedReadyForNotification(
+        pendingTarget.recordId,
+        pendingTarget.commentId
+      )
+
+      if (!targetItem) {
+        Taro.showToast({ title: '未找到对应动态', icon: 'none' })
+        return
+      }
+
+      scrollToFeedCard(pendingTarget.recordId)
+      const replyTarget =
+        (pendingTarget.commentId
+          ? targetItem.comments?.find((comment) => comment.id === pendingTarget.commentId)
+          : null)
+        || (pendingTarget.parentCommentId
+          ? targetItem.comments?.find((comment) => comment.id === pendingTarget.parentCommentId)
+          : null)
+        || null
+
+      openCommentModal(pendingTarget.recordId, replyTarget)
+    } catch (e) {
+      console.error('处理互动消息跳转失败:', e)
+      Taro.showToast({ title: '打开评论区失败', icon: 'none' })
+    } finally {
+      pendingNotificationNavigationRef.current = false
+    }
+  }, [ensureFeedReadyForNotification, openCommentModal, scrollToFeedCard])
 
   const handleLoadAllComments = async (recordId: string) => {
     if (!getAccessToken()) {
@@ -925,6 +1306,7 @@ export default function CommunityPage() {
           id='community-main-scroll'
           className='community-scroll'
           scrollY
+          scrollIntoView={feedScrollIntoView || undefined}
           showScrollbar={false}
           refresherEnabled
           refresherTriggered={refreshing}
@@ -982,13 +1364,20 @@ export default function CommunityPage() {
                   >
                     <View className='friends-list-inner'>
                       {friends.map((f) => (
-                        <View key={f.id} className='friend-item'>
+                        <View
+                          key={f.id}
+                          className={`friend-item ${priorityAuthorIds.includes(f.id) ? 'is-priority' : ''}`}
+                          onClick={() => togglePriorityAuthor(f.id)}
+                        >
                           <View className='friend-avatar'>
                             {f.avatar ? (
                               <Image src={f.avatar} mode='aspectFill' className='friend-avatar-img' />
                             ) : (
                               <Text className='friend-avatar-placeholder'>👤</Text>
                             )}
+                            {priorityAuthorIds.includes(f.id) ? (
+                              <Text className='friend-priority-badge'>关</Text>
+                            ) : null}
                           </View>
                           <Text className='friend-name' numberOfLines={1}>{f.nickname || '用户'}</Text>
                         </View>
@@ -1098,6 +1487,56 @@ export default function CommunityPage() {
                   <Text className='feed-section-link' onClick={openFoodLibrary}>食物库</Text>
                 ) : null}
               </View>
+              <View className='feed-filter-panel'>
+                <ScrollView className='feed-filter-row' scrollX enhanced showScrollbar={false}>
+                  <View className='feed-filter-row-inner'>
+                    {FEED_SORT_OPTIONS.map((opt) => (
+                      <View
+                        key={opt.value}
+                        className={`feed-filter-chip ${feedSortBy === opt.value ? 'active' : ''}`}
+                        onClick={() => setFeedSortBy(opt.value)}
+                      >
+                        <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                      </View>
+                    ))}
+                    {loggedIn ? (
+                      <View
+                        className={`feed-filter-chip ${feedAuthorScope === 'priority' ? 'active' : ''}`}
+                        onClick={() => setFeedAuthorScope(feedAuthorScope === 'priority' ? 'all' : 'priority')}
+                      >
+                        <Text className='feed-filter-chip-text'>
+                          {feedAuthorScope === 'priority' ? '特别关注中' : '特别关注'}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </ScrollView>
+                <ScrollView className='feed-filter-row' scrollX enhanced showScrollbar={false}>
+                  <View className='feed-filter-row-inner'>
+                    {FEED_MEAL_OPTIONS.map((opt) => (
+                      <View
+                        key={opt.value}
+                        className={`feed-filter-chip ${feedMealType === opt.value ? 'active' : ''}`}
+                        onClick={() => setFeedMealType(opt.value)}
+                      >
+                        <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                      </View>
+                    ))}
+                    {FEED_GOAL_OPTIONS.map((opt) => (
+                      <View
+                        key={opt.value}
+                        className={`feed-filter-chip subtle ${feedDietGoal === opt.value ? 'active' : ''}`}
+                        onClick={() => setFeedDietGoal(opt.value)}
+                      >
+                        <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+                {loggedIn ? (
+                  <Text className='feed-filter-tip'>点上方好友头像可设为特别关注，推荐会优先展示他们。</Text>
+                ) : null}
+              </View>
               {showSkeleton ? (
                 <View className='skeleton-container'>
                   {[1, 2, 3].map(i => (
@@ -1130,7 +1569,11 @@ export default function CommunityPage() {
                 ) : (
                   <View className='feed-empty'>
                     <Text className='feed-empty-text'>
-                      {loggedIn ? '暂无好友动态，稍后再来看看吧' : '暂无动态'}
+                      {loggedIn
+                        ? (feedAuthorScope === 'priority'
+                          ? '你还没有特别关注的人，先点好友头像设置吧'
+                          : '暂无符合当前筛选条件的好友动态')
+                        : '暂无符合当前筛选条件的动态'}
                     </Text>
                   </View>
                 )
@@ -1158,6 +1601,16 @@ export default function CommunityPage() {
                             </Text>
                           </View>
                         </View>
+                        {(item.recommend_reason || item.record.diet_goal) ? (
+                          <View className='feed-tags'>
+                            {item.recommend_reason ? (
+                              <Text className='feed-tag highlight'>{item.recommend_reason}</Text>
+                            ) : null}
+                            {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
+                              <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
+                            ) : null}
+                          </View>
+                        ) : null}
                         {item.record.description && (
                           <Text className='feed-content'>{item.record.description}</Text>
                         )}
@@ -1404,17 +1857,6 @@ export default function CommunityPage() {
         </View>
       )}
 
-      {/* 去记录一餐（记录后好友可在圈子看到） */}
-      {loggedIn && (
-        <View
-          className='fab-button'
-          onClick={handlePhotoAnalyze}
-        >
-          <View className='fab-icon'>
-            <IconCamera size={48} color="#ffffff" />
-          </View>
-        </View>
-      )}
     </View>
   )
 }

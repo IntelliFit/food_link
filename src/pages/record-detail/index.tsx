@@ -52,6 +52,39 @@ const ACTIVITY_TIMING_NAMES: Record<string, string> = {
   none: '无'
 }
 
+type EditableNutrientField = 'calories' | 'protein' | 'carbs' | 'fat'
+
+interface EditableFoodItem {
+  name: string
+  weight: number
+  ratio: number
+  intake: number
+  nutrients: Nutrients
+}
+
+const EDITABLE_NUTRIENT_FIELDS: EditableNutrientField[] = ['calories', 'protein', 'carbs', 'fat']
+
+const EDITABLE_NUTRIENT_META: Record<EditableNutrientField, { label: string; unit: string }> = {
+  calories: { label: '热量', unit: 'kcal' },
+  protein: { label: '蛋白质', unit: 'g' },
+  carbs: { label: '碳水', unit: 'g' },
+  fat: { label: '脂肪', unit: 'g' }
+}
+
+const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
+
+const normalizeDisplayNumber = (value: number) => {
+  if (!Number.isFinite(value)) return '0'
+  const rounded = roundToSingleDecimal(value)
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+const getItemRatioFactor = (item: Pick<EditableFoodItem, 'ratio'>) => Math.max(0, item.ratio ?? 0) / 100
+
+const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrientField) => (
+  roundToSingleDecimal((item.nutrients?.[field] ?? 0) * getItemRatioFactor(item))
+)
+
 
 
 /** 格式化记录时间 */
@@ -82,13 +115,7 @@ export default function RecordDetailPage() {
   const [loading, setLoading] = React.useState(true)
   const [isOwner, setIsOwner] = React.useState(false)
   const [showEditModal, setShowEditModal] = React.useState(false)
-  const [editItems, setEditItems] = React.useState<Array<{
-    name: string
-    weight: number
-    ratio: number
-    intake: number
-    nutrients: Nutrients
-  }>>([])
+  const [editItems, setEditItems] = React.useState<EditableFoodItem[]>([])
   const [editSaving, setEditSaving] = React.useState(false)
   const [ownerNickname, setOwnerNickname] = React.useState('')
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
@@ -214,6 +241,84 @@ export default function RecordDetailPage() {
       return next
     })
   }, [])
+
+  const updateEditItemName = useCallback((index: number, nextName: string) => {
+    setEditItems(prev => {
+      const next = [...prev]
+      const item = next[index]
+      if (!item) return prev
+      next[index] = { ...item, name: nextName }
+      return next
+    })
+  }, [])
+
+  const handleEditItemName = useCallback((index: number) => {
+    const currentName = editItems[index]?.name || ''
+    // @ts-ignore
+    Taro.showModal({
+      title: '修改食物名称',
+      content: currentName,
+      // @ts-ignore
+      editable: true,
+      placeholderText: '请输入新的食物名称',
+      success: (res) => {
+        if (!res.confirm) return
+        const nextName = String((res as any).content ?? '').trim()
+        if (!nextName) {
+          Taro.showToast({ title: '名称不能为空', icon: 'none' })
+          return
+        }
+        updateEditItemName(index, nextName)
+      }
+    })
+  }, [editItems, updateEditItemName])
+
+  const updateDisplayedNutrient = useCallback((index: number, field: EditableNutrientField, nextDisplayValue: number) => {
+    setEditItems(prev => {
+      const next = [...prev]
+      const item = next[index]
+      if (!item) return prev
+      const ratioFactor = getItemRatioFactor(item)
+      const normalizedDisplayValue = Math.max(0, roundToSingleDecimal(nextDisplayValue))
+      const nextNutrientValue = ratioFactor > 0
+        ? roundToSingleDecimal(normalizedDisplayValue / ratioFactor)
+        : normalizedDisplayValue
+
+      next[index] = {
+        ...item,
+        nutrients: {
+          ...item.nutrients,
+          [field]: nextNutrientValue
+        }
+      }
+      return next
+    })
+  }, [])
+
+  const handleEditNutrient = useCallback((index: number, field: EditableNutrientField) => {
+    const item = editItems[index]
+    if (!item) return
+    const meta = EDITABLE_NUTRIENT_META[field]
+    const currentValue = getDisplayedNutrientValue(item, field)
+    // @ts-ignore
+    Taro.showModal({
+      title: `修改${meta.label}${meta.unit === 'g' ? '(g)' : `(${meta.unit})`}`,
+      content: normalizeDisplayNumber(currentValue),
+      // @ts-ignore
+      editable: true,
+      placeholderText: `请输入${meta.label}`,
+      success: (res) => {
+        if (!res.confirm) return
+        const nextText = String((res as any).content ?? '').trim()
+        const parsed = Number(nextText)
+        if (!nextText || !Number.isFinite(parsed) || parsed < 0) {
+          Taro.showToast({ title: '请输入不小于0的数字', icon: 'none' })
+          return
+        }
+        updateDisplayedNutrient(index, field, parsed)
+      }
+    })
+  }, [editItems, updateDisplayedNutrient])
 
   /** 摄入克数加减按钮（允许超过原始重量） */
   const adjustIntake = useCallback((index: number, delta: number) => {
@@ -741,15 +846,15 @@ export default function RecordDetailPage() {
             </View>
             <ScrollView scrollY enhanced showScrollbar={false} className="edit-modal-body">
               {editItems.map((item, idx) => {
-                const r = (item.ratio ?? 100) / 100
-                const cal = Math.round(item.nutrients.calories * r * 10) / 10
-                const pro = Math.round(item.nutrients.protein * r * 10) / 10
-                const carb = Math.round(item.nutrients.carbs * r * 10) / 10
-                const fat = Math.round(item.nutrients.fat * r * 10) / 10
                 return (
                   <View key={idx} className="edit-food-card">
                     <View className="edit-food-header">
-                      <Text className="edit-food-name">{item.name}</Text>
+                      <View className="edit-food-title-wrap">
+                        <Text className="edit-food-name">{item.name}</Text>
+                        <View className="edit-food-name-btn" onClick={() => handleEditItemName(idx)}>
+                          <Text className="iconfont icon-shouxieqianming"></Text>
+                        </View>
+                      </View>
                       {editItems.length > 1 && (
                         <View className="edit-food-delete" onClick={() => removeEditItem(idx)}>
                           <Text className="iconfont icon-shanchu"></Text>
@@ -795,24 +900,29 @@ export default function RecordDetailPage() {
                       />
                     </View>
 
-                    {/* 营养值只读展示 */}
-                    <View className="edit-nutrients-readonly">
-                      <View className="nutrient-chip">
-                        <Text className="nutrient-chip-label">热量</Text>
-                        <Text className="nutrient-chip-value">{cal}<Text className="nutrient-chip-unit">kcal</Text></Text>
-                      </View>
-                      <View className="nutrient-chip">
-                        <Text className="nutrient-chip-label">蛋白质</Text>
-                        <Text className="nutrient-chip-value">{pro}<Text className="nutrient-chip-unit">g</Text></Text>
-                      </View>
-                      <View className="nutrient-chip">
-                        <Text className="nutrient-chip-label">碳水</Text>
-                        <Text className="nutrient-chip-value">{carb}<Text className="nutrient-chip-unit">g</Text></Text>
-                      </View>
-                      <View className="nutrient-chip">
-                        <Text className="nutrient-chip-label">脂肪</Text>
-                        <Text className="nutrient-chip-value">{fat}<Text className="nutrient-chip-unit">g</Text></Text>
-                      </View>
+                    <View className="edit-nutrients-header">
+                      <Text className="edit-section-label no-margin">营养值</Text>
+                      <Text className="edit-nutrients-tip">点击任一项直接修改</Text>
+                    </View>
+
+                    <View className="edit-nutrients-grid">
+                      {EDITABLE_NUTRIENT_FIELDS.map((field) => {
+                        const meta = EDITABLE_NUTRIENT_META[field]
+                        const displayValue = getDisplayedNutrientValue(item, field)
+                        return (
+                          <View
+                            key={`${idx}-${field}`}
+                            className="nutrient-chip nutrient-chip-editable"
+                            onClick={() => handleEditNutrient(idx, field)}
+                          >
+                            <Text className="nutrient-chip-label">{meta.label}</Text>
+                            <Text className="nutrient-chip-value">
+                              {normalizeDisplayNumber(displayValue)}
+                              <Text className="nutrient-chip-unit">{meta.unit}</Text>
+                            </Text>
+                          </View>
+                        )
+                      })}
                     </View>
                   </View>
                 )

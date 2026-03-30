@@ -1,12 +1,8 @@
 import { View, Text, Input, ScrollView, Map } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { getCurrentInstance } from '@tarojs/taro'
+import { API_BASE_URL } from '../../utils/api'
 import './index.scss'
-
-const ENV_API_BASE_URL =
-  (typeof process !== 'undefined' && process?.env?.TARO_APP_API_BASE_URL) || ''
-
-const API_BASE_URL = ENV_API_BASE_URL || 'https://healthymax.cn'
 
 type PoiItem = {
   name: string

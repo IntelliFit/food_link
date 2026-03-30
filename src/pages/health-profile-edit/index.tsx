@@ -55,7 +55,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式', desc: '分开拍/重拍约束更严格，准确性更高。' },
+  { value: 'strict', title: '精准模式', desc: '单食物或 2-3 个清晰主体时更准，复杂整餐会提醒拆拍。' },
   { value: 'standard', title: '标准模式', desc: '记录更便捷，但估算误差会更大。' }
 ]
 
@@ -239,7 +239,7 @@ export default function HealthProfileEditPage() {
     if (executionMode !== originalExecutionMode) {
       const modeChangeTip = executionMode === 'standard'
         ? '切换到标准模式后记录更便捷，但克数准确性会下降，可能影响减脂/增肌进度。'
-        : '切换到精准模式会增加拍照规范要求，但能提升饮食执行可靠性。'
+        : '切换到精准模式后，系统会更看重主体数量、边界清晰度和是否需要拆拍。'
       const confirmSwitch = await Taro.showModal({
         title: '确认切换执行模式',
         content: modeChangeTip

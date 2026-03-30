@@ -988,54 +988,54 @@ def upload_health_report_image(user_id: str, base64_image: str) -> str:
     return str(result)
 
 
-def upload_food_analyze_image(base64_image: str) -> str:
+def _resolve_public_storage_url(result: Any) -> str:
+    if isinstance(result, dict):
+        return (result.get("publicUrl") or result.get("public_url") or "").strip()
+    if hasattr(result, "public_url"):
+        return str(getattr(result, "public_url", "") or "").strip()
+    if hasattr(result, "publicUrl"):
+        return str(getattr(result, "publicUrl", "") or "").strip()
+    return str(result or "").strip()
+
+
+def upload_food_analyze_image_bytes(
+    file_bytes: bytes,
+    extension: str = ".jpg",
+    content_type: str = "image/jpeg",
+) -> str:
     """
-    将食物分析图片上传到 Supabase Storage，返回公网可访问的 URL。
-    路径：food-images/{uuid}.jpg
-    需先在 Supabase Dashboard → Storage 创建 bucket「food-images」并设为 Public。
+    将食物分析图片字节上传到 Supabase Storage，返回公网可访问的 URL。
+    路径：food-images/{uuid}.{ext}
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    raw = base64_image.split(",")[1] if "," in base64_image else base64_image
+    if not file_bytes:
+        raise ValueError("图片文件为空")
+
+    safe_ext = (extension or ".jpg").strip().lower()
+    if not safe_ext.startswith("."):
+        safe_ext = f".{safe_ext}"
+    if not re.fullmatch(r"\.[a-z0-9]{1,8}", safe_ext):
+        safe_ext = ".jpg"
+
+    path = f"{uuid.uuid4().hex}{safe_ext}"
+    safe_content_type = (content_type or "image/jpeg").strip() or "image/jpeg"
+
     try:
-        file_bytes = base64.b64decode(raw)
-    except Exception as e:
-        raise ValueError(f"base64 解码失败: {e}")
-    
-    path = f"{uuid.uuid4().hex}.jpg"
-    try:
-        # 上传文件到 Supabase Storage
         supabase.storage.from_(FOOD_ANALYZE_BUCKET).upload(
             path,
             file_bytes,
-            {"content-type": "image/jpeg", "upsert": "true"},
+            {"content-type": safe_content_type, "upsert": "true"},
         )
     except Exception as e:
         error_msg = str(e) or f"上传失败: {type(e).__name__}"
-        # 检查是否是网络或 SSL 相关错误
         if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower() or "timeout" in error_msg.lower():
             raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
         raise Exception(f"上传图片到 Supabase Storage 失败: {error_msg}")
-    
+
     try:
-        # 获取公网 URL
         result = supabase.storage.from_(FOOD_ANALYZE_BUCKET).get_public_url(path)
-        if isinstance(result, dict):
-            url = result.get("publicUrl") or result.get("public_url") or ""
-            if not url:
-                raise ValueError("无法获取图片公网 URL")
-            return url
-        if hasattr(result, "public_url"):
-            url = getattr(result, "public_url", "")
-            if not url:
-                raise ValueError("无法获取图片公网 URL")
-            return url
-        if hasattr(result, "publicUrl"):
-            url = getattr(result, "publicUrl", "")
-            if not url:
-                raise ValueError("无法获取图片公网 URL")
-            return url
-        url = str(result)
+        url = _resolve_public_storage_url(result)
         if not url:
             raise ValueError("无法获取图片公网 URL")
         return url
@@ -1044,6 +1044,20 @@ def upload_food_analyze_image(base64_image: str) -> str:
         if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower():
             raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
         raise Exception(f"获取图片公网 URL 失败: {error_msg}")
+
+
+def upload_food_analyze_image(base64_image: str) -> str:
+    """
+    将食物分析图片上传到 Supabase Storage，返回公网可访问的 URL。
+    路径：food-images/{uuid}.jpg
+    需先在 Supabase Dashboard → Storage 创建 bucket「food-images」并设为 Public。
+    """
+    raw = base64_image.split(",")[1] if "," in base64_image else base64_image
+    try:
+        file_bytes = base64.b64decode(raw)
+    except Exception as e:
+        raise ValueError(f"base64 解码失败: {e}")
+    return upload_food_analyze_image_bytes(file_bytes)
 
 
 def upload_user_avatar(user_id: str, base64_image: str) -> str:
@@ -1631,6 +1645,136 @@ def _query_feed_comments_bundle_sync(
     return _build_feed_comment_bundle(all_comments, user_map, comments_limit)
 
 
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        text = str(value).strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        dt = datetime.fromisoformat(text)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _compute_macro_balance_score(
+    total_protein: Any,
+    total_carbs: Any,
+    total_fat: Any,
+) -> float:
+    try:
+        protein = max(float(total_protein or 0), 0.0)
+        carbs = max(float(total_carbs or 0), 0.0)
+        fat = max(float(total_fat or 0), 0.0)
+    except Exception:
+        return 0.0
+
+    protein_kcal = protein * 4.0
+    carbs_kcal = carbs * 4.0
+    fat_kcal = fat * 9.0
+    total_kcal = protein_kcal + carbs_kcal + fat_kcal
+    if total_kcal <= 0:
+        return 0.0
+
+    protein_ratio = protein_kcal / total_kcal
+    carbs_ratio = carbs_kcal / total_kcal
+    fat_ratio = fat_kcal / total_kcal
+    penalty = (
+        abs(protein_ratio - 0.30)
+        + abs(carbs_ratio - 0.40)
+        + abs(fat_ratio - 0.30)
+    )
+    score = max(0.0, 1.0 - penalty / 0.9)
+    return round(score * 100.0, 2)
+
+
+def _compute_feed_hot_score(like_count: int, comment_count: int) -> float:
+    raw = float(max(like_count, 0) * 2 + max(comment_count, 0) * 3)
+    return min(raw / 30.0, 1.0)
+
+
+def _compute_freshness_score(record_time: Any, window_hours: float = 72.0) -> float:
+    dt = _parse_iso_datetime(record_time)
+    if not dt:
+        return 0.0
+    delta_hours = max((datetime.now(timezone.utc) - dt).total_seconds() / 3600.0, 0.0)
+    if window_hours <= 0:
+        return 0.0
+    return max(0.0, 1.0 - min(delta_hours, window_hours) / window_hours)
+
+
+def _build_feed_recommend_reason(
+    record: Dict[str, Any],
+    sort_by: str,
+    meal_type: Optional[str],
+    diet_goal: Optional[str],
+    priority_author_ids: Optional[List[str]] = None,
+    like_count: int = 0,
+    comment_count: int = 0,
+) -> str:
+    author_id = str(record.get("user_id") or "")
+    if priority_author_ids and author_id and author_id in priority_author_ids:
+        return "特别关注的人"
+    if meal_type and record.get("meal_type") == meal_type:
+        return "餐次匹配"
+    if diet_goal and record.get("diet_goal") == diet_goal:
+        return "同目标饮食"
+    if sort_by == "hot" and (like_count > 0 or comment_count > 0):
+        return "圈子高热度"
+    if sort_by == "balanced":
+        return "营养更均衡"
+    if _compute_macro_balance_score(
+        record.get("total_protein"),
+        record.get("total_carbs"),
+        record.get("total_fat"),
+    ) >= 72:
+        return "营养较均衡"
+    if like_count >= 3:
+        return "点赞较高"
+    return "为你推荐"
+
+
+def _score_feed_record(
+    record: Dict[str, Any],
+    *,
+    sort_by: str,
+    like_count: int,
+    comment_count: int,
+    meal_type: Optional[str],
+    diet_goal: Optional[str],
+    priority_author_ids: Optional[List[str]] = None,
+) -> float:
+    balance_score = _compute_macro_balance_score(
+        record.get("total_protein"),
+        record.get("total_carbs"),
+        record.get("total_fat"),
+    ) / 100.0
+    hot_score = _compute_feed_hot_score(like_count, comment_count)
+    fresh_score = _compute_freshness_score(record.get("record_time"))
+    meal_match = 1.0 if meal_type and record.get("meal_type") == meal_type else 0.0
+    goal_match = 1.0 if diet_goal and record.get("diet_goal") == diet_goal else 0.0
+    priority_match = 1.0 if priority_author_ids and str(record.get("user_id") or "") in priority_author_ids else 0.0
+
+    if sort_by == "hot":
+        return hot_score * 100.0 + fresh_score * 10.0 + balance_score * 8.0
+    if sort_by == "balanced":
+        return balance_score * 100.0 + hot_score * 12.0 + fresh_score * 6.0
+
+    return (
+        priority_match * 120.0
+        + meal_match * 45.0
+        + goal_match * 36.0
+        + balance_score * 20.0
+        + hot_score * 18.0
+        + fresh_score * 12.0
+    )
+
+
 async def get_feed_record_interaction_context(user_id: Optional[str], record_id: str) -> Dict[str, Any]:
     """
     判断用户是否可对某条圈子动态进行查看/评论/点赞。
@@ -1660,7 +1804,12 @@ async def list_friends_feed_records(
     offset: int = 0,
     limit: int = 20,
     include_comments: bool = True,
-    comments_limit: int = 5
+    comments_limit: int = 5,
+    meal_type: Optional[str] = None,
+    diet_goal: Optional[str] = None,
+    sort_by: str = "latest",
+    priority_author_ids: Optional[List[str]] = None,
+    author_scope: str = "all",
 ) -> List[Dict[str, Any]]:
     """
     获取好友 + 自己的饮食记录（支持分页），用于圈子 Feed。
@@ -1677,10 +1826,18 @@ async def list_friends_feed_records(
         列表，每项包含 record、author、comments（可选）
     """
     friend_ids = await get_friend_ids(user_id)
-    # 包含自己：圈子 Feed 同时展示自己的今日食物
     author_ids = list(set(friend_ids) | {user_id})
     if not author_ids:
         author_ids = [user_id]
+
+    normalized_priority_ids = [
+        aid for aid in list(dict.fromkeys([str(x).strip() for x in (priority_author_ids or []) if str(x).strip()]))
+        if aid in author_ids
+    ]
+    if author_scope == "priority":
+        author_ids = normalized_priority_ids
+        if not author_ids:
+            return []
     
     check_supabase_configured()
     supabase = get_supabase_client()
@@ -1692,13 +1849,49 @@ async def list_friends_feed_records(
             end_d = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
             end_ts = end_d.isoformat().replace("+00:00", "Z")
             q = q.gte("record_time", start_ts).lt("record_time", end_ts)
-            
-        q = q.order("record_time", desc=True).range(offset, offset + limit - 1)
+
+        if meal_type:
+            q = q.eq("meal_type", meal_type)
+        if diet_goal:
+            q = q.eq("diet_goal", diet_goal)
+
+        custom_rank = sort_by in {"recommended", "hot", "balanced"}
+        candidate_limit = max(offset + limit + 40, limit * 3, 60) if custom_rank else limit
+        range_start = 0 if custom_rank else offset
+        range_end = candidate_limit - 1 if custom_rank else offset + limit - 1
+
+        q = q.order("record_time", desc=True).range(range_start, range_end)
         records = q.execute()
         
         rec_list = list(records.data or [])
         if not rec_list:
             return []
+
+        likes_map: Dict[str, Dict[str, Any]] = {}
+        comment_count_map: Dict[str, int] = {}
+        if custom_rank:
+            record_ids = [r["id"] for r in rec_list]
+            likes_map = await get_feed_likes_for_records(record_ids, user_id) if record_ids else {}
+            comment_bundle = _query_feed_comments_bundle_sync(supabase, record_ids, 0) if record_ids else {"comment_count_map": {}}
+            comment_count_map = comment_bundle["comment_count_map"]
+
+            rec_list.sort(
+                key=lambda r: (
+                    -_score_feed_record(
+                        r,
+                        sort_by=sort_by,
+                        like_count=likes_map.get(r["id"], {}).get("count", 0),
+                        comment_count=comment_count_map.get(r["id"], 0),
+                        meal_type=meal_type,
+                        diet_goal=diet_goal,
+                        priority_author_ids=normalized_priority_ids,
+                    ),
+                    -(_parse_iso_datetime(r.get("record_time")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(),
+                )
+            )
+            rec_list = rec_list[offset: offset + limit]
+            if not rec_list:
+                return []
             
         # 获取作者信息（仅查询结果中涉及的用户）
         involved_user_ids = list(set(r["user_id"] for r in rec_list))
@@ -1707,16 +1900,24 @@ async def list_friends_feed_records(
         
         # 批量获取评论（如果需要）
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
-        comment_count_map: Dict[str, int] = {}
         if include_comments:
             record_ids = [r["id"] for r in rec_list]
             bundle = _query_feed_comments_bundle_sync(supabase, record_ids, comments_limit)
             comments_map = bundle["comments_map"]
             comment_count_map = bundle["comment_count_map"]
+        elif not comment_count_map:
+            record_ids = [r["id"] for r in rec_list]
+            if record_ids:
+                comment_count_map = _query_feed_comments_bundle_sync(supabase, record_ids, 0)["comment_count_map"]
+
+        if not likes_map:
+            record_ids = [r["id"] for r in rec_list]
+            likes_map = await get_feed_likes_for_records(record_ids, user_id) if record_ids else {}
         
         out = []
         for r in rec_list:
             author = author_map.get(r["user_id"], {})
+            like_info = likes_map.get(r["id"], {"count": 0, "liked": False})
             item = {
                 "record": r,
                 "author": {
@@ -1724,9 +1925,23 @@ async def list_friends_feed_records(
                     "nickname": author.get("nickname") or "用户",
                     "avatar": author.get("avatar") or "",
                 },
+                "like_count": like_info.get("count", 0),
+                "liked": like_info.get("liked", False),
+                "is_mine": r.get("user_id") == user_id,
+                "recommend_reason": _build_feed_recommend_reason(
+                    r,
+                    sort_by=sort_by,
+                    meal_type=meal_type,
+                    diet_goal=diet_goal,
+                    priority_author_ids=normalized_priority_ids,
+                    like_count=like_info.get("count", 0),
+                    comment_count=comment_count_map.get(r["id"], 0),
+                ),
             }
             if include_comments:
                 item["comments"] = comments_map.get(r["id"], [])
+                item["comment_count"] = comment_count_map.get(r["id"], 0)
+            else:
                 item["comment_count"] = comment_count_map.get(r["id"], 0)
             out.append(item)
         return out
@@ -1824,7 +2039,10 @@ async def list_public_feed_records(
     offset: int = 0,
     limit: int = 20,
     include_comments: bool = True,
-    comments_limit: int = 5
+    comments_limit: int = 5,
+    meal_type: Optional[str] = None,
+    diet_goal: Optional[str] = None,
+    sort_by: str = "latest",
 ) -> List[Dict[str, Any]]:
     """
     获取公共饮食记录（来自 public_records=true 的用户），无需登录。
@@ -1839,33 +2057,71 @@ async def list_public_feed_records(
         if not public_user_ids:
             return []
 
-        q = (
-            supabase.table("user_food_records")
-            .select("*")
-            .in_("user_id", public_user_ids)
-            .order("record_time", desc=True)
-            .range(offset, offset + limit - 1)
-        )
+        q = supabase.table("user_food_records").select("*").in_("user_id", public_user_ids)
+        if meal_type:
+            q = q.eq("meal_type", meal_type)
+        if diet_goal:
+            q = q.eq("diet_goal", diet_goal)
+
+        custom_rank = sort_by in {"recommended", "hot", "balanced"}
+        candidate_limit = max(offset + limit + 40, limit * 3, 60) if custom_rank else limit
+        range_start = 0 if custom_rank else offset
+        range_end = candidate_limit - 1 if custom_rank else offset + limit - 1
+        q = q.order("record_time", desc=True).range(range_start, range_end)
         records = q.execute()
         rec_list = list(records.data or [])
         if not rec_list:
             return []
+
+        likes_map: Dict[str, Dict[str, Any]] = {}
+        comment_count_map: Dict[str, int] = {}
+        if custom_rank:
+            record_ids = [r["id"] for r in rec_list]
+            likes_map = await get_feed_likes_for_records(record_ids, None) if record_ids else {}
+            comment_bundle = _query_feed_comments_bundle_sync(supabase, record_ids, 0) if record_ids else {"comment_count_map": {}}
+            comment_count_map = comment_bundle["comment_count_map"]
+
+            rec_list.sort(
+                key=lambda r: (
+                    -_score_feed_record(
+                        r,
+                        sort_by=sort_by,
+                        like_count=likes_map.get(r["id"], {}).get("count", 0),
+                        comment_count=comment_count_map.get(r["id"], 0),
+                        meal_type=meal_type,
+                        diet_goal=diet_goal,
+                        priority_author_ids=None,
+                    ),
+                    -(_parse_iso_datetime(r.get("record_time")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(),
+                )
+            )
+            rec_list = rec_list[offset: offset + limit]
+            if not rec_list:
+                return []
 
         involved_user_ids = list(set(r["user_id"] for r in rec_list))
         authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
         author_map = {a["id"]: a for a in (authors.data or [])}
 
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
-        comment_count_map: Dict[str, int] = {}
         if include_comments:
             record_ids = [r["id"] for r in rec_list]
             bundle = _query_feed_comments_bundle_sync(supabase, record_ids, comments_limit)
             comments_map = bundle["comments_map"]
             comment_count_map = bundle["comment_count_map"]
+        elif not comment_count_map:
+            record_ids = [r["id"] for r in rec_list]
+            if record_ids:
+                comment_count_map = _query_feed_comments_bundle_sync(supabase, record_ids, 0)["comment_count_map"]
+
+        if not likes_map:
+            record_ids = [r["id"] for r in rec_list]
+            likes_map = await get_feed_likes_for_records(record_ids, None) if record_ids else {}
 
         out = []
         for r in rec_list:
             author = author_map.get(r["user_id"], {})
+            like_info = likes_map.get(r["id"], {"count": 0, "liked": False})
             item: Dict[str, Any] = {
                 "record": r,
                 "author": {
@@ -1873,9 +2129,23 @@ async def list_public_feed_records(
                     "nickname": author.get("nickname") or "用户",
                     "avatar": author.get("avatar") or "",
                 },
+                "like_count": like_info.get("count", 0),
+                "liked": False,
+                "is_mine": False,
+                "recommend_reason": _build_feed_recommend_reason(
+                    r,
+                    sort_by=sort_by,
+                    meal_type=meal_type,
+                    diet_goal=diet_goal,
+                    priority_author_ids=None,
+                    like_count=like_info.get("count", 0),
+                    comment_count=comment_count_map.get(r["id"], 0),
+                ),
             }
             if include_comments:
                 item["comments"] = comments_map.get(r["id"], [])
+                item["comment_count"] = comment_count_map.get(r["id"], 0)
+            else:
                 item["comment_count"] = comment_count_map.get(r["id"], 0)
             out.append(item)
         return out
@@ -2102,7 +2372,61 @@ def update_public_food_library_status_sync(item_id: str, status: str) -> None:
     except Exception as e:
         print(f"[update_public_food_library_status_sync] 错误: {e}")
         raise
-        
+
+
+def _score_public_food_library_item(item: Dict[str, Any], sort_by: str) -> float:
+    total_calories = max(float(item.get("total_calories") or 0), 0.0)
+    total_protein = max(float(item.get("total_protein") or 0), 0.0)
+    like_count = max(int(item.get("like_count") or 0), 0)
+    collection_count = max(int(item.get("collection_count") or 0), 0)
+    comment_count = max(int(item.get("comment_count") or 0), 0)
+    rating_score = max(min(float(item.get("avg_rating") or 0) / 5.0, 1.0), 0.0)
+    hot_score = min((like_count * 2 + collection_count * 2 + comment_count * 3) / 40.0, 1.0)
+    balance_score = _compute_macro_balance_score(
+        item.get("total_protein"),
+        item.get("total_carbs"),
+        item.get("total_fat"),
+    ) / 100.0
+    protein_density = min((total_protein / max(total_calories, 1.0)) * 250.0, 1.0) if total_calories > 0 else 0.0
+    low_calorie_score = max(0.0, 1.0 - min(total_calories, 900.0) / 900.0)
+    fat_loss_bonus = 1.0 if item.get("suitable_for_fat_loss") else 0.0
+
+    if sort_by == "balanced":
+        return balance_score * 100.0 + hot_score * 12.0 + rating_score * 10.0
+    if sort_by == "high_protein":
+        return protein_density * 100.0 + balance_score * 15.0 + hot_score * 10.0
+    if sort_by == "low_calorie":
+        return low_calorie_score * 100.0 + balance_score * 10.0 + hot_score * 8.0
+
+    return (
+        fat_loss_bonus * 25.0
+        + balance_score * 22.0
+        + protein_density * 18.0
+        + low_calorie_score * 16.0
+        + hot_score * 12.0
+        + rating_score * 10.0
+    )
+
+
+def _build_public_food_library_recommend_reason(item: Dict[str, Any], sort_by: str) -> str:
+    if sort_by == "balanced":
+        return "营养更均衡"
+    if sort_by == "high_protein":
+        return "高蛋白优先"
+    if sort_by == "low_calorie":
+        return "低热量优先"
+    if item.get("suitable_for_fat_loss"):
+        return "更适合减脂"
+    if _compute_macro_balance_score(
+        item.get("total_protein"),
+        item.get("total_carbs"),
+        item.get("total_fat"),
+    ) >= 72:
+        return "营养较均衡"
+    if int(item.get("like_count") or 0) >= 5:
+        return "大家更爱收藏点赞"
+    return "值得参考"
+
 
 async def list_public_food_library(
     city: Optional[str] = None,
@@ -2110,14 +2434,15 @@ async def list_public_food_library(
     merchant_name: Optional[str] = None,
     min_calories: Optional[float] = None,
     max_calories: Optional[float] = None,
-    sort_by: str = "latest",  # latest / hot / rating
+    sort_by: str = "latest",  # latest / hot / rating / balanced / high_protein / low_calorie / recommended
     limit: int = 20,
     offset: int = 0,
 ) -> List[Dict[str, Any]]:
     """
     查询公共食物库列表（仅返回 published 状态）。
     可按城市、适合减脂、商家名模糊、热量区间筛选。
-    排序：latest（最新）/ hot（点赞最多）/ rating（评分最高）。
+    排序：latest（最新）/ hot（点赞最多）/ rating（评分最高）
+         / balanced（营养更均衡）/ high_protein（高蛋白）/ low_calorie（低热量）/ recommended（综合推荐）。
     """
     check_supabase_configured()
     supabase = get_supabase_client()
@@ -2133,16 +2458,35 @@ async def list_public_food_library(
             q = q.gte("total_calories", min_calories)
         if max_calories is not None:
             q = q.lte("total_calories", max_calories)
-        # 排序
+        custom_rank = sort_by in {"balanced", "high_protein", "low_calorie", "recommended"}
+        candidate_limit = max(offset + limit + 80, limit * 3, 100) if custom_rank else limit
+
         if sort_by == "hot":
             q = q.order("like_count", desc=True)
         elif sort_by == "rating":
             q = q.order("avg_rating", desc=True)
         else:
             q = q.order("published_at", desc=True)
-        q = q.range(offset, offset + limit - 1)
+
+        if custom_rank:
+            q = q.range(0, candidate_limit - 1)
+        else:
+            q = q.range(offset, offset + limit - 1)
         result = q.execute()
-        return list(result.data or [])
+        items = list(result.data or [])
+
+        if custom_rank:
+            items.sort(
+                key=lambda item: (
+                    -_score_public_food_library_item(item, sort_by),
+                    -(_parse_iso_datetime(item.get("published_at") or item.get("created_at")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(),
+                )
+            )
+            items = items[offset: offset + limit]
+
+        for item in items:
+            item["recommend_reason"] = _build_public_food_library_recommend_reason(item, sort_by)
+        return items
     except Exception as e:
         print(f"[list_public_food_library] 错误: {e}")
         raise

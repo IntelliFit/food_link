@@ -2,7 +2,7 @@ import { View, Text, Image, Textarea } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Switch } from '@taroify/core'
-import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
+import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, uploadAnalyzeImageFile, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
 import type { ExecutionMode } from '../../utils/api'
 
 import './index.scss'
@@ -10,9 +10,11 @@ import './index.scss'
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
   { value: 'breakfast', label: '早餐', iconClass: 'icon-zaocan1' },
+  { value: 'morning_snack', label: '早加餐', iconClass: 'icon-lingshi' },
   { value: 'lunch', label: '午餐', iconClass: 'icon-wucan' },
+  { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
   { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
-  { value: 'snack', label: '加餐', iconClass: 'icon-lingshi' },
+  { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' },
 ]
 
 /** 饮食目标（状态一） */
@@ -34,11 +36,11 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; tips: string[] }> = {
   strict: {
     title: '精准模式',
-    desc: '这是受约束执行模式，只服务增肌减脂场景；不符合规则时会要求你分开拍、拨开拍或重拍。',
+    desc: '更适合做分项精估：主体少、边界清楚时更准，复杂整餐会提醒你拆拍。',
     tips: [
-      '只拍单纯碳水或单纯瘦肉，混合菜不要直接拍',
-      '碳水和蛋白尽量分开摆放，混在一起就拨开再拍',
-      '旁边放手掌或餐具作参照，重量判断会更稳'
+      '单个食物最准确，先让主体完整入镜',
+      '混合餐最多保留 2-3 个主体，尽量拨开后再拍',
+      '菜太多或互相遮挡时，请分开拍；旁边放餐具会更稳'
     ]
   },
   standard: {
@@ -65,6 +67,16 @@ const isTempImagePath = (path: string): boolean => {
   const raw = (path || '').trim()
   if (!raw) return false
   return /^https?:\/\/tmp\//i.test(raw) || /^wxfile:\/\/tmp\//i.test(raw)
+}
+
+const shouldFallbackToLegacyAnalyzeUpload = (error: unknown): boolean => {
+  const message = String((error as any)?.message || error || '').toLowerCase()
+  return (
+    message.includes('http 404') ||
+    message.includes('http 405') ||
+    message.includes('http 415') ||
+    message.includes('not found')
+  )
 }
 
 /**
@@ -128,9 +140,25 @@ const persistImagePathIfNeeded = async (path: string): Promise<string> => {
   return raw
 }
 
+const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> => {
+  const normalizedPaths = paths.map(path => String(path || '').trim()).filter(Boolean)
+  const persistedPaths: string[] = []
+
+  for (const path of normalizedPaths) {
+    try {
+      const stablePath = await persistImagePathIfNeeded(path)
+      persistedPaths.push(stablePath || path)
+    } catch (err) {
+      console.warn('图片预持久化失败，回退原路径:', path, err)
+      persistedPaths.push(path)
+    }
+  }
+
+  return persistedPaths
+}
+
 export default function AnalyzePage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
-  const [imageBase64Map, setImageBase64Map] = useState<Record<string, string>>({})
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>('breakfast')
   const [dietGoal, setDietGoal] = useState<DietGoal>('none')
@@ -186,7 +214,8 @@ export default function AnalyzePage() {
         const storedPath = Taro.getStorageSync('analyzeImagePath')
         if (storedPath) {
           const path = String(storedPath)
-          setImagePaths([path])
+          const [stablePath] = await persistImagePathsImmediately([path])
+          setImagePaths(stablePath ? [stablePath] : [path])
           // 清除存储，避免下次进入页面时误用
           Taro.removeStorageSync('analyzeImagePath')
         }
@@ -207,8 +236,8 @@ export default function AnalyzePage() {
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
       })
-      // 预览阶段优先保留原始路径，避免 devtools 特殊路径在 Image 组件中无法展示
-      const newPaths = (res.tempFilePaths || []).map(p => String(p || '').trim()).filter(Boolean)
+      const rawPaths = (res.tempFilePaths || []).map(p => String(p || '').trim()).filter(Boolean)
+      const newPaths = await persistImagePathsImmediately(rawPaths)
       setImagePaths(prev => [...prev, ...newPaths])
     } catch (e) {
       // cancelled
@@ -219,16 +248,7 @@ export default function AnalyzePage() {
   const handleRemoveImage = (index: number) => {
     setImagePaths(prev => {
       const newPaths = [...prev]
-      const removed = newPaths[index]
       newPaths.splice(index, 1)
-      if (removed) {
-        setImageBase64Map(base64Prev => {
-          if (!(removed in base64Prev)) return base64Prev
-          const next = { ...base64Prev }
-          delete next[removed]
-          return next
-        })
-      }
       return newPaths
     })
   }
@@ -262,13 +282,21 @@ export default function AnalyzePage() {
       // 1. 依次上传所有图片获取 URL
       const imageUrls: string[] = []
       for (const path of imagePaths) {
-        let base64 = imageBase64Map[path]
-        if (!base64) {
-          const stablePath = await persistImagePathIfNeeded(path)
-          const readPath = await compressImagePathForUpload(stablePath || path)
-          base64 = await imageToBase64(readPath || stablePath || path)
-          setImageBase64Map(prev => (prev[path] ? prev : { ...prev, [path]: base64! }))
+        const stablePath = await persistImagePathIfNeeded(path)
+        const uploadPath = await compressImagePathForUpload(stablePath || path)
+
+        try {
+          const { imageUrl } = await uploadAnalyzeImageFile(uploadPath || stablePath || path)
+          imageUrls.push(imageUrl)
+          continue
+        } catch (fileUploadError) {
+          if (!shouldFallbackToLegacyAnalyzeUpload(fileUploadError)) {
+            throw fileUploadError
+          }
+          console.warn('文件直传接口暂不可用，回退 base64 上传:', fileUploadError)
         }
+
+        const base64 = await imageToBase64(uploadPath || stablePath || path)
         const { imageUrl } = await uploadAnalyzeImage(base64)
         imageUrls.push(imageUrl)
       }
@@ -326,9 +354,9 @@ export default function AnalyzePage() {
   }
 
   const handlePreviewImage = (current: string) => {
-    const urls = imagePaths.map(p => imageBase64Map[p] || p)
+    const urls = imagePaths
     Taro.previewImage({
-      current: imageBase64Map[current] || current,
+      current,
       urls
     })
   }
@@ -378,7 +406,7 @@ export default function AnalyzePage() {
             {imagePaths.map((path, index) => (
               <View key={index} className='grid-item'>
                 <Image
-                  src={imageBase64Map[path] || path}
+                  src={path}
                   mode='aspectFill'
                   className='grid-image'
                   onClick={() => handlePreviewImage(path)}

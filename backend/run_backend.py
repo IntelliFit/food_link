@@ -21,18 +21,21 @@ TEXT_WORKER_COUNT = int(os.getenv("TEXT_WORKER_COUNT", "1"))  # 文字分析 Wor
 HEALTH_REPORT_WORKER_COUNT = int(os.getenv("HEALTH_REPORT_WORKER_COUNT", "1"))  # 病历提取 Worker
 COMMENT_WORKER_COUNT = int(os.getenv("COMMENT_WORKER_COUNT", "1"))  # 评论审核 Worker
 PUBLIC_LIBRARY_MODERATION_WORKER_COUNT = int(os.getenv("PUBLIC_LIBRARY_MODERATION_WORKER_COUNT", "1"))  # 食物库审核
+FOOD_DEBUG_TASK_QUEUE = str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}
+FOOD_TASK_TYPE = "food_debug" if FOOD_DEBUG_TASK_QUEUE else "food"
+TEXT_FOOD_TASK_TYPE = "food_text_debug" if FOOD_DEBUG_TASK_QUEUE else "food_text"
 
 
 def run_food_worker_process(worker_id: int) -> None:
     """子进程入口：运行食物分析 Worker。"""
     from worker import run_worker
-    run_worker(worker_id=worker_id, task_type="food", poll_interval=2.0)
+    run_worker(worker_id=worker_id, task_type=FOOD_TASK_TYPE, poll_interval=2.0)
 
 
 def run_text_food_worker_process(worker_id: int) -> None:
     """子进程入口：运行文字分析 Worker。"""
     from worker import run_worker
-    run_worker(worker_id=worker_id, task_type="food_text", poll_interval=2.0)
+    run_worker(worker_id=worker_id, task_type=TEXT_FOOD_TASK_TYPE, poll_interval=2.0)
 
 
 def run_health_report_worker_process(worker_id: int) -> None:
@@ -90,7 +93,8 @@ def main() -> None:
         f"{TEXT_WORKER_COUNT} 个文字分析 Worker + "
         f"{HEALTH_REPORT_WORKER_COUNT} 个病历提取 Worker + "
         f"{COMMENT_WORKER_COUNT} 个评论审核 Worker + "
-        f"{PUBLIC_LIBRARY_MODERATION_WORKER_COUNT} 个食物库审核 Worker",
+        f"{PUBLIC_LIBRARY_MODERATION_WORKER_COUNT} 个食物库审核 Worker"
+        f"（food_task_type={FOOD_TASK_TYPE}, text_task_type={TEXT_FOOD_TASK_TYPE}）",
         flush=True
     )
 
@@ -99,7 +103,7 @@ def main() -> None:
     uvicorn.run(
         "main:app",
         host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", "8888")),
+        port=int(os.getenv("PORT", "3010")),
         log_level="info",
     )
 

@@ -1,5 +1,455 @@
 # CURRENT_TASK
 
+- Task: 精准模式收敛为“单食物 / 可拆分混合餐 / 复杂混合餐”简化方案
+- Status: done（已把精准模式从“过细 sceneTags + 白名单强心智”收敛成更经典的拆分精估模式）
+- Scope:
+  - `backend/worker.py`：
+    - 图片 `strict` prompt 改为只围绕 `sceneType / itemCountLevel / visibility / referencePresent` 四个核心信号做判断
+    - 图片 `strict` 后校验改成简单规则：单主体清晰可过、2-3 个清晰主体可分项估、4+ 主体或遮挡严重时建议拆拍
+    - 文字 `strict` 同步改成同口径简化，减少对旧 `sceneTags` 体系的依赖，只保留轻量追问
+  - `src/pages/analyze/index.tsx`、`src/pages/result/index.tsx`、`src/pages/analyze-loading/index.tsx`：
+    - 精准模式文案改为“单个食物最稳 / 混合餐最多 2-3 个主体 / 菜太多就拆拍”
+    - 结果态文案改成“符合精准模式 / 建议重拍 / 建议拆拍”
+  - `src/pages/health-profile/index.tsx`、`src/pages/health-profile-edit/index.tsx`、`src/pages/health-profile-view/index.tsx`、`src/pages/record/index.tsx`、`src/pages/analyze-history/index.tsx`：
+    - 同步更新精准模式说明，避免继续沿用“严格白名单”旧心智
+  - `backend/README.md`：
+    - 新增精准模式验证样本建议，固定单食物 / 可拆分混合餐 / 复杂混合餐三组评估口径
+- Verification:
+  - `python -m py_compile backend/worker.py` 通过
+  - `ReadLints` 检查最近修改文件无新增报错
+- Next step:
+  - 用固定样本集验证三类场景：单食物、2-3 个清晰主体、4+ 主体或遮挡重
+  - 重点观察精准模式“通过样本”的重量误差是否明显优于标准模式
+
+- Task: 修复本地调试时分析任务被外部 Worker 抢占，导致看不到 prompt/输出日志
+- Status: done（已完成本地 debug 队列隔离 + 标准模式结果强制裁字段）
+- Scope:
+  - `backend/main.py`：
+    - 新增 `_get_food_task_type(...)`，在 `FOOD_ANALYSIS_DEBUG=1` 时把异步任务类型从 `food / food_text` 改为 `food_debug / food_text_debug`
+  - `backend/run_backend.py`：
+    - `FOOD_ANALYSIS_DEBUG=1` 时，本地 worker 改为消费 `food_debug / food_text_debug`
+    - 启动日志新增当前消费队列类型提示
+  - `backend/worker.py`：
+    - 增加 `food_debug / food_text_debug` 任务类型映射
+    - 标准模式结果写回前强制清空 `pfc_ratio_comment / absorption_notes`
+    - 新增 `FOOD_ANALYSIS_DEBUG=1` 时的终端调试输出：`prompt / response_usage / raw_model_output / final_result`
+- Verification:
+  - `python -m py_compile backend/main.py backend/worker.py backend/run_backend.py` 通过
+  - `ReadLints` 检查无新增报错
+  - 复核任务 `0b05db8a-bb9a-45af-a59c-ae7cb33bdab5`：`task_type=food`、`execution_mode=standard` 但仍出现 `pfc_ratio_comment/absorption_notes/recognitionOutcome`，进一步支持“任务被其他环境旧 Worker 抢占处理”的判断
+- Next step:
+  - 用户重启 `python backend/run_backend.py` 后再提一条新任务
+  - 确认日志出现 `[worker-*] 处理任务 ...` 与 `[food_debug] ...` 四段
+  - 再检查新任务 `task_type` 是否为 `food_debug`，以及结果中 `pfc_ratio_comment/absorption_notes` 是否为 `null`
+
+- Task: 去掉食物营养分析链路中的所有审核以追求最大速度
+- Status: done（已移除图片/文字食物分析的前置审核；当前食物分析提交后会直接进入主模型识别，不再先走千问审核）
+- Scope:
+  - `backend/worker.py`：
+    - `process_one_food_task(...)` 不再调用 `run_content_moderation_sync(...)`
+    - `process_one_text_food_task(...)` 不再调用 `run_content_moderation_sync(...)`
+    - 图片/文字食物分析任务不再写入 `violated` 状态或 `food_analysis` 违规记录
+  - `backend/main.py`：
+    - `/api/analyze` 的同步分析 prompt 不再要求模型输出 `is_violation / violation_reason`
+    - `/api/analyze` 不再根据 `is_violation` 中断返回
+    - 测试/直连分析入口改为直接调用 `run_food_analysis_sync(...)`，不再先跑审核
+- Verification:
+  - `python -m py_compile backend/main.py backend/worker.py` 通过
+  - `ReadLints` 检查 `backend/main.py`、`backend/worker.py` 无新增报错
+  - 已新增终端标记：图片/文字异步分析会打印 `MODERATION_SKIPPED`，同步直连分析也会打印同名标记
+  - 已新增主进程提交标记：`/api/analyze/submit` 和 `/api/analyze-text/submit` 成功后会打印 `MODERATION_SKIPPED_CONFIRMED`
+- Next step:
+  - 线上部署后观察图片分析与文字分析的平均耗时是否明显下降
+  - 若还要继续压缩成本，可再裁剪 `standard` 模式输出字段或降低默认模型规格
+
+- Task: 调整首页餐次目标为“三餐动态 + 加餐参考”
+- Status: done（已完成代码修改；按项目当前口径未做构建、运行检测、交互点击、截图或其他前端验证）
+- Scope:
+  - `backend/main.py`：
+    - 早餐 / 午餐 / 晚餐改为根据首页总热量目标动态分配
+    - 早加餐 / 午加餐 / 晚加餐改为统一参考值 `150 kcal`
+    - 加餐标签改为明确返回“加餐参考，不计入总目标”
+  - `src/pages/index/index.tsx`：
+    - 首页餐次卡片右侧文案从纯百分比改为“目标 xxx kcal / 参考 xxx kcal”
+    - 渲染后端返回的餐次标签，直观提示加餐不在总目标规划内
+  - `src/pages/index/index.scss`：
+    - 增加加餐提示标签样式
+    - 继续保留此前提高过的“未记录”灰色对比度样式
+- Verification:
+  - 已完成代码级检查
+  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+- Next step:
+  - 用户查看首页餐次卡片是否符合“三餐规划、加餐仅参考”的产品预期
+
+- Task: 去掉分析中页面的假进度步骤
+- Status: done（已移除分析中页的三步步骤卡，只保留转圈、模式说明和小知识，避免用循环动画伪装真实进度；按项目当前口径未做构建或运行态验证）
+- Scope:
+  - `src/pages/analyze-loading/index.tsx`：
+    - 删除步骤轮播状态与假进度渲染
+  - `src/pages/analyze-loading/index.scss`：
+    - 删除进度卡相关样式
+- Verification:
+  - 已完成代码级检查
+  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+- Next step:
+  - 用户在小程序里再看一次“分析中”页，确认视觉上更简洁且不再出现假进度
+
+- Task: 修复首页营养比例超过目标后仍只显示 100%
+- Status: done（首页三大营养素比例文案现按真实值显示，超过目标后可见 `120%` 等超额比例；未做运行态验证，遵循当前项目口径）
+- Scope:
+  - `src/pages/index/index.tsx`：
+    - 将比例计算从“显示值封顶 100%”改为“真实百分比”
+    - 新增视觉进度封顶逻辑，仅限制圆环和进度条宽度，避免超过一圈时显示异常
+- Verification:
+  - `ReadLints` 检查 `src/pages/index/index.tsx` 无新增报错
+- Next step:
+  - 用户在首页确认三大营养素超过目标时，右侧比例是否已显示为 `120%` 一类真实值
+
+- Task: 修复分析中页面进度步骤静态不动
+- Status: done（已将分析中页面的 3 步进度改为循环流转动画，不再长期停在第 1 步；按项目当前口径未做构建或运行态验证）
+- Scope:
+  - `src/pages/analyze-loading/index.tsx`：
+    - 新增加载态步骤轮播状态
+    - 让“校验图片质量 / 识别食物与克重 / 生成营养建议”按固定节奏循环高亮
+  - `src/pages/analyze-loading/index.scss`：
+    - 新增当前步骤位移动效、脉冲高亮与已完成态样式
+- Verification:
+  - 已完成代码级检查
+  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+- Next step:
+  - 用户在小程序里再看一次“分析中”页，确认进度展示已不再像静态假进度
+
+- Task: 圈子推荐机制与高级筛选一期落地
+- Status: done（已完成后端轻量打分 + 圈子页筛选入口 + 本地“特别关注”优先推荐；按项目当前口径未做构建或运行态验证）
+- Scope:
+  - `backend/database.py`：
+    - 圈子 Feed 新增 `meal_type / diet_goal / sort_by / priority_author_ids / author_scope` 支持
+    - 新增轻量推荐分：综合特别关注、餐次匹配、目标匹配、热度、新鲜度、营养均衡度
+    - 公共食物库新增 `balanced / high_protein / low_calorie / recommended` 排序
+    - Feed 与食物库都补上 `recommend_reason`
+  - `backend/main.py`：
+    - `/api/community/feed`、`/api/community/public-feed` 新增推荐/筛选查询参数透传
+  - `src/utils/api.ts`：
+    - 新增圈子推荐查询类型与参数拼装
+    - 公共食物库排序枚举扩展
+  - `src/pages/community/index.tsx`：
+    - 新增圈子页两行轻筛选：排序 / 特别关注 / 餐次 / 目标
+    - 新增本地“特别关注”作者列表，点好友头像即可切换
+    - 推荐理由与目标标签展示到动态卡片
+    - 圈子页内嵌食物库推荐会跟随当前排序/目标自动调整
+  - `src/pages/community/index.scss`：
+    - 新增筛选条、特别关注头像标记、推荐标签样式
+- Verification:
+  - 已完成代码级自查与 diff 复核
+  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+- Next step:
+  - 用户进入圈子页实际试用这版筛选与推荐
+  - 若要继续二期，可再补“完整关注系统 / 餐次化食物库 / 更多推荐理由与画像权重”
+
+- Task: 排查 3 月 11 日到当前食物识别算法成本上升原因
+- Status: done（已完成代码与历史版本比对，确认成本上升主要来自 3 月 22 日 `execution_mode` 引入和 3 月 28 日“精准模式/结构化判定/二次纠错”升级叠加）
+- Scope:
+  - `2026-03-11` 版本：
+    - 图片 prompt 仍是基础版，只要求返回 `items / description / insight / pfc_ratio_comment / absorption_notes / context_advice`
+    - 无 `recognitionOutcome / allowedFoodCategory / retakeGuidance / sceneTags / followupQuestions`
+    - 无二次纠错的 `previousResult / correctionItems / additionalContext` 大上下文
+  - `2026-03-22` 之后：
+    - 引入 `execution_mode`
+    - prompt 额外要求模型遵守标准/精准两套约束
+    - 输入 token 开始上升，但输出结构尚未明显膨胀
+  - `2026-03-28` 之后：
+    - prompt 新增精准模式结构化判定字段、场景标签枚举、拒识原因与重拍建议
+    - 二次纠错任务还会注入 `previousResult / correctionItems / additionalContext`
+    - 这是输出 token 和总成本继续明显放大的主因
+- Verification:
+  - 已比对 `050796e`、`7f63100`、`34398d1` 三个关键版本的 `backend/main.py`、`backend/worker.py`
+  - 已结合用户提供的 3 月 11 日与 3 月 29 日 usage 面板截图确认：
+    - 当前 `output tokens` 明显高于 3 月 11 日
+    - `input tokens` 也同步升高，但输出膨胀更明显
+- Next step:
+  - 若优先降成本，先把默认链路退回“轻量返回”
+  - 仅在用户主动开启精准模式或发起二次纠错时，才启用结构化拒识字段和长上下文 prompt
+
+- Task: 严格拆分标准模式与精准模式识别链路
+- Status: done（已把异步图片/文字识别的 `standard` 与 `strict` prompt/返回结构分开；标准模式恢复轻量 schema，不再默认输出精准模式字段）
+- Scope:
+  - `backend/worker.py`：
+    - `_build_food_prompt(...)`：
+      - `standard` 改回轻量单流程 prompt
+      - 仅保留基础营养识别输出 `items / description / insight / pfc_ratio_comment / absorption_notes / context_advice`
+      - 不再要求模型输出 `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / sceneTags`
+    - `_build_text_food_prompt(...)`：
+      - `standard` 改回轻量文字识别 prompt
+      - 仍可带最小纠错上下文，但不再走精准模式结构化追问字段
+    - `run_food_analysis_sync(...)`：
+      - 仅在 `strict` 下追加 `_derive_recognition_fields(...)`
+    - `run_text_food_analysis_sync(...)`：
+      - 仅在 `strict` 下追加 `_derive_text_recognition_fields(...)`
+      - 同时修正文字链路此前误走图片识别派生函数的问题
+- Verification:
+  - `ReadLints` 检查 `backend/worker.py` 无新增报错
+  - `python -m py_compile backend/worker.py` 通过
+- Next step:
+  - 线上部署后重点观察标准模式调用的 `output tokens` 是否回落
+  - 若仍偏高，再继续裁剪标准模式中的 `pfc_ratio_comment / absorption_notes / context_advice`
+
+- Task: 修复互动消息点击后应回到动态评论区而不是识别记录详情
+- Status: done（互动消息现改为回到圈子页对应动态，并自动展开评论输入区；未做运行态验证，按用户当前项目口径跳过）
+- Scope:
+  - `src/pages/interaction-notifications/index.tsx`：
+    - 不再点击后跳转 `/pages/record-detail/index`
+    - 改为把 `record_id / comment_id / parent_comment_id` 写入本地待处理跳转目标
+    - 再切回 tab 页 `/pages/community/index`
+  - `src/pages/community/index.tsx`：
+    - 新增“待处理互动消息跳转目标”读取/过期清理逻辑
+    - 从互动消息进入时，会尽量定位到对应动态卡片
+    - 若能拿到对应评论，则自动展开评论输入区并把该评论作为回复目标
+    - 若评论不在当前预览里，会先补拉该动态的完整评论列表
+- Verification:
+  - 按用户对 `food_link` 的最新项目级要求，本次未执行运行检测、交互点击、截图或构建校验
+- Next step:
+  - 用户在微信开发者工具或真机上点一条“评论了你的动态 / 回复了你的评论”的互动消息
+  - 确认是否进入圈子页并直接落到该动态评论区，可继续回复
+
+- Task: 修正首页餐次目标与“未记录”灰色对比度
+- Status: done（已完成代码修改；按用户最新明确要求，本次不做任何运行检测、交互点击、截图、构建校验或前端验证）
+- Scope:
+  - `backend/main.py`：
+    - 首页各餐次目标不再使用固定写死值
+    - 改为按用户首页总热量目标，基于既有餐次权重动态拆分到 6 餐次
+    - 这样底部各餐次隐含目标总和会与上方总目标保持一致
+  - `src/pages/index/index.scss`：
+    - 提高首页默认“未记录/未选中”日期灰底的对比度，避免在绿色主视觉里不明显
+  - `src/pages/stats/index.scss`：
+    - 提高“未记录”热图色块与图例灰色的对比度，增强与红/蓝状态的区分
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+  - 用户在继续做前端构建/验证前，明确要求本项目默认不做任何运行检测或前端验证；因此已停止后续验证动作
+- Next step:
+  - 用户直接查看首页与统计页效果；若还想继续微调灰色深浅或餐次分配比例，再按反馈细调
+
+- Task: 同步 `main` 与 `dev` 分支
+- Status: done（远端与本地都已安全同步到同一合并提交，且当前工作区未提交改动已完整保留）
+- Scope:
+  - 分支现状：
+    - `origin/dev` 相对 `origin/main` 额外包含 7 个 UI 相关提交（首页 / 我的页 / 自定义 tabbar）
+    - `origin/main` 相对 `origin/dev` 额外包含 2 个较新的主线提交（社区评论通知、图片识别 `text_input` 修复）
+  - 合并策略：
+    - 不在当前脏工作区直接切分支，避免污染用户未提交改动
+    - 使用独立 worktree `D:\files\food_link__merge_sync`
+    - 以 `origin/main` 为基线创建临时分支，再执行 `git merge --no-ff origin/dev`
+    - 合并结果提交：`6c22ed9 Merge remote-tracking branch 'origin/dev' into codex/merge-main-dev`
+  - 结果：
+    - 本次合并未出现手工冲突
+    - `src/app.config.ts` 自动合并，保留了 `main` 上的 `pages/interaction-notifications/index`，同时纳入 `dev` 的首页 / 我的页 / 自定义 tabbar UI 调整
+- Verification:
+  - `npm run build:weapp` 通过（在独立 worktree 里复用主工作区 `node_modules` 后执行）
+  - 构建仅出现既有 Sass deprecation warning，无新增构建错误
+  - `2026-03-29` 再次核对确认：
+    - 远端 `origin/main` 与 `origin/dev` 都已指向 `6c22ed9`
+    - 本地 `main` 与本地 `dev` 现也都已指向 `6c22ed9`
+    - 当前本地 [src/app.config.ts](D:\files\food_link\src\app.config.ts) 已为 5 tab + `custom: true`
+    - 通过 `git stash push --include-untracked` 暂存当前本地修改后，先快进本地 `main`，再创建/同步本地 `dev`，最后成功 `git stash apply 'stash@{0}'` 恢复全部本地修改
+    - 恢复后当前工作区仍保留原有 16 个改动文件和 1 个未跟踪图片，未被覆盖
+  - `2026-03-29` 用户再次反馈“底部导航仍像 4 个”后复查确认：
+    - 源码 [src/app.config.ts](D:\files\food_link\src\app.config.ts) 与 [custom-tab-bar/index.js](D:\files\food_link\custom-tab-bar\index.js) 其实已经是 5 tab
+    - 真正落后的，是开发者工具读取的 `dist/app.json`
+    - 编译前 [dist/app.json](D:\files\food_link\dist\app.json) 仍是旧的 4 tab 非 custom 配置
+    - 重新执行 `npm run build:weapp`（首次因 Node 内存不足失败，追加 `NODE_OPTIONS=--max-old-space-size=8192` 后通过）后，`dist/app.json` 已更新为 5 tab + `custom: true`
+  - `2026-03-29` 用户继续反馈首页接口全部 `ERR_CONNECTION_REFUSED`：
+    - 当前前端开发产物确实在请求 `http://127.0.0.1:3010`
+    - 本机 `netstat` 未看到 `3010` 端口处于 `LISTEN`
+    - 用户的 `uvicorn main:app --reload --host 0.0.0.0 --port 3010` 只显示 `Started reloader process`，未看到 `Started server process` / `Application startup complete`
+    - 结论：当前本地联调的真实阻塞点是“后端没有真正监听成功”，不是前端地址配错
+  - `2026-03-29` 进一步确认：
+    - `uvicorn --reload` 相关父子进程分别为 `8360` 和 `1456`
+    - `Ctrl+C` 未能把它们一起结束
+    - 已通过 `Stop-Process -Id 8360,1456 -Force` 清理卡住的进程树
+  - `2026-03-29` 用户继续追问“本地运行端口在哪里”后再次确认：
+    - `http://127.0.0.1:3010/openapi.json` 返回 `200`
+    - 真实监听地址是 `0.0.0.0:3010`，占用 PID 为 `44584`
+    - 对应进程是 `D:\software\anaconda\python.exe`，启动时间 `2026/3/29 19:51:40`
+    - 因为监听在 `0.0.0.0`（所有网卡地址），用户若只盯 `127.0.0.1` 文本，容易误以为“没有本地 3010”
+    - 之后再执行第二次 `uvicorn ... --port 3010` 报 `WinError 10013`，本质是重复抢占同一端口
+  - `2026-03-29` 按用户要求清理 `3010`：
+    - 已强制结束当前监听 `3010` 的 PID `44584`
+    - 清理后 `http://127.0.0.1:3010/openapi.json` 已无法访问，说明 `3010` 监听已释放
+- Next step:
+  - 远端与本地分支同步已完成
+  - 保险起见，当前保留 `stash@{0}` 作为额外备份；待用户确认无误后再决定是否删除
+  - 若开发者工具里底部导航仍未显示，优先在微信开发者工具执行“清缓存并编译”或重开项目，因为当前源码和 `dist` 已都是 5 tab，自定义 tabbar 缺失更像运行态缓存未刷新
+  - 本地联调优先不要继续依赖 `uvicorn --reload`，改用项目脚本 `python backend/run_backend.py` 或 `npm run dev:backend`，先让 `3010` 真正监听起来
+  - 若页面仍显示旧的 `ERR_CONNECTION_REFUSED`，先清空开发者工具 Console/Network 后再刷新；旧错误日志不会自动消失
+
+- Task: 排查图片分析偶发卡在大模型请求前
+- Status: in_progress（最新线上日志已确认：至少部分失败任务已经进入 worker，并在 worker 请求上游模型接口时连续 3 次异常；当前最可能是服务器到上游模型服务的 HTTPS/TLS 连接被中途断开）
+- Scope:
+  - 前端链路 `src/pages/analyze/index.tsx`：
+    - `persistImagePathIfNeeded(...)`：本地临时文件持久化
+    - `compressImagePathForUpload(...)`：上传前压缩
+    - `uploadAnalyzeImageFile(...)` / `uploadAnalyzeImage(...)`：图片上传
+    - `submitAnalyzeTask(...)`：提交异步分析任务
+  - 后端链路 `backend/worker.py`：
+    - `process_one_food_task(...)` 已确认任务会进入第二步 `run_food_analysis_sync(...)`
+    - `run_food_analysis_sync(...)` 中第 `983-1029` 行会对上游模型接口最多重试 3 次
+    - 用户提供的线上日志 `Food analysis attempt 3 exception: API 请求失败` 对应“3 次请求都没拿到成功响应”
+    - 若线上 `LLM_PROVIDER=gemini`，则该请求目标是 `https://api.ofox.ai/v1/chat/completions`
+    - 若线上 `LLM_PROVIDER=qwen`，则该请求目标是 DashScope `.../chat/completions`
+  - 当前优先排查顺序：
+    - 先区分失败停在“上传/提交前”还是“worker 调模型时”
+    - 对于这批最新失败样本，优先看后端 worker stdout/stderr 是否出现 `SSL` / `EOF` / `ConnectError` / `ReadError`
+    - 确认线上 `LLM_PROVIDER` 当前实际值，以及对应上游（OfoxAI 或 DashScope）在失败时段是否有波动
+    - 若失败时 `/api/analyze/submit` 已成功且模型 usage 无新增，继续核对该 usage 面板是否真对应 worker 当前使用的上游平台
+- Verification:
+  - 已重新阅读状态文件与当前实现代码，未做代码修改
+  - 已核对 `backend/worker.py`：
+    - `Food analysis attempt N exception: ...` 来自 `run_food_analysis_sync(...)` 内部 `httpx.Client(...).post(...)` 这一层
+    - `Food analysis attempt 3 exception: API 请求失败` 说明 worker 已执行到“请求上游模型”阶段，而不是卡在上传前
+- Next step:
+  - 让用户确认线上 `LLM_PROVIDER`
+  - 在服务器失败时段 grep worker 日志里的 `SSL|EOF|ConnectError|ReadError|Food analysis attempt`
+  - 若当前走 `gemini -> api.ofox.ai`，优先怀疑 OfoxAI 链路波动或服务器到该域名的 TLS 连接异常
+  - 若当前走 `qwen -> dashscope`，则改查 DashScope 链路
+
+- Task: 记录时不再重复弹出餐次选择
+- Status: done（结果页“记录”会优先使用分析前已选餐次直接保存；只有拿不到餐次缓存时才兜底弹窗）
+- Scope:
+  - `src/pages/result/index.tsx`：
+    - 新增 `getSavedSelectableMealType()`
+    - `handleConfirmAndShare()` 改为优先读取 `analyzeMealType`
+    - 严格模式 hard/soft reject 下，用户确认“仍要记录”后也优先直接按已选餐次保存
+    - 仅当分析前没有餐次缓存时，才继续显示“选择餐次”弹窗
+- Verification:
+  - 按用户最新要求，本次未运行项目、未跑构建、未做截图或交互验证
+- Next step:
+  - 用户直接在结果页点“记录”，确认不再重复出现餐次选择弹窗
+
+- Task: 恢复分析/结果页餐次选择为 6 餐次
+- Status: done（分析页、结果页、文字结果页已从“早中晚+加餐”恢复为“早餐 / 早加餐 / 午餐 / 午加餐 / 晚餐 / 晚加餐”；legacy `snack` 继续兼容映射到 `午加餐`）
+- Scope:
+  - `src/pages/analyze/index.tsx`：恢复分析页餐次选项为 6 个
+  - `src/pages/result/index.tsx`：恢复保存记录弹窗为 6 个餐次，并兼容旧 `snack` 缓存
+  - `src/pages/result-text/index.tsx`：恢复文字结果页保存弹窗为 6 个餐次
+- Verification:
+  - `npm run build:weapp` 通过
+  - 用户已明确说明：这个窗口以及整个 `food_link` 项目默认都不需要运行项目，也不需要做前端截图/交互验证
+- Next step:
+  - 用户重新打开“选择餐次”弹窗确认是否恢复 6 项
+  - 若微信开发者工具仍显示旧的 4 项，优先重新编译当前 `dist`
+
+- Task: 修复图片识别偶发失败 `"'list' object has no attribute 'get'"`
+- Status: done（已为图片/文字识别结果解析补上数组响应兜底与类型过滤，后端编译通过；等待用户复测同类样本）
+- Scope:
+  - 根因：
+    - `backend/worker.py` 的异步识别结果解析默认假设模型返回顶层 `dict`
+    - 当模型偶发直接返回 `list`，或 `items` 内混入非 `dict` 项时，worker 在 `.get(...)` 处抛出 `AttributeError: 'list' object has no attribute 'get'`
+    - 前端历史页只是把 `task.error_message` 原样展示出来，所以用户直接看到了 Python 异常
+  - 修复：
+    - `backend/worker.py` 新增 `_normalize_analysis_response_payload(...)`，把“顶层直接返回食物数组”的情况归一化成 `{"items": [...]}`，无法识别时改为抛出用户可读的 `识别结果格式异常，请重试`
+    - `backend/worker.py` 新增 `_parse_analysis_result_items(...)`，仅解析合法 `dict` item，避免单个脏元素把整条任务打崩
+    - `backend/main.py` 同步补相同归一化/过滤逻辑，避免同步识别接口也踩到同类问题
+- Verification:
+  - `python -m py_compile backend/worker.py backend/main.py` 通过
+- Next step:
+  - 用户重新用失败样本发起一次图片识别
+  - 若仍失败，优先抓该任务对应的 AI 原始返回 JSON，确认是顶层数组还是 `items` 内部结构异常
+
+- Task: 修复本地调试默认未走“实时编译 + 本地后端”的问题
+- Status: done（已补开发环境 API 地址与本地后端启动脚本；开发模式编译后确认 `dist` 已切到 `http://127.0.0.1:3010`；开发者工具自动化端口未开，未完成运行态点击验证）
+- Scope:
+  - `project.config.json` 的 `miniprogramRoot` 指向 `dist/`
+  - `package.json` 里的 `dev:weapp` 本质是 `taro build --type weapp --watch`，只是“持续编译”，不是提供页面的本地 Web 服务
+  - 此前缺少 `.env.development`，`config/dev.ts` 也为空，导致开发态没有独立后端地址配置
+  - `src/utils/api.ts`、`src/pages/location-search/index.tsx` 已改为：优先读取 `TARO_APP_API_BASE_URL`；未配置时，development 默认走 `http://127.0.0.1:3010`，production 保持 `https://healthymax.cn`
+  - 已新增 `.env.development` 与 `.env.development.example`
+  - `package.json` 已新增 `npm run dev:backend`，直接启动 `backend/run_backend.py`
+  - `backend/README.md` 与 `backend/run_backend.py` 本地启动端口已统一为 `3010`
+- Verification:
+  - 已核对 `project.config.json`
+  - 已核对 `project.private.config.json`
+  - 已核对 `package.json`
+  - 已核对 `src/utils/api.ts`
+  - 已核对 `src/pages/location-search/index.tsx`
+  - `npm run build:weapp` 通过
+  - `npm run dev:weapp` 已触发初始开发编译（watch 进程按超时截断）
+  - `2026-03-29 15:01` 检查 `npm run build:weapp` 产物：`dist/common.js` 仍为 `https://healthymax.cn`，说明 `build:weapp` 是生产构建
+  - `2026-03-29 15:04` 检查 `npm run dev:weapp` 首轮产物：`dist/common.js` 已切到 `http://127.0.0.1:3010`
+  - `2026-03-29` 检查本机监听端口：`3010`、`8888`、`9420` 均未监听；因此“微信开发者工具里还能打开页面”并不是本地后端或自动化服务在运行
+  - 已核对开发者工具私有配置：`useStaticServer=false`、`useLanDebug=false`，没有发现“偷偷起本地服务”的配置；`compileHotReLoad=true` 只负责热刷新已有 `dist` 产物，不负责代替 `npm run dev:weapp`
+  - 尝试 `mrc where --port 9420` 失败：本机当前未开启微信开发者工具自动化端口，未完成运行态截图/交互验证
+- Next step:
+  - 本地联调时先运行 `npm run dev:backend`，再运行 `npm run dev:weapp`
+  - 微信开发者工具重新编译/刷新后，在 Network 中确认请求已切到 `http://127.0.0.1:3010`
+  - 若要真机调试，把 `.env.development` 中的 `127.0.0.1` 改成电脑局域网 IP
+  - 若要排除“旧 `dist` 干扰”，不要用 `npm run build:weapp` 的生产产物判断本地联调结果，应以 `npm run dev:weapp` 刚产出的 `dist/common.js` 为准
+
+- Task: 修复分析页本地图片临时路径失效导致 `compressImage:fail file doesn't exist`
+- Status: done（已做最小前端修复；构建通过；运行态自动化目标不是 food_link，未能在正确小程序里完成选图验证）
+- Scope:
+  - 根因：
+    - `src/pages/analyze/index.tsx` 注释写的是“选图后立刻持久化临时图”，但实际代码是等到点击“分析”时才调用 `persistImagePathIfNeeded(...)`
+    - 微信小程序临时文件路径会被回收，因此到了 `compressImagePathForUpload(...)` 时文件已不存在，触发 `compressImage:fail file doesn't exist`，随后 `uploadFile:fail file not found`
+    - 这是小程序本地文件生命周期问题，请求尚未到后端，无法只靠后端修复
+  - 修复：
+    - `src/pages/analyze/index.tsx` 新增 `persistImagePathsImmediately(...)`
+    - 在 `handleChooseImage` 选图完成后立即把临时图保存到 `USER_DATA_PATH`
+    - 在读取 `analyzeImagePath` 本地缓存恢复图片时，也先立即做一次持久化
+- Verification:
+  - `npm run build:weapp` 通过
+  - 尝试连接微信开发者工具自动化成功，但当前 9420 端口连接到的目标页面为 `coach/profile/[id]`，不是 `food_link` 小程序，无法在正确应用里完成“选图 -> 分析”运行态验证
+- Next step:
+  - 让微信开发者工具切到 `food_link` 项目后，再复测“选图 -> 立即分析”链路
+  - 若仍报错，继续抓 `persistImagePathIfNeeded(...)` 的 console warn 和真实 `path` 值
+
+---
+
+- Task: 图片分析上传 `413`（图片体积过大）与分析页 `setData` 过大
+- Status: done（已改为文件直传优先 + 去除页面内 base64 状态；等待后端部署后由用户复测）
+- Scope:
+  - 根因确认：
+    - 微信开发者工具日志显示 `POST https://healthymax.cn/api/upload-analyze-image 413`
+    - 同时前端存在 `setData 数据传输长度为 1191 KB`，说明分析页把大 base64 放进了页面状态
+  - `backend/database.py`：
+    - 新增 `upload_food_analyze_image_bytes(...)`，支持直接上传图片字节到 Supabase Storage
+    - `upload_food_analyze_image(...)` 改为只负责 base64 解码，再复用字节上传逻辑
+  - `backend/main.py`：
+    - 新增 `/api/upload-analyze-image-file`，支持 multipart 文件直传
+  - `src/utils/api.ts`：
+    - `compressImagePathForUpload(...)` 升级为按文件大小多档压缩，不再只固定 `quality: 72`
+    - 新增 `uploadAnalyzeImageFile(...)`
+  - `src/pages/analyze/index.tsx`：
+    - 上传时改为 `本地文件直传优先`
+    - 若后端还是旧版、文件直传接口未部署，则仅对 `404/405/415/not found` 回退到旧的 base64 上传
+    - 移除 `imageBase64Map` 页面状态，避免再把大 base64 推进 `setData`
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - `npm run build:weapp` 通过
+  - `mrc where --port 9420` 当前连接到 `coach/overview`，不是 `food_link` 的 `pages/analyze/index`
+  - `mrc errors 30 --port 9420` 为 0，但该结果来自错误的自动化目标，不能作为本页运行态验证
+- Next step:
+  - 部署后端新增接口 `/api/upload-analyze-image-file`
+  - 用户在 `food_link` 的微信开发者工具/真机上复测拍照分析，确认：
+    - 不再出现 `setData 数据传输长度过长`
+    - 优先不再命中 `/api/upload-analyze-image` 的 `413`
+    - 若仍失败，抓新的 Network 记录确认是否仍被网关限流或是单张原始文件本身仍超限
+
+- Task: 放宽食物语境下的内容审核误判（仅改后端，不改前端）
+- Status: done（已放宽“食品名/包装文案玩梗词”相关审核；等待用户用真实样本复测）
+- Scope:
+  - `backend/worker.py`：
+    - 调整图片/文本/评论审核提示词，明确“牛马”“打工人”“摸鱼”等词若处于食品名、品牌名、菜单名、包装文案语境，不应按政治敏感拦截
+    - 新增食物语境兜底 `_relax_moderation_result_if_needed(...)`，当审核结果为 `politics / inappropriate_text / other`，且文本明显属于食物语境时自动放行
+    - 同步补充图片分析 prompt，避免分析模型本身再把食品包装文案误判为政治敏感
+  - `backend/main.py`：
+    - 同步放宽 Gemini 图片分析 prompt，避免同步分析接口仍沿用旧的严格口径
+- Verification:
+  - `python -m py_compile backend/worker.py backend/main.py` 通过
+- Next step:
+  - 用户用“牛马面包”等真实样本再次测试图片分析 / 文字录入 / 评论链路
+  - 若仍有误判，抓取对应任务的审核返回 `category + reason`，继续补充放行词或缩小拦截范围
+
+---
+
 - Task: 修复识别失败 `name 'text_input' is not defined`
 - Status: done（已修复图片分析链路误用文字模式字段派生的问题，后端编译校验通过）
 - Scope:
