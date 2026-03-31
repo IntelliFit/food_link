@@ -3752,18 +3752,30 @@ async def update_dashboard_targets(
 
 
 @app.get("/api/home/dashboard")
-async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
+async def get_home_dashboard(
+    date: Optional[str] = None,
+    user_info: dict = Depends(get_current_user_info)
+):
     """
-    首页数据：今日摄入汇总 + 今日各餐次汇总。目标热量优先用用户 TDEE，否则 2000。
+    首页数据：指定日期摄入汇总 + 各餐次汇总。目标热量优先用用户 TDEE，否则 2000。
     运动数据不返回，由前端静态展示或后续接口提供。
+    
+    参数:
+        date: 指定日期 (YYYY-MM-DD 格式)，不传则默认今天
     """
     user_id = user_info["user_id"]
-    today = _get_china_today_str()
+    target_date = date if date else _get_china_today_str()
+    
+    # 调试日志
+    print(f"[DEBUG /api/home/dashboard] user_id={user_id}, date={date}")
+    
     try:
         user = await get_user_by_id(user_id)
+        print(f"[DEBUG /api/home/dashboard] user={user.get('nickname') if user else 'None'}")
         targets = _get_dashboard_targets(user)
         calorie_target = float(targets["calorie_target"])
-        records = await list_food_records(user_id=user_id, date=today, limit=100)
+        records = await list_food_records(user_id=user_id, date=target_date, limit=100)
+        print(f"[DEBUG /api/home/dashboard] records count={len(records)}")
     except Exception as e:
         print(f"[get_home_dashboard] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取首页数据失败")
@@ -3773,6 +3785,8 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
     total_protein = sum(float(r.get("total_protein") or 0) for r in records)
     total_carbs = sum(float(r.get("total_carbs") or 0) for r in records)
     total_fat = sum(float(r.get("total_fat") or 0) for r in records)
+    
+    print(f"[DEBUG /api/home/dashboard] 计算结果: cal={total_cal}, protein={total_protein}, carbs={total_carbs}, fat={total_fat}")
 
     protein_target = targets["protein_target"]
     carbs_target = targets["carbs_target"]

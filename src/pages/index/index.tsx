@@ -1,5 +1,5 @@
 import { View, Text, Input } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,
@@ -37,8 +37,9 @@ interface WeekHeatmapCell {
   dayName: string
   dayNum: string
   calories: number
+  target: number
+  intakeRatio: number  // 摄入比例: calories / target，用于热力图染色
   state: WeekHeatmapState
-  level: 0 | 1 | 2 | 3
   isToday: boolean
 }
 
@@ -233,8 +234,9 @@ function createWeekHeatmapCells(): WeekHeatmapCell[] {
       dayName: SHORT_DAY_NAMES[date.getDay()],
       dayNum: String(date.getDate()),
       calories: 0,
+      target: 2000,
+      intakeRatio: 0,
       state: 'none',
-      level: 0,
       isToday: offset === 0
     })
   }
@@ -251,8 +253,12 @@ export default function IndexPage() {
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()))
 
-  const loadDashboard = useCallback(async () => {
+  // 加载指定日期的首页数据
+  const loadDashboard = useCallback(async (targetDate?: string) => {
+    console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate)
+    console.log('[DEBUG] getAccessToken:', getAccessToken() ? '有token' : '无token')
     if (!getAccessToken()) {
+      console.log('[DEBUG] 无token，返回默认值')
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
@@ -263,13 +269,23 @@ export default function IndexPage() {
 
     setLoading(true)
     try {
+      console.log('[DEBUG] 请求 API, date:', targetDate)
       const [res, stats] = await Promise.all([
-        getHomeDashboard(),
+        getHomeDashboard(targetDate),
         getStatsSummary('week')
       ])
-      const storedTargets = getStoredDashboardTargets()
-      const intake =
-        storedTargets != null ? mergeHomeIntakeWithTargets(res.intakeData, storedTargets) : res.intakeData
+      console.log('[DEBUG] API 返回:', res)
+      console.log('[DEBUG] intakeData.current:', res.intakeData?.current)
+      console.log('[DEBUG] intakeData.macros:', res.intakeData?.macros)
+      // 优先使用 API 返回的数据，不使用本地缓存覆盖
+      const intake = res.intakeData
+      console.log('[DEBUG] 处理后的 intake:', intake)
+      
+      // 先设置 intakeData，再构建热力图
+      console.log('[DEBUG] 设置 intakeData:', intake)
+      setIntakeData(intake)
+      console.log('[DEBUG] 设置 meals:', res.meals)
+      setMeals(res.meals || [])
       
       // 构建7天热力图数据（今天前后各3天）
       const today = new Date()
@@ -280,29 +296,30 @@ export default function IndexPage() {
         const dateKey = formatDateKey(date)
         const dayData = stats.daily_calories.find(d => d.date === dateKey)
         const hasRecord = dayData && dayData.calories > 0
-        const delta = hasRecord ? dayData.calories - stats.tdee : 0
-        const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(stats.tdee, 1) : 0
-        let level: WeekHeatmapCell['level'] = 0
-        if (deltaRatio > 0.3) level = 3
-        else if (deltaRatio > 0.15) level = 2
-        else if (deltaRatio > 0) level = 1
+        const calories = dayData?.calories || 0
+        // 使用 TDEE 作为目标热量计算摄入比例
+        const target = stats.tdee || 2000
+        const intakeRatio = hasRecord ? calories / target : 0
         
         nextWeekHeatmapCells.push({
           date: dateKey,
           dayName: SHORT_DAY_NAMES[date.getDay()],
           dayNum: String(date.getDate()),
-          calories: dayData?.calories || 0,
-          state: !hasRecord ? 'none' : delta > 0 ? 'surplus' : 'deficit',
-          level,
+          calories,
+          target,
+          intakeRatio,
+          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
           isToday: offset === 0
         })
       }
       
-      setIntakeData(intake)
-      setMeals(res.meals || [])
       setWeekHeatmapCells(nextWeekHeatmapCells)
       setTargetForm(createTargetForm(intake))
-    } catch {
+      console.log('[DEBUG] 所有数据设置完成')
+      // 注意：selectedDate 的更新移到 handleDateSelect 中，避免重复更新
+    } catch (error) {
+      console.error('[DEBUG] API 调用失败:', error)
+      Taro.showToast({ title: '加载失败: ' + (error as Error).message, icon: 'none', duration: 3000 })
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setWeekHeatmapCells(createWeekHeatmapCells())
@@ -310,11 +327,34 @@ export default function IndexPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading])
 
-  // 每次显示页面时刷新数据
+  // 每次显示页面时刷新数据（仅当显示的是今天时才刷新）
+  // 使用 ref 获取最新的 selectedDate，避免闭包问题
+  const selectedDateRef = useRef(selectedDate)
+  selectedDateRef.current = selectedDate
+  // 标志位：是否跳过下一次 useDidShow 刷新（用于点击日期后避免覆盖）
+  const skipNextRefreshRef = useRef(false)
+  
   Taro.useDidShow(() => {
-    loadDashboard()
+    const today = formatDateKey(new Date())
+    const currentSelected = selectedDateRef.current
+    console.log('[DEBUG] useDidShow, selectedDate:', currentSelected, 'today:', today, 'skip:', skipNextRefreshRef.current)
+    
+    // 如果设置了跳过标志，则跳过本次刷新
+    if (skipNextRefreshRef.current) {
+      console.log('[DEBUG] 跳过本次刷新')
+      skipNextRefreshRef.current = false
+      return
+    }
+    
+    // 只有当前显示的是今天，或者没有选择日期时，才刷新今天的数据
+    if (currentSelected === today || !currentSelected) {
+      console.log('[DEBUG] 刷新今天数据')
+      loadDashboard(today)
+    } else {
+      console.log('[DEBUG] 当前显示非今天，不自动刷新')
+    }
   })
 
   useShareAppMessage(() => ({
@@ -486,11 +526,13 @@ export default function IndexPage() {
   }
 
   const handleDateSelect = (date: string) => {
+    console.log('[DEBUG] 点击日期:', date)
+    // 设置跳过标志，避免 useDidShow 覆盖本次加载的数据
+    skipNextRefreshRef.current = true
+    // 直接切换到该日期的数据，不依赖 weekHeatmapCells
+    console.log('[DEBUG] 调用 loadDashboard:', date)
     setSelectedDate(date)
-    const cell = weekHeatmapCells.find(c => c.date === date)
-    if (cell && cell.calories > 0) {
-      Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(date)}` })
-    }
+    loadDashboard(date)
   }
 
   const totalCurrent = normalizeDisplayNumber(intakeData.current)
@@ -540,18 +582,30 @@ export default function IndexPage() {
         {/* 日期选择器 */}
         <View className='date-selector-section'>
           <View className='date-list'>
-            {weekHeatmapCells.map((cell) => (
-              <View
-                key={cell.date}
-                className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''} ${cell.calories > 0 ? 'has-record' : ''}`}
-                onClick={() => handleDateSelect(cell.date)}
-              >
-                <Text className='date-day-name'>{cell.dayName}</Text>
-                <View className={`date-day-num ${cell.state} level-${cell.level}`}>
-                  <Text className='date-num-text'>{cell.dayNum}</Text>
+            {weekHeatmapCells.map((cell) => {
+              // 根据摄入比例计算热力图颜色级别
+              let heatLevel = 0
+              if (cell.calories > 0 && cell.target > 0) {
+                const ratio = cell.intakeRatio
+                if (ratio >= 1.0) heatLevel = 4      // 达到或超过目标
+                else if (ratio >= 0.75) heatLevel = 3  // 75%-100%
+                else if (ratio >= 0.5) heatLevel = 2   // 50%-75%
+                else if (ratio >= 0.25) heatLevel = 1  // 25%-50%
+              }
+              
+              return (
+                <View
+                  key={cell.date}
+                  className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''} ${cell.calories > 0 ? 'has-record' : ''}`}
+                  onClick={() => handleDateSelect(cell.date)}
+                >
+                  <Text className='date-day-name'>{cell.dayName}</Text>
+                  <View className={`date-day-num heat-level-${heatLevel}`}>
+                    <Text className='date-num-text'>{cell.dayNum}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              )
+            })}
           </View>
         </View>
 
@@ -603,34 +657,42 @@ export default function IndexPage() {
                   </View>
                 </View>
                 
-                {/* 主体内容 */}
-                <View className='macro-content'>
-                  {/* 第一行：大数字 + 仪表盘 */}
-                  <View className='macro-row-first'>
-                    <View className='macro-value-wrap'>
-                      <Text className='macro-big-number' style={{ color }}>
+                {/* 极简仪表盘 */}
+                <View className='macro-gauge-wrap'>
+                  <View className='macro-gauge'>
+                    {/* SVG 圆环 */}
+                    <svg className='macro-gauge-svg' viewBox='0 0 100 100'>
+                      {/* 背景圆环 */}
+                      <circle
+                        className='macro-gauge-track'
+                        cx='50'
+                        cy='50'
+                        r='42'
+                        fill='none'
+                        stroke='#e5e7eb'
+                        strokeWidth='8'
+                      />
+                      {/* 进度圆环 */}
+                      <circle
+                        className='macro-gauge-progress'
+                        cx='50'
+                        cy='50'
+                        r='42'
+                        fill='none'
+                        stroke={color}
+                        strokeWidth='8'
+                        strokeLinecap='round'
+                        strokeDasharray={`${visualProgress * 2.64} 264`}
+                        transform='rotate(-90 50 50)'
+                      />
+                    </svg>
+                    {/* 中心数值 */}
+                    <View className='macro-gauge-center'>
+                      <Text className='macro-gauge-value' style={{ color }}>
                         {loading ? '--' : formatDisplayNumber(currentValue)}
                       </Text>
-                      <Text className='macro-unit-inline'>{unit}</Text>
+                      <Text className='macro-gauge-unit'>克</Text>
                     </View>
-                    
-                    <View className='macro-progress-badge' style={{ color, borderColor: `${color}22`, backgroundColor: `${color}14` }}>
-                      <Text className='macro-progress-badge-text'>{formatProgressText(progress)}</Text>
-                    </View>
-                  </View>
-                  
-                  {/* 第二行：详情 + 百分比 */}
-                  <View className='macro-row-second'>
-                    <Text className='macro-detail-text'>
-                      {formatDisplayNumber(currentValue)} / {formatDisplayNumber(targetValue)}{unit}
-                    </Text>
-                  </View>
-
-                  <View className='macro-progress-bar-bg'>
-                    <View
-                      className='macro-progress-bar-fill'
-                      style={{ width: `${visualProgress}%`, backgroundColor: color }}
-                    />
                   </View>
                 </View>
               </View>

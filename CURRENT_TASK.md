@@ -1,5 +1,37 @@
 # CURRENT_TASK
 
+- Task: 首页日期热力图染色 + 点击切换数据
+- Status: in_progress（已找到并修复问题）
+- Scope:
+  - 后端 `backend/main.py`：`/api/home/dashboard` 新增可选 `date` 参数，支持获取指定日期数据
+  - 前端 `src/utils/api.ts`：`getHomeDashboard()` 支持传入日期参数
+  - 前端 `src/pages/index/index.tsx`：
+    - 修改 `WeekHeatmapCell` 接口，添加 `target` 和 `intakeRatio` 字段
+    - 修改 `loadDashboard()` 支持加载指定日期数据
+    - 修改 `handleDateSelect()`，点击日期时加载该日期数据而不是跳转页面
+    - 日期渲染根据 `intakeRatio` 显示 5 级热力颜色（无记录/25%/50%/75%/100%+）
+  - 样式 `src/pages/index/index.scss`：新增 5 级热力颜色样式
+- 问题根因：
+  - `Taro.useDidShow()` 钩子会在页面每次显示时触发
+  - 它会调用 `loadDashboard()` 加载**今天**的数据（不带日期参数）
+  - 当用户点击30号后，`loadDashboard(date)` 加载了30号数据
+  - 但紧接着 `useDidShow` 又触发了，加载今天的数据（锦恢今天无记录，显示0）
+  - 导致30号的数据被今天的空数据覆盖
+- 修复方案：
+  - 修改 `useDidShow`，只在当前显示的是今天时才刷新数据
+  - 如果用户已选择其他日期，不自动刷新
+- Verification:
+  - ✅ 后端 API 测试：`/api/home/dashboard?date=2026-03-30` 正确返回 1176 kcal
+  - ✅ 后端数据库：`list_food_records` 正确返回 2 条记录
+  - ✅ 后端日志确认：请求30号时返回2条记录
+  - ✅ UI 热力图颜色：30号日期圆圈显示绿色
+  - ✅ 问题定位并修复：发现微信小程序 GET 请求缓存导致前端收到旧数据（0 kcal）
+  - ✅ 修复方案：在 `getHomeDashboard` URL 中添加 `_t=${timestamp}` 参数禁用缓存
+  - 🔄 待验证：重新编译后点击30号数据是否正确显示
+
+- Task: 首页三大营养素极简改版（仪表盘中心显示摄入量）
+- Status: done
+
 - Task: 圈子动态支持从圈子移除（不删除饮食记录）
 - Status: done
 - Scope:

@@ -25,6 +25,12 @@ This workspace is dedicated to the `food_link` project.
 - Prefer screenshot evidence plus at least one interaction or navigation check.
 - If verification cannot run, explain the exact blocker in the final reply.
 
+### Project Skills
+
+This project includes the following project-level skills in `.agents/skills/`:
+
+- **weapp-devtools**: WeChat Mini Program automation and debugging tools
+
 ## Durable State
 
 - Do not rely on chat transcript alone for project continuity.

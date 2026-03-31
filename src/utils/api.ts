@@ -1216,8 +1216,15 @@ export async function getUnlimitedQRCode(
 /**
  * 获取首页仪表盘数据（今日摄入 + 今日餐食，不含运动）
  */
-export async function getHomeDashboard(): Promise<HomeDashboard> {
-  const res = await authenticatedRequest('/api/home/dashboard', { method: 'GET', timeout: 10000 })
+export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
+  // 添加时间戳禁用缓存
+  const timestamp = Date.now()
+  const url = date 
+    ? `/api/home/dashboard?date=${encodeURIComponent(date)}&_t=${timestamp}`
+    : `/api/home/dashboard?_t=${timestamp}`
+  console.log('[DEBUG API] 请求 URL:', url)
+  const res = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  console.log('[DEBUG API] 响应状态:', res.statusCode, '数据:', res.data)
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取首页数据失败'
     throw new Error(msg)

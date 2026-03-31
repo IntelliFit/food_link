@@ -167,6 +167,41 @@ $text-tertiary: #9ca3af;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  
+  // 摄入热力图颜色 - 基于绿色主题渐变
+  &.heat-level-0 {
+    // 无记录 - 保持默认灰色
+    background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
+  }
+  
+  &.heat-level-1 {
+    // 25%-50% - 浅绿
+    background: linear-gradient(180deg, #86efac 0%, #4ade80 100%);
+    border-color: rgba(34, 197, 94, 0.3);
+    .date-num-text { color: #166534; }
+  }
+  
+  &.heat-level-2 {
+    // 50%-75% - 中绿
+    background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
+    border-color: rgba(34, 197, 94, 0.4);
+    .date-num-text { color: #ffffff; }
+  }
+  
+  &.heat-level-3 {
+    // 75%-100% - 深绿
+    background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+    border-color: rgba(22, 163, 74, 0.5);
+    .date-num-text { color: #ffffff; }
+  }
+  
+  &.heat-level-4 {
+    // 100%+ - 最深绿/主题色
+    background: linear-gradient(180deg, #16a34a 0%, #00bc7d 100%);
+    border-color: rgba(0, 188, 125, 0.6);
+    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
+    .date-num-text { color: #ffffff; }
+  }
 }
 
 .date-num-text {
@@ -337,87 +372,55 @@ $text-tertiary: #9ca3af;
   color: $text-secondary;
 }
 
-// 主体内容区 - 新布局
-.macro-content {
+// 极简仪表盘布局
+.macro-gauge-wrap {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 8rpx 0;
-  gap: 8rpx;
-}
-
-// 第一行：大数字 + 大仪表盘
-.macro-row-first {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12rpx;
-}
-
-.macro-value-wrap {
-  display: flex;
-  align-items: baseline;
-  gap: 4rpx;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.macro-big-number {
-  font-size: 36rpx;
-  font-weight: 700;
-  line-height: 48rpx;
-}
-
-.macro-unit-inline {
-  font-size: 22rpx;
-  color: $text-tertiary;
-  line-height: 30rpx;
-}
-
-// 第二行：详情 + 百分比
-.macro-row-second {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.macro-detail-text {
-  font-size: 20rpx;
-  color: $text-tertiary;
-  line-height: 28rpx;
-}
-
-.macro-progress-badge {
-  min-width: 88rpx;
-  height: 52rpx;
-  padding: 0 16rpx;
-  border-radius: 9999rpx;
-  border: 1rpx solid transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  box-sizing: border-box;
+  padding: 16rpx 0 8rpx;
 }
 
-.macro-progress-badge-text {
-  font-size: 24rpx;
-  font-weight: 700;
-  line-height: 32rpx;
+.macro-gauge {
+  position: relative;
+  width: 140rpx;
+  height: 140rpx;
 }
 
-.macro-progress-bar-bg {
+.macro-gauge-svg {
   width: 100%;
-  height: 10rpx;
-  background: #e5e7eb;
-  border-radius: 9999rpx;
-  overflow: hidden;
+  height: 100%;
+  transform: rotate(-90deg);
 }
 
-.macro-progress-bar-fill {
-  height: 100%;
-  border-radius: 9999rpx;
-  transition: width 0.3s ease;
+.macro-gauge-track {
+  stroke: #e5e7eb;
+}
+
+.macro-gauge-progress {
+  transition: stroke-dasharray 0.5s ease;
+}
+
+.macro-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+}
+
+.macro-gauge-value {
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 40rpx;
+}
+
+.macro-gauge-unit {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
 }
 
 // 快捷记录区域
