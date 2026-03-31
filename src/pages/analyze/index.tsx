@@ -1,10 +1,10 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Switch } from '@taroify/core'
-import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, uploadAnalyzeImageFile, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
+import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, uploadAnalyzeImageFile, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile,getMyMembership, MembershipStatus } from '../../utils/api'
 import type { ExecutionMode } from '../../utils/api'
-import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
+import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
 
 import './index.scss'
 
@@ -167,6 +167,11 @@ export default function AnalyzePage() {
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+
+  const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+    return value === 'strict' ? 'strict' : 'standard'
+  }
 
   const handleMultiViewChange = (value: any) => {
     if (typeof value === 'boolean') {
@@ -179,6 +184,13 @@ export default function AnalyzePage() {
     }
     setIsMultiView(Boolean(value))
   }
+
+  // 每次进入拍照页都刷新配额（从分析结果页返回时）
+  useDidShow(() => {
+    if (getAccessToken()) {
+      getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
+    }
+  })
 
   useEffect(() => {
     // 1. 获取饮食目标
@@ -196,7 +208,14 @@ export default function AnalyzePage() {
             Taro.setStorageSync('dietGoal', profile.diet_goal)
           }
           if (profile.execution_mode) {
-            setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
+            setExecutionMode(normalizeExecutionMode(profile.execution_mode))
+          }
+          // 加载会员状态和配额
+          try {
+            const ms = await getMyMembership()
+            setMembershipStatus(ms)
+          } catch (err) {
+            console.error('获取会员状态失败:', err)
           }
         }
       } catch (err) {
@@ -263,8 +282,22 @@ export default function AnalyzePage() {
   }
 
   const handleStrictModeTap = () => {
-    notifyStrictModeUnavailable()
-    setExecutionMode('standard')
+    if (membershipStatus?.is_pro) {
+      setExecutionMode('strict')
+      return
+    }
+    Taro.showModal({
+      title: '解锁精准模式',
+      content: '精准模式需要开通食探会员才能使用，是否前往开通？',
+      confirmText: '去开通',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          Taro.navigateTo({ url: '/pages/pro-membership/index' })
+        }
+        // 取消：保持标准模式
+      }
+    })
   }
 
   const doAnalyze = async () => {
@@ -323,12 +356,25 @@ export default function AnalyzePage() {
     } catch (error: any) {
       Taro.hideLoading()
       setIsAnalyzing(false)
-      Taro.showModal({
-        title: '分析失败',
-        content: error.message || '分析失败，请重试',
-        showCancel: false,
-        confirmText: '确定'
-      })
+      const errMsg = error?.message || '分析失败，请重试'
+      if (error?.statusCode === 429 || errMsg.includes('上限')) {
+        Taro.showModal({
+          title: '今日次数已用完',
+          content: errMsg,
+          confirmText: '去开通会员',
+          cancelText: '取消',
+          success: (res) => {
+            if (res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }
+        })
+      } else {
+        Taro.showModal({
+          title: '分析失败',
+          content: errMsg,
+          showCancel: false,
+          confirmText: '确定'
+        })
+      }
     }
   }
 
@@ -365,7 +411,20 @@ export default function AnalyzePage() {
 
   return (
     <View className='analyze-page'>
-      {/* 模式提示条（更接近网页信息架构：先告知规则，再执行上传） */}
+      {/* 今日配额提示条 */}
+      {membershipStatus && (
+        <View
+          className={`quota-bar ${membershipStatus.is_pro ? 'quota-bar--pro' : (membershipStatus.daily_remaining ?? 3) <= 1 ? 'quota-bar--warn' : ''}`}
+          onClick={() => !membershipStatus.is_pro && Taro.navigateTo({ url: '/pages/pro-membership/index' })}
+        >
+          <Text className='quota-bar-text'>
+            {membershipStatus.is_pro ? '🥇 ' : ''}今日剩余 {membershipStatus.daily_remaining ?? '--'}/{membershipStatus.daily_limit ?? '--'} 次
+            {!membershipStatus.is_pro && '  →开通会员每日20次'}
+          </Text>
+        </View>
+      )}
+
+      {/* 模式提示条 */}
       <View className={`mode-banner ${executionMode}`}>
         <View className='mode-banner-header'>
           <View className='mode-title-wrap'>

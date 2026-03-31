@@ -97,15 +97,69 @@
 
 // 会员卡片 - 采用首页风格的白色卡片设计
 .member-card {
-  margin: 0 24rpx;
-  padding: 32rpx;
-  background: #ffffff;
+  margin: 0 40rpx;
+  padding: 40rpx;
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
   border-radius: 24rpx;
   color: #1f2937;
   position: relative;
   overflow: hidden;
   box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
   z-index: 2;
+
+  &.member-card--pro {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    box-shadow: 0 8rpx 32rpx rgba(15, 52, 96, 0.4);
+
+    .card-title    { color: #ffffff; }
+    .card-validity { color: rgba(255, 255, 255, 0.55); }
+    .progress-text { color: rgba(255, 255, 255, 0.7); display: block; margin-bottom: 8rpx; }
+    .card-tip      { color: rgba(255, 255, 255, 0.55); }
+    .progress-bar  { background: rgba(255, 255, 255, 0.12); }
+    .progress-inner { background: linear-gradient(to right, #fde68a 0%, #f59e0b 100%); }
+  }
+
+  &.member-card--free {
+    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+    box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.25);
+
+    .card-title    { color: #ffffff; }
+    .card-validity { color: rgba(255, 255, 255, 0.7); }
+    .progress-text { color: rgba(255, 255, 255, 0.8); display: block; margin-bottom: 8rpx; }
+    .card-tip      { color: rgba(255, 255, 255, 0.7); }
+    .progress-bar  { background: rgba(255, 255, 255, 0.25); }
+    .progress-inner { background: rgba(255, 255, 255, 0.85); }
+  }
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.card-pro-badge {
+  font-size: 20rpx;
+  font-weight: 800;
+  color: #1a1a2e;
+  background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+  padding: 4rpx 14rpx;
+  border-radius: 20rpx;
+  letter-spacing: 1px;
+}
+
+.card-upgrade-btn {
+  background: rgba(255, 255, 255, 0.22);
+  padding: 12rpx 28rpx;
+  border-radius: 30rpx;
+  backdrop-filter: blur(4px);
+  border: 1rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.card-upgrade-text {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: 600;
 }
 
 .card-bg-icon {
