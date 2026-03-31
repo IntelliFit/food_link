@@ -37,35 +37,6 @@
   overflow: hidden;
 }
 
-.history-shortcut {
-  margin: -4rpx 24rpx 24rpx;
-  padding: 18rpx 24rpx;
-  border-radius: 18rpx;
-  background: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
-}
-
-.history-shortcut-icon {
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 50%;
-  background: #faf5ff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.history-shortcut-text {
-  font-size: 26rpx;
-  line-height: 36rpx;
-  color: #7c3aed;
-  font-weight: 600;
-}
-
 .method-card {
   flex: 1;
   display: flex;
@@ -103,10 +74,6 @@
 
 .text-icon {
   background: linear-gradient(to right, #2b7fff 0%, #00b8db 100%);
-}
-
-.history-icon {
-  background: linear-gradient(to right, #ad46ff 0%, #f6339a 100%);
 }
 
 .method-text {
@@ -193,79 +160,18 @@
   text-align: center;
 }
 
-// 历史分析入口
-.history-entry {
+.record-scope-note {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16rpx 0; // 保持点击区域
+  padding: 16rpx 0 0;
 }
 
-.history-entry-text {
-  font-size: 26rpx;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
-}
-
-.uploaded-image {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.action-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16rpx;
-}
-
-.text-input-card .action-buttons {
-  grid-template-columns: 1fr;
-  margin-top: 8rpx;
-}
-
-.action-btn {
-  height: 56rpx;
-  border-radius: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.primary-btn {
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  box-shadow: 0px 4rpx 12rpx rgba(0, 188, 125, 0.3);
-}
-
-.text-input-card .primary-btn {
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-}
-
-.secondary-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
-}
-
-.primary-btn .btn-text {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #ffffff;
-  line-height: 40rpx;
-}
-
-.text-input-card .primary-btn .btn-text {
-  color: #ffffff;
-}
-
-.secondary-btn .btn-text {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #ffffff;
-  line-height: 40rpx;
+.record-scope-note-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: center;
 }
 
 // 文字记录区域 - Premium Design
@@ -559,17 +465,17 @@
   }
 }
 
-// 底部悬浮按钮
+// 底部悬浮按钮（TabBar 页需要抬高避免被盖住）
 .text-action-floating {
   position: fixed;
-  bottom: 0;
+  bottom: calc(100rpx + env(safe-area-inset-bottom));
   left: 0;
   right: 0;
-  padding: 12rpx 32rpx calc(12rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.9);
+  padding: 12rpx 32rpx 12rpx;
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   z-index: 100;
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.05);
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
 }
 
 .analyze-btn-premium {
@@ -608,89 +514,6 @@
 }
 
 // 保留原有的一些基础样式
-.section-label {
-  display: block;
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1e2939;
-  line-height: 40rpx;
-  margin-bottom: 16rpx;
-}
-
-.input-placeholder {
-  font-size: 28rpx;
-  color: rgba(10, 10, 10, 0.4);
-  line-height: 40rpx;
-}
-
-.input-row {
-  display: flex;
-  gap: 16rpx;
-  margin-bottom: 24rpx;
-}
-
-.input-group {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-}
-
-.input-label-small {
-  font-size: 26rpx;
-  font-weight: 500;
-  color: #4a5565;
-  line-height: 36rpx;
-}
-
-.amount-input {
-  background: #f9fafb;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 16rpx;
-  padding: 16rpx 20rpx;
-  height: 56rpx;
-  font-size: 28rpx;
-  color: #1e2939;
-  line-height: 40rpx;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.time-picker {
-  background: #f9fafb;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 16rpx;
-  padding: 16rpx 20rpx;
-  height: 56rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-sizing: border-box;
-}
-
-.time-text {
-  font-size: 28rpx;
-  color: #1e2939;
-  line-height: 40rpx;
-}
-
-.time-placeholder {
-  font-size: 28rpx;
-  color: rgba(10, 10, 10, 0.4);
-  line-height: 40rpx;
-}
-
-.time-icon {
-  font-size: 24rpx;
-  color: #6a7282;
-}
-
-.input-placeholder {
-  font-size: 28rpx;
-  color: rgba(10, 10, 10, 0.4);
-  line-height: 40rpx;
-}
-
 // Tips卡片
 .tips-section {
   background: #ffffff;
@@ -755,377 +578,6 @@
   color: #4a5565;
   line-height: 40rpx;
   flex: 1;
-}
-
-// 历史记录区域
-.history-section {
-  padding: 0 24rpx 24rpx;
-}
-
-.history-header-card {
-  background: #ffffff;
-  border-radius: 22rpx;
-  padding: 28rpx 24rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
-}
-
-.history-header-title {
-  display: block;
-  font-size: 30rpx;
-  line-height: 42rpx;
-  color: #1e2939;
-  font-weight: 700;
-  margin-bottom: 10rpx;
-}
-
-.history-header-subtitle {
-  display: block;
-  font-size: 24rpx;
-  line-height: 36rpx;
-  color: #6a7282;
-}
-
-// 日期选择
-.date-selector {
-  margin-bottom: 24rpx;
-}
-
-.date-card {
-  background: #ffffff;
-  border-radius: 22rpx;
-  padding: 28rpx 24rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
-}
-
-.date-label {
-  display: block;
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1e2939;
-  line-height: 40rpx;
-  margin-bottom: 16rpx;
-}
-
-.date-display {
-  background: #f9fafb;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 16rpx;
-  padding: 20rpx 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  transition: all 0.2s ease;
-}
-
-.date-display:active {
-  background: #f3f4f6;
-  border-color: #00bc7d;
-}
-
-.date-text {
-  font-size: 30rpx;
-  color: #1e2939;
-  line-height: 42rpx;
-  font-weight: 600;
-}
-
-// 日历弹层：确认按钮与选中日使用绿色渐变/主题绿
-.record-calendar {
-  --calendar-active-color: #00bc7d;
-
-  .taroify-calendar__confirm {
-    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%) !important;
-    border: none !important;
-    color: #fff !important;
-  }
-}
-
-.date-icon {
-  font-size: 32rpx;
-  color: #6a7282;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.date-stats {
-  display: flex;
-  gap: 16rpx;
-}
-
-.stat-item {
-  flex: 1;
-  background: #ffffff;
-  border-radius: 18rpx;
-  padding: 24rpx 20rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10rpx;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
-}
-
-.stat-label {
-  font-size: 26rpx;
-  color: #6a7282;
-  line-height: 36rpx;
-}
-
-.stat-value {
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #1e2939;
-  line-height: 52rpx;
-}
-
-// 历史记录列表
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-}
-
-.history-meal-card {
-  background: #ffffff;
-  border-radius: 22rpx;
-  padding: 28rpx 24rpx;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
-  margin-bottom: 16rpx;
-}
-
-.meal-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24rpx;
-  padding-bottom: 24rpx;
-  border-bottom: 1rpx solid #f3f4f6;
-}
-
-.meal-header-left {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  flex: 1;
-}
-
-.meal-type-icon {
-  width: 52rpx;
-  height: 52rpx;
-  border-radius: 14rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28rpx;
-  flex-shrink: 0;
-
-  .iconfont {
-    font-size: 28rpx;
-  }
-}
-
-.breakfast-icon {
-  background: #ffedd4;
-  color: #ff6900;
-}
-
-.morning_snack-icon {
-  background: #ede9fe;
-  color: #7b61ff;
-}
-
-.lunch-icon {
-  background: #dcfce7;
-  color: #00c950;
-}
-
-.afternoon_snack-icon {
-  background: #f3e8ff;
-  color: #ad46ff;
-}
-
-.dinner-icon {
-  background: #dbeafe;
-  color: #2b7fff;
-}
-
-.evening_snack-icon {
-  background: #ede9fe;
-  color: #5b21b6;
-}
-
-.snack-icon {
-  background: #f3e8ff;
-  color: #ad46ff;
-}
-
-.meal-header-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.meal-card-name {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #1e2939;
-  line-height: 48rpx;
-}
-
-.meal-card-time {
-  font-size: 26rpx;
-  color: #6a7282;
-  line-height: 36rpx;
-}
-
-.meal-header-right {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.meal-calorie {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #1e2939;
-  line-height: 48rpx;
-}
-
-/* 删除入口：弱化样式，不影响整体美观 */
-.meal-card-delete {
-  padding: 8rpx;
-  margin: -8rpx;
-}
-
-.meal-card-delete-icon {
-  font-size: 32rpx;
-  color: #9ca3af;
-}
-
-.meal-actions {
-  display: flex;
-  gap: 12rpx;
-  align-items: center;
-}
-
-.action-icon {
-  width: 44rpx;
-  height: 44rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10rpx;
-  background: #f9fafb;
-  transition: all 0.2s ease;
-  font-size: 20rpx;
-  cursor: pointer;
-
-  .iconfont {
-    font-size: 20rpx;
-    color: #6a7282;
-  }
-
-  &.edit-icon .iconfont {
-    color: #2b7fff;
-  }
-
-  &.delete-icon .iconfont {
-    color: #ef4444;
-  }
-}
-
-.action-icon:active {
-  background: #f3f4f6;
-  transform: scale(0.95);
-}
-
-.delete-icon-rotate {
-  display: inline-block;
-  transform: rotate(180deg);
-}
-
-// 食物列表
-.food-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.food-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18rpx 0;
-  border-bottom: 1rpx solid #f3f4f6;
-
-  &:last-child {
-    border-bottom: none;
-  }
-}
-
-.food-info {
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-  flex: 1;
-}
-
-.food-name {
-  font-size: 28rpx;
-  color: #1e2939;
-  line-height: 40rpx;
-  font-weight: 500;
-}
-
-.food-amount {
-  font-size: 24rpx;
-  color: #6a7282;
-  line-height: 32rpx;
-  padding: 2rpx 8rpx;
-  background: #f9fafb;
-  border-radius: 6rpx;
-}
-
-.food-calorie {
-  font-size: 28rpx;
-  color: #4a5565;
-  line-height: 40rpx;
-  font-weight: 600;
-  min-width: 80rpx;
-  text-align: right;
-}
-
-// 空状态
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 120rpx 24rpx;
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 80rpx;
-  margin-bottom: 24rpx;
-  opacity: 0.5;
-}
-
-.empty-text {
-  font-size: 32rpx;
-  color: #1e2939;
-  line-height: 48rpx;
-  font-weight: 600;
-  margin-bottom: 12rpx;
-}
-
-.empty-hint {
-  font-size: 28rpx;
-  color: #6a7282;
-  line-height: 40rpx;
 }
 
 .text-picker-mask {

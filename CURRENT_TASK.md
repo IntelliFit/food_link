@@ -1,5 +1,269 @@
 # CURRENT_TASK
 
+- Task: 圈子动态支持从圈子移除（不删除饮食记录）
+- Status: done
+- Scope:
+  - backend/database/migrate_user_food_records_add_hidden_from_feed.sql
+  - backend/database.py: hide_food_record_from_feed + feed 查询过滤
+  - backend/main.py: POST /api/community/feed/{record_id}/hide
+  - src/utils/api.ts: communityHideFeed
+  - src/pages/community/index.tsx: is_mine 帖子底部移除按钮
+  - src/pages/community/index.scss: action-delete 样式
+- Verification:
+  - python -m py_compile 通过
+  - npm run build:weapp 通过
+- Next step:
+  - 先在数据库执行 migrate_user_food_records_add_hidden_from_feed.sql
+  - 重启后端后在圈子页测试
+
+- Task: 拆分“分析页历史查看”和“记录页拍照录入”的职责
+- Status: done（分析页点某天不再应该跳进拍照页；已新增独立“当天记录页”，并把记录页收口为纯录入入口）
+- Scope:
+  - `src/pages/day-record/index.tsx`
+  - `src/pages/day-record/index.scss`
+  - `src/pages/day-record/index.config.ts`
+    - 新增独立“当天饮食记录”页面，专门展示某一天的餐食明细、总摄入、目标热量与删除入口
+    - 每条记录卡片补充缩略图预览；有实物图时显示首张小图并支持直接预览大图，无图时显示 logo 占位
+    - 点击单条记录仍进入 `record-detail`
+  - `src/pages/stats/index.tsx`
+    - 日历图与“查看当天记录”按钮改为直接跳转新页 `/pages/day-record/index?date=...`
+    - 不再通过 storage + `switchTab` 把用户送进 `record` 页
+  - `src/pages/index/index.tsx`
+    - 首页“查看全部”和日期热力格入口同步改到独立当天记录页
+    - 首页保留“查看饮食统计”作为历史总览入口
+  - `src/pages/record/index.tsx`
+  - `src/pages/record/index.scss`
+  - `src/pages/record/index.config.ts`
+    - 移除按天历史/日期选择区块，`record` 页只保留拍照识别与文字记录
+    - 页面文案明确提示“历史查看已经统一放到分析页”
+  - `src/app.config.ts`
+    - 注册新页面 `pages/day-record/index`
+- Verification:
+  - `npm run build:weapp` 通过
+  - 当天记录卡片补图预览后再次执行 `npm run build:weapp`，仍通过
+  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
+    - `mrc where --port 9420` 成功，当前连接到 `pages/index/index`
+    - `mrc errors 20 --port 9420` 返回 `0`
+    - `mrc switchTab /pages/stats/index --port 9420` 返回 `page "pages/stats/index" is not found`
+    - `mrc relaunch /pages/day-record/index?date=2026-03-31 --port 9420` 返回 `page not found`
+  - 当前阻塞：
+    - 构建产物里已包含 `dist/pages/stats/index.*` 与 `dist/pages/day-record/index.*`
+    - 但当前微信开发者工具自动化目标里的运行包未同步到最新 `dist`，导致无法继续完成截图和真实点击链路验证
+- Next step:
+  - 在微信开发者工具里对当前 `food_link` 项目执行一次“编译/重新载入最新 dist”
+  - 重新验证两条链路：
+    - 分析页点某一天是否进入独立当天记录页
+    - 记录页是否只剩录入，不再出现日期选择和历史列表
+    - 当天记录卡片是否已出现图片缩略图，并且点小图可直接预览照片
+
+- Task: 切换评论审核到 OfoxAI `openai/gpt-5.4-nano` 并放宽审核
+- Status: done（评论审核已从 `qwen-plus + DashScope` 切到 `openai/gpt-5.4-nano + OfoxAI`；与 Gemini 热量识别共用 OfoxAI key/base_url；审核提示词和本地兜底已改为“明确违规才拦”）
+- Scope:
+  - `backend/worker.py`
+    - 评论审核请求改为走 `https://api.ofox.ai/v1/chat/completions`
+    - API Key 改为复用 `OFOXAI_API_KEY / ofox_ai_apikey`
+    - 默认模型改为 `openai/gpt-5.4-nano`
+    - 评论审核 timeout 默认收紧为 `8s`
+    - 审核提示词改为“宽松优先”，普通吐槽、轻微负面评价、食物语境玩梗、简短回复默认放行
+    - 新增评论审核本地放宽兜底：若模型把短评、普通评价、非明确广告/辱骂类内容误判为 `harassment / spam / inappropriate_text / other / politics`，后端会再放行一层
+- Verification:
+  - `python -m py_compile backend/worker.py` 通过
+- Next step:
+  - 重启 `backend/run_backend.py` 或评论 worker 进程，让新模型配置生效
+  - 用 2-3 条真实评论复测耗时和误判率，重点看“普通吐槽/轻负评/玩梗菜名”是否仍被拦
+
+- Task: 修复首页营养素与餐次比例显示失真
+- Status: done（首页比例已改为“真实百分比文案 + 视觉进度单独裁剪 + 非法值兜底”；营养素不再把 `92%` 画成近似满格，餐次卡补上明确百分比）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - 新增首页数值/百分比归一化方法，兜底 `undefined / NaN / 非数字字符串`
+    - 热量总进度、三大营养素进度、餐次进度统一按“真实值显示，视觉值裁到 100%”处理
+    - 三大营养素卡片去掉容易失真的伪圆环，改成百分比徽标 + 横向进度条
+    - 去掉“目标达成 / 已超目标”辅助文案，只保留比例数字与进度表达
+    - 早餐 / 午餐 / 晚餐 / 加餐卡片补充明确的百分比文本，同时保留目标/参考热量文案
+  - `src/pages/index/index.scss`
+    - 新增营养素百分比徽标、横向进度条、餐次百分比区块样式
+- Verification:
+  - `npm run build:weapp` 曾通过
+  - 本轮去掉“目标达成 / 已超目标”文案后再次执行 `npm run build:weapp`，构建阶段命中 `vite:esbuild-transpile` 的 `write ENOMEM`
+  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
+    - `mrc where --port 9420`
+    - `mrc errors 20 --port 9420`
+  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成截图和点击验证
+- Next step:
+  - 用户在首页确认三点：
+    - 三大营养素的 `92% / 58% / 130%` 是否与视觉长度一致，不再出现 `92%` 看起来像 `100%`
+    - 早餐 / 午餐 / 晚餐 / 加餐卡片右侧是否已显示明确百分比
+    - 超过目标时是否仍显示真实比例，如 `130%`
+
+- Task: 暂时关闭精准模式并在点击时提示“该功能仍在完善中”
+- Status: done（分析页和健康档案相关入口已临时关闭精准模式；点击精准模式只提示“该功能仍在完善中”；老结果页再分析也会自动回落到标准模式）
+- Scope:
+  - `src/utils/execution-mode.ts`
+    - 新增执行模式可用性开关与统一提示方法
+    - 当前前端口径固定关闭 `strict`
+  - `src/pages/analyze/index.tsx`
+    - 分析页点击“精准”不再切换模式，只弹“该功能仍在完善中”
+    - 读取用户档案默认模式时，若历史值为 `strict`，前端执行口径自动回落到 `standard`
+  - `src/pages/health-profile/index.tsx`
+  - `src/pages/health-profile-edit/index.tsx`
+    - 健康档案问卷/编辑页里的精准模式改为“完善中，暂时不可选”
+    - 点击精准模式时仅提示，不再选中
+  - `src/pages/health-profile-view/index.tsx`
+    - 档案查看页补充“精准模式（完善中，暂未开放）”展示文案
+  - `src/pages/result/index.tsx`
+    - 二次纠错/重新分析时，即使历史任务来自 `strict`，重新提交流程也统一按 `standard` 发送
+    - 标准模式说明文案去掉“建议切到精准模式再分析一次”的引导
+- Verification:
+  - `npm run build:weapp` 通过
+  - 已尝试 DevTools 自动化验证：
+    - `mrc where --port 9420`
+    - `mrc errors 20 --port 9420`
+  - 当前阻塞：本机微信开发者工具自动化端口 `9420` 未开启，无法完成截图/点击验证
+- Next step:
+  - 用户在小程序里点一次分析页或健康档案里的“精准模式”，确认会提示“该功能仍在完善中”
+  - 若后续精准模式恢复开发，可只打开 `src/utils/execution-mode.ts` 中的可用性开关，再补回运行态验证
+
+- Task: 将用户总目标热量默认底座改为毛德倩公式口径
+- Status: done（后端 BMR 已从 Mifflin-St Jeor 切到毛德倩公式；TDEE 继续按活动系数推导；不再强依赖身高/生日才能算出目标热量）
+- Scope:
+  - `backend/metabolic.py`
+    - `calculate_bmr(...)` 改为毛德倩公式
+    - 保留原函数签名兼容既有调用点，但公式实际只使用 `性别 + 体重`
+  - `backend/main.py`
+    - `update_health_profile` 的 BMR/TDEE 生成条件从“性别 + 身高 + 体重 + 年龄 + 活动水平”收敛为“性别 + 体重 + 活动水平”
+    - 接口注释同步改为新口径
+- Verification:
+  - `python -m py_compile backend/main.py backend/metabolic.py` 通过
+- Next step:
+  - 若用户认可该口径，可再同步补一条前端/产品说明，明确“默认热量目标基于毛德倩公式 + 活动系数估算”
+
+- Task: 补齐点赞互动通知并强化评论回复层级视觉
+- Status: done（点赞通知、回复层级 UI 和前端构建均已完成；运行态 DevTools 验证受阻于 9420 端口未开启；旧库需先执行 SQL migration 才能收到点赞通知）
+- Scope:
+  - `backend/main.py`：
+    - 点赞动态成功后，为动态作者写入 `like_received` 互动通知
+    - 仅对“新增点赞”触发，避免重复点赞反复发通知
+  - `backend/database.py`：
+    - `add_feed_like(...)` 改为返回是否真实新增点赞
+  - `backend/database/feed_interaction_notifications.sql`
+  - `backend/database/migrate_feed_interaction_notifications_add_like_received.sql`
+    - 互动通知类型补齐 `like_received`
+    - 已新增旧库兼容迁移脚本
+  - `src/utils/api.ts`
+  - `src/pages/interaction-notifications/index.tsx`
+    - 前端通知类型、标题、副标题补齐“点赞”
+  - `src/pages/community/index.tsx`
+    - 点赞通知进入圈子页时只定位动态，不再误开评论输入框
+    - 评论渲染改成“作者 / 回复对象 / 独立内容气泡”的结构
+  - `src/pages/community/index.scss`
+    - 回复评论新增左侧引导线、回复对象标签和差异化气泡，避免视觉上像两条独立评论
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py backend/worker.py` 通过
+  - `npm run build:weapp` 通过
+  - 已尝试 DevTools 自动化验证：`mrc where --port 9420`
+  - 当前阻塞：本机微信开发者工具自动化端口 `9420` 未开启
+- Next step:
+  - 先执行 `backend/database/migrate_feed_interaction_notifications_add_like_received.sql`
+  - 再在微信开发者工具或真机确认：
+    - 点赞别人动态后，作者是否能在互动消息里看到“赞了你的动态”
+    - 回复评论在圈子卡片里是否已经明显形成“回复某人”的层级结构
+
+- Task: 修复图片模式二次纠错“改名被当成新增项”导致食物数量变多
+- Status: done（已改为按原项身份/原名替换；“橘子改橙子”不再保留旧项再额外新增一项）
+- Status: done（已进一步收紧为“纠错抽屉提交的列表就是最终列表”；即使模型额外吐出旧项/重复项，最终也不会再从 `4` 项变成 `5` 项）
+- Scope:
+  - 根因：
+    - `backend/worker.py` 的 `_apply_image_correction_items(...)` 之前只按“纠错后的 name”匹配结果项
+    - 当用户把某一项改名时，例如 `橘子 -> 橙子`，后端会把 `橙子` 当成新增项补进去
+    - 原来的 `橘子` 因为没有被识别成“同一项替换”，又会在收尾阶段被保留下来，最终从 `4` 项变成 `5` 项
+    - 用户实际使用里还存在第二层问题：
+      - 很多时候并不会手动改上面的食物列表，而是直接在“补充说明”里写自然语言，比如“那不是橘子，是橙子”
+      - 旧前端会把这句只当普通附加说明，结构化 `correctionItems` 仍然还是原来的 `苹果 / 香蕉 / 橘子 / 梨子`
+      - 在“最终结果严格以 correctionItems 为准”的新后端下，这种自然语言改名就会表现成“完全没变化”
+    - 本轮进一步通过全链路 debug 确认了第三层根因：
+      - 模型其实已经能从补充说明里改出新名字，例如日志里的 `炸肉饼 -> 炸牛肉饼`
+      - 但若前端没有先把这类自然语言改名写进结构化 `correctionItems`，后端兜底仍会把最终名称按旧清单压回去
+      - 因此真正要修的是“补充说明 -> 结构化改名”的前端识别覆盖率，而不只是继续改模型 prompt
+    - 本轮又确认了第四层问题：
+      - 当前前端构造的 `additionalContext` 会把自由文本放成“补充说明”，而结构化清单放在前面，模型更容易把自由文本当次级参考
+      - 同时自然语言改名规则此前仍漏掉了 `炸肉排说得太模糊了，这是牛肉排` 这类常见口语句式
+    - 用户进一步明确指出当前方案方向性错误：
+      - 不应继续依赖正则去“理解用户纠错语义”
+      - 二次纠错的主语义输入应完全交给大模型处理
+      - 结构化清单更适合作为“哪些字段被用户手动改过”的确定性锁，而不是语义理解引擎
+  - 已完成修复：
+    - `src/pages/result/index.tsx`
+      - 二次纠错提交时，结构化纠错清单新增透传 `sourceItemId / sourceName`
+      - `previousResult.items` 同步携带稳定 `itemId`
+      - 已撤回“用正则解析补充说明语义”作为主逻辑的方向，不再靠前端规则理解 `A -> B`
+      - 改为在提交时只下发：
+        - 原始自由文本纠错说明（最高优先级）
+        - 结构化食物清单 + `nameEdited / weightEdited`
+      - 其中 `nameEdited / weightEdited` 仅用于告诉后端“这个字段是不是用户手动改过”
+      - 文字模式重新提交流程不再丢弃 `correctionItems`，会把用户当前确认的结构化清单一并下发给后端
+      - 图片/文字模式提交时，`additionalContext` 文案口径改成“本轮用户主要纠错说明（最高优先级）”，不再把自由文本降成次级补充
+      - 补充说明 placeholder 也改成明确示例，降低误用成本
+    - `src/utils/api.ts`
+      - 为二次纠错请求和分析结果项补充 `sourceItemId / sourceName / itemId` 类型
+    - `backend/worker.py`
+      - `_apply_image_correction_items(...)` 先按 `sourceItemId`，再按 `sourceName`，最后才按纠错后的 `name` 匹配
+      - 二次纠错的最终返回列表改为严格以 `correctionItems` 为准，不再保留模型额外生成的旧项/重复项
+      - 更正后的项会保留原 `itemId`，便于后续继续二次纠错
+      - 同时修正 `_build_item_from_fallback(...)` 中 `itemId` 回写代码不可达的问题
+      - 文字模式新增 `_apply_text_correction_items(...)` 收口，模型返回后也会按用户确认清单统一名称、数量、顺序与明确重量
+      - 已撤回后端“从 `additionalContext` 用规则抽改名语义”的方向，语义理解交还给大模型
+      - 新增 `_normalize_correction_items(...)`，统一解析 `nameEdited / weightEdited`
+      - `_apply_image_correction_items(...)` / `_apply_text_correction_items(...)` 改成字段级收口：
+        - 自由文本纠错说明负责语义修正，由模型主导理解
+        - 结构化清单只锁用户明确手动改过的名称/重量，以及最终列表顺序
+        - 未手动改过的旧名称/旧重量，不能再压过模型本轮结果
+      - 图片/文字 prompt 都改成“自由文本纠错说明优先，结构化清单只用于说明哪些字段被人工改过”
+- Verification:
+  - `python -m py_compile backend/worker.py` 通过
+  - `ReadLints` 检查 `src/pages/result/index.tsx` 无新增报错
+  - `npm run build:weapp` 通过（此前图片链路修复时）
+  - 已执行最小行为验证：
+    - 当 `nameEdited=False` 且模型输出 `炸牛肉排` 时，后端最终保留模型名 `炸牛肉排`
+    - 当 `nameEdited=True` 且用户手动改成 `牛肉排` 时，后端最终锁定为 `牛肉排`
+  - 已执行最小复现脚本：
+    - 初始 4 项：`apple / banana / orange_old / pear`
+    - 模拟模型错误返回 5 项：`apple / banana / orange_old / orange_new / pear`
+    - 二次纠错清单只保留 4 项，并把 `orange_old -> orange_new`
+    - 修复后返回仍为 `4` 项，且 `itemId` 保持 `1 / 2 / 3 / 4`
+  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
+    - `mrc where --port 9420` 已成功，但当前连接到的不是 `food_link`，而是另一套小程序页面 `training/today-training`
+    - 因此本次未能在正确应用里完成结果页二次纠错的截图/点击验证
+- Next step:
+  - 用户在结果页实测一次图片模式二次纠错：
+    - 方式 1：直接把列表里的 `橘子` 改成 `橙子`
+    - 方式 2：不改列表，只在补充说明里写 `那不是橘子，是橙子`
+    - 两种方式都应最终保持 `4` 项，而不是新增第 `5` 项，也不应再完全不变化
+  - 若仍异常，打开全链路 debug：
+    - 提交接口日志：`submit_request / submit_created`
+    - worker 日志：`task_input / prompt / raw_model_output / final_result`
+    - 对照第一轮结果、第二轮纠错提交 payload、模型原始输出、最终写回结果逐段排查
+
+- Task: 修正圈子推荐排序打乱时间顺序
+- Status: done（已改为“时间倒序永远主排序，推荐分只做同时间层内辅助排序”）
+- Scope:
+  - 根因：
+    - 圈子推荐一期里，`recommended / hot / balanced` 在后端是先按推荐分重排、再按时间做次级排序
+    - 导致旧动态会因为分数更高被顶到前面，破坏用户对时间流的预期
+  - 修复：
+    - `backend/database.py`
+    - `list_friends_feed_records(...)` 与 `list_public_feed_records(...)` 的自定义排序改为：
+      - `record_time` 倒序永远第一优先级
+      - 推荐分只作为同时间层内的次级排序参考
+  - 结果预期：
+    - 不管是 `recommended / hot / balanced`，Feed 主体都仍按最新时间往下排
+    - 推荐能力继续保留，但不能再把老内容整体顶到新内容前面
+- Verification:
+  - 已完成代码级复核
+  - 按当前项目口径，本次未执行构建、运行检测、交互点击或截图验证
+- Next step:
+  - 用户在圈子页切换 `推荐 / 高赞 / 均衡` 看看时间顺序是否恢复正常
+
 - Task: 临时取消食物分析每日次数限制
 - Status: done（后端默认已不再按日配额拦截拍照/文字分析，保留环境变量开关便于后续恢复）
 - Scope:
@@ -629,3 +893,35 @@
     - 结果页右下角“上传公共库”是否直接进入公共库上传页，且已自动带入本次拍照分析内容
     - “记录”后是否不再弹“是否上传公共库”的提醒
 - Last updated: `2026-03-29`
+
+---
+
+- Task: 收敛统计页「AI 营养洞察」触发方式，避免每次打开页面实时分析
+- Status: done（已改为“默认读缓存 + 用户手动生成/更新”；后端按北京时间返回最近缓存及是否建议刷新）
+- Scope:
+  - `src/pages/stats/index.tsx`
+    - 移除“统计页无缓存就自动拉起 WebSocket 实时生成”的逻辑
+    - 新增“立即生成 / 手动更新”按钮
+    - 新增缓存说明文案、空态说明、手动刷新失败提示
+    - 若后端返回“缓存已过时”，页面只提示“可手动更新”，不再自动重算
+  - `src/pages/stats/index.scss`
+    - 补充统计页 AI 洞察按钮、状态提示、空态、错误态样式
+  - `src/utils/api.ts`
+    - `StatsSummary` 新增 `analysis_summary_generated_date / analysis_summary_needs_refresh`
+  - `backend/database.py`
+    - AI 洞察缓存查询补齐 `generated_date`
+    - 新增“取最近一条缓存”方法，避免跨天后页面直接空白
+  - `backend/main.py`
+    - 统计汇总接口改为优先返回最近缓存，并标记是否建议手动刷新
+    - 统计洞察生成/保存接口统一按北京时间计算自然日
+    - 修正统计洞察生成时错误透传内置 `range` 而非 `stats_range` 的问题
+- Verification:
+  - `npm run build:weapp` 通过
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - 已尝试 DevTools 自动化验证：`mrc where --port 9420`
+  - 当前阻塞：本机微信开发者工具自动化端口 `9420` 未开启，无法完成截图和点击验证
+- Next step:
+  - 用户在统计页确认三点：
+    - 再次打开页面时，不会自动出现“AI 正在分析最近的饮食记录”
+    - 有缓存时优先展示缓存，并显示生成日期
+    - 新增饮食记录后，当天若需重算，需手动点击“手动更新”

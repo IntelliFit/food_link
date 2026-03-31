@@ -12,6 +12,7 @@ import {
   type HealthProfileUpdateRequest,
   type ExecutionMode
 } from '../../utils/api'
+import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
 
 import './index.scss'
 import HeightRuler from '../../components/HeightRuler'
@@ -55,7 +56,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式', desc: '单食物或 2-3 个清晰主体时更准，复杂整餐会提醒拆拍。' },
+  { value: 'strict', title: '精准模式（完善中）', desc: '该功能仍在完善中，暂时不可选。' },
   { value: 'standard', title: '标准模式', desc: '记录更便捷，但估算误差会更大。' }
 ]
 
@@ -102,8 +103,9 @@ export default function HealthProfileEditPage() {
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
       if (profile.execution_mode) {
-        setExecutionMode(profile.execution_mode)
-        setOriginalExecutionMode(profile.execution_mode)
+        const normalizedMode = normalizeAvailableExecutionMode(profile.execution_mode)
+        setExecutionMode(normalizedMode)
+        setOriginalExecutionMode(normalizedMode)
       }
       const hc = profile.health_condition
       if (hc?.medical_history?.length) {
@@ -435,7 +437,14 @@ export default function HealthProfileEditPage() {
                 <View
                   key={opt.value}
                   className={`option-card ${executionMode === opt.value ? 'active' : ''}`}
-                  onClick={() => setExecutionMode(opt.value)}
+                  onClick={() => {
+                    if (opt.value === 'strict') {
+                      notifyStrictModeUnavailable()
+                      setExecutionMode('standard')
+                      return
+                    }
+                    setExecutionMode(opt.value)
+                  }}
                 >
                   <View className="option-info">
                     <Text className="option-label">{opt.title}</Text>

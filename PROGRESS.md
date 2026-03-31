@@ -6,6 +6,10 @@
 
 ## 2026-03-31
 
+- 🐛 fix: 二次纠错重构为“模型主导语义 + 显式字段锁定”，移除正则式语义理解主逻辑，新增 `nameEdited/weightEdited` 仅锁用户手改字段，避免旧清单继续压过模型结果 `src/pages/result/index.tsx` `src/utils/api.ts` `backend/worker.py`
+- 🐛 fix: 二次纠错把自由文本提升为最高优先级输入，并补齐“X 说得太模糊了，这是 Y”这类口语改名解析，前后端都会把这类说明转成结构化改名 `src/pages/result/index.tsx` `backend/worker.py`
+- 🐛 fix: 文字模式二次纠错改为同样下发结构化清单并在后端按用户确认结果收口，避免文字链路改名/改重量后又漂回旧结果 `src/pages/result/index.tsx` `backend/worker.py`
+- 🐛 fix: 补强结果页二次纠错的自然语言改名识别，支持“X 实际上是 Y / 其实是 Y / 应该是 Y”并放宽原项匹配，避免补充说明里的改名没进结构化清单 `src/pages/result/index.tsx`
 - 🐛 fix: 临时关闭食物分析每日次数限制，后端默认不再因当日配额拦截拍照/文字分析，并保留环境变量开关便于后续恢复 `backend/main.py`
 - ⚡ perf: 修复微信小程序上传主包超 `2MB`，生产构建改为默认压缩且不上传 sourcemap；重新构建后 `dist` 已降到约 `1517.69 KB` `project.config.json` `config/prod.ts`
 - ⚡ perf: 新增 Supabase `food-images` 批量压缩脚本，默认只对被业务引用的长期图片做 dry-run 评估，支持同 key 覆盖压缩与本地报告输出 `backend/compress_food_images.py`

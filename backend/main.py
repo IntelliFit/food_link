@@ -55,6 +55,7 @@ from database import (
     list_food_records_by_range,
     get_streak_days,
     get_cached_insight,
+    get_latest_cached_insight,
     upsert_insight_cache,
     insert_critical_samples,
     upload_health_report_image,
@@ -87,6 +88,7 @@ from database import (
     list_feed_interaction_notifications,
     count_unread_feed_interaction_notifications,
     mark_feed_interaction_notifications_read,
+    create_feed_interaction_notification_sync,
     # 公共食物库
     create_public_food_library_item,
     list_public_food_library,
@@ -103,6 +105,7 @@ from database import (
     list_public_food_library_comments,
     get_food_record_by_id,
     delete_food_record,
+    hide_food_record_from_feed,
     # 私人食谱
     create_user_recipe,
     list_user_recipes,
@@ -231,6 +234,28 @@ def _parse_execution_mode_or_raise(value: Optional[str]) -> Optional[str]:
 
 def _is_food_debug_queue_enabled() -> bool:
     return str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_food_analysis_debug_enabled() -> bool:
+    return str(os.getenv("FOOD_ANALYSIS_DEBUG") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _debug_log_food_submit(stage: str, payload: Any) -> None:
+    if not _is_food_analysis_debug_enabled():
+        return
+    try:
+        if isinstance(payload, (dict, list)):
+            body = json.dumps(payload, ensure_ascii=False, indent=2)
+        else:
+            body = str(payload)
+    except Exception as exc:
+        body = f"<serialize_failed: {exc}>"
+    print(
+        f"[food_debug_submit] stage={stage}_BEGIN\n"
+        f"{body}\n"
+        f"[food_debug_submit] stage={stage}_END",
+        flush=True,
+    )
 
 
 def _get_food_task_type(base_task_type: str) -> str:
@@ -665,9 +690,10 @@ def _build_gemini_prompt(
 结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
 输出要求：
 - 简体中文
-- description <= 12字
-- insight <= 18字
-- context_advice <= 18字，无需则空字符串
+- description <= 16字
+- insight 1-2句，<= 32字
+- context_advice 1-2句，<= 32字，无需则空字符串
+- 建议写得自然一点，但不要空泛和重复
 - 只返回 JSON
 
 JSON:
@@ -1495,6 +1521,16 @@ async def analyze_submit(
         "previousResult": body.previousResult,
         "correctionItems": body.correctionItems,
     }
+    _debug_log_food_submit(
+        "image_submit_request",
+        {
+            "user_id": user_info["user_id"],
+            "task_type": _get_food_task_type("food"),
+            "image_url": body.image_url,
+            "image_urls": body.image_urls,
+            "payload": payload,
+        },
+    )
     try:
         task = await asyncio.to_thread(
             create_analysis_task_sync,
@@ -1503,6 +1539,16 @@ async def analyze_submit(
             image_url=body.image_url.strip() if body.image_url else None,
             image_urls=body.image_urls,
             payload=payload,
+        )
+        _debug_log_food_submit(
+            "image_submit_created",
+            {
+                "task_id": task["id"],
+                "task_type": task.get("task_type"),
+                "image_url": task.get("image_url"),
+                "image_paths": task.get("image_paths"),
+                "payload": task.get("payload"),
+            },
         )
         print(
             f"[food_analysis] MODERATION_SKIPPED_CONFIRMED task_id={task['id']} submit_type=image",
@@ -1959,6 +2005,15 @@ async def analyze_text_submit(
         "previousResult": body.previousResult,
         "correctionItems": body.correctionItems,
     }
+    _debug_log_food_submit(
+        "text_submit_request",
+        {
+            "user_id": user_info["user_id"],
+            "task_type": _get_food_task_type("food_text"),
+            "text": body.text,
+            "payload": payload,
+        },
+    )
 
     try:
         task = await asyncio.to_thread(
@@ -1967,6 +2022,15 @@ async def analyze_text_submit(
             task_type=_get_food_task_type("food_text"),
             text_input=body.text.strip(),
             payload=payload,
+        )
+        _debug_log_food_submit(
+            "text_submit_created",
+            {
+                "task_id": task["id"],
+                "task_type": task.get("task_type"),
+                "text_input": task.get("text_input"),
+                "payload": task.get("payload"),
+            },
         )
         print(
             f"[food_analysis] MODERATION_SKIPPED_CONFIRMED task_id={task['id']} submit_type=text",
@@ -2926,7 +2990,7 @@ async def update_health_profile(
     user_info: dict = Depends(get_current_user_info),
 ):
     """
-    提交/更新健康档案问卷。后端根据性别、年龄、身高、体重、活动水平自动计算 BMR 与 TDEE。
+    提交/更新健康档案问卷。后端根据性别、体重、活动水平自动计算 BMR 与 TDEE。
     """
     user_id = user_info["user_id"]
     user = await get_user_by_id(user_id)
@@ -3001,20 +3065,17 @@ async def update_health_profile(
             print(f"[update_health_profile] 写入体检报告失败: {e}")
     update_dict["health_condition"] = health_condition
 
-    # 计算 BMR / TDEE（需具备性别、身高、体重、年龄、活动水平）
+    # 计算 BMR / TDEE（当前 BMR 使用毛德倩公式，只依赖性别、体重与活动水平）
     gender = update_dict.get("gender") or user.get("gender")
-    height = update_dict.get("height") if "height" in update_dict else user.get("height")
     weight = update_dict.get("weight") if "weight" in update_dict else user.get("weight")
-    birthday = update_dict.get("birthday") if "birthday" in update_dict else user.get("birthday")
     activity_level = update_dict.get("activity_level") or user.get("activity_level") or "sedentary"
 
-    age = get_age_from_birthday(birthday) if birthday else None
-    if gender and height is not None and weight is not None and age is not None:
+    if gender and weight is not None:
         bmr = calculate_bmr(
             "male" if gender == "male" else "female",
             float(weight),
-            float(height),
-            age,
+            0.0,
+            0,
         )
         tdee = calculate_tdee(bmr, activity_level or "sedentary")
         update_dict["bmr"] = bmr
@@ -3931,10 +3992,19 @@ async def get_stats_summary(
     # 只读缓存：不在该接口内调用大模型，避免统计接口超时
     data_fingerprint = f"{total_cal:.0f}_{avg_cal_per_day:.1f}_{recorded_days}_{pct_p}_{pct_c}_{pct_f}"
     cached = await get_cached_insight(user_id, range, today)
-    if cached and cached.get("data_fingerprint") == data_fingerprint:
-        analysis_summary = cached.get("insight_text", "")
-    else:
-        analysis_summary = ""
+    if not cached:
+        cached = await get_latest_cached_insight(user_id, range)
+
+    analysis_summary = ""
+    analysis_summary_generated_date = None
+    analysis_summary_needs_refresh = False
+    if cached:
+        analysis_summary = cached.get("insight_text", "") or ""
+        analysis_summary_generated_date = cached.get("generated_date")
+        analysis_summary_needs_refresh = (
+            cached.get("generated_date") != today
+            or cached.get("data_fingerprint") != data_fingerprint
+        )
 
     return {
         "range": range,
@@ -3952,6 +4022,8 @@ async def get_stats_summary(
         "daily_calories": daily_list,
         "macro_percent": {"protein": pct_p, "carbs": pct_c, "fat": pct_f},
         "analysis_summary": analysis_summary,
+        "analysis_summary_generated_date": analysis_summary_generated_date,
+        "analysis_summary_needs_refresh": analysis_summary_needs_refresh,
     }
 
 
@@ -3975,7 +4047,7 @@ async def generate_stats_insight(
     """
     stats_range = body.range if body.range in ("week", "month") else "week"
     user_id = user_info["user_id"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(CHINA_TZ)
     today = now.strftime("%Y-%m-%d")
     if stats_range == "week":
         start_d = (now - timedelta(days=6)).date()
@@ -4029,7 +4101,7 @@ async def generate_stats_insight(
     try:
         insight = await _generate_nutrition_insight(
             user=user,
-            range_type=range,
+            range_type=stats_range,
             start_date=start_date,
             end_date=end_date,
             tdee=tdee,
@@ -4065,7 +4137,7 @@ async def save_stats_insight(
         raise HTTPException(status_code=400, detail="analysis_summary 不能为空")
 
     user_id = user_info["user_id"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(CHINA_TZ)
     today = now.strftime("%Y-%m-%d")
     if stats_range == "week":
         start_d = (now - timedelta(days=6)).date()
@@ -4242,7 +4314,7 @@ async def ws_stats_insight(websocket: WebSocket):
             await websocket.close(code=1008)
             return
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(CHINA_TZ)
         today = now.strftime("%Y-%m-%d")
         if stats_range == "week":
             start_d = (now - timedelta(days=6)).date()
@@ -4293,7 +4365,7 @@ async def ws_stats_insight(websocket: WebSocket):
         # 调用大模型生成完整洞察文本
         insight = await _generate_nutrition_insight(
             user=user,
-            range_type=range,
+            range_type=stats_range,
             start_date=start_date,
             end_date=end_date,
             tdee=tdee,
@@ -4732,8 +4804,22 @@ async def api_community_like(
 ):
     """对某条动态点赞"""
     try:
-        await _ensure_feed_record_interactable(user_info["user_id"], record_id)
-        await add_feed_like(user_info["user_id"], record_id)
+        record = await _ensure_feed_record_interactable(user_info["user_id"], record_id)
+        inserted = await add_feed_like(user_info["user_id"], record_id)
+        record_owner_id = str(record.get("user_id") or "").strip()
+        if inserted and record_owner_id and record_owner_id != user_info["user_id"]:
+            content_preview = (str(record.get("description") or "").strip() or "赞了你的动态")[:120]
+            try:
+                await asyncio.to_thread(
+                    create_feed_interaction_notification_sync,
+                    recipient_user_id=record_owner_id,
+                    actor_user_id=user_info["user_id"],
+                    record_id=record_id,
+                    notification_type="like_received",
+                    content_preview=content_preview,
+                )
+            except Exception as notify_err:
+                print(f"[api/community/feed/like] 创建点赞通知失败: {notify_err}")
         return {"message": "已点赞"}
     except HTTPException:
         raise
@@ -4757,6 +4843,25 @@ async def api_community_unlike(
     except Exception as e:
         print(f"[api/community/feed/unlike] 错误: {e}")
         raise HTTPException(status_code=500, detail="取消失败")
+
+
+@app.post("/api/community/feed/{record_id}/hide")
+async def api_community_hide_feed(
+    record_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """将自己的动态从圈子中隐藏（不删除饮食记录本身）。"""
+    user_id = user_info["user_id"]
+    try:
+        hidden = await hide_food_record_from_feed(user_id=user_id, record_id=record_id)
+        if not hidden:
+            raise HTTPException(status_code=404, detail="记录不存在或无权操作")
+        return {"message": "已从圈子中移除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/community/feed/hide] 错误: {e}")
+        raise HTTPException(status_code=500, detail="操作失败")
 
 
 @app.get("/api/community/feed/{record_id}/comments")

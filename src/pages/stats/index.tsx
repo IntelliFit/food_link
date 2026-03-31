@@ -1,7 +1,7 @@
 import { View, Text, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { API_BASE_URL, getStatsSummary, saveStatsInsight, type StatsSummary } from '../../utils/api'
+import { getStatsSummary, generateStatsInsight, saveStatsInsight, type StatsSummary } from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
@@ -36,13 +36,18 @@ const MEAL_ICON_COLORS: Record<string, string> = {
   snack: '#ad46ff'
 }
 
-const RECORD_HISTORY_DATE_KEY = 'recordHistoryDate'
+function formatLocalDate(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 type HeatmapCell = {
   date: string
   calories: number
   delta: number
-  level: 0 | 1 | 2 | 3
+  level: 1 | 2
   state: 'none' | 'surplus' | 'deficit'
 }
 
@@ -59,9 +64,8 @@ export default function StatsPage() {
   const [aiDisplayText, setAiDisplayText] = useState('')
   const typingTimerRef = useRef<any>(null)
   const [isTyping, setIsTyping] = useState(false)
-  const isGeneratingRef = useRef(false)
-  const fullTextRef = useRef('')
-  const hasSavedRef = useRef(false)
+  const [insightActionLoading, setInsightActionLoading] = useState(false)
+  const [insightError, setInsightError] = useState<string | null>(null)
 
   const fetchStats = useCallback(async (r: 'week' | 'month') => {
     setLoading(true)
@@ -90,70 +94,47 @@ export default function StatsPage() {
     fetchStats(range)
   })
 
-  // 如果统计数据返回但后端还没有缓存的 AI 洞察，则通过 WebSocket 请求大模型并流式接收
-  useEffect(() => {
-    if (!data) return
-    if (data.analysis_summary) {
-      // 已命中缓存，后面打字效果会处理
-      return
-    }
-    if (isGeneratingRef.current) return
-    isGeneratingRef.current = true
+  const handleGenerateInsight = useCallback(async () => {
+    if (!data || insightActionLoading) return
 
-    const userId = Taro.getStorageSync('user_id')
-    if (!userId) {
-      isGeneratingRef.current = false
-      return
-    }
+    setInsightActionLoading(true)
+    setInsightError(null)
+    try {
+      const res = await generateStatsInsight(range)
+      const full = (res.analysis_summary || '').trim()
+      if (!full) throw new Error('AI 洞察生成失败')
 
-    const wsBase = API_BASE_URL.replace(/^http/, 'ws')
-    const wsUrl = `${wsBase}/ws/stats/insight?range=${range}&user_id=${encodeURIComponent(userId)}`
+      setData(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          analysis_summary: full,
+          analysis_summary_generated_date: formatLocalDate(),
+          analysis_summary_needs_refresh: false
+        }
+      })
 
-    fullTextRef.current = ''
-
-    // 建立 WebSocket 连接（微信小程序端使用全局事件）
-    Taro.connectSocket({
-      url: wsUrl,
-      header: {},
-      protocols: [],
-      tcpNoDelay: true
-    })
-
-    const handleMessage = (res: Taro.SocketTask.OnMessageCallbackResult) => {
-      const chunk = typeof res.data === 'string' ? res.data : ''
-      if (!chunk) return
-      fullTextRef.current += chunk
-      setAiDisplayText(prev => prev + chunk)
-    }
-
-    const handleClose = () => {
-      isGeneratingRef.current = false
-      // 连接关闭后，若有完整文本且尚未保存，则保存到后端
-      const full = fullTextRef.current.trim()
-      if (full && !hasSavedRef.current) {
-        hasSavedRef.current = true
-        saveStatsInsight(range, full).catch((e) => {
-          console.error('保存 AI 洞察失败:', e)
-        })
-        // 同时更新 data，以便后续再次进入时使用缓存（触发打字效果）
-        setData(prev => (prev ? { ...prev, analysis_summary: full } : prev))
+      try {
+        await saveStatsInsight(range, full)
+      } catch (saveError) {
+        console.error('保存 AI 洞察失败:', saveError)
       }
-    }
 
-    const handleError = (err: any) => {
-      console.error('AI 洞察 WebSocket 连接错误:', err)
-      isGeneratingRef.current = false
+      Taro.showToast({
+        title: '洞察已更新',
+        icon: 'success'
+      })
+    } catch (e: unknown) {
+      const message = (e as Error).message || 'AI 洞察生成失败，请稍后重试'
+      setInsightError(message)
+      Taro.showToast({
+        title: '生成失败',
+        icon: 'none'
+      })
+    } finally {
+      setInsightActionLoading(false)
     }
-
-    Taro.onSocketMessage(handleMessage)
-    Taro.onSocketClose(handleClose)
-    Taro.onSocketError(handleError)
-
-    return () => {
-      // 交由服务端正常关闭本次连接，避免重复关闭导致报错
-      isGeneratingRef.current = false
-    }
-  }, [data, range])
+  }, [data, insightActionLoading, range])
 
   // AI 洞察打字机效果：当 analysis_summary 从空变为非空时，按字符逐步显示
   useEffect(() => {
@@ -163,7 +144,6 @@ export default function StatsPage() {
     if (!full) {
       setAiDisplayText('')
       setIsTyping(false)
-      hasSavedRef.current = false
       if (typingTimerRef.current) {
         clearInterval(typingTimerRef.current)
         typingTimerRef.current = null
@@ -191,13 +171,6 @@ export default function StatsPage() {
       if (index >= full.length) {
         setAiDisplayText(full)
         setIsTyping(false)
-        // 打字完成后，将完整文本保存到后端（忽略错误，避免影响体验）
-        if (!hasSavedRef.current) {
-          hasSavedRef.current = true
-          saveStatsInsight(range, full).catch((e) => {
-            console.error('保存 AI 洞察失败:', e)
-          })
-        }
         if (typingTimerRef.current) {
           clearInterval(typingTimerRef.current)
           typingTimerRef.current = null
@@ -251,6 +224,10 @@ export default function StatsPage() {
   const totalProtein = toSafeNumber(d.total_protein)
   const totalCarbs = toSafeNumber(d.total_carbs)
   const totalFat = toSafeNumber(d.total_fat)
+  const hasInsight = Boolean(d.analysis_summary?.trim())
+  const insightGeneratedDate = d.analysis_summary_generated_date || ''
+  const insightNeedsRefresh = Boolean(d.analysis_summary_needs_refresh)
+  const displayInsightText = aiDisplayText || (hasInsight && !isTyping ? d.analysis_summary : '')
   const macroPercent = {
     protein: toSafeNumber(d.macro_percent?.protein),
     carbs: toSafeNumber(d.macro_percent?.carbs),
@@ -275,10 +252,8 @@ export default function StatsPage() {
     const hasRecord = item.calories > 0
     const delta = hasRecord ? item.calories - tdee : 0
     const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(tdee, 1) : 0
-    let level: HeatmapCell['level'] = 0
-    if (deltaRatio > 0.3) level = 3
-    else if (deltaRatio > 0.15) level = 2
-    else if (deltaRatio > 0) level = 1
+    const level: HeatmapCell['level'] = deltaRatio > 0.15 ? 2 : 1
+
     return {
       date: item.date,
       calories: item.calories,
@@ -289,10 +264,9 @@ export default function StatsPage() {
   })
   const activeHeatmapCell = [...heatmapCells].reverse().find((item) => item.calories > 0) || heatmapCells[heatmapCells.length - 1]
 
-  const openHistoryForDate = (date: string) => {
-    Taro.setStorageSync('recordPageTab', 'history')
-    Taro.setStorageSync(RECORD_HISTORY_DATE_KEY, date)
-    Taro.switchTab({ url: '/pages/record/index' })
+  const openDayRecordPage = (date: string) => {
+    if (!date) return
+    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(date)}` })
   }
 
   return (
@@ -332,7 +306,7 @@ export default function StatsPage() {
             <Text className='iconfont icon-rili chart-title-icon' />
             <View className='card-header-copy'>
               <Text className='card-title'>日历图</Text>
-              <Text className='card-subtitle'>灰色未记录，红色吃多了，蓝色吃少了</Text>
+              <Text className='card-subtitle'>灰色未记录，橙色吃多了，蓝色吃少了</Text>
             </View>
           </View>
           <View className='heatmap-legend'>
@@ -355,8 +329,8 @@ export default function StatsPage() {
                 {heatmapCells.map((item) => (
                   <View
                     key={item.date}
-                    className={`heatmap-cell ${item.state} level-${item.level} ${item.calories > 0 ? 'is-clickable' : ''}`}
-                    onClick={() => item.calories > 0 && openHistoryForDate(item.date)}
+                    className={`heatmap-cell ${item.state} ${item.state !== 'none' ? `level-${item.level}` : ''} ${item.calories > 0 ? 'is-clickable' : ''}`}
+                    onClick={() => item.calories > 0 && openDayRecordPage(item.date)}
                   >
                     <Text className='heatmap-cell-label'>{item.date.slice(-2)}</Text>
                     <View className='heatmap-cell-dot' />
@@ -371,7 +345,7 @@ export default function StatsPage() {
                       : `最近周期内暂无饮食记录`}
                   </Text>
                   {activeHeatmapCell.calories > 0 && (
-                    <View className='heatmap-link-btn' onClick={() => openHistoryForDate(activeHeatmapCell.date)}>
+                    <View className='heatmap-link-btn' onClick={() => openDayRecordPage(activeHeatmapCell.date)}>
                       <Text className='heatmap-link-btn-text'>查看当天记录</Text>
                     </View>
                   )}
@@ -545,18 +519,51 @@ export default function StatsPage() {
         {/* 分析报告 */}
         <View className='stats-card analysis-card'>
           <View className='card-header'>
-            <Text className='card-title'>AI 营养洞察</Text>
-            <Text className='card-subtitle'>基于大模型分析</Text>
+            <View className='card-header-copy'>
+              <Text className='card-title'>AI 营养洞察</Text>
+              <Text className='card-subtitle'>默认读取缓存，需要时手动更新</Text>
+            </View>
+            <View
+              className={`analysis-action-btn${insightActionLoading ? ' disabled' : ''}`}
+              onClick={insightActionLoading ? undefined : handleGenerateInsight}
+            >
+              <Text className='analysis-action-btn-text'>
+                {insightActionLoading ? '生成中...' : hasInsight ? '手动更新' : '立即生成'}
+              </Text>
+            </View>
           </View>
           <View className='ai-disclaimer'>
             <Text className='ai-disclaimer-text'>本内容由人工智能生成，仅供健康参考，不代替专业医疗建议。</Text>
           </View>
-          {aiDisplayText ? (
-            <Text className='analysis-content'>{aiDisplayText}</Text>
-          ) : (
+          {insightGeneratedDate ? (
+            <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
+              <Text className='analysis-status-text'>
+                {insightNeedsRefresh
+                  ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
+                  : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
+              </Text>
+            </View>
+          ) : null}
+          {insightError ? (
+            <View className='analysis-error'>
+              <Text className='analysis-error-text'>{insightError}</Text>
+            </View>
+          ) : null}
+          {displayInsightText ? (
+            <Text className='analysis-content'>{displayInsightText}</Text>
+          ) : insightActionLoading || isTyping ? (
             <View className='analysis-loading'>
               <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
-              <Text className='analysis-loading-text'>AI 正在分析最近的饮食记录，请稍候...</Text>
+              <Text className='analysis-loading-text'>
+                {insightActionLoading ? 'AI 正在生成当前统计周期的营养洞察，请稍候...' : '正在展示已生成的洞察...'}
+              </Text>
+            </View>
+          ) : (
+            <View className='analysis-empty'>
+              <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>
+              <View className='analysis-empty-action' onClick={handleGenerateInsight}>
+                <Text className='analysis-empty-action-text'>生成本{range === 'week' ? '周' : '月'}洞察</Text>
+              </View>
             </View>
           )}
         </View>

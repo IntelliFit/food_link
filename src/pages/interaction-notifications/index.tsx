@@ -17,6 +17,7 @@ function persistPendingCommunityTarget(item: FeedInteractionNotification) {
   try {
     Taro.setStorageSync(COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY, {
       recordId: item.record_id,
+      notificationType: item.notification_type,
       commentId: item.comment_id || '',
       parentCommentId: item.parent_comment_id || '',
       createdAt: Date.now()
@@ -42,6 +43,9 @@ function formatTimeLabel(timeStr: string): string {
 }
 
 function buildNotificationTitle(item: FeedInteractionNotification): string {
+  if (item.notification_type === 'like_received') {
+    return `${item.actor.nickname || '有人'}赞了你的动态`
+  }
   if (item.notification_type === 'comment_received') {
     return `${item.actor.nickname || '有人'}评论了你的动态`
   }
@@ -108,7 +112,7 @@ export default function InteractionNotificationsPage() {
       <View className='notifications-header'>
         <View>
           <Text className='notifications-title'>互动消息</Text>
-          <Text className='notifications-subtitle'>评论、回复和审核结果都会显示在这里</Text>
+          <Text className='notifications-subtitle'>点赞、评论、回复和审核结果都会显示在这里</Text>
         </View>
         <View
           className={`mark-read-btn ${(markingRead || unreadCount <= 0) ? 'disabled' : ''}`}

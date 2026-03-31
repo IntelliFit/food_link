@@ -2,10 +2,11 @@ import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Texta
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, submitTextAnalyzeTask, type ExecutionMode, type AnalyzeRecognitionOutcome, type AllowedFoodCategory } from '../../utils/api'
+import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
 
 import './index.scss'
 
-const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/public-assets//logo.png'
+
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 
 const MEAL_OPTIONS = [
@@ -27,7 +28,7 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
   standard: {
     title: '标准模式',
     desc: '本次结果更强调记录效率，适合快速记录日常餐食。',
-    note: '若你正在严格控脂控碳，建议切到精准模式再分析一次。'
+    note: '当前默认使用标准模式，精准模式仍在完善中。'
   }
 }
 
@@ -93,6 +94,8 @@ const getSavedSelectableMealType = (): SelectableMealType | undefined => {
 
 interface NutritionItem {
   id: number
+  sourceItemId?: number
+  sourceName?: string
   name: string
   weight: number // 当前重量（用户可调节）
   originalWeight: number // AI 初始估算重量（用于标记样本时计算偏差）
@@ -121,6 +124,15 @@ const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixe
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
   roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
 )
+
+const normalizeFoodNameForCorrection = (value: unknown) => (
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[()（）\[\]【】,，。./\\\-_:：;；·]/g, '')
+)
+
 
 export default function ResultPage() {
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
@@ -195,8 +207,11 @@ export default function ResultPage() {
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
     return items.map((item, index) => {
       const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
+      const itemId = item.itemId ?? (index + 1)
       return {
-        id: index + 1,
+        id: itemId,
+        sourceItemId: itemId,
+        sourceName: item.name,
         name: item.name,
         weight: item.estimatedWeightGrams,
         originalWeight: aiWeight,
@@ -828,6 +843,7 @@ export default function ResultPage() {
       ...prev,
       {
         id: Date.now(), // 临时 ID
+        sourceName: '',
         name: '',
         weight: 100, // 默认 100g
         originalWeight: 100,
@@ -867,16 +883,19 @@ export default function ResultPage() {
         try {
           setIsResubmitting(true)
           Taro.showLoading({ title: '提交分析中...', mask: true })
+          const resolvedCorrectionItems = correctionItems.map((item) => ({ ...item }))
+          setCorrectionItems(resolvedCorrectionItems)
 
           // 2. 获取原请求的基础配置
           const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
           const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
-          const savedExecutionMode = normalizeExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
+          const savedExecutionMode = normalizeAvailableExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,
             items: nutritionItems.map((item) => ({
+              itemId: item.sourceItemId ?? item.id,
               name: item.name,
               estimatedWeightGrams: item.weight,
               originalWeightGrams: item.originalWeight,
@@ -898,64 +917,78 @@ export default function ResultPage() {
             allowedFoodCategory,
             followupQuestions: followupQuestions.length > 0 ? followupQuestions : undefined,
           }
-          const structuredCorrectionItems = correctionItems.map((item) => ({
-            name: item.name.trim(),
-            weight: Math.max(0, Math.round(item.weight || 0))
-          })).filter((item) => !!item.name && item.weight > 0)
-
-          // 图片模式：纠错清单是主输入；文字模式：纠错清单仅参考，不作为主输入下发
-          const imageCorrectionsText = structuredCorrectionItems
-            .map((item, idx) => `${idx + 1}. ${item.name} ${item.weight}g`)
-            .join('; ')
-          let imageFinalContext = imageCorrectionsText
-            ? `用户在二次纠错中确认了以下食物和重量，请优先采用：${imageCorrectionsText}。`
-            : '用户发起了图片模式二次纠错，请结合原图重新分析。'
-          if (additionalContext.trim()) {
-            imageFinalContext += `\n本轮补充说明：${additionalContext.trim()}`
+          // 构建纠错上下文：用户自由文本 + 用户在列表中的手动修改
+          const editDescriptions: string[] = []
+          const baselineMap = new Map(nutritionItems.map(ni => [ni.id, ni]))
+          for (const item of resolvedCorrectionItems) {
+            const baseline = baselineMap.get(item.id)
+            if (baseline) {
+              const nameChanged = normalizeFoodNameForCorrection(item.name.trim()) !== normalizeFoodNameForCorrection(baseline.name.trim())
+              const weightChanged = Math.round(item.weight || 0) !== Math.round(baseline.weight || 0)
+              if (nameChanged && weightChanged) {
+                editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"，重量改为${Math.round(item.weight)}g`)
+              } else if (nameChanged) {
+                editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"`)
+              } else if (weightChanged) {
+                editDescriptions.push(`将"${item.name.trim()}"的重量改为${Math.round(item.weight)}g`)
+              }
+            } else {
+              editDescriptions.push(`新增食物"${item.name.trim()}" ${Math.round(item.weight)}g`)
+            }
           }
+          for (const baseline of nutritionItems) {
+            if (!resolvedCorrectionItems.some(ci => ci.id === baseline.id)) {
+              editDescriptions.push(`删除了"${baseline.name}"`)
+            }
+          }
+
+          const correctionParts: string[] = []
+          if (additionalContext.trim()) {
+            correctionParts.push(additionalContext.trim())
+          }
+          if (editDescriptions.length > 0) {
+            correctionParts.push(`用户在列表中做了以下修改：${editDescriptions.join('；')}`)
+          }
+          const finalCorrectionContext = correctionParts.length > 0
+            ? correctionParts.join('\n')
+            : '用户发起了二次纠错，请结合原始内容重新分析。'
 
           let taskId = ''
 
-          // 3. 区分是图片分析还是纯文字分析
           const shouldResubmitWithImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
 
           if (shouldResubmitWithImage) {
-            // 图片分析
             const res = await submitAnalyzeTask({
               image_url: imagePaths[0] || imagePath,
               image_urls: imagePaths.length > 0 ? imagePaths : undefined,
-              additionalContext: imageFinalContext,
+              additionalContext: finalCorrectionContext,
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
               execution_mode: savedExecutionMode,
               previousResult,
-              correctionItems: structuredCorrectionItems
             })
             taskId = res.task_id
           } else {
-            // 纯文本分析
             const originalText = String(Taro.getStorageSync('analyzeTextInput') || '').trim()
             const previousCorrectionContext = String(Taro.getStorageSync('analyzeTextAdditionalContext') || '').trim()
+            const textContextParts = [
+              previousCorrectionContext ? `上一轮纠错上下文：${previousCorrectionContext}` : '',
+              finalCorrectionContext,
+              originalText ? `原始文字记录：${originalText}` : '',
+            ].filter(Boolean)
             const currentResultSummary = nutritionItems
               .map((item, idx) => `${idx + 1}. ${item.name} ${item.weight}g`)
               .join('; ')
-            const contextParts = [
-              previousCorrectionContext ? `上一轮纠错/补充上下文：${previousCorrectionContext}` : '',
-              additionalContext.trim() ? `本轮用户补充说明：${additionalContext.trim()}` : '',
-              originalText ? `原始文字记录：${originalText}` : '',
-              `当前结果页中用户已确认/已调整的食物结果：${currentResultSummary}。`
-            ].filter(Boolean)
-            const textPayload = originalText || currentResultSummary || imageCorrectionsText
+            const textPayload = originalText || currentResultSummary
             const res = await submitTextAnalyzeTask({
               text: textPayload,
-              additionalContext: contextParts.join('\n'),
+              additionalContext: textContextParts.join('\n'),
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
               execution_mode: savedExecutionMode,
               previousResult,
-              correctionItems: undefined
             })
             taskId = res.task_id
           }
@@ -1022,12 +1055,10 @@ export default function ResultPage() {
             </Swiper>
           ) : (
             <View className='hero-placeholder logo-placeholder'>
-              <Image
-                src={APP_LOGO_URL}
-                mode='aspectFit'
-                className='placeholder-logo'
-              />
-              <Text className='placeholder-text'>未提供实物照片</Text>
+              <View className='placeholder-icon-wrap'>
+                <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
+              </View>
+              <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
             </View>
           )}
 
@@ -1443,7 +1474,7 @@ export default function ResultPage() {
               </View>
               <Textarea
                 className='context-textarea'
-                placeholder='例如：这碗饭大概有 300g，鸡腿是整只未去骨，我只吃了蛋白'
+                placeholder='例如：不是橘子，是橙子；这碗饭大概 300g；鸡腿是整只未去骨，我只吃了蛋白'
                 value={additionalContext}
                 onInput={(e: any) => setAdditionalContext(e.detail.value)}
                 maxlength={200}

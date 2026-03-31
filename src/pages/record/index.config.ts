@@ -1,5 +1,5 @@
 export default definePageConfig({
-  navigationBarTitleText: '食物分析和记录',
+  navigationBarTitleText: '记录饮食',
   enableShareAppMessage: true,
   enableShareTimeline: true
 })

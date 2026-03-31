@@ -132,6 +132,18 @@ FOOD_BRAND_SLANG_ALLOWLIST = {
 EXPLICIT_POLITICS_PATTERN = re.compile(
     r"(习近平|共产党|中共|政府|国家主席|总书记|人大|政协|两会|法轮功|六四|天安门|台独|港独|藏独|疆独|反共|民主运动)"
 )
+COMMENT_REVIEW_ALLOWLIST = {
+    "好吃", "不好吃", "难吃", "一般", "一般般", "推荐", "不推荐", "踩雷", "避雷", "无语",
+    "离谱", "太咸", "太甜", "太油", "太辣", "笑死", "哈哈", "呜呜", "哭了", "不错",
+}
+COMMENT_EXPLICIT_ABUSE_PATTERN = re.compile(
+    r"(操你妈|草泥马|傻[逼屄比币]|煞笔|死全家|去死|杀了你|弄死你|强奸|轮奸|约炮|卖淫|嫖娼)",
+    re.IGNORECASE,
+)
+COMMENT_SPAM_PATTERN = re.compile(
+    r"(加微|加v|vx|vx|微信|v信|私聊|私信我|联系我|代理|返现|刷单|兼职赚钱|点击链接|二维码|http://|https://|www\.)",
+    re.IGNORECASE,
+)
 
 
 def _debug_log_analysis(task: Dict[str, Any], execution_mode: str, stage: str, payload: Any) -> None:
@@ -231,6 +243,7 @@ def _relax_moderation_result_if_needed(
     result: Dict[str, Any],
     *,
     text_context: str = "",
+    allow_comment_lenient: bool = False,
 ) -> Dict[str, Any]:
     if not isinstance(result, dict) or not result.get("is_violation"):
         return result
@@ -243,7 +256,41 @@ def _relax_moderation_result_if_needed(
         relaxed["reason"] = ""
         relaxed["relaxed_by_backend"] = True
         return relaxed
+    if allow_comment_lenient and _should_relax_comment_moderation(text_context, category, reason):
+        relaxed = dict(result)
+        relaxed["is_violation"] = False
+        relaxed["category"] = "lenient_comment_allowed"
+        relaxed["reason"] = ""
+        relaxed["relaxed_by_backend"] = True
+        return relaxed
     return result
+
+
+def _should_relax_comment_moderation(
+    text: str,
+    category: Optional[str],
+    reason: Optional[str] = None,
+) -> bool:
+    normalized = (text or "").strip().lower()
+    if not normalized:
+        return False
+
+    category_norm = (category or "").strip().lower()
+    reason_norm = (reason or "").strip().lower()
+    if category_norm not in {"harassment", "spam", "inappropriate_text", "other", "politics"}:
+        return False
+    if EXPLICIT_POLITICS_PATTERN.search(normalized) or EXPLICIT_POLITICS_PATTERN.search(reason_norm):
+        return False
+    if COMMENT_EXPLICIT_ABUSE_PATTERN.search(normalized) or COMMENT_EXPLICIT_ABUSE_PATTERN.search(reason_norm):
+        return False
+    if COMMENT_SPAM_PATTERN.search(normalized) or COMMENT_SPAM_PATTERN.search(reason_norm):
+        return False
+
+    if _is_food_context_text(normalized):
+        return True
+    if any(term in normalized for term in COMMENT_REVIEW_ALLOWLIST):
+        return True
+    return len(normalized) <= 30
 
 
 def _normalize_scene_tags(value: Any) -> List[str]:
@@ -740,6 +787,15 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _safe_int(value: Any, default: Optional[int] = None) -> Optional[int]:
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except Exception:
+        return default
+
+
 def _normalize_food_name(name: Any) -> str:
     raw = str(name or "").strip().lower()
     if not raw:
@@ -747,6 +803,18 @@ def _normalize_food_name(name: Any) -> str:
     compact = re.sub(r"\s+", "", raw)
     compact = re.sub(r"[()（）\[\]【】,，。./\\\-_:：;；·]", "", compact)
     return compact
+
+
+def _find_match_index_by_item_id(items: list, target_item_id: Optional[int], used_indexes: set) -> Optional[int]:
+    if target_item_id is None:
+        return None
+    for idx, item in enumerate(items):
+        if idx in used_indexes:
+            continue
+        item_id = _safe_int((item or {}).get("itemId"))
+        if item_id == target_item_id:
+            return idx
+    return None
 
 
 def _find_match_index(items: list, target_name: str, used_indexes: set) -> Optional[int]:
@@ -773,87 +841,6 @@ def _scale_nutrients(nutrients: Dict[str, Any], ratio: float) -> Dict[str, float
     return {k: _safe_float((nutrients or {}).get(k), 0.0) * ratio for k in keys}
 
 
-def _build_item_from_fallback(
-    target_name: str,
-    target_weight: float,
-    fallback_item: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    nutrients = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0, "sugar": 0.0}
-    if fallback_item:
-        fallback_weight = _safe_float(
-            fallback_item.get("estimatedWeightGrams") or fallback_item.get("originalWeightGrams"),
-            0.0,
-        )
-        if fallback_weight > 0:
-            ratio = target_weight / fallback_weight
-            nutrients = _scale_nutrients(fallback_item.get("nutrients") or {}, ratio)
-    return {
-        "name": target_name,
-        "estimatedWeightGrams": target_weight,
-        "originalWeightGrams": target_weight,
-        "nutrients": nutrients,
-    }
-
-
-def _apply_image_correction_items(result_items: list, payload: Dict[str, Any]) -> list:
-    """
-    图片模式二次纠错的强约束兜底：
-    - correctionItems 给出的食物与克重作为本轮锚点
-    - 若模型返回和锚点不一致，按锚点回写并按比例缩放营养
-    """
-    correction_items_raw = payload.get("correctionItems") or []
-    correction_items = []
-    for raw in correction_items_raw:
-        name = str((raw or {}).get("name") or "").strip()
-        weight = _safe_float((raw or {}).get("weight"), 0.0)
-        if name and weight > 0:
-            correction_items.append({"name": name, "weight": weight})
-
-    if not correction_items:
-        return result_items
-
-    previous_items = ((payload.get("previousResult") or {}).get("items") or [])
-    used_result_indexes = set()
-    used_previous_indexes = set()
-    correction_name_norms = {_normalize_food_name(item["name"]) for item in correction_items}
-
-    corrected_items = []
-    for corr in correction_items:
-        target_name = corr["name"]
-        target_weight = corr["weight"]
-
-        result_idx = _find_match_index(result_items, target_name, used_result_indexes)
-        if result_idx is not None:
-            used_result_indexes.add(result_idx)
-            matched = result_items[result_idx]
-            matched_weight = _safe_float(matched.get("estimatedWeightGrams"), 0.0)
-            if matched_weight > 0:
-                ratio = target_weight / matched_weight
-                nutrients = _scale_nutrients(matched.get("nutrients") or {}, ratio)
-                corrected_items.append({
-                    "name": target_name,
-                    "estimatedWeightGrams": target_weight,
-                    "originalWeightGrams": target_weight,
-                    "nutrients": nutrients,
-                })
-                continue
-
-        prev_idx = _find_match_index(previous_items, target_name, used_previous_indexes)
-        fallback_item = None
-        if prev_idx is not None:
-            used_previous_indexes.add(prev_idx)
-            fallback_item = previous_items[prev_idx]
-        corrected_items.append(_build_item_from_fallback(target_name, target_weight, fallback_item))
-
-    for idx, item in enumerate(result_items):
-        if idx in used_result_indexes:
-            continue
-        item_name_norm = _normalize_food_name(item.get("name"))
-        if item_name_norm in correction_name_norms:
-            continue
-        corrected_items.append(item)
-
-    return corrected_items
 
 
 def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
@@ -909,20 +896,9 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
         if parts:
             previous_result_block = "\n第一轮分析输出（供本轮重算参考）：\n- " + "\n- ".join(parts)
 
-    correction_items = payload.get("correctionItems") or []
-    correction_items_text = "\n".join(
-        f"{idx + 1}. {str(item.get('name') or '').strip()} {_fmt_weight(item.get('weight'))}"
-        for idx, item in enumerate(correction_items)
-        if str(item.get("name") or "").strip()
-    )
-    correction_block = (
-        "\n第二轮结构化纠错清单（用户在纠错弹窗中提交）：\n" + correction_items_text
-    ) if correction_items_text else ""
-
     additional = (payload.get("additionalContext") or "").strip()
     additional_line = (
-        f'\n用户本轮补充/纠错说明: "{additional}"。'
-        '\n若与第一轮结果或原图观感冲突，可用此说明修正；但若结构化纠错清单给了明确克重，则以纠错清单为锚点。'
+        f'\n用户本轮纠错说明: "{additional}"。请严格按照此说明修正结果。'
     ) if additional else ""
 
     is_multi_view = payload.get("is_multi_view")
@@ -932,16 +908,12 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
         execution_mode = "standard"
     if execution_mode == "standard":
         standard_context_parts = []
-        if correction_items_text:
-            standard_context_parts.append(
-                "纠错清单:\n" + correction_items_text
-            )
-        elif previous_result_block:
-            standard_context_parts.append(previous_result_block.strip())
         if additional:
             standard_context_parts.append(
-                f'补充:{additional}'
+                "用户纠错说明：\n" + additional
             )
+        if previous_result_block:
+            standard_context_parts.append(previous_result_block.strip())
         standard_context_block = (
             "\n\n" + "\n\n".join(standard_context_parts)
         ) if standard_context_parts else ""
@@ -968,9 +940,10 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
 输出要求：
 - 简体中文
-- description <= 12字
-- insight <= 18字
-- context_advice <= 18字，无需则空字符串
+- description <= 16字
+- insight 1-2句，<= 32字
+- context_advice 1-2句，<= 32字，无需则空字符串
+- 建议写得自然一点，但不要空泛和重复
 - 只返回 JSON
 
 JSON:
@@ -999,23 +972,20 @@ JSON:
     return f"""
 {multi_view_hint}
 请作为专业的营养师分析这些食物图片。
-这是一轮基于“原始图片 + 第一轮结果 + 第二轮反馈”的重新生成。
+这是一轮基于"原始图片 + 第一轮结果 + 用户纠错说明"的重新生成。
 {previous_result_block}
-{correction_block}
 {additional_line}
 
 信息优先级（高到低）：
-1. 第二轮结构化纠错清单（图片模式的主输入）
-2. 本轮用户补充/纠错说明
-3. 第一轮分析输出
-4. 原始图片视觉信息
+1. 本轮用户纠错说明
+2. 第一轮分析输出
+3. 原始图片视觉信息
 
-如果高优先级信息与低优先级冲突，必须以前者为准。
-如果结构化纠错清单给出了明确食物与克重，本轮结果中对应食物的 estimatedWeightGrams 必须与清单一致。
-如果图片主体是食品、饮料、食品包装或菜单，且画面中的“牛马”“打工人”“摸鱼”等词只是商品名、品牌名或包装文案，不要因此判定为政治敏感或违规。
+如果用户纠错说明与之前结果冲突，必须以用户说明为准。
+如果图片主体是食品、饮料、食品包装或菜单，且画面中的"牛马""打工人""摸鱼"等词只是商品名、品牌名或包装文案，不要因此判定为政治敏感或违规。
 
 1. 识别图中所有不同的食物单品。
-2. 重新估算每种食物的重量（克）和详细营养成分；当第二轮反馈给出了更明确重量时，请体现到本轮结果中。
+2. 重新估算每种食物的重量（克）和详细营养成分；当用户纠错说明给出了更明确重量时，请体现到本轮结果中。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
@@ -1062,9 +1032,12 @@ JSON:
 DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 QWEN_VL_MODEL = "qwen-vl-max"
 QWEN_TEXT_MODEL = "qwen-plus"
+OFOX_BASE_URL = os.getenv("OFOXAI_BASE_URL", "https://api.ofox.ai/v1")
 OFOX_MODEL_NAME = os.getenv("OFOX_MODEL_NAME", os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview"))
 OFOX_VISION_MODEL_NAME = os.getenv("OFOX_VISION_MODEL_NAME", OFOX_MODEL_NAME)
 OFOX_TEXT_MODEL_NAME = os.getenv("OFOX_TEXT_MODEL_NAME", OFOX_MODEL_NAME)
+COMMENT_MODERATION_MODEL = os.getenv("COMMENT_MODERATION_MODEL", "openai/gpt-5.4-nano")
+COMMENT_MODERATION_TIMEOUT_SECONDS = float(os.getenv("COMMENT_MODERATION_TIMEOUT_SECONDS", "8"))
 
 
 def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1099,6 +1072,17 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
     if execution_mode not in {"standard", "strict"}:
         execution_mode = "standard"
+    _debug_log_analysis(
+        task,
+        execution_mode,
+        "task_input",
+        {
+            "task_type": task.get("task_type"),
+            "image_url": image_url,
+            "image_paths": image_paths,
+            "payload": payload,
+        },
+    )
 
     user_id = task.get("user_id")
     user = get_user_by_id_sync(user_id) if user_id else None
@@ -1184,8 +1168,7 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     # 转为与 API 一致的 result 结构（供前端与保存记录使用）
     items = _parse_analysis_result_items(parsed)
 
-    # 图片模式下：二次纠错清单作为强约束兜底，防止模型忽略用户已确认克重
-    items = _apply_image_correction_items(items, payload)
+    # 二次纠错完全信任模型输出，不做后处理覆盖
 
     result = {
         "description": str(parsed.get("description", "无法获取描述")),
@@ -1263,21 +1246,11 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
         if parts:
             previous_result_block = "\n上一轮分析输出 / 当前结果页基线（其中可能已包含用户在结果页直接手动修改后的名称与重量，请优先参考这里，再结合本轮文字说明继续修正）：\n- " + "\n- ".join(parts)
 
-    correction_items = payload.get("correctionItems") or []
-    correction_items_text = "\n".join(
-        f"{idx + 1}. {str(item.get('name') or '').strip()} {float(item.get('weight') or 0):g}g"
-        for idx, item in enumerate(correction_items)
-        if str(item.get("name") or "").strip()
-    )
-    correction_block = (
-        "\n第二轮结构化纠错清单（文字模式下仅作参考摘要，不是主输入）：\n" + correction_items_text
-    ) if correction_items_text else ""
-
     additional = (payload.get("additionalContext") or "").strip()
     additional_line = (
-        f'\n用户补充/纠错信息："{additional}"。'
-        '\n如果这段补充/纠错信息与原始描述或上一轮输出冲突，请优先采用这段补充/纠错信息。'
+        f'\n用户本轮纠错说明: "{additional}"。请严格按照此说明修正结果。'
     ) if additional else ""
+
 
     execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
     if execution_mode not in {"standard", "strict"}:
@@ -1289,13 +1262,9 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
         standard_context_parts = []
         if additional:
             standard_context_parts.append(
-                f'补充:{additional}'
+                "用户纠错说明：\n" + additional
             )
-        if correction_items_text:
-            standard_context_parts.append(
-                "纠错清单:\n" + correction_items_text
-            )
-        elif previous_result_block:
+        if previous_result_block:
             standard_context_parts.append(previous_result_block.strip())
         standard_context_block = (
             "\n\n" + "\n\n".join(standard_context_parts)
@@ -1319,10 +1288,11 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 用户描述:{text_input}{standard_context_block}
 {compact_tag_block}输出要求：
 - 简体中文
-- description <= 12字
-- insight <= 18字
-- context_advice <= 18字，无需则空字符串
-- 若补充或纠错给出明确重量，优先采用
+- description <= 16字
+- insight 1-2句，<= 32字
+- context_advice 1-2句，<= 32字，无需则空字符串
+- 建议写得自然一点，但不要空泛和重复
+- 若用户纠错说明给出明确名称/重量，必须优先采用
 - 只返回 JSON
 
 {{
@@ -1352,21 +1322,20 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 
 用户描述：{text_input}
 {previous_result_block}
-{correction_block}
 {additional_line}
 
 信息优先级（高到低）：
-1. 本轮用户补充/纠错信息
+1. 本轮用户主要纠错说明
 2. 上一轮分析输出 / 当前结果页基线
-3. 本轮结构化纠错清单
-4. 原始用户描述
+3. 原始用户描述
+
 
 如果高优先级信息和低优先级信息冲突，必须以前者为准。
 不要机械复用上一轮结果；你需要根据本轮文字说明重新得出更新后的食物、重量与营养。
 
 任务：
 1. 识别描述中的所有食物单品。
-2. 估算每种食物的合理重量（克）和详细营养成分；如果本轮补充说明中给出更晚的重量说明，按本轮补充说明确定。若没有更新重量说明，再参考当前结果页基线与结构化纠错清单。
+2. 估算每种食物的合理重量（克）和详细营养成分；如果用户纠错说明给出了明确的重量，按用户说明确定。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
@@ -1437,6 +1406,16 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
     execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
     if execution_mode not in {"standard", "strict"}:
         execution_mode = "standard"
+    _debug_log_analysis(
+        task,
+        execution_mode,
+        "task_input",
+        {
+            "task_type": task.get("task_type"),
+            "text_input": text_input,
+            "payload": payload,
+        },
+    )
 
     user_id = task.get("user_id")
     user = get_user_by_id_sync(user_id) if user_id else None
@@ -1512,6 +1491,7 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
 
     # 转为与 API 一致的 result 结构
     items = _parse_analysis_result_items(parsed)
+    # 二次纠错完全信任模型输出，不做后处理覆盖
 
     result = {
         "description": str(parsed.get("description", "无法获取描述")),
@@ -1673,22 +1653,24 @@ def process_one_health_report_task(task: Dict[str, Any]) -> None:
 def _comment_moderation_prompt(content: str) -> str:
     """评论内容审核提示词。"""
     return f"""
-你是一个内容安全审核系统。请分析以下用户评论内容，判断是否存在违规情况：
+你是一个“宽松优先”的评论审核系统。请分析以下用户评论内容，判断是否存在明确违规情况：
 
 评论内容："{content}"
 
 判断标准：
-1. 包含色情、低俗、露骨内容
-2. 包含暴力、恐怖、血腥描述
-3. 包含违法犯罪相关内容
-4. 包含政治敏感言论、地域歧视
-5. 包含人身攻击、侮辱谩骂
-6. 包含广告、营销、垃圾信息
-7. 包含恶意灌水、无意义内容
+1. 明确色情、低俗、露骨招嫖内容
+2. 明确暴力威胁、血腥恐怖、教唆伤害内容
+3. 明确违法犯罪、毒品、诈骗、引流拉群、联系方式广告
+4. 明确政治敏感、煽动、地域歧视、仇恨攻击
+5. 明确且强烈的人身攻击、辱骂、诅咒、骚扰
 
-注意：正常的食物评价（如"好吃"、"推荐"、"味道不错"）不算违规。
-注意：食品名、套餐名、门店活动文案、玩梗菜名中的“牛马”“打工人”等词，只要明显在讨论食物或商品，不按政治敏感处理。
-只有明确违反上述规则的内容才判定为违规。
+放宽原则：
+- 默认放行。只有“明确违规且把握很高”时才判定违规。
+- 普通吐槽、轻微负面评价、情绪化口语、重复字、语气词、表情、简短回复，不算违规。
+- 正常的食物评价（如“好吃”“一般”“不推荐”“踩雷”“味道怪怪的”）不算违规。
+- 食品名、套餐名、门店活动文案、玩梗菜名中的“牛马”“打工人”等词，只要明显在讨论食物或商品，不按政治敏感处理。
+- 如果只是态度不好、但没有明确辱骂/威胁/歧视/广告，请放行。
+- 如果拿不准，请返回不违规。
 
 请严格按以下 JSON 格式返回，不要包含任何其他文本：
 如果不违规：{{"is_violation": false}}
@@ -1706,16 +1688,15 @@ def run_comment_moderation_sync(content: str) -> Optional[Dict[str, Any]]:
       - {"is_violation": True, "category": "...", "reason": "..."} 表示违规
     审核失败时返回 None（不阻塞评论流程）。
     """
-    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not api_key:
-        print("[comment_moderation] 缺少 API_KEY，跳过审核")
+    api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+    if not api_key or api_key == "your_ofoxai_api_key_here":
+        print("[comment_moderation] 缺少 OFOXAI_API_KEY，跳过审核")
         return None
 
-    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    api_url = f"{base_url}/chat/completions"
+    api_url = f"{OFOX_BASE_URL}/chat/completions"
 
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=COMMENT_MODERATION_TIMEOUT_SECONDS) as client:
             response = client.post(
                 api_url,
                 headers={
@@ -1723,10 +1704,10 @@ def run_comment_moderation_sync(content: str) -> Optional[Dict[str, Any]]:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "qwen-plus",
+                    "model": COMMENT_MODERATION_MODEL,
                     "messages": [{"role": "user", "content": _comment_moderation_prompt(content)}],
                     "response_format": {"type": "json_object"},
-                    "temperature": 0.1,
+                    "temperature": 0.0,
                 },
             )
 
@@ -1743,7 +1724,11 @@ def run_comment_moderation_sync(content: str) -> Optional[Dict[str, Any]]:
         json_str = re.sub(r"```json", "", raw)
         json_str = re.sub(r"```", "", json_str).strip()
         result = json.loads(json_str)
-        result = _relax_moderation_result_if_needed(result, text_context=content)
+        result = _relax_moderation_result_if_needed(
+            result,
+            text_context=content,
+            allow_comment_lenient=True,
+        )
         print(f"[comment_moderation] 审核结果: {result}")
         return result
 

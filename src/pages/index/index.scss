@@ -351,6 +351,7 @@ $text-tertiary: #9ca3af;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12rpx;
 }
 
 .macro-value-wrap {
@@ -386,39 +387,37 @@ $text-tertiary: #9ca3af;
   line-height: 28rpx;
 }
 
-.macro-percent-right {
-  font-size: 22rpx;
-  font-weight: 600;
-  line-height: 32rpx;
-}
-
-// 大环形仪表盘 - 加大版
-.macro-donut-large {
-  width: 72rpx;
-  height: 72rpx;
-  position: relative;
+.macro-progress-badge {
+  min-width: 88rpx;
+  height: 52rpx;
+  padding: 0 16rpx;
+  border-radius: 9999rpx;
+  border: 1rpx solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-}
-
-.donut-bg-ring,
-.donut-progress-ring {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
   box-sizing: border-box;
 }
 
-.donut-bg-ring {
-  border: 12rpx solid #e5e7eb;
+.macro-progress-badge-text {
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 32rpx;
 }
 
-.donut-progress-ring {
-  border: 12rpx solid transparent;
-  border-top-color: inherit;
-  transition: transform 0.5s ease, opacity 0.3s ease;
+.macro-progress-bar-bg {
+  width: 100%;
+  height: 10rpx;
+  background: #e5e7eb;
+  border-radius: 9999rpx;
+  overflow: hidden;
+}
+
+.macro-progress-bar-fill {
+  height: 100%;
+  border-radius: 9999rpx;
+  transition: width 0.3s ease;
 }
 
 // 快捷记录区域
@@ -565,6 +564,20 @@ $text-tertiary: #9ca3af;
   min-width: 128rpx;
   text-align: right;
   flex-shrink: 0;
+}
+
+.meal-progress-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2rpx;
+  flex-shrink: 0;
+}
+
+.meal-progress-percent {
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 30rpx;
 }
 
 .meal-time {

@@ -18,6 +18,7 @@ export default defineAppConfig({
     'pages/health-profile-view/index',
     'pages/health-profile-edit/index',
     'pages/stats/index',
+    'pages/day-record/index',
     'pages/record-detail/index',
     'pages/food-library/index',
     'pages/food-library-detail/index',

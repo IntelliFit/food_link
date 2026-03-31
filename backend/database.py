@@ -474,7 +474,7 @@ async def get_cached_insight(user_id: str, range_type: str, generated_date: str)
     try:
         result = (
             supabase.table("ai_stats_insights")
-            .select("data_fingerprint, insight_text")
+            .select("generated_date, data_fingerprint, insight_text")
             .eq("user_id", user_id)
             .eq("range_type", range_type)
             .eq("generated_date", generated_date)
@@ -486,6 +486,31 @@ async def get_cached_insight(user_id: str, range_type: str, generated_date: str)
         return None
     except Exception as e:
         print(f"[get_cached_insight] 错误: {e}")
+        return None
+
+
+async def get_latest_cached_insight(user_id: str, range_type: str) -> Optional[Dict[str, Any]]:
+    """
+    查询某个统计范围最近一次生成的 AI 营养洞察缓存。
+    返回 { generated_date, data_fingerprint, insight_text } 或 None
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("ai_stats_insights")
+            .select("generated_date, data_fingerprint, insight_text")
+            .eq("user_id", user_id)
+            .eq("range_type", range_type)
+            .order("generated_date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_latest_cached_insight] 错误: {e}")
         return None
 
 
@@ -1843,6 +1868,7 @@ async def list_friends_feed_records(
     supabase = get_supabase_client()
     try:
         q = supabase.table("user_food_records").select("*").in_("user_id", author_ids)
+        q = q.neq("hidden_from_feed", True)
         
         if date:
             start_ts = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
@@ -1877,7 +1903,8 @@ async def list_friends_feed_records(
 
             rec_list.sort(
                 key=lambda r: (
-                    -_score_feed_record(
+                    (_parse_iso_datetime(r.get("record_time")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(),
+                    _score_feed_record(
                         r,
                         sort_by=sort_by,
                         like_count=likes_map.get(r["id"], {}).get("count", 0),
@@ -1886,8 +1913,8 @@ async def list_friends_feed_records(
                         diet_goal=diet_goal,
                         priority_author_ids=normalized_priority_ids,
                     ),
-                    -(_parse_iso_datetime(r.get("record_time")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(),
-                )
+                ),
+                reverse=True,
             )
             rec_list = rec_list[offset: offset + limit]
             if not rec_list:
@@ -2058,6 +2085,7 @@ async def list_public_feed_records(
             return []
 
         q = supabase.table("user_food_records").select("*").in_("user_id", public_user_ids)
+        q = q.neq("hidden_from_feed", True)
         if meal_type:
             q = q.eq("meal_type", meal_type)
         if diet_goal:
@@ -2083,7 +2111,8 @@ async def list_public_feed_records(
 
             rec_list.sort(
                 key=lambda r: (
-                    -_score_feed_record(
+                    (_parse_iso_datetime(r.get("record_time")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(),
+                    _score_feed_record(
                         r,
                         sort_by=sort_by,
                         like_count=likes_map.get(r["id"], {}).get("count", 0),
@@ -2092,8 +2121,8 @@ async def list_public_feed_records(
                         diet_goal=diet_goal,
                         priority_author_ids=None,
                     ),
-                    -(_parse_iso_datetime(r.get("record_time")) or datetime.fromtimestamp(0, tz=timezone.utc)).timestamp(),
-                )
+                ),
+                reverse=True,
             )
             rec_list = rec_list[offset: offset + limit]
             if not rec_list:
@@ -2154,15 +2183,16 @@ async def list_public_feed_records(
         raise
 
 
-async def add_feed_like(user_id: str, record_id: str) -> None:
-    """对某条饮食记录点赞"""
+async def add_feed_like(user_id: str, record_id: str) -> bool:
+    """对某条饮食记录点赞；返回是否新增了一条点赞。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
         supabase.table("feed_likes").insert({"user_id": user_id, "record_id": record_id}).execute()
+        return True
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
-            return
+            return False
         print(f"[add_feed_like] 错误: {e}")
         raise
 
@@ -2925,6 +2955,24 @@ async def delete_food_record(user_id: str, record_id: str) -> bool:
         return result.data is not None and len(result.data) > 0
     except Exception as e:
         print(f"[delete_food_record] 错误: {e}")
+        raise
+
+
+async def hide_food_record_from_feed(user_id: str, record_id: str) -> bool:
+    """将自己的饮食记录从圈子 Feed 中隐藏（不删除记录本身）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_food_records")
+            .update({"hidden_from_feed": True})
+            .eq("id", record_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return result.data is not None and len(result.data) > 0
+    except Exception as e:
+        print(f"[hide_food_record_from_feed] 错误: {e}")
         raise
 
 

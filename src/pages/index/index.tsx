@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Progress } from '@tarojs/components'
+import { View, Text, Input } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
@@ -158,8 +158,30 @@ function calculateProgressPercent(current: number, target: number): number {
   return Math.max(0, Number(((current / target) * 100).toFixed(1)))
 }
 
+function normalizeDisplayNumber(value: unknown): number {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+function normalizeProgressPercent(value: unknown, current?: unknown, target?: unknown): number {
+  const numeric = Number(value)
+  if (Number.isFinite(numeric)) {
+    return Math.max(0, Number(numeric.toFixed(1)))
+  }
+
+  if (current != null && target != null) {
+    return calculateProgressPercent(normalizeDisplayNumber(current), normalizeDisplayNumber(target))
+  }
+
+  return 0
+}
+
 function clampVisualProgress(progress: number): number {
   return Math.min(100, Math.max(0, progress))
+}
+
+function formatProgressText(progress: number): string {
+  return `${Math.round(progress)}%`
 }
 
 function createTargetForm(intake: HomeIntakeData): TargetFormState {
@@ -198,8 +220,6 @@ const MACRO_CONFIGS: Array<{
   { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#eab308', unit: 'g', Icon: IconCarbs },
   { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f97316', unit: 'g', Icon: IconFat }
 ]
-
-const RECORD_HISTORY_DATE_KEY = 'recordHistoryDate'
 
 function createWeekHeatmapCells(): WeekHeatmapCell[] {
   const today = new Date()
@@ -449,8 +469,12 @@ export default function IndexPage() {
   }
 
   const handleViewAllMeals = () => {
-    Taro.setStorageSync('recordPageTab', 'history')
-    Taro.switchTab({ url: '/pages/record/index' })
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    const today = formatDateKey(new Date())
+    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(today)}` })
   }
 
   const openRecordSummary = () => {
@@ -465,14 +489,14 @@ export default function IndexPage() {
     setSelectedDate(date)
     const cell = weekHeatmapCells.find(c => c.date === date)
     if (cell && cell.calories > 0) {
-      Taro.setStorageSync('recordPageTab', 'history')
-      Taro.setStorageSync(RECORD_HISTORY_DATE_KEY, date)
-      Taro.switchTab({ url: '/pages/record/index' })
+      Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(date)}` })
     }
   }
 
-  const remainingCalories = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
-  const calorieProgress = calculateProgressPercent(intakeData.current, intakeData.target)
+  const totalCurrent = normalizeDisplayNumber(intakeData.current)
+  const totalTarget = normalizeDisplayNumber(intakeData.target)
+  const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
+  const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
   
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
@@ -562,7 +586,9 @@ export default function IndexPage() {
         <View className='macros-section'>
           {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
             const macro = intakeData.macros[key]
-            const progress = calculateProgressPercent(macro.current, macro.target)
+            const currentValue = normalizeDisplayNumber(macro.current)
+            const targetValue = normalizeDisplayNumber(macro.target)
+            const progress = calculateProgressPercent(currentValue, targetValue)
             const visualProgress = clampVisualProgress(progress)
             
             return (
@@ -583,33 +609,28 @@ export default function IndexPage() {
                   <View className='macro-row-first'>
                     <View className='macro-value-wrap'>
                       <Text className='macro-big-number' style={{ color }}>
-                        {loading ? '--' : formatDisplayNumber(macro.current)}
+                        {loading ? '--' : formatDisplayNumber(currentValue)}
                       </Text>
                       <Text className='macro-unit-inline'>{unit}</Text>
                     </View>
                     
-                    {/* 右侧：大仪表盘（无数字） */}
-                    <View className='macro-donut-large'>
-                      <View className='donut-bg-ring' />
-                      <View 
-                        className='donut-progress-ring'
-                        style={{
-                          borderColor: color,
-                          transform: `rotate(${visualProgress * 3.6 - 90}deg)`,
-                          opacity: visualProgress > 0 ? 1 : 0
-                        }}
-                      />
+                    <View className='macro-progress-badge' style={{ color, borderColor: `${color}22`, backgroundColor: `${color}14` }}>
+                      <Text className='macro-progress-badge-text'>{formatProgressText(progress)}</Text>
                     </View>
                   </View>
                   
                   {/* 第二行：详情 + 百分比 */}
                   <View className='macro-row-second'>
                     <Text className='macro-detail-text'>
-                      {formatDisplayNumber(macro.current)} / {formatDisplayNumber(macro.target)}{unit}
+                      {formatDisplayNumber(currentValue)} / {formatDisplayNumber(targetValue)}{unit}
                     </Text>
-                    <Text className='macro-percent-right' style={{ color }}>
-                      {progress.toFixed(0)}%
-                    </Text>
+                  </View>
+
+                  <View className='macro-progress-bar-bg'>
+                    <View
+                      className='macro-progress-bar-fill'
+                      style={{ width: `${visualProgress}%`, backgroundColor: color }}
+                    />
                   </View>
                 </View>
               </View>
@@ -652,9 +673,12 @@ export default function IndexPage() {
                 const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
                 const { Icon, color, bgColor, label } = config
                 const isSnackMeal = SNACK_MEAL_TYPES.has(meal.type)
+                const mealCalorie = normalizeDisplayNumber(meal.calorie)
+                const mealTarget = normalizeDisplayNumber(meal.target)
+                const mealProgress = normalizeProgressPercent(meal.progress, mealCalorie, mealTarget)
                 const targetText = isSnackMeal
-                  ? `参考 ${formatDisplayNumber(meal.target)} kcal`
-                  : `目标 ${formatDisplayNumber(meal.target)} kcal`
+                  ? `参考 ${formatDisplayNumber(mealTarget)} kcal`
+                  : `目标 ${formatDisplayNumber(mealTarget)} kcal`
                 
                 return (
                   <View key={`${meal.type}-${index}`} className='meal-item'>
@@ -664,16 +688,19 @@ export default function IndexPage() {
                     <View className='meal-content'>
                       <View className='meal-main'>
                         <Text className='meal-name'>{meal.name || label}</Text>
-                        <Text className='meal-calorie'>{meal.calorie} kcal</Text>
+                        <Text className='meal-calorie'>{formatDisplayNumber(mealCalorie)} kcal</Text>
                       </View>
                       <View className='meal-progress-wrap'>
                         <View className='meal-progress-bar-bg'>
                           <View
                             className='meal-progress-bar-fill'
-                            style={{ width: `${clampVisualProgress(meal.progress)}%`, backgroundColor: color }}
+                            style={{ width: `${clampVisualProgress(mealProgress)}%`, backgroundColor: color }}
                           />
                         </View>
-                        <Text className='meal-progress-text'>{targetText}</Text>
+                        <View className='meal-progress-meta'>
+                          <Text className='meal-progress-percent' style={{ color }}>{formatProgressText(mealProgress)}</Text>
+                          <Text className='meal-progress-text'>{targetText}</Text>
+                        </View>
                       </View>
                       {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                       {meal.tags?.length > 0 && (

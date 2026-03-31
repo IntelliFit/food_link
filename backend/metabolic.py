@@ -1,6 +1,6 @@
 """
-代谢计算引擎：根据用户生理指标计算 BMR 与 TDEE
-使用 Mifflin-St Jeor 公式计算 BMR，再结合活动系数得到 TDEE
+代谢计算引擎：根据用户生理指标计算 BMR 与 TDEE。
+当前 BMR 采用更贴近中国成人样本的毛德倩公式，再结合活动系数得到 TDEE。
 """
 from typing import Literal, Optional
 
@@ -21,15 +21,19 @@ def calculate_bmr(
     age_years: int,
 ) -> float:
     """
-    使用 Mifflin-St Jeor 公式计算基础代谢率 (BMR)，单位 kcal/天。
+    使用毛德倩公式计算基础代谢率 (BMR)，单位 kcal/天。
 
-    - 男性: BMR = 10 * weight(kg) + 6.25 * height(cm) - 5 * age + 5
-    - 女性: BMR = 10 * weight(kg) + 6.25 * height(cm) - 5 * age - 161
+    - 男性: BMR = (48.5 * weight(kg) + 2954.7) / 4.184
+    - 女性: BMR = (41.9 * weight(kg) + 2869.1) / 4.184
+
+    说明：
+    - 当前函数保留 `height_cm` 与 `age_years` 参数是为了兼容既有调用点；
+      毛德倩公式本身只使用性别与体重。
     """
     if gender == "male":
-        bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age_years + 5
+        bmr = (48.5 * weight_kg + 2954.7) / 4.184
     else:
-        bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age_years - 161
+        bmr = (41.9 * weight_kg + 2869.1) / 4.184
     return round(max(0, bmr), 1)
 
 

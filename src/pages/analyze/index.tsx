@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { Switch } from '@taroify/core'
 import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, uploadAnalyzeImageFile, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
 import type { ExecutionMode } from '../../utils/api'
+import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
 
 import './index.scss'
 
@@ -167,10 +168,6 @@ export default function AnalyzePage() {
   const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
 
-  const normalizeExecutionMode = (value: unknown): ExecutionMode => {
-    return value === 'strict' ? 'strict' : 'standard'
-  }
-
   const handleMultiViewChange = (value: any) => {
     if (typeof value === 'boolean') {
       setIsMultiView(value)
@@ -199,7 +196,7 @@ export default function AnalyzePage() {
             Taro.setStorageSync('dietGoal', profile.diet_goal)
           }
           if (profile.execution_mode) {
-            setExecutionMode(normalizeExecutionMode(profile.execution_mode))
+            setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
           }
         }
       } catch (err) {
@@ -263,6 +260,11 @@ export default function AnalyzePage() {
 
   const handleDefaultModeEdit = () => {
     Taro.navigateTo({ url: '/pages/health-profile-edit/index' })
+  }
+
+  const handleStrictModeTap = () => {
+    notifyStrictModeUnavailable()
+    setExecutionMode('standard')
   }
 
   const doAnalyze = async () => {
@@ -376,7 +378,7 @@ export default function AnalyzePage() {
         <View className='mode-switch-row'>
           <View
             className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''}`}
-            onClick={() => setExecutionMode('strict')}
+            onClick={handleStrictModeTap}
           >
             精准
           </View>

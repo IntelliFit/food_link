@@ -69,6 +69,7 @@ export interface Nutrients {
 
 // 食物项接口
 export interface FoodItem {
+  itemId?: number
   name: string
   estimatedWeightGrams: number
   originalWeightGrams: number
@@ -319,6 +320,8 @@ export interface StatsSummary {
   daily_calories: Array<{ date: string; calories: number }>
   macro_percent: { protein: number; carbs: number; fat: number }
   analysis_summary: string
+  analysis_summary_generated_date?: string | null
+  analysis_summary_needs_refresh?: boolean
 }
 
 // 登录请求接口
@@ -952,6 +955,10 @@ export interface AnalyzeTaskSubmitParams {
   correctionItems?: Array<{
     name: string
     weight: number
+    sourceName?: string
+    sourceItemId?: number
+    nameEdited?: boolean
+    weightEdited?: boolean
   }>
 }
 
@@ -1007,6 +1014,10 @@ export interface AnalyzeTextTaskSubmitParams {
   correctionItems?: Array<{
     name: string
     weight: number
+    sourceName?: string
+    sourceItemId?: number
+    nameEdited?: boolean
+    weightEdited?: boolean
   }>
 }
 
@@ -1988,7 +1999,7 @@ export interface CommunityCommentTask {
 
 export interface FeedInteractionNotification {
   id: string
-  notification_type: 'comment_received' | 'reply_received' | 'comment_rejected'
+  notification_type: 'like_received' | 'comment_received' | 'reply_received' | 'comment_rejected'
   record_id?: string | null
   comment_id?: string | null
   parent_comment_id?: string | null
@@ -2220,6 +2231,12 @@ export async function communityLike(recordId: string): Promise<void> {
 export async function communityUnlike(recordId: string): Promise<void> {
   const response = await authenticatedRequest(`/api/community/feed/${recordId}/like`, { method: 'DELETE' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '取消失败')
+}
+
+/** 将自己的动态从圈子中隐藏（不删除饮食记录本身） */
+export async function communityHideFeed(recordId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/community/feed/${recordId}/hide`, { method: 'POST' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '操作失败')
 }
 
 /** 某条动态的评论列表 */

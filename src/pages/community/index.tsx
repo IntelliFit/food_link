@@ -22,6 +22,7 @@ import {
   communityGetNotifications,
   communityPostComment,
   communityGetCheckinLeaderboard,
+  communityHideFeed,
   type FriendSearchUser,
   type FriendRequestItem,
   type FriendListItem,
@@ -123,6 +124,7 @@ const COMMUNITY_NOTIFICATION_TARGET_MAX_AGE_MS = 10 * 60 * 1000
 
 type PendingCommunityNotificationTarget = {
   recordId: string
+  notificationType?: 'like_received' | 'comment_received' | 'reply_received' | 'comment_rejected' | ''
   commentId?: string | null
   parentCommentId?: string | null
   createdAt?: number
@@ -156,6 +158,7 @@ function readPendingCommunityNotificationTarget(): PendingCommunityNotificationT
 
     return {
       recordId,
+      notificationType: typeof parsed?.notificationType === 'string' ? parsed.notificationType.trim() as PendingCommunityNotificationTarget['notificationType'] : '',
       commentId: typeof parsed?.commentId === 'string' ? parsed.commentId.trim() : '',
       parentCommentId: typeof parsed?.parentCommentId === 'string' ? parsed.parentCommentId.trim() : '',
       createdAt: Number.isFinite(createdAt) ? createdAt : undefined
@@ -291,6 +294,7 @@ export default function CommunityPage() {
   const [feedDietGoal, setFeedDietGoal] = useState<DietGoal | 'all'>('all')
   const [feedAuthorScope, setFeedAuthorScope] = useState<CommunityAuthorScope>('all')
   const [priorityAuthorIds, setPriorityAuthorIds] = useState<string[]>([])
+  const [feedSearchKeyword, setFeedSearchKeyword] = useState('')
   const pendingNotificationNavigationRef = useRef(false)
   const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextFilterRefreshRef = useRef(true)
@@ -908,6 +912,28 @@ export default function CommunityPage() {
     }
   }
 
+  const handleHideFeed = async (item: CommunityFeedItem) => {
+    if (!getAccessToken()) return
+    Taro.showModal({
+      title: '确认移除',
+      content: '从圈子中移除这条动态？你的饮食记录不会被删除。',
+      confirmText: '移除',
+      confirmColor: '#ef4444',
+      success: async (res) => {
+        if (!res.confirm) return
+        try {
+          await communityHideFeed(item.record.id)
+          const newList = feedList.filter(f => f.record.id !== item.record.id)
+          setFeedList(newList)
+          saveToCache(newList)
+          Taro.showToast({ title: '已从圈子移除', icon: 'success' })
+        } catch (e) {
+          Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
+        }
+      }
+    })
+  }
+
   /** 点击帖子查看详情（通过 URL 参数传递记录 ID，从数据库获取最新数据） */
   const handleViewDetail = (record: CommunityFeedItem['record']) => {
     if (!record.id) {
@@ -961,6 +987,15 @@ export default function CommunityPage() {
 
   const recommendedLibraryItems = libraryRecommendList.slice(0, 3)
   const shouldInsertLibraryAfter = (feedIndex: number) => (feedIndex + 1) % 4 === 0
+
+  const filteredFeedList = feedSearchKeyword.trim()
+    ? feedList.filter((item) => {
+      const kw = feedSearchKeyword.trim().toLowerCase()
+      const desc = (item.record.description || '').toLowerCase()
+      const author = (item.author.nickname || '').toLowerCase()
+      return desc.includes(kw) || author.includes(kw)
+    })
+    : feedList
 
   const renderLibraryCard = (libItem: PublicFoodLibraryItem, key: string) => {
     const locationText = formatLibraryLocation(libItem)
@@ -1167,16 +1202,22 @@ export default function CommunityPage() {
       }
 
       scrollToFeedCard(pendingTarget.recordId)
-      const replyTarget =
-        (pendingTarget.commentId
-          ? targetItem.comments?.find((comment) => comment.id === pendingTarget.commentId)
-          : null)
-        || (pendingTarget.parentCommentId
-          ? targetItem.comments?.find((comment) => comment.id === pendingTarget.parentCommentId)
-          : null)
-        || null
+      const shouldOpenReplyComposer = pendingTarget.notificationType === 'comment_received'
+        || pendingTarget.notificationType === 'reply_received'
+        || Boolean(pendingTarget.commentId || pendingTarget.parentCommentId)
 
-      openCommentModal(pendingTarget.recordId, replyTarget)
+      if (shouldOpenReplyComposer) {
+        const replyTarget =
+          (pendingTarget.commentId
+            ? targetItem.comments?.find((comment) => comment.id === pendingTarget.commentId)
+            : null)
+          || (pendingTarget.parentCommentId
+            ? targetItem.comments?.find((comment) => comment.id === pendingTarget.parentCommentId)
+            : null)
+          || null
+
+        openCommentModal(pendingTarget.recordId, replyTarget)
+      }
     } catch (e) {
       console.error('处理互动消息跳转失败:', e)
       Taro.showToast({ title: '打开评论区失败', icon: 'none' })
@@ -1488,51 +1529,80 @@ export default function CommunityPage() {
                 ) : null}
               </View>
               <View className='feed-filter-panel'>
-                <ScrollView className='feed-filter-row' scrollX enhanced showScrollbar={false}>
-                  <View className='feed-filter-row-inner'>
-                    {FEED_SORT_OPTIONS.map((opt) => (
-                      <View
-                        key={opt.value}
-                        className={`feed-filter-chip ${feedSortBy === opt.value ? 'active' : ''}`}
-                        onClick={() => setFeedSortBy(opt.value)}
-                      >
-                        <Text className='feed-filter-chip-text'>{opt.label}</Text>
-                      </View>
-                    ))}
-                    {loggedIn ? (
-                      <View
-                        className={`feed-filter-chip ${feedAuthorScope === 'priority' ? 'active' : ''}`}
-                        onClick={() => setFeedAuthorScope(feedAuthorScope === 'priority' ? 'all' : 'priority')}
-                      >
-                        <Text className='feed-filter-chip-text'>
-                          {feedAuthorScope === 'priority' ? '特别关注中' : '特别关注'}
-                        </Text>
-                      </View>
-                    ) : null}
+                <View className='feed-search-wrap'>
+                  <View className='feed-search-icon-wrap'>
+                    <Text className='feed-search-icon'>搜</Text>
                   </View>
-                </ScrollView>
-                <ScrollView className='feed-filter-row' scrollX enhanced showScrollbar={false}>
-                  <View className='feed-filter-row-inner'>
-                    {FEED_MEAL_OPTIONS.map((opt) => (
-                      <View
-                        key={opt.value}
-                        className={`feed-filter-chip ${feedMealType === opt.value ? 'active' : ''}`}
-                        onClick={() => setFeedMealType(opt.value)}
-                      >
-                        <Text className='feed-filter-chip-text'>{opt.label}</Text>
-                      </View>
-                    ))}
-                    {FEED_GOAL_OPTIONS.map((opt) => (
-                      <View
-                        key={opt.value}
-                        className={`feed-filter-chip subtle ${feedDietGoal === opt.value ? 'active' : ''}`}
-                        onClick={() => setFeedDietGoal(opt.value)}
-                      >
-                        <Text className='feed-filter-chip-text'>{opt.label}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
+                  <Input
+                    className='feed-search-input'
+                    placeholder='搜索动态内容或用户...'
+                    placeholderClass='feed-search-placeholder'
+                    value={feedSearchKeyword}
+                    onInput={(e) => setFeedSearchKeyword(e.detail.value)}
+                    confirmType='search'
+                  />
+                  {feedSearchKeyword ? (
+                    <Text className='feed-search-clear' onClick={() => setFeedSearchKeyword('')}>清除</Text>
+                  ) : null}
+                </View>
+                <View className='feed-filter-labeled-row'>
+                  <Text className='feed-filter-label'>排序</Text>
+                  <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
+                    <View className='feed-filter-row-inner'>
+                      {FEED_SORT_OPTIONS.map((opt) => (
+                        <View
+                          key={opt.value}
+                          className={`feed-filter-chip ${feedSortBy === opt.value ? 'active' : ''}`}
+                          onClick={() => setFeedSortBy(opt.value)}
+                        >
+                          <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                        </View>
+                      ))}
+                      {loggedIn ? (
+                        <View
+                          className={`feed-filter-chip ${feedAuthorScope === 'priority' ? 'active' : ''}`}
+                          onClick={() => setFeedAuthorScope(feedAuthorScope === 'priority' ? 'all' : 'priority')}
+                        >
+                          <Text className='feed-filter-chip-text'>
+                            {feedAuthorScope === 'priority' ? '特别关注中' : '特别关注'}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </ScrollView>
+                </View>
+                <View className='feed-filter-labeled-row'>
+                  <Text className='feed-filter-label'>餐次</Text>
+                  <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
+                    <View className='feed-filter-row-inner'>
+                      {FEED_MEAL_OPTIONS.map((opt) => (
+                        <View
+                          key={opt.value}
+                          className={`feed-filter-chip ${feedMealType === opt.value ? 'active' : ''}`}
+                          onClick={() => setFeedMealType(opt.value)}
+                        >
+                          <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+                <View className='feed-filter-labeled-row'>
+                  <Text className='feed-filter-label'>目标</Text>
+                  <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
+                    <View className='feed-filter-row-inner'>
+                      {FEED_GOAL_OPTIONS.map((opt) => (
+                        <View
+                          key={opt.value}
+                          className={`feed-filter-chip ${feedDietGoal === opt.value ? 'active' : ''}`}
+                          onClick={() => setFeedDietGoal(opt.value)}
+                        >
+                          <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
                 {loggedIn ? (
                   <Text className='feed-filter-tip'>点上方好友头像可设为特别关注，推荐会优先展示他们。</Text>
                 ) : null}
@@ -1561,8 +1631,12 @@ export default function CommunityPage() {
                 </View>
               ) : loadingFeed && feedList.length === 0 ? (
                 <Text className='loading-text'>加载中...</Text>
-              ) : feedList.length === 0 ? (
-                recommendedLibraryItems.length > 0 ? (
+              ) : filteredFeedList.length === 0 ? (
+                feedSearchKeyword.trim() ? (
+                  <View className='feed-empty'>
+                    <Text className='feed-empty-text'>未找到匹配「{feedSearchKeyword.trim()}」的动态</Text>
+                  </View>
+                ) : recommendedLibraryItems.length > 0 ? (
                   <View className='feed-list'>
                     {recommendedLibraryItems.map((libItem, idx) => renderLibraryCard(libItem, `library-empty-${libItem.id}-${idx}`))}
                   </View>
@@ -1579,7 +1653,7 @@ export default function CommunityPage() {
                 )
               ) : (
                 <View className='feed-list'>
-                  {feedList.map((item, index) => (
+                  {filteredFeedList.map((item, index) => (
                     <View key={item.record.id}>
                       <View
                         id={`feed-card-${item.record.id}`}
@@ -1651,13 +1725,22 @@ export default function CommunityPage() {
                             <Text className='action-icon iconfont icon-pinglun' />
                           <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                           </View>
+                          {item.is_mine ? (
+                            <View
+                              className='action-item action-delete'
+                              onClick={() => handleHideFeed(item)}
+                            >
+                              <Text className='action-icon action-delete-icon'>×</Text>
+                              <Text className='action-count action-delete-text'>移除</Text>
+                            </View>
+                          ) : null}
                         </View>
                         {(item.comments?.length ?? 0) > 0 && (
                           <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
                             {(item.comments || []).map((c) => (
                               <View
                                 key={c.id}
-                                className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''}`}
+                                className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''} ${c.reply_to_user_id ? 'is-reply' : ''}`}
                                 onClick={() => openCommentModal(item.record.id, c)}
                               >
                                 <View className='comment-avatar'>
@@ -1667,16 +1750,19 @@ export default function CommunityPage() {
                                     <Text className='comment-avatar-placeholder'>👤</Text>
                                   )}
                                 </View>
-                                <View className='comment-body'>
-                                  <Text className='comment-text'>
+                                <View className={`comment-body ${c.reply_to_user_id ? 'is-reply' : ''}`}>
+                                  <View className='comment-meta-line'>
                                     <Text className='comment-author'>{c.nickname || '用户'}</Text>
                                     {c.reply_to_user_id ? (
-                                      <Text className='comment-reply-label'>
-                                        {' '}回复 {c.reply_to_nickname || '用户'}
-                                      </Text>
+                                      <>
+                                        <Text className='comment-reply-arrow'>回复</Text>
+                                        <Text className='comment-reply-target'>{c.reply_to_nickname || '用户'}</Text>
+                                      </>
                                     ) : null}
-                                    <Text> {c.content}</Text>
-                                  </Text>
+                                  </View>
+                                  <View className={`comment-content-bubble ${c.reply_to_user_id ? 'is-reply' : ''}`}>
+                                    <Text className='comment-content-text'>{c.content}</Text>
+                                  </View>
                                   {c._is_temp ? (
                                     <Text className='comment-status-badge'>审核中</Text>
                                   ) : null}

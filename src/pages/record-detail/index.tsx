@@ -16,7 +16,6 @@ import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../component
 
 import './index.scss'
 
-const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/public-assets//logo.png'
 
 const MEAL_TYPE_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -412,7 +411,7 @@ export default function RecordDetailPage() {
   const timeStr = formatRecordTime(record.record_time)
   const items = record.items || []
   const hasRealRecordImage = Boolean(record.image_path)
-  const recordDisplayImage = record.image_path || APP_LOGO_URL
+  const recordDisplayImage = record.image_path || ''
 
   /** 单条食物实际摄入热量（按 ratio） */
   const itemCalorie = (item: FoodRecord['items'][0]) => {
@@ -626,9 +625,15 @@ export default function RecordDetailPage() {
             })
           }}
         >
-          <Image src={recordDisplayImage} mode={hasRealRecordImage ? 'aspectFill' : 'aspectFit'} />
-          {!hasRealRecordImage && (
-            <Text className="detail-image-placeholder-text">未提供实物照片，已使用产品 logo</Text>
+          {hasRealRecordImage ? (
+            <Image src={recordDisplayImage} mode='aspectFill' />
+          ) : (
+            <>
+              <View className='detail-image-icon-wrap'>
+                <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
+              </View>
+              <Text className="detail-image-placeholder-text">文字记录，未提供实物照片</Text>
+            </>
           )}
         </View>
 

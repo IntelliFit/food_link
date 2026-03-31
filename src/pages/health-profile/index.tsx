@@ -12,6 +12,7 @@ import {
   type HealthProfileUpdateRequest,
   type ExecutionMode
 } from '../../utils/api'
+import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
 
 import './index.scss'
 import HeightRuler from '../../components/HeightRuler'
@@ -55,7 +56,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式（推荐）', desc: '单食物或 2-3 个清晰主体时更准，复杂整餐会提醒拆拍。' },
+  { value: 'strict', title: '精准模式（完善中）', desc: '该功能仍在完善中，暂时不可选。' },
   { value: 'standard', title: '标准模式', desc: '记录更快，但估算波动更大，适合先建立习惯。' }
 ]
 
@@ -107,7 +108,7 @@ export default function HealthProfilePage() {
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
       if (profile.execution_mode) {
-        setExecutionMode(profile.execution_mode)
+        setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
         setExecutionModeTouched(true)
       }
       const hc = profile.health_condition
@@ -223,7 +224,9 @@ export default function HealthProfilePage() {
   }
 
   const recommendExecutionMode = (goal: string): ExecutionMode => {
-    if (goal === 'fat_loss' || goal === 'muscle_gain') return 'strict'
+    if (goal === 'fat_loss' || goal === 'muscle_gain') {
+      return normalizeAvailableExecutionMode('strict')
+    }
     return 'standard'
   }
 
@@ -514,6 +517,11 @@ export default function HealthProfilePage() {
                   key={mode.value}
                   className={`option-card with-desc ${executionMode === mode.value ? 'active' : ''}`}
                   onClick={() => {
+                    if (mode.value === 'strict') {
+                      notifyStrictModeUnavailable()
+                      setExecutionMode('standard')
+                      return
+                    }
                     setExecutionMode(mode.value)
                     setExecutionModeTouched(true)
                   }}

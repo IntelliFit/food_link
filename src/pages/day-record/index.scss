@@ -1,0 +1,339 @@
+.day-record-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f6fbf8 0%, #ffffff 220rpx);
+}
+
+.day-record-scroll {
+  min-height: 100vh;
+}
+
+.day-record-hero {
+  padding: 40rpx 32rpx 28rpx;
+}
+
+.day-record-hero-title {
+  display: block;
+  font-size: 42rpx;
+  line-height: 58rpx;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.day-record-hero-date {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 30rpx;
+  line-height: 42rpx;
+  color: #00a36c;
+  font-weight: 700;
+}
+
+.day-record-hero-desc {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #64748b;
+}
+
+.day-record-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16rpx;
+  padding: 0 32rpx 28rpx;
+}
+
+.summary-card {
+  padding: 22rpx 18rpx;
+  border-radius: 22rpx;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8rpx 26rpx rgba(15, 23, 42, 0.06);
+}
+
+.summary-label {
+  display: block;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #94a3b8;
+}
+
+.summary-value {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 30rpx;
+  line-height: 42rpx;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.day-record-list {
+  padding: 0 32rpx;
+}
+
+.day-record-card {
+  margin-bottom: 20rpx;
+  padding: 28rpx 24rpx;
+  border-radius: 26rpx;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10rpx 32rpx rgba(15, 23, 42, 0.06);
+}
+
+.day-record-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding-bottom: 22rpx;
+  border-bottom: 1rpx solid #eef2f7;
+}
+
+.day-record-card-main {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.day-record-card-thumb {
+  position: relative;
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 22rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f1f5f9;
+  box-shadow: inset 0 0 0 1rpx rgba(148, 163, 184, 0.12);
+
+  &.is-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  }
+}
+
+.day-record-card-thumb-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.day-record-card-thumb-badge {
+  position: absolute;
+  right: 8rpx;
+  bottom: 8rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgba(15, 23, 42, 0.74);
+
+  &.placeholder {
+    background: rgba(100, 116, 139, 0.76);
+  }
+}
+
+.day-record-card-thumb-badge-text {
+  font-size: 18rpx;
+  line-height: 24rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.day-record-card-icon {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .iconfont {
+    font-size: 30rpx;
+  }
+}
+
+.breakfast-icon {
+  background: #ffedd4;
+  color: #ff6900;
+}
+
+.morning_snack-icon {
+  background: #ede9fe;
+  color: #7b61ff;
+}
+
+.lunch-icon {
+  background: #dcfce7;
+  color: #00c950;
+}
+
+.afternoon_snack-icon {
+  background: #f3e8ff;
+  color: #ad46ff;
+}
+
+.dinner-icon {
+  background: #dbeafe;
+  color: #2b7fff;
+}
+
+.evening_snack-icon {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.snack-icon {
+  background: #f3e8ff;
+  color: #ad46ff;
+}
+
+.day-record-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.day-record-card-name {
+  display: block;
+  font-size: 30rpx;
+  line-height: 42rpx;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.day-record-card-time {
+  display: block;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #64748b;
+}
+
+.day-record-card-preview-tip {
+  display: block;
+  font-size: 20rpx;
+  line-height: 30rpx;
+  color: #94a3b8;
+}
+
+.day-record-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.day-record-card-calorie {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.day-record-card-delete {
+  padding: 8rpx;
+  margin: -8rpx;
+}
+
+.day-record-card-delete-icon {
+  font-size: 32rpx;
+  color: #94a3b8;
+}
+
+.day-record-food-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 8rpx;
+}
+
+.day-record-food-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+}
+
+.day-record-food-main {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.day-record-food-name {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.day-record-food-amount {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 999rpx;
+  padding: 4rpx 12rpx;
+}
+
+.day-record-food-calorie {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  color: #475569;
+  font-weight: 600;
+}
+
+.day-record-empty {
+  padding: 120rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.day-record-empty-icon {
+  font-size: 82rpx;
+  color: #cbd5e1;
+  margin-bottom: 24rpx;
+}
+
+.day-record-empty-title {
+  font-size: 30rpx;
+  line-height: 42rpx;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.day-record-empty-desc {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #64748b;
+}
+
+.day-record-empty-btn {
+  margin-top: 28rpx;
+  padding: 18rpx 34rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a36c 100%);
+  box-shadow: 0 12rpx 28rpx rgba(0, 188, 125, 0.2);
+}
+
+.day-record-empty-btn-text {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.day-record-footer-space {
+  height: 64rpx;
+}

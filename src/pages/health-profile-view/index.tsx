@@ -19,7 +19,7 @@ const GOAL_MAP: Record<string, string> = {
   muscle_gain: '增重'
 }
 const EXECUTION_MODE_MAP: Record<string, string> = {
-  strict: '精准模式（拆分精估）',
+  strict: '精准模式（完善中，暂未开放）',
   standard: '标准模式（便捷估算）'
 }
 const MEDICAL_MAP: Record<string, string> = {
