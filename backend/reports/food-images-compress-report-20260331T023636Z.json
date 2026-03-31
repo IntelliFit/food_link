@@ -1,0 +1,5119 @@
+{
+  "summary": {
+    "bucket": "food-images",
+    "scope": "all",
+    "execute": true,
+    "count": 300,
+    "replaced_or_planned": 0,
+    "skipped": 300,
+    "failed": 0,
+    "total_before_mb": 22.74,
+    "total_after_mb": 22.74,
+    "estimated_saved_mb": 0.0,
+    "max_edge": 1280,
+    "jpeg_quality": 62,
+    "webp_quality": 58
+  },
+  "items": [
+    {
+      "name": "5101c9316c294a53a83068f33ca4b311.jpg",
+      "created_at": "2026-03-21T09:46:42.206Z",
+      "original_size": 58650,
+      "status": "skipped_low_gain",
+      "compressed_size": 58646,
+      "estimated_saved_bytes": 4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "510d4ee009f64115971d50a6c103bd59.jpg",
+      "created_at": "2026-03-22T05:40:51.797Z",
+      "original_size": 99686,
+      "status": "skipped_low_gain",
+      "compressed_size": 99690,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "511b7c1a9906472ba5be7c8c4877c84a.jpg",
+      "created_at": "2026-03-12T13:18:04.052Z",
+      "original_size": 17912,
+      "status": "skipped_low_gain",
+      "compressed_size": 7554,
+      "estimated_saved_bytes": 10358,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 222,
+        "original_height": 248,
+        "new_width": 222,
+        "new_height": 248,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5134dd5317364b6eaab74fa93a77ecc1.jpg",
+      "created_at": "2026-03-17T03:46:18.130Z",
+      "original_size": 93417,
+      "status": "skipped_low_gain",
+      "compressed_size": 93413,
+      "estimated_saved_bytes": 4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 576,
+        "new_width": 1280,
+        "new_height": 576,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "515b4224eca44f458debcda4f7cf5d8b.jpg",
+      "created_at": "2026-03-30T08:16:02.351Z",
+      "original_size": 23274,
+      "status": "skipped_low_gain",
+      "compressed_size": 23245,
+      "estimated_saved_bytes": 29,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1206,
+        "original_height": 271,
+        "new_width": 1206,
+        "new_height": 271,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "516669718e494fec8746a527bec14b1f.jpg",
+      "created_at": "2026-03-18T04:39:21.637Z",
+      "original_size": 50552,
+      "status": "skipped_low_gain",
+      "compressed_size": 47109,
+      "estimated_saved_bytes": 3443,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "51b4bf32daf445c4844b3b6779485bdc.jpg",
+      "created_at": "2026-03-24T04:58:15.366Z",
+      "original_size": 131462,
+      "status": "skipped_low_gain",
+      "compressed_size": 131468,
+      "estimated_saved_bytes": -6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "51b52e749e9842f4b61326cc3265c7c4.jpg",
+      "created_at": "2026-03-22T03:53:54.989Z",
+      "original_size": 81638,
+      "status": "skipped_low_gain",
+      "compressed_size": 81639,
+      "estimated_saved_bytes": -1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 591,
+        "new_width": 1280,
+        "new_height": 591,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "51bb3db2ffc34178b6d07468c4357e9c.jpg",
+      "created_at": "2026-03-26T05:22:44.461Z",
+      "original_size": 64343,
+      "status": "skipped_low_gain",
+      "compressed_size": 59897,
+      "estimated_saved_bytes": 4446,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "51d37353ef1241439d585d5a11f16e09.jpg",
+      "created_at": "2026-03-12T00:13:39.134Z",
+      "original_size": 56425,
+      "status": "skipped_low_gain",
+      "compressed_size": 26212,
+      "estimated_saved_bytes": 30213,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 888,
+        "original_height": 1916,
+        "new_width": 593,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "51f03a501b044bc68f6c8a84c2be8b6a.jpg",
+      "created_at": "2026-03-14T04:14:56.973Z",
+      "original_size": 142598,
+      "status": "skipped_low_gain",
+      "compressed_size": 142597,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "51f493b6d8ea45f78a8ad7be4b074b5f.jpg",
+      "created_at": "2026-03-17T03:29:00.255Z",
+      "original_size": 66592,
+      "status": "skipped_low_gain",
+      "compressed_size": 66584,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "51fbb8190f864dfc88356fa886ac763e.jpg",
+      "created_at": "2026-03-11T13:30:11.995Z",
+      "original_size": 119145,
+      "status": "skipped_low_gain",
+      "compressed_size": 119112,
+      "estimated_saved_bytes": 33,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "520c9a1bf2bb4e87a608648d147d264a.jpg",
+      "created_at": "2026-02-25T04:59:26.408Z",
+      "original_size": 56039,
+      "status": "skipped_low_gain",
+      "compressed_size": 56017,
+      "estimated_saved_bytes": 22,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1106,
+        "original_height": 1178,
+        "new_width": 1106,
+        "new_height": 1178,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "525df5135a984b319bba01ba0ae78601.jpg",
+      "created_at": "2026-03-16T10:27:32.570Z",
+      "original_size": 69996,
+      "status": "skipped_low_gain",
+      "compressed_size": 69969,
+      "estimated_saved_bytes": 27,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 580,
+        "new_width": 1280,
+        "new_height": 580,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "525ffefad8b34569b0c48f9faa6cc834.jpg",
+      "created_at": "2026-03-27T05:51:24.297Z",
+      "original_size": 101475,
+      "status": "skipped_low_gain",
+      "compressed_size": 101474,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "526da05463c24b74a48661d75c19dad4.jpg",
+      "created_at": "2026-03-11T04:13:17.547Z",
+      "original_size": 86101,
+      "status": "skipped_low_gain",
+      "compressed_size": 86116,
+      "estimated_saved_bytes": -15,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 591,
+        "original_height": 1280,
+        "new_width": 591,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5285aa0006c34fc3b0e9776b655f5250.jpg",
+      "created_at": "2026-03-23T09:31:43.060Z",
+      "original_size": 57592,
+      "status": "skipped_low_gain",
+      "compressed_size": 53954,
+      "estimated_saved_bytes": 3638,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "52adc3ea1d274b8bab4a45448d1c8494.jpg",
+      "created_at": "2026-03-14T04:32:03.077Z",
+      "original_size": 159056,
+      "status": "skipped_low_gain",
+      "compressed_size": 159038,
+      "estimated_saved_bytes": 18,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "52c82a0d1e184953bb2754b3e44b56f4.jpg",
+      "created_at": "2026-02-06T14:07:54.132Z",
+      "original_size": 97076,
+      "status": "skipped_low_gain",
+      "compressed_size": 97079,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 943,
+        "new_width": 1280,
+        "new_height": 943,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53022cebca714f2ca23100c6725161d7.jpg",
+      "created_at": "2026-03-26T09:25:34.532Z",
+      "original_size": 106603,
+      "status": "skipped_low_gain",
+      "compressed_size": 106601,
+      "estimated_saved_bytes": 2,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5321b335daa3446ba1cecfb9ab41188d.jpg",
+      "created_at": "2026-03-13T02:49:42.145Z",
+      "original_size": 217544,
+      "status": "skipped_low_gain",
+      "compressed_size": 217505,
+      "estimated_saved_bytes": 39,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5321ca1f530345d8b53b9152dc40536f.jpg",
+      "created_at": "2026-03-29T08:25:29.733Z",
+      "original_size": 74358,
+      "status": "skipped_low_gain",
+      "compressed_size": 44062,
+      "estimated_saved_bytes": 30296,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1594,
+        "new_width": 578,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5323987a0ea1462a9b9f8674d5a91701.jpg",
+      "created_at": "2026-03-17T04:37:13.897Z",
+      "original_size": 81624,
+      "status": "skipped_low_gain",
+      "compressed_size": 81660,
+      "estimated_saved_bytes": -36,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "532a9e82f28243ce8ba0356feda73a6a.jpg",
+      "created_at": "2026-03-30T00:42:24.066Z",
+      "original_size": 123791,
+      "status": "skipped_low_gain",
+      "compressed_size": 123790,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53463e8ba21e4992b6dc1cfd522c3403.jpg",
+      "created_at": "2026-03-14T04:08:55.783Z",
+      "original_size": 88032,
+      "status": "skipped_low_gain",
+      "compressed_size": 55931,
+      "estimated_saved_bytes": 32101,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 717,
+        "original_height": 1552,
+        "new_width": 591,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "535fee61a7e840369e8a7a1287717c54.jpg",
+      "created_at": "2026-03-16T04:11:16.799Z",
+      "original_size": 57621,
+      "status": "skipped_low_gain",
+      "compressed_size": 57619,
+      "estimated_saved_bytes": 2,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5389ac802bb641da91d1b36e0e662933.jpg",
+      "created_at": "2026-03-13T09:42:14.712Z",
+      "original_size": 70658,
+      "status": "skipped_low_gain",
+      "compressed_size": 70647,
+      "estimated_saved_bytes": 11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "539d4ea49aad4d11a834de0abf164a6e.jpg",
+      "created_at": "2026-03-23T12:06:48.721Z",
+      "original_size": 144657,
+      "status": "skipped_low_gain",
+      "compressed_size": 144626,
+      "estimated_saved_bytes": 31,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53b1d576287e463bb256df0f1d9a4404.jpg",
+      "created_at": "2026-03-29T09:48:13.460Z",
+      "original_size": 48797,
+      "status": "skipped_low_gain",
+      "compressed_size": 48797,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 567,
+        "original_height": 1280,
+        "new_width": 567,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53cc8bcdc19a4bff8b4fd2ff3419aa03.jpg",
+      "created_at": "2026-03-14T04:08:56.805Z",
+      "original_size": 27789,
+      "status": "skipped_low_gain",
+      "compressed_size": 27789,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 591,
+        "new_width": 1280,
+        "new_height": 591,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53d8bfd545a34d49b869a36dd43bc112.jpg",
+      "created_at": "2026-03-30T00:47:16.741Z",
+      "original_size": 50455,
+      "status": "skipped_low_gain",
+      "compressed_size": 47586,
+      "estimated_saved_bytes": 2869,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53e852e9ee5344019a0b7795f9d71e73.jpg",
+      "created_at": "2026-03-12T11:23:05.700Z",
+      "original_size": 65022,
+      "status": "skipped_low_gain",
+      "compressed_size": 65022,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53ec0892e32c430794078e17a55e71eb.jpg",
+      "created_at": "2026-03-15T03:41:37.308Z",
+      "original_size": 48237,
+      "status": "skipped_low_gain",
+      "compressed_size": 48237,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "53fd07a5be02417881b1bc6739a4378c.jpg",
+      "created_at": "2026-02-08T12:51:02.643Z",
+      "original_size": 57886,
+      "status": "skipped_low_gain",
+      "compressed_size": 57890,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "540ce79ced8246e2973f3e9da238c6ba.jpg",
+      "created_at": "2026-03-18T10:20:41.327Z",
+      "original_size": 120024,
+      "status": "skipped_low_gain",
+      "compressed_size": 120019,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "540e42b13a4e4eb596754ed8cd884d2c.jpg",
+      "created_at": "2026-03-19T10:17:37.587Z",
+      "original_size": 92097,
+      "status": "skipped_low_gain",
+      "compressed_size": 92094,
+      "estimated_saved_bytes": 3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "541067878b254d60b6e9f41d9c1edc99.jpg",
+      "created_at": "2026-03-21T12:24:10.698Z",
+      "original_size": 145389,
+      "status": "skipped_low_gain",
+      "compressed_size": 145330,
+      "estimated_saved_bytes": 59,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "541e647689064aa48279568e1deaf0e5.jpg",
+      "created_at": "2026-03-17T09:46:59.311Z",
+      "original_size": 71378,
+      "status": "skipped_low_gain",
+      "compressed_size": 71355,
+      "estimated_saved_bytes": 23,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 582,
+        "new_width": 1280,
+        "new_height": 582,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "54242adb9aca44b3b2187262dc67c9c8.jpg",
+      "created_at": "2026-03-21T04:25:45.504Z",
+      "original_size": 71587,
+      "status": "skipped_low_gain",
+      "compressed_size": 71581,
+      "estimated_saved_bytes": 6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 576,
+        "new_width": 1280,
+        "new_height": 576,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "543341c2417d462f83f6b1a568bb8398.jpg",
+      "created_at": "2026-02-17T01:47:42.891Z",
+      "original_size": 77325,
+      "status": "skipped_low_gain",
+      "compressed_size": 77328,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5433dfdc2ef447c7a406d7a7dda35b02.jpg",
+      "created_at": "2026-03-24T05:12:58.203Z",
+      "original_size": 47910,
+      "status": "skipped_low_gain",
+      "compressed_size": 47912,
+      "estimated_saved_bytes": -2,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 846,
+        "original_height": 639,
+        "new_width": 846,
+        "new_height": 639,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "54769e40f219468baed624b6216cfd93.jpg",
+      "created_at": "2026-03-15T09:50:16.231Z",
+      "original_size": 99629,
+      "status": "skipped_low_gain",
+      "compressed_size": 99618,
+      "estimated_saved_bytes": 11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "547e349d2f2f4b5eb2be588503c1bc58.jpg",
+      "created_at": "2026-03-19T03:45:58.511Z",
+      "original_size": 67423,
+      "status": "skipped_low_gain",
+      "compressed_size": 67400,
+      "estimated_saved_bytes": 23,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "54d501072fca43e1a9d5d6d93b9df271.jpg",
+      "created_at": "2026-03-26T03:56:56.502Z",
+      "original_size": 107653,
+      "status": "skipped_low_gain",
+      "compressed_size": 107644,
+      "estimated_saved_bytes": 9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "54d57dd6647f438da2b7deca89b438fa.jpg",
+      "created_at": "2026-03-12T15:27:03.661Z",
+      "original_size": 65830,
+      "status": "skipped_low_gain",
+      "compressed_size": 60879,
+      "estimated_saved_bytes": 4951,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "54d7b32689954d08a9954b802dc66fdf.jpg",
+      "created_at": "2026-03-23T10:14:06.364Z",
+      "original_size": 63197,
+      "status": "skipped_low_gain",
+      "compressed_size": 45371,
+      "estimated_saved_bytes": 17826,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "54ebcb03b62d47cd9c5981a951418a9c.jpg",
+      "created_at": "2026-03-15T08:51:38.519Z",
+      "original_size": 82661,
+      "status": "skipped_low_gain",
+      "compressed_size": 82649,
+      "estimated_saved_bytes": 12,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "54f7a43b8e51449f8ab9b9ebf39758b3.jpg",
+      "created_at": "2026-02-03T14:25:53.390Z",
+      "original_size": 49414,
+      "status": "skipped_low_gain",
+      "compressed_size": 49423,
+      "estimated_saved_bytes": -9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 856,
+        "original_height": 636,
+        "new_width": 856,
+        "new_height": 636,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "551fb27f80074d439a465e894d11a9e2.jpg",
+      "created_at": "2026-03-14T03:13:49.766Z",
+      "original_size": 39924,
+      "status": "skipped_low_gain",
+      "compressed_size": 36449,
+      "estimated_saved_bytes": 3475,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 568,
+        "new_width": 960,
+        "new_height": 568,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5522e7a8bcf84a33b8463d15948dc63e.jpg",
+      "created_at": "2026-03-26T11:55:10.069Z",
+      "original_size": 62609,
+      "status": "skipped_low_gain",
+      "compressed_size": 58573,
+      "estimated_saved_bytes": 4036,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "552ae12210974eddaced9fa740ba3a2c.jpg",
+      "created_at": "2026-03-15T09:21:45.638Z",
+      "original_size": 80594,
+      "status": "skipped_low_gain",
+      "compressed_size": 80618,
+      "estimated_saved_bytes": -24,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 576,
+        "original_height": 1280,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5534c3b1dcc94745b0a18ee6af32387b.jpg",
+      "created_at": "2026-03-19T05:11:21.059Z",
+      "original_size": 67886,
+      "status": "skipped_low_gain",
+      "compressed_size": 67885,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "553dcf670b044e2396e84e1ab2341e2c.jpg",
+      "created_at": "2026-03-09T23:50:21.835Z",
+      "original_size": 61041,
+      "status": "skipped_low_gain",
+      "compressed_size": 61040,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 582,
+        "original_height": 1280,
+        "new_width": 582,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "554ab0dad60c4b8f8b2caf817e33f8f8.jpg",
+      "created_at": "2026-03-13T04:03:53.989Z",
+      "original_size": 63024,
+      "status": "skipped_low_gain",
+      "compressed_size": 58994,
+      "estimated_saved_bytes": 4030,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5570b86c427f4932a5240a0187870d94.jpg",
+      "created_at": "2026-03-13T04:02:42.074Z",
+      "original_size": 53227,
+      "status": "skipped_low_gain",
+      "compressed_size": 53219,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5579abf4b56c41b0af9899ac1c12dca1.jpg",
+      "created_at": "2026-03-29T14:09:44.782Z",
+      "original_size": 44917,
+      "status": "skipped_low_gain",
+      "compressed_size": 44921,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 528,
+        "original_height": 967,
+        "new_width": 528,
+        "new_height": 967,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "55c3eeed220f44e48bbb541c5cdab7ee.jpg",
+      "created_at": "2026-03-07T11:27:27.421Z",
+      "original_size": 86827,
+      "status": "skipped_low_gain",
+      "compressed_size": 55178,
+      "estimated_saved_bytes": 31649,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1594,
+        "new_width": 578,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "55d78297d6234d4e8595407eb6647312.jpg",
+      "created_at": "2026-03-25T14:05:29.831Z",
+      "original_size": 97463,
+      "status": "skipped_low_gain",
+      "compressed_size": 97471,
+      "estimated_saved_bytes": -8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "55da6c08a86a4d16a05484de98e29f1b.jpg",
+      "created_at": "2026-03-17T04:07:06.208Z",
+      "original_size": 127632,
+      "status": "skipped_low_gain",
+      "compressed_size": 127632,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "55e3bb46fd7c41c3ad0cdbf68b66563c.jpg",
+      "created_at": "2026-03-16T13:50:26.226Z",
+      "original_size": 183256,
+      "status": "skipped_low_gain",
+      "compressed_size": 183233,
+      "estimated_saved_bytes": 23,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "55f84dd28d964ccb818be545963807bb.jpg",
+      "created_at": "2026-03-28T03:10:50.109Z",
+      "original_size": 137816,
+      "status": "skipped_low_gain",
+      "compressed_size": 137820,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "55fca121b27446e8aa75b4ad45d7d9c9.jpg",
+      "created_at": "2026-03-08T04:45:21.290Z",
+      "original_size": 77637,
+      "status": "skipped_low_gain",
+      "compressed_size": 46153,
+      "estimated_saved_bytes": 31484,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 768,
+        "original_height": 1664,
+        "new_width": 591,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "567a9d034b764552981a153168d4ec42.jpg",
+      "created_at": "2026-03-26T03:46:10.209Z",
+      "original_size": 139745,
+      "status": "skipped_low_gain",
+      "compressed_size": 139745,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "56ba9667324244198fce1fb5607cc5dc.jpg",
+      "created_at": "2026-03-13T17:13:51.691Z",
+      "original_size": 75179,
+      "status": "skipped_low_gain",
+      "compressed_size": 52350,
+      "estimated_saved_bytes": 22829,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 800,
+        "original_height": 800,
+        "new_width": 800,
+        "new_height": 800,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "56ceb60027ca44d6abdcf1eb11dba2a0.jpg",
+      "created_at": "2026-03-27T03:39:29.286Z",
+      "original_size": 172844,
+      "status": "skipped_low_gain",
+      "compressed_size": 172818,
+      "estimated_saved_bytes": 26,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "56d96258ca0748a986d5c64fb10ea6bf.jpg",
+      "created_at": "2026-03-14T03:31:31.479Z",
+      "original_size": 97810,
+      "status": "skipped_low_gain",
+      "compressed_size": 97810,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "56e539f09b6b493985d872274f4f224b.jpg",
+      "created_at": "2026-03-20T12:48:58.373Z",
+      "original_size": 131046,
+      "status": "skipped_low_gain",
+      "compressed_size": 131050,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "570e79a834974ead8fc5e0b06e411c56.jpg",
+      "created_at": "2026-03-13T01:39:45.776Z",
+      "original_size": 54422,
+      "status": "skipped_low_gain",
+      "compressed_size": 51319,
+      "estimated_saved_bytes": 3103,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 540,
+        "new_width": 960,
+        "new_height": 540,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "571a8293d4ca4735ba1d04c9746bf5c3.jpg",
+      "created_at": "2026-03-14T00:20:31.469Z",
+      "original_size": 80509,
+      "status": "skipped_low_gain",
+      "compressed_size": 80492,
+      "estimated_saved_bytes": 17,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 576,
+        "new_width": 1280,
+        "new_height": 576,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "577e6f1bfeb846e7877f9d199856398a.jpg",
+      "created_at": "2026-03-27T05:16:24.482Z",
+      "original_size": 62645,
+      "status": "skipped_low_gain",
+      "compressed_size": 62639,
+      "estimated_saved_bytes": 6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "57939f625d114ff7b7c21c26b59b435e.jpg",
+      "created_at": "2026-03-30T04:19:32.671Z",
+      "original_size": 53855,
+      "status": "skipped_low_gain",
+      "compressed_size": 50204,
+      "estimated_saved_bytes": 3651,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "57c44f0a0549491890765bc4db0a0baa.jpg",
+      "created_at": "2026-02-27T03:11:02.042Z",
+      "original_size": 91547,
+      "status": "skipped_low_gain",
+      "compressed_size": 91544,
+      "estimated_saved_bytes": 3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "57d7dc259b5c43dc9302eede286fc91d.jpg",
+      "created_at": "2026-03-15T12:25:54.057Z",
+      "original_size": 90499,
+      "status": "skipped_low_gain",
+      "compressed_size": 90497,
+      "estimated_saved_bytes": 2,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "580c1fd72c4649bbace8890e7c57011f.jpg",
+      "created_at": "2026-03-30T09:14:46.518Z",
+      "original_size": 58087,
+      "status": "skipped_low_gain",
+      "compressed_size": 36820,
+      "estimated_saved_bytes": 21267,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5824e47e718d412db0ab01be36c44d64.jpg",
+      "created_at": "2026-03-19T04:07:36.356Z",
+      "original_size": 101645,
+      "status": "skipped_low_gain",
+      "compressed_size": 101655,
+      "estimated_saved_bytes": -10,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5845f33dc2a640e1bd8f02f4f711c3b0.jpg",
+      "created_at": "2026-03-30T12:01:43.564Z",
+      "original_size": 69688,
+      "status": "skipped_low_gain",
+      "compressed_size": 65291,
+      "estimated_saved_bytes": 4397,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "587dab19dab549c68e2f8f3aa5b14695.jpg",
+      "created_at": "2026-03-23T03:41:31.729Z",
+      "original_size": 74299,
+      "status": "skipped_low_gain",
+      "compressed_size": 74310,
+      "estimated_saved_bytes": -11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "58842283f6974ebb931288967a124d7b.jpg",
+      "created_at": "2026-03-17T01:34:52.956Z",
+      "original_size": 35832,
+      "status": "skipped_low_gain",
+      "compressed_size": 35821,
+      "estimated_saved_bytes": 11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5887f935601940f89306ed0019877442.jpg",
+      "created_at": "2026-03-28T01:33:00.263Z",
+      "original_size": 62060,
+      "status": "skipped_low_gain",
+      "compressed_size": 45208,
+      "estimated_saved_bytes": 16852,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "58c202d26382409fb8ce91b83b53bb67.jpg",
+      "created_at": "2026-03-21T04:13:50.325Z",
+      "original_size": 73022,
+      "status": "skipped_low_gain",
+      "compressed_size": 67659,
+      "estimated_saved_bytes": 5363,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 540,
+        "new_width": 960,
+        "new_height": 540,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "58ca946f18774c12a36a309a55b57dde.jpg",
+      "created_at": "2026-03-21T09:39:12.605Z",
+      "original_size": 107916,
+      "status": "skipped_low_gain",
+      "compressed_size": 107935,
+      "estimated_saved_bytes": -19,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 720,
+        "new_width": 1280,
+        "new_height": 720,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "59053076eefe4a3ab7479384676aa84b.jpg",
+      "created_at": "2026-03-27T06:14:59.242Z",
+      "original_size": 50658,
+      "status": "skipped_low_gain",
+      "compressed_size": 50653,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "590da6353f97426fbba9c8c2d341baa6.jpg",
+      "created_at": "2026-03-20T04:27:47.109Z",
+      "original_size": 129324,
+      "status": "skipped_low_gain",
+      "compressed_size": 129298,
+      "estimated_saved_bytes": 26,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5918eed130714b37b182c91ec5fc9251.jpg",
+      "created_at": "2026-03-22T10:09:07.813Z",
+      "original_size": 60342,
+      "status": "skipped_low_gain",
+      "compressed_size": 60274,
+      "estimated_saved_bytes": 68,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 580,
+        "original_height": 1280,
+        "new_width": 580,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "591af9588ac54568bae73adb74ebe1d6.jpg",
+      "created_at": "2026-03-19T03:54:33.749Z",
+      "original_size": 80703,
+      "status": "skipped_low_gain",
+      "compressed_size": 80711,
+      "estimated_saved_bytes": -8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 720,
+        "new_width": 1280,
+        "new_height": 720,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "591ffae9c39541deb239b20c51aea00c.jpg",
+      "created_at": "2026-03-21T04:35:25.222Z",
+      "original_size": 39512,
+      "status": "skipped_low_gain",
+      "compressed_size": 37768,
+      "estimated_saved_bytes": 1744,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5927518331294a9bb100c96a858eddd8.jpg",
+      "created_at": "2026-03-14T04:31:50.876Z",
+      "original_size": 65947,
+      "status": "skipped_low_gain",
+      "compressed_size": 65910,
+      "estimated_saved_bytes": 37,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 578,
+        "new_width": 1280,
+        "new_height": 578,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "592acf3767c24c6295192dc06cf584d5.jpg",
+      "created_at": "2026-03-20T06:03:43.354Z",
+      "original_size": 91015,
+      "status": "skipped_low_gain",
+      "compressed_size": 91021,
+      "estimated_saved_bytes": -6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "594263afb4284cbead7da43210968156.jpg",
+      "created_at": "2026-02-21T11:40:14.262Z",
+      "original_size": 41372,
+      "status": "skipped_low_gain",
+      "compressed_size": 39267,
+      "estimated_saved_bytes": 2105,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5949e8b7d353460f97682a374e52ad15.jpg",
+      "created_at": "2026-03-20T04:33:35.787Z",
+      "original_size": 75319,
+      "status": "skipped_low_gain",
+      "compressed_size": 75311,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "59740aab30624284957f4655eb207cf9.jpg",
+      "created_at": "2026-03-11T05:47:09.623Z",
+      "original_size": 103467,
+      "status": "skipped_low_gain",
+      "compressed_size": 103478,
+      "estimated_saved_bytes": -11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5975108ad0db4f8caf72aba2e4431854.jpg",
+      "created_at": "2026-03-13T03:51:14.391Z",
+      "original_size": 92159,
+      "status": "skipped_low_gain",
+      "compressed_size": 92147,
+      "estimated_saved_bytes": 12,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5986121c63d54248b499de0d280f64a0.jpg",
+      "created_at": "2026-02-09T08:15:41.564Z",
+      "original_size": 185659,
+      "status": "skipped_low_gain",
+      "compressed_size": 185633,
+      "estimated_saved_bytes": 26,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "598f75ed9f27448388c0c6d1ec1a8b45.jpg",
+      "created_at": "2026-02-08T14:58:27.749Z",
+      "original_size": 84136,
+      "status": "skipped_low_gain",
+      "compressed_size": 84124,
+      "estimated_saved_bytes": 12,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 980,
+        "new_width": 1280,
+        "new_height": 980,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5995c14bf486441b945152a765738121.jpg",
+      "created_at": "2026-03-13T10:33:55.299Z",
+      "original_size": 99999,
+      "status": "skipped_low_gain",
+      "compressed_size": 100010,
+      "estimated_saved_bytes": -11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "599d340fd4b543aaaf492c244aa87270.jpg",
+      "created_at": "2026-02-18T13:23:06.785Z",
+      "original_size": 82039,
+      "status": "skipped_low_gain",
+      "compressed_size": 75510,
+      "estimated_saved_bytes": 6529,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 540,
+        "original_height": 960,
+        "new_width": 540,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "599dd7c3398b4baaa0cf2be54c9b807c.jpg",
+      "created_at": "2026-03-14T12:20:10.240Z",
+      "original_size": 67700,
+      "status": "skipped_low_gain",
+      "compressed_size": 63550,
+      "estimated_saved_bytes": 4150,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "59ff9a5bdf914002a15acd1cebfea069.jpg",
+      "created_at": "2026-02-17T10:29:59.883Z",
+      "original_size": 52008,
+      "status": "skipped_low_gain",
+      "compressed_size": 52000,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5a5042cfcd944ccfbf8206f470e90400.jpg",
+      "created_at": "2026-03-22T07:55:39.132Z",
+      "original_size": 84497,
+      "status": "skipped_low_gain",
+      "compressed_size": 52812,
+      "estimated_saved_bytes": 31685,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 698,
+        "original_height": 1552,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5a623240ef7248a8b50348cf1fbd368a.jpg",
+      "created_at": "2026-02-06T13:51:39.907Z",
+      "original_size": 47910,
+      "status": "skipped_low_gain",
+      "compressed_size": 47912,
+      "estimated_saved_bytes": -2,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 846,
+        "original_height": 639,
+        "new_width": 846,
+        "new_height": 639,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5a64a2e86ed3424eae246158a0846220.jpg",
+      "created_at": "2026-03-24T08:41:13.669Z",
+      "original_size": 90349,
+      "status": "skipped_low_gain",
+      "compressed_size": 58706,
+      "estimated_saved_bytes": 31643,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1552,
+        "original_height": 698,
+        "new_width": 1280,
+        "new_height": 576,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5aa70a7e7ab04103904858520f154ba7.jpg",
+      "created_at": "2026-03-13T10:26:25.980Z",
+      "original_size": 57811,
+      "status": "skipped_low_gain",
+      "compressed_size": 41306,
+      "estimated_saved_bytes": 16505,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5ac49ba8630b4d3ba488b3d65556cc58.jpg",
+      "created_at": "2026-03-14T02:08:40.475Z",
+      "original_size": 115461,
+      "status": "skipped_low_gain",
+      "compressed_size": 115443,
+      "estimated_saved_bytes": 18,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 1035,
+        "new_width": 1280,
+        "new_height": 1035,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5ae1ec11bfe343d383097892d43e8e03.jpg",
+      "created_at": "2026-03-20T23:46:48.909Z",
+      "original_size": 72586,
+      "status": "skipped_low_gain",
+      "compressed_size": 72591,
+      "estimated_saved_bytes": -5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5b164e88629c471c9f646f726001449f.jpg",
+      "created_at": "2026-03-19T00:16:55.078Z",
+      "original_size": 32852,
+      "status": "skipped_low_gain",
+      "compressed_size": 32851,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 576,
+        "original_height": 1280,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5b24b7a747a44eb0a77edbcfb7b21700.jpg",
+      "created_at": "2026-03-17T13:26:27.639Z",
+      "original_size": 88394,
+      "status": "skipped_low_gain",
+      "compressed_size": 88384,
+      "estimated_saved_bytes": 10,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5b5d6483778f45f1aa4d0bbf9793bafd.jpg",
+      "created_at": "2026-02-25T16:14:43.904Z",
+      "original_size": 56039,
+      "status": "skipped_low_gain",
+      "compressed_size": 56017,
+      "estimated_saved_bytes": 22,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1106,
+        "original_height": 1178,
+        "new_width": 1106,
+        "new_height": 1178,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5b74929279d1424faf0b8c47a28a5178.jpg",
+      "created_at": "2026-03-29T07:12:20.067Z",
+      "original_size": 80604,
+      "status": "skipped_low_gain",
+      "compressed_size": 72306,
+      "estimated_saved_bytes": 8298,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 605,
+        "original_height": 960,
+        "new_width": 605,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5b91e580949a48f8b48ab851ab2dfffe.jpg",
+      "created_at": "2026-03-16T03:22:25.055Z",
+      "original_size": 52007,
+      "status": "skipped_low_gain",
+      "compressed_size": 52007,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5baa47e1614b4ea8b17d42cd5acc1900.jpg",
+      "created_at": "2026-03-14T04:06:08.796Z",
+      "original_size": 60176,
+      "status": "skipped_low_gain",
+      "compressed_size": 59996,
+      "estimated_saved_bytes": 180,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 582,
+        "original_height": 1280,
+        "new_width": 582,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5bde20c8ec5b4efca07a5a2e3884c0fc.jpg",
+      "created_at": "2026-03-30T10:54:58.145Z",
+      "original_size": 86211,
+      "status": "skipped_low_gain",
+      "compressed_size": 86193,
+      "estimated_saved_bytes": 18,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 578,
+        "new_width": 1280,
+        "new_height": 578,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5be9454fdbde4c73832eb5a4f93b48e9.jpg",
+      "created_at": "2026-03-19T09:57:45.804Z",
+      "original_size": 75371,
+      "status": "skipped_low_gain",
+      "compressed_size": 75364,
+      "estimated_saved_bytes": 7,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 574,
+        "new_width": 1280,
+        "new_height": 574,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5bea511c4cbd447a81ac41c0d3334a6c.jpg",
+      "created_at": "2026-03-12T06:22:47.006Z",
+      "original_size": 81910,
+      "status": "skipped_low_gain",
+      "compressed_size": 81910,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5bfd7fb3eae34c23bc70b4ffcf6371aa.jpg",
+      "created_at": "2026-03-13T02:01:06.631Z",
+      "original_size": 63374,
+      "status": "skipped_low_gain",
+      "compressed_size": 63373,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 583,
+        "new_width": 1280,
+        "new_height": 583,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c0e2117cc234e65aa4a1b90895c3d1b.jpg",
+      "created_at": "2026-03-29T17:53:24.368Z",
+      "original_size": 88280,
+      "status": "skipped_low_gain",
+      "compressed_size": 88261,
+      "estimated_saved_bytes": 19,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 828,
+        "new_width": 1280,
+        "new_height": 828,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c154b7d1c0a44e792c244aa72fb8fed.jpg",
+      "created_at": "2026-03-13T05:44:53.171Z",
+      "original_size": 77886,
+      "status": "skipped_low_gain",
+      "compressed_size": 61135,
+      "estimated_saved_bytes": 16751,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c50dc59befe43f8b7a179c610749a8d.jpg",
+      "created_at": "2026-03-29T04:09:47.502Z",
+      "original_size": 76687,
+      "status": "skipped_low_gain",
+      "compressed_size": 76681,
+      "estimated_saved_bytes": 6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 567,
+        "original_height": 1280,
+        "new_width": 567,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c50ded263fd420ab5e48b743f0a02f7.jpg",
+      "created_at": "2026-03-25T04:17:36.652Z",
+      "original_size": 65519,
+      "status": "skipped_low_gain",
+      "compressed_size": 65518,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c53ffc081114d70809a46a93305ef96.jpg",
+      "created_at": "2026-03-15T04:03:25.680Z",
+      "original_size": 66027,
+      "status": "skipped_low_gain",
+      "compressed_size": 42822,
+      "estimated_saved_bytes": 23205,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c5af57bd2fe4581a11a8d462280eaa8.jpg",
+      "created_at": "2026-03-24T09:43:42.888Z",
+      "original_size": 148332,
+      "status": "skipped_low_gain",
+      "compressed_size": 148340,
+      "estimated_saved_bytes": -8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c5c1d5513ec43b3976c5f8e47250bca.jpg",
+      "created_at": "2026-03-21T09:45:33.440Z",
+      "original_size": 106392,
+      "status": "skipped_low_gain",
+      "compressed_size": 106385,
+      "estimated_saved_bytes": 7,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c671cd63ecc4b51a7ffa2391a77b934.jpg",
+      "created_at": "2026-03-14T00:38:11.268Z",
+      "original_size": 122118,
+      "status": "skipped_low_gain",
+      "compressed_size": 122100,
+      "estimated_saved_bytes": 18,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 721,
+        "new_width": 1280,
+        "new_height": 721,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c730e77e52441fc9e80d1c57b45c155.jpg",
+      "created_at": "2026-03-27T00:49:22.937Z",
+      "original_size": 46632,
+      "status": "skipped_low_gain",
+      "compressed_size": 44106,
+      "estimated_saved_bytes": 2526,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5c9cf56053e54a13968c01fd52796797.jpg",
+      "created_at": "2026-03-27T02:50:30.478Z",
+      "original_size": 65567,
+      "status": "skipped_low_gain",
+      "compressed_size": 61935,
+      "estimated_saved_bytes": 3632,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5ca1dc8bfc2649f1875cc3d0c0fc2827.jpg",
+      "created_at": "2026-03-19T08:43:04.638Z",
+      "original_size": 60441,
+      "status": "skipped_low_gain",
+      "compressed_size": 60431,
+      "estimated_saved_bytes": 10,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5cb1f22a83194bd7a23eec4b17790924.jpg",
+      "created_at": "2026-03-16T04:04:49.652Z",
+      "original_size": 138260,
+      "status": "skipped_low_gain",
+      "compressed_size": 138231,
+      "estimated_saved_bytes": 29,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5cd1c0796ff84afe88453101b008d604.jpg",
+      "created_at": "2026-03-13T13:49:20.309Z",
+      "original_size": 163431,
+      "status": "skipped_low_gain",
+      "compressed_size": 163431,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5ce41011689e4e32aca5e9f0321faeb0.jpg",
+      "created_at": "2026-03-17T06:10:54.451Z",
+      "original_size": 53993,
+      "status": "skipped_low_gain",
+      "compressed_size": 50371,
+      "estimated_saved_bytes": 3622,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5cf600477fad46f394d328bb2d5b549c.jpg",
+      "created_at": "2026-03-22T03:32:44.069Z",
+      "original_size": 105664,
+      "status": "skipped_low_gain",
+      "compressed_size": 105641,
+      "estimated_saved_bytes": 23,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5d0292b542a44ae7a476247c5c4db2ad.jpg",
+      "created_at": "2026-03-30T01:39:57.091Z",
+      "original_size": 59391,
+      "status": "skipped_low_gain",
+      "compressed_size": 59391,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 569,
+        "new_width": 1280,
+        "new_height": 569,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5d1bf552e02d48299c827353634849cd.jpg",
+      "created_at": "2026-03-24T16:22:18.092Z",
+      "original_size": 76067,
+      "status": "skipped_low_gain",
+      "compressed_size": 48346,
+      "estimated_saved_bytes": 27721,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1552,
+        "original_height": 698,
+        "new_width": 1280,
+        "new_height": 576,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5d3b582e446c41fe99fa5fc6bc0e10c8.jpg",
+      "created_at": "2026-03-18T10:08:46.630Z",
+      "original_size": 81454,
+      "status": "skipped_low_gain",
+      "compressed_size": 81468,
+      "estimated_saved_bytes": -14,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 576,
+        "original_height": 1280,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5d550f66a3af4b28872f0af76bf75995.jpg",
+      "created_at": "2026-03-17T10:46:45.988Z",
+      "original_size": 76803,
+      "status": "skipped_low_gain",
+      "compressed_size": 76767,
+      "estimated_saved_bytes": 36,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5d642519d5f144f29017cea1183af033.jpg",
+      "created_at": "2026-03-13T02:16:35.193Z",
+      "original_size": 84848,
+      "status": "skipped_low_gain",
+      "compressed_size": 84849,
+      "estimated_saved_bytes": -1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 576,
+        "original_height": 1280,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5d67b45b7b8b400ba56f8992bf2c8d85.jpg",
+      "created_at": "2026-03-30T09:43:10.184Z",
+      "original_size": 67112,
+      "status": "skipped_low_gain",
+      "compressed_size": 67113,
+      "estimated_saved_bytes": -1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5d9c2fbd536642f3bdb0b7a875bc8ceb.jpg",
+      "created_at": "2026-03-14T02:03:39.969Z",
+      "original_size": 78508,
+      "status": "skipped_low_gain",
+      "compressed_size": 78492,
+      "estimated_saved_bytes": 16,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5da1edf1504c4e05a9d345e62786db9f.jpg",
+      "created_at": "2026-03-23T12:06:47.936Z",
+      "original_size": 68605,
+      "status": "skipped_low_gain",
+      "compressed_size": 68846,
+      "estimated_saved_bytes": -241,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 589,
+        "original_height": 1280,
+        "new_width": 589,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5dcd084753674bbbbb531c89bfe16362.jpg",
+      "created_at": "2026-03-18T09:11:37.776Z",
+      "original_size": 76434,
+      "status": "skipped_low_gain",
+      "compressed_size": 70940,
+      "estimated_saved_bytes": 5494,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5dceb7b190b14277aec8d9d1fe444d3e.jpg",
+      "created_at": "2026-03-22T11:53:04.621Z",
+      "original_size": 64278,
+      "status": "skipped_low_gain",
+      "compressed_size": 41619,
+      "estimated_saved_bytes": 22659,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 698,
+        "original_height": 1552,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5dd56d3b4a6745b8a2779dc720a5f274.jpg",
+      "created_at": "2026-03-15T10:20:34.450Z",
+      "original_size": 114022,
+      "status": "skipped_low_gain",
+      "compressed_size": 114019,
+      "estimated_saved_bytes": 3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5dd8afef259942a698f67d785681e021.jpg",
+      "created_at": "2026-03-29T13:06:57.308Z",
+      "original_size": 78702,
+      "status": "skipped_low_gain",
+      "compressed_size": 72580,
+      "estimated_saved_bytes": 6122,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 639,
+        "original_height": 960,
+        "new_width": 639,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5defe8d29e0b4ea095f80fd5482bf6b6.jpg",
+      "created_at": "2026-03-28T21:58:16.109Z",
+      "original_size": 48160,
+      "status": "skipped_low_gain",
+      "compressed_size": 48169,
+      "estimated_saved_bytes": -9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 593,
+        "new_width": 1280,
+        "new_height": 593,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5e2cc0e9615845f6b5bef0262f665bbe.jpg",
+      "created_at": "2026-03-13T11:55:15.971Z",
+      "original_size": 90987,
+      "status": "skipped_low_gain",
+      "compressed_size": 90987,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 720,
+        "new_width": 1280,
+        "new_height": 720,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5e7afdd72c1547f19c644914aadb76fe.jpg",
+      "created_at": "2026-03-21T03:14:53.071Z",
+      "original_size": 61917,
+      "status": "skipped_low_gain",
+      "compressed_size": 57563,
+      "estimated_saved_bytes": 4354,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5e7fd107258a4b3194ab3e64ddf8f2ed.jpg",
+      "created_at": "2026-03-17T10:31:39.946Z",
+      "original_size": 135459,
+      "status": "skipped_low_gain",
+      "compressed_size": 135417,
+      "estimated_saved_bytes": 42,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5e9d1ffe57ee41898138744239370ec8.jpg",
+      "created_at": "2026-03-12T08:40:41.334Z",
+      "original_size": 103268,
+      "status": "skipped_low_gain",
+      "compressed_size": 103250,
+      "estimated_saved_bytes": 18,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 794,
+        "original_height": 1280,
+        "new_width": 794,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5ec60a654c6a4935aafe56ca86f20914.jpg",
+      "created_at": "2026-03-30T09:27:28.386Z",
+      "original_size": 63713,
+      "status": "skipped_low_gain",
+      "compressed_size": 63730,
+      "estimated_saved_bytes": -17,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5ee393f26efb45cfb708a039c2fdbfd7.jpg",
+      "created_at": "2026-03-30T12:01:44.343Z",
+      "original_size": 76402,
+      "status": "skipped_low_gain",
+      "compressed_size": 76411,
+      "estimated_saved_bytes": -9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "5ff893fa54934ce4808ad8d1d3d333af.jpg",
+      "created_at": "2026-03-17T11:23:31.221Z",
+      "original_size": 59422,
+      "status": "skipped_low_gain",
+      "compressed_size": 59422,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "60549e72e3144f8c9661304c79bc99f4.jpg",
+      "created_at": "2026-03-20T03:29:27.999Z",
+      "original_size": 85409,
+      "status": "skipped_low_gain",
+      "compressed_size": 54830,
+      "estimated_saved_bytes": 30579,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6069ecdffdc74b6aafbb85a8055d26e2.jpg",
+      "created_at": "2026-03-25T04:17:35.802Z",
+      "original_size": 68692,
+      "status": "skipped_low_gain",
+      "compressed_size": 68692,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "606da547a15e4a9da1cea96fc560e770.jpg",
+      "created_at": "2026-02-16T16:09:43.766Z",
+      "original_size": 34187,
+      "status": "skipped_low_gain",
+      "compressed_size": 34189,
+      "estimated_saved_bytes": -2,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 746,
+        "original_height": 653,
+        "new_width": 746,
+        "new_height": 653,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "60ba6659681e42a89b40dadac2d12a29.jpg",
+      "created_at": "2026-03-08T03:50:53.794Z",
+      "original_size": 77741,
+      "status": "skipped_low_gain",
+      "compressed_size": 50059,
+      "estimated_saved_bytes": 27682,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "60c5ee8e158446e59942c38367ae6724.jpg",
+      "created_at": "2026-03-13T04:39:51.712Z",
+      "original_size": 91961,
+      "status": "skipped_low_gain",
+      "compressed_size": 91969,
+      "estimated_saved_bytes": -8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "60c8cb3f8b8c42458c6ccda8e622c8ee.jpg",
+      "created_at": "2026-02-23T09:35:13.060Z",
+      "original_size": 89355,
+      "status": "skipped_low_gain",
+      "compressed_size": 89351,
+      "estimated_saved_bytes": 4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "60e09738f1ae44d48cab53f2bed36f94.jpg",
+      "created_at": "2026-03-30T04:46:01.371Z",
+      "original_size": 105935,
+      "status": "skipped_low_gain",
+      "compressed_size": 97330,
+      "estimated_saved_bytes": 8605,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 634,
+        "new_width": 960,
+        "new_height": 634,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "612e078c8446474fa5d8ce533f1b9e56.jpg",
+      "created_at": "2026-03-24T04:40:30.297Z",
+      "original_size": 77654,
+      "status": "skipped_low_gain",
+      "compressed_size": 71218,
+      "estimated_saved_bytes": 6436,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 541,
+        "new_width": 960,
+        "new_height": 541,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "613c2b4ef3d04b768fb5393ffc4397d7.jpg",
+      "created_at": "2026-03-22T03:59:21.537Z",
+      "original_size": 108637,
+      "status": "skipped_low_gain",
+      "compressed_size": 108630,
+      "estimated_saved_bytes": 7,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "614737a80b0d445a9f4846eaf4728649.jpg",
+      "created_at": "2026-03-18T00:27:23.430Z",
+      "original_size": 129870,
+      "status": "skipped_low_gain",
+      "compressed_size": 129850,
+      "estimated_saved_bytes": 20,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "61675c30243745d7bce0edddc2b27711.jpg",
+      "created_at": "2026-03-20T04:49:07.627Z",
+      "original_size": 74961,
+      "status": "skipped_low_gain",
+      "compressed_size": 54825,
+      "estimated_saved_bytes": 20136,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "619f866869f04dd085bfd2ac46ed7071.jpg",
+      "created_at": "2026-03-17T03:46:24.853Z",
+      "original_size": 93417,
+      "status": "skipped_low_gain",
+      "compressed_size": 93413,
+      "estimated_saved_bytes": 4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 576,
+        "new_width": 1280,
+        "new_height": 576,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "61cd72b103a34961bc904544ddade8f6.jpg",
+      "created_at": "2026-03-14T03:46:59.128Z",
+      "original_size": 54207,
+      "status": "skipped_low_gain",
+      "compressed_size": 51242,
+      "estimated_saved_bytes": 2965,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "61d8768b63bb419f90b4a4bd5c6451cf.jpg",
+      "created_at": "2026-03-18T11:06:05.713Z",
+      "original_size": 141818,
+      "status": "skipped_low_gain",
+      "compressed_size": 141833,
+      "estimated_saved_bytes": -15,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "61ed10b1d7f9407cb519394052009a40.jpg",
+      "created_at": "2026-03-09T03:23:47.883Z",
+      "original_size": 99813,
+      "status": "skipped_low_gain",
+      "compressed_size": 99835,
+      "estimated_saved_bytes": -22,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "621cf66cb9ff4f60a4a0ec83af8bdf69.jpg",
+      "created_at": "2026-03-16T03:38:43.124Z",
+      "original_size": 78124,
+      "status": "skipped_low_gain",
+      "compressed_size": 78105,
+      "estimated_saved_bytes": 19,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "623bef33515244ac8c19b1c81c7e5e92.jpg",
+      "created_at": "2026-03-29T12:56:54.414Z",
+      "original_size": 157001,
+      "status": "skipped_low_gain",
+      "compressed_size": 156966,
+      "estimated_saved_bytes": 35,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6270ca45286c4ed68c5345865ef495d2.jpg",
+      "created_at": "2026-02-17T12:08:50.320Z",
+      "original_size": 50637,
+      "status": "skipped_low_gain",
+      "compressed_size": 31168,
+      "estimated_saved_bytes": 19469,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6275849bc4d242f6a1d1774e367b7ec6.jpg",
+      "created_at": "2026-03-19T10:23:06.109Z",
+      "original_size": 63182,
+      "status": "skipped_low_gain",
+      "compressed_size": 63190,
+      "estimated_saved_bytes": -8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "62b1f1ce2a074e59961a6e6fc1883e25.jpg",
+      "created_at": "2026-03-26T11:47:49.166Z",
+      "original_size": 48636,
+      "status": "skipped_low_gain",
+      "compressed_size": 46091,
+      "estimated_saved_bytes": 2545,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "62d57d4de23e44509e2fcd3f8d034a7c.jpg",
+      "created_at": "2026-03-26T04:26:46.975Z",
+      "original_size": 61743,
+      "status": "skipped_low_gain",
+      "compressed_size": 57865,
+      "estimated_saved_bytes": 3878,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "62eb3fe0065a4ca585edc0ff0676fa70.jpg",
+      "created_at": "2026-03-29T08:19:54.320Z",
+      "original_size": 79058,
+      "status": "skipped_low_gain",
+      "compressed_size": 79062,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "62fdf16172254f128a75ee8d6f0ef077.jpg",
+      "created_at": "2026-03-23T11:58:47.694Z",
+      "original_size": 35721,
+      "status": "skipped_low_gain",
+      "compressed_size": 33458,
+      "estimated_saved_bytes": 2263,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "630e28486f9c45acb8b849c9bd95f818.jpg",
+      "created_at": "2026-03-15T06:04:02.628Z",
+      "original_size": 46602,
+      "status": "skipped_low_gain",
+      "compressed_size": 46592,
+      "estimated_saved_bytes": 10,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "630e47a826e041c5b9dcfbf34744530c.jpg",
+      "created_at": "2026-03-21T11:32:56.929Z",
+      "original_size": 51906,
+      "status": "skipped_low_gain",
+      "compressed_size": 49042,
+      "estimated_saved_bytes": 2864,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "634068409da448bbb41ebd9a146a39bb.jpg",
+      "created_at": "2026-03-17T03:46:16.099Z",
+      "original_size": 68108,
+      "status": "skipped_low_gain",
+      "compressed_size": 68123,
+      "estimated_saved_bytes": -15,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 591,
+        "original_height": 1280,
+        "new_width": 591,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6358dcd4a6ed4ea9b097742f812611ae.jpg",
+      "created_at": "2026-03-28T06:48:16.228Z",
+      "original_size": 66948,
+      "status": "skipped_low_gain",
+      "compressed_size": 66934,
+      "estimated_saved_bytes": 14,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 568,
+        "new_width": 1280,
+        "new_height": 568,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "63658aab01b649ef8e46e5601e507fd0.jpg",
+      "created_at": "2026-03-23T01:13:04.986Z",
+      "original_size": 81033,
+      "status": "skipped_low_gain",
+      "compressed_size": 81039,
+      "estimated_saved_bytes": -6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "636c9d7c8dd84dde8a401dfa0d2caa7a.jpg",
+      "created_at": "2026-03-12T08:35:29.359Z",
+      "original_size": 53799,
+      "status": "skipped_low_gain",
+      "compressed_size": 50536,
+      "estimated_saved_bytes": 3263,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "63a4d595da854a218b2cabf1cec01338.jpg",
+      "created_at": "2026-02-16T14:32:48.443Z",
+      "original_size": 52008,
+      "status": "skipped_low_gain",
+      "compressed_size": 52000,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "63ce1a26baa14e60991e1334fa8149cf.jpg",
+      "created_at": "2026-03-29T12:52:56.850Z",
+      "original_size": 78702,
+      "status": "skipped_low_gain",
+      "compressed_size": 72580,
+      "estimated_saved_bytes": 6122,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 639,
+        "original_height": 960,
+        "new_width": 639,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "63ea36414e90419e8439d1b4aa0d4d59.jpg",
+      "created_at": "2026-03-15T03:48:09.048Z",
+      "original_size": 71111,
+      "status": "skipped_low_gain",
+      "compressed_size": 71112,
+      "estimated_saved_bytes": -1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "63ed6863377542e3839e7a865f859d09.jpg",
+      "created_at": "2026-03-22T04:31:36.518Z",
+      "original_size": 49409,
+      "status": "skipped_low_gain",
+      "compressed_size": 49412,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 597,
+        "original_height": 1280,
+        "new_width": 597,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "63f3e33944184ff49f71072b32446c62.jpg",
+      "created_at": "2026-02-16T14:37:51.004Z",
+      "original_size": 75796,
+      "status": "skipped_low_gain",
+      "compressed_size": 75806,
+      "estimated_saved_bytes": -10,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "642618db1364404d954cbff2b74929f7.jpg",
+      "created_at": "2026-03-15T09:00:38.049Z",
+      "original_size": 110083,
+      "status": "skipped_low_gain",
+      "compressed_size": 110074,
+      "estimated_saved_bytes": 9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "645016f3222b43499c94de98b26ab73e.jpg",
+      "created_at": "2026-03-21T03:11:59.872Z",
+      "original_size": 39987,
+      "status": "skipped_low_gain",
+      "compressed_size": 39986,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "64540d41cc9e49c1a5c20ad87e926285.jpg",
+      "created_at": "2026-03-18T14:57:47.861Z",
+      "original_size": 70669,
+      "status": "skipped_low_gain",
+      "compressed_size": 70676,
+      "estimated_saved_bytes": -7,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "645773872d794d2a8ed1934874f15544.jpg",
+      "created_at": "2026-03-27T16:43:55.905Z",
+      "original_size": 59202,
+      "status": "skipped_low_gain",
+      "compressed_size": 55150,
+      "estimated_saved_bytes": 4052,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 896,
+        "new_width": 640,
+        "new_height": 896,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "645b81d5ba794b78874da2c2f9d0c09f.jpg",
+      "created_at": "2026-03-30T04:12:09.490Z",
+      "original_size": 57787,
+      "status": "skipped_low_gain",
+      "compressed_size": 57782,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 578,
+        "new_width": 1280,
+        "new_height": 578,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "645fe7ce4b3d4e129869c9d27e63af43.jpg",
+      "created_at": "2026-03-29T07:58:30.731Z",
+      "original_size": 46060,
+      "status": "skipped_low_gain",
+      "compressed_size": 46071,
+      "estimated_saved_bytes": -11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 859,
+        "original_height": 646,
+        "new_width": 859,
+        "new_height": 646,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "646af8145fcd49dd8e9f21c827647e68.jpg",
+      "created_at": "2026-03-17T10:49:57.125Z",
+      "original_size": 32100,
+      "status": "skipped_low_gain",
+      "compressed_size": 30988,
+      "estimated_saved_bytes": 1112,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "647a8478f1d845e49de3f6abcb0db7ce.jpg",
+      "created_at": "2026-02-18T03:50:53.086Z",
+      "original_size": 60188,
+      "status": "skipped_low_gain",
+      "compressed_size": 60164,
+      "estimated_saved_bytes": 24,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 580,
+        "original_height": 1280,
+        "new_width": 580,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6488cccee8494af89a024c3015d0f0ca.jpg",
+      "created_at": "2026-03-18T09:37:57.277Z",
+      "original_size": 76011,
+      "status": "skipped_low_gain",
+      "compressed_size": 69683,
+      "estimated_saved_bytes": 6328,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 541,
+        "new_width": 960,
+        "new_height": 541,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "648ce3e01c4b40d9918c0a432fb6089a.jpg",
+      "created_at": "2026-03-29T06:04:18.371Z",
+      "original_size": 73150,
+      "status": "skipped_low_gain",
+      "compressed_size": 47389,
+      "estimated_saved_bytes": 25761,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 698,
+        "original_height": 1552,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "64a1904b77f845bbb6cd26cf5fe053d7.jpg",
+      "created_at": "2026-03-24T03:13:24.558Z",
+      "original_size": 81222,
+      "status": "skipped_low_gain",
+      "compressed_size": 81234,
+      "estimated_saved_bytes": -12,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "64c8b0f9671b431e988c66ae5828e56b.jpg",
+      "created_at": "2026-03-30T01:39:35.535Z",
+      "original_size": 59391,
+      "status": "skipped_low_gain",
+      "compressed_size": 59391,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 569,
+        "new_width": 1280,
+        "new_height": 569,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "654132c78b1c4dff866f8355c49565f6.jpg",
+      "created_at": "2026-03-18T09:50:00.521Z",
+      "original_size": 74006,
+      "status": "skipped_low_gain",
+      "compressed_size": 74009,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "654b6f8ea7ab4799978e159be5a7daf3.jpg",
+      "created_at": "2026-03-14T09:52:42.604Z",
+      "original_size": 78872,
+      "status": "skipped_low_gain",
+      "compressed_size": 78865,
+      "estimated_saved_bytes": 7,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "655b35bcd1824570beb4933cceba9023.jpg",
+      "created_at": "2026-03-29T09:46:03.916Z",
+      "original_size": 65047,
+      "status": "skipped_low_gain",
+      "compressed_size": 65043,
+      "estimated_saved_bytes": 4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "655b894a66644f8e95890dad1b753480.jpg",
+      "created_at": "2026-03-28T10:26:52.244Z",
+      "original_size": 53263,
+      "status": "skipped_low_gain",
+      "compressed_size": 49247,
+      "estimated_saved_bytes": 4016,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 649,
+        "new_width": 640,
+        "new_height": 649,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6580d28ad8b84982973e8f75faf6a435.jpg",
+      "created_at": "2026-03-25T07:36:01.641Z",
+      "original_size": 62648,
+      "status": "skipped_low_gain",
+      "compressed_size": 62651,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 574,
+        "new_width": 1280,
+        "new_height": 574,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6582f5ca4d7242cfa7d745d00438240c.jpg",
+      "created_at": "2026-03-23T03:09:54.875Z",
+      "original_size": 55135,
+      "status": "skipped_low_gain",
+      "compressed_size": 51880,
+      "estimated_saved_bytes": 3255,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "659b424f7d7b4350b8ec263a283a0685.jpg",
+      "created_at": "2026-03-23T04:37:27.691Z",
+      "original_size": 102079,
+      "status": "skipped_low_gain",
+      "compressed_size": 102061,
+      "estimated_saved_bytes": 18,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "65b2260d74fb44a48b64016d8f426a06.jpg",
+      "created_at": "2026-02-24T12:20:49.387Z",
+      "original_size": 95783,
+      "status": "skipped_low_gain",
+      "compressed_size": 88165,
+      "estimated_saved_bytes": 7618,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "65c17a33227840708b601a66a18b6bad.jpg",
+      "created_at": "2026-02-25T04:56:41.270Z",
+      "original_size": 87189,
+      "status": "skipped_low_gain",
+      "compressed_size": 87196,
+      "estimated_saved_bytes": -7,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 597,
+        "original_height": 1280,
+        "new_width": 597,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "65de0a873a934406a3258ab6cfd08335.jpg",
+      "created_at": "2026-03-21T09:08:44.903Z",
+      "original_size": 63239,
+      "status": "skipped_low_gain",
+      "compressed_size": 63215,
+      "estimated_saved_bytes": 24,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 591,
+        "new_width": 1280,
+        "new_height": 591,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66169fc0d47340ae9f537cd269bbb771.jpg",
+      "created_at": "2026-03-23T07:16:59.710Z",
+      "original_size": 76543,
+      "status": "skipped_low_gain",
+      "compressed_size": 71043,
+      "estimated_saved_bytes": 5500,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66253a28b8fd423bb50a7b15734650ff.jpg",
+      "created_at": "2026-03-14T04:03:40.163Z",
+      "original_size": 96035,
+      "status": "skipped_low_gain",
+      "compressed_size": 96031,
+      "estimated_saved_bytes": 4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 720,
+        "new_width": 1280,
+        "new_height": 720,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6625d3bdfeac4814aa81f3a6aa54b315.jpg",
+      "created_at": "2026-03-25T02:02:16.612Z",
+      "original_size": 30563,
+      "status": "skipped_low_gain",
+      "compressed_size": 29775,
+      "estimated_saved_bytes": 788,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66279179462d44e78f984787d1845fa5.jpg",
+      "created_at": "2026-03-25T10:05:40.446Z",
+      "original_size": 62403,
+      "status": "skipped_low_gain",
+      "compressed_size": 58397,
+      "estimated_saved_bytes": 4006,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 541,
+        "new_width": 960,
+        "new_height": 541,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66494796be7645a98fb36ae9061370d6.jpg",
+      "created_at": "2026-03-25T04:17:35.190Z",
+      "original_size": 89604,
+      "status": "skipped_low_gain",
+      "compressed_size": 89604,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "664d754e5ec243cfa27764f13078cc6f.jpg",
+      "created_at": "2026-03-13T09:41:37.623Z",
+      "original_size": 88161,
+      "status": "skipped_low_gain",
+      "compressed_size": 88098,
+      "estimated_saved_bytes": 63,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 579,
+        "new_width": 1280,
+        "new_height": 579,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6684f19ad6e6468e9e725f8fc5bce0af.jpg",
+      "created_at": "2026-03-18T10:13:41.921Z",
+      "original_size": 99340,
+      "status": "skipped_low_gain",
+      "compressed_size": 99343,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6696b3a2ede04d90935e6846583410e1.jpg",
+      "created_at": "2026-03-12T03:39:44.766Z",
+      "original_size": 75450,
+      "status": "skipped_low_gain",
+      "compressed_size": 75431,
+      "estimated_saved_bytes": 19,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66a4617a5a54476fa060dad4a929cf22.jpg",
+      "created_at": "2026-03-12T08:57:28.900Z",
+      "original_size": 88096,
+      "status": "skipped_low_gain",
+      "compressed_size": 88083,
+      "estimated_saved_bytes": 13,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66ae5928b9784c378418e5badc8d996b.jpg",
+      "created_at": "2026-03-14T03:46:42.034Z",
+      "original_size": 71922,
+      "status": "skipped_low_gain",
+      "compressed_size": 71902,
+      "estimated_saved_bytes": 20,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 582,
+        "original_height": 1280,
+        "new_width": 582,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66b36416f63f4ad2a74c9b324ec2079c.jpg",
+      "created_at": "2026-03-24T09:04:38.375Z",
+      "original_size": 68313,
+      "status": "skipped_low_gain",
+      "compressed_size": 50508,
+      "estimated_saved_bytes": 17805,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66b80c034164462f8525ec4dd2b5439d.jpg",
+      "created_at": "2026-03-12T15:27:04.885Z",
+      "original_size": 65830,
+      "status": "skipped_low_gain",
+      "compressed_size": 60879,
+      "estimated_saved_bytes": 4951,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66daca4bdd3648c296aac5086d715130.jpg",
+      "created_at": "2026-03-26T03:49:06.716Z",
+      "original_size": 62532,
+      "status": "skipped_low_gain",
+      "compressed_size": 58214,
+      "estimated_saved_bytes": 4318,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66edfc0418df40daa7cda9de14b7d6b0.jpg",
+      "created_at": "2026-03-12T10:21:58.709Z",
+      "original_size": 70873,
+      "status": "skipped_low_gain",
+      "compressed_size": 70849,
+      "estimated_saved_bytes": 24,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 570,
+        "original_height": 1280,
+        "new_width": 570,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "66f92443d7da4aaf91ee463e72b4e3af.jpg",
+      "created_at": "2026-03-27T07:26:38.201Z",
+      "original_size": 65710,
+      "status": "skipped_low_gain",
+      "compressed_size": 61524,
+      "estimated_saved_bytes": 4186,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "67325ce1bd8d4f329bbce0335b5df4e3.jpg",
+      "created_at": "2026-03-23T01:40:09.939Z",
+      "original_size": 40156,
+      "status": "skipped_low_gain",
+      "compressed_size": 37699,
+      "estimated_saved_bytes": 2457,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "67583a4d687446d79589a3dd8416f595.jpg",
+      "created_at": "2026-03-15T04:48:15.965Z",
+      "original_size": 77052,
+      "status": "skipped_low_gain",
+      "compressed_size": 77052,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6770fc85e8b54de3816f50b4a0a4fc70.jpg",
+      "created_at": "2026-03-12T08:39:35.656Z",
+      "original_size": 112869,
+      "status": "skipped_low_gain",
+      "compressed_size": 112860,
+      "estimated_saved_bytes": 9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1172,
+        "original_height": 898,
+        "new_width": 1172,
+        "new_height": 898,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "67745d308dfb49e5840532d1b9874587.jpg",
+      "created_at": "2026-03-19T01:15:20.571Z",
+      "original_size": 64750,
+      "status": "skipped_low_gain",
+      "compressed_size": 64753,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 576,
+        "original_height": 1280,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "67d16e8511944280a303bf616ffbec97.jpg",
+      "created_at": "2026-03-13T03:24:47.125Z",
+      "original_size": 86759,
+      "status": "skipped_low_gain",
+      "compressed_size": 86748,
+      "estimated_saved_bytes": 11,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "67dfb46e9d084c51bdb5be47b95b6bcd.jpg",
+      "created_at": "2026-02-01T15:02:08.920Z",
+      "original_size": 52008,
+      "status": "skipped_low_gain",
+      "compressed_size": 52000,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "68055500c7be47f3a23aa71dbbd3a43b.jpg",
+      "created_at": "2026-03-30T15:03:59.734Z",
+      "original_size": 139193,
+      "status": "skipped_low_gain",
+      "compressed_size": 139208,
+      "estimated_saved_bytes": -15,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6807a5323cac4a5b8ba36f0eec84a36d.jpg",
+      "created_at": "2026-03-13T12:56:39.371Z",
+      "original_size": 102396,
+      "status": "skipped_low_gain",
+      "compressed_size": 102421,
+      "estimated_saved_bytes": -25,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "680e1bafea294fc1b14869ec738d31dd.jpg",
+      "created_at": "2026-03-25T15:26:57.658Z",
+      "original_size": 57386,
+      "status": "skipped_low_gain",
+      "compressed_size": 53683,
+      "estimated_saved_bytes": 3703,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 540,
+        "original_height": 960,
+        "new_width": 540,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "68338bd1e8034ddfa947286c15696ebf.jpg",
+      "created_at": "2026-03-27T14:42:41.926Z",
+      "original_size": 111805,
+      "status": "skipped_low_gain",
+      "compressed_size": 111809,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "68bec0c1f7504a0e9a5eebe3ee84c5c2.jpg",
+      "created_at": "2026-03-08T10:48:45.681Z",
+      "original_size": 87234,
+      "status": "skipped_low_gain",
+      "compressed_size": 87229,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "68c033670625412ab8480d3ac1e0cac3.jpg",
+      "created_at": "2026-03-20T01:04:17.178Z",
+      "original_size": 89707,
+      "status": "skipped_low_gain",
+      "compressed_size": 82519,
+      "estimated_saved_bytes": 7188,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 541,
+        "new_width": 960,
+        "new_height": 541,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "68c22170e9234bd7a4a34276e9924739.jpg",
+      "created_at": "2026-03-28T14:45:49.585Z",
+      "original_size": 58391,
+      "status": "skipped_low_gain",
+      "compressed_size": 35485,
+      "estimated_saved_bytes": 22906,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "68dd841002fc484a8bdc6a4f8f54f114.jpg",
+      "created_at": "2026-03-30T08:21:26.303Z",
+      "original_size": 23274,
+      "status": "skipped_low_gain",
+      "compressed_size": 23245,
+      "estimated_saved_bytes": 29,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1206,
+        "original_height": 271,
+        "new_width": 1206,
+        "new_height": 271,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "68ea63580aae44ba8e638a1d8be3b70f.jpg",
+      "created_at": "2026-03-12T09:28:59.302Z",
+      "original_size": 61593,
+      "status": "skipped_low_gain",
+      "compressed_size": 57242,
+      "estimated_saved_bytes": 4351,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6910941c0ba44457a994b49af967015c.jpg",
+      "created_at": "2026-03-11T05:42:22.227Z",
+      "original_size": 110077,
+      "status": "skipped_low_gain",
+      "compressed_size": 110089,
+      "estimated_saved_bytes": -12,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "69497398ada149858ad840488924b2ab.jpg",
+      "created_at": "2026-03-25T03:19:48.490Z",
+      "original_size": 124201,
+      "status": "skipped_low_gain",
+      "compressed_size": 124228,
+      "estimated_saved_bytes": -27,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "695acf0c88a94364bf4a58fbac630c08.jpg",
+      "created_at": "2026-03-24T17:24:05.799Z",
+      "original_size": 58652,
+      "status": "skipped_low_gain",
+      "compressed_size": 58652,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 1136,
+        "new_width": 640,
+        "new_height": 1136,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6987aa746d114e2da4cb9ff25040a665.jpg",
+      "created_at": "2026-03-13T04:00:37.548Z",
+      "original_size": 73069,
+      "status": "skipped_low_gain",
+      "compressed_size": 73072,
+      "estimated_saved_bytes": -3,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 576,
+        "original_height": 1280,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6992d02a310c44629d73e905adc54f5f.jpg",
+      "created_at": "2026-03-13T04:16:38.268Z",
+      "original_size": 87572,
+      "status": "skipped_low_gain",
+      "compressed_size": 87581,
+      "estimated_saved_bytes": -9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "69a6ea86822a4df0b294a557730b2f23.jpg",
+      "created_at": "2026-03-14T08:30:34.495Z",
+      "original_size": 130633,
+      "status": "skipped_low_gain",
+      "compressed_size": 130624,
+      "estimated_saved_bytes": 9,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "69b0a0c8dd69413a90a703a1c8460284.jpg",
+      "created_at": "2026-02-02T13:58:50.783Z",
+      "original_size": 79058,
+      "status": "skipped_low_gain",
+      "compressed_size": 79062,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "69bd3d5507324ecfa3d97e2bc9680f4c.jpg",
+      "created_at": "2026-03-22T11:27:16.922Z",
+      "original_size": 38629,
+      "status": "skipped_low_gain",
+      "compressed_size": 36584,
+      "estimated_saved_bytes": 2045,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "69fb4bc4d06c4890bbb0607db83c3102.jpg",
+      "created_at": "2026-02-08T15:22:08.152Z",
+      "original_size": 52609,
+      "status": "skipped_low_gain",
+      "compressed_size": 52615,
+      "estimated_saved_bytes": -6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6a0d8fbc03034ff99fc52d86a6e8916d.jpg",
+      "created_at": "2026-03-13T10:05:13.879Z",
+      "original_size": 33356,
+      "status": "skipped_low_gain",
+      "compressed_size": 33356,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6a23618ca3aa4e778e70925a022fa8ac.jpg",
+      "created_at": "2026-03-23T03:48:05.509Z",
+      "original_size": 87969,
+      "status": "skipped_low_gain",
+      "compressed_size": 55856,
+      "estimated_saved_bytes": 32113,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ab834d4e670440fbf02ff1541104014.jpg",
+      "created_at": "2026-03-13T17:02:29.351Z",
+      "original_size": 30906,
+      "status": "skipped_low_gain",
+      "compressed_size": 26896,
+      "estimated_saved_bytes": 4010,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 640,
+        "new_width": 640,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6af14408417b496cb047f25cdedd836c.jpg",
+      "created_at": "2026-03-12T08:08:02.585Z",
+      "original_size": 75100,
+      "status": "skipped_low_gain",
+      "compressed_size": 54214,
+      "estimated_saved_bytes": 20886,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6af2bf96a2cf4e8a8ab832151df254fb.jpg",
+      "created_at": "2026-03-19T03:05:48.778Z",
+      "original_size": 48945,
+      "status": "skipped_low_gain",
+      "compressed_size": 45926,
+      "estimated_saved_bytes": 3019,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b07b7e0584844fe946e46b0a5a33344.jpg",
+      "created_at": "2026-02-16T14:14:50.691Z",
+      "original_size": 34187,
+      "status": "skipped_low_gain",
+      "compressed_size": 34189,
+      "estimated_saved_bytes": -2,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 746,
+        "original_height": 653,
+        "new_width": 746,
+        "new_height": 653,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b1f1d25ca3d4c76b24abfd8a5f4dd56.jpg",
+      "created_at": "2026-03-22T11:58:57.543Z",
+      "original_size": 56636,
+      "status": "skipped_low_gain",
+      "compressed_size": 53292,
+      "estimated_saved_bytes": 3344,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b2d741ea4964bc1a681f874da2ab136.jpg",
+      "created_at": "2026-03-15T04:36:55.459Z",
+      "original_size": 138928,
+      "status": "skipped_low_gain",
+      "compressed_size": 138920,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b5c16869fd34bd2ac462ed9e197d11b.jpg",
+      "created_at": "2026-03-19T04:07:01.150Z",
+      "original_size": 156779,
+      "status": "skipped_low_gain",
+      "compressed_size": 156789,
+      "estimated_saved_bytes": -10,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b70e34db1a74de7b2c4bb58df831091.jpg",
+      "created_at": "2026-03-29T04:07:24.299Z",
+      "original_size": 81239,
+      "status": "skipped_low_gain",
+      "compressed_size": 74903,
+      "estimated_saved_bytes": 6336,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 540,
+        "new_width": 960,
+        "new_height": 540,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b7a512b41ce4d799a624e8e323da714.jpg",
+      "created_at": "2026-03-18T03:24:02.858Z",
+      "original_size": 52008,
+      "status": "skipped_low_gain",
+      "compressed_size": 52000,
+      "estimated_saved_bytes": 8,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b7eb8e55cde4365b6bc79780e55e3a2.jpg",
+      "created_at": "2026-03-25T10:11:59.651Z",
+      "original_size": 61223,
+      "status": "skipped_low_gain",
+      "compressed_size": 61219,
+      "estimated_saved_bytes": 4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 576,
+        "original_height": 1280,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b888c3a959545a6bfbdd4e895155e3b.jpg",
+      "created_at": "2026-03-13T10:03:52.746Z",
+      "original_size": 83621,
+      "status": "skipped_low_gain",
+      "compressed_size": 76842,
+      "estimated_saved_bytes": 6779,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 541,
+        "new_width": 960,
+        "new_height": 541,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6b9d05de7cdb4e7880e85aafe7754848.jpg",
+      "created_at": "2026-03-28T04:32:12.553Z",
+      "original_size": 141171,
+      "status": "skipped_low_gain",
+      "compressed_size": 141166,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6bd239b9677944b7afc71f318cd1b91d.jpg",
+      "created_at": "2026-03-14T09:24:14.427Z",
+      "original_size": 68931,
+      "status": "skipped_low_gain",
+      "compressed_size": 68952,
+      "estimated_saved_bytes": -21,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6bd515562e394daeb593bf4d965eb585.jpg",
+      "created_at": "2026-03-26T10:39:07.566Z",
+      "original_size": 84894,
+      "status": "skipped_low_gain",
+      "compressed_size": 84898,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6bdbb0fba6ab456f988c32a16dd68e5c.jpg",
+      "created_at": "2026-03-18T14:55:08.954Z",
+      "original_size": 67570,
+      "status": "skipped_low_gain",
+      "compressed_size": 67503,
+      "estimated_saved_bytes": 67,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 589,
+        "original_height": 1280,
+        "new_width": 589,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6bedb070fb824d059f9428a4181b0dc8.jpg",
+      "created_at": "2026-03-12T09:34:08.012Z",
+      "original_size": 66070,
+      "status": "skipped_low_gain",
+      "compressed_size": 66069,
+      "estimated_saved_bytes": 1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6bfd32016fdd4bf2be0abc13c03ce983.jpg",
+      "created_at": "2026-03-18T00:48:57.330Z",
+      "original_size": 46209,
+      "status": "skipped_low_gain",
+      "compressed_size": 44405,
+      "estimated_saved_bytes": 1804,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6bfea38cfa1e4652a15ad6ce9ed4ed78.jpg",
+      "created_at": "2026-03-14T04:32:03.795Z",
+      "original_size": 88757,
+      "status": "skipped_low_gain",
+      "compressed_size": 88719,
+      "estimated_saved_bytes": 38,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6c3191ae37ec4e0582dd97ba49015da9.jpg",
+      "created_at": "2026-03-26T09:55:31.024Z",
+      "original_size": 70995,
+      "status": "skipped_low_gain",
+      "compressed_size": 53246,
+      "estimated_saved_bytes": 17749,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6c7c53241a724d3fbd9bc492a4b1b052.jpg",
+      "created_at": "2026-03-30T00:26:55.670Z",
+      "original_size": 89965,
+      "status": "skipped_low_gain",
+      "compressed_size": 89965,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ca1c9d3b7b2481fad85f3049d34fb25.jpg",
+      "created_at": "2026-03-29T12:56:04.289Z",
+      "original_size": 78702,
+      "status": "skipped_low_gain",
+      "compressed_size": 72580,
+      "estimated_saved_bytes": 6122,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 639,
+        "original_height": 960,
+        "new_width": 639,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6cba365b3dab48c69b09eac4c3ec9612.jpg",
+      "created_at": "2026-03-24T06:15:13.249Z",
+      "original_size": 43690,
+      "status": "skipped_low_gain",
+      "compressed_size": 27338,
+      "estimated_saved_bytes": 16352,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 709,
+        "original_height": 1576,
+        "new_width": 576,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6cbc5c2dd7614423b0cccef4a2a3c949.jpg",
+      "created_at": "2026-03-24T04:35:33.149Z",
+      "original_size": 105265,
+      "status": "skipped_low_gain",
+      "compressed_size": 105259,
+      "estimated_saved_bytes": 6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 960,
+        "new_width": 1280,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6cc020adde954215bc7dc5724e968b62.jpg",
+      "created_at": "2026-02-18T04:25:42.678Z",
+      "original_size": 120951,
+      "status": "skipped_low_gain",
+      "compressed_size": 120881,
+      "estimated_saved_bytes": 70,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 580,
+        "new_width": 1280,
+        "new_height": 580,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6cd6a1535d2d48879069b32666772fc4.jpg",
+      "created_at": "2026-03-13T09:58:42.781Z",
+      "original_size": 71997,
+      "status": "skipped_low_gain",
+      "compressed_size": 66977,
+      "estimated_saved_bytes": 5020,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6cdbbf6480c54215b36195bb0ba8b0f0.jpg",
+      "created_at": "2026-03-19T02:51:36.829Z",
+      "original_size": 64607,
+      "status": "skipped_low_gain",
+      "compressed_size": 64586,
+      "estimated_saved_bytes": 21,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 597,
+        "original_height": 1280,
+        "new_width": 597,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6cdcab57872247a59a741dc2ae170997.jpg",
+      "created_at": "2026-03-17T10:26:39.507Z",
+      "original_size": 106626,
+      "status": "skipped_low_gain",
+      "compressed_size": 106626,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ce124a3af4e4015948f1fb19db3b8b6.jpg",
+      "created_at": "2026-03-29T12:19:17.277Z",
+      "original_size": 95730,
+      "status": "skipped_low_gain",
+      "compressed_size": 95725,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ce7e6d36e9b4a6ea454fefacfaaae4a.jpg",
+      "created_at": "2026-03-16T09:44:48.963Z",
+      "original_size": 108175,
+      "status": "skipped_low_gain",
+      "compressed_size": 108176,
+      "estimated_saved_bytes": -1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 720,
+        "original_height": 1280,
+        "new_width": 720,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ce9ac3e3e174b008d89600de9ec20de.jpg",
+      "created_at": "2026-03-16T09:48:16.819Z",
+      "original_size": 70401,
+      "status": "skipped_low_gain",
+      "compressed_size": 70395,
+      "estimated_saved_bytes": 6,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6d02ea0e94174e898cc95f7dbbe9c804.jpg",
+      "created_at": "2026-03-25T03:38:36.794Z",
+      "original_size": 67382,
+      "status": "skipped_low_gain",
+      "compressed_size": 62482,
+      "estimated_saved_bytes": 4900,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 541,
+        "original_height": 960,
+        "new_width": 541,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6d100197afe54da0b69494bde0cb4243.jpg",
+      "created_at": "2026-03-12T05:36:10.985Z",
+      "original_size": 114199,
+      "status": "skipped_low_gain",
+      "compressed_size": 114176,
+      "estimated_saved_bytes": 23,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 853,
+        "new_width": 1280,
+        "new_height": 853,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6d15f23282d4452dbc5adf72a9bd9e51.jpg",
+      "created_at": "2026-03-13T12:59:17.355Z",
+      "original_size": 84471,
+      "status": "skipped_low_gain",
+      "compressed_size": 84472,
+      "estimated_saved_bytes": -1,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 582,
+        "original_height": 1280,
+        "new_width": 582,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6d16bdf9794049628e43039b4b76db40.jpg",
+      "created_at": "2026-03-23T07:05:25.576Z",
+      "original_size": 70914,
+      "status": "skipped_low_gain",
+      "compressed_size": 65823,
+      "estimated_saved_bytes": 5091,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6d280ed6991e4f22ae5f5145fb07699d.jpg",
+      "created_at": "2026-03-25T12:00:51.828Z",
+      "original_size": 56094,
+      "status": "skipped_low_gain",
+      "compressed_size": 52963,
+      "estimated_saved_bytes": 3131,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 854,
+        "original_height": 640,
+        "new_width": 854,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6d3658dc4f1343a39125820f969e5c24.jpg",
+      "created_at": "2026-03-22T09:57:02.320Z",
+      "original_size": 86713,
+      "status": "skipped_low_gain",
+      "compressed_size": 54580,
+      "estimated_saved_bytes": 32133,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 714,
+        "original_height": 1576,
+        "new_width": 580,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6d92c9bab3134def8760318cc73a88b8.jpg",
+      "created_at": "2026-03-19T03:57:27.652Z",
+      "original_size": 132291,
+      "status": "skipped_low_gain",
+      "compressed_size": 132266,
+      "estimated_saved_bytes": 25,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6dcde71a1648468cb11ca117f282f068.jpg",
+      "created_at": "2026-03-18T09:49:45.614Z",
+      "original_size": 71073,
+      "status": "skipped_low_gain",
+      "compressed_size": 71086,
+      "estimated_saved_bytes": -13,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6dd7797d083243f1af55f448c50648a5.jpg",
+      "created_at": "2026-03-21T08:52:26.007Z",
+      "original_size": 114463,
+      "status": "skipped_low_gain",
+      "compressed_size": 114463,
+      "estimated_saved_bytes": 0,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ddcf7af5a00403895c827d055e555d6.jpg",
+      "created_at": "2026-03-17T07:23:36.487Z",
+      "original_size": 83139,
+      "status": "skipped_low_gain",
+      "compressed_size": 83108,
+      "estimated_saved_bytes": 31,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 580,
+        "original_height": 1280,
+        "new_width": 580,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6e06f1bd7f7040fd953e87e00052541f.jpg",
+      "created_at": "2026-02-08T14:35:40.595Z",
+      "original_size": 90075,
+      "status": "skipped_low_gain",
+      "compressed_size": 90070,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1125,
+        "original_height": 1129,
+        "new_width": 1125,
+        "new_height": 1129,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6e41c906753341b7b305edb69ca09d3f.jpg",
+      "created_at": "2026-03-29T07:51:38.837Z",
+      "original_size": 100440,
+      "status": "skipped_low_gain",
+      "compressed_size": 92371,
+      "estimated_saved_bytes": 8069,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 579,
+        "original_height": 960,
+        "new_width": 579,
+        "new_height": 960,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6e522268032746b9934b3886c019dd30.jpg",
+      "created_at": "2026-03-25T14:05:13.107Z",
+      "original_size": 44917,
+      "status": "skipped_low_gain",
+      "compressed_size": 44921,
+      "estimated_saved_bytes": -4,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 528,
+        "original_height": 967,
+        "new_width": 528,
+        "new_height": 967,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6e55ced4450d4af2bb08c549d9681e6b.jpg",
+      "created_at": "2026-03-14T03:56:18.176Z",
+      "original_size": 83131,
+      "status": "skipped_low_gain",
+      "compressed_size": 52276,
+      "estimated_saved_bytes": 30855,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 719,
+        "original_height": 1600,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6e5a14402aa446d480b6c88148eecc40.jpg",
+      "created_at": "2026-03-24T01:11:50.364Z",
+      "original_size": 89819,
+      "status": "skipped_low_gain",
+      "compressed_size": 89843,
+      "estimated_saved_bytes": -24,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 590,
+        "original_height": 1280,
+        "new_width": 590,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ec376c850304a0ea5d0916fe1526c80.jpg",
+      "created_at": "2026-03-13T10:09:28.757Z",
+      "original_size": 36210,
+      "status": "skipped_low_gain",
+      "compressed_size": 34660,
+      "estimated_saved_bytes": 1550,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 854,
+        "new_width": 640,
+        "new_height": 854,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ecf0ab4b2554a7596ff1e298eecf0f2.jpg",
+      "created_at": "2026-03-08T03:40:22.111Z",
+      "original_size": 106385,
+      "status": "skipped_low_gain",
+      "compressed_size": 106415,
+      "estimated_saved_bytes": -30,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ecf5fb3009c4b558f9dd5f7d5385c7a.jpg",
+      "created_at": "2026-03-17T03:28:24.836Z",
+      "original_size": 96569,
+      "status": "skipped_low_gain",
+      "compressed_size": 96548,
+      "estimated_saved_bytes": 21,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 1280,
+        "new_width": 960,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6ed8e273501d4eaa8d27c771214e7725.jpg",
+      "created_at": "2026-03-14T11:30:57.092Z",
+      "original_size": 94872,
+      "status": "skipped_low_gain",
+      "compressed_size": 94879,
+      "estimated_saved_bytes": -7,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 720,
+        "new_width": 1280,
+        "new_height": 720,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6f2fa26db9564f1da569847651cd31b8.jpg",
+      "created_at": "2026-03-14T09:36:16.413Z",
+      "original_size": 32898,
+      "status": "skipped_low_gain",
+      "compressed_size": 29466,
+      "estimated_saved_bytes": 3432,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 640,
+        "original_height": 640,
+        "new_width": 640,
+        "new_height": 640,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6f3700150d4645248e2c9f00804d352f.jpg",
+      "created_at": "2026-03-15T09:44:19.127Z",
+      "original_size": 53835,
+      "status": "skipped_low_gain",
+      "compressed_size": 53830,
+      "estimated_saved_bytes": 5,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 1280,
+        "original_height": 575,
+        "new_width": 1280,
+        "new_height": 575,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6f6f38cb803c4c61aa65ab81b0a5f816.jpg",
+      "created_at": "2026-03-25T09:49:41.081Z",
+      "original_size": 56550,
+      "status": "skipped_low_gain",
+      "compressed_size": 52690,
+      "estimated_saved_bytes": 3860,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 960,
+        "original_height": 540,
+        "new_width": 960,
+        "new_height": 540,
+        "content_type": "image/jpeg"
+      }
+    },
+    {
+      "name": "6f7e2ea5f9a04eccb2b9d70ade99eae9.jpg",
+      "created_at": "2026-03-15T00:19:38.508Z",
+      "original_size": 40299,
+      "status": "skipped_low_gain",
+      "compressed_size": 40315,
+      "estimated_saved_bytes": -16,
+      "replace": false,
+      "meta": {
+        "original_mode": "RGB",
+        "original_width": 575,
+        "original_height": 1280,
+        "new_width": 575,
+        "new_height": 1280,
+        "content_type": "image/jpeg"
+      }
+    }
+  ]
+}

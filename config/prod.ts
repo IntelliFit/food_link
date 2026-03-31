@@ -1,7 +1,17 @@
 import type { UserConfigExport } from "@tarojs/cli"
 
 export default {
-  mini: {},
+  jsMinimizer: 'terser',
+  cssMinimizer: 'csso',
+  terser: {
+    enable: true
+  },
+  csso: {
+    enable: true
+  },
+  mini: {
+    enableSourceMap: false
+  },
   h5: {
     // 确保产物为 es5
     legacy: true,

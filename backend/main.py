@@ -37,6 +37,7 @@ from test_backend.utils import calculate_deviation
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
+FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
 from auth import create_access_token
 from database import (
     get_user_by_openid,
@@ -450,6 +451,13 @@ def _format_membership_response(membership: Optional[Dict[str, Any]]) -> Dict[st
         "expires_at": membership.get("expires_at"),
         "last_paid_at": membership.get("last_paid_at"),
     }
+
+
+def _get_food_analysis_daily_limit(is_pro: bool) -> Optional[int]:
+    """临时关闭拍照分析日限；恢复时只需打开环境变量。"""
+    if not FOOD_ANALYSIS_DAILY_LIMIT_ENABLED:
+        return None
+    return 20 if is_pro else 3
 
 
 def _get_private_key(private_key_pem: str):
@@ -986,9 +994,9 @@ class MembershipStatusResponse(BaseModel):
     current_period_start: Optional[str] = None
     expires_at: Optional[str] = None
     last_paid_at: Optional[str] = None
-    daily_limit: int = 3
-    daily_used: int = 0
-    daily_remaining: int = 3
+    daily_limit: Optional[int] = None
+    daily_used: Optional[int] = None
+    daily_remaining: Optional[int] = None
 
 
 class MembershipPlansListResponse(BaseModel):
@@ -1201,14 +1209,15 @@ async def analyze_food(
             membership = await _get_effective_membership(user_info["user_id"])
             membership_resp = _format_membership_response(membership)
             is_pro_sync = membership_resp["is_pro"]
-            quota_limit_sync = 20 if is_pro_sync else 3
-            today_str_sync = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-            daily_used_sync = await get_today_food_analysis_count(user_info["user_id"], today_str_sync)
-            if daily_used_sync >= quota_limit_sync:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"今日拍照次数已达上限（{quota_limit_sync}次），{'请明日再试' if is_pro_sync else '开通食探会员可提升至每日20次'}"
-                )
+            quota_limit_sync = _get_food_analysis_daily_limit(is_pro_sync)
+            if quota_limit_sync is not None:
+                today_str_sync = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+                daily_used_sync = await get_today_food_analysis_count(user_info["user_id"], today_str_sync)
+                if daily_used_sync >= quota_limit_sync:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"今日拍照次数已达上限（{quota_limit_sync}次），{'请明日再试' if is_pro_sync else '开通食探会员可提升至每日20次'}"
+                    )
             # strict 模式需要 Pro 会员
             if execution_mode == "strict" and not is_pro_sync:
                 execution_mode = "standard"
@@ -1453,14 +1462,15 @@ async def analyze_submit(
     membership = await _get_effective_membership(user_info["user_id"])
     membership_resp = _format_membership_response(membership)
     is_pro = membership_resp["is_pro"]
-    quota_limit = 20 if is_pro else 3
-    today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-    daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
-    if daily_used >= quota_limit:
-        raise HTTPException(
-            status_code=429,
-            detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '开通食探会员可提升至每日20次'}"
-        )
+    quota_limit = _get_food_analysis_daily_limit(is_pro)
+    if quota_limit is not None:
+        today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+        daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
+        if daily_used >= quota_limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '开通食探会员可提升至每日20次'}"
+            )
 
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
     user = await get_user_by_id(user_info["user_id"])
@@ -2465,7 +2475,12 @@ async def get_my_membership(
         membership = await _get_effective_membership(user_info["user_id"])
         result = _format_membership_response(membership)
         is_pro = result["is_pro"]
-        daily_limit = 20 if is_pro else 3
+        daily_limit = _get_food_analysis_daily_limit(is_pro)
+        if daily_limit is None:
+            result["daily_limit"] = None
+            result["daily_used"] = None
+            result["daily_remaining"] = None
+            return result
         today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
         daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
         daily_used = min(daily_used, daily_limit)

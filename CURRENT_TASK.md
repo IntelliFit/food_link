@@ -1,5 +1,74 @@
 # CURRENT_TASK
 
+- Task: 临时取消食物分析每日次数限制
+- Status: done（后端默认已不再按日配额拦截拍照/文字分析，保留环境变量开关便于后续恢复）
+- Scope:
+  - 根因复核：
+    - 当前日限统计口径不是“纯拍照成功次数”，而是按 `analysis_tasks` 当天创建量计数
+    - 统计同时包含 `food` 和 `food_text`
+    - 失败任务/未完成任务也会占用当日额度，因此用户体感上可能出现“只拍了 2 次就被拦”
+  - 已完成调整：
+    - `backend/main.py`
+      - 新增 `FOOD_ANALYSIS_DAILY_LIMIT_ENABLED` 环境变量开关
+      - 默认关闭每日限次检查
+      - `/api/membership/me` 在限次关闭时不再返回 `3/20` 日限数字，相关字段改为 `null`
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+- Next step:
+  - 部署当前后端
+  - 用户重新实测拍照/文字分析，确认不再出现“今日拍照次数已达上限”
+
+- Task: 修复微信小程序上传因主包超 `2MB` 失败
+- Status: done（已完成最小风险的构建/上传侧减包调整；生产构建后 `dist` 约 `1517.69 KB`，已明显低于 `2 MB` 上限）
+- Scope:
+  - 根因定位：
+    - 微信开发者工具上传报错 `80051`
+    - 上传源大小约 `2060 KB`，超过主包 `2 MB` 上限
+    - 当前上传目录为 `dist/`
+    - 原始构建产物中 `.map` 文件合计约 `3240.53 KB`
+    - 即使去掉 `.map`，非 map 产物也约 `2076.31 KB`，说明主包代码本体也略超上限
+  - 已完成配置调整：
+    - `project.config.json`
+      - `minified: false -> true`
+      - `uploadWithSourceMap: true -> false`
+    - `config/prod.ts`
+      - 显式启用 `terser` JS 压缩
+      - 显式启用 `csso` CSS 压缩
+      - 显式关闭 `mini.enableSourceMap`
+  - 构建结果：
+    - `npm run build:weapp` 通过
+    - 当前 `dist` 总体积约 `1517.69 KB`
+    - 当前 `dist` 中 `.map` 数量为 `0`
+- Verification:
+  - 生产构建已通过
+  - 已复测构建后 `dist` 体积，确认明显低于微信上传报错阈值
+- Next step:
+  - 用户在微信开发者工具执行“清缓存并编译”后重新上传
+  - 若上传界面仍显示旧体积，优先确认开发者工具已重新读取最新 `dist/`
+
+- Task: Supabase Storage 超配额治理（先压缩后删除）
+- Status: in_progress（已完成 4 个 bucket 与业务引用关系盘点；当前决策为先做保守压缩，再考虑删除临时图/孤儿图）
+- Scope:
+  - 已确认当前存储主矛盾集中在 `food-images`
+  - `food-images` 中约 `531.42 MB` 为已进入 `user_food_records` 的长期图片，约 `460.40 MB` 为仅分析未落库的临时图，约 `119.18 MB` 为孤儿图
+  - `user-avatars`、`health-reports` 总量较小，不是本轮容量主矛盾
+  - 已新增 `backend/compress_food_images.py`：
+    - 默认 `dry-run`
+    - 默认只处理被业务引用的 `food-images`
+    - 保持对象 key/URL 不变，直接回写覆盖
+    - 已补 `--name`，支持按对象名精确压缩单张图片
+  - 已实际执行首批压缩：`python backend/compress_food_images.py --execute --limit 200`
+    - 处理 `200` 张被引用图片
+    - 实际替换 `141` 张，跳过 `59` 张，失败 `0`
+    - 报告估算从 `80.76 MB` 降到 `15.74 MB`，首批约释放 `65.01 MB`
+  - 已完成单文件验证：
+    - `python backend/compress_food_images.py --execute --name "156d3b2c5a094fcf81b44f4229aade73.jpg"`
+    - 该图从 `2.14 MB` 压到 `0.18 MB`
+- Next step:
+  - 等用户在 Supabase / 前端回看单图 `156d3b2c5a094fcf81b44f4229aade73.jpg`
+  - 若观感可接受，按同参数继续批量压缩被引用的长期图片
+  - 压缩收益稳定后，再评估是否删除 `analysis_only_temp` 与 `orphan`
+
 - Task: 精准模式收敛为“单食物 / 可拆分混合餐 / 复杂混合餐”简化方案
 - Status: done（已把精准模式从“过细 sceneTags + 白名单强心智”收敛成更经典的拆分精估模式）
 - Scope:

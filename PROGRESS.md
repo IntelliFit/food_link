@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-03-31
+
+- 🐛 fix: 临时关闭食物分析每日次数限制，后端默认不再因当日配额拦截拍照/文字分析，并保留环境变量开关便于后续恢复 `backend/main.py`
+- ⚡ perf: 修复微信小程序上传主包超 `2MB`，生产构建改为默认压缩且不上传 sourcemap；重新构建后 `dist` 已降到约 `1517.69 KB` `project.config.json` `config/prod.ts`
+- ⚡ perf: 新增 Supabase `food-images` 批量压缩脚本，默认只对被业务引用的长期图片做 dry-run 评估，支持同 key 覆盖压缩与本地报告输出 `backend/compress_food_images.py`
+- ⚡ perf: 图片压缩脚本补充 `--name` 精确处理入口，支持只压单个指定对象，方便逐张验收后再批量执行 `backend/compress_food_images.py`
+- ⚡ perf: 图片压缩脚本新增 `--progress-every` 低日志模式，避免全量压缩时因逐文件输出过多导致后台终端承载异常 `backend/compress_food_images.py`
+- ⚡ perf: 图片压缩脚本补充 `--offset` 分批处理能力并跳过占位对象，便于稳定地按批次推进全量压缩 `backend/compress_food_images.py`
+
 ## 2026-03-30
 
 - ⚡ perf: 精准模式收敛为“单食物 / 可拆分混合餐 / 复杂混合餐”简化判定，只保留主体数量、遮挡程度、参照物等核心信号，减少旧版严格模式的过细规则负担 `backend/worker.py`
