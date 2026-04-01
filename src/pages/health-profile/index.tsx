@@ -13,6 +13,7 @@ import {
   type ExecutionMode
 } from '../../utils/api'
 import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 import HeightRuler from '../../components/HeightRuler'
@@ -62,7 +63,7 @@ const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc:
 
 const TOTAL_STEPS = 12 // 性别、生日、身高、体重、目标、活动、执行模式、病史、饮食、过敏、特殊情况、体检报告
 
-export default function HealthProfilePage() {
+function HealthProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
@@ -741,3 +742,5 @@ export default function HealthProfilePage() {
     </View>
   )
 }
+
+export default withAuth(HealthProfilePage)

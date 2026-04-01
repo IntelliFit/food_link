@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Taro, { getCurrentInstance } from '@tarojs/taro'
 import { API_BASE_URL } from '../../utils/api'
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 type PoiItem = {
   name: string
@@ -19,7 +20,7 @@ type SearchResponse = {
 const DEFAULT_LAT = 39.89945
 const DEFAULT_LNG = 116.40769
 
-export default function LocationSearchPage() {
+function LocationSearchPage() {
   const [keyword, setKeyword] = useState('')
   const [searching, setSearching] = useState(false)
   const [locating, setLocating] = useState(false)
@@ -252,3 +253,5 @@ export default function LocationSearchPage() {
     </View>
   )
 }
+
+export default withAuth(LocationSearchPage)

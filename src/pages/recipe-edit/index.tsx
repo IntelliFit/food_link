@@ -1,6 +1,7 @@
 import { View, Text, Input, Textarea, Button } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 
@@ -13,7 +14,7 @@ const MEAL_TYPES = [
   { id: 'evening_snack', name: '晚加餐' }
 ]
 
-export default function RecipeEditPage() {
+function RecipeEditPage() {
   const [loading, setLoading] = useState(false)
   const [recipeId, setRecipeId] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -209,3 +210,5 @@ export default function RecipeEditPage() {
     </View>
   )
 }
+
+export default withAuth(RecipeEditPage)

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, submitTextAnalyzeTask, type ExecutionMode, type AnalyzeRecognitionOutcome, type AllowedFoodCategory } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 
@@ -134,7 +135,7 @@ const normalizeFoodNameForCorrection = (value: unknown) => (
 )
 
 
-export default function ResultPage() {
+function ResultPage() {
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
@@ -1497,3 +1498,5 @@ export default function ResultPage() {
     </View>
   )
 }
+
+export default withAuth(ResultPage)

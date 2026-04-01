@@ -5,6 +5,14 @@ import { getAccessToken, acceptFriendInvite } from './utils/api'
 
 import './app.scss'
 
+// 不需要登录的页面白名单
+const PUBLIC_PAGES = new Set([
+  '/pages/login/index',
+  '/pages/agreement/index',
+  '/pages/privacy/index',
+  '/pages/about/index',
+])
+
 function App({ children }: PropsWithChildren<any>) {
   useLaunch((options) => {
     console.log('App launched.')
@@ -43,7 +51,5 @@ function App({ children }: PropsWithChildren<any>) {
   // children 是将要会渲染的页面
   return children
 }
-  
-
 
 export default App

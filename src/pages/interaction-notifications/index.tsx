@@ -1,3 +1,4 @@
+import { withAuth } from '../../utils/withAuth'
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useCallback, useState } from 'react'
 import Taro from '@tarojs/taro'
@@ -55,7 +56,7 @@ function buildNotificationTitle(item: FeedInteractionNotification): string {
   return '你的评论未通过审核'
 }
 
-export default function InteractionNotificationsPage() {
+function InteractionNotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [markingRead, setMarkingRead] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -163,3 +164,5 @@ export default function InteractionNotificationsPage() {
     </View>
   )
 }
+
+export default withAuth(InteractionNotificationsPage)

@@ -1,4 +1,5 @@
 import { View, Text, ScrollView, Slider } from '@tarojs/components'
+import { withAuth } from '../../utils/withAuth'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord } from '../../utils/api'
@@ -54,7 +55,7 @@ const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number
   roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
 )
 
-export default function ResultTextPage() {
+function ResultTextPage() {
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
   const [nutritionStats, setNutritionStats] = useState({
@@ -572,3 +573,5 @@ export default function ResultTextPage() {
     </View>
   )
 }
+
+export default withAuth(ResultTextPage)

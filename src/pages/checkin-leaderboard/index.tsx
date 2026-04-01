@@ -1,10 +1,11 @@
+import { withAuth } from '../../utils/withAuth'
 import { View, Text, ScrollView, Image } from '@tarojs/components'
 import { useCallback, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { communityGetCheckinLeaderboard, getAccessToken, type CheckinLeaderboardItem } from '../../utils/api'
 import './index.scss'
 
-export default function CheckinLeaderboardPage() {
+function CheckinLeaderboardPage() {
   const [list, setList] = useState<CheckinLeaderboardItem[]>([])
   const [weekStart, setWeekStart] = useState('')
   const [weekEnd, setWeekEnd] = useState('')
@@ -113,3 +114,5 @@ export default function CheckinLeaderboardPage() {
     </View>
   )
 }
+
+export default withAuth(CheckinLeaderboardPage)

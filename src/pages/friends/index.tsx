@@ -1,3 +1,4 @@
+import { withAuth } from '../../utils/withAuth'
 import { View, Text, Image, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
@@ -32,7 +33,7 @@ function formatTime(ts?: string): string {
   return `${y}-${m}-${day} ${hh}:${mm}`
 }
 
-export default function FriendsPage() {
+function FriendsPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('friends')
   const [loading, setLoading] = useState(false)
   const [friends, setFriends] = useState<FriendListItem[]>([])
@@ -232,3 +233,5 @@ export default function FriendsPage() {
     </View>
   )
 }
+
+export default withAuth(FriendsPage)

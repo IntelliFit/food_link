@@ -7,6 +7,7 @@ import type { ExecutionMode } from '../../utils/api'
 import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
 
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
@@ -158,7 +159,7 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
   return persistedPaths
 }
 
-export default function AnalyzePage() {
+function AnalyzePage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>('breakfast')
@@ -568,3 +569,5 @@ export default function AnalyzePage() {
     </View>
   )
 }
+
+export default withAuth(AnalyzePage)

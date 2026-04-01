@@ -1,4 +1,5 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
+import { withAuth } from '../../utils/withAuth'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { listAnalyzeTasks, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome } from '../../utils/api'
@@ -55,7 +56,7 @@ function formatTime(iso: string) {
   }
 }
 
-export default function AnalyzeHistoryPage() {
+function AnalyzeHistoryPage() {
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -214,3 +215,5 @@ export default function AnalyzeHistoryPage() {
     </View>
   )
 }
+
+export default withAuth(AnalyzeHistoryPage)

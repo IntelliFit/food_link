@@ -1,5 +1,5 @@
 import { View, Text, Input } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,
@@ -17,6 +17,7 @@ import { Empty, Button } from '@taroify/core'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 const DEFAULT_INTAKE: HomeIntakeData = {
   current: 0,
@@ -93,6 +94,112 @@ function parseCompleteNumber(value: string): number | null {
 function formatTargetInput(value: number): string {
   const rounded = Math.max(0, Number(value.toFixed(1)))
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+// 数字滚动动画 Hook
+function useAnimatedNumber(target: number, duration: number = 800, delay: number = 0): number {
+  const [displayValue, setDisplayValue] = useState(0)
+  const startTimeRef = useRef<number | null>(null)
+  const startValueRef = useRef(0)
+  const targetRef = useRef(target)
+  const rafRef = useRef<number | null>(null)
+
+  // easeOutCubic 缓动函数
+  const easeOutCubic = (t: number): number => {
+    return 1 - Math.pow(1 - t, 3)
+  }
+
+  useEffect(() => {
+    targetRef.current = target
+    startValueRef.current = displayValue
+    startTimeRef.current = null
+
+    const animate = (timestamp: number) => {
+      if (startTimeRef.current === null) {
+        startTimeRef.current = timestamp + delay
+      }
+
+      const elapsed = timestamp - startTimeRef.current
+
+      if (elapsed < 0) {
+        rafRef.current = requestAnimationFrame(animate)
+        return
+      }
+
+      const progress = Math.min(elapsed / duration, 1)
+      const easedProgress = easeOutCubic(progress)
+      const currentValue = startValueRef.current + (targetRef.current - startValueRef.current) * easedProgress
+
+      setDisplayValue(currentValue)
+
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate)
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  }, [target, duration, delay])
+
+  return displayValue
+}
+
+// 圆环进度动画 Hook
+function useAnimatedProgress(targetProgress: number, duration: number = 800, delay: number = 0): number {
+  const [displayProgress, setDisplayProgress] = useState(0)
+  const startTimeRef = useRef<number | null>(null)
+  const startProgressRef = useRef(0)
+  const targetRef = useRef(targetProgress)
+  const rafRef = useRef<number | null>(null)
+
+  // easeOutCubic 缓动函数
+  const easeOutCubic = (t: number): number => {
+    return 1 - Math.pow(1 - t, 3)
+  }
+
+  useEffect(() => {
+    targetRef.current = targetProgress
+    startProgressRef.current = displayProgress
+    startTimeRef.current = null
+
+    const animate = (timestamp: number) => {
+      if (startTimeRef.current === null) {
+        startTimeRef.current = timestamp + delay
+      }
+
+      const elapsed = timestamp - startTimeRef.current
+
+      if (elapsed < 0) {
+        rafRef.current = requestAnimationFrame(animate)
+        return
+      }
+
+      const progress = Math.min(elapsed / duration, 1)
+      const easedProgress = easeOutCubic(progress)
+      const currentProgress = startProgressRef.current + (targetRef.current - startProgressRef.current) * easedProgress
+
+      setDisplayProgress(currentProgress)
+
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate)
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(animate)
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  }, [targetProgress, duration, delay])
+
+  return displayProgress
 }
 
 function parseMacroTargets(form: TargetFormState): MacroTargets | null {
@@ -243,7 +350,7 @@ function createWeekHeatmapCells(): WeekHeatmapCell[] {
   return cells
 }
 
-export default function IndexPage() {
+function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
   const [meals, setMeals] = useState<HomeMealItem[]>([])
   const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(createWeekHeatmapCells())
@@ -539,6 +646,10 @@ export default function IndexPage() {
   const totalTarget = normalizeDisplayNumber(intakeData.target)
   const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
   const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
+
+  // 使用动画数字
+  const animatedRemainingCalories = useAnimatedNumber(remainingCalories, 800, 0)
+  const animatedTotalCurrent = useAnimatedNumber(totalCurrent, 800, 100)
   
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
@@ -553,6 +664,68 @@ export default function IndexPage() {
   const getMacroRemaining = (key: MacroKey) => {
     const macro = intakeData.macros[key]
     return Math.max(0, Number((macro.target - macro.current).toFixed(1)))
+  }
+
+  // 营养素动画数值和进度
+  const macroAnimations = useMemo(() => {
+    return MACRO_CONFIGS.map(({ key }, index) => {
+      const macro = intakeData.macros[key]
+      const currentValue = normalizeDisplayNumber(macro.current)
+      const targetValue = normalizeDisplayNumber(macro.target)
+      const targetProgress = calculateProgressPercent(currentValue, targetValue)
+      return {
+        key,
+        animatedValue: currentValue,
+        animatedProgress: targetProgress,
+        delay: index * 150 // 错开动画时间
+      }
+    })
+  }, [intakeData.macros])
+
+  // 为每个营养素使用动画 hook
+  const proteinAnimation = useAnimatedNumber(
+    macroAnimations.find(m => m.key === 'protein')?.animatedValue || 0,
+    800,
+    200
+  )
+  const carbsAnimation = useAnimatedNumber(
+    macroAnimations.find(m => m.key === 'carbs')?.animatedValue || 0,
+    800,
+    350
+  )
+  const fatAnimation = useAnimatedNumber(
+    macroAnimations.find(m => m.key === 'fat')?.animatedValue || 0,
+    800,
+    500
+  )
+
+  // 圆环进度动画
+  const proteinProgressAnimation = useAnimatedProgress(
+    macroAnimations.find(m => m.key === 'protein')?.animatedProgress || 0,
+    800,
+    200
+  )
+  const carbsProgressAnimation = useAnimatedProgress(
+    macroAnimations.find(m => m.key === 'carbs')?.animatedProgress || 0,
+    800,
+    350
+  )
+  const fatProgressAnimation = useAnimatedProgress(
+    macroAnimations.find(m => m.key === 'fat')?.animatedProgress || 0,
+    800,
+    500
+  )
+
+  const animatedMacroValues: Record<MacroKey, number> = {
+    protein: proteinAnimation,
+    carbs: carbsAnimation,
+    fat: fatAnimation
+  }
+
+  const animatedMacroProgress: Record<MacroKey, number> = {
+    protein: proteinProgressAnimation,
+    carbs: carbsProgressAnimation,
+    fat: fatProgressAnimation
   }
 
   return (
@@ -614,7 +787,7 @@ export default function IndexPage() {
           <View className='main-card-header'>
             <View className='main-card-title'>
               <Text className='card-label'>剩余可摄入</Text>
-              <Text className='card-value'>{formatNumberWithComma(remainingCalories)}</Text>
+              <Text className='card-value'>{formatNumberWithComma(Math.round(animatedRemainingCalories))}</Text>
               <Text className='card-unit'>kcal</Text>
             </View>
             <View className='target-section'>
@@ -645,6 +818,10 @@ export default function IndexPage() {
             const progress = calculateProgressPercent(currentValue, targetValue)
             const visualProgress = clampVisualProgress(progress)
             
+            // 使用动画进度和数值
+            const animatedProgress = clampVisualProgress(animatedMacroProgress[key] ?? 0)
+            const animatedValue = animatedMacroValues[key] ?? 0
+            
             return (
               <View key={key} className='macro-card'>
                 {/* 顶部标签栏 - 灰色系 */}
@@ -657,41 +834,26 @@ export default function IndexPage() {
                   </View>
                 </View>
                 
-                {/* 极简仪表盘 */}
+                {/* 大仪表盘 - 使用 CSS 环形进度条 */}
                 <View className='macro-gauge-wrap'>
-                  <View className='macro-gauge'>
-                    {/* SVG 圆环 */}
-                    <svg className='macro-gauge-svg' viewBox='0 0 100 100'>
-                      {/* 背景圆环 */}
-                      <circle
-                        className='macro-gauge-track'
-                        cx='50'
-                        cy='50'
-                        r='42'
-                        fill='none'
-                        stroke='#e5e7eb'
-                        strokeWidth='8'
+                  <View className='macro-gauge-box'>
+                    <View className='macro-gauge'>
+                      {/* 外圈背景 */}
+                      <View 
+                        className='macro-ring-bg'
+                        style={{
+                          background: `conic-gradient(${color} ${animatedProgress * 3.6}deg, #f0f0f0 ${animatedProgress * 3.6}deg)`
+                        }}
                       />
-                      {/* 进度圆环 */}
-                      <circle
-                        className='macro-gauge-progress'
-                        cx='50'
-                        cy='50'
-                        r='42'
-                        fill='none'
-                        stroke={color}
-                        strokeWidth='8'
-                        strokeLinecap='round'
-                        strokeDasharray={`${visualProgress * 2.64} 264`}
-                        transform='rotate(-90 50 50)'
-                      />
-                    </svg>
-                    {/* 中心数值 */}
-                    <View className='macro-gauge-center'>
-                      <Text className='macro-gauge-value' style={{ color }}>
-                        {loading ? '--' : formatDisplayNumber(currentValue)}
-                      </Text>
-                      <Text className='macro-gauge-unit'>克</Text>
+                      {/* 内圈白色遮罩，形成圆环效果 */}
+                      <View className='macro-ring-inner' />
+                      {/* 中心数值 - 使用动画数值 */}
+                      <View className='macro-gauge-center'>
+                        <Text className='macro-gauge-value' style={{ color }}>
+                          {loading ? '--' : formatDisplayNumber(animatedValue)}
+                        </Text>
+                        <Text className='macro-gauge-unit'>克</Text>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -888,3 +1050,5 @@ export default function IndexPage() {
     </View>
   )
 }
+
+export default withAuth(IndexPage)

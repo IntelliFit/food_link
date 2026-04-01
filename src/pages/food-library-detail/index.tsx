@@ -1,3 +1,4 @@
+import { withAuth } from '../../utils/withAuth'
 import { View, Text, ScrollView, Image, Textarea, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
@@ -51,7 +52,7 @@ function formatTime(timeStr: string | null | undefined): string {
   }
 }
 
-export default function FoodLibraryDetailPage() {
+function FoodLibraryDetailPage() {
   const router = useRouter()
   const itemId = router.params.id || ''
 
@@ -534,3 +535,5 @@ export default function FoodLibraryDetailPage() {
     </View>
   )
 }
+
+export default withAuth(FoodLibraryDetailPage)

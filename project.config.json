@@ -4,7 +4,7 @@
   "description": "AI Food Analysis and Diet Sharing Community",
   "appid": "wxbb1ce739d73a66e4",
   "setting": {
-    "urlCheck": true,
+    "urlCheck": false,
     "es6": false,
     "enhance": false,
     "compileHotReLoad": false,

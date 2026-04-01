@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
+import { withAuth } from '../../utils/withAuth'
 import {
   getAccessToken,
   getPublicFoodLibraryList,
@@ -29,7 +30,7 @@ const CACHE_DURATION = 5 * 60 * 1000
 type TabMode = 'all' | 'collections'
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
 
-export default function FoodLibraryPage() {
+function FoodLibraryPage() {
   const router = useRouter()
   const fromRecord = router.params.from === 'record'
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
@@ -605,3 +606,5 @@ export default function FoodLibraryPage() {
     </View>
   )
 }
+
+export default withAuth(FoodLibraryPage)

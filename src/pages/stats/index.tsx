@@ -5,6 +5,7 @@ import { getStatsSummary, generateStatsInsight, saveStatsInsight, type StatsSumm
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -56,7 +57,7 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
-export default function StatsPage() {
+function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<StatsSummary | null>(null)
@@ -573,4 +574,6 @@ export default function StatsPage() {
     </View>
   )
 }
+
+export default withAuth(StatsPage)
 

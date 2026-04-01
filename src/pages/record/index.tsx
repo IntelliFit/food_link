@@ -12,6 +12,7 @@ import {
 import { IconCamera, IconText } from '../../components/iconfont'
 
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 const MEAL_TYPE_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -39,7 +40,7 @@ const ACTIVITY_TIMING_OPTIONS = [
 
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
 
-export default function RecordPage() {
+function RecordPage() {
   const [activeMethod, setActiveMethod] = useState<'photo' | 'text'>('photo')
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
@@ -563,3 +564,5 @@ export default function RecordPage() {
     </View>
   )
 }
+
+export default withAuth(RecordPage)

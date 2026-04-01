@@ -13,6 +13,7 @@ import {
   type ExecutionMode
 } from '../../utils/api'
 import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 import HeightRuler from '../../components/HeightRuler'
@@ -60,7 +61,7 @@ const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc:
   { value: 'standard', title: '标准模式', desc: '记录更便捷，但估算误差会更大。' }
 ]
 
-export default function HealthProfileEditPage() {
+function HealthProfileEditPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -582,3 +583,5 @@ export default function HealthProfileEditPage() {
     </View>
   )
 }
+
+export default withAuth(HealthProfileEditPage)

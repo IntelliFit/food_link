@@ -40,6 +40,7 @@ import '@taroify/core/button/style'
 import '@taroify/core/divider/style'
 
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -237,7 +238,7 @@ function getLibraryRecommendParams(
   return { sort_by: 'recommended' as const }
 }
 
-export default function CommunityPage() {
+function CommunityPage() {
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
   const [friends, setFriends] = useState<FriendListItem[]>([])
   const [requests, setRequests] = useState<FriendRequestItem[]>([])
@@ -1946,3 +1947,5 @@ export default function CommunityPage() {
     </View>
   )
 }
+
+export default withAuth(CommunityPage)

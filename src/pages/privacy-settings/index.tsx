@@ -4,8 +4,9 @@ import { Cell, Switch } from '@taroify/core'
 import { useState } from 'react'
 import { getUserProfile, authenticatedRequest } from '../../utils/api'
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
-export default function PrivacySettings() {
+function PrivacySettings() {
     const [searchable, setSearchable] = useState(true)
     const [publicRecords, setPublicRecords] = useState(true)
     const [loading, setLoading] = useState(true)
@@ -90,3 +91,5 @@ export default function PrivacySettings() {
         </View>
     )
 }
+
+export default withAuth(PrivacySettings)

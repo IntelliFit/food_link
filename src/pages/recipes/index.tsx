@@ -2,6 +2,7 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getUserRecipes, deleteUserRecipe, useUserRecipe, type UserRecipe, type FoodRecord } from '../../utils/api'
+import { withAuth } from '../../utils/withAuth'
 import './index.scss'
 
 /** 餐次映射 */
@@ -15,7 +16,7 @@ const MEAL_TYPE_NAMES: Record<string, string> = {
   snack: '午加餐'
 }
 
-export default function RecipesPage() {
+function RecipesPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'favorite'>('all')
   const [recipes, setRecipes] = useState<UserRecipe[]>([])
   const [loading, setLoading] = useState(false)
@@ -337,3 +338,5 @@ export default function RecipesPage() {
     </View>
   )
 }
+
+export default withAuth(RecipesPage)

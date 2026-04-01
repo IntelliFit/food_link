@@ -1,4 +1,5 @@
 import { Image, ScrollView, Text, View } from '@tarojs/components'
+import { withAuth } from '../../utils/withAuth'
 import { useCallback, useState } from 'react'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import {
@@ -76,7 +77,7 @@ type DayRecordCard = {
   totalCalorie: number
 }
 
-export default function DayRecordPage() {
+function DayRecordPage() {
   const router = useRouter()
   const initialDate = router.params?.date || formatDateKey(new Date())
   const [selectedDate] = useState(initialDate)
@@ -310,3 +311,5 @@ export default function DayRecordPage() {
     </View>
   )
 }
+
+export default withAuth(DayRecordPage)

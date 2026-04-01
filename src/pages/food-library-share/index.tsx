@@ -1,3 +1,4 @@
+import { withAuth } from '../../utils/withAuth'
 import { View, Text, ScrollView, Image, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
@@ -34,7 +35,7 @@ type QuickUploadDraft = {
 // 城市区域数据（示例）
 
 
-export default function FoodLibrarySharePage() {
+function FoodLibrarySharePage() {
   const routerParams = Taro.getCurrentInstance().router?.params
   const sourceRecordId = routerParams?.source_record_id
   const quickUploadMode = routerParams?.quick_upload === '1'
@@ -854,3 +855,5 @@ export default function FoodLibrarySharePage() {
     </View>
   )
 }
+
+export default withAuth(FoodLibrarySharePage)

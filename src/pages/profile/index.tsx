@@ -28,6 +28,7 @@ import {
 } from '../../utils/api'
 
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 interface UserInfo {
   avatar: string
@@ -48,7 +49,7 @@ function formatRegisterDate(value: string | undefined | null): string {
   return `${y}-${m}-${day}`
 }
 
-export default function ProfilePage() {
+function ProfilePage() {
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
@@ -587,3 +588,5 @@ export default function ProfilePage() {
     </View>
   )
 }
+
+export default withAuth(ProfilePage)

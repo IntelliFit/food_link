@@ -13,6 +13,7 @@ import {
 } from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../utils/poster'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 
@@ -105,7 +106,7 @@ function getInviteCodeFromUserId(userId: string): string {
   return raw.length >= 8 ? raw.slice(0, 8) : ''
 }
 
-export default function RecordDetailPage() {
+function RecordDetailPage() {
   const router = useRouter()
   const [record, setRecord] = React.useState<FoodRecord | null>(null)
   const [posterGenerating, setPosterGenerating] = React.useState(false)
@@ -971,3 +972,5 @@ export default function RecordDetailPage() {
     </ScrollView>
   )
 }
+
+export default withAuth(RecordDetailPage)

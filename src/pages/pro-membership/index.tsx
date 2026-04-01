@@ -11,6 +11,7 @@ import {
 } from '../../utils/api'
 
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 const PRO_MEMBERSHIP_TEST_OPENID = 'oe4xm19XWerfUsnkIsd_7XWu_Q4A'
 
@@ -42,7 +43,7 @@ function getStatusText(status?: MembershipStatus['status']): string {
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-export default function ProMembershipPage() {
+function ProMembershipPage() {
   const [plan, setPlan] = useState<MembershipPlan | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [loading, setLoading] = useState(false)
@@ -184,3 +185,5 @@ export default function ProMembershipPage() {
     </View>
   )
 }
+
+export default withAuth(ProMembershipPage)

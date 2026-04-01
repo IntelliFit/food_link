@@ -1,4 +1,5 @@
 import { View, Text } from '@tarojs/components'
+import { withAuth } from '../../utils/withAuth'
 import { useState, useEffect, useRef } from 'react'
 import Taro from '@tarojs/taro'
 import { getAnalyzeTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode } from '../../utils/api'
@@ -113,7 +114,7 @@ const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => 
   return null
 }
 
-export default function AnalyzeLoadingPage() {
+function AnalyzeLoadingPage() {
   const [taskId, setTaskId] = useState<string>('')
   const [taskType, setTaskType] = useState<string>('food') // food 或 food_text
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
@@ -316,3 +317,5 @@ export default function AnalyzeLoadingPage() {
     </View>
   )
 }
+
+export default withAuth(AnalyzeLoadingPage)
