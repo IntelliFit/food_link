@@ -408,23 +408,41 @@ $text-tertiary: #9ca3af;
   justify-content: center;
 }
 
-// CSS 环形进度条 - 使用 conic-gradient
+// CSS 环形进度条 - 使用 conic-gradient + mask 实现圆角端点
 .macro-ring-bg {
   position: absolute;
-  width: 160rpx;
-  height: 160rpx;
+  width: 140rpx;
+  height: 140rpx;
   border-radius: 50%;
   transition: background 0.1s ease-out;
   will-change: background;
+  // 使用 mask 创建圆角效果的环形
+  -webkit-mask: radial-gradient(
+    circle,
+    transparent 58%,
+    black 58.5%,
+    black 72%,
+    transparent 72.5%
+  );
+  mask: radial-gradient(
+    circle,
+    transparent 58%,
+    black 58.5%,
+    black 72%,
+    transparent 72.5%
+  );
 }
 
-// 内圈遮罩，形成圆环效果
+// 内圈遮罩，形成圆环效果 - 添加柔和阴影增强立体感
 .macro-ring-inner {
   position: absolute;
-  width: 120rpx;
-  height: 120rpx;
+  width: 100rpx;
+  height: 100rpx;
   border-radius: 50%;
-  background: #ffffff;
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+  box-shadow: 
+    0 2rpx 8rpx rgba(0, 0, 0, 0.06),
+    inset 0 1rpx 2rpx rgba(255, 255, 255, 0.8);
 }
 
 .macro-gauge-center {
