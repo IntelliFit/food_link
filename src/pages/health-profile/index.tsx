@@ -9,10 +9,12 @@ import {
   uploadReportImage,
   submitReportExtractionTask,
   imageToBase64,
+  getMyMembership,
   type HealthProfileUpdateRequest,
-  type ExecutionMode
+  type ExecutionMode,
+  type MembershipStatus,
 } from '../../utils/api'
-import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
+import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
 
 import './index.scss'
 import HeightRuler from '../../components/HeightRuler'
@@ -56,7 +58,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式（完善中）', desc: '该功能仍在完善中，暂时不可选。' },
+  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。需开通食探会员。' },
   { value: 'standard', title: '标准模式', desc: '记录更快，但估算波动更大，适合先建立习惯。' }
 ]
 
@@ -80,6 +82,7 @@ export default function HealthProfilePage() {
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
   const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -108,7 +111,7 @@ export default function HealthProfilePage() {
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
       if (profile.execution_mode) {
-        setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
+        setExecutionMode(profile.execution_mode)
         setExecutionModeTouched(true)
       }
       const hc = profile.health_condition
@@ -125,6 +128,7 @@ export default function HealthProfilePage() {
 
   useEffect(() => {
     loadProfile()
+    getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
   }, [])
 
   const goNext = () => {
@@ -224,9 +228,7 @@ export default function HealthProfilePage() {
   }
 
   const recommendExecutionMode = (goal: string): ExecutionMode => {
-    if (goal === 'fat_loss' || goal === 'muscle_gain') {
-      return normalizeAvailableExecutionMode('strict')
-    }
+    if (goal === 'fat_loss' || goal === 'muscle_gain') return 'strict'
     return 'standard'
   }
 
@@ -266,6 +268,7 @@ export default function HealthProfilePage() {
   const handleSubmit = async () => {
     // 合并预设病史和选中的自定义病史
     const allMedicalHistory = [...medicalHistory.filter(v => v !== 'none'), ...selectedCustomMedical]
+    let effectiveMode = executionMode
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
@@ -273,7 +276,7 @@ export default function HealthProfilePage() {
       weight: weight ? Number(weight) : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
-      execution_mode: executionMode,
+      execution_mode: effectiveMode,
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
@@ -284,6 +287,24 @@ export default function HealthProfilePage() {
       Taro.showToast({ title: '请完成前几项必填', icon: 'none' })
       return
     }
+
+    // 精准模式需要会员：填写完档案后提示
+    if (effectiveMode === 'strict' && !membershipStatus?.is_pro) {
+      const { confirm } = await Taro.showModal({
+        title: '解锁精准模式',
+        content: '精准模式需要开通食探会员才能使用，是否前往开通？\n若取消则自动切换至标准模式保存。',
+        confirmText: '去开通',
+        cancelText: '标准模式保存',
+      })
+      if (confirm) {
+        Taro.navigateTo({ url: '/pages/pro-membership/index' })
+        return
+      }
+      effectiveMode = 'standard'
+      setExecutionMode('standard')
+      req.execution_mode = 'standard'
+    }
+
     const { confirm } = await Taro.showModal({
       title: '确认保存',
       content: reportImageUrl
@@ -518,8 +539,8 @@ export default function HealthProfilePage() {
                   className={`option-card with-desc ${executionMode === mode.value ? 'active' : ''}`}
                   onClick={() => {
                     if (mode.value === 'strict') {
-                      notifyStrictModeUnavailable()
-                      setExecutionMode('standard')
+                      setExecutionMode('strict')
+                      setExecutionModeTouched(true)
                       return
                     }
                     setExecutionMode(mode.value)

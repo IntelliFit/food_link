@@ -1,19 +1,29 @@
 import Taro from '@tarojs/taro'
 import type { ExecutionMode } from './api'
 
-export const STRICT_MODE_ENABLED = false
-export const STRICT_MODE_DISABLED_MESSAGE = '该功能仍在完善中'
+export const STRICT_MODE_ENABLED = true
 
 export const normalizeAvailableExecutionMode = (value: unknown): ExecutionMode => {
-  if (!STRICT_MODE_ENABLED) {
-    return 'standard'
-  }
   return value === 'strict' ? 'strict' : 'standard'
 }
 
-export const notifyStrictModeUnavailable = () => {
-  Taro.showToast({
-    title: STRICT_MODE_DISABLED_MESSAGE,
-    icon: 'none'
+/**
+ * 弹窗提示用户：精准模式需要开通会员。
+ * - 确认（去开通）：跳转到会员页
+ * - 取消：调用 onCancel（通常用于回退到标准模式）
+ */
+export const promptStrictModeUpgrade = (onCancel?: () => void) => {
+  Taro.showModal({
+    title: '解锁精准模式',
+    content: '精准模式需要开通食探会员才能使用，是否前往开通？若取消则自动切换至标准模式。',
+    confirmText: '去开通',
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm) {
+        Taro.navigateTo({ url: '/pages/pro-membership/index' })
+      } else {
+        onCancel?.()
+      }
+    }
   })
 }

@@ -8,6 +8,7 @@ import {
   getFriendInviteProfile,
   acceptFriendInvite,
   updateFoodRecord,
+  getMyMembership,
   type FoodRecord,
   type Nutrients
 } from '../../utils/api'
@@ -111,6 +112,7 @@ export default function RecordDetailPage() {
   const [posterGenerating, setPosterGenerating] = React.useState(false)
   const [posterImageUrl, setPosterImageUrl] = React.useState<string | null>(null)
   const [showPosterModal, setShowPosterModal] = React.useState(false)
+  const [isProUser, setIsProUser] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [isOwner, setIsOwner] = React.useState(false)
   const [showEditModal, setShowEditModal] = React.useState(false)
@@ -122,6 +124,11 @@ export default function RecordDetailPage() {
   const [inviteLoading, setInviteLoading] = React.useState(false)
 
   useEffect(() => {
+    // 加载会员状态（用于海报样式判断）
+    if (getAccessToken()) {
+      getMyMembership().then(ms => setIsProUser(ms.is_pro)).catch(() => {})
+    }
+
     const loadRecord = async () => {
       const recordId = router.params?.id
 
@@ -527,7 +534,7 @@ export default function RecordDetailPage() {
               return
             }
 
-            const dynamicHeight = computePosterHeight(ctx, record, POSTER_WIDTH)
+            const dynamicHeight = computePosterHeight(ctx, record, POSTER_WIDTH, isProUser)
             canvas.width = POSTER_WIDTH * dpr
             canvas.height = dynamicHeight * dpr
             ctx.scale(dpr, dpr)
@@ -541,6 +548,7 @@ export default function RecordDetailPage() {
               qrCodeImage: qrImg,
               sharerNickname: ownerNickname,
               sharerAvatarImage: avatarImg,
+              isPro: isProUser,
             })
 
             Taro.canvasToTempFilePath({

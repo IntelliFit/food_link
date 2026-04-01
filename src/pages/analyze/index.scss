@@ -120,6 +120,32 @@
   line-height: 32rpx;
 }
 
+// 配额提示条
+.quota-bar {
+  margin: 0 0 16rpx;
+  padding: 14rpx 24rpx;
+  background: #f0fdf4;
+  border-radius: 16rpx;
+  border: 1rpx solid #d1fae5;
+  text-align: center;
+
+  &--pro {
+    background: linear-gradient(135deg, #1a1a2e10 0%, #0f346010 100%);
+    border-color: #c7d2fe;
+  }
+
+  &--warn {
+    background: #fff7ed;
+    border-color: #fed7aa;
+  }
+}
+
+.quota-bar-text {
+  font-size: 24rpx;
+  color: #374151;
+  font-weight: 500;
+}
+
 // 图标字体在本页的统一样式
 .analyze-page .iconfont {
   display: inline-flex;

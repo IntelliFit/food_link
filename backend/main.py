@@ -1251,6 +1251,7 @@ async def analyze_food(
             # strict 模式需要 Pro 会员
             if execution_mode == "strict" and not is_pro_sync:
                 execution_mode = "standard"
+
         mode_hint = _build_execution_mode_hint(execution_mode)
         compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
 
@@ -2585,7 +2586,6 @@ async def toggle_test_membership():
                 and expires_at > now
             )
             if is_currently_active:
-                # 已是会员 → 降为过期
                 updated = await save_user_pro_membership(
                     TEST_MEMBERSHIP_USER_ID,
                     {
@@ -2596,7 +2596,6 @@ async def toggle_test_membership():
                 )
                 new_is_pro = False
             else:
-                # 非会员 → 激活 30 天
                 updated = await save_user_pro_membership(
                     TEST_MEMBERSHIP_USER_ID,
                     {
@@ -2610,7 +2609,6 @@ async def toggle_test_membership():
                 )
                 new_is_pro = True
         else:
-            # 无记录 → 创建激活记录
             updated = await save_user_pro_membership(
                 TEST_MEMBERSHIP_USER_ID,
                 {
