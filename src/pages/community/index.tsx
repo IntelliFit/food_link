@@ -1258,8 +1258,7 @@ export default function CommunityPage() {
     if (!expandedCommentRecordId || !commentContent.trim()) return
     setCommentSubmitting(true)
     try {
-      // 调用新接口，获取临时评论数据
-      const { task_id, temp_comment } = await communityPostComment(
+      const { comment } = await communityPostComment(
         expandedCommentRecordId,
         commentContent.trim(),
         {
@@ -1268,18 +1267,17 @@ export default function CommunityPage() {
         }
       )
       const localUserDisplay = getLocalUserDisplay()
-      const displayTempComment = {
-        ...temp_comment,
-        reply_to_nickname: replyTargetComment?.nickname || temp_comment.reply_to_nickname || '',
-        nickname: temp_comment.nickname || localUserDisplay.nickname,
-        avatar: temp_comment.avatar || localUserDisplay.avatar
+      const displayComment = {
+        ...comment,
+        reply_to_nickname: replyTargetComment?.nickname || comment.reply_to_nickname || '',
+        nickname: comment.nickname || localUserDisplay.nickname,
+        avatar: comment.avatar || localUserDisplay.avatar
       }
 
-      // 立即将临时评论添加到当前记录的评论列表（乐观更新）
       const newList = feedList.map(item => {
         if (item.record.id !== expandedCommentRecordId) return item
         const currentComments = item.comments || []
-        const nextComments = [...currentComments, displayTempComment]
+        const nextComments = [...currentComments, displayComment]
         return {
           ...item,
           comments: nextComments.slice(-Math.max(5, nextComments.length)),
@@ -1288,23 +1286,13 @@ export default function CommunityPage() {
       })
       setFeedList(newList)
 
-      // 将临时评论缓存到本地存储
-      const tempCommentsKey = `temp_comments_${expandedCommentRecordId}`
-      try {
-        const existingTemp = Taro.getStorageSync(tempCommentsKey) || []
-        existingTemp.push({ task_id, comment: displayTempComment, timestamp: Date.now() })
-        Taro.setStorageSync(tempCommentsKey, existingTemp)
-      } catch (e) {
-        console.error('缓存临时评论失败:', e)
-      }
-
       saveToCache(newList)
 
       try { Taro.removeStorageSync(draftKey(expandedCommentRecordId)) } catch (_) {}
       setCommentContent('')
       setExpandedCommentRecordId(null)
       setReplyTargetComment(null)
-      Taro.showToast({ title: '评论已提交审核', icon: 'success' })
+      Taro.showToast({ title: '评论成功', icon: 'success' })
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
     } finally {

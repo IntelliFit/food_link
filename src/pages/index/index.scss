@@ -346,26 +346,26 @@ $text-tertiary: #9ca3af;
   gap: 8rpx;
 }
 
-// 第一行：大数字 + 大仪表盘
+// 第一行：仅大数字（百分比改到下一行，避免与徽标横向争抢空间）
 .macro-row-first {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12rpx;
+  align-items: baseline;
+  min-width: 0;
 }
 
 .macro-value-wrap {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 4rpx;
   min-width: 0;
-  overflow: hidden;
+  max-width: 100%;
 }
 
 .macro-big-number {
-  font-size: 36rpx;
+  font-size: 32rpx;
   font-weight: 700;
-  line-height: 48rpx;
+  line-height: 44rpx;
 }
 
 .macro-unit-inline {
@@ -374,23 +374,27 @@ $text-tertiary: #9ca3af;
   line-height: 30rpx;
 }
 
-// 第二行：详情 + 百分比
+// 第二行：详情（可收缩）+ 百分比徽标（固定不占第一行宽度）
 .macro-row-second {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8rpx;
+  min-width: 0;
 }
 
 .macro-detail-text {
+  flex: 1;
+  min-width: 0;
   font-size: 20rpx;
   color: $text-tertiary;
   line-height: 28rpx;
 }
 
 .macro-progress-badge {
-  min-width: 88rpx;
-  height: 52rpx;
-  padding: 0 16rpx;
+  min-width: 0;
+  height: 44rpx;
+  padding: 0 12rpx;
   border-radius: 9999rpx;
   border: 1rpx solid transparent;
   display: flex;
@@ -398,12 +402,23 @@ $text-tertiary: #9ca3af;
   justify-content: center;
   flex-shrink: 0;
   box-sizing: border-box;
+
+  &.is-over {
+    height: 40rpx;
+    padding: 0 10rpx;
+  }
 }
 
 .macro-progress-badge-text {
-  font-size: 24rpx;
+  font-size: 22rpx;
   font-weight: 700;
-  line-height: 32rpx;
+  line-height: 30rpx;
+  white-space: nowrap;
+}
+
+.macro-progress-badge.is-over .macro-progress-badge-text {
+  font-size: 20rpx;
+  line-height: 28rpx;
 }
 
 .macro-progress-bar-bg {

@@ -1,5 +1,38 @@
 # CURRENT_TASK
 
+- Task: 首页三大营养素超额时数字与百分比徽标重叠
+- Status: done（布局改为两行：第一行仅克数+g，第二行「当前/目标」+ 百分比徽标；略缩小主数字与徽标字号；≥100% 时徽标额外缩小）
+- Scope:
+  - `src/pages/index/index.tsx`：百分比徽标从 `macro-row-first` 移到 `macro-row-second`；超额加 `is-over` class
+  - `src/pages/index/index.scss`：去掉第一行与徽标横向争抢；`macro-value-wrap` 不再 `overflow: hidden` 以免小数被裁成 `193.`
+- Verification:
+  - `npm run build:weapp` 通过
+  - `mrc where --port 9420` 失败：本机未开微信开发者工具自动化端口，未完成截图验证
+- Next step:
+  - 用户在真机/开发者工具首页确认超额场景下克数、比例、文案不再重叠
+
+- Task: 暂时移除评论审核，评论改为直接发布
+- Status: done（圈子评论和公共食物库评论都不再创建审核任务；提交后直接入库并立即显示，前端去掉“已提交审核/审核中”这条主链路）
+- Scope:
+  - `backend/main.py`
+    - `/api/community/feed/{record_id}/comments` 改为直接调用 `add_feed_comment_sync(...)`
+    - 圈子评论发布后，接口层直接补发 `comment_received / reply_received` 互动通知
+    - `/api/public-food-library/{item_id}/comments` 改为直接调用 `add_public_food_library_comment_sync(...)`
+  - `src/utils/api.ts`
+    - 评论提交返回值从 `{ task_id, temp_comment }` 收口为 `{ comment }`
+  - `src/pages/community/index.tsx`
+    - 提交评论后直接插入真实评论，不再缓存临时评论
+    - 成功提示改为“评论成功”
+  - `src/pages/food-library-detail/index.tsx`
+    - 提交评论后直接插入真实评论，不再缓存临时评论
+    - 加载评论时顺手清理旧的 `temp_library_comments_*` 缓存
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+  - `ReadLints` 检查 `src/pages/community/index.tsx`、`src/pages/food-library-detail/index.tsx`、`src/utils/api.ts` 无新增报错
+- Next step:
+  - 重启 `backend/run_backend.py`
+  - 用户实际发一条圈子评论和一条公共食物库评论，确认都是即时显示、没有“审核中”
+
 - Task: 圈子动态支持从圈子移除（不删除饮食记录）
 - Status: done
 - Scope:

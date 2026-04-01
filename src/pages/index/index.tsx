@@ -605,7 +605,7 @@ export default function IndexPage() {
                 
                 {/* 主体内容 */}
                 <View className='macro-content'>
-                  {/* 第一行：大数字 + 仪表盘 */}
+                  {/* 第一行：仅大数字，避免与百分比徽标同一行挤压重叠 */}
                   <View className='macro-row-first'>
                     <View className='macro-value-wrap'>
                       <Text className='macro-big-number' style={{ color }}>
@@ -613,17 +613,19 @@ export default function IndexPage() {
                       </Text>
                       <Text className='macro-unit-inline'>{unit}</Text>
                     </View>
-                    
-                    <View className='macro-progress-badge' style={{ color, borderColor: `${color}22`, backgroundColor: `${color}14` }}>
-                      <Text className='macro-progress-badge-text'>{formatProgressText(progress)}</Text>
-                    </View>
                   </View>
-                  
-                  {/* 第二行：详情 + 百分比 */}
+
+                  {/* 第二行：当前/目标 + 百分比徽标（拆行后互不遮挡） */}
                   <View className='macro-row-second'>
                     <Text className='macro-detail-text'>
                       {formatDisplayNumber(currentValue)} / {formatDisplayNumber(targetValue)}{unit}
                     </Text>
+                    <View
+                      className={`macro-progress-badge${progress >= 100 ? ' is-over' : ''}`}
+                      style={{ color, borderColor: `${color}22`, backgroundColor: `${color}14` }}
+                    >
+                      <Text className='macro-progress-badge-text'>{formatProgressText(progress)}</Text>
+                    </View>
                   </View>
 
                   <View className='macro-progress-bar-bg'>

@@ -2246,15 +2246,14 @@ export async function communityGetComments(recordId: string): Promise<{ list: Fe
   return response.data as { list: FeedCommentItem[] }
 }
 
-/** 
- * 发表评论（异步审核版本）
- * 返回任务 ID 和临时评论数据，前端需要本地缓存显示
+/**
+ * 发表评论（直接发布）
  */
 export async function communityPostComment(
   recordId: string,
   content: string,
   options?: { parent_comment_id?: string; reply_to_user_id?: string }
-): Promise<{ task_id: string; temp_comment: FeedCommentItem }> {
+): Promise<{ comment: FeedCommentItem }> {
   const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, {
     method: 'POST',
     data: {
@@ -2264,7 +2263,7 @@ export async function communityPostComment(
     }
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发表失败')
-  return response.data as { task_id: string; temp_comment: FeedCommentItem }
+  return response.data as { comment: FeedCommentItem }
 }
 
 /** 获取我最近的圈子评论审核任务 */
@@ -2502,15 +2501,14 @@ export async function getPublicFoodLibraryComments(itemId: string): Promise<{ li
   return response.data as { list: PublicFoodLibraryComment[] }
 }
 
-/** 
- * 发表公共食物库评论（异步审核版本，可选评分 1-5）
- * 返回任务 ID 和临时评论数据，前端需要本地缓存显示
+/**
+ * 发表公共食物库评论（直接发布，可选评分 1-5）
  */
 export async function postPublicFoodLibraryComment(
   itemId: string,
   content: string,
   rating?: number
-): Promise<{ task_id: string; temp_comment: PublicFoodLibraryComment }> {
+): Promise<{ comment: PublicFoodLibraryComment }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, {
     method: 'POST',
     data: { content: content.trim(), ...(rating !== undefined && { rating }) }
@@ -2518,7 +2516,7 @@ export async function postPublicFoodLibraryComment(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '发表失败')
   }
-  return response.data as { task_id: string; temp_comment: PublicFoodLibraryComment }
+  return response.data as { comment: PublicFoodLibraryComment }
 }
 
 // ---------- 用户私人食谱 ----------

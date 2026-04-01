@@ -89,6 +89,10 @@ from database import (
     count_unread_feed_interaction_notifications,
     mark_feed_interaction_notifications_read,
     create_feed_interaction_notification_sync,
+    add_feed_comment_sync,
+    add_public_food_library_comment_sync,
+    get_food_record_by_id_sync,
+    get_feed_comment_by_id_sync,
     # 公共食物库
     create_public_food_library_item,
     list_public_food_library,
@@ -4888,9 +4892,8 @@ async def api_community_comment_post(
     user_info: dict = Depends(get_current_user_info),
 ):
     """
-    发表评论（异步审核版本）。
+    发表评论（直接发布版本）。
     body: { "content": "评论内容" }
-    返回任务 ID，前端需要本地缓存显示，后台审核通过后才会真正入库。
     """
     await _ensure_feed_record_interactable(user_info["user_id"], record_id)
 
@@ -4923,32 +4926,66 @@ async def api_community_comment_post(
             or (profile or {}).get("avatar")
             or ""
         )
-        # 创建评论审核任务
-        task = create_comment_task_sync(
+        comment = add_feed_comment_sync(
             user_id=user_info["user_id"],
-            comment_type="feed",
-            target_id=record_id,
+            record_id=record_id,
             content=content,
-            extra={
-                "parent_comment_id": parent_comment_id,
-                "reply_to_user_id": reply_to_user_id,
-            } if parent_comment_id or reply_to_user_id else None,
+            parent_comment_id=parent_comment_id,
+            reply_to_user_id=reply_to_user_id,
         )
-        # 返回任务 ID 和临时评论数据（前端本地显示用）
+
+        try:
+            record = get_food_record_by_id_sync(record_id)
+            record_owner_id = (record or {}).get("user_id")
+            if record_owner_id and record_owner_id != user_info["user_id"]:
+                create_feed_interaction_notification_sync(
+                    recipient_user_id=record_owner_id,
+                    actor_user_id=user_info["user_id"],
+                    record_id=record_id,
+                    comment_id=comment.get("id"),
+                    parent_comment_id=parent_comment_id,
+                    notification_type="comment_received",
+                    content_preview=(content or "")[:120],
+                )
+
+            if reply_to_user_id and reply_to_user_id != user_info["user_id"]:
+                create_feed_interaction_notification_sync(
+                    recipient_user_id=reply_to_user_id,
+                    actor_user_id=user_info["user_id"],
+                    record_id=record_id,
+                    comment_id=comment.get("id"),
+                    parent_comment_id=parent_comment_id,
+                    notification_type="reply_received",
+                    content_preview=(content or "")[:120],
+                )
+            elif parent_comment_id:
+                parent_comment_sync = get_feed_comment_by_id_sync(parent_comment_id)
+                parent_owner_id = (parent_comment_sync or {}).get("user_id")
+                if parent_owner_id and parent_owner_id != user_info["user_id"]:
+                    create_feed_interaction_notification_sync(
+                        recipient_user_id=parent_owner_id,
+                        actor_user_id=user_info["user_id"],
+                        record_id=record_id,
+                        comment_id=comment.get("id"),
+                        parent_comment_id=parent_comment_id,
+                        notification_type="reply_received",
+                        content_preview=(content or "")[:120],
+                    )
+        except Exception as notify_err:
+            print(f"[api/community/feed/comment] 创建圈子互动通知失败: {notify_err}")
+
         return {
-            "task_id": task["id"],
-            "temp_comment": {
-                "id": task["id"],  # 使用任务 ID 作为临时 ID
+            "comment": {
+                "id": comment["id"],
                 "user_id": user_info["user_id"],
                 "record_id": record_id,
                 "parent_comment_id": parent_comment_id,
                 "reply_to_user_id": reply_to_user_id,
                 "reply_to_nickname": "",
                 "content": content,
-                "created_at": task["created_at"],
+                "created_at": comment["created_at"],
                 "nickname": nickname,
                 "avatar": avatar,
-                "_is_temp": True,  # 标记为临时评论
             }
         }
     except HTTPException:
@@ -5367,9 +5404,8 @@ async def api_public_food_library_comment_post(
     user_info: dict = Depends(get_current_user_info),
 ):
     """
-    发表公共食物库评论（异步审核版本）。
+    发表公共食物库评论（直接发布版本）。
     body: { "content": "评论内容", "rating": 5 }  # rating 可选 1-5
-    返回任务 ID，前端需要本地缓存显示，后台审核通过后才会真正入库。
     """
     content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
     if not content:
@@ -5392,27 +5428,22 @@ async def api_public_food_library_comment_post(
             or (profile or {}).get("avatar")
             or ""
         )
-        # 创建评论审核任务
-        task = create_comment_task_sync(
+        comment = add_public_food_library_comment_sync(
             user_id=user_info["user_id"],
-            comment_type="public_food_library",
-            target_id=item_id,
+            item_id=item_id,
             content=content,
             rating=rating,
         )
-        # 返回任务 ID 和临时评论数据（前端本地显示用）
         return {
-            "task_id": task["id"],
-            "temp_comment": {
-                "id": task["id"],  # 使用任务 ID 作为临时 ID
+            "comment": {
+                "id": comment["id"],
                 "user_id": user_info["user_id"],
                 "library_item_id": item_id,
                 "content": content,
                 "rating": rating,
-                "created_at": task["created_at"],
+                "created_at": comment["created_at"],
                 "nickname": nickname,
                 "avatar": avatar,
-                "_is_temp": True,  # 标记为临时评论
             }
         }
     except Exception as e:

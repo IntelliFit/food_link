@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-04-01
+
+- 🐛 fix: 暂时移除评论审核主链路，圈子评论和公共食物库评论改为直接发布并立即展示，不再显示“已提交审核/审核中” `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx` `src/pages/food-library-detail/index.tsx`
+
 ## 2026-03-31
 
 - 🐛 fix: 二次纠错重构为“模型主导语义 + 显式字段锁定”，移除正则式语义理解主逻辑，新增 `nameEdited/weightEdited` 仅锁用户手改字段，避免旧清单继续压过模型结果 `src/pages/result/index.tsx` `src/utils/api.ts` `backend/worker.py`
