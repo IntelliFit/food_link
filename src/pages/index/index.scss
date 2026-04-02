@@ -87,7 +87,7 @@ $text-tertiary: #9ca3af;
   box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.15);
 }
 
-// 日期选择器
+// 日期选择器 - 新设计：滑动卡片式
 .date-selector-section {
   margin-bottom: 32rpx;
 }
@@ -102,71 +102,102 @@ $text-tertiary: #9ca3af;
 }
 
 .date-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12rpx;
-  padding: 8rpx 0;
-  min-width: 80rpx;
-  border-radius: 16rpx;
+  justify-content: space-between;
+  width: 88rpx;
+  height: 160rpx;  // 日期卡片高度，可根据设计调整
+  border-radius: 44rpx;  // 半圆角，两端为半圆
+  background: #f1f5f9;
+  border: 3rpx solid transparent;  // 默认透明边框，防止点击变形
+  padding: 12rpx 0 16rpx;
+  overflow: hidden;
   transition: all 0.2s ease;
+  box-sizing: border-box;
   
   &:active {
-    background: rgba(0, 188, 125, 0.05);
+    transform: scale(0.96);
   }
   
+  // 背景进度条
+  .date-progress-bg {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, rgba(0, 188, 125, 0.6) 0%, rgba(0, 188, 125, 0.9) 100%);
+    border-radius: 0 0 44rpx 44rpx;  // 与卡片圆角一致
+    transition: height 0.3s ease;
+    z-index: 0;
+  }
+  
+  // 星期几
+  .date-day-name {
+    position: relative;
+    z-index: 1;
+    font-size: 22rpx;
+    color: $text-tertiary;
+    line-height: 30rpx;
+    font-weight: 500;
+  }
+  
+  // 日期数字 - 圆形
+  .date-day-circle {
+    position: relative;
+    z-index: 1;
+    width: 64rpx;  // 圆圈直径，可调整大小
+    height: 64rpx;  // 保持宽高一致为圆形
+    border-radius: 50%;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  }
+  
+  // 选中状态 - 仅外框变绿色，背景不变
   &.is-selected {
-    .date-day-num {
+    background: #f1f5f9;  // 保持原背景色
+    border-color: $primary-color;  // 绿色外框
+    box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.3);
+    
+    .date-progress-bg {
+      background: linear-gradient(180deg, rgba(0, 188, 125, 0.7) 0%, rgba(0, 188, 125, 1) 100%);
+    }
+    
+    .date-day-name {
+      color: $primary-color;  // 星期几文字变绿色
+      font-weight: 600;
+    }
+    
+    .date-day-circle {
+      background: #ffffff;
+      box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.15);
+    }
+    
+    .date-num-text {
+      color: $text-primary;  // 日期数字保持原色
+    }
+  }
+  
+  // 今天状态
+  &.is-today {
+    // 今天的日期圆圈始终显示绿色背景（无论是否被选中）
+    .date-day-circle {
       background: $primary-color;
-      box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
       
       .date-num-text {
         color: #ffffff;
       }
     }
     
-    .date-day-name {
-      color: $primary-color;
-      font-weight: 600;
+    // 今天未选中时不需要特殊边框
+    &:not(.is-selected) {
+      border-color: transparent;
     }
   }
-  
-  &.is-today:not(.is-selected) {
-    .date-day-num {
-      border: 2rpx solid $primary-color;
-    }
-  }
-  
-  &.has-record:not(.is-selected) {
-    .date-day-num {
-      &.deficit {
-        background: rgba(59, 130, 246, 0.15);
-        .date-num-text { color: $blue-color; }
-      }
-      &.surplus {
-        background: rgba(249, 115, 22, 0.15);
-        .date-num-text { color: $orange-color; }
-      }
-    }
-  }
-}
-
-.date-day-name {
-  font-size: 22rpx;
-  color: $text-tertiary;
-  line-height: 30rpx;
-}
-
-.date-day-num {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 50%;
-  background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-  border: 2rpx solid rgba(100, 116, 139, 0.16);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
 }
 
 .date-num-text {

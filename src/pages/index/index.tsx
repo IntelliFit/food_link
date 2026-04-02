@@ -998,21 +998,35 @@ export default function IndexPage() {
           </View>
         </View>
 
-        {/* 日期选择器 */}
+        {/* 日期选择器 - 新设计：滑动卡片式 */}
         <View className='date-selector-section'>
           <View className='date-list'>
-            {weekHeatmapCells.map((cell) => (
-              <View
-                key={cell.date}
-                className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''} ${cell.calories > 0 ? 'has-record' : ''}`}
-                onClick={() => handleDateSelect(cell.date)}
-              >
-                <Text className='date-day-name'>{cell.dayName}</Text>
-                <View className={`date-day-num ${cell.state} level-${cell.level}`}>
-                  <Text className='date-num-text'>{cell.dayNum}</Text>
+            {weekHeatmapCells.map((cell) => {
+              // 计算摄入进度百分比（用于背景进度条）
+              const progressPercent = cell.target > 0 
+                ? Math.min(100, Math.round((cell.calories / cell.target) * 100))
+                : 0
+              
+              return (
+                <View
+                  key={cell.date}
+                  className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''}`}
+                  onClick={() => handleDateSelect(cell.date)}
+                >
+                  {/* 背景进度条 */}
+                  <View 
+                    className='date-progress-bg'
+                    style={{ height: `${progressPercent}%` }}
+                  />
+                  {/* 星期几 */}
+                  <Text className='date-day-name'>{cell.dayName}</Text>
+                  {/* 日期数字 - 圆形 */}
+                  <View className='date-day-circle'>
+                    <Text className='date-num-text'>{cell.dayNum}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              )
+            })}
           </View>
         </View>
 
