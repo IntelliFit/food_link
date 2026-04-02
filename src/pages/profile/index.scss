@@ -103,15 +103,24 @@
   }
 
   &.member-card--free {
-    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-    box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.25);
+    background: #ffffff;
+    box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.12);
+    border: 1rpx solid #e2e8f0;
 
-    .card-title { color: #ffffff; }
-    .card-validity { color: rgba(255, 255, 255, 0.7); }
-    .progress-text { color: rgba(255, 255, 255, 0.8); display: block; margin-bottom: 8rpx; }
-    .card-tip { color: rgba(255, 255, 255, 0.7); }
-    .progress-bar { background: rgba(255, 255, 255, 0.25); }
-    .progress-inner { background: rgba(255, 255, 255, 0.85); }
+    .card-title { color: #111827; }
+    .card-validity { color: #64748b; }
+    .progress-text { color: #475569; display: block; margin-bottom: 8rpx; }
+    .card-tip { color: #00bc7d; font-weight: 500; }
+    .progress-bar { background: #e2e8f0; }
+    .progress-inner { background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%); }
+    .card-upgrade-btn {
+      background: #00bc7d;
+      border: none;
+      backdrop-filter: none;
+    }
+    .card-upgrade-text {
+      color: #ffffff;
+    }
   }
 }
 
