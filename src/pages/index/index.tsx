@@ -838,15 +838,16 @@ function IndexPage() {
                 <View className='macro-gauge-wrap'>
                   <View className='macro-gauge-box'>
                     <View className='macro-gauge'>
-                      {/* 外圈背景 */}
-                      <View 
+                      {/* SVG 圆环进度条（微信小程序用 data URI 背景图渲染） */}
+                      <View
                         className='macro-ring-bg'
                         style={{
-                          background: `conic-gradient(${color} ${animatedProgress * 3.6}deg, #f0f0f0 ${animatedProgress * 3.6}deg)`
+                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='50' cy='50' r='40' fill='none' stroke='${color}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 40}' stroke-dashoffset='${2 * Math.PI * 40 * (1 - animatedProgress / 100)}'/></svg>`
+                          )}")`,
+                          backgroundSize: '100% 100%'
                         }}
                       />
-                      {/* 内圈白色遮罩，形成圆环效果 */}
-                      <View className='macro-ring-inner' />
                       {/* 中心数值 - 使用动画数值 */}
                       <View className='macro-gauge-center'>
                         <Text className='macro-gauge-value' style={{ color }}>
