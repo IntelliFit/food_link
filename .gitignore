@@ -85,3 +85,15 @@ coverage/
 *.temp
 .cache/
 .env.development
+
+# 调试/测试截图
+check_*.png
+gauge_*.png
+test_*.png
+verify*.png
+home_*.png
+after_*.png
+before_*.png
+final_*.png
+current-*.png
+weapp_*.png
