@@ -147,8 +147,8 @@ $text-tertiary: #9ca3af;
   .date-day-circle {
     position: relative;
     z-index: 1;
-    width: 52rpx;
-    height: 52rpx;
+    width: 64rpx;  // 圆圈直径，可调整大小
+    height: 64rpx;  // 保持宽高一致为圆形
     border-radius: 50%;
     background: #ffffff;
     display: flex;
