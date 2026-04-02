@@ -944,6 +944,68 @@ export default function IndexPage() {
     return Math.max(0, Number((macro.target - macro.current).toFixed(1)))
   }
 
+  // 营养素动画数值和进度
+  const macroAnimations = useMemo(() => {
+    return MACRO_CONFIGS.map(({ key }) => {
+      const macro = intakeData.macros[key]
+      const currentValue = normalizeDisplayNumber(macro.current)
+      const targetValue = normalizeDisplayNumber(macro.target)
+      const targetProgress = calculateProgressPercent(currentValue, targetValue)
+      return {
+        key,
+        animatedValue: currentValue,
+        animatedProgress: targetProgress,
+        delay: 0 // 与顶部热量指标同时开始动画
+      }
+    })
+  }, [intakeData.macros])
+
+  // 为每个营养素使用动画 hook（与顶部热量指标同时开始）
+  const proteinAnimation = useAnimatedNumber(
+    macroAnimations.find(m => m.key === 'protein')?.animatedValue || 0,
+    800,
+    0
+  )
+  const carbsAnimation = useAnimatedNumber(
+    macroAnimations.find(m => m.key === 'carbs')?.animatedValue || 0,
+    800,
+    0
+  )
+  const fatAnimation = useAnimatedNumber(
+    macroAnimations.find(m => m.key === 'fat')?.animatedValue || 0,
+    800,
+    0
+  )
+
+  // 圆环进度动画（与顶部热量指标同时开始）
+  const proteinProgressAnimation = useAnimatedProgress(
+    macroAnimations.find(m => m.key === 'protein')?.animatedProgress || 0,
+    800,
+    0
+  )
+  const carbsProgressAnimation = useAnimatedProgress(
+    macroAnimations.find(m => m.key === 'carbs')?.animatedProgress || 0,
+    800,
+    0
+  )
+  const fatProgressAnimation = useAnimatedProgress(
+    macroAnimations.find(m => m.key === 'fat')?.animatedProgress || 0,
+    800,
+    0
+  )
+
+  const animatedMacroValues: Record<MacroKey, number> = {
+    protein: proteinAnimation,
+    carbs: carbsAnimation,
+    fat: fatAnimation
+  }
+
+  const animatedMacroProgress: Record<MacroKey, number> = {
+    protein: proteinProgressAnimation,
+    carbs: carbsProgressAnimation,
+    fat: fatProgressAnimation
+  }
+
   const todayDateKey = formatDateKey(new Date())
   const derivedWeight = deriveWeightSummary(bodyMetrics.weightEntries)
   const todayWeightEntry = findLatestWeightEntryByDate(bodyMetrics.weightEntries, todayDateKey)
@@ -1066,6 +1128,10 @@ export default function IndexPage() {
             const progress = calculateProgressPercent(currentValue, targetValue)
             const visualProgress = clampVisualProgress(progress)
             
+            // 使用动画进度和数值
+            const animatedProgress = clampVisualProgress(animatedMacroProgress[key] ?? 0)
+            const animatedValue = animatedMacroValues[key] ?? 0
+            
             return (
               <View key={key} className='macro-card'>
                 {/* 顶部标签栏 - 灰色系 */}
@@ -1078,36 +1144,28 @@ export default function IndexPage() {
                   </View>
                 </View>
                 
-                {/* 主体内容 */}
-                <View className='macro-content'>
-                  {/* 第一行：仅大数字，避免与百分比徽标同一行挤压重叠 */}
-                  <View className='macro-row-first'>
-                    <View className='macro-value-wrap'>
-                      <Text className='macro-big-number' style={{ color }}>
-                        {loading ? '--' : formatDisplayNumber(currentValue)}
-                      </Text>
-                      <Text className='macro-unit-inline'>{unit}</Text>
+                {/* 大仪表盘 - 使用 CSS 环形进度条 */}
+                <View className='macro-gauge-wrap'>
+                  <View className='macro-gauge-box'>
+                    <View className='macro-gauge'>
+                      {/* SVG 圆环进度条（微信小程序用 data URI 背景图渲染） */}
+                      <View
+                        className='macro-ring-bg'
+                        style={{
+                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='50' cy='50' r='40' fill='none' stroke='${color}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 40}' stroke-dashoffset='${2 * Math.PI * 40 * (1 - animatedProgress / 100)}'/></svg>`
+                          )}")`,
+                          backgroundSize: '100% 100%'
+                        }}
+                      />
+                      {/* 中心数值 - 使用动画数值 */}
+                      <View className='macro-gauge-center'>
+                        <Text className='macro-gauge-value' style={{ color }}>
+                          {loading ? '--' : formatDisplayNumber(animatedValue)}
+                        </Text>
+                        <Text className='macro-gauge-unit'>克</Text>
+                      </View>
                     </View>
-                  </View>
-
-                  {/* 第二行：当前/目标 + 百分比徽标（拆行后互不遮挡） */}
-                  <View className='macro-row-second'>
-                    <Text className='macro-detail-text'>
-                      {formatDisplayNumber(currentValue)} / {formatDisplayNumber(targetValue)}{unit}
-                    </Text>
-                    <View
-                      className={`macro-progress-badge${progress >= 100 ? ' is-over' : ''}`}
-                      style={{ color, borderColor: `${color}22`, backgroundColor: `${color}14` }}
-                    >
-                      <Text className='macro-progress-badge-text'>{formatProgressText(progress)}</Text>
-                    </View>
-                  </View>
-
-                  <View className='macro-progress-bar-bg'>
-                    <View
-                      className='macro-progress-bar-fill'
-                      style={{ width: `${visualProgress}%`, backgroundColor: color }}
-                    />
                   </View>
                 </View>
               </View>
