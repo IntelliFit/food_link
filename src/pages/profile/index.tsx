@@ -6,13 +6,10 @@ import {
   NotesOutlined,
   ChartTrendingOutlined,
   LocationOutlined,
-  SettingOutlined,
   Bell,
   ShieldOutlined,
-  CommentOutlined,
   InfoOutlined,
   CalendarOutlined,
-  EnvelopOutlined,
   Arrow
 } from '@taroify/icons'
 import '@taroify/icons/style'
@@ -195,12 +192,9 @@ function ProfilePage() {
 
   // 设置项
   const settings = [
-    { id: 1, icon: <SettingOutlined size='20' />, title: '个人设置' }, // 将 “设置” 改为 “个人设置” 更直观
     { id: 2, icon: <Bell size='20' />, title: '好友管理' },
     { id: 3, icon: <ShieldOutlined size='20' />, title: '隐私设置' },
-    { id: 4, icon: <CommentOutlined size='20' />, title: '意见反馈' },
-    { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' },
-    { id: 6, icon: <EnvelopOutlined size='20' />, title: '联系邮箱', text: 'jianwen_ma@stu.pku.edu.cn' }
+    { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' }
   ]
 
   const handleServiceClick = (service: typeof services[0]) => {
@@ -256,17 +250,6 @@ function ProfilePage() {
   }
 
   const handleSettingClick = (setting: any) => {
-    // 复制邮箱
-    if (setting.id === 6) {
-      Taro.setClipboardData({
-        data: setting.text,
-        success: () => {
-          Taro.showToast({ title: '已复制邮箱', icon: 'success' })
-        }
-      })
-      return
-    }
-
     // 关于我们
     if (setting.id === 5) {
       Taro.navigateTo({ url: '/pages/about/index' })
@@ -275,11 +258,6 @@ function ProfilePage() {
 
     if (!isLoggedIn) {
       Taro.navigateTo({ url: '/pages/login/index' })
-      return
-    }
-    // 个人设置：进入独立设置页
-    if (setting.id === 1) {
-      Taro.navigateTo({ url: '/pages/profile-settings/index' })
       return
     }
     // 好友管理
@@ -353,12 +331,9 @@ function ProfilePage() {
 
   const getSettingColor = (id: number) => {
     const colors: Record<number, string> = {
-      1: '#6b7280', // 个人设置 - 灰
       2: '#3b82f6', // 好友管理 - 蓝
       3: '#10b981', // 隐私设置 - 绿
-      4: '#f59e0b', // 意见反馈 - 橙
-      5: '#8b5cf6', // 关于我们 - 紫
-      6: '#64748b'  // 联系邮箱 - 灰蓝
+      5: '#8b5cf6'  // 关于我们 - 紫
     }
     return colors[id] || '#6b7280'
   }
