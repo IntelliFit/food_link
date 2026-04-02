@@ -11,6 +11,7 @@ import {
   SettingOutlined,
   Bell,
   ShieldOutlined,
+  ClockOutlined,
   CommentOutlined,
   InfoOutlined,
   CalendarOutlined,
@@ -26,7 +27,9 @@ import {
   uploadUserAvatar,
   imageToBase64,
   getMyMembership,
-  MembershipStatus
+  getFoodExpiryDashboard,
+  MembershipStatus,
+  FoodExpiryDashboard,
 } from '../../utils/api'
 
 import './index.scss'
@@ -53,6 +56,15 @@ function formatExpiry(value?: string | null): string {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return '--'
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
+  if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
+  if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
+  if (dashboard.expired_count > 0) return `当前有 ${dashboard.expired_count} 样已过期，建议先处理。`
+  if (dashboard.today_count > 0) return `今天有 ${dashboard.today_count} 样需要优先吃掉。`
+  if (dashboard.soon_count > 0) return `接下来有 ${dashboard.soon_count} 样即将到期。`
+  return `当前共有 ${dashboard.active_count} 样食物在保鲜中。`
 }
 
 export default function ProfilePage() {
@@ -82,6 +94,7 @@ export default function ProfilePage() {
 
   // 会员状态
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [expiryDashboard, setExpiryDashboard] = useState<FoodExpiryDashboard | null>(null)
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -95,16 +108,23 @@ export default function ProfilePage() {
         setIsLoggedIn(true)
         // 从服务器获取最新用户信息
         try {
-          const [apiUserInfo, membershipData] = await Promise.all([
+          const [apiUserInfo, membershipData, dashboardData] = await Promise.all([
             getUserProfile(),
             getMyMembership().catch((err) => {
               console.error('[profile] 获取会员状态失败:', err)
               return null
-            })
+            }),
+            getFoodExpiryDashboard().catch((err) => {
+              console.error('[profile] 获取保质期摘要失败:', err)
+              return null
+            }),
           ])
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
             setMembershipStatus(membershipData)
+          }
+          if (dashboardData !== null) {
+            setExpiryDashboard(dashboardData as FoodExpiryDashboard)
           }
 
           // 获取记录天数
@@ -152,6 +172,7 @@ export default function ProfilePage() {
       } else {
         setIsLoggedIn(false)
         setMembershipStatus(null)
+        setExpiryDashboard(null)
         setUserInfo({
           avatar: '',
           name: '用户昵称',
@@ -179,6 +200,14 @@ export default function ProfilePage() {
       title: '收藏餐食',
       desc: '常吃的食物组合，一键记录',
       path: '/pages/recipes/index'
+    },
+    {
+      id: 2,
+      icon: <ClockOutlined size='32' />,
+      title: '食物管理',
+      desc: formatExpiryPreviewText(expiryDashboard),
+      path: '/pages/expiry/index',
+      badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
     },
     {
       id: 3,
@@ -394,6 +423,7 @@ export default function ProfilePage() {
             clearAllStorage()
             setIsLoggedIn(false)
             setMembershipStatus(null)
+            setExpiryDashboard(null)
             setUserInfo({
               avatar: '',
               name: '用户昵称',
@@ -521,7 +551,18 @@ export default function ProfilePage() {
               className='grid-item'
               onClick={() => handleServiceClick(service)}
             >
-              <View className='grid-icon'>{service.icon}</View>
+              <View className='grid-icon'>
+                {service.icon}
+                {(service as { badgeCount?: number }).badgeCount ? (
+                  <View className='grid-badge'>
+                    <Text className='grid-badge-text'>
+                      {(service as { badgeCount?: number }).badgeCount! > 99
+                        ? '99+'
+                        : String((service as { badgeCount?: number }).badgeCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text className='grid-text'>{service.title}</Text>
             </View>
           ))}

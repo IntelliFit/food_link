@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSON
 import hashlib
 import secrets
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple, Set
 import os
 if os.name == "nt":
     # 这台 Windows 环境下 _wmi.exec_query 可能卡死，进而导致 import httpx 阻塞。
@@ -51,12 +51,26 @@ from database import (
     get_analysis_task_by_id_sync,
     get_analysis_tasks_by_ids,
     list_analysis_tasks_by_user_sync,
+    create_precision_session_sync,
+    get_precision_session_by_id_sync,
+    update_precision_session_sync,
+    create_precision_session_round_sync,
+    list_precision_session_rounds_sync,
+    create_precision_item_estimate_sync,
+    list_precision_item_estimates_sync,
     list_food_records,
     list_food_records_by_range,
     get_streak_days,
     get_cached_insight,
     get_latest_cached_insight,
     upsert_insight_cache,
+    list_user_weight_records,
+    upsert_user_weight_record,
+    list_user_water_logs,
+    create_user_water_log,
+    delete_user_water_logs_by_date,
+    get_user_body_metric_settings,
+    upsert_user_body_metric_settings,
     insert_critical_samples,
     upload_health_report_image,
     upload_food_analyze_image,
@@ -110,6 +124,10 @@ from database import (
     get_food_record_by_id,
     delete_food_record,
     hide_food_record_from_feed,
+    create_food_expiry_item,
+    list_food_expiry_items,
+    get_food_expiry_item,
+    update_food_expiry_item,
     # 私人食谱
     create_user_recipe,
     list_user_recipes,
@@ -130,6 +148,9 @@ from database import (
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
     get_today_food_analysis_count,
+    search_manual_food,
+    log_unresolved_food,
+    browse_manual_food_library,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -195,6 +216,19 @@ MEAL_NAMES = {
     "snack": "午加餐",
 }
 VALID_MEAL_TYPES = set(MEAL_DISPLAY_ORDER) | {"snack"}
+
+EXPIRY_STORAGE_TYPES = {"room_temp", "refrigerated", "frozen"}
+EXPIRY_STATUS_TYPES = {"active", "consumed", "discarded"}
+EXPIRY_SOURCE_TYPES = {"manual", "ocr", "ai"}
+BODY_METRIC_SOURCE_TYPES = {"manual", "imported", "ai"}
+DEFAULT_WATER_GOAL_ML = 2000
+
+EXPIRY_URGENCY_LABELS = {
+    "expired": "已过期",
+    "today": "今天到期",
+    "soon": "即将到期",
+    "fresh": "保鲜中",
+}
 
 
 def _build_dashboard_meal_targets(calorie_target: float) -> Dict[str, float]:
@@ -452,6 +486,225 @@ def _build_json_datetime(value: Optional[datetime]) -> Optional[str]:
     if value is None:
         return None
     return value.astimezone(timezone.utc).isoformat()
+
+
+def _parse_date_string(value: Optional[str], field_name: str) -> Optional[str]:
+    """校验 YYYY-MM-DD 日期字符串，合法则原样返回。"""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        datetime.strptime(raw, "%Y-%m-%d")
+        return raw
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"{field_name} 必须为 YYYY-MM-DD")
+
+
+def _normalize_expiry_storage_type(value: Optional[str]) -> str:
+    storage_type = (value or "").strip().lower() or "refrigerated"
+    if storage_type not in EXPIRY_STORAGE_TYPES:
+        raise HTTPException(status_code=400, detail="storage_type 必须为 room_temp / refrigerated / frozen")
+    return storage_type
+
+
+def _normalize_expiry_status(value: Optional[str], default: str = "active") -> str:
+    status = (value or "").strip().lower() or default
+    if status not in EXPIRY_STATUS_TYPES:
+        raise HTTPException(status_code=400, detail="status 必须为 active / consumed / discarded")
+    return status
+
+
+def _normalize_expiry_source_type(value: Optional[str], default: str = "manual") -> str:
+    source_type = (value or "").strip().lower() or default
+    if source_type not in EXPIRY_SOURCE_TYPES:
+        raise HTTPException(status_code=400, detail="source_type 必须为 manual / ocr / ai")
+    return source_type
+
+
+def _normalize_food_expiry_item(row: Dict[str, Any], today_local: Optional[datetime] = None) -> Dict[str, Any]:
+    """补充保质期条目的派生字段，便于前端直接渲染。"""
+    item = dict(row)
+    today = (today_local or datetime.now(CHINA_TZ)).date()
+    expire_date_raw = row.get("expire_date")
+
+    days_until_expire: Optional[int] = None
+    urgency = "fresh"
+    if expire_date_raw:
+        try:
+            expire_date = datetime.strptime(str(expire_date_raw), "%Y-%m-%d").date()
+            days_until_expire = (expire_date - today).days
+            if days_until_expire < 0:
+                urgency = "expired"
+            elif days_until_expire == 0:
+                urgency = "today"
+            elif days_until_expire <= 2:
+                urgency = "soon"
+            else:
+                urgency = "fresh"
+        except Exception:
+            days_until_expire = None
+
+    status = (row.get("status") or "active").strip().lower()
+    item["status"] = status if status in EXPIRY_STATUS_TYPES else "active"
+    item["days_until_expire"] = days_until_expire
+    item["urgency"] = urgency if item["status"] == "active" else "fresh"
+    item["urgency_label"] = EXPIRY_URGENCY_LABELS.get(item["urgency"], "保鲜中")
+    item["storage_type_label"] = {
+        "room_temp": "常温",
+        "refrigerated": "冷藏",
+        "frozen": "冷冻",
+    }.get(row.get("storage_type"), "冷藏")
+    item["status_label"] = {
+        "active": "保鲜中",
+        "consumed": "已吃完",
+        "discarded": "已丢弃",
+    }.get(item["status"], "保鲜中")
+    return item
+
+
+def _normalize_body_metric_source_type(value: Optional[str], default: str = "manual") -> str:
+    source_type = (value or "").strip().lower() or default
+    if source_type not in BODY_METRIC_SOURCE_TYPES:
+        raise HTTPException(status_code=400, detail="source_type 必须为 manual / imported / ai")
+    return source_type
+
+
+def _build_legacy_weight_client_id(date_key: str, value: float) -> str:
+    return f"legacy:{date_key}:{round(float(value), 1):.1f}"
+
+
+def _resolve_stats_range_dates(range_type: str) -> Tuple[str, str, datetime]:
+    now = datetime.now(CHINA_TZ)
+    if range_type == "month":
+        start_d = (now - timedelta(days=29)).date()
+    else:
+        start_d = (now - timedelta(days=6)).date()
+    return start_d.isoformat(), now.date().isoformat(), now
+
+
+def _normalize_weight_entry(row: Dict[str, Any]) -> Dict[str, Any]:
+    recorded_at = row.get("created_at") or row.get("updated_at")
+    return {
+        "id": row.get("id"),
+        "date": str(row.get("recorded_on") or ""),
+        "value": round(float(row.get("weight_kg") or 0), 1),
+        "client_id": row.get("client_record_id"),
+        "recorded_at": _build_json_datetime(_parse_datetime(recorded_at)) if recorded_at else None,
+    }
+
+
+def _weight_entry_sort_key(entry: Dict[str, Any]) -> Tuple[str, str]:
+    parsed = _parse_datetime(entry.get("recorded_at"))
+    recorded_at = _build_json_datetime(parsed) if parsed else None
+    return (
+        str(entry.get("date") or ""),
+        recorded_at or str(entry.get("date") or ""),
+    )
+
+
+def _aggregate_weight_daily(weight_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    daily_map: Dict[str, Dict[str, Any]] = {}
+    for row in weight_rows:
+        entry = _normalize_weight_entry(row)
+        date_key = str(entry.get("date") or "")
+        if not date_key:
+            continue
+        existing = daily_map.get(date_key)
+        if existing is None or _weight_entry_sort_key(entry) >= _weight_entry_sort_key(existing):
+            daily_map[date_key] = entry
+    return [daily_map[date_key] for date_key in sorted(daily_map.keys())]
+
+
+def _aggregate_water_daily(
+    water_logs: List[Dict[str, Any]],
+    start_date: str,
+    end_date: str,
+) -> List[Dict[str, Any]]:
+    daily_map: Dict[str, Dict[str, Any]] = {}
+    for row in water_logs:
+        date_key = str(row.get("recorded_on") or "")
+        if not date_key:
+            continue
+        amount = int(float(row.get("amount_ml") or 0))
+        bucket = daily_map.setdefault(date_key, {"date": date_key, "total": 0, "logs": []})
+        bucket["total"] += amount
+        bucket["logs"].append(amount)
+
+    daily_list: List[Dict[str, Any]] = []
+    cursor = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end_day = datetime.strptime(end_date, "%Y-%m-%d").date()
+    while cursor <= end_day:
+        date_key = cursor.isoformat()
+        item = daily_map.get(date_key)
+        if item:
+            daily_list.append({
+                "date": date_key,
+                "total": int(item["total"]),
+                "logs": list(item["logs"]),
+            })
+        else:
+            daily_list.append({"date": date_key, "total": 0, "logs": []})
+        cursor += timedelta(days=1)
+    return daily_list
+
+
+async def _build_body_metrics_summary(
+    user_id: str,
+    start_date: str,
+    end_date: str,
+) -> Dict[str, Any]:
+    weight_rows = await list_user_weight_records(user_id=user_id, start_date=start_date, end_date=end_date)
+    water_logs = await list_user_water_logs(user_id=user_id, start_date=start_date, end_date=end_date)
+    settings = await get_user_body_metric_settings(user_id)
+
+    raw_weight_entries = [_normalize_weight_entry(row) for row in weight_rows]
+    weight_entries = _aggregate_weight_daily(weight_rows)
+    latest_weight = raw_weight_entries[-1] if raw_weight_entries else None
+    previous_weight = raw_weight_entries[-2] if len(raw_weight_entries) >= 2 else None
+    weight_change = None
+    if latest_weight and previous_weight:
+        weight_change = round(float(latest_weight["value"]) - float(previous_weight["value"]), 1)
+
+    water_daily = _aggregate_water_daily(water_logs, start_date, end_date)
+    total_water_ml = sum(int(item["total"]) for item in water_daily)
+    recorded_days = sum(1 for item in water_daily if int(item["total"]) > 0)
+    avg_daily_water_ml = round(total_water_ml / recorded_days, 1) if recorded_days > 0 else 0.0
+    water_goal_ml = int((settings or {}).get("water_goal_ml") or DEFAULT_WATER_GOAL_ML)
+    today_key = datetime.now(CHINA_TZ).date().isoformat()
+    today_water = next((item for item in water_daily if item["date"] == today_key), {"date": today_key, "total": 0, "logs": []})
+
+    return {
+        "weight_entries": weight_entries,
+        "latest_weight": latest_weight,
+        "previous_weight": previous_weight,
+        "weight_change": weight_change,
+        "water_goal_ml": water_goal_ml,
+        "today_water": today_water,
+        "water_daily": water_daily,
+        "total_water_ml": total_water_ml,
+        "avg_daily_water_ml": avg_daily_water_ml,
+        "water_recorded_days": recorded_days,
+    }
+
+
+def _empty_body_metrics_summary(start_date: str, end_date: str) -> Dict[str, Any]:
+    today_key = datetime.now(CHINA_TZ).date().isoformat()
+    water_daily = _aggregate_water_daily([], start_date, end_date)
+    today_water = next((item for item in water_daily if item["date"] == today_key), {"date": today_key, "total": 0, "logs": []})
+    return {
+        "weight_entries": [],
+        "latest_weight": None,
+        "previous_weight": None,
+        "weight_change": None,
+        "water_goal_ml": DEFAULT_WATER_GOAL_ML,
+        "today_water": today_water,
+        "water_daily": water_daily,
+        "total_water_ml": 0,
+        "avg_daily_water_ml": 0.0,
+        "water_recorded_days": 0,
+    }
 
 
 def _format_membership_response(membership: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1488,6 +1741,8 @@ async def analyze_submit(
     """
     if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
         raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
+    if body.image_urls and len(body.image_urls) > 1 and not body.is_multi_view:
+        raise HTTPException(status_code=400, detail="上传多张图片前请先开启多视角模式")
 
     # 配额检查
     membership = await _get_effective_membership(user_info["user_id"])
@@ -2330,6 +2585,58 @@ class UpdateUserInfoRequest(BaseModel):
     telephone: Optional[str] = None
     searchable: Optional[bool] = None
     public_records: Optional[bool] = None
+
+
+class BodyWeightUpsertRequest(BaseModel):
+    value: float = Field(..., ge=20, le=300, description="体重 kg")
+    date: Optional[str] = Field(default=None, description="记录日期 YYYY-MM-DD，默认今天")
+    client_id: Optional[str] = Field(default=None, max_length=80, description="客户端幂等 ID")
+    source_type: Optional[str] = Field(default="manual", description="manual / imported / ai")
+
+
+class BodyWaterLogRequest(BaseModel):
+    amount_ml: int = Field(..., ge=1, le=5000, description="饮水量 ml")
+    date: Optional[str] = Field(default=None, description="记录日期 YYYY-MM-DD，默认今天")
+    source_type: Optional[str] = Field(default="manual", description="manual / imported / ai")
+
+
+class BodyWaterResetRequest(BaseModel):
+    date: Optional[str] = Field(default=None, description="要清空的日期 YYYY-MM-DD，默认今天")
+
+
+class BodyMetricsLocalWeightEntry(BaseModel):
+    date: str = Field(..., description="日期 YYYY-MM-DD")
+    value: float = Field(..., ge=20, le=300, description="体重 kg")
+    client_id: Optional[str] = Field(default=None, max_length=80, description="客户端幂等 ID")
+    recorded_at: Optional[str] = Field(default=None, description="记录时间 ISO 字符串")
+
+
+class BodyMetricsLocalWaterDay(BaseModel):
+    total: int = Field(default=0, ge=0, le=20000)
+    logs: List[int] = Field(default_factory=list, description="当天分次喝水记录 ml")
+
+
+class BodyMetricsSyncRequest(BaseModel):
+    weight_entries: List[BodyMetricsLocalWeightEntry] = Field(default_factory=list)
+    water_by_date: Dict[str, BodyMetricsLocalWaterDay] = Field(default_factory=dict)
+    water_goal_ml: Optional[int] = Field(default=None, ge=500, le=10000)
+
+
+class FoodExpiryItemUpsertRequest(BaseModel):
+    food_name: str = Field(..., min_length=1, max_length=60, description="食物名称")
+    category: Optional[str] = Field(default=None, max_length=30, description="食物分类")
+    storage_type: Optional[str] = Field(default="refrigerated", description="储存方式: room_temp / refrigerated / frozen")
+    quantity_note: Optional[str] = Field(default=None, max_length=40, description="数量说明")
+    expire_date: str = Field(..., description="到期日期 YYYY-MM-DD")
+    opened_date: Optional[str] = Field(default=None, description="开封日期 YYYY-MM-DD")
+    note: Optional[str] = Field(default=None, max_length=200, description="补充备注")
+    source_type: Optional[str] = Field(default="manual", description="来源: manual / ocr / ai")
+    status: Optional[str] = Field(default="active", description="状态: active / consumed / discarded")
+
+
+class FoodExpiryStatusUpdateRequest(BaseModel):
+    status: str = Field(..., description="状态: active / consumed / discarded")
+
 
 # ---------- 健康档案 (Professional Onboarding) ----------
 
@@ -3432,6 +3739,46 @@ async def save_critical_samples(
     return {"message": "已保存偏差样本", "count": len(rows)}
 
 
+@app.get("/api/manual-food/search")
+async def manual_food_search(
+    q: str = "",
+    limit: int = 20,
+):
+    """
+    手动记录搜索接口（无需登录）。
+    搜索公共食物库 + 标准食物营养词典（含别名），返回统一格式。
+    """
+    q = (q or "").strip()
+    if not q:
+        return {"results": []}
+    if limit < 1:
+        limit = 1
+    if limit > 50:
+        limit = 50
+    try:
+        results = await search_manual_food(q, limit=limit)
+        if not results:
+            asyncio.create_task(log_unresolved_food(q))
+        return {"results": results}
+    except Exception as e:
+        print(f"[manual_food_search] 错误: {e}")
+        raise HTTPException(status_code=500, detail="搜索失败")
+
+
+@app.get("/api/manual-food/browse")
+async def manual_food_browse():
+    """
+    浏览食物数据库（无需登录）。
+    返回公共食物库和标准营养词典的全量数据，供前端可视化展示。
+    """
+    try:
+        data = await browse_manual_food_library()
+        return data
+    except Exception as e:
+        print(f"[manual_food_browse] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取食物库失败")
+
+
 class SaveFoodRecordRequest(BaseModel):
     meal_type: str = Field(..., description=MEAL_TYPE_DESCRIPTION)
     image_path: Optional[str] = Field(default=None, description="图片路径或 URL（可选）")
@@ -3663,6 +4010,395 @@ async def delete_food_record_endpoint(
         raise HTTPException(status_code=500, detail="删除失败")
 
 
+@app.get("/api/body-metrics/summary")
+async def get_body_metrics_summary(
+    range: str = "month",
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取体重/喝水云端摘要，供首页与统计页复用。"""
+    stats_range = range if range in ("week", "month") else "month"
+    user_id = user_info["user_id"]
+    try:
+        start_date, end_date, _ = _resolve_stats_range_dates(stats_range)
+        try:
+            summary = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+        except Exception as body_metrics_error:
+            print(f"[get_body_metrics_summary] 降级为空摘要: {body_metrics_error}")
+            summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)
+        return {
+            "range": stats_range,
+            "start_date": start_date,
+            "end_date": end_date,
+            **summary,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_body_metrics_summary] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取身体指标摘要失败")
+
+
+@app.post("/api/body-metrics/weight")
+async def save_body_weight_record(
+    body: BodyWeightUpsertRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    user_id = user_info["user_id"]
+    recorded_on = _parse_date_string(body.date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+    source_type = _normalize_body_metric_source_type(body.source_type)
+    client_id = (body.client_id or "").strip() or None
+    try:
+        row = await upsert_user_weight_record(
+            user_id=user_id,
+            recorded_on=recorded_on,
+            weight_kg=body.value,
+            source_type=source_type,
+            client_record_id=client_id,
+        )
+        return {"message": "体重已保存", "item": _normalize_weight_entry(row)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[save_body_weight_record] 错误: {e}")
+        raise HTTPException(status_code=500, detail="保存体重失败")
+
+
+@app.post("/api/body-metrics/water")
+async def save_body_water_log(
+    body: BodyWaterLogRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    user_id = user_info["user_id"]
+    recorded_on = _parse_date_string(body.date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+    source_type = _normalize_body_metric_source_type(body.source_type)
+    try:
+        row = await create_user_water_log(
+            user_id=user_id,
+            amount_ml=body.amount_ml,
+            recorded_on=recorded_on,
+            source_type=source_type,
+        )
+        return {
+            "message": "喝水已记录",
+            "item": {
+                "id": row.get("id"),
+                "date": str(row.get("recorded_on") or recorded_on),
+                "amount_ml": int(row.get("amount_ml") or body.amount_ml),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[save_body_water_log] 错误: {e}")
+        raise HTTPException(status_code=500, detail="保存喝水记录失败")
+
+
+@app.post("/api/body-metrics/water/reset")
+async def reset_body_water_logs(
+    body: BodyWaterResetRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    user_id = user_info["user_id"]
+    recorded_on = _parse_date_string(body.date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+    try:
+        deleted_count = await delete_user_water_logs_by_date(user_id=user_id, recorded_on=recorded_on)
+        return {"message": "已清空当日喝水记录", "deleted_count": deleted_count, "date": recorded_on}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[reset_body_water_logs] 错误: {e}")
+        raise HTTPException(status_code=500, detail="清空喝水记录失败")
+
+
+@app.post("/api/body-metrics/sync-local")
+async def sync_local_body_metrics(
+    body: BodyMetricsSyncRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """将旧首页本地体重/喝水记录幂等迁移到云端。"""
+    user_id = user_info["user_id"]
+    imported_weight_count = 0
+    imported_water_count = 0
+
+    try:
+        if body.water_goal_ml is not None:
+            await upsert_user_body_metric_settings(user_id=user_id, water_goal_ml=body.water_goal_ml)
+
+        if body.weight_entries:
+            weight_dates = sorted({
+                entry.date for entry in body.weight_entries
+                if _parse_date_string(entry.date, "weight_entries.date")
+            })
+            existing_weight_client_ids: Set[str] = set()
+            existing_weight_pairs: Set[Tuple[str, float]] = set()
+            if weight_dates:
+                existing_weight_rows = await list_user_weight_records(
+                    user_id=user_id,
+                    start_date=weight_dates[0],
+                    end_date=weight_dates[-1],
+                )
+                for row in existing_weight_rows:
+                    date_key = str(row.get("recorded_on") or "")
+                    try:
+                        weight_value = round(float(row.get("weight_kg") or 0), 1)
+                    except Exception:
+                        weight_value = 0.0
+                    existing_weight_pairs.add((date_key, weight_value))
+                    client_record_id = str(row.get("client_record_id") or "").strip()
+                    if client_record_id:
+                        existing_weight_client_ids.add(client_record_id)
+
+            def _weight_sync_sort_key(entry: BodyMetricsLocalWeightEntry) -> Tuple[str, str]:
+                parsed = _parse_datetime(entry.recorded_at)
+                return (
+                    entry.date,
+                    _build_json_datetime(parsed) if parsed else entry.date,
+                )
+
+            for entry in sorted(body.weight_entries, key=_weight_sync_sort_key):
+                recorded_on = _parse_date_string(entry.date, "weight_entries.date")
+                if not recorded_on:
+                    continue
+                client_id = (entry.client_id or "").strip() or _build_legacy_weight_client_id(recorded_on, entry.value)
+                weight_value = round(float(entry.value), 1)
+                if client_id in existing_weight_client_ids or (recorded_on, weight_value) in existing_weight_pairs:
+                    continue
+                recorded_at = _build_json_datetime(_parse_datetime(entry.recorded_at))
+                await upsert_user_weight_record(
+                    user_id=user_id,
+                    recorded_on=recorded_on,
+                    weight_kg=entry.value,
+                    source_type="imported",
+                    client_record_id=client_id,
+                    recorded_at=recorded_at,
+                )
+                existing_weight_client_ids.add(client_id)
+                existing_weight_pairs.add((recorded_on, weight_value))
+                imported_weight_count += 1
+
+        if body.water_by_date:
+            water_dates = sorted({
+                date_key for date_key in body.water_by_date.keys()
+                if _parse_date_string(date_key, "water_by_date.key")
+            })
+            if water_dates:
+                existing_water_logs = await list_user_water_logs(
+                    user_id=user_id,
+                    start_date=water_dates[0],
+                    end_date=water_dates[-1],
+                )
+                existing_water_dates = {str(item.get("recorded_on") or "") for item in existing_water_logs}
+                for date_key, day in body.water_by_date.items():
+                    recorded_on = _parse_date_string(date_key, "water_by_date.key")
+                    if not recorded_on or recorded_on in existing_water_dates:
+                        continue
+                    logs = [int(amount) for amount in day.logs if int(amount) > 0]
+                    if not logs and int(day.total) > 0:
+                        logs = [int(day.total)]
+                    for amount in logs:
+                        await create_user_water_log(
+                            user_id=user_id,
+                            amount_ml=amount,
+                            recorded_on=recorded_on,
+                            source_type="imported",
+                        )
+                        imported_water_count += 1
+
+        return {
+            "message": "本地身体指标已同步",
+            "imported_weight_count": imported_weight_count,
+            "imported_water_count": imported_water_count,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[sync_local_body_metrics] 错误: {e}")
+        raise HTTPException(status_code=500, detail="同步本地身体指标失败")
+
+
+@app.get("/api/expiry/dashboard")
+async def get_food_expiry_dashboard(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """我的页保质期提醒摘要。"""
+    user_id = user_info["user_id"]
+    try:
+        raw_items = await list_food_expiry_items(user_id=user_id)
+        today_local = datetime.now(CHINA_TZ)
+        items = [_normalize_food_expiry_item(row, today_local=today_local) for row in raw_items]
+        active_items = [item for item in items if item["status"] == "active"]
+        urgency_rank = {"expired": 0, "today": 1, "soon": 2, "fresh": 3}
+        active_items.sort(
+            key=lambda item: (
+                urgency_rank.get(item.get("urgency"), 9),
+                item.get("days_until_expire") if item.get("days_until_expire") is not None else 9999,
+                item.get("expire_date") or "9999-12-31",
+            )
+        )
+        expired_count = sum(1 for item in active_items if item.get("urgency") == "expired")
+        today_count = sum(1 for item in active_items if item.get("urgency") == "today")
+        soon_count = sum(1 for item in active_items if item.get("urgency") == "soon")
+        processed_count = sum(1 for item in items if item["status"] != "active")
+        return {
+            "active_count": len(active_items),
+            "expired_count": expired_count,
+            "today_count": today_count,
+            "soon_count": soon_count,
+            "processed_count": processed_count,
+            "preview_items": active_items[:3],
+        }
+    except Exception as e:
+        print(f"[get_food_expiry_dashboard] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取保质期摘要失败")
+
+
+@app.get("/api/expiry/items")
+async def get_food_expiry_items(
+    status: Optional[str] = None,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取当前用户的保质期条目。"""
+    user_id = user_info["user_id"]
+    try:
+        normalized_status = _normalize_expiry_status(status) if status else None
+        rows = await list_food_expiry_items(user_id=user_id, status=normalized_status)
+        today_local = datetime.now(CHINA_TZ)
+        items = [_normalize_food_expiry_item(row, today_local=today_local) for row in rows]
+        active_items = [item for item in items if item["status"] == "active"]
+        processed_items = [item for item in items if item["status"] != "active"]
+        urgency_rank = {"expired": 0, "today": 1, "soon": 2, "fresh": 3}
+        active_items.sort(
+            key=lambda item: (
+                urgency_rank.get(item.get("urgency"), 9),
+                item.get("days_until_expire") if item.get("days_until_expire") is not None else 9999,
+                item.get("expire_date") or "9999-12-31",
+            )
+        )
+        processed_items.sort(
+            key=lambda item: item.get("updated_at") or item.get("created_at") or "",
+            reverse=True,
+        )
+        return {"items": active_items + processed_items}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_food_expiry_items] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取保质期列表失败")
+
+
+@app.get("/api/expiry/items/{item_id}")
+async def get_food_expiry_item_detail(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    user_id = user_info["user_id"]
+    try:
+        row = await get_food_expiry_item(user_id=user_id, item_id=item_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        return {"item": _normalize_food_expiry_item(row)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_food_expiry_item_detail] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取详情失败")
+
+
+@app.post("/api/expiry/items")
+async def create_food_expiry_item_endpoint(
+    body: FoodExpiryItemUpsertRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    user_id = user_info["user_id"]
+    food_name = body.food_name.strip()
+    if not food_name:
+        raise HTTPException(status_code=400, detail="food_name 不能为空")
+
+    expire_date = _parse_date_string(body.expire_date, "expire_date")
+    opened_date = _parse_date_string(body.opened_date, "opened_date")
+    if opened_date and expire_date and opened_date > expire_date:
+        raise HTTPException(status_code=400, detail="opened_date 不能晚于 expire_date")
+
+    payload = {
+        "food_name": food_name,
+        "category": (body.category or "").strip() or None,
+        "storage_type": _normalize_expiry_storage_type(body.storage_type),
+        "quantity_note": (body.quantity_note or "").strip() or None,
+        "expire_date": expire_date,
+        "opened_date": opened_date,
+        "note": (body.note or "").strip() or None,
+        "source_type": _normalize_expiry_source_type(body.source_type),
+        "status": _normalize_expiry_status(body.status),
+    }
+    try:
+        row = await create_food_expiry_item(user_id=user_id, data=payload)
+        return {"message": "创建成功", "item": _normalize_food_expiry_item(row)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[create_food_expiry_item_endpoint] 错误: {e}")
+        raise HTTPException(status_code=500, detail="创建保质期条目失败")
+
+
+@app.put("/api/expiry/items/{item_id}")
+async def update_food_expiry_item_endpoint(
+    item_id: str,
+    body: FoodExpiryItemUpsertRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    user_id = user_info["user_id"]
+    food_name = body.food_name.strip()
+    if not food_name:
+        raise HTTPException(status_code=400, detail="food_name 不能为空")
+
+    expire_date = _parse_date_string(body.expire_date, "expire_date")
+    opened_date = _parse_date_string(body.opened_date, "opened_date")
+    if opened_date and expire_date and opened_date > expire_date:
+        raise HTTPException(status_code=400, detail="opened_date 不能晚于 expire_date")
+
+    payload = {
+        "food_name": food_name,
+        "category": (body.category or "").strip() or None,
+        "storage_type": _normalize_expiry_storage_type(body.storage_type),
+        "quantity_note": (body.quantity_note or "").strip() or None,
+        "expire_date": expire_date,
+        "opened_date": opened_date,
+        "note": (body.note or "").strip() or None,
+        "source_type": _normalize_expiry_source_type(body.source_type),
+        "status": _normalize_expiry_status(body.status),
+    }
+    try:
+        row = await update_food_expiry_item(user_id=user_id, item_id=item_id, data=payload)
+        if not row:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        return {"message": "更新成功", "item": _normalize_food_expiry_item(row)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[update_food_expiry_item_endpoint] 错误: {e}")
+        raise HTTPException(status_code=500, detail="更新保质期条目失败")
+
+
+@app.post("/api/expiry/items/{item_id}/status")
+async def update_food_expiry_item_status_endpoint(
+    item_id: str,
+    body: FoodExpiryStatusUpdateRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    user_id = user_info["user_id"]
+    status = _normalize_expiry_status(body.status)
+    try:
+        row = await update_food_expiry_item(user_id=user_id, item_id=item_id, data={"status": status})
+        if not row:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        return {"message": "状态已更新", "item": _normalize_food_expiry_item(row)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[update_food_expiry_item_status_endpoint] 错误: {e}")
+        raise HTTPException(status_code=500, detail="更新状态失败")
+
+
 @app.get("/api/food-record/share/{record_id}")
 async def get_shared_food_record(record_id: str):
     """
@@ -3811,6 +4547,22 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
         meal_target = meal_targets.get(meal_type, 0.0)
         meal_progress = (meal_cal / meal_target * 100) if meal_target else 0
         meal_progress = round(meal_progress, 1)
+        meal_image_urls: List[str] = []
+        seen_image_urls = set()
+        for record in items:
+            record_image_urls = record.get("image_paths") or []
+            if not isinstance(record_image_urls, list):
+                record_image_urls = []
+            if not record_image_urls and record.get("image_path"):
+                record_image_urls = [record.get("image_path")]
+            for image_url in record_image_urls:
+                if not isinstance(image_url, str):
+                    continue
+                image_url = image_url.strip()
+                if not image_url or image_url in seen_image_urls:
+                    continue
+                seen_image_urls.add(image_url)
+                meal_image_urls.append(image_url)
         # 取该餐次最早一条记录的时间作为展示时间
         times = [x.get("record_time") for x in items if x.get("record_time")]
         time_str = "00:00"
@@ -3824,6 +4576,8 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
             "target": meal_target,
             "progress": meal_progress,
             "tags": [SNACK_TARGET_TAG] if "snack" in meal_type else [],
+            "image_path": meal_image_urls[0] if meal_image_urls else None,
+            "image_paths": meal_image_urls,
         })
 
     return {"intakeData": intake_data, "meals": meals_out}
@@ -3929,14 +4683,9 @@ async def get_stats_summary(
     if range not in ("week", "month"):
         range = "week"
     user_id = user_info["user_id"]
-    now = datetime.now(CHINA_TZ)
-    today = now.strftime("%Y-%m-%d")
-    if range == "week":
-        start_d = (now - timedelta(days=6)).date()
-    else:
-        start_d = (now - timedelta(days=29)).date()
-    start_date = start_d.strftime("%Y-%m-%d")
-    end_date = today
+    start_date, end_date, now = _resolve_stats_range_dates(range)
+    start_d = datetime.strptime(start_date, "%Y-%m-%d").date()
+    today = end_date
     print(f"[get_stats_summary] Range: {range}, Start: {start_date}, End: {end_date}, User: {user_id}")
     try:
         user = await get_user_by_id(user_id)
@@ -3949,6 +4698,12 @@ async def get_stats_summary(
     except Exception as e:
         print(f"[get_stats_summary] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取统计失败")
+
+    try:
+        body_metrics_summary = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+    except Exception as body_metrics_error:
+        print(f"[get_stats_summary] 身体指标降级为空摘要: {body_metrics_error}")
+        body_metrics_summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)
 
     total_cal = sum(float(r.get("total_calories") or 0) for r in records)
     total_protein = sum(float(r.get("total_protein") or 0) for r in records)
@@ -4026,6 +4781,7 @@ async def get_stats_summary(
         "analysis_summary": analysis_summary,
         "analysis_summary_generated_date": analysis_summary_generated_date,
         "analysis_summary_needs_refresh": analysis_summary_needs_refresh,
+        "body_metrics": body_metrics_summary,
     }
 
 

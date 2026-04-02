@@ -56,6 +56,10 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value))
+}
+
 export default function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
@@ -228,6 +232,7 @@ export default function StatsPage() {
   const insightGeneratedDate = d.analysis_summary_generated_date || ''
   const insightNeedsRefresh = Boolean(d.analysis_summary_needs_refresh)
   const displayInsightText = aiDisplayText || (hasInsight && !isTyping ? d.analysis_summary : '')
+  const bodyMetrics = d.body_metrics
   const macroPercent = {
     protein: toSafeNumber(d.macro_percent?.protein),
     carbs: toSafeNumber(d.macro_percent?.carbs),
@@ -248,6 +253,19 @@ export default function StatsPage() {
   const maxDailyCalories = d.daily_calories.length > 0
     ? Math.max(...d.daily_calories.map(i => i.calories))
     : 2000
+  const weightTrend = bodyMetrics?.weight_entries || []
+  const latestWeight = bodyMetrics?.latest_weight || null
+  const previousWeight = bodyMetrics?.previous_weight || null
+  const weightChange = bodyMetrics?.weight_change
+  const waterDaily = bodyMetrics?.water_daily || []
+  const waterGoalMl = toSafeNumber(bodyMetrics?.water_goal_ml, 2000)
+  const avgDailyWaterMl = toSafeNumber(bodyMetrics?.avg_daily_water_ml)
+  const totalWaterMl = toSafeNumber(bodyMetrics?.total_water_ml)
+  const waterRecordedDays = toSafeNumber(bodyMetrics?.water_recorded_days)
+  const waterTrend = range === 'week' ? waterDaily.slice(-7) : waterDaily.slice(-14)
+  const maxWaterValue = waterTrend.length > 0
+    ? Math.max(waterGoalMl, ...waterTrend.map(item => toSafeNumber(item.total)))
+    : waterGoalMl
   const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
     const hasRecord = item.calories > 0
     const delta = hasRecord ? item.calories - tdee : 0
@@ -455,7 +473,7 @@ export default function StatsPage() {
                 <Text className='macro-detail'>{totalProtein.toFixed(0)}g / {macroPercent.protein}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill protein' style={{ width: `${macroPercent.protein}%` }}></View>
+                <View className='progress-fill protein' style={{ width: `${clampPercent(macroPercent.protein)}%` }}></View>
               </View>
             </View>
 
@@ -468,7 +486,7 @@ export default function StatsPage() {
                 <Text className='macro-detail'>{totalCarbs.toFixed(0)}g / {macroPercent.carbs}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill carbs' style={{ width: `${macroPercent.carbs}%` }}></View>
+                <View className='progress-fill carbs' style={{ width: `${clampPercent(macroPercent.carbs)}%` }}></View>
               </View>
             </View>
 
@@ -481,7 +499,7 @@ export default function StatsPage() {
                 <Text className='macro-detail'>{totalFat.toFixed(0)}g / {macroPercent.fat}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill fat' style={{ width: `${macroPercent.fat}%` }}></View>
+                <View className='progress-fill fat' style={{ width: `${clampPercent(macroPercent.fat)}%` }}></View>
               </View>
             </View>
           </View>
@@ -513,6 +531,80 @@ export default function StatsPage() {
                 </View>
               )
             })}
+          </View>
+        </View>
+
+        <View className='stats-card body-metrics-card'>
+          <View className='card-header'>
+            <Text className='iconfont icon-shangzhang chart-title-icon' />
+            <View className='card-header-copy'>
+              <Text className='card-title'>体重与喝水</Text>
+              <Text className='card-subtitle'>跨设备同步后，这里会持续累积长期趋势</Text>
+            </View>
+          </View>
+
+          <View className='body-metrics-grid'>
+            <View className='body-metric-panel'>
+              <View className='body-metric-panel-header'>
+                <Text className='body-metric-title'>体重趋势</Text>
+                {latestWeight ? (
+                  <Text className='body-metric-main'>
+                    {latestWeight.value.toFixed(1)} kg
+                  </Text>
+                ) : (
+                  <Text className='body-metric-empty'>还没有云端体重记录</Text>
+                )}
+              </View>
+              {latestWeight ? (
+                <Text className='body-metric-sub'>
+                  {previousWeight
+                    ? `${weightChange && weightChange > 0 ? '+' : ''}${toSafeNumber(weightChange).toFixed(1)} kg，较上次`
+                    : '已开始累计体重趋势'}
+                </Text>
+              ) : null}
+              {weightTrend.length > 0 ? (
+                <View className='weight-chip-row'>
+                  {weightTrend.slice(-(range === 'week' ? 7 : 10)).map((item) => (
+                    <View key={item.date} className='weight-chip'>
+                      <Text className='weight-chip-date'>{item.date.slice(5)}</Text>
+                      <Text className='weight-chip-value'>{item.value.toFixed(1)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
+            <View className='body-metric-panel water-panel'>
+              <View className='body-metric-panel-header'>
+                <Text className='body-metric-title'>喝水趋势</Text>
+                <Text className='body-metric-main'>
+                  {avgDailyWaterMl.toFixed(0)} ml
+                </Text>
+              </View>
+              <Text className='body-metric-sub'>
+                日均 {avgDailyWaterMl.toFixed(0)} ml，目标 {waterGoalMl} ml，累计 {totalWaterMl.toFixed(0)} ml
+              </Text>
+              {waterTrend.length > 0 ? (
+                <View className='water-trend-chart'>
+                  {waterTrend.map((item) => {
+                    const pct = maxWaterValue > 0 ? Math.max((toSafeNumber(item.total) / maxWaterValue) * 100, 8) : 8
+                    return (
+                      <View key={item.date} className='water-trend-col'>
+                        <View className='water-trend-bar-wrap'>
+                          <View className='water-trend-bar' style={{ height: `${pct}%` }} />
+                        </View>
+                        <Text className='water-trend-label'>{item.date.slice(5)}</Text>
+                      </View>
+                    )
+                  })}
+                </View>
+              ) : null}
+              <View className='water-metric-footer'>
+                <Text className='water-metric-note'>
+                  {waterRecordedDays > 0 ? `已有 ${waterRecordedDays} 天饮水记录` : '还没有云端喝水记录'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
 

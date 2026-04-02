@@ -67,18 +67,22 @@ def list_all_objects(bucket_id, prefix="", limit=1000):
         offset += limit
     return all_objects
 
+def p(msg):
+    print(msg, flush=True)
+
 if __name__ == "__main__":
     buckets = list_buckets()
-    print("=== Buckets ===")
+    p("=== Buckets ===")
     for b in buckets:
-        print(f"  {b['id']} (public={b.get('public', '?')})")
+        p(f"  {b['id']} (public={b.get('public', '?')})")
 
-    print()
+    p("")
     grand_total = 0
     grand_count = 0
 
     for b in buckets:
         bid = b["id"]
+        p(f"Scanning {bid} ...")
         objects = list_all_objects(bid)
         total_bytes = 0
         for obj in objects:
@@ -89,6 +93,6 @@ if __name__ == "__main__":
         mb = total_bytes / 1048576
         grand_total += total_bytes
         grand_count += len(objects)
-        print(f"{bid}: {len(objects)} files, {mb:.2f} MB")
+        p(f"  => {bid}: {len(objects)} files, {mb:.2f} MB")
 
-    print(f"\n=== GRAND TOTAL: {grand_count} objects, {grand_total/1048576:.2f} MB ({grand_total/1073741824:.3f} GB) ===")
+    p(f"\n=== GRAND TOTAL: {grand_count} objects, {grand_total/1048576:.2f} MB ({grand_total/1073741824:.3f} GB) ===")

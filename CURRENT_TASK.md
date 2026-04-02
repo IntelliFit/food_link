@@ -1,5 +1,316 @@
 # CURRENT_TASK
 
+- Task: 喝水弹层交互统一（快捷与自定义均需「确认记录」）
+- Status: done（`src/pages/index/index.tsx`：快捷量累加到输入框；主按钮文案「确认记录」；说明文案已同步）
+- Next step: 微信开发者工具内点快捷量后应只见输入框变化，点「确认记录」后才写入并关弹层；`npm run build:weapp` 已通过
+
+- Task: 修复首页体重/喝水记录逻辑与弹层交互
+- Status: done（体重已支持同一天多次记录；首页按“最近一次 / 上一次”展示；喝水弹层已改为快捷累加后需确认记录；体重/喝水弹层已整体上移避开自定义 tabBar）
+- Scope:
+  - 后端：
+    - `backend/database.py`
+      - 体重记录查询改为按 `recorded_on + created_at` 升序
+      - 体重写入改为“多条插入 + `client_record_id` 幂等兜底”，不再按日期覆盖
+    - `backend/main.py`
+      - `/api/body-metrics/weight` 支持 `client_id`
+      - `/api/body-metrics/sync-local` 的体重同步补上 `client_id / recorded_at` 和重复导入去重
+      - 身体指标汇总改为：`latest_weight / previous_weight` 取真实最近两条记录；`weight_entries` 用于趋势时按“每天最后一次”聚合
+    - 数据库脚本：
+      - `backend/database/user_body_metrics.sql`
+      - `backend/sql/add_user_body_metrics.sql`
+      - 已移除 `(user_id, recorded_on)` 唯一约束，改为 `client_record_id` 唯一索引方案
+  - 前端：
+    - `src/utils/api.ts`
+      - 体重记录 API 类型补充 `client_id / recorded_at`
+      - `saveBodyWeightRecord(...)` 支持传客户端幂等 ID
+    - `src/pages/index/index.tsx`
+      - 本地体重记录结构补充 `clientId / recordedAt`
+      - 本地保存体重不再覆盖当天旧值，而是追加一条新记录
+      - 首页体重摘要改为基于“最近一次 / 上一次”而不是“今天 vs 昨天”
+      - 喝水弹层快捷量累加到自定义输入框，与手输统一，点击「确认记录」后写入并关闭
+      - 体重按钮文案改为 `去记 / 再记`
+    - `src/pages/index/index.scss`
+      - 体重/喝水弹层改为浮起式卡片，底部抬高避开自定义 tabBar
+      - `清空今天` 按钮提高可见性
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - `npm run build:weapp` 通过
+  - 已按项目要求再次尝试微信开发者工具自动化验证：
+    - `mrc where --port 9420`
+    - `mrc errors 20 --port 9420`
+  - 当前阻塞：仍无法连接 `ws://localhost:9420`，未拿到运行态截图与点击验证
+- Next step:
+  - 在线上数据库执行 `backend/sql/add_user_body_metrics.sql`
+  - 重启后端
+  - 在微信开发者工具里重点确认：
+    - 同一天是否可以连续记录多次体重，且首页显示最近一次与上一次变化
+    - 喝水弹层点快捷量后是否仅更新输入框，点「确认记录」后才写入并关闭
+    - 体重/喝水弹层底部按钮是否彻底不再被 tabBar 遮挡
+
+- Task: 首页“今日餐食”卡片补照片缩略图预览
+- Status: done（首页每个餐次卡片现在支持显示代表图，点缩略图可直接预览当餐照片）
+- Scope:
+  - 后端：
+    - `backend/main.py`
+      - `/api/home/dashboard` 的 `meals` 聚合结果新增 `image_path / image_paths`
+      - 同一餐次下会汇总去重后的图片列表，首页可直接拿到代表图与预览列表
+  - 前端：
+    - `src/utils/api.ts`
+      - `HomeMealItem` 类型补充 `image_path / image_paths`
+    - `src/pages/index/index.tsx`
+      - 今日餐食卡片左侧改为“缩略图优先、餐次图标兜底”
+      - 有图时点缩略图可 `previewImage`
+      - 多图时显示 `N张` 角标
+    - `src/pages/index/index.scss`
+      - 新增首页餐次缩略图容器、角标与卡片对齐样式
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+  - `npm run build:weapp` 通过
+  - 已按项目要求尝试微信开发者工具自动化验证：
+    - `mrc where --port 9420`
+    - `mrc errors 20 --port 9420`
+  - 当前阻塞：`ws://localhost:9420` 连接失败，说明微信开发者工具未开启自动化端口或未打开目标项目，暂未拿到首页缩略图的运行态截图
+- Next step:
+  - 在微信开发者工具中打开 `food_link` 项目并开启自动化端口 `9420`
+  - 重新确认首页“今日餐食”每个卡片是否已显示代表图，且点缩略图能否预览大图
+
+- Task: 打通体重/喝水云端同步并接入统计页长期分析
+- Status: done（代码已落地：首页从本地记录升级为“云端优先、本地兜底”；统计页新增体重与喝水长期趋势区块；后端已补表结构与接口）
+- Scope:
+  - 后端：
+    - `backend/database.py`
+      - 新增体重记录、喝水日志、身体指标设置的读写函数
+    - `backend/main.py`
+      - 新增 `/api/body-metrics/summary`
+      - 新增 `/api/body-metrics/weight`
+      - 新增 `/api/body-metrics/water`
+      - 新增 `/api/body-metrics/water/reset`
+      - 新增 `/api/body-metrics/sync-local`
+      - `GET /api/stats/summary` 返回 `body_metrics` 聚合结果
+    - 新增数据库脚本：
+      - `backend/database/user_body_metrics.sql`
+      - `backend/sql/add_user_body_metrics.sql`
+  - 前端：
+    - `src/utils/api.ts`
+      - 新增 body metrics 相关类型与 API 方法
+    - `src/pages/index/index.tsx`
+      - 首页体重/喝水改为云端读写，失败时回退本地 storage
+      - 登录后会尝试把旧本地体重/喝水快照同步到云端
+    - `src/pages/stats/index.tsx`
+    - `src/pages/stats/index.scss`
+      - 新增“体重与喝水”长期趋势模块
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - `npm run build:weapp` 通过
+  - 已尝试运行态验证：`mrc where --port 9420`
+  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成截图与点击验证
+- Next step:
+  - 在线上数据库执行 `backend/sql/add_user_body_metrics.sql`
+  - 重启后端
+  - 在微信开发者工具里确认三条链路：
+    - 首页记录体重后，另一台设备能否看到同步结果
+    - 首页加水/清空今日后，统计页喝水趋势是否随之更新
+    - 统计页体重与喝水趋势的视觉层级是否合适
+
+- Task: 实现“手动记录”模式 MVP
+- Status: done（记录页新增第三种方式“手动记录”，搜索公共食物库 + 标准食物营养词典，免费保存到 user_food_records）
+- Scope:
+  - 后端：
+    - `backend/database.py`：新增 `search_manual_food()` + `log_unresolved_food()`
+    - `backend/main.py`：新增 `GET /api/manual-food/search?q=&limit=`
+  - 前端：
+    - `src/utils/api.ts`：新增 `ManualFoodSearchResult` + `searchManualFood()`
+    - `src/pages/record/index.tsx`：第三种记录方式入口 + 搜索/选择/调重量/保存 UI
+    - `src/pages/record/index.scss`：手动记录样式（橙色渐变主题 + 永久免费徽标）
+  - 设计口径（积分制待后续实现）：
+    - 标准分析 `1 积分/次`、精准分析 `3 积分/次`、新用户赠送 `20` 积分
+    - 计费仅适用于 `拍照记录` 与 `文字记录`
+    - `手动记录` 永久免费
+- Verification:
+  - TypeScript 类型检查通过（无新增错误）
+  - ReadLints 无新增报错
+- Next step:
+  - 部署后端、在微信开发者工具中测试完整链路
+  - 后续再做“积分制替换现有日配额”
+
+- Task: 将首页体重/喝水从“快捷条”重构为更小更精简的并排胶囊卡片
+- Status: done（已按用户最新要求再次重做，将两行快捷条合并为一行两个并排小卡片）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - 移除原本上下排列的两行快捷条
+    - 改为更小的一行左右两列布局（体重、喝水并排）
+    - 喝水操作精简保留为 `+250ml`，点击面板其他区域唤起更多
+  - `src/pages/index/index.scss`
+    - 新增 `.body-status-grid` 与 `.body-status-card`
+    - 字号和 padding 进一步压缩，使整体所占垂直空间更小
+- Verification:
+  - `npm run build:weapp` 通过
+  - 当前仍未完成 DevTools 截图验证：`ws://localhost:9420` 无法连接
+- Next step:
+  - 用户确认这版并排胶囊卡片是否达到期望的紧凑程度
+
+- Task: 首页信息架构：体重/喝水区块移到三大营养素下方
+- Status: done（热量总览与 PFC 营养素相邻，体重/喝水作为后续「身体习惯」区块）
+- Scope:
+  - `src/pages/index/index.tsx`：`body-status-section` 从「热量卡后」挪到「`macros-section` 后、今日餐食前」
+- Verification:
+  - 本地 `ReadLints` 无报错；DevTools 截图仍受 9420 未开阻塞
+
+- Task: 实现“我的页保质期提醒”MVP
+- Status: done（已落一版手动录入 MVP：我的页会员卡下方新增保质期提醒入口卡片；新增保质期列表页与编辑页；后端补齐保质期条目 CRUD 和摘要接口）
+- Scope:
+  - 前端：
+    - `src/pages/profile/index.tsx`
+    - `src/pages/profile/index.scss`
+    - `src/pages/expiry/*`
+    - `src/pages/expiry-edit/*`
+    - `src/app.config.ts`
+    - `src/utils/api.ts`
+  - 后端：
+    - `backend/main.py`
+    - `backend/database.py`
+    - `backend/database/food_expiry_items.sql`
+    - `backend/sql/add_food_expiry_items.sql`
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - `npm run build:weapp` 通过
+  - 已按项目要求尝试微信开发者工具自动化验证：`mrc where --port 9420`
+  - 当前阻塞：本机未开启微信开发者工具自动化端口 `9420`，无法完成截图与点击链路验证
+- Next step:
+  - 先执行 `backend/sql/add_food_expiry_items.sql`
+  - 重启后端
+  - 在“我的”页确认入口位置与视觉层级
+  - 进入保质期页验证新增、编辑、标记吃完/丢弃、恢复提醒四条链路
+
+- Task: 输出基于真实 Supabase 实库的 schema 分析报告
+- Status: done（已直接连接 `ocijuywmkalfmfxquzzf` 的线上 `public` schema，按真实表、字段、行数与活跃度生成正式文档）
+- Scope:
+  - `docs/数据库实库Schema分析报告.md`
+    - 基于真实 `rest/v1` OpenAPI schema 输出 32 张表的线上结构盘点
+    - 补充核心业务链、旧表判断、重复语义分析与治理建议
+- Verification:
+  - 已确认线上真实存在的表包括：
+    - `analysis_tasks`
+    - `user_food_records`
+    - `public_food_library`
+    - `food_analysis_records`
+    - `food_nutrition_library`
+    - `meal_items`
+    - `public_food_library_likes`
+  - 已补查所有 `public` 表的真实行数，并对疑似旧表补查最近写入时间
+- Next step:
+  - 若后续要做数据库治理，可基于这份报告先补齐缺失迁移，再给旧表打“废弃/待清理”标签
+
+- Task: 收缩首页体重/喝水模块的视觉优先级
+- Status: done（已根据用户截图反馈收成轻量辅助卡，避免喧宾夺主影响热量总览）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - 热量总览卡重新放回体重/喝水模块之前，恢复首页主视觉优先级
+    - 体重卡与喝水卡保留首页直接可见，但整体文案更轻、更中性
+    - 去掉体重“每日 1 次”的强假设，改为“可随时补记 / 已记录，可修改”
+    - 体重趋势说明从“较昨日”收口为更稳妥的“较上次”
+  - `src/pages/index/index.scss`
+    - 区块标题、卡片高度、字号、徽标、进度条、快捷按钮整体缩小
+    - 体重/喝水改成更弱化的二级信息卡，降低对首页主流程的视觉干扰
+- Verification:
+  - `npm run build:weapp` 通过
+  - 已再次尝试 DevTools 自动化验证：
+    - `mrc where --port 9420`
+    - `mrc errors 20 --port 9420`
+  - 当前阻塞：仍无法连接 `ws://localhost:9420`，未完成运行态截图验证
+- Next step:
+  - 用户在微信开发者工具中查看新版首页，确认体重/喝水是否已经足够“轻”
+  - 若还偏重，下一轮继续收成“更像摘要条、少一层卡片感”的版本
+
+- Task: 修复圈子回复评论时输入框难找且上下抖动
+- Status: done（已把回复提示从输入框同行拆出，并将底部评论框改成更稳定的单行输入结构；前端构建通过；运行态 DevTools 验证仍受 9420 端口未开启阻塞）
+- Scope:
+  - `src/pages/community/index.tsx`
+    - 底部评论栏改为 `reply tip` 在上、输入框与发送按钮在下的两层结构
+    - 评论输入由 `Textarea` 改为更稳定的 `Input`
+    - 打开/关闭评论栏时显式重置 `commentInputFocus`，避免旧焦点状态叠加
+  - `src/pages/community/index.scss`
+    - 已进一步确认项目使用 `custom tabBar`，评论栏不是“没打开”，而是被底部 tabBar 挡住
+    - 评论栏与蒙层现已整体抬到自定义 tabBar 上方
+    - 回复提示条不再和输入框挤在同一行，避免回复态把输入框挤没
+- Verification:
+  - `npm run build:weapp` 通过
+  - 已尝试 DevTools 自动化验证：
+    - `mrc where --port 9420`
+    - `mrc errors 20 --port 9420`
+  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成真实点击“回复评论”后的截图与键盘联动验证
+- Next step:
+  - 在微信开发者工具重新编译最新 `dist`
+  - 实测两条链路：
+    - 点击某条评论回复时，底部输入框是否稳定可见
+    - 键盘弹起时是否还会出现明显上下跳动
+
+- Task: 设计“食物保质期记录与提醒”功能的工程方案
+- Status: in_progress（用户需要更详细的工程落地方案，重点比较手动录入、OCR、用户输入与大模型在保质期录入中的职责分工）
+- Scope:
+  - 结合现有 `food_link` 小程序架构，评估是否复用 `record/index`、`index/index`、通知与后端 API 骨架
+  - 输出面向工程实现的方案：数据表、接口、页面、提醒任务、OCR/规则/模型分层
+- Next step:
+  - 向用户提交一版详细技术方案，明确推荐采用“手动录入为保底、OCR 为主识别、规则解析优先、小模型兜底”的混合方案
+  - 若用户认可，再进一步细化为 MVP 迭代顺序与具体表结构/接口草案
+
+- Task: 首页新增“今日身体状态”双卡（体重记录 + 喝水记录）
+- Status: done（已按用户要求做成首页一级可见模块，而不是放进健康档案/健康板块）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - 在日期条下方、热量卡上方新增 `今日身体状态` 区块
+    - 新增 `今日体重` 卡：支持显示今日/最近一次体重、与昨日对比、最近 7 天迷你趋势、点击后弹层记录/修改
+    - 新增 `今日喝水` 卡：支持显示今日累计、目标进度、`+250 / +500` 快捷加水、更多弹层、自定义输入与清空今日
+    - 体重/喝水数据当前先走本地 storage 持久化
+    - 若已登录且健康档案里有 `weight`，体重弹层会把档案体重作为默认值来源
+  - `src/pages/index/index.scss`
+    - 新增与首页现有视觉一致的双卡、进度条、迷你趋势条、弹层样式
+- Verification:
+  - `npm run build:weapp` 通过
+  - 已按项目要求尝试微信开发者工具自动化验证：
+    - `mrc where --port 9420` 失败
+    - `mrc errors 20 --port 9420` 失败
+  - 当前阻塞：
+    - 本机未能连接到微信开发者工具自动化端口 `9420`
+    - 因此本轮未完成首页截图、点击 `记录体重`、点击 `+250ml` 的运行态验证
+- Next step:
+  - 在微信开发者工具中打开 `food_link` 项目并开启自动化端口 `9420`
+  - 复测三点：
+    - 首页是否在日期条下方直接显示“今日身体状态”双卡
+    - 点击体重卡是否能拉起弹层并保存今日体重
+    - 点击喝水卡 `+250 / +500` 后累计值和进度条是否即时变化
+
+- Task: 评估体重记录与喝水记录如何融入当前产品信息架构
+- Status: in_progress（用户已明确否决放进“健康档案/健康板块”的方向，要求优先做成打开就能直接看到的入口）
+- Scope:
+  - 当前 tab 结构为 `首页 / 分析 / 记录 / 圈子 / 我的`
+  - `record` 页当前已收口为新增饮食记录入口，不适合再承担体重/喝水主入口
+  - `health-profile` 当前更偏静态档案，不适合承载高频每日记录
+- Next step:
+  - 基于“首页直出、用户立即可见”的要求，收敛一版更适合当前首页的信息架构方案
+  - 判断体重与喝水是做成首页顶部独立卡片、今日摘要条，还是作为首页核心数据区并列模块
+
+- Task: 多视角辅助模式收口为严格方案
+- Status: done（未开启多视角时前端只允许单图，正式后端接口也会拒绝未开启多视角时的多图提交，并明确提醒“如果要拍多视角，请先开启多视角模式”）
+- Scope:
+  - `src/pages/analyze/index.tsx`
+    - 未开启多视角时，已改为只允许上传 `1` 张图片
+    - 若用户在单图模式下继续添加图片，或已选多图后尝试关闭多视角，会弹明确提示
+    - 页面文案已补充“未开启多视角时仅支持 1 张，开启后最多 3 张”
+  - `backend/main.py`
+    - 正式接口 `/api/analyze/submit` 已补上 `image_urls > 1 && !is_multi_view` 的 `400` 拒绝
+  - `backend/worker.py`
+    - 继续保留 `is_multi_view=true` 时的 prompt 提示，让多张图明确按“同一份食物不同角度”处理
+- Verification:
+  - `npm run build:weapp` 通过
+  - `python -m py_compile backend/main.py` 通过
+  - 已尝试 DevTools 自动化验证：`mrc where --port 9420`、`mrc errors 20 --port 9420`
+  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成截图和点击验证
+- Next step:
+  - 用户在分析页手动验证两条链路：
+    - 未开启多视角时，上传第 2 张图片会被拦截并提示开启多视角
+    - 开启多视角后，最多可上传 3 张，并按同一食物多角度处理
+
 - Task: 首页三大营养素超额时数字与百分比徽标重叠
 - Status: done（布局改为两行：第一行仅克数+g，第二行「当前/目标」+ 百分比徽标；略缩小主数字与徽标字号；≥100% 时徽标额外缩小）
 - Scope:

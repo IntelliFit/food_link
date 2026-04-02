@@ -11,6 +11,8 @@ export default defineAppConfig({
     'pages/result-text/index',
     'pages/ai-assistant/index',
     'pages/profile/index',
+    'pages/expiry/index',
+    'pages/expiry-edit/index',
     'pages/pro-membership/index',
     'pages/recipes/index',
     'pages/recipe-edit/index',

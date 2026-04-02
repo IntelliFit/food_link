@@ -42,17 +42,33 @@ function formatTimeLabel(timeStr: string): string {
   }
 }
 
+function getNotificationType(item: FeedInteractionNotification): string {
+  return String((item as { notification_type?: unknown }).notification_type || '').trim().toLowerCase()
+}
+
 function buildNotificationTitle(item: FeedInteractionNotification): string {
-  if (item.notification_type === 'like_received') {
+  const notificationType = getNotificationType(item)
+  if (notificationType === 'like_received') {
     return `${item.actor.nickname || '有人'}赞了你的动态`
   }
-  if (item.notification_type === 'comment_received') {
+  if (notificationType === 'comment_received') {
     return `${item.actor.nickname || '有人'}评论了你的动态`
   }
-  if (item.notification_type === 'reply_received') {
+  if (notificationType === 'reply_received') {
     return `${item.actor.nickname || '有人'}回复了你的评论`
   }
-  return '你的评论未通过审核'
+  if (notificationType === 'comment_rejected') {
+    return '你的评论未通过审核'
+  }
+  return '你收到一条互动消息'
+}
+
+function buildNotificationContent(item: FeedInteractionNotification): string {
+  const notificationType = getNotificationType(item)
+  if (notificationType === 'comment_rejected') {
+    return item.content_preview || '系统拦截了一条评论，点击查看详情'
+  }
+  return item.content_preview || '点击查看详情'
 }
 
 export default function InteractionNotificationsPage() {
@@ -152,7 +168,7 @@ export default function InteractionNotificationsPage() {
                   {!item.is_read ? <View className='notification-dot' /> : null}
                 </View>
                 <Text className='notification-content' numberOfLines={2}>
-                  {item.content_preview || '点击查看详情'}
+                  {buildNotificationContent(item)}
                 </Text>
                 <Text className='notification-time'>{formatTimeLabel(item.created_at)}</Text>
               </View>
