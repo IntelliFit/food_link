@@ -636,7 +636,7 @@ function IndexPage() {
     console.log('[DEBUG] 点击日期:', date)
     // 设置跳过标志，避免 useDidShow 覆盖本次加载的数据
     skipNextRefreshRef.current = true
-    // 直接切换到该日期的数据，不依赖 weekHeatmapCells
+    // 直接切换到该日期的数据
     console.log('[DEBUG] 调用 loadDashboard:', date)
     setSelectedDate(date)
     loadDashboard(date)
