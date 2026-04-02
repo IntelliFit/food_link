@@ -396,6 +396,9 @@ export interface MembershipStatus {
   current_period_start?: string | null
   expires_at?: string | null
   last_paid_at?: string | null
+  daily_limit: number | null
+  daily_used: number | null
+  daily_remaining: number | null
 }
 
 export interface MembershipPlansResponse {
@@ -1645,6 +1648,31 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
     throw new Error(error.message || '创建会员支付单失败')
   }
 }
+
+// ============================================================
+// TODO: [TEST] 以下测试函数在正式上线前必须删除
+// ============================================================
+/**
+ * [TEST ONLY] 切换测试账号会员状态（active ⇌ expired）
+ * TODO: [TEST] 正式上线前删除此函数。
+ */
+export async function toggleTestMembership(): Promise<{ ok: boolean; is_pro: boolean; status: string }> {
+  try {
+    const response = await authenticatedRequest('/api/dev/toggle-test-membership', {
+      method: 'POST'
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '切换失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { ok: boolean; is_pro: boolean; status: string }
+  } catch (error: any) {
+    console.error('切换测试会员状态失败:', error)
+    throw new Error(error.message || '切换失败')
+  }
+}
+// TODO: [TEST] 测试函数结束
+// ============================================================
 
 /**
  * 更新用户信息

@@ -24,7 +24,9 @@ import {
   getUserRecordDays,
   updateUserInfo,
   uploadUserAvatar,
-  imageToBase64
+  imageToBase64,
+  getMyMembership,
+  MembershipStatus
 } from '../../utils/api'
 
 import './index.scss'
@@ -36,8 +38,6 @@ interface UserInfo {
   meta: string
 }
 
-const PRO_MEMBERSHIP_TEST_OPENID = 'oe4xm19XWerfUsnkIsd_7XWu_Q4A'
-
 /** 注册时间格式化为 YYYY-MM-DD */
 function formatRegisterDate(value: string | undefined | null): string {
   if (!value) return '--'
@@ -47,6 +47,13 @@ function formatRegisterDate(value: string | undefined | null): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+function formatExpiry(value?: string | null): string {
+  if (!value) return '--'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '--'
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function ProfilePage() {
@@ -73,9 +80,11 @@ function ProfilePage() {
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
   const [registerDate, setRegisterDate] = useState('--')
-  const [canAccessProMembershipTest, setCanAccessProMembershipTest] = useState(false)
 
-  // 每次显示页面时检查登录状态并刷新数据
+  // 会员状态
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+
+  // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
     loadUserInfo()
   })
@@ -87,7 +96,17 @@ function ProfilePage() {
         setIsLoggedIn(true)
         // 从服务器获取最新用户信息
         try {
-          const apiUserInfo = await getUserProfile()
+          const [apiUserInfo, membershipData] = await Promise.all([
+            getUserProfile(),
+            getMyMembership().catch((err) => {
+              console.error('[profile] 获取会员状态失败:', err)
+              return null
+            })
+          ])
+          // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
+          if (membershipData !== null) {
+            setMembershipStatus(membershipData)
+          }
 
           // 获取记录天数
           let days = 0
@@ -109,7 +128,6 @@ function ProfilePage() {
             Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
           }
           setRegisterDate(formatRegisterDate(registerTime))
-          setCanAccessProMembershipTest(apiUserInfo.openid === PRO_MEMBERSHIP_TEST_OPENID)
           const completed = apiUserInfo.onboarding_completed ?? true
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
@@ -130,11 +148,11 @@ function ProfilePage() {
           if (storedUserInfo) {
             setUserInfo(storedUserInfo)
           }
-          setCanAccessProMembershipTest(Taro.getStorageSync('openid') === PRO_MEMBERSHIP_TEST_OPENID)
           setRegisterDate(formatRegisterDate(Taro.getStorageSync('userRegisterTime') || ''))
         }
       } else {
         setIsLoggedIn(false)
+        setMembershipStatus(null)
         setUserInfo({
           avatar: '',
           name: '用户昵称',
@@ -142,11 +160,9 @@ function ProfilePage() {
         })
         setRecordDays(0)
         setRegisterDate('--')
-        setCanAccessProMembershipTest(false)
       }
     } catch (error) {
       console.error('读取登录状态失败:', error)
-      setCanAccessProMembershipTest(false)
     }
   }
 
@@ -176,18 +192,15 @@ function ProfilePage() {
       icon: <LocationOutlined size='32' />,
       title: '附近美食',
       desc: '发现附近健康美食推荐'
-    }
-  ]
-
-  if (canAccessProMembershipTest) {
-    services.push({
+    },
+    {
       id: 6,
       icon: <ShieldOutlined size='32' />,
-      title: 'Pro会员',
-      desc: '测试 Pro 会员支付功能',
+      title: '食探会员',
+      desc: membershipStatus?.is_pro ? '会员已开通' : '每日20次 · 精准模式',
       path: '/pages/pro-membership/index'
-    })
-  }
+    }
+  ]
 
   // 设置项
   const settings = [
@@ -381,6 +394,7 @@ function ProfilePage() {
           try {
             clearAllStorage()
             setIsLoggedIn(false)
+            setMembershipStatus(null)
             setUserInfo({
               avatar: '',
               name: '用户昵称',
@@ -388,7 +402,6 @@ function ProfilePage() {
             })
             setRecordDays(0)
             setRegisterDate('--')
-            setCanAccessProMembershipTest(false)
             Taro.removeStorageSync('userRegisterTime')
             Taro.showToast({ title: '已退出登录', icon: 'success' })
           } catch (error) {
@@ -448,26 +461,54 @@ function ProfilePage() {
 
         {/* 第二行：会员卡片（仅登录后展示） */}
         {isLoggedIn && (
-          <View className='member-card'>
-            <View className='card-header'>
-              <View>
-                <Text className='card-validity'>注册时间 {registerDate}</Text>
-                <Text className='card-title'>食探会员</Text>
-              </View>
-            </View>
-
-            <View className='card-body'>
-              <View className='progress-info'>
-                <Text className='progress-text'>{recordDays}/365</Text>
-                <View className='progress-bar'>
-                  <View className='progress-inner' style={{ width: `${Math.min((recordDays / 365) * 100, 100)}%` }}></View>
+          <View
+            className={`member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
+            onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
+          >
+            {membershipStatus?.is_pro ? (
+              <>
+                <View className='card-header'>
+                  <View>
+                    <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
+                    <View className='card-title-row'>
+                      <Text className='card-title'>食探会员</Text>
+                      <Text className='card-pro-badge'>PRO</Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-              <Text className='card-tip'>您已在食探记录了 {recordDays} 天</Text>
-            </View>
-
+                <View className='card-body'>
+                  <View className='progress-info'>
+                    <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
+                    <View className='progress-bar'>
+                      <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus.daily_used ?? 0) / (membershipStatus.daily_limit ?? 20)) * 100, 100)}%` }}></View>
+                    </View>
+                  </View>
+                  <Text className='card-tip'>剩余 {membershipStatus.daily_remaining ?? (membershipStatus.daily_limit ?? 20)} 次 · 精准模式已解锁</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View className='card-header'>
+                  <View>
+                    <Text className='card-validity'>注册时间 {registerDate}</Text>
+                    <Text className='card-title'>食探会员</Text>
+                  </View>
+                  <View className='card-upgrade-btn'>
+                    <Text className='card-upgrade-text'>立即开通</Text>
+                  </View>
+                </View>
+                <View className='card-body'>
+                  <View className='progress-info'>
+                    <Text className='progress-text'>今日拍照 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 3} 次</Text>
+                    <View className='progress-bar'>
+                      <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 3)) * 100, 100)}%` }}></View>
+                    </View>
+                  </View>
+                  <Text className='card-tip'>开通会员每日享20次 · 解锁精准模式</Text>
+                </View>
+              </>
+            )}
             <View className='card-bg-icon'>
-              {/* 装饰背景图标 */}
               <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
             </View>
           </View>

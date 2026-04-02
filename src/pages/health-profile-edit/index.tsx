@@ -9,8 +9,10 @@ import {
   uploadReportImage,
   submitReportExtractionTask,
   imageToBase64,
+  getMyMembership,
   type HealthProfileUpdateRequest,
-  type ExecutionMode
+  type ExecutionMode,
+  type MembershipStatus,
 } from '../../utils/api'
 import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
 import { withAuth } from '../../utils/withAuth'
@@ -57,7 +59,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式（完善中）', desc: '该功能仍在完善中，暂时不可选。' },
+  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。需开通食探会员。' },
   { value: 'standard', title: '标准模式', desc: '记录更便捷，但估算误差会更大。' }
 ]
 
@@ -84,6 +86,7 @@ function HealthProfileEditPage() {
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([])
 
   const [healthNotes, setHealthNotes] = useState<string>('')
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
 
   const loadProfile = async () => {
     try {
@@ -104,9 +107,8 @@ function HealthProfileEditPage() {
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
       if (profile.execution_mode) {
-        const normalizedMode = normalizeAvailableExecutionMode(profile.execution_mode)
-        setExecutionMode(normalizedMode)
-        setOriginalExecutionMode(normalizedMode)
+        setExecutionMode(profile.execution_mode)
+        setOriginalExecutionMode(profile.execution_mode)
       }
       const hc = profile.health_condition
       if (hc?.medical_history?.length) {
@@ -140,6 +142,7 @@ function HealthProfileEditPage() {
 
   useEffect(() => {
     loadProfile()
+    getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
   }, [])
 
   const toggleMedical = (value: string) => {
@@ -440,8 +443,21 @@ function HealthProfileEditPage() {
                   className={`option-card ${executionMode === opt.value ? 'active' : ''}`}
                   onClick={() => {
                     if (opt.value === 'strict') {
-                      notifyStrictModeUnavailable()
-                      setExecutionMode('standard')
+                      if (membershipStatus?.is_pro) {
+                        setExecutionMode('strict')
+                        return
+                      }
+                      Taro.showModal({
+                        title: '解锁精准模式',
+                        content: '精准模式需要开通食探会员才能使用，是否前往开通？若取消则保持当前模式。',
+                        confirmText: '去开通',
+                        cancelText: '取消',
+                        success: (res) => {
+                          if (res.confirm) {
+                            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                          }
+                        }
+                      })
                       return
                     }
                     setExecutionMode(opt.value)
