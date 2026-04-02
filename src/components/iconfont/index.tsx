@@ -129,3 +129,13 @@ export const IconChevronRight = ({ size = 48, color = '#000000', className = '' 
     />
   )
 }
+
+/** 水滴图标 */
+export const IconWaterDrop = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-yiliaohangyedeICON- ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
