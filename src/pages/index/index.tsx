@@ -739,8 +739,8 @@ function IndexPage() {
       {/* 背景渐变层 */}
       <View className='gradient-bg' />
       
-      {/* 页面内容 - 只保留状态栏高度，因为导航栏是透明的 */}
-      <View className='page-content' style={{ paddingTop: `${getStatusBarHeightSafe()}px` }}>
+      {/* 页面内容 - 减少顶部留白 */}
+      <View className='page-content' style={{ paddingTop: '10rpx' }}>
         {/* 问候区 */}
         <View className='greeting-section'>
           <View className='greeting-text'>
