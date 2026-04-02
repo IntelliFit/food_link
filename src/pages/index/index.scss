@@ -109,7 +109,7 @@ $text-tertiary: #9ca3af;
   justify-content: space-between;
   width: 88rpx;
   height: 120rpx;
-  border-radius: 20rpx;
+  border-radius: 44rpx;  // 半圆角，两端为半圆
   background: #f1f5f9;
   padding: 12rpx 0 16rpx;
   overflow: hidden;
@@ -126,7 +126,7 @@ $text-tertiary: #9ca3af;
     left: 0;
     right: 0;
     background: linear-gradient(180deg, rgba(0, 188, 125, 0.6) 0%, rgba(0, 188, 125, 0.9) 100%);
-    border-radius: 0 0 20rpx 20rpx;
+    border-radius: 0 0 44rpx 44rpx;  // 与卡片圆角一致
     transition: height 0.3s ease;
     z-index: 0;
   }
@@ -155,17 +155,18 @@ $text-tertiary: #9ca3af;
     box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
   }
   
-  // 选中状态
+  // 选中状态 - 仅外框变绿色，背景不变
   &.is-selected {
-    background: $primary-color;
+    background: #f1f5f9;  // 保持原背景色
+    border: 3rpx solid $primary-color;  // 绿色外框
     box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.3);
     
     .date-progress-bg {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.4) 100%);
+      background: linear-gradient(180deg, rgba(0, 188, 125, 0.7) 0%, rgba(0, 188, 125, 1) 100%);
     }
     
     .date-day-name {
-      color: #ffffff;
+      color: $primary-color;  // 星期几文字变绿色
       font-weight: 600;
     }
     
@@ -175,7 +176,7 @@ $text-tertiary: #9ca3af;
     }
     
     .date-num-text {
-      color: $primary-color;
+      color: $text-primary;  // 日期数字保持原色
     }
   }
   
