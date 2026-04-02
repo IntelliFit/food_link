@@ -464,7 +464,7 @@ function FoodLibraryPage() {
         refresherDefaultStyle='black'
       >
         <View className="list-content">
-          <Divider className="refresh-divider">下拉刷新</Divider>
+          <Divider className="refresh-divider" />
           {tabMode === 'all' && showSkeleton ? (
             // 骨架屏
             <View className="skeleton-container">

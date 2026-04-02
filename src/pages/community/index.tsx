@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Image, Input, Textarea, Button } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
@@ -1074,6 +1074,7 @@ function CommunityPage() {
     if (commentContent.trim()) {
       try { Taro.setStorageSync(draftKey(expandedCommentRecordId), commentContent) } catch (_) {}
     }
+    setCommentInputFocus(false)
     setExpandedCommentRecordId(null)
     setReplyTargetComment(null)
   }
@@ -1093,6 +1094,7 @@ function CommunityPage() {
     }
     let draft = ''
     try { draft = Taro.getStorageSync(draftKey(recordId)) || '' } catch (_) {}
+    setCommentInputFocus(false)
     setCommentContent(draft)
     setExpandedCommentRecordId(recordId)
     setReplyTargetComment(replyComment || null)
@@ -1259,8 +1261,7 @@ function CommunityPage() {
     if (!expandedCommentRecordId || !commentContent.trim()) return
     setCommentSubmitting(true)
     try {
-      // 调用新接口，获取临时评论数据
-      const { task_id, temp_comment } = await communityPostComment(
+      const { comment } = await communityPostComment(
         expandedCommentRecordId,
         commentContent.trim(),
         {
@@ -1269,18 +1270,17 @@ function CommunityPage() {
         }
       )
       const localUserDisplay = getLocalUserDisplay()
-      const displayTempComment = {
-        ...temp_comment,
-        reply_to_nickname: replyTargetComment?.nickname || temp_comment.reply_to_nickname || '',
-        nickname: temp_comment.nickname || localUserDisplay.nickname,
-        avatar: temp_comment.avatar || localUserDisplay.avatar
+      const displayComment = {
+        ...comment,
+        reply_to_nickname: replyTargetComment?.nickname || comment.reply_to_nickname || '',
+        nickname: comment.nickname || localUserDisplay.nickname,
+        avatar: comment.avatar || localUserDisplay.avatar
       }
 
-      // 立即将临时评论添加到当前记录的评论列表（乐观更新）
       const newList = feedList.map(item => {
         if (item.record.id !== expandedCommentRecordId) return item
         const currentComments = item.comments || []
-        const nextComments = [...currentComments, displayTempComment]
+        const nextComments = [...currentComments, displayComment]
         return {
           ...item,
           comments: nextComments.slice(-Math.max(5, nextComments.length)),
@@ -1289,23 +1289,13 @@ function CommunityPage() {
       })
       setFeedList(newList)
 
-      // 将临时评论缓存到本地存储
-      const tempCommentsKey = `temp_comments_${expandedCommentRecordId}`
-      try {
-        const existingTemp = Taro.getStorageSync(tempCommentsKey) || []
-        existingTemp.push({ task_id, comment: displayTempComment, timestamp: Date.now() })
-        Taro.setStorageSync(tempCommentsKey, existingTemp)
-      } catch (e) {
-        console.error('缓存临时评论失败:', e)
-      }
-
       saveToCache(newList)
 
       try { Taro.removeStorageSync(draftKey(expandedCommentRecordId)) } catch (_) {}
       setCommentContent('')
       setExpandedCommentRecordId(null)
       setReplyTargetComment(null)
-      Taro.showToast({ title: '评论已提交审核', icon: 'success' })
+      Taro.showToast({ title: '评论成功', icon: 'success' })
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
     } finally {
@@ -1358,77 +1348,41 @@ function CommunityPage() {
           lowerThreshold={100}
         >
           <View className='community-scroll-content'>
-            <Divider className="refresh-divider">下拉刷新</Divider>
+            <Divider className="refresh-divider" />
             <View className='page-header'>
               <Text className='page-title'>健康圈子</Text>
               <Text className='page-subtitle'>与好友一起分享健康饮食</Text>
             </View>
 
             {/* 好友区域（仅登录后显示） */}
-            {loggedIn && (
-              <View className='friends-section'>
-                <View className='section-header'>
-                  <Text className='section-title'>好友</Text>
-                  <View className='header-actions'>
-                    {requests.length > 0 && (
-                      <View className='requests-badge' onClick={() => setShowRequests(true)}>
-                        <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
+                {loggedIn && (
+                  <View className='friends-section'>
+                    <View className='section-header'>
+                      <Text className='section-title'>好友</Text>
+                      <View className='header-actions'>
+                        {requests.length > 0 && (
+                          <View className='requests-badge' onClick={() => setShowRequests(true)}>
+                            <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
+                          </View>
+                        )}
+                        <View className='view-all-btn notification-entry' onClick={handleOpenNotifications}>
+                          <Text className='view-all-text'>
+                            互动消息{unreadNotificationCount > 0 ? ` (${unreadNotificationCount})` : ''}
+                          </Text>
+                          <Text className='arrow'>{'>'}</Text>
+                        </View>
+                        <View className='view-all-btn' onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}>
+                          <Text className='view-all-text'>好友管理</Text>
+                          <Text className='arrow'>{'>'}</Text>
+                        </View>
+                        <View className='view-all-btn' onClick={() => setShowAddFriend(true)}>
+                          <Text className='view-all-text'>添加好友</Text>
+                          <Text className='arrow'>{'>'}</Text>
+                        </View>
                       </View>
-                    )}
-                    <View className='view-all-btn notification-entry' onClick={handleOpenNotifications}>
-                      <Text className='view-all-text'>
-                        互动消息{unreadNotificationCount > 0 ? ` (${unreadNotificationCount})` : ''}
-                      </Text>
-                      <Text className='arrow'>{'>'}</Text>
-                    </View>
-                    <View className='view-all-btn' onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}>
-                      <Text className='view-all-text'>好友管理</Text>
-                      <Text className='arrow'>{'>'}</Text>
-                    </View>
-                    <View className='view-all-btn' onClick={() => setShowAddFriend(true)}>
-                      <Text className='view-all-text'>添加好友</Text>
-                      <Text className='arrow'>{'>'}</Text>
                     </View>
                   </View>
-                </View>
-                {loadingFriends ? (
-                  <Text className='loading-text'>加载中...</Text>
-                ) : friends.length === 0 ? (
-                  <Text className='empty-text'>
-                    暂无应用内好友（与微信通讯录无关）。点击「添加好友」按昵称或手机号添加后，会显示在这里。
-                  </Text>
-                ) : (
-                  <ScrollView
-                    className='friends-list'
-                    scrollX
-                    enhanced
-                    showScrollbar={false}
-                  >
-                    <View className='friends-list-inner'>
-                      {friends.map((f) => (
-                        <View
-                          key={f.id}
-                          className={`friend-item ${priorityAuthorIds.includes(f.id) ? 'is-priority' : ''}`}
-                          onClick={() => togglePriorityAuthor(f.id)}
-                        >
-                          <View className='friend-avatar'>
-                            {f.avatar ? (
-                              <Image src={f.avatar} mode='aspectFill' className='friend-avatar-img' />
-                            ) : (
-                              <Text className='friend-avatar-placeholder'>👤</Text>
-                            )}
-                            {priorityAuthorIds.includes(f.id) ? (
-                              <Text className='friend-priority-badge'>关</Text>
-                            ) : null}
-                          </View>
-                          <Text className='friend-name' numberOfLines={1}>{f.nickname || '用户'}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </ScrollView>
                 )}
-              </View>
-            )}
 
             {/* 未登录提示条 */}
             {!loggedIn && (
@@ -1604,9 +1558,6 @@ function CommunityPage() {
                     </View>
                   </ScrollView>
                 </View>
-                {loggedIn ? (
-                  <Text className='feed-filter-tip'>点上方好友头像可设为特别关注，推荐会优先展示他们。</Text>
-                ) : null}
               </View>
               {showSkeleton ? (
                 <View className='skeleton-container'>
@@ -1826,30 +1777,35 @@ function CommunityPage() {
         className={`comment-bottom-mask ${expandedCommentRecordId ? 'visible' : ''}`}
         onClick={closeCommentModal}
       />
-      <View className={`comment-bottom-bar ${expandedCommentRecordId ? 'visible' : ''}`}>
+      <View
+        className={`comment-bottom-bar ${expandedCommentRecordId ? 'visible' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {replyTargetComment ? (
           <View className='comment-reply-tip'>
             <Text className='comment-reply-tip-text'>正在回复 {replyTargetComment.nickname || '用户'}</Text>
             <Text className='comment-reply-tip-close' onClick={() => setReplyTargetComment(null)}>取消</Text>
           </View>
         ) : null}
-        <Textarea
-          className='comment-bottom-input'
-          placeholder={replyTargetComment ? `回复 ${replyTargetComment.nickname || '用户'}...` : '说点什么...'}
-          placeholderClass='comment-bottom-placeholder'
-          value={commentContent}
-          onInput={(e) => setCommentContent(e.detail.value)}
-          confirmType='send'
-          onConfirm={submitComment}
-          focus={commentInputFocus}
-          autoHeight
-          maxlength={500}
-        />
-        <View
-          className={`comment-bottom-send ${(!commentContent.trim() || commentSubmitting) ? 'disabled' : ''}`}
-          onClick={submitComment}
-        >
-          <Text>{commentSubmitting ? '...' : '发送'}</Text>
+        <View className='comment-bottom-main'>
+          <Input
+            className='comment-bottom-input'
+            placeholder={replyTargetComment ? `回复 ${replyTargetComment.nickname || '用户'}...` : '说点什么...'}
+            placeholderClass='comment-bottom-placeholder'
+            value={commentContent}
+            onInput={(e) => setCommentContent(e.detail.value)}
+            confirmType='send'
+            onConfirm={submitComment}
+            focus={commentInputFocus}
+            maxlength={500}
+            cursorSpacing={24}
+          />
+          <View
+            className={`comment-bottom-send ${(!commentContent.trim() || commentSubmitting) ? 'disabled' : ''}`}
+            onClick={submitComment}
+          >
+            <Text>{commentSubmitting ? '...' : '发送'}</Text>
+          </View>
         </View>
       </View>
 

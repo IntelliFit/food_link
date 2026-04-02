@@ -88,54 +88,12 @@ function FoodLibraryDetailPage() {
   const loadComments = async () => {
     try {
       const res = await getPublicFoodLibraryComments(itemId)
-      const serverComments = res.list || []
-
-      // 合并本地临时评论（审核中）到列表顶部：最多保留 5 分钟，避免用户返回页面后“评论消失”
-      const tempCommentsKey = `temp_library_comments_${itemId}`
-      const now = Date.now()
-      let cachedTemp: Array<{ task_id: string; comment: PublicFoodLibraryComment; timestamp: number }> = []
       try {
-        const raw = Taro.getStorageSync(tempCommentsKey)
-        cachedTemp = Array.isArray(raw) ? raw : []
+        Taro.removeStorageSync(`temp_library_comments_${itemId}`)
       } catch (e) {
-        console.error('读取临时评论缓存失败:', e)
+        console.error('清理旧临时评论缓存失败:', e)
       }
-
-      const MAX_TEMP_AGE_MS = 5 * 60 * 1000
-      const DEDUPE_WINDOW_MS = 10 * 60 * 1000
-
-      const validTemp = cachedTemp
-        .filter((t) => t && typeof t.timestamp === 'number' && now - t.timestamp <= MAX_TEMP_AGE_MS)
-        .map((t) => ({
-          ...t,
-          comment: { ...t.comment, _is_temp: true }
-        }))
-
-      const remainingTemp = validTemp.filter((t) => {
-        const tTime = new Date(t.comment.created_at).getTime()
-        return !serverComments.some((sc) => {
-          const scTime = new Date(sc.created_at).getTime()
-          return (
-            sc.user_id === t.comment.user_id &&
-            sc.content === t.comment.content &&
-            (sc.rating ?? null) === (t.comment.rating ?? null) &&
-            (Number.isNaN(tTime) || Number.isNaN(scTime) ? false : Math.abs(scTime - tTime) <= DEDUPE_WINDOW_MS)
-          )
-        })
-      })
-
-      // 回写缓存（仅保留仍在窗口期内的临时评论）
-      try {
-        if (remainingTemp.length) {
-          Taro.setStorageSync(tempCommentsKey, remainingTemp)
-        } else {
-          Taro.removeStorageSync(tempCommentsKey)
-        }
-      } catch (e) {
-        console.error('更新临时评论缓存失败:', e)
-      }
-
-      setComments([...remainingTemp.map((t) => t.comment), ...serverComments])
+      setComments(res.list || [])
     } catch (e) {
       console.error('加载评论失败:', e)
     }
@@ -181,33 +139,21 @@ function FoodLibraryDetailPage() {
     }
     setSubmitting(true)
     try {
-      // 调用新接口，获取临时评论数据
-      const { task_id, temp_comment } = await postPublicFoodLibraryComment(
+      const { comment } = await postPublicFoodLibraryComment(
         itemId, 
         commentContent, 
         commentRating > 0 ? commentRating : undefined
       )
       const localUserDisplay = getLocalUserDisplay()
-      const displayTempComment = {
-        ...temp_comment,
-        nickname: temp_comment.nickname || localUserDisplay.nickname,
-        avatar: temp_comment.avatar || localUserDisplay.avatar
+      const displayComment = {
+        ...comment,
+        nickname: comment.nickname || localUserDisplay.nickname,
+        avatar: comment.avatar || localUserDisplay.avatar
       }
-      
-      // 立即将临时评论添加到评论列表开头（乐观更新）
-      setComments(prev => [displayTempComment, ...prev])
-      
-      // 将临时评论缓存到本地存储
-      const tempCommentsKey = `temp_library_comments_${itemId}`
-      try {
-        const existingTemp = Taro.getStorageSync(tempCommentsKey) || []
-        existingTemp.push({ task_id, comment: displayTempComment, timestamp: Date.now() })
-        Taro.setStorageSync(tempCommentsKey, existingTemp)
-      } catch (e) {
-        console.error('缓存临时评论失败:', e)
-      }
-      
-      Taro.showToast({ title: '评论已提交审核', icon: 'success' })
+
+      setComments(prev => [displayComment, ...prev])
+
+      Taro.showToast({ title: '评论成功', icon: 'success' })
       setShowCommentModal(false)
       setCommentContent('')
       setCommentRating(0)

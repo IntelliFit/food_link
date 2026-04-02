@@ -856,3 +856,140 @@
 .footer-placeholder {
   height: 120rpx;
 }
+
+.body-metrics-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.body-metric-panel {
+  padding: 24rpx;
+  border-radius: 28rpx;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 247, 251, 0.92) 100%),
+    linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(16, 185, 129, 0.04) 100%);
+  border: 1rpx solid rgba(148, 163, 184, 0.12);
+}
+
+.water-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(239, 246, 255, 0.92) 100%),
+    linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(14, 165, 233, 0.04) 100%);
+}
+
+.body-metric-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.body-metric-title {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.body-metric-main {
+  font-size: 34rpx;
+  line-height: 44rpx;
+  color: #111827;
+  font-weight: 800;
+}
+
+.body-metric-empty {
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #94a3b8;
+}
+
+.body-metric-sub {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #64748b;
+}
+
+.weight-chip-row {
+  margin-top: 18rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.weight-chip {
+  min-width: 92rpx;
+  padding: 12rpx 14rpx;
+  border-radius: 20rpx;
+  background: rgba(241, 245, 249, 0.95);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.weight-chip-date {
+  font-size: 18rpx;
+  color: #94a3b8;
+  line-height: 24rpx;
+}
+
+.weight-chip-value {
+  font-size: 22rpx;
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 30rpx;
+}
+
+.water-trend-chart {
+  margin-top: 20rpx;
+  min-height: 180rpx;
+  display: flex;
+  align-items: flex-end;
+  gap: 12rpx;
+}
+
+.water-trend-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.water-trend-bar-wrap {
+  width: 100%;
+  height: 150rpx;
+  padding: 10rpx;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 24rpx;
+  background: rgba(226, 232, 240, 0.5);
+}
+
+.water-trend-bar {
+  width: 100%;
+  border-radius: 999rpx;
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  box-shadow: 0 8rpx 20rpx rgba(37, 99, 235, 0.16);
+}
+
+.water-trend-label {
+  font-size: 18rpx;
+  line-height: 24rpx;
+  color: #94a3b8;
+}
+
+.water-metric-footer {
+  margin-top: 12rpx;
+}
+
+.water-metric-note {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
+}

@@ -1,0 +1,130 @@
+.expiry-edit-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #e7faf3 0%, #f4f7f6 24%, #f6f8fa 100%);
+}
+
+.expiry-edit-scroll {
+  height: 100vh;
+}
+
+.expiry-edit-panel {
+  padding: 32rpx;
+}
+
+.expiry-edit-title {
+  display: block;
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #16332a;
+}
+
+.expiry-edit-desc {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #61756d;
+  line-height: 1.6;
+}
+
+.expiry-edit-block {
+  margin-top: 28rpx;
+  padding: 28rpx;
+  background: rgba(255, 255, 255, 0.94);
+  border-radius: 28rpx;
+  box-shadow: 0 10rpx 30rpx rgba(31, 41, 55, 0.06);
+}
+
+.expiry-edit-label {
+  display: block;
+  font-size: 28rpx;
+  color: #16332a;
+  font-weight: 600;
+  margin-bottom: 18rpx;
+}
+
+.expiry-input,
+.expiry-picker,
+.expiry-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #f4f8f6;
+  border-radius: 20rpx;
+  font-size: 28rpx;
+  color: #16332a;
+}
+
+.expiry-input,
+.expiry-picker {
+  min-height: 92rpx;
+  padding: 0 24rpx;
+  line-height: 92rpx;
+}
+
+.expiry-picker {
+  display: block;
+}
+
+.expiry-textarea {
+  padding: 24rpx;
+  min-height: 180rpx;
+  line-height: 1.6;
+}
+
+.expiry-preset-list,
+.expiry-choice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.expiry-preset-chip,
+.expiry-choice-chip {
+  padding: 16rpx 24rpx;
+  border-radius: 999rpx;
+  background: #f4f8f6;
+  color: #314740;
+  font-size: 26rpx;
+}
+
+.expiry-choice-chip.is-active {
+  background: #00bc7d;
+  color: #fff;
+}
+
+.expiry-custom-category-wrap {
+  margin-top: 18rpx;
+}
+
+.expiry-inline-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18rpx;
+}
+
+.expiry-clear-text {
+  font-size: 24rpx;
+  color: #00a36b;
+}
+
+.expiry-loading,
+.expiry-submit-btn {
+  margin-top: 32rpx;
+  margin-bottom: 40rpx;
+  padding: 28rpx 0;
+  border-radius: 999rpx;
+  text-align: center;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.expiry-loading {
+  background: rgba(255, 255, 255, 0.9);
+  color: #61756d;
+}
+
+.expiry-submit-btn {
+  background: #00bc7d;
+  color: #fff;
+  box-shadow: 0 12rpx 28rpx rgba(0, 188, 125, 0.22);
+}

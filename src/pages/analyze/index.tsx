@@ -174,16 +174,29 @@ function AnalyzePage() {
     return value === 'strict' ? 'strict' : 'standard'
   }
 
+  const showMultiViewRequiredModal = () => {
+    Taro.showModal({
+      title: '请先开启多视角模式',
+      content: '未开启多视角模式时仅支持上传 1 张图片。若要拍同一份食物的多个视角，请先开启多视角模式。',
+      showCancel: false,
+      confirmText: '我知道了'
+    })
+  }
+
   const handleMultiViewChange = (value: any) => {
-    if (typeof value === 'boolean') {
-      setIsMultiView(value)
+    const nextValue =
+      typeof value === 'boolean'
+        ? value
+        : value && typeof value === 'object' && typeof value.detail?.value === 'boolean'
+          ? value.detail.value
+          : Boolean(value)
+
+    if (!nextValue && imagePaths.length > 1) {
+      showMultiViewRequiredModal()
       return
     }
-    if (value && typeof value === 'object' && typeof value.detail?.value === 'boolean') {
-      setIsMultiView(value.detail.value)
-      return
-    }
-    setIsMultiView(Boolean(value))
+
+    setIsMultiView(nextValue)
   }
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）
@@ -244,12 +257,17 @@ function AnalyzePage() {
   }, [])
 
   const handleChooseImage = async () => {
+    if (!isMultiView && imagePaths.length >= 1) {
+      showMultiViewRequiredModal()
+      return
+    }
+
     const remain = 3 - imagePaths.length
     if (remain <= 0) return
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
       const res = await Taro.chooseImage({
-        count: remain,
+        count: isMultiView ? remain : 1,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
       })
@@ -308,6 +326,10 @@ function AnalyzePage() {
     }
     if (imagePaths.length === 0) {
       Taro.showToast({ title: '请先选择图片', icon: 'none' })
+      return
+    }
+    if (!isMultiView && imagePaths.length > 1) {
+      showMultiViewRequiredModal()
       return
     }
 
@@ -493,7 +515,7 @@ function AnalyzePage() {
             <View className='placeholder-content'>
               <Text className='iconfont icon-xiangji' style={{ fontSize: '64rpx', color: '#9ca3af', marginBottom: '16rpx' }} />
               <Text className='placeholder-text'>点击拍摄/上传食物</Text>
-              <Text className='placeholder-sub'>支持多图 (最多3张)</Text>
+              <Text className='placeholder-sub'>未开启多视角时仅支持 1 张，开启后最多 3 张</Text>
             </View>
           </View>
         )}
@@ -502,7 +524,7 @@ function AnalyzePage() {
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>将多张图片视为同一食物的不同角度</Text>
+            <Text className='multiview-compact-hint'>开启后才可上传多张，并按同一食物的不同角度处理</Text>
           </View>
           <Switch
             className='compact-switch'

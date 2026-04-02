@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-04-01
+
+- 🐛 fix: 修复互动消息类型兜底误判，只有 `comment_rejected` 才显示“评论未通过审核”，未知类型改为中性提示，避免点赞等通知被误显示为审核失败 `src/pages/interaction-notifications/index.tsx`
+- 📝 docs: 新增基于真实 Supabase 实库的 schema 分析报告，按线上真实表、字段、行数和活跃度梳理核心链路、旧表与治理建议 `docs/数据库实库Schema分析报告.md`
+- 🐛 fix: 暂时移除评论审核主链路，圈子评论和公共食物库评论改为直接发布并立即展示，不再显示“已提交审核/审核中” `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx` `src/pages/food-library-detail/index.tsx`
+
 ## 2026-03-31
 
 - 🐛 fix: 二次纠错重构为“模型主导语义 + 显式字段锁定”，移除正则式语义理解主逻辑，新增 `nameEdited/weightEdited` 仅锁用户手改字段，避免旧清单继续压过模型结果 `src/pages/result/index.tsx` `src/utils/api.ts` `backend/worker.py`

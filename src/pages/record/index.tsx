@@ -11,11 +11,17 @@ import {
   getAccessToken,
   getPublicFoodLibraryList,
   getMyMembership,
+  saveFoodRecord,
+  browseManualFood,
   type FoodRecord,
   type PublicFoodLibraryItem,
   type MembershipStatus,
+  type ManualFoodSearchResult,
+  type ManualFoodBrowseResult,
+  type Nutrients,
 } from '../../utils/api'
 import { IconCamera, IconText, IconClock } from '../../components/iconfont'
+import { Input } from '@tarojs/components'
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
@@ -69,7 +75,8 @@ function RecordPage() {
 
   const recordMethods = [
     { id: 'photo', text: '拍照识别', iconClass: 'photo-icon' },
-    { id: 'text', text: '文字记录', iconClass: 'text-icon' }
+    { id: 'text', text: '文字记录', iconClass: 'text-icon' },
+    { id: 'manual', text: '手动记录', iconClass: 'manual-icon' }
   ]
 
   const formatDateKey = (date: Date) => {
@@ -178,6 +185,178 @@ function RecordPage() {
   const [textHistoryRecords, setTextHistoryRecords] = useState<FoodRecord[]>([])
   const [textLibraryItems, setTextLibraryItems] = useState<PublicFoodLibraryItem[]>([])
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+
+  // ---- 手动记录 state ----
+  const [manualSelectedItems, setManualSelectedItems] = useState<Array<{
+    id: string
+    source: 'public_library' | 'nutrition_library'
+    title: string
+    weight: number
+    defaultWeight: number
+    nutrients: { calories: number; protein: number; carbs: number; fat: number }
+    nutrientsPer100g?: { calories: number; protein: number; carbs: number; fat: number }
+  }>>([])
+  const [manualMealType, setManualMealType] = useState('breakfast')
+  const [manualDietGoal, setManualDietGoal] = useState<string>('none')
+  const [manualActivityTiming, setManualActivityTiming] = useState<string>('none')
+  const [manualSaving, setManualSaving] = useState(false)
+  // 食物库浏览
+  const [manualBrowseData, setManualBrowseData] = useState<ManualFoodBrowseResult | null>(null)
+  const [manualBrowseLoading, setManualBrowseLoading] = useState(false)
+  const [manualBrowseTab, setManualBrowseTab] = useState<'public_library' | 'nutrition_library'>('nutrition_library')
+  const [manualFilterText, setManualFilterText] = useState('')
+
+  const loadManualBrowseData = async () => {
+    if (manualBrowseData) return
+    setManualBrowseLoading(true)
+    try {
+      const data = await browseManualFood()
+      setManualBrowseData(data)
+    } catch (e: any) {
+      Taro.showToast({ title: '加载食物库失败', icon: 'none' })
+    } finally {
+      setManualBrowseLoading(false)
+    }
+  }
+
+  const filteredBrowseItems = useMemo(() => {
+    if (!manualBrowseData) return []
+    const items = manualBrowseTab === 'public_library'
+      ? manualBrowseData.public_library
+      : manualBrowseData.nutrition_library
+    const q = manualFilterText.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(item =>
+      item.title.toLowerCase().includes(q) || (item.subtitle || '').toLowerCase().includes(q)
+    )
+  }, [manualBrowseData, manualBrowseTab, manualFilterText])
+
+  const handleManualAddItem = (item: ManualFoodSearchResult) => {
+    if (manualSelectedItems.some(s => s.id === item.id && s.source === item.source)) {
+      Taro.showToast({ title: '已添加', icon: 'none' })
+      return
+    }
+    const weight = item.default_weight_grams || 100
+    let nutrients: { calories: number; protein: number; carbs: number; fat: number }
+    if (item.nutrients_per_100g) {
+      const scale = weight / 100
+      nutrients = {
+        calories: Math.round(item.nutrients_per_100g.calories * scale * 10) / 10,
+        protein: Math.round(item.nutrients_per_100g.protein * scale * 10) / 10,
+        carbs: Math.round(item.nutrients_per_100g.carbs * scale * 10) / 10,
+        fat: Math.round(item.nutrients_per_100g.fat * scale * 10) / 10,
+      }
+    } else {
+      nutrients = {
+        calories: item.total_calories,
+        protein: item.total_protein,
+        carbs: item.total_carbs,
+        fat: item.total_fat,
+      }
+    }
+    setManualSelectedItems(prev => [...prev, {
+      id: item.id,
+      source: item.source,
+      title: item.title,
+      weight,
+      defaultWeight: weight,
+      nutrients,
+      nutrientsPer100g: item.nutrients_per_100g || undefined,
+    }])
+    Taro.showToast({ title: '已添加', icon: 'success', duration: 800 })
+  }
+
+  const handleManualWeightChange = (index: number, newWeight: number) => {
+    setManualSelectedItems(prev => {
+      const updated = [...prev]
+      const item = { ...updated[index] }
+      item.weight = Math.max(1, newWeight)
+      if (item.nutrientsPer100g) {
+        const scale = item.weight / 100
+        item.nutrients = {
+          calories: Math.round(item.nutrientsPer100g.calories * scale * 10) / 10,
+          protein: Math.round(item.nutrientsPer100g.protein * scale * 10) / 10,
+          carbs: Math.round(item.nutrientsPer100g.carbs * scale * 10) / 10,
+          fat: Math.round(item.nutrientsPer100g.fat * scale * 10) / 10,
+        }
+      } else {
+        const ratio = item.defaultWeight > 0 ? item.weight / item.defaultWeight : 1
+        item.nutrients = {
+          calories: Math.round(item.nutrients.calories / (prev[index].weight / item.defaultWeight || 1) * ratio * 10) / 10,
+          protein: Math.round(item.nutrients.protein / (prev[index].weight / item.defaultWeight || 1) * ratio * 10) / 10,
+          carbs: Math.round(item.nutrients.carbs / (prev[index].weight / item.defaultWeight || 1) * ratio * 10) / 10,
+          fat: Math.round(item.nutrients.fat / (prev[index].weight / item.defaultWeight || 1) * ratio * 10) / 10,
+        }
+      }
+      updated[index] = item
+      return updated
+    })
+  }
+
+  const handleManualRemoveItem = (index: number) => {
+    setManualSelectedItems(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const manualTotalNutrients = useMemo(() => {
+    return manualSelectedItems.reduce(
+      (acc, item) => ({
+        calories: acc.calories + item.nutrients.calories,
+        protein: acc.protein + item.nutrients.protein,
+        carbs: acc.carbs + item.nutrients.carbs,
+        fat: acc.fat + item.nutrients.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    )
+  }, [manualSelectedItems])
+
+  const handleManualSave = async () => {
+    if (manualSelectedItems.length === 0) {
+      Taro.showToast({ title: '请先添加食物', icon: 'none' })
+      return
+    }
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    setManualSaving(true)
+    try {
+      const items = manualSelectedItems.map(item => ({
+        name: item.title,
+        weight: item.weight,
+        ratio: 100,
+        intake: item.weight,
+        nutrients: {
+          calories: item.nutrients.calories,
+          protein: item.nutrients.protein,
+          carbs: item.nutrients.carbs,
+          fat: item.nutrients.fat,
+          fiber: 0,
+          sugar: 0,
+        } as Nutrients,
+      }))
+      const totalWeight = manualSelectedItems.reduce((s, i) => s + i.weight, 0)
+      await saveFoodRecord({
+        meal_type: manualMealType as any,
+        diet_goal: manualDietGoal as any,
+        activity_timing: manualActivityTiming as any,
+        description: '手动记录：' + manualSelectedItems.map(i => i.title).join('、'),
+        insight: '手动记录，数据来自食物词典',
+        items,
+        total_calories: Math.round(manualTotalNutrients.calories * 10) / 10,
+        total_protein: Math.round(manualTotalNutrients.protein * 10) / 10,
+        total_carbs: Math.round(manualTotalNutrients.carbs * 10) / 10,
+        total_fat: Math.round(manualTotalNutrients.fat * 10) / 10,
+        total_weight_grams: totalWeight,
+      })
+      Taro.showToast({ title: '记录成功', icon: 'success' })
+      setManualSelectedItems([])
+      setManualFilterText('')
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+    } finally {
+      setManualSaving(false)
+    }
+  }
 
   const toSafeNutrients = (src?: { calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number; sugar?: number }) => ({
     calories: src?.calories ?? 0,
@@ -450,7 +629,7 @@ function RecordPage() {
   useDidShow(() => {
     const tab = Taro.getStorageSync('recordPageTab') as string | undefined
     const historyDate = Taro.getStorageSync(RECORD_HISTORY_DATE_KEY) as string | undefined
-    if (tab === 'photo' || tab === 'text' || tab === 'history') {
+    if (tab === 'photo' || tab === 'text' || tab === 'history' || tab === 'manual') {
       setActiveMethod(tab)
       Taro.removeStorageSync('recordPageTab') // 用完即删，避免重复触发
     } else if (tab) {
@@ -497,12 +676,14 @@ function RecordPage() {
   useEffect(() => {
     if (activeMethod === 'history') {
       loadHistory(selectedDate)
-      // 与首页一致：从首页仪表盘接口获取目标卡路里
       if (getAccessToken()) {
         getHomeDashboard()
           .then((res) => setTargetCalories(res.intakeData.target))
           .catch(() => { /* 失败保持默认 2000 */ })
       }
+    }
+    if (activeMethod === 'manual') {
+      loadManualBrowseData()
     }
   }, [activeMethod, selectedDate])
 
@@ -580,6 +761,7 @@ function RecordPage() {
             <View className={`method-icon ${method.iconClass}`}>
               {method.id === 'photo' && <IconCamera size={40} color={getMethodIconColor(method.id)} />}
               {method.id === 'text' && <IconText size={40} color={getMethodIconColor(method.id)} />}
+              {method.id === 'manual' && <Text style={{ fontSize: '36rpx', color: '#fff' }} className='iconfont icon-jishiben' />}
             </View>
             <Text className='method-text'>{method.text}</Text>
           </View>
@@ -842,6 +1024,215 @@ function RecordPage() {
               )
             )}
           </View>
+        </View>
+      )}
+
+      {/* 手动记录区域 */}
+      {activeMethod === 'manual' && (
+        <View className='manual-record-section'>
+          {/* 食物数据库浏览 */}
+          <View className='manual-browse-card'>
+            <View className='manual-browse-header'>
+              <Text className='manual-browse-title'>食物数据库</Text>
+              <Text className='manual-browse-count'>
+                {manualBrowseData
+                  ? `共 ${manualBrowseData.public_library.length + manualBrowseData.nutrition_library.length} 种食物`
+                  : ''}
+              </Text>
+            </View>
+
+            {/* Tab 切换 */}
+            <View className='manual-browse-tabs'>
+              <View
+                className={`manual-browse-tab ${manualBrowseTab === 'nutrition_library' ? 'active' : ''}`}
+                onClick={() => setManualBrowseTab('nutrition_library')}
+              >
+                <Text className='manual-browse-tab-text'>
+                  营养词典{manualBrowseData ? ` (${manualBrowseData.nutrition_library.length})` : ''}
+                </Text>
+              </View>
+              <View
+                className={`manual-browse-tab ${manualBrowseTab === 'public_library' ? 'active' : ''}`}
+                onClick={() => setManualBrowseTab('public_library')}
+              >
+                <Text className='manual-browse-tab-text'>
+                  公共食物库{manualBrowseData ? ` (${manualBrowseData.public_library.length})` : ''}
+                </Text>
+              </View>
+            </View>
+
+            {/* 前端过滤输入 */}
+            <View className='manual-filter-bar'>
+              <Input
+                className='manual-filter-input'
+                placeholder='输入关键词筛选...'
+                value={manualFilterText}
+                onInput={(e) => setManualFilterText(e.detail.value)}
+              />
+              {manualFilterText && (
+                <View className='manual-filter-clear' onClick={() => setManualFilterText('')}>
+                  <Text className='manual-filter-clear-text'>清除</Text>
+                </View>
+              )}
+            </View>
+
+            {/* 食物列表 */}
+            {manualBrowseLoading ? (
+              <View className='manual-browse-loading'>
+                <Text className='manual-browse-loading-text'>加载中...</Text>
+              </View>
+            ) : (
+              <ScrollView className='manual-browse-list' scrollY>
+                {filteredBrowseItems.length > 0 ? (
+                  filteredBrowseItems.map((item) => (
+                    <View
+                      key={`${item.source}-${item.id}`}
+                      className='manual-result-item'
+                      onClick={() => handleManualAddItem(item)}
+                    >
+                      <View className='manual-result-info'>
+                        <View className='manual-result-title-row'>
+                          <Text className='manual-result-name'>{item.title}</Text>
+                        </View>
+                        <Text className='manual-result-sub'>
+                          {Math.round(item.total_calories)} kcal
+                          {item.source === 'nutrition_library' ? ' / 100g' : ''}
+                          {item.subtitle && item.source === 'public_library' ? ` · ${item.subtitle}` : ''}
+                        </Text>
+                      </View>
+                      <View className='manual-add-btn'>
+                        <Text className='manual-add-btn-text'>+</Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View className='manual-empty-results'>
+                    <Text className='manual-empty-text'>
+                      {manualFilterText ? '没有匹配的食物' : '暂无数据'}
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* 已选食物 */}
+          {manualSelectedItems.length > 0 && (
+            <View className='manual-selected-card'>
+              <Text className='manual-selected-title'>已选食物（{manualSelectedItems.length}）</Text>
+              {manualSelectedItems.map((item, index) => (
+                <View key={`${item.source}-${item.id}`} className='manual-selected-item'>
+                  <View className='manual-selected-info'>
+                    <Text className='manual-selected-name'>{item.title}</Text>
+                    <Text className='manual-selected-cal'>{Math.round(item.nutrients.calories)} kcal</Text>
+                  </View>
+                  <View className='manual-weight-row'>
+                    <Text className='manual-weight-label'>重量(g)</Text>
+                    <Input
+                      className='manual-weight-input'
+                      type='number'
+                      value={String(item.weight)}
+                      onBlur={(e) => {
+                        const val = parseInt(e.detail.value, 10)
+                        if (Number.isFinite(val) && val > 0) {
+                          handleManualWeightChange(index, val)
+                        }
+                      }}
+                    />
+                    <View className='manual-remove-btn' onClick={() => handleManualRemoveItem(index)}>
+                      <Text className='manual-remove-text'>移除</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+              {/* 营养总计 */}
+              <View className='manual-total-row'>
+                <View className='manual-total-item'>
+                  <Text className='manual-total-label'>热量</Text>
+                  <Text className='manual-total-value'>{Math.round(manualTotalNutrients.calories)} kcal</Text>
+                </View>
+                <View className='manual-total-item'>
+                  <Text className='manual-total-label'>蛋白质</Text>
+                  <Text className='manual-total-value'>{Math.round(manualTotalNutrients.protein)}g</Text>
+                </View>
+                <View className='manual-total-item'>
+                  <Text className='manual-total-label'>碳水</Text>
+                  <Text className='manual-total-value'>{Math.round(manualTotalNutrients.carbs)}g</Text>
+                </View>
+                <View className='manual-total-item'>
+                  <Text className='manual-total-label'>脂肪</Text>
+                  <Text className='manual-total-value'>{Math.round(manualTotalNutrients.fat)}g</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* 配置选项：餐次 + 目标 + 时机 */}
+          <View className='config-card-premium'>
+            <View className='config-item'>
+              <Text className='config-label'>餐次</Text>
+              <View className='meal-selector-row'>
+                {meals.map((meal) => (
+                  <View
+                    key={meal.id}
+                    className={`meal-option ${manualMealType === meal.id ? 'active' : ''}`}
+                    onClick={() => setManualMealType(meal.id)}
+                  >
+                    <Text className={`iconfont ${meal.icon} meal-icon`}></Text>
+                    <Text className='meal-name'>{meal.name}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View className='config-divider'></View>
+
+            <View className='config-vertical-stack'>
+              <View className='config-item'>
+                <Text className='config-label'>目标</Text>
+                <View className='options-row'>
+                  {DIET_GOAL_OPTIONS.map(opt => (
+                    <View
+                      key={opt.value}
+                      className={`mini-chip ${manualDietGoal === opt.value ? 'active' : ''}`}
+                      onClick={() => setManualDietGoal(opt.value)}
+                    >
+                      {opt.label}
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              <View className='config-divider'></View>
+
+              <View className='config-item'>
+                <Text className='config-label'>时机</Text>
+                <View className='options-row'>
+                  {ACTIVITY_TIMING_OPTIONS.map(opt => (
+                    <View
+                      key={opt.value}
+                      className={`mini-chip ${manualActivityTiming === opt.value ? 'active' : ''}`}
+                      onClick={() => setManualActivityTiming(opt.value)}
+                    >
+                      {opt.label}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* 保存按钮 */}
+          <View className='manual-action-floating'>
+            <View
+              className={`manual-save-btn ${manualSelectedItems.length === 0 ? 'disabled' : ''} ${manualSaving ? 'loading' : ''}`}
+              onClick={handleManualSave}
+            >
+              {manualSaving ? '保存中...' : `保存记录（${Math.round(manualTotalNutrients.calories)} kcal）`}
+            </View>
+          </View>
+          <View style={{ height: '140rpx' }}></View>
         </View>
       )}
 

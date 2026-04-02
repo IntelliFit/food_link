@@ -1,16 +1,21 @@
-import { View, Text, Image, Button } from '@tarojs/components'
+import { View, Text, Image, Button, Input } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
+import { Cell } from '@taroify/core'
+import '@taroify/core/cell/style'
 import {
   TodoListOutlined,
   NotesOutlined,
   ChartTrendingOutlined,
   LocationOutlined,
+  SettingOutlined,
   Bell,
   ShieldOutlined,
+  ClockOutlined,
+  CommentOutlined,
   InfoOutlined,
   CalendarOutlined,
-  Arrow
+  EnvelopOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -18,12 +23,16 @@ import {
   getAccessToken,
   clearAllStorage,
   getUserRecordDays,
+  updateUserInfo,
+  uploadUserAvatar,
+  imageToBase64,
   getMyMembership,
-  MembershipStatus
+  getFoodExpiryDashboard,
+  MembershipStatus,
+  FoodExpiryDashboard,
 } from '../../utils/api'
 
 import './index.scss'
-import { withAuth } from '../../utils/withAuth'
 
 interface UserInfo {
   avatar: string
@@ -49,11 +58,25 @@ function formatExpiry(value?: string | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function ProfilePage() {
+function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
+  if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
+  if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
+  if (dashboard.expired_count > 0) return `当前有 ${dashboard.expired_count} 样已过期，建议先处理。`
+  if (dashboard.today_count > 0) return `今天有 ${dashboard.today_count} 样需要优先吃掉。`
+  if (dashboard.soon_count > 0) return `接下来有 ${dashboard.soon_count} 样即将到期。`
+  return `当前共有 ${dashboard.active_count} 样食物在保鲜中。`
+}
+
+export default function ProfilePage() {
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // （个人设置已迁移到独立页面 /pages/profile-settings/index）
+  // 是否显示设置弹窗
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+
+  // 临时头像和昵称（用于填写表单）
+  const [tempAvatar, setTempAvatar] = useState('')
+  const [tempNickname, setTempNickname] = useState('')
 
   // 用户信息
   const [userInfo, setUserInfo] = useState<UserInfo>({
@@ -71,6 +94,7 @@ function ProfilePage() {
 
   // 会员状态
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [expiryDashboard, setExpiryDashboard] = useState<FoodExpiryDashboard | null>(null)
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -84,16 +108,23 @@ function ProfilePage() {
         setIsLoggedIn(true)
         // 从服务器获取最新用户信息
         try {
-          const [apiUserInfo, membershipData] = await Promise.all([
+          const [apiUserInfo, membershipData, dashboardData] = await Promise.all([
             getUserProfile(),
             getMyMembership().catch((err) => {
               console.error('[profile] 获取会员状态失败:', err)
               return null
-            })
+            }),
+            getFoodExpiryDashboard().catch((err) => {
+              console.error('[profile] 获取保质期摘要失败:', err)
+              return null
+            }),
           ])
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
             setMembershipStatus(membershipData)
+          }
+          if (dashboardData !== null) {
+            setExpiryDashboard(dashboardData as FoodExpiryDashboard)
           }
 
           // 获取记录天数
@@ -141,6 +172,7 @@ function ProfilePage() {
       } else {
         setIsLoggedIn(false)
         setMembershipStatus(null)
+        setExpiryDashboard(null)
         setUserInfo({
           avatar: '',
           name: '用户昵称',
@@ -158,32 +190,40 @@ function ProfilePage() {
   const services = [
     {
       id: 0,
-      icon: <TodoListOutlined size='20' />,
+      icon: <TodoListOutlined size='32' />,
       title: '健康档案',
       desc: '生理指标、BMR/TDEE、病史与饮食偏好'
     },
     {
       id: 1,
-      icon: <NotesOutlined size='20' />,
+      icon: <NotesOutlined size='32' />,
       title: '收藏餐食',
       desc: '常吃的食物组合，一键记录',
       path: '/pages/recipes/index'
     },
     {
+      id: 2,
+      icon: <ClockOutlined size='32' />,
+      title: '食物管理',
+      desc: formatExpiryPreviewText(expiryDashboard),
+      path: '/pages/expiry/index',
+      badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
+    },
+    {
       id: 3,
-      icon: <ChartTrendingOutlined size='20' />,
+      icon: <ChartTrendingOutlined size='32' />,
       title: '饮食记录',
       desc: '日历图查看每天吃多吃少'
     },
     {
       id: 5,
-      icon: <LocationOutlined size='20' />,
+      icon: <LocationOutlined size='32' />,
       title: '附近美食',
       desc: '发现附近健康美食推荐'
     },
     {
       id: 6,
-      icon: <ShieldOutlined size='20' />,
+      icon: <ShieldOutlined size='32' />,
       title: '食探会员',
       desc: membershipStatus?.is_pro ? '会员已开通' : '每日20次 · 精准模式',
       path: '/pages/pro-membership/index'
@@ -192,9 +232,12 @@ function ProfilePage() {
 
   // 设置项
   const settings = [
+    { id: 1, icon: <SettingOutlined size='20' />, title: '个人设置' }, // 将 “设置” 改为 “个人设置” 更直观
     { id: 2, icon: <Bell size='20' />, title: '好友管理' },
     { id: 3, icon: <ShieldOutlined size='20' />, title: '隐私设置' },
-    { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' }
+    { id: 4, icon: <CommentOutlined size='20' />, title: '意见反馈' },
+    { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' },
+    { id: 6, icon: <EnvelopOutlined size='20' />, title: '联系邮箱', text: 'jianwen_ma@stu.pku.edu.cn' }
   ]
 
   const handleServiceClick = (service: typeof services[0]) => {
@@ -250,6 +293,17 @@ function ProfilePage() {
   }
 
   const handleSettingClick = (setting: any) => {
+    // 复制邮箱
+    if (setting.id === 6) {
+      Taro.setClipboardData({
+        data: setting.text,
+        success: () => {
+          Taro.showToast({ title: '已复制邮箱', icon: 'success' })
+        }
+      })
+      return
+    }
+
     // 关于我们
     if (setting.id === 5) {
       Taro.navigateTo({ url: '/pages/about/index' })
@@ -260,7 +314,12 @@ function ProfilePage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    // 好友管理
+    // 设置：打开个人设置弹窗
+    if (setting.id === 1) {
+      handleSettings()
+      return
+    }
+    // 隐私设置
     if (setting.id === 2) {
       Taro.navigateTo({ url: '/pages/friends/index' })
       return
@@ -282,7 +341,70 @@ function ProfilePage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    Taro.navigateTo({ url: '/pages/profile-settings/index' })
+    setShowSettingsModal(true)
+    // 初始化设置弹窗的临时数据
+    setTempAvatar(userInfo.avatar)
+    setTempNickname(userInfo.name)
+  }
+
+  // 处理头像选择
+  const handleChooseAvatar = async (e: any) => {
+    const { avatarUrl } = e.detail
+
+    const needUpload = avatarUrl && !avatarUrl.startsWith('https://')
+
+    if (needUpload) {
+      Taro.showLoading({ title: '上传中...' })
+      try {
+        const base64 = await imageToBase64(avatarUrl)
+        const { imageUrl } = await uploadUserAvatar(base64)
+        setTempAvatar(imageUrl)
+        Taro.hideLoading()
+      } catch (err: any) {
+        Taro.hideLoading()
+        Taro.showToast({ title: '上传失败', icon: 'none' })
+      }
+    } else {
+      setTempAvatar(avatarUrl)
+    }
+  }
+
+  const handleNicknameInput = (e: any) => {
+    setTempNickname(e.detail.value)
+  }
+
+  const handleNicknameBlur = (e: any) => {
+    setTempNickname(e.detail.value)
+  }
+
+  // 保存完善的信息
+  const handleSaveProfile = async () => {
+    if (!tempAvatar || !tempNickname) {
+      Taro.showToast({ title: '请完善头像和昵称', icon: 'none' })
+      return
+    }
+
+    Taro.showLoading({ title: '保存中...' })
+    try {
+      await updateUserInfo({
+        nickname: tempNickname,
+        avatar: tempAvatar
+      })
+
+      // 更新本地状态
+      const newUserInfo = { ...userInfo, avatar: tempAvatar, name: tempNickname }
+      setUserInfo(newUserInfo)
+      Taro.setStorageSync('userInfo', newUserInfo)
+
+      Taro.hideLoading()
+      Taro.showToast({ title: '保存成功', icon: 'success' })
+
+      setShowSettingsModal(false)
+
+    } catch (err: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: err.message || '保存失败', icon: 'none' })
+    }
   }
 
   // 处理去登录
@@ -301,6 +423,7 @@ function ProfilePage() {
             clearAllStorage()
             setIsLoggedIn(false)
             setMembershipStatus(null)
+            setExpiryDashboard(null)
             setUserInfo({
               avatar: '',
               name: '用户昵称',
@@ -318,167 +441,231 @@ function ProfilePage() {
     })
   }
 
-  const getServiceColor = (id: number) => {
-    const colors: Record<number, string> = {
-      0: '#10b981', // 健康档案 - 绿
-      1: '#f59e0b', // 收藏餐食 - 橙
-      3: '#3b82f6', // 饮食记录 - 蓝
-      5: '#ef4444', // 附近美食 - 红
-      6: '#f59e0b'  // 食探会员 - 金
-    }
-    return colors[id] || '#6b7280'
-  }
-
-  const getSettingColor = (id: number) => {
-    const colors: Record<number, string> = {
-      2: '#3b82f6', // 好友管理 - 蓝
-      3: '#10b981', // 隐私设置 - 绿
-      5: '#8b5cf6'  // 关于我们 - 紫
-    }
-    return colors[id] || '#6b7280'
-  }
-
   return (
     <View className='profile-page'>
-      {/* 顶部用户信息卡片（微信风格） */}
-      <View className='profile-card user-card' onClick={isLoggedIn ? handleSettings : handleGoLogin}>
-        <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
-          {!isLoggedIn ? (
-            <Text className='iconfont icon-weidenglu user-avatar-icon' />
-          ) : userInfo.avatar && userInfo.avatar.startsWith('http') ? (
-            <Image src={userInfo.avatar} mode='aspectFit' className='user-avatar-image' />
-          ) : (
-            <Text className='iconfont icon-weidenglu user-avatar-icon' />
-          )}
-        </View>
-        <View className='user-info-main'>
-          {isLoggedIn ? (
-            <>
-              <Text className='user-name'>{userInfo.name}</Text>
-              <Text className='user-subtitle'>{userInfo.meta} · {Taro.getStorageSync('phoneNumber') || '188******46'}</Text>
-            </>
-          ) : (
-            <Text className='user-name'>点击登录</Text>
-          )}
-        </View>
-        <Arrow size={20} color='#c8c9cc' className='user-arrow' />
-      </View>
-
-      {/* 会员卡片（仅登录后展示） */}
-      {isLoggedIn && (
-        <View
-          className={`profile-card member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
-          onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
-        >
-          {membershipStatus?.is_pro ? (
-            <>
-              <View className='card-header'>
-                <View>
-                  <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
-                  <View className='card-title-row'>
-                    <Text className='card-title'>食探会员</Text>
-                    <Text className='card-pro-badge'>PRO</Text>
+      {/* 顶部区域：用户信息 + 会员卡片 */}
+      <View className='header-section'>
+        {/* 第一行：用户信息 + 会员码 */}
+        <View className='user-header-row'>
+          <View className='user-basic-info'>
+            {/* 点击头像/昵称区域也可以打开设置（如果已登录） */}
+            <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`} onClick={isLoggedIn ? handleSettings : handleGoLogin}>
+              {!isLoggedIn ? (
+                <Text className='iconfont icon-weidenglu user-avatar-icon' />
+              ) : userInfo.avatar && userInfo.avatar.startsWith('http') ? (
+                <Image
+                  src={userInfo.avatar}
+                  mode='aspectFit'
+                  className='user-avatar-image'
+                />
+              ) : (
+                <Text className='iconfont icon-weidenglu user-avatar-icon' />
+              )}
+            </View>
+            <View className='user-text-info'>
+              {isLoggedIn ? (
+                <View onClick={handleSettings}>
+                  <View className='user-name-row'>
+                    <Text className='user-name'>{userInfo.name}</Text>
+                  </View>
+                  <Text className='user-phone'>{Taro.getStorageSync('phoneNumber') || '188******46'}</Text>
+                  <View className='user-meta-row'>
+                    <CalendarOutlined size='14' className='meta-icon' />
+                    <Text className='user-meta-text'>{userInfo.meta}</Text>
                   </View>
                 </View>
-              </View>
-              <View className='card-body'>
-                <View className='progress-info'>
-                  <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
-                  <View className='progress-bar'>
-                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus.daily_used ?? 0) / (membershipStatus.daily_limit ?? 20)) * 100, 100)}%` }} />
-                  </View>
-                </View>
-                <Text className='card-tip'>剩余 {membershipStatus.daily_remaining ?? (membershipStatus.daily_limit ?? 20)} 次 · 精准模式已解锁</Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View className='card-header'>
-                <View>
-                  <Text className='card-validity'>注册时间 {registerDate}</Text>
-                  <Text className='card-title'>食探会员</Text>
-                </View>
-                <View className='card-upgrade-btn'>
-                  <Text className='card-upgrade-text'>立即开通</Text>
-                </View>
-              </View>
-              <View className='card-body'>
-                <View className='progress-info'>
-                  <Text className='progress-text'>今日拍照 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 3} 次</Text>
-                  <View className='progress-bar'>
-                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 3)) * 100, 100)}%` }} />
-                  </View>
-                </View>
-                <Text className='card-tip'>开通会员每日享20次 · 解锁精准模式</Text>
-              </View>
-            </>
-          )}
-          <View className='card-bg-icon'>
-            <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
+              ) : (
+                <Button
+                  className='login-link-button'
+                  onClick={handleGoLogin}
+                  plain
+                  hoverClass='none'
+                >
+                  点击登录
+                </Button>
+              )}
+            </View>
           </View>
         </View>
-      )}
 
-      {/* 引导横幅 */}
+        {/* 第二行：会员卡片（仅登录后展示） */}
+        {isLoggedIn && (
+          <View
+            className={`member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
+            onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
+          >
+            {membershipStatus?.is_pro ? (
+              <>
+                <View className='card-header'>
+                  <View>
+                    <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
+                    <View className='card-title-row'>
+                      <Text className='card-title'>食探会员</Text>
+                      <Text className='card-pro-badge'>PRO</Text>
+                    </View>
+                  </View>
+                </View>
+                <View className='card-body'>
+                  <View className='progress-info'>
+                    <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
+                    <View className='progress-bar'>
+                      <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus.daily_used ?? 0) / (membershipStatus.daily_limit ?? 20)) * 100, 100)}%` }}></View>
+                    </View>
+                  </View>
+                  <Text className='card-tip'>剩余 {membershipStatus.daily_remaining ?? (membershipStatus.daily_limit ?? 20)} 次 · 精准模式已解锁</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View className='card-header'>
+                  <View>
+                    <Text className='card-validity'>注册时间 {registerDate}</Text>
+                    <Text className='card-title'>食探会员</Text>
+                  </View>
+                  <View className='card-upgrade-btn'>
+                    <Text className='card-upgrade-text'>立即开通</Text>
+                  </View>
+                </View>
+                <View className='card-body'>
+                  <View className='progress-info'>
+                    <Text className='progress-text'>今日拍照 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 3} 次</Text>
+                    <View className='progress-bar'>
+                      <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 3)) * 100, 100)}%` }}></View>
+                    </View>
+                  </View>
+                  <Text className='card-tip'>开通会员每日享20次 · 解锁精准模式</Text>
+                </View>
+              </>
+            )}
+            <View className='card-bg-icon'>
+              <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
+            </View>
+          </View>
+        )}
+
+        {/* 服务网格 (原 services 列表) */}
+        <View className='services-grid'>
+          {services.map((service) => (
+            <View
+              key={service.id}
+              className='grid-item'
+              onClick={() => handleServiceClick(service)}
+            >
+              <View className='grid-icon'>
+                {service.icon}
+                {(service as { badgeCount?: number }).badgeCount ? (
+                  <View className='grid-badge'>
+                    <Text className='grid-badge-text'>
+                      {(service as { badgeCount?: number }).badgeCount! > 99
+                        ? '99+'
+                        : String((service as { badgeCount?: number }).badgeCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text className='grid-text'>{service.title}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
       {isLoggedIn && !onboardingCompleted && (
         <View
-          className='profile-card onboarding-card'
+          className='onboarding-banner'
           onClick={() => Taro.navigateTo({ url: '/pages/health-profile/index' })}
+          style={{ margin: '32rpx' }}
         >
-          <Text className='onboarding-text'>📋 完善健康档案，获取个性化饮食建议</Text>
-          <Text className='onboarding-arrow'>{'>'}</Text>
+          <Text className='onboarding-banner-text'>📋 完善健康档案，获取个性化饮食建议</Text>
+          <Text className='onboarding-banner-arrow'>{'>'}</Text>
         </View>
       )}
 
-      {/* 服务分组（微信列表风格） */}
-      <View className='profile-card list-card'>
-        {services.map((service) => (
-          <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
-            <View className='list-icon' style={{ color: getServiceColor(service.id) }}>
-              {service.icon}
-            </View>
-            <Text className='list-title'>{service.title}</Text>
-            <View className='list-arrow'>
-              <Arrow size={16} color='#c8c9cc' />
-            </View>
-          </View>
-        ))}
+      {/* 设置 */}
+      <View className='settings-section'>
+        <Cell.Group>
+          {settings.map((setting) => (
+            <Cell
+              key={setting.id}
+              title={setting.title}
+              icon={setting.icon}
+              isLink={!(setting as any).text}
+              onClick={() => handleSettingClick(setting)}
+            >
+              {(setting as any).text ? <Text style={{ fontSize: '28rpx', color: '#64748b' }}>{(setting as any).text}</Text> : null}
+            </Cell>
+          ))}
+        </Cell.Group>
       </View>
 
-      {/* 设置分组（微信列表风格） */}
-      <View className='profile-card list-card'>
-        {settings.map((setting) => (
-          <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
-            <View className='list-icon' style={{ color: getSettingColor(setting.id) }}>
-              {setting.icon}
-            </View>
-            <Text className='list-title'>{setting.title}</Text>
-            {(setting as any).text && <Text className='list-extra'>{(setting as any).text}</Text>}
-            <View className='list-arrow'>
-              <Arrow size={16} color='#c8c9cc' />
-            </View>
+      {/* 登录/退出登录按钮 */}
+      {
+        isLoggedIn ? (
+          <View className='logout-btn' onClick={handleLogout}>
+            <Text className='logout-text'>退出登录</Text>
           </View>
-        ))}
-      </View>
-
-      {/* 登录/退出登录 */}
-      {isLoggedIn ? (
-        <View className='profile-card logout-card' onClick={handleLogout}>
-          <Text className='logout-text'>退出登录</Text>
-        </View>
-      ) : (
-        <View className='profile-card login-card' onClick={handleGoLogin}>
-          <Text className='login-text'>登录</Text>
-        </View>
-      )}
-
+        ) : (
+          <Button
+            className='login-btn'
+            onClick={handleGoLogin}
+            plain
+            hoverClass='none'
+          >
+            <Text className='login-text'>登录</Text>
+          </Button>
+        )
+      }
       <View className='profile-version'>
         <Text>版本号 v2.0.7</Text>
       </View>
 
+      {/* 个人设置弹窗 */}
+      {showSettingsModal && (
+        <View className='profile-form-modal'>
+          <View className='profile-form-content'>
+            <View className='profile-form-header'>
+              <Text className='profile-form-title'>个人设置</Text>
+              <Text className='profile-form-close' onClick={() => setShowSettingsModal(false)}>✕</Text>
+            </View>
+            <View className='profile-form-body'>
+              <View className='avatar-choose-section'>
+                <Text className='form-label'>更换头像</Text>
+                <Button
+                  className='avatar-choose-btn'
+                  openType='chooseAvatar'
+                  onChooseAvatar={handleChooseAvatar}
+                >
+                  <View className='avatar-choose-wrapper'>
+                    {tempAvatar ? (
+                      <Image src={tempAvatar} className='avatar-preview' mode='aspectFill' />
+                    ) : (
+                      <View className='avatar-placeholder'>
+                        <Text className='avatar-placeholder-text'>点击选择</Text>
+                      </View>
+                    )}
+                  </View>
+                </Button>
+              </View>
 
+              <View className='nickname-input-section'>
+                <Text className='form-label'>修改昵称</Text>
+                <Input
+                  className='nickname-input'
+                  type='nickname'
+                  placeholder='请输入昵称'
+                  value={tempNickname}
+                  onBlur={handleNicknameBlur}
+                  onInput={handleNicknameInput}
+                />
+              </View>
+            </View>
+
+            <View className='profile-form-footer'>
+              <Button className='form-btn skip-btn' onClick={() => setShowSettingsModal(false)}>取消</Button>
+              <Button className='form-btn save-btn' onClick={handleSaveProfile}>保存</Button>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }
-
-export default withAuth(ProfilePage)

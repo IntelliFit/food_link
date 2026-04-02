@@ -647,3 +647,350 @@
   color: #94a3b8;
   font-size: 26rpx;
 }
+
+// 手动记录 icon
+.manual-icon {
+  background: linear-gradient(to right, #f59e0b 0%, #f97316 100%);
+}
+
+// ---------- 手动记录区域 ----------
+.manual-record-section {
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+// 食物数据库浏览卡片
+.manual-browse-card {
+  @extend %premium-card;
+}
+
+.manual-browse-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.manual-browse-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1e2939;
+}
+
+.manual-browse-count {
+  font-size: 24rpx;
+  color: #94a3b8;
+}
+
+// Tab 切换
+.manual-browse-tabs {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 16rpx;
+  padding: 4rpx;
+  margin-bottom: 16rpx;
+}
+
+.manual-browse-tab {
+  flex: 1;
+  height: 68rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12rpx;
+  transition: all 0.2s ease;
+
+  &.active {
+    background: #ffffff;
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  }
+}
+
+.manual-browse-tab-text {
+  font-size: 26rpx;
+  color: #64748b;
+  font-weight: 500;
+
+  .manual-browse-tab.active & {
+    color: #1e2939;
+    font-weight: 600;
+  }
+}
+
+// 前端过滤栏
+.manual-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.manual-filter-input {
+  flex: 1;
+  height: 72rpx;
+  background: #f8fafc;
+  border: 2rpx solid #e2e8f0;
+  border-radius: 36rpx;
+  padding: 0 28rpx;
+  font-size: 26rpx;
+  color: #1e2939;
+
+  &:focus {
+    border-color: #f59e0b;
+  }
+}
+
+.manual-filter-clear {
+  padding: 12rpx 20rpx;
+  flex-shrink: 0;
+}
+
+.manual-filter-clear-text {
+  font-size: 26rpx;
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+// 加载态
+.manual-browse-loading {
+  padding: 80rpx 0;
+  text-align: center;
+}
+
+.manual-browse-loading-text {
+  font-size: 26rpx;
+  color: #94a3b8;
+}
+
+// 食物列表
+.manual-browse-list {
+  max-height: 640rpx;
+}
+
+.manual-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 8rpx;
+  border-bottom: 1rpx solid #f1f5f9;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:active {
+    background: #f8fafc;
+  }
+}
+
+.manual-result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.manual-result-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 6rpx;
+}
+
+.manual-result-name {
+  font-size: 28rpx;
+  color: #1e2939;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-result-sub {
+  font-size: 24rpx;
+  color: #6a7282;
+}
+
+.manual-add-btn {
+  width: 56rpx;
+  height: 56rpx;
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.manual-add-btn-text {
+  font-size: 36rpx;
+  color: #ffffff;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.manual-empty-results {
+  padding: 40rpx 0;
+  text-align: center;
+}
+
+.manual-empty-text {
+  font-size: 26rpx;
+  color: #94a3b8;
+}
+
+// 已选食物
+.manual-selected-card {
+  @extend %premium-card;
+}
+
+.manual-selected-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1e2939;
+  margin-bottom: 16rpx;
+}
+
+.manual-selected-item {
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+
+  &:last-of-type {
+    border-bottom: none;
+  }
+}
+
+.manual-selected-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.manual-selected-name {
+  font-size: 28rpx;
+  color: #1e2939;
+  font-weight: 500;
+}
+
+.manual-selected-cal {
+  font-size: 26rpx;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.manual-weight-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.manual-weight-label {
+  font-size: 24rpx;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.manual-weight-input {
+  width: 140rpx;
+  height: 60rpx;
+  background: #f8fafc;
+  border: 2rpx solid #e2e8f0;
+  border-radius: 12rpx;
+  text-align: center;
+  font-size: 28rpx;
+  color: #1e2939;
+
+  &:focus {
+    border-color: #f59e0b;
+  }
+}
+
+.manual-remove-btn {
+  margin-left: auto;
+  padding: 8rpx 20rpx;
+  border-radius: 8rpx;
+  background: #fef2f2;
+
+  &:active {
+    background: #fee2e2;
+  }
+}
+
+.manual-remove-text {
+  font-size: 24rpx;
+  color: #ef4444;
+}
+
+// 营养总计
+.manual-total-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+}
+
+.manual-total-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.manual-total-label {
+  font-size: 22rpx;
+  color: #94a3b8;
+}
+
+.manual-total-value {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #1e2939;
+}
+
+// 底部保存按钮
+.manual-action-floating {
+  position: fixed;
+  bottom: calc(100rpx + env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  padding: 12rpx 32rpx 12rpx;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  z-index: 100;
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+}
+
+.manual-save-btn {
+  width: 100%;
+  height: 96rpx;
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  border-radius: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #ffffff;
+  box-shadow: 0 8rpx 24rpx rgba(245, 158, 11, 0.3);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.98);
+    box-shadow: 0 4rpx 12rpx rgba(245, 158, 11, 0.2);
+  }
+
+  &.disabled {
+    opacity: 0.5;
+    background: #cbd5e1;
+    box-shadow: none;
+  }
+
+  &.loading {
+    opacity: 0.8;
+  }
+}

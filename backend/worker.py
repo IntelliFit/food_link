@@ -49,6 +49,7 @@ from database import (
     update_public_food_library_status_sync,
 )
 from metabolic import get_age_from_birthday
+from image_compressor import compress_task_images
 
 ACTIVITY_LEVEL_LABELS = {
     "sedentary": "久坐",
@@ -1185,6 +1186,15 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return result
 
 
+def _get_task_image_urls(task: Dict[str, Any]) -> List[str]:
+    """Extract all image URLs from a task."""
+    paths = task.get("image_paths")
+    if paths and isinstance(paths, list) and len(paths) > 0:
+        return paths
+    url = task.get("image_url")
+    return [url] if url else []
+
+
 def process_one_food_task(task: Dict[str, Any]) -> None:
     """处理单条食物分析任务：直接执行分析并写回 done/failed。"""
     task_id = task["id"]
@@ -1192,6 +1202,11 @@ def process_one_food_task(task: Dict[str, Any]) -> None:
         print(f"[food_analysis] MODERATION_SKIPPED task_id={task_id} type=image", flush=True)
         result = run_food_analysis_sync(task)
         update_analysis_task_result_sync(task_id, status="done", result=result)
+
+        try:
+            compress_task_images(_get_task_image_urls(task))
+        except Exception:
+            pass
     except Exception as e:
         err_msg = str(e) or type(e).__name__
         update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)

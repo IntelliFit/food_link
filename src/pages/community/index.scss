@@ -254,7 +254,7 @@
 
 // 好友区域
 .friends-section {
-  padding: 32rpx;
+  padding: 24rpx 32rpx;
   margin: 0 24rpx 16rpx;
   background: #fff;
   border-radius: 24rpx;
@@ -374,7 +374,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24rpx;
 }
 
 .section-title {
@@ -482,9 +481,9 @@
 // 本周打卡排行榜
 .ranking-banner {
   background: linear-gradient(135deg, #ffb900 0%, #ff8c00 50%, #ff6900 100%);
-  border-radius: 28rpx;
-  padding: 36rpx 32rpx;
-  margin: 24rpx 32rpx;
+  border-radius: 24rpx;
+  padding: 24rpx 32rpx;
+  margin: 0 24rpx 24rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -499,14 +498,14 @@
 .ranking-content {
   display: flex;
   align-items: flex-start;
-  gap: 20rpx;
+  gap: 16rpx;
   flex: 1;
   min-width: 0;
 }
 
 .ranking-icon-wrap {
-  width: 80rpx;
-  height: 80rpx;
+  width: 64rpx;
+  height: 64rpx;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   display: flex;
@@ -517,7 +516,7 @@
 }
 
 .ranking-icon-emoji {
-  font-size: 40rpx;
+  font-size: 32rpx;
   line-height: 1;
 }
 
@@ -526,13 +525,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14rpx;
+  gap: 8rpx;
 }
 
 .ranking-text {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 4rpx;
 }
 
 // 横幅内：前三名缩略预览
@@ -554,11 +553,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6rpx;
+  gap: 4rpx;
 }
 
 .ranking-preview-rank {
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: 800;
   color: #fef9c3;
   line-height: 1;
@@ -577,8 +576,8 @@
 }
 
 .ranking-preview-avatar-wrap {
-  width: 64rpx;
-  height: 64rpx;
+  width: 48rpx;
+  height: 48rpx;
   border-radius: 50%;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.22);
@@ -594,12 +593,12 @@
 }
 
 .ranking-preview-avatar-fallback {
-  font-size: 28rpx;
+  font-size: 24rpx;
   line-height: 1;
 }
 
 .ranking-preview-name {
-  font-size: 20rpx;
+  font-size: 18rpx;
   color: #ffffff;
   max-width: 100%;
   text-align: center;
@@ -607,7 +606,7 @@
 }
 
 .ranking-preview-count {
-  font-size: 20rpx;
+  font-size: 18rpx;
   color: #fef3c6;
   font-weight: 600;
   line-height: 1.2;
@@ -615,7 +614,7 @@
 
 .ranking-preview-cta {
   display: block;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: rgba(255, 255, 255, 0.95);
   margin-top: 4rpx;
   text-align: center;
@@ -625,10 +624,10 @@
 
 .ranking-preview-placeholder {
   display: block;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: rgba(255, 255, 255, 0.85);
   text-align: center;
-  padding: 12rpx 0 4rpx;
+  padding: 8rpx 0 0;
 }
 
 .ranking-preview-skeleton {
@@ -637,7 +636,7 @@
   align-items: center;
   justify-content: center;
   gap: 32rpx;
-  padding: 16rpx 0 8rpx;
+  padding: 8rpx 0 0;
 }
 
 .ranking-preview-sk-dot {
@@ -670,10 +669,10 @@
 }
 
 .ranking-title {
-  font-size: 32rpx;
+  font-size: 30rpx;
   font-weight: 600;
   color: #ffffff;
-  line-height: 48rpx;
+  line-height: 40rpx;
 }
 
 .ranking-subtitle {
@@ -1718,9 +1717,9 @@
   left: 0;
   right: 0;
   top: 0;
-  bottom: 0;
+  bottom: calc(100rpx + env(safe-area-inset-bottom));
   background: rgba(0, 0, 0, 0.15);
-  z-index: 998;
+  z-index: 1000;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -1736,34 +1735,45 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
-  z-index: 999;
+  bottom: calc(100rpx + env(safe-area-inset-bottom));
+  z-index: 1001;
+  width: 100%;
+  box-sizing: border-box;
+  opacity: 0;
+  pointer-events: none;
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 16rpx;
   padding: 20rpx 24rpx;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  // margin-bottom: 3rpx;
   background: #fff;
   border-top: 1rpx solid #e5e7eb;
   box-shadow: 0 -4rpx 24rpx rgba(0, 0, 0, 0.08);
-  transform: translateY(100%);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(120%);
+  transition: transform 0.22s ease, opacity 0.18s ease;
 
   &.visible {
+    opacity: 1;
+    pointer-events: auto;
     transform: translateY(0);
   }
 }
 
+.comment-bottom-main {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
 .comment-bottom-input {
   flex: 1;
-  min-height: 72rpx;
-  max-height: 240rpx;
-  padding: 18rpx 28rpx;
+  width: 0;
+  height: 76rpx;
+  min-height: 76rpx;
+  padding: 0 28rpx;
   background: #f1f5f9;
-  border-radius: 32rpx;
+  border-radius: 38rpx;
   font-size: 28rpx;
-  line-height: 1.5;
+  line-height: 76rpx;
   color: #1e293b;
   caret-color: #1e293b;
   border: 1rpx solid #e2e8f0;
@@ -1790,6 +1800,7 @@
 }
 
 .comment-reply-tip-close {
+  flex-shrink: 0;
   font-size: 24rpx;
   color: #16a34a;
 }
