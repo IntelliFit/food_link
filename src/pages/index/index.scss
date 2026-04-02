@@ -87,7 +87,7 @@ $text-tertiary: #9ca3af;
   box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.15);
 }
 
-// 日期选择器
+// 日期选择器 - 新设计：滑动卡片式
 .date-selector-section {
   margin-bottom: 32rpx;
 }
@@ -102,105 +102,94 @@ $text-tertiary: #9ca3af;
 }
 
 .date-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12rpx;
-  padding: 8rpx 0;
-  min-width: 80rpx;
-  border-radius: 16rpx;
+  justify-content: space-between;
+  width: 88rpx;
+  height: 120rpx;
+  border-radius: 20rpx;
+  background: #f1f5f9;
+  padding: 12rpx 0 16rpx;
+  overflow: hidden;
   transition: all 0.2s ease;
   
   &:active {
-    background: rgba(0, 188, 125, 0.05);
+    transform: scale(0.96);
   }
   
+  // 背景进度条
+  .date-progress-bg {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, rgba(0, 188, 125, 0.6) 0%, rgba(0, 188, 125, 0.9) 100%);
+    border-radius: 0 0 20rpx 20rpx;
+    transition: height 0.3s ease;
+    z-index: 0;
+  }
+  
+  // 星期几
+  .date-day-name {
+    position: relative;
+    z-index: 1;
+    font-size: 22rpx;
+    color: $text-tertiary;
+    line-height: 30rpx;
+    font-weight: 500;
+  }
+  
+  // 日期数字 - 圆形
+  .date-day-circle {
+    position: relative;
+    z-index: 1;
+    width: 52rpx;
+    height: 52rpx;
+    border-radius: 50%;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+  }
+  
+  // 选中状态
   &.is-selected {
-    .date-day-num {
+    background: $primary-color;
+    box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.3);
+    
+    .date-progress-bg {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.4) 100%);
+    }
+    
+    .date-day-name {
+      color: #ffffff;
+      font-weight: 600;
+    }
+    
+    .date-day-circle {
+      background: #ffffff;
+      box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.15);
+    }
+    
+    .date-num-text {
+      color: $primary-color;
+    }
+  }
+  
+  // 今天未选中状态
+  &.is-today:not(.is-selected) {
+    border: 2rpx solid $primary-color;
+    
+    .date-day-circle {
       background: $primary-color;
-      box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
       
       .date-num-text {
         color: #ffffff;
       }
     }
-    
-    .date-day-name {
-      color: $primary-color;
-      font-weight: 600;
-    }
-  }
-  
-  &.is-today:not(.is-selected) {
-    .date-day-num {
-      border: 2rpx solid $primary-color;
-    }
-  }
-  
-  &.has-record:not(.is-selected) {
-    .date-day-num {
-      &.deficit {
-        background: rgba(59, 130, 246, 0.15);
-        .date-num-text { color: $blue-color; }
-      }
-      &.surplus {
-        background: rgba(249, 115, 22, 0.15);
-        .date-num-text { color: $orange-color; }
-      }
-    }
-  }
-}
-
-.date-day-name {
-  font-size: 22rpx;
-  color: $text-tertiary;
-  line-height: 30rpx;
-}
-
-.date-day-num {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 50%;
-  background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-  border: 2rpx solid rgba(100, 116, 139, 0.16);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-  
-  // 摄入热力图颜色 - 基于绿色主题渐变
-  &.heat-level-0 {
-    // 无记录 - 保持默认灰色
-    background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-  }
-  
-  &.heat-level-1 {
-    // 25%-50% - 浅绿
-    background: linear-gradient(180deg, #86efac 0%, #4ade80 100%);
-    border-color: rgba(34, 197, 94, 0.3);
-    .date-num-text { color: #166534; }
-  }
-  
-  &.heat-level-2 {
-    // 50%-75% - 中绿
-    background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
-    border-color: rgba(34, 197, 94, 0.4);
-    .date-num-text { color: #ffffff; }
-  }
-  
-  &.heat-level-3 {
-    // 75%-100% - 深绿
-    background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
-    border-color: rgba(22, 163, 74, 0.5);
-    .date-num-text { color: #ffffff; }
-  }
-  
-  &.heat-level-4 {
-    // 100%+ - 最深绿/主题色
-    background: linear-gradient(180deg, #16a34a 0%, #00bc7d 100%);
-    border-color: rgba(0, 188, 125, 0.6);
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
-    .date-num-text { color: #ffffff; }
   }
 }
 

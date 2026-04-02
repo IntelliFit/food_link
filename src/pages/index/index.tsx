@@ -752,27 +752,30 @@ function IndexPage() {
           </View>
         </View>
 
-        {/* 日期选择器 */}
+        {/* 日期选择器 - 新设计：滑动卡片式 */}
         <View className='date-selector-section'>
           <View className='date-list'>
             {weekHeatmapCells.map((cell) => {
-              // 根据摄入比例计算热力图颜色级别
-              // 基于总热量的三阶段染色（热量越高，颜色越深）
-              let heatLevel = 0
-              if (cell.calories > 0) {
-                if (cell.calories >= 1200) heatLevel = 3      // 高热量 - 深绿
-                else if (cell.calories >= 500) heatLevel = 2  // 中热量 - 中绿
-                else heatLevel = 1                             // 低热量 - 浅绿
-              }
+              // 计算摄入进度百分比（用于背景进度条）
+              const progressPercent = cell.target > 0 
+                ? Math.min(100, Math.round((cell.calories / cell.target) * 100))
+                : 0
               
               return (
                 <View
                   key={cell.date}
-                  className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''} ${cell.calories > 0 ? 'has-record' : ''}`}
+                  className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''}`}
                   onClick={() => handleDateSelect(cell.date)}
                 >
+                  {/* 背景进度条 */}
+                  <View 
+                    className='date-progress-bg'
+                    style={{ height: `${progressPercent}%` }}
+                  />
+                  {/* 星期几 */}
                   <Text className='date-day-name'>{cell.dayName}</Text>
-                  <View className={`date-day-num heat-level-${heatLevel}`}>
+                  {/* 日期数字 - 圆形 */}
+                  <View className='date-day-circle'>
                     <Text className='date-num-text'>{cell.dayNum}</Text>
                   </View>
                 </View>
