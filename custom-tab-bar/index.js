@@ -18,7 +18,7 @@ Component({
       { 
         id: 'record',
         pagePath: '/pages/record/index', 
-        text: '记录',
+        text: '',
         isCenter: true,
         iconPath: './icons/record.png',
         selectedIconPath: './icons/record-active.png'

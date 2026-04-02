@@ -19,6 +19,6 @@
         />
       </block>
     </view>
-    <text class="tab-text">{{item.text}}</text>
+    <text class="tab-text" wx:if="{{!item.isCenter}}">{{item.text}}</text>
   </view>
 </view>
