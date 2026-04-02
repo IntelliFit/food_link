@@ -39,7 +39,7 @@ interface WeekHeatmapCell {
   dayNum: string
   calories: number
   target: number
-  intakeRatio: number  // 摄入比例: calories / target，用于热力图染色
+  intakeRatio: number  // 摄入比例: calories / target
   state: WeekHeatmapState
   isToday: boolean
 }
@@ -757,13 +757,12 @@ function IndexPage() {
           <View className='date-list'>
             {weekHeatmapCells.map((cell) => {
               // 根据摄入比例计算热力图颜色级别
+              // 基于总热量的三阶段染色（热量越高，颜色越深）
               let heatLevel = 0
-              if (cell.calories > 0 && cell.target > 0) {
-                const ratio = cell.intakeRatio
-                if (ratio >= 1.0) heatLevel = 4      // 达到或超过目标
-                else if (ratio >= 0.75) heatLevel = 3  // 75%-100%
-                else if (ratio >= 0.5) heatLevel = 2   // 50%-75%
-                else if (ratio >= 0.25) heatLevel = 1  // 25%-50%
+              if (cell.calories > 0) {
+                if (cell.calories >= 1200) heatLevel = 3      // 高热量 - 深绿
+                else if (cell.calories >= 500) heatLevel = 2  // 中热量 - 中绿
+                else heatLevel = 1                             // 低热量 - 浅绿
               }
               
               return (
