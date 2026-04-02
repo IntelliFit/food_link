@@ -14,7 +14,8 @@ import {
   CommentOutlined,
   InfoOutlined,
   CalendarOutlined,
-  EnvelopOutlined
+  EnvelopOutlined,
+  Arrow
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -412,168 +413,163 @@ function ProfilePage() {
     })
   }
 
+  const getServiceColor = (id: number) => {
+    const colors: Record<number, string> = {
+      0: '#10b981', // 健康档案 - 绿
+      1: '#f59e0b', // 收藏餐食 - 橙
+      3: '#3b82f6', // 饮食记录 - 蓝
+      5: '#ef4444', // 附近美食 - 红
+      6: '#f59e0b'  // 食探会员 - 金
+    }
+    return colors[id] || '#6b7280'
+  }
+
+  const getSettingColor = (id: number) => {
+    const colors: Record<number, string> = {
+      1: '#6b7280', // 个人设置 - 灰
+      2: '#3b82f6', // 好友管理 - 蓝
+      3: '#10b981', // 隐私设置 - 绿
+      4: '#f59e0b', // 意见反馈 - 橙
+      5: '#8b5cf6', // 关于我们 - 紫
+      6: '#64748b'  // 联系邮箱 - 灰蓝
+    }
+    return colors[id] || '#6b7280'
+  }
+
   return (
     <View className='profile-page'>
-      {/* 顶部区域：用户信息 + 会员卡片 */}
-      <View className='header-section'>
-        {/* 第一行：用户信息 + 会员码 */}
-        <View className='user-header-row'>
-          <View className='user-basic-info'>
-            {/* 点击头像/昵称区域也可以打开设置（如果已登录） */}
-            <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`} onClick={isLoggedIn ? handleSettings : handleGoLogin}>
-              {!isLoggedIn ? (
-                <Text className='iconfont icon-weidenglu user-avatar-icon' />
-              ) : userInfo.avatar && userInfo.avatar.startsWith('http') ? (
-                <Image
-                  src={userInfo.avatar}
-                  mode='aspectFit'
-                  className='user-avatar-image'
-                />
-              ) : (
-                <Text className='iconfont icon-weidenglu user-avatar-icon' />
-              )}
-            </View>
-            <View className='user-text-info'>
-              {isLoggedIn ? (
-                <View onClick={handleSettings}>
-                  <View className='user-name-row'>
-                    <Text className='user-name'>{userInfo.name}</Text>
-                  </View>
-                  <Text className='user-phone'>{Taro.getStorageSync('phoneNumber') || '188******46'}</Text>
-                  <View className='user-meta-row'>
-                    <CalendarOutlined size='14' className='meta-icon' />
-                    <Text className='user-meta-text'>{userInfo.meta}</Text>
-                  </View>
-                </View>
-              ) : (
-                <Button
-                  className='login-link-button'
-                  onClick={handleGoLogin}
-                  plain
-                  hoverClass='none'
-                >
-                  点击登录
-                </Button>
-              )}
-            </View>
-          </View>
+      {/* 顶部用户信息卡片（微信风格） */}
+      <View className='profile-card user-card' onClick={isLoggedIn ? handleSettings : handleGoLogin}>
+        <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
+          {!isLoggedIn ? (
+            <Text className='iconfont icon-weidenglu user-avatar-icon' />
+          ) : userInfo.avatar && userInfo.avatar.startsWith('http') ? (
+            <Image src={userInfo.avatar} mode='aspectFit' className='user-avatar-image' />
+          ) : (
+            <Text className='iconfont icon-weidenglu user-avatar-icon' />
+          )}
         </View>
-
-        {/* 第二行：会员卡片（仅登录后展示） */}
-        {isLoggedIn && (
-          <View
-            className={`member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
-            onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
-          >
-            {membershipStatus?.is_pro ? (
-              <>
-                <View className='card-header'>
-                  <View>
-                    <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
-                    <View className='card-title-row'>
-                      <Text className='card-title'>食探会员</Text>
-                      <Text className='card-pro-badge'>PRO</Text>
-                    </View>
-                  </View>
-                </View>
-                <View className='card-body'>
-                  <View className='progress-info'>
-                    <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
-                    <View className='progress-bar'>
-                      <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus.daily_used ?? 0) / (membershipStatus.daily_limit ?? 20)) * 100, 100)}%` }}></View>
-                    </View>
-                  </View>
-                  <Text className='card-tip'>剩余 {membershipStatus.daily_remaining ?? (membershipStatus.daily_limit ?? 20)} 次 · 精准模式已解锁</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <View className='card-header'>
-                  <View>
-                    <Text className='card-validity'>注册时间 {registerDate}</Text>
-                    <Text className='card-title'>食探会员</Text>
-                  </View>
-                  <View className='card-upgrade-btn'>
-                    <Text className='card-upgrade-text'>立即开通</Text>
-                  </View>
-                </View>
-                <View className='card-body'>
-                  <View className='progress-info'>
-                    <Text className='progress-text'>今日拍照 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 3} 次</Text>
-                    <View className='progress-bar'>
-                      <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 3)) * 100, 100)}%` }}></View>
-                    </View>
-                  </View>
-                  <Text className='card-tip'>开通会员每日享20次 · 解锁精准模式</Text>
-                </View>
-              </>
-            )}
-            <View className='card-bg-icon'>
-              <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
-            </View>
-          </View>
-        )}
-
-        {/* 服务网格 (原 services 列表) */}
-        <View className='services-grid'>
-          {services.map((service) => (
-            <View
-              key={service.id}
-              className='grid-item'
-              onClick={() => handleServiceClick(service)}
-            >
-              <View className='grid-icon'>{service.icon}</View>
-              <Text className='grid-text'>{service.title}</Text>
-            </View>
-          ))}
+        <View className='user-info-main'>
+          {isLoggedIn ? (
+            <>
+              <Text className='user-name'>{userInfo.name}</Text>
+              <Text className='user-subtitle'>{userInfo.meta} · {Taro.getStorageSync('phoneNumber') || '188******46'}</Text>
+            </>
+          ) : (
+            <Text className='user-name'>点击登录</Text>
+          )}
         </View>
+        <Arrow size={20} color='#c8c9cc' className='user-arrow' />
       </View>
 
-      {isLoggedIn && !onboardingCompleted && (
+      {/* 会员卡片（仅登录后展示） */}
+      {isLoggedIn && (
         <View
-          className='onboarding-banner'
-          onClick={() => Taro.navigateTo({ url: '/pages/health-profile/index' })}
-          style={{ margin: '32rpx' }}
+          className={`profile-card member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
+          onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
         >
-          <Text className='onboarding-banner-text'>📋 完善健康档案，获取个性化饮食建议</Text>
-          <Text className='onboarding-banner-arrow'>{'>'}</Text>
+          {membershipStatus?.is_pro ? (
+            <>
+              <View className='card-header'>
+                <View>
+                  <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
+                  <View className='card-title-row'>
+                    <Text className='card-title'>食探会员</Text>
+                    <Text className='card-pro-badge'>PRO</Text>
+                  </View>
+                </View>
+              </View>
+              <View className='card-body'>
+                <View className='progress-info'>
+                  <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
+                  <View className='progress-bar'>
+                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus.daily_used ?? 0) / (membershipStatus.daily_limit ?? 20)) * 100, 100)}%` }} />
+                  </View>
+                </View>
+                <Text className='card-tip'>剩余 {membershipStatus.daily_remaining ?? (membershipStatus.daily_limit ?? 20)} 次 · 精准模式已解锁</Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View className='card-header'>
+                <View>
+                  <Text className='card-validity'>注册时间 {registerDate}</Text>
+                  <Text className='card-title'>食探会员</Text>
+                </View>
+                <View className='card-upgrade-btn'>
+                  <Text className='card-upgrade-text'>立即开通</Text>
+                </View>
+              </View>
+              <View className='card-body'>
+                <View className='progress-info'>
+                  <Text className='progress-text'>今日拍照 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 3} 次</Text>
+                  <View className='progress-bar'>
+                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 3)) * 100, 100)}%` }} />
+                  </View>
+                </View>
+                <Text className='card-tip'>开通会员每日享20次 · 解锁精准模式</Text>
+              </View>
+            </>
+          )}
+          <View className='card-bg-icon'>
+            <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
+          </View>
         </View>
       )}
 
-      {/* 设置 */}
-      <View className='settings-section'>
-        <Cell.Group>
-          {settings.map((setting) => (
-            <Cell
-              key={setting.id}
-              title={setting.title}
-              icon={setting.icon}
-              isLink={!(setting as any).text}
-              onClick={() => handleSettingClick(setting)}
-            >
-              {(setting as any).text ? <Text style={{ fontSize: '28rpx', color: '#64748b' }}>{(setting as any).text}</Text> : null}
-            </Cell>
-          ))}
-        </Cell.Group>
+      {/* 引导横幅 */}
+      {isLoggedIn && !onboardingCompleted && (
+        <View
+          className='profile-card onboarding-card'
+          onClick={() => Taro.navigateTo({ url: '/pages/health-profile/index' })}
+        >
+          <Text className='onboarding-text'>📋 完善健康档案，获取个性化饮食建议</Text>
+          <Text className='onboarding-arrow'>{'>'}</Text>
+        </View>
+      )}
+
+      {/* 服务分组（微信列表风格） */}
+      <View className='profile-card list-card'>
+        {services.map((service) => (
+          <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
+            <View className='list-icon' style={{ color: getServiceColor(service.id) }}>
+              {service.icon}
+            </View>
+            <Text className='list-title'>{service.title}</Text>
+            <View className='list-arrow'>
+              <Arrow size={16} color='#c8c9cc' />
+            </View>
+          </View>
+        ))}
       </View>
 
-      {/* 登录/退出登录按钮 */}
-      {
-        isLoggedIn ? (
-          <View className='logout-btn' onClick={handleLogout}>
-            <Text className='logout-text'>退出登录</Text>
+      {/* 设置分组（微信列表风格） */}
+      <View className='profile-card list-card'>
+        {settings.map((setting) => (
+          <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
+            <View className='list-icon' style={{ color: getSettingColor(setting.id) }}>
+              {setting.icon}
+            </View>
+            <Text className='list-title'>{setting.title}</Text>
+            {(setting as any).text && <Text className='list-extra'>{(setting as any).text}</Text>}
+            <View className='list-arrow'>
+              <Arrow size={16} color='#c8c9cc' />
+            </View>
           </View>
-        ) : (
-          <Button
-            className='login-btn'
-            onClick={handleGoLogin}
-            plain
-            hoverClass='none'
-          >
-            <Text className='login-text'>登录</Text>
-          </Button>
-        )
-      }
+        ))}
+      </View>
+
+      {/* 登录/退出登录 */}
+      {isLoggedIn ? (
+        <View className='profile-card logout-card' onClick={handleLogout}>
+          <Text className='logout-text'>退出登录</Text>
+        </View>
+      ) : (
+        <View className='profile-card login-card' onClick={handleGoLogin}>
+          <Text className='login-text'>登录</Text>
+        </View>
+      )}
+
       <View className='profile-version'>
         <Text>版本号 v2.0.7</Text>
       </View>
