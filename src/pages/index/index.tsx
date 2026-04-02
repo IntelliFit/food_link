@@ -647,9 +647,9 @@ function IndexPage() {
   const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
   const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
 
-  // 使用动画数字
+  // 使用动画数字（剩余可摄入、总摄入与三大营养素同时开始）
   const animatedRemainingCalories = useAnimatedNumber(remainingCalories, 800, 0)
-  const animatedTotalCurrent = useAnimatedNumber(totalCurrent, 800, 100)
+  const animatedTotalCurrent = useAnimatedNumber(totalCurrent, 800, 0)
   
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
@@ -677,43 +677,43 @@ function IndexPage() {
         key,
         animatedValue: currentValue,
         animatedProgress: targetProgress,
-        delay: index * 150 // 错开动画时间
+        delay: 0 // 与顶部热量指标同时开始动画
       }
     })
   }, [intakeData.macros])
 
-  // 为每个营养素使用动画 hook
+  // 为每个营养素使用动画 hook（与顶部热量指标同时开始）
   const proteinAnimation = useAnimatedNumber(
     macroAnimations.find(m => m.key === 'protein')?.animatedValue || 0,
     800,
-    200
+    0
   )
   const carbsAnimation = useAnimatedNumber(
     macroAnimations.find(m => m.key === 'carbs')?.animatedValue || 0,
     800,
-    350
+    0
   )
   const fatAnimation = useAnimatedNumber(
     macroAnimations.find(m => m.key === 'fat')?.animatedValue || 0,
     800,
-    500
+    0
   )
 
-  // 圆环进度动画
+  // 圆环进度动画（与顶部热量指标同时开始）
   const proteinProgressAnimation = useAnimatedProgress(
     macroAnimations.find(m => m.key === 'protein')?.animatedProgress || 0,
     800,
-    200
+    0
   )
   const carbsProgressAnimation = useAnimatedProgress(
     macroAnimations.find(m => m.key === 'carbs')?.animatedProgress || 0,
     800,
-    350
+    0
   )
   const fatProgressAnimation = useAnimatedProgress(
     macroAnimations.find(m => m.key === 'fat')?.animatedProgress || 0,
     800,
-    500
+    0
   )
 
   const animatedMacroValues: Record<MacroKey, number> = {
