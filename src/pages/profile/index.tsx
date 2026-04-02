@@ -1,8 +1,6 @@
-import { View, Text, Image, Button, Input } from '@tarojs/components'
+import { View, Text, Image, Button } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { Cell } from '@taroify/core'
-import '@taroify/core/cell/style'
 import {
   TodoListOutlined,
   NotesOutlined,
@@ -23,9 +21,6 @@ import {
   getAccessToken,
   clearAllStorage,
   getUserRecordDays,
-  updateUserInfo,
-  uploadUserAvatar,
-  imageToBase64,
   getMyMembership,
   MembershipStatus
 } from '../../utils/api'
@@ -61,12 +56,7 @@ function ProfilePage() {
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // 是否显示设置弹窗
-  const [showSettingsModal, setShowSettingsModal] = useState(false)
-
-  // 临时头像和昵称（用于填写表单）
-  const [tempAvatar, setTempAvatar] = useState('')
-  const [tempNickname, setTempNickname] = useState('')
+  // （个人设置已迁移到独立页面 /pages/profile-settings/index）
 
   // 用户信息
   const [userInfo, setUserInfo] = useState<UserInfo>({
@@ -171,32 +161,32 @@ function ProfilePage() {
   const services = [
     {
       id: 0,
-      icon: <TodoListOutlined size='32' />,
+      icon: <TodoListOutlined size='20' />,
       title: '健康档案',
       desc: '生理指标、BMR/TDEE、病史与饮食偏好'
     },
     {
       id: 1,
-      icon: <NotesOutlined size='32' />,
+      icon: <NotesOutlined size='20' />,
       title: '收藏餐食',
       desc: '常吃的食物组合，一键记录',
       path: '/pages/recipes/index'
     },
     {
       id: 3,
-      icon: <ChartTrendingOutlined size='32' />,
+      icon: <ChartTrendingOutlined size='20' />,
       title: '饮食记录',
       desc: '日历图查看每天吃多吃少'
     },
     {
       id: 5,
-      icon: <LocationOutlined size='32' />,
+      icon: <LocationOutlined size='20' />,
       title: '附近美食',
       desc: '发现附近健康美食推荐'
     },
     {
       id: 6,
-      icon: <ShieldOutlined size='32' />,
+      icon: <ShieldOutlined size='20' />,
       title: '食探会员',
       desc: membershipStatus?.is_pro ? '会员已开通' : '每日20次 · 精准模式',
       path: '/pages/pro-membership/index'
@@ -287,12 +277,12 @@ function ProfilePage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    // 设置：打开个人设置弹窗
+    // 个人设置：进入独立设置页
     if (setting.id === 1) {
-      handleSettings()
+      Taro.navigateTo({ url: '/pages/profile-settings/index' })
       return
     }
-    // 隐私设置
+    // 好友管理
     if (setting.id === 2) {
       Taro.navigateTo({ url: '/pages/friends/index' })
       return
@@ -314,70 +304,7 @@ function ProfilePage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    setShowSettingsModal(true)
-    // 初始化设置弹窗的临时数据
-    setTempAvatar(userInfo.avatar)
-    setTempNickname(userInfo.name)
-  }
-
-  // 处理头像选择
-  const handleChooseAvatar = async (e: any) => {
-    const { avatarUrl } = e.detail
-
-    const needUpload = avatarUrl && !avatarUrl.startsWith('https://')
-
-    if (needUpload) {
-      Taro.showLoading({ title: '上传中...' })
-      try {
-        const base64 = await imageToBase64(avatarUrl)
-        const { imageUrl } = await uploadUserAvatar(base64)
-        setTempAvatar(imageUrl)
-        Taro.hideLoading()
-      } catch (err: any) {
-        Taro.hideLoading()
-        Taro.showToast({ title: '上传失败', icon: 'none' })
-      }
-    } else {
-      setTempAvatar(avatarUrl)
-    }
-  }
-
-  const handleNicknameInput = (e: any) => {
-    setTempNickname(e.detail.value)
-  }
-
-  const handleNicknameBlur = (e: any) => {
-    setTempNickname(e.detail.value)
-  }
-
-  // 保存完善的信息
-  const handleSaveProfile = async () => {
-    if (!tempAvatar || !tempNickname) {
-      Taro.showToast({ title: '请完善头像和昵称', icon: 'none' })
-      return
-    }
-
-    Taro.showLoading({ title: '保存中...' })
-    try {
-      await updateUserInfo({
-        nickname: tempNickname,
-        avatar: tempAvatar
-      })
-
-      // 更新本地状态
-      const newUserInfo = { ...userInfo, avatar: tempAvatar, name: tempNickname }
-      setUserInfo(newUserInfo)
-      Taro.setStorageSync('userInfo', newUserInfo)
-
-      Taro.hideLoading()
-      Taro.showToast({ title: '保存成功', icon: 'success' })
-
-      setShowSettingsModal(false)
-
-    } catch (err: any) {
-      Taro.hideLoading()
-      Taro.showToast({ title: err.message || '保存失败', icon: 'none' })
-    }
+    Taro.navigateTo({ url: '/pages/profile-settings/index' })
   }
 
   // 处理去登录
@@ -574,54 +501,7 @@ function ProfilePage() {
         <Text>版本号 v2.0.7</Text>
       </View>
 
-      {/* 个人设置弹窗 */}
-      {showSettingsModal && (
-        <View className='profile-form-modal'>
-          <View className='profile-form-content'>
-            <View className='profile-form-header'>
-              <Text className='profile-form-title'>个人设置</Text>
-              <Text className='profile-form-close' onClick={() => setShowSettingsModal(false)}>✕</Text>
-            </View>
-            <View className='profile-form-body'>
-              <View className='avatar-choose-section'>
-                <Text className='form-label'>更换头像</Text>
-                <Button
-                  className='avatar-choose-btn'
-                  openType='chooseAvatar'
-                  onChooseAvatar={handleChooseAvatar}
-                >
-                  <View className='avatar-choose-wrapper'>
-                    {tempAvatar ? (
-                      <Image src={tempAvatar} className='avatar-preview' mode='aspectFill' />
-                    ) : (
-                      <View className='avatar-placeholder'>
-                        <Text className='avatar-placeholder-text'>点击选择</Text>
-                      </View>
-                    )}
-                  </View>
-                </Button>
-              </View>
 
-              <View className='nickname-input-section'>
-                <Text className='form-label'>修改昵称</Text>
-                <Input
-                  className='nickname-input'
-                  type='nickname'
-                  placeholder='请输入昵称'
-                  value={tempNickname}
-                  onBlur={handleNicknameBlur}
-                  onInput={handleNicknameInput}
-                />
-              </View>
-            </View>
-
-            <View className='profile-form-footer'>
-              <Button className='form-btn skip-btn' onClick={() => setShowSettingsModal(false)}>取消</Button>
-              <Button className='form-btn save-btn' onClick={handleSaveProfile}>保存</Button>
-            </View>
-          </View>
-        </View>
-      )}
     </View>
   )
 }
