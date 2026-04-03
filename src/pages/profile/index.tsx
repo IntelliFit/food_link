@@ -21,6 +21,7 @@ import {
   getUserRecordDays,
   getMyMembership,
   getFoodExpiryDashboard,
+  friendGetRequestsOverview,
   MembershipStatus,
   FoodExpiryDashboard
 } from '../../utils/api'
@@ -84,6 +85,9 @@ function ProfilePage() {
   // 会员状态
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [expiryDashboard, setExpiryDashboard] = useState<FoodExpiryDashboard | null>(null)
+  
+  // 好友请求数量
+  const [friendRequestCount, setFriendRequestCount] = useState(0)
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -97,7 +101,7 @@ function ProfilePage() {
         setIsLoggedIn(true)
         // 从服务器获取最新用户信息
         try {
-          const [apiUserInfo, membershipData, dashboardData] = await Promise.all([
+          const [apiUserInfo, membershipData, dashboardData, friendRequestsData] = await Promise.all([
             getUserProfile(),
             getMyMembership().catch((err) => {
               console.error('[profile] 获取会员状态失败:', err)
@@ -107,7 +111,17 @@ function ProfilePage() {
               console.error('[profile] 获取保质期摘要失败:', err)
               return null
             }),
+            friendGetRequestsOverview().catch((err) => {
+              console.error('[profile] 获取好友请求失败:', err)
+              return null
+            }),
           ])
+          
+          // 计算待处理的好友请求数量
+          if (friendRequestsData?.received) {
+            const pendingCount = friendRequestsData.received.filter(r => r.status === 'pending').length
+            setFriendRequestCount(pendingCount)
+          }
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
             setMembershipStatus(membershipData)
@@ -220,7 +234,7 @@ function ProfilePage() {
 
   // 设置项
   const settings = [
-    { id: 2, icon: <Bell size='20' />, title: '好友管理' },
+    { id: 2, icon: <Bell size='20' />, title: '好友管理', badge: friendRequestCount },
     { id: 3, icon: <ShieldOutlined size='20' />, title: '隐私设置' },
     { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' }
   ]
@@ -488,6 +502,12 @@ function ProfilePage() {
             </View>
             <Text className='list-title'>{setting.title}</Text>
             {(setting as any).text && <Text className='list-extra'>{(setting as any).text}</Text>}
+            {/* 好友请求数量圆圈 */}
+            {(setting as any).badge > 0 && (
+              <View className='list-badge'>
+                <Text className='list-badge-text'>{(setting as any).badge}</Text>
+              </View>
+            )}
             <View className='list-arrow'>
               <Arrow size={16} color='#c8c9cc' />
             </View>

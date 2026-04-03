@@ -9,9 +9,9 @@
   position: relative;
   width: 100%;
   height: 400rpx; // Shorter than image version
-  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);ShorterthanimageversionbackgroundShorterthanimageversionbackgroundShorterthanimageversionbackground
-  display: flex;displaydisplay
-  flex-direction: column;flex-direction
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 16rpx;
@@ -388,9 +388,9 @@
   @extend %card-base;
 
   padding: 0; // 内部布局控制内边距
-  border: 1rpx solid rgb(0 0 0 / 3%);borderborderborder
-  border-radius: 24rpx;border-radiusborder-radius
-  box-shadow: 0 6rpx 20rpx rgb(15 23 42 / 5%);box-shadow
+  border: 1rpx solid rgb(0 0 0 / 3%);
+  border-radius: 24rpx;
+  box-shadow: 0 6rpx 20rpx rgb(15 23 42 / 5%);
 }
 
 .ingredient-main {

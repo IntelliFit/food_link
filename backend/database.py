@@ -882,8 +882,10 @@ def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
             return up.data[0]
         return None
     except Exception as e:
-        print(f"[claim_next_pending_task_sync] 错误: {e}")
-        raise
+        # 不抛出异常，避免工作进程因网络问题（502/503等）崩溃
+        error_msg = str(e)[:200]
+        print(f"[claim_next_pending_task_sync] 网络错误，稍后重试: {error_msg}")
+        return None
 
 
 def update_analysis_task_result_sync(
@@ -1351,8 +1353,11 @@ def claim_next_pending_comment_task_sync(comment_type: Optional[str] = None) -> 
             return up.data[0]
         return None
     except Exception as e:
-        print(f"[claim_next_pending_comment_task_sync] 错误: {e}")
-        raise
+        # 不抛出异常，避免工作进程因网络问题（502/503等）崩溃
+        # 返回 None 让工作进程休眠后重试
+        error_msg = str(e)[:200]  # 限制错误信息长度
+        print(f"[claim_next_pending_comment_task_sync] 网络错误，稍后重试: {error_msg}")
+        return None
 
 
 def update_comment_task_result_sync(

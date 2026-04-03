@@ -62,15 +62,15 @@
 
 // 食谱列表
 .recipe-list {
-  height: 0; // 配合 flex: 1 滚动;flexflex
+  height: 0; // 配合 flex: 1 滚动;
   box-sizing: border-boxbox-sizing
 }
 
 .recipes-grid {
   padding: 24rpx 32rpx 160rpx; // 底部留白给 fab
-  display: flex;fabdisplayfabdisplayfabdisplay
-  flex-direction: column;flex-directionflex-direction
-  gap: 24rpx;gap
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
 }
 
 // 空状态
@@ -371,9 +371,9 @@
   position: fixed;
   right: 40rpx;
   bottom: 160rpx; // 避开 tabBar
-  width: 100rpx;tabBarwidthtabBarwidthtabBarwidth
-  height: 100rpx;heightheight
-  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);background
+  width: 100rpx;
+  height: 100rpx;
+  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;

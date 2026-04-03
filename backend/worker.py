@@ -1865,6 +1865,10 @@ def run_comment_worker(worker_id: int, poll_interval: float = 2.0) -> None:
     """
     print(f"[comment-worker-{worker_id}] 启动，处理评论审核任务", flush=True)
     
+    # 指数退避计数器
+    backoff_count = 0
+    max_backoff = 30  # 最大退避 30 秒
+    
     while True:
         try:
             task = claim_next_pending_comment_task_sync()
@@ -1872,14 +1876,20 @@ def run_comment_worker(worker_id: int, poll_interval: float = 2.0) -> None:
                 print(f"[comment-worker-{worker_id}] 处理任务 {task['id']}", flush=True)
                 process_one_comment_task(task)
                 print(f"[comment-worker-{worker_id}] 任务 {task['id']} 完成", flush=True)
+                backoff_count = 0  # 成功处理任务后重置退避
             else:
+                backoff_count = 0  # 正常无任务也重置
                 time.sleep(poll_interval)
         except KeyboardInterrupt:
             print(f"[comment-worker-{worker_id}] 退出", flush=True)
             break
         except Exception as e:
-            print(f"[comment-worker-{worker_id}] 错误: {e}", flush=True)
-            time.sleep(poll_interval)
+            # 使用指数退避，避免网络故障时频繁重试
+            backoff_count = min(backoff_count + 1, max_backoff)
+            sleep_time = min(poll_interval + backoff_count, max_backoff)
+            error_msg = str(e)[:100]
+            print(f"[comment-worker-{worker_id}] 错误: {error_msg}，{sleep_time}s 后重试", flush=True)
+            time.sleep(sleep_time)
 
 
 def run_worker(worker_id: int, task_type: str = "food", poll_interval: float = 2.0) -> None:
@@ -1902,6 +1912,10 @@ def run_worker(worker_id: int, task_type: str = "food", poll_interval: float = 2
     if not processor:
         raise ValueError(f"不支持的任务类型: {task_type}")
     
+    # 指数退避计数器
+    backoff_count = 0
+    max_backoff = 30  # 最大退避 30 秒
+    
     while True:
         try:
             task = claim_next_pending_task_sync(task_type)
@@ -1909,14 +1923,20 @@ def run_worker(worker_id: int, task_type: str = "food", poll_interval: float = 2
                 print(f"[worker-{worker_id}] 处理任务 {task['id']}", flush=True)
                 processor(task)
                 print(f"[worker-{worker_id}] 任务 {task['id']} 完成", flush=True)
+                backoff_count = 0  # 成功处理任务后重置退避
             else:
+                backoff_count = 0  # 正常无任务也重置
                 time.sleep(poll_interval)
         except KeyboardInterrupt:
             print(f"[worker-{worker_id}] 退出", flush=True)
             break
         except Exception as e:
-            print(f"[worker-{worker_id}] 错误: {e}", flush=True)
-            time.sleep(poll_interval)
+            # 使用指数退避，避免网络故障时频繁重试
+            backoff_count = min(backoff_count + 1, max_backoff)
+            sleep_time = min(poll_interval + backoff_count, max_backoff)
+            error_msg = str(e)[:100]
+            print(f"[worker-{worker_id}] 错误: {error_msg}，{sleep_time}s 后重试", flush=True)
+            time.sleep(sleep_time)
 
 
 if __name__ == "__main__":
