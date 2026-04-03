@@ -121,7 +121,6 @@
 .tab-item.center-item .icon-wrapper {
   width: 88rpx;
   height: 88rpx;
-  margin-top: -28rpx;
   background: #07c160;
   border-radius: 50%;
   box-shadow: 0px 4rpx 16rpx rgba(7, 193, 96, 0.35);

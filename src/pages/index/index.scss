@@ -44,7 +44,7 @@ $text-tertiary: #9ca3af;
 .page-content {
   position: relative;
   z-index: 1;
-  padding: calc(20rpx + env(safe-area-inset-top)) 24rpx 240rpx;
+  padding: calc(20rpx + env(safe-area-inset-top)) 24rpx 50px;
 }
 
 // 问候区
