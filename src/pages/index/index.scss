@@ -1273,3 +1273,349 @@ $blue-color: #3b82f6;
     opacity: 1;
   }
 }
+
+// ==================== 普通模式样式 ====================
+
+// 模式切换开关
+.target-mode-switch {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 9999rpx;
+  padding: 4rpx;
+  gap: 4rpx;
+}
+
+.target-mode-option {
+  padding: 8rpx 24rpx;
+  border-radius: 9999rpx;
+  transition: all 0.2s ease;
+  
+  &.active {
+    background: #00bc7d;
+    
+    .target-mode-text {
+      color: #fff;
+      font-weight: 600;
+    }
+  }
+}
+
+.target-mode-text {
+  font-size: 24rpx;
+  color: #64748b;
+  line-height: 34rpx;
+}
+
+.target-modal-desc {
+  font-size: 24rpx;
+  color: #9ca3af;
+  line-height: 34rpx;
+  margin-top: 8rpx;
+}
+
+// 普通模式容器
+.target-simple-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-top: 24rpx;
+}
+
+// 滑块卡片
+.target-slider-card {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
+}
+
+.target-slider-card-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.target-slider-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.target-slider-icon {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &.protein {
+    background: #3b82f6;
+  }
+  
+  &.carbs {
+    background: #eab308;
+  }
+  
+  &.fat {
+    background: #f97316;
+  }
+}
+
+.target-slider-card-title {
+  flex: 1;
+  font-size: 28rpx;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.target-slider-card-value {
+  font-size: 32rpx;
+  color: #1f2937;
+  font-weight: 700;
+}
+
+// 滑块轨道
+.target-slider-bar-wrap {
+  position: relative;
+  height: 48rpx;
+  background: #f1f5f9;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+
+.target-slider-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 24rpx;
+  display: flex;
+  align-items: center;
+  padding-left: 16rpx;
+  transition: width 0.1s ease;
+  
+  &.protein {
+    background: #c8e86c;
+  }
+  
+  &.carbs {
+    background: #f0d878;
+  }
+  
+  &.fat {
+    background: #f4b868;
+  }
+}
+
+.target-slider-bar-text {
+  font-size: 22rpx;
+  color: #1f2937;
+  font-weight: 700;
+}
+
+// 透明滑块
+.target-slider-input {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0.01;
+  
+  .wx-slider-wrapper {
+    background: transparent !important;
+  }
+  
+  .wx-slider-track {
+    background: transparent !important;
+  }
+  
+  .wx-slider-thumb {
+    width: 32rpx !important;
+    height: 32rpx !important;
+    background: #fff !important;
+    border-radius: 50% !important;
+    box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 30%) !important;
+  }
+}
+
+// 卡路里水池
+.target-calorie-pool {
+  position: relative;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
+  overflow: hidden;
+  min-height: 180rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8rpx;
+}
+
+.target-calorie-wave-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 20rpx;
+}
+
+.target-calorie-wave {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(180deg, rgb(0 188 125 / 15%) 0%, rgb(0 188 125 / 35%) 100%);
+  transition: height 0.3s ease;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -16rpx;
+    left: -50%;
+    width: 200%;
+    height: 32rpx;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,60 C200,120 400,0 600,60 C800,120 1000,0 1200,60 L1200,120 L0,120 Z' fill='rgb(0 188 125 / 15%)'/%3E%3C/svg%3E") repeat-x;
+    background-size: 600rpx 32rpx;
+    animation: waveMove 3s linear infinite;
+  }
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: -12rpx;
+    left: -50%;
+    width: 200%;
+    height: 24rpx;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,40 C300,100 500,0 800,50 C1000,90 1100,20 1200,40 L1200,120 L0,120 Z' fill='rgb(0 188 125 / 10%)'/%3E%3C/svg%3E") repeat-x;
+    background-size: 800rpx 24rpx;
+    animation: waveMove 4s linear infinite reverse;
+  }
+}
+
+@keyframes waveMove {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.target-calorie-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.target-calorie-label {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 34rpx;
+}
+
+.target-calorie-value {
+  font-size: 48rpx;
+  color: #00bc7d;
+  font-weight: 700;
+  line-height: 64rpx;
+}
+
+.target-calorie-unit {
+  font-size: 28rpx;
+  color: #00bc7d;
+  font-weight: 500;
+  margin-left: 8rpx;
+}
+
+.target-calorie-hint {
+  font-size: 20rpx;
+  color: #9ca3af;
+  margin-top: 4rpx;
+}
+
+// 精确模式表单
+.target-form-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-top: 24rpx;
+}
+
+.target-form-item {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
+}
+
+.target-form-label {
+  display: block;
+  font-size: 28rpx;
+  color: #1f2937;
+  line-height: 40rpx;
+  margin-bottom: 12rpx;
+  font-weight: 500;
+}
+
+.target-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  padding: 0 20rpx;
+  height: 80rpx;
+  border: 2rpx solid #e5e7eb;
+}
+
+.target-input {
+  flex: 1;
+  height: 100%;
+  font-size: 32rpx;
+  color: #1f2937;
+  line-height: 80rpx;
+}
+
+.target-input-unit {
+  font-size: 26rpx;
+  color: #6b7280;
+  line-height: 36rpx;
+}
+
+// 保存按钮
+.target-modal-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 32rpx;
+}
+
+.target-modal-btn {
+  flex: 1;
+  height: 96rpx;
+  border-radius: 9999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &.primary {
+    background: linear-gradient(135deg, #00bc7d 0%, #00a86b 100%);
+  }
+}
+
+.target-modal-btn-text {
+  font-size: 30rpx;
+  line-height: 42rpx;
+  font-weight: 600;
+  
+  &.primary {
+    color: #fff;
+  }
+}

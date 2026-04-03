@@ -403,7 +403,7 @@ function ProfilePage() {
           {isLoggedIn ? (
             <>
               <Text className='user-name'>{userInfo.name}</Text>
-              <Text className='user-subtitle'>{userInfo.meta} · {Taro.getStorageSync('phoneNumber') || '188******46'}</Text>
+              <Text className='user-subtitle'>{userInfo.meta}</Text>
             </>
           ) : (
             <Text className='user-name'>点击登录</Text>

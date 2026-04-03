@@ -97,3 +97,12 @@ before_*.png
 final_*.png
 current-*.png
 weapp_*.png
+modal_*.png
+step*.png
+*.local.png
+
+# 根目录下的所有PNG截图（保留子目录中的PNG资源）
+/*.png
+/*.PNG
+
+.playwright-mcp

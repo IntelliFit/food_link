@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>好友管理 - 简约设计预览</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+    }
+    .phone {
+      width: 375px;
+      height: 812px;
+      background: linear-gradient(180deg, rgba(0,188,125,0.08) 0%, rgba(0,188,125,0.03) 15%, #f8fafc 40%, #f1f5f9 100%);
+      border-radius: 40px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+      position: relative;
+    }
+    /* 状态栏 */
+    .status-bar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .status-time { color: #000; }
+    .status-icons { display: flex; gap: 5px; }
+    /* 导航栏 */
+    .nav-bar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: 17px;
+      font-weight: 600;
+      color: #000;
+    }
+    .nav-back {
+      position: absolute;
+      left: 16px;
+      font-size: 24px;
+      color: #000;
+    }
+    .nav-more {
+      position: absolute;
+      right: 16px;
+      display: flex;
+      gap: 8px;
+    }
+    .nav-dot {
+      width: 24px;
+      height: 24px;
+      border: 1.5px solid #000;
+      border-radius: 50%;
+    }
+    /* 头部 */
+    .header {
+      display: flex;
+      justify-content: flex-end;
+      padding: 12px 24px;
+    }
+    .refresh-btn {
+      height: 32px;
+      padding: 0 16px;
+      border-radius: 16px;
+      font-size: 13px;
+      color: #00bc7d;
+      background: rgba(0,188,125,0.08);
+      border: 1px solid rgba(0,188,125,0.15);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    /* Tab */
+    .tabs-wrapper {
+      padding: 16px 20px;
+    }
+    .tabs {
+      display: flex;
+      background: rgba(255,255,255,0.9);
+      border-radius: 24px;
+      padding: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .tab-item {
+      flex: 1;
+      text-align: center;
+      padding: 10px 0;
+      font-size: 14px;
+      color: #64748b;
+      border-radius: 20px;
+      position: relative;
+    }
+    .tab-item.active {
+      background: #00bc7d;
+      color: #fff;
+      font-weight: 500;
+    }
+    .tab-badge {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      background: #fff;
+      color: #00bc7d;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* 列表 */
+    .list {
+      padding: 0 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .request-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .meta {
+      flex: 1;
+      min-width: 0;
+    }
+    .name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 4px;
+    }
+    .time {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    /* 操作按钮 - 新设计 */
+    .request-actions {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .icon-btn:active {
+      transform: scale(0.9);
+    }
+    .reject-btn {
+      border: 1.5px solid #ef4444;
+    }
+    .reject-btn .icon-text {
+      color: #ef4444;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    .accept-btn {
+      border: 1.5px solid #00bc7d;
+    }
+    .accept-btn .icon-text {
+      color: #00bc7d;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    /* 状态标签 */
+    .status {
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .status.accepted {
+      background: rgba(0,188,125,0.1);
+      color: #00bc7d;
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <!-- 状态栏 -->
+    <div class="status-bar">
+      <span class="status-time">22:43</span>
+      <div class="status-icons">
+        <span>📶</span>
+        <span>🔋</span>
+      </div>
+    </div>
+    
+    <!-- 导航栏 -->
+    <div class="nav-bar">
+      <span class="nav-back">‹</span>
+      <span>好友管理</span>
+      <div class="nav-more">
+        <span style="font-size: 20px;">⋯</span>
+        <div class="nav-dot"></div>
+      </div>
+    </div>
+    
+    <!-- 头部 -->
+    <div class="header">
+      <div class="refresh-btn">
+        <span>↻</span>
+        <span>刷新</span>
+      </div>
+    </div>
+    
+    <!-- Tab -->
+    <div class="tabs-wrapper">
+      <div class="tabs">
+        <div class="tab-item">
+          好友列表
+          <span class="tab-badge">1</span>
+        </div>
+        <div class="tab-item active">
+          收到的请求
+          <span class="tab-badge" style="color: #00bc7d;">4</span>
+        </div>
+        <div class="tab-item">我发起的</div>
+      </div>
+    </div>
+    
+    <!-- 列表 -->
+    <div class="list">
+      <!-- 卡片 1 -->
+      <div class="card">
+        <div class="request-row">
+          <img class="avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=1" alt="avatar">
+          <div class="meta">
+            <div class="name">洋葱小鱿</div>
+            <div class="time">12小时前</div>
+          </div>
+          <div class="request-actions">
+            <div class="icon-btn reject-btn">
+              <span class="icon-text">✕</span>
+            </div>
+            <div class="icon-btn accept-btn">
+              <span class="icon-text">✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 卡片 2 -->
+      <div class="card">
+        <div class="request-row">
+          <img class="avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=2" alt="avatar">
+          <div class="meta">
+            <div class="name">Mxd</div>
+            <div class="time">4月1日</div>
+          </div>
+          <div class="request-actions">
+            <div class="icon-btn reject-btn">
+              <span class="icon-text">✕</span>
+            </div>
+            <div class="icon-btn accept-btn">
+              <span class="icon-text">✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 卡片 3 -->
+      <div class="card">
+        <div class="request-row">
+          <img class="avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=3" alt="avatar">
+          <div class="meta">
+            <div class="name">推客小李</div>
+            <div class="time">3月30日</div>
+          </div>
+          <div class="request-actions">
+            <div class="icon-btn reject-btn">
+              <span class="icon-text">✕</span>
+            </div>
+            <div class="icon-btn accept-btn">
+              <span class="icon-text">✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 卡片 4 - 已处理 -->
+      <div class="card">
+        <div class="request-row">
+          <img class="avatar" src="https://api.dicebear.com/7.x/avataaars/svg?seed=4" alt="avatar">
+          <div class="meta">
+            <div class="name">几几朵朵</div>
+            <div class="time">3月12日</div>
+          </div>
+          <div class="request-actions">
+            <span class="status accepted">已同意</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

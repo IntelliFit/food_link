@@ -1,4 +1,4 @@
-import { View, Text, Input, Image } from '@tarojs/components'
+import { View, Text, Input, Image, Slider } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
@@ -83,6 +83,52 @@ interface MacroTargets {
   protein: number
   carbs: number
   fat: number
+}
+
+// 普通模式目标档位状态
+interface SimpleTargetState {
+  proteinLevel: number  // 1-20
+  carbsLevel: number    // 1-20
+  fatLevel: number      // 1-20
+}
+
+// 档位映射到实际数值（1-20档）
+const LEVEL_TO_GRAMS = {
+  protein: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200],
+  carbs: [50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 550],
+  fat: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110]
+}
+
+// 根据档位计算克数
+function getGramsFromLevel(type: 'protein' | 'carbs' | 'fat', level: number): number {
+  const index = Math.max(0, Math.min(19, level - 1))
+  return LEVEL_TO_GRAMS[type][index]
+}
+
+// 根据克数找到最接近的档位
+function getLevelFromGrams(type: 'protein' | 'carbs' | 'fat', grams: number): number {
+  const values = LEVEL_TO_GRAMS[type]
+  let closestLevel = 1
+  let minDiff = Math.abs(values[0] - grams)
+  
+  for (let i = 1; i < values.length; i++) {
+    const diff = Math.abs(values[i] - grams)
+    if (diff < minDiff) {
+      minDiff = diff
+      closestLevel = i + 1
+    }
+  }
+  
+  return closestLevel
+}
+
+// 根据普通模式的档位计算卡路里
+function calculateCaloriesFromLevels(levels: SimpleTargetState): number {
+  const proteinGrams = getGramsFromLevel('protein', levels.proteinLevel)
+  const carbsGrams = getGramsFromLevel('carbs', levels.carbsLevel)
+  const fatGrams = getGramsFromLevel('fat', levels.fatLevel)
+  
+  return proteinGrams * 4 + carbsGrams * 4 + fatGrams * 9
 }
 
 const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -502,6 +548,50 @@ function IndexPage() {
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
+  
+  // 目标编辑模式：simple=普通模式（滑块），precise=精确模式（数字输入）
+  const [targetMode, setTargetMode] = useState<'simple' | 'precise'>('simple')
+  
+  // 普通模式的档位状态（1-20档）
+  const [simpleTarget, setSimpleTarget] = useState<SimpleTargetState>({
+    proteinLevel: 8,   // 默认80g蛋白质
+    carbsLevel: 10,    // 默认275g碳水
+    fatLevel: 8        // 默认50g脂肪
+  })
+  
+  // 处理模式切换，同步数据
+  const handleModeSwitch = (newMode: 'simple' | 'precise') => {
+    if (newMode === targetMode) return
+    
+    if (newMode === 'precise') {
+      // 普通 -> 精确：将档位值同步到targetForm
+      const protein = getGramsFromLevel('protein', simpleTarget.proteinLevel)
+      const carbs = getGramsFromLevel('carbs', simpleTarget.carbsLevel)
+      const fat = getGramsFromLevel('fat', simpleTarget.fatLevel)
+      const calories = calculateCaloriesFromLevels(simpleTarget)
+      
+      setTargetForm({
+        calorieTarget: String(calories),
+        proteinTarget: String(protein),
+        carbsTarget: String(carbs),
+        fatTarget: String(fat)
+      })
+    } else {
+      // 精确 -> 普通：将targetForm值同步到档位
+      const proteinLevel = getLevelFromGrams('protein', Number(targetForm.proteinTarget) || 80)
+      const carbsLevel = getLevelFromGrams('carbs', Number(targetForm.carbsTarget) || 275)
+      const fatLevel = getLevelFromGrams('fat', Number(targetForm.fatTarget) || 50)
+      
+      setSimpleTarget({
+        proteinLevel,
+        carbsLevel,
+        fatLevel
+      })
+    }
+    
+    setTargetMode(newMode)
+  }
+  
   const [selectedDate, setSelectedDate] = useState(normalizeTo2025(formatDateKey(new Date())))
 
   // 体重/喝水状态
@@ -691,36 +781,55 @@ function IndexPage() {
   }
 
   const handleSaveTargets = async () => {
-    let payload: DashboardTargets = {
-      calorie_target: Number(targetForm.calorieTarget),
-      protein_target: Number(targetForm.proteinTarget),
-      carbs_target: Number(targetForm.carbsTarget),
-      fat_target: Number(targetForm.fatTarget)
-    }
+    let payload: DashboardTargets
+    
+    // 根据当前模式计算payload
+    if (targetMode === 'simple') {
+      // 普通模式：从档位计算实际克数
+      const protein = getGramsFromLevel('protein', simpleTarget.proteinLevel)
+      const carbs = getGramsFromLevel('carbs', simpleTarget.carbsLevel)
+      const fat = getGramsFromLevel('fat', simpleTarget.fatLevel)
+      const calories = calculateCaloriesFromLevels(simpleTarget)
+      
+      payload = {
+        calorie_target: calories,
+        protein_target: protein,
+        carbs_target: carbs,
+        fat_target: fat
+      }
+    } else {
+      // 精确模式：使用表单输入值
+      payload = {
+        calorie_target: Number(targetForm.calorieTarget),
+        protein_target: Number(targetForm.proteinTarget),
+        carbs_target: Number(targetForm.carbsTarget),
+        fat_target: Number(targetForm.fatTarget)
+      }
+      
+      if (Object.values(payload).some((value) => !Number.isFinite(value))) {
+        Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
+        return
+      }
 
-    if (Object.values(payload).some((value) => !Number.isFinite(value))) {
-      Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
-      return
-    }
+      if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
+        Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
+        return
+      }
 
-    if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
-      Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
-      return
-    }
+      if (payload.protein_target < 0 || payload.protein_target > 500) {
+        Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
+        return
+      }
 
-    if (payload.protein_target < 0 || payload.protein_target > 500) {
-      Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
-      return
-    }
+      if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
+        Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
+        return
+      }
 
-    if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
-      Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
-      return
-    }
-
-    if (payload.fat_target < 0 || payload.fat_target > 300) {
-      Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
-      return
+      if (payload.fat_target < 0 || payload.fat_target > 300) {
+        Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
+        return
+      }
     }
 
     const normalized = alignPayloadWithCalorieTarget(payload)
@@ -1378,80 +1487,221 @@ function IndexPage() {
           <View className='target-modal-mask' onClick={() => !savingTargets && setShowTargetEditor(false)} />
           <View className='target-modal-content'>
             <View className='target-modal-header'>
-              <Text className='target-modal-title'>编辑今日目标</Text>
-              <Text className='target-modal-desc'>保存后会同步到账号，下次登录仍会保留。</Text>
+              <View className='target-modal-title-row'>
+                <Text className='target-modal-title'>编辑今日目标</Text>
+                {/* 模式切换开关 */}
+                <View className='target-mode-switch'>
+                  <View 
+                    className={`target-mode-option ${targetMode === 'simple' ? 'active' : ''}`}
+                    onClick={() => handleModeSwitch('simple')}
+                  >
+                    <Text className='target-mode-text'>普通</Text>
+                  </View>
+                  <View 
+                    className={`target-mode-option ${targetMode === 'precise' ? 'active' : ''}`}
+                    onClick={() => handleModeSwitch('precise')}
+                  >
+                    <Text className='target-mode-text'>精确</Text>
+                  </View>
+                </View>
+              </View>
+              <Text className='target-modal-desc'>
+                {targetMode === 'simple' ? '滑动选择档位快速设置目标' : '保存后会同步到账号，下次登录仍会保留。'}
+              </Text>
             </View>
 
-            <View className='target-form-list'>
-              <View className='target-form-item'>
-                <Text className='target-form-label'>今日摄入目标</Text>
-                <View className='target-input-wrap'>
-                  <Input
-                    className='target-input'
-                    type='digit'
-                    value={targetForm.calorieTarget}
-                    onInput={(e) => handleTargetInput('calorieTarget', e.detail.value)}
-                  />
-                  <Text className='target-input-unit'>kcal</Text>
+            {/* 普通模式：横向滑块卡片 */}
+            {targetMode === 'simple' && (
+              <View className='target-simple-mode'>
+                {/* 蛋白质卡片 */}
+                <View className='target-slider-card'>
+                  <View className='target-slider-card-header'>
+                    <View className='target-slider-icon-wrap'>
+                      <View className='target-slider-icon protein'>
+                        <IconProtein size={28} color='#fff' />
+                      </View>
+                    </View>
+                    <Text className='target-slider-card-title'>蛋白质</Text>
+                    <Text className='target-slider-card-value'>
+                      {getGramsFromLevel('protein', simpleTarget.proteinLevel)}g
+                    </Text>
+                  </View>
+                  <View className='target-slider-bar-wrap'>
+                    <View 
+                      className='target-slider-bar protein'
+                      style={{ width: `${(simpleTarget.proteinLevel / 20) * 100}%` }}
+                    >
+                      <Text className='target-slider-bar-text'>
+                        {Math.round((simpleTarget.proteinLevel / 20) * 100)}%
+                      </Text>
+                    </View>
+                    <Slider
+                      className='target-slider-input'
+                      value={simpleTarget.proteinLevel}
+                      min={1}
+                      max={20}
+                      step={1}
+                      showValue={false}
+                      activeColor='transparent'
+                      backgroundColor='transparent'
+                      blockSize={28}
+                      onChange={(e) => setSimpleTarget(prev => ({ ...prev, proteinLevel: e.detail.value }))}
+                    />
+                  </View>
+                </View>
+
+                {/* 碳水卡片 */}
+                <View className='target-slider-card'>
+                  <View className='target-slider-card-header'>
+                    <View className='target-slider-icon-wrap'>
+                      <View className='target-slider-icon carbs'>
+                        <IconCarbs size={28} color='#fff' />
+                      </View>
+                    </View>
+                    <Text className='target-slider-card-title'>碳水</Text>
+                    <Text className='target-slider-card-value'>
+                      {getGramsFromLevel('carbs', simpleTarget.carbsLevel)}g
+                    </Text>
+                  </View>
+                  <View className='target-slider-bar-wrap'>
+                    <View 
+                      className='target-slider-bar carbs'
+                      style={{ width: `${(simpleTarget.carbsLevel / 20) * 100}%` }}
+                    >
+                      <Text className='target-slider-bar-text'>
+                        {Math.round((simpleTarget.carbsLevel / 20) * 100)}%
+                      </Text>
+                    </View>
+                    <Slider
+                      className='target-slider-input'
+                      value={simpleTarget.carbsLevel}
+                      min={1}
+                      max={20}
+                      step={1}
+                      showValue={false}
+                      activeColor='transparent'
+                      backgroundColor='transparent'
+                      blockSize={28}
+                      onChange={(e) => setSimpleTarget(prev => ({ ...prev, carbsLevel: e.detail.value }))}
+                    />
+                  </View>
+                </View>
+
+                {/* 脂肪卡片 */}
+                <View className='target-slider-card'>
+                  <View className='target-slider-card-header'>
+                    <View className='target-slider-icon-wrap'>
+                      <View className='target-slider-icon fat'>
+                        <IconFat size={28} color='#fff' />
+                      </View>
+                    </View>
+                    <Text className='target-slider-card-title'>脂肪</Text>
+                    <Text className='target-slider-card-value'>
+                      {getGramsFromLevel('fat', simpleTarget.fatLevel)}g
+                    </Text>
+                  </View>
+                  <View className='target-slider-bar-wrap'>
+                    <View 
+                      className='target-slider-bar fat'
+                      style={{ width: `${(simpleTarget.fatLevel / 20) * 100}%` }}
+                    >
+                      <Text className='target-slider-bar-text'>
+                        {Math.round((simpleTarget.fatLevel / 20) * 100)}%
+                      </Text>
+                    </View>
+                    <Slider
+                      className='target-slider-input'
+                      value={simpleTarget.fatLevel}
+                      min={1}
+                      max={20}
+                      step={1}
+                      showValue={false}
+                      activeColor='transparent'
+                      backgroundColor='transparent'
+                      blockSize={28}
+                      onChange={(e) => setSimpleTarget(prev => ({ ...prev, fatLevel: e.detail.value }))}
+                    />
+                  </View>
+                </View>
+
+                {/* 卡路里预览 - 波浪水池效果 */}
+                <View className='target-calorie-pool'>
+                  <View className='target-calorie-wave-wrap'>
+                    <View 
+                      className='target-calorie-wave'
+                      style={{ height: `${Math.min((calculateCaloriesFromLevels(simpleTarget) / 2500) * 100, 100)}%` }}
+                    />
+                  </View>
+                  <View className='target-calorie-content'>
+                    <Text className='target-calorie-label'>预计摄入目标</Text>
+                    <Text className='target-calorie-value'>
+                      {calculateCaloriesFromLevels(simpleTarget)}
+                      <Text className='target-calorie-unit'>kcal</Text>
+                    </Text>
+                    <Text className='target-calorie-hint'>建议范围: 1500-2500 kcal</Text>
+                  </View>
                 </View>
               </View>
+            )}
 
-              <View className='target-form-item'>
-                <Text className='target-form-label'>蛋白质目标</Text>
-                <View className='target-input-wrap'>
-                  <Input
-                    className='target-input'
-                    type='digit'
-                    value={targetForm.proteinTarget}
-                    onInput={(e) => handleTargetInput('proteinTarget', e.detail.value)}
-                  />
-                  <Text className='target-input-unit'>g</Text>
+            {/* 精确模式：数字输入框 */}
+            {targetMode === 'precise' && (
+              <View className='target-form-list'>
+                <View className='target-form-item'>
+                  <Text className='target-form-label'>今日摄入目标</Text>
+                  <View className='target-input-wrap'>
+                    <Input
+                      className='target-input'
+                      type='digit'
+                      value={targetForm.calorieTarget}
+                      onInput={(e) => handleTargetInput('calorieTarget', e.detail.value)}
+                    />
+                    <Text className='target-input-unit'>kcal</Text>
+                  </View>
+                </View>
+
+                <View className='target-form-item'>
+                  <Text className='target-form-label'>蛋白质目标</Text>
+                  <View className='target-input-wrap'>
+                    <Input
+                      className='target-input'
+                      type='digit'
+                      value={targetForm.proteinTarget}
+                      onInput={(e) => handleTargetInput('proteinTarget', e.detail.value)}
+                    />
+                    <Text className='target-input-unit'>g</Text>
+                  </View>
+                </View>
+
+                <View className='target-form-item'>
+                  <Text className='target-form-label'>碳水目标</Text>
+                  <View className='target-input-wrap'>
+                    <Input
+                      className='target-input'
+                      type='digit'
+                      value={targetForm.carbsTarget}
+                      onInput={(e) => handleTargetInput('carbsTarget', e.detail.value)}
+                    />
+                    <Text className='target-input-unit'>g</Text>
+                  </View>
+                </View>
+
+                <View className='target-form-item'>
+                  <Text className='target-form-label'>脂肪目标</Text>
+                  <View className='target-input-wrap'>
+                    <Input
+                      className='target-input'
+                      type='digit'
+                      value={targetForm.fatTarget}
+                      onInput={(e) => handleTargetInput('fatTarget', e.detail.value)}
+                    />
+                    <Text className='target-input-unit'>g</Text>
+                  </View>
                 </View>
               </View>
-
-              <View className='target-form-item'>
-                <Text className='target-form-label'>碳水目标</Text>
-                <View className='target-input-wrap'>
-                  <Input
-                    className='target-input'
-                    type='digit'
-                    value={targetForm.carbsTarget}
-                    onInput={(e) => handleTargetInput('carbsTarget', e.detail.value)}
-                  />
-                  <Text className='target-input-unit'>g</Text>
-                </View>
-              </View>
-
-              <View className='target-form-item'>
-                <Text className='target-form-label'>脂肪目标</Text>
-                <View className='target-input-wrap'>
-                  <Input
-                    className='target-input'
-                    type='digit'
-                    value={targetForm.fatTarget}
-                    onInput={(e) => handleTargetInput('fatTarget', e.detail.value)}
-                  />
-                  <Text className='target-input-unit'>g</Text>
-                </View>
-              </View>
-            </View>
-
-            <View className='target-relation-hint'>
-              <Text className='target-relation-hint-title'>保存规则：以热量目标为准自动换算三大营养素</Text>
-              {calorieInputValue != null && caloriesFromMacroInputs != null ? (
-                <Text className={`target-relation-hint-value ${isRelationAligned ? 'aligned' : 'adjusting'}`}>
-                  当前三大营养素换算热量 {formatDisplayNumber(caloriesFromMacroInputs)} kcal
-                  {isRelationAligned ? '，已满足关系' : '，保存时会自动校准'}
-                </Text>
-              ) : (
-                <Text className='target-relation-hint-value pending'>请填写完整的数字目标</Text>
-              )}
-            </View>
+            )}
 
             <View className='target-modal-actions'>
-              <View className='target-modal-btn secondary' onClick={() => !savingTargets && setShowTargetEditor(false)}>
-                <Text className='target-modal-btn-text secondary'>取消</Text>
-              </View>
               <View className='target-modal-btn primary' onClick={handleSaveTargets}>
                 <Text className='target-modal-btn-text primary'>{savingTargets ? '保存中...' : '保存'}</Text>
               </View>
