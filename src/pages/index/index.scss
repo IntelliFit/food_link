@@ -44,7 +44,7 @@ $text-tertiary: #9ca3af;
 .page-content {
   position: relative;
   z-index: 1;
-  padding: 0 24rpx 180rpx;
+  padding: 0 24rpx 240rpx;
 }
 
 // 问候区
@@ -108,10 +108,10 @@ $text-tertiary: #9ca3af;
   align-items: center;
   justify-content: space-between;
   width: 88rpx;
-  height: 160rpx;  // 日期卡片高度，可根据设计调整
-  border-radius: 44rpx;  // 半圆角，两端为半圆
+  height: 160rpx;
+  border-radius: 44rpx;
   background: #f1f5f9;
-  border: 3rpx solid transparent;  // 默认透明边框，防止点击变形
+  border: 3rpx solid transparent;
   padding: 12rpx 0 16rpx;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -119,18 +119,6 @@ $text-tertiary: #9ca3af;
   
   &:active {
     transform: scale(0.96);
-  }
-  
-  // 背景进度条
-  .date-progress-bg {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(180deg, rgba(0, 188, 125, 0.6) 0%, rgba(0, 188, 125, 0.9) 100%);
-    border-radius: 0 0 44rpx 44rpx;  // 与卡片圆角一致
-    transition: height 0.3s ease;
-    z-index: 0;
   }
   
   // 星期几
@@ -147,45 +135,27 @@ $text-tertiary: #9ca3af;
   .date-day-circle {
     position: relative;
     z-index: 1;
-    width: 64rpx;  // 圆圈直径，可调整大小
-    height: 64rpx;  // 保持宽高一致为圆形
+    width: 64rpx;
+    height: 64rpx;
     border-radius: 50%;
     background: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
     box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
-  }
-  
-  // 选中状态 - 仅外框变绿色，背景不变
-  &.is-selected {
-    background: #f1f5f9;  // 保持原背景色
-    border-color: $primary-color;  // 绿色外框
-    box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.3);
+    transition: all 0.2s ease;
     
-    .date-progress-bg {
-      background: linear-gradient(180deg, rgba(0, 188, 125, 0.7) 0%, rgba(0, 188, 125, 1) 100%);
-    }
-    
-    .date-day-name {
-      color: $primary-color;  // 星期几文字变绿色
-      font-weight: 600;
-    }
-    
-    .date-day-circle {
+    // 无记录 - 白色（默认）
+    &.is-empty {
       background: #ffffff;
-      box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.15);
+      
+      .date-num-text {
+        color: $text-primary;
+      }
     }
     
-    .date-num-text {
-      color: $text-primary;  // 日期数字保持原色
-    }
-  }
-  
-  // 今天状态
-  &.is-today {
-    // 今天的日期圆圈始终显示绿色背景（无论是否被选中）
-    .date-day-circle {
+    // 有记录但未超过目标 - 绿色
+    &.is-recorded {
       background: $primary-color;
       
       .date-num-text {
@@ -193,9 +163,25 @@ $text-tertiary: #9ca3af;
       }
     }
     
-    // 今天未选中时不需要特殊边框
-    &:not(.is-selected) {
-      border-color: transparent;
+    // 超过目标 - 红色
+    &.is-over {
+      background: #ef4444;
+      
+      .date-num-text {
+        color: #ffffff;
+      }
+    }
+  }
+  
+  // 选中状态 - 仅外框变绿色
+  &.is-selected {
+    background: #f1f5f9;
+    border-color: $primary-color;
+    box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.3);
+    
+    .date-day-name {
+      color: $primary-color;
+      font-weight: 600;
     }
   }
 }
@@ -203,103 +189,7 @@ $text-tertiary: #9ca3af;
 .date-num-text {
   font-size: 26rpx;
   font-weight: 600;
-  color: $text-primary;
   line-height: 36rpx;
-}
-
-// 体重与喝水快捷并排卡片
-.body-status-section {
-  margin-bottom: 24rpx;
-}
-
-.body-status-grid {
-  display: flex;
-  gap: 16rpx;
-}
-
-.body-status-card {
-  flex: 1;
-  min-width: 0;
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 24rpx;
-  padding: 16rpx 20rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.03);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12rpx;
-}
-
-.body-status-content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.body-status-header {
-  display: flex;
-  align-items: baseline;
-  gap: 8rpx;
-  min-width: 0;
-}
-
-.body-status-label {
-  font-size: 22rpx;
-  color: $text-secondary;
-  white-space: nowrap;
-}
-
-.body-status-value {
-  font-size: 26rpx;
-  font-weight: 700;
-  color: $text-primary;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.body-status-meta {
-  font-size: 18rpx;
-  color: $text-tertiary;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.body-status-action {
-  flex-shrink: 0;
-}
-
-.body-status-btn {
-  height: 44rpx;
-  padding: 0 16rpx;
-  border-radius: 9999rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &.weight {
-    background: rgba(0, 188, 125, 0.08);
-  }
-
-  &.water {
-    background: rgba(59, 130, 246, 0.08);
-  }
-}
-
-.body-status-btn-text {
-  font-size: 20rpx;
-  font-weight: 600;
-
-  &.weight {
-    color: $primary-color;
-  }
-
-  &.water {
-    color: $blue-color;
-  }
 }
 
 // 主卡片（热量总览）
@@ -512,9 +402,14 @@ $text-tertiary: #9ca3af;
 }
 
 .macro-gauge-value {
-  font-size: 36rpx;
+  font-size: 32rpx;
   font-weight: 700;
-  line-height: 44rpx;
+  line-height: 40rpx;
+  max-width: 130rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .macro-gauge-unit {
@@ -1316,5 +1211,70 @@ $text-tertiary: #9ca3af;
 @media (max-width: 720px) {
   .water-modal-quick-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+// 日期切换加载动画
+.loading-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+// 简单旋转加载动画
+.loading-spinner {
+  width: 20rpx;
+  height: 20rpx;
+  border: 3rpx solid #e5e7eb;
+  border-top-color: #00bc7d;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// 跳动点加载动画
+.loading-dots {
+  display: flex;
+  gap: 8rpx;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-dot {
+  width: 8rpx;
+  height: 8rpx;
+  background: #00bc7d;
+  border-radius: 50%;
+  animation: bounce 1.4s ease-in-out infinite both;
+}
+
+.loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
   }
 }

@@ -110,6 +110,11 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
+// 转换日期为2025年（系统时间可能是2026年，但数据是2025年的）
+function normalizeTo2025(dateStr: string): string {
+  return dateStr.replace(/^2026-/, '2025-')
+}
+
 function parseCompleteNumber(value: string): number | null {
   const normalized = value.trim()
   if (!normalized || !/^\d+(\.\d+)?$/.test(normalized)) {
@@ -125,105 +130,104 @@ function formatTargetInput(value: number): string {
 }
 
 // 数字滚动动画 Hook
-function useAnimatedNumber(target: number, duration: number = 800, delay: number = 0): number {
-  const [displayValue, setDisplayValue] = useState(0)
-  const startTimeRef = useRef<number | null>(null)
-  const startValueRef = useRef(0)
-  const targetRef = useRef(target)
-  const rafRef = useRef<number | null>(null)
-
-  const easeOutCubic = (t: number): number => {
-    return 1 - Math.pow(1 - t, 3)
-  }
+function useAnimatedNumber(target: number, duration: number = 600, delay: number = 0): number {
+  const [displayValue, setDisplayValue] = useState(target)
+  const animationRef = useRef<{ startTime: number | null; startValue: number; rafId: number | null }>({
+    startTime: null,
+    startValue: 0,
+    rafId: null
+  })
 
   useEffect(() => {
-    targetRef.current = target
-    startValueRef.current = displayValue
-    startTimeRef.current = null
+    // 清除之前的动画
+    if (animationRef.current.rafId) {
+      cancelAnimationFrame(animationRef.current.rafId)
+    }
 
-    const animate = (timestamp: number) => {
-      if (startTimeRef.current === null) {
-        startTimeRef.current = timestamp + delay
-      }
+    const startValue = displayValue
+    const startTime = performance.now() + delay
+    animationRef.current = { startTime, startValue, rafId: null }
 
-      const elapsed = timestamp - startTimeRef.current
+    const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
 
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime
+      
       if (elapsed < 0) {
-        rafRef.current = requestAnimationFrame(animate)
+        animationRef.current.rafId = requestAnimationFrame(animate)
         return
       }
 
       const progress = Math.min(elapsed / duration, 1)
       const easedProgress = easeOutCubic(progress)
-      const currentValue = startValueRef.current + (targetRef.current - startValueRef.current) * easedProgress
+      const currentValue = startValue + (target - startValue) * easedProgress
 
       setDisplayValue(currentValue)
 
       if (progress < 1) {
-        rafRef.current = requestAnimationFrame(animate)
+        animationRef.current.rafId = requestAnimationFrame(animate)
       }
     }
 
-    rafRef.current = requestAnimationFrame(animate)
+    animationRef.current.rafId = requestAnimationFrame(animate)
 
     return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current)
+      if (animationRef.current.rafId) {
+        cancelAnimationFrame(animationRef.current.rafId)
       }
     }
-  }, [target, duration, delay])
+  }, [target])
 
   return displayValue
 }
 
 // 圆环进度动画 Hook
-function useAnimatedProgress(targetProgress: number, duration: number = 800, delay: number = 0): number {
-  const [displayProgress, setDisplayProgress] = useState(0)
-  const startTimeRef = useRef<number | null>(null)
-  const startProgressRef = useRef(0)
-  const targetRef = useRef(targetProgress)
-  const rafRef = useRef<number | null>(null)
-
-  const easeOutCubic = (t: number): number => {
-    return 1 - Math.pow(1 - t, 3)
-  }
+function useAnimatedProgress(targetProgress: number, duration: number = 600, delay: number = 0): number {
+  const [displayProgress, setDisplayProgress] = useState(targetProgress)
+  const animationRef = useRef<{ startTime: number | null; startProgress: number; rafId: number | null }>({
+    startTime: null,
+    startProgress: 0,
+    rafId: null
+  })
 
   useEffect(() => {
-    targetRef.current = targetProgress
-    startProgressRef.current = displayProgress
-    startTimeRef.current = null
+    if (animationRef.current.rafId) {
+      cancelAnimationFrame(animationRef.current.rafId)
+    }
 
-    const animate = (timestamp: number) => {
-      if (startTimeRef.current === null) {
-        startTimeRef.current = timestamp + delay
-      }
+    const startProgress = displayProgress
+    const startTime = performance.now() + delay
+    animationRef.current = { startTime, startProgress, rafId: null }
 
-      const elapsed = timestamp - startTimeRef.current
+    const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
 
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime
+      
       if (elapsed < 0) {
-        rafRef.current = requestAnimationFrame(animate)
+        animationRef.current.rafId = requestAnimationFrame(animate)
         return
       }
 
       const progress = Math.min(elapsed / duration, 1)
       const easedProgress = easeOutCubic(progress)
-      const currentProgress = startProgressRef.current + (targetRef.current - startProgressRef.current) * easedProgress
+      const currentProgress = startProgress + (targetProgress - startProgress) * easedProgress
 
       setDisplayProgress(currentProgress)
 
       if (progress < 1) {
-        rafRef.current = requestAnimationFrame(animate)
+        animationRef.current.rafId = requestAnimationFrame(animate)
       }
     }
 
-    rafRef.current = requestAnimationFrame(animate)
+    animationRef.current.rafId = requestAnimationFrame(animate)
 
     return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current)
+      if (animationRef.current.rafId) {
+        cancelAnimationFrame(animationRef.current.rafId)
       }
     }
-  }, [targetProgress, duration, delay])
+  }, [targetProgress])
 
   return displayProgress
 }
@@ -474,7 +478,7 @@ function createWeekHeatmapCells(): WeekHeatmapCell[] {
   for (let offset = -3; offset <= 3; offset++) {
     const date = new Date(today)
     date.setDate(today.getDate() + offset)
-    const dateKey = formatDateKey(date)
+    const dateKey = normalizeTo2025(formatDateKey(date))
     cells.push({
       date: dateKey,
       dayName: SHORT_DAY_NAMES[date.getDay()],
@@ -494,10 +498,11 @@ function IndexPage() {
   const [meals, setMeals] = useState<HomeMealItem[]>([])
   const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(createWeekHeatmapCells())
   const [loading, setLoading] = useState(true)
+  const [isSwitchingDate, setIsSwitchingDate] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
-  const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()))
+  const [selectedDate, setSelectedDate] = useState(normalizeTo2025(formatDateKey(new Date())))
 
   // 体重/喝水状态
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetricsStorage>(getStoredBodyMetrics())
@@ -541,21 +546,25 @@ function IndexPage() {
       console.log('[DEBUG] 设置 meals:', res.meals)
       setMeals(res.meals || [])
       
-      // 构建7天热力图数据
+      // 构建7天热力图数据 - 始终以今天为中心（不随点击滚动）
       const today = new Date()
+      console.log('[DEBUG] 构建热力图, 中心日期(今天):', formatDateKey(today))
       const nextWeekHeatmapCells: WeekHeatmapCell[] = []
       for (let offset = -3; offset <= 3; offset++) {
         const date = new Date(today)
         date.setDate(today.getDate() + offset)
         const dateKey = formatDateKey(date)
-        const dayData = stats.daily_calories.find(d => d.date === dateKey)
+        // 将日期转换为2025年格式用于前端显示
+        const displayDateKey = normalizeTo2025(dateKey)
+        // 匹配时需要与后端返回的格式匹配
+        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === displayDateKey)
         const hasRecord = dayData && dayData.calories > 0
         const calories = dayData?.calories || 0
         const target = stats.tdee || 2000
         const intakeRatio = hasRecord ? calories / target : 0
         
         nextWeekHeatmapCells.push({
-          date: dateKey,
+          date: displayDateKey,
           dayName: SHORT_DAY_NAMES[date.getDay()],
           dayNum: String(date.getDate()),
           calories,
@@ -592,8 +601,9 @@ function IndexPage() {
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
     } finally {
       setLoading(false)
+      setIsSwitchingDate(false)
     }
-  }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading])
+  }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading, setIsSwitchingDate])
 
   // 每次显示页面时刷新数据
   const selectedDateRef = useRef(selectedDate)
@@ -601,7 +611,7 @@ function IndexPage() {
   const skipNextRefreshRef = useRef(false)
   
   Taro.useDidShow(() => {
-    const today = formatDateKey(new Date())
+    const today = normalizeTo2025(formatDateKey(new Date()))
     const currentSelected = selectedDateRef.current
     console.log('[DEBUG] useDidShow, selectedDate:', currentSelected, 'today:', today, 'skip:', skipNextRefreshRef.current)
     
@@ -756,7 +766,7 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    const today = formatDateKey(new Date())
+    const today = normalizeTo2025(formatDateKey(new Date()))
     Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(today)}` })
   }
 
@@ -769,10 +779,24 @@ function IndexPage() {
   }
 
   const handleDateSelect = (date: string) => {
-    console.log('[DEBUG] 点击日期:', date)
+    console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
-    console.log('[DEBUG] 调用 loadDashboard:', date)
+    // date 已经是2025格式，直接使用
     setSelectedDate(date)
+    // 立即进入日期切换状态，显示加载中并归零数字
+    setIsSwitchingDate(true)
+    // 先清空当前数据，让数字归零
+    setIntakeData({
+      target: 0,
+      current: 0,
+      remaining: 0,
+      progress: 0,
+      macros: {
+        protein: { current: 0, target: 0, remaining: 0, progress: 0 },
+        carbs: { current: 0, target: 0, remaining: 0, progress: 0 },
+        fat: { current: 0, target: 0, remaining: 0, progress: 0 }
+      }
+    })
     loadDashboard(date)
   }
 
@@ -1025,6 +1049,10 @@ function IndexPage() {
   )
   
   const waterProgress = calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
+  
+  // 喝水动画
+  const animatedWaterTotal = useAnimatedNumber(todayWater.total, 600, 0)
+  const animatedWaterProgress = useAnimatedProgress(waterProgress, 600, 0)
 
   return (
     <View className='home-page'>
@@ -1054,22 +1082,25 @@ function IndexPage() {
         <View className='date-selector-section'>
           <View className='date-list'>
             {weekHeatmapCells.map((cell) => {
-              const progressPercent = cell.target > 0 
-                ? Math.min(100, Math.round((cell.calories / cell.target) * 100))
-                : 0
+              // 计算圆圈颜色状态
+              // 无记录: 白色, 有记录未超目标: 绿色, 超过目标: 红色
+              let circleClass = 'is-empty'  // 默认无记录白色
+              if (cell.calories > 0) {
+                if (cell.calories > cell.target) {
+                  circleClass = 'is-over'  // 超过目标红色
+                } else {
+                  circleClass = 'is-recorded'  // 有记录未超过绿色
+                }
+              }
               
               return (
                 <View
                   key={cell.date}
-                  className={`date-item ${cell.isToday ? 'is-today' : ''} ${selectedDate === cell.date ? 'is-selected' : ''}`}
+                  className={`date-item ${selectedDate === cell.date ? 'is-selected' : ''}`}
                   onClick={() => handleDateSelect(cell.date)}
                 >
-                  <View 
-                    className='date-progress-bg'
-                    style={{ height: `${progressPercent}%` }}
-                  />
                   <Text className='date-day-name'>{cell.dayName}</Text>
-                  <View className='date-day-circle'>
+                  <View className={`date-day-circle ${circleClass}`}>
                     <Text className='date-num-text'>{cell.dayNum}</Text>
                   </View>
                 </View>
@@ -1083,8 +1114,15 @@ function IndexPage() {
           <View className='main-card-header'>
             <View className='main-card-title'>
               <Text className='card-label'>剩余可摄入</Text>
-              <Text className='card-value'>{formatNumberWithComma(Math.round(animatedRemainingCalories))}</Text>
-              <Text className='card-unit'>kcal</Text>
+              {isSwitchingDate ? (
+                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', marginTop: '8rpx' }}>
+                  <Text className='card-value' style={{ fontSize: '36rpx', color: '#9ca3af' }}>--</Text>
+                  <View className='loading-spinner' style={{ width: '24rpx', height: '24rpx', borderWidth: '3rpx' }} />
+                </View>
+              ) : (
+                <Text className='card-value'>{formatNumberWithComma(Math.round(animatedRemainingCalories))}</Text>
+              )}
+              {!isSwitchingDate && <Text className='card-unit'>kcal</Text>}
             </View>
             <View className='target-section'>
               <Text className='target-text'>目标: {formatDisplayNumber(intakeData.target)}</Text>
@@ -1104,17 +1142,12 @@ function IndexPage() {
           </View>
         </View>
 
-        {/* 三大营养素卡片 */}
+        {/* 三大营养素卡片 - 带动画效果 */}
         <View className='macros-section'>
           {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
             const macro = intakeData.macros[key]
-            const currentValue = normalizeDisplayNumber(macro.current)
-            const targetValue = normalizeDisplayNumber(macro.target)
-            const progress = calculateProgressPercent(currentValue, targetValue)
-            const visualProgress = clampVisualProgress(progress)
-            
-            const animatedProgress = clampVisualProgress(animatedMacroProgress[key] ?? 0)
-            const animatedValue = animatedMacroValues[key] ?? 0
+            const animatedValue = animatedMacroValues[key]
+            const animatedProgress = animatedMacroProgress[key]
             
             return (
               <View key={key} className='macro-card'>
@@ -1140,10 +1173,20 @@ function IndexPage() {
                         }}
                       />
                       <View className='macro-gauge-center'>
-                        <Text className='macro-gauge-value' style={{ color }}>
-                          {loading ? '--' : formatDisplayNumber(animatedValue)}
-                        </Text>
-                        <Text className='macro-gauge-unit'>克</Text>
+                        {isSwitchingDate ? (
+                          <View className='loading-dots'>
+                            <View className='loading-dot' />
+                            <View className='loading-dot' />
+                            <View className='loading-dot' />
+                          </View>
+                        ) : (
+                          <>
+                            <Text className='macro-gauge-value' style={{ color }}>
+                              {formatDisplayNumber(animatedValue)}
+                            </Text>
+                            <Text className='macro-gauge-unit'>克</Text>
+                          </>
+                        )}
                       </View>
                     </View>
                   </View>
@@ -1200,18 +1243,18 @@ function IndexPage() {
               <IconChevronRight size={16} color='#9ca3af' />
             </View>
             <View className='body-status-content'>
-              <Text className='body-status-value'>{todayWater.total}</Text>
+              <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
               <Text className='body-status-unit'>ml</Text>
             </View>
             <View className='body-status-progress-wrap'>
               <View className='body-status-progress-bg'>
                 <View 
                   className='body-status-progress-fill water'
-                  style={{ width: `${clampVisualProgress(waterProgress)}%` }}
+                  style={{ width: `${clampVisualProgress(animatedWaterProgress)}%` }}
                 />
               </View>
               <Text className='body-status-progress-text'>
-                {Math.round(waterProgress)}% / 目标 {bodyMetrics.waterGoalMl}ml
+                {Math.round(animatedWaterProgress)}% / 目标 {bodyMetrics.waterGoalMl}ml
               </Text>
             </View>
           </View>

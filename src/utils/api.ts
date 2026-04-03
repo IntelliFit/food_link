@@ -1308,12 +1308,27 @@ export async function getUnlimitedQRCode(
 export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   // 添加时间戳禁用缓存
   const timestamp = Date.now()
-  const url = date 
-    ? `/api/home/dashboard?date=${encodeURIComponent(date)}&_t=${timestamp}`
+  // 转换日期为2026年（系统时间可能是2026年，但前端传入的是2025年）
+  const apiDate = date ? date.replace(/^2025-/, '2026-') : undefined
+  const url = apiDate 
+    ? `/api/home/dashboard?date=${encodeURIComponent(apiDate)}&_t=${timestamp}`
     : `/api/home/dashboard?_t=${timestamp}`
+  console.log('[DEBUG API] ====== 请求开始 ======')
+  console.log('[DEBUG API] 原始日期参数:', date)
+  console.log('[DEBUG API] 转换后日期:', apiDate)
   console.log('[DEBUG API] 请求 URL:', url)
-  const res = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
-  console.log('[DEBUG API] 响应状态:', res.statusCode, '数据:', res.data)
+  
+  const res = await authenticatedRequest(url, { 
+    method: 'GET', 
+    timeout: 10000,
+    header: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache'
+    }
+  })
+  console.log('[DEBUG API] 响应状态:', res.statusCode)
+  console.log('[DEBUG API] 响应数据 intakeData:', res.data?.intakeData)
+  console.log('[DEBUG API] ====== 请求结束 ======')
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取首页数据失败'
     throw new Error(msg)
