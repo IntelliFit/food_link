@@ -310,46 +310,46 @@ function HealthProfileEditPage() {
 
   if (loading) {
     return (
-      <View className="health-profile-edit-page">
-        <View className="loading-wrap">
-          <Text className="loading-text">加载中...</Text>
+      <View className='health-profile-edit-page'>
+        <View className='loading-wrap'>
+          <Text className='loading-text'>加载中...</Text>
         </View>
       </View>
     )
   }
 
   return (
-    <View className="health-profile-edit-page">
-      <ScrollView className="scroll-wrap" scrollY enhanced showScrollbar={false}>
+    <View className='health-profile-edit-page'>
+      <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         {/* 基础信息 */}
-        <View className="section">
-          <Text className="section-title">基础信息</Text>
+        <View className='section'>
+          <Text className='section-title'>基础信息</Text>
 
-          <View className="form-item">
-            <Text className="form-label">
-              性别 <Text className="required">*</Text>
+          <View className='form-item'>
+            <Text className='form-label'>
+              性别 <Text className='required'>*</Text>
             </Text>
-            <View className="choice-row">
+            <View className='choice-row'>
               <View
                 className={`choice-btn ${gender === 'male' ? 'active' : ''}`}
                 onClick={() => setGender('male')}
               >
-                <Text className="choice-icon iconfont icon-nannv-nan" />
-                <Text className="choice-text">男</Text>
+                <Text className='choice-icon iconfont icon-nannv-nan' />
+                <Text className='choice-text'>男</Text>
               </View>
               <View
                 className={`choice-btn ${gender === 'female' ? 'active' : ''}`}
                 onClick={() => setGender('female')}
               >
-                <Text className="choice-icon iconfont icon-nannv-nv" />
-                <Text className="choice-text">女</Text>
+                <Text className='choice-icon iconfont icon-nannv-nv' />
+                <Text className='choice-text'>女</Text>
               </View>
             </View>
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">
-              年龄 <Text className="required">*</Text>
+          <View className='form-item'>
+            <Text className='form-label'>
+              年龄 <Text className='required'>*</Text>
             </Text>
             <AgePicker
               value={age}
@@ -363,11 +363,11 @@ function HealthProfileEditPage() {
             />
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">
-              身高 <Text className="required">*</Text>
+          <View className='form-item'>
+            <Text className='form-label'>
+              身高 <Text className='required'>*</Text>
             </Text>
-            <View className="ruler-container">
+            <View className='ruler-container'>
               <HeightRuler
                 value={height ? Number(height) : 170}
                 onChange={(val) => setHeight(String(val))}
@@ -377,11 +377,11 @@ function HealthProfileEditPage() {
             </View>
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">
-              体重 <Text className="required">*</Text>
+          <View className='form-item'>
+            <Text className='form-label'>
+              体重 <Text className='required'>*</Text>
             </Text>
-            <View className="ruler-container">
+            <View className='ruler-container'>
               <WeightRuler
                 value={weight ? Number(weight) : 60}
                 onChange={(val) => setWeight(String(val))}
@@ -392,11 +392,11 @@ function HealthProfileEditPage() {
             </View>
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">
-              饮食目标 <Text className="required">*</Text>
+          <View className='form-item'>
+            <Text className='form-label'>
+              饮食目标 <Text className='required'>*</Text>
             </Text>
-            <View className="option-list">
+            <View className='option-list'>
               {GOAL_OPTIONS.map((opt) => (
                 <View
                   key={opt.value}
@@ -404,39 +404,39 @@ function HealthProfileEditPage() {
                   onClick={() => setDietGoal(opt.value)}
                 >
                   <Text className={`option-icon iconfont ${opt.icon}`}></Text>
-                  <View className="option-info">
-                    <Text className="option-label">{opt.label}</Text>
-                    <Text className="option-desc">{opt.desc}</Text>
+                  <View className='option-info'>
+                    <Text className='option-label'>{opt.label}</Text>
+                    <Text className='option-desc'>{opt.desc}</Text>
                   </View>
                 </View>
               ))}
             </View>
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">
-              活动水平 <Text className="required">*</Text>
+          <View className='form-item'>
+            <Text className='form-label'>
+              活动水平 <Text className='required'>*</Text>
             </Text>
-            <View className="option-list">
+            <View className='option-list'>
               {ACTIVITY_OPTIONS.map((o) => (
                 <View
                   key={o.value}
                   className={`option-card ${activityLevel === o.value ? 'active' : ''}`}
                   onClick={() => setActivityLevel(o.value)}
                 >
-                  <Text className="option-icon">{o.icon}</Text>
-                  <Text className="option-label">{o.label}</Text>
-                  <Text className="option-desc">{o.desc}</Text>
+                  <Text className='option-icon'>{o.icon}</Text>
+                  <Text className='option-label'>{o.label}</Text>
+                  <Text className='option-desc'>{o.desc}</Text>
                 </View>
               ))}
             </View>
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">
-              执行模式 <Text className="required">*</Text>
+          <View className='form-item'>
+            <Text className='form-label'>
+              执行模式 <Text className='required'>*</Text>
             </Text>
-            <View className="option-list">
+            <View className='option-list'>
               {EXECUTION_MODE_OPTIONS.map((opt) => (
                 <View
                   key={opt.value}
@@ -463,9 +463,9 @@ function HealthProfileEditPage() {
                     setExecutionMode(opt.value)
                   }}
                 >
-                  <View className="option-info">
-                    <Text className="option-label">{opt.title}</Text>
-                    <Text className="option-desc">{opt.desc}</Text>
+                  <View className='option-info'>
+                    <Text className='option-label'>{opt.title}</Text>
+                    <Text className='option-desc'>{opt.desc}</Text>
                   </View>
                 </View>
               ))}
@@ -474,19 +474,19 @@ function HealthProfileEditPage() {
         </View>
 
         {/* 健康状况 */}
-        <View className="section">
-          <Text className="section-title">健康状况</Text>
+        <View className='section'>
+          <Text className='section-title'>健康状况</Text>
 
-          <View className="form-item">
-            <Text className="form-label">既往病史（可多选）</Text>
-            <View className="option-grid">
+          <View className='form-item'>
+            <Text className='form-label'>既往病史（可多选）</Text>
+            <View className='option-grid'>
               {MEDICAL_OPTIONS.map((o) => (
                 <View
                   key={o.value}
                   className={`tag-btn ${medicalHistory.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleMedical(o.value)}
                 >
-                  <Text className="tag-text">{o.label}</Text>
+                  <Text className='tag-text'>{o.label}</Text>
                 </View>
               ))}
               {customMedicalList.map((item) => (
@@ -496,56 +496,56 @@ function HealthProfileEditPage() {
                   onClick={() => toggleCustomMedical(item)}
                   onLongPress={() => handleRemoveCustomMedical(item)}
                 >
-                  <Text className="tag-text">{item}</Text>
+                  <Text className='tag-text'>{item}</Text>
                 </View>
               ))}
             </View>
-            <View className="custom-input-wrap">
+            <View className='custom-input-wrap'>
               <Input
-                className="custom-input"
-                placeholder="其他病史，输入后点击添加"
+                className='custom-input'
+                placeholder='其他病史，输入后点击添加'
                 value={customMedical}
                 onInput={(e) => setCustomMedical(e.detail.value)}
                 onConfirm={handleAddCustomMedical}
               />
-              <View className="custom-input-btn" onClick={handleAddCustomMedical}>
+              <View className='custom-input-btn' onClick={handleAddCustomMedical}>
                 <Text>添加</Text>
               </View>
             </View>
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">特殊饮食习惯（可多选）</Text>
-            <View className="option-grid">
+          <View className='form-item'>
+            <Text className='form-label'>特殊饮食习惯（可多选）</Text>
+            <View className='option-grid'>
               {DIET_OPTIONS.map((o) => (
                 <View
                   key={o.value}
                   className={`tag-btn ${dietPreference.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleDiet(o.value)}
                 >
-                  <Text className="tag-icon">{o.icon}</Text>
-                  <Text className="tag-text">{o.label}</Text>
+                  <Text className='tag-icon'>{o.icon}</Text>
+                  <Text className='tag-text'>{o.label}</Text>
                 </View>
               ))}
             </View>
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">过敏源</Text>
+          <View className='form-item'>
+            <Text className='form-label'>过敏源</Text>
             <Textarea
-              className="text-input textarea-input"
-              placeholder="如：海鲜、花生，多个用顿号分隔"
+              className='text-input textarea-input'
+              placeholder='如：海鲜、花生，多个用顿号分隔'
               value={allergies}
               onInput={(e) => setAllergies(e.detail.value)}
               maxlength={200}
             />
           </View>
 
-          <View className="form-item">
-            <Text className="form-label">特殊情况和补充</Text>
+          <View className='form-item'>
+            <Text className='form-label'>特殊情况和补充</Text>
             <Textarea
-              className="text-input textarea-input"
-              placeholder="例如：孕期、哺乳期、手术恢复期等"
+              className='text-input textarea-input'
+              placeholder='例如：孕期、哺乳期、手术恢复期等'
               value={healthNotes}
               onInput={(e) => setHealthNotes(e.detail.value)}
               maxlength={500}
@@ -554,41 +554,41 @@ function HealthProfileEditPage() {
         </View>
 
         {/* 体检报告 */}
-        <View className="section">
-          <Text className="section-title">体检报告（选填）</Text>
+        <View className='section'>
+          <Text className='section-title'>体检报告（选填）</Text>
           <View
             className={`upload-area ${reportImageUrl ? 'has-image' : ''}`}
             onClick={handleReportUpload}
           >
             {reportImageUrl ? (
               <>
-                <Image src={reportImageUrl} mode="aspectFit" className="preview-image" />
-                <View className="reupload-mask">
-                  <Text className="iconfont icon-xiangji" style={{ fontSize: '48rpx', color: '#fff' }}></Text>
-                  <Text className="reupload-text">点击更换图片</Text>
+                <Image src={reportImageUrl} mode='aspectFit' className='preview-image' />
+                <View className='reupload-mask'>
+                  <Text className='iconfont icon-xiangji' style={{ fontSize: '48rpx', color: '#fff' }}></Text>
+                  <Text className='reupload-text'>点击更换图片</Text>
                 </View>
               </>
             ) : (
-              <View className="upload-placeholder">
-                <Text className="upload-icon iconfont icon-paizhao-xianxing"></Text>
-                <Text className="upload-title">点击上传报告</Text>
-                <Text className="upload-desc">支持 JPG / PNG 格式图片</Text>
+              <View className='upload-placeholder'>
+                <Text className='upload-icon iconfont icon-paizhao-xianxing'></Text>
+                <Text className='upload-title'>点击上传报告</Text>
+                <Text className='upload-desc'>支持 JPG / PNG 格式图片</Text>
               </View>
             )}
           </View>
-          <Text className="upload-hint">AI 将自动识别血糖、血脂等关键指标</Text>
+          <Text className='upload-hint'>AI 将自动识别血糖、血脂等关键指标</Text>
         </View>
 
         {/* 底部操作按钮 */}
-        <View className="footer-actions">
-          <View className="refill-link" onClick={handleRefillQuestionnaire}>
-            <Text className="refill-text">或前往答题页面重新填写</Text>
+        <View className='footer-actions'>
+          <View className='refill-link' onClick={handleRefillQuestionnaire}>
+            <Text className='refill-text'>或前往答题页面重新填写</Text>
           </View>
           <Button
             block
-            color="primary"
-            shape="round"
-            className="save-btn"
+            color='primary'
+            shape='round'
+            className='save-btn'
             onClick={handleSubmit}
             loading={saving}
           >

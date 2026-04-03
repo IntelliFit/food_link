@@ -167,10 +167,10 @@ function LocationSearchPage() {
   // 选点位置已通过 latitude/longitude 中心点展示
 
   return (
-    <View className="location-search-page">
-      <View className="map-wrap">
+    <View className='location-search-page'>
+      <View className='map-wrap'>
         <Map
-          className="map"
+          className='map'
           latitude={centerLat}
           longitude={centerLng}
           scale={15}
@@ -179,33 +179,33 @@ function LocationSearchPage() {
           onError={() => {}}
         />
         {/* 中心指示点：选点始终以地图中心为准 */}
-        <View className="map-center-pin">
-          <View className="map-center-pin-inner" />
+        <View className='map-center-pin'>
+          <View className='map-center-pin-inner' />
         </View>
         {locating && (
-          <View className="map-mask">
+          <View className='map-mask'>
             <Text>定位中...</Text>
           </View>
         )}
       </View>
 
-      <View className="panel">
-        <View className="search-row">
+      <View className='panel'>
+        <View className='search-row'>
           <Input
-            className="search-input"
-            placeholder="输入商家名/地名搜索"
+            className='search-input'
+            placeholder='输入商家名/地名搜索'
             value={keyword}
             onInput={(e) => setKeyword(e.detail.value)}
             onConfirm={doSearch}
-            confirmType="search"
+            confirmType='search'
           />
-          <View className="search-btn" onClick={doSearch}>
+          <View className='search-btn' onClick={doSearch}>
             {searching ? '搜索中' : '搜索'}
           </View>
         </View>
         <View className={`selected-address-card ${hasSelection ? 'selected-address-card--filled' : ''}`}>
-          <Text className="selected-address-label">当前选中</Text>
-          <Text className="selected-address-text">
+          <Text className='selected-address-label'>当前选中</Text>
+          <Text className='selected-address-text'>
             {selectedAddress || selectedName
               ? [typeof selectedName === 'string' && selectedName !== '地图选点' ? selectedName : '', typeof selectedAddress === 'string' ? selectedAddress : ''].filter(Boolean).join(' ').trim() || '已选位置'
               : '点击地图选点，或从搜索结果选择'}
@@ -213,31 +213,31 @@ function LocationSearchPage() {
         </View>
 
         {results.length > 0 && (
-          <View className="result-section">
-            <Text className="result-section-title">搜索结果（共 {results.length} 个，点击选择）</Text>
-            <ScrollView className="result-list" scrollY enhanced showScrollbar={false}>
+          <View className='result-section'>
+            <Text className='result-section-title'>搜索结果（共 {results.length} 个，点击选择）</Text>
+            <ScrollView className='result-list' scrollY enhanced showScrollbar={false}>
               {results.map((poi, idx) => (
                 <View
                   key={idx}
-                  className="result-item"
+                  className='result-item'
                   onClick={() => handleSelectResult(poi)}
                 >
-                  <View className="result-item-main">
-                    <Text className="result-item-index">{idx + 1}</Text>
-                    <View className="result-item-content">
-                      <Text className="result-name">{poi.name || '未命名位置'}</Text>
+                  <View className='result-item-main'>
+                    <Text className='result-item-index'>{idx + 1}</Text>
+                    <View className='result-item-content'>
+                      <Text className='result-name'>{poi.name || '未命名位置'}</Text>
                       {poi.address ? (
-                        <Text className="result-address" numberOfLines={3}>{poi.address}</Text>
+                        <Text className='result-address' numberOfLines={3}>{poi.address}</Text>
                       ) : null}
                     </View>
                   </View>
-                  <Text className="result-item-action">选这里</Text>
+                  <Text className='result-item-action'>选这里</Text>
                 </View>
               ))}
             </ScrollView>
             {results.length >= 4 && (
-              <View className="result-list-more">
-                <Text className="result-list-more-text">下滑查看更多</Text>
+              <View className='result-list-more'>
+                <Text className='result-list-more-text'>下滑查看更多</Text>
               </View>
             )}
           </View>

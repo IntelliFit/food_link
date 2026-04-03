@@ -32,7 +32,7 @@
   position: absolute;
   bottom: 48rpx;
   right: 32rpx;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgb(0 0 0 / 60%);
   backdrop-filter: blur(4px);
   padding: 8rpx 20rpx;
   border-radius: 200rpx;
@@ -45,7 +45,7 @@
 .counter-text {
   font-size: 24rpx;
   font-weight: 600;
-  color: #ffffff;
+  color: #fff;
   letter-spacing: 2rpx;
 }
 
@@ -62,7 +62,7 @@
 
 .logo-placeholder {
   background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.9) 0%, rgba(236, 253, 245, 0.88) 32%, rgba(209, 250, 229, 0.96) 100%);
+    radial-gradient(circle at top, rgb(255 255 255 / 90%) 0%, rgb(236 253 245 / 88%) 32%, rgb(209 250 229 / 96%) 100%);
 }
 
 .placeholder-icon-wrap {
@@ -72,8 +72,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 40rpx;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.06);
+  background: rgb(255 255 255 / 90%);
+  box-shadow: 0 10rpx 28rpx rgb(15 23 42 / 6%);
 }
 
 .placeholder-icon {
@@ -100,16 +100,16 @@
 .favorite-btn {
   position: absolute;
   top: 100rpx; // 避开状态栏
-  right: 32rpx;
-  width: 88rpx;
-  height: 88rpx;
-  background: rgba(255, 255, 255, 0.9);
+  right: 32rpx;rightrightright
+  width: 88rpx;widthwidth
+  height: 88rpx;height
+  background: rgb(255 255 255 / 90%);
   backdrop-filter: blur(8px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 15%);
   z-index: 10;
   transition: all 0.2s ease;
 
@@ -125,7 +125,7 @@
 
   &.favorited {
     color: #ef4444; // 收藏后红色
-    animation: pulse 0.3s ease;
+    animation: pulse 0.3s ease;animationanimationanimation
   }
 }
 
@@ -134,9 +134,9 @@
   position: relative;
   margin-top: -120rpx;
   padding: 0 32rpx 180rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
+  z-index: 2;z-indexz-indexz-index
+  display: flex;displaydisplay
+  flex-direction: column;flex-direction
   gap: 32rpx;
 }
 
@@ -144,7 +144,7 @@
   padding: 28rpx 30rpx;
   border: 1rpx solid transparent;
   border-radius: 32rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%);
   overflow: hidden;
 
   &.strict {
@@ -187,7 +187,7 @@
   flex-shrink: 0;
   font-size: 24rpx;
   color: #0f766e;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgb(255 255 255 / 70%);
   border-radius: 999rpx;
   padding: 8rpx 20rpx;
 }
@@ -209,20 +209,20 @@
   padding: 28rpx 30rpx;
   border-radius: 32rpx;
   border: 1rpx solid transparent;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%);
 
   &.outcome-ok {
-    background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+    background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
     border-color: #bbf7d0;
   }
 
   &.outcome-soft_reject {
-    background: linear-gradient(135deg, #fffbeb 0%, #ffffff 100%);
+    background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
     border-color: #fcd34d;
   }
 
   &.outcome-hard_reject {
-    background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%);
+    background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
     border-color: #fca5a5;
   }
 }
@@ -257,7 +257,7 @@
   padding: 8rpx 18rpx;
   border-radius: 999rpx;
   border: 1rpx solid transparent;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgb(255 255 255 / 80%);
 
   &.chip-ok {
     border-color: #86efac;
@@ -321,9 +321,9 @@
 .followup-question-card {
   padding: 28rpx 30rpx;
   border-radius: 32rpx;
-  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
   border: 1rpx solid #93c5fd;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%);
 }
 
 .followup-question-header {
@@ -393,18 +393,19 @@
 
 // 通用卡片样式
 %card-base {
-  background: #ffffff;
+  background: #fff;
   border-radius: 32rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%);
   overflow: hidden;
 }
 
 // 核心营养概览卡片
 .nutrition-overview-card {
   @extend %card-base;
+
   padding: 40rpx;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1rpx solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+  border: 1rpx solid rgb(255 255 255 / 60%);
 }
 
 .nutrition-header {
@@ -422,9 +423,9 @@
 
 .calories-value {
   font-size: 80rpx; // 超大数字
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1;
+  font-weight: 800;font-weightfont-weightfont-weight
+  color: #0f172a;colorcolor
+  line-height: 1;line-height
   font-family: 'DIN Alternate', sans-serif;
   letter-spacing: -2rpx;
 }
@@ -544,6 +545,7 @@
 // 双模型对比切换区域
 .model-switch-card {
   @extend %card-base;
+
   padding: 32rpx;
   background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
   border: 2rpx solid #d1fae5;
@@ -572,7 +574,7 @@
 }
 
 .model-tab {
-  background: #ffffff;
+  background: #fff;
   border-radius: 20rpx;
   padding: 24rpx;
   display: flex;
@@ -591,7 +593,7 @@
   &.active {
     border-color: #00bc7d;
     background: #ecfdf5;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.1);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 10%);
 
     .model-name {
       color: #059669;
@@ -616,6 +618,7 @@
 // AI 健康透视卡片
 .insight-card {
   @extend %card-base;
+
   padding: 32rpx;
 }
 
@@ -632,12 +635,14 @@
   }
 
   // 基础样式
-  border: 1rpx solid transparent;
+  border: 1rpx solid transparent;borderborderborder
   transition: all 0.2s ease;
+
+transitiontransition
 
   &.highlight {
     background: #f0fdf4;
-    border-color: rgba(0, 188, 125, 0.2);
+    border-color: rgb(0 188 125 / 20%);
     align-items: flex-start;
   }
 
@@ -648,7 +653,7 @@
 
   &.ratio {
     background: #fff7ed;
-    border-color: rgba(249, 115, 22, 0.15);
+    border-color: rgb(249 115 22 / 15%);
     align-items: flex-start;
   }
 }
@@ -663,7 +668,7 @@
   justify-content: center;
 
   &.green {
-    background: rgba(0, 188, 125, 0.1);
+    background: rgb(0 188 125 / 10%);
 
     .insight-icon {
       color: #00bc7d;
@@ -671,7 +676,7 @@
   }
 
   &.blue {
-    background: rgba(59, 130, 246, 0.1);
+    background: rgb(59 130 246 / 10%);
 
     .insight-icon {
       color: #3b82f6;
@@ -679,7 +684,7 @@
   }
 
   &.orange {
-    background: rgba(249, 115, 22, 0.1);
+    background: rgb(249 115 22 / 10%);
 
     .insight-icon {
       color: #f97316;
@@ -687,7 +692,7 @@
   }
 
   &.purple {
-    background: rgba(168, 85, 247, 0.1);
+    background: rgb(168 85 247 / 10%);
 
     .insight-icon {
       color: #a855f7;
@@ -695,7 +700,7 @@
   }
 
   &.teal {
-    background: rgba(20, 184, 166, 0.1);
+    background: rgb(20 184 166 / 10%);
 
     .insight-icon {
       color: #14b8a6;
@@ -705,7 +710,7 @@
 
 .insight-icon {
   font-size: 32rpx !important; // 调整图标大小适配圆圈
-  line-height: 1;
+  line-height: 1;line-heightline-heightline-height
 }
 
 .insight-body {
@@ -724,8 +729,8 @@
   font-size: 28rpx;
   color: #334155;
   line-height: 48rpx; // 增加行高，提升阅读体验
-  text-align: justify;
-  margin-top: 8rpx; // 对齐图标中心
+  text-align: justify;text-aligntext-aligntext-align
+  margin-top: 8rpx;margin-topmargin-top // 对齐图标中心
 }
 
 .insight-tags {
@@ -778,10 +783,11 @@
 
 .ingredient-card {
   @extend %card-base;
+
   padding: 0; // 内部布局控制内边距
-  border: 1rpx solid rgba(0, 0, 0, 0.03);
-  border-radius: 24rpx;
-  box-shadow: 0 6rpx 20rpx rgba(15, 23, 42, 0.05);
+  border: 1rpx solid rgb(0 0 0 / 3%);borderborderborder
+  border-radius: 24rpx;border-radiusborder-radius
+  box-shadow: 0 6rpx 20rpx rgb(15 23 42 / 5%);box-shadow
   transition: all 0.3s ease;
 
 }
@@ -893,10 +899,10 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
-  background: #ffffff;
+  background: #fff;
   padding: 6rpx;
   border-radius: 14rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 2%);
 }
 
 .adjust-btn {
@@ -974,22 +980,22 @@
 .macro-editor-item {
   &.protein {
     .macro-editor-chip {
-      background: rgba(0, 188, 125, 0.07);
-      border-color: rgba(0, 188, 125, 0.18);
+      background: rgb(0 188 125 / 7%);
+      border-color: rgb(0 188 125 / 18%);
     }
   }
 
   &.carbs {
     .macro-editor-chip {
-      background: rgba(59, 130, 246, 0.07);
-      border-color: rgba(59, 130, 246, 0.16);
+      background: rgb(59 130 246 / 7%);
+      border-color: rgb(59 130 246 / 16%);
     }
   }
 
   &.fat {
     .macro-editor-chip {
-      background: rgba(245, 158, 11, 0.08);
-      border-color: rgba(245, 158, 11, 0.18);
+      background: rgb(245 158 11 / 8%);
+      border-color: rgb(245 158 11 / 18%);
     }
   }
 }
@@ -1004,7 +1010,7 @@
   padding: 10rpx 12rpx;
   border-radius: 12rpx;
   border: 1rpx solid #dbe3ec;
-  background: #ffffff;
+  background: #fff;
 }
 
 .macro-editor-item-label {
@@ -1026,8 +1032,8 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: #ffffff;
-  box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.05);
+  background: #fff;
+  box-shadow: 0 -8rpx 32rpx rgb(0 0 0 / 5%);
   z-index: 100;
   border-radius: 32rpx 32rpx 0 0;
 }
@@ -1080,10 +1086,10 @@
   height: 96rpx;
   border-radius: 20rpx;
   background: #00bc7d; // 品牌绿
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.25);
+  display: flex;displaydisplaydisplay
+  align-items: center;align-itemsalign-items
+  justify-content: center;justify-content
+  box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 25%);
   transition: all 0.2s ease;
 
   &:active {
@@ -1103,13 +1109,13 @@
 
   &.soft-warning {
     background: #f59e0b;
-    box-shadow: 0 8rpx 20rpx rgba(245, 158, 11, 0.22);
+    box-shadow: 0 8rpx 20rpx rgb(245 158 11 / 22%);
   }
 
   .btn-text {
     font-size: 32rpx;
     font-weight: 600;
-    color: #ffffff;
+    color: #fff;
   }
 }
 
@@ -1121,9 +1127,9 @@
   flex-shrink: 0;
   padding: 14rpx 22rpx;
   border-radius: 100rpx;
-  background: #ffffff;
+  background: #fff;
   border: 2rpx solid #bbf7d0;
-  box-shadow: 0 8rpx 20rpx rgba(15, 23, 42, 0.04);
+  box-shadow: 0 8rpx 20rpx rgb(15 23 42 / 4%);
 
   &:active {
     background: #f0fdf4;
@@ -1165,11 +1171,8 @@
 // 餐次选择弹窗
 .meal-selector-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgb(0 0 0 / 60%);
   backdrop-filter: blur(4px);
   z-index: 999;
   display: flex;
@@ -1187,12 +1190,12 @@
 
 .meal-selector-card {
   width: 600rpx;
-  background: #ffffff;
+  background: #fff;
   border-radius: 32rpx;
   padding: 40rpx;
   transform: scale(0.9);
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 12rpx 48rpx rgba(0, 0, 0, 0.15);
+  box-shadow: 0 12rpx 48rpx rgb(0 0 0 / 15%);
 
   .visible & {
     transform: scale(1);
@@ -1229,7 +1232,7 @@
   &.active {
     background: #ecfdf5;
     border-color: #00bc7d;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.1);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 10%);
 
     .option-icon {
       color: #00bc7d;
@@ -1278,8 +1281,8 @@
 
   .confirm-btn {
     background: #00bc7d;
-    color: #ffffff;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.2);
+    color: #fff;
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 20%);
   }
 }
 
@@ -1322,7 +1325,7 @@
 
   .correction-icon {
     font-size: 22rpx;
-    color: #ffffff;
+    color: #fff;
   }
 
   .correction-text {
@@ -1343,11 +1346,8 @@
 // 二次纠错抽屉弹窗
 .correction-drawer-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgb(0 0 0 / 60%);
   backdrop-filter: blur(4px);
   z-index: 1000;
   display: flex;
@@ -1365,13 +1365,13 @@
 .correction-drawer-content {
   width: 100%;
   height: 85vh; // 占屏幕 85% 高度
-  background: #f8fafc;
-  border-radius: 40rpx 40rpx 0 0;
-  display: flex;
+  background: #f8fafc;85%background85%background85%background
+  border-radius: 40rpx 40rpx 0 0;border-radiusborder-radius
+  display: flex;display
   flex-direction: column;
   transform: translateY(100%);
   transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 -12rpx 48rpx rgba(0, 0, 0, 0.15);
+  box-shadow: 0 -12rpx 48rpx rgb(0 0 0 / 15%);
 
   &.slide-up {
     transform: translateY(0);
@@ -1383,9 +1383,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 32rpx 40rpx;
-  background: #ffffff;
+  background: #fff;
   border-radius: 40rpx 40rpx 0 0;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 4%);
   z-index: 2;
 
   .drawer-title {
@@ -1419,6 +1419,7 @@
 .drawer-scroll {
   flex: 1;
   height: 0;
+
   /* 必须加 height: 0 配合 flex: 1 才能让 ScrollView 正确滚动 */
   padding: 32rpx;
   box-sizing: border-box;
@@ -1435,10 +1436,10 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
-  background: #ffffff;
+  background: #fff;
   padding: 24rpx;
   border-radius: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 2%);
 }
 
 .correction-index {
@@ -1465,7 +1466,7 @@
 
     &:focus {
       border-color: #00bc7d;
-      background: #ffffff;
+      background: #fff;
     }
 
     &.name-input {
@@ -1489,7 +1490,7 @@
 
   &:focus-within {
     border: 2rpx solid #00bc7d;
-    background: #ffffff;
+    background: #fff;
   }
 
   .weight-input {
@@ -1553,10 +1554,10 @@
 }
 
 .additional-context-wrapper {
-  background: #ffffff;
+  background: #fff;
   padding: 32rpx;
   border-radius: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 2%);
 
   .context-label {
     display: flex;
@@ -1595,8 +1596,8 @@
 
 .drawer-footer {
   padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
-  background: #ffffff;
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.04);
+  background: #fff;
+  box-shadow: 0 -4rpx 16rpx rgb(0 0 0 / 4%);
   z-index: 2;
 
   .drawer-submit-btn {
@@ -1607,10 +1608,10 @@
     height: 96rpx;
     background: #00bc7d;
     border-radius: 24rpx;
-    color: #ffffff;
+    color: #fff;
     font-size: 32rpx;
     font-weight: 600;
-    box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.25);
+    box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 25%);
     transition: all 0.2s ease;
 
     &:active {

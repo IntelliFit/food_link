@@ -13,7 +13,7 @@
   flex-shrink: 0;
   border-radius: 0 0 24rpx 24rpx;
   overflow: hidden;
-  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 6%);
 }
 
 .map {
@@ -40,17 +40,14 @@
   height: 18rpx;
   border-radius: 50%;
   border: 4rpx solid #00bc7d;
-  background: #ffffff;
-  box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.15);
+  background: #fff;
+  box-shadow: 0 4rpx 8rpx rgb(0 0 0 / 15%);
 }
 
 .map-mask {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
+  inset: 0;
+  background: rgb(255 255 255 / 80%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -66,7 +63,7 @@
   background: #fff;
   border-radius: 24rpx 24rpx 0 0;
   margin-top: -16rpx;
-  box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 -4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
 .search-row {
@@ -185,7 +182,7 @@
   font-size: 24rpx;
   font-weight: 600;
   color: #00bc7d;
-  background: rgba(0, 188, 125, 0.12);
+  background: rgb(0 188 125 / 12%);
   border-radius: 50%;
 }
 
@@ -237,7 +234,7 @@
   border-radius: 16rpx;
   font-size: 32rpx;
   font-weight: 600;
-  box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.35);
+  box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 35%);
 
   &.disabled {
     background: #c9cdd4;

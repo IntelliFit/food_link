@@ -171,64 +171,64 @@ function FoodLibraryDetailPage() {
 
   if (loading) {
     return (
-      <View className="food-detail-page skeleton-wrapper">
+      <View className='food-detail-page skeleton-wrapper'>
         {/* 图片骨架 */}
-        <View className="skeleton-image" />
+        <View className='skeleton-image' />
 
         {/* 基础信息骨架 */}
-        <View className="skeleton-card info-card">
-          <View className="skeleton-row between">
-            <View className="skeleton-block title-block" />
-            <View className="skeleton-block tag-block" />
+        <View className='skeleton-card info-card'>
+          <View className='skeleton-row between'>
+            <View className='skeleton-block title-block' />
+            <View className='skeleton-block tag-block' />
           </View>
-          <View className="skeleton-block text-block" />
-          <View className="skeleton-block text-block short" />
+          <View className='skeleton-block text-block' />
+          <View className='skeleton-block text-block short' />
 
-          <View className="nutrients-block">
-            <View className="skeleton-block nutrient-item-block" />
-            <View className="skeleton-block nutrient-item-block" />
-            <View className="skeleton-block nutrient-item-block" />
+          <View className='nutrients-block'>
+            <View className='skeleton-block nutrient-item-block' />
+            <View className='skeleton-block nutrient-item-block' />
+            <View className='skeleton-block nutrient-item-block' />
           </View>
 
-          <View className="skeleton-row">
-            <View className="skeleton-block avatar-block" />
-            <View className="info-block">
-              <View className="skeleton-block text-block" style={{ width: '40%', marginBottom: '8rpx' }} />
-              <View className="skeleton-block text-block" style={{ width: '30%', marginBottom: 0 }} />
+          <View className='skeleton-row'>
+            <View className='skeleton-block avatar-block' />
+            <View className='info-block'>
+              <View className='skeleton-block text-block' style={{ width: '40%', marginBottom: '8rpx' }} />
+              <View className='skeleton-block text-block' style={{ width: '30%', marginBottom: 0 }} />
             </View>
           </View>
         </View>
 
         {/* 商家信息骨架 */}
-        <View className="skeleton-card">
-          <View className="skeleton-block text-block" style={{ width: '30%', marginBottom: '32rpx', height: '40rpx' }} />
-          <View className="skeleton-row">
-            <View className="skeleton-block" style={{ width: '40rpx', height: '40rpx' }} />
-            <View className="skeleton-block text-block" style={{ flex: 1, marginBottom: 0 }} />
+        <View className='skeleton-card'>
+          <View className='skeleton-block text-block' style={{ width: '30%', marginBottom: '32rpx', height: '40rpx' }} />
+          <View className='skeleton-row'>
+            <View className='skeleton-block' style={{ width: '40rpx', height: '40rpx' }} />
+            <View className='skeleton-block text-block' style={{ flex: 1, marginBottom: 0 }} />
           </View>
-          <View className="skeleton-row">
-            <View className="skeleton-block" style={{ width: '40rpx', height: '40rpx' }} />
-            <View className="skeleton-block text-block" style={{ flex: 1, marginBottom: 0 }} />
+          <View className='skeleton-row'>
+            <View className='skeleton-block' style={{ width: '40rpx', height: '40rpx' }} />
+            <View className='skeleton-block text-block' style={{ flex: 1, marginBottom: 0 }} />
           </View>
         </View>
 
         {/* 评论骨架 */}
-        <View className="skeleton-card">
-          <View className="skeleton-row between">
-            <View className="skeleton-block text-block" style={{ width: '20%', marginBottom: '24rpx', height: '40rpx' }} />
-            <View className="skeleton-block tag-block" style={{ width: '80rpx', height: '32rpx' }} />
+        <View className='skeleton-card'>
+          <View className='skeleton-row between'>
+            <View className='skeleton-block text-block' style={{ width: '20%', marginBottom: '24rpx', height: '40rpx' }} />
+            <View className='skeleton-block tag-block' style={{ width: '80rpx', height: '32rpx' }} />
           </View>
 
           <View style={{ marginTop: '24rpx' }}>
-            <View className="skeleton-row">
-              <View className="skeleton-block avatar-block" style={{ width: '72rpx', height: '72rpx' }} />
-              <View className="info-block">
-                <View className="skeleton-block text-block" style={{ width: '30%', marginBottom: '8rpx' }} />
-                <View className="skeleton-block text-block" style={{ width: '20%', marginBottom: 0 }} />
+            <View className='skeleton-row'>
+              <View className='skeleton-block avatar-block' style={{ width: '72rpx', height: '72rpx' }} />
+              <View className='info-block'>
+                <View className='skeleton-block text-block' style={{ width: '30%', marginBottom: '8rpx' }} />
+                <View className='skeleton-block text-block' style={{ width: '20%', marginBottom: 0 }} />
               </View>
             </View>
-            <View className="skeleton-block text-block" style={{ width: '100%', marginTop: '16rpx' }} />
-            <View className="skeleton-block text-block short" />
+            <View className='skeleton-block text-block' style={{ width: '100%', marginTop: '16rpx' }} />
+            <View className='skeleton-block text-block short' />
           </View>
         </View>
       </View>
@@ -237,9 +237,9 @@ function FoodLibraryDetailPage() {
 
   if (!item) {
     return (
-      <View className="food-detail-page">
-        <View className="loading-state">
-          <Text className="loading-text">内容不存在</Text>
+      <View className='food-detail-page'>
+        <View className='loading-state'>
+          <Text className='loading-text'>内容不存在</Text>
         </View>
       </View>
     )
@@ -250,117 +250,117 @@ function FoodLibraryDetailPage() {
     : (item.image_path ? [item.image_path] : [])
 
   return (
-    <View className="food-detail-page">
+    <View className='food-detail-page'>
       {/* 图片（支持多图轮播） */}
-      <View className="image-section">
+      <View className='image-section'>
         {imageList.length > 0 ? (
           <>
             <Swiper
-              className="detail-swiper"
+              className='detail-swiper'
               indicatorDots
-              indicatorColor="rgba(255,255,255,0.5)"
-              indicatorActiveColor="#fff"
+              indicatorColor='rgba(255,255,255,0.5)'
+              indicatorActiveColor='#fff'
               autoplay={false}
               circular
               onAnimationFinish={(e) => setCurrentImageIndex(e.detail.current)}
             >
               {imageList.map((src, index) => (
-                <SwiperItem key={index} className="detail-swiper-item">
+                <SwiperItem key={index} className='detail-swiper-item'>
                   <Image
-                    className="detail-image"
+                    className='detail-image'
                     src={src}
-                    mode="aspectFill"
+                    mode='aspectFill'
                     onClick={() => Taro.previewImage({ urls: imageList, current: src })}
                   />
                 </SwiperItem>
               ))}
             </Swiper>
             {imageList.length > 1 && (
-              <View className="image-counter">
-                <Text className="image-counter-text">{currentImageIndex + 1}/{imageList.length}</Text>
+              <View className='image-counter'>
+                <Text className='image-counter-text'>{currentImageIndex + 1}/{imageList.length}</Text>
               </View>
             )}
           </>
         ) : (
-          <View className="image-placeholder">暂无图片</View>
+          <View className='image-placeholder'>暂无图片</View>
         )}
         {item.suitable_for_fat_loss && (
-          <View className="fat-loss-badge">适合减脂</View>
+          <View className='fat-loss-badge'>适合减脂</View>
         )}
       </View>
 
       {/* 基础信息 */}
-      <View className="info-card">
-        <View className="info-header">
-          <Text className="info-title">{item.food_name || item.description || '健康餐'}</Text>
-          <View className="info-calories-badge">
-            <FireOutlined size="16" />
-            <Text className="info-calories">{item.total_calories.toFixed(0)} kcal</Text>
+      <View className='info-card'>
+        <View className='info-header'>
+          <Text className='info-title'>{item.food_name || item.description || '健康餐'}</Text>
+          <View className='info-calories-badge'>
+            <FireOutlined size='16' />
+            <Text className='info-calories'>{item.total_calories.toFixed(0)} kcal</Text>
           </View>
         </View>
         {item.description && (
-          <Text className="info-description">{item.description}</Text>
+          <Text className='info-description'>{item.description}</Text>
         )}
         {item.insight && (
-          <Text className="info-insight">{item.insight}</Text>
+          <Text className='info-insight'>{item.insight}</Text>
         )}
-        <View className="nutrients-row">
-          <View className="nutrient-item">
-            <Text className="nutrient-value">{item.total_protein.toFixed(1)}g</Text>
-            <Text className="nutrient-label">蛋白质</Text>
+        <View className='nutrients-row'>
+          <View className='nutrient-item'>
+            <Text className='nutrient-value'>{item.total_protein.toFixed(1)}g</Text>
+            <Text className='nutrient-label'>蛋白质</Text>
           </View>
-          <View className="nutrient-item">
-            <Text className="nutrient-value">{item.total_carbs.toFixed(1)}g</Text>
-            <Text className="nutrient-label">碳水</Text>
+          <View className='nutrient-item'>
+            <Text className='nutrient-value'>{item.total_carbs.toFixed(1)}g</Text>
+            <Text className='nutrient-label'>碳水</Text>
           </View>
-          <View className="nutrient-item">
-            <Text className="nutrient-value">{item.total_fat.toFixed(1)}g</Text>
-            <Text className="nutrient-label">脂肪</Text>
+          <View className='nutrient-item'>
+            <Text className='nutrient-value'>{item.total_fat.toFixed(1)}g</Text>
+            <Text className='nutrient-label'>脂肪</Text>
           </View>
         </View>
-        <View className="author-row">
+        <View className='author-row'>
           {item.author?.avatar ? (
-            <View className="author-avatar">
-              <Image className="author-avatar-img" src={item.author.avatar} />
+            <View className='author-avatar'>
+              <Image className='author-avatar-img' src={item.author.avatar} />
             </View>
           ) : (
-            <View className="author-avatar">
-              <UserOutlined size="20" color="#9ca3af" />
+            <View className='author-avatar'>
+              <UserOutlined size='20' color='#9ca3af' />
             </View>
           )}
-          <View className="author-info">
-            <Text className="author-name">{item.author?.nickname || '用户'}</Text>
-            <Text className="publish-time">{formatTime(item.published_at)}</Text>
+          <View className='author-info'>
+            <Text className='author-name'>{item.author?.nickname || '用户'}</Text>
+            <Text className='publish-time'>{formatTime(item.published_at)}</Text>
           </View>
         </View>
       </View>
 
       {/* 商家信息 */}
       {(item.merchant_name || item.merchant_address || item.city) && (
-        <View className="merchant-card">
-          <Text className="card-title">商家信息</Text>
+        <View className='merchant-card'>
+          <Text className='card-title'>商家信息</Text>
           {item.merchant_name && (
-            <View className="merchant-item">
-              <View className="merchant-icon-wrapper"><ShopOutlined size="18" /></View>
-              <Text className="merchant-text">{item.merchant_name}</Text>
+            <View className='merchant-item'>
+              <View className='merchant-icon-wrapper'><ShopOutlined size='18' /></View>
+              <Text className='merchant-text'>{item.merchant_name}</Text>
             </View>
           )}
           {item.merchant_address && (
-            <View className="merchant-item">
-              <View className="merchant-icon-wrapper"><LocationOutlined size="18" /></View>
-              <Text className="merchant-text">{item.merchant_address}</Text>
+            <View className='merchant-item'>
+              <View className='merchant-icon-wrapper'><LocationOutlined size='18' /></View>
+              <Text className='merchant-text'>{item.merchant_address}</Text>
             </View>
           )}
           {item.city && (
-            <View className="merchant-item">
-              <View className="merchant-icon-wrapper"><GuideOutlined size="18" /></View>
-              <Text className="merchant-text">{item.city}{item.district ? ` ${item.district}` : ''}</Text>
+            <View className='merchant-item'>
+              <View className='merchant-icon-wrapper'><GuideOutlined size='18' /></View>
+              <Text className='merchant-text'>{item.city}{item.district ? ` ${item.district}` : ''}</Text>
             </View>
           )}
           {item.taste_rating && (
-            <View className="merchant-item">
-              <View className="merchant-icon-wrapper"><Star size="18" className="star-icon" /></View>
-              <Text className="merchant-text">口味评分：{item.taste_rating} 分</Text>
+            <View className='merchant-item'>
+              <View className='merchant-icon-wrapper'><Star size='18' className='star-icon' /></View>
+              <Text className='merchant-text'>口味评分：{item.taste_rating} 分</Text>
             </View>
           )}
         </View>
@@ -368,11 +368,11 @@ function FoodLibraryDetailPage() {
 
       {/* 标签 */}
       {item.user_tags && item.user_tags.length > 0 && (
-        <View className="tags-card">
-          <Text className="card-title">标签</Text>
-          <View className="tags-list">
+        <View className='tags-card'>
+          <Text className='card-title'>标签</Text>
+          <View className='tags-list'>
             {item.user_tags.map((tag, idx) => (
-              <Text key={idx} className="tag-item">{tag}</Text>
+              <Text key={idx} className='tag-item'>{tag}</Text>
             ))}
           </View>
         </View>
@@ -380,47 +380,47 @@ function FoodLibraryDetailPage() {
 
       {/* 用户备注 */}
       {item.user_notes && (
-        <View className="notes-card">
-          <Text className="card-title">用户评价</Text>
-          <Text className="notes-content">{item.user_notes}</Text>
+        <View className='notes-card'>
+          <Text className='card-title'>用户评价</Text>
+          <Text className='notes-content'>{item.user_notes}</Text>
         </View>
       )}
 
       {/* 评论区 */}
-      <View className="comments-card">
-        <View className="comments-header">
-          <Text className="card-title">评论</Text>
-          <Text className="comments-count">{comments.length} 条</Text>
+      <View className='comments-card'>
+        <View className='comments-header'>
+          <Text className='card-title'>评论</Text>
+          <Text className='comments-count'>{comments.length} 条</Text>
         </View>
         {comments.length === 0 ? (
-          <View className="comments-empty">暂无评论，快来抢沙发</View>
+          <View className='comments-empty'>暂无评论，快来抢沙发</View>
         ) : (
-          <ScrollView className="comments-list" scrollY enhanced showScrollbar={false}>
+          <ScrollView className='comments-list' scrollY enhanced showScrollbar={false}>
             {comments.map(c => (
-              <View key={c.id} className="comment-item">
-                <View className="comment-header">
+              <View key={c.id} className='comment-item'>
+                <View className='comment-header'>
                   {c.avatar ? (
-                    <View className="comment-avatar">
-                      <Image className="comment-avatar-img" src={c.avatar} />
+                    <View className='comment-avatar'>
+                      <Image className='comment-avatar-img' src={c.avatar} />
                     </View>
                   ) : (
-                    <View className="comment-avatar">
-                      <UserOutlined size="16" color="#9ca3af" />
+                    <View className='comment-avatar'>
+                      <UserOutlined size='16' color='#9ca3af' />
                     </View>
                   )}
-                  <View className="comment-info">
-                    <Text className="comment-name">{c.nickname}</Text>
-                    <Text className="comment-time">{formatTime(c.created_at)}</Text>
+                  <View className='comment-info'>
+                    <Text className='comment-name'>{c.nickname}</Text>
+                    <Text className='comment-time'>{formatTime(c.created_at)}</Text>
                   </View>
                   {c.rating && (
-                    <View className="comment-rating-stars">
+                    <View className='comment-rating-stars'>
                       {Array.from({ length: c.rating }).map((_, i) => (
-                        <Star key={i} size="12" className="star-filled" />
+                        <Star key={i} size='12' className='star-filled' />
                       ))}
                     </View>
                   )}
                 </View>
-                <Text className="comment-content">{c.content}</Text>
+                <Text className='comment-content'>{c.content}</Text>
               </View>
             ))}
           </ScrollView>
@@ -428,51 +428,51 @@ function FoodLibraryDetailPage() {
       </View>
 
       {/* 底部操作栏 */}
-      <View className="bottom-bar">
+      <View className='bottom-bar'>
         <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
-          {item.liked ? <Like size="20" /> : <LikeOutlined size="20" />}
+          {item.liked ? <Like size='20' /> : <LikeOutlined size='20' />}
         </View>
         <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
-          {item.collected ? <Star size="20" className="star-filled" /> : <StarOutlined size="20" />}
+          {item.collected ? <Star size='20' className='star-filled' /> : <StarOutlined size='20' />}
         </View>
-        <View className="action-btn comment-btn" onClick={() => setShowCommentModal(true)}>
-          <CommentOutlined size="20" />
-          <Text className="action-text">写评论</Text>
+        <View className='action-btn comment-btn' onClick={() => setShowCommentModal(true)}>
+          <CommentOutlined size='20' />
+          <Text className='action-text'>写评论</Text>
         </View>
       </View>
 
       {/* 评论弹窗 */}
       {showCommentModal && (
-        <View className="comment-modal" onClick={() => setShowCommentModal(false)}>
-          <View className="comment-modal-content" onClick={e => e.stopPropagation()}>
-            <View className="modal-header">
-              <Text className="modal-title">发表评论</Text>
-              <View className="modal-close" onClick={() => setShowCommentModal(false)}>
-                <Cross size="24" color="#9ca3af" />
+        <View className='comment-modal' onClick={() => setShowCommentModal(false)}>
+          <View className='comment-modal-content' onClick={e => e.stopPropagation()}>
+            <View className='modal-header'>
+              <Text className='modal-title'>发表评论</Text>
+              <View className='modal-close' onClick={() => setShowCommentModal(false)}>
+                <Cross size='24' color='#9ca3af' />
               </View>
             </View>
-            <View className="rating-row">
-              <Text className="rating-label">评分（可选）：</Text>
-              <View className="rating-stars">
+            <View className='rating-row'>
+              <Text className='rating-label'>评分（可选）：</Text>
+              <View className='rating-stars'>
                 {[1, 2, 3, 4, 5].map(n => (
                   <View
                     key={n}
                     className={`rating-star-wrapper ${n <= commentRating ? 'active' : ''}`}
                     onClick={() => setCommentRating(n === commentRating ? 0 : n)}
                   >
-                    {n <= commentRating ? <Star size="28" /> : <StarOutlined size="28" />}
+                    {n <= commentRating ? <Star size='28' /> : <StarOutlined size='28' />}
                   </View>
                 ))}
               </View>
             </View>
             <Textarea
-              className="comment-input"
-              placeholder="分享你的想法..."
+              className='comment-input'
+              placeholder='分享你的想法...'
               value={commentContent}
               onInput={e => setCommentContent(e.detail.value)}
               maxlength={500}
             />
-            <View className="submit-btn" onClick={handleSubmitComment}>
+            <View className='submit-btn' onClick={handleSubmitComment}>
               {submitting ? '提交中...' : '发表评论'}
             </View>
           </View>

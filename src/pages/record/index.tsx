@@ -1,4 +1,4 @@
-import { View, Text, Image, Textarea, ScrollView } from '@tarojs/components'
+import { View, Text, Image, Textarea, ScrollView , Input } from '@tarojs/components'
 import { useState, useEffect, useMemo } from 'react'
 import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Calendar } from '@taroify/core'
@@ -21,7 +21,6 @@ import {
   type Nutrients,
 } from '../../utils/api'
 import { IconCamera, IconText, IconClock } from '../../components/iconfont'
-import { Input } from '@tarojs/components'
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'

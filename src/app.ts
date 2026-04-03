@@ -1,6 +1,5 @@
 import { PropsWithChildren } from 'react'
-import { useLaunch } from '@tarojs/taro'
-import Taro from '@tarojs/taro'
+import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'
 
 import './app.scss'

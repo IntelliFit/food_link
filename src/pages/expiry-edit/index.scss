@@ -29,9 +29,9 @@
 .expiry-edit-block {
   margin-top: 28rpx;
   padding: 28rpx;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgb(255 255 255 / 94%);
   border-radius: 28rpx;
-  box-shadow: 0 10rpx 30rpx rgba(31, 41, 55, 0.06);
+  box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);
 }
 
 .expiry-edit-label {
@@ -119,12 +119,12 @@
 }
 
 .expiry-loading {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgb(255 255 255 / 90%);
   color: #61756d;
 }
 
 .expiry-submit-btn {
   background: #00bc7d;
   color: #fff;
-  box-shadow: 0 12rpx 28rpx rgba(0, 188, 125, 0.22);
+  box-shadow: 0 12rpx 28rpx rgb(0 188 125 / 22%);
 }

@@ -1,6 +1,6 @@
 .stats-page {
   min-height: 100vh;
-  background: #ffffff;
+  background: #fff;
   padding-bottom: 200rpx;
   box-sizing: border-box;
 }
@@ -36,12 +36,12 @@
 .segmented-control {
   position: relative;
   display: flex;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgb(255 255 255 / 60%);
   backdrop-filter: blur(10px);
   padding: 8rpx;
   border-radius: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
-  border: 1rpx solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
+  border: 1rpx solid rgb(255 255 255 / 50%);
 
   &.is-loading .segment-item {
     opacity: 0.7;
@@ -88,22 +88,22 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.active {
-    background: #ffffff;
+    background: #fff;
     color: #00bc7d;
     font-weight: 600;
-    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 6%);
   }
 }
 
 // 通用卡片
 .stats-card {
   margin: 0 32rpx 28rpx;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgb(255 255 255 / 92%);
   backdrop-filter: blur(24px);
   border-radius: 28rpx;
   padding: 36rpx 32rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04), 0 1rpx 3rpx rgba(0, 0, 0, 0.02);
-  border: 1rpx solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%), 0 1rpx 3rpx rgb(0 0 0 / 2%);
+  border: 1rpx solid rgb(255 255 255 / 80%);
 }
 
 .card-header {
@@ -144,24 +144,24 @@
 // Hero Card
 .hero-card {
   padding: 40rpx;
-  color: #ffffff;
+  color: #fff;
   position: relative;
   overflow: hidden;
   border: none;
 
   &.deficit-mode {
     background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-    box-shadow: 0 12rpx 32rpx rgba(0, 188, 125, 0.3);
+    box-shadow: 0 12rpx 32rpx rgb(0 188 125 / 30%);
   }
 
   &.surplus-mode {
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    box-shadow: 0 12rpx 32rpx rgba(245, 158, 11, 0.3);
+    box-shadow: 0 12rpx 32rpx rgb(245 158 11 / 30%);
   }
 
   .card-header,
   .card-title {
-    color: rgba(255, 255, 255, 0.9);
+    color: rgb(255 255 255 / 90%);
   }
 }
 
@@ -180,7 +180,7 @@
 
 .hero-badge {
   font-size: 22rpx;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgb(255 255 255 / 25%);
   padding: 8rpx 18rpx;
   border-radius: 100rpx;
   font-weight: 600;
@@ -215,7 +215,7 @@
 .hero-grid {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.1);
+  background: rgb(0 0 0 / 10%);
   border-radius: 20rpx;
   padding: 24rpx;
 }
@@ -231,7 +231,7 @@
 .hero-divider {
   width: 1rpx;
   height: 48rpx;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(255 255 255 / 20%);
 }
 
 .hero-label {
@@ -260,7 +260,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4rpx 12rpx rgba(244, 63, 94, 0.08);
+  box-shadow: 0 4rpx 12rpx rgb(244 63 94 / 8%);
 }
 
 .streak-icon-font {
@@ -331,16 +331,16 @@
 
   &.none {
     background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-    border-color: rgba(100, 116, 139, 0.16);
+    border-color: rgb(100 116 139 / 16%);
   }
 
   &.surplus {
-    background: rgba(249, 115, 22, 0.15);
+    background: rgb(249 115 22 / 15%);
     border-color: transparent;
   }
 
   &.deficit {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgb(59 130 246 / 15%);
     border-color: transparent;
   }
 }
@@ -374,28 +374,28 @@
 
 .heatmap-cell.is-clickable:active {
   transform: scale(0.95);
-  background: rgba(0, 188, 125, 0.05);
+  background: rgb(0 188 125 / 5%);
 }
 
 .heatmap-cell.none {
   background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-  border-color: rgba(100, 116, 139, 0.16);
+  border-color: rgb(100 116 139 / 16%);
 }
 
 .heatmap-cell.surplus.level-1 {
-  background: rgba(249, 115, 22, 0.15);
+  background: rgb(249 115 22 / 15%);
 }
 
 .heatmap-cell.surplus.level-2 {
-  background: rgba(249, 115, 22, 0.35);
+  background: rgb(249 115 22 / 35%);
 }
 
 .heatmap-cell.deficit.level-1 {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgb(59 130 246 / 15%);
 }
 
 .heatmap-cell.deficit.level-2 {
-  background: rgba(59, 130, 246, 0.35);
+  background: rgb(59 130 246 / 35%);
 }
 
 .heatmap-cell-label {
@@ -412,6 +412,7 @@
 .heatmap-cell.surplus.level-1 .heatmap-cell-label {
   color: #f97316;
 }
+
 .heatmap-cell.surplus.level-2 .heatmap-cell-label {
   color: #c2410c;
 }
@@ -419,6 +420,7 @@
 .heatmap-cell.deficit.level-1 .heatmap-cell-label {
   color: #3b82f6;
 }
+
 .heatmap-cell.deficit.level-2 .heatmap-cell-label {
   color: #1d4ed8;
 }
@@ -427,7 +429,7 @@
   width: 8rpx;
   height: 8rpx;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
   opacity: 0.3;
   margin-top: 6rpx;
   position: absolute;
@@ -443,6 +445,7 @@
   background: #f97316;
   opacity: 0.6;
 }
+
 .heatmap-cell.surplus.level-2 .heatmap-cell-dot {
   background: #c2410c;
   opacity: 0.7;
@@ -452,6 +455,7 @@
   background: #3b82f6;
   opacity: 0.6;
 }
+
 .heatmap-cell.deficit.level-2 .heatmap-cell-dot {
   background: #1d4ed8;
   opacity: 0.7;
@@ -644,7 +648,7 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
-  border: 1rpx solid rgba(0, 0, 0, 0.03);
+  border: 1rpx solid rgb(0 0 0 / 3%);
 }
 
 .meal-icon-box {
@@ -687,7 +691,7 @@
 // Analysis
 .analysis-card {
   background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
-  border-color: rgba(59, 130, 246, 0.1);
+  border-color: rgb(59 130 246 / 10%);
 
   .card-header {
     justify-content: space-between;
@@ -699,7 +703,7 @@
   }
 
   .card-subtitle {
-    color: rgba(29, 78, 216, 0.6);
+    color: rgb(29 78 216 / 60%);
   }
 }
 
@@ -708,7 +712,7 @@
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
   background: #dbeafe;
-  border: 1rpx solid rgba(37, 99, 235, 0.12);
+  border: 1rpx solid rgb(37 99 235 / 12%);
 
   &.disabled {
     opacity: 0.65;
@@ -726,12 +730,12 @@
   margin-bottom: 16rpx;
   padding: 16rpx 18rpx;
   border-radius: 18rpx;
-  background: rgba(219, 234, 254, 0.72);
-  border: 1rpx solid rgba(59, 130, 246, 0.08);
+  background: rgb(219 234 254 / 72%);
+  border: 1rpx solid rgb(59 130 246 / 8%);
 
   &.warning {
-    background: rgba(254, 249, 195, 0.9);
-    border-color: rgba(245, 158, 11, 0.14);
+    background: rgb(254 249 195 / 90%);
+    border-color: rgb(245 158 11 / 14%);
   }
 }
 
@@ -791,13 +795,13 @@
   padding: 18rpx 28rpx;
   border-radius: 999rpx;
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 10rpx 24rpx rgba(37, 99, 235, 0.18);
+  box-shadow: 0 10rpx 24rpx rgb(37 99 235 / 18%);
 }
 
 .analysis-empty-action-text {
   font-size: 24rpx;
   line-height: 32rpx;
-  color: #ffffff;
+  color: #fff;
   font-weight: 600;
 }
 
@@ -805,8 +809,8 @@
   margin-bottom: 16rpx;
   padding: 16rpx 18rpx;
   border-radius: 18rpx;
-  background: rgba(254, 226, 226, 0.88);
-  border: 1rpx solid rgba(239, 68, 68, 0.12);
+  background: rgb(254 226 226 / 88%);
+  border: 1rpx solid rgb(239 68 68 / 12%);
 }
 
 .analysis-error-text {
@@ -850,7 +854,7 @@
   border-radius: 100rpx;
   font-size: 28rpx;
   font-weight: 600;
-  box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.25);
+  box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 25%);
 }
 
 .footer-placeholder {
@@ -867,15 +871,15 @@
   padding: 24rpx;
   border-radius: 28rpx;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 247, 251, 0.92) 100%),
-    linear-gradient(135deg, rgba(59, 130, 246, 0.06) 0%, rgba(16, 185, 129, 0.04) 100%);
-  border: 1rpx solid rgba(148, 163, 184, 0.12);
+    linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(244 247 251 / 92%) 100%),
+    linear-gradient(135deg, rgb(59 130 246 / 6%) 0%, rgb(16 185 129 / 4%) 100%);
+  border: 1rpx solid rgb(148 163 184 / 12%);
 }
 
 .water-panel {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(239, 246, 255, 0.92) 100%),
-    linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(14, 165, 233, 0.04) 100%);
+    linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(239 246 255 / 92%) 100%),
+    linear-gradient(135deg, rgb(59 130 246 / 8%) 0%, rgb(14 165 233 / 4%) 100%);
 }
 
 .body-metric-panel-header {
@@ -923,7 +927,7 @@
   min-width: 92rpx;
   padding: 12rpx 14rpx;
   border-radius: 20rpx;
-  background: rgba(241, 245, 249, 0.95);
+  background: rgb(241 245 249 / 95%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -968,14 +972,14 @@
   align-items: flex-end;
   justify-content: center;
   border-radius: 24rpx;
-  background: rgba(226, 232, 240, 0.5);
+  background: rgb(226 232 240 / 50%);
 }
 
 .water-trend-bar {
   width: 100%;
   border-radius: 999rpx;
   background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
-  box-shadow: 0 8rpx 20rpx rgba(37, 99, 235, 0.16);
+  box-shadow: 0 8rpx 20rpx rgb(37 99 235 / 16%);
 }
 
 .water-trend-label {

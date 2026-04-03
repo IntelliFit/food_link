@@ -3014,7 +3014,7 @@ export async function deleteUserRecipe(recipeId: string): Promise<{ message: str
 }
 
 /** 使用食谱（一键记录，可指定餐次） */
-export async function useUserRecipe(recipeId: string, mealType?: string): Promise<{ message: string; record_id: string }> {
+export async function applyUserRecipe(recipeId: string, mealType?: string): Promise<{ message: string; record_id: string }> {
   const response = await authenticatedRequest(`/api/recipes/${recipeId}/use`, {
     method: 'POST',
     data: { meal_type: mealType },

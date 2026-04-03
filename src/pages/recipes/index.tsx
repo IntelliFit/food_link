@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getUserRecipes, deleteUserRecipe, useUserRecipe, type UserRecipe, type FoodRecord } from '../../utils/api'
+import { getUserRecipes, deleteUserRecipe, applyUserRecipe, type UserRecipe, type FoodRecord } from '../../utils/api'
 import { withAuth } from '../../utils/withAuth'
 import './index.scss'
 
@@ -80,7 +80,7 @@ function RecipesPage() {
       if (!confirm) return
 
       Taro.showLoading({ title: '记录中...', mask: true })
-      await useUserRecipe(recipe.id, selectedMealType)
+      await applyUserRecipe(recipe.id, selectedMealType)
       Taro.hideLoading()
       Taro.showToast({ title: '已添加到饮食记录', icon: 'success' })
       // 刷新列表以更新使用次数

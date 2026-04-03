@@ -9,9 +9,9 @@
   position: relative;
   width: 100%;
   height: 400rpx; // Shorter than image version
-  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
-  display: flex;
-  flex-direction: column;
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);ShorterthanimageversionbackgroundShorterthanimageversionbackgroundShorterthanimageversionbackground
+  display: flex;displaydisplay
+  flex-direction: column;flex-direction
   align-items: center;
   justify-content: center;
   gap: 16rpx;
@@ -20,10 +20,7 @@
   &::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     background-image: radial-gradient(#94a3b8 1px, transparent 1px);
     background-size: 20px 20px;
     opacity: 0.2;
@@ -33,14 +30,14 @@
 .hero-icon-wrapper {
   width: 120rpx;
   height: 120rpx;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgb(255 255 255 / 60%);
   backdrop-filter: blur(4px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 8rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 5%);
 
   .iconfont {
     font-size: 64rpx;
@@ -78,18 +75,19 @@
 
 // Card Base
 %card-base {
-  background: #ffffff;
+  background: #fff;
   border-radius: 32rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%);
   overflow: hidden;
 }
 
 // Nutrition Overview Card
 .nutrition-overview-card {
   @extend %card-base;
+
   padding: 40rpx;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1rpx solid rgba(255, 255, 255, 0.6);
+  background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+  border: 1rpx solid rgb(255 255 255 / 60%);
 }
 
 .nutrition-header {
@@ -228,6 +226,7 @@
 // Insight Card
 .insight-card {
   @extend %card-base;
+
   padding: 32rpx;
 }
 
@@ -264,7 +263,7 @@
 
   &.highlight {
     background: #f0fdf4;
-    border-color: rgba(0, 188, 125, 0.2);
+    border-color: rgb(0 188 125 / 20%);
     align-items: flex-start;
   }
 
@@ -275,13 +274,13 @@
 
   &.ratio {
     background: #fff7ed;
-    border-color: rgba(249, 115, 22, 0.15);
+    border-color: rgb(249 115 22 / 15%);
     align-items: flex-start;
   }
 
   &.absorption {
     background: #faf5ff;
-    border-color: rgba(168, 85, 247, 0.15);
+    border-color: rgb(168 85 247 / 15%);
     align-items: flex-start;
   }
 }
@@ -296,7 +295,7 @@
   justify-content: center;
 
   &.green {
-    background: rgba(0, 188, 125, 0.1);
+    background: rgb(0 188 125 / 10%);
 
     .insight-icon {
       color: #00bc7d;
@@ -304,7 +303,7 @@
   }
 
   &.blue {
-    background: rgba(59, 130, 246, 0.1);
+    background: rgb(59 130 246 / 10%);
 
     .insight-icon {
       color: #3b82f6;
@@ -312,7 +311,7 @@
   }
 
   &.orange {
-    background: rgba(249, 115, 22, 0.1);
+    background: rgb(249 115 22 / 10%);
 
     .insight-icon {
       color: #f97316;
@@ -320,7 +319,7 @@
   }
 
   &.purple {
-    background: rgba(168, 85, 247, 0.1);
+    background: rgb(168 85 247 / 10%);
 
     .insight-icon {
       color: #a855f7;
@@ -387,10 +386,11 @@
 
 .ingredient-card {
   @extend %card-base;
+
   padding: 0; // 内部布局控制内边距
-  border: 1rpx solid rgba(0, 0, 0, 0.03);
-  border-radius: 24rpx;
-  box-shadow: 0 6rpx 20rpx rgba(15, 23, 42, 0.05);
+  border: 1rpx solid rgb(0 0 0 / 3%);borderborderborder
+  border-radius: 24rpx;border-radiusborder-radius
+  box-shadow: 0 6rpx 20rpx rgb(15 23 42 / 5%);box-shadow
 }
 
 .ingredient-main {
@@ -476,10 +476,10 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
-  background: #ffffff;
+  background: #fff;
   padding: 6rpx;
   border-radius: 14rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 2%);
 }
 
 .adjust-btn {
@@ -556,22 +556,22 @@
 .macro-editor-item {
   &.protein {
     .macro-editor-chip {
-      background: rgba(0, 188, 125, 0.07);
-      border-color: rgba(0, 188, 125, 0.18);
+      background: rgb(0 188 125 / 7%);
+      border-color: rgb(0 188 125 / 18%);
     }
   }
 
   &.carbs {
     .macro-editor-chip {
-      background: rgba(59, 130, 246, 0.07);
-      border-color: rgba(59, 130, 246, 0.16);
+      background: rgb(59 130 246 / 7%);
+      border-color: rgb(59 130 246 / 16%);
     }
   }
 
   &.fat {
     .macro-editor-chip {
-      background: rgba(245, 158, 11, 0.08);
-      border-color: rgba(245, 158, 11, 0.18);
+      background: rgb(245 158 11 / 8%);
+      border-color: rgb(245 158 11 / 18%);
     }
   }
 }
@@ -586,7 +586,7 @@
   padding: 10rpx 12rpx;
   border-radius: 12rpx;
   border: 1rpx solid #dbe3ec;
-  background: #ffffff;
+  background: #fff;
 }
 
 .macro-editor-item-label {
@@ -608,8 +608,8 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: #ffffff;
-  box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.05);
+  background: #fff;
+  box-shadow: 0 -8rpx 32rpx rgb(0 0 0 / 5%);
   z-index: 100;
   border-radius: 32rpx 32rpx 0 0;
 }
@@ -660,7 +660,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.25);
+  box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 25%);
   transition: all 0.2s ease;
 
   &:active {
@@ -676,18 +676,15 @@
   .btn-text {
     font-size: 32rpx;
     font-weight: 600;
-    color: #ffffff;
+    color: #fff;
   }
 }
 
 // Meal Selector Modal
 .meal-selector-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgb(0 0 0 / 60%);
   backdrop-filter: blur(4px);
   z-index: 999;
   display: flex;
@@ -705,12 +702,12 @@
 
 .meal-selector-card {
   width: 600rpx;
-  background: #ffffff;
+  background: #fff;
   border-radius: 32rpx;
   padding: 40rpx;
   transform: scale(0.9);
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 12rpx 48rpx rgba(0, 0, 0, 0.15);
+  box-shadow: 0 12rpx 48rpx rgb(0 0 0 / 15%);
 
   .visible & {
     transform: scale(1);
@@ -747,7 +744,7 @@
   &.active {
     background: #ecfdf5;
     border-color: #00bc7d;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.1);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 10%);
 
     .option-icon {
       color: #00bc7d;
@@ -796,8 +793,8 @@
 
   .confirm-btn {
     background: #00bc7d;
-    color: #ffffff;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.2);
+    color: #fff;
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 20%);
   }
 }
 

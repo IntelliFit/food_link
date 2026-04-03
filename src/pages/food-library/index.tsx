@@ -353,16 +353,16 @@ function FoodLibraryPage() {
 
   if (!loggedIn) {
     return (
-      <View className="food-library-page">
+      <View className='food-library-page'>
         {fromRecord && (
-          <View className="pick-mode-tip">
-            <Text className="pick-mode-title">从公共食物库选择</Text>
-            <Text className="pick-mode-subtitle">点任意餐食卡片，可直接带回到文字记录里</Text>
+          <View className='pick-mode-tip'>
+            <Text className='pick-mode-title'>从公共食物库选择</Text>
+            <Text className='pick-mode-subtitle'>点任意餐食卡片，可直接带回到文字记录里</Text>
           </View>
         )}
-        <View className="login-tip">
-          <Text className="login-tip-text">{fromRecord ? '登录后才能从公共食物库带回记录' : '登录后查看公共食物库'}</Text>
-          <Button className="login-tip-btn" onClick={goLogin}>去登录</Button>
+        <View className='login-tip'>
+          <Text className='login-tip-text'>{fromRecord ? '登录后才能从公共食物库带回记录' : '登录后查看公共食物库'}</Text>
+          <Button className='login-tip-btn' onClick={goLogin}>去登录</Button>
         </View>
       </View>
     )
@@ -372,15 +372,15 @@ function FoodLibraryPage() {
   const isLoading = tabMode === 'all' ? loading : collectionLoading
 
   return (
-    <View className="food-library-page">
+    <View className='food-library-page'>
       {fromRecord && (
-        <View className="pick-mode-tip">
-          <Text className="pick-mode-title">从公共食物库选择</Text>
-          <Text className="pick-mode-subtitle">点任意餐食卡片，可直接带回到文字记录里</Text>
+        <View className='pick-mode-tip'>
+          <Text className='pick-mode-title'>从公共食物库选择</Text>
+          <Text className='pick-mode-subtitle'>点任意餐食卡片，可直接带回到文字记录里</Text>
         </View>
       )}
       {/* Tab：全部 / 收藏夹 */}
-      <View className="tab-section">
+      <View className='tab-section'>
         <View
           className={`tab-item ${tabMode === 'all' ? 'active' : ''}`}
           onClick={() => setTabMode('all')}
@@ -400,8 +400,8 @@ function FoodLibraryPage() {
 
       {/* 筛选区（仅全部时显示） */}
       {tabMode === 'all' && (
-        <View className="filter-section">
-          <View className="filter-row">
+        <View className='filter-section'>
+          <View className='filter-row'>
             <View
               className={`filter-tag ${filterFatLoss === undefined ? 'active' : ''}`}
               onClick={() => setFilterFatLoss(undefined)}
@@ -415,22 +415,22 @@ function FoodLibraryPage() {
               适合减脂
             </View>
           </View>
-          <View className="search-row">
+          <View className='search-row'>
             <Input
-              className="search-input"
-              placeholder="搜索商家名称"
+              className='search-input'
+              placeholder='搜索商家名称'
               value={searchKeyword}
               onInput={e => setSearchKeyword(e.detail.value)}
               onConfirm={handleSearch}
             />
-            <Button className="search-btn" onClick={handleSearch}>搜索</Button>
+            <Button className='search-btn' onClick={handleSearch}>搜索</Button>
           </View>
         </View>
       )}
 
       {/* 排序区（仅全部时显示） */}
       {tabMode === 'all' && (
-        <View className="sort-section">
+        <View className='sort-section'>
           <View
             className={`sort-item ${sortBy === 'latest' ? 'active' : ''}`}
             onClick={() => setSortBy('latest')}
@@ -454,7 +454,7 @@ function FoodLibraryPage() {
 
       {/* 列表 */}
       <ScrollView
-        className="list-scroll"
+        className='list-scroll'
         scrollY
         enhanced
         showScrollbar={false}
@@ -463,37 +463,37 @@ function FoodLibraryPage() {
         onRefresherRefresh={handleRefresherRefresh}
         refresherDefaultStyle='black'
       >
-        <View className="list-content">
-          <Divider className="refresh-divider" />
+        <View className='list-content'>
+          <Divider className='refresh-divider' />
           {tabMode === 'all' && showSkeleton ? (
             // 骨架屏
-            <View className="skeleton-container">
+            <View className='skeleton-container'>
               {[1, 2, 3].map(i => (
-                <View key={i} className="skeleton-food-card">
-                  <View className="skeleton-image" />
-                  <View className="skeleton-info">
-                    <View className="skeleton-line" style={{ width: '60%', height: '32rpx', marginBottom: '16rpx' }} />
-                    <View className="skeleton-line" style={{ width: '100%', height: '24rpx', marginBottom: '12rpx' }} />
-                    <View className="skeleton-line" style={{ width: '80%', height: '24rpx' }} />
+                <View key={i} className='skeleton-food-card'>
+                  <View className='skeleton-image' />
+                  <View className='skeleton-info'>
+                    <View className='skeleton-line' style={{ width: '60%', height: '32rpx', marginBottom: '16rpx' }} />
+                    <View className='skeleton-line' style={{ width: '100%', height: '24rpx', marginBottom: '12rpx' }} />
+                    <View className='skeleton-line' style={{ width: '80%', height: '24rpx' }} />
                   </View>
                 </View>
               ))}
             </View>
           ) : isLoading && displayList.length === 0 ? (
-            <View className="loading-state">
-              <Text className="loading-text">加载中...</Text>
+            <View className='loading-state'>
+              <Text className='loading-text'>加载中...</Text>
             </View>
           ) : tabMode === 'collections' && displayList.length === 0 ? (
-            <View className="empty-state">
-              <Text className="empty-icon iconfont icon-shoucang-yishoucang" />
-              <Text className="empty-text">暂无收藏，去逛逛收藏喜欢的餐食</Text>
-              <View className="empty-btn" onClick={() => setTabMode('all')}>去逛逛</View>
+            <View className='empty-state'>
+              <Text className='empty-icon iconfont icon-shoucang-yishoucang' />
+              <Text className='empty-text'>暂无收藏，去逛逛收藏喜欢的餐食</Text>
+              <View className='empty-btn' onClick={() => setTabMode('all')}>去逛逛</View>
             </View>
           ) : displayList.length === 0 ? (
-            <View className="empty-state">
-              <Text className="empty-icon iconfont icon-shiwu" />
-              <Text className="empty-text">暂无内容，快来分享第一份健康餐吧</Text>
-              <View className="empty-btn" onClick={goShare}>去分享</View>
+            <View className='empty-state'>
+              <Text className='empty-icon iconfont icon-shiwu' />
+              <Text className='empty-text'>暂无内容，快来分享第一份健康餐吧</Text>
+              <View className='empty-btn' onClick={goShare}>去分享</View>
             </View>
           ) : (
             displayList.map(item => (
@@ -502,92 +502,92 @@ function FoodLibraryPage() {
                 className={`food-card ${fromRecord ? 'is-pick-mode' : ''}`}
                 onClick={() => (fromRecord ? pickForRecord(item) : goDetail(item.id))}
               >
-                <View className="food-image-wrap">
+                <View className='food-image-wrap'>
                   {item.image_path ? (
-                    <Image className="food-image" src={item.image_path} mode="aspectFill" />
+                    <Image className='food-image' src={item.image_path} mode='aspectFill' />
                   ) : (
-                    <View className="food-image-placeholder">暂无图片</View>
+                    <View className='food-image-placeholder'>暂无图片</View>
                   )}
                   {item.suitable_for_fat_loss && (
-                    <View className="fat-loss-badge">适合减脂</View>
+                    <View className='fat-loss-badge'>适合减脂</View>
                   )}
                 </View>
-                <View className="food-info">
-                  <View className="food-header">
-                    <Text className="food-title">{item.food_name || item.description || '健康餐'}</Text>
-                    <Text className="food-calories">{item.total_calories.toFixed(0)} kcal</Text>
+                <View className='food-info'>
+                  <View className='food-header'>
+                    <Text className='food-title'>{item.food_name || item.description || '健康餐'}</Text>
+                    <Text className='food-calories'>{item.total_calories.toFixed(0)} kcal</Text>
                   </View>
                   {item.description && (
-                    <View className="food-description">
-                      <Text className="description-text">{item.description}</Text>
+                    <View className='food-description'>
+                      <Text className='description-text'>{item.description}</Text>
                     </View>
                   )}
                   {item.merchant_name && (
-                    <View className="food-merchant">
-                      <Text className="merchant-icon iconfont icon-shiwu" />
-                      <Text className="merchant-name">{item.merchant_name}</Text>
+                    <View className='food-merchant'>
+                      <Text className='merchant-icon iconfont icon-shiwu' />
+                      <Text className='merchant-name'>{item.merchant_name}</Text>
                       {item.taste_rating && item.taste_rating > 0 && (
-                        <View className="taste-rating">
-                          <Text className="rating-icon">★</Text>
-                          <Text className="rating-text">{item.taste_rating}</Text>
+                        <View className='taste-rating'>
+                          <Text className='rating-icon'>★</Text>
+                          <Text className='rating-text'>{item.taste_rating}</Text>
                         </View>
                       )}
                     </View>
                   )}
                   {(item.merchant_address || item.province || item.city) && (
-                    <View className="food-location">
-                      <Text className="location-icon iconfont icon-dizhi" />
-                      <Text className="location-text">
+                    <View className='food-location'>
+                      <Text className='location-icon iconfont icon-dizhi' />
+                      <Text className='location-text'>
                         {item.merchant_address ||
                           [item.province, item.city, item.district].filter(Boolean).join(' ')}
                       </Text>
                     </View>
                   )}
                   {item.user_tags && item.user_tags.length > 0 && (
-                    <View className="food-tags">
+                    <View className='food-tags'>
                       {item.user_tags.slice(0, 3).map((tag, idx) => (
-                        <Text key={idx} className="food-tag">{tag}</Text>
+                        <Text key={idx} className='food-tag'>{tag}</Text>
                       ))}
                     </View>
                   )}
-                  <View className="food-footer">
-                    <View className="food-author">
+                  <View className='food-footer'>
+                    <View className='food-author'>
                       {item.author?.avatar ? (
-                        <View className="author-avatar">
-                          <Image className="author-avatar-img" src={item.author.avatar} />
+                        <View className='author-avatar'>
+                          <Image className='author-avatar-img' src={item.author.avatar} />
                         </View>
                       ) : (
-                        <View className="author-avatar" />
+                        <View className='author-avatar' />
                       )}
-                      <Text className="author-name">{item.author?.nickname || '用户'}</Text>
+                      <Text className='author-name'>{item.author?.nickname || '用户'}</Text>
                     </View>
-                    <View className="food-stats">
+                    <View className='food-stats'>
                       <View
-                        className="stat-item"
+                        className='stat-item'
                         onClick={e => { e.stopPropagation(); handleLike(item) }}
                       >
                         <Text className={`stat-icon iconfont icon-good ${item.liked ? 'liked' : ''}`} />
-                        <Text className="stat-count">{item.like_count}</Text>
+                        <Text className='stat-count'>{item.like_count}</Text>
                       </View>
                       <View
-                        className="stat-item"
+                        className='stat-item'
                         onClick={e => handleCollect(e, item)}
                       >
                         {item.collected ? (
-                          <Star size="16" style={{ color: '#fbbf24' }} />
+                          <Star size='16' style={{ color: '#fbbf24' }} />
                         ) : (
-                          <StarOutlined size="16" color="#6b7280" />
+                          <StarOutlined size='16' color='#6b7280' />
                         )}
-                        <Text className="stat-count">{item.collection_count || 0}</Text>
+                        <Text className='stat-count'>{item.collection_count || 0}</Text>
                       </View>
-                      <View className="stat-item">
-                        <Text className="stat-icon iconfont icon-pinglun" />
-                        <Text className="stat-count">{item.comment_count}</Text>
+                      <View className='stat-item'>
+                        <Text className='stat-icon iconfont icon-pinglun' />
+                        <Text className='stat-count'>{item.comment_count}</Text>
                       </View>
                       {item.avg_rating > 0 && (
-                        <View className="stat-item">
-                          <Text className="stat-icon iconfont icon-shoucang-yishoucang" />
-                          <Text className="stat-count">{item.avg_rating.toFixed(1)}</Text>
+                        <View className='stat-item'>
+                          <Text className='stat-icon iconfont icon-shoucang-yishoucang' />
+                          <Text className='stat-count'>{item.avg_rating.toFixed(1)}</Text>
                         </View>
                       )}
                     </View>
@@ -600,8 +600,8 @@ function FoodLibraryPage() {
       </ScrollView>
 
       {/* 浮动分享按钮 */}
-      <View className="fab-button" onClick={goShare}>
-        <Text className="fab-icon">+</Text>
+      <View className='fab-button' onClick={goShare}>
+        <Text className='fab-icon'>+</Text>
       </View>
     </View>
   )

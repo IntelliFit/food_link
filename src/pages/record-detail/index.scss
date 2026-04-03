@@ -11,7 +11,7 @@
   border-radius: 24rpx;
   padding: 40rpx 36rpx;
   margin-bottom: 28rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 6%);
 }
 
 .detail-header {
@@ -97,7 +97,7 @@
     justify-content: center;
     gap: 20rpx;
     background:
-      radial-gradient(circle at top, rgba(255, 255, 255, 0.95) 0%, rgba(236, 253, 245, 0.92) 30%, rgba(209, 250, 229, 0.98) 100%);
+      radial-gradient(circle at top, rgb(255 255 255 / 95%) 0%, rgb(236 253 245 / 92%) 30%, rgb(209 250 229 / 98%) 100%);
     cursor: default;
   }
 }
@@ -109,8 +109,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 40rpx;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.06);
+  background: rgb(255 255 255 / 90%);
+  box-shadow: 0 10rpx 28rpx rgb(15 23 42 / 6%);
 }
 
 .detail-image-placeholder-text {
@@ -178,11 +178,12 @@
       font-size: 36rpx;
       margin-right: 12rpx;
       color: #00bc7d;
+
       /* 默认绿色，也可根据不同 block 调整 */
     }
   }
 
-  >Text:last-child {
+  >text:last-child {
     display: block;
     font-size: 28rpx;
     color: #475569;
@@ -371,7 +372,7 @@
     width: 52rpx;
     height: 52rpx;
     border-radius: 26rpx;
-    border: 2rpx solid rgba(255, 255, 255, 0.9);
+    border: 2rpx solid rgb(255 255 255 / 90%);
     flex-shrink: 0;
   }
 
@@ -477,10 +478,7 @@
 /* 海报预览弹窗 */
 .poster-modal {
   position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -491,11 +489,8 @@
 
 .poster-modal-mask {
   position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgb(0 0 0 / 60%);
   backdrop-filter: blur(4px);
 }
 
@@ -592,10 +587,7 @@
 /* 编辑记录弹窗 */
 .edit-modal {
   position: fixed;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 1000;
   display: flex;
   align-items: flex-end;
@@ -604,11 +596,8 @@
 
 .edit-modal-mask {
   position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgb(0 0 0 / 50%);
   backdrop-filter: blur(4px);
 }
 

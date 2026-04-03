@@ -5,7 +5,7 @@
 }
 
 .header {
-  background: #ffffff;
+  background: #fff;
   padding: 40rpx 32rpx;
   margin-bottom: 24rpx;
   border-bottom: 1rpx solid #f3f4f6;
@@ -32,14 +32,14 @@
 }
 
 .task-card {
-  background: #ffffff;
+  background: #fff;
   border-radius: 20rpx;
   padding: 24rpx;
   margin-bottom: 24rpx;
   display: flex;
   align-items: center;
   gap: 24rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
   transition: all 0.2s ease;
 
   &:active {

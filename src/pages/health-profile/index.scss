@@ -60,6 +60,7 @@
 
 .cards-track {
   display: flex;
+
   /* 可见区 750rpx，12 张卡 */
   width: 9000rpx;
   height: 100%;
@@ -79,8 +80,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden auto;
 }
 
 .step-card-step {
@@ -148,7 +148,7 @@
   padding: 24rpx 32rpx;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   gap: 16rpx;
-  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2rpx 4rpx rgb(0 0 0 / 2%);
 
   &.big {
     min-height: 100rpx;
@@ -158,7 +158,7 @@
   &:active {
     background: #e6fffa !important;
     border-color: #00bc7d !important;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.1);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 10%);
 
     .option-icon {
       transform: scale(1.1);
@@ -282,7 +282,7 @@
   &.active {
     background: #00bc7d;
     border-color: #00bc7d;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.25);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 25%);
 
     .option-label {
       color: #fff;
@@ -423,6 +423,7 @@
 }
 
 /* 下一题 / 保存按钮：紧贴选项/文本框下方 */
+
 /* Taroify Button 覆盖：移除默认边框 */
 .health-profile-page .taroify-button::after {
   border: none;
@@ -444,7 +445,7 @@
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 
   &.ready {
-    box-shadow: 0 4rpx 20rpx rgba(0, 188, 125, 0.25);
+    box-shadow: 0 4rpx 20rpx rgb(0 188 125 / 25%);
   }
 
   &.primary {
@@ -623,7 +624,6 @@
 
   &.prev {
     color: #0d9488;
-    color: #0d9488;
     background: #f0fdf9;
   }
 }
@@ -651,8 +651,8 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(16, 185, 129, 0.15);
-  border: 4rpx solid #ffffff;
+  box-shadow: 0 8rpx 24rpx rgb(16 185 129 / 15%);
+  border: 4rpx solid #fff;
 }
 
 .hero-icon {
@@ -726,11 +726,8 @@
 
 .reupload-mask {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgb(0 0 0 / 50%);
   backdrop-filter: blur(2px);
   display: flex;
   flex-direction: column;

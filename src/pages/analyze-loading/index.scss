@@ -20,7 +20,7 @@
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    border: 6rpx solid rgba(0, 188, 125, 0.1);
+    border: 6rpx solid rgb(0 188 125 / 10%);
   }
 
   .spin {
@@ -52,7 +52,6 @@
 }
 
 @keyframes pulse {
-
   0%,
   100% {
     transform: scale(1);
@@ -120,11 +119,11 @@
 .tip-card {
   width: 100%;
   max-width: 600rpx;
-  background: #ffffff;
+  background: #fff;
   border-radius: 24rpx;
   padding: 32rpx 40rpx;
   margin-bottom: 64rpx;
-  box-shadow: 0 10rpx 30rpx -10rpx rgba(0, 0, 0, 0.05);
+  box-shadow: 0 10rpx 30rpx -10rpx rgb(0 0 0 / 5%);
   border: 1rpx solid #f1f5f9;
   position: relative;
   overflow: hidden;
@@ -149,6 +148,7 @@
   .tip-icon {
     font-size: 32rpx;
     color: #f59e0b;
+
     /* Amber */
   }
 
@@ -194,12 +194,12 @@
   font-size: 28rpx;
   font-weight: 600;
   color: #00bc7d;
-  background: rgba(0, 188, 125, 0.08);
+  background: rgb(0 188 125 / 8%);
   border-radius: 100rpx;
   transition: all 0.2s;
 
   &:active {
-    background: rgba(0, 188, 125, 0.15);
+    background: rgb(0 188 125 / 15%);
     transform: scale(0.98);
   }
 }
@@ -267,7 +267,7 @@
     color: #fff;
     background: #00bc7d;
     border-radius: 100rpx;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
     margin-top: 16rpx;
   }
 }
@@ -292,6 +292,6 @@
     color: #fff;
     background: #00bc7d;
     border-radius: 100rpx;
-    box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.3);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
   }
 }

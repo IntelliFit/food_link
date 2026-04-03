@@ -10,7 +10,7 @@
   margin: 24rpx 24rpx 0;
   padding: 28rpx 32rpx;
   border-radius: 24rpx;
-  border: 2rpx solid rgba(0, 188, 125, 0.12);
+  border: 2rpx solid rgb(0 188 125 / 12%);
 }
 
 .quick-upload-title {
@@ -146,7 +146,7 @@
   right: 8rpx;
   width: 40rpx;
   height: 40rpx;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgb(0 0 0 / 60%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -192,7 +192,7 @@
   display: block;
   font-size: 32rpx;
   font-weight: 600;
-  color: #009966;
+  color: #096;
   margin-bottom: 8rpx;
 }
 
@@ -356,7 +356,7 @@
   background: #fff;
   border-radius: 50%;
   transition: all 0.3s ease;
-  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2rpx 4rpx rgb(0 0 0 / 10%);
 }
 
 .switch-btn.active .switch-dot {
@@ -379,7 +379,7 @@
 
   &.selected {
     background: #ecfdf5;
-    color: #009966;
+    color: #096;
   }
 }
 
@@ -422,7 +422,7 @@
   background: #ecfdf5;
   border-radius: 12rpx;
   font-size: 24rpx;
-  color: #009966;
+  color: #096;
 }
 
 .remove-tag {
@@ -485,11 +485,11 @@
   background: #ecfdf5;
   border-radius: 20rpx;
   font-size: 24rpx;
-  color: #009966;
+  color: #096;
 
   .iconfont {
     font-size: 26rpx;
-    color: #009966;
+    color: #096;
   }
 }
 
@@ -502,7 +502,7 @@
   background: #fff;
   padding: 24rpx 32rpx;
   padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -4rpx 16rpx rgb(0 0 0 / 6%);
   z-index: 100;
 }
 
@@ -525,11 +525,8 @@
 // 从记录选择弹窗
 .record-modal {
   position: fixed;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgb(0 0 0 / 50%);
   z-index: 1000;
   display: flex;
   align-items: flex-end;

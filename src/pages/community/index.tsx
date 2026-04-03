@@ -1348,7 +1348,7 @@ function CommunityPage() {
           lowerThreshold={100}
         >
           <View className='community-scroll-content'>
-            <Divider className="refresh-divider" />
+            <Divider className='refresh-divider' />
             <View className='page-header'>
               <Text className='page-title'>健康圈子</Text>
               <Text className='page-subtitle'>与好友一起分享健康饮食</Text>
@@ -1390,7 +1390,7 @@ function CommunityPage() {
                 <Text className='login-tip-text'>登录后可添加好友、点赞和评论</Text>
                 <TaroifyButton
                   className='login-tip-btn'
-                  shape="round"
+                  shape='round'
                   style={{ background: 'linear-gradient(to right, #00bc7d 0%, #00bba7 100%)', border: 'none', color: '#fff' }}
                   onClick={() => Taro.navigateTo({ url: '/pages/login/index' })}
                 >

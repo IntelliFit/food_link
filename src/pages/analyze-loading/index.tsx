@@ -257,16 +257,16 @@ function AnalyzeLoadingPage() {
 
   if (status === 'violated') {
     return (
-      <View className="analyze-loading-page">
-        <View className="violated-wrap">
-          <View className="violated-icon-wrap">
-            <Text className="iconfont icon-jinggao" style={{ fontSize: '80rpx', color: '#dc2626' }} />
+      <View className='analyze-loading-page'>
+        <View className='violated-wrap'>
+          <View className='violated-icon-wrap'>
+            <Text className='iconfont icon-jinggao' style={{ fontSize: '80rpx', color: '#dc2626' }} />
           </View>
-          <Text className="violated-title">内容审核未通过</Text>
-          <Text className="violated-reason">{violationReason}</Text>
-          <Text className="violated-hint">您提交的内容不符合平台使用规范，请确保上传与食物相关的图片或文字描述。</Text>
-          <Text className="btn-history" onClick={handleGoHistory}>返回分析历史</Text>
-          <Text className="ai-notice"> 食探 - 您的智能健康管理助手</Text>
+          <Text className='violated-title'>内容审核未通过</Text>
+          <Text className='violated-reason'>{violationReason}</Text>
+          <Text className='violated-hint'>您提交的内容不符合平台使用规范，请确保上传与食物相关的图片或文字描述。</Text>
+          <Text className='btn-history' onClick={handleGoHistory}>返回分析历史</Text>
+          <Text className='ai-notice'> 食探 - 您的智能健康管理助手</Text>
         </View>
       </View>
     )
@@ -274,45 +274,45 @@ function AnalyzeLoadingPage() {
 
   if (status === 'failed') {
     return (
-      <View className="analyze-loading-page">
-        <View className="error-wrap">
-          <Text className="error-msg">识别失败：{errorMessage}</Text>
-          <Text className="btn-history" onClick={handleGoHistory}>去分析历史</Text>
-          <Text className="ai-notice"> 食探 - 您的智能健康管理助手</Text>
+      <View className='analyze-loading-page'>
+        <View className='error-wrap'>
+          <Text className='error-msg'>识别失败：{errorMessage}</Text>
+          <Text className='btn-history' onClick={handleGoHistory}>去分析历史</Text>
+          <Text className='ai-notice'> 食探 - 您的智能健康管理助手</Text>
         </View>
       </View>
     )
   }
 
   return (
-    <View className="analyze-loading-page">
-      <View className="spinner-wrap">
-        <View className="ring" />
-        <View className="spin" />
-        <Text className="icon-center iconfont icon-shiwu" />
+    <View className='analyze-loading-page'>
+      <View className='spinner-wrap'>
+        <View className='ring' />
+        <View className='spin' />
+        <Text className='icon-center iconfont icon-shiwu' />
       </View>
-      <Text className="title">
+      <Text className='title'>
         {taskType === 'food_text' ? '食探正在分析您的餐食...' : '食探正在分析您的餐食...'}
       </Text>
-      <Text className="subtitle">分析结果由 AI 生成，仅供参考</Text>
+      <Text className='subtitle'>分析结果由 AI 生成，仅供参考</Text>
       <View className={`mode-pill ${executionMode}`}>
-        <Text className="mode-pill-title">当前：{EXECUTION_MODE_META[executionMode].title}</Text>
-        <Text className="mode-pill-desc">{EXECUTION_MODE_META[executionMode].desc}</Text>
+        <Text className='mode-pill-title'>当前：{EXECUTION_MODE_META[executionMode].title}</Text>
+        <Text className='mode-pill-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
       </View>
-      <View className="tip-card">
-        <View className="tip-header">
-          <Text className="tip-icon iconfont icon-dengpao" />
-          <Text className="tip-label">健身小知识</Text>
+      <View className='tip-card'>
+        <View className='tip-header'>
+          <Text className='tip-icon iconfont icon-dengpao' />
+          <Text className='tip-label'>健身小知识</Text>
         </View>
-        <Text className="tip-text">{HEALTH_TIPS[tipIndex]}</Text>
+        <Text className='tip-text'>{HEALTH_TIPS[tipIndex]}</Text>
       </View>
-      <View className="actions-wrap">
-        <Text className="leave-hint">无需一直等待，您可以先离开。分析完成后在「分析历史」中查看结果即可。</Text>
-        <View className="btn-leave" onClick={handleLeave}>
-          <Text className="iconfont icon-shizhong" style={{ marginRight: 6, fontSize: 16 }} />
+      <View className='actions-wrap'>
+        <Text className='leave-hint'>无需一直等待，您可以先离开。分析完成后在「分析历史」中查看结果即可。</Text>
+        <View className='btn-leave' onClick={handleLeave}>
+          <Text className='iconfont icon-shizhong' style={{ marginRight: 6, fontSize: 16 }} />
           <Text>先离开，稍后查看</Text>
         </View>
-        <Text className="ai-notice">食探 - 您的智能健康管理助手</Text>
+        <Text className='ai-notice'>食探 - 您的智能健康管理助手</Text>
       </View>
     </View>
   )

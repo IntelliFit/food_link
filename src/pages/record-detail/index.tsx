@@ -357,8 +357,8 @@ function RecordDetailPage() {
 
   if (loading || !record) {
     return (
-      <View className="record-detail-page">
-        <View className="empty-tip">{loading ? '加载中...' : '记录不存在'}</View>
+      <View className='record-detail-page'>
+        <View className='empty-tip'>{loading ? '加载中...' : '记录不存在'}</View>
       </View>
     )
   }
@@ -606,21 +606,21 @@ function RecordDetailPage() {
   }
 
   return (
-    <ScrollView className="record-detail-page" scrollY>
-      <View className="detail-card">
-        <View className="detail-header">
-          <View className="meal-badge">
-            <View className="meal-icon">
+    <ScrollView className='record-detail-page' scrollY>
+      <View className='detail-card'>
+        <View className='detail-header'>
+          <View className='meal-badge'>
+            <View className='meal-icon'>
               <mealIconConfig.Icon size={40} color={mealIconConfig.color} />
             </View>
-            <View className="meal-badge-text">
-              <Text className="meal-name">{mealName}</Text>
-              <Text className="meal-time">{timeStr}</Text>
+            <View className='meal-badge-text'>
+              <Text className='meal-name'>{mealName}</Text>
+              <Text className='meal-time'>{timeStr}</Text>
             </View>
           </View>
-          <View className="total-calorie">
-            <Text className="num">{Math.round((record.total_calories ?? 0) * 10) / 10}</Text>
-            <Text className="unit">kcal</Text>
+          <View className='total-calorie'>
+            <Text className='num'>{Math.round((record.total_calories ?? 0) * 10) / 10}</Text>
+            <Text className='unit'>kcal</Text>
           </View>
         </View>
 
@@ -641,24 +641,24 @@ function RecordDetailPage() {
               <View className='detail-image-icon-wrap'>
                 <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
               </View>
-              <Text className="detail-image-placeholder-text">文字记录，未提供实物照片</Text>
+              <Text className='detail-image-placeholder-text'>文字记录，未提供实物照片</Text>
             </>
           )}
         </View>
 
         {/* 用户选择的目标与状态 */}
         {(record.diet_goal || record.activity_timing) && (
-          <View className="context-tags">
+          <View className='context-tags'>
             {record.diet_goal && record.diet_goal !== 'none' && (
-              <View className="context-tag goal-tag">
-                <Text className="tag-icon iconfont icon-shangzhang"></Text>
-                <Text className="tag-text">{DIET_GOAL_NAMES[record.diet_goal] || record.diet_goal}</Text>
+              <View className='context-tag goal-tag'>
+                <Text className='tag-icon iconfont icon-shangzhang'></Text>
+                <Text className='tag-text'>{DIET_GOAL_NAMES[record.diet_goal] || record.diet_goal}</Text>
               </View>
             )}
             {record.activity_timing && record.activity_timing !== 'none' && (
-              <View className="context-tag timing-tag">
-                <Text className="tag-icon iconfont icon-shizhong"></Text>
-                <Text className="tag-text">{ACTIVITY_TIMING_NAMES[record.activity_timing] || record.activity_timing}</Text>
+              <View className='context-tag timing-tag'>
+                <Text className='tag-icon iconfont icon-shizhong'></Text>
+                <Text className='tag-text'>{ACTIVITY_TIMING_NAMES[record.activity_timing] || record.activity_timing}</Text>
               </View>
             )}
           </View>
@@ -666,9 +666,9 @@ function RecordDetailPage() {
 
         {
           record.description ? (
-            <View className="detail-desc">
-              <Text className="label">
-                <Text className="iconfont icon-shiwu" style={{ marginRight: 6 }}></Text>
+            <View className='detail-desc'>
+              <Text className='label'>
+                <Text className='iconfont icon-shiwu' style={{ marginRight: 6 }}></Text>
                 识别描述
               </Text>
               <Text>{record.description}</Text>
@@ -678,9 +678,9 @@ function RecordDetailPage() {
 
         {
           record.insight ? (
-            <View className="detail-insight">
-              <Text className="label">
-                <Text className="iconfont icon-a-144-lvye" style={{ marginRight: 6 }}></Text>
+            <View className='detail-insight'>
+              <Text className='label'>
+                <Text className='iconfont icon-a-144-lvye' style={{ marginRight: 6 }}></Text>
                 AI 健康建议
               </Text>
               <Text>{record.insight}</Text>
@@ -690,9 +690,9 @@ function RecordDetailPage() {
 
         {
           record.pfc_ratio_comment ? (
-            <View className="detail-insight">
-              <Text className="label">
-                <Text className="iconfont icon-tubiao-zhuzhuangtu" style={{ marginRight: 6 }}></Text>
+            <View className='detail-insight'>
+              <Text className='label'>
+                <Text className='iconfont icon-tubiao-zhuzhuangtu' style={{ marginRight: 6 }}></Text>
                 PFC 比例分析
               </Text>
               <Text>{record.pfc_ratio_comment}</Text>
@@ -701,9 +701,9 @@ function RecordDetailPage() {
         }
         {
           record.absorption_notes ? (
-            <View className="detail-insight">
-              <Text className="label">
-                <Text className="iconfont icon-huore" style={{ marginRight: 6 }}></Text>
+            <View className='detail-insight'>
+              <Text className='label'>
+                <Text className='iconfont icon-huore' style={{ marginRight: 6 }}></Text>
                 吸收与利用
               </Text>
               <Text>{record.absorption_notes}</Text>
@@ -712,9 +712,9 @@ function RecordDetailPage() {
         }
         {
           record.context_advice ? (
-            <View className="detail-insight">
-              <Text className="label">
-                <Text className="iconfont icon-shizhong" style={{ marginRight: 6 }}></Text>
+            <View className='detail-insight'>
+              <Text className='label'>
+                <Text className='iconfont icon-shizhong' style={{ marginRight: 6 }}></Text>
                 情境建议
               </Text>
               <Text>{record.context_advice}</Text>
@@ -723,39 +723,39 @@ function RecordDetailPage() {
         }
 
         {!isOwner && inviteCode && (
-          <View className="friend-invite-card">
-            <View className="friend-invite-header">
-              {ownerAvatar ? <Image className="friend-invite-avatar" src={ownerAvatar} mode="aspectFill" /> : null}
-              <Text className="friend-invite-title">
+          <View className='friend-invite-card'>
+            <View className='friend-invite-header'>
+              {ownerAvatar ? <Image className='friend-invite-avatar' src={ownerAvatar} mode='aspectFill' /> : null}
+              <Text className='friend-invite-title'>
                 {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
               </Text>
             </View>
-            <Text className="friend-invite-desc">未注册会先登录，登录后发送申请，需对方同意</Text>
-            <Button className="friend-invite-btn" onClick={handleAcceptInvite} disabled={inviteLoading}>
+            <Text className='friend-invite-desc'>未注册会先登录，登录后发送申请，需对方同意</Text>
+            <Button className='friend-invite-btn' onClick={handleAcceptInvite} disabled={inviteLoading}>
               {inviteLoading ? '处理中...' : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
             </Button>
           </View>
         )}
 
-        <View className="poster-actions">
+        <View className='poster-actions'>
           {isOwner && (
-            <Button className="edit-record-btn" onClick={handleOpenEdit}>
-              <Text className="iconfont icon-bianji" style={{ marginRight: 8 }}></Text>
+            <Button className='edit-record-btn' onClick={handleOpenEdit}>
+              <Text className='iconfont icon-bianji' style={{ marginRight: 8 }}></Text>
               修改记录
             </Button>
           )}
-          <Button className="poster-btn" onClick={handleGeneratePoster} disabled={posterGenerating}>
+          <Button className='poster-btn' onClick={handleGeneratePoster} disabled={posterGenerating}>
             {posterGenerating ? '生成中...' : '生成分享海报'}
           </Button>
         </View>
       </View>
 
-      <View className="poster-canvas-wrap">
-        <Canvas type="2d" id="recordPosterCanvas" className="poster-canvas" style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }} />
+      <View className='poster-canvas-wrap'>
+        <Canvas type='2d' id='recordPosterCanvas' className='poster-canvas' style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }} />
       </View>
 
-      <View className="detail-card">
-        <Text className="food-list-title">食物明细</Text>
+      <View className='detail-card'>
+        <Text className='food-list-title'>食物明细</Text>
         {items.length > 0 ? (
           items.map((item, index) => {
             const cal = itemCalorie(item)
@@ -766,58 +766,58 @@ function RecordDetailPage() {
             const fiber = ((item.nutrients?.fiber ?? 0) * ratio) / 100
             const sugar = ((item.nutrients?.sugar ?? 0) * ratio) / 100
             return (
-              <View key={index} className="food-item">
-                <View className="food-info">
-                  <Text className="food-name">{item.name}</Text>
-                  <Text className="food-meta">
+              <View key={index} className='food-item'>
+                <View className='food-info'>
+                  <Text className='food-name'>{item.name}</Text>
+                  <Text className='food-meta'>
                     摄入 {item.intake ?? 0}g
                     {ratio !== 100 ? ` · 约 ${ratio}%` : ''}
                   </Text>
-                  <View className="food-nutrients-detail">
-                    <Text className="nutrient-item">蛋白 {protein.toFixed(1)}g</Text>
-                    <Text className="nutrient-item">碳水 {carbs.toFixed(1)}g</Text>
-                    <Text className="nutrient-item">脂肪 {fat.toFixed(1)}g</Text>
-                    {fiber > 0 && <Text className="nutrient-item">纤维 {fiber.toFixed(1)}g</Text>}
-                    {sugar > 0 && <Text className="nutrient-item">糖 {sugar.toFixed(1)}g</Text>}
+                  <View className='food-nutrients-detail'>
+                    <Text className='nutrient-item'>蛋白 {protein.toFixed(1)}g</Text>
+                    <Text className='nutrient-item'>碳水 {carbs.toFixed(1)}g</Text>
+                    <Text className='nutrient-item'>脂肪 {fat.toFixed(1)}g</Text>
+                    {fiber > 0 && <Text className='nutrient-item'>纤维 {fiber.toFixed(1)}g</Text>}
+                    {sugar > 0 && <Text className='nutrient-item'>糖 {sugar.toFixed(1)}g</Text>}
                   </View>
                 </View>
-                <View className="food-nutrients">
-                  <Text className="food-calorie">{Math.round(cal * 10) / 10} kcal</Text>
+                <View className='food-nutrients'>
+                  <Text className='food-calorie'>{Math.round(cal * 10) / 10} kcal</Text>
                 </View>
               </View>
             )
           })
         ) : (
-          <View className="empty-tip">暂无食物明细</View>
+          <View className='empty-tip'>暂无食物明细</View>
         )}
 
-        <View className="nutrition-summary-section">
-          <Text className="summary-title">营养汇总</Text>
-          <View className="summary-grid">
-            <View className="summary-item">
-              <Text className="summary-label">总热量</Text>
-              <Text className="summary-value highlight">{Math.round((record.total_calories ?? 0) * 10) / 10}</Text>
-              <Text className="summary-unit">kcal</Text>
+        <View className='nutrition-summary-section'>
+          <Text className='summary-title'>营养汇总</Text>
+          <View className='summary-grid'>
+            <View className='summary-item'>
+              <Text className='summary-label'>总热量</Text>
+              <Text className='summary-value highlight'>{Math.round((record.total_calories ?? 0) * 10) / 10}</Text>
+              <Text className='summary-unit'>kcal</Text>
             </View>
-            <View className="summary-item">
-              <Text className="summary-label">总重量</Text>
-              <Text className="summary-value">{record.total_weight_grams ?? 0}</Text>
-              <Text className="summary-unit">g</Text>
+            <View className='summary-item'>
+              <Text className='summary-label'>总重量</Text>
+              <Text className='summary-value'>{record.total_weight_grams ?? 0}</Text>
+              <Text className='summary-unit'>g</Text>
             </View>
-            <View className="summary-item">
-              <Text className="summary-label">蛋白质</Text>
-              <Text className="summary-value">{Math.round((record.total_protein ?? 0) * 10) / 10}</Text>
-              <Text className="summary-unit">g</Text>
+            <View className='summary-item'>
+              <Text className='summary-label'>蛋白质</Text>
+              <Text className='summary-value'>{Math.round((record.total_protein ?? 0) * 10) / 10}</Text>
+              <Text className='summary-unit'>g</Text>
             </View>
-            <View className="summary-item">
-              <Text className="summary-label">碳水</Text>
-              <Text className="summary-value">{Math.round((record.total_carbs ?? 0) * 10) / 10}</Text>
-              <Text className="summary-unit">g</Text>
+            <View className='summary-item'>
+              <Text className='summary-label'>碳水</Text>
+              <Text className='summary-value'>{Math.round((record.total_carbs ?? 0) * 10) / 10}</Text>
+              <Text className='summary-unit'>g</Text>
             </View>
-            <View className="summary-item">
-              <Text className="summary-label">脂肪</Text>
-              <Text className="summary-value">{Math.round((record.total_fat ?? 0) * 10) / 10}</Text>
-              <Text className="summary-unit">g</Text>
+            <View className='summary-item'>
+              <Text className='summary-label'>脂肪</Text>
+              <Text className='summary-value'>{Math.round((record.total_fat ?? 0) * 10) / 10}</Text>
+              <Text className='summary-unit'>g</Text>
             </View>
             {(() => {
               const totalFiber = items.reduce((sum, item) => {
@@ -825,10 +825,10 @@ function RecordDetailPage() {
                 return sum + ((item.nutrients?.fiber ?? 0) * ratio)
               }, 0)
               return totalFiber > 0 ? (
-                <View className="summary-item">
-                  <Text className="summary-label">膳食纤维</Text>
-                  <Text className="summary-value">{Math.round(totalFiber * 10) / 10}</Text>
-                  <Text className="summary-unit">g</Text>
+                <View className='summary-item'>
+                  <Text className='summary-label'>膳食纤维</Text>
+                  <Text className='summary-value'>{Math.round(totalFiber * 10) / 10}</Text>
+                  <Text className='summary-unit'>g</Text>
                 </View>
               ) : null
             })()}
@@ -838,10 +838,10 @@ function RecordDetailPage() {
                 return sum + ((item.nutrients?.sugar ?? 0) * ratio)
               }, 0)
               return totalSugar > 0 ? (
-                <View className="summary-item">
-                  <Text className="summary-label">糖分</Text>
-                  <Text className="summary-value">{Math.round(totalSugar * 10) / 10}</Text>
-                  <Text className="summary-unit">g</Text>
+                <View className='summary-item'>
+                  <Text className='summary-label'>糖分</Text>
+                  <Text className='summary-value'>{Math.round(totalSugar * 10) / 10}</Text>
+                  <Text className='summary-unit'>g</Text>
                 </View>
               ) : null
             })()}
@@ -851,59 +851,59 @@ function RecordDetailPage() {
 
       {/* 编辑记录弹窗 */}
       {showEditModal && (
-        <View className="edit-modal" catchMove>
-          <View className="edit-modal-mask" onClick={() => setShowEditModal(false)} />
-          <View className="edit-modal-content">
-            <View className="edit-modal-header">
-              <Text className="edit-modal-title">修改食物参数</Text>
-              <View className="edit-modal-close" onClick={() => setShowEditModal(false)} />
+        <View className='edit-modal' catchMove>
+          <View className='edit-modal-mask' onClick={() => setShowEditModal(false)} />
+          <View className='edit-modal-content'>
+            <View className='edit-modal-header'>
+              <Text className='edit-modal-title'>修改食物参数</Text>
+              <View className='edit-modal-close' onClick={() => setShowEditModal(false)} />
             </View>
-            <ScrollView scrollY enhanced showScrollbar={false} className="edit-modal-body">
+            <ScrollView scrollY enhanced showScrollbar={false} className='edit-modal-body'>
               {editItems.map((item, idx) => {
                 return (
-                  <View key={idx} className="edit-food-card">
-                    <View className="edit-food-header">
-                      <View className="edit-food-title-wrap">
-                        <Text className="edit-food-name">{item.name}</Text>
-                        <View className="edit-food-name-btn" onClick={() => handleEditItemName(idx)}>
-                          <Text className="iconfont icon-shouxieqianming"></Text>
+                  <View key={idx} className='edit-food-card'>
+                    <View className='edit-food-header'>
+                      <View className='edit-food-title-wrap'>
+                        <Text className='edit-food-name'>{item.name}</Text>
+                        <View className='edit-food-name-btn' onClick={() => handleEditItemName(idx)}>
+                          <Text className='iconfont icon-shouxieqianming'></Text>
                         </View>
                       </View>
                       {editItems.length > 1 && (
-                        <View className="edit-food-delete" onClick={() => removeEditItem(idx)}>
-                          <Text className="iconfont icon-shanchu"></Text>
+                        <View className='edit-food-delete' onClick={() => removeEditItem(idx)}>
+                          <Text className='iconfont icon-shanchu'></Text>
                         </View>
                       )}
                     </View>
 
                     {/* 摄入克数：加减按钮 + 手动输入 */}
-                    <View className="edit-intake-section">
-                      <Text className="edit-section-label">摄入克数</Text>
-                      <View className="intake-adjuster">
-                        <View className="adjust-btn minus" onClick={() => adjustIntake(idx, -10)}>
-                          <Text className="adjust-btn-text">−</Text>
+                    <View className='edit-intake-section'>
+                      <Text className='edit-section-label'>摄入克数</Text>
+                      <View className='intake-adjuster'>
+                        <View className='adjust-btn minus' onClick={() => adjustIntake(idx, -10)}>
+                          <Text className='adjust-btn-text'>−</Text>
                         </View>
                         <Input
-                          className="intake-input"
-                          type="digit"
+                          className='intake-input'
+                          type='digit'
                           value={String(item.intake)}
                           onBlur={(e) => updateIntake(idx, parseFloat(e.detail.value) || 0)}
                         />
-                        <Text className="intake-unit">g</Text>
-                        <View className="adjust-btn plus" onClick={() => adjustIntake(idx, 10)}>
-                          <Text className="adjust-btn-text">+</Text>
+                        <Text className='intake-unit'>g</Text>
+                        <View className='adjust-btn plus' onClick={() => adjustIntake(idx, 10)}>
+                          <Text className='adjust-btn-text'>+</Text>
                         </View>
                       </View>
                     </View>
 
                     {/* 比例：滑块 */}
-                    <View className="edit-ratio-section">
-                      <View className="ratio-header">
-                        <Text className="edit-section-label">摄入比例</Text>
+                    <View className='edit-ratio-section'>
+                      <View className='ratio-header'>
+                        <Text className='edit-section-label'>摄入比例</Text>
                         <Text className={`ratio-value ${item.ratio > 100 ? 'over' : ''}`}>{item.ratio}%</Text>
                       </View>
                       <Slider
-                        className="ratio-slider"
+                        className='ratio-slider'
                         value={Math.min(100, item.ratio)}
                         min={0}
                         max={100}
@@ -914,25 +914,25 @@ function RecordDetailPage() {
                       />
                     </View>
 
-                    <View className="edit-nutrients-header">
-                      <Text className="edit-section-label no-margin">营养值</Text>
-                      <Text className="edit-nutrients-tip">点击任一项直接修改</Text>
+                    <View className='edit-nutrients-header'>
+                      <Text className='edit-section-label no-margin'>营养值</Text>
+                      <Text className='edit-nutrients-tip'>点击任一项直接修改</Text>
                     </View>
 
-                    <View className="edit-nutrients-grid">
+                    <View className='edit-nutrients-grid'>
                       {EDITABLE_NUTRIENT_FIELDS.map((field) => {
                         const meta = EDITABLE_NUTRIENT_META[field]
                         const displayValue = getDisplayedNutrientValue(item, field)
                         return (
                           <View
                             key={`${idx}-${field}`}
-                            className="nutrient-chip nutrient-chip-editable"
+                            className='nutrient-chip nutrient-chip-editable'
                             onClick={() => handleEditNutrient(idx, field)}
                           >
-                            <Text className="nutrient-chip-label">{meta.label}</Text>
-                            <Text className="nutrient-chip-value">
+                            <Text className='nutrient-chip-label'>{meta.label}</Text>
+                            <Text className='nutrient-chip-value'>
                               {normalizeDisplayNumber(displayValue)}
-                              <Text className="nutrient-chip-unit">{meta.unit}</Text>
+                              <Text className='nutrient-chip-unit'>{meta.unit}</Text>
                             </Text>
                           </View>
                         )
@@ -942,9 +942,9 @@ function RecordDetailPage() {
                 )
               })}
             </ScrollView>
-            <View className="edit-modal-footer">
-              <Button className="edit-cancel-btn" onClick={() => setShowEditModal(false)}>取消</Button>
-              <Button className="edit-save-btn" onClick={handleSaveEdit} disabled={editSaving}>
+            <View className='edit-modal-footer'>
+              <Button className='edit-cancel-btn' onClick={() => setShowEditModal(false)}>取消</Button>
+              <Button className='edit-save-btn' onClick={handleSaveEdit} disabled={editSaving}>
                 {editSaving ? '保存中...' : '保存修改'}
               </Button>
             </View>
@@ -955,23 +955,23 @@ function RecordDetailPage() {
       {/* 海报预览弹窗 */}
       {
         showPosterModal && posterImageUrl && (
-          <View className="poster-modal">
-            <View className="poster-modal-mask" onClick={() => setShowPosterModal(false)} catchMove />
-            <View className="poster-modal-content">
-              <Text className="poster-modal-title">分享海报</Text>
-              <ScrollView scrollY className="poster-scroll-area">
-                <Image src={posterImageUrl} mode="widthFix" className="poster-modal-image" />
+          <View className='poster-modal'>
+            <View className='poster-modal-mask' onClick={() => setShowPosterModal(false)} catchMove />
+            <View className='poster-modal-content'>
+              <Text className='poster-modal-title'>分享海报</Text>
+              <ScrollView scrollY className='poster-scroll-area'>
+                <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
               </ScrollView>
-              <View className="poster-modal-actions-col">
-                <View className="share-row">
-                  <Button className="poster-modal-btn share-chat-btn" openType="share">
+              <View className='poster-modal-actions-col'>
+                <View className='share-row'>
+                  <Button className='poster-modal-btn share-chat-btn' openType='share'>
                     微信好友/群聊
                   </Button>
-                  <Button className="poster-modal-btn share-moments-btn" onClick={handleSavePoster}>
+                  <Button className='poster-modal-btn share-moments-btn' onClick={handleSavePoster}>
                     保存图片
                   </Button>
                 </View>
-                <Button className="poster-modal-btn close-btn" onClick={() => setShowPosterModal(false)}>关闭</Button>
+                <Button className='poster-modal-btn close-btn' onClick={() => setShowPosterModal(false)}>关闭</Button>
               </View>
             </View>
           </View>

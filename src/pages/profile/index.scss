@@ -2,8 +2,8 @@
   min-height: 100vh;
   position: relative;
   background: linear-gradient(180deg,
-    rgba(0, 188, 125, 0.15) 0%,
-    rgba(0, 188, 125, 0.08) 25%,
+    rgb(0 188 125 / 15%) 0%,
+    rgb(0 188 125 / 8%) 25%,
     #EFF1F4 60%,
     #EFF1F4 100%
   );
@@ -12,7 +12,7 @@
 
 // 通用白色卡片
 .profile-card {
-  background: #ffffff;
+  background: #fff;
   border-radius: 24rpx;
   margin: 0 24rpx 24rpx;
   overflow: hidden;
@@ -92,52 +92,59 @@
 
   &.member-card--pro {
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    box-shadow: 0 8rpx 32rpx rgba(15, 52, 96, 0.4);
+    box-shadow: 0 8rpx 32rpx rgb(15 52 96 / 40%);
 
-    .card-title { color: #ffffff; }
-    .card-validity { color: rgba(255, 255, 255, 0.55); }
-    .progress-text { color: rgba(255, 255, 255, 0.7); display: block; margin-bottom: 8rpx; }
-    .card-tip { color: rgba(255, 255, 255, 0.55); }
-    .progress-bar { background: rgba(255, 255, 255, 0.12); }
+    .card-title { color: #fff; }
+    .card-validity { color: rgb(255 255 255 / 55%); }
+    .progress-text { color: rgb(255 255 255 / 70%); display: block; margin-bottom: 8rpx; }
+    .card-tip { color: rgb(255 255 255 / 55%); }
+    .progress-bar { background: rgb(255 255 255 / 12%); }
     .progress-inner { background: linear-gradient(to right, #fde68a 0%, #f59e0b 100%); }
   }
 
   &.member-card--free {
     background: linear-gradient(135deg, #00c896 0%, #00bc7d 50%, #00a86b 100%);
-    box-shadow: 0 12rpx 32rpx rgba(0, 188, 125, 0.35);
+    box-shadow: 0 12rpx 32rpx rgb(0 188 125 / 35%);
 
     .card-title {
-      color: #ffffff;
-      text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.15);
+      color: #fff;
+      text-shadow: 0 2rpx 4rpx rgb(0 0 0 / 15%);
     }
+
     .card-validity {
-      color: rgba(255, 255, 255, 0.85);
-      text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+      color: rgb(255 255 255 / 85%);
+      text-shadow: 0 1rpx 2rpx rgb(0 0 0 / 10%);
     }
+
     .progress-text {
-      color: rgba(255, 255, 255, 0.9);
+      color: rgb(255 255 255 / 90%);
       display: block;
       margin-bottom: 8rpx;
-      text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+      text-shadow: 0 1rpx 2rpx rgb(0 0 0 / 10%);
     }
+
     .card-tip {
-      color: rgba(255, 255, 255, 0.9);
-      text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+      color: rgb(255 255 255 / 90%);
+      text-shadow: 0 1rpx 2rpx rgb(0 0 0 / 10%);
     }
+
     .progress-bar {
-      background: rgba(0, 0, 0, 0.15);
-      box-shadow: inset 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+      background: rgb(0 0 0 / 15%);
+      box-shadow: inset 0 1rpx 2rpx rgb(0 0 0 / 10%);
     }
+
     .progress-inner {
-      background: linear-gradient(to right, #ffffff 0%, #e0f2fe 100%);
-      box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.15);
+      background: linear-gradient(to right, #fff 0%, #e0f2fe 100%);
+      box-shadow: 0 2rpx 6rpx rgb(0 0 0 / 15%);
     }
+
     .card-upgrade-btn {
-      background: #ffffff;
+      background: #fff;
       border: none;
       backdrop-filter: none;
-      box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.12);
+      box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 12%);
     }
+
     .card-upgrade-text {
       color: #00bc7d;
     }
@@ -178,11 +185,11 @@
   }
 
   .card-upgrade-btn {
-    background: rgba(255, 255, 255, 0.22);
+    background: rgb(255 255 255 / 22%);
     padding: 12rpx 28rpx;
     border-radius: 30rpx;
     backdrop-filter: blur(4px);
-    border: 1rpx solid rgba(255, 255, 255, 0.3);
+    border: 1rpx solid rgb(255 255 255 / 30%);
   }
 
   .card-upgrade-text {
@@ -288,7 +295,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 28rpx 32rpx;
-  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+  background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
   border: 1rpx solid #bbf7d0;
 
   &:active {

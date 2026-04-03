@@ -1,23 +1,14 @@
-// 主题色变量
-$primary-color: #00bc7d;
 $primary-light: #ecfdf5;
 $primary-gradient-start: #00bc7d;
 $primary-gradient-end: #00bba7;
 
-// 营养素颜色：基于人们对营养素的直观印象
-$protein-color: #ef4444;    // 红色 - 肉类/肌肉
-$carbs-color: #eab308;      // 黄色 - 谷物/能量  
-$fat-color: #f97316;        // 橘黄色 - 油脂
+$orange-color     // 橙色 - 用于热量盈余提示
 
-// 辅助色
-$blue-color: #3b82f6;       // 蓝色 - 用于文字记录按钮等
-$orange-color: #f97316;     // 橙色 - 用于热量盈余提示
+$purple-color: #8b5cf6;$purple-color$purple-color$purple-color
+$purple-light: #f3e8ff;$purple-light$purple-light
 
-$purple-color: #8b5cf6;
-$purple-light: #f3e8ff;
-
-$bg-color: #f8fafc;
-$card-bg: #ffffff;
+$bg-color: #f8fafc;$bg-color
+$card-bg: #fff;
 $gradient-end: #EFF1F4;
 $text-primary: #1f2937;
 $text-secondary: #6b7280;
@@ -28,8 +19,8 @@ $text-tertiary: #9ca3af;
   min-height: 100vh;
   position: relative;
   background: linear-gradient(180deg, 
-    rgba(0, 188, 125, 0.15) 0%,
-    rgba(0, 188, 125, 0.08) 25%,
+    rgb(0 188 125 / 15%) 0%,
+    rgb(0 188 125 / 8%) 25%,
     #EFF1F4 60%,
     #EFF1F4 100%
   );
@@ -44,7 +35,7 @@ $text-tertiary: #9ca3af;
 .page-content {
   position: relative;
   z-index: 1;
-  padding: calc(20rpx + env(safe-area-inset-top)) 24rpx 50px;
+  padding: 200px 24rpx;
 }
 
 // 问候区
@@ -84,7 +75,7 @@ $text-tertiary: #9ca3af;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4rpx 12rpx rgba(0, 188, 125, 0.15);
+  box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 15%);
 }
 
 // 日期选择器 - 新设计：滑动卡片式
@@ -98,7 +89,7 @@ $text-tertiary: #9ca3af;
   background: $card-bg;
   border-radius: 24rpx;
   padding: 20rpx 16rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
 .date-item {
@@ -138,16 +129,16 @@ $text-tertiary: #9ca3af;
     width: 64rpx;
     height: 64rpx;
     border-radius: 50%;
-    background: #ffffff;
+    background: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 8%);
     transition: all 0.2s ease;
     
     // 无记录 - 白色（默认）
     &.is-empty {
-      background: #ffffff;
+      background: #fff;
       
       .date-num-text {
         color: $text-primary;
@@ -159,7 +150,7 @@ $text-tertiary: #9ca3af;
       background: $primary-color;
       
       .date-num-text {
-        color: #ffffff;
+        color: #fff;
       }
     }
     
@@ -168,7 +159,7 @@ $text-tertiary: #9ca3af;
       background: #ef4444;
       
       .date-num-text {
-        color: #ffffff;
+        color: #fff;
       }
     }
   }
@@ -177,7 +168,7 @@ $text-tertiary: #9ca3af;
   &.is-selected {
     background: #f1f5f9;
     border-color: $primary-color;
-    box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.3);
+    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 30%);
     
     .date-day-name {
       color: $primary-color;
@@ -198,7 +189,7 @@ $text-tertiary: #9ca3af;
   border-radius: 32rpx;
   padding: 32rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
 .main-card-header {
@@ -320,7 +311,7 @@ $text-tertiary: #9ca3af;
   background: $card-bg;
   border-radius: 24rpx;
   padding: 16rpx 12rpx 20rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
   display: flex;
   flex-direction: column;
   min-height: 280rpx;
@@ -495,7 +486,7 @@ $text-tertiary: #9ca3af;
   background: $card-bg;
   border-radius: 24rpx;
   padding: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
 .meal-media-wrap {
@@ -506,7 +497,7 @@ $text-tertiary: #9ca3af;
   overflow: hidden;
   flex-shrink: 0;
   background: #f8fafc;
-  border: 1rpx solid rgba(148, 163, 184, 0.16);
+  border: 1rpx solid rgb(148 163 184 / 16%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -539,7 +530,7 @@ $text-tertiary: #9ca3af;
   min-width: 38rpx;
   padding: 4rpx 10rpx;
   border-radius: 9999rpx;
-  background: rgba(15, 23, 42, 0.72);
+  background: rgb(15 23 42 / 72%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -548,7 +539,7 @@ $text-tertiary: #9ca3af;
 .meal-thumb-badge-text {
   font-size: 18rpx;
   line-height: 24rpx;
-  color: #ffffff;
+  color: #fff;
   font-weight: 600;
 }
 
@@ -640,7 +631,7 @@ $text-tertiary: #9ca3af;
   line-height: 28rpx;
   color: $purple-color;
   background: $purple-light;
-  border: 1rpx solid rgba(139, 92, 246, 0.14);
+  border: 1rpx solid rgb(139 92 246 / 14%);
   border-radius: 9999rpx;
   padding: 6rpx 14rpx;
 }
@@ -657,18 +648,18 @@ $text-tertiary: #9ca3af;
   background: linear-gradient(135deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border-radius: 24rpx;
   padding: 28rpx;
-  box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.25);
+  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 25%);
   
   &:active {
     transform: scale(0.995);
-    box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.2);
+    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 20%);
   }
 }
 
 .stats-entry-icon {
   width: 64rpx;
   height: 64rpx;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(255 255 255 / 20%);
   border-radius: 16rpx;
   display: flex;
   align-items: center;
@@ -684,7 +675,7 @@ $text-tertiary: #9ca3af;
   display: block;
   font-size: 30rpx;
   font-weight: 600;
-  color: #ffffff;
+  color: #fff;
   line-height: 42rpx;
   margin-bottom: 4rpx;
 }
@@ -692,7 +683,7 @@ $text-tertiary: #9ca3af;
 .stats-entry-desc {
   display: block;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgb(255 255 255 / 80%);
   line-height: 34rpx;
 }
 
@@ -714,7 +705,7 @@ $text-tertiary: #9ca3af;
 .target-modal-mask {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgb(15 23 42 / 45%);
   backdrop-filter: blur(4px);
 }
 
@@ -739,7 +730,7 @@ $text-tertiary: #9ca3af;
   margin: 0 20rpx calc(116rpx + env(safe-area-inset-bottom));
   border-radius: 36rpx;
   max-height: calc(100vh - 220rpx - env(safe-area-inset-bottom));
-  box-shadow: 0 20rpx 60rpx rgba(15, 23, 42, 0.12);
+  box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 12%);
 }
 
 .body-modal-sheet .modal-actions-fixed {
@@ -776,7 +767,7 @@ $text-tertiary: #9ca3af;
 }
 
 .water-modal-quick-item {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgb(59 130 246 / 8%);
   border-radius: 20rpx;
   padding: 24rpx 0;
   display: flex;
@@ -785,7 +776,7 @@ $text-tertiary: #9ca3af;
   gap: 6rpx;
 
   &:active {
-    background: rgba(59, 130, 246, 0.14);
+    background: rgb(59 130 246 / 14%);
   }
 }
 
@@ -897,7 +888,7 @@ $text-tertiary: #9ca3af;
   border-radius: 16rpx;
   padding: 20rpx 24rpx;
   background: $primary-light;
-  border: 2rpx solid rgba(0, 188, 125, 0.2);
+  border: 2rpx solid rgb(0 188 125 / 20%);
 }
 
 .target-relation-hint-title {
@@ -944,7 +935,7 @@ $text-tertiary: #9ca3af;
   margin-top: 0;
   padding-top: 20rpx;
   padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, $card-bg 18%, $card-bg 100%);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0%) 0%, $card-bg 18%, $card-bg 100%);
 }
 
 .target-modal-btn {
@@ -961,7 +952,7 @@ $text-tertiary: #9ca3af;
 
   &.primary {
     background: linear-gradient(to right, $primary-gradient-start 0%, $primary-gradient-end 100%);
-    box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.3);
+    box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 30%);
   }
 }
 
@@ -975,7 +966,7 @@ $text-tertiary: #9ca3af;
   }
 
   &.primary {
-    color: #ffffff;
+    color: #fff;
   }
 }
 
@@ -992,7 +983,7 @@ $text-tertiary: #9ca3af;
   background: $card-bg;
   border-radius: 24rpx;
   padding: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
   
   &:active {
     transform: scale(0.98);
@@ -1021,11 +1012,11 @@ $text-tertiary: #9ca3af;
   justify-content: center;
   
   &.weight-icon {
-    background: rgba(139, 92, 246, 0.1);
+    background: rgb(139 92 246 / 10%);
   }
   
   &.water-icon {
-    background: rgba(59, 130, 246, 0.1);
+    background: rgb(59 130 246 / 10%);
   }
 }
 
@@ -1065,7 +1056,7 @@ $text-tertiary: #9ca3af;
   
   &.up {
     color: #ef4444;
-    background: rgba(239, 68, 68, 0.1);
+    background: rgb(239 68 68 / 10%);
   }
   
   &.down {
@@ -1131,11 +1122,11 @@ $text-tertiary: #9ca3af;
   align-items: center;
   gap: 8rpx;
   padding: 20rpx 0;
-  background: rgba(59, 130, 246, 0.08);
+  background: rgb(59 130 246 / 8%);
   border-radius: 16rpx;
   
   &:active {
-    background: rgba(59, 130, 246, 0.14);
+    background: rgb(59 130 246 / 14%);
   }
 }
 
@@ -1160,7 +1151,7 @@ $text-tertiary: #9ca3af;
   border-radius: 12rpx;
   overflow: hidden;
   background: #f8fafc;
-  border: 1rpx solid rgba(148, 163, 184, 0.16);
+  border: 1rpx solid rgb(148 163 184 / 16%);
   
   &:active {
     opacity: 0.8;
@@ -1181,7 +1172,7 @@ $text-tertiary: #9ca3af;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1rpx solid rgba(148, 163, 184, 0.16);
+  border: 1rpx solid rgb(148 163 184 / 16%);
 }
 
 .meal-image-more-text {
@@ -1194,7 +1185,7 @@ $text-tertiary: #9ca3af;
 // 弹窗按钮样式扩展
 .target-modal-btn {
   &.danger {
-    background: rgba(239, 68, 68, 0.1);
+    background: rgb(239 68 68 / 10%);
   }
   
   &.primary {
@@ -1208,7 +1199,7 @@ $text-tertiary: #9ca3af;
   }
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .water-modal-quick-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1223,6 +1214,7 @@ $text-tertiary: #9ca3af;
   0%, 100% {
     opacity: 0.4;
   }
+
   50% {
     opacity: 0.8;
   }
@@ -1273,6 +1265,7 @@ $text-tertiary: #9ca3af;
     transform: scale(0.6);
     opacity: 0.5;
   }
+
   40% {
     transform: scale(1);
     opacity: 1;

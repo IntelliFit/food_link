@@ -40,7 +40,7 @@
   text-align: center;
   font-size: 26rpx;
   color: #64748b;
-  background: #ffffff;
+  background: #fff;
   border-radius: 14rpx;
   padding: 16rpx 8rpx;
   border: 2rpx solid #e2e8f0;
@@ -59,13 +59,13 @@
 }
 
 .card {
-  background: #ffffff;
+  background: #fff;
   border-radius: 16rpx;
   padding: 20rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 4rpx 14rpx rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4rpx 14rpx rgb(15 23 42 / 4%);
 }
 
 .card.vertical {
@@ -155,17 +155,17 @@
 
 .primary-btn {
   background: #00bc7d;
-  color: #ffffff;
+  color: #fff;
 }
 
 .plain-btn {
-  background: #ffffff;
+  background: #fff;
   color: #475569;
   border: 2rpx solid #cbd5e1;
 }
 
 .danger-btn {
-  background: #ffffff;
+  background: #fff;
   color: #ef4444;
   border: 2rpx solid #fecaca;
   min-width: 108rpx;

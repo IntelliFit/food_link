@@ -53,15 +53,15 @@ export default function CustomNavBar({
 
     return (
         <View
-            className={`custom-nav-bar ${className}`}
-            style={{
+          className={`custom-nav-bar ${className}`}
+          style={{
                 background,
                 paddingTop: `${navInfo.statusBarHeight}px`
             }}
         >
             <View
-                className='custom-nav-bar__content'
-                style={{ height: `${navInfo.navBarHeight}px` }}
+              className='custom-nav-bar__content'
+              style={{ height: `${navInfo.navBarHeight}px` }}
             >
                 {showBack && (
                     <View className='custom-nav-bar__back' onClick={handleBack}>

@@ -1,6 +1,5 @@
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useCallback } from 'react'
-import { useDidShow } from '@tarojs/taro'
 import { getAccessToken } from './api'
 
 // 不需要登录的页面白名单

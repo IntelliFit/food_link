@@ -498,7 +498,8 @@ function AnalyzePage() {
                 <View className='remove-btn' onClick={(e) => {
                   e.stopPropagation()
                   handleRemoveImage(index)
-                }}>
+                }}
+                >
                   <Text className='close-icon'>×</Text>
                 </View>
               </View>

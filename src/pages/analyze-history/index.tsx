@@ -138,20 +138,20 @@ function AnalyzeHistoryPage() {
   }
 
   return (
-    <View className="analyze-history-page">
-      <View className="header">
-        <Text className="title">分析历史</Text>
-        <Text className="desc">可在此查看识别结果，并将结果保存为饮食记录</Text>
+    <View className='analyze-history-page'>
+      <View className='header'>
+        <Text className='title'>分析历史</Text>
+        <Text className='desc'>可在此查看识别结果，并将结果保存为饮食记录</Text>
       </View>
-      <ScrollView className="list" scrollY>
+      <ScrollView className='list' scrollY>
         {loading ? (
-          <View className="loading-wrap">加载中...</View>
+          <View className='loading-wrap'>加载中...</View>
         ) : tasks.length === 0 ? (
-          <View className="empty">
-            <View className="empty-icon">
-              <Text className="iconfont icon-paizhao-xianxing" style={{ fontSize: '80rpx', color: '#9ca3af' }} />
+          <View className='empty'>
+            <View className='empty-icon'>
+              <Text className='iconfont icon-paizhao-xianxing' style={{ fontSize: '80rpx', color: '#9ca3af' }} />
             </View>
-            <Text className="empty-text">暂时没有记录，快去拍一张吧~</Text>
+            <Text className='empty-text'>暂时没有记录，快去拍一张吧~</Text>
           </View>
         ) : (
           tasks.map(t => {
@@ -163,49 +163,49 @@ function AnalyzeHistoryPage() {
                 className={`task-card ${t.status === 'violated' || t.is_violated ? 'task-card-violated' : ''}`}
                 onClick={() => onTaskTap(t)}
               >
-                <View className="thumb">
+                <View className='thumb'>
                   {t.status === 'violated' || t.is_violated ? (
                   // 违规任务显示警告图标，不展示原图
-                    <View className="thumb-violated">
-                      <Text className="iconfont icon-jinggao" style={{ fontSize: '48rpx', color: '#ef4444' }} />
+                    <View className='thumb-violated'>
+                      <Text className='iconfont icon-jinggao' style={{ fontSize: '48rpx', color: '#ef4444' }} />
                     </View>
                   ) : t.image_url ? (
-                    <Image src={t.image_url} mode="aspectFill" />
+                    <Image src={t.image_url} mode='aspectFill' />
                   ) : (
                   // 文字分析任务显示文字图标
-                    <View className="thumb-placeholder">
-                      <Text className="iconfont icon-xingzhuang-wenzi" style={{ fontSize: '48rpx', color: '#15803d' }} />
+                    <View className='thumb-placeholder'>
+                      <Text className='iconfont icon-xingzhuang-wenzi' style={{ fontSize: '48rpx', color: '#15803d' }} />
                     </View>
                   )}
                 </View>
-                <View className="body">
-                  <Text className="time">{formatTime(t.created_at)}</Text>
-                  <View className="tag-row">
-                    <View className="task-type-tag">
-                      <Text className="task-type-text">
+                <View className='body'>
+                  <Text className='time'>{formatTime(t.created_at)}</Text>
+                  <View className='tag-row'>
+                    <View className='task-type-tag'>
+                      <Text className='task-type-text'>
                         {t.task_type === 'food_text' ? '文字识别' : '图片识别'}
                       </Text>
                     </View>
                     <View className={`mode-tag mode-${mode}`}>
-                      <Text className="mode-tag-text">{EXECUTION_MODE_LABEL[mode]}</Text>
+                      <Text className='mode-tag-text'>{EXECUTION_MODE_LABEL[mode]}</Text>
                     </View>
                     {mode === 'strict' && t.status === 'done' && (
                       <View className={`recognition-tag recognition-${recognitionOutcome}`}>
-                        <Text className="recognition-tag-text">{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
+                        <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
                       </View>
                     )}
                   </View>
                   <View className={`status-row status-${t.status}`}>
-                    <View className="status-dot"></View>
-                    <Text className="status-text">{STATUS_MAP[t.status] || t.status}</Text>
+                    <View className='status-dot'></View>
+                    <Text className='status-text'>{STATUS_MAP[t.status] || t.status}</Text>
                   </View>
                   {/* 违规任务显示违规原因 */}
                   {(t.status === 'violated' || t.is_violated) && t.violation_reason && (
-                    <Text className="violation-reason">{t.violation_reason}</Text>
+                    <Text className='violation-reason'>{t.violation_reason}</Text>
                   )}
                 </View>
                 {(t.status === 'done' || t.status === 'failed') && !t.is_violated && (
-                  <Text className="arrow">›</Text>
+                  <Text className='arrow'>›</Text>
                 )}
               </View>
             )

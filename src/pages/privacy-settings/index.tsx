@@ -56,34 +56,34 @@ function PrivacySettings() {
 
     if (loading) {
         return (
-            <View className="loading-container">
+            <View className='loading-container'>
                 <Text>加载中...</Text>
             </View>
         )
     }
 
     return (
-        <View className="privacy-settings-page">
-            <Cell.Group className="setting-group" title="基础隐私">
+        <View className='privacy-settings-page'>
+            <Cell.Group className='setting-group' title='基础隐私'>
                 <Cell
-                    title="允许在圈子中被搜索"
-                    brief="开启后，其他用户可以通过用户名或手机号搜索到您。"
-                    rightIcon={
+                  title='允许在圈子中被搜索'
+                  brief='开启后，其他用户可以通过用户名或手机号搜索到您。'
+                  rightIcon={
                         <Switch
-                            checked={searchable}
-                            onChange={(val) => updateSetting('searchable', val)}
-                            style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+                          checked={searchable}
+                          onChange={(val) => updateSetting('searchable', val)}
+                          style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
                         />
                     }
                 />
                 <Cell
-                    title="公开我的饮食记录"
-                    brief="开启后，其他用户在圈子里可以看到您的动态和饮食记录。"
-                    rightIcon={
+                  title='公开我的饮食记录'
+                  brief='开启后，其他用户在圈子里可以看到您的动态和饮食记录。'
+                  rightIcon={
                         <Switch
-                            checked={publicRecords}
-                            onChange={(val) => updateSetting('public_records', val)}
-                            style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+                          checked={publicRecords}
+                          onChange={(val) => updateSetting('public_records', val)}
+                          style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
                         />
                     }
                 />

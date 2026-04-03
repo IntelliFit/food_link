@@ -1348,7 +1348,7 @@ function ResultPage() {
               </View>
 
               <View
-                className={`feedback-link-row`}
+                className='feedback-link-row'
               >
                 <View className='correction-entry' onClick={openCorrectionDrawer}>
                   <View className='correction-entry-icon-box'>

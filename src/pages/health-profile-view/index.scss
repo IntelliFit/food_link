@@ -35,7 +35,7 @@
   border-radius: 24rpx;
   margin: 24rpx;
   padding: 32rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 6%);
 }
 
 .block-title {
@@ -107,7 +107,7 @@
 
 .btn-primary {
   background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
-  box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, 0.2);
+  box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 20%);
 
   .btn-text {
     color: #fff;
@@ -168,6 +168,7 @@
 
   &.abnormal {
     color: #ef4444;
+
     /* 异常标红 */
   }
 }
