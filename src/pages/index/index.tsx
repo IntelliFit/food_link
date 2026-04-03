@@ -20,7 +20,7 @@ import {
 } from '../../utils/api'
 import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
 import { Empty, Button } from '@taroify/core'
-import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
+// 删除 CustomNavBar 导入，使用页面原生导航栏
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
@@ -1056,17 +1056,8 @@ function IndexPage() {
 
   return (
     <View className='home-page'>
-      {/* 自定义渐变导航栏 */}
-      <CustomNavBar
-        title=''
-        background='transparent'
-      />
-      
-      {/* 背景渐变层 */}
-      <View className='gradient-bg' />
-      
       {/* 页面内容 */}
-      <View className='page-content' style={{ paddingTop: `${getStatusBarHeightSafe()}px` }}>
+      <View className='page-content'>
         {/* 问候区 */}
         <View className='greeting-section'>
           <View className='greeting-text'>
