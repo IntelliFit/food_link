@@ -10,7 +10,8 @@ import {
   ShieldOutlined,
   InfoOutlined,
   CalendarOutlined,
-  Arrow
+  Arrow,
+  ClockOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -19,7 +20,9 @@ import {
   clearAllStorage,
   getUserRecordDays,
   getMyMembership,
-  MembershipStatus
+  getFoodExpiryDashboard,
+  MembershipStatus,
+  FoodExpiryDashboard
 } from '../../utils/api'
 
 import './index.scss'
@@ -49,6 +52,15 @@ function formatExpiry(value?: string | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
+  if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
+  if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
+  if (dashboard.expired_count > 0) return `当前有 ${dashboard.expired_count} 样已过期，建议先处理。`
+  if (dashboard.today_count > 0) return `今天有 ${dashboard.today_count} 样需要优先吃掉。`
+  if (dashboard.soon_count > 0) return `接下来有 ${dashboard.soon_count} 样即将到期。`
+  return `当前共有 ${dashboard.active_count} 样食物在保鲜中。`
+}
+
 function ProfilePage() {
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -71,6 +83,7 @@ function ProfilePage() {
 
   // 会员状态
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [expiryDashboard, setExpiryDashboard] = useState<FoodExpiryDashboard | null>(null)
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -84,16 +97,23 @@ function ProfilePage() {
         setIsLoggedIn(true)
         // 从服务器获取最新用户信息
         try {
-          const [apiUserInfo, membershipData] = await Promise.all([
+          const [apiUserInfo, membershipData, dashboardData] = await Promise.all([
             getUserProfile(),
             getMyMembership().catch((err) => {
               console.error('[profile] 获取会员状态失败:', err)
               return null
-            })
+            }),
+            getFoodExpiryDashboard().catch((err) => {
+              console.error('[profile] 获取保质期摘要失败:', err)
+              return null
+            }),
           ])
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
             setMembershipStatus(membershipData)
+          }
+          if (dashboardData !== null) {
+            setExpiryDashboard(dashboardData as FoodExpiryDashboard)
           }
 
           // 获取记录天数
@@ -170,6 +190,14 @@ function ProfilePage() {
       path: '/pages/recipes/index'
     },
     {
+      id: 2,
+      icon: <ClockOutlined size='20' />,
+      title: '食物管理',
+      desc: formatExpiryPreviewText(expiryDashboard),
+      path: '/pages/expiry/index',
+      badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
+    },
+    {
       id: 3,
       icon: <ChartTrendingOutlined size='20' />,
       title: '饮食记录',
@@ -216,6 +244,11 @@ function ProfilePage() {
     // 我的食谱
     if (service.id === 1) {
       Taro.navigateTo({ url: '/pages/recipes/index' })
+      return
+    }
+    // 食物管理
+    if (service.id === 2) {
+      Taro.navigateTo({ url: '/pages/expiry/index' })
       return
     }
     // 饮食记录（整合日历图和数据统计）
@@ -322,6 +355,7 @@ function ProfilePage() {
     const colors: Record<number, string> = {
       0: '#10b981', // 健康档案 - 绿
       1: '#f59e0b', // 收藏餐食 - 橙
+      2: '#8b5cf6', // 食物管理 - 紫
       3: '#3b82f6', // 饮食记录 - 蓝
       5: '#ef4444', // 附近美食 - 红
       6: '#f59e0b'  // 食探会员 - 金

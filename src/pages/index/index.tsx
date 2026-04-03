@@ -1289,15 +1289,37 @@ function IndexPage() {
                 const mealCalorie = normalizeDisplayNumber(meal.calorie)
                 const mealTarget = normalizeDisplayNumber(meal.target)
                 const mealProgress = normalizeProgressPercent(meal.progress, mealCalorie, mealTarget)
+                const mealImageUrls = Array.isArray(meal.image_paths) && meal.image_paths.length > 0
+                  ? meal.image_paths.filter(Boolean)
+                  : (meal.image_path ? [meal.image_path] : [])
+                const previewImage = mealImageUrls[0] || ''
+                const hasRealImage = mealImageUrls.length > 0
                 const targetText = isSnackMeal
                   ? `参考 ${formatDisplayNumber(mealTarget)} kcal`
                   : `目标 ${formatDisplayNumber(mealTarget)} kcal`
-                const hasImages = meal.images && meal.images.length > 0
                 
                 return (
                   <View key={`${meal.type}-${index}`} className='meal-item'>
-                    <View className='meal-icon-wrap' style={{ backgroundColor: bgColor }}>
-                      <Icon size={24} color={color} />
+                    <View
+                      className={`meal-media-wrap ${hasRealImage ? 'is-photo' : 'is-icon'}`}
+                      onClick={() => previewHomeMealImages(meal)}
+                    >
+                      {hasRealImage ? (
+                        <Image
+                          className='meal-thumb-image'
+                          src={previewImage}
+                          mode='aspectFill'
+                        />
+                      ) : (
+                        <View className='meal-icon-wrap' style={{ backgroundColor: bgColor }}>
+                          <Icon size={24} color={color} />
+                        </View>
+                      )}
+                      {hasRealImage && mealImageUrls.length > 1 && (
+                        <View className='meal-thumb-badge'>
+                          <Text className='meal-thumb-badge-text'>{mealImageUrls.length}张</Text>
+                        </View>
+                      )}
                     </View>
                     <View className='meal-content'>
                       <View className='meal-main'>
@@ -1322,33 +1344,6 @@ function IndexPage() {
                           {meal.tags.map((tag) => (
                             <Text key={tag} className='meal-tag'>{tag}</Text>
                           ))}
-                        </View>
-                      )}
-                      {/* 餐食图片预览 */}
-                      {hasImages && (
-                        <View className='meal-images'>
-                          {meal.images!.slice(0, 3).map((img, imgIndex) => (
-                            <View 
-                              key={imgIndex} 
-                              className='meal-image-thumb'
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                previewHomeMealImages(meal, imgIndex)
-                              }}
-                            >
-                              <Image 
-                                src={img} 
-                                mode='aspectFill' 
-                                className='meal-image-img'
-                                lazyLoad
-                              />
-                            </View>
-                          ))}
-                          {meal.images!.length > 3 && (
-                            <View className='meal-image-more'>
-                              <Text className='meal-image-more-text'>+{meal.images!.length - 3}</Text>
-                            </View>
-                          )}
                         </View>
                       )}
                     </View>
