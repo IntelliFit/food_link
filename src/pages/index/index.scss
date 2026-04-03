@@ -723,7 +723,7 @@ $text-tertiary: #9ca3af;
   width: 100%;
   background: $card-bg;
   border-radius: 40rpx 40rpx 0 0;
-  padding: 40rpx 32rpx 48rpx;
+  padding: 40rpx 32rpx calc(120rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   max-height: 85vh;
   display: flex;
