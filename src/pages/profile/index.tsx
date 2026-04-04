@@ -158,6 +158,13 @@ export default function ProfilePage() {
       path: '/pages/recipes/index'
     },
     {
+      id: 2,
+      icon: <CalendarOutlined size='32' />,
+      title: '食物保质期',
+      desc: '记录家中食物和吃完时间',
+      path: '/pages/food-expiry/index'
+    },
+    {
       id: 3,
       icon: <ChartTrendingOutlined size='32' />,
       title: '饮食记录',
@@ -366,7 +373,6 @@ export default function ProfilePage() {
             })
             setRecordDays(0)
             setRegisterDate('--')
-            setCanAccessProMembershipTest(false)
             Taro.removeStorageSync('userRegisterTime')
             Taro.showToast({ title: '已退出登录', icon: 'success' })
           } catch (error) {

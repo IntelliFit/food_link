@@ -213,10 +213,49 @@ export interface HomeMealItem {
   tags: string[]
 }
 
+export interface FoodExpiryItem {
+  id: string
+  user_id: string
+  food_name: string
+  quantity_text?: string | null
+  storage_location?: string | null
+  note?: string | null
+  deadline_at: string
+  deadline_precision: 'date' | 'datetime'
+  completed_at?: string | null
+  created_at: string
+  updated_at: string
+  is_overdue: boolean
+  is_due_today: boolean
+  days_left?: number | null
+  deadline_label?: string | null
+  urgency_level: 'overdue' | 'today' | 'soon' | 'normal'
+}
+
+export interface FoodExpirySummary {
+  pendingCount: number
+  soonCount: number
+  overdueCount: number
+  items: FoodExpiryItem[]
+}
+
+export interface CreateFoodExpiryRequest {
+  food_name: string
+  quantity_text?: string
+  storage_location?: string
+  note?: string
+  deadline_precision: 'date' | 'datetime'
+  deadline_date: string
+  deadline_time?: string
+}
+
+export interface UpdateFoodExpiryRequest extends CreateFoodExpiryRequest {}
+
 /** 首页仪表盘接口返回（不含运动） */
 export interface HomeDashboard {
   intakeData: HomeIntakeData
   meals: HomeMealItem[]
+  expirySummary?: FoodExpirySummary
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -1223,6 +1262,74 @@ export async function getHomeDashboard(): Promise<HomeDashboard> {
     throw new Error(msg)
   }
   return res.data as HomeDashboard
+}
+
+export async function getFoodExpiryList(status: 'pending' | 'completed' = 'pending'): Promise<{ items: FoodExpiryItem[] }> {
+  const res = await authenticatedRequest(`/api/food-expiry/list?status=${encodeURIComponent(status)}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取食物保质期列表失败')
+  }
+  return res.data as { items: FoodExpiryItem[] }
+}
+
+export async function createFoodExpiryItem(data: CreateFoodExpiryRequest): Promise<{ id: string; message: string; item: FoodExpiryItem }> {
+  const res = await authenticatedRequest('/api/food-expiry', {
+    method: 'POST',
+    data,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '创建食物保质期失败')
+  }
+  return res.data as { id: string; message: string; item: FoodExpiryItem }
+}
+
+export async function getFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
+  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取食物保质期详情失败')
+  }
+  return res.data as { item: FoodExpiryItem }
+}
+
+export async function updateFoodExpiryItem(id: string, data: UpdateFoodExpiryRequest): Promise<{ message: string; item: FoodExpiryItem }> {
+  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
+    method: 'PUT',
+    data,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '更新食物保质期失败')
+  }
+  return res.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function completeFoodExpiryItem(id: string): Promise<{ message: string; item: FoodExpiryItem }> {
+  const res = await authenticatedRequest(`/api/food-expiry/${id}/complete`, {
+    method: 'POST',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '标记已吃完失败')
+  }
+  return res.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function deleteFoodExpiryItem(id: string): Promise<{ message: string }> {
+  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
+    method: 'DELETE',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '删除食物保质期失败')
+  }
+  return res.data as { message: string }
 }
 
 /**

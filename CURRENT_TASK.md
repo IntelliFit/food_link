@@ -1,5 +1,46 @@
 # CURRENT_TASK
 
+- Task: 新增食物保质期管理功能（我的页入口 + 首页摘要 + 列表/编辑页）
+- Status: done（V1 已完成手动录入、首页摘要展示、列表管理、标记已吃完与后端 CRUD；服务号通知暂未实现）
+- Scope:
+  - `backend/database/user_food_expiry_items.sql`
+    - 新增 `user_food_expiry_items` 表和更新时间触发器
+  - `backend/database.py`
+    - 新增食物保质期增删改查与标记已吃完数据层方法
+  - `backend/main.py`
+    - 新增 `/api/food-expiry` CRUD 接口
+    - 新增截止时间解析、临期/过期派生字段序列化
+    - 首页 `/api/home/dashboard` 新增 `expirySummary`
+  - `src/utils/api.ts`
+    - 新增 `FoodExpiryItem / FoodExpirySummary` 类型和前端 API 方法
+  - `src/pages/profile/index.tsx`
+    - 我的页服务网格新增 `食物保质期` 入口
+  - `src/pages/index/index.tsx`
+  - `src/pages/index/index.scss`
+    - 首页新增“快到期食物”摘要卡片，仅展示已设置内容并可进入列表页
+  - `src/pages/food-expiry/index.tsx`
+  - `src/pages/food-expiry/index.scss`
+  - `src/pages/food-expiry/index.config.ts`
+    - 新增保质期列表页，支持待吃完/已吃完切换、编辑、删除、标记已吃完
+  - `src/pages/food-expiry-edit/index.tsx`
+  - `src/pages/food-expiry-edit/index.scss`
+  - `src/pages/food-expiry-edit/index.config.ts`
+    - 新增保质期编辑页，支持日期/日期时间两种截止精度
+  - `src/app.config.ts`
+    - 注册新页面
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - `eslint src/pages/food-expiry/index.tsx src/pages/food-expiry-edit/index.tsx src/pages/index/index.tsx src/pages/profile/index.tsx src/utils/api.ts` 通过
+  - 已按要求执行 `npm run dev:weapp`
+    - 当前仍命中 Taro/Rust `system-configuration` panic：`Attempted to create a NULL object`
+    - 暂未拿到正常 watch 编译完成结果，属于当前本机编译环境阻塞
+- Next step:
+  - 先在数据库执行 `backend/database/user_food_expiry_items.sql`
+  - 修复或绕过当前本机 `npm run dev:weapp` 的 Taro/Rust 编译环境问题后，再在微信开发者工具中验证：
+    - 我的页 `食物保质期` 入口
+    - 首页“快到期食物”摘要卡片
+    - 列表页新增/编辑/删除/标记已吃完流程
+
 - Task: 移除个人页服务网格中的测试入口 Pro会员
 - Status: done
 - Scope:

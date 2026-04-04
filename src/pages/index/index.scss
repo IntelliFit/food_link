@@ -430,6 +430,148 @@ $text-tertiary: #9ca3af;
   padding-left: 8rpx;
 }
 
+.expiry-section {
+  margin-bottom: 32rpx;
+}
+
+.expiry-card {
+  background: $card-bg;
+  border-radius: 24rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+}
+
+.expiry-loading {
+  padding: 40rpx 0;
+  text-align: center;
+}
+
+.expiry-summary-top {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+  flex-wrap: wrap;
+}
+
+.expiry-summary-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: $text-primary;
+  line-height: 40rpx;
+}
+
+.expiry-summary-badge {
+  padding: 6rpx 14rpx;
+  border-radius: 9999rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 30rpx;
+
+  &.overdue {
+    color: #dc2626;
+    background: #fee2e2;
+  }
+
+  &.soon {
+    color: #d97706;
+    background: #fef3c7;
+  }
+}
+
+.expiry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.expiry-item {
+  padding: 18rpx 20rpx;
+  border-radius: 18rpx;
+  background: #f8fafc;
+
+  &:active {
+    opacity: 0.75;
+  }
+}
+
+.expiry-item-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.expiry-item-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: $text-primary;
+  line-height: 40rpx;
+}
+
+.expiry-item-tag {
+  flex-shrink: 0;
+  padding: 4rpx 12rpx;
+  border-radius: 9999rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 28rpx;
+
+  &.overdue {
+    color: #dc2626;
+    background: #fee2e2;
+  }
+
+  &.today {
+    color: #ea580c;
+    background: #ffedd5;
+  }
+
+  &.soon {
+    color: #d97706;
+    background: #fef3c7;
+  }
+
+  &.normal {
+    color: $text-secondary;
+    background: #e5e7eb;
+  }
+}
+
+.expiry-item-meta {
+  display: block;
+  font-size: 24rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+}
+
+.expiry-empty {
+  padding: 28rpx 8rpx;
+
+  &:active {
+    opacity: 0.75;
+  }
+}
+
+.expiry-empty-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: $text-primary;
+  line-height: 40rpx;
+  margin-bottom: 8rpx;
+}
+
+.expiry-empty-desc {
+  display: block;
+  font-size: 24rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+}
+
 // 今日餐食区域
 .meals-section {
   margin-bottom: 32rpx;

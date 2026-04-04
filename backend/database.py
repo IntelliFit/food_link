@@ -2976,6 +2976,111 @@ async def hide_food_record_from_feed(user_id: str, record_id: str) -> bool:
         raise
 
 
+# ---------- 食物保质期 ----------
+
+async def create_food_expiry_item(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建食物保质期项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "food_name": data.get("food_name"),
+        "quantity_text": data.get("quantity_text"),
+        "storage_location": data.get("storage_location"),
+        "note": data.get("note"),
+        "deadline_at": data.get("deadline_at"),
+        "deadline_precision": data.get("deadline_precision") or "date",
+        "completed_at": data.get("completed_at"),
+    }
+    try:
+        result = supabase.table("user_food_expiry_items").insert(row).execute()
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f"[create_food_expiry_item] 错误: {e}")
+        raise
+
+
+async def list_food_expiry_items(user_id: str, status: str = "pending") -> List[Dict[str, Any]]:
+    """列出用户的食物保质期项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_food_expiry_items").select("*").eq("user_id", user_id).execute()
+        items = result.data or []
+        if status == "completed":
+            completed_items = [item for item in items if item.get("completed_at")]
+            completed_items.sort(
+                key=lambda item: str(item.get("completed_at") or ""),
+                reverse=True,
+            )
+            return completed_items
+        pending_items = [item for item in items if not item.get("completed_at")]
+        pending_items.sort(key=lambda item: str(item.get("deadline_at") or ""))
+        return pending_items
+    except Exception as e:
+        print(f"[list_food_expiry_items] 错误: {e}")
+        raise
+
+
+async def get_food_expiry_item(item_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    """获取单个食物保质期项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_food_expiry_items")
+            .select("*")
+            .eq("id", item_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_food_expiry_item] 错误: {e}")
+        raise
+
+
+async def update_food_expiry_item(item_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """更新食物保质期项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_food_expiry_items")
+            .update(data)
+            .eq("id", item_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f"[update_food_expiry_item] 错误: {e}")
+        raise
+
+
+async def complete_food_expiry_item(item_id: str, user_id: str) -> Dict[str, Any]:
+    """标记食物已吃完。"""
+    return await update_food_expiry_item(
+        item_id,
+        user_id,
+        {"completed_at": datetime.now(timezone.utc).isoformat()},
+    )
+
+
+async def delete_food_expiry_item(item_id: str, user_id: str) -> bool:
+    """删除食物保质期项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        supabase.table("user_food_expiry_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
+        return True
+    except Exception as e:
+        print(f"[delete_food_expiry_item] 错误: {e}")
+        raise
+
+
 # ---------- 用户私人食谱 ----------
 
 async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:

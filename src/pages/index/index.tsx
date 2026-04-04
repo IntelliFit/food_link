@@ -1,6 +1,7 @@
 import { View, Text, Input } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import { Empty, Button } from '@taroify/core'
 import {
   getHomeDashboard,
   getStatsSummary,
@@ -10,11 +11,13 @@ import {
   getStoredDashboardTargets,
   type DashboardTargets,
   type HomeIntakeData,
-  type HomeMealItem
+  type HomeMealItem,
+  type FoodExpiryItem,
+  type FoodExpirySummary
 } from '../../utils/api'
-import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight } from '../../components/iconfont'
-import { Empty, Button } from '@taroify/core'
+import { IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
+import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 
 import './index.scss'
 
@@ -27,6 +30,13 @@ const DEFAULT_INTAKE: HomeIntakeData = {
     carbs: { current: 0, target: 250 },
     fat: { current: 0, target: 65 }
   }
+}
+
+const DEFAULT_EXPIRY_SUMMARY: FoodExpirySummary = {
+  pendingCount: 0,
+  soonCount: 0,
+  overdueCount: 0,
+  items: []
 }
 
 type MacroKey = keyof HomeIntakeData['macros']
@@ -55,7 +65,6 @@ interface MacroTargets {
   fat: number
 }
 
-const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const SHORT_DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
 
 function getGreeting(): string {
@@ -193,6 +202,22 @@ function createTargetForm(intake: HomeIntakeData): TargetFormState {
   }
 }
 
+function getExpiryUrgencyText(item: FoodExpiryItem): string {
+  if (item.urgency_level === 'overdue') return '已过期'
+  if (item.urgency_level === 'today') return '今天截止'
+  if (item.urgency_level === 'soon') {
+    const days = Math.max(1, Number(item.days_left ?? 1))
+    return `${days}天内到期`
+  }
+  return '待处理'
+}
+
+function formatExpiryMeta(item: FoodExpiryItem): string {
+  return [item.deadline_label, item.storage_location || '', item.quantity_text || '']
+    .filter(Boolean)
+    .join(' · ')
+}
+
 // 餐次对应的 iconfont 图标及颜色
 const MEAL_ICON_CONFIG = {
   breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐' },
@@ -244,6 +269,7 @@ function createWeekHeatmapCells(): WeekHeatmapCell[] {
 export default function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
   const [meals, setMeals] = useState<HomeMealItem[]>([])
+  const [expirySummary, setExpirySummary] = useState<FoodExpirySummary>(DEFAULT_EXPIRY_SUMMARY)
   const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(createWeekHeatmapCells())
   const [loading, setLoading] = useState(true)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
@@ -255,6 +281,7 @@ export default function IndexPage() {
     if (!getAccessToken()) {
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
+      setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
       setWeekHeatmapCells(createWeekHeatmapCells())
       setLoading(false)
@@ -300,11 +327,13 @@ export default function IndexPage() {
       
       setIntakeData(intake)
       setMeals(res.meals || [])
+      setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       setWeekHeatmapCells(nextWeekHeatmapCells)
       setTargetForm(createTargetForm(intake))
     } catch {
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
+      setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
       setWeekHeatmapCells(createWeekHeatmapCells())
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
     } finally {
@@ -333,6 +362,16 @@ export default function IndexPage() {
       menus: ['shareAppMessage', 'shareTimeline']
     })
   }, [])
+
+  useEffect(() => {
+    const refreshHome = () => {
+      loadDashboard()
+    }
+    Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
+    return () => {
+      Taro.eventCenter.off(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
+    }
+  }, [loadDashboard])
 
   const openTargetEditor = () => {
     if (!getAccessToken()) {
@@ -485,6 +524,14 @@ export default function IndexPage() {
     Taro.navigateTo({ url: '/pages/stats/index' })
   }
 
+  const openFoodExpiryList = () => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    Taro.navigateTo({ url: '/pages/food-expiry/index' })
+  }
+
   const handleDateSelect = (date: string) => {
     setSelectedDate(date)
     const cell = weekHeatmapCells.find(c => c.date === date)
@@ -506,12 +553,7 @@ export default function IndexPage() {
       ? Number((calorieInputValue - caloriesFromMacroInputs).toFixed(1))
       : null
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
-
-  // 计算三大营养素剩余量
-  const getMacroRemaining = (key: MacroKey) => {
-    const macro = intakeData.macros[key]
-    return Math.max(0, Number((macro.target - macro.current).toFixed(1)))
-  }
+  const shouldShowExpirySection = expirySummary.pendingCount > 0
 
   return (
     <View className='home-page'>
@@ -637,6 +679,56 @@ export default function IndexPage() {
             )
           })}
         </View>
+
+        {/* 快到期食物 */}
+        {shouldShowExpirySection && (
+          <View className='expiry-section'>
+            <View className='section-header'>
+              <Text className='section-title'>快到期食物</Text>
+              <View className='view-all-btn' onClick={openFoodExpiryList}>
+                <Text className='view-all-text'>查看全部</Text>
+                <IconChevronRight size={16} color='#00bc7d' />
+              </View>
+            </View>
+
+            <View className='expiry-card'>
+              {loading ? (
+                <View className='expiry-loading'>
+                  <Text className='loading-text'>加载中...</Text>
+                </View>
+              ) : (
+                <>
+                  <View className='expiry-summary-top'>
+                    <Text className='expiry-summary-text'>
+                      待处理 {expirySummary.pendingCount} 项
+                    </Text>
+                    {expirySummary.overdueCount > 0 && (
+                      <Text className='expiry-summary-badge overdue'>
+                        {expirySummary.overdueCount} 项已过期
+                      </Text>
+                    )}
+                    {expirySummary.overdueCount === 0 && expirySummary.soonCount > 0 && (
+                      <Text className='expiry-summary-badge soon'>
+                        {expirySummary.soonCount} 项临近截止
+                      </Text>
+                    )}
+                  </View>
+                  <View className='expiry-list'>
+                    {expirySummary.items.map((item) => (
+                      <View key={item.id} className='expiry-item' onClick={openFoodExpiryList}>
+                        <View className='expiry-item-main'>
+                          <Text className='expiry-item-name'>{item.food_name}</Text>
+                          <Text className={`expiry-item-tag ${item.urgency_level}`}>{getExpiryUrgencyText(item)}</Text>
+                        </View>
+                        <Text className='expiry-item-meta'>{formatExpiryMeta(item)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* 今日餐食区域 */}
         <View className='meals-section'>

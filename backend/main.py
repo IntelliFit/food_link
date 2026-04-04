@@ -106,6 +106,12 @@ from database import (
     get_food_record_by_id,
     delete_food_record,
     hide_food_record_from_feed,
+    create_food_expiry_item,
+    list_food_expiry_items,
+    get_food_expiry_item,
+    update_food_expiry_item,
+    complete_food_expiry_item,
+    delete_food_expiry_item,
     # 私人食谱
     create_user_recipe,
     list_user_recipes,
@@ -448,6 +454,122 @@ def _build_json_datetime(value: Optional[datetime]) -> Optional[str]:
     if value is None:
         return None
     return value.astimezone(timezone.utc).isoformat()
+
+
+FOOD_EXPIRY_SOON_DAYS = 3
+VALID_FOOD_EXPIRY_PRECISIONS = {"date", "datetime"}
+VALID_FOOD_EXPIRY_STATUSES = {"pending", "completed"}
+
+
+def _normalize_food_expiry_text(value: Optional[str], max_length: int = 200) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:max_length]
+
+
+def _build_food_expiry_deadline(
+    deadline_date: str,
+    deadline_precision: str,
+    deadline_time: Optional[str] = None,
+) -> datetime:
+    try:
+        date_part = datetime.strptime(deadline_date, "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(status_code=400, detail="deadline_date 必须为 YYYY-MM-DD")
+
+    if deadline_precision == "date":
+        return datetime(
+            date_part.year,
+            date_part.month,
+            date_part.day,
+            23,
+            59,
+            59,
+            tzinfo=CHINA_TZ,
+        ).astimezone(timezone.utc)
+
+    if deadline_precision == "datetime":
+        if not deadline_time:
+            raise HTTPException(status_code=400, detail="deadline_time 不能为空")
+        try:
+            time_part = datetime.strptime(deadline_time, "%H:%M").time()
+        except Exception:
+            raise HTTPException(status_code=400, detail="deadline_time 必须为 HH:MM")
+        return datetime(
+            date_part.year,
+            date_part.month,
+            date_part.day,
+            time_part.hour,
+            time_part.minute,
+            0,
+            tzinfo=CHINA_TZ,
+        ).astimezone(timezone.utc)
+
+    raise HTTPException(status_code=400, detail="deadline_precision 必须为 date 或 datetime")
+
+
+def _serialize_food_expiry_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    deadline_at = _parse_datetime(item.get("deadline_at"))
+    completed_at = _parse_datetime(item.get("completed_at"))
+    now = datetime.now(timezone.utc)
+    deadline_local = deadline_at.astimezone(CHINA_TZ) if deadline_at else None
+    now_local = now.astimezone(CHINA_TZ)
+    is_overdue = bool(deadline_at and completed_at is None and deadline_at < now)
+    is_due_today = bool(deadline_local and completed_at is None and deadline_local.date() == now_local.date())
+
+    days_left: Optional[int] = None
+    if deadline_local:
+        days_left = (deadline_local.date() - now_local.date()).days
+
+    urgency_level = "normal"
+    if is_overdue:
+        urgency_level = "overdue"
+    elif is_due_today:
+        urgency_level = "today"
+    elif completed_at is None and days_left is not None and 0 < days_left <= FOOD_EXPIRY_SOON_DAYS:
+        urgency_level = "soon"
+
+    deadline_label: Optional[str] = None
+    if deadline_local:
+        if item.get("deadline_precision") == "datetime":
+            deadline_label = deadline_local.strftime("%m-%d %H:%M")
+        else:
+            deadline_label = deadline_local.strftime("%m-%d")
+
+    return {
+        **item,
+        "deadline_at": _build_json_datetime(deadline_at),
+        "completed_at": _build_json_datetime(completed_at),
+        "is_overdue": is_overdue,
+        "is_due_today": is_due_today,
+        "days_left": days_left,
+        "deadline_label": deadline_label,
+        "urgency_level": urgency_level,
+    }
+
+
+def _build_food_expiry_summary(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    serialized = [_serialize_food_expiry_item(item) for item in items]
+
+    def sort_key(item: Dict[str, Any]):
+        urgency_rank = {"overdue": 0, "today": 1, "soon": 2, "normal": 3}
+        days_left = item.get("days_left")
+        return (
+            urgency_rank.get(item.get("urgency_level") or "normal", 9),
+            days_left if isinstance(days_left, int) else 9999,
+            item.get("deadline_at") or "",
+        )
+
+    serialized.sort(key=sort_key)
+    return {
+        "pendingCount": len(serialized),
+        "soonCount": sum(1 for item in serialized if item.get("urgency_level") in {"today", "soon"}),
+        "overdueCount": sum(1 for item in serialized if item.get("urgency_level") == "overdue"),
+        "items": serialized[:3],
+    }
 
 
 def _format_membership_response(membership: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3692,6 +3814,146 @@ async def get_shared_food_record(record_id: str):
         raise HTTPException(status_code=500, detail="获取记录详情失败")
 
 
+# ---------- 食物保质期 ----------
+
+
+class FoodExpiryUpsertRequest(BaseModel):
+    food_name: str = Field(..., min_length=1, max_length=100, description="食物名称")
+    quantity_text: Optional[str] = Field(default=None, description="数量描述，如 2盒")
+    storage_location: Optional[str] = Field(default=None, description="存放位置，如 冷藏")
+    note: Optional[str] = Field(default=None, description="备注")
+    deadline_precision: str = Field(default="date", description="截止精度：date / datetime")
+    deadline_date: str = Field(..., description="截止日期 YYYY-MM-DD")
+    deadline_time: Optional[str] = Field(default=None, description="截止时间 HH:MM，仅 datetime 时必填")
+
+
+@app.get("/api/food-expiry/list")
+async def api_list_food_expiry_items(
+    status: str = "pending",
+    user_info: dict = Depends(get_current_user_info),
+):
+    if status not in VALID_FOOD_EXPIRY_STATUSES:
+        raise HTTPException(status_code=400, detail="status 必须为 pending 或 completed")
+    try:
+        items = await list_food_expiry_items(user_info["user_id"], status=status)
+        return {"items": [_serialize_food_expiry_item(item) for item in items]}
+    except Exception as e:
+        print(f"[api_list_food_expiry_items] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取食物保质期列表失败")
+
+
+@app.post("/api/food-expiry")
+async def api_create_food_expiry_item(
+    body: FoodExpiryUpsertRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    precision = (body.deadline_precision or "").strip()
+    if precision not in VALID_FOOD_EXPIRY_PRECISIONS:
+        raise HTTPException(status_code=400, detail="deadline_precision 必须为 date 或 datetime")
+    deadline_at = _build_food_expiry_deadline(body.deadline_date, precision, body.deadline_time)
+    try:
+        item = await create_food_expiry_item(
+            user_info["user_id"],
+            {
+                "food_name": body.food_name.strip(),
+                "quantity_text": _normalize_food_expiry_text(body.quantity_text, max_length=50),
+                "storage_location": _normalize_food_expiry_text(body.storage_location, max_length=50),
+                "note": _normalize_food_expiry_text(body.note, max_length=300),
+                "deadline_precision": precision,
+                "deadline_at": deadline_at.isoformat(),
+            },
+        )
+        return {"id": item["id"], "message": "创建成功", "item": _serialize_food_expiry_item(item)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api_create_food_expiry_item] 错误: {e}")
+        raise HTTPException(status_code=500, detail="创建食物保质期失败")
+
+
+@app.get("/api/food-expiry/{item_id}")
+async def api_get_food_expiry_item(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    try:
+        item = await get_food_expiry_item(item_id, user_info["user_id"])
+        if not item:
+            raise HTTPException(status_code=404, detail="食物保质期项不存在")
+        return {"item": _serialize_food_expiry_item(item)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api_get_food_expiry_item] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取食物保质期详情失败")
+
+
+@app.put("/api/food-expiry/{item_id}")
+async def api_update_food_expiry_item(
+    item_id: str,
+    body: FoodExpiryUpsertRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    precision = (body.deadline_precision or "").strip()
+    if precision not in VALID_FOOD_EXPIRY_PRECISIONS:
+        raise HTTPException(status_code=400, detail="deadline_precision 必须为 date 或 datetime")
+    existing = await get_food_expiry_item(item_id, user_info["user_id"])
+    if not existing:
+        raise HTTPException(status_code=404, detail="食物保质期项不存在")
+    deadline_at = _build_food_expiry_deadline(body.deadline_date, precision, body.deadline_time)
+    try:
+        item = await update_food_expiry_item(
+            item_id,
+            user_info["user_id"],
+            {
+                "food_name": body.food_name.strip(),
+                "quantity_text": _normalize_food_expiry_text(body.quantity_text, max_length=50),
+                "storage_location": _normalize_food_expiry_text(body.storage_location, max_length=50),
+                "note": _normalize_food_expiry_text(body.note, max_length=300),
+                "deadline_precision": precision,
+                "deadline_at": deadline_at.isoformat(),
+            },
+        )
+        return {"message": "更新成功", "item": _serialize_food_expiry_item(item)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api_update_food_expiry_item] 错误: {e}")
+        raise HTTPException(status_code=500, detail="更新食物保质期失败")
+
+
+@app.post("/api/food-expiry/{item_id}/complete")
+async def api_complete_food_expiry_item(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    existing = await get_food_expiry_item(item_id, user_info["user_id"])
+    if not existing:
+        raise HTTPException(status_code=404, detail="食物保质期项不存在")
+    try:
+        item = await complete_food_expiry_item(item_id, user_info["user_id"])
+        return {"message": "已标记为吃完", "item": _serialize_food_expiry_item(item)}
+    except Exception as e:
+        print(f"[api_complete_food_expiry_item] 错误: {e}")
+        raise HTTPException(status_code=500, detail="标记已吃完失败")
+
+
+@app.delete("/api/food-expiry/{item_id}")
+async def api_delete_food_expiry_item(
+    item_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    existing = await get_food_expiry_item(item_id, user_info["user_id"])
+    if not existing:
+        raise HTTPException(status_code=404, detail="食物保质期项不存在")
+    try:
+        await delete_food_expiry_item(item_id, user_info["user_id"])
+        return {"message": "删除成功"}
+    except Exception as e:
+        print(f"[api_delete_food_expiry_item] 错误: {e}")
+        raise HTTPException(status_code=500, detail="删除食物保质期失败")
+
+
 # ---------- 首页仪表盘（今日摄入 + 今日餐食，不含运动） ----------
 
 DASHBOARD_DEFAULT_MACRO_TARGETS = {"protein": 120.0, "carbs": 250.0, "fat": 65.0}
@@ -3764,6 +4026,7 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
         targets = _get_dashboard_targets(user)
         calorie_target = float(targets["calorie_target"])
         records = await list_food_records(user_id=user_id, date=today, limit=100)
+        expiry_items = await list_food_expiry_items(user_id=user_id, status="pending")
     except Exception as e:
         print(f"[get_home_dashboard] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取首页数据失败")
@@ -3824,7 +4087,11 @@ async def get_home_dashboard(user_info: dict = Depends(get_current_user_info)):
             "tags": [SNACK_TARGET_TAG] if "snack" in meal_type else [],
         })
 
-    return {"intakeData": intake_data, "meals": meals_out}
+    return {
+        "intakeData": intake_data,
+        "meals": meals_out,
+        "expirySummary": _build_food_expiry_summary(expiry_items),
+    }
 
 
 # ---------- 数据统计（周/月摄入、TDEE、连续天数、饮食结构 + AI 洞察） ----------
