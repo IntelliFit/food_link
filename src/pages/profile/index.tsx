@@ -35,8 +35,6 @@ interface UserInfo {
   meta: string
 }
 
-const PRO_MEMBERSHIP_TEST_OPENID = 'oe4xm19XWerfUsnkIsd_7XWu_Q4A'
-
 /** 注册时间格式化为 YYYY-MM-DD */
 function formatRegisterDate(value: string | undefined | null): string {
   if (!value) return '--'
@@ -72,7 +70,6 @@ export default function ProfilePage() {
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
   const [registerDate, setRegisterDate] = useState('--')
-  const [canAccessProMembershipTest, setCanAccessProMembershipTest] = useState(false)
 
   // 每次显示页面时检查登录状态并刷新数据
   useDidShow(() => {
@@ -108,7 +105,6 @@ export default function ProfilePage() {
             Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
           }
           setRegisterDate(formatRegisterDate(registerTime))
-          setCanAccessProMembershipTest(apiUserInfo.openid === PRO_MEMBERSHIP_TEST_OPENID)
           const completed = apiUserInfo.onboarding_completed ?? true
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
@@ -129,7 +125,6 @@ export default function ProfilePage() {
           if (storedUserInfo) {
             setUserInfo(storedUserInfo)
           }
-          setCanAccessProMembershipTest(Taro.getStorageSync('openid') === PRO_MEMBERSHIP_TEST_OPENID)
           setRegisterDate(formatRegisterDate(Taro.getStorageSync('userRegisterTime') || ''))
         }
       } else {
@@ -141,11 +136,9 @@ export default function ProfilePage() {
         })
         setRecordDays(0)
         setRegisterDate('--')
-        setCanAccessProMembershipTest(false)
       }
     } catch (error) {
       console.error('读取登录状态失败:', error)
-      setCanAccessProMembershipTest(false)
     }
   }
 
@@ -177,16 +170,6 @@ export default function ProfilePage() {
       desc: '发现附近健康美食推荐'
     }
   ]
-
-  if (canAccessProMembershipTest) {
-    services.push({
-      id: 6,
-      icon: <ShieldOutlined size='32' />,
-      title: 'Pro会员',
-      desc: '测试 Pro 会员支付功能',
-      path: '/pages/pro-membership/index'
-    })
-  }
 
   // 设置项
   const settings = [
@@ -233,10 +216,6 @@ export default function ProfilePage() {
         confirmText: '好的',
         confirmColor: '#00bc7d'
       })
-      return
-    }
-    if (service.id === 6) {
-      Taro.navigateTo({ url: '/pages/pro-membership/index' })
       return
     }
     const path = (service as { path?: string }).path

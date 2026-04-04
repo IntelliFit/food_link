@@ -1,5 +1,21 @@
 # CURRENT_TASK
 
+- Task: 移除个人页服务网格中的测试入口 Pro会员
+- Status: done
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - 删除测试专用 `Pro会员` 服务入口
+    - 清理测试 OpenID 常量、显示开关状态和对应跳转分支
+    - 保留顶部“食探会员”卡片不变
+- Verification:
+  - 已执行 `npm run build:weapp`
+    - 当前仅看到 Taro/Rust 侧 `system-configuration` panic 输出，命令未正常返回明确成功结果
+  - 已按项目要求尝试运行态验证
+    - `mrc where --port 9420` 失败：本机无 `mrc` 命令
+    - `mrc errors 20 --port 9420` 失败：本机无 `mrc` 命令
+- Next step:
+  - 在可用的微信开发者工具自动化环境中打开“我的”页，确认服务网格里不再显示 `Pro会员`
+
 - Task: 圈子动态支持从圈子移除（不删除饮食记录）
 - Status: done
 - Scope:
