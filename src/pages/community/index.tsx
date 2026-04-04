@@ -1582,7 +1582,7 @@ function CommunityPage() {
                   ))}
                 </View>
               ) : loadingFeed && feedList.length === 0 ? (
-                <Text className='loading-text'>加载中...</Text>
+                <View className='loading-spinner-md' />
               ) : filteredFeedList.length === 0 ? (
                 feedSearchKeyword.trim() ? (
                   <View className='feed-empty'>

@@ -312,7 +312,7 @@ function HealthProfileEditPage() {
     return (
       <View className='health-profile-edit-page'>
         <View className='loading-wrap'>
-          <Text className='loading-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )

@@ -57,7 +57,7 @@ function PrivacySettings() {
     if (loading) {
         return (
             <View className='loading-container'>
-                <Text>加载中...</Text>
+                <View className='loading-spinner-md' />
             </View>
         )
     }

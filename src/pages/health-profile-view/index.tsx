@@ -78,7 +78,7 @@ function HealthProfileViewPage() {
     return (
       <View className='health-profile-view-page'>
         <View className='loading-wrap'>
-          <Text className='loading-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )

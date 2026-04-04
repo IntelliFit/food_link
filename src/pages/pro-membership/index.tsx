@@ -245,7 +245,7 @@ function ProMembershipPage() {
           disabled={loading || !plan || pageLoading}
           onClick={handleSubscribe}
         >
-          {pageLoading ? '加载中...' : isPro ? '续费一个月' : `¥${plan?.amount?.toFixed(2) ?? '9.90'} 立即开通`}
+          {pageLoading ? <View className='btn-spinner' /> : (isPro ? '续费一个月' : `¥${plan?.amount?.toFixed(2) ?? '9.90'} 立即开通`)}
         </Button>
         <Text className='subscribe-hint'>到期后不自动续费 · 支持微信支付</Text>
       </View>

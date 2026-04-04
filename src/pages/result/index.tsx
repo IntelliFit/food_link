@@ -1341,9 +1341,7 @@ function ResultPage() {
                   className={`primary-btn ${saving ? 'loading' : ''} ${(isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''}`}
                   onClick={handleConfirmAndShare}
                 >
-                  <Text className='btn-text'>
-                    {saving ? '保存中...' : ((isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录')}
-                  </Text>
+                  {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>{(isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录'}</Text>}
                 </View>
               </View>
 
@@ -1489,8 +1487,8 @@ function ResultPage() {
               className={`drawer-submit-btn ${isResubmitting ? 'loading' : ''}`}
               onClick={handleSubmitCorrection}
             >
-              <Text className='iconfont icon-loading'></Text>
-              <Text>{isResubmitting ? '提交中...' : '重新智能分析'}</Text>
+              {isResubmitting ? <View className='btn-spinner' /> : <Text className='iconfont icon-loading'></Text>}
+              <Text>{isResubmitting ? '' : '重新智能分析'}</Text>
             </View>
           </View>
         </View>

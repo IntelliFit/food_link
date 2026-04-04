@@ -40,3 +40,66 @@ page {
 //   font-size: 28rpx !important;
 // }
 
+// ==================== 全局 Loading Spinner 样式 ====================
+
+// 通用 loading spinner（白色，用于按钮等深色背景）
+.loading-spinner {
+  width: 32rpx;
+  height: 32rpx;
+  border: 3rpx solid rgb(255 255 255 / 30%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+// 深色 spinner（用于白色背景）
+.loading-spinner-dark {
+  width: 40rpx;
+  height: 40rpx;
+  border: 4rpx solid #e2e8f0;
+  border-top-color: #00bc7d;
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+// 中等尺寸 spinner
+.loading-spinner-md {
+  width: 48rpx;
+  height: 48rpx;
+  border: 4rpx solid #e2e8f0;
+  border-top-color: #00bc7d;
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+// 大号 spinner
+.loading-spinner-lg {
+  width: 60rpx;
+  height: 60rpx;
+  border: 5rpx solid #e2e8f0;
+  border-top-color: #00bc7d;
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+// loading 容器（用于居中显示）
+.loading-container-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+}
+
+// loading 文字
+.loading-text-primary {
+  font-size: 28rpx;
+  color: #64748b;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

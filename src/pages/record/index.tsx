@@ -976,7 +976,7 @@ function RecordPage() {
               <Text className='text-picker-close' onClick={() => setShowTextSourcePicker(false)}>✕</Text>
             </View>
             {textSourceLoading ? (
-              <View className='text-picker-empty'>加载中...</View>
+              <View className='text-picker-empty'><View className='loading-spinner-md' /></View>
             ) : textSourceType === 'history' ? (
               textHistoryRecords.length > 0 ? (
                 <ScrollView className='text-picker-list' scrollY>
@@ -1078,7 +1078,7 @@ function RecordPage() {
             {/* 食物列表 */}
             {manualBrowseLoading ? (
               <View className='manual-browse-loading'>
-                <Text className='manual-browse-loading-text'>加载中...</Text>
+                <View className='loading-spinner-md' />
               </View>
             ) : (
               <ScrollView className='manual-browse-list' scrollY>
@@ -1228,7 +1228,7 @@ function RecordPage() {
               className={`manual-save-btn ${manualSelectedItems.length === 0 ? 'disabled' : ''} ${manualSaving ? 'loading' : ''}`}
               onClick={handleManualSave}
             >
-              {manualSaving ? '保存中...' : `保存记录（${Math.round(manualTotalNutrients.calories)} kcal）`}
+              {manualSaving ? <View className='btn-spinner' /> : `保存记录（${Math.round(manualTotalNutrients.calories)} kcal）`}
             </View>
           </View>
           <View style={{ height: '140rpx' }}></View>
@@ -1282,8 +1282,7 @@ function RecordPage() {
           {/* 记录列表 */}
           {historyLoading ? (
             <View className='empty-state'>
-              <Text className='iconfont icon-jiazaixiao empty-icon'></Text>
-              <Text className='empty-text'>加载中...</Text>
+              <View className='loading-spinner-md' />
             </View>
           ) : historyError ? (
             <View className='empty-state'>

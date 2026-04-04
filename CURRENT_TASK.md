@@ -1,5 +1,21 @@
 # CURRENT_TASK
 
+- Task: 今日餐食布局优化：图片撑满容器、进度条超额红色警示
+- Status: done（已完成代码修改并通过构建）
+- Scope:
+  - `src/pages/index/components/MealsSection.tsx`
+    - 图片区域样式优化：添加 `max-width: 100%` 和 `object-fit: cover` 确保图片撑满容器
+    - 进度条颜色逻辑：超过 100% 时从绿色变为红色警示 (`#ef4444`)
+    - 新增 `is-warning` class 用于超额状态的额外样式（如红色阴影）
+  - `src/pages/index/index.scss`
+    - `.meal-thumb-image`: 添加 `max-width: 100%` 和 `object-fit: cover`
+    - `.meal-progress-bar-fill.is-warning`: 添加红色阴影效果
+- Verification:
+  - ✅ 构建通过：`npm run build:weapp` 成功
+  - ⏭️ 待验证：在微信开发者工具中确认
+    - 餐次缩略图是否正确撑满 80rpx 正方形容器
+    - 当摄入超过目标（如 193%）时，进度条是否显示为红色
+
 - Task: 首页样式优化：体重/喝水卡片标题统一、今日餐食紫色改绿色、卡片布局紧凑化
 - Status: done（已完成代码修改并通过构建，待运行态验证）
 - Scope:

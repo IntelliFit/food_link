@@ -319,8 +319,7 @@ function ResultTextPage() {
     return (
       <View className='result-text-page'>
         <View className='empty-state'>
-          <Text className='empty-icon iconfont icon-shizhong'></Text>
-          <Text className='empty-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )
@@ -536,7 +535,7 @@ function ResultTextPage() {
         <View className='pba-safe-area'>
           <View className='action-grid'>
             <View className={`primary-btn ${saving ? 'loading' : ''}`} onClick={saving ? undefined : handleConfirmAndShare}>
-              <Text className='btn-text'>{saving ? '保存中...' : '确认记录'}</Text>
+              {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>确认记录</Text>}
             </View>
           </View>
         </View>

@@ -116,7 +116,7 @@ function RecipeEditPage() {
     return (
       <View className='recipe-edit-page'>
         <View className='loading-mask'>
-          <Text className='loading-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )

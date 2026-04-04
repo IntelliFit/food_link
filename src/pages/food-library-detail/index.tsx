@@ -473,7 +473,7 @@ function FoodLibraryDetailPage() {
               maxlength={500}
             />
             <View className='submit-btn' onClick={handleSubmitComment}>
-              {submitting ? '提交中...' : '发表评论'}
+              {submitting ? <View className='btn-spinner' /> : '发表评论'}
             </View>
           </View>
         </View>

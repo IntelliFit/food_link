@@ -358,7 +358,7 @@ function RecordDetailPage() {
   if (loading || !record) {
     return (
       <View className='record-detail-page'>
-        <View className='empty-tip'>{loading ? '加载中...' : '记录不存在'}</View>
+        <View className='empty-tip'>{loading ? <View className='loading-spinner' /> : '记录不存在'}</View>
       </View>
     )
   }
@@ -732,7 +732,7 @@ function RecordDetailPage() {
             </View>
             <Text className='friend-invite-desc'>未注册会先登录，登录后发送申请，需对方同意</Text>
             <Button className='friend-invite-btn' onClick={handleAcceptInvite} disabled={inviteLoading}>
-              {inviteLoading ? '处理中...' : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
+              {inviteLoading ? <View className='btn-spinner' /> : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
             </Button>
           </View>
         )}
@@ -945,7 +945,7 @@ function RecordDetailPage() {
             <View className='edit-modal-footer'>
               <Button className='edit-cancel-btn' onClick={() => setShowEditModal(false)}>取消</Button>
               <Button className='edit-save-btn' onClick={handleSaveEdit} disabled={editSaving}>
-                {editSaving ? '保存中...' : '保存修改'}
+                {editSaving ? <View className='btn-spinner' /> : '保存修改'}
               </Button>
             </View>
           </View>

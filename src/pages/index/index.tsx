@@ -1089,7 +1089,7 @@ function IndexPage() {
           <View className='meals-list'>
             {loading ? (
               <View className='meals-loading'>
-                <Text className='loading-text'>加载中...</Text>
+                <View className='loading-spinner-md' />
               </View>
             ) : meals.length === 0 ? (
               <View className='meals-empty'>
@@ -1247,7 +1247,7 @@ function IndexPage() {
                 <Text className='target-modal-btn-text secondary'>取消</Text>
               </View>
               <View className='target-modal-btn primary' onClick={handleSaveWeight}>
-                <Text className='target-modal-btn-text primary'>{savingWeight ? '保存中...' : '保存'}</Text>
+                {savingWeight ? <View className='btn-spinner' /> : <Text className='target-modal-btn-text primary'>保存</Text>}
               </View>
             </View>
           </View>
@@ -1315,7 +1315,7 @@ function IndexPage() {
                 </View>
               )}
               <View className='target-modal-btn primary' onClick={handleSaveWater}>
-                <Text className='target-modal-btn-text primary'>{savingWater ? '保存中...' : '添加'}</Text>
+                {savingWater ? <View className='btn-spinner' /> : <Text className='target-modal-btn-text primary'>添加</Text>}
               </View>
             </View>
           </View>

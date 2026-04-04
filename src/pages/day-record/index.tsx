@@ -217,8 +217,7 @@ function DayRecordPage() {
 
         {loading ? (
           <View className='day-record-empty'>
-            <Text className='iconfont icon-jiazaixiao day-record-empty-icon'></Text>
-            <Text className='day-record-empty-title'>加载中...</Text>
+            <View className='loading-spinner-md' />
           </View>
         ) : error ? (
           <View className='day-record-empty'>

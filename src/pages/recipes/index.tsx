@@ -186,8 +186,7 @@ function RecipesPage() {
       <ScrollView className='recipe-list' scrollY>
         {loading ? (
           <View className='empty-state'>
-            <Text className='iconfont icon-shizhong empty-icon'></Text>
-            <Text className='empty-text'>加载中...</Text>
+            <View className='loading-spinner-md' />
           </View>
         ) : recipes.length > 0 ? (
           <View className='recipes-grid'>

@@ -15,8 +15,9 @@ const MEAL_ICON_CONFIG = {
   snack: { Icon: IconSnack, color: '#00bc7d', bgColor: '#ecfdf5', label: '加餐' }
 } as const
 
-// 餐次进度条使用统一的绿色主题色
-const MEAL_PROGRESS_COLOR = '#00bc7d'
+// 餐次进度条颜色：正常为绿色，超过100%为红色警示
+const MEAL_PROGRESS_COLOR_NORMAL = '#00bc7d'
+const MEAL_PROGRESS_COLOR_WARNING = '#ef4444'
 
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
 
@@ -81,7 +82,7 @@ export function MealsSection({
       <View className='meals-list'>
         {loading ? (
           <View className='meals-loading'>
-            <Text className='loading-text'>加载中...</Text>
+            <View className='loading-spinner-md' />
           </View>
         ) : meals.length === 0 ? (
           <View className='meals-empty'>
@@ -161,8 +162,11 @@ export function MealsSection({
                       <View className='meal-progress-wrap'>
                         <View className='meal-progress-bar-bg'>
                           <View
-                            className='meal-progress-bar-fill'
-                            style={{ width: `${clampVisualProgress(mealProgress)}%`, backgroundColor: MEAL_PROGRESS_COLOR }}
+                            className={`meal-progress-bar-fill ${mealProgress > 100 ? 'is-warning' : ''}`}
+                            style={{
+                              width: `${clampVisualProgress(mealProgress)}%`,
+                              backgroundColor: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL
+                            }}
                           />
                         </View>
                         <View className='meal-progress-meta'>

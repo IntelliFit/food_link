@@ -353,7 +353,7 @@ function HealthProfilePage() {
     return (
       <View className='health-profile-page'>
         <View className='card step-card'>
-          <Text className='step-card-title'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )

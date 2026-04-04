@@ -323,7 +323,7 @@ function FriendsPage() {
             onClick={loadData}
           >
             <RefreshIcon size={24} color='#00bc7d' />
-            <Text>{loading ? '刷新中' : '刷新'}</Text>
+            {loading ? <View className='btn-spinner' style={{ margin: 0 }} /> : <Text>刷新</Text>}
           </Button>
         </View>
       </View>

@@ -199,8 +199,7 @@ export default function StatsPage() {
     return (
       <View className='stats-page'>
         <View className='loading-wrap'>
-          <Text className='iconfont icon-jiazaixiao loading-icon' />
-          <Text className='loading-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )
@@ -300,8 +299,7 @@ export default function StatsPage() {
           <View className={`segmented-control ${loading ? 'is-loading' : ''}`}>
             {loading && (
               <View className='tabs-loading'>
-                <Text className='iconfont icon-jiazaixiao tabs-loading-icon' />
-                <Text className='tabs-loading-text'>加载中</Text>
+                <View className='loading-spinner-md' />
               </View>
             )}
             <View

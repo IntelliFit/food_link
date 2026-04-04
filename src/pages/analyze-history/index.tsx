@@ -145,7 +145,7 @@ function AnalyzeHistoryPage() {
       </View>
       <ScrollView className='list' scrollY>
         {loading ? (
-          <View className='loading-wrap'>加载中...</View>
+          <View className='loading-wrap'><View className='loading-spinner-md' /></View>
         ) : tasks.length === 0 ? (
           <View className='empty'>
             <View className='empty-icon'>

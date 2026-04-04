@@ -638,7 +638,7 @@ function AnalyzePage() {
           onClick={!isAnalyzing ? handleConfirm : undefined}
         >
           <Text className='confirm-btn-text'>
-            {isAnalyzing ? '提交中...' : (imagePaths.length === 0 ? '请先拍照' : `分析 ${imagePaths.length} 张图片`)}
+            {isAnalyzing ? <View className='btn-spinner' /> : (imagePaths.length === 0 ? '请先拍照' : `分析 ${imagePaths.length} 张图片`)}
           </Text>
         </View>
         <View

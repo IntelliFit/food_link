@@ -135,13 +135,13 @@ function InteractionNotificationsPage() {
           className={`mark-read-btn ${(markingRead || unreadCount <= 0) ? 'disabled' : ''}`}
           onClick={handleMarkAllRead}
         >
-          <Text>{markingRead ? '处理中...' : '全部已读'}</Text>
+          {markingRead ? <View className='btn-spinner' /> : <Text>全部已读</Text>}
         </View>
       </View>
 
       {loading ? (
         <View className='notifications-loading'>
-          <Text>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       ) : list.length === 0 ? (
         <View className='notifications-empty'>

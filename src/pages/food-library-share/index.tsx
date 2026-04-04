@@ -785,7 +785,7 @@ function FoodLibrarySharePage() {
           className={`submit-btn ${canSubmit ? '' : 'disabled'}`}
           onClick={canSubmit ? handleSubmit : undefined}
         >
-          {submitting ? '提交中...' : analyzing ? '识别中...' : '分享到公共库'}
+          {submitting || analyzing ? <View className='btn-spinner' /> : '分享到公共库'}
         </View>
       </View>
 

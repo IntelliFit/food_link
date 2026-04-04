@@ -481,7 +481,7 @@ function FoodLibraryPage() {
             </View>
           ) : isLoading && displayList.length === 0 ? (
             <View className='loading-state'>
-              <Text className='loading-text'>加载中...</Text>
+              <View className='loading-spinner-md' />
             </View>
           ) : tabMode === 'collections' && displayList.length === 0 ? (
             <View className='empty-state'>

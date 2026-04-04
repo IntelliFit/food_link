@@ -57,7 +57,7 @@ function CheckinLeaderboardPage() {
       </View>
 
       {loading ? (
-        <View className='checkin-lb-state'>加载中...</View>
+        <View className='checkin-lb-state'><View className='loading-spinner-md' /></View>
       ) : error ? (
         <View className='checkin-lb-state'>
           <Text>{error}</Text>
