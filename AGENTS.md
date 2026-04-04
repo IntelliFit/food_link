@@ -1,52 +1,98 @@
-# food_link agent rules
+# food_link 项目代理规则
 
-This workspace is dedicated to the `food_link` project.
+本工作区专用于 `food_link` 项目。
 
-## Session Startup
+## 会话启动
 
-- At the start of every new session, and again after compaction, read `IDENTITY.md`, `SOUL.md`, and `USER.md` before replying.
-- Then read `PROJECT_STATE.md`, `CURRENT_TASK.md`, and `DECISIONS.md`.
-- Also read `memory/YYYY-MM-DD.md` and yesterday's daily memory file if they exist.
-- Treat these files as the source of truth over stale transcript memory when they disagree.
-- If a required state file is missing, create it before continuing with non-trivial work.
+- 在每个新会话开始时，以及在上下文压缩后，回复前请先读取 `IDENTITY.md`、`SOUL.md` 和 `USER.md`。
+- 然后读取 `PROJECT_STATE.md`、`CURRENT_TASK.md` 和 `DECISIONS.md`。
+- 如果存在当天的 `memory/YYYY-MM-DD.md` 和昨天的日记文件，也请一并读取。
+- 当这些文件与过期的对话记忆不一致时，以此类文件为准。
+- 如果必需的状态文件缺失，在进行非琐碎工作前请先创建它。
 
-## Role
+## 角色
 
-- You are the coding agent for this project.
-- You are currently responsible for the `food_link` project only.
-- If asked which project you are responsible for, answer clearly that you are responsible for `food_link` and your working directory is `D:\files\food_link`.
-- Work directly in this workspace and write the code yourself.
-- Do not delegate coding work to Codex CLI, Claude Code, ACP sessions, or any other external coding agent unless the user explicitly asks.
+- 你是本项目的编码代理。
+- 你目前仅负责 `food_link` 项目。
+- 直接在此工作区中工作，亲自编写代码。
+- 除非用户明确要求，否则不要将编码工作委托给 Codex CLI、Claude Code、ACP 会话或任何其他外部编码代理。
 
-## Frontend Verification
+## 前端验证
 
-- This project must use the `weapp-devtools` skill for mini program UI verification.
-- After any page, component, style, routing, or interaction change, you must attempt runtime verification with WeChat DevTools automation.
-- Prefer screenshot evidence plus at least one interaction or navigation check.
-- If verification cannot run, explain the exact blocker in the final reply.
+- 本项目必须使用 `weapp-devtools` 技能进行小程序 UI 验证。
+- 禁止使用 playwright mcp，chrome mcp 等页面调试内容，如果需要截图，使用 `weapp-devtools` 里面的 skill
+- 在进行任何页面、组件、样式、路由或交互变更后，必须尝试使用微信开发者工具自动化进行运行时验证。
+- 优先提供截图证据，并至少进行一次交互或导航检查。
+- 如果无法运行验证，请在最终回复中说明具体的阻塞原因。
 
-### Project Skills
+### 项目技能
 
-This project includes the following project-level skills in `.agents/skills/`:
+本项目在 `.agents/skills/` 中包含以下项目级技能：
 
-- **weapp-devtools**: WeChat Mini Program automation and debugging tools
+- **weapp-devtools**: 微信小程序自动化和调试工具
+- **jinhui-stack-debug**: 网站和小程序调试的依赖关系排查指南
+  - **核心理念**：很多问题表象在前端，根源在依赖层。先验证依赖，再调试本体。
+  - 调试时必须按照依赖层级逐层排查：数据依赖 → 环境依赖 → 版本依赖 → 配置依赖 → 状态依赖 → 网络依赖 → 权限依赖 → 缓存依赖 → 构建依赖 → 运行时依赖
+  - 详细规范请参考 `.agents/skills/jinhui-stack-debug/SKILL.md`
 
-## Durable State
+## 持久化状态
 
-- Do not rely on chat transcript alone for project continuity.
-- After any confirmed requirement, decision, blocker, milestone, ownership clarification, or handoff-worthy next step, write the durable part to files before the final reply.
-- Update `CURRENT_TASK.md` for the actively worked task, status, blocker, or next step.
-- Update `DECISIONS.md` for stable choices that should survive session resets.
-- Append dated notes and short handoffs to `memory/YYYY-MM-DD.md`.
-- When the user says "remember this" or corrects project context, write it down instead of keeping it only in conversation memory.
+- 不要仅依赖对话记录来维持项目连续性。
+- 在确认任何需求、决策、阻塞点、里程碑、所有权澄清或值得交接的后续步骤后，在最终回复前将持久化部分写入文件。
+- 更新 `CURRENT_TASK.md` 以记录当前正在进行的任务、状态、阻塞点或后续步骤。
+- 更新 `DECISIONS.md` 以记录应在会话重置后保留的稳定选择。
+- 将日期笔记和简短交接记录追加到 `memory/YYYY-MM-DD.md`。
+- 当用户说"记住这个"或纠正项目上下文时，将其记录下来，而不是仅保留在对话记忆中。
 
-## Working Style
+## 工作风格
 
-- Favor direct edits, concrete verification, and short status updates.
-- Do not claim frontend behavior is correct unless you checked it in the runtime or clearly state that it was not verified.
+- 倾向于直接编辑、具体验证和简短的状态更新。
+- 除非在运行时中检查过或明确说明未验证，否则不要声称前端行为是正确的。
 
-## Red Lines
+## 开发工作流程
 
-- Never answer project ownership, current task, or decision history from stale transcript memory without rereading the state files.
-- Never claim you are unassigned or unsure which project you own when `IDENTITY.md` and the state files are present.
-- Never switch to another project by default.
+### 运行开发服务器
+
+- 开发时必须使用 `npm run dev:weapp` 启动开发服务器
+- 该命令会正确设置 `NODE_ENV=development` 和 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`
+- 不要直接使用 `taro build --type weapp --watch`，这可能导致 API 地址错误
+
+### 提交前清理
+
+- 提交代码前必须清理项目根目录下的临时文件
+- 已配置 git pre-commit hook 自动删除以下文件：
+  - `*.png` (调试截图)
+  - `*.html` (预览文件)
+  - `*.py` (调试脚本)
+  - `*.js` (根目录下的临时 JS 文件，不包括 src/ 和 config/ 等子目录)
+- Hook 位置：`.husky/pre-commit`
+- 如需手动运行清理：`find . -maxdepth 1 -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" -type f -delete`
+
+## 调试规范（必须遵守 jinhui-stack-debug）
+
+当调试陷入僵局时，**必须**按照 `jinhui-stack-debug` 技能的依赖关系排查指南逐层排查：
+
+### 排查优先级（由高到低）
+
+1. **数据依赖** - 前端表现依赖于后端数据的正确性。页面显示异常时，先验证接口返回，再排查前端渲染。
+2. **环境依赖** - 不同运行环境导致行为差异。本地正常但线上异常时，检查环境变量、域名、协议等差异。
+3. **版本依赖** - 依赖库/框架版本不兼容。升级后功能异常时，检查版本变更和 breaking changes。
+4. **配置依赖** - 配置文件错误或遗漏。白名单、API密钥、路由配置等问题。
+5. **状态依赖** - 组件/应用状态管理问题。刷新后正常、切换页面后数据丢失等。
+6. **网络依赖** - 网络层通信问题。请求超时、跨域报错、404/500 错误等。
+7. **权限依赖** - 用户权限或接口权限不足。功能按钮不显示、接口返回 403 等。
+8. **缓存依赖** - 各类缓存导致代码不生效。改代码后页面无变化、用户看到旧版本等。
+9. **构建依赖** - 构建工具或产物问题。代码没生效、sourcemap 不匹配等。
+10. **运行时依赖** - 浏览器/宿主环境差异。某浏览器正常某浏览器异常、iOS/Android 表现不一致等。
+
+### 核心原则
+
+- **先验证依赖，再调试本体**：很多问题表象在前端，根源在依赖层
+- **逐层排查，避免在低层级问题上浪费时间**
+- 详细排查方法请参考 `.agents/skills/jinhui-stack-debug/` 目录下各依赖类型的具体文档
+
+## 红线
+
+- 除非重新读取状态文件，否则不要根据过期的对话记忆回答项目所有权、当前任务或决策历史。
+- 当 `IDENTITY.md` 和状态文件存在时，不要声称自己未被分配或不确定自己负责哪个项目。
+- 默认情况下不要切换到其他项目。

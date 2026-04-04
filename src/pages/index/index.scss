@@ -251,6 +251,9 @@ $blue-color: #3b82f6;
 }
 
 .target-edit-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 20rpx;
   color: #6b7280;
   line-height: 28rpx;
@@ -483,23 +486,23 @@ $blue-color: #3b82f6;
 
 .meal-item {
   display: flex;
-  align-items: flex-start;
-  gap: 20rpx;
+  align-items: center;
+  gap: 16rpx;
   background: $card-bg;
-  border-radius: 24rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
+  border-radius: 20rpx;
+  padding: 16rpx 20rpx;
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
 }
 
 .meal-media-wrap {
   position: relative;
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 20rpx;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 16rpx;
   overflow: hidden;
   flex-shrink: 0;
   background: #f8fafc;
-  border: 1rpx solid rgb(148 163 184 / 16%);
+  border: 1rpx solid rgb(148 163 184 / 12%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -512,7 +515,7 @@ $blue-color: #3b82f6;
 .meal-icon-wrap {
   width: 100%;
   height: 100%;
-  border-radius: 20rpx;
+  border-radius: 16rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -554,28 +557,28 @@ $blue-color: #3b82f6;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12rpx;
+  margin-bottom: 8rpx;
 }
 
 .meal-name {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: $text-primary;
-  line-height: 42rpx;
-}
-
-.meal-calorie {
   font-size: 28rpx;
   font-weight: 600;
   color: $text-primary;
   line-height: 40rpx;
 }
 
+.meal-calorie {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $text-secondary;
+  line-height: 36rpx;
+}
+
 .meal-progress-wrap {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  margin-bottom: 8rpx;
+  gap: 12rpx;
+  margin-bottom: 4rpx;
 }
 
 .meal-progress-bar-bg {
@@ -593,10 +596,10 @@ $blue-color: #3b82f6;
 }
 
 .meal-progress-text {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: $text-tertiary;
-  line-height: 32rpx;
-  min-width: 128rpx;
+  line-height: 28rpx;
+  min-width: 120rpx;
   text-align: right;
   flex-shrink: 0;
 }
@@ -610,32 +613,49 @@ $blue-color: #3b82f6;
 }
 
 .meal-progress-percent {
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 30rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 28rpx;
+  color: $primary-color;
 }
 
 .meal-time {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: $text-tertiary;
-  line-height: 32rpx;
+  line-height: 28rpx;
 }
 
 .meal-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx;
-  margin-top: 10rpx;
+  gap: 6rpx;
+  margin-top: 6rpx;
 }
 
 .meal-tag {
-  font-size: 20rpx;
-  line-height: 28rpx;
-  color: $purple-color;
-  background: $purple-light;
-  border: 1rpx solid rgb(139 92 246 / 14%);
+  font-size: 18rpx;
+  line-height: 26rpx;
+  color: $primary-color;
+  background: $primary-light;
+  border: 1rpx solid rgba(0, 188, 125, 0.12);
   border-radius: 9999rpx;
-  padding: 6rpx 14rpx;
+  padding: 4rpx 10rpx;
+}
+
+// 加餐简化样式
+.meal-snack-meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 4rpx;
+
+  .meal-time {
+    margin-top: 0;
+  }
+
+  .meal-tags {
+    margin-top: 0;
+  }
 }
 
 // 统计入口区域
@@ -822,8 +842,13 @@ $blue-color: #3b82f6;
   margin-bottom: 32rpx;
 }
 
+.target-modal-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .target-modal-title {
-  display: block;
   font-size: 36rpx;
   color: $text-primary;
   line-height: 50rpx;
@@ -996,37 +1021,28 @@ $blue-color: #3b82f6;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: 8rpx;
 }
 
 .body-status-title-wrap {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 8rpx;
 }
 
 .body-status-icon {
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 12rpx;
+  width: 28rpx;
+  height: 28rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  
-  &.weight-icon {
-    background: rgb(139 92 246 / 10%);
-  }
-  
-  &.water-icon {
-    background: rgb(59 130 246 / 10%);
-  }
 }
 
-.body-status-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: $text-primary;
-  line-height: 40rpx;
+.body-status-label {
+  font-size: 22rpx;
+  font-weight: 400;
+  line-height: 32rpx;
+  color: $text-secondary;
 }
 
 .body-status-content {
@@ -1100,7 +1116,7 @@ $blue-color: #3b82f6;
   transition: width 0.3s ease;
   
   &.water {
-    background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+    background: linear-gradient(90deg, $primary-color 0%, #00d68f 100%);
   }
 }
 
@@ -1442,67 +1458,42 @@ $blue-color: #3b82f6;
   }
 }
 
-// 卡路里水池
+// 卡路里水池 - Canvas 正弦波效果
 .target-calorie-pool {
   position: relative;
   background: #fff;
+  border: 2rpx solid #e5e7eb;
   border-radius: 20rpx;
   padding: 28rpx;
-  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 6%);
   overflow: hidden;
-  min-height: 180rpx;
+  min-height: 200rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 8rpx;
+  margin-top: 16rpx;
+  transform: translateZ(0); // 创建新的层叠上下文，防止 Canvas 溢出
 }
 
-.target-calorie-wave-wrap {
+// Canvas 画布 - 严格限制在父容器内
+.calorie-wave-canvas {
   position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border-radius: 20rpx;
-}
-
-.target-calorie-wave {
-  position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
-  right: 0;
-  background: linear-gradient(180deg, rgb(0 188 125 / 15%) 0%, rgb(0 188 125 / 35%) 100%);
-  transition: height 0.3s ease;
-  
-  &::before {
-    content: '';
-    position: absolute;
-    top: -16rpx;
-    left: -50%;
-    width: 200%;
-    height: 32rpx;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,60 C200,120 400,0 600,60 C800,120 1000,0 1200,60 L1200,120 L0,120 Z' fill='rgb(0 188 125 / 15%)'/%3E%3C/svg%3E") repeat-x;
-    background-size: 600rpx 32rpx;
-    animation: waveMove 3s linear infinite;
-  }
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  border-radius: 18rpx; // 与父容器圆角一致
+  overflow: hidden;
+}
+
+// 保存按钮使用主题绿色
+.target-save-btn {
+  background: linear-gradient(135deg, #00bc7d 0%, #00a86e 100%) !important;
+  border-color: #00bc7d !important;
   
   &::after {
-    content: '';
-    position: absolute;
-    top: -12rpx;
-    left: -50%;
-    width: 200%;
-    height: 24rpx;
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120' preserveAspectRatio='none'%3E%3Cpath d='M0,40 C300,100 500,0 800,50 C1000,90 1100,20 1200,40 L1200,120 L0,120 Z' fill='rgb(0 188 125 / 10%)'/%3E%3C/svg%3E") repeat-x;
-    background-size: 800rpx 24rpx;
-    animation: waveMove 4s linear infinite reverse;
-  }
-}
-
-@keyframes waveMove {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
+    border: none !important;
   }
 }
 

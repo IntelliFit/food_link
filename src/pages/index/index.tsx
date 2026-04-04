@@ -25,141 +25,19 @@ import { Empty, Button } from '@taroify/core'
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
 
-const DEFAULT_INTAKE: HomeIntakeData = {
-  current: 0,
-  target: 2000,
-  progress: 0,
-  macros: {
-    protein: { current: 0, target: 120 },
-    carbs: { current: 0, target: 250 },
-    fat: { current: 0, target: 65 }
-  }
-}
-
-const WEIGHT_HISTORY_LIMIT = 60
-const QUICK_WATER_AMOUNTS = [200, 350, 500]
-
-const WATER_GOAL_DEFAULT = 2000
-
-interface WeightRecordEntry {
-  date: string
-  value: number
-  recorded_at?: string
-}
-
-interface BodyMetricsStorage {
-  weightEntries: WeightRecordEntry[]
-  waterByDate: Record<string, BodyMetricWaterDay>
-  waterGoalMl: number
-}
-
-interface WaterRecord {
-  date: string
-  amount: number
-}
-
-type MacroKey = keyof HomeIntakeData['macros']
-type WeekHeatmapState = 'none' | 'surplus' | 'deficit'
-
-interface WeekHeatmapCell {
-  date: string
-  dayName: string
-  dayNum: string
-  calories: number
-  target: number
-  intakeRatio: number
-  state: WeekHeatmapState
-  isToday: boolean
-}
-
-interface TargetFormState {
-  calorieTarget: string
-  proteinTarget: string
-  carbsTarget: string
-  fatTarget: string
-}
-
-interface MacroTargets {
-  protein: number
-  carbs: number
-  fat: number
-}
-
-// 普通模式目标档位状态
-interface SimpleTargetState {
-  proteinLevel: number  // 1-20
-  carbsLevel: number    // 1-20
-  fatLevel: number      // 1-20
-}
-
-// 档位映射到实际数值（1-20档）
-const LEVEL_TO_GRAMS = {
-  protein: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200],
-  carbs: [50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 550],
-  fat: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110]
-}
-
-// 根据档位计算克数
-function getGramsFromLevel(type: 'protein' | 'carbs' | 'fat', level: number): number {
-  const index = Math.max(0, Math.min(19, level - 1))
-  return LEVEL_TO_GRAMS[type][index]
-}
-
-// 根据克数找到最接近的档位
-function getLevelFromGrams(type: 'protein' | 'carbs' | 'fat', grams: number): number {
-  const values = LEVEL_TO_GRAMS[type]
-  let closestLevel = 1
-  let minDiff = Math.abs(values[0] - grams)
-  
-  for (let i = 1; i < values.length; i++) {
-    const diff = Math.abs(values[i] - grams)
-    if (diff < minDiff) {
-      minDiff = diff
-      closestLevel = i + 1
-    }
-  }
-  
-  return closestLevel
-}
-
-// 根据普通模式的档位计算卡路里
-function calculateCaloriesFromLevels(levels: SimpleTargetState): number {
-  const proteinGrams = getGramsFromLevel('protein', levels.proteinLevel)
-  const carbsGrams = getGramsFromLevel('carbs', levels.carbsLevel)
-  const fatGrams = getGramsFromLevel('fat', levels.fatLevel)
-  
-  return proteinGrams * 4 + carbsGrams * 4 + fatGrams * 9
-}
-
-const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-const SHORT_DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六']
-
-function getGreeting(): string {
-  const h = new Date().getHours()
-  if (h < 12) return '早上好'
-  if (h < 18) return '下午好'
-  return '晚上好'
-}
-
-function formatDisplayNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1)
-}
-
-function formatNumberWithComma(value: number): string {
-  return Math.round(value).toLocaleString('zh-CN')
-}
-
-function formatDateKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
+// 导入拆分出的模块
+import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets, type SimpleTargetState } from './types'
+import { DEFAULT_INTAKE, WEIGHT_HISTORY_LIMIT, QUICK_WATER_AMOUNTS, WATER_GOAL_DEFAULT, DAY_NAMES, SHORT_DAY_NAMES, LEVEL_TO_GRAMS, DEFAULT_SIMPLE_TARGET } from './utils/constants'
+import { getGramsFromLevel, getLevelFromGrams, calculateCaloriesFromLevels, getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
+import { useAnimatedNumber, useAnimatedProgress } from './hooks'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry } from './components'
 
 // 转换日期为2025年（系统时间可能是2026年，但数据是2025年的）
 function normalizeTo2025(dateStr: string): string {
   return dateStr.replace(/^2026-/, '2025-')
 }
+
+
 
 function parseCompleteNumber(value: string): number | null {
   const normalized = value.trim()
@@ -173,109 +51,6 @@ function parseCompleteNumber(value: string): number | null {
 function formatTargetInput(value: number): string {
   const rounded = Math.max(0, Number(value.toFixed(1)))
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
-}
-
-// 数字滚动动画 Hook
-function useAnimatedNumber(target: number, duration: number = 600, delay: number = 0): number {
-  const [displayValue, setDisplayValue] = useState(target)
-  const animationRef = useRef<{ startTime: number | null; startValue: number; rafId: number | null }>({
-    startTime: null,
-    startValue: 0,
-    rafId: null
-  })
-
-  useEffect(() => {
-    // 清除之前的动画
-    if (animationRef.current.rafId) {
-      cancelAnimationFrame(animationRef.current.rafId)
-    }
-
-    const startValue = displayValue
-    const startTime = performance.now() + delay
-    animationRef.current = { startTime, startValue, rafId: null }
-
-    const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime
-      
-      if (elapsed < 0) {
-        animationRef.current.rafId = requestAnimationFrame(animate)
-        return
-      }
-
-      const progress = Math.min(elapsed / duration, 1)
-      const easedProgress = easeOutCubic(progress)
-      const currentValue = startValue + (target - startValue) * easedProgress
-
-      setDisplayValue(currentValue)
-
-      if (progress < 1) {
-        animationRef.current.rafId = requestAnimationFrame(animate)
-      }
-    }
-
-    animationRef.current.rafId = requestAnimationFrame(animate)
-
-    return () => {
-      if (animationRef.current.rafId) {
-        cancelAnimationFrame(animationRef.current.rafId)
-      }
-    }
-  }, [target])
-
-  return displayValue
-}
-
-// 圆环进度动画 Hook
-function useAnimatedProgress(targetProgress: number, duration: number = 600, delay: number = 0): number {
-  const [displayProgress, setDisplayProgress] = useState(targetProgress)
-  const animationRef = useRef<{ startTime: number | null; startProgress: number; rafId: number | null }>({
-    startTime: null,
-    startProgress: 0,
-    rafId: null
-  })
-
-  useEffect(() => {
-    if (animationRef.current.rafId) {
-      cancelAnimationFrame(animationRef.current.rafId)
-    }
-
-    const startProgress = displayProgress
-    const startTime = performance.now() + delay
-    animationRef.current = { startTime, startProgress, rafId: null }
-
-    const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime
-      
-      if (elapsed < 0) {
-        animationRef.current.rafId = requestAnimationFrame(animate)
-        return
-      }
-
-      const progress = Math.min(elapsed / duration, 1)
-      const easedProgress = easeOutCubic(progress)
-      const currentProgress = startProgress + (targetProgress - startProgress) * easedProgress
-
-      setDisplayProgress(currentProgress)
-
-      if (progress < 1) {
-        animationRef.current.rafId = requestAnimationFrame(animate)
-      }
-    }
-
-    animationRef.current.rafId = requestAnimationFrame(animate)
-
-    return () => {
-      if (animationRef.current.rafId) {
-        cancelAnimationFrame(animationRef.current.rafId)
-      }
-    }
-  }, [targetProgress])
-
-  return displayProgress
 }
 
 function parseMacroTargets(form: TargetFormState): MacroTargets | null {
@@ -366,15 +141,6 @@ function clampVisualProgress(progress: number): number {
 
 function formatProgressText(progress: number): string {
   return `${Math.round(progress)}%`
-}
-
-function createTargetForm(intake: HomeIntakeData): TargetFormState {
-  return {
-    calorieTarget: formatDisplayNumber(intake.target),
-    proteinTarget: formatDisplayNumber(intake.macros.protein.target),
-    carbsTarget: formatDisplayNumber(intake.macros.carbs.target),
-    fatTarget: formatDisplayNumber(intake.macros.fat.target)
-  }
 }
 
 // 体重/喝水相关辅助函数
@@ -504,6 +270,9 @@ const MEAL_ICON_CONFIG = {
 
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
 
+// 餐次进度条使用统一的绿色主题色
+const MEAL_PROGRESS_COLOR = '#00bc7d'
+
 // 营养素配置
 const MACRO_CONFIGS: Array<{
   key: MacroKey
@@ -517,27 +286,6 @@ const MACRO_CONFIGS: Array<{
   { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#eab308', unit: 'g', Icon: IconCarbs },
   { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f97316', unit: 'g', Icon: IconFat }
 ]
-
-function createWeekHeatmapCells(): WeekHeatmapCell[] {
-  const today = new Date()
-  const cells: WeekHeatmapCell[] = []
-  for (let offset = -3; offset <= 3; offset++) {
-    const date = new Date(today)
-    date.setDate(today.getDate() + offset)
-    const dateKey = normalizeTo2025(formatDateKey(date))
-    cells.push({
-      date: dateKey,
-      dayName: SHORT_DAY_NAMES[date.getDay()],
-      dayNum: String(date.getDate()),
-      calories: 0,
-      target: 2000,
-      intakeRatio: 0,
-      state: 'none',
-      isToday: offset === 0
-    })
-  }
-  return cells
-}
 
 function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
@@ -1168,46 +916,14 @@ function IndexPage() {
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}
-        <View className='greeting-section'>
-          <View className='greeting-text'>
-            <Text className='greeting-title'>{getGreeting()}</Text>
-            <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
-          </View>
-          <View className='greeting-icon'>
-            <IconTrendingUp size={24} color='#00bc7d' />
-          </View>
-        </View>
+        <GreetingSection />
 
         {/* 日期选择器 */}
-        <View className='date-selector-section'>
-          <View className='date-list'>
-            {weekHeatmapCells.map((cell) => {
-              // 计算圆圈颜色状态
-              // 无记录: 白色, 有记录未超目标: 绿色, 超过目标: 红色
-              let circleClass = 'is-empty'  // 默认无记录白色
-              if (cell.calories > 0) {
-                if (cell.calories > cell.target) {
-                  circleClass = 'is-over'  // 超过目标红色
-                } else {
-                  circleClass = 'is-recorded'  // 有记录未超过绿色
-                }
-              }
-              
-              return (
-                <View
-                  key={cell.date}
-                  className={`date-item ${selectedDate === cell.date ? 'is-selected' : ''}`}
-                  onClick={() => handleDateSelect(cell.date)}
-                >
-                  <Text className='date-day-name'>{cell.dayName}</Text>
-                  <View className={`date-day-circle ${circleClass}`}>
-                    <Text className='date-num-text'>{cell.dayNum}</Text>
-                  </View>
-                </View>
-              )
-            })}
-          </View>
-        </View>
+        <DateSelector 
+          cells={weekHeatmapCells} 
+          selectedDate={selectedDate} 
+          onSelect={handleDateSelect} 
+        />
 
         {/* 热量总览卡片 */}
         <View className='main-card'>
@@ -1439,11 +1155,11 @@ function IndexPage() {
                         <View className='meal-progress-bar-bg'>
                           <View
                             className='meal-progress-bar-fill'
-                            style={{ width: `${clampVisualProgress(mealProgress)}%`, backgroundColor: color }}
+                            style={{ width: `${clampVisualProgress(mealProgress)}%`, backgroundColor: MEAL_PROGRESS_COLOR }}
                           />
                         </View>
                         <View className='meal-progress-meta'>
-                          <Text className='meal-progress-percent' style={{ color }}>{formatProgressText(mealProgress)}</Text>
+                          <Text className='meal-progress-percent' style={{ color: MEAL_PROGRESS_COLOR }}>{formatProgressText(mealProgress)}</Text>
                           <Text className='meal-progress-text'>{targetText}</Text>
                         </View>
                       </View>
@@ -1464,251 +1180,33 @@ function IndexPage() {
         </View>
 
         {/* 查看统计入口 */}
-        <View className='stats-entry-section' onClick={openRecordSummary}>
-          <View className='stats-entry-card'>
-            <View className='stats-entry-icon'>
-              <IconTrendingUp size={24} color='#ffffff' />
-            </View>
-            <View className='stats-entry-text'>
-              <Text className='stats-entry-title'>查看饮食统计</Text>
-              <Text className='stats-entry-desc'>了解您的饮食趋势和营养分析</Text>
-            </View>
-            <IconChevronRight size={20} color='#ffffff' />
-          </View>
-        </View>
+        <StatsEntry onClick={openRecordSummary} />
 
         {/* 底部留白 */}
         <View className='bottom-spacer' />
       </View>
 
       {/* 目标编辑弹窗 */}
-      {showTargetEditor && (
-        <View className='target-modal' catchMove>
-          <View className='target-modal-mask' onClick={() => !savingTargets && setShowTargetEditor(false)} />
-          <View className='target-modal-content'>
-            <View className='target-modal-header'>
-              <View className='target-modal-title-row'>
-                <Text className='target-modal-title'>编辑今日目标</Text>
-                {/* 模式切换开关 */}
-                <View className='target-mode-switch'>
-                  <View 
-                    className={`target-mode-option ${targetMode === 'simple' ? 'active' : ''}`}
-                    onClick={() => handleModeSwitch('simple')}
-                  >
-                    <Text className='target-mode-text'>普通</Text>
-                  </View>
-                  <View 
-                    className={`target-mode-option ${targetMode === 'precise' ? 'active' : ''}`}
-                    onClick={() => handleModeSwitch('precise')}
-                  >
-                    <Text className='target-mode-text'>精确</Text>
-                  </View>
-                </View>
-              </View>
-              <Text className='target-modal-desc'>
-                {targetMode === 'simple' ? '滑动选择档位快速设置目标' : '保存后会同步到账号，下次登录仍会保留。'}
-              </Text>
-            </View>
-
-            {/* 普通模式：横向滑块卡片 */}
-            {targetMode === 'simple' && (
-              <View className='target-simple-mode'>
-                {/* 蛋白质卡片 */}
-                <View className='target-slider-card'>
-                  <View className='target-slider-card-header'>
-                    <View className='target-slider-icon-wrap'>
-                      <View className='target-slider-icon protein'>
-                        <IconProtein size={28} color='#fff' />
-                      </View>
-                    </View>
-                    <Text className='target-slider-card-title'>蛋白质</Text>
-                    <Text className='target-slider-card-value'>
-                      {getGramsFromLevel('protein', simpleTarget.proteinLevel)}g
-                    </Text>
-                  </View>
-                  <View className='target-slider-bar-wrap'>
-                    <View 
-                      className='target-slider-bar protein'
-                      style={{ width: `${(simpleTarget.proteinLevel / 20) * 100}%` }}
-                    >
-                      <Text className='target-slider-bar-text'>
-                        {Math.round((simpleTarget.proteinLevel / 20) * 100)}%
-                      </Text>
-                    </View>
-                    <Slider
-                      className='target-slider-input'
-                      value={simpleTarget.proteinLevel}
-                      min={1}
-                      max={20}
-                      step={1}
-                      showValue={false}
-                      activeColor='transparent'
-                      backgroundColor='transparent'
-                      blockSize={28}
-                      onChange={(e) => setSimpleTarget(prev => ({ ...prev, proteinLevel: e.detail.value }))}
-                    />
-                  </View>
-                </View>
-
-                {/* 碳水卡片 */}
-                <View className='target-slider-card'>
-                  <View className='target-slider-card-header'>
-                    <View className='target-slider-icon-wrap'>
-                      <View className='target-slider-icon carbs'>
-                        <IconCarbs size={28} color='#fff' />
-                      </View>
-                    </View>
-                    <Text className='target-slider-card-title'>碳水</Text>
-                    <Text className='target-slider-card-value'>
-                      {getGramsFromLevel('carbs', simpleTarget.carbsLevel)}g
-                    </Text>
-                  </View>
-                  <View className='target-slider-bar-wrap'>
-                    <View 
-                      className='target-slider-bar carbs'
-                      style={{ width: `${(simpleTarget.carbsLevel / 20) * 100}%` }}
-                    >
-                      <Text className='target-slider-bar-text'>
-                        {Math.round((simpleTarget.carbsLevel / 20) * 100)}%
-                      </Text>
-                    </View>
-                    <Slider
-                      className='target-slider-input'
-                      value={simpleTarget.carbsLevel}
-                      min={1}
-                      max={20}
-                      step={1}
-                      showValue={false}
-                      activeColor='transparent'
-                      backgroundColor='transparent'
-                      blockSize={28}
-                      onChange={(e) => setSimpleTarget(prev => ({ ...prev, carbsLevel: e.detail.value }))}
-                    />
-                  </View>
-                </View>
-
-                {/* 脂肪卡片 */}
-                <View className='target-slider-card'>
-                  <View className='target-slider-card-header'>
-                    <View className='target-slider-icon-wrap'>
-                      <View className='target-slider-icon fat'>
-                        <IconFat size={28} color='#fff' />
-                      </View>
-                    </View>
-                    <Text className='target-slider-card-title'>脂肪</Text>
-                    <Text className='target-slider-card-value'>
-                      {getGramsFromLevel('fat', simpleTarget.fatLevel)}g
-                    </Text>
-                  </View>
-                  <View className='target-slider-bar-wrap'>
-                    <View 
-                      className='target-slider-bar fat'
-                      style={{ width: `${(simpleTarget.fatLevel / 20) * 100}%` }}
-                    >
-                      <Text className='target-slider-bar-text'>
-                        {Math.round((simpleTarget.fatLevel / 20) * 100)}%
-                      </Text>
-                    </View>
-                    <Slider
-                      className='target-slider-input'
-                      value={simpleTarget.fatLevel}
-                      min={1}
-                      max={20}
-                      step={1}
-                      showValue={false}
-                      activeColor='transparent'
-                      backgroundColor='transparent'
-                      blockSize={28}
-                      onChange={(e) => setSimpleTarget(prev => ({ ...prev, fatLevel: e.detail.value }))}
-                    />
-                  </View>
-                </View>
-
-                {/* 卡路里预览 - 波浪水池效果 */}
-                <View className='target-calorie-pool'>
-                  <View className='target-calorie-wave-wrap'>
-                    <View 
-                      className='target-calorie-wave'
-                      style={{ height: `${Math.min((calculateCaloriesFromLevels(simpleTarget) / 2500) * 100, 100)}%` }}
-                    />
-                  </View>
-                  <View className='target-calorie-content'>
-                    <Text className='target-calorie-label'>预计摄入目标</Text>
-                    <Text className='target-calorie-value'>
-                      {calculateCaloriesFromLevels(simpleTarget)}
-                      <Text className='target-calorie-unit'>kcal</Text>
-                    </Text>
-                    <Text className='target-calorie-hint'>建议范围: 1500-2500 kcal</Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* 精确模式：数字输入框 */}
-            {targetMode === 'precise' && (
-              <View className='target-form-list'>
-                <View className='target-form-item'>
-                  <Text className='target-form-label'>今日摄入目标</Text>
-                  <View className='target-input-wrap'>
-                    <Input
-                      className='target-input'
-                      type='digit'
-                      value={targetForm.calorieTarget}
-                      onInput={(e) => handleTargetInput('calorieTarget', e.detail.value)}
-                    />
-                    <Text className='target-input-unit'>kcal</Text>
-                  </View>
-                </View>
-
-                <View className='target-form-item'>
-                  <Text className='target-form-label'>蛋白质目标</Text>
-                  <View className='target-input-wrap'>
-                    <Input
-                      className='target-input'
-                      type='digit'
-                      value={targetForm.proteinTarget}
-                      onInput={(e) => handleTargetInput('proteinTarget', e.detail.value)}
-                    />
-                    <Text className='target-input-unit'>g</Text>
-                  </View>
-                </View>
-
-                <View className='target-form-item'>
-                  <Text className='target-form-label'>碳水目标</Text>
-                  <View className='target-input-wrap'>
-                    <Input
-                      className='target-input'
-                      type='digit'
-                      value={targetForm.carbsTarget}
-                      onInput={(e) => handleTargetInput('carbsTarget', e.detail.value)}
-                    />
-                    <Text className='target-input-unit'>g</Text>
-                  </View>
-                </View>
-
-                <View className='target-form-item'>
-                  <Text className='target-form-label'>脂肪目标</Text>
-                  <View className='target-input-wrap'>
-                    <Input
-                      className='target-input'
-                      type='digit'
-                      value={targetForm.fatTarget}
-                      onInput={(e) => handleTargetInput('fatTarget', e.detail.value)}
-                    />
-                    <Text className='target-input-unit'>g</Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            <View className='target-modal-actions'>
-              <View className='target-modal-btn primary' onClick={handleSaveTargets}>
-                <Text className='target-modal-btn-text primary'>{savingTargets ? '保存中...' : '保存'}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
+      <TargetEditor
+        visible={showTargetEditor}
+        mode={targetMode}
+        targetMode={targetMode}
+        simpleTarget={simpleTarget}
+        targetForm={targetForm}
+        saving={savingTargets}
+        intakeData={intakeData}
+        onModeChange={handleModeSwitch}
+        onSimpleTargetChange={setSimpleTarget}
+        onTargetFormChange={(newForm) => {
+          // 同步处理targetForm变更
+          const key = Object.keys(newForm).find(k => newForm[k as keyof typeof newForm] !== targetForm[k as keyof typeof targetForm])
+          if (key) {
+            handleTargetInput(key as keyof typeof targetForm, newForm[key as keyof typeof newForm])
+          }
+        }}
+        onSave={handleSaveTargets}
+        onClose={() => setShowTargetEditor(false)}
+      />
 
       {/* 体重编辑弹窗 */}
       {showWeightEditor && (

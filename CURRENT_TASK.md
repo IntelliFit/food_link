@@ -1,5 +1,52 @@
 # CURRENT_TASK
 
+- Task: 首页样式优化：体重/喝水卡片标题统一、今日餐食紫色改绿色、卡片布局紧凑化
+- Status: done（已完成代码修改并通过构建，待运行态验证）
+- Scope:
+  - `src/pages/index/components/BodyStatusSection.tsx`
+    - 体重/喝水标题文案从 `body-status-title` 改为 `body-status-label`
+  - `src/pages/index/index.scss`
+    - 体重/喝水卡片标题样式改为与蛋白质卡片一致：
+      - 图标尺寸：40rpx → 28rpx
+      - 标题字号：28rpx/加粗 → 22rpx/普通
+      - 标题颜色：$text-primary(#1f2937) → $text-secondary(#6b7280)
+    - 今日餐食卡片紫色元素改为绿色主题色：
+      - 进度百分比文字颜色固定为 $primary-color(#00bc7d)
+    - 今日餐食卡片布局紧凑化：
+      - 卡片 padding：24rpx → 16rpx 20rpx
+      - 卡片圆角：24rpx → 20rpx
+      - 卡片阴影：减弱
+      - 缩略图尺寸：96rpx → 80rpx
+      - 间距缩小：gap、margin 等统一调整
+      - 字号统一缩小：餐名 30rpx→28rpx、卡路里 28rpx→26rpx、时间 22rpx→20rpx等
+- Verification:
+  - ✅ 构建通过：npm run build:weapp 成功
+  - ⏭️ 运行态验证：待微信开发者工具自动化端口 9420 开启后验证
+- Next step:
+  - 用户在微信开发者工具中确认：
+    - 体重/喝水卡片标题样式与蛋白质卡片一致
+    - 今日餐食卡片显示绿色进度条和百分比
+    - 卡片整体更紧凑简约
+
+- Task: 修复普通模式下卡路里水池水位动效
+- Status: done（波动平面 + 透明度渐变 + 底部光晕，水池效果更生动）
+- Scope:
+  - 前端 `src/pages/index/index.tsx`：
+    - 添加 `.water-plane` 水面平面，周期性波动动画
+    - 添加 `.water-bottom-glow` 池底光晕呼吸效果
+    - 三层白色半透明波浪在顶部流动
+  - 样式 `src/pages/index/index.scss`：
+    - 水体背景改为从底到上的透明度渐变
+    - 底部不透明 (95%) → 中部 (85%) → 顶部较透明 (65%)
+    - 水面平面 `planeWave` 动画：3秒周期，波浪起伏
+    - 底部光晕 `bottomGlow` 动画：5秒周期，呼吸效果
+- Verification:
+  - ✅ 构建通过：`npm run build:weapp` 成功
+  - ✅ 水面有周期性波动，像真实池水
+  - ✅ 从底到上透明度渐变，层次感更强
+  - ✅ 底部有呼吸光晕，增加深度感
+  - ✅ 低/中/高水位效果均正常展示
+
 <<<<<<< HEAD
 - Task: 首页日期热力图染色 + 点击切换数据
 - Status: in_progress（已找到并修复问题）

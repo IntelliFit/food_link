@@ -2,15 +2,12 @@ import Taro from '@tarojs/taro'
 
 declare const __API_BASE_URL__: string
 
-// 强制开发模式使用 localhost，生产模式使用 healthymax.cn
-const isDev = process.env.NODE_ENV === 'development'
-export const API_BASE_URL = isDev
-  ? 'http://127.0.0.1:3010'
-  : (__API_BASE_URL__ || 'https://healthymax.cn')
+// 使用构建时注入的 API 基础 URL
+// config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
+export const API_BASE_URL = __API_BASE_URL__ || 'https://healthymax.cn'
 
 // 调试日志
-console.log('[API] 当前环境:', process.env.NODE_ENV)
-console.log('[API] API_BASE_URL:', API_BASE_URL)
+console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
 
 function isNgrokFreeDomain(url: string): boolean {
   return /^https:\/\/[^/]+\.ngrok-free\.dev(?:\/|$)/i.test(url)
