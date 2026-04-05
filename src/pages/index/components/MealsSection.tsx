@@ -162,7 +162,7 @@ export function MealsSection({
                           />
                         </View>
                         <View className='meal-progress-meta'>
-                          <Text className='meal-progress-percent' style={{ color: mealProgress > 100 ? PERCENT_COLOR_WARNING : PERCENT_COLOR_NORMAL }}>{formatProgressText(mealProgress)}</Text>
+                          <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                           <Text className='meal-progress-text'>{targetText}</Text>
                         </View>
                       </View>
@@ -189,7 +189,7 @@ export function MealsSection({
                           />
                         </View>
                         <View className='meal-progress-meta'>
-                          <Text className='meal-progress-percent' style={{ color: mealProgress > 100 ? PERCENT_COLOR_WARNING : PERCENT_COLOR_NORMAL }}>{formatProgressText(mealProgress)}</Text>
+                          <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                           <Text className='meal-progress-text'>{targetText}</Text>
                         </View>
                       </View>

@@ -782,11 +782,11 @@ $blue-color: #3b82f6;
   font-weight: 600;
   line-height: 28rpx;
   color: $primary-color;
-}
 
-// 超额时百分比文字变红（配合 .is-warning 类使用）
-.meal-item.is-warning .meal-progress-percent {
-  color: #ef4444 !important;
+  // 超过100%时变红
+  &.is-over {
+    color: #ef4444;
+  }
 }
 
 // 加餐类型的进度条红色警示
