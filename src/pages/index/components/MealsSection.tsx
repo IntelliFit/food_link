@@ -145,11 +145,16 @@ export function MealsSection({
                 </View>
                 <View className='meal-content'>
                   <View className='meal-main'>
-                    <Text className='meal-name'>{meal.name || label}</Text>
+                    <View className='meal-title-wrap'>
+                      <Text className='meal-name'>{meal.name || label}</Text>
+                      {isSnackMeal && (
+                        <Text className='meal-snack-hint'>参考</Text>
+                      )}
+                    </View>
                     <Text className='meal-calorie'>{formatDisplayNumber(mealCalorie)} kcal</Text>
                   </View>
                   {isSnackMeal ? (
-                    // 加餐显示：进度条 + 时间 + 标签
+                    // 加餐显示：进度条 + 时间
                     <>
                       <View className='meal-progress-wrap'>
                         <View className='meal-progress-bar-bg'>
@@ -167,13 +172,6 @@ export function MealsSection({
                         </View>
                       </View>
                       {meal.time && <Text className='meal-time'>{meal.time}</Text>}
-                      {meal.tags?.length > 0 && (
-                        <View className='meal-tags'>
-                          {meal.tags.slice(0, 2).map((tag) => (
-                            <Text key={tag} className='meal-tag'>{tag}</Text>
-                          ))}
-                        </View>
-                      )}
                     </>
                   ) : (
                     // 正餐完整显示：进度条 + 目标

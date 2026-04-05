@@ -720,11 +720,26 @@ $blue-color: #3b82f6;
   margin-bottom: 8rpx;
 }
 
+.meal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 .meal-name {
   font-size: 28rpx;
   font-weight: 600;
   color: $text-primary;
   line-height: 40rpx;
+}
+
+.meal-snack-hint {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  background: #f3f4f6;
+  padding: 2rpx 10rpx;
+  border-radius: 8rpx;
+  line-height: 28rpx;
 }
 
 .meal-calorie {

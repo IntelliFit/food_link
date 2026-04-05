@@ -1473,3 +1473,21 @@
     - 今日餐食中超过100%时，百分比数字变红
     - 今日餐食中超过100%时，进度条变红
     - 用户图片正确撑满容器（100rpx x 100rpx）
+
+- Task: 加餐"参考"标签移到标题右侧 + 图片撑满容器
+- Status: done（代码已完成并通过构建）
+- Scope:
+  - 修改 `src/pages/index/components/MealsSection.tsx`:
+    - 新增 `meal-title-wrap` 包裹餐名和"参考"标签
+    - 加餐类型在标题后显示"参考"标签（灰色小标签）
+    - 移除加餐底部的 tags 显示区域
+  - 修改 `src/pages/index/index.scss`:
+    - 添加 `.meal-title-wrap`: flex 布局，gap 12rpx
+    - 添加 `.meal-snack-hint`: 灰色背景小标签样式
+    - 图片样式已存在: width/height 100%, object-fit: cover
+- Verification:
+  - ✅ 构建通过：`npm run build:weapp` 成功
+  - ⏭️ 待验证：在微信开发者工具中确认
+    - 加餐标题右侧显示"参考"标签
+    - 底部不再显示"加餐参考，不计入总目标"标签
+    - 用户图片撑满 100rpx x 100rpx 容器
