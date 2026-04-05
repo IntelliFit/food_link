@@ -50,17 +50,31 @@ const getTotalCalories = (task: AnalysisTask): number => {
   return result.items?.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0) || 0
 }
 
-function formatTime(iso: string) {
+function formatTime(iso: string): { text: string; isToday: boolean } {
   try {
     const d = new Date(iso)
     const now = new Date()
     const isToday = d.toDateString() === now.toDateString()
+    const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const hour = d.getHours()
+    const period = hour < 12 ? '上午' : '下午'
+    
     if (isToday) {
-      return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      return { text: `今天 ${period}${timeStr}`, isToday: true }
     }
-    return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    
+    // 昨天
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    if (d.toDateString() === yesterday.toDateString()) {
+      return { text: `昨天 ${period}${timeStr}`, isToday: false }
+    }
+    
+    // 其他日期
+    const dateStr = d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+    return { text: `${dateStr} ${period}${timeStr}`, isToday: false }
   } catch {
-    return ''
+    return { text: '', isToday: false }
   }
 }
 
@@ -192,27 +206,31 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
         <View className='body'>
           <View className='main-row'>
             <View className='left-content'>
-              <Text className='time'>{formatTime(task.created_at)}</Text>
-              {totalCalories > 0 && (
-                <Text className='calories'>{Math.round(totalCalories)} kcal</Text>
-              )}
+              <Text className='calories'>{totalCalories > 0 ? `${Math.round(totalCalories)} kcal` : '--'}</Text>
+              <Text className='time'>{(() => {
+                const timeInfo = formatTime(task.created_at)
+                return timeInfo.text
+              })()}</Text>
             </View>
             <View className='right-content'>
-              <View className={`status-badge status-${task.status}`}>
-                <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
+              {/* 状态标签和模式标签放在同一行 */}
+              <View className='tag-row-vertical'>
+                <View className={`status-badge status-${task.status}`}>
+                  <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
+                </View>
+                {/* 只在精准模式下显示标签 */}
+                {mode === 'strict' && (
+                  <View className='mode-tag strict'>
+                    <Text className='mode-tag-text'>精准</Text>
+                  </View>
+                )}
+                {/* 精准模式下显示识别结果 */}
+                {mode === 'strict' && task.status === 'done' && (
+                  <View className={`recognition-tag recognition-${recognitionOutcome}`}>
+                    <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
+                  </View>
+                )}
               </View>
-              {/* 只在精准模式下显示标签 */}
-              {mode === 'strict' && (
-                <View className='mode-tag strict'>
-                  <Text className='mode-tag-text'>精准</Text>
-                </View>
-              )}
-              {/* 精准模式下显示识别结果 */}
-              {mode === 'strict' && task.status === 'done' && (
-                <View className={`recognition-tag recognition-${recognitionOutcome}`}>
-                  <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
-                </View>
-              )}
             </View>
           </View>
           {(task.status === 'violated' || task.is_violated) && task.violation_reason && (
