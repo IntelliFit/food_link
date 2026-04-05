@@ -781,6 +781,11 @@ $blue-color: #3b82f6;
   color: $primary-color;
 }
 
+// 超额时百分比文字变红（配合 .is-warning 类使用）
+.is-warning .meal-progress-percent {
+  color: #ef4444 !important;
+}
+
 .meal-time {
   font-size: 20rpx;
   color: $text-tertiary;

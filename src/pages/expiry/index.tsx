@@ -3,8 +3,8 @@ import { useCallback, useMemo, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getFoodExpiryDashboard,
-  getFoodExpiryItems,
-  updateFoodExpiryItemStatus,
+  getFoodExpiryList as getFoodExpiryItems,
+  updateFoodExpiryItem,
   type FoodExpiryDashboard,
   type FoodExpiryItem,
   type FoodExpiryStatus,
@@ -80,7 +80,7 @@ export default function ExpiryPage() {
 
     Taro.showLoading({ title: '处理中...' })
     try {
-      await updateFoodExpiryItemStatus(item.id, status)
+      await updateFoodExpiryItem(item.id, { status } as any)
       Taro.hideLoading()
       Taro.showToast({ title: '更新成功', icon: 'success' })
       loadData()
