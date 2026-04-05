@@ -1062,6 +1062,60 @@ def list_analysis_tasks_by_user_sync(
         raise
 
 
+def delete_analysis_task_sync(task_id: str, user_id: str) -> bool:
+    """
+    删除用户的分析任务。
+    只能删除属于自己且状态为 done/failed/timed_out 的任务。
+    返回是否删除成功。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 先查询任务确认归属和状态
+        r = supabase.table("analysis_tasks").select("id, status").eq("id", task_id).eq("user_id", user_id).execute()
+        if not r.data or len(r.data) == 0:
+            raise Exception("任务不存在或无权限")
+        
+        task = r.data[0]
+        # 不允许删除进行中的任务
+        if task["status"] in ("pending", "processing"):
+            raise Exception("进行中的任务无法删除")
+        
+        # 执行删除
+        supabase.table("analysis_tasks").delete().eq("id", task_id).eq("user_id", user_id).execute()
+        return True
+    except Exception as e:
+        print(f"[delete_analysis_task_sync] 错误: {e}")
+        raise
+
+
+def mark_timed_out_tasks_sync(timeout_minutes: int = 5) -> int:
+    """
+    将超时的 pending/processing 任务标记为 timed_out。
+    返回被标记的任务数量。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 计算超时时间点
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+        
+        # 更新超时任务
+        result = supabase.table("analysis_tasks").update({
+            "status": "timed_out",
+            "error_message": "分析超时，请重试",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }).in_("status", ["pending", "processing"]).lt("created_at", cutoff_time.isoformat()).execute()
+        
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            print(f"[mark_timed_out_tasks_sync] 标记了 {count} 个超时任务")
+        return count
+    except Exception as e:
+        print(f"[mark_timed_out_tasks_sync] 错误: {e}")
+        return 0
+
+
 # ==================== 精准模式会话相关函数 ====================
 
 def create_precision_session_sync(

@@ -82,6 +82,8 @@ const getNextTipIndex = (current?: number) => {
 const POLL_INTERVAL = 2000
 // 健康小知识轮播间隔（ms）——从 3 秒放慢到 6 秒
 const TIP_ROTATE_INTERVAL = 6000
+// 分析超时时间：5分钟（毫秒）
+const ANALYZE_TIMEOUT = 5 * 60 * 1000
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }> = {
   strict: {
@@ -124,6 +126,8 @@ function AnalyzeLoadingPage() {
   const [tipIndex, setTipIndex] = useState(() => getNextTipIndex())
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tipTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const startTimeRef = useRef<number>(Date.now())
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
@@ -143,6 +147,34 @@ function AnalyzeLoadingPage() {
     Taro.setStorageSync('analyzeTaskType', type)
   }, [])
 
+  // 超时检测
+  useEffect(() => {
+    if (!taskId || status !== 'loading') return
+    
+    startTimeRef.current = Date.now()
+    
+    timeoutTimerRef.current = setTimeout(() => {
+      // 5分钟超时
+      setStatus('failed')
+      setErrorMessage('分析超时，请重试')
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+      if (tipTimerRef.current) {
+        clearInterval(tipTimerRef.current)
+        tipTimerRef.current = null
+      }
+    }, ANALYZE_TIMEOUT)
+    
+    return () => {
+      if (timeoutTimerRef.current) {
+        clearTimeout(timeoutTimerRef.current)
+        timeoutTimerRef.current = null
+      }
+    }
+  }, [taskId, status])
+
   useEffect(() => {
     if (!taskId || status !== 'loading') return
     const poll = async () => {
@@ -155,6 +187,11 @@ function AnalyzeLoadingPage() {
         }
         if (task.status === 'done' && task.result) {
           setStatus('done')
+          // 清除超时定时器
+          if (timeoutTimerRef.current) {
+            clearTimeout(timeoutTimerRef.current)
+            timeoutTimerRef.current = null
+          }
           if (pollTimerRef.current) {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null
@@ -199,9 +236,14 @@ function AnalyzeLoadingPage() {
           }
           return
         }
-        if (task.status === 'failed') {
+        if (task.status === 'failed' || task.status === 'timed_out') {
           setStatus('failed')
-          setErrorMessage(task.error_message || '识别失败')
+          setErrorMessage(task.error_message || (task.status === 'timed_out' ? '分析超时，请重试' : '识别失败'))
+          // 清除超时定时器
+          if (timeoutTimerRef.current) {
+            clearTimeout(timeoutTimerRef.current)
+            timeoutTimerRef.current = null
+          }
           if (pollTimerRef.current) {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null
@@ -211,6 +253,11 @@ function AnalyzeLoadingPage() {
         if (task.status === 'violated' || task.is_violated) {
           setStatus('violated')
           setViolationReason(task.violation_reason || '内容违规')
+          // 清除超时定时器
+          if (timeoutTimerRef.current) {
+            clearTimeout(timeoutTimerRef.current)
+            timeoutTimerRef.current = null
+          }
           if (pollTimerRef.current) {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null

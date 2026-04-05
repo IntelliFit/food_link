@@ -1178,6 +1178,22 @@ export async function updateAnalysisTaskResult(taskId: string, result: AnalyzeRe
 }
 
 /**
+ * 删除分析任务
+ * DELETE /api/analyze/tasks/{task_id}
+ */
+export async function deleteAnalysisTask(taskId: string): Promise<{ message: string }> {
+  const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '删除任务失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string }
+}
+
+/**
  * 提交偏差样本（用户点击「认为 AI 估算偏差大，点击标记样本」）
  * 需登录。items 中每条为：食物名、AI 重量、用户修正重量、偏差百分比。
  */

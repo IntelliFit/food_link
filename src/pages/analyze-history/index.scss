@@ -31,19 +31,71 @@
   box-sizing: border-box;
 }
 
+// 左滑卡片容器
+.swipeable-card-wrapper {
+  position: relative;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+  border-radius: 20rpx;
+}
+
+// 背景操作按钮
+.action-buttons {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.action-btn {
+  width: 140rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+
+  .iconfont {
+    font-size: 36rpx;
+    color: #fff;
+  }
+
+  .action-text {
+    font-size: 24rpx;
+    color: #fff;
+    font-weight: 500;
+  }
+
+  &.share {
+    background: #00bc7d;
+  }
+
+  &.delete {
+    background: #ef4444;
+  }
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+// 任务卡片
 .task-card {
   background: #fff;
   border-radius: 20rpx;
   padding: 24rpx;
-  margin-bottom: 24rpx;
   display: flex;
   align-items: center;
   gap: 24rpx;
   box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease;
+  position: relative;
+  z-index: 1;
 
   &:active {
-    transform: scale(0.98);
     background: #f9fafb;
   }
 
@@ -259,6 +311,16 @@
 
     .status-text {
       color: #dc2626;
+    }
+  }
+
+  .status-timed_out {
+    .status-dot {
+      background: #f59e0b;
+    }
+
+    .status-text {
+      color: #f59e0b;
     }
   }
 

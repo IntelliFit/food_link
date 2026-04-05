@@ -1895,6 +1895,51 @@ async def update_task_result(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/analyze/tasks/{task_id}")
+async def delete_analyze_task(
+    task_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    删除指定的分析任务。
+    只能删除属于自己且状态为 done/failed/timed_out/violated 的任务，进行中的任务无法删除。
+    """
+    from database import delete_analysis_task_sync
+    try:
+        await asyncio.to_thread(delete_analysis_task_sync, task_id, user_info["user_id"])
+        return {"message": "删除成功"}
+    except Exception as e:
+        error_msg = str(e)
+        if "任务不存在" in error_msg or "无权限" in error_msg:
+            raise HTTPException(status_code=404, detail=error_msg)
+        if "进行中的任务" in error_msg:
+            raise HTTPException(status_code=400, detail=error_msg)
+        print(f"[delete_analyze_task] 错误: {e}")
+        raise HTTPException(status_code=500, detail="删除失败")
+
+
+@app.post("/api/analyze/tasks/cleanup-timeout")
+async def cleanup_timed_out_tasks(
+    admin_key: str = Query(..., description="管理密钥"),
+    timeout_minutes: int = Query(default=5, ge=1, le=30, description="超时时间（分钟）"),
+):
+    """
+    清理超时的分析任务（内部管理接口）。
+    将由定时任务或外部调度器调用。
+    """
+    from database import mark_timed_out_tasks_sync
+    expected_key = os.getenv("ADMIN_API_KEY", "")
+    if not expected_key or admin_key != expected_key:
+        raise HTTPException(status_code=403, detail="无权限")
+    
+    try:
+        count = await asyncio.to_thread(mark_timed_out_tasks_sync, timeout_minutes)
+        return {"message": f"已标记 {count} 个超时任务", "count": count}
+    except Exception as e:
+        print(f"[cleanup_timed_out_tasks] 错误: {e}")
+        raise HTTPException(status_code=500, detail="清理失败")
+
+
 # ---------- 双模型对比分析接口 ----------
 
 @app.post("/api/analyze-compare", response_model=CompareAnalyzeResponse)
