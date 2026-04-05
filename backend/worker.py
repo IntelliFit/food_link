@@ -1192,9 +1192,11 @@ def process_one_food_task(task: Dict[str, Any]) -> None:
         print(f"[food_analysis] MODERATION_SKIPPED task_id={task_id} type=image", flush=True)
         result = run_food_analysis_sync(task)
         update_analysis_task_result_sync(task_id, status="done", result=result)
+    except (RuntimeError, ValueError) as e:
+        update_analysis_task_result_sync(task_id, status="failed", error_message=str(e))
     except Exception as e:
-        err_msg = str(e) or type(e).__name__
-        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        print(f"[worker] task {task_id} unexpected error: {type(e).__name__}: {e}", flush=True)
+        update_analysis_task_result_sync(task_id, status="failed", error_message="系统繁忙，请稍后重试")
 
 
 def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
@@ -1515,9 +1517,11 @@ def process_one_text_food_task(task: Dict[str, Any]) -> None:
         print(f"[food_analysis] MODERATION_SKIPPED task_id={task_id} type=text", flush=True)
         result = run_text_food_analysis_sync(task)
         update_analysis_task_result_sync(task_id, status="done", result=result)
+    except (RuntimeError, ValueError) as e:
+        update_analysis_task_result_sync(task_id, status="failed", error_message=str(e))
     except Exception as e:
-        err_msg = str(e) or type(e).__name__
-        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        print(f"[worker] task {task_id} unexpected error: {type(e).__name__}: {e}", flush=True)
+        update_analysis_task_result_sync(task_id, status="failed", error_message="系统繁忙，请稍后重试")
 
 
 def process_one_public_library_moderation_task(task: Dict[str, Any]) -> None:
@@ -1645,9 +1649,11 @@ def process_one_health_report_task(task: Dict[str, Any]) -> None:
     try:
         extracted = run_health_report_ocr_sync(task)
         update_analysis_task_result_sync(task_id, status="done", result={"extracted_content": extracted})
+    except (RuntimeError, ValueError) as e:
+        update_analysis_task_result_sync(task_id, status="failed", error_message=str(e))
     except Exception as e:
-        err_msg = str(e) or type(e).__name__
-        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        print(f"[worker] task {task_id} unexpected error: {type(e).__name__}: {e}", flush=True)
+        update_analysis_task_result_sync(task_id, status="failed", error_message="系统繁忙，请稍后重试")
 
 
 def _comment_moderation_prompt(content: str) -> str:
