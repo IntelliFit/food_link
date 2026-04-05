@@ -893,17 +893,37 @@ def update_analysis_task_result_sync(
     status: str,
     result: Optional[Dict[str, Any]] = None,
     error_message: Optional[str] = None,
-) -> None:
-    """更新任务结果（done / failed）。"""
+) -> bool:
+    """
+    更新任务结果（done / failed）。
+    如果任务已被取消或删除，则跳过更新并返回 False。
+    
+    Returns:
+        bool: 是否成功更新
+    """
     check_supabase_configured()
     supabase = get_supabase_client()
-    row = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
-    if result is not None:
-        row["result"] = result
-    if error_message is not None:
-        row["error_message"] = error_message
+    
     try:
+        # 先检查任务是否存在且不是 cancelled 状态
+        check = supabase.table("analysis_tasks").select("status").eq("id", task_id).execute()
+        if not check.data or len(check.data) == 0:
+            print(f"[update_analysis_task_result_sync] 任务 {task_id} 不存在，跳过更新")
+            return False
+        
+        current_status = check.data[0].get("status")
+        if current_status == "cancelled":
+            print(f"[update_analysis_task_result_sync] 任务 {task_id} 已被取消，跳过更新")
+            return False
+        
+        row = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
+        if result is not None:
+            row["result"] = result
+        if error_message is not None:
+            row["error_message"] = error_message
+        
         supabase.table("analysis_tasks").update(row).eq("id", task_id).execute()
+        return True
     except Exception as e:
         print(f"[update_analysis_task_result_sync] 错误: {e}")
         raise
@@ -1062,28 +1082,112 @@ def list_analysis_tasks_by_user_sync(
         raise
 
 
-def delete_analysis_task_sync(task_id: str, user_id: str) -> bool:
+def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: bool = True) -> dict:
     """
     删除用户的分析任务。
-    只能删除属于自己且状态为 done/failed/timed_out 的任务。
-    返回是否删除成功。
+    支持删除任何状态的任务，包括进行中的任务(pending/processing)。
+    对于进行中的任务，会先标记为 cancelled 状态，然后清理关联资源，最后删除记录。
+    
+    Args:
+        task_id: 任务ID
+        user_id: 用户ID
+        cancel_processing: 是否允许取消进行中的任务（默认True）
+    
+    Returns:
+        dict: 包含删除结果和清理的资源信息
+        {
+            "deleted": bool,
+            "cancelled": bool,  # 是否取消了进行中的任务
+            "images_deleted": int,  # 删除的图片数量
+            "message": str
+        }
     """
     check_supabase_configured()
     supabase = get_supabase_client()
+    
+    result = {
+        "deleted": False,
+        "cancelled": False,
+        "images_deleted": 0,
+        "message": ""
+    }
+    
     try:
-        # 先查询任务确认归属和状态
-        r = supabase.table("analysis_tasks").select("id, status").eq("id", task_id).eq("user_id", user_id).execute()
+        # 先查询任务确认归属和状态，同时获取图片信息
+        r = supabase.table("analysis_tasks").select(
+            "id, status, image_url, image_paths, task_type"
+        ).eq("id", task_id).eq("user_id", user_id).execute()
+        
         if not r.data or len(r.data) == 0:
             raise Exception("任务不存在或无权限")
         
         task = r.data[0]
-        # 不允许删除进行中的任务
-        if task["status"] in ("pending", "processing"):
-            raise Exception("进行中的任务无法删除")
+        task_status = task.get("status")
         
-        # 执行删除
+        # 如果是进行中的任务，先标记为 cancelled
+        if task_status in ("pending", "processing"):
+            if not cancel_processing:
+                raise Exception("进行中的任务无法删除")
+            
+            # 更新状态为 cancelled，这样 worker 会跳过这个任务
+            supabase.table("analysis_tasks").update({
+                "status": "cancelled",
+                "error_message": "用户主动取消任务",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", task_id).eq("user_id", user_id).execute()
+            
+            result["cancelled"] = True
+            print(f"[delete_analysis_task_sync] 任务 {task_id} 已标记为 cancelled")
+            
+            # 给 worker 一点时间来放弃这个任务
+            import time
+            time.sleep(0.5)
+        
+        # 清理关联的图片资源
+        images_to_delete = []
+        
+        # 从 image_url 字段获取
+        if task.get("image_url"):
+            images_to_delete.append(task["image_url"])
+        
+        # 从 image_paths 字段获取（可能是 JSON 数组）
+        image_paths = task.get("image_paths")
+        if image_paths:
+            if isinstance(image_paths, str):
+                try:
+                    import json
+                    image_paths = json.loads(image_paths)
+                except:
+                    image_paths = [image_paths]
+            if isinstance(image_paths, list):
+                images_to_delete.extend(image_paths)
+        
+        # 根据任务类型确定存储桶
+        bucket_name = FOOD_ANALYZE_BUCKET
+        if task.get("task_type") == "health_report":
+            bucket_name = HEALTH_REPORTS_BUCKET
+        
+        # 删除图片
+        for image_url in images_to_delete:
+            if image_url:
+                try:
+                    delete_image_from_storage(image_url, bucket_name)
+                    result["images_deleted"] += 1
+                except Exception as img_e:
+                    print(f"[delete_analysis_task_sync] 删除图片失败 {image_url}: {img_e}")
+        
+        # 执行删除任务记录
         supabase.table("analysis_tasks").delete().eq("id", task_id).eq("user_id", user_id).execute()
-        return True
+        result["deleted"] = True
+        
+        if result["cancelled"]:
+            result["message"] = f"任务已取消并删除，清理了 {result['images_deleted']} 个关联资源"
+        else:
+            result["message"] = f"任务已删除，清理了 {result['images_deleted']} 个关联资源"
+        
+        print(f"[delete_analysis_task_sync] {result['message']}")
+        return result
+        
     except Exception as e:
         print(f"[delete_analysis_task_sync] 错误: {e}")
         raise

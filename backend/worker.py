@@ -1201,7 +1201,12 @@ def process_one_food_task(task: Dict[str, Any]) -> None:
     try:
         print(f"[food_analysis] MODERATION_SKIPPED task_id={task_id} type=image", flush=True)
         result = run_food_analysis_sync(task)
-        update_analysis_task_result_sync(task_id, status="done", result=result)
+        
+        # 更新结果，如果被取消则跳过
+        updated = update_analysis_task_result_sync(task_id, status="done", result=result)
+        if not updated:
+            print(f"[food_analysis] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
+            return
 
         try:
             compress_task_images(_get_task_image_urls(task))
@@ -1209,7 +1214,9 @@ def process_one_food_task(task: Dict[str, Any]) -> None:
             pass
     except Exception as e:
         err_msg = str(e) or type(e).__name__
-        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        updated = update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        if not updated:
+            print(f"[food_analysis] 任务 {task_id} 已被取消，放弃错误写入", flush=True)
 
 
 def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
@@ -1529,10 +1536,14 @@ def process_one_text_food_task(task: Dict[str, Any]) -> None:
     try:
         print(f"[food_analysis] MODERATION_SKIPPED task_id={task_id} type=text", flush=True)
         result = run_text_food_analysis_sync(task)
-        update_analysis_task_result_sync(task_id, status="done", result=result)
+        updated = update_analysis_task_result_sync(task_id, status="done", result=result)
+        if not updated:
+            print(f"[food_analysis] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
     except Exception as e:
         err_msg = str(e) or type(e).__name__
-        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        updated = update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        if not updated:
+            print(f"[food_analysis] 任务 {task_id} 已被取消，放弃错误写入", flush=True)
 
 
 def process_one_public_library_moderation_task(task: Dict[str, Any]) -> None:
@@ -1553,10 +1564,14 @@ def process_one_public_library_moderation_task(task: Dict[str, Any]) -> None:
             update_public_food_library_status_sync(item_id, "rejected")
         else:
             update_public_food_library_status_sync(item_id, "published")
-            update_analysis_task_result_sync(task_id, status="done", result={"status": "approved"})
+            updated = update_analysis_task_result_sync(task_id, status="done", result={"status": "approved"})
+            if not updated:
+                print(f"[worker] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
     except Exception as e:
         err_msg = str(e) or type(e).__name__
-        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        updated = update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        if not updated:
+            print(f"[worker] 任务 {task_id} 已被取消，放弃错误写入", flush=True)
 
 
 def _ocr_report_prompt() -> str:
@@ -1659,10 +1674,14 @@ def process_one_health_report_task(task: Dict[str, Any]) -> None:
     task_id = task["id"]
     try:
         extracted = run_health_report_ocr_sync(task)
-        update_analysis_task_result_sync(task_id, status="done", result={"extracted_content": extracted})
+        updated = update_analysis_task_result_sync(task_id, status="done", result={"extracted_content": extracted})
+        if not updated:
+            print(f"[health_report] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
     except Exception as e:
         err_msg = str(e) or type(e).__name__
-        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        updated = update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+        if not updated:
+            print(f"[health_report] 任务 {task_id} 已被取消，放弃错误写入", flush=True)
 
 
 def _comment_moderation_prompt(content: str) -> str:

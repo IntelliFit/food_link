@@ -1219,8 +1219,16 @@ export async function updateAnalysisTaskResult(taskId: string, result: AnalyzeRe
 /**
  * 删除分析任务
  * DELETE /api/analyze/tasks/{task_id}
+ * 支持删除进行中的任务，会自动取消并清理关联资源
  */
-export async function deleteAnalysisTask(taskId: string): Promise<{ message: string }> {
+export interface DeleteTaskResult {
+  message: string
+  deleted: boolean
+  cancelled?: boolean
+  images_deleted?: number
+}
+
+export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResult> {
   const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}`, {
     method: 'DELETE',
     timeout: 10000
@@ -1229,7 +1237,7 @@ export async function deleteAnalysisTask(taskId: string): Promise<{ message: str
     const msg = (res.data as any)?.detail || '删除任务失败'
     throw new Error(msg)
   }
-  return res.data as { message: string }
+  return res.data as DeleteTaskResult
 }
 
 /**

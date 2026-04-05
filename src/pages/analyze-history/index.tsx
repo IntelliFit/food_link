@@ -2,7 +2,7 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../utils/withAuth'
 import { useState, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome } from '../../utils/api'
+import { listAnalyzeTasks, deleteAnalysisTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../utils/api'
 import './index.scss'
 
 const STATUS_MAP: Record<string, string> = {
@@ -11,7 +11,8 @@ const STATUS_MAP: Record<string, string> = {
   done: '已完成',
   failed: '识别失败',
   violated: '内容违规',
-  timed_out: '已超时'
+  timed_out: '已超时',
+  cancelled: '已取消'
 }
 
 const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
@@ -237,7 +238,7 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
             <Text className='violation-reason'>{task.violation_reason}</Text>
           )}
         </View>
-        {(task.status === 'done' || task.status === 'failed' || task.status === 'timed_out') && !task.is_violated && (
+        {(task.status === 'done' || task.status === 'failed' || task.status === 'processing') && !task.is_violated && (
           <Text className='arrow'>›</Text>
         )}
       </View>
@@ -274,8 +275,13 @@ function AnalyzeHistoryPage() {
 
   const handleDelete = async (taskId: string) => {
     try {
-      await deleteAnalysisTask(taskId)
-      Taro.showToast({ title: '删除成功', icon: 'success' })
+      const result: DeleteTaskResult = await deleteAnalysisTask(taskId)
+      // 根据删除结果显示不同的提示
+      if (result.cancelled) {
+        Taro.showToast({ title: '已取消并删除任务', icon: 'success' })
+      } else {
+        Taro.showToast({ title: '删除成功', icon: 'success' })
+      }
       // 从列表中移除
       setTasks(prev => prev.filter(t => t.id !== taskId))
     } catch (e: any) {

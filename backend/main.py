@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, JSONResponse
@@ -2020,20 +2020,24 @@ async def delete_analyze_task(
 ):
     """
     删除指定的分析任务。
-    只能删除属于自己且状态为 done/failed/timed_out/violated 的任务，进行中的任务无法删除。
+    支持删除任何状态的任务，包括进行中的任务(pending/processing)。
+    对于进行中的任务，会先标记为 cancelled 状态，清理关联资源后删除。
     """
     from database import delete_analysis_task_sync
     try:
-        await asyncio.to_thread(delete_analysis_task_sync, task_id, user_info["user_id"])
-        return {"message": "删除成功"}
+        result = await asyncio.to_thread(delete_analysis_task_sync, task_id, user_info["user_id"], cancel_processing=True)
+        return {
+            "message": result.get("message", "删除成功"),
+            "deleted": result.get("deleted", True),
+            "cancelled": result.get("cancelled", False),
+            "images_deleted": result.get("images_deleted", 0)
+        }
     except Exception as e:
         error_msg = str(e)
         if "任务不存在" in error_msg or "无权限" in error_msg:
             raise HTTPException(status_code=404, detail=error_msg)
-        if "进行中的任务" in error_msg:
-            raise HTTPException(status_code=400, detail=error_msg)
         print(f"[delete_analyze_task] 错误: {e}")
-        raise HTTPException(status_code=500, detail="删除失败")
+        raise HTTPException(status_code=500, detail=f"删除失败: {error_msg}")
 
 
 @app.post("/api/analyze/tasks/cleanup-timeout")

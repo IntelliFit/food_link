@@ -1419,3 +1419,57 @@
     - 再次打开页面时，不会自动出现“AI 正在分析最近的饮食记录”
     - 有缓存时优先展示缓存，并显示生成日期
     - 新增饮食记录后，当天若需重算，需手动点击“手动更新”
+
+- Task: 支持删除进行中的分析任务
+- Status: done（代码已完成，需执行 SQL）
+- Scope:
+  - 后端 `backend/database.py`:
+    - 修改 `delete_analysis_task_sync` 函数：
+      - 支持删除 pending/processing 状态的任务
+      - 先标记为 cancelled 状态，让 worker 跳过
+      - 自动清理关联的图片资源（image_url/image_paths）
+      - 返回详细的删除结果（deleted/cancelled/images_deleted/message）
+    - 修改 `update_analysis_task_result_sync` 函数：
+      - 更新前检查任务是否被取消或删除
+      - 如果被取消则跳过更新，避免覆盖用户删除操作
+  - 后端 `backend/main.py`:
+    - 更新 DELETE `/api/analyze/tasks/{task_id}` 端点
+    - 返回新的响应格式，包含取消状态和资源清理信息
+  - 后端 `backend/worker.py`:
+    - 更新所有任务处理函数，在写入结果前检查任务是否被取消
+    - 支持的任务类型：food、food_text、health_report、public_food_library_text
+  - 后端 `backend/sql/add_cancelled_status.sql`:
+    - 添加 cancelled 状态到数据库约束
+  - 前端 `src/utils/api.ts`:
+    - 添加 `DeleteTaskResult` 接口
+    - 更新 `deleteAnalysisTask` 函数返回类型
+  - 前端 `src/pages/analyze-history/index.tsx`:
+    - 添加 'cancelled' 到 STATUS_MAP
+    - 更新删除处理函数，根据 cancelled 状态显示不同提示
+- Verification:
+  - ✅ 后端服务重启成功
+  - ✅ 前端编译成功
+  - ⏭️ 待验证：删除进行中的任务
+- Next step:
+  - 执行 SQL 添加 cancelled 状态到数据库约束
+  - 在微信开发者工具中测试删除进行中的任务
+
+- Task: 今日餐食板块百分比超过100%变红 + 图片撑满容器
+- Status: done（代码已完成并通过构建）
+- Scope:
+  - 修复 `src/pages/index/index.tsx`:
+    - 添加 `MEAL_PROGRESS_COLOR_NORMAL` 和 `MEAL_PROGRESS_COLOR_WARNING` 常量
+    - 删除旧的 `MEAL_PROGRESS_COLOR` 常量
+    - 进度条填充：根据 `mealProgress > 100` 动态设置背景色（绿色/红色）
+    - 百分比文字：根据 `mealProgress > 100` 动态设置颜色（绿色/红色）
+    - 添加 `is-warning` 和 `is-over` className 用于额外样式
+  - 图片样式确认 (`src/pages/index/index.scss`):
+    - `.meal-media-wrap`: 100rpx x 100rpx，overflow: hidden
+    - `.meal-thumb-image`: width/height: 100%, object-fit: cover
+    - 已和历史记录样式对齐，图片会撑满整个容器
+- Verification:
+  - ✅ 构建通过：`npm run build:weapp` 成功
+  - ⏭️ 待验证：在微信开发者工具中确认
+    - 今日餐食中超过100%时，百分比数字变红
+    - 今日餐食中超过100%时，进度条变红
+    - 用户图片正确撑满容器（100rpx x 100rpx）

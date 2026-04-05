@@ -294,8 +294,9 @@ const MEAL_ICON_CONFIG = {
 
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
 
-// 餐次进度条使用统一的绿色主题色
-const MEAL_PROGRESS_COLOR = '#00bc7d'
+// 餐次进度条颜色：正常为绿色，超过100%为红色警示
+const MEAL_PROGRESS_COLOR_NORMAL = '#00bc7d'
+const MEAL_PROGRESS_COLOR_WARNING = '#ef4444'
 
 // 营养素配置
 const MACRO_CONFIGS: Array<{
@@ -1245,12 +1246,12 @@ function IndexPage() {
                       <View className='meal-progress-wrap'>
                         <View className='meal-progress-bar-bg'>
                           <View
-                            className='meal-progress-bar-fill'
-                            style={{ width: `${clampVisualProgress(mealProgress)}%`, backgroundColor: MEAL_PROGRESS_COLOR }}
+                            className={`meal-progress-bar-fill ${mealProgress > 100 ? 'is-warning' : ''}`}
+                            style={{ width: `${clampVisualProgress(mealProgress)}%`, backgroundColor: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL }}
                           />
                         </View>
                         <View className='meal-progress-meta'>
-                          <Text className='meal-progress-percent' style={{ color: MEAL_PROGRESS_COLOR }}>{formatProgressText(mealProgress)}</Text>
+                          <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`} style={{ color: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL }}>{formatProgressText(mealProgress)}</Text>
                           <Text className='meal-progress-text'>{targetText}</Text>
                         </View>
                       </View>
