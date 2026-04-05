@@ -49,6 +49,11 @@
 
   &.share {
     background: #00bc7d;
+
+    &.disabled {
+      background: #d1d5db;
+      pointer-events: none;
+    }
   }
 
   &.delete {
@@ -119,22 +124,42 @@
     gap: 8rpx;
   }
 
-  // 标题行：时间 + 状态
-  .title-row {
+  // 主行：左侧时间+热量 | 右侧状态+标签
+  .main-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 16rpx;
   }
 
-  .time {
-    font-size: 28rpx;
-    color: #1f2937;
-    font-weight: 500;
-    line-height: 40rpx;
+  .left-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    flex: 1;
   }
 
-  // 状态徽章 - 更紧凑
+  .right-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8rpx;
+  }
+
+  .time {
+    font-size: 26rpx;
+    color: #1f2937;
+    font-weight: 500;
+    line-height: 36rpx;
+  }
+
+  .calories {
+    font-size: 22rpx;
+    color: #6b7280;
+    line-height: 30rpx;
+  }
+
+  // 状态徽章
   .status-badge {
     display: inline-flex;
     align-items: center;
@@ -178,14 +203,7 @@
     }
   }
 
-  .tag-row {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-    flex-wrap: wrap;
-  }
-
-  // 精准模式标签 - 简化版
+  // 精准模式标签
   .mode-tag {
     display: inline-flex;
     align-items: center;
@@ -199,7 +217,7 @@
 
       .mode-tag-text {
         color: #047857;
-        font-size: 22rpx;
+        font-size: 20rpx;
         font-weight: 600;
       }
     }
@@ -213,7 +231,7 @@
     border: 1rpx solid transparent;
 
     .recognition-tag-text {
-      font-size: 22rpx;
+      font-size: 20rpx;
       font-weight: 500;
     }
 
@@ -243,11 +261,6 @@
         color: #b91c1c;
       }
     }
-  }
-
-  // 兼容旧版状态行（隐藏）
-  .status-row {
-    display: none;
   }
 
   .violation-reason {

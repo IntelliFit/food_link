@@ -43,6 +43,13 @@ const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
   return payloadMode === 'strict' ? 'strict' : 'standard'
 }
 
+// 获取总热量
+const getTotalCalories = (task: AnalysisTask): number => {
+  if (!task.result) return 0
+  const result = task.result as AnalyzeResponse
+  return result.items?.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0) || 0
+}
+
 function formatTime(iso: string) {
   try {
     const d = new Date(iso)
@@ -76,7 +83,9 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
 
   const mode = pickExecutionMode(task)
   const recognitionOutcome = pickRecognitionOutcome(task)
-  const canSwipe = task.status === 'done' || task.status === 'failed' || task.status === 'timed_out'
+  const canSwipe = task.status !== 'pending' // 排队中不能滑动，其他都可以
+  const canShare = task.status === 'done' && task.result // 只有完成的才能分享
+  const totalCalories = getTotalCalories(task)
 
   const handleTouchStart = (e: any) => {
     if (!canSwipe) return
@@ -123,6 +132,10 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
   }
 
   const handleShare = () => {
+    if (!canShare) {
+      Taro.showToast({ title: '识别完成后才能分享', icon: 'none' })
+      return
+    }
     onShare(task)
     setOffset(0)
     setIsOpen(false)
@@ -141,7 +154,10 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
     <View className='swipeable-card-wrapper'>
       {/* 背景操作按钮 */}
       <View className='action-buttons' style={{ width: `${maxOffset}rpx` }}>
-        <View className='action-btn share' onClick={handleShare}>
+        <View 
+          className={`action-btn share ${!canShare ? 'disabled' : ''}`} 
+          onClick={handleShare}
+        >
           <Text className='iconfont icon-fenxiang' />
           <Text className='action-text'>分享</Text>
         </View>
@@ -174,29 +190,30 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
           )}
         </View>
         <View className='body'>
-          <View className='title-row'>
-            <Text className='time'>{formatTime(task.created_at)}</Text>
-            <View className={`status-badge status-${task.status}`}>
-              <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
+          <View className='main-row'>
+            <View className='left-content'>
+              <Text className='time'>{formatTime(task.created_at)}</Text>
+              {totalCalories > 0 && (
+                <Text className='calories'>{Math.round(totalCalories)} kcal</Text>
+              )}
             </View>
-          </View>
-          <View className='tag-row'>
-            {/* 只在精准模式下显示标签 */}
-            {mode === 'strict' && (
-              <View className='mode-tag strict'>
-                <Text className='mode-tag-text'>精准</Text>
+            <View className='right-content'>
+              <View className={`status-badge status-${task.status}`}>
+                <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
               </View>
-            )}
-            {/* 精准模式下显示识别结果 */}
-            {mode === 'strict' && task.status === 'done' && (
-              <View className={`recognition-tag recognition-${recognitionOutcome}`}>
-                <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
-              </View>
-            )}
-          </View>
-          <View className={`status-row status-${task.status}`}>
-            <View className='status-dot'></View>
-            <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
+              {/* 只在精准模式下显示标签 */}
+              {mode === 'strict' && (
+                <View className='mode-tag strict'>
+                  <Text className='mode-tag-text'>精准</Text>
+                </View>
+              )}
+              {/* 精准模式下显示识别结果 */}
+              {mode === 'strict' && task.status === 'done' && (
+                <View className={`recognition-tag recognition-${recognitionOutcome}`}>
+                  <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
+                </View>
+              )}
+            </View>
           </View>
           {(task.status === 'violated' || task.is_violated) && task.violation_reason && (
             <Text className='violation-reason'>{task.violation_reason}</Text>
