@@ -139,10 +139,6 @@ function AnalyzeHistoryPage() {
 
   return (
     <View className='analyze-history-page'>
-      <View className='header'>
-        <Text className='title'>分析历史</Text>
-        <Text className='desc'>可在此查看识别结果，并将结果保存为饮食记录</Text>
-      </View>
       <ScrollView className='list' scrollY>
         {loading ? (
           <View className='loading-wrap'><View className='loading-spinner-md' /></View>

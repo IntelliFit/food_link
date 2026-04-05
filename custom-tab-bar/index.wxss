@@ -142,3 +142,8 @@
 .tab-item.center-item .tab-text {
   color: #666666;
 }
+
+/* 隐藏状态 */
+.custom-tab-bar.hidden {
+  display: none;
+}

@@ -53,7 +53,7 @@
 
 ### 运行开发服务器
 
-- 开发时必须使用 `npm run dev:weapp` 启动开发服务器
+- 开发时必须使用 `npm run dev:weapp` 启动开发服务器，禁止用 `npm run build:weapp` 构建。
 - 该命令会正确设置 `NODE_ENV=development` 和 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`
 - 不要直接使用 `taro build --type weapp --watch`，这可能导致 API 地址错误
 

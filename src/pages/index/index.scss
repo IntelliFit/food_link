@@ -464,6 +464,10 @@ $blue-color: #3b82f6;
 .meals-loading {
   padding: 60rpx 0;
   text-align: center;
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
 }
 
 .loading-text {

@@ -4,6 +4,8 @@ export default defineAppConfig({
     'pages/community/index',
     'pages/checkin-leaderboard/index',
     'pages/record/index',
+    'pages/record-text/index',
+    'pages/record-manual/index',
     'pages/analyze/index',
     'pages/analyze-loading/index',
     'pages/analyze-history/index',
@@ -74,6 +76,9 @@ export default defineAppConfig({
   permission: {
     'scope.userLocation': {
       desc: '你的位置信息将用于分享食物时标记商家位置'
+    },
+    'scope.camera': {
+      desc: '需要使用相机拍照识别食物'
     }
   },
   requiredPrivateInfos: [

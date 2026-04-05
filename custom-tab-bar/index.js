@@ -1,6 +1,7 @@
 Component({
   data: {
     selectedIndex: 0,
+    hidden: false,
     tabList: [
       { 
         id: 'home',
@@ -43,8 +44,10 @@ Component({
   lifetimes: {
     attached() {
       this.updateSelected()
+      this.updateHidden()
       this.data.timer = setInterval(() => {
         this.updateSelected()
+        this.updateHidden()
       }, 300)
     },
     
@@ -70,6 +73,26 @@ Component({
         }
       } catch (error) {
         console.error('CustomTabBar updateSelected error:', error)
+      }
+    },
+    
+    // 检查是否需要隐藏 tabBar（在摄影模式下隐藏）
+    updateHidden() {
+      try {
+        const pages = getCurrentPages()
+        if (pages.length > 0) {
+          const currentPage = pages[pages.length - 1]
+          const currentPath = '/' + currentPage.route
+          
+          // 在记录饮食摄影页面隐藏 tabBar
+          const shouldHide = currentPath === '/pages/record/index'
+          
+          if (shouldHide !== this.data.hidden) {
+            this.setData({ hidden: shouldHide })
+          }
+        }
+      } catch (error) {
+        console.error('CustomTabBar updateHidden error:', error)
       }
     },
     
