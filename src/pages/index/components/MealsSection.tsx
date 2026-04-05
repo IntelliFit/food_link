@@ -149,8 +149,23 @@ export function MealsSection({
                     <Text className='meal-calorie'>{formatDisplayNumber(mealCalorie)} kcal</Text>
                   </View>
                   {isSnackMeal ? (
-                    // 加餐简化显示：只显示时间和标签（如有）
-                    <View className='meal-snack-meta'>
+                    // 加餐显示：进度条 + 时间 + 标签
+                    <>
+                      <View className='meal-progress-wrap'>
+                        <View className='meal-progress-bar-bg'>
+                          <View
+                            className={`meal-progress-bar-fill ${mealProgress > 100 ? 'is-warning' : ''}`}
+                            style={{
+                              width: `${clampVisualProgress(mealProgress)}%`,
+                              backgroundColor: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL
+                            }}
+                          />
+                        </View>
+                        <View className='meal-progress-meta'>
+                          <Text className='meal-progress-percent' style={{ color: mealProgress > 100 ? PERCENT_COLOR_WARNING : PERCENT_COLOR_NORMAL }}>{formatProgressText(mealProgress)}</Text>
+                          <Text className='meal-progress-text'>{targetText}</Text>
+                        </View>
+                      </View>
                       {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                       {meal.tags?.length > 0 && (
                         <View className='meal-tags'>
@@ -159,7 +174,7 @@ export function MealsSection({
                           ))}
                         </View>
                       )}
-                    </View>
+                    </>
                   ) : (
                     // 正餐完整显示：进度条 + 目标
                     <>

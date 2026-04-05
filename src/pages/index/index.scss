@@ -681,8 +681,11 @@ $blue-color: #3b82f6;
   width: 100%;
   height: 100%;
   max-width: 100%;
+  min-width: 100%;
+  min-height: 100%;
   display: block;
   object-fit: cover;
+  flex-shrink: 0;
 }
 
 .meal-thumb-badge {
@@ -782,7 +785,16 @@ $blue-color: #3b82f6;
 }
 
 // 超额时百分比文字变红（配合 .is-warning 类使用）
-.is-warning .meal-progress-percent {
+.meal-item.is-warning .meal-progress-percent {
+  color: #ef4444 !important;
+}
+
+// 加餐类型的进度条红色警示
+.meal-item.is-warning .meal-snack-progress-fill {
+  background-color: #ef4444 !important;
+}
+
+.meal-item.is-warning .meal-snack-progress-percent {
   color: #ef4444 !important;
 }
 
