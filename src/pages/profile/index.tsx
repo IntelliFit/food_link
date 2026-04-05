@@ -205,8 +205,8 @@ function ProfilePage() {
     },
     {
       id: 2,
-      icon: <ClockOutlined size='20' />,
-      title: '食物管理',
+      icon: <CalendarOutlined size='20' />,
+      title: '食物保质期',
       desc: formatExpiryPreviewText(expiryDashboard),
       path: '/pages/expiry/index',
       badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
@@ -279,10 +279,6 @@ function ProfilePage() {
         confirmText: '好的',
         confirmColor: '#00bc7d'
       })
-      return
-    }
-    if (service.id === 6) {
-      Taro.navigateTo({ url: '/pages/pro-membership/index' })
       return
     }
     const path = (service as { path?: string }).path

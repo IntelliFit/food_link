@@ -24,6 +24,8 @@ export default defineAppConfig({
     'pages/stats/index',
     'pages/day-record/index',
     'pages/record-detail/index',
+    'pages/food-expiry/index',
+    'pages/food-expiry-edit/index',
     'pages/food-library/index',
     'pages/food-library-detail/index',
     'pages/interaction-notifications/index',
