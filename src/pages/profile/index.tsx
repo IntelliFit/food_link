@@ -211,7 +211,7 @@ export default function ProfilePage() {
     }
     // 饮食记录（整合日历图和数据统计）
     if (service.id === 3) {
-      Taro.navigateTo({ url: '/pages/stats/index' })
+      Taro.switchTab({ url: '/pages/stats/index' })
       return
     }
     // 附近美食（开发中）

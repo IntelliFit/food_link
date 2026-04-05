@@ -521,7 +521,7 @@ export default function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    Taro.navigateTo({ url: '/pages/stats/index' })
+    Taro.switchTab({ url: '/pages/stats/index' })
   }
 
   const openFoodExpiryList = () => {
