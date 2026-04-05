@@ -174,16 +174,20 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
           )}
         </View>
         <View className='body'>
-          <Text className='time'>{formatTime(task.created_at)}</Text>
+          <View className='title-row'>
+            <Text className='time'>{formatTime(task.created_at)}</Text>
+            <View className={`status-badge status-${task.status}`}>
+              <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
+            </View>
+          </View>
           <View className='tag-row'>
-            <View className='task-type-tag'>
-              <Text className='task-type-text'>
-                {task.task_type === 'food_text' ? '文字识别' : '图片识别'}
-              </Text>
-            </View>
-            <View className={`mode-tag mode-${mode}`}>
-              <Text className='mode-tag-text'>{EXECUTION_MODE_LABEL[mode]}</Text>
-            </View>
+            {/* 只在精准模式下显示标签 */}
+            {mode === 'strict' && (
+              <View className='mode-tag strict'>
+                <Text className='mode-tag-text'>精准</Text>
+              </View>
+            )}
+            {/* 精准模式下显示识别结果 */}
             {mode === 'strict' && task.status === 'done' && (
               <View className={`recognition-tag recognition-${recognitionOutcome}`}>
                 <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
