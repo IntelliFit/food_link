@@ -19,6 +19,10 @@ const MEAL_ICON_CONFIG = {
 const MEAL_PROGRESS_COLOR_NORMAL = '#00bc7d'
 const MEAL_PROGRESS_COLOR_WARNING = '#ef4444'
 
+// 百分比文字颜色
+const PERCENT_COLOR_NORMAL = '#00bc7d'
+const PERCENT_COLOR_WARNING = '#ef4444'
+
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
 
 function normalizeDisplayNumber(value: unknown): number {
@@ -117,7 +121,7 @@ export function MealsSection({
               : `目标 ${formatDisplayNumber(mealTarget)} kcal`
             
             return (
-              <View key={`${meal.type}-${index}`} className='meal-item'>
+              <View key={`${meal.type}-${index}`} className={`meal-item ${mealProgress > 100 ? 'is-warning' : ''}`}>
                 <View
                   className={`meal-media-wrap ${hasRealImage ? 'is-photo' : 'is-icon'}`}
                   onClick={() => onPreviewImages(meal)}
@@ -170,7 +174,7 @@ export function MealsSection({
                           />
                         </View>
                         <View className='meal-progress-meta'>
-                          <Text className='meal-progress-percent'>{formatProgressText(mealProgress)}</Text>
+                          <Text className='meal-progress-percent' style={{ color: mealProgress > 100 ? PERCENT_COLOR_WARNING : PERCENT_COLOR_NORMAL }}>{formatProgressText(mealProgress)}</Text>
                           <Text className='meal-progress-text'>{targetText}</Text>
                         </View>
                       </View>
