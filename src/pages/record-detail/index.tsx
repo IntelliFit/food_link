@@ -122,6 +122,14 @@ export default function RecordDetailPage() {
   const [inviteLoading, setInviteLoading] = React.useState(false)
 
   useEffect(() => {
+    Taro.showShareMenu({
+      withShareTicket: true,
+      // @ts-ignore
+      menus: ['shareAppMessage', 'shareTimeline'],
+    })
+  }, [])
+
+  useEffect(() => {
     const loadRecord = async () => {
       const recordId = router.params?.id
 
