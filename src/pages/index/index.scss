@@ -37,7 +37,7 @@ $blue-color: #3b82f6;
 .page-content {
   position: relative;
   z-index: 1;
-  padding: 160rpx 24rpx 120rpx;
+  padding: 180rpx 32rpx 140rpx; // 增加整体padding，更舒适的边距
 }
 
 // 问候区
@@ -46,7 +46,7 @@ $blue-color: #3b82f6;
   justify-content: space-between;
   align-items: flex-start;
   padding-top: 4rpx;
-  margin-bottom: 16rpx; // 顶部紧凑
+  margin-bottom: 20rpx; // 增加间距
 }
 
 .greeting-text {
@@ -82,7 +82,7 @@ $blue-color: #3b82f6;
 
 // 日期选择器 - 新设计：滑动卡片式
 .date-selector-section {
-  margin-bottom: 12rpx; // 与热量卡片紧密连接
+  margin-bottom: 16rpx; // 增加间距
 }
 
 .date-list {
@@ -190,7 +190,7 @@ $blue-color: #3b82f6;
   background: $card-bg;
   border-radius: 32rpx;
   padding: 32rpx;
-  margin-bottom: 12rpx; // 与营养素紧密连接，形成核心数据区
+  margin-bottom: 16rpx; // 增加间距
   box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
@@ -593,7 +593,7 @@ $blue-color: #3b82f6;
 }
 
 .expiry-section {
-  margin-bottom: 20rpx; // 功能区块间距
+  margin-bottom: 24rpx; // 增加间距
 }
 
 .expiry-card {
@@ -736,7 +736,7 @@ $blue-color: #3b82f6;
 
 // 今日餐食区域
 .meals-section {
-  margin-bottom: 32rpx; // 底部区域较大间距，与页面底部形成呼吸感
+  margin-bottom: 40rpx; // 增加底部间距，更舒适的呼吸感
 }
 
 .section-header {
@@ -1021,7 +1021,7 @@ $blue-color: #3b82f6;
 
 // 统计入口区域
 .stats-entry-section {
-  margin-bottom: 20rpx; // 功能区块间距
+  margin-bottom: 24rpx; // 增加间距
 }
 
 .stats-entry-card {
@@ -1379,7 +1379,7 @@ $blue-color: #3b82f6;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16rpx;
-  margin-bottom: 12rpx; // 缩小间距，与上方合并卡片形成整体
+  margin-bottom: 24rpx; // 增加间距
 }
 
 .body-status-card {
