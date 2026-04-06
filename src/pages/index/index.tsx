@@ -29,9 +29,9 @@ import './index.scss'
 import { withAuth } from '../../utils/withAuth'
 
 // 导入拆分出的模块
-import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets, type SimpleTargetState } from './types'
-import { DEFAULT_INTAKE, WEIGHT_HISTORY_LIMIT, QUICK_WATER_AMOUNTS, WATER_GOAL_DEFAULT, DAY_NAMES, SHORT_DAY_NAMES, LEVEL_TO_GRAMS, DEFAULT_SIMPLE_TARGET } from './utils/constants'
-import { getGramsFromLevel, getLevelFromGrams, calculateCaloriesFromLevels, getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
+import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
+import { DEFAULT_INTAKE, WEIGHT_HISTORY_LIMIT, QUICK_WATER_AMOUNTS, WATER_GOAL_DEFAULT, DAY_NAMES, SHORT_DAY_NAMES } from './utils/constants'
+import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry } from './components'
 
@@ -322,49 +322,6 @@ function IndexPage() {
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
-  
-  // 目标编辑模式：simple=普通模式（滑块），precise=精确模式（数字输入）
-  const [targetMode, setTargetMode] = useState<'simple' | 'precise'>('simple')
-  
-  // 普通模式的档位状态（1-20档）
-  const [simpleTarget, setSimpleTarget] = useState<SimpleTargetState>({
-    proteinLevel: 8,   // 默认80g蛋白质
-    carbsLevel: 10,    // 默认275g碳水
-    fatLevel: 8        // 默认50g脂肪
-  })
-  
-  // 处理模式切换，同步数据
-  const handleModeSwitch = (newMode: 'simple' | 'precise') => {
-    if (newMode === targetMode) return
-    
-    if (newMode === 'precise') {
-      // 普通 -> 精确：将档位值同步到targetForm
-      const protein = getGramsFromLevel('protein', simpleTarget.proteinLevel)
-      const carbs = getGramsFromLevel('carbs', simpleTarget.carbsLevel)
-      const fat = getGramsFromLevel('fat', simpleTarget.fatLevel)
-      const calories = calculateCaloriesFromLevels(simpleTarget)
-      
-      setTargetForm({
-        calorieTarget: String(calories),
-        proteinTarget: String(protein),
-        carbsTarget: String(carbs),
-        fatTarget: String(fat)
-      })
-    } else {
-      // 精确 -> 普通：将targetForm值同步到档位
-      const proteinLevel = getLevelFromGrams('protein', Number(targetForm.proteinTarget) || 80)
-      const carbsLevel = getLevelFromGrams('carbs', Number(targetForm.carbsTarget) || 275)
-      const fatLevel = getLevelFromGrams('fat', Number(targetForm.fatTarget) || 50)
-      
-      setSimpleTarget({
-        proteinLevel,
-        carbsLevel,
-        fatLevel
-      })
-    }
-    
-    setTargetMode(newMode)
-  }
   
   const [selectedDate, setSelectedDate] = useState(normalizeTo2025(formatDateKey(new Date())))
 
@@ -1014,6 +971,7 @@ function IndexPage() {
             const macro = intakeData.macros[key]
             const animatedValue = animatedMacroValues[key]
             const animatedProgress = animatedMacroProgress[key]
+            const targetValue = macro?.target || 0
             
             return (
               <View key={key} className='macro-card'>
@@ -1056,6 +1014,13 @@ function IndexPage() {
                       </View>
                     </View>
                   </View>
+                </View>
+
+                {/* 目标值 - 仿照体重卡片样式 */}
+                <View className='macro-target-content'>
+                  <Text className='macro-target-label'>总</Text>
+                  <Text className='macro-target-value'>{formatDisplayNumber(targetValue)}</Text>
+                  <Text className='macro-target-unit'>g</Text>
                 </View>
               </View>
             )
@@ -1309,14 +1274,8 @@ function IndexPage() {
       {/* 目标编辑弹窗 */}
       <TargetEditor
         visible={showTargetEditor}
-        mode={targetMode}
-        targetMode={targetMode}
-        simpleTarget={simpleTarget}
         targetForm={targetForm}
         saving={savingTargets}
-        intakeData={intakeData}
-        onModeChange={handleModeSwitch}
-        onSimpleTargetChange={setSimpleTarget}
         onTargetFormChange={(newForm) => {
           // 同步处理targetForm变更
           const key = Object.keys(newForm).find(k => newForm[k as keyof typeof newForm] !== targetForm[k as keyof typeof targetForm])

@@ -5,6 +5,7 @@
     class="tab-item {{item.isCenter ? 'center-item' : ''}} {{selectedIndex === index ? 'selected' : ''}}"
     data-index="{{index}}"
     data-path="{{item.pagePath}}"
+    data-iscenter="{{item.isCenter}}"
     bindtap="switchTab"
   >
     <view class="icon-wrapper">

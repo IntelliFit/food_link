@@ -153,6 +153,11 @@ from database import (
     search_manual_food,
     log_unresolved_food,
     browse_manual_food_library,
+    # 运动记录
+    list_user_exercise_logs,
+    create_user_exercise_log,
+    delete_user_exercise_log,
+    get_exercise_calories_by_date,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -7726,6 +7731,204 @@ async def api_activate_prompt(
     except Exception as e:
         print(f"[api/prompts activate] 错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ===== 运动记录 API =====
+
+class ExerciseLogCreateRequest(BaseModel):
+    exercise_desc: str = Field(..., min_length=1, max_length=200, description="运动描述，如'跑步30分钟'")
+    calories_burned: int = Field(..., ge=0, le=5000, description="消耗的卡路里（千卡）")
+    date: Optional[str] = Field(None, description="记录日期（ISO格式），默认为今天")
+
+
+class ExerciseCaloriesEstimateRequest(BaseModel):
+    exercise_desc: str = Field(..., min_length=1, max_length=200, description="运动描述，如'慢跑5公里'")
+
+
+class ExerciseLogResponse(BaseModel):
+    id: str
+    exercise_desc: str
+    calories_burned: int
+    recorded_on: str
+    recorded_at: str
+
+
+@app.get("/api/exercise-logs")
+async def get_exercise_logs(
+    date: Optional[str] = Query(None, description="指定日期（ISO格式），默认为今天"),
+    start_date: Optional[str] = Query(None, description="开始日期范围"),
+    end_date: Optional[str] = Query(None, description="结束日期范围"),
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取用户的运动记录列表"""
+    user_id = user_info["user_id"]
+    
+    try:
+        # 如果指定了具体日期
+        if date:
+            target_date = _parse_date_string(date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+            logs = await list_user_exercise_logs(user_id=user_id, start_date=target_date, end_date=target_date)
+        # 如果指定了日期范围
+        elif start_date or end_date:
+            logs = await list_user_exercise_logs(
+                user_id=user_id,
+                start_date=start_date if start_date else None,
+                end_date=end_date if end_date else None
+            )
+        # 默认获取今天
+        else:
+            today = datetime.now(CHINA_TZ).date().isoformat()
+            logs = await list_user_exercise_logs(user_id=user_id, start_date=today, end_date=today)
+        
+        # 计算总消耗
+        total_calories = sum(log.get("calories_burned", 0) for log in logs)
+        
+        return {
+            "logs": logs,
+            "total_calories": total_calories,
+            "count": len(logs)
+        }
+    except Exception as e:
+        print(f"[get_exercise_logs] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取运动记录失败")
+
+
+@app.post("/api/exercise-logs")
+async def create_exercise_log(
+    body: ExerciseLogCreateRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """创建新的运动记录"""
+    user_id = user_info["user_id"]
+    recorded_on = _parse_date_string(body.date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+    
+    try:
+        row = await create_user_exercise_log(
+            user_id=user_id,
+            exercise_desc=body.exercise_desc,
+            calories_burned=body.calories_burned,
+            recorded_on=recorded_on,
+        )
+        
+        # 获取当日总消耗
+        total_burned = await get_exercise_calories_by_date(user_id=user_id, recorded_on=recorded_on)
+        
+        return {
+            "message": "运动记录已保存",
+            "item": row,
+            "today_total": total_burned,
+        }
+    except Exception as e:
+        print(f"[create_exercise_log] 错误: {e}")
+        raise HTTPException(status_code=500, detail="保存运动记录失败")
+
+
+@app.delete("/api/exercise-logs/{log_id}")
+async def delete_exercise_log(
+    log_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """删除运动记录"""
+    user_id = user_info["user_id"]
+    
+    try:
+        success = await delete_user_exercise_log(user_id=user_id, log_id=log_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="记录不存在")
+        return {"message": "已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[delete_exercise_log] 错误: {e}")
+        raise HTTPException(status_code=500, detail="删除运动记录失败")
+
+
+@app.post("/api/exercise-logs/estimate-calories")
+async def estimate_exercise_calories(
+    body: ExerciseCaloriesEstimateRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """使用 AI 估算运动消耗的卡路里"""
+    user_id = user_info["user_id"]
+    
+    try:
+        # 读取 API Key
+        api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+        if not api_key:
+            raise HTTPException(status_code=503, detail="AI 服务未配置")
+        
+        # 构建 AI 提示词
+        prompt = f"""请根据以下运动描述，估算消耗的卡路里（千卡）。
+
+运动描述：{body.exercise_desc}
+
+请只返回一个整数数字，表示估算的卡路里消耗（千卡）。
+规则：
+1. 只返回数字，不要有任何其他文字
+2. 如果无法估算，返回0
+3. 范围在 0-5000 之间
+
+示例输出：
+285"""
+
+        # 调用 AI API
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "gemini-2.5-flash-preview-04-17",
+            "messages": [
+                {"role": "system", "content": "你是一个专业的运动健身教练，擅长估算各种运动消耗的卡路里。"},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 50
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{OFOXAI_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            ai_content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            # 提取数字
+            calories = 0
+            if ai_content:
+                # 尝试直接解析
+                try:
+                    calories = int(float(ai_content.strip()))
+                except ValueError:
+                    # 使用正则提取数字
+                    import re
+                    numbers = re.findall(r'\d+', ai_content)
+                    if numbers:
+                        calories = int(numbers[0])
+            
+            # 限制范围
+            calories = max(0, min(5000, calories))
+            
+            return {
+                "estimated_calories": calories,
+                "exercise_desc": body.exercise_desc,
+                "ai_response": ai_content.strip() if ai_content else None
+            }
+            
+    except httpx.HTTPStatusError as e:
+        print(f"[estimate_exercise_calories] AI API 错误: {e}")
+        raise HTTPException(status_code=502, detail="AI 服务暂时不可用")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[estimate_exercise_calories] 错误: {e}")
+        raise HTTPException(status_code=500, detail="估算卡路里失败")
 
 
 @app.delete("/api/prompts/{prompt_id}")

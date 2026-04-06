@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-04-08
+
+- 🔧 refactor: 编辑目标对话框重构：删除普通模式，仅保留精确模式；为热量/蛋白质/碳水/脂肪四个指标增加左右加减按钮；固定步长：热量100、蛋白质/碳水50、脂肪10 `src/pages/index/components/TargetEditor.tsx` `src/pages/index/types/index.ts` `src/pages/index/index.tsx`
+- ✨ feat: 首页三大营养素卡片（蛋白质/碳水/脂肪）底部新增目标值显示：仿照体重卡片样式，显示"总XXg"格式，包含分隔线和数值样式 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🐛 fix: 系统中断导致样式异常，已恢复相关文件：首页样式文件、运动记录页面、分析加载页、记录页等 `src/pages/index/index.scss` `src/pages/index/index.tsx` `src/pages/exercise-record/index.scss` `src/pages/exercise-record/index.tsx` `src/pages/analyze-loading/index.scss` `src/pages/record/index.scss` `src/pages/record/index.tsx`
+- 🔧 refactor: 将记录菜单从独立页面改为底部弹窗形式：点击底部绿色按钮切换到首页并触发弹窗，仿照目标编辑对话框样式从底部滑出 `src/pages/index/index.tsx` `src/pages/index/components/RecordMenu.tsx` `src/pages/index/index.scss` `custom-tab-bar/index.js`
+- 🎨 style: 优化首页体重/喝水/运动卡片布局：卡片改为三等分自适应宽度（使用 `max-width: calc((100vw - 48rpx - 24rpx) / 3)`），缩小卡片内边距（20rpx 16rpx）和间距（12rpx），同步缩小字体和进度条高度，确保三卡片总宽度不超出屏幕 `src/pages/index/index.scss`
+- 🎨 style: 记录菜单页面优化：移除顶部关闭按钮和标题（避免与页面导航栏标题重复），移除功能名称中的英文副标题，功能卡片图标和文字改为水平和垂直居中 `src/pages/record-menu/index.tsx` `src/pages/record-menu/index.scss` `src/pages/record-menu/index.config.ts`
+- ✨ feat: 新增运动记录功能，支持用户输入运动描述（如"慢跑30分钟"），AI 自动估算消耗卡路里并保存 `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss` `src/utils/api.ts`
+- ✨ feat: 创建后端运动记录 API，包括获取列表、创建记录、删除记录和 AI 估算卡路里 `backend/main.py` `backend/database.py` `backend/sql/add_exercise_logs.sql`
+- ✨ feat: 首页新增运动卡片，显示当日消耗卡路里，点击进入运动记录页面 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🗃️ db: 创建 user_exercise_logs 数据表，存储运动描述、消耗卡路里和记录日期 `backend/sql/add_exercise_logs.sql`
+- ✅ test: 微信开发者工具自动化验证通过 - 首页运动卡片显示正常，点击跳转运动记录页面，页面 UI 完整，输入和提交功能正常
+
+## 2026-04-07
+
+- 🎨 style: 首页三大营养素卡片重构布局：当前摄入量放大置顶（40rpx/700weight），标签缩小（20rpx），环形图内改为百分比 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 首页样式综合优化：快到期食物徽章增加gap间距修复数字文字挤压问题；三大营养素标签缩小到20rpx、数字放大到40rpx加粗、仪表盘内改为彩色克数+灰色小g样式；体重喝水运动数字从36rpx放大到40rpx `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 修复首页体重/喝水/运动三卡片宽度溢出问题：减小间距(16rpx→12rpx)、缩小内边距(24rpx→16/12rpx)、降低字号(44→36rpx)、添加文本截断处理 `src/pages/index/index.scss`
+- 🔧 refactor: 编辑目标对话框步长调整：蛋白质/碳水固定50g步长，脂肪固定10g步长，热量保持动态步长 `src/pages/index/components/TargetEditor.tsx`
+- 🔧 refactor: 编辑目标对话框移除普通模式，仅保留精确模式；为每个指标增加加减按钮，智能步长调整（热量25/50/100，营养素1/2/5克） `src/pages/index/components/TargetEditor.tsx` `src/pages/index/index.scss` `src/pages/index/types/index.ts` `src/pages/index/index.tsx`
+- 🎨 style: 简化目标编辑器样式：去掉绿色边框高亮、去掉步长提示文字、输入框改为浅灰背景，整体更清爽简约 `src/pages/index/components/TargetEditor.tsx` `src/pages/index/index.scss`
+- 🔧 revert: 回滚编辑目标对话框到滑块版本，恢复 Slider 组件和 CalorieWavePool 波浪池预览 `src/pages/index/components/TargetEditor.tsx` `src/pages/index/index.scss`
+- 🎨 style: 优化编辑目标对话框：波块选择器改为横向左右滑动（ScrollView 实现），去除所有图标，布局改为紧凑单行样式（标签+数值在左，选择器在右），对话框支持内部滚动 `src/pages/index/components/TargetEditor.tsx` `src/components/HorizontalWheelPicker/` `src/pages/index/index.scss`
+- 🎨 style: 重构编辑目标对话框UI，移除三个滑块和卡路里水池，改用横向波块滚轮选择器（仿 AgePicker 设计），第一个为总热量（800-4000kcal），后为蛋白质/碳水/脂肪三档 `src/pages/index/components/TargetEditor.tsx` `src/components/HorizontalWheelPicker/` `src/pages/index/index.scss`
+- 🐛 fix: 修复食物保质期"创建提醒"报错问题，统一使用旧版 API 结构（`/api/food-expiry`），字段映射：storage_type -> storage_location, quantity_note -> quantity_text, expire_date -> deadline_date, 移除不支持的数据库字段 `src/pages/expiry-edit/index.tsx` `src/utils/api.ts`
+- 🎨 style: 首页蛋白质/碳水/脂肪卡片顶部显示目标值（40rpx黑色加粗左对齐），标签文字黑色无图标 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 首页体重/喝水/运动卡片去除图标，简化header布局 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+
 ## 2026-04-06
 
 - 🎨 style: 替换拍照页相册按钮的 iconfont 图标为 SVG 图片，使用 Image 组件引用本地文件，保持 82rpx 尺寸和白色阴影效果 `src/pages/record/index.tsx` `src/pages/record/index.scss` `src/assets/icons/album.svg`

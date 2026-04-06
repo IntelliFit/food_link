@@ -97,7 +97,17 @@ Component({
     },
     
     switchTab(e) {
-      const { index, path } = e.currentTarget.dataset
+      const { index, path, iscenter } = e.currentTarget.dataset
+
+      // 中间记录按钮特殊处理：切换到首页并显示记录菜单弹窗
+      if (iscenter) {
+        // 设置标记，让首页显示记录菜单弹窗
+        wx.setStorageSync('showRecordMenuModal', true)
+        // 切换到首页
+        wx.switchTab({ url: '/pages/index/index' })
+        return
+      }
+
       this.setData({ selectedIndex: index })
       wx.switchTab({ url: path })
     }

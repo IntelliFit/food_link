@@ -44,24 +44,11 @@ export interface MacroTargets {
   fat: number
 }
 
-// 普通模式目标档位状态
-export interface SimpleTargetState {
-  proteinLevel: number  // 1-20
-  carbsLevel: number    // 1-20
-  fatLevel: number      // 1-20
-}
-
-// 目标编辑组件Props
+// 目标编辑组件Props（简化版 - 仅精确模式）
 export interface TargetEditorProps {
   visible: boolean
-  mode: 'simple' | 'precise'
-  targetMode: 'simple' | 'precise'
-  simpleTarget: SimpleTargetState
   targetForm: TargetFormState
   saving: boolean
-  intakeData: HomeIntakeData
-  onModeChange: (mode: 'simple' | 'precise') => void
-  onSimpleTargetChange: (target: SimpleTargetState) => void
   onTargetFormChange: (form: TargetFormState) => void
   onSave: () => void
   onClose: () => void

@@ -4,6 +4,7 @@ export default defineAppConfig({
     'pages/community/index',
     'pages/checkin-leaderboard/index',
     'pages/record/index',
+    'pages/record-menu/index',
     'pages/record-text/index',
     'pages/record-manual/index',
     'pages/analyze/index',

@@ -4415,3 +4415,97 @@ async def log_unresolved_food(raw_name: str) -> None:
                 .execute()
     except Exception as e:
         print(f"[log_unresolved_food] 记录未命中词失败: {e}")
+
+
+# ===== 运动记录相关函数 =====
+
+async def list_user_exercise_logs(
+    user_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """读取用户运动记录（按时间倒序）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = (
+            supabase.table("user_exercise_logs")
+            .select("*")
+            .eq("user_id", user_id)
+        )
+        if start_date:
+            query = query.gte("recorded_on", start_date)
+        if end_date:
+            query = query.lte("recorded_on", end_date)
+        query = query.order("recorded_at", desc=True)
+        if limit:
+            query = query.limit(limit)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_user_exercise_logs] 错误: {e}")
+        raise
+
+
+async def create_user_exercise_log(
+    user_id: str,
+    exercise_desc: str,
+    calories_burned: int,
+    recorded_on: Optional[str] = None,
+) -> Dict[str, Any]:
+    """新增一条运动记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        day = recorded_on or datetime.now(CHINA_TZ).date().isoformat()
+        row = {
+            "user_id": user_id,
+            "exercise_desc": exercise_desc.strip(),
+            "calories_burned": int(calories_burned),
+            "recorded_on": day,
+        }
+        result = supabase.table("user_exercise_logs").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("新增运动记录失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_user_exercise_log] 错误: {e}")
+        raise
+
+
+async def delete_user_exercise_log(user_id: str, log_id: str) -> bool:
+    """删除指定ID的运动记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_exercise_logs")
+            .delete()
+            .eq("id", log_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return len(result.data or []) > 0
+    except Exception as e:
+        print(f"[delete_user_exercise_log] 错误: {e}")
+        raise
+
+
+async def get_exercise_calories_by_date(user_id: str, recorded_on: str) -> int:
+    """获取用户指定日期运动消耗的总卡路里。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_exercise_logs")
+            .select("calories_burned")
+            .eq("user_id", user_id)
+            .eq("recorded_on", recorded_on)
+            .execute()
+        )
+        total = sum((row.get("calories_burned") or 0) for row in (result.data or []))
+        return total
+    except Exception as e:
+        print(f"[get_exercise_calories_by_date] 错误: {e}")
+        return 0

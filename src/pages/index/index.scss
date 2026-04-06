@@ -414,6 +414,36 @@ $blue-color: #3b82f6;
   line-height: 26rpx;
 }
 
+// 目标值显示 - 仿照体重卡片样式
+.macro-target-content {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4rpx;
+  margin-top: 12rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid #f1f5f9;
+}
+
+.macro-target-label {
+  font-size: 22rpx;
+  color: $text-tertiary;
+  line-height: 32rpx;
+}
+
+.macro-target-value {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 40rpx;
+}
+
+.macro-target-unit {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+}
+
 // 快捷记录区域
 .section-title {
   font-size: 32rpx;

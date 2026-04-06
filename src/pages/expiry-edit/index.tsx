@@ -6,15 +6,15 @@ import {
   getFoodExpiryItem,
   updateFoodExpiryItem,
   type FoodExpiryItem,
-  type FoodExpiryStorageType,
+  type CreateFoodExpiryRequest,
 } from '../../utils/api'
 
 import './index.scss'
 
-const STORAGE_OPTIONS: Array<{ value: FoodExpiryStorageType; label: string }> = [
-  { value: 'room_temp', label: '常温' },
-  { value: 'refrigerated', label: '冷藏' },
-  { value: 'frozen', label: '冷冻' },
+const STORAGE_OPTIONS = [
+  { value: '常温', label: '常温' },
+  { value: '冷藏', label: '冷藏' },
+  { value: '冷冻', label: '冷冻' },
 ]
 
 const CATEGORY_OPTIONS = [
@@ -67,12 +67,10 @@ export default function ExpiryEditPage() {
   const [foodName, setFoodName] = useState('')
   const [category, setCategory] = useState('乳制品')
   const [customCategory, setCustomCategory] = useState('')
-  const [storageType, setStorageType] = useState<FoodExpiryStorageType>('refrigerated')
-  const [quantityNote, setQuantityNote] = useState('')
-  const [expireDate, setExpireDate] = useState(addDays(3))
-  const [openedDate, setOpenedDate] = useState('')
+  const [storageLocation, setStorageLocation] = useState('冷藏')
+  const [quantityText, setQuantityText] = useState('')
+  const [deadlineDate, setDeadlineDate] = useState(addDays(3))
   const [note, setNote] = useState('')
-  const [status, setStatus] = useState<FoodExpiryItem['status']>('active')
 
   const pageTitle = useMemo(() => (isEdit ? '编辑保质期' : '新增保质期'), [isEdit])
   const isCustomCategory = useMemo(() => !CATEGORY_OPTIONS.includes(category), [category])
@@ -87,15 +85,19 @@ export default function ExpiryEditPage() {
 
   const hydrateForm = (item: FoodExpiryItem) => {
     setFoodName(item.food_name || '')
-    const nextCategory = item.category || '乳制品'
+    // 优先使用 category，如果不存在则尝试从 storage_location 推断分类
+    const storageLocationFromItem = item.storage_location || '冷藏'
+    const inferredCategory = storageLocationFromItem === '常温' ? '主食' : '乳制品'
+    const nextCategory = inferredCategory
     setCategory(nextCategory)
     setCustomCategory(CATEGORY_OPTIONS.includes(nextCategory) ? '' : nextCategory)
-    setStorageType(item.storage_type || 'refrigerated')
-    setQuantityNote(item.quantity_note || '')
-    setExpireDate(item.expire_date || addDays(3))
-    setOpenedDate(item.opened_date || '')
+    setStorageLocation(storageLocationFromItem)
+    setQuantityText(item.quantity_text || '')
+    // 数据库使用 deadline_at，格式为 ISO 字符串，需要提取日期部分
+    const deadlineAt = (item as any).deadline_at || addDays(3)
+    const datePart = deadlineAt.split('T')[0]
+    setDeadlineDate(datePart || addDays(3))
     setNote(item.note || '')
-    setStatus(item.status || 'active')
   }
 
   const loadDetail = useCallback(async () => {
@@ -119,8 +121,14 @@ export default function ExpiryEditPage() {
     setFoodName(preset.food_name)
     setCategory(preset.category)
     setCustomCategory('')
-    setStorageType(preset.storage_type)
-    setExpireDate(addDays(preset.days))
+    // 映射 storage_type 到 storage_location 标签
+    const locationMap: Record<string, string> = {
+      'room_temp': '常温',
+      'refrigerated': '冷藏',
+      'frozen': '冷冻',
+    }
+    setStorageLocation(locationMap[preset.storage_type] || '冷藏')
+    setDeadlineDate(addDays(preset.days))
   }
 
   const handleSubmit = async () => {
@@ -128,25 +136,18 @@ export default function ExpiryEditPage() {
       Taro.showToast({ title: '请输入食物名称', icon: 'none' })
       return
     }
-    if (!expireDate) {
+    if (!deadlineDate) {
       Taro.showToast({ title: '请选择到期日期', icon: 'none' })
       return
     }
-    if (openedDate && openedDate > expireDate) {
-      Taro.showToast({ title: '开封日期不能晚于到期日期', icon: 'none' })
-      return
-    }
 
-    const payload = {
+    const payload: CreateFoodExpiryRequest = {
       food_name: foodName.trim(),
-      category: normalizedCategory,
-      storage_type: storageType,
-      quantity_note: quantityNote.trim(),
-      expire_date: expireDate,
-      opened_date: openedDate || undefined,
-      note: note.trim(),
-      source_type: 'manual' as const,
-      status,
+      quantity_text: quantityText.trim() || undefined,
+      storage_location: storageLocation.trim() || undefined,
+      note: note.trim() || undefined,
+      deadline_precision: 'date',
+      deadline_date: deadlineDate,
     }
 
     Taro.showLoading({ title: isEdit ? '保存中...' : '创建中...' })
@@ -254,8 +255,8 @@ export default function ExpiryEditPage() {
               {STORAGE_OPTIONS.map((option) => (
                 <View
                   key={option.value}
-                  className={`expiry-choice-chip ${storageType === option.value ? 'is-active' : ''}`}
-                  onClick={() => setStorageType(option.value)}
+                  className={`expiry-choice-chip ${storageLocation === option.value ? 'is-active' : ''}`}
+                  onClick={() => setStorageLocation(option.value)}
                 >
                   <Text>{option.label}</Text>
                 </View>
@@ -268,32 +269,16 @@ export default function ExpiryEditPage() {
             <Input
               className='expiry-input'
               placeholder='例如 2 盒 / 半袋 / 3 个'
-              value={quantityNote}
-              onInput={(e) => setQuantityNote(e.detail.value)}
+              value={quantityText}
+              onInput={(e) => setQuantityText(e.detail.value)}
             />
           </View>
 
           <View className='expiry-edit-block'>
             <Text className='expiry-edit-label'>到期日期</Text>
-            <Picker mode='date' value={expireDate} onChange={(e) => setExpireDate(e.detail.value)}>
+            <Picker mode='date' value={deadlineDate} onChange={(e) => setDeadlineDate(e.detail.value)}>
               <View className='expiry-picker'>
-                <Text>{expireDate || '请选择到期日期'}</Text>
-              </View>
-            </Picker>
-          </View>
-
-          <View className='expiry-edit-block'>
-            <View className='expiry-inline-head'>
-              <Text className='expiry-edit-label'>开封日期</Text>
-              {!!openedDate && (
-                <Text className='expiry-clear-text' onClick={() => setOpenedDate('')}>
-                  清空
-                </Text>
-              )}
-            </View>
-            <Picker mode='date' value={openedDate || formatDate(new Date())} onChange={(e) => setOpenedDate(e.detail.value)}>
-              <View className='expiry-picker'>
-                <Text>{openedDate || '可选，用于记录已开封食物'}</Text>
+                <Text>{deadlineDate || '请选择到期日期'}</Text>
               </View>
             </Picker>
           </View>

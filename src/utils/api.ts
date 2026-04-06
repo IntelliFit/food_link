@@ -1403,6 +1403,78 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   return res.data as HomeDashboard
 }
 
+// ========== 新保质期 API (/api/expiry/items) ==========
+
+export async function getExpiryItems(status: 'pending' | 'completed' = 'pending'): Promise<{ items: FoodExpiryItem[] }> {
+  const res = await authenticatedRequest(`/api/expiry/items?status=${encodeURIComponent(status)}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取食物保质期列表失败')
+  }
+  return res.data as { items: FoodExpiryItem[] }
+}
+
+export async function createExpiryItem(data: UpsertFoodExpiryItemRequest): Promise<{ message: string; item: FoodExpiryItem }> {
+  const res = await authenticatedRequest('/api/expiry/items', {
+    method: 'POST',
+    data,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '创建食物保质期失败')
+  }
+  return res.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function getExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
+  const res = await authenticatedRequest(`/api/expiry/items/${id}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取食物保质期详情失败')
+  }
+  return res.data as { item: FoodExpiryItem }
+}
+
+export async function updateExpiryItem(id: string, data: UpsertFoodExpiryItemRequest): Promise<{ message: string; item: FoodExpiryItem }> {
+  const res = await authenticatedRequest(`/api/expiry/items/${id}`, {
+    method: 'PUT',
+    data,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '更新食物保质期失败')
+  }
+  return res.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function completeExpiryItem(id: string): Promise<{ message: string; item: FoodExpiryItem }> {
+  const res = await authenticatedRequest(`/api/expiry/items/${id}/complete`, {
+    method: 'POST',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '标记已吃完失败')
+  }
+  return res.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function deleteExpiryItem(id: string): Promise<{ message: string }> {
+  const res = await authenticatedRequest(`/api/expiry/items/${id}`, {
+    method: 'DELETE',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '删除食物保质期失败')
+  }
+  return res.data as { message: string }
+}
+
+// ========== 旧保质期 API (/api/food-expiry) - 兼容旧页面 ==========
+
 export async function getFoodExpiryList(status: 'pending' | 'completed' = 'pending'): Promise<{ items: FoodExpiryItem[] }> {
   const res = await authenticatedRequest(`/api/food-expiry/list?status=${encodeURIComponent(status)}`, {
     method: 'GET',
@@ -3068,4 +3140,68 @@ export async function applyUserRecipe(recipeId: string, mealType?: string): Prom
     throw new Error((response.data as any)?.detail || '使用食谱失败')
   }
   return response.data as { message: string; record_id: string }
+}
+
+// ===== 运动记录 API =====
+
+/** 运动记录项 */
+export interface ExerciseLogItem {
+  id: string
+  exercise_desc: string
+  calories_burned: number
+  recorded_on: string
+  recorded_at: string
+}
+
+/** 获取运动记录列表 */
+export async function getExerciseLogs(params?: { date?: string; start_date?: string; end_date?: string }): Promise<{ logs: ExerciseLogItem[]; total_calories: number; count: number }> {
+  const queryParams = new URLSearchParams()
+  if (params?.date) queryParams.set('date', params.date)
+  if (params?.start_date) queryParams.set('start_date', params.start_date)
+  if (params?.end_date) queryParams.set('end_date', params.end_date)
+
+  const url = `/api/exercise-logs${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+  const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取运动记录失败')
+  }
+  return response.data as { logs: ExerciseLogItem[]; total_calories: number; count: number }
+}
+
+/** 创建运动记录 */
+export async function createExerciseLog(data: { exercise_desc: string; calories_burned: number; date?: string }): Promise<{ message: string; item: ExerciseLogItem; today_total: number }> {
+  const response = await authenticatedRequest('/api/exercise-logs', {
+    method: 'POST',
+    data,
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '保存运动记录失败')
+  }
+  return response.data as { message: string; item: ExerciseLogItem; today_total: number }
+}
+
+/** 删除运动记录 */
+export async function deleteExerciseLog(logId: string): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/exercise-logs/${logId}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '删除运动记录失败')
+  }
+  return response.data as { message: string }
+}
+
+/** AI 估算运动卡路里 */
+export async function estimateExerciseCalories(exerciseDesc: string): Promise<{ estimated_calories: number; exercise_desc: string; ai_response?: string }> {
+  const response = await authenticatedRequest('/api/exercise-logs/estimate-calories', {
+    method: 'POST',
+    data: { exercise_desc: exerciseDesc },
+    timeout: 35000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '估算卡路里失败')
+  }
+  return response.data as { estimated_calories: number; exercise_desc: string; ai_response?: string }
 }

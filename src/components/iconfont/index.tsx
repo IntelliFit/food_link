@@ -159,3 +159,33 @@ export const IconSend = ({ size = 48, color = '#000000', className = '' }: IconP
     />
   )
 }
+
+/** 相册/图片图标 */
+export const IconAlbum = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-shiwu ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 编辑/手写图标 */
+export const IconEdit = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-shouxieqianming ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 历史/记录图标 */
+export const IconHistory = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-jishiben ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
