@@ -7,8 +7,8 @@
 ## 2026-04-09
 
 - 🎨 style: 增加首页整体padding和模块间距：页面padding 24rpx→32rpx/120rpx→140rpx，模块间距全面增加 16→20/12→16/12→16/12→24/24→40rpx，更舒适的视觉空间 `src/pages/index/index.scss`
+- 🎨 style: 三大营养素改为水平三列布局：每个卡片内部左右分栏，左侧名称+当前摄入/目标克数，右侧仪表盘百分比；三卡片水平并排 `src/pages/index/index.scss`
 - 🎨 style: 三大营养素改为左右布局：左侧名称+当前摄入/目标克数，右侧仪表盘显示百分比；去除背景色，垂直排列在热量卡片内 `src/pages/index/index.tsx` `src/pages/index/index.scss`
-- 🎨 style: 首页布局重构：三大营养素合并入热量总览卡片，内联水平排列（带分隔线），与身体状态卡片大小一致；身体状态下间距缩小至12rpx `src/pages/index/index.tsx` `src/pages/index/index.scss`
 - 🎨 style: 优化首页组件间距层次：问候区16rpx→日期12rpx→热量12rpx→营养素24rpx（核心数据区紧密连接），身体状态20rpx，统计/快到期20rpx，餐食32rpx（底部呼吸感） `src/pages/index/index.scss`
 - 🎨 style: 蛋白质/碳水/脂肪卡片重构：目标值「XXg」移到标题上方大字体显示，仪表盘半径扩大到40px（容器120rpx，SVG r=40，实际显示80rpx直径） `src/pages/index/index.tsx` `src/pages/index/index.scss`
 - 🎨 style: 首页卡片背景色改为柔和米白：将 `$card-bg` 变量从纯白 `#fff` 改为 `#FEFEFE`，使所有组件背景更柔和护眼 `src/pages/index/index.scss`
