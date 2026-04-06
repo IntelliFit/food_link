@@ -942,8 +942,8 @@ function IndexPage() {
           onSelect={handleDateSelect} 
         />
 
-        {/* 热量总览卡片 */}
-        <View className='main-card'>
+        {/* 热量总览卡片 + 三大营养素合并 */}
+        <View className='main-card combined-card'>
           <View className='main-card-header'>
             <View className='main-card-title'>
               <Text className='card-label'>剩余可摄入</Text>
@@ -966,7 +966,7 @@ function IndexPage() {
               </View>
             </View>
           </View>
-          
+
           <View className='progress-section'>
             <View className='progress-bar-bg thick'>
               <View
@@ -975,67 +975,69 @@ function IndexPage() {
               />
             </View>
           </View>
-        </View>
 
-        {/* 三大营养素卡片 - 带动画效果 */}
-        <View className='macros-section'>
-          {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
-            const macro = intakeData.macros[key]
-            const animatedValue = animatedMacroValues[key]
-            const animatedProgress = animatedMacroProgress[key]
-            const targetValue = macro?.target || 0
-            
-            return (
-              <View key={key} className='macro-card'>
-                {/* 目标值 - 移到标题上方 */}
-                <View className='macro-target-top'>
-                  <Text className='macro-target-top-value'>{formatDisplayNumber(targetValue)}</Text>
-                  <Text className='macro-target-top-unit'>g</Text>
-                </View>
+          {/* 分隔线 */}
+          <View className='macros-divider' />
 
-                <View className='macro-card-header'>
-                  <View className='macro-title-wrap'>
-                    <View className='macro-icon'>
-                      <Icon size={16} color='#9ca3af' />
-                    </View>
-                    <Text className='macro-label'>{label}</Text>
+          {/* 三大营养素 - 合并到热量卡片内 */}
+          <View className='macros-section-inline'>
+            {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
+              const macro = intakeData.macros[key]
+              const animatedValue = animatedMacroValues[key]
+              const animatedProgress = animatedMacroProgress[key]
+              const targetValue = macro?.target || 0
+
+              return (
+                <View key={key} className='macro-card-inline'>
+                  <View className='macro-target-top'>
+                    <Text className='macro-target-top-value'>{formatDisplayNumber(targetValue)}</Text>
+                    <Text className='macro-target-top-unit'>g</Text>
                   </View>
-                </View>
 
-                <View className='macro-gauge-wrap'>
-                  <View className='macro-gauge-box'>
-                    <View className='macro-gauge'>
-                      <View
-                        className='macro-ring-bg'
-                        style={{
-                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='50' cy='50' r='40' fill='none' stroke='${color}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 40}' stroke-dashoffset='${2 * Math.PI * 40 * (1 - animatedProgress / 100)}'/></svg>`
-                          )}")`,
-                          backgroundSize: '100% 100%'
-                        }}
-                      />
-                      <View className='macro-gauge-center'>
-                        {isSwitchingDate ? (
-                          <View className='loading-dots'>
-                            <View className='loading-dot' />
-                            <View className='loading-dot' />
-                            <View className='loading-dot' />
-                          </View>
-                        ) : (
-                          <>
-                            <Text className='macro-gauge-value' style={{ color }}>
-                              {formatDisplayNumber(animatedValue)}
-                            </Text>
-                            <Text className='macro-gauge-unit'>克</Text>
-                          </>
-                        )}
+                  <View className='macro-card-header-inline'>
+                    <View className='macro-title-wrap-inline'>
+                      <View className='macro-icon-inline'>
+                        <Icon size={14} color='#9ca3af' />
+                      </View>
+                      <Text className='macro-label-inline'>{label}</Text>
+                    </View>
+                  </View>
+
+                  <View className='macro-gauge-wrap-inline'>
+                    <View className='macro-gauge-box-inline'>
+                      <View className='macro-gauge-inline'>
+                        <View
+                          className='macro-ring-bg-inline'
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+                              `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='50' cy='50' r='40' fill='none' stroke='${color}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 40}' stroke-dashoffset='${2 * Math.PI * 40 * (1 - animatedProgress / 100)}'/></svg>`
+                            )}")`,
+                            backgroundSize: '100% 100%'
+                          }}
+                        />
+                        <View className='macro-gauge-center-inline'>
+                          {isSwitchingDate ? (
+                            <View className='loading-dots-inline'>
+                              <View className='loading-dot' />
+                              <View className='loading-dot' />
+                              <View className='loading-dot' />
+                            </View>
+                          ) : (
+                            <>
+                              <Text className='macro-gauge-value-inline' style={{ color }}>
+                                {formatDisplayNumber(animatedValue)}
+                              </Text>
+                              <Text className='macro-gauge-unit-inline'>克</Text>
+                            </>
+                          )}
+                        </View>
                       </View>
                     </View>
                   </View>
                 </View>
-              </View>
-            )
-          })}
+              )
+            })}
+          </View>
         </View>
 
         {/* 体重/喝水状态卡片 */}
