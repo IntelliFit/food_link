@@ -1,7 +1,8 @@
 import { View, Text, ScrollView } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getStatsSummary, generateStatsInsight, saveStatsInsight, type StatsSummary } from '../../utils/api'
+import { Switch } from '@taroify/core'
+import { getStatsSummary, generateStatsInsight, saveStatsInsight, getBodyMetricsSummary, type StatsSummary } from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
@@ -70,6 +71,7 @@ export default function StatsPage() {
   const [isTyping, setIsTyping] = useState(false)
   const [insightActionLoading, setInsightActionLoading] = useState(false)
   const [insightError, setInsightError] = useState<string | null>(null)
+  const [showCalories, setShowCalories] = useState(false)
 
   const fetchStats = useCallback(async (r: 'week' | 'month') => {
     setLoading(true)
@@ -81,8 +83,33 @@ export default function StatsPage() {
         setLoading(false)
         return
       }
-      const res = await getStatsSummary(r)
-      setData(res)
+      // 并行获取统计数据和体重/喝水数据
+      const [statsRes, bodyMetricsRes] = await Promise.all([
+        getStatsSummary(r),
+        getBodyMetricsSummary(r).catch(() => null)
+      ])
+      
+      // 如果 stats 返回的 body_metrics 为空或缺失，使用 bodyMetricsRes 的数据
+      if (bodyMetricsRes) {
+        // 检查是否有有效的体重或喝水数据
+        const hasWeightData = bodyMetricsRes.weight_entries && bodyMetricsRes.weight_entries.length > 0
+        const hasWaterData = bodyMetricsRes.water_daily && bodyMetricsRes.water_daily.some((d: any) => d.total > 0)
+        
+        if (hasWeightData || hasWaterData) {
+          statsRes.body_metrics = {
+            weight_entries: bodyMetricsRes.weight_entries || [],
+            latest_weight: bodyMetricsRes.latest_weight || null,
+            previous_weight: bodyMetricsRes.previous_weight || null,
+            weight_change: bodyMetricsRes.weight_change ?? null,
+            water_daily: bodyMetricsRes.water_daily || [],
+            water_goal_ml: bodyMetricsRes.water_goal_ml || 2000,
+            total_water_ml: bodyMetricsRes.total_water_ml || 0,
+            avg_daily_water_ml: bodyMetricsRes.avg_daily_water_ml || 0,
+            water_recorded_days: bodyMetricsRes.water_recorded_days || 0
+          }
+        }
+      }
+      setData(statsRes)
     } catch (e: unknown) {
       setError((e as Error).message || '获取统计失败')
     } finally {
@@ -289,10 +316,7 @@ export default function StatsPage() {
   return (
     <View className='stats-page'>
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
-        <View className='page-header'>
-          <Text className='page-title'>饮食记录</Text>
-          <Text className='page-subtitle'>先看日历图，再往下看趋势和营养结构</Text>
-        </View>
+        {/* 页面头部已移除 - 标题和描述不再需要 */}
 
         {/* 周/月切换 - Segmented Control，切换时显示加载 */}
         <View className='tabs-container'>
@@ -317,63 +341,69 @@ export default function StatsPage() {
           </View>
         </View>
 
-        <View className='stats-card heatmap-card'>
-          <View className='card-header'>
-            <Text className='iconfont icon-rili chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>日历图</Text>
-              <Text className='card-subtitle'>灰色未记录，橙色吃多了，蓝色吃少了</Text>
-            </View>
-          </View>
-          <View className='heatmap-legend'>
-            <View className='heatmap-legend-item'>
-              <View className='heatmap-legend-swatch none' />
-              <Text className='heatmap-legend-text'>未记录</Text>
-            </View>
-            <View className='heatmap-legend-item'>
-              <View className='heatmap-legend-swatch surplus' />
-              <Text className='heatmap-legend-text'>吃多了</Text>
-            </View>
-            <View className='heatmap-legend-item'>
-              <View className='heatmap-legend-swatch deficit' />
-              <Text className='heatmap-legend-text'>吃少了</Text>
-            </View>
-          </View>
-          {heatmapCells.length > 0 ? (
-            <>
-              <View className='heatmap-grid'>
-                {heatmapCells.map((item) => (
+        {/* 日历图 - 根据 range 显示不同视图 */}
+        {range === 'week' ? (
+          // 近一周：首页风格横向排列（7天）
+          <View className='date-selector-section'>
+            <View className='date-list'>
+              {heatmapCells.slice(-7).map((item) => {
+                let circleClass = 'is-empty'
+                if (item.calories > 0) {
+                  if (item.state === 'surplus') {
+                    circleClass = 'is-over'
+                  } else {
+                    circleClass = 'is-recorded'
+                  }
+                }
+                
+                const date = new Date(`${item.date}T12:00:00`)
+                const dayNames = ['日', '一', '二', '三', '四', '五', '六']
+                const dayName = dayNames[date.getDay()]
+                const dayNum = item.date.slice(-2).replace(/^0/, '')
+                
+                return (
                   <View
                     key={item.date}
-                    className={`heatmap-cell ${item.state} ${item.state !== 'none' ? `level-${item.level}` : ''} ${item.calories > 0 ? 'is-clickable' : ''}`}
+                    className={`date-item ${item.calories > 0 ? 'is-clickable' : ''}`}
+                    onClick={() => item.calories > 0 && openDayRecordPage(item.date)}
+                  >
+                    <Text className='date-day-name'>{dayName}</Text>
+                    <View className={`date-day-circle ${circleClass}`}>
+                      <Text className='date-num-text'>{dayNum}</Text>
+                    </View>
+                  </View>
+                )
+              })}
+            </View>
+          </View>
+        ) : (
+          // 近一月：日历网格视图（30天，约5行）
+          <View className='stats-card heatmap-card'>
+            <View className='heatmap-grid month-view'>
+              {heatmapCells.slice(-30).map((item) => {
+                let circleClass = 'is-empty'
+                if (item.calories > 0) {
+                  if (item.state === 'surplus') {
+                    circleClass = 'is-over'
+                  } else {
+                    circleClass = 'is-recorded'
+                  }
+                }
+                
+                return (
+                  <View
+                    key={item.date}
+                    className={`heatmap-cell ${circleClass} ${item.calories > 0 ? 'is-clickable' : ''}`}
                     onClick={() => item.calories > 0 && openDayRecordPage(item.date)}
                   >
                     <Text className='heatmap-cell-label'>{item.date.slice(-2)}</Text>
                     <View className='heatmap-cell-dot' />
                   </View>
-                ))}
-              </View>
-              {activeHeatmapCell ? (
-                <View className='heatmap-summary'>
-                  <Text className='heatmap-summary-text'>
-                    {activeHeatmapCell.calories > 0
-                      ? `${activeHeatmapCell.date} ${activeHeatmapCell.state === 'surplus' ? '吃多了' : '吃少了'} ${Math.abs(Math.round(activeHeatmapCell.delta))} kcal`
-                      : `最近周期内暂无饮食记录`}
-                  </Text>
-                  {activeHeatmapCell.calories > 0 && (
-                    <View className='heatmap-link-btn' onClick={() => openDayRecordPage(activeHeatmapCell.date)}>
-                      <Text className='heatmap-link-btn-text'>查看当天记录</Text>
-                    </View>
-                  )}
-                </View>
-              ) : null}
-            </>
-          ) : (
-            <View className='chart-empty-state'>
-              <Text className='empty-text'>暂无记录热图</Text>
+                )
+              })}
             </View>
-          )}
-        </View>
+          </View>
+        )}
 
         {/* 热量盈缺看板 - Hero Card */}
         <View className={`stats-card hero-card ${isSurplus ? 'surplus-mode' : 'deficit-mode'}`}>
@@ -421,27 +451,40 @@ export default function StatsPage() {
         </View>
 
         {/* 每日摄入趋势 - Bar Chart */}
-        {/* 每日摄入趋势 - Bar Chart */}
         <View className='stats-card chart-card'>
-          <View className='card-header'>
-            <Text className='iconfont icon-shangzhang chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>摄入趋势</Text>
-              <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '最近 14 天'}</Text>
+          <View className='card-header chart-card-header'>
+            <View className='chart-title-group'>
+              <Text className='iconfont icon-shangzhang chart-title-icon' />
+              <View className='card-header-copy'>
+                <Text className='card-title'>摄入趋势</Text>
+                <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '最近 14 天'}</Text>
+              </View>
+            </View>
+            <View className='chart-switch-wrap'>
+              <Text className='chart-switch-label'>显示数值</Text>
+              <Switch
+                className='chart-switch'
+                checked={showCalories}
+                onChange={(v) => setShowCalories(Boolean(typeof v === 'object' ? v.detail?.value : v))}
+                style={{ '--switch-checked-background-color': '#00bc7d' } as CSSProperties}
+              />
             </View>
           </View>
-            {chartDays.length > 0 ? (
-              <View className='bar-chart-container'>
-                {chartDays.map((item) => {
-                  const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10)
-                  return (
-                    <View key={item.date} className='chart-col'>
-                      <View className='bar-wrapper'>
-                        <View
-                          className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
-                          style={{ height: `${heightPct}%` }}
-                        ></View>
-                      </View>
+          {chartDays.length > 0 ? (
+            <View className='bar-chart-container'>
+              {chartDays.map((item) => {
+                const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10)
+                return (
+                  <View key={item.date} className='chart-col'>
+                    {showCalories && (
+                      <Text className='bar-calorie-text'>{Math.round(item.calories)}</Text>
+                    )}
+                    <View className='bar-wrapper'>
+                      <View
+                        className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
+                        style={{ height: `${heightPct}%` }}
+                      ></View>
+                    </View>
                     <Text className='bar-label'>{item.date.slice(5)}</Text>
                   </View>
                 )
@@ -503,28 +546,47 @@ export default function StatsPage() {
           </View>
         </View>
 
-        {/* 饮食结构 - Meal Structure */}
+        {/* 饮食结构 - Meal Structure 仪表盘风格 */}
         <View className='stats-card meal-structure-card'>
           <View className='card-header'>
             <Text className='iconfont icon-canciguanli chart-title-icon' />
             <Text className='card-title'>餐次结构</Text>
           </View>
-          <View className='meal-grid'>
-              {(['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'] as const).map((key) => {
-                const cal = byMeal[key]
-                const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
-                const MealIcon = MEAL_ICONS[key]
-                return (
-                <View key={key} className='meal-item'>
-                  <View className='meal-icon-box' style={{ backgroundColor: `${MEAL_ICON_COLORS[key]}14` }}>
-                    <MealIcon size={36} color={MEAL_ICON_COLORS[key]} />
+          <View className='meal-gauges-grid'>
+            {(['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'] as const).map((key) => {
+              const cal = byMeal[key]
+              const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
+              const MealIcon = MEAL_ICONS[key]
+              const color = MEAL_ICON_COLORS[key]
+              const radius = 43
+              const circumference = 2 * Math.PI * radius
+              const progress = Math.min(pct / 100, 1)
+              
+              return (
+                <View key={key} className='meal-gauge-item'>
+                  <View className='meal-gauge-left'>
+                    <View className='meal-gauge-icon-wrap' style={{ backgroundColor: `${color}14` }}>
+                      <MealIcon size={20} color={color} />
+                    </View>
+                    <Text className='meal-gauge-label'>{MEAL_NAMES[key]}</Text>
+                    <Text className='meal-gauge-percent' style={{ color }}>{pct.toFixed(1)}%</Text>
                   </View>
-                  <View className='meal-data'>
-                    <Text className='meal-name'>{MEAL_NAMES[key]}</Text>
-                    <Text className='meal-cal'>{cal.toFixed(0)}</Text>
-                  </View>
-                  <View className='meal-pct'>
-                    <Text>{pct.toFixed(1)}%</Text>
+                  
+                  <View className='meal-gauge-right'>
+                    <View className='meal-gauge-circle'>
+                      <View
+                        className='meal-gauge-ring'
+                        style={{
+                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='${radius}' fill='none' stroke='#f0f0f0' stroke-width='12'/><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${circumference}' stroke-dashoffset='${circumference * (1 - progress)}'/></svg>`
+                          )}")`,
+                          backgroundSize: '100% 100%'
+                        }}
+                      />
+                      <View className='meal-gauge-center'>
+                        <Text className='meal-gauge-cal' style={{ color }}>{Math.round(cal)}</Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
               )

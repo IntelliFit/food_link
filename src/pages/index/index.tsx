@@ -1015,9 +1015,6 @@ function IndexPage() {
             </View>
           </View>
 
-          {/* 分隔线 */}
-          <View className='macros-divider' />
-
           {/* 三大营养素 - 合并到热量卡片内，左右布局 */}
           <View className='macros-section-horizontal'>
             {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {

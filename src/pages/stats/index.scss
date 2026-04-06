@@ -1,36 +1,118 @@
 .stats-page {
   min-height: 100vh;
-  background: #fff;
+  background: linear-gradient(180deg,
+    rgb(0 188 125 / 15%) 0%,
+    rgb(0 188 125 / 8%) 25%,
+    #EFF1F4 60%,
+    #EFF1F4 100%
+  );
   padding-bottom: 200rpx;
   box-sizing: border-box;
 }
 
-// 页面头部
-.page-header {
-  padding: 56rpx 32rpx 28rpx;
-  background: transparent;
+// 页面头部已移除
+
+// 日期选择器 - 首页风格
+.date-selector-section {
+  margin: 24rpx 32rpx 28rpx;
 }
 
-.page-title {
-  display: block;
-  font-size: 44rpx;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 60rpx;
-  margin-bottom: 12rpx;
-  letter-spacing: -0.5rpx;
+.date-list {
+  display: flex;
+  justify-content: space-between;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 20rpx 16rpx;
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
-.page-subtitle {
-  display: block;
-  font-size: 28rpx;
-  color: #64748b;
-  line-height: 40rpx;
+.date-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  width: 88rpx;
+  height: 160rpx;
+  border-radius: 44rpx;
+  background: #f1f5f9;
+  border: 3rpx solid transparent;
+  padding: 12rpx 0 16rpx;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  
+  &:active {
+    transform: scale(0.96);
+  }
+  
+  // 星期几
+  .date-day-name {
+    position: relative;
+    z-index: 1;
+    font-size: 22rpx;
+    color: #9ca3af;
+    line-height: 30rpx;
+    font-weight: 500;
+  }
+  
+  // 日期数字 - 圆形
+  .date-day-circle {
+    position: relative;
+    z-index: 1;
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 8%);
+    transition: all 0.2s ease;
+    
+    // 无记录 - 白色（默认）
+    &.is-empty {
+      background: #fff;
+      
+      .date-num-text {
+        color: #1f2937;
+      }
+    }
+    
+    // 有记录但未超过目标 - 绿色
+    &.is-recorded {
+      background: #00bc7d;
+      
+      .date-num-text {
+        color: #fff;
+      }
+    }
+    
+    // 超过目标 - 红色
+    &.is-over {
+      background: #ef4444;
+      
+      .date-num-text {
+        color: #fff;
+      }
+    }
+  }
+  
+  // 可点击状态
+  &.is-clickable {
+    cursor: pointer;
+  }
+}
+
+.date-num-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 36rpx;
 }
 
 // Tabs
 .tabs-container {
-  padding: 0 32rpx 32rpx;
+  padding: 16rpx 32rpx 0;
 }
 
 .segmented-control {
@@ -305,200 +387,138 @@
   font-weight: 600;
 }
 
-.heatmap-card .card-header {
-  align-items: flex-start;
-}
+// 旧的 heatmap 样式已移除，替换为首页风格的日期选择器
 
-.heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  margin-bottom: 20rpx;
-  flex-wrap: wrap;
-}
-
-.heatmap-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.heatmap-legend-swatch {
-  width: 20rpx;
-  height: 20rpx;
-  border-radius: 50%;
-  border: 2rpx solid transparent;
-
-  &.none {
-    background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-    border-color: rgb(100 116 139 / 16%);
-  }
-
-  &.surplus {
-    background: rgb(249 115 22 / 15%);
-    border-color: transparent;
-  }
-
-  &.deficit {
-    background: rgb(59 130 246 / 15%);
-    border-color: transparent;
-  }
-}
-
-.heatmap-legend-text {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #64748b;
+// 日历网格视图（近一月模式）
+.heatmap-card {
+  padding: 20rpx;
 }
 
 .heatmap-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 20rpx 16rpx;
-  padding: 10rpx 0;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 16rpx;
+  
+  // 月视图（30天）需要更紧凑
+  &.month-view {
+    gap: 12rpx;
+  }
 }
 
 .heatmap-cell {
   aspect-ratio: 1;
   border-radius: 50%;
-  padding: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   border: 2rpx solid transparent;
   transition: all 0.2s ease;
-  position: relative;
-  box-sizing: border-box;
-}
-
-.heatmap-cell.is-clickable:active {
-  transform: scale(0.95);
-  background: rgb(0 188 125 / 5%);
-}
-
-.heatmap-cell.none {
-  background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-  border-color: rgb(100 116 139 / 16%);
-}
-
-.heatmap-cell.surplus.level-1 {
-  background: rgb(249 115 22 / 15%);
-}
-
-.heatmap-cell.surplus.level-2 {
-  background: rgb(249 115 22 / 35%);
-}
-
-.heatmap-cell.deficit.level-1 {
-  background: rgb(59 130 246 / 15%);
-}
-
-.heatmap-cell.deficit.level-2 {
-  background: rgb(59 130 246 / 35%);
+  background: #f1f5f9;
+  
+  // 月视图下稍微小一点
+  .month-view & {
+    min-height: 64rpx;
+  }
+  
+  // 无记录
+  &.is-empty {
+    background: #f1f5f9;
+    
+    .heatmap-cell-label {
+      color: #94a3b8;
+    }
+    
+    .heatmap-cell-dot {
+      background: #cbd5e1;
+    }
+  }
+  
+  // 有记录未超标 - 绿色
+  &.is-recorded {
+    background: #00bc7d;
+    
+    .heatmap-cell-label {
+      color: #fff;
+    }
+    
+    .heatmap-cell-dot {
+      background: #fff;
+      opacity: 0.6;
+    }
+  }
+  
+  // 超过目标 - 红色
+  &.is-over {
+    background: #ef4444;
+    
+    .heatmap-cell-label {
+      color: #fff;
+    }
+    
+    .heatmap-cell-dot {
+      background: #fff;
+      opacity: 0.6;
+    }
+  }
+  
+  &.is-clickable:active {
+    transform: scale(0.95);
+  }
 }
 
 .heatmap-cell-label {
   font-size: 26rpx;
-  line-height: 1;
   font-weight: 600;
+  line-height: 1;
   margin-top: -2rpx;
-}
-
-.heatmap-cell.none .heatmap-cell-label {
-  color: #475569;
-}
-
-.heatmap-cell.surplus.level-1 .heatmap-cell-label {
-  color: #f97316;
-}
-
-.heatmap-cell.surplus.level-2 .heatmap-cell-label {
-  color: #c2410c;
-}
-
-.heatmap-cell.deficit.level-1 .heatmap-cell-label {
-  color: #3b82f6;
-}
-
-.heatmap-cell.deficit.level-2 .heatmap-cell-label {
-  color: #1d4ed8;
+  
+  .month-view & {
+    font-size: 22rpx;
+  }
 }
 
 .heatmap-cell-dot {
-  width: 8rpx;
-  height: 8rpx;
+  width: 6rpx;
+  height: 6rpx;
   border-radius: 50%;
-  background: currentcolor;
-  opacity: 0.3;
-  margin-top: 6rpx;
-  position: absolute;
-  bottom: 12rpx;
-}
-
-.heatmap-cell.none .heatmap-cell-dot {
-  background: #cbd5e1;
-  opacity: 1;
-}
-
-.heatmap-cell.surplus.level-1 .heatmap-cell-dot {
-  background: #f97316;
-  opacity: 0.6;
-}
-
-.heatmap-cell.surplus.level-2 .heatmap-cell-dot {
-  background: #c2410c;
-  opacity: 0.7;
-}
-
-.heatmap-cell.deficit.level-1 .heatmap-cell-dot {
-  background: #3b82f6;
-  opacity: 0.6;
-}
-
-.heatmap-cell.deficit.level-2 .heatmap-cell-dot {
-  background: #1d4ed8;
-  opacity: 0.7;
-}
-
-.heatmap-summary {
-  margin-top: 20rpx;
-  padding: 20rpx 22rpx;
-  border-radius: 20rpx;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.heatmap-summary-text {
-  flex: 1;
-  font-size: 24rpx;
-  line-height: 34rpx;
-  color: #475569;
-}
-
-.heatmap-link-btn {
-  flex-shrink: 0;
-  padding: 12rpx 20rpx;
-  border-radius: 999rpx;
-  background: #eff6ff;
-}
-
-.heatmap-link-btn-text {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #2563eb;
-  font-weight: 600;
+  margin-top: 4rpx;
 }
 
 // Chart Card：容器给列固定高度，柱子用 flex 占满上方空间，避免 height:100% 循环依赖导致不渲染
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chart-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.chart-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.chart-switch-label {
+  font-size: 20rpx;
+  color: #64748b;
+}
+
+.chart-switch {
+  transform: scale(0.75);
+  transform-origin: right center;
+}
+
 .bar-chart-container {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  height: 240rpx;
+  height: 280rpx;
   padding: 0 16rpx;
 }
 
@@ -506,9 +526,18 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12rpx;
+  gap: 8rpx;
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+.bar-calorie-text {
+  font-size: 18rpx;
+  color: #64748b;
+  line-height: 24rpx;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .bar-wrapper {
@@ -630,62 +659,86 @@
   }
 }
 
-// Meal Structure
+// Meal Structure - 仪表盘风格（两列布局）
 .meal-structure-card .card-header {
-  margin-bottom: 28rpx;
+  margin-bottom: 24rpx;
 }
 
-.meal-grid {
+.meal-gauges-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20rpx;
+  gap: 16rpx;
 }
 
-.meal-item {
-  background: #f8fafc;
+.meal-gauge-item {
+  background: white;
   border-radius: 20rpx;
-  padding: 22rpx 20rpx;
+  padding: 20rpx;
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  justify-content: space-between;
   border: 1rpx solid rgb(0 0 0 / 3%);
 }
 
-.meal-icon-box {
-  width: 68rpx;
-  height: 68rpx;
-  border-radius: 18rpx;
+.meal-gauge-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8rpx;
+}
+
+.meal-gauge-icon-wrap {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 10rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
-.meal-data {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
+.meal-gauge-label {
+  font-size: 24rpx;
+  color: #334155;
+  font-weight: 600;
 }
 
-.meal-name {
-  font-size: 22rpx;
-  color: #94a3b8;
-}
-
-.meal-cal {
+.meal-gauge-percent {
   font-size: 28rpx;
   font-weight: 700;
-  color: #1e2939;
 }
 
-.meal-pct {
-  font-size: 24rpx;
-  color: #00bc7d;
-  font-weight: 600;
-  background: #ecfdf5;
-  padding: 4rpx 12rpx;
-  border-radius: 100rpx;
+.meal-gauge-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-circle {
+  position: relative;
+  width: 90rpx;
+  height: 90rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.meal-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-cal {
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 // Analysis
