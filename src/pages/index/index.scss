@@ -360,10 +360,9 @@ $blue-color: #3b82f6;
 }
 
 .macro-label-horizontal {
-  font-size: 22rpx;
-  font-weight: 500;
-  line-height: 30rpx;
-  color: $text-secondary;
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 36rpx;
 }
 
 .macro-value-row {
@@ -374,15 +373,15 @@ $blue-color: #3b82f6;
 }
 
 .macro-current-value {
-  font-size: 28rpx;
+  font-size: 32rpx;
   font-weight: 700;
-  line-height: 36rpx;
+  line-height: 42rpx;
 }
 
 .macro-target-hint {
-  font-size: 18rpx;
+  font-size: 20rpx;
   color: $text-tertiary;
-  line-height: 26rpx;
+  line-height: 28rpx;
 }
 
 // 右侧仪表盘 - 增大尺寸

@@ -992,8 +992,7 @@ function IndexPage() {
                   {/* 左侧：名称 + 数值 */}
                   <View className='macro-left-content'>
                     <View className='macro-title-row'>
-                      <View className='macro-icon-dot' style={{ backgroundColor: color }} />
-                      <Text className='macro-label-horizontal'>{label}</Text>
+                      <Text className='macro-label-horizontal' style={{ color }}>{label}</Text>
                     </View>
                     <View className='macro-value-row'>
                       <Text className='macro-current-value' style={{ color }}>
