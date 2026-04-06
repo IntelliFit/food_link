@@ -33,7 +33,7 @@ import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type
 import { DEFAULT_INTAKE, WEIGHT_HISTORY_LIMIT, QUICK_WATER_AMOUNTS, WATER_GOAL_DEFAULT, DAY_NAMES, SHORT_DAY_NAMES } from './utils/constants'
 import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry } from './components'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu } from './components'
 
 // 转换日期为2025年（系统时间可能是2026年，但数据是2025年的）
 function normalizeTo2025(dateStr: string): string {
@@ -334,6 +334,9 @@ function IndexPage() {
   const [waterInput, setWaterInput] = useState('')
   const [savingWater, setSavingWater] = useState(false)
 
+  // 记录菜单弹窗状态
+  const [showRecordMenu, setShowRecordMenu] = useState(false)
+
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string) => {
     console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate)
@@ -437,13 +440,20 @@ function IndexPage() {
     const today = normalizeTo2025(formatDateKey(new Date()))
     const currentSelected = selectedDateRef.current
     console.log('[DEBUG] useDidShow, selectedDate:', currentSelected, 'today:', today, 'skip:', skipNextRefreshRef.current)
-    
+
+    // 检查是否需要显示记录菜单（从底部导航栏中间按钮点击）
+    const shouldShowRecordMenu = Taro.getStorageSync('showRecordMenuModal')
+    if (shouldShowRecordMenu) {
+      Taro.removeStorageSync('showRecordMenuModal')
+      setShowRecordMenu(true)
+    }
+
     if (skipNextRefreshRef.current) {
       console.log('[DEBUG] 跳过本次刷新')
       skipNextRefreshRef.current = false
       return
     }
-    
+
     if (currentSelected === today || !currentSelected) {
       console.log('[DEBUG] 刷新今天数据')
       loadDashboard(today)
@@ -948,7 +958,9 @@ function IndexPage() {
               {!isSwitchingDate && <Text className='card-unit'>kcal</Text>}
             </View>
             <View className='target-section'>
-              <Text className='target-text'>目标: {formatDisplayNumber(intakeData.target)}</Text>
+              <Text className='target-text'>
+                {formatNumberWithComma(Math.round(intakeData.current))}/{formatNumberWithComma(intakeData.target)}
+              </Text>
               <View className='target-edit-btn' onClick={openTargetEditor}>
                 <Text className='target-edit-text'>编辑目标</Text>
               </View>
@@ -975,6 +987,12 @@ function IndexPage() {
             
             return (
               <View key={key} className='macro-card'>
+                {/* 目标值 - 移到标题上方 */}
+                <View className='macro-target-top'>
+                  <Text className='macro-target-top-value'>{formatDisplayNumber(targetValue)}</Text>
+                  <Text className='macro-target-top-unit'>g</Text>
+                </View>
+
                 <View className='macro-card-header'>
                   <View className='macro-title-wrap'>
                     <View className='macro-icon'>
@@ -983,7 +1001,7 @@ function IndexPage() {
                     <Text className='macro-label'>{label}</Text>
                   </View>
                 </View>
-                
+
                 <View className='macro-gauge-wrap'>
                   <View className='macro-gauge-box'>
                     <View className='macro-gauge'>
@@ -1015,13 +1033,6 @@ function IndexPage() {
                     </View>
                   </View>
                 </View>
-
-                {/* 目标值 - 仿照体重卡片样式 */}
-                <View className='macro-target-content'>
-                  <Text className='macro-target-label'>总</Text>
-                  <Text className='macro-target-value'>{formatDisplayNumber(targetValue)}</Text>
-                  <Text className='macro-target-unit'>g</Text>
-                </View>
               </View>
             )
           })}
@@ -1033,9 +1044,6 @@ function IndexPage() {
           <View className='body-status-card weight-card' onClick={openWeightEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
-                <View className='body-status-icon weight-icon'>
-                  <IconTrendingUp size={16} color='#8b5cf6' />
-                </View>
                 <Text className='body-status-title'>体重</Text>
               </View>
               <IconChevronRight size={16} color='#9ca3af' />
@@ -1066,9 +1074,6 @@ function IndexPage() {
           <View className='body-status-card water-card' onClick={openWaterEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
-                <View className='body-status-icon water-icon'>
-                  <IconWaterDrop size={16} color='#3b82f6' />
-                </View>
                 <Text className='body-status-title'>喝水</Text>
               </View>
               <IconChevronRight size={16} color='#9ca3af' />
@@ -1094,9 +1099,6 @@ function IndexPage() {
           <View className='body-status-card exercise-card' onClick={openExerciseRecord}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
-                <View className='body-status-icon exercise-icon'>
-                  <IconExercise size={16} color='#f97316' />
-                </View>
                 <Text className='body-status-title'>运动</Text>
               </View>
               <IconChevronRight size={16} color='#9ca3af' />
@@ -1400,6 +1402,9 @@ function IndexPage() {
           </View>
         </View>
       )}
+
+      {/* 记录菜单弹窗 */}
+      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} />
     </View>
   )
 }

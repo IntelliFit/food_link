@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-04-09
+
+- 🎨 style: 优化首页组件间距层次：问候区16rpx→日期12rpx→热量12rpx→营养素24rpx（核心数据区紧密连接），身体状态20rpx，统计/快到期20rpx，餐食32rpx（底部呼吸感） `src/pages/index/index.scss`
+- 🎨 style: 蛋白质/碳水/脂肪卡片重构：目标值「XXg」移到标题上方大字体显示，仪表盘半径扩大到40px（容器120rpx，SVG r=40，实际显示80rpx直径） `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 首页卡片背景色改为柔和米白：将 `$card-bg` 变量从纯白 `#fff` 改为 `#FEFEFE`，使所有组件背景更柔和护眼 `src/pages/index/index.scss`
+- 🎨 style: 去除体重/喝水/运动卡片左侧图标：删除 IconTrendingUp、IconWaterDrop、IconExercise 图标组件，标题直接显示文字更简洁 `src/pages/index/index.tsx`
+- 🎨 style: 首页间距层次精细调整：形成清晰视觉层次 - 问候区16rpx（紧凑顶部）、日期选择器12rpx（连接性）、主卡片16rpx+营养素20rpx（核心数据区）、身体状态20rpx、统计入口/快到期/餐食24rpx（独立区块分隔感） `src/pages/index/index.scss`
+- 🎨 style: 重新设计记录菜单弹窗：顶部圆角指示条、2x2网格功能卡片（带NEW标签）、底部餐食/运动列表（带麦克风和箭头图标），仿照参考图片样式 `src/pages/index/components/RecordMenu.tsx` `src/pages/index/index.scss` `src/components/iconfont/index.tsx`
+- 🎨 style: 首页间距层次优化：取消统一15rpx，改为更有层次的间距 - 问候区20rpx、日期选择器12rpx、主卡片16rpx、三大营养素20rpx，层次分明 `src/pages/index/index.scss`
+- 🎨 style: 首页今日剩余卡片右上角显示改为「目前已摄入卡路里/目标设置的总卡路里」格式，如 "800/2000" `src/pages/index/index.tsx`
+- ✅ test: 微信开发者工具自动化验证通过：三大营养素卡片已紧凑显示（仪表盘缩小到100rpx）、卡片间距统一15rpx、底部绿色按钮正常弹出记录菜单弹窗 `verify_home_final.png` `verify_home_4_record_menu.png`
+- 🎨 style: 首页三大营养素卡片大幅紧凑化：仪表盘从 180rpx 缩小到 100rpx、卡片内边距减少、间距收紧、字体整体缩小，使组件更紧凑 `src/pages/index/index.scss`
+- 🔧 refactor: 统一首页所有组件的 margin-bottom 为 15rpx，保持一致的间距规范 `src/pages/index/index.scss`
+- 🐛 fix: 修复底部导航栏中间按钮点击无反应问题：首页添加 showRecordMenu 状态和 RecordMenu 组件，在 useDidShow 中检测 showRecordMenuModal 标记并显示弹窗 `src/pages/index/index.tsx` `src/pages/index/components/index.ts` `src/pages/index/index.scss`
+
 ## 2026-04-08
 
 - 🔧 refactor: 编辑目标对话框重构：删除普通模式，仅保留精确模式；为热量/蛋白质/碳水/脂肪四个指标增加左右加减按钮；固定步长：热量100、蛋白质/碳水50、脂肪10 `src/pages/index/components/TargetEditor.tsx` `src/pages/index/types/index.ts` `src/pages/index/index.tsx`

@@ -1,72 +1,111 @@
-import { View, Text } from '@tarojs/components'
+import { View, Text, Image } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { IconCamera, IconAlbum, IconText, IconEdit, IconHistory } from '../../../components/iconfont'
+import {
+  IconCamera,
+  IconAlbum,
+  IconText,
+  IconEdit,
+  IconBreakfast,
+  IconLunch,
+  IconDinner,
+  IconSnack,
+  IconExercise,
+  IconMicrophone,
+  IconChevronRight
+} from '../../../components/iconfont'
 
 interface RecordMenuProps {
   visible: boolean
   onClose: () => void
 }
 
-// 主要功能模式
-const MAIN_MODES = [
+// 顶部2x2网格功能
+const GRID_FEATURES = [
   {
     id: 'camera',
     label: '拍照识别',
-    color: '#00bc7d',
-    bgColor: 'rgba(0, 188, 125, 0.08)',
-    iconColor: '#ffffff',
+    subLabel: 'Scan Food',
+    color: '#e85d75',
+    bgColor: '#fef2f4',
     Icon: IconCamera,
   },
   {
-    id: 'album',
-    label: '相册选择',
-    color: '#3b82f6',
-    bgColor: 'rgba(59, 130, 246, 0.08)',
-    iconColor: '#ffffff',
-    Icon: IconAlbum,
+    id: 'receipt',
+    label: '小票识别',
+    subLabel: 'Scan Receipt',
+    color: '#10b981',
+    bgColor: '#ecfdf5',
+    Icon: IconEdit,
   },
   {
-    id: 'text',
-    label: '文字记录',
-    color: '#8b5cf6',
-    bgColor: 'rgba(139, 92, 246, 0.08)',
-    iconColor: '#ffffff',
+    id: 'label',
+    label: '营养标签',
+    subLabel: 'Nutrition Label',
+    color: '#f59e0b',
+    bgColor: '#fffbeb',
     Icon: IconText,
   },
   {
-    id: 'manual',
-    label: '手动记录',
-    color: '#f59e0b',
-    bgColor: 'rgba(245, 158, 11, 0.08)',
-    iconColor: '#ffffff',
-    Icon: IconEdit,
+    id: 'bill',
+    label: '账单识别',
+    subLabel: 'Scan Food Bill',
+    color: '#3b82f6',
+    bgColor: '#eff6ff',
+    isNew: true,
+    Icon: IconAlbum,
   },
 ]
 
-// 其他功能
-const OTHER_MODES = [
+// 底部列表项
+const LIST_ITEMS = [
   {
-    id: 'history',
-    label: '历史记录',
-    desc: '查看以往识别记录',
-    color: '#6b7280',
-    Icon: IconHistory,
+    id: 'breakfast',
+    label: '早餐',
+    iconType: 'meal',
+    Icon: IconBreakfast,
+    color: '#f59e0b',
+  },
+  {
+    id: 'lunch',
+    label: '午餐',
+    iconType: 'meal',
+    Icon: IconLunch,
+    color: '#f59e0b',
+  },
+  {
+    id: 'snack',
+    label: '加餐',
+    iconType: 'meal',
+    Icon: IconSnack,
+    color: '#f59e0b',
+  },
+  {
+    id: 'dinner',
+    label: '晚餐',
+    iconType: 'meal',
+    Icon: IconDinner,
+    color: '#f59e0b',
+  },
+  {
+    id: 'activity',
+    label: '运动',
+    iconType: 'activity',
+    Icon: IconExercise,
+    color: '#e85d75',
   },
 ]
 
 export function RecordMenu({ visible, onClose }: RecordMenuProps) {
   if (!visible) return null
 
-  const handleMainModeClick = (modeId: string) => {
+  const handleGridClick = (modeId: string) => {
     onClose()
 
     switch (modeId) {
       case 'camera':
-        // 进入简化拍照模式
         Taro.navigateTo({ url: '/pages/record/index?mode=simple' })
         break
-      case 'album':
-        // 直接进入相册选择
+      case 'receipt':
         Taro.chooseImage({
           count: 1,
           sizeType: ['compressed'],
@@ -74,6 +113,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           success: (res) => {
             const imagePath = res.tempFilePaths[0]
             Taro.setStorageSync('analyzeImagePath', imagePath)
+            Taro.setStorageSync('analyzeMode', 'receipt')
             Taro.navigateTo({ url: '/pages/analyze/index' })
           },
           fail: (err) => {
@@ -82,19 +122,48 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           }
         })
         break
-      case 'text':
+      case 'label':
         Taro.navigateTo({ url: '/pages/record-text/index' })
         break
-      case 'manual':
-        Taro.navigateTo({ url: '/pages/record-manual/index' })
+      case 'bill':
+        Taro.chooseImage({
+          count: 1,
+          sizeType: ['compressed'],
+          sourceType: ['album'],
+          success: (res) => {
+            const imagePath = res.tempFilePaths[0]
+            Taro.setStorageSync('analyzeImagePath', imagePath)
+            Taro.setStorageSync('analyzeMode', 'bill')
+            Taro.navigateTo({ url: '/pages/analyze/index' })
+          },
+          fail: (err) => {
+            if (err.errMsg?.includes('cancel')) return
+            Taro.showToast({ title: '选择图片失败', icon: 'none' })
+          }
+        })
         break
     }
   }
 
-  const handleOtherModeClick = (modeId: string) => {
+  const handleListClick = (itemId: string) => {
     onClose()
-    if (modeId === 'history') {
-      Taro.navigateTo({ url: '/pages/analyze-history/index' })
+
+    switch (itemId) {
+      case 'breakfast':
+        Taro.navigateTo({ url: '/pages/record-manual/index?meal=breakfast' })
+        break
+      case 'lunch':
+        Taro.navigateTo({ url: '/pages/record-manual/index?meal=lunch' })
+        break
+      case 'snack':
+        Taro.navigateTo({ url: '/pages/record-manual/index?meal=snack' })
+        break
+      case 'dinner':
+        Taro.navigateTo({ url: '/pages/record-manual/index?meal=dinner' })
+        break
+      case 'activity':
+        Taro.navigateTo({ url: '/pages/exercise-record/index' })
+        break
     }
   }
 
@@ -102,73 +171,70 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
     <View className='record-menu-modal' catchMove>
       <View className='record-menu-mask' onClick={onClose} />
       <View className='record-menu-content'>
-        {/* 标题 */}
-        <View className='record-menu-header'>
-          <Text className='record-menu-title'>记录饮食</Text>
-          <Text className='record-menu-subtitle'>选择记录方式</Text>
-        </View>
+        {/* 顶部圆角指示条 */}
+        <View className='record-menu-handle-bar' />
 
-        {/* 主功能网格 */}
-        <View className='record-menu-grid'>
-          {MAIN_MODES.map((mode) => {
-            const IconComponent = mode.Icon
+        {/* 2x2 功能网格 */}
+        <View className='record-menu-grid-v2'>
+          {GRID_FEATURES.map((feature) => {
+            const IconComponent = feature.Icon
             return (
               <View
-                key={mode.id}
-                className='record-menu-card'
-                style={{ backgroundColor: mode.bgColor }}
-                onClick={() => handleMainModeClick(mode.id)}
+                key={feature.id}
+                className='record-menu-grid-card'
+                style={{ backgroundColor: feature.bgColor }}
+                onClick={() => handleGridClick(feature.id)}
               >
-                <View
-                  className='record-menu-icon-wrap'
-                  style={{ backgroundColor: mode.color }}
-                >
-                  <IconComponent size={32} color={mode.iconColor} />
+                {feature.isNew && (
+                  <View className='record-menu-new-badge'>
+                    <Text className='record-menu-new-text'>NEW</Text>
+                  </View>
+                )}
+                <View className='record-menu-grid-icon-wrap'>
+                  <IconComponent size={40} color={feature.color} />
                 </View>
-                <Text className='record-menu-label' style={{ color: mode.color }}>
-                  {mode.label}
-                </Text>
+                <View className='record-menu-grid-text-wrap'>
+                  <Text className='record-menu-grid-label' style={{ color: feature.color }}>
+                    {feature.label}
+                  </Text>
+                  <Text className='record-menu-grid-sublabel'>
+                    {feature.subLabel}
+                  </Text>
+                </View>
               </View>
             )
           })}
         </View>
 
-        {/* 分隔线 */}
-        <View className='record-menu-divider' />
-
-        {/* 其他功能列表 */}
-        <View className='record-menu-list'>
-          <Text className='record-menu-section-title'>其他功能</Text>
-          {OTHER_MODES.map((mode) => {
-            const IconComponent = mode.Icon
+        {/* 底部功能列表 */}
+        <View className='record-menu-list-v2'>
+          {LIST_ITEMS.map((item) => {
+            const IconComponent = item.Icon
             return (
               <View
-                key={mode.id}
-                className='record-menu-list-item'
-                onClick={() => handleOtherModeClick(mode.id)}
+                key={item.id}
+                className='record-menu-list-item-v2'
+                onClick={() => handleListClick(item.id)}
               >
-                <View
-                  className='record-menu-list-icon'
-                  style={{ backgroundColor: 'rgba(107, 114, 128, 0.1)' }}
-                >
-                  <IconComponent size={20} color={mode.color} />
+                <View className='record-menu-list-left'>
+                  <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${item.color}15` }}>
+                    <IconComponent size={24} color={item.color} />
+                  </View>
+                  <Text className='record-menu-list-label-v2'>{item.label}</Text>
                 </View>
-                <View className='record-menu-list-content'>
-                  <Text className='record-menu-list-label'>{mode.label}</Text>
-                  <Text className='record-menu-list-desc'>{mode.desc}</Text>
+                <View className='record-menu-list-right'>
+                  <View className='record-menu-mic-btn'>
+                    <IconMicrophone size={18} color='#9ca3af' />
+                  </View>
+                  <IconChevronRight size={16} color='#d1d5db' />
                 </View>
-                <Text className='record-menu-list-arrow'>›</Text>
               </View>
             )
           })}
         </View>
 
-        {/* 关闭按钮 */}
-        <View className='record-menu-footer'>
-          <View className='record-menu-close-btn' onClick={onClose}>
-            <Text className='record-menu-close-text'>取消</Text>
-          </View>
-        </View>
+        {/* 底部安全区域 */}
+        <View className='record-menu-safe-area' />
       </View>
     </View>
   )
