@@ -310,109 +310,114 @@ $blue-color: #3b82f6;
 .macros-divider {
   height: 1rpx;
   background: linear-gradient(90deg, transparent 0%, #e5e7eb 20%, #e5e7eb 80%, transparent 100%);
-  margin: 24rpx 0 20rpx;
+  margin: 20rpx 0 16rpx;
 }
 
-// 内联三大营养素 - 水平排列在热量卡片内
-.macros-section-inline {
-  display: flex;
-  gap: 16rpx;
-  justify-content: space-between;
-}
-
-.macro-card-inline {
-  flex: 1;
-  min-width: 0;
+// 新版三大营养素 - 水平布局（左右分栏）
+.macros-section-horizontal {
   display: flex;
   flex-direction: column;
+  gap: 12rpx;
+}
+
+.macro-card-horizontal {
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  padding: 12rpx 8rpx;
-  background: #f8fafc;
-  border-radius: 16rpx;
+  justify-content: space-between;
+  padding: 12rpx 16rpx;
+  background: transparent; // 去除背景色
+  border-radius: 12rpx;
+  transition: background 0.2s ease;
+
+  &:active {
+    background: rgba(0, 0, 0, 0.02);
+  }
 }
 
-.macro-card-header-inline {
-  margin-bottom: 8rpx;
+// 左侧内容区
+.macro-left-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
 }
 
-.macro-title-wrap-inline {
+.macro-title-row {
   display: flex;
   align-items: center;
-  gap: 4rpx;
+  gap: 8rpx;
 }
 
-.macro-icon-inline {
-  width: 16rpx;
-  height: 16rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.macro-icon-dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
 }
 
-.macro-label-inline {
-  font-size: 20rpx;
-  font-weight: 400;
-  line-height: 28rpx;
+.macro-label-horizontal {
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 32rpx;
   color: $text-secondary;
 }
 
-// 内联仪表盘 - 缩小到与身体状态卡片一致
-.macro-gauge-wrap-inline {
+.macro-value-row {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: baseline;
+  gap: 4rpx;
 }
 
-.macro-gauge-box-inline {
+.macro-current-value {
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 40rpx;
+}
+
+.macro-target-hint {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+}
+
+// 右侧仪表盘
+.macro-gauge-box-horizontal {
   position: relative;
-  width: 88rpx;
-  height: 88rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.macro-gauge-inline {
-  position: relative;
-  width: 80rpx;
-  height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.macro-ring-bg-inline {
-  position: absolute;
   width: 72rpx;
   height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.macro-gauge-horizontal {
+  position: relative;
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.macro-ring-bg-horizontal {
+  position: absolute;
+  width: 56rpx;
+  height: 56rpx;
   transform: rotate(-90deg);
 }
 
-.macro-gauge-center-inline {
+.macro-gauge-center-horizontal {
   position: absolute;
   inset: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0;
 }
 
-.macro-gauge-value-inline {
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 30rpx;
-  max-width: 70rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-}
-
-.macro-gauge-unit-inline {
-  font-size: 14rpx;
-  color: $text-tertiary;
-  line-height: 20rpx;
+.macro-percentage {
+  font-size: 18rpx;
+  font-weight: 600;
+  line-height: 24rpx;
 }
 
 .loading-dots-inline {
@@ -438,6 +443,12 @@ $blue-color: #3b82f6;
       animation-delay: 0s;
     }
   }
+}
+
+// 隐藏旧的内联样式
+.macros-section-inline,
+.macro-card-inline {
+  display: none;
 }
 
 // 三大营养素区域 - 紧凑设计（保留原样式用于兼容性）

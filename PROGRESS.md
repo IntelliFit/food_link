@@ -6,6 +6,7 @@
 
 ## 2026-04-09
 
+- 🎨 style: 三大营养素改为左右布局：左侧名称+当前摄入/目标克数，右侧仪表盘显示百分比；去除背景色，垂直排列在热量卡片内 `src/pages/index/index.tsx` `src/pages/index/index.scss`
 - 🎨 style: 首页布局重构：三大营养素合并入热量总览卡片，内联水平排列（带分隔线），与身体状态卡片大小一致；身体状态下间距缩小至12rpx `src/pages/index/index.tsx` `src/pages/index/index.scss`
 - 🎨 style: 优化首页组件间距层次：问候区16rpx→日期12rpx→热量12rpx→营养素24rpx（核心数据区紧密连接），身体状态20rpx，统计/快到期20rpx，餐食32rpx（底部呼吸感） `src/pages/index/index.scss`
 - 🎨 style: 蛋白质/碳水/脂肪卡片重构：目标值「XXg」移到标题上方大字体显示，仪表盘半径扩大到40px（容器120rpx，SVG r=40，实际显示80rpx直径） `src/pages/index/index.tsx` `src/pages/index/index.scss`

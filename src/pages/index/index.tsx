@@ -979,8 +979,8 @@ function IndexPage() {
           {/* 分隔线 */}
           <View className='macros-divider' />
 
-          {/* 三大营养素 - 合并到热量卡片内 */}
-          <View className='macros-section-inline'>
+          {/* 三大营养素 - 合并到热量卡片内，左右布局 */}
+          <View className='macros-section-horizontal'>
             {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
               const macro = intakeData.macros[key]
               const animatedValue = animatedMacroValues[key]
@@ -988,49 +988,45 @@ function IndexPage() {
               const targetValue = macro?.target || 0
 
               return (
-                <View key={key} className='macro-card-inline'>
-                  <View className='macro-target-top'>
-                    <Text className='macro-target-top-value'>{formatDisplayNumber(targetValue)}</Text>
-                    <Text className='macro-target-top-unit'>g</Text>
-                  </View>
-
-                  <View className='macro-card-header-inline'>
-                    <View className='macro-title-wrap-inline'>
-                      <View className='macro-icon-inline'>
-                        <Icon size={14} color='#9ca3af' />
-                      </View>
-                      <Text className='macro-label-inline'>{label}</Text>
+                <View key={key} className='macro-card-horizontal'>
+                  {/* 左侧：名称 + 数值 */}
+                  <View className='macro-left-content'>
+                    <View className='macro-title-row'>
+                      <View className='macro-icon-dot' style={{ backgroundColor: color }} />
+                      <Text className='macro-label-horizontal'>{label}</Text>
+                    </View>
+                    <View className='macro-value-row'>
+                      <Text className='macro-current-value' style={{ color }}>
+                        {formatDisplayNumber(animatedValue)}
+                      </Text>
+                      <Text className='macro-target-hint'>/ {formatDisplayNumber(targetValue)}g</Text>
                     </View>
                   </View>
 
-                  <View className='macro-gauge-wrap-inline'>
-                    <View className='macro-gauge-box-inline'>
-                      <View className='macro-gauge-inline'>
-                        <View
-                          className='macro-ring-bg-inline'
-                          style={{
-                            backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                              `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='50' cy='50' r='40' fill='none' stroke='${color}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 40}' stroke-dashoffset='${2 * Math.PI * 40 * (1 - animatedProgress / 100)}'/></svg>`
-                            )}")`,
-                            backgroundSize: '100% 100%'
-                          }}
-                        />
-                        <View className='macro-gauge-center-inline'>
-                          {isSwitchingDate ? (
-                            <View className='loading-dots-inline'>
-                              <View className='loading-dot' />
-                              <View className='loading-dot' />
-                              <View className='loading-dot' />
-                            </View>
-                          ) : (
-                            <>
-                              <Text className='macro-gauge-value-inline' style={{ color }}>
-                                {formatDisplayNumber(animatedValue)}
-                              </Text>
-                              <Text className='macro-gauge-unit-inline'>克</Text>
-                            </>
-                          )}
-                        </View>
+                  {/* 右侧：仪表盘 */}
+                  <View className='macro-gauge-box-horizontal'>
+                    <View className='macro-gauge-horizontal'>
+                      <View
+                        className='macro-ring-bg-horizontal'
+                        style={{
+                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='#f0f0f0' stroke-width='12'/><circle cx='50' cy='50' r='40' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 40}' stroke-dashoffset='${2 * Math.PI * 40 * (1 - animatedProgress / 100)}'/></svg>`
+                          )}")`,
+                          backgroundSize: '100% 100%'
+                        }}
+                      />
+                      <View className='macro-gauge-center-horizontal'>
+                        {isSwitchingDate ? (
+                          <View className='loading-dots-inline'>
+                            <View className='loading-dot' />
+                            <View className='loading-dot' />
+                            <View className='loading-dot' />
+                          </View>
+                        ) : (
+                          <Text className='macro-percentage' style={{ color }}>
+                            {Math.round(animatedProgress)}%
+                          </Text>
+                        )}
                       </View>
                     </View>
                   </View>
