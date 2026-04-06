@@ -139,3 +139,23 @@ export const IconWaterDrop = ({ size = 48, color = '#000000', className = '' }: 
     />
   )
 }
+
+/** 运动/跑步图标 */
+export const IconExercise = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-sport-2 ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 发送图标 */
+export const IconSend = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-fasong ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}

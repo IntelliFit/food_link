@@ -4,65 +4,140 @@
   padding-bottom: 240rpx; // 留出底部操作栏的空间
 }
 
-// 顶部英雄区
-.hero-section {
+// ========== 扫描框顶部区域（仿相机模式） ==========
+.scanner-hero-section {
   position: relative;
   width: 100%;
-  height: 600rpx;
-  background: #e2e8f0;
+  height: 700rpx;
+  background: #000;
+  overflow: hidden;
 }
 
-.hero-swiper {
+// 高斯模糊背景层
+.scanner-blur-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.scanner-bg-image {
+  width: 100%;
+  height: 100%;
+  filter: blur(40rpx) brightness(0.8);
+  transform: scale(1.2);
+}
+
+.scanner-blur-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20rpx);
+}
+
+// 扫描框容器
+.scanner-frame-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+// 扫描框
+.scanner-frame {
+  width: 520rpx;
+  height: 520rpx;
+  position: relative;
+  border-radius: 24rpx;
+  overflow: hidden;
+  background: #f0f0f0;
+  box-shadow:
+    0 20rpx 60rpx rgba(0, 0, 0, 0.2),
+    0 0 0 1rpx rgba(255, 255, 255, 0.3) inset;
+}
+
+// 四角圆弧形括号 - 白色主题色
+.scanner-corner {
+  position: absolute;
+  width: 150rpx;
+  height: 150rpx;
+  border-color: #00bc7d;
+  border-style: solid;
+  border-width: 0;
+  z-index: 20;
+
+  &.scanner-corner-tl {
+    top: 16rpx;
+    left: 16rpx;
+    border-top-width: 10rpx;
+    border-left-width: 10rpx;
+    border-top-left-radius: 80rpx;
+  }
+
+  &.scanner-corner-tr {
+    top: 16rpx;
+    right: 16rpx;
+    border-top-width: 10rpx;
+    border-right-width: 10rpx;
+    border-top-right-radius: 80rpx;
+  }
+
+  &.scanner-corner-bl {
+    bottom: 16rpx;
+    left: 16rpx;
+    border-bottom-width: 10rpx;
+    border-left-width: 10rpx;
+    border-bottom-left-radius: 80rpx;
+  }
+
+  &.scanner-corner-br {
+    bottom: 16rpx;
+    right: 16rpx;
+    border-bottom-width: 10rpx;
+    border-right-width: 10rpx;
+    border-bottom-right-radius: 80rpx;
+  }
+}
+
+// 框内图片轮播
+.scanner-swiper {
   width: 100%;
   height: 100%;
 }
 
-.hero-swiper-item {
+.scanner-swiper-item {
   width: 100%;
   height: 100%;
 }
 
-.hero-image {
+.scanner-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.image-counter {
-  position: absolute;
-  bottom: 48rpx;
-  right: 32rpx;
-  background: rgb(0 0 0 / 60%);
-  backdrop-filter: blur(4px);
-  padding: 8rpx 20rpx;
-  border-radius: 200rpx;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.counter-text {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: 2rpx;
-}
-
-.hero-placeholder {
+// 占位符
+.scanner-placeholder {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #cbd5e1;
   gap: 16rpx;
-}
 
-.logo-placeholder {
-  background:
-    radial-gradient(circle at top, rgb(255 255 255 / 90%) 0%, rgb(236 253 245 / 88%) 32%, rgb(209 250 229 / 96%) 100%);
+  &.logo-placeholder {
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 50%, #d1fae5 100%);
+  }
 }
 
 .placeholder-icon-wrap {
@@ -82,19 +157,67 @@
 }
 
 .placeholder-text {
-  font-size: 28rpx;
+  font-size: 24rpx;
   color: #64748b;
   font-weight: 500;
+  text-align: center;
+  padding: 0 40rpx;
 }
 
-.hero-overlay {
+// 图片计数器
+.image-counter {
   position: absolute;
-  bottom: 0;
+  bottom: -60rpx;
+  right: 24rpx;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8rpx);
+  padding: 8rpx 20rpx;
+  border-radius: 200rpx;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.counter-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 2rpx;
+}
+
+// 扫描区状态文字
+.scanner-status-text {
+  position: absolute;
+  bottom: 60rpx;
   left: 0;
   right: 0;
-  height: 240rpx;
-  background: linear-gradient(to bottom, transparent 0%, #f8fafc 100%);
-  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 15;
+  padding: 0 60rpx;
+}
+
+.scanner-status-label {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 12rpx;
+  text-shadow: 0 2rpx 8rpx rgba(255, 255, 255, 0.8);
+}
+
+.scanner-status-desc {
+  font-size: 26rpx;
+  color: #4b5563;
+  text-align: center;
+  line-height: 1.5;
+  max-width: 600rpx;
+  text-shadow: 0 2rpx 8rpx rgba(255, 255, 255, 0.6);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .favorite-btn {
@@ -129,15 +252,17 @@
   }
 }
 
-// 内容容器 - 上移覆盖图片
+// 内容容器 - 与扫描框区域自然衔接
 .content-container {
   position: relative;
-  margin-top: -120rpx;
-  padding: 0 32rpx 180rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
+  padding: 32rpx 32rpx 180rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
   z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 32rpx;
+  background: #f8fafc;
+  border-radius: 40rpx 40rpx 0 0;
+  margin-top: -40rpx;
 }
 
 .mode-result-card {

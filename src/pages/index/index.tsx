@@ -21,7 +21,7 @@ import {
   type FoodExpiryItem,
   type FoodExpirySummary
 } from '../../utils/api'
-import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
+import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop, IconExercise } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 
@@ -681,6 +681,14 @@ function IndexPage() {
     Taro.navigateTo({ url: '/pages/food-expiry/index' })
   }
 
+  const openExerciseRecord = () => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    Taro.navigateTo({ url: '/pages/exercise-record/index' })
+  }
+
   const handleDateSelect = (date: string) => {
     console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
@@ -1115,6 +1123,26 @@ function IndexPage() {
                 {Math.round(animatedWaterProgress)}% / 目标 {bodyMetrics.waterGoalMl}ml
               </Text>
             </View>
+          </View>
+
+          {/* 运动卡片 */}
+          <View className='body-status-card exercise-card' onClick={openExerciseRecord}>
+            <View className='body-status-header'>
+              <View className='body-status-title-wrap'>
+                <View className='body-status-icon exercise-icon'>
+                  <IconExercise size={16} color='#f97316' />
+                </View>
+                <Text className='body-status-title'>运动</Text>
+              </View>
+              <IconChevronRight size={16} color='#9ca3af' />
+            </View>
+            <View className='body-status-content'>
+              <Text className='body-status-value'>--</Text>
+              <Text className='body-status-unit'>kcal</Text>
+            </View>
+            <Text className='body-status-hint'>
+              点击记录今日运动
+            </Text>
           </View>
         </View>
 

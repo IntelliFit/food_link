@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-04-06
+
+- 🎨 style: 替换拍照页相册按钮的 iconfont 图标为 SVG 图片，使用 Image 组件引用本地文件，保持 82rpx 尺寸和白色阴影效果 `src/pages/record/index.tsx` `src/pages/record/index.scss` `src/assets/icons/album.svg`
+- 🎨 style: 分析页面去掉配额提示条左侧的表情图标 `src/pages/analyze/index.tsx`
+- 🔧 refactor: 后端默认启用拍照分析每日次数限制，修复显示 --/-- 问题 `backend/main.py`
+- ✨ feat: 开发者模式添加调试按钮，支持模拟数据直接进入结果页或分析 Loading 页调试样式（长按页面任意位置启用） `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss` `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss`
+- 🎨 style: 重新设计分析 Loading 页面UI，全屏背景图+白色半透明高斯模糊，扫描框显示清晰图片，进度列表浮在模糊层上 `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss`
+- 🎨 style: 分析 Loading 页去除调试标签，健康知识改为游戏TIPS风格放在扫描框下方，带淡入淡出动画 `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss`
+- 🎨 style: 重新设计结果页顶部区域，使用扫描框样式展示图片，高斯模糊白色半透明背景，框外显示分析状态文字 `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🐛 fix: 修复分析 Loading 页面的 Taro 导入路径 `@taro` -> `@tarojs/taro`，解决构建报错 `src/pages/analyze-loading/index.tsx`
+
 ## 2026-04-01
 
 - 🐛 fix: 修复互动消息类型兜底误判，只有 `comment_rejected` 才显示“评论未通过审核”，未知类型改为中性提示，避免点赞等通知被误显示为审核失败 `src/pages/interaction-notifications/index.tsx`

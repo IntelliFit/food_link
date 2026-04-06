@@ -37,7 +37,7 @@ from test_backend.utils import calculate_deviation
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
-FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 from auth import create_access_token
 from database import (
     get_user_by_openid,
@@ -5027,6 +5027,7 @@ async def get_stats_summary(
 
     try:
         body_metrics_summary = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+        print(f"[get_stats_summary] body_metrics_summary: {body_metrics_summary}")
     except Exception as body_metrics_error:
         print(f"[get_stats_summary] 身体指标降级为空摘要: {body_metrics_error}")
         body_metrics_summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)

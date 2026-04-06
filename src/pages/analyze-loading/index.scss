@@ -1,297 +1,602 @@
-.analyze-loading-page {
-  min-height: 100vh;
-  background: #f8fafc;
+.analyze-loading-page-v3 {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+// 全屏背景图片
+.fullscreen-bg-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+
+// 白色半透明高斯模糊层
+.blur-overlay-v3 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 2;
+}
+
+// 内容层 - 所有UI元素
+.content-layer {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 48rpx 32rpx;
+  padding: 60rpx 40rpx 40rpx;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
-/* Spinner Animation */
-.spinner-wrap {
-  width: 160rpx;
-  height: 160rpx;
+// 扫描框容器
+.scanner-frame-container {
   position: relative;
-  margin-bottom: 64rpx;
+  margin-top: 40rpx;
+  margin-bottom: 60rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 
-  .ring {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    border: 6rpx solid rgb(0 188 125 / 10%);
-  }
+// 扫描框 - 拍照模式样式
+.scanner-frame-v3 {
+  position: relative;
+  width: 520rpx;
+  height: 520rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  background: #f5f5f5;
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15);
 
-  .spin {
+  // 四角括号
+  .corner {
     position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    border: 6rpx solid transparent;
-    border-top-color: #00bc7d;
-    border-right-color: #00bc7d;
-    animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  }
+    width: 48rpx;
+    height: 48rpx;
+    border-color: #fff;
+    border-style: solid;
+    z-index: 10;
+    filter: drop-shadow(0 2rpx 4rpx rgba(0, 0, 0, 0.3));
 
-  .icon-center {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 64rpx;
-    color: #00bc7d;
-    animation: pulse 2s ease-in-out infinite;
+    &.corner-tl {
+      top: 20rpx;
+      left: 20rpx;
+      border-width: 6rpx 0 0 6rpx;
+      border-top-left-radius: 12rpx;
+    }
+
+    &.corner-tr {
+      top: 20rpx;
+      right: 20rpx;
+      border-width: 6rpx 6rpx 0 0;
+      border-top-right-radius: 12rpx;
+    }
+
+    &.corner-bl {
+      bottom: 20rpx;
+      left: 20rpx;
+      border-width: 0 0 6rpx 6rpx;
+      border-bottom-left-radius: 12rpx;
+    }
+
+    &.corner-br {
+      bottom: 20rpx;
+      right: 20rpx;
+      border-width: 0 6rpx 6rpx 0;
+      border-bottom-right-radius: 12rpx;
+    }
   }
 }
 
-@keyframes spin {
+// 扫描线动画
+.scan-line-v3 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4rpx;
+  background: linear-gradient(90deg, transparent, #00bc7d, transparent);
+  box-shadow: 0 0 20rpx rgba(0, 188, 125, 0.6);
+  z-index: 5;
+  animation: scanMoveV3 2.5s ease-in-out infinite;
+}
+
+@keyframes scanMoveV3 {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(520rpx);
+    opacity: 0;
+  }
+}
+
+// 框内图片 - 清晰显示
+.frame-image-v3 {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+// 框内占位符
+.frame-placeholder-v3 {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+}
+
+// 游戏风格 TIPS 容器 - 扫描框下方
+.game-tip-container {
+  margin-top: 24rpx;
+  margin-bottom: 40rpx;
+  width: 100%;
+  max-width: 560rpx;
+  display: flex;
+  justify-content: center;
+}
+
+// 游戏风格 TIPS 盒子 - 更紧凑动感
+.game-tip-box {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.75) 0%, rgba(30, 30, 40, 0.85) 100%);
+  backdrop-filter: blur(16rpx);
+  -webkit-backdrop-filter: blur(16rpx);
+  border-radius: 20rpx;
+  padding: 16rpx 24rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  border: 2rpx solid rgba(251, 191, 36, 0.4);
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.3), inset 0 1rpx 0 rgba(255, 255, 255, 0.1);
+  animation: tipPulse 4s ease-in-out infinite;
+  max-width: 100%;
+  position: relative;
+  overflow: hidden;
+
+  // 游戏风格的装饰线
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2rpx;
+    background: linear-gradient(90deg, transparent, #fbbf24, transparent);
+    opacity: 0.6;
+  }
+}
+
+@keyframes tipPulse {
+  0%, 100% {
+    border-color: rgba(251, 191, 36, 0.3);
+    box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    border-color: rgba(251, 191, 36, 0.6);
+    box-shadow: 0 4rpx 24rpx rgba(251, 191, 36, 0.15);
+  }
+}
+
+// TIPS 图标 - 闪烁效果
+.game-tip-label {
+  font-size: 20rpx;
+  color: #1f2937;
+  font-weight: 900;
+  letter-spacing: 1rpx;
+  flex-shrink: 0;
+  padding: 6rpx 12rpx;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  border-radius: 10rpx;
+  box-shadow: 0 2rpx 8rpx rgba(251, 191, 36, 0.4);
+  animation: tipLabelFlash 2s ease-in-out infinite;
+  text-shadow: none;
+}
+
+@keyframes tipLabelFlash {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 2rpx 8rpx rgba(251, 191, 36, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 4rpx 12rpx rgba(251, 191, 36, 0.6);
+  }
+}
+
+.game-tip-text {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.4;
+  flex: 1;
+  font-weight: 400;
+}
+
+// 分析步骤面板
+.steps-panel {
+  width: 100%;
+  max-width: 630rpx;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 24rpx;
+  padding: 32rpx;
+  margin-bottom: 32rpx;
+  backdrop-filter: blur(10rpx);
+  -webkit-backdrop-filter: blur(10rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.5);
+}
+
+// 单个分析步骤
+.analysis-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.06);
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &.done {
+    .step-status-icon {
+      background: #10b981;
+    }
+    .step-title-v3 {
+      color: #10b981;
+    }
+  }
+
+  &.active {
+    .step-status-icon {
+      background: #3b82f6;
+    }
+    .step-title-v3 {
+      color: #1f2937;
+      font-weight: 600;
+    }
+    .step-desc-v3 {
+      color: #3b82f6;
+    }
+  }
+
+  &.pending {
+    .step-status-icon {
+      background: rgba(0, 0, 0, 0.1);
+    }
+    .step-title-v3 {
+      color: #9ca3af;
+    }
+    .step-desc-v3 {
+      color: #d1d5db;
+    }
+    .status-pending {
+      color: #d1d5db;
+    }
+  }
+}
+
+.step-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.step-status-icon {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.status-check {
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.status-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: stepSpinV3 0.8s linear infinite;
+}
+
+@keyframes stepSpinV3 {
   to {
     transform: rotate(360deg);
   }
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-
-  50% {
-    transform: scale(1.1);
-    opacity: 0.8;
-  }
-}
-
-/* Typography */
-.title {
-  font-size: 40rpx;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 16rpx;
-  letter-spacing: -0.5px;
-}
-
-.subtitle {
+.status-pending {
   font-size: 28rpx;
-  color: #64748b;
-  margin-bottom: 28rpx;
-  font-weight: 400;
+  color: #9ca3af;
 }
 
-.mode-pill {
-  width: 100%;
-  max-width: 600rpx;
-  padding: 24rpx 28rpx;
-  border-radius: 20rpx;
+.step-text-wrap {
+  flex: 1;
+}
+
+.step-title-v3 {
+  font-size: 30rpx;
+  color: #1f2937;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 6rpx;
+  transition: color 0.3s ease;
+}
+
+.step-desc-v3 {
+  font-size: 24rpx;
+  color: #6b7280;
+  display: block;
+  transition: color 0.3s ease;
+}
+
+// 脉冲指示器
+.step-pulse {
+  width: 16rpx;
+  height: 16rpx;
+  background: #3b82f6;
+  border-radius: 50%;
+  margin-left: 16rpx;
+  animation: pulseV3 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseV3 {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+// 模式徽章
+.mode-badge {
+  padding: 12rpx 32rpx;
+  border-radius: 30rpx;
   margin-bottom: 24rpx;
-  border: 1rpx solid transparent;
-  box-sizing: border-box;
 
   &.strict {
-    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-    border-color: #a7f3d0;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1rpx solid rgba(245, 158, 11, 0.3);
+
+    .mode-badge-text {
+      color: #f59e0b;
+    }
   }
 
   &.standard {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    border-color: #e2e8f0;
+    background: rgba(59, 130, 246, 0.15);
+    border: 1rpx solid rgba(59, 130, 246, 0.3);
+
+    .mode-badge-text {
+      color: #3b82f6;
+    }
   }
 }
 
-.mode-pill-title {
-  display: block;
+.mode-badge-text {
   font-size: 26rpx;
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 8rpx;
+  font-weight: 600;
 }
 
-.mode-pill-desc {
-  display: block;
-  font-size: 23rpx;
-  color: #475569;
-  line-height: 1.5;
-}
-
-/* Tip Card */
+// 健康知识卡片
 .tip-card {
   width: 100%;
-  max-width: 600rpx;
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 32rpx 40rpx;
-  margin-bottom: 64rpx;
-  box-shadow: 0 10rpx 30rpx -10rpx rgb(0 0 0 / 5%);
-  border: 1rpx solid #f1f5f9;
-  position: relative;
-  overflow: hidden;
+  max-width: 630rpx;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 20rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 32rpx;
+  border-left: 6rpx solid #f59e0b;
+  backdrop-filter: blur(10rpx);
+  -webkit-backdrop-filter: blur(10rpx);
+}
 
-  &::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 6rpx;
-    background: linear-gradient(to bottom, #00bc7d, #34d399);
-  }
-
-  .tip-header {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-    margin-bottom: 20rpx;
-  }
+.tip-card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
 
   .tip-icon {
     font-size: 32rpx;
     color: #f59e0b;
-
-    /* Amber */
-  }
-
-  .tip-label {
-    font-size: 26rpx;
-    color: #f59e0b;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-  }
-
-  .tip-text {
-    font-size: 28rpx;
-    color: #334155;
-    line-height: 1.7;
-    text-align: justify;
+    margin-right: 12rpx;
   }
 }
 
-/* Actions */
-.actions-wrap {
-  width: 100%;
-  max-width: 600rpx;
+.tip-card-title {
+  font-size: 28rpx;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.tip-card-content {
+  font-size: 26rpx;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+// 底部操作区
+.bottom-actions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32rpx;
+  gap: 20rpx;
+  margin-top: auto;
+  padding-top: 20rpx;
 }
 
-.leave-hint {
-  font-size: 24rpx;
-  color: #94a3b8;
-  text-align: center;
-  line-height: 1.5;
-  padding: 0 32rpx;
-}
-
-.btn-leave {
+// 离开按钮
+.btn-leave-v3 {
+  padding: 24rpx 56rpx;
+  background: rgba(0, 188, 125, 0.1);
+  border: 2rpx solid rgba(0, 188, 125, 0.3);
+  border-radius: 40rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24rpx 48rpx;
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #00bc7d;
-  background: rgb(0 188 125 / 8%);
-  border-radius: 100rpx;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
 
   &:active {
-    background: rgb(0 188 125 / 15%);
+    background: rgba(0, 188, 125, 0.2);
+    transform: scale(0.98);
+  }
+}
+
+.btn-leave-text-v3 {
+  font-size: 28rpx;
+  color: #00bc7d;
+  font-weight: 500;
+}
+
+// 退出调试按钮
+.btn-exit-debug-v3 {
+  padding: 20rpx 48rpx;
+  background: rgba(239, 68, 68, 0.1);
+  border: 2rpx solid rgba(239, 68, 68, 0.3);
+  border-radius: 32rpx;
+
+  &:active {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  .btn-exit-debug-text {
+    font-size: 26rpx;
+    color: #ef4444;
+    font-weight: 500;
+  }
+}
+
+// 品牌页脚
+.brand-footer {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.4);
+  margin-top: 24rpx;
+  text-align: center;
+}
+
+// ===== 旧样式保留（用于错误状态） =====
+.analyze-loading-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 40rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.violated-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60rpx 40rpx;
+}
+
+.violated-icon-wrap {
+  width: 160rpx;
+  height: 160rpx;
+  background: #fee2e2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 48rpx;
+}
+
+.violated-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 24rpx;
+}
+
+.violated-reason {
+  font-size: 30rpx;
+  color: #7f1d1d;
+  margin-bottom: 20rpx;
+  text-align: center;
+}
+
+.violated-hint {
+  font-size: 28rpx;
+  color: #991b1b;
+  text-align: center;
+  margin-bottom: 48rpx;
+  padding: 0 20rpx;
+  line-height: 1.6;
+}
+
+.error-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60rpx 40rpx;
+}
+
+.error-msg {
+  font-size: 32rpx;
+  color: #ef4444;
+  text-align: center;
+  margin-bottom: 48rpx;
+}
+
+.btn-history {
+  padding: 28rpx 56rpx;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a86b 100%);
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 600;
+  border-radius: 44rpx;
+  box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.25);
+
+  &:active {
     transform: scale(0.98);
   }
 }
 
 .ai-notice {
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: #94a3b8;
-  margin-top: 16rpx;
-  text-align: center;
-}
-
-/* Violated State */
-.violated-wrap {
-  text-align: center;
-  padding: 32rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24rpx;
-
-  .violated-icon-wrap {
-    width: 160rpx;
-    height: 160rpx;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 16rpx;
-  }
-
-  .violated-title {
-    font-size: 36rpx;
-    font-weight: 700;
-    color: #dc2626;
-    display: block;
-  }
-
-  .violated-reason {
-    font-size: 28rpx;
-    color: #991b1b;
-    background: #fef2f2;
-    border: 1rpx solid #fecaca;
-    border-radius: 16rpx;
-    padding: 20rpx 32rpx;
-    line-height: 1.6;
-    max-width: 560rpx;
-    display: block;
-  }
-
-  .violated-hint {
-    font-size: 24rpx;
-    color: #94a3b8;
-    line-height: 1.6;
-    max-width: 480rpx;
-    text-align: center;
-    display: block;
-  }
-
-  .btn-history {
-    display: inline-block;
-    padding: 24rpx 56rpx;
-    font-size: 28rpx;
-    font-weight: 600;
-    color: #fff;
-    background: #00bc7d;
-    border-radius: 100rpx;
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
-    margin-top: 16rpx;
-  }
-}
-
-/* Error State */
-.error-wrap {
-  text-align: center;
-  padding: 32rpx;
-
-  .error-msg {
-    font-size: 28rpx;
-    color: #ef4444;
-    margin-bottom: 32rpx;
-    display: block;
-  }
-
-  .btn-history {
-    display: inline-block;
-    padding: 24rpx 56rpx;
-    font-size: 28rpx;
-    font-weight: 600;
-    color: #fff;
-    background: #00bc7d;
-    border-radius: 100rpx;
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
-  }
+  margin-top: 48rpx;
 }

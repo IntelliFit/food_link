@@ -38,7 +38,8 @@ export default defineAppConfig({
     'pages/privacy/index',
     'pages/privacy-settings/index',
     'pages/friends/index',
-    'pages/profile-settings/index'
+    'pages/profile-settings/index',
+    'pages/exercise-record/index'
   ],
   window: {
     backgroundTextStyle: 'light',

@@ -122,43 +122,42 @@ camera {
   // 四角圆弧形括号 - 主题色绿色带发光
   .corner {
     position: absolute;
-    width: 56rpx;
-    height: 56rpx;
-    border-color: rgba(0, 188, 125, 1);
+    width: 150rpx;
+    height: 150rpx;
+    border-color: #FCFFFE;
     border-style: solid;
     border-width: 0;
-    box-shadow: 0 0 12rpx rgba(0, 188, 125, 0.5);
     
     &-tl {
       top: 0;
       left: 0;
-      border-top-width: 6rpx;
-      border-left-width: 6rpx;
-      border-top-left-radius: 28rpx;
+      border-top-width: 10rpx;
+      border-left-width: 10rpx;
+      border-top-left-radius: 80rpx;
     }
     
     &-tr {
       top: 0;
       right: 0;
-      border-top-width: 6rpx;
-      border-right-width: 6rpx;
-      border-top-right-radius: 28rpx;
+      border-top-width: 10rpx;
+      border-right-width: 10rpx;
+      border-top-right-radius: 80rpx;
     }
     
     &-bl {
       bottom: 0;
       left: 0;
-      border-bottom-width: 6rpx;
-      border-left-width: 6rpx;
-      border-bottom-left-radius: 28rpx;
+      border-bottom-width: 10rpx;
+      border-left-width: 10rpx;
+      border-bottom-left-radius: 80rpx;
     }
     
     &-br {
       bottom: 0;
       right: 0;
-      border-bottom-width: 6rpx;
-      border-right-width: 6rpx;
-      border-bottom-right-radius: 28rpx;
+      border-bottom-width: 10rpx;
+      border-right-width: 10rpx;
+      border-bottom-right-radius: 80rpx;
     }
   }
   
@@ -207,7 +206,7 @@ camera {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: space-around;
   padding: 40rpx 60rpx calc(100rpx + env(safe-area-inset-bottom));
   z-index: 20;
 }
@@ -221,16 +220,8 @@ camera {
   align-items: center;
   justify-content: center;
   gap: 12rpx;
-  border-radius: 28rpx;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
-  box-shadow: 
-    0 8rpx 32rpx rgba(0, 0, 0, 0.2),
-    inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
-  
+
   &:active {
     transform: scale(0.92);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.15) 100%);
@@ -238,9 +229,15 @@ camera {
   }
   
   .album-icon {
-    font-size: 44rpx;
+    font-size: 82rpx;
     color: #fff;
     text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.3);
+  }
+
+  .album-icon-img {
+    width: 82rpx;
+    height: 82rpx;
+    filter: drop-shadow(0 2rpx 8rpx rgba(0, 0, 0, 0.3));
   }
   
   .album-label {

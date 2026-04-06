@@ -650,13 +650,12 @@ $blue-color: #3b82f6;
 
 .meal-media-wrap {
   position: relative;
-  width: 100rpx;
-  height: 100rpx;
+  width: 130rpx;
+  height: 130rpx;
   border-radius: 12rpx;
   overflow: hidden;
   flex-shrink: 0;
   background: #f3f4f6;
-  border: 1rpx solid #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1209,7 +1208,8 @@ $blue-color: #3b82f6;
 
 // 体重/喝水卡片 - 新设计
 .body-status-section {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 16rpx;
   margin-bottom: 32rpx;
 }
@@ -1336,11 +1336,85 @@ $blue-color: #3b82f6;
   line-height: 28rpx;
 }
 
+// 运动卡片样式
+.exercise-card {
+  .body-status-icon.exercise-icon {
+    background: #fff7ed;
+    border-radius: 8rpx;
+    width: 32rpx;
+    height: 32rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  &:active {
+    background: #fff7ed;
+  }
+}
+
+// 喝水弹层专用样式
+.water-modal {
+  .target-modal-header {
+    margin-bottom: 24rpx;
+  }
+}
+
+// 今日进度 - 简约进度条
+.water-progress-section {
+  margin-bottom: 28rpx;
+  padding: 24rpx;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-radius: 20rpx;
+}
+
+.water-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.water-progress-label {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #0369a1;
+  font-weight: 600;
+}
+
+.water-progress-value {
+  font-size: 32rpx;
+  line-height: 44rpx;
+  color: #0284c7;
+  font-weight: 800;
+}
+
+.water-progress-bar-bg {
+  height: 12rpx;
+  background: rgb(186 230 253 / 60%);
+  border-radius: 999rpx;
+  overflow: hidden;
+  margin-bottom: 12rpx;
+}
+
+.water-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #0ea5e9 100%);
+  border-radius: 999rpx;
+  transition: width 0.5s ease;
+}
+
+.water-progress-goal {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
+}
+
 // 喝水快捷按钮
 .water-quick-actions {
   display: flex;
   gap: 16rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .water-quick-btn {
@@ -1818,5 +1892,21 @@ $blue-color: #3b82f6;
   
   &.primary {
     color: #fff;
+  }
+}
+
+// 喝水弹层底部按钮动画
+.water-modal-actions {
+  animation: slideUp 0.25s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

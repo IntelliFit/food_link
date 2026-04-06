@@ -1,4 +1,4 @@
-import { View, Text, Camera } from '@tarojs/components'
+import { View, Text, Camera, Image } from '@tarojs/components'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro, { useDidShow, useDidHide, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
@@ -279,9 +279,7 @@ function RecordPage() {
       {/* 底部控制区域 */}
       <View className='bottom-controls'>
         {/* 相册按钮 - 左侧 */}
-        <View className='album-btn' onClick={handleChooseFromAlbum}>
-          <Text className='iconfont icon-paizhao-xianxing album-icon' />
-          <Text className='album-label'>相册</Text>
+        <View className='side-btn placeholder'>
         </View>
 
         {/* 拍照按钮 */}
@@ -293,8 +291,14 @@ function RecordPage() {
           </View>
         </View>
 
-        {/* 占位 - 保持对称 */}
-        <View className='side-btn placeholder' />
+        {/* 相册按钮 - 右侧 */}
+        <View className='album-btn' onClick={handleChooseFromAlbum}>
+          <Image
+            className='album-icon-img'
+            src='data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAyNCAxMDI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik04NTMuMzMzMzMzIDk2YzQwLjUzMzMzMyAwIDc0LjY2NjY2NyAzNC4xMzMzMzMgNzQuNjY2NjY3IDc0LjY2NjY2N3Y2ODIuNjY2NjY2YzAgNDAuNTMzMzMzLTM0LjEzMzMzMyA3NC42NjY2NjctNzQuNjY2NjY3IDc0LjY2NjY2N0gxNzAuNjY2NjY3Yy00MC41MzMzMzMgMC03NC42NjY2NjctMzQuMTMzMzMzLTc0LjY2NjY2Ny03NC42NjY2NjdWMTcwLjY2NjY2N2MwLTQwLjUzMzMzMyAzNC4xMzMzMzMtNzQuNjY2NjY3IDc0LjY2NjY2Ny03NC42NjY2NjdoNjgyLjY2NjY2NnpNNzQ2LjY2NjY2NyA0NjkuMzMzMzMzYy0xMC42NjY2NjctMTIuOC0zMi0xNC45MzMzMzMtNDQuOC0yLjEzMzMzM0wzMjAgODA4LjUzMzMzM2wtMi4xMzMzMzMgMi4xMzMzMzRjLTE5LjIgMTkuMi00LjI2NjY2NyA1My4zMzMzMzMgMjMuNDY2NjY2IDUzLjMzMzMzM2g0OTIuOGMxNy4wNjY2NjctMi4xMzMzMzMgMjkuODY2NjY3LTE0LjkzMzMzMyAyOS44NjY2NjctMzJ2LTE5Ni4yNjY2NjdjMC02LjQtMi4xMzMzMzMtMTAuNjY2NjY3LTYuNC0xNC45MzMzMzNsLTEwOC44LTE0OS4zMzMzMzMtMi4xMzMzMzMtMi4xMzMzMzR6IG0tMzk0LjY2NjY2Ny0yMDIuNjY2NjY2Yy00Ni45MzMzMzMgMC04NS4zMzMzMzMgMzguNC04NS4zMzMzMzMgODUuMzMzMzMzczM4LjQgODUuMzMzMzMzIDg1LjMzMzMzMyA4NS4zMzMzMzMgODUuMzMzMzMzLTM4LjQgODUuMzMzMzMzLTg1LjMzMzMzMy0zOC40LTg1LjMzMzMzMy04NS4zMzMzMzMtODUuMzMzMzMzeiIgZmlsbD0iI2ZmZmZmZiI+PC9wYXRoPjwvc3ZnPg=='
+            mode='aspectFit'
+          />
+        </View>
       </View>
     </View>
   )

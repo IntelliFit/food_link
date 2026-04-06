@@ -1,0 +1,309 @@
+// 颜色变量
+$primary-color: #00bc7d;
+$exercise-color: #f97316;
+$exercise-light: #fff7ed;
+$bg-color: #f8fafc;
+$card-bg: #fff;
+$text-primary: #1f2937;
+$text-secondary: #6b7280;
+$text-tertiary: #9ca3af;
+$border-color: #e5e7eb;
+
+.exercise-record-page {
+  min-height: 100vh;
+  background: $bg-color;
+  display: flex;
+  flex-direction: column;
+}
+
+// 头部统计
+.header-stats {
+  padding: 24rpx 24rpx 16rpx;
+  background: linear-gradient(180deg, #fff 0%, $bg-color 100%);
+}
+
+.stats-card {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  background: $card-bg;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
+}
+
+.stats-icon-wrap {
+  width: 80rpx;
+  height: 80rpx;
+  background: $exercise-light;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stats-info {
+  flex: 1;
+}
+
+.stats-label {
+  display: block;
+  font-size: 24rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+  margin-bottom: 4rpx;
+}
+
+.stats-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.stats-value {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 60rpx;
+}
+
+.stats-unit {
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+}
+
+.stats-count {
+  font-size: 24rpx;
+  color: $exercise-color;
+  background: $exercise-light;
+  padding: 8rpx 16rpx;
+  border-radius: 9999rpx;
+  font-weight: 500;
+}
+
+// 聊天容器
+.chat-container {
+  flex: 1;
+  padding: 16rpx 24rpx;
+  overflow-y: auto;
+}
+
+// 空状态
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 120rpx;
+}
+
+.empty-icon-wrap {
+  width: 160rpx;
+  height: 160rpx;
+  background: #f3f4f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32rpx;
+}
+
+.empty-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: $text-primary;
+  line-height: 44rpx;
+  margin-bottom: 12rpx;
+}
+
+.empty-desc {
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 40rpx;
+  text-align: center;
+  margin-bottom: 48rpx;
+}
+
+// 快捷示例
+.quick-examples {
+  width: 100%;
+  padding: 0 24rpx;
+}
+
+.quick-examples-title {
+  display: block;
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+  margin-bottom: 16rpx;
+  text-align: center;
+}
+
+.example-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16rpx;
+}
+
+.example-tag {
+  background: $card-bg;
+  border: 2rpx solid $border-color;
+  border-radius: 9999rpx;
+  padding: 16rpx 28rpx;
+  
+  &:active {
+    background: $exercise-light;
+    border-color: $exercise-color;
+  }
+}
+
+.example-tag-text {
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 36rpx;
+}
+
+// 聊天列表
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.chat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.chat-bubble {
+  max-width: 80%;
+  background: $exercise-color;
+  border-radius: 24rpx 24rpx 4rpx 24rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 12rpx;
+}
+
+.chat-content {
+  font-size: 30rpx;
+  color: #fff;
+  line-height: 44rpx;
+  word-break: break-all;
+}
+
+.chat-meta {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.chat-result {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  background: $exercise-light;
+  padding: 8rpx 16rpx;
+  border-radius: 9999rpx;
+}
+
+.chat-result-text {
+  font-size: 22rpx;
+  color: $exercise-color;
+  line-height: 32rpx;
+  font-weight: 500;
+}
+
+.chat-time {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+}
+
+.chat-delete {
+  margin-top: 8rpx;
+  padding: 4rpx 12rpx;
+  
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.chat-delete-text {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+}
+
+// 输入区域
+.input-section {
+  padding: 16rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: $card-bg;
+  border-top: 2rpx solid $border-color;
+}
+
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: $bg-color;
+  border-radius: 9999rpx;
+  padding: 12rpx 12rpx 12rpx 24rpx;
+}
+
+.chat-input {
+  flex: 1;
+  height: 64rpx;
+  font-size: 30rpx;
+  color: $text-primary;
+  line-height: 44rpx;
+}
+
+.input-placeholder {
+  color: $text-tertiary;
+}
+
+.send-btn {
+  width: 64rpx;
+  height: 64rpx;
+  background: $exercise-color;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  
+  &:active {
+    transform: scale(0.95);
+    opacity: 0.9;
+  }
+  
+  &.disabled {
+    background: $text-tertiary;
+    opacity: 0.5;
+  }
+}
+
+.send-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border: 4rpx solid rgb(255 255 255 / 30%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.input-hint {
+  display: block;
+  font-size: 22rpx;
+  color: $text-tertiary;
+  line-height: 32rpx;
+  text-align: center;
+  margin-top: 12rpx;
+}

@@ -169,6 +169,20 @@ function AnalyzePage() {
   const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [isDevMode, setIsDevMode] = useState(false)
+
+  // 初始化时检查开发者模式
+  useEffect(() => {
+    const checkDevMode = () => {
+      try {
+        const devMode = Taro.getStorageSync('devMode')
+        setIsDevMode(devMode === true || devMode === 'true')
+      } catch {
+        setIsDevMode(false)
+      }
+    }
+    checkDevMode()
+  }, [])
 
   const normalizeExecutionMode = (value: unknown): ExecutionMode => {
     return value === 'strict' ? 'strict' : 'standard'
@@ -432,8 +446,94 @@ function AnalyzePage() {
     })
   }
 
+  // 开发者模式：直接进入结果页调试样式
+  const handleDebugResultPage = () => {
+    // 模拟分析结果数据
+    const mockResult = {
+      foods: [
+        {
+          id: 1,
+          name: '示例食物 - 红烧排骨',
+          weight: 150,
+          calories: 320,
+          protein: 18.5,
+          fat: 22.3,
+          carbs: 8.2,
+          sodium_mg: 280,
+          description: '精选猪肋排红烧制作，肉质鲜嫩'
+        },
+        {
+          id: 2,
+          name: '示例食物 - 清炒西兰花',
+          weight: 120,
+          calories: 45,
+          protein: 3.8,
+          fat: 0.8,
+          carbs: 8.5,
+          sodium_mg: 45,
+          description: '新鲜西兰花清炒，保持营养'
+        }
+      ],
+      total: {
+        calories: 365,
+        protein: 22.3,
+        fat: 23.1,
+        carbs: 16.7
+      },
+      tips: [
+        '这是调试模式下的示例数据',
+        '用于预览结果页面的样式效果'
+      ]
+    }
+
+    // 保存调试数据到本地存储
+    if (imagePaths.length > 0) {
+      Taro.setStorageSync('analyzeImagePath', imagePaths[0])
+      Taro.setStorageSync('analyzeImagePaths', imagePaths)
+    } else {
+      // 如果没有图片，使用占位图
+      Taro.setStorageSync('analyzeImagePath', '')
+      Taro.setStorageSync('analyzeImagePaths', [])
+    }
+    Taro.setStorageSync('analyzeResult', JSON.stringify(mockResult))
+    Taro.setStorageSync('analyzeMealType', mealType)
+    Taro.setStorageSync('analyzeDietGoal', dietGoal)
+    Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+    Taro.setStorageSync('analyzeSourceTaskId', 'debug-task-id')
+    Taro.setStorageSync('analyzeTaskType', 'food')
+    Taro.setStorageSync('analyzeCompareMode', false)
+
+    // 跳转到结果页面
+    Taro.navigateTo({ url: '/pages/result/index' })
+  }
+
+  // 开发者模式：进入分析 Loading 页面调试
+  const handleDebugAnalyzeLoadingPage = () => {
+    // 保存执行模式到 storage，让分析页读取
+    Taro.setStorageSync('analyzeExecutionMode', executionMode)
+    Taro.setStorageSync('analyzeTaskType', 'food')
+
+    // 跳转到分析 loading 页面，使用 debug 任务 ID
+    // analyze-loading 页面会识别 debug 前缀，进入调试模式
+    Taro.navigateTo({
+      url: `/pages/analyze-loading/index?task_id=debug-task-${Date.now()}&execution_mode=${executionMode}`
+    })
+  }
+
+  // 长按启用开发者模式
+  const handleEnableDevMode = () => {
+    Taro.setStorageSync('devMode', true)
+    setIsDevMode(true)
+    Taro.showToast({
+      title: '开发者模式已启用',
+      icon: 'none',
+      duration: 2000
+    })
+  }
+
   return (
-    <View className='analyze-page'>
+    <View className='analyze-page' onLongPress={handleEnableDevMode}>
+      {/* 提示：长按页面任意位置可启用开发者模式 */}
       {/* 今日配额提示条 */}
       {membershipStatus && (
         <View
@@ -441,7 +541,7 @@ function AnalyzePage() {
           onClick={() => !membershipStatus.is_pro && Taro.navigateTo({ url: '/pages/pro-membership/index' })}
         >
           <Text className='quota-bar-text'>
-            {membershipStatus.is_pro ? '🥇 ' : ''}今日剩余 {membershipStatus.daily_remaining ?? '--'}/{membershipStatus.daily_limit ?? '--'} 次
+            今日剩余 {membershipStatus.daily_remaining ?? '--'}/{membershipStatus.daily_limit ?? '--'} 次
             {!membershipStatus.is_pro && '  →开通会员每日20次'}
           </Text>
         </View>
@@ -641,6 +741,25 @@ function AnalyzePage() {
             {isAnalyzing ? <View className='btn-spinner' /> : (imagePaths.length === 0 ? '请先拍照' : `分析 ${imagePaths.length} 张图片`)}
           </Text>
         </View>
+
+        {/* 开发者调试按钮 */}
+        {isDevMode && (
+          <>
+            <View
+              className='debug-btn'
+              onClick={handleDebugResultPage}
+            >
+              <Text className='debug-btn-text'>🛠 调试：模拟进入结果页</Text>
+            </View>
+            <View
+              className='debug-btn debug-btn--secondary'
+              onClick={handleDebugAnalyzeLoadingPage}
+            >
+              <Text className='debug-btn-text'>⏳ 调试：进入分析 Loading 页</Text>
+            </View>
+          </>
+        )}
+
         <View
           className='history-link'
           onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
