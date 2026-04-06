@@ -488,6 +488,33 @@ function IndexPage() {
     }
   }, [loadDashboard])
 
+  // 监听记录菜单标记变化（解决首页直接点击绿色按钮无响应问题）
+  useEffect(() => {
+    const checkRecordMenuFlag = () => {
+      const shouldShow = Taro.getStorageSync('showRecordMenuModal')
+      if (shouldShow) {
+        Taro.removeStorageSync('showRecordMenuModal')
+        setShowRecordMenu(true)
+      }
+    }
+
+    // 立即检查一次
+    checkRecordMenuFlag()
+
+    // 设置轮询检查（每500ms检查一次，最多检查10秒）
+    let checkCount = 0
+    const maxChecks = 20
+    const timer = setInterval(() => {
+      checkRecordMenuFlag()
+      checkCount++
+      if (checkCount >= maxChecks) {
+        clearInterval(timer)
+      }
+    }, 500)
+
+    return () => clearInterval(timer)
+  }, [])
+
   const openTargetEditor = () => {
     if (!getAccessToken()) {
       Taro.showToast({ title: '登录后可编辑目标', icon: 'none' })

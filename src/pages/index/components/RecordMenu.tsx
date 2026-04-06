@@ -1,16 +1,11 @@
-import { View, Text, Image } from '@tarojs/components'
+import { View, Text } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import {
   IconCamera,
   IconAlbum,
   IconText,
   IconEdit,
-  IconBreakfast,
-  IconLunch,
-  IconDinner,
-  IconSnack,
-  IconExercise,
-  IconMicrophone,
+  IconHistory,
   IconChevronRight
 } from '../../../components/iconfont'
 
@@ -19,7 +14,7 @@ interface RecordMenuProps {
   onClose: () => void
 }
 
-// 顶部2x2网格功能
+// 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
 const GRID_FEATURES = [
   {
     id: 'camera',
@@ -30,70 +25,38 @@ const GRID_FEATURES = [
     Icon: IconCamera,
   },
   {
-    id: 'receipt',
-    label: '小票识别',
-    subLabel: 'Scan Receipt',
+    id: 'album',
+    label: '相册上传',
+    subLabel: 'Photo Library',
     color: '#10b981',
     bgColor: '#ecfdf5',
-    Icon: IconEdit,
+    Icon: IconAlbum,
   },
   {
-    id: 'label',
-    label: '营养标签',
-    subLabel: 'Nutrition Label',
+    id: 'text',
+    label: '文本输入',
+    subLabel: 'Text Input',
     color: '#f59e0b',
     bgColor: '#fffbeb',
     Icon: IconText,
   },
   {
-    id: 'bill',
-    label: '账单识别',
-    subLabel: 'Scan Food Bill',
+    id: 'manual',
+    label: '手动输入',
+    subLabel: 'Manual Entry',
     color: '#3b82f6',
     bgColor: '#eff6ff',
-    isNew: true,
-    Icon: IconAlbum,
+    Icon: IconEdit,
   },
 ]
 
-// 底部列表项
-const LIST_ITEMS = [
-  {
-    id: 'breakfast',
-    label: '早餐',
-    iconType: 'meal',
-    Icon: IconBreakfast,
-    color: '#f59e0b',
-  },
-  {
-    id: 'lunch',
-    label: '午餐',
-    iconType: 'meal',
-    Icon: IconLunch,
-    color: '#f59e0b',
-  },
-  {
-    id: 'snack',
-    label: '加餐',
-    iconType: 'meal',
-    Icon: IconSnack,
-    color: '#f59e0b',
-  },
-  {
-    id: 'dinner',
-    label: '晚餐',
-    iconType: 'meal',
-    Icon: IconDinner,
-    color: '#f59e0b',
-  },
-  {
-    id: 'activity',
-    label: '运动',
-    iconType: 'activity',
-    Icon: IconExercise,
-    color: '#e85d75',
-  },
-]
+// 底部只有历史记录
+const HISTORY_ITEM = {
+  id: 'history',
+  label: '历史记录',
+  Icon: IconHistory,
+  color: '#6b7280',
+}
 
 export function RecordMenu({ visible, onClose }: RecordMenuProps) {
   if (!visible) return null
@@ -105,7 +68,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
       case 'camera':
         Taro.navigateTo({ url: '/pages/record/index?mode=simple' })
         break
-      case 'receipt':
+      case 'album':
         Taro.chooseImage({
           count: 1,
           sizeType: ['compressed'],
@@ -113,7 +76,6 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           success: (res) => {
             const imagePath = res.tempFilePaths[0]
             Taro.setStorageSync('analyzeImagePath', imagePath)
-            Taro.setStorageSync('analyzeMode', 'receipt')
             Taro.navigateTo({ url: '/pages/analyze/index' })
           },
           fail: (err) => {
@@ -122,49 +84,18 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           }
         })
         break
-      case 'label':
+      case 'text':
         Taro.navigateTo({ url: '/pages/record-text/index' })
         break
-      case 'bill':
-        Taro.chooseImage({
-          count: 1,
-          sizeType: ['compressed'],
-          sourceType: ['album'],
-          success: (res) => {
-            const imagePath = res.tempFilePaths[0]
-            Taro.setStorageSync('analyzeImagePath', imagePath)
-            Taro.setStorageSync('analyzeMode', 'bill')
-            Taro.navigateTo({ url: '/pages/analyze/index' })
-          },
-          fail: (err) => {
-            if (err.errMsg?.includes('cancel')) return
-            Taro.showToast({ title: '选择图片失败', icon: 'none' })
-          }
-        })
+      case 'manual':
+        Taro.navigateTo({ url: '/pages/record-manual/index' })
         break
     }
   }
 
-  const handleListClick = (itemId: string) => {
+  const handleHistoryClick = () => {
     onClose()
-
-    switch (itemId) {
-      case 'breakfast':
-        Taro.navigateTo({ url: '/pages/record-manual/index?meal=breakfast' })
-        break
-      case 'lunch':
-        Taro.navigateTo({ url: '/pages/record-manual/index?meal=lunch' })
-        break
-      case 'snack':
-        Taro.navigateTo({ url: '/pages/record-manual/index?meal=snack' })
-        break
-      case 'dinner':
-        Taro.navigateTo({ url: '/pages/record-manual/index?meal=dinner' })
-        break
-      case 'activity':
-        Taro.navigateTo({ url: '/pages/exercise-record/index' })
-        break
-    }
+    Taro.navigateTo({ url: '/pages/analyze-history/index' })
   }
 
   return (
@@ -206,31 +137,22 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           })}
         </View>
 
-        {/* 底部功能列表 */}
+        {/* 底部历史记录 */}
         <View className='record-menu-list-v2'>
-          {LIST_ITEMS.map((item) => {
-            const IconComponent = item.Icon
-            return (
-              <View
-                key={item.id}
-                className='record-menu-list-item-v2'
-                onClick={() => handleListClick(item.id)}
-              >
-                <View className='record-menu-list-left'>
-                  <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${item.color}15` }}>
-                    <IconComponent size={24} color={item.color} />
-                  </View>
-                  <Text className='record-menu-list-label-v2'>{item.label}</Text>
-                </View>
-                <View className='record-menu-list-right'>
-                  <View className='record-menu-mic-btn'>
-                    <IconMicrophone size={18} color='#9ca3af' />
-                  </View>
-                  <IconChevronRight size={16} color='#d1d5db' />
-                </View>
+          <View
+            className='record-menu-list-item-v2'
+            onClick={handleHistoryClick}
+          >
+            <View className='record-menu-list-left'>
+              <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${HISTORY_ITEM.color}15` }}>
+                <HISTORY_ITEM.Icon size={24} color={HISTORY_ITEM.color} />
               </View>
-            )
-          })}
+              <Text className='record-menu-list-label-v2'>{HISTORY_ITEM.label}</Text>
+            </View>
+            <View className='record-menu-list-right'>
+              <IconChevronRight size={16} color='#d1d5db' />
+            </View>
+          </View>
         </View>
 
         {/* 底部安全区域 */}
