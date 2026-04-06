@@ -385,11 +385,11 @@ $blue-color: #3b82f6;
   line-height: 26rpx;
 }
 
-// 右侧仪表盘
+// 右侧仪表盘 - 增大尺寸
 .macro-gauge-box-horizontal {
   position: relative;
-  width: 68rpx;
-  height: 68rpx;
+  width: 88rpx;
+  height: 88rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -398,8 +398,8 @@ $blue-color: #3b82f6;
 
 .macro-gauge-horizontal {
   position: relative;
-  width: 60rpx;
-  height: 60rpx;
+  width: 80rpx;
+  height: 80rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -407,8 +407,8 @@ $blue-color: #3b82f6;
 
 .macro-ring-bg-horizontal {
   position: absolute;
-  width: 52rpx;
-  height: 52rpx;
+  width: 72rpx;
+  height: 72rpx;
   transform: rotate(-90deg);
 }
 
@@ -1423,9 +1423,9 @@ $blue-color: #3b82f6;
 }
 
 .body-status-label {
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: 400;
-  line-height: 32rpx;
+  line-height: 30rpx;
   color: $text-secondary;
 }
 
@@ -1437,20 +1437,20 @@ $blue-color: #3b82f6;
 }
 
 .body-status-value {
-  font-size: 44rpx;
+  font-size: 40rpx;
   font-weight: 700;
   color: $text-primary;
-  line-height: 56rpx;
+  line-height: 52rpx;
 }
 
 .body-status-unit {
-  font-size: 24rpx;
+  font-size: 20rpx;
   color: $text-tertiary;
-  line-height: 34rpx;
+  line-height: 30rpx;
 }
 
 .body-status-change {
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: 600;
   padding: 4rpx 10rpx;
   border-radius: 9999rpx;
@@ -1468,16 +1468,16 @@ $blue-color: #3b82f6;
 }
 
 .body-status-empty {
-  font-size: 32rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: $text-tertiary;
-  line-height: 44rpx;
+  line-height: 40rpx;
 }
 
 .body-status-hint {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: $text-tertiary;
-  line-height: 32rpx;
+  line-height: 30rpx;
 }
 
 .body-status-progress-wrap {
