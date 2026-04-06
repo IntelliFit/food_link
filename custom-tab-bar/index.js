@@ -103,6 +103,22 @@ Component({
       if (iscenter) {
         // 设置标记，让首页显示记录菜单弹窗
         wx.setStorageSync('showRecordMenuModal', true)
+        // 触发全局事件（备用方案，确保首页能收到通知）
+        try {
+          const pages = getCurrentPages()
+          if (pages.length > 0) {
+            const currentPage = pages[pages.length - 1]
+            // 如果已经在首页，直接触发事件
+            if (currentPage.route === 'pages/index/index') {
+              const eventChannel = currentPage.getOpenerEventChannel && currentPage.getOpenerEventChannel()
+              if (eventChannel && eventChannel.emit) {
+                eventChannel.emit('showRecordMenu')
+              }
+            }
+          }
+        } catch (err) {
+          console.error('触发事件失败', err)
+        }
         // 切换到首页
         wx.switchTab({ url: '/pages/index/index' })
         return

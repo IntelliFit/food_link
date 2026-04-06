@@ -2106,7 +2106,7 @@ $blue-color: #3b82f6;
   background: #fff;
   border-radius: 32rpx 32rpx 0 0;
   padding: 32rpx 24rpx;
-  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(64rpx + env(safe-area-inset-bottom));
   animation: slideUp 0.3s ease;
 }
 

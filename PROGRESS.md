@@ -6,6 +6,7 @@
 
 ## 2026-04-09
 
+- ⏪ revert: 还原分析页面至5小时前版本：移除体重/喝水数据展示、Switch控件、仪表盘风格餐次结构等新功能，恢复原始饮食统计和热图展示样式 `src/pages/stats/index.tsx`
 - 🎨 style: 增大营养仪表盘半径（68→88rpx）并缩小身体状态卡片字体（value 44→40rpx/unit 24→20rpx等） `src/pages/index/index.scss`
 - 🎨 style: 增加首页整体padding和模块间距：页面padding 24rpx→32rpx/120rpx→140rpx，模块间距全面增加 16→20/12→16/12→16/12→24/24→40rpx，更舒适的视觉空间 `src/pages/index/index.scss`
 - 🎨 style: 三大营养素改为水平三列布局：每个卡片内部左右分栏，左侧名称+当前摄入/目标克数，右侧仪表盘百分比；三卡片水平并排 `src/pages/index/index.scss`

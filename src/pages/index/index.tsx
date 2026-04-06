@@ -501,18 +501,30 @@ function IndexPage() {
     // 立即检查一次
     checkRecordMenuFlag()
 
-    // 设置轮询检查（每500ms检查一次，最多检查10秒）
+    // 设置轮询检查（每50ms检查一次，最多检查60秒）
+    // 使用更短的间隔和更长的持续时间，确保捕获标记
     let checkCount = 0
-    const maxChecks = 20
+    const maxChecks = 1200
     const timer = setInterval(() => {
       checkRecordMenuFlag()
       checkCount++
       if (checkCount >= maxChecks) {
         clearInterval(timer)
       }
-    }, 500)
+    }, 50)
 
     return () => clearInterval(timer)
+  }, [])
+
+  // 额外：监听全局事件（备用方案，确保可靠性）
+  useEffect(() => {
+    const showRecordMenuHandler = () => {
+      setShowRecordMenu(true)
+    }
+    Taro.eventCenter.on('showRecordMenu', showRecordMenuHandler)
+    return () => {
+      Taro.eventCenter.off('showRecordMenu', showRecordMenuHandler)
+    }
   }, [])
 
   const openTargetEditor = () => {
