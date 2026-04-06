@@ -1232,13 +1232,13 @@ $blue-color: #3b82f6;
 .target-form-list {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: 16rpx;
 }
 
 .target-form-item {
   background: #f8fafc;
   border-radius: 20rpx;
-  padding: 24rpx;
+  padding: 20rpx;
 }
 
 .target-form-label {
@@ -1246,8 +1246,37 @@ $blue-color: #3b82f6;
   font-size: 28rpx;
   color: $text-primary;
   line-height: 40rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 16rpx;
   font-weight: 500;
+}
+
+.target-input-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.target-adjust-btn {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 16rpx;
+  background: #fff;
+  border: 2rpx solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &:active {
+    background: #f1f5f9;
+  }
+}
+
+.target-adjust-btn-text {
+  font-size: 32rpx;
+  color: $text-primary;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .target-input-wrap {

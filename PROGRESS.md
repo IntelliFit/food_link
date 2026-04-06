@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-04-07
+
+- 🐛 fix: 修复首页点击底部导航栏中间按钮无响应问题：改进了 custom-tab-bar 事件通知机制，当已在首页时直接通过多方案降级策略触发事件，不再依赖 switchTab 生命周期 `custom-tab-bar/index.js` `src/pages/index/index.tsx`
+- 🎨 style: 优化编辑今日目标界面布局，将加减按钮移到输入框左右两侧形成水平布局，缩小各板块间距 `src/pages/index/index.scss`
+
 ## 2026-04-09
 
 - ⏪ revert: 还原分析页面到含体重喝水数据展示、Switch控件、仪表盘餐次结构的版本 `src/pages/stats/index.tsx`

@@ -519,11 +519,47 @@ function IndexPage() {
   // 额外：监听全局事件（备用方案，确保可靠性）
   useEffect(() => {
     const showRecordMenuHandler = () => {
+      console.log('[DEBUG] 通过全局事件触发显示记录菜单')
       setShowRecordMenu(true)
     }
     Taro.eventCenter.on('showRecordMenu', showRecordMenuHandler)
     return () => {
       Taro.eventCenter.off('showRecordMenu', showRecordMenuHandler)
+    }
+  }, [])
+
+  // 额外方案：监听 app 实例上的事件中心（供原生组件如 custom-tab-bar 使用）
+  useEffect(() => {
+    const showRecordMenuHandler = () => {
+      console.log('[DEBUG] 通过 app eventCenter 触发显示记录菜单')
+      setShowRecordMenu(true)
+    }
+    
+    // 注册到 app 实例的事件中心，供 custom-tab-bar 调用
+    try {
+      const app = Taro.getApp()
+      if (app) {
+        if (!app.eventCenter) {
+          app.eventCenter = { callbacks: {} }
+        }
+        if (!app.eventCenter.callbacks) {
+          app.eventCenter.callbacks = {}
+        }
+        app.eventCenter.callbacks['showRecordMenu'] = showRecordMenuHandler
+      }
+    } catch (err) {
+      console.error('[DEBUG] 注册 app eventCenter 失败:', err)
+    }
+    
+    return () => {
+      try {
+        const app = Taro.getApp()
+        if (app && app.eventCenter && app.eventCenter.callbacks) {
+          delete app.eventCenter.callbacks['showRecordMenu']
+        }
+      } catch (err) {
+        console.error('[DEBUG] 清理 app eventCenter 失败:', err)
+      }
     }
   }, [])
 
