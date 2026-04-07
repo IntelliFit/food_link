@@ -6,6 +6,7 @@
 
 ## 2026-04-08
 
+- 🐛 fix: 文字分析 loading 不再沿用上次拍照图：清 storage、`food_text` 用与结果页一致的无图占位视觉；纠错重分析走文字链时同步清图 `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss` `src/pages/record-text/index.tsx` `src/pages/result/index.tsx`
 - ✨ feat: 主热量「粗进度条」与三大营养素圆环、圆心克数接入 `useAnimatedProgress`/`useAnimatedNumber`（与喝水条同源缓动）`src/pages/index/index.tsx`
 - 🐛 fix: 仪表盘换日缓动：`selectedDate|busy|idle` 作 `resetDep`；`useLayoutEffect` 内 `resetDep` 变化时先同步归零再 rAF，并清 `dist` 后 `build:weapp:preview` + CLI 重启开发者工具 `src/pages/index/hooks/useAnimatedNumber.ts` `useAnimatedProgress.ts` `src/pages/index/index.tsx`
 - 🐛 fix: 身体指标云端日期与首页 `2026-MM-DD` 不一致时喝水/体重按日查不到；`bmDateKey`/`normalizeBodyMetricsStorageKeys` 与 `applyCloudBodyMetrics` 按日 upsert；`getBodyMetricsSummary` 失败时重试并规范化本机缓存 `src/pages/index/index.tsx`

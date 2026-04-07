@@ -1052,6 +1052,10 @@ function ResultPage() {
 
           // 4. 跳转到 loading 页面重新走解析流程
           const nextTaskType = shouldResubmitWithImage ? 'food_image' : 'food_text'
+          if (!shouldResubmitWithImage) {
+            Taro.removeStorageSync('analyzeImagePath')
+            Taro.removeStorageSync('analyzeImagePaths')
+          }
           Taro.navigateTo({
             url: `/pages/analyze-loading/index?task_id=${taskId}&task_type=${nextTaskType}&execution_mode=${savedExecutionMode}`
           })

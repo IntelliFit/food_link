@@ -88,6 +88,9 @@ function RecordTextPage() {
     Taro.showLoading({ title: '提交任务中...', mask: true })
 
     try {
+      // 避免沿用上一次拍照分析残留在 storage 中的图，loading 与结果页需与「文字记录」一致
+      Taro.removeStorageSync('analyzeImagePath')
+      Taro.removeStorageSync('analyzeImagePaths')
       Taro.setStorageSync('analyzeTextInput', inputText)
       const { task_id } = await submitTextAnalyzeTask({
         text: inputText,

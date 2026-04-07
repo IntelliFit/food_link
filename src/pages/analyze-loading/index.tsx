@@ -105,6 +105,14 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
 }
 
 // 分析步骤配置
+/** 文字饮食分析步骤（与结果页「无图占位」同属文字记录链路） */
+const FOOD_TEXT_ANALYSIS_STEPS = [
+  { id: 't1', title: '文字已接收', desc: '已收到你的饮食描述' },
+  { id: 't2', title: '解析食物信息', desc: '结合餐次与饮食目标' },
+  { id: 't3', title: '估算营养', desc: '估算热量与三大营养素' },
+  { id: 't4', title: '生成分析', desc: '汇总本轮文字记录' }
+]
+
 const ANALYSIS_STEPS = [
   {
     id: 'image',
@@ -160,7 +168,9 @@ const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => 
 
 function AnalyzeLoadingPage() {
   const [taskId, setTaskId] = useState<string>('')
-  const [taskType, setTaskType] = useState<string>('food')
+  const [taskType, setTaskType] = useState<string>(() =>
+    normalizeTaskType(Taro.getCurrentInstance().router?.params?.task_type)
+  )
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [status, setStatus] = useState<'loading' | 'done' | 'failed' | 'violated'>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -178,12 +188,26 @@ function AnalyzeLoadingPage() {
 
   const syncImagePathFromStorage = useCallback(() => {
     try {
+      const type = normalizeTaskType(Taro.getCurrentInstance().router?.params?.task_type)
+      // 文字分析：与结果页一致，不展示历史拍照图；并清除残留 storage
+      if (type === 'food_text') {
+        Taro.removeStorageSync('analyzeImagePath')
+        Taro.removeStorageSync('analyzeImagePaths')
+        setImagePath('')
+        return
+      }
+      if (type === 'exercise') {
+        setImagePath('')
+        return
+      }
       const storedPath = Taro.getStorageSync('analyzeImagePath')
       const storedPaths = Taro.getStorageSync('analyzeImagePaths')
       if (storedPaths && Array.isArray(storedPaths) && storedPaths.length > 0) {
         setImagePath(String(storedPaths[0] || ''))
       } else if (storedPath) {
         setImagePath(String(storedPath))
+      } else {
+        setImagePath('')
       }
     } catch (e) {
       console.error('获取图片路径失败:', e)
@@ -511,10 +535,21 @@ function AnalyzeLoadingPage() {
     )
   }
 
+  const isTextFoodTask = taskType === 'food_text'
+
   return (
     <View className='analyze-loading-page-v3'>
-      {/* 全屏背景：与刚拍摄/选中的图为同一张 */}
-      {imagePath ? (
+      {/* 全屏背景：拍照分析与结果头图一致；文字分析与结果页「无图占位」同一视觉 */}
+      {isTextFoodTask ? (
+        <View className='fullscreen-bg-text-record'>
+          <View className='fullscreen-text-placeholder'>
+            <View className='text-record-icon-wrap'>
+              <Text className='iconfont icon-shiwu' style={{ fontSize: '120rpx', color: '#00bc7d' }} />
+            </View>
+            <Text className='text-record-placeholder-label'>文字记录，未提供实物照片</Text>
+          </View>
+        </View>
+      ) : imagePath ? (
         <Image className='fullscreen-bg-image' src={imagePath} mode='aspectFill' />
       ) : (
         <View className='fullscreen-bg-fallback' />
@@ -530,6 +565,13 @@ function AnalyzeLoadingPage() {
             {taskType === 'exercise' ? (
               <View className='frame-placeholder-v3'>
                 <IconExercise size={64} color='#f97316' />
+              </View>
+            ) : isTextFoodTask ? (
+              <View className='frame-placeholder-v3 frame-placeholder-text-record'>
+                <View className='frame-text-record-icon-wrap'>
+                  <Text className='iconfont icon-shiwu' style={{ fontSize: '64rpx', color: '#00bc7d' }} />
+                </View>
+                <Text className='frame-text-record-label'>文字记录</Text>
               </View>
             ) : imagePath ? (
               <Image className='frame-image-v3' src={imagePath} mode='aspectFill' />
@@ -554,7 +596,12 @@ function AnalyzeLoadingPage() {
         </View>
 
         <View className='steps-panel'>
-          {(taskType === 'exercise' ? EXERCISE_ANALYSIS_STEPS : ANALYSIS_STEPS).map((step, index) => {
+          {(taskType === 'exercise'
+            ? EXERCISE_ANALYSIS_STEPS
+            : taskType === 'food_text'
+              ? FOOD_TEXT_ANALYSIS_STEPS
+              : ANALYSIS_STEPS
+          ).map((step, index) => {
             const stepStatus = getStepStatus(index)
             return (
               <View key={step.id} className={`analysis-step ${stepStatus}`}>
