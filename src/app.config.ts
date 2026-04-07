@@ -42,6 +42,8 @@ export default defineAppConfig({
   ],
   window: {
     backgroundTextStyle: 'light',
+    // 与 `app.scss` 中 page 背景一致，避免导航/页面与 WebView 边缘亚像素缝隙露出默认白底形成一条细白线
+    backgroundColor: '#f9fafb',
     navigationBarBackgroundColor: '#fff',
     navigationBarTitleText: 'Food Link',
     navigationBarTextStyle: 'black'

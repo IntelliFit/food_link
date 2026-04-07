@@ -2,11 +2,26 @@
 @import './assets/iconfont/iconfont.css';
 
 page {
+  /* 避免 100vw 等略大于视口导致横向露出底层，形成左侧/边缘细线 */
+  /* 对称扩展 2px + 负边距：盖住部分机型 WebView 与物理边之间的 1px 亚像素缝（透出原生白底），且不依赖背景色，黑色全屏页不受影响 */
+  width: calc(100% + 2px);
+  margin-left: -1px;
+  margin-right: -1px;
+  min-height: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
   background-color: #f9fafb;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Taro 页面根 view：与可视区域同宽，减少子树略窄时露出底层 */
+page > view {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 // 通用工具类

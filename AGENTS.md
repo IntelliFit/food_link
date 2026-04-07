@@ -68,6 +68,11 @@
 - Hook 位置：`.husky/pre-commit`
 - 如需手动运行清理：`find . -maxdepth 1 -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" -type f -delete`
 
+
+## 图标更新
+
+当前项目使用iconfont作为图标系统。更新图标的命令为 python scripts/update-icon.py
+
 ## 调试规范（必须遵守 jinhui-stack-debug）
 
 当调试陷入僵局时，**必须**按照 `jinhui-stack-debug` 技能的依赖关系排查指南逐层排查：

@@ -27,7 +27,7 @@ import base64
 import math
 import mimetypes
 import calendar
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime, timezone, date
 from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
 from cryptography.hazmat.primitives import hashes, serialization
@@ -696,11 +696,48 @@ def _resolve_stats_range_dates(range_type: str) -> Tuple[str, str, datetime]:
     return start_d.isoformat(), now.date().isoformat(), now
 
 
+def _today_china_date_for_body_metrics() -> date:
+    """中国时区「今天」日期；单测可 patch 以冻结日期（datetime.now 在 Py3.12 上不便 patch）。"""
+    return datetime.now(CHINA_TZ).date()
+
+
+def _canonical_recorded_on_body_metric(row: Dict[str, Any]) -> str:
+    """
+    纠正错年：前端曾把真实 2026 记成 2025 同一月日。
+    1) 若 recorded_on 与创建时间（中国时区自然日）月日一致但年份不同，以创建日为准。
+    2) 若 UTC 导致 1) 无法匹配（如晚八点后写入跨中国日），则去年同月日整体平移到当前年（与错年展示位一致）。
+    """
+    raw = str(row.get("recorded_on") or "").strip()[:10]
+    if not raw or len(raw) < 10:
+        return raw
+    try:
+        raw_d = datetime.strptime(raw, "%Y-%m-%d").date()
+    except Exception:
+        return raw
+    today = _today_china_date_for_body_metrics()
+    created = row.get("created_at") or row.get("updated_at") or row.get("recorded_at")
+    if created:
+        try:
+            dt = _parse_datetime(created)
+            if dt:
+                china = dt.astimezone(CHINA_TZ).date()
+                if raw_d.month == china.month and raw_d.day == china.day and raw_d.year != china.year:
+                    return china.isoformat()
+        except Exception:
+            pass
+    if raw_d.year == today.year - 1:
+        candidate = raw_d.replace(year=today.year)
+        if candidate <= today and (today - candidate).days <= 400:
+            return candidate.isoformat()
+    return raw
+
+
 def _normalize_weight_entry(row: Dict[str, Any]) -> Dict[str, Any]:
     recorded_at = row.get("created_at") or row.get("updated_at")
+    date_key = _canonical_recorded_on_body_metric(row) or str(row.get("recorded_on") or "")
     return {
         "id": row.get("id"),
-        "date": str(row.get("recorded_on") or ""),
+        "date": date_key,
         "value": round(float(row.get("weight_kg") or 0), 1),
         "client_id": row.get("client_record_id"),
         "recorded_at": _build_json_datetime(_parse_datetime(recorded_at)) if recorded_at else None,
@@ -729,6 +766,43 @@ def _aggregate_weight_daily(weight_rows: List[Dict[str, Any]]) -> List[Dict[str,
     return [daily_map[date_key] for date_key in sorted(daily_map.keys())]
 
 
+def _build_weight_locf_series(
+    weight_rows: List[Dict[str, Any]],
+    start_date: str,
+    end_date: str,
+) -> List[Dict[str, Any]]:
+    """
+    统计区间 [start_date, end_date] 内每日体重：无新记录时沿用最近一次有效体重（LOCF），趋势不断档。
+    """
+    aggregated = _aggregate_weight_daily(weight_rows)
+    by_date: Dict[str, float] = {}
+    for e in aggregated:
+        dk = str(e.get("date") or "")
+        if dk:
+            by_date[dk] = float(e.get("value") or 0)
+    cursor = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end_day = datetime.strptime(end_date, "%Y-%m-%d").date()
+    last_val: Optional[float] = None
+    for d_str in sorted(by_date.keys()):
+        try:
+            d = datetime.strptime(d_str, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if d < cursor:
+            last_val = by_date[d_str]
+        else:
+            break
+    out: List[Dict[str, Any]] = []
+    while cursor <= end_day:
+        date_key = cursor.isoformat()
+        if date_key in by_date:
+            last_val = by_date[date_key]
+        if last_val is not None:
+            out.append({"date": date_key, "value": round(last_val, 1)})
+        cursor += timedelta(days=1)
+    return out
+
+
 def _aggregate_water_daily(
     water_logs: List[Dict[str, Any]],
     start_date: str,
@@ -736,7 +810,7 @@ def _aggregate_water_daily(
 ) -> List[Dict[str, Any]]:
     daily_map: Dict[str, Dict[str, Any]] = {}
     for row in water_logs:
-        date_key = str(row.get("recorded_on") or "")
+        date_key = _canonical_recorded_on_body_metric(row) or str(row.get("recorded_on") or "")
         if not date_key:
             continue
         amount = int(float(row.get("amount_ml") or 0))
@@ -767,17 +841,22 @@ async def _build_body_metrics_summary(
     start_date: str,
     end_date: str,
 ) -> Dict[str, Any]:
-    weight_rows = await list_user_weight_records(user_id=user_id, start_date=start_date, end_date=end_date)
-    water_logs = await list_user_water_logs(user_id=user_id, start_date=start_date, end_date=end_date)
+    # 体重和喝水：库内可能误存为「上一年」同一月日，仅用 365 天窗口会漏掉（如 2025-04-03 相对 2026-04-07）
+    now = datetime.now(CHINA_TZ)
+    extended_start = (now - timedelta(days=730)).date().isoformat()
+    extended_end = now.date().isoformat()
+    weight_rows = await list_user_weight_records(user_id=user_id, start_date=extended_start, end_date=extended_end)
+    water_logs = await list_user_water_logs(user_id=user_id, start_date=extended_start, end_date=extended_end)
     settings = await get_user_body_metric_settings(user_id)
 
-    raw_weight_entries = [_normalize_weight_entry(row) for row in weight_rows]
     weight_entries = _aggregate_weight_daily(weight_rows)
-    latest_weight = raw_weight_entries[-1] if raw_weight_entries else None
-    previous_weight = raw_weight_entries[-2] if len(raw_weight_entries) >= 2 else None
+    latest_weight = weight_entries[-1] if weight_entries else None
+    previous_weight = weight_entries[-2] if len(weight_entries) >= 2 else None
     weight_change = None
     if latest_weight and previous_weight:
         weight_change = round(float(latest_weight["value"]) - float(previous_weight["value"]), 1)
+
+    weight_trend_daily = _build_weight_locf_series(weight_rows, start_date, end_date)
 
     water_daily = _aggregate_water_daily(water_logs, start_date, end_date)
     total_water_ml = sum(int(item["total"]) for item in water_daily)
@@ -789,6 +868,7 @@ async def _build_body_metrics_summary(
 
     return {
         "weight_entries": weight_entries,
+        "weight_trend_daily": weight_trend_daily,
         "latest_weight": latest_weight,
         "previous_weight": previous_weight,
         "weight_change": weight_change,
@@ -807,6 +887,7 @@ def _empty_body_metrics_summary(start_date: str, end_date: str) -> Dict[str, Any
     today_water = next((item for item in water_daily if item["date"] == today_key), {"date": today_key, "total": 0, "logs": []})
     return {
         "weight_entries": [],
+        "weight_trend_daily": [],
         "latest_weight": None,
         "previous_weight": None,
         "weight_change": None,

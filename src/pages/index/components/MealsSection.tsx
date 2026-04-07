@@ -79,7 +79,6 @@ export function MealsSection({
         <Text className='section-title'>今日餐食</Text>
         <View className='view-all-btn' onClick={onViewAllMeals}>
           <Text className='view-all-text'>查看全部</Text>
-          <IconChevronRight size={16} color='#00bc7d' />
         </View>
       </View>
       

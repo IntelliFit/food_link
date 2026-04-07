@@ -72,7 +72,6 @@ export function MacrosSection({
                         <Text className='macro-gauge-value' style={{ color }}>
                           {formatDisplayNumber(animatedValue)}
                         </Text>
-                        <Text className='macro-gauge-unit'>克</Text>
                       </>
                     )}
                   </View>

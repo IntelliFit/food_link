@@ -89,24 +89,19 @@ export default function StatsPage() {
         getBodyMetricsSummary(r).catch(() => null)
       ])
       
-      // 如果 stats 返回的 body_metrics 为空或缺失，使用 bodyMetricsRes 的数据
+      // 专用接口成功时优先采用（与首页身体指标同源）
       if (bodyMetricsRes) {
-        // 检查是否有有效的体重或喝水数据
-        const hasWeightData = bodyMetricsRes.weight_entries && bodyMetricsRes.weight_entries.length > 0
-        const hasWaterData = bodyMetricsRes.water_daily && bodyMetricsRes.water_daily.some((d: any) => d.total > 0)
-        
-        if (hasWeightData || hasWaterData) {
-          statsRes.body_metrics = {
-            weight_entries: bodyMetricsRes.weight_entries || [],
-            latest_weight: bodyMetricsRes.latest_weight || null,
-            previous_weight: bodyMetricsRes.previous_weight || null,
-            weight_change: bodyMetricsRes.weight_change ?? null,
-            water_daily: bodyMetricsRes.water_daily || [],
-            water_goal_ml: bodyMetricsRes.water_goal_ml || 2000,
-            total_water_ml: bodyMetricsRes.total_water_ml || 0,
-            avg_daily_water_ml: bodyMetricsRes.avg_daily_water_ml || 0,
-            water_recorded_days: bodyMetricsRes.water_recorded_days || 0
-          }
+        statsRes.body_metrics = {
+          weight_entries: bodyMetricsRes.weight_entries || [],
+          weight_trend_daily: bodyMetricsRes.weight_trend_daily || [],
+          latest_weight: bodyMetricsRes.latest_weight ?? null,
+          previous_weight: bodyMetricsRes.previous_weight ?? null,
+          weight_change: bodyMetricsRes.weight_change ?? null,
+          water_daily: bodyMetricsRes.water_daily || [],
+          water_goal_ml: bodyMetricsRes.water_goal_ml || 2000,
+          total_water_ml: bodyMetricsRes.total_water_ml || 0,
+          avg_daily_water_ml: bodyMetricsRes.avg_daily_water_ml || 0,
+          water_recorded_days: bodyMetricsRes.water_recorded_days || 0
         }
       }
       setData(statsRes)
@@ -279,7 +274,11 @@ export default function StatsPage() {
   const maxDailyCalories = d.daily_calories.length > 0
     ? Math.max(...d.daily_calories.map(i => i.calories))
     : 2000
-  const weightTrend = bodyMetrics?.weight_entries || []
+  // 优先使用后端 LOCF 日序列（无记录日沿用上次体重）；否则回退为仅有记录日
+  const weightTrend =
+    bodyMetrics?.weight_trend_daily && bodyMetrics.weight_trend_daily.length > 0
+      ? bodyMetrics.weight_trend_daily
+      : bodyMetrics?.weight_entries || []
   const latestWeight = bodyMetrics?.latest_weight || null
   const previousWeight = bodyMetrics?.previous_weight || null
   const weightChange = bodyMetrics?.weight_change
@@ -546,7 +545,7 @@ export default function StatsPage() {
           </View>
         </View>
 
-        {/* 饮食结构 - Meal Structure 仪表盘风格 */}
+        {/* 饮食结构 - Meal Structure 百分比风格 */}
         <View className='stats-card meal-structure-card'>
           <View className='card-header'>
             <Text className='iconfont icon-canciguanli chart-title-icon' />
@@ -558,35 +557,21 @@ export default function StatsPage() {
               const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
               const MealIcon = MEAL_ICONS[key]
               const color = MEAL_ICON_COLORS[key]
-              const radius = 43
-              const circumference = 2 * Math.PI * radius
-              const progress = Math.min(pct / 100, 1)
-              
+
               return (
                 <View key={key} className='meal-gauge-item'>
                   <View className='meal-gauge-left'>
                     <View className='meal-gauge-icon-wrap' style={{ backgroundColor: `${color}14` }}>
                       <MealIcon size={20} color={color} />
                     </View>
-                    <Text className='meal-gauge-label'>{MEAL_NAMES[key]}</Text>
-                    <Text className='meal-gauge-percent' style={{ color }}>{pct.toFixed(1)}%</Text>
-                  </View>
-                  
-                  <View className='meal-gauge-right'>
-                    <View className='meal-gauge-circle'>
-                      <View
-                        className='meal-gauge-ring'
-                        style={{
-                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='${radius}' fill='none' stroke='#f0f0f0' stroke-width='12'/><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${circumference}' stroke-dashoffset='${circumference * (1 - progress)}'/></svg>`
-                          )}")`,
-                          backgroundSize: '100% 100%'
-                        }}
-                      />
-                      <View className='meal-gauge-center'>
-                        <Text className='meal-gauge-cal' style={{ color }}>{Math.round(cal)}</Text>
-                      </View>
+                    <View className='meal-gauge-info'>
+                      <Text className='meal-gauge-label'>{MEAL_NAMES[key]}</Text>
+                      <Text className='meal-gauge-cal' style={{ color }}>{Math.round(cal)} kcal</Text>
                     </View>
+                  </View>
+
+                  <View className='meal-gauge-right'>
+                    <Text className='meal-gauge-percent' style={{ color }}>{pct.toFixed(1)}%</Text>
                   </View>
                 </View>
               )

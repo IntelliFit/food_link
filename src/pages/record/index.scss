@@ -1,3 +1,8 @@
+// 本页 page 与沉浸式背景一致，避免默认浅色 page 在左/右边缘露出一条细线
+page {
+  background-color: #000;
+}
+
 // 沉浸式相机模式 - 黑色主题
 .record-page.camera-mode {
   position: fixed;
@@ -5,7 +10,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  width: 100vw;
+  /* 100vw 在部分机型上略大于可视宽度，会露出下层背景形成左侧细线；用 100% + 四向贴边更稳 */
+  width: 100%;
   height: 100vh;
   overflow: hidden;
   background: #000;
@@ -113,10 +119,10 @@ camera {
   align-items: center;
 }
 
-// 扫描框 - 四角圆弧形括号样式
+// 扫描框 - 四角圆弧形括号样式（与分析中页 loading 同尺寸、同圆角）
 .scanner-frame {
-  width: 520rpx;
-  height: 520rpx;
+  width: 640rpx;
+  height: 640rpx;
   position: relative;
   
   // 四角圆弧形括号 - 主题色绿色带发光

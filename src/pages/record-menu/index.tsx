@@ -71,8 +71,7 @@ function RecordMenuPage() {
 
     switch (modeId) {
       case 'camera':
-        // 进入简化拍照模式
-        Taro.navigateTo({ url: '/pages/record/index?mode=simple' })
+        Taro.switchTab({ url: '/pages/record/index' })
         break
       case 'album':
         // 直接进入相册选择

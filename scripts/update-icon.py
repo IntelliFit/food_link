@@ -11,7 +11,7 @@ headers = {
     'sec-fetch-mode': 'navigate'
 }
 
-url = 'https://www.iconfont.cn/api/project/download.zip?spm=a313x.manage_type_myprojects.i1.d7543c303.65eb3a81XFlBqk&pid=3899231&ctoken=null'
+url = 'https://www.iconfont.cn/api/project/download.zip?spm=a313x.manage_type_myprojects.i1.d7543c303.6fda3a81vBCiyY&pid=5122763&ctoken=null'
 res = r.get(url, headers=headers)
 
 if res.status_code:
@@ -31,9 +31,9 @@ for parent, _, files in os.walk('./scripts/tmp'):
         if file.endswith('.css'):
             content = open(filepath, 'r', encoding='utf-8').read().replace('font-size: 16px;', '')
             open(filepath, 'w', encoding='utf-8').write(content)
-            shutil.move(filepath, os.path.join('./src/assets/icon', file))
+            shutil.move(filepath, os.path.join('src/assets/iconfont', file))
         elif file.endswith('.woff2'):
-            shutil.move(filepath, os.path.join('./src/assets/icon', file))
+            shutil.move(filepath, os.path.join('src/assets/iconfont', file))
 
 # 删除压缩包和解压区域
 os.remove('./scripts/tmp.zip')

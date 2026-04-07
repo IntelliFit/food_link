@@ -6,6 +6,21 @@
 
 ## 2026-04-07
 
+- 🐛 fix: 进一步消除多页左侧 1px 白线：`page` 使用对称负边距与 `calc(100% + 2px)` 扩展宽度盖住亚像素缝；`page > view` 全宽约束 `src/app.scss`
+- 🎨 style: 首页「食物保质期」去掉顶部提醒条；外层取消独立白底外框；每条记录白底圆角阴影与「今日餐食」条目一致 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- ✨ feat: 首页接入「食物保质期」区块：展示 dashboard 返回的待吃完条目与摘要、空态引导 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🐛 fix: 缓解多数页面左侧细白线：统一 `window.backgroundColor` 与 page 背景；page 增加 `overflow-x: hidden`；全屏/表单根容器将 `100vw` 改为 `100%` 避免亚像素溢出 `src/app.config.ts` `src/app.scss` `src/pages/record/index.scss` `src/pages/analyze-loading/index.scss` `src/pages/record-text/index.scss` `src/pages/record-manual/index.scss`
+- 🐛 fix: 食物保质期：`/api/expiry/dashboard` 与 `/api/expiry/items` 按 `user_food_expiry_items` 序列化；新增 `POST /api/food-expiry/{id}/restore`；`pages/expiry` 改用待吃完/已吃完列表与恢复接口，修复误用 PUT 仅传 `status` 导致 422 `backend/main.py` `backend/database.py` `src/utils/api.ts` `src/pages/expiry/index.tsx`
+- 🎨 style: 分析中页取景框与摄影页统一为 640rpx、四角 150rpx/80rpx 圆角/10rpx 边线与扫描线动画；修正层级顺序并去掉内容区灰底模糊 `src/pages/analyze-loading/index.scss` `src/pages/analyze-loading/index.tsx` `src/pages/record/index.scss`
+- 🎨 style: 分析中页：全屏与扫描框均使用刚拍/选的本地图；去掉白雾遮罩；底部渐变衬托中文文案；分析步骤与小贴士去卡片化；步骤与健康贴士文案中文化 `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss`
+- 🐛 fix: 提交分析任务跳转 loading 前写回 `analyzeImagePath`，避免分析页清空 storage 后 loading 无图 `src/pages/analyze/index.tsx`
+- 🐛 fix: 首页记录菜单「拍照识别」改用 `switchTab` 进入 tabBar 拍照页，并去掉四项英文副标题 `src/pages/index/components/RecordMenu.tsx` `src/pages/record-menu/index.tsx`
+- 🐛 fix: 统计页体重趋势：扩大身体指标查询窗口；`recorded_on` 错年时用创建日或平移到当前年；按日 LOCF 生成 `weight_trend_daily`；喝水聚合同步使用规范化日期 `backend/main.py` `src/utils/api.ts` `src/pages/stats/index.tsx`
+- 🐛 fix: 修复分析页喝水/体重趋势与首页不一致：首页日期曾用 2025 展示但身体指标接口未做年与 dashboard 相同的映射，导致写入 `recorded_on` 错年、统计周聚合为 0；改为首页使用真实日历日、API 统一 `mapCalendarDateToApi`，并迁移本机今日身体指标缓存键 `src/pages/index/index.tsx` `src/utils/api.ts` `src/pages/stats/index.tsx`
+- 🔧 chore: `dev:backend` 改为使用 `backend/venv` 解释器，避免系统 Python 缺少 FastAPI 导致启动失败 `package.json`
+- 🎨 style: 优化日期选择器选中项样式，胶囊背景改为主题绿色，中间日期小球改为黑色 `src/pages/index/index.scss`
+- 🎨 style: 去除首页日期选择器外容器的背景色、圆角和 padding，使其与页面背景融合 `src/pages/index/index.scss`
+- 🔧 chore: 重启前后端服务并进行微信开发者工具自动化验证，后端 PID 59751 (端口 3010)，前端编译正常 `backend/run_backend.py` `npm run dev:weapp`
 - 🎨 style: 更换首页标题类名，移除不必要 margin-bottom，快到期食物改为 expiry-title，今日餐食改为 meals-title `src/pages/index/index.tsx` `src/pages/index/index.scss`
 - 🎨 style: 分离快到期食物和今日餐食标题样式，新增 expiry-title 和 meals-title 类，移除 margin-bottom `src/pages/index/index.scss` `src/pages/index/index.tsx`
 - 🐛 fix: 修复首页点击底部导航栏中间按钮无响应问题：改进了 custom-tab-bar 事件通知机制，当已在首页时直接通过多方案降级策略触发事件，不再依赖 switchTab 生命周期 `custom-tab-bar/index.js` `src/pages/index/index.tsx`
@@ -14,6 +29,10 @@
 ## 2026-04-09
 
 - ⏪ revert: 还原分析页面到含体重喝水数据展示、Switch控件、仪表盘餐次结构的版本 `src/pages/stats/index.tsx`
+
+## 2026-04-08
+
+- 🐛 fix: 修复分析页面体重喝水与其他数据（摄入趋势、营养素占比、每日缺口）无法同时正常显示的问题。体重/喝水数据使用过去365天的扩展日期范围查询，与食物记录的正常周/月范围分离，避免日期年份不匹配导致的查询失败 `backend/main.py`
 
 ## 2026-04-01
 

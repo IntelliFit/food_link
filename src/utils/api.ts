@@ -394,6 +394,8 @@ export interface BodyMetricsSummary {
   start_date: string
   end_date: string
   weight_entries: BodyMetricWeightEntry[]
+  /** 统计区间内每日体重（LOCF：无新记录时沿用上次体重，供趋势展示） */
+  weight_trend_daily?: Array<{ date: string; value: number }>
   latest_weight?: BodyMetricWeightEntry | null
   previous_weight?: BodyMetricWeightEntry | null
   weight_change?: number | null
@@ -1388,13 +1390,21 @@ export async function getUnlimitedQRCode(
 }
 
 /**
+ * 与首页 dashboard 一致：日期条曾用 2025 显示年时，后端需使用真实数据年（如 2026）。
+ * 身体指标写入接口也经此映射，避免与统计周范围错年。
+ */
+function mapCalendarDateToApi(date?: string): string | undefined {
+  if (!date) return undefined
+  return date.replace(/^2025-/, '2026-')
+}
+
+/**
  * 获取首页仪表盘数据（今日摄入 + 今日餐食，不含运动）
  */
 export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   // 添加时间戳禁用缓存
   const timestamp = Date.now()
-  // 转换日期为2026年（系统时间可能是2026年，但前端传入的是2025年）
-  const apiDate = date ? date.replace(/^2025-/, '2026-') : undefined
+  const apiDate = mapCalendarDateToApi(date)
   const url = apiDate 
     ? `/api/home/dashboard?date=${encodeURIComponent(apiDate)}&_t=${timestamp}`
     : `/api/home/dashboard?_t=${timestamp}`
@@ -1525,7 +1535,7 @@ export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): 
 export async function saveBodyWeightRecord(value: number, date?: string, clientId?: string): Promise<{ message: string; item: BodyMetricWeightEntry }> {
   const res = await authenticatedRequest('/api/body-metrics/weight', {
     method: 'POST',
-    data: { value, date, client_id: clientId },
+    data: { value, date: mapCalendarDateToApi(date), client_id: clientId },
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -1538,7 +1548,7 @@ export async function saveBodyWeightRecord(value: number, date?: string, clientI
 export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: { id?: string; date: string; amount_ml: number } }> {
   const res = await authenticatedRequest('/api/body-metrics/water', {
     method: 'POST',
-    data: { amount_ml: amountMl, date },
+    data: { amount_ml: amountMl, date: mapCalendarDateToApi(date) },
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -1551,7 +1561,7 @@ export async function addBodyWaterLog(amountMl: number, date?: string): Promise<
 export async function resetBodyWaterLogs(date?: string): Promise<{ message: string; deleted_count: number; date: string }> {
   const res = await authenticatedRequest('/api/body-metrics/water/reset', {
     method: 'POST',
-    data: { date },
+    data: { date: mapCalendarDateToApi(date) },
     timeout: 10000
   })
   if (res.statusCode !== 200) {
