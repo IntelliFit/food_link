@@ -1,16 +1,33 @@
 .result-page {
   min-height: 100vh;
   background: #f8fafc;
-  padding-bottom: 240rpx; // 留出底部操作栏的空间
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+// 仅内容区滚动；头图 fixed 在底层，透明区可穿透滚动
+.result-scroll {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 2;
+  background: transparent;
 }
 
 // ========== 顶部食物图：全幅铺满 + 自下而上黑色渐变（无取景框/眼膜） ==========
 .scanner-hero-section {
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
   width: 100%;
-  height: 700rpx;
   background: #0f172a;
   overflow: hidden;
+  transform: translateZ(0);
 }
 
 .scanner-hero-swiper {
@@ -107,17 +124,18 @@
   letter-spacing: 2rpx;
 }
 
-// 内容容器 - 与扫描框区域自然衔接
+// 内容容器 - 与头图叠层由 ScrollView 的 padding-top（头高−40rpx）保证；白卡盖住头图底部
 .content-container {
   position: relative;
-  padding: 32rpx 32rpx 180rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
+  padding: 32rpx 32rpx 500rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
   z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 32rpx;
   background: #f8fafc;
   border-radius: 40rpx 40rpx 0 0;
-  margin-top: -40rpx;
+  margin-top: 0;
+  box-shadow: 0 -12rpx 40rpx rgb(15 23 42 / 6%);
 }
 
 .mode-result-card {

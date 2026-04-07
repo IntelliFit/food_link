@@ -6,6 +6,13 @@
 
 ## 2026-04-07
 
+- 🎨 style: 圈子本周打卡榜横幅去掉「点我查看完整榜单」文案；预览条内当前用户头像/昵称加大 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🎨 style: 分析结果页头图改为 fixed + 随滚动从大图收至全宽横条（ScrollView 动态 padding 保持与白卡叠层），白卡上滑可完全盖住头图 `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🔧 refactor: 分析结果营养概览三色柱高度按「蛋白/碳水/脂肪」供能占三者总供能比例（4:4:9 kcal/g）绘制 `src/pages/result/index.tsx`
+- 🎨 style: 分析结果页头图 `sticky` 吸顶、仅下方内容滚动，白卡叠层加顶侧阴影强化「自下而上」覆盖感 `src/pages/result/index.scss`
+- 🎨 style: 圈子顶部去掉「好友」标题与白底板，三入口改为网格 + 图标；动态/食物库卡片白底 50% 透明 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🎨 style: 圈子筛选改为 `icon-filter`（默认灰、激活/展开主题绿）；纯文字帖文案用 `View` 包裹以修复与 `feed-meta` 间距；千卡数字与宏量营养素同为 24rpx `src/pages/community/index.tsx` `src/pages/community/index.scss` `src/assets/iconfont/iconfont.css`
+- 🎨 style: 首页「食物保质期」「今日餐食」与上方区块增加间距（`margin-top` / `margin-bottom`）`src/pages/index/index.scss`
 - 🔧 chore: 移除 `debug/`、`artifacts/`、`docs/verification/` 下验证用 PNG，并加入 `.gitignore` 防止再提交
 - 🎨 style: 「记录喝水」弹窗 `.water-modal-content` 底部增加约 30px padding `src/pages/index/index.scss`
 - 🎨 style: 首页模块白底 alpha 字面量 `50%`（`$module-card-bg-alpha`）；弹窗实色白；运动千卡 `useAnimatedNumber` `src/pages/index/index.scss` `src/pages/index/index-wave.scss` `src/pages/index/index.tsx`

@@ -28,6 +28,9 @@
   }
 }
 
+// 与首页模块一致：动态卡片白底 alpha 50%
+$community-feed-card-alpha: 50%;
+
 /* 滚动外层：flex 占满剩余空间，给 ScrollView 提供明确高度 */
 .community-scroll-wrap {
   flex: 1;
@@ -133,7 +136,7 @@
 }
 
 .skeleton-feed-card {
-  background: #fff;
+  background: rgb(255 255 255 / #{$community-feed-card-alpha});
   border-radius: 28rpx;
   padding: 36rpx;
   margin-bottom: 24rpx;
@@ -260,60 +263,120 @@
   --button-default-height: 80rpx;
 }
 
-// 好友区域
-.friends-section {
-  padding: 24rpx 32rpx;
-  margin: 0 24rpx 16rpx;
-  background: #fff;
-  border-radius: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 5%);
+// 顶部快捷区：无整块白底，与页面渐变融合
+.friends-quick-bar {
+  padding: 0 32rpx;
+  margin-bottom: 28rpx;
+  box-sizing: border-box;
 }
 
-.header-actions {
+.friends-requests-banner {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 12rpx;
-  max-width: 72%;
-}
-
-// 好友区操作：按钮质感（微立体 + 按压）
-.friend-action-pill {
-  padding: 14rpx 22rpx;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-  border: 1rpx solid #e2e8f0;
-  border-radius: 9999rpx;
-  box-shadow:
-    0 2rpx 0 #e2e8f0,
-    0 6rpx 16rpx rgb(15 23 42 / 6%);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+  padding: 22rpx 28rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(135deg, rgb(255 251 235 / 92%) 0%, rgb(254 243 199 / 88%) 100%);
+  border: 1rpx solid rgb(251 191 36 / 45%);
+  box-shadow: 0 4rpx 14rpx rgb(180 83 9 / 10%);
 
   &:active {
-    transform: translateY(2rpx);
-    box-shadow:
-      0 1rpx 0 #e2e8f0,
-      0 2rpx 8rpx rgb(15 23 42 / 5%);
+    opacity: 0.92;
   }
 }
 
-.friend-action-pill--amber {
-  background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
-  border-color: #fcd34d;
-  box-shadow:
-    0 2rpx 0 #fbbf24,
-    0 6rpx 14rpx rgb(180 83 9 / 12%);
+.friends-requests-banner-label {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #92400e;
+  line-height: 40rpx;
 }
 
-.requests-badge {
-  padding: 10rpx 24rpx;
-  border-radius: 9999rpx;
-}
-
-.requests-badge-text {
+.friends-requests-banner-count {
+  min-width: 44rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgb(217 119 6 / 18%);
   font-size: 26rpx;
+  font-weight: 700;
   color: #b45309;
-  font-weight: 500;
+  text-align: center;
+  line-height: 36rpx;
+}
+
+.friends-requests-banner-chevron {
+  font-size: 36rpx;
+  color: #d97706;
+  line-height: 1;
+  font-weight: 300;
+}
+
+.friends-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.friends-quick-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12rpx;
+  padding: 28rpx 12rpx 24rpx;
+  border-radius: 22rpx;
+  background: rgb(255 255 255 / 42%);
+  border: 1rpx solid rgb(0 188 125 / 10%);
+  box-shadow: 0 4rpx 16rpx rgb(15 23 42 / 5%);
+  box-sizing: border-box;
+  min-height: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:active {
+    transform: scale(0.98);
+    box-shadow: 0 2rpx 10rpx rgb(15 23 42 / 6%);
+  }
+}
+
+.friends-quick-cell-icon {
+  font-size: 40rpx;
+  color: #00bc7d;
+  line-height: 1;
+}
+
+.friends-quick-cell-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #334155;
+  line-height: 34rpx;
+  text-align: center;
+}
+
+.friends-quick-cell-badge {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2rpx 6rpx rgb(239 68 68 / 35%);
+}
+
+.friends-quick-cell-badge-text {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
 }
 
 .loading-text,
@@ -434,10 +497,6 @@
   color: #0f766e;
   line-height: 36rpx;
   font-weight: 600;
-}
-
-.friend-action-pill .view-all-text {
-  color: #0f766e;
 }
 
 .circles-list {
@@ -650,14 +709,31 @@
   line-height: 1.2;
 }
 
-.ranking-preview-cta {
-  display: block;
-  font-size: 20rpx;
-  color: rgb(255 255 255 / 95%);
-  margin-top: 4rpx;
-  text-align: center;
-  line-height: 1.4;
-  font-weight: 500;
+// 当前登录用户在预览条中：头像与昵称放大，便于辨认
+.ranking-preview-cell.is-me {
+  .ranking-preview-rank {
+    font-size: 22rpx;
+  }
+
+  .ranking-preview-avatar-wrap {
+    width: 96rpx;
+    height: 96rpx;
+    border-width: 4rpx;
+  }
+
+  .ranking-preview-avatar-fallback {
+    font-size: 44rpx;
+  }
+
+  .ranking-preview-name {
+    font-size: 28rpx;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .ranking-preview-count {
+    font-size: 22rpx;
+  }
 }
 
 .ranking-preview-placeholder {
@@ -762,24 +838,27 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
 
-  &.is-open {
+  .icon-filter {
+    font-size: 34rpx;
+    line-height: 1;
+    color: #94a3b8;
+  }
+
+  &.is-open,
+  &.is-active {
     border-color: #00bc7d;
     box-shadow: 0 0 0 2rpx rgb(0 188 125 / 14%), 0 4rpx 12rpx rgb(0 188 125 / 10%);
+  }
+
+  &.is-active .icon-filter {
+    color: #00bc7d;
   }
 
   &:active {
     opacity: 0.92;
   }
-}
-
-.feed-filter-funnel-svg {
-  width: 36rpx;
-  height: 36rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .feed-filter-summary {
@@ -951,7 +1030,7 @@
 }
 
 .library-feed-card {
-  background: #fff;
+  background: rgb(255 255 255 / #{$community-feed-card-alpha});
   border-radius: 28rpx;
   padding: 24rpx;
   box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(0 188 125 / 4%);
@@ -1272,7 +1351,7 @@
 }
 
 .feed-card {
-  background: #fff;
+  background: rgb(255 255 255 / #{$community-feed-card-alpha});
   border-radius: 28rpx;
   padding: 36rpx;
   box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(0 188 125 / 4%);
@@ -1366,13 +1445,18 @@
   padding: 0 4rpx;
 }
 
-// 纯文字动态（无图）：文案与下方热量区拉开间距
+/* 纯文字帖：小程序里 Text 的 margin-bottom 常不生效，用外层 View 撑开与 feed-meta 的间距 */
+.feed-content-wrap--text-only {
+  display: block;
+  margin-bottom: 28rpx;
+}
+
 .feed-card-text-only .feed-content {
-  margin-bottom: 36rpx;
+  margin-bottom: 0;
 }
 
 .feed-card-text-only .feed-meta {
-  margin-top: 4rpx;
+  margin-top: 0;
 }
 
 /* 食物描述与图片之间的间隔 */
@@ -1403,13 +1487,25 @@
 }
 
 .feed-calorie {
-  font-size: 30rpx;
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: 0;
+  font-size: 24rpx;
   color: #fff;
   font-weight: 600;
+  line-height: 1.45;
   background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  padding: 10rpx 24rpx;
-  border-radius: 32rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 28rpx;
   box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
+}
+
+.feed-calorie-num,
+.feed-calorie-unit {
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .feed-macros {

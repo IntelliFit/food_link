@@ -1,5 +1,5 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, submitTextAnalyzeTask, type ExecutionMode, type AnalyzeRecognitionOutcome, type AllowedFoodCategory } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
@@ -134,6 +134,11 @@ const normalizeFoodNameForCorrection = (value: unknown) => (
     .replace(/[()（）\[\]【】,，。./\\\-_:：;；·]/g, '')
 )
 
+/** 结果页头图：全宽；上滑时在区间内从「大图高度」收缩到「顶栏条高度」 */
+const RESULT_HERO_MAX_RPX = 700
+const RESULT_HERO_MIN_RPX = 200
+/** 纵向滑动多少 px 内完成收缩（与 scrollTop 同单位） */
+const RESULT_HERO_SHRINK_SCROLL_PX = 420
 
 function ResultPage() {
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
@@ -170,6 +175,38 @@ function ResultPage() {
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
+
+  /** 驱动头图收缩：与 ScrollView 的 scrollTop 同步 */
+  const [resultScrollTop, setResultScrollTop] = useState(0)
+  const resultScrollRafRef = useRef<number | null>(null)
+  const pendingResultScrollTopRef = useRef(0)
+
+  const handleResultScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
+    const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
+    pendingResultScrollTopRef.current = st
+    if (resultScrollRafRef.current != null) return
+    resultScrollRafRef.current = requestAnimationFrame(() => {
+      resultScrollRafRef.current = null
+      setResultScrollTop(pendingResultScrollTopRef.current)
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (resultScrollRafRef.current != null) {
+        cancelAnimationFrame(resultScrollRafRef.current)
+      }
+    }
+  }, [])
+
+  /** 上滑时头图高度在 [MIN, MAX] 间插值；到底后保持 MIN，白卡继续上滑将其盖住 */
+  const resultHeroRpx = useMemo(() => {
+    const t = Math.min(1, resultScrollTop / RESULT_HERO_SHRINK_SCROLL_PX)
+    return RESULT_HERO_MAX_RPX - (RESULT_HERO_MAX_RPX - RESULT_HERO_MIN_RPX) * t
+  }, [resultScrollTop])
+
+  /** 与原先 margin 叠层一致：内容区起点 = 头图底 − 40rpx */
+  const resultScrollPaddingTopRpx = resultHeroRpx - 40
 
   const openQuickUpload = () => {
     const draftImageUrls = (imagePaths.length > 0 ? imagePaths : (imagePath ? [imagePath] : []))
@@ -318,7 +355,21 @@ function ResultPage() {
   const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0
   const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
 
-
+  /** 概览区三色柱高度：按该成分供能在「蛋白+碳水+脂肪」总供能中的占比（4/4/9 kcal·g⁻¹） */
+  const macroEnergyBarPercents = useMemo(() => {
+    const proteinKcal = nutritionStats.protein * 4
+    const carbsKcal = nutritionStats.carbs * 4
+    const fatKcal = nutritionStats.fat * 9
+    const total = proteinKcal + carbsKcal + fatKcal
+    if (total <= 0) {
+      return { protein: 0, carbs: 0, fat: 0 }
+    }
+    return {
+      protein: (proteinKcal / total) * 100,
+      carbs: (carbsKcal / total) * 100,
+      fat: (fatKcal / total) * 100,
+    }
+  }, [nutritionStats.protein, nutritionStats.carbs, nutritionStats.fat])
 
   // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
@@ -1027,49 +1078,52 @@ function ResultPage() {
 
   return (
     <View className='result-page'>
+      {/* 固定头图：不随列表平移；上滑时高度逐渐收至全宽横条，之后由白卡内容上滑吞没 */}
+      <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
+        {imagePaths.length > 0 ? (
+          <Swiper
+            className='scanner-hero-swiper'
+            circular
+            indicatorDots={false}
+            onChange={(e) => setCurrentImageIndex(e.detail.current)}
+            current={currentImageIndex}
+          >
+            {imagePaths.map((path, index) => (
+              <SwiperItem key={index} className='scanner-hero-swiper-item'>
+                <Image
+                  src={path}
+                  mode='aspectFill'
+                  className='scanner-hero-image'
+                  onClick={() => handlePreviewImage(path)}
+                />
+              </SwiperItem>
+            ))}
+          </Swiper>
+        ) : (
+          <View className='scanner-hero-placeholder'>
+            <View className='placeholder-icon-wrap'>
+              <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
+            </View>
+            <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
+          </View>
+        )}
+        <View className='scanner-hero-gradient' />
+        {imagePaths.length > 1 && (
+          <View className='image-counter'>
+            <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
+          </View>
+        )}
+      </View>
+
       <ScrollView
         className='result-scroll'
+        style={{ paddingTop: `${resultScrollPaddingTopRpx}rpx` }}
         scrollY
+        scrollWithAnimation={false}
         enhanced
         showScrollbar={false}
+        onScroll={handleResultScroll}
       >
-        {/* 顶部：整幅食物图铺满，无底纹取景框；底部黑色渐变增加层次 */}
-        <View className='scanner-hero-section'>
-          {imagePaths.length > 0 ? (
-            <Swiper
-              className='scanner-hero-swiper'
-              circular
-              indicatorDots={false}
-              onChange={(e) => setCurrentImageIndex(e.detail.current)}
-              current={currentImageIndex}
-            >
-              {imagePaths.map((path, index) => (
-                <SwiperItem key={index} className='scanner-hero-swiper-item'>
-                  <Image
-                    src={path}
-                    mode='aspectFill'
-                    className='scanner-hero-image'
-                    onClick={() => handlePreviewImage(path)}
-                  />
-                </SwiperItem>
-              ))}
-            </Swiper>
-          ) : (
-            <View className='scanner-hero-placeholder'>
-              <View className='placeholder-icon-wrap'>
-                <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
-              </View>
-              <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
-            </View>
-          )}
-          <View className='scanner-hero-gradient' />
-          {imagePaths.length > 1 && (
-            <View className='image-counter'>
-              <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
-            </View>
-          )}
-        </View>
-
         <View className='content-container'>
           <View className={`mode-result-card ${executionMode}`}>
             <View className='mode-result-header'>
@@ -1153,21 +1207,21 @@ function ResultPage() {
             <View className='macro-grid'>
               <View className='macro-item protein'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.protein / 50) * 100, 100)}%` }}></View>
+                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.protein}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.protein * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>蛋白质</Text>
               </View>
               <View className='macro-item carbs'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.carbs / 100) * 100, 100)}%` }}></View>
+                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.carbs}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.carbs * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>碳水</Text>
               </View>
               <View className='macro-item fat'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.fat / 40) * 100, 100)}%` }}></View>
+                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.fat}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.fat * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>脂肪</Text>

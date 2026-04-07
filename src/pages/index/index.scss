@@ -748,7 +748,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .expiry-section {
-  margin-bottom: 24rpx; // 增加间距
+  margin-top: 20rpx; // 与上方（体重/喝水/运动）多留一点呼吸感
+  margin-bottom: 28rpx;
 }
 
 // 与今日餐食一致：外层不再使用独立白底卡片，避免双重白框
@@ -919,6 +920,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 今日餐食区域
 .meals-section {
+  margin-top: 20rpx; // 与上方（保质期或无保质期时与身体指标区）多留一点间距
   margin-bottom: 40rpx; // 增加底部间距，更舒适的呼吸感
 }
 

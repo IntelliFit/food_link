@@ -103,21 +103,6 @@ function FeedSearchGlyph() {
   )
 }
 
-/** 筛选：极简漏斗图标（点击展开排序/餐次/目标） */
-function FeedFilterFunnelIcon() {
-  return (
-    <View className='feed-filter-funnel-svg'>
-      <svg viewBox='0 0 24 24' fill='none' style={{ width: '100%', height: '100%' }}>
-        <path
-          d='M5 5h14l-4.5 7v7l-5-2.5V12L5 5z'
-          stroke='#64748b'
-          strokeWidth='1.75'
-          strokeLinejoin='round'
-        />
-      </svg>
-    </View>
-  )
-}
 
 /** 排行榜入口右侧：圆形底 + 右向箭头，替代纯文本「>」 */
 function RankingEntryChevron() {
@@ -296,7 +281,6 @@ function CommunityPage() {
 
   /** 打卡榜预览（横幅内展示前三名，点开看完整榜） */
   const [lbPreviewTop, setLbPreviewTop] = useState<CheckinLeaderboardItem[]>([])
-  const [lbPreviewMyRank, setLbPreviewMyRank] = useState<number | null>(null)
   /** 下拉刷新时横幅内显示加载态 */
   const [lbPreviewLoading, setLbPreviewLoading] = useState(false)
   /** 任意请求进行中（含静默），用于首次进入时骨架 */
@@ -316,7 +300,6 @@ function CommunityPage() {
   const loadCheckinPreview = useCallback(async (silent = true) => {
     if (!getAccessToken()) {
       setLbPreviewTop([])
-      setLbPreviewMyRank(null)
       setLbPreviewFetching(false)
       return
     }
@@ -326,8 +309,6 @@ function CommunityPage() {
       const res = await communityGetCheckinLeaderboard()
       const list = res.list || []
       setLbPreviewTop(list.slice(0, 3))
-      const me = list.find((r) => r.is_me)
-      setLbPreviewMyRank(me ? me.rank : null)
     } catch {
       // 保留上次预览，避免请求失败时横幅突然变空
     } finally {
@@ -961,6 +942,17 @@ function CommunityPage() {
     return [sortLabel, mealLabel, goalLabel, priority].filter(Boolean).join(' · ')
   }, [feedSortBy, feedMealType, feedDietGoal, feedAuthorScope, loggedIn])
 
+  /** 筛选图标：展开面板或任一筛选项非默认时为主题色 */
+  const feedFilterIconActive = useMemo(
+    () =>
+      feedFilterExpanded ||
+      feedSortBy !== 'recommended' ||
+      feedMealType !== 'all' ||
+      feedDietGoal !== 'all' ||
+      (loggedIn && feedAuthorScope === 'priority'),
+    [feedFilterExpanded, feedSortBy, feedMealType, feedDietGoal, feedAuthorScope, loggedIn]
+  )
+
   /** 暂存草稿的 key */
   const draftKey = (recordId: string) => `comment_draft_${recordId}`
 
@@ -1244,32 +1236,42 @@ function CommunityPage() {
           lowerThreshold={100}
         >
           <View className='community-scroll-content'>
-            {/* 好友区域（仅登录后显示） */}
-                {loggedIn && (
-                  <View className='friends-section'>
-                    <View className='section-header'>
-                      <Text className='section-title'>好友</Text>
-                      <View className='header-actions'>
-                        {requests.length > 0 && (
-                          <View className='requests-badge friend-action-pill friend-action-pill--amber' onClick={() => setShowRequests(true)}>
-                            <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
-                          </View>
-                        )}
-                        <View className='view-all-btn friend-action-pill notification-entry' onClick={handleOpenNotifications}>
-                          <Text className='view-all-text'>
-                            互动消息{unreadNotificationCount > 0 ? ` (${unreadNotificationCount})` : ''}
-                          </Text>
-                        </View>
-                        <View className='view-all-btn friend-action-pill' onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}>
-                          <Text className='view-all-text'>好友管理</Text>
-                        </View>
-                        <View className='view-all-btn friend-action-pill' onClick={() => setShowAddFriend(true)}>
-                          <Text className='view-all-text'>添加好友</Text>
-                        </View>
-                      </View>
-                    </View>
+            {/* 快捷入口：无标题、无整块白底；三键等分 + 可选好友请求条 */}
+            {loggedIn && (
+              <View className='friends-quick-bar'>
+                {requests.length > 0 ? (
+                  <View className='friends-requests-banner' onClick={() => setShowRequests(true)}>
+                    <Text className='friends-requests-banner-label'>好友请求</Text>
+                    <Text className='friends-requests-banner-count'>{requests.length}</Text>
+                    <Text className='friends-requests-banner-chevron'>›</Text>
                   </View>
-                )}
+                ) : null}
+                <View className='friends-quick-grid'>
+                  <View className='friends-quick-cell' onClick={handleOpenNotifications}>
+                    <Text className='friends-quick-cell-icon iconfont icon-pinglun' />
+                    <Text className='friends-quick-cell-label'>互动消息</Text>
+                    {unreadNotificationCount > 0 ? (
+                      <View className='friends-quick-cell-badge'>
+                        <Text className='friends-quick-cell-badge-text'>
+                          {unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View
+                    className='friends-quick-cell'
+                    onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}
+                  >
+                    <Text className='friends-quick-cell-icon iconfont icon-duoren' />
+                    <Text className='friends-quick-cell-label'>好友管理</Text>
+                  </View>
+                  <View className='friends-quick-cell' onClick={() => setShowAddFriend(true)}>
+                    <Text className='friends-quick-cell-icon iconfont icon-zengji' />
+                    <Text className='friends-quick-cell-label'>添加好友</Text>
+                  </View>
+                </View>
+              </View>
+            )}
 
             {/* 未登录提示条 */}
             {!loggedIn && (
@@ -1318,7 +1320,10 @@ function CommunityPage() {
                         <>
                           <View className='ranking-preview-row'>
                             {lbPreviewTop.map((row) => (
-                              <View key={row.user_id} className='ranking-preview-cell'>
+                              <View
+                                key={row.user_id}
+                                className={`ranking-preview-cell${row.is_me ? ' is-me' : ''}`}
+                              >
                                 <Text
                                   className={`ranking-preview-rank ${row.rank === 1 ? 'r1' : row.rank === 2 ? 'r2' : 'r3'}`}
                                 >
@@ -1342,15 +1347,6 @@ function CommunityPage() {
                               </View>
                             ))}
                           </View>
-                          <Text className='ranking-preview-cta'>
-                            {lbPreviewMyRank != null
-                              ? lbPreviewMyRank > 3
-                                ? `你当前第${lbPreviewMyRank}名 · 点我查看完整榜单`
-                                : lbPreviewMyRank >= 1
-                                  ? '你已进前三 · 点我查看完整榜单'
-                                  : '点我查看完整榜单'
-                              : '点我查看完整榜单'}
-                          </Text>
                         </>
                       ) : (
                         <Text className='ranking-preview-placeholder'>暂无预览，下拉刷新试试</Text>
@@ -1389,10 +1385,10 @@ function CommunityPage() {
                 </View>
                 <View className='feed-filter-trigger-row'>
                   <View
-                    className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''}`}
+                    className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''} ${feedFilterIconActive ? 'is-active' : ''}`}
                     onClick={() => setFeedFilterExpanded((v) => !v)}
                   >
-                    <FeedFilterFunnelIcon />
+                    <Text className='iconfont icon-filter' />
                   </View>
                   <Text
                     className='feed-filter-summary'
@@ -1536,9 +1532,14 @@ function CommunityPage() {
                             <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
                           </View>
                         ) : null}
-                        {item.record.description && (
-                          <Text className='feed-content'>{item.record.description}</Text>
-                        )}
+                        {item.record.description &&
+                          (item.record.image_path ? (
+                            <Text className='feed-content'>{item.record.description}</Text>
+                          ) : (
+                            <View className='feed-content-wrap feed-content-wrap--text-only'>
+                              <Text className='feed-content'>{item.record.description}</Text>
+                            </View>
+                          ))}
                         {item.record.image_path && (
                           <View className='feed-image'>
                             <Image
@@ -1549,9 +1550,12 @@ function CommunityPage() {
                           </View>
                         )}
                         <View className='feed-meta'>
-                          <Text className='feed-calorie'>
-                            {Number(item.record.total_calories || 0).toFixed(0)} kcal
-                          </Text>
+                          <View className='feed-calorie'>
+                            <Text className='feed-calorie-num'>
+                              {Number(item.record.total_calories || 0).toFixed(0)}
+                            </Text>
+                            <Text className='feed-calorie-unit'> kcal</Text>
+                          </View>
                           <Text className='feed-macros'>
                             蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
                           </Text>
