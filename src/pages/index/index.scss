@@ -1362,45 +1362,58 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   height: 60rpx;
 }
 
-// 目标编辑弹窗
+// 首页底部弹层共用：记录菜单 / 体重 / 喝水 / 编辑目标 — 浮在 tabBar 上、四周留白圆角卡片
+$sheet-float-gap-x: 24rpx;
+$sheet-float-gap-top: 48rpx;
+$sheet-float-above-tabbar: calc(env(safe-area-inset-bottom) + 128rpx);
+$sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-inset-bottom) - 128rpx);
+
+// 目标编辑弹窗（与 RecordMenu 同款悬浮底卡）
 .target-modal {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 10000;
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  box-sizing: border-box;
+  padding: $sheet-float-gap-top $sheet-float-gap-x $sheet-float-above-tabbar;
 }
 
 .target-modal-mask {
   position: absolute;
   inset: 0;
-  background: rgb(15 23 42 / 45%);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .target-modal-content {
   position: relative;
+  z-index: 1;
   width: 100%;
+  max-width: 100%;
+  max-height: $sheet-float-max-height;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: $modal-sheet-bg;
-  border-radius: 40rpx 40rpx 0 0;
-  padding: 40rpx 32rpx calc(120rpx + env(safe-area-inset-bottom));
+  border-radius: 32rpx;
+  padding: 32rpx 24rpx 28rpx;
   box-sizing: border-box;
-  max-height: 85vh;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 14%);
+  animation: slideUp 0.3s ease;
 }
 
 .body-modal-content {
-  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+  padding-bottom: 28rpx;
 }
 
 .body-modal-sheet {
-  width: calc(100% - 40rpx);
-  margin: 0 20rpx calc(116rpx + env(safe-area-inset-bottom));
-  border-radius: 36rpx;
-  max-height: calc(100vh - 220rpx - env(safe-area-inset-bottom));
-  box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 12%);
+  width: calc(100% - #{$sheet-float-gap-x} * 2);
+  margin: 0 $sheet-float-gap-x;
+  border-radius: 32rpx;
+  max-height: $sheet-float-max-height;
+  box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 14%);
 }
 
 .body-modal-sheet .modal-actions-fixed {
@@ -1923,9 +1936,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   line-height: 34rpx;
 }
 
-// 记录喝水弹窗：覆盖底部大留白，仅保留安全区与内容边距；底部再增加约 30px 呼吸空间
+// 喝水弹窗：与通用底卡一致，无需再为 tabBar 预留 150px
 .target-modal-content.water-modal-content {
-  padding-bottom: calc(28rpx + 150px + env(safe-area-inset-bottom));
+  padding-bottom: 32rpx;
 }
 
 .target-modal-header .water-modal-clear-link {
@@ -2430,29 +2443,36 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
-// 记录菜单弹窗样式
+// 记录菜单（样式与 `.target-modal` / 体重喝水目标弹层共用 `$sheet-float-*`）
 .record-menu-modal {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 10001;
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  box-sizing: border-box;
+  padding: $sheet-float-gap-top $sheet-float-gap-x $sheet-float-above-tabbar;
 }
 
 .record-menu-mask {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .record-menu-content {
   position: relative;
+  z-index: 1;
   width: 100%;
+  max-width: 100%;
+  max-height: $sheet-float-max-height;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: $modal-sheet-bg;
-  border-radius: 32rpx 32rpx 0 0;
-  padding: 32rpx 24rpx;
-  padding-bottom: calc(64rpx + env(safe-area-inset-bottom));
+  border-radius: 32rpx;
+  padding: 28rpx 24rpx 28rpx;
+  box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 14%);
   animation: slideUp 0.3s ease;
 }
 
@@ -2706,8 +2726,4 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.record-menu-safe-area {
-  height: calc(env(safe-area-inset-bottom));
 }

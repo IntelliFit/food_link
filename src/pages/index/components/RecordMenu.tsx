@@ -148,9 +148,6 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
             </View>
           </View>
         </View>
-
-        {/* 底部安全区域 */}
-        <View className='record-menu-safe-area' />
       </View>
     </View>
   )

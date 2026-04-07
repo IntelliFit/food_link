@@ -6,6 +6,18 @@
 
 ## 2026-04-08
 
+- ✨ feat: 主热量「粗进度条」与三大营养素圆环、圆心克数接入 `useAnimatedProgress`/`useAnimatedNumber`（与喝水条同源缓动）`src/pages/index/index.tsx`
+- 🐛 fix: 仪表盘换日缓动：`selectedDate|busy|idle` 作 `resetDep`；`useLayoutEffect` 内 `resetDep` 变化时先同步归零再 rAF，并清 `dist` 后 `build:weapp:preview` + CLI 重启开发者工具 `src/pages/index/hooks/useAnimatedNumber.ts` `useAnimatedProgress.ts` `src/pages/index/index.tsx`
+- 🐛 fix: 身体指标云端日期与首页 `2026-MM-DD` 不一致时喝水/体重按日查不到；`bmDateKey`/`normalizeBodyMetricsStorageKeys` 与 `applyCloudBodyMetrics` 按日 upsert；`getBodyMetricsSummary` 失败时重试并规范化本机缓存 `src/pages/index/index.tsx`
+- ⚡ perf: `useAnimatedNumber`/`Progress` 增加 `resetDep`（首页传 `selectedDate`），换日时从 0 重新缓动；初始 `useState(0)` 避免首帧即等于 target；已执行 `npm run build:weapp:preview` `src/pages/index/hooks/useAnimatedNumber.ts` `useAnimatedProgress.ts` `src/pages/index/index.tsx`
+- ⚡ perf: 首页数字/进度动画 rAF 改为统一 `getNowMs()` 计时，修复真机无时间戳导致 NaN；`mergeExerciseKcal` 与 dashboard 取 max 避免 logs 返回 0 覆盖汇总；`dashboardBusy` 恢复首屏加载态与喝水/运动/体重卡片 loading `src/pages/index/hooks/useAnimatedNumber.ts` `useAnimatedProgress.ts` `src/pages/index/index.tsx`
+- 🔧 chore: 执行 `npm run build:weapp:preview` 产出指向 `https://healthymax.cn` 的小程序 `dist/`
+- 🔧 chore: 新增 `npm run dev:weapp:online`（watch + 线上 `https://healthymax.cn`）；`AGENTS.md` 补充与 `build:weapp:preview` 的选用说明 `package.json` `AGENTS.md`
+- 🎨 style: 体重 / 喝水 / 编辑今日目标弹窗与记录菜单共用悬浮底卡样式（`$sheet-float-*`、圆角+阴影+z-index）`src/pages/index/index.scss`
+- 🎨 style: 首页记录菜单改为四周留白、全圆角悬浮卡片，置于底部栏上方（不再隐藏 tabBar）`src/pages/index/index.scss` `src/pages/index/index.tsx` `custom-tab-bar/index.js`
+- 🎨 style: 首页记录菜单打开时 `hideTabBar`、关闭时 `showTabBar`，白底弹层贴齐屏幕底+安全区（不再整体上移半截压在 tab 上）；保留 `z-index` 与内容区可滚动 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🐛 fix: 首页 `loadDashboard()` 无参时改为按「当前选中日期」请求，避免与日历不一致及并发覆盖；宏量圆环改为直接展示接口克数+静态进度环，避免真机动画卡在 0 `src/pages/index/index.tsx`
+- 🐛 fix: 真机无 `performance` 导致首页数字动画报错；增加 `perf-polyfill` 与 `getNowMs`；生产包不再无条件打印 API 基址；新增 `npm run build:weapp:preview` 与 `AGENTS.md` 真机构建说明 `src/perf-polyfill.ts` `src/utils/perf-now.ts` `src/app.ts` `src/pages/index/hooks/useAnimatedNumber.ts` `useAnimatedProgress.ts` `src/utils/api.ts` `package.json` `AGENTS.md`
 - 🔧 chore: 微信上传版本号更正为 **2.0.10**（继 2.0.9）；`package.json` 同步；`NODE_ENV=production` 构建后 `cli upload`
 
 ## 2026-04-07

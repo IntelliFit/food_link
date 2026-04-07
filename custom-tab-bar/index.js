@@ -83,10 +83,10 @@ Component({
         if (pages.length > 0) {
           const currentPage = pages[pages.length - 1]
           const currentPath = '/' + currentPage.route
-          
+
           // 在记录饮食摄影页面隐藏 tabBar
           const shouldHide = currentPath === '/pages/record/index'
-          
+
           if (shouldHide !== this.data.hidden) {
             this.setData({ hidden: shouldHide })
           }

@@ -23,8 +23,10 @@ export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   ''
 )
 
-// 调试日志
-console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
+// 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
+if (process.env.NODE_ENV !== 'production') {
+  console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
+}
 
 function isNgrokFreeDomain(url: string): boolean {
   return /^https:\/\/[^/]+\.ngrok-free\.dev(?:\/|$)/i.test(url)

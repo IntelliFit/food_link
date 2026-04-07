@@ -1,3 +1,4 @@
+import './perf-polyfill'
 import { PropsWithChildren } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'

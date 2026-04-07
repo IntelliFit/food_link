@@ -7,13 +7,13 @@ import {
   getStatsSummary,
   getAccessToken,
   updateDashboardTargets,
-  mergeHomeIntakeWithTargets,
   getStoredDashboardTargets,
   getBodyMetricsSummary,
   getExerciseLogs,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
+  mapCalendarDateToApi,
   type DashboardTargets,
   type HomeIntakeData,
   type HomeMealItem,
@@ -194,8 +194,9 @@ function parseExerciseBurnedKcal(raw: unknown): number {
   return 0
 }
 
-/** 与记运动页同源：优先用 GET /api/exercise-logs 的 total_calories，避免 dashboard 字段缺失或异常时为 0 */
+/** 与记运动页同源：合并 dashboard 与 exercise-logs；取二者较大值，避免 logs 空列表返回 0 时盖住 dashboard 已有汇总（真机偶发） */
 function mergeExerciseKcalFromDashboardAndLogs(dashboardRaw: unknown, logsTotal: unknown): number {
+  const dash = parseExerciseBurnedKcal(dashboardRaw)
   const fromLogs =
     typeof logsTotal === 'number' && Number.isFinite(logsTotal)
       ? logsTotal
@@ -203,9 +204,9 @@ function mergeExerciseKcalFromDashboardAndLogs(dashboardRaw: unknown, logsTotal:
         ? parseFloat(logsTotal.trim())
         : NaN
   if (Number.isFinite(fromLogs)) {
-    return fromLogs
+    return Math.max(dash, fromLogs)
   }
-  return parseExerciseBurnedKcal(dashboardRaw)
+  return dash
 }
 
 // 体重/喝水相关辅助函数
@@ -234,11 +235,53 @@ function sortWeightEntries(entries: WeightRecordEntry[]): WeightRecordEntry[] {
   return [...entries].sort((a, b) => a.date.localeCompare(b.date))
 }
 
+/** 与 dashboard / 身体指标 API 一致：展示年 2026 时，云端/库内 2025-xx-xx 应对齐到 2026-xx-xx */
+function bmDateKey(date: string): string {
+  return mapCalendarDateToApi(date) ?? date
+}
+
+/**
+ * 合并本机 waterByDate / 体重条目的日期键，避免同日 2025/2026 两套键导致查不到、按日切换永远不变
+ */
+function normalizeBodyMetricsStorageKeys(metrics: BodyMetricsStorage): BodyMetricsStorage {
+  const nextWater: Record<string, BodyMetricWaterDay> = {}
+  for (const [k, v] of Object.entries(metrics.waterByDate)) {
+    const nk = bmDateKey(k)
+    const merged = nextWater[nk]
+    if (!merged) {
+      nextWater[nk] = { ...v, date: nk }
+    } else {
+      const pick = merged.total >= v.total ? merged : { ...v, date: nk }
+      nextWater[nk] = {
+        date: nk,
+        total: Math.max(merged.total, v.total),
+        logs: pick.logs,
+      }
+    }
+  }
+  const byDate = new Map<string, WeightRecordEntry>()
+  for (const e of metrics.weightEntries) {
+    const nk = bmDateKey(e.date)
+    const prev = byDate.get(nk)
+    const nextE: WeightRecordEntry = { ...e, date: nk }
+    if (!prev) {
+      byDate.set(nk, nextE)
+    } else {
+      const nt = nextE.recorded_at || ''
+      const pt = prev.recorded_at || ''
+      byDate.set(nk, nt >= pt ? nextE : prev)
+    }
+  }
+  const weightEntries = sortWeightEntries([...byDate.values()]).slice(-WEIGHT_HISTORY_LIMIT)
+  return { ...metrics, waterByDate: nextWater, weightEntries }
+}
+
 function getStoredBodyMetrics(): BodyMetricsStorage {
   try {
     const stored = Taro.getStorageSync('body_metrics_storage')
     if (stored) {
-      return migrateLegacy2025BodyMetricKeys(stored as BodyMetricsStorage)
+      const migrated = migrateLegacy2025BodyMetricKeys(stored as BodyMetricsStorage)
+      return normalizeBodyMetricsStorageKeys(migrated)
     }
   } catch {
     // ignore
@@ -263,47 +306,54 @@ function applyCloudBodyMetrics(storage: BodyMetricsStorage, cloud: {
   water_daily?: BodyMetricWaterDay[]
   water_goal_ml?: number
 }): BodyMetricsStorage {
-  const next: BodyMetricsStorage = {
+  let next = normalizeBodyMetricsStorageKeys({
+    ...storage,
     weightEntries: [...storage.weightEntries],
     waterByDate: { ...storage.waterByDate },
     waterGoalMl: cloud.water_goal_ml || storage.waterGoalMl || WATER_GOAL_DEFAULT
-  }
+  })
 
-  if (cloud.weight_entries) {
-    const existingDates = new Set(next.weightEntries.map(e => e.date))
-    cloud.weight_entries.forEach(entry => {
-      if (!existingDates.has(entry.date)) {
-        next.weightEntries.push({
-          date: entry.date,
-          value: entry.value,
-          recorded_at: entry.recorded_at || undefined
-        })
-      }
+  if (cloud.weight_entries?.length) {
+    const byDate = new Map<string, WeightRecordEntry>()
+    next.weightEntries.forEach((e) => {
+      const d = bmDateKey(e.date)
+      byDate.set(d, { ...e, date: d })
     })
-    next.weightEntries = sortWeightEntries(next.weightEntries).slice(-WEIGHT_HISTORY_LIMIT)
+    for (const entry of cloud.weight_entries) {
+      const d = bmDateKey(entry.date)
+      byDate.set(d, {
+        date: d,
+        value: entry.value,
+        recorded_at: entry.recorded_at || undefined
+      })
+    }
+    next.weightEntries = sortWeightEntries([...byDate.values()]).slice(-WEIGHT_HISTORY_LIMIT)
   }
 
-  if (cloud.water_daily) {
-    cloud.water_daily.forEach(day => {
-      next.waterByDate[day.date] = {
-        date: day.date,
+  if (cloud.water_daily?.length) {
+    for (const day of cloud.water_daily) {
+      const d = bmDateKey(day.date)
+      next.waterByDate[d] = {
+        date: d,
         total: day.total,
         logs: day.logs || []
       }
-    })
+    }
   }
 
   return next
 }
 
 function getTodayWater(metrics: BodyMetricsStorage, date: string): BodyMetricWaterDay {
-  return metrics.waterByDate[date] || { date, total: 0, logs: [] }
+  const d = bmDateKey(date)
+  return metrics.waterByDate[d] || metrics.waterByDate[date] || { date, total: 0, logs: [] }
 }
 
 function addWaterToMetrics(metrics: BodyMetricsStorage, date: string, amount: number): BodyMetricsStorage {
+  const key = bmDateKey(date)
   const current = getTodayWater(metrics, date)
   const updated: BodyMetricWaterDay = {
-    date,
+    date: key,
     total: current.total + amount,
     logs: [...current.logs, amount]
   }
@@ -311,15 +361,32 @@ function addWaterToMetrics(metrics: BodyMetricsStorage, date: string, amount: nu
     ...metrics,
     waterByDate: {
       ...metrics.waterByDate,
-      [date]: updated
+      [key]: updated
     }
   }
 }
 
 function clearWaterForDate(metrics: BodyMetricsStorage, date: string): BodyMetricsStorage {
   const next = { ...metrics, waterByDate: { ...metrics.waterByDate } }
+  delete next.waterByDate[bmDateKey(date)]
   delete next.waterByDate[date]
   return next
+}
+
+/** 真机弱网时身体指标接口偶发失败，短延迟重试一次；仍失败则返回 null，由本机缓存 + 日期键规范化兜底 */
+async function fetchBodyMetricsSummaryRetry(): Promise<
+  Awaited<ReturnType<typeof getBodyMetricsSummary>> | null
+> {
+  try {
+    return await getBodyMetricsSummary('week')
+  } catch {
+    await new Promise<void>((resolve) => setTimeout(resolve, 350))
+    try {
+      return await getBodyMetricsSummary('week')
+    } catch {
+      return null
+    }
+  }
 }
 
 function getExpiryUrgencyText(item: HomeFoodExpiryItem): string {
@@ -411,8 +478,13 @@ function IndexPage() {
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string) => {
     const seq = ++loadDashboardSeqRef.current
+    /** 无参调用（如保质期事件、保存目标后刷新）必须与日历选中日期一致，否则会拉到「后端默认今天」覆盖当前选中日期的数据 */
+    const resolvedDate =
+      targetDate !== undefined && targetDate !== ''
+        ? targetDate
+        : (selectedDateRef.current || formatDateKey(new Date()))
 
-    console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate, 'seq:', seq)
+    console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate, 'resolvedDate:', resolvedDate, 'seq:', seq)
     console.log('[DEBUG] getAccessToken:', getAccessToken() ? '有token' : '无token')
     if (!getAccessToken()) {
       console.log('[DEBUG] 无token，返回默认值')
@@ -429,13 +501,12 @@ function IndexPage() {
 
     setLoading(true)
     try {
-      console.log('[DEBUG] 请求 API, date:', targetDate)
-      const exerciseLogParams =
-        targetDate !== undefined && targetDate !== '' ? { date: targetDate } : undefined
+      console.log('[DEBUG] 请求 API, date:', resolvedDate)
+      const exerciseLogParams = { date: resolvedDate }
       const [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
-        getHomeDashboard(targetDate),
+        getHomeDashboard(resolvedDate),
         getStatsSummary('week'),
-        getBodyMetricsSummary('week').catch(() => null),
+        fetchBodyMetricsSummaryRetry(),
         getExerciseLogs(exerciseLogParams).catch(() => null)
       ])
       if (seq !== loadDashboardSeqRef.current) {
@@ -484,7 +555,7 @@ function IndexPage() {
       setWeekHeatmapCells(nextWeekHeatmapCells)
       setTargetForm(createTargetForm(intake))
 
-      // 应用云端身体指标数据
+      // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
       if (bodyMetricsRes) {
         setBodyMetrics(prev => {
           const next = applyCloudBodyMetrics(prev, {
@@ -492,6 +563,12 @@ function IndexPage() {
             water_daily: bodyMetricsRes.water_daily,
             water_goal_ml: bodyMetricsRes.water_goal_ml
           })
+          saveBodyMetrics(next)
+          return next
+        })
+      } else {
+        setBodyMetrics(prev => {
+          const next = normalizeBodyMetricsStorageKeys(prev)
           saveBodyMetrics(next)
           return next
         })
@@ -795,7 +872,7 @@ function IndexPage() {
     try {
       const { saveScope } = await updateDashboardTargets(payload)
       setShowTargetEditor(false)
-      await loadDashboard()
+      await loadDashboard(selectedDateRef.current || formatDateKey(new Date()))
       if (saveScope === 'local') {
         Taro.showToast({
           title: normalized.adjusted
@@ -874,17 +951,16 @@ function IndexPage() {
     // 立即进入日期切换状态，显示加载中并归零数字
     setIsSwitchingDate(true)
     // 先清空当前数据，让数字归零
-    setIntakeData({
-      target: 0,
+    setIntakeData((prev) => ({
+      ...prev,
       current: 0,
-      remaining: 0,
       progress: 0,
       macros: {
-        protein: { current: 0, target: 0, remaining: 0, progress: 0 },
-        carbs: { current: 0, target: 0, remaining: 0, progress: 0 },
-        fat: { current: 0, target: 0, remaining: 0, progress: 0 }
-      }
-    })
+        protein: { ...prev.macros.protein, current: 0 },
+        carbs: { ...prev.macros.carbs, current: 0 },
+        fat: { ...prev.macros.fat, current: 0 },
+      },
+    }))
     loadDashboard(date)
   }
 
@@ -1062,9 +1138,12 @@ function IndexPage() {
     ? Number((totalCurrent - totalTarget).toFixed(1))
     : remainingCalories
 
-  const animatedHeadlineCalories = useAnimatedNumber(calorieHeadlineBase, 800, 0)
-  const animatedTotalCurrent = useAnimatedNumber(totalCurrent, 800, 0)
-  
+  /** 与 selectedDate 组合：切日后先 busy 再 idle；仅传日期时 resetDep 不变，遮罩结束时看不到缓动 */
+  const dashboardBusy = loading || isSwitchingDate
+  const dashboardAnimResetKey = `${selectedDate}|${dashboardBusy ? 'busy' : 'idle'}`
+
+  const animatedHeadlineCalories = useAnimatedNumber(calorieHeadlineBase, 800, 0, dashboardAnimResetKey)
+
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
   const caloriesFromMacroInputs = macroInputValues ? calcCaloriesFromMacros(macroInputValues) : null
@@ -1075,65 +1154,6 @@ function IndexPage() {
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
   /** 登录用户展示食物保质期区块（无数据时显示引导） */
   const showFoodExpiryBlock = Boolean(getAccessToken())
-
-  const macroAnimations = useMemo(() => {
-    return MACRO_CONFIGS.map(({ key }) => {
-      const macro = intakeData.macros[key]
-      const currentValue = normalizeDisplayNumber(macro.current)
-      const targetValue = normalizeDisplayNumber(macro.target)
-      const targetProgress = calculateProgressPercent(currentValue, targetValue)
-      return {
-        key,
-        animatedValue: currentValue,
-        animatedProgress: targetProgress,
-        delay: 0
-      }
-    })
-  }, [intakeData.macros])
-
-  const proteinAnimation = useAnimatedNumber(
-    macroAnimations.find(m => m.key === 'protein')?.animatedValue || 0,
-    800,
-    0
-  )
-  const carbsAnimation = useAnimatedNumber(
-    macroAnimations.find(m => m.key === 'carbs')?.animatedValue || 0,
-    800,
-    0
-  )
-  const fatAnimation = useAnimatedNumber(
-    macroAnimations.find(m => m.key === 'fat')?.animatedValue || 0,
-    800,
-    0
-  )
-
-  const proteinProgressAnimation = useAnimatedProgress(
-    macroAnimations.find(m => m.key === 'protein')?.animatedProgress || 0,
-    800,
-    0
-  )
-  const carbsProgressAnimation = useAnimatedProgress(
-    macroAnimations.find(m => m.key === 'carbs')?.animatedProgress || 0,
-    800,
-    0
-  )
-  const fatProgressAnimation = useAnimatedProgress(
-    macroAnimations.find(m => m.key === 'fat')?.animatedProgress || 0,
-    800,
-    0
-  )
-
-  const animatedMacroValues: Record<MacroKey, number> = {
-    protein: proteinAnimation,
-    carbs: carbsAnimation,
-    fat: fatAnimation
-  }
-
-  const animatedMacroProgress: Record<MacroKey, number> = {
-    protein: proteinProgressAnimation,
-    carbs: carbsProgressAnimation,
-    fat: fatProgressAnimation
-  }
 
   // 体重/喝水计算
   const weightSummary = useMemo(() => 
@@ -1148,17 +1168,46 @@ function IndexPage() {
   
   const waterProgress = calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
 
+  /** 三大营养素：用于圆环与中心克数缓动（与主热量条、喝水条一致，从 0/上一段插值到当前） */
+  const proteinCur = normalizeDisplayNumber(intakeData.macros.protein.current)
+  const proteinTargetRaw = normalizeDisplayNumber(intakeData.macros.protein.target)
+  const proteinRingPct = Math.min(100, calculateProgressPercent(proteinCur, proteinTargetRaw))
+
+  const carbsCur = normalizeDisplayNumber(intakeData.macros.carbs.current)
+  const carbsTargetRaw = normalizeDisplayNumber(intakeData.macros.carbs.target)
+  const carbsRingPct = Math.min(100, calculateProgressPercent(carbsCur, carbsTargetRaw))
+
+  const fatCur = normalizeDisplayNumber(intakeData.macros.fat.current)
+  const fatTargetRaw = normalizeDisplayNumber(intakeData.macros.fat.target)
+  const fatRingPct = Math.min(100, calculateProgressPercent(fatCur, fatTargetRaw))
+
   const waterDraftMl = parseCompleteNumber(waterInput)
   const showWaterAddFooter =
     waterInputFocused || (waterDraftMl != null && waterDraftMl > 0)
 
-  // 喝水动画
-  const animatedWaterTotal = useAnimatedNumber(todayWater.total, 600, 0)
-  const animatedWaterProgress = useAnimatedProgress(waterProgress, 600, 0)
+  // 喝水动画（resetKey 含 busy/idle，与主卡一致）
+  const animatedWaterTotal = useAnimatedNumber(todayWater.total, 600, 0, dashboardAnimResetKey)
+  const animatedWaterProgress = useAnimatedProgress(waterProgress, 600, 0, dashboardAnimResetKey)
+
+  /** 主热量进度条宽度（0～100），与上方 headline 数字同源缓动 */
+  const animatedMainCalorieBarPct = useAnimatedProgress(
+    dashboardBusy ? 0 : clampVisualProgress(calorieProgress),
+    600,
+    0,
+    dashboardAnimResetKey
+  )
+
+  const animatedMacroProteinNum = useAnimatedNumber(dashboardBusy ? 0 : proteinCur, 600, 0, dashboardAnimResetKey)
+  const animatedMacroCarbsNum = useAnimatedNumber(dashboardBusy ? 0 : carbsCur, 600, 0, dashboardAnimResetKey)
+  const animatedMacroFatNum = useAnimatedNumber(dashboardBusy ? 0 : fatCur, 600, 0, dashboardAnimResetKey)
+
+  const animatedMacroProteinRing = useAnimatedProgress(dashboardBusy ? 0 : proteinRingPct, 600, 0, dashboardAnimResetKey)
+  const animatedMacroCarbsRing = useAnimatedProgress(dashboardBusy ? 0 : carbsRingPct, 600, 0, dashboardAnimResetKey)
+  const animatedMacroFatRing = useAnimatedProgress(dashboardBusy ? 0 : fatRingPct, 600, 0, dashboardAnimResetKey)
 
   /** 运动消耗：默认 0，数据就绪后从 0 缓动到接口值（与喝水一致） */
-  const exerciseAnimTarget = loading || isSwitchingDate ? 0 : exerciseBurnedKcal
-  const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0)
+  const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
+  const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey)
 
   return (
     <View className='home-page'>
@@ -1179,9 +1228,9 @@ function IndexPage() {
           <View className='main-card-header'>
             <View className='main-card-title'>
               <Text className='card-label'>
-                {isSwitchingDate ? '剩余可摄入' : isCalorieOver ? '已超出' : '剩余可摄入'}
+                {dashboardBusy ? '剩余可摄入' : isCalorieOver ? '已超出' : '剩余可摄入'}
               </Text>
-              {isSwitchingDate ? (
+              {dashboardBusy ? (
                 <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', marginTop: '8rpx' }}>
                   <Text className='card-value' style={{ fontSize: '36rpx', color: '#9ca3af' }}>--</Text>
                   <View className='loading-spinner' style={{ width: '24rpx', height: '24rpx', borderWidth: '3rpx' }} />
@@ -1193,10 +1242,10 @@ function IndexPage() {
                     : formatNumberWithComma(Math.round(animatedHeadlineCalories))}
                 </Text>
               )}
-              {!isSwitchingDate && <Text className='card-unit'>kcal</Text>}
+              {!dashboardBusy && <Text className='card-unit'>kcal</Text>}
             </View>
             <View className='target-section'>
-              {isSwitchingDate ? (
+              {dashboardBusy ? (
                 <View className='target-energy-nums-only'>
                   <Text className='target-energy-num-muted'>--</Text>
                   <Text className='target-energy-slash-only'>/</Text>
@@ -1220,10 +1269,10 @@ function IndexPage() {
           </View>
 
           <View className='progress-section'>
-            <View className='progress-bar-bg thick'>
+            <View className={`progress-bar-bg thick${dashboardBusy ? ' loading-pulse' : ''}`}>
               <View
                 className={`progress-bar-fill thick${isCalorieOver ? ' is-over' : ''}`}
-                style={{ width: `${clampVisualProgress(calorieProgress)}%` }}
+                style={{ width: `${animatedMainCalorieBarPct}%` }}
               />
             </View>
           </View>
@@ -1232,8 +1281,6 @@ function IndexPage() {
           <View className='macros-section-horizontal'>
             {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
               const macro = intakeData.macros[key]
-              const animatedValue = animatedMacroValues[key]
-              const animatedProgress = animatedMacroProgress[key]
               const targetValue = macro?.target || 0
               const currentRaw = normalizeDisplayNumber(macro?.current)
               const targetRaw = normalizeDisplayNumber(macro?.target)
@@ -1244,6 +1291,19 @@ function IndexPage() {
                 : null
               const ringStrokeColor = isMacroOver ? HOME_WARNING_RED : color
               const intakeTextColor = isMacroOver ? HOME_WARNING_RED : color
+
+              const ringAnimPct =
+                key === 'protein'
+                  ? animatedMacroProteinRing
+                  : key === 'carbs'
+                    ? animatedMacroCarbsRing
+                    : animatedMacroFatRing
+              const intakeAnimNum =
+                key === 'protein'
+                  ? animatedMacroProteinNum
+                  : key === 'carbs'
+                    ? animatedMacroCarbsNum
+                    : animatedMacroFatNum
 
               return (
                 <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
@@ -1270,13 +1330,13 @@ function IndexPage() {
                         className='macro-ring-bg-horizontal'
                         style={{
                           backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><circle cx='60' cy='60' r='48' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='60' cy='60' r='48' fill='none' stroke='${ringStrokeColor}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 48}' stroke-dashoffset='${2 * Math.PI * 48 * (1 - animatedProgress / 100)}'/></svg>`
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><circle cx='60' cy='60' r='48' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='60' cy='60' r='48' fill='none' stroke='${ringStrokeColor}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 48}' stroke-dashoffset='${2 * Math.PI * 48 * (1 - ringAnimPct / 100)}'/></svg>`
                           )}")`,
                           backgroundSize: '100% 100%'
                         }}
                       />
                       <View className='macro-gauge-center-horizontal'>
-                        {isSwitchingDate ? (
+                        {dashboardBusy ? (
                           <View className='loading-dots-inline'>
                             <View className='loading-dot' />
                             <View className='loading-dot' />
@@ -1285,7 +1345,7 @@ function IndexPage() {
                         ) : (
                           <View className='macro-gauge-text-wrap'>
                             <Text className='macro-intake-value' style={{ color: intakeTextColor }}>
-                              {formatDisplayNumber(animatedValue)}
+                              {formatDisplayNumber(intakeAnimNum)}
                             </Text>
                           </View>
                         )}
@@ -1308,7 +1368,12 @@ function IndexPage() {
               </View>
             </View>
             <View className='body-status-content'>
-              {weightSummary.latestWeight ? (
+              {dashboardBusy ? (
+                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                </View>
+              ) : weightSummary.latestWeight ? (
                 <>
                   <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
                   <Text className='body-status-unit'>kg</Text>
@@ -1337,18 +1402,27 @@ function IndexPage() {
               </View>
             </View>
             <View className='body-status-content'>
-              <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
-              <Text className='body-status-unit'>ml</Text>
+              {dashboardBusy ? (
+                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                </View>
+              ) : (
+                <>
+                  <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
+                  <Text className='body-status-unit'>ml</Text>
+                </>
+              )}
             </View>
             <View className='body-status-progress-wrap'>
               <View className='body-status-progress-bg'>
                 <View 
                   className='body-status-progress-fill water'
-                  style={{ width: `${clampVisualProgress(animatedWaterProgress)}%` }}
+                  style={{ width: `${dashboardBusy ? 0 : clampVisualProgress(animatedWaterProgress)}%` }}
                 />
               </View>
               <Text className='body-status-progress-text'>
-                {Math.round(animatedWaterProgress)}% / 目标 {bodyMetrics.waterGoalMl}ml
+                {dashboardBusy ? '-- 加载中' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
               </Text>
             </View>
           </View>
@@ -1361,10 +1435,19 @@ function IndexPage() {
               </View>
             </View>
             <View className='body-status-content'>
-              <Text className='body-status-value'>
-                {Math.round(animatedExerciseBurnedKcal)}
-              </Text>
-              <Text className='body-status-unit'>kcal</Text>
+              {dashboardBusy ? (
+                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                </View>
+              ) : (
+                <>
+                  <Text className='body-status-value'>
+                    {Math.round(animatedExerciseBurnedKcal)}
+                  </Text>
+                  <Text className='body-status-unit'>kcal</Text>
+                </>
+              )}
             </View>
             <Text className='body-status-hint'>
               点击记录今日运动
