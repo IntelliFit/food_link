@@ -316,6 +316,7 @@ $blue-color: #3b82f6;
 // 新版三大营养素 - 三卡片水平并排，每个卡片内部左右布局
 .macros-section-horizontal {
   display: flex;
+  margin-top: 5px;
   flex-direction: row;
   gap: 12rpx;
 }
@@ -594,6 +595,24 @@ $blue-color: #3b82f6;
   color: $text-primary;
   line-height: 44rpx;
   margin-bottom: 20rpx;
+  padding-left: 8rpx;
+}
+
+// 快到期食物标题 - 无底部间距
+.expiry-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 44rpx;
+  padding-left: 8rpx;
+}
+
+// 今日餐食标题 - 无底部间距
+.meals-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 44rpx;
   padding-left: 8rpx;
 }
 

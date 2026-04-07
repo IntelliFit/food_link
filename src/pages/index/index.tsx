@@ -1186,7 +1186,7 @@ function IndexPage() {
         {shouldShowExpirySection && (
           <View className='expiry-section'>
             <View className='section-header'>
-              <Text className='section-title'>快到期食物</Text>
+              <Text className='expiry-title'>快到期食物</Text>
               <View className='view-all-btn' onClick={openFoodExpiryList}>
                 <Text className='view-all-text'>查看全部</Text>
                 <IconChevronRight size={16} color='#00bc7d' />
@@ -1235,7 +1235,7 @@ function IndexPage() {
         {/* 今日餐食区域 */}
         <View className='meals-section'>
           <View className='section-header'>
-            <Text className='section-title'>今日餐食</Text>
+            <Text className='meals-title'>今日餐食</Text>
             <View className='view-all-btn' onClick={handleViewAllMeals}>
               <Text className='view-all-text'>查看全部</Text>
               <IconChevronRight size={16} color='#00bc7d' />
