@@ -102,16 +102,16 @@ class TestStatsSummaryDateHandling:
     
     async def test_stats_summary_without_auth(self, async_client):
         """测试未认证访问统计摘要"""
-        response = await async_client.get("/api/stats/summary?period=week")
+        response = await async_client.get("/api/stats/summary?range=week")
         
         assert response.status_code in [401, 403, 422]
     
     async def test_stats_summary_with_different_periods(self, async_client):
-        """测试不同时间周期的统计摘要"""
-        periods = ["week", "month", "year"]
+        """测试不同时间周期的统计摘要（接口参数为 range）"""
+        ranges = ["week", "month"]
         
-        for period in periods:
-            response = await async_client.get(f"/api/stats/summary?period={period}")
+        for rng in ranges:
+            response = await async_client.get(f"/api/stats/summary?range={rng}")
             assert response.status_code in [401, 403, 422]
 
 
@@ -121,13 +121,13 @@ class TestBodyMetricsDateHandling:
     
     async def test_body_metrics_without_auth(self, async_client):
         """测试未认证访问身体指标"""
-        response = await async_client.get("/api/body-metrics/summary?period=week")
+        response = await async_client.get("/api/body-metrics/summary?range=week")
         
         assert response.status_code in [401, 403, 422]
     
     async def test_body_metrics_with_date_param(self, async_client):
-        """测试带日期参数访问身体指标"""
-        response = await async_client.get("/api/body-metrics/summary?period=week&date=2025-04-03")
+        """测试带 range 访问身体指标（摘要区间由 range 解析，无独立 date 参数）"""
+        response = await async_client.get("/api/body-metrics/summary?range=week")
         
         assert response.status_code in [401, 403, 422]
 

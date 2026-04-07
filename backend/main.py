@@ -34,6 +34,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from test_backend.utils import calculate_deviation
+from exercise_llm import ExerciseLlmError, estimate_exercise_calories_sync
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
@@ -160,6 +161,7 @@ from database import (
     create_user_exercise_log,
     delete_user_exercise_log,
     get_exercise_calories_by_date,
+    exercise_fallback_task_type,
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
@@ -968,7 +970,7 @@ def _get_food_analysis_daily_limit(is_pro: bool) -> Optional[int]:
     """临时关闭拍照分析日限；恢复时只需打开环境变量。"""
     if not FOOD_ANALYSIS_DAILY_LIMIT_ENABLED:
         return None
-    return 20 if is_pro else 3
+    return 20 if is_pro else 10
 
 
 def _get_private_key(private_key_pem: str):
@@ -4859,9 +4861,8 @@ async def get_home_dashboard(
     user_info: dict = Depends(get_current_user_info)
 ):
     """
-    首页数据：指定日期摄入汇总 + 各餐次汇总。目标热量优先用用户 TDEE，否则 2000。
-    运动数据不返回，由前端静态展示或后续接口提供。
-    
+    首页数据：指定日期摄入汇总 + 各餐次汇总 + 当日运动消耗（千卡）。目标热量优先用用户 TDEE，否则 2000。
+
     参数:
         date: 指定日期 (YYYY-MM-DD 格式)，不传则默认今天
     """
@@ -4961,11 +4962,31 @@ async def get_home_dashboard(
             "image_paths": meal_image_urls,
         })
 
+    exercise_burned = await get_exercise_calories_by_date(user_id, target_date)
+
     return {
         "intakeData": intake_data,
         "meals": meals_out,
         "expirySummary": _build_food_expiry_summary(expiry_items),
+        "exerciseBurnedKcal": round(float(exercise_burned), 1),
     }
+
+
+@app.get("/api/exercise-calories/daily")
+async def get_exercise_calories_daily(
+    date: Optional[str] = Query(None, description="YYYY-MM-DD，不传则默认中国时区当天"),
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    单日运动消耗汇总（千卡），数据来自 `user_exercise_logs`（与 migrate_exercise_logs_and_task_type.sql）。
+    与 GET /api/home/dashboard 的 `exerciseBurnedKcal` 同源，便于单独调试或客户端兜底拉取。
+    """
+    user_id = user_info["user_id"]
+    target_date = _parse_date_string(date, "date") if date else None
+    if not target_date:
+        target_date = datetime.now(CHINA_TZ).date().isoformat()
+    total = await get_exercise_calories_by_date(user_id, target_date)
+    return {"date": target_date, "total_calories_burned": int(total)}
 
 
 # ---------- 数据统计（周/月摄入、TDEE、连续天数、饮食结构 + AI 洞察） ----------
@@ -7789,10 +7810,12 @@ async def api_activate_prompt(
 
 # ===== 运动记录 API =====
 
-class ExerciseLogCreateRequest(BaseModel):
-    exercise_desc: str = Field(..., min_length=1, max_length=200, description="运动描述，如'跑步30分钟'")
-    calories_burned: int = Field(..., ge=0, le=5000, description="消耗的卡路里（千卡）")
-    date: Optional[str] = Field(None, description="记录日期（ISO格式），默认为今天")
+async def _estimate_exercise_calories_llm(exercise_desc: str) -> Tuple[int, Optional[str]]:
+    """将运动描述交给大模型估算千卡（与 Worker 共用 exercise_llm 实现）。"""
+    try:
+        return await asyncio.to_thread(estimate_exercise_calories_sync, exercise_desc)
+    except ExerciseLlmError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 class ExerciseCaloriesEstimateRequest(BaseModel):
@@ -7834,8 +7857,8 @@ async def get_exercise_logs(
             today = datetime.now(CHINA_TZ).date().isoformat()
             logs = await list_user_exercise_logs(user_id=user_id, start_date=today, end_date=today)
         
-        # 计算总消耗
-        total_calories = sum(log.get("calories_burned", 0) for log in logs)
+        # 计算总消耗（PostgREST 可能将数值以字符串返回）
+        total_calories = sum(int(log.get("calories_burned") or 0) for log in logs)
         
         return {
             "logs": logs,
@@ -7849,32 +7872,65 @@ async def get_exercise_logs(
 
 @app.post("/api/exercise-logs")
 async def create_exercise_log(
-    body: ExerciseLogCreateRequest,
+    exercise_desc: str = Form(..., description="运动描述原文"),
+    date: Optional[str] = Form(None, description="记录日期 ISO，可选"),
     user_info: dict = Depends(get_current_user_info),
 ):
-    """创建新的运动记录"""
+    """提交运动分析异步任务（与 `POST /api/analyze/submit` 同一套模式）。
+
+    - 立即返回 `task_id`，在 `analysis_tasks` 中创建 `pending` 任务；
+    - Worker 消费任务、调用大模型估算千卡、写入 `user_exercise_logs`；
+    - 客户端通过 `GET /api/analyze/tasks/{task_id}` 轮询直至 `done`/`failed`。
+
+    使用 `application/x-www-form-urlencoded` 表单提交。
+    """
     user_id = user_info["user_id"]
-    recorded_on = _parse_date_string(body.date, "date") or datetime.now(CHINA_TZ).date().isoformat()
-    
+    desc = (exercise_desc or "").strip()
+    if not desc:
+        raise HTTPException(status_code=422, detail="运动描述不能为空")
+    if len(desc) > 200:
+        raise HTTPException(status_code=422, detail="运动描述过长")
+
+    recorded_on = _parse_date_string(date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+
     try:
-        row = await create_user_exercise_log(
+        task = await asyncio.to_thread(
+            create_analysis_task_sync,
             user_id=user_id,
-            exercise_desc=body.exercise_desc,
-            calories_burned=body.calories_burned,
-            recorded_on=recorded_on,
+            task_type="exercise",
+            text_input=desc,
+            payload={"recorded_on": recorded_on},
         )
-        
-        # 获取当日总消耗
-        total_burned = await get_exercise_calories_by_date(user_id=user_id, recorded_on=recorded_on)
-        
-        return {
-            "message": "运动记录已保存",
-            "item": row,
-            "today_total": total_burned,
-        }
     except Exception as e:
-        print(f"[create_exercise_log] 错误: {e}")
-        raise HTTPException(status_code=500, detail="保存运动记录失败")
+        err_s = str(e)
+        # 远端 DB 若尚未执行 migrate_exercise_logs_and_task_type.sql，task_type=exercise 会违反 CHECK
+        if (
+            "23514" in err_s
+            or "analysis_tasks_task_type_check" in err_s
+            or "violates check constraint" in err_s.lower()
+        ):
+            try:
+                task = await asyncio.to_thread(
+                    create_analysis_task_sync,
+                    user_id=user_id,
+                    task_type=exercise_fallback_task_type(),
+                    text_input=desc,
+                    payload={"recorded_on": recorded_on, "exercise": True},
+                )
+            except Exception as e2:
+                print(f"[create_exercise_log] 回退投递仍失败: {e2}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"提交运动分析任务失败: {e2}",
+                )
+        else:
+            print(f"[create_exercise_log] 错误: {e}")
+            raise HTTPException(status_code=500, detail=f"提交运动分析任务失败: {e}")
+
+    return {
+        "task_id": task["id"],
+        "message": "运动分析任务已提交，请轮询任务状态直至完成",
+    }
 
 
 @app.delete("/api/exercise-logs/{log_id}")
@@ -7902,82 +7958,15 @@ async def estimate_exercise_calories(
     body: ExerciseCaloriesEstimateRequest,
     user_info: dict = Depends(get_current_user_info),
 ):
-    """使用 AI 估算运动消耗的卡路里"""
-    user_id = user_info["user_id"]
-    
+    """仅调用大模型估算千卡（不落库），与 Worker 共用 exercise_llm。"""
+    _ = user_info
     try:
-        # 读取 API Key
-        api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
-        if not api_key:
-            raise HTTPException(status_code=503, detail="AI 服务未配置")
-        
-        # 构建 AI 提示词
-        prompt = f"""请根据以下运动描述，估算消耗的卡路里（千卡）。
-
-运动描述：{body.exercise_desc}
-
-请只返回一个整数数字，表示估算的卡路里消耗（千卡）。
-规则：
-1. 只返回数字，不要有任何其他文字
-2. 如果无法估算，返回0
-3. 范围在 0-5000 之间
-
-示例输出：
-285"""
-
-        # 调用 AI API
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
+        calories, ai_raw = await _estimate_exercise_calories_llm(body.exercise_desc)
+        return {
+            "estimated_calories": calories,
+            "exercise_desc": body.exercise_desc.strip(),
+            "ai_response": ai_raw,
         }
-        
-        payload = {
-            "model": "gemini-2.5-flash-preview-04-17",
-            "messages": [
-                {"role": "system", "content": "你是一个专业的运动健身教练，擅长估算各种运动消耗的卡路里。"},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3,
-            "max_tokens": 50
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{OFOXAI_BASE_URL}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            result = response.json()
-            
-            ai_content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            
-            # 提取数字
-            calories = 0
-            if ai_content:
-                # 尝试直接解析
-                try:
-                    calories = int(float(ai_content.strip()))
-                except ValueError:
-                    # 使用正则提取数字
-                    import re
-                    numbers = re.findall(r'\d+', ai_content)
-                    if numbers:
-                        calories = int(numbers[0])
-            
-            # 限制范围
-            calories = max(0, min(5000, calories))
-            
-            return {
-                "estimated_calories": calories,
-                "exercise_desc": body.exercise_desc,
-                "ai_response": ai_content.strip() if ai_content else None
-            }
-            
-    except httpx.HTTPStatusError as e:
-        print(f"[estimate_exercise_calories] AI API 错误: {e}")
-        raise HTTPException(status_code=502, detail="AI 服务暂时不可用")
     except HTTPException:
         raise
     except Exception as e:

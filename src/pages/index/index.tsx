@@ -10,6 +10,7 @@ import {
   mergeHomeIntakeWithTargets,
   getStoredDashboardTargets,
   getBodyMetricsSummary,
+  getExerciseLogs,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
@@ -21,16 +22,25 @@ import {
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary
 } from '../../utils/api'
-import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop, IconExercise } from '../../components/iconfont'
+import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
+import { HOME_DASHBOARD_REFRESH_EVENT } from '../../utils/home-events'
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
-import { DEFAULT_INTAKE, WEIGHT_HISTORY_LIMIT, QUICK_WATER_AMOUNTS, WATER_GOAL_DEFAULT, DAY_NAMES, SHORT_DAY_NAMES } from './utils/constants'
+import {
+  DEFAULT_INTAKE,
+  WEIGHT_HISTORY_LIMIT,
+  QUICK_WATER_AMOUNTS,
+  WATER_GOAL_DEFAULT,
+  DAY_NAMES,
+  SHORT_DAY_NAMES,
+  HOME_WARNING_RED
+} from './utils/constants'
 import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu } from './components'
@@ -172,6 +182,32 @@ function formatProgressText(progress: number): string {
   return `${Math.round(progress)}%`
 }
 
+/** dashboard 的 exerciseBurnedKcal：兼容 JSON 中数字被解析为字符串的情况 */
+function parseExerciseBurnedKcal(raw: unknown): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw
+  }
+  if (typeof raw === 'string') {
+    const n = parseFloat(raw.trim())
+    return Number.isFinite(n) ? n : 0
+  }
+  return 0
+}
+
+/** 与记运动页同源：优先用 GET /api/exercise-logs 的 total_calories，避免 dashboard 字段缺失或异常时为 0 */
+function mergeExerciseKcalFromDashboardAndLogs(dashboardRaw: unknown, logsTotal: unknown): number {
+  const fromLogs =
+    typeof logsTotal === 'number' && Number.isFinite(logsTotal)
+      ? logsTotal
+      : typeof logsTotal === 'string'
+        ? parseFloat(logsTotal.trim())
+        : NaN
+  if (Number.isFinite(fromLogs)) {
+    return fromLogs
+  }
+  return parseExerciseBurnedKcal(dashboardRaw)
+}
+
 // 体重/喝水相关辅助函数
 function deriveWeightSummary(entries: WeightRecordEntry[], date: string) {
   const sorted = sortWeightEntries(entries)
@@ -302,6 +338,13 @@ function formatExpiryMeta(item: HomeFoodExpiryItem): string {
     .join(' · ')
 }
 
+function getExpiryTagClass(urgency: FoodExpiryItem['urgency_level']): string {
+  if (urgency === 'overdue') return 'overdue'
+  if (urgency === 'today') return 'today'
+  if (urgency === 'soon') return 'soon'
+  return 'normal'
+}
+
 // 餐次对应的 iconfont 图标及颜色
 const MEAL_ICON_CONFIG = {
   breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐' },
@@ -315,9 +358,9 @@ const MEAL_ICON_CONFIG = {
 
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
 
-// 餐次进度条颜色：正常为绿色，超过100%为红色警示
+// 餐次进度条颜色：正常为绿色，超过100%为柔和红警示
 const MEAL_PROGRESS_COLOR_NORMAL = '#00bc7d'
-const MEAL_PROGRESS_COLOR_WARNING = '#ef4444'
+const MEAL_PROGRESS_COLOR_WARNING = HOME_WARNING_RED
 
 // 营养素配置
 const MACRO_CONFIGS: Array<{
@@ -344,43 +387,60 @@ function IndexPage() {
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   
-  const [selectedDate, setSelectedDate] = useState(normalizeTo2025(formatDateKey(new Date())))
+  const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()))
 
   // 体重/喝水状态
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetricsStorage>(getStoredBodyMetrics())
+  /** 首页「运动」卡片：当日消耗千卡（与 dashboard 同步） */
+  const [exerciseBurnedKcal, setExerciseBurnedKcal] = useState(0)
   const [showWeightEditor, setShowWeightEditor] = useState(false)
   const [weightInput, setWeightInput] = useState('')
   const [savingWeight, setSavingWeight] = useState(false)
   const [showWaterEditor, setShowWaterEditor] = useState(false)
   const [waterInput, setWaterInput] = useState('')
+  /** 自定义水量输入框聚焦（与草稿数字共同决定是否显示「添加」） */
+  const [waterInputFocused, setWaterInputFocused] = useState(false)
   const [savingWater, setSavingWater] = useState(false)
+  const waterBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 快速切换日期时忽略非最新一次 dashboard 的响应（微信小程序无 AbortController，无法掐断请求） */
+  const loadDashboardSeqRef = useRef(0)
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
 
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string) => {
-    console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate)
+    const seq = ++loadDashboardSeqRef.current
+
+    console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate, 'seq:', seq)
     console.log('[DEBUG] getAccessToken:', getAccessToken() ? '有token' : '无token')
     if (!getAccessToken()) {
       console.log('[DEBUG] 无token，返回默认值')
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(0)
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
       setWeekHeatmapCells(createWeekHeatmapCells())
       setLoading(false)
+      setIsSwitchingDate(false)
       return
     }
 
     setLoading(true)
     try {
       console.log('[DEBUG] 请求 API, date:', targetDate)
-      const [res, stats, bodyMetricsRes] = await Promise.all([
+      const exerciseLogParams =
+        targetDate !== undefined && targetDate !== '' ? { date: targetDate } : undefined
+      const [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
         getHomeDashboard(targetDate),
         getStatsSummary('week'),
-        getBodyMetricsSummary('week').catch(() => null)
+        getBodyMetricsSummary('week').catch(() => null),
+        getExerciseLogs(exerciseLogParams).catch(() => null)
       ])
+      if (seq !== loadDashboardSeqRef.current) {
+        return
+      }
       console.log('[DEBUG] API 返回:', res)
       console.log('[DEBUG] intakeData.current:', res.intakeData?.current)
       console.log('[DEBUG] intakeData.macros:', res.intakeData?.macros)
@@ -400,17 +460,14 @@ function IndexPage() {
         const date = new Date(today)
         date.setDate(today.getDate() + offset)
         const dateKey = formatDateKey(date)
-        // 将日期转换为2025年格式用于前端显示
-        const displayDateKey = normalizeTo2025(dateKey)
-        // 匹配时需要与后端返回的格式匹配
-        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === displayDateKey)
+        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
         const hasRecord = dayData && dayData.calories > 0
         const calories = dayData?.calories || 0
         const target = stats.tdee || 2000
         const intakeRatio = hasRecord ? calories / target : 0
         
         nextWeekHeatmapCells.push({
-          date: displayDateKey,
+          date: dateKey,
           dayName: SHORT_DAY_NAMES[date.getDay()],
           dayNum: String(date.getDate()),
           calories,
@@ -421,6 +478,9 @@ function IndexPage() {
         })
       }
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(
+        mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
+      )
       setWeekHeatmapCells(nextWeekHeatmapCells)
       setTargetForm(createTargetForm(intake))
 
@@ -439,16 +499,22 @@ function IndexPage() {
 
       console.log('[DEBUG] 所有数据设置完成')
     } catch (error) {
+      if (seq !== loadDashboardSeqRef.current) {
+        return
+      }
       console.error('[DEBUG] API 调用失败:', error)
       Taro.showToast({ title: '加载失败: ' + (error as Error).message, icon: 'none', duration: 3000 })
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(0)
       setWeekHeatmapCells(createWeekHeatmapCells())
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
     } finally {
-      setLoading(false)
-      setIsSwitchingDate(false)
+      if (seq === loadDashboardSeqRef.current) {
+        setLoading(false)
+        setIsSwitchingDate(false)
+      }
     }
   }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading, setIsSwitchingDate])
 
@@ -458,7 +524,7 @@ function IndexPage() {
   const skipNextRefreshRef = useRef(false)
   
   Taro.useDidShow(() => {
-    const today = normalizeTo2025(formatDateKey(new Date()))
+    const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
     console.log('[DEBUG] useDidShow, selectedDate:', currentSelected, 'today:', today, 'skip:', skipNextRefreshRef.current)
 
@@ -483,6 +549,26 @@ function IndexPage() {
     }
   })
 
+  /**
+   * 挂载后补拉一次 dashboard（含运动消耗）。
+   * 部分环境下仅依赖 useDidShow 会晚于首屏或时序异常，导致运动千卡一直为 0。
+   */
+  useEffect(() => {
+    const today = formatDateKey(new Date())
+    if (!getAccessToken()) {
+      return
+    }
+    if (skipNextRefreshRef.current) {
+      skipNextRefreshRef.current = false
+      return
+    }
+    const cur = selectedDateRef.current
+    if (cur === today || !cur) {
+      void loadDashboard(today)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅首屏补拉，避免与 loadDashboard 依赖链重复触发
+  }, [])
+
   useShareAppMessage(() => ({
     title: '食探 - AI 智能饮食记录',
     path: '/pages/index/index'
@@ -499,6 +585,12 @@ function IndexPage() {
     })
   }, [])
 
+  useEffect(() => () => {
+    if (waterBlurTimerRef.current) {
+      clearTimeout(waterBlurTimerRef.current)
+    }
+  }, [])
+
   useEffect(() => {
     const refreshHome = () => {
       loadDashboard()
@@ -506,6 +598,21 @@ function IndexPage() {
     Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
     return () => {
       Taro.eventCenter.off(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
+    }
+  }, [loadDashboard])
+
+  /** 记运动落库后通知：仅在看「今天」时重拉 dashboard，与 exerciseBurnedKcal 对齐 */
+  useEffect(() => {
+    const onExerciseRefresh = (): void => {
+      const today = formatDateKey(new Date())
+      const currentSelected = selectedDateRef.current
+      if (currentSelected === today || !currentSelected) {
+        loadDashboard(today)
+      }
+    }
+    Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, onExerciseRefresh)
+    return () => {
+      Taro.eventCenter.off(HOME_DASHBOARD_REFRESH_EVENT, onExerciseRefresh)
     }
   }, [loadDashboard])
 
@@ -724,7 +831,7 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    const today = normalizeTo2025(formatDateKey(new Date()))
+    const today = formatDateKey(new Date())
     Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(today)}` })
   }
 
@@ -744,6 +851,14 @@ function IndexPage() {
     Taro.navigateTo({ url: '/pages/expiry/index' })
   }
 
+  const openFoodExpiryEdit = (id: string) => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    Taro.navigateTo({ url: `/pages/food-expiry-edit/index?id=${encodeURIComponent(id)}` })
+  }
+
   const openExerciseRecord = () => {
     if (!getAccessToken()) {
       Taro.navigateTo({ url: '/pages/login/index' })
@@ -755,7 +870,6 @@ function IndexPage() {
   const handleDateSelect = (date: string) => {
     console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
-    // date 已经是2025格式，直接使用
     setSelectedDate(date)
     // 立即进入日期切换状态，显示加载中并归零数字
     setIsSwitchingDate(true)
@@ -838,7 +952,12 @@ function IndexPage() {
       Taro.showToast({ title: '登录后可记录喝水', icon: 'none' })
       return
     }
+    if (waterBlurTimerRef.current) {
+      clearTimeout(waterBlurTimerRef.current)
+      waterBlurTimerRef.current = null
+    }
     setWaterInput('')
+    setWaterInputFocused(false)
     setShowWaterEditor(true)
   }
 
@@ -876,6 +995,7 @@ function IndexPage() {
     await addWaterAmount(amount)
     setShowWaterEditor(false)
     setWaterInput('')
+    setWaterInputFocused(false)
   }
 
   const clearTodayWater = async () => {
@@ -894,6 +1014,7 @@ function IndexPage() {
       })
       
       setShowWaterEditor(false)
+      setWaterInputFocused(false)
       Taro.showToast({ title: '已清空今日喝水记录', icon: 'success' })
     } catch (error) {
       Taro.showToast({ title: (error as Error).message || '清空失败', icon: 'none' })
@@ -934,8 +1055,14 @@ function IndexPage() {
   const totalTarget = normalizeDisplayNumber(intakeData.target)
   const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
   const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
+  /** 摄入超过目标时，下方进度条用警示红（与营养素超标一致） */
+  const isCalorieOver = totalCurrent > totalTarget
+  /** 左侧主数字：未超标为剩余可摄入；超标为超出目标的量（正数） */
+  const calorieHeadlineBase = isCalorieOver
+    ? Number((totalCurrent - totalTarget).toFixed(1))
+    : remainingCalories
 
-  const animatedRemainingCalories = useAnimatedNumber(remainingCalories, 800, 0)
+  const animatedHeadlineCalories = useAnimatedNumber(calorieHeadlineBase, 800, 0)
   const animatedTotalCurrent = useAnimatedNumber(totalCurrent, 800, 0)
   
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
@@ -946,7 +1073,8 @@ function IndexPage() {
       ? Number((calorieInputValue - caloriesFromMacroInputs).toFixed(1))
       : null
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
-  const shouldShowExpirySection = expirySummary.pendingCount > 0
+  /** 登录用户展示食物保质期区块（无数据时显示引导） */
+  const showFoodExpiryBlock = Boolean(getAccessToken())
 
   const macroAnimations = useMemo(() => {
     return MACRO_CONFIGS.map(({ key }) => {
@@ -1019,10 +1147,18 @@ function IndexPage() {
   )
   
   const waterProgress = calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
-  
+
+  const waterDraftMl = parseCompleteNumber(waterInput)
+  const showWaterAddFooter =
+    waterInputFocused || (waterDraftMl != null && waterDraftMl > 0)
+
   // 喝水动画
   const animatedWaterTotal = useAnimatedNumber(todayWater.total, 600, 0)
   const animatedWaterProgress = useAnimatedProgress(waterProgress, 600, 0)
+
+  /** 运动消耗：默认 0，数据就绪后从 0 缓动到接口值（与喝水一致） */
+  const exerciseAnimTarget = loading || isSwitchingDate ? 0 : exerciseBurnedKcal
+  const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0)
 
   return (
     <View className='home-page'>
@@ -1042,21 +1178,41 @@ function IndexPage() {
         <View className='main-card combined-card'>
           <View className='main-card-header'>
             <View className='main-card-title'>
-              <Text className='card-label'>剩余可摄入</Text>
+              <Text className='card-label'>
+                {isSwitchingDate ? '剩余可摄入' : isCalorieOver ? '已超出' : '剩余可摄入'}
+              </Text>
               {isSwitchingDate ? (
                 <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', marginTop: '8rpx' }}>
                   <Text className='card-value' style={{ fontSize: '36rpx', color: '#9ca3af' }}>--</Text>
                   <View className='loading-spinner' style={{ width: '24rpx', height: '24rpx', borderWidth: '3rpx' }} />
                 </View>
               ) : (
-                <Text className='card-value'>{formatNumberWithComma(Math.round(animatedRemainingCalories))}</Text>
+                <Text className={`card-value${isCalorieOver ? ' is-over' : ''}`}>
+                  {isCalorieOver
+                    ? formatDisplayNumber(Math.round(animatedHeadlineCalories))
+                    : formatNumberWithComma(Math.round(animatedHeadlineCalories))}
+                </Text>
               )}
               {!isSwitchingDate && <Text className='card-unit'>kcal</Text>}
             </View>
             <View className='target-section'>
-              <Text className='target-text'>
-                {formatNumberWithComma(Math.round(intakeData.current))}/{formatNumberWithComma(intakeData.target)}
-              </Text>
+              {isSwitchingDate ? (
+                <View className='target-energy-nums-only'>
+                  <Text className='target-energy-num-muted'>--</Text>
+                  <Text className='target-energy-slash-only'>/</Text>
+                  <Text className='target-energy-num-muted'>--</Text>
+                </View>
+              ) : (
+                <View className='target-energy-nums-only'>
+                  <Text className={`target-energy-intake-num${isCalorieOver ? ' is-over' : ''}`}>
+                    {formatDisplayNumber(Math.round(intakeData.current))}
+                  </Text>
+                  <Text className='target-energy-slash-only'>/</Text>
+                  <Text className='target-energy-target-num'>
+                    {formatDisplayNumber(Math.round(intakeData.target))}
+                  </Text>
+                </View>
+              )}
               <View className='target-edit-btn' onClick={openTargetEditor}>
                 <Text className='target-edit-text'>编辑目标</Text>
               </View>
@@ -1066,7 +1222,7 @@ function IndexPage() {
           <View className='progress-section'>
             <View className='progress-bar-bg thick'>
               <View
-                className='progress-bar-fill thick'
+                className={`progress-bar-fill thick${isCalorieOver ? ' is-over' : ''}`}
                 style={{ width: `${clampVisualProgress(calorieProgress)}%` }}
               />
             </View>
@@ -1079,18 +1235,31 @@ function IndexPage() {
               const animatedValue = animatedMacroValues[key]
               const animatedProgress = animatedMacroProgress[key]
               const targetValue = macro?.target || 0
+              const currentRaw = normalizeDisplayNumber(macro?.current)
+              const targetRaw = normalizeDisplayNumber(macro?.target)
+              const macroPct = calculateProgressPercent(currentRaw, targetRaw)
+              const isMacroOver = macroPct > 100
+              const macroExcessG = isMacroOver
+                ? Number((Math.max(0, currentRaw - targetRaw)).toFixed(1))
+                : null
+              const ringStrokeColor = isMacroOver ? HOME_WARNING_RED : color
+              const intakeTextColor = isMacroOver ? HOME_WARNING_RED : color
 
               return (
-                <View key={key} className='macro-card-horizontal'>
-                  {/* 左侧：名称 + 目标总量 */}
+                <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
+                  {/* 左侧：超标时顶部极简超出量；名称 + 目标总量 */}
                   <View className='macro-left-content'>
+                    {macroExcessG != null && macroExcessG > 0 && (
+                      <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}g</Text>
+                    )}
                     <View className='macro-title-row'>
                       <Text className='macro-label-horizontal'>{label}</Text>
                     </View>
                     <View className='macro-value-row'>
                       <Text className='macro-target-value'>
-                        {formatDisplayNumber(targetValue)}g
+                        {formatDisplayNumber(targetValue)}
                       </Text>
+                      <Text className='macro-target-unit'>g</Text>
                     </View>
                   </View>
 
@@ -1101,7 +1270,7 @@ function IndexPage() {
                         className='macro-ring-bg-horizontal'
                         style={{
                           backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><circle cx='60' cy='60' r='48' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='60' cy='60' r='48' fill='none' stroke='${color}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 48}' stroke-dashoffset='${2 * Math.PI * 48 * (1 - animatedProgress / 100)}'/></svg>`
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><circle cx='60' cy='60' r='48' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='60' cy='60' r='48' fill='none' stroke='${ringStrokeColor}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 48}' stroke-dashoffset='${2 * Math.PI * 48 * (1 - animatedProgress / 100)}'/></svg>`
                           )}")`,
                           backgroundSize: '100% 100%'
                         }}
@@ -1115,7 +1284,7 @@ function IndexPage() {
                           </View>
                         ) : (
                           <View className='macro-gauge-text-wrap'>
-                            <Text className='macro-intake-value'>
+                            <Text className='macro-intake-value' style={{ color: intakeTextColor }}>
                               {formatDisplayNumber(animatedValue)}
                             </Text>
                           </View>
@@ -1137,7 +1306,6 @@ function IndexPage() {
               <View className='body-status-title-wrap'>
                 <Text className='body-status-title'>体重</Text>
               </View>
-              <IconChevronRight size={16} color='#9ca3af' />
             </View>
             <View className='body-status-content'>
               {weightSummary.latestWeight ? (
@@ -1167,7 +1335,6 @@ function IndexPage() {
               <View className='body-status-title-wrap'>
                 <Text className='body-status-title'>喝水</Text>
               </View>
-              <IconChevronRight size={16} color='#9ca3af' />
             </View>
             <View className='body-status-content'>
               <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
@@ -1192,10 +1359,11 @@ function IndexPage() {
               <View className='body-status-title-wrap'>
                 <Text className='body-status-title'>运动</Text>
               </View>
-              <IconChevronRight size={16} color='#9ca3af' />
             </View>
             <View className='body-status-content'>
-              <Text className='body-status-value'>--</Text>
+              <Text className='body-status-value'>
+                {Math.round(animatedExerciseBurnedKcal)}
+              </Text>
               <Text className='body-status-unit'>kcal</Text>
             </View>
             <Text className='body-status-hint'>
@@ -1204,47 +1372,54 @@ function IndexPage() {
           </View>
         </View>
 
-        {/* 快到期食物 */}
-        {shouldShowExpirySection && (
+        {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
+        {showFoodExpiryBlock && (
           <View className='expiry-section'>
             <View className='section-header'>
-              <Text className='expiry-title'>快到期食物</Text>
+              <Text className='expiry-title'>食物保质期</Text>
               <View className='view-all-btn' onClick={openFoodExpiryList}>
                 <Text className='view-all-text'>查看全部</Text>
-                <IconChevronRight size={16} color='#00bc7d' />
               </View>
             </View>
 
             <View className='expiry-card'>
               {loading ? (
-                <View className='expiry-loading'>
-                  <Text className='loading-text'>加载中...</Text>
+                <View className='expiry-skeleton'>
+                  {[1, 2, 3].map((i) => (
+                    <View key={i} className='expiry-skeleton-item'>
+                      <View className='expiry-skeleton-row'>
+                        <View className='home-line-wide' />
+                        <View className='home-line-tag' />
+                      </View>
+                      <View className='home-line-narrow' />
+                    </View>
+                  ))}
+                </View>
+              ) : expirySummary.pendingCount === 0 ? (
+                <View className='expiry-empty' onClick={openFoodExpiryList}>
+                  <Text className='expiry-empty-title'>暂无待吃完记录</Text>
+                  <Text className='expiry-empty-desc'>
+                    添加家中食物与预计吃完时间，我们会在首页展示最紧急的几项并提醒即将过期。
+                  </Text>
                 </View>
               ) : (
                 <>
-                  <View className='expiry-summary-top'>
-                    <Text className='expiry-summary-text'>
-                      待处理 {expirySummary.pendingCount} 项
-                    </Text>
-                    {expirySummary.overdueCount > 0 && (
-                      <Text className='expiry-summary-badge overdue'>
-                        {expirySummary.overdueCount} 项已过期
-                      </Text>
-                    )}
-                    {expirySummary.overdueCount === 0 && expirySummary.soonCount > 0 && (
-                      <Text className='expiry-summary-badge soon'>
-                        {expirySummary.soonCount} 项临近截止
-                      </Text>
-                    )}
-                  </View>
                   <View className='expiry-list'>
                     {expirySummary.items.map((item) => (
-                      <View key={item.id} className='expiry-item' onClick={openFoodExpiryList}>
+                      <View
+                        key={item.id}
+                        className='expiry-item'
+                        onClick={() => openFoodExpiryEdit(item.id)}
+                      >
                         <View className='expiry-item-main'>
                           <Text className='expiry-item-name'>{item.food_name}</Text>
-                          <Text className={`expiry-item-tag ${item.urgency_level}`}>{getExpiryUrgencyText(item)}</Text>
+                          <Text className={`expiry-item-tag ${getExpiryTagClass(item.urgency_level)}`}>
+                            {getExpiryUrgencyText(item)}
+                          </Text>
                         </View>
-                        <Text className='expiry-item-meta'>{formatExpiryMeta(item)}</Text>
+                        <Text className='expiry-item-meta'>
+                          {formatExpiryMeta(item) || '点击编辑'}
+                        </Text>
                       </View>
                     ))}
                   </View>
@@ -1260,14 +1435,28 @@ function IndexPage() {
             <Text className='meals-title'>今日餐食</Text>
             <View className='view-all-btn' onClick={handleViewAllMeals}>
               <Text className='view-all-text'>查看全部</Text>
-              <IconChevronRight size={16} color='#00bc7d' />
             </View>
           </View>
           
           <View className='meals-list'>
             {loading ? (
-              <View className='meals-loading'>
-                <View className='loading-spinner-md' />
+              <View className='meals-skeleton'>
+                {[1, 2, 3].map((i) => (
+                  <View key={i} className='meal-skeleton-item'>
+                    <View className='meal-skeleton-thumb' />
+                    <View className='meal-skeleton-body'>
+                      <View className='meal-skeleton-top'>
+                        <View className='home-line-title' />
+                        <View className='home-line-cal' />
+                      </View>
+                      <View className='home-skeleton-bar' />
+                      <View className='meal-skeleton-foot'>
+                        <View className='home-line-foot-l' />
+                        <View className='home-line-foot-r' />
+                      </View>
+                    </View>
+                  </View>
+                ))}
               </View>
             ) : meals.length === 0 ? (
               <View className='meals-empty'>
@@ -1302,7 +1491,7 @@ function IndexPage() {
                   : `目标 ${formatDisplayNumber(mealTarget)} kcal`
                 
                 return (
-                  <View key={`${meal.type}-${index}`} className='meal-item'>
+                  <View key={`${meal.type}-${index}`} className={`meal-item ${mealProgress > 100 ? 'is-warning' : ''}`}>
                     <View
                       className={`meal-media-wrap ${hasRealImage ? 'is-photo' : 'is-icon'}`}
                       onClick={() => previewHomeMealImages(meal)}
@@ -1326,20 +1515,34 @@ function IndexPage() {
                     </View>
                     <View className='meal-content'>
                       <View className='meal-main'>
-                        <Text className='meal-name'>{meal.name || label}</Text>
-                        <Text className='meal-calorie'>{formatDisplayNumber(mealCalorie)} kcal</Text>
+                        <View className='meal-title-wrap'>
+                          <Text className='meal-name'>{meal.name || label}</Text>
+                          {isSnackMeal && (
+                            <Text className='meal-snack-hint'>参考</Text>
+                          )}
+                        </View>
+                        <View className='meal-calorie-stack'>
+                          <Text className='meal-calorie-label'>已摄入</Text>
+                          <Text className='meal-calorie'>
+                            {formatDisplayNumber(mealCalorie)}
+                            <Text className='meal-calorie-unit'> kcal</Text>
+                          </Text>
+                        </View>
                       </View>
                       <View className='meal-progress-wrap'>
                         <View className='meal-progress-bar-bg'>
                           <View
                             className={`meal-progress-bar-fill ${mealProgress > 100 ? 'is-warning' : ''}`}
-                            style={{ width: `${clampVisualProgress(mealProgress)}%`, backgroundColor: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL }}
+                            style={{
+                              width: `${clampVisualProgress(mealProgress)}%`,
+                              backgroundColor: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL
+                            }}
                           />
                         </View>
-                        <View className='meal-progress-meta'>
-                          <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`} style={{ color: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL }}>{formatProgressText(mealProgress)}</Text>
-                          <Text className='meal-progress-text'>{targetText}</Text>
-                        </View>
+                      </View>
+                      <View className='meal-progress-foot'>
+                        <Text className='meal-progress-text'>{targetText}</Text>
+                        <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                       </View>
                       {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                       {meal.tags?.length > 0 && (
@@ -1429,11 +1632,34 @@ function IndexPage() {
       {/* 喝水编辑弹窗 */}
       {showWaterEditor && (
         <View className='target-modal' catchMove>
-          <View className='target-modal-mask' onClick={() => !savingWater && setShowWaterEditor(false)} />
-          <View className='target-modal-content'>
+          <View
+            className='target-modal-mask'
+            onClick={() => {
+              if (!savingWater) {
+                if (waterBlurTimerRef.current) {
+                  clearTimeout(waterBlurTimerRef.current)
+                  waterBlurTimerRef.current = null
+                }
+                setWaterInputFocused(false)
+                setShowWaterEditor(false)
+              }
+            }}
+          />
+          <View className='target-modal-content water-modal-content'>
             <View className='target-modal-header'>
               <Text className='target-modal-title'>记录喝水</Text>
               <Text className='target-modal-desc'>今日已喝 {todayWater.total} ml</Text>
+              {todayWater.total > 0 ? (
+                <Text
+                  className='water-modal-clear-link'
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!savingWater) void clearTodayWater()
+                  }}
+                >
+                  清空今日记录
+                </Text>
+              ) : null}
             </View>
 
             {/* 快捷水量按钮 */}
@@ -1459,6 +1685,19 @@ function IndexPage() {
                     type='number'
                     value={waterInput}
                     onInput={(e) => setWaterInput(e.detail.value)}
+                    onFocus={() => {
+                      if (waterBlurTimerRef.current) {
+                        clearTimeout(waterBlurTimerRef.current)
+                        waterBlurTimerRef.current = null
+                      }
+                      setWaterInputFocused(true)
+                    }}
+                    onBlur={() => {
+                      waterBlurTimerRef.current = setTimeout(() => {
+                        setWaterInputFocused(false)
+                        waterBlurTimerRef.current = null
+                      }, 200)
+                    }}
                     placeholder='输入水量'
                   />
                   <Text className='target-input-unit'>ml</Text>
@@ -1466,30 +1705,19 @@ function IndexPage() {
               </View>
             </View>
 
-            <View className='target-relation-hint'>
-              <Text className='target-relation-hint-title'>
-                今日进度: {Math.round(waterProgress)}% / 目标 {bodyMetrics.waterGoalMl}ml
+            {todayWater.logs.length > 0 ? (
+              <Text className='water-modal-records-hint'>
+                已记录 {todayWater.logs.length} 次，共 {todayWater.total} ml
               </Text>
-              {todayWater.logs.length > 0 && (
-                <Text className='target-relation-hint-value'>
-                  已记录 {todayWater.logs.length} 次，共 {todayWater.total}ml
-                </Text>
-              )}
-            </View>
+            ) : null}
 
-            <View className='target-modal-actions'>
-              <View className='target-modal-btn secondary' onClick={() => !savingWater && setShowWaterEditor(false)}>
-                <Text className='target-modal-btn-text secondary'>取消</Text>
-              </View>
-              {todayWater.total > 0 && (
-                <View className='target-modal-btn danger' onClick={clearTodayWater}>
-                  <Text className='target-modal-btn-text danger'>清空</Text>
+            {showWaterAddFooter ? (
+              <View className='target-modal-actions water-modal-actions-single'>
+                <View className='target-modal-btn primary' onClick={handleSaveWater}>
+                  {savingWater ? <View className='btn-spinner' /> : <Text className='target-modal-btn-text primary'>添加</Text>}
                 </View>
-              )}
-              <View className='target-modal-btn primary' onClick={handleSaveWater}>
-                {savingWater ? <View className='btn-spinner' /> : <Text className='target-modal-btn-text primary'>添加</Text>}
               </View>
-            </View>
+            ) : null}
           </View>
         </View>
       )}

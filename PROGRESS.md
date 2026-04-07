@@ -6,6 +6,48 @@
 
 ## 2026-04-07
 
+- 🎨 style: 「记录喝水」弹窗 `.water-modal-content` 底部增加约 30px padding `src/pages/index/index.scss`
+- 🎨 style: 首页模块白底 alpha 字面量 `50%`（`$module-card-bg-alpha`）；弹窗实色白；运动千卡 `useAnimatedNumber` `src/pages/index/index.scss` `src/pages/index/index-wave.scss` `src/pages/index/index.tsx`
+- 🔧 chore: `npm run dev:restart` + `scripts/restart-dev.sh` 一键重启前后端；`AGENTS.md`/`.cursorrules` 约定有影响运行的改动后自动重启 `package.json` `scripts/restart-dev.sh` `AGENTS.md` `.cursorrules`
+- ✨ feat: `GET /api/exercise-calories/daily` 返回指定日运动总千卡（`user_exercise_logs`）；首页 `loadDashboard` 并行 `getExerciseLogs` 以 `total_calories` 为准并导出 `mapCalendarDateToApi`；挂载 `useEffect` 补拉首屏；`getExerciseLogs` 日期与 dashboard 对齐 `backend/main.py` `src/utils/api.ts` `src/pages/index/index.tsx`
+- 🐛 fix: 汇总当日运动消耗时对 `calories_burned` 做 `int()`，避免 PostgREST 返回字符串导致求和异常、首页运动千卡恒为 0；首页兼容字符串型 `exerciseBurnedKcal`；记运动完成/删除后广播刷新 dashboard `backend/database.py` `src/pages/index/index.tsx` `src/pages/exercise-record/index.tsx` `src/utils/home-events.ts`
+- ✨ feat: `GET /api/home/dashboard` 增加 `exerciseBurnedKcal`；首页「运动」卡片展示当日消耗并随 `loadDashboard` 刷新；记运动页头图与底部「分析」Tab 同款绿柱状图 `backend/main.py` `src/utils/api.ts` `src/pages/index/index.tsx` `src/pages/exercise-record/index.scss`
+- 🎨 style: 记运动页输入区下方说明文案移除 `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss`
+
+- ✨ feat: 记运动改为**当前页对话卡片**：提交后在列表展示「分析中」与 spinner，完成后写入千卡；不跳转 `analyze-loading`；多任务 `exercise_pending_tasks_v1` 持久化 + 轮询；失败卡片可关闭；样式 `chat-result--pending` `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss`
+- 🗃️ db: 新增 `supabase/migrations/20260408120000_exercise_logs_and_task_type.sql` 供 `supabase db push`；Worker `_stringify_exception_for_task` 避免 `error_message` 整段 dict 导致前端难读 `backend/worker.py`
+- 🗃️ db: 新增 `sql/migrate_exercise_logs_and_task_type.sql`（建 `user_exercise_logs` + 扩展 `analysis_tasks.task_type` 含 `exercise`/`food_debug`/`food_text_debug`）；`scripts/apply_exercise_migration.py` + `psycopg2-binary` 可选直连执行；`list_user_exercise_logs` 表未就绪时返回空列表；`POST /api/exercise-logs` 在 CHECK 未迁移时回退为 `food_text*` + `payload.exercise`，文字 Worker 转调 `process_one_exercise_task` `backend/database.py` `backend/main.py` `backend/worker.py` `backend/requirements.txt`
+- 🔧 chore: `requirements.txt` 补充 `Pillow`（`worker.py` 依赖 `image_compressor`），避免仅用 `.venv` 启动 `run_backend` 时所有 Worker 因缺 PIL 退出 `backend/requirements.txt`
+- ✨ feat: 运动记录改为与食物分析一致的异步任务（`analysis_tasks` + Worker），前端 `createExerciseLog` 取 `task_id` 后轮询 `getAnalyzeTask`，本地存 `exercise_pending_task_id` 便于杀进程后恢复 `backend/main.py` `backend/worker.py` `src/utils/api.ts` `src/pages/exercise-record/index.tsx`
+- 🐛 fix: 记运动 `POST /api/exercise-logs` 改为 **表单** `application/x-www-form-urlencoded` + 后端 `Form()`，规避部分微信小程序 JSON body 序列化导致 422；422 错误信息附带 `loc` `src/utils/api.ts` `src/pages/exercise-record/index.tsx` `backend/main.py`
+- ✨ feat: 普通用户食物分析每日次数上限由 3 调整为 10（会员仍为 20）`_get_food_analysis_daily_limit` `backend/main.py`；相关文案与展示兜底 `src/pages/profile/index.tsx` `src/pages/analyze/index.tsx` `src/pages/record/index.tsx` `src/pages/record-text/index.tsx` `src/pages/pro-membership/index.tsx`
+- ✨ feat: 运动记录 `POST /api/exercise-logs` 仅接收 `exercise_desc`，`_estimate_exercise_calories_llm` 将用户原文交 OfoxAI 估算千卡后落库（不再接受客户端上报热量）；`/estimate-calories` 与创建共用同一逻辑 `backend/main.py`；前端只调 `createExerciseLog({ exercise_desc })` `src/utils/api.ts` `src/pages/exercise-record/index.tsx`
+- 🔧 chore: iconfont 阿里 CDN 字体 URL 增加新 `?t=` 时间戳，便于绕过小程序字体缓存 `src/assets/iconfont/iconfont.css`
+- 🎨 style: 记运动输入框右侧发送区改为 `exercise-send-trigger`，图标仅 `iconfont icon-send`（不再使用 `send-btn` / `send-btn-icon`） `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss`
+- 🐛 fix: 首页切换日期去掉 `AbortController`（微信小程序无此 API），仅保留序号守卫防止晚到响应覆盖 UI `src/pages/index/index.tsx` `src/utils/api.ts`
+- 🎨 style: 记运动页发送按钮改用 `Text` + `iconfont icon-send` 渲染发送图标 `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss`
+- ⚡ perf: 首页切换日期时对未完成 dashboard 批量请求 `AbortController` 取消，并以序号防止晚到响应写错状态 `src/pages/index/index.tsx` `src/utils/api.ts`
+- 🎨 style: 首页热量卡右上「编辑目标」上方恢复纯数字 已摄入/目标（无汉字、无千分位；超标时左侧数字柔和红） `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/CalorieCard.tsx`
+- 🎨 style: 首页「记录喝水」弹窗去掉今日进度/目标；仅输入聚焦或草稿水量非零时显示单独「添加」；取消与底部清空按钮移除，清空改为头部链接；弹窗底部留白优化 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 圈子页：去掉顶部白条 Divider；好友区「互动消息/好友管理/添加好友」按钮质感；排行榜绿青渐变、头像加大；好友动态标题去掉「推荐」、移除食物库推荐插入与空态推荐；筛选改为漏斗按钮+摘要、展开后再选；纯文字动态增加文案与热量间距；动态区与排行榜留白 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🎨 style: 首页日期选中态边框与背景同色（`$date-capsule-selected-bg`） `src/pages/index/index.scss`
+- 🎨 style: 首页日期选中胶囊为主题绿半透明；选中时日期数字为白色，圆仍透明无底/边/影 `src/pages/index/index.scss`
+- 🎨 style: 去掉首页「摄入能量 / 总能量」区块；热量超标进度条改为纯色红；三大营养素超标时在标签上方极简显示 `+Xg` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/CalorieCard.tsx`
+- ✨ feat: 摄入超过目标时左侧主标题改为「已超出」、大数字显示超出量（kcal），样式为柔和红 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/CalorieCard.tsx` `src/pages/index/types/index.ts`
+- 🎨 style: 首页右上固定「摄入能量 / 总能量」+ 下一行数字比（无千分位逗号、超标摄入柔和红）；首页超标红统一 `HOME_WARNING_RED` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/utils/constants.ts` `src/pages/index/components/CalorieCard.tsx` `src/pages/index/components/MealsSection.tsx`
+- 🎨 style: 首页「剩余可摄入」下热量进度条在摄入超过目标时改为红色渐变，与超标警示一致 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/CalorieCard.tsx`
+- 🎨 style: 首页日期选中态中间小球不再强制黑色，与无记录白/已吃绿/超标红一致 `src/pages/index/index.scss`
+- 🐛 fix: 每日分析次数统计包含 `food_debug`/`food_text_debug`（与异步任务写入一致），「我的」会员卡 `daily_used` 与配额不再恒为 0；文案「今日拍照」改为「今日分析」 `backend/database.py` `src/pages/profile/index.tsx`
+- 🎨 style: 首页三大营养素卡片在摄入超过目标时与今日餐食一致使用浅红底+红边，环与数值用警示红 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 圈子好友动态加载与首页「食物保质期」「今日餐食」加载由 spinner 改为骨架屏；动态骨架与 `.feed-card`/`.feed-image(384rpx)` 对齐并补充高度注释 `src/pages/community/index.tsx` `src/pages/community/index.scss` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/MealsSection.tsx`
+- 🎨 style: 首页「今日餐食」数字区整理：右上「已摄入」+ 大卡、进度条独占一行、其下左目标/参考右完成度；与 `MealsSection` 结构对齐 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/MealsSection.tsx`
+- ✨ feat: 快速记录运动页「试试这样说」预设移至输入框上方、横向滑动；页面与输入区全宽；发送按钮改用 `icon-send`；`IconSend` 同步 `icon-send` `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss` `src/assets/iconfont/iconfont.css` `src/components/iconfont/index.tsx`
+- 🎨 style: 首页「食物保质期」去掉「待吃完/优先关注」摘要行，仅保留条目列表 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 分析结果页顶部改为整图铺满，移除模糊背景/绿色取景角/图上状态文案，增加自下而上黑色渐变；分析中页恢复合并前版本（`5e7eee0`）布局与底部暗角可读层，违规图标改为现有 iconfont `src/pages/result/index.tsx` `src/pages/result/index.scss` `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss`
+- 🎨 style: `.expiry-loading` 使用 flex 水平垂直居中（首页保质期加载区、编辑页加载条） `src/pages/index/index.scss` `src/pages/expiry-edit/index.scss`
+- 🎨 style: 圈子页去掉「健康圈子」标题与副标题；好友入口去掉「>」箭头；排行榜右侧改为圆形半透明底+SVG 箭头；动态搜索框用放大镜图标；页面背景渐变对齐首页 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🔧 refactor: 将首页 `index.tsx`/`index.scss` 与 `RecordMenu`/`MealsSection`/`MacrosSection` 恢复为 `ab4f4c3`（下午界面恢复提交）之前版本（`5e7eee0`），与当前 stash 无关；已启动 `npm run dev:weapp` 刷新编译 `src/pages/index/`
+- 🔧 test: 修复体重错年单测在 Py3.12 下 patch `datetime.now` 失败，改为 patch `_today_china_date_for_body_metrics`；统计/身体指标集成测试改用 `range` 查询参数；新增保质期与运动/身体指标摘要路由未认证用例；前端增加 `jest.config.cjs`+`tsconfig.jest.json` 启用 ts-jest，移除 `utils.test.ts` 中无效后端路径 import `backend/tests/unit/test_body_metrics_dates.py` `backend/tests/integration/test_home_dashboard.py` `backend/tests/integration/test_expiry_and_activity_queries.py` `jest.config.cjs` `tsconfig.jest.json` `tests/unit/utils.test.ts`
 - 🎨 style: 从合并前提交恢复下午已调好的界面：首页/统计/分析中/记录相关样式与布局，iconfont 与 `index` 组件；`index.tsx` 保留 `HomeFoodExpiry*` 与身体指标缓存迁移，快到期入口改为 `pages/expiry`；`app.config.ts`/`app.scss` 保持与远端合并后的白边修复与路由 `src/pages/index/` `src/pages/stats/` `src/pages/analyze-loading/` `src/pages/record*` `src/assets/iconfont/`
 - 🐛 fix: 进一步消除多页左侧 1px 白线：`page` 使用对称负边距与 `calc(100% + 2px)` 扩展宽度盖住亚像素缝；`page > view` 全宽约束 `src/app.scss`
 - 🎨 style: 首页「食物保质期」去掉顶部提醒条；外层取消独立白底外框；每条记录白底圆角阴影与「今日餐食」条目一致 `src/pages/index/index.tsx` `src/pages/index/index.scss`

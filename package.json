@@ -13,6 +13,7 @@
     "prepare": "husky",
     "new": "taro new",
     "dev:backend": "cd backend && ./venv/bin/python run_backend.py",
+    "dev:restart": "bash scripts/restart-dev.sh",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

@@ -33,6 +33,8 @@ import httpx
 from database import (
     claim_next_pending_task_sync,
     update_analysis_task_result_sync,
+    create_user_exercise_log_sync,
+    get_exercise_calories_by_date_sync,
     get_user_by_id_sync,
     get_food_record_by_id_sync,
     get_feed_comment_by_id_sync,
@@ -1788,6 +1790,10 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
 def process_one_text_food_task(task: Dict[str, Any]) -> None:
     """处理单条文字食物分析任务：直接执行分析并写回 done/failed。"""
     task_id = task["id"]
+    # 运动热量任务：与 task_type=exercise 共用 process_one_exercise_task（兼容未迁移 task_type CHECK 的库）
+    if (task.get("payload") or {}).get("exercise"):
+        process_one_exercise_task(task)
+        return
     try:
         print(f"[food_analysis] MODERATION_SKIPPED task_id={task_id} type=text", flush=True)
         result = run_text_food_analysis_sync(task)
@@ -2194,10 +2200,61 @@ def run_food_expiry_notification_worker(worker_id: int, poll_interval: float = 2
             time.sleep(sleep_time)
 
 
+def _stringify_exception_for_task(e: BaseException) -> str:
+    """将 Supabase/PostgREST 等异常转成可存入 analysis_tasks.error_message 的短字符串。"""
+    import json
+
+    msg = getattr(e, "message", None)
+    if isinstance(msg, dict):
+        return str(msg.get("message") or json.dumps(msg, ensure_ascii=False))[:500]
+    if isinstance(msg, str) and msg.strip().startswith("{"):
+        try:
+            d = json.loads(msg)
+            if isinstance(d, dict) and d.get("message"):
+                return str(d["message"])[:500]
+        except Exception:
+            pass
+    return str(e)[:500]
+
+
+def process_one_exercise_task(task: Dict[str, Any]) -> None:
+    """运动描述异步任务：大模型估算千卡后写入 user_exercise_logs。"""
+    from exercise_llm import ExerciseLlmError, estimate_exercise_calories_sync
+
+    task_id = task["id"]
+    user_id = task["user_id"]
+    text = (task.get("text_input") or "").strip()
+    payload = task.get("payload") or {}
+    recorded_on = payload.get("recorded_on")
+
+    if not text:
+        update_analysis_task_result_sync(task_id, "failed", error_message="运动描述为空")
+        return
+
+    try:
+        calories, ai_raw = estimate_exercise_calories_sync(text)
+        row = create_user_exercise_log_sync(user_id, text, calories, recorded_on)
+        day = row.get("recorded_on") or recorded_on
+        total = get_exercise_calories_by_date_sync(user_id, day) if day else 0
+        result = {
+            "exercise_log": row,
+            "estimated_calories": calories,
+            "ai_response": ai_raw,
+            "today_total": total,
+        }
+        update_analysis_task_result_sync(task_id, "done", result=result)
+    except ExerciseLlmError as e:
+        update_analysis_task_result_sync(task_id, "failed", error_message=str(e))
+    except Exception as e:
+        err = _stringify_exception_for_task(e)
+        print(f"[process_one_exercise_task] {err}", flush=True)
+        update_analysis_task_result_sync(task_id, "failed", error_message=err)
+
+
 def run_worker(worker_id: int, task_type: str = "food", poll_interval: float = 2.0) -> None:
     """
     单 Worker 进程入口：循环抢占 pending 任务并处理。
-    task_type: food | food_text | health_report
+    task_type: food | food_text | health_report | exercise
     """
     print(f"[worker-{worker_id}] 启动，任务类型: {task_type}", flush=True)
     
@@ -2209,6 +2266,7 @@ def run_worker(worker_id: int, task_type: str = "food", poll_interval: float = 2
         "food_text_debug": process_one_text_food_task,
         "health_report": process_one_health_report_task,
         "public_food_library_text": process_one_public_library_moderation_task,
+        "exercise": process_one_exercise_task,
     }
     processor = processor_map.get(task_type)
     if not processor:

@@ -2,7 +2,14 @@
    100vh 仅作兜底（JS 未就绪时）。flex 让 ScrollView 获得准确高度。 */
 .community-page {
   height: 100vh;
-  background: linear-gradient(180deg, #f0fdf4 0%, #f8fafc 30%, #f1f5f9 100%);
+  // 与首页 home-page 一致的绿系顶栏渐变 + 浅灰底
+  background: linear-gradient(
+    180deg,
+    rgb(0 188 125 / 15%) 0%,
+    rgb(0 188 125 / 8%) 25%,
+    #eff1f4 60%,
+    #eff1f4 100%
+  );
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -39,6 +46,7 @@
 
 /* 滚动内容底部留白，避免最后一条被 tab 栏遮挡 */
 .community-scroll-content {
+  padding-top: 24rpx;
   padding-bottom: 160rpx;
   box-sizing: border-box;
 }
@@ -114,37 +122,23 @@
   white-space: nowrap;
 }
 
-// 顶部下拉刷新提示分割线（白底遮住页面绿色渐变，视觉上无绿色）
-.community-page .refresh-divider {
-  margin: 0 32rpx;
-  padding: 24rpx 0 16rpx;
-  font-size: 24rpx;
-  color: #94a3b8;
-  background: #fff !important;
+// 已移除顶部 Divider，避免好友区上方出现白条
 
-  .taroify-divider {
-    background: #fff !important;
-  }
-}
-
-// 页面头部
-.page-header {
-  background: linear-gradient(135deg, #fff 0%, #f8fffc 100%);
-  padding: 64rpx 32rpx 40rpx;
-  box-shadow: 0 4rpx 20rpx rgb(0 188 125 / 6%);
-}
-
-// ========== 骨架屏样式 ==========
+// ========== 骨架屏样式（对齐 `.feed-card` 与 `.feed-image` 高度） ==========
+// 单条好友动态卡片高度（rpx，约）：
+// - 卡 padding 上下 72 + 头区 约 112 + 可选标签/文案 0–120 + 图 384+24 + 营养行 约 80 + 操作区 约 88 + 可选评论 0–∞
+// 典型「有图」完整卡片约 760–920rpx；无图、无文案可低至约 280–420rpx。骨架按「有图 + 短文案」取上沿。
 .skeleton-container {
   padding: 0 32rpx;
 }
 
 .skeleton-feed-card {
   background: #fff;
-  border-radius: 24rpx;
-  padding: 32rpx;
+  border-radius: 28rpx;
+  padding: 36rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 2rpx 16rpx rgb(0 0 0 / 4%);
+  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(0 188 125 / 4%);
+  border: 1rpx solid rgb(0 188 125 / 4%);
 }
 
 .skeleton-feed-header {
@@ -155,8 +149,8 @@
 }
 
 .skeleton-avatar {
-  width: 80rpx;
-  height: 80rpx;
+  width: 84rpx;
+  height: 84rpx;
   border-radius: 50%;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
@@ -181,10 +175,11 @@
   margin-bottom: 24rpx;
 }
 
+// 与 `.feed-image` 固定高度 384rpx 一致
 .skeleton-image {
   width: 100%;
-  height: 400rpx;
-  border-radius: 16rpx;
+  height: 384rpx;
+  border-radius: 24rpx;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
@@ -193,7 +188,38 @@
 
 .skeleton-meta {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.skeleton-meta-pill {
+  width: 140rpx;
+  height: 48rpx;
+  border-radius: 32rpx;
+}
+
+.skeleton-meta-wide {
+  flex: 1;
+  min-width: 200rpx;
+  height: 40rpx;
+  border-radius: 24rpx;
+}
+
+.skeleton-feed-actions {
+  display: flex;
+  align-items: center;
+  gap: 48rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid #f1f5f9;
+  margin-top: 16rpx;
+}
+
+.skeleton-action {
+  width: 120rpx;
+  height: 36rpx;
+  border-radius: 8rpx;
 }
 
 @keyframes skeleton-loading {
@@ -204,23 +230,6 @@
   100% {
     background-position: -200% 0;
   }
-}
-
-.page-title {
-  display: block;
-  font-size: 44rpx;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 64rpx;
-  margin-bottom: 12rpx;
-  letter-spacing: -0.5px;
-}
-
-.page-subtitle {
-  display: block;
-  font-size: 28rpx;
-  color: #64748b;
-  line-height: 40rpx;
 }
 
 // 未登录提示
@@ -263,14 +272,42 @@
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 24rpx;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12rpx;
+  max-width: 72%;
+}
+
+// 好友区操作：按钮质感（微立体 + 按压）
+.friend-action-pill {
+  padding: 14rpx 22rpx;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  border: 1rpx solid #e2e8f0;
+  border-radius: 9999rpx;
+  box-shadow:
+    0 2rpx 0 #e2e8f0,
+    0 6rpx 16rpx rgb(15 23 42 / 6%);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:active {
+    transform: translateY(2rpx);
+    box-shadow:
+      0 1rpx 0 #e2e8f0,
+      0 2rpx 8rpx rgb(15 23 42 / 5%);
+  }
+}
+
+.friend-action-pill--amber {
+  background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #fcd34d;
+  box-shadow:
+    0 2rpx 0 #fbbf24,
+    0 6rpx 14rpx rgb(180 83 9 / 12%);
 }
 
 .requests-badge {
   padding: 10rpx 24rpx;
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
   border-radius: 9999rpx;
-  box-shadow: 0 2rpx 8rpx rgb(180 83 9 / 15%);
 }
 
 .requests-badge-text {
@@ -385,7 +422,6 @@
 .view-all-btn {
   display: flex;
   align-items: center;
-  gap: 8rpx;
   transition: all 0.2s ease;
 
   &:active {
@@ -394,14 +430,14 @@
 }
 
 .view-all-text {
-  font-size: 28rpx;
-  color: #096;
-  line-height: 40rpx;
+  font-size: 26rpx;
+  color: #0f766e;
+  line-height: 36rpx;
+  font-weight: 600;
 }
 
-.arrow {
-  font-size: 28rpx;
-  color: #096;
+.friend-action-pill .view-all-text {
+  color: #0f766e;
 }
 
 .circles-list {
@@ -477,16 +513,19 @@
   line-height: 32rpx;
 }
 
-// 本周打卡排行榜
+// 本周打卡排行榜（与应用主色一致的绿青渐变）
 .ranking-banner {
-  background: linear-gradient(135deg, #ffb900 0%, #ff8c00 50%, #ff6900 100%);
-  border-radius: 24rpx;
-  padding: 24rpx 32rpx;
-  margin: 0 24rpx 24rpx;
+  background: linear-gradient(135deg, #047857 0%, #00a36c 38%, #00bc7d 72%, #14b8a6 100%);
+  border-radius: 28rpx;
+  padding: 28rpx 32rpx;
+  margin: 0 24rpx 0;
+  border: 1rpx solid rgb(255 255 255 / 22%);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 12rpx 40rpx rgb(255 105 0 / 30%), 0 4rpx 16rpx rgb(255 105 0 / 20%);
+  box-shadow:
+    0 14rpx 40rpx rgb(0 188 125 / 22%),
+    0 4rpx 14rpx rgb(0 0 0 / 8%);
   transition: all 0.25s ease;
 
   &:active {
@@ -575,12 +614,12 @@
 }
 
 .ranking-preview-avatar-wrap {
-  width: 48rpx;
-  height: 48rpx;
+  width: 64rpx;
+  height: 64rpx;
   border-radius: 50%;
   overflow: hidden;
   background: rgb(255 255 255 / 22%);
-  border: 2rpx solid rgb(255 255 255 / 45%);
+  border: 3rpx solid rgb(255 255 255 / 50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -592,7 +631,7 @@
 }
 
 .ranking-preview-avatar-fallback {
-  font-size: 24rpx;
+  font-size: 30rpx;
   line-height: 1;
 }
 
@@ -639,8 +678,8 @@
 }
 
 .ranking-preview-sk-dot {
-  width: 56rpx;
-  height: 56rpx;
+  width: 64rpx;
+  height: 64rpx;
   border-radius: 50%;
   background: rgb(255 255 255 / 28%);
   animation: rankingPreviewPulse 1.1s ease-in-out infinite;
@@ -680,20 +719,81 @@
   line-height: 32rpx;
 }
 
-.ranking-arrow {
-  font-size: 40rpx;
-  color: #fff;
+.ranking-chevron {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 22%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  padding: 10rpx;
+  box-sizing: border-box;
 }
 
-// 最新动态
+// 最新动态（与上方排行榜留出间距）
 .feed-section {
   padding: 0 32rpx 32rpx;
+  margin-top: 28rpx;
 }
 
 .feed-filter-panel {
   margin-bottom: 24rpx;
   overflow: hidden;
+}
+
+.feed-filter-trigger-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+  padding: 0 4rpx;
+}
+
+.feed-filter-funnel-btn {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  border: 1rpx solid #e2e8f0;
+  box-shadow: 0 2rpx 0 #e8edf3, 0 6rpx 14rpx rgb(15 23 42 / 5%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+  &.is-open {
+    border-color: #00bc7d;
+    box-shadow: 0 0 0 2rpx rgb(0 188 125 / 14%), 0 4rpx 12rpx rgb(0 188 125 / 10%);
+  }
+
+  &:active {
+    opacity: 0.92;
+  }
+}
+
+.feed-filter-funnel-svg {
+  width: 36rpx;
+  height: 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feed-filter-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.feed-filter-expanded {
+  padding-top: 16rpx;
+  margin-top: 8rpx;
+  border-top: 1rpx solid #f1f5f9;
 }
 
 .feed-search-wrap {
@@ -723,10 +823,12 @@
   flex-shrink: 0;
 }
 
-.feed-search-icon {
-  font-size: 22rpx;
-  color: #94a3b8;
-  font-weight: 600;
+.feed-search-svg {
+  width: 32rpx;
+  height: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .feed-search-input {
@@ -1262,6 +1364,15 @@
   margin-bottom: 24rpx;
   word-break: break-word;
   padding: 0 4rpx;
+}
+
+// 纯文字动态（无图）：文案与下方热量区拉开间距
+.feed-card-text-only .feed-content {
+  margin-bottom: 36rpx;
+}
+
+.feed-card-text-only .feed-meta {
+  margin-top: 4rpx;
 }
 
 /* 食物描述与图片之间的间隔 */

@@ -427,7 +427,7 @@ function ProfilePage() {
               </View>
               <View className='card-body'>
                 <View className='progress-info'>
-                  <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
+                  <Text className='progress-text'>今日分析 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
                   <View className='progress-bar'>
                     <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus.daily_used ?? 0) / (membershipStatus.daily_limit ?? 20)) * 100, 100)}%` }} />
                   </View>
@@ -448,9 +448,9 @@ function ProfilePage() {
               </View>
               <View className='card-body'>
                 <View className='progress-info'>
-                  <Text className='progress-text'>今日拍照 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 3} 次</Text>
+                  <Text className='progress-text'>今日分析 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 10} 次</Text>
                   <View className='progress-bar'>
-                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 3)) * 100, 100)}%` }} />
+                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 10)) * 100, 100)}%` }} />
                   </View>
                 </View>
                 <Text className='card-tip'>开通会员每日享20次 · 解锁精准模式</Text>

@@ -54,6 +54,16 @@ def check_supabase_configured():
         raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
 
 
+def exercise_fallback_task_type() -> str:
+    """
+    当数据库尚未允许 task_type=exercise 时，用文字食物队列类型 + payload.exercise 投递。
+    与 run_backend.py 中 TEXT_FOOD_TASK_TYPE / food_text_debug 逻辑一致。
+    """
+    if str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return "food_text_debug"
+    return "food_text"
+
+
 async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
     """
     通过 openid 查询用户
@@ -4195,8 +4205,13 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
         raise
 
 
+# 计入「每日分析配额」的任务类型：与 create_analysis_task_sync 写入的类型一致。
+# 开发环境若开启 FOOD_DEBUG_TASK_QUEUE，任务为 food_debug / food_text_debug，须一并统计，否则会员页 daily_used 恒为 0。
+_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA = ("food", "food_text", "food_debug", "food_text_debug")
+
+
 async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
-    """统计用户今日（中国时区）的食物拍照分析次数（task_type 为 food 或 food_text）。"""
+    """统计用户今日（中国时区）的食物分析次数：analysis_tasks 表中上述 task_type 的创建条数（拍照与文字分析均计入）。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
@@ -4209,7 +4224,7 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
         result = supabase.table("analysis_tasks")\
             .select("id")\
             .eq("user_id", user_id)\
-            .in_("task_type", ["food", "food_text"])\
+            .in_("task_type", list(_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA))\
             .gte("created_at", day_start)\
             .lt("created_at", day_end_excl)\
             .execute()
@@ -4605,17 +4620,26 @@ async def list_user_exercise_logs(
         result = query.execute()
         return list(result.data or [])
     except Exception as e:
+        err_s = str(e)
+        # 表未创建或 PostgREST 缓存中无表时，避免首页/记运动页整页 500
+        if (
+            "PGRST205" in err_s
+            or "Could not find the table" in err_s
+            or ("user_exercise_logs" in err_s and "relation" in err_s.lower())
+        ):
+            print(f"[list_user_exercise_logs] 表未就绪，返回空列表: {e}")
+            return []
         print(f"[list_user_exercise_logs] 错误: {e}")
         raise
 
 
-async def create_user_exercise_log(
+def create_user_exercise_log_sync(
     user_id: str,
     exercise_desc: str,
     calories_burned: int,
     recorded_on: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """新增一条运动记录。"""
+    """新增一条运动记录（Worker 同步调用）。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
@@ -4631,8 +4655,18 @@ async def create_user_exercise_log(
             return result.data[0]
         raise Exception("新增运动记录失败：返回数据为空")
     except Exception as e:
-        print(f"[create_user_exercise_log] 错误: {e}")
+        print(f"[create_user_exercise_log_sync] 错误: {e}")
         raise
+
+
+async def create_user_exercise_log(
+    user_id: str,
+    exercise_desc: str,
+    calories_burned: int,
+    recorded_on: Optional[str] = None,
+) -> Dict[str, Any]:
+    """新增一条运动记录。"""
+    return create_user_exercise_log_sync(user_id, exercise_desc, calories_burned, recorded_on)
 
 
 async def delete_user_exercise_log(user_id: str, log_id: str) -> bool:
@@ -4653,8 +4687,8 @@ async def delete_user_exercise_log(user_id: str, log_id: str) -> bool:
         raise
 
 
-async def get_exercise_calories_by_date(user_id: str, recorded_on: str) -> int:
-    """获取用户指定日期运动消耗的总卡路里。"""
+def get_exercise_calories_by_date_sync(user_id: str, recorded_on: str) -> int:
+    """获取用户指定日期运动消耗的总卡路里（Worker 同步）。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
@@ -4665,8 +4699,14 @@ async def get_exercise_calories_by_date(user_id: str, recorded_on: str) -> int:
             .eq("recorded_on", recorded_on)
             .execute()
         )
-        total = sum((row.get("calories_burned") or 0) for row in (result.data or []))
+        # PostgREST 可能将整型以字符串返回，与 GET /api/exercise-logs 中 int() 处理保持一致
+        total = sum(int(row.get("calories_burned") or 0) for row in (result.data or []))
         return total
     except Exception as e:
-        print(f"[get_exercise_calories_by_date] 错误: {e}")
+        print(f"[get_exercise_calories_by_date_sync] 错误: {e}")
         return 0
+
+
+async def get_exercise_calories_by_date(user_id: str, recorded_on: str) -> int:
+    """获取用户指定日期运动消耗的总卡路里。"""
+    return get_exercise_calories_by_date_sync(user_id, recorded_on)

@@ -1033,74 +1033,41 @@ function ResultPage() {
         enhanced
         showScrollbar={false}
       >
-        {/* 顶部扫描框区域 - 仿相机模式设计 */}
+        {/* 顶部：整幅食物图铺满，无底纹取景框；底部黑色渐变增加层次 */}
         <View className='scanner-hero-section'>
-          {/* 高斯模糊背景层 */}
-          <View className='scanner-blur-bg'>
-            {imagePaths.length > 0 && (
-              <Image
-                src={imagePaths[currentImageIndex]}
-                mode='aspectFill'
-                className='scanner-bg-image'
-              />
-            )}
-            <View className='scanner-blur-overlay' />
-          </View>
-
-          {/* 中央扫描框 */}
-          <View className='scanner-frame-container'>
-            <View className='scanner-frame'>
-              {/* 四角圆弧形括号 */}
-              <View className='scanner-corner scanner-corner-tl' />
-              <View className='scanner-corner scanner-corner-tr' />
-              <View className='scanner-corner scanner-corner-bl' />
-              <View className='scanner-corner scanner-corner-br' />
-
-              {/* 框内图片 */}
-              {imagePaths.length > 0 ? (
-                <Swiper
-                  className='scanner-swiper'
-                  circular
-                  indicatorDots={false}
-                  onChange={(e) => setCurrentImageIndex(e.detail.current)}
-                  current={currentImageIndex}
-                >
-                  {imagePaths.map((path, index) => (
-                    <SwiperItem key={index} className='scanner-swiper-item'>
-                      <Image
-                        src={path}
-                        mode='aspectFill'
-                        className='scanner-image'
-                        onClick={() => handlePreviewImage(path)}
-                      />
-                    </SwiperItem>
-                  ))}
-                </Swiper>
-              ) : (
-                <View className='scanner-placeholder logo-placeholder'>
-                  <View className='placeholder-icon-wrap'>
-                    <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
-                  </View>
-                  <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Image Counter Badge */}
-            {imagePaths.length > 1 && (
-              <View className='image-counter'>
-                <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
+          {imagePaths.length > 0 ? (
+            <Swiper
+              className='scanner-hero-swiper'
+              circular
+              indicatorDots={false}
+              onChange={(e) => setCurrentImageIndex(e.detail.current)}
+              current={currentImageIndex}
+            >
+              {imagePaths.map((path, index) => (
+                <SwiperItem key={index} className='scanner-hero-swiper-item'>
+                  <Image
+                    src={path}
+                    mode='aspectFill'
+                    className='scanner-hero-image'
+                    onClick={() => handlePreviewImage(path)}
+                  />
+                </SwiperItem>
+              ))}
+            </Swiper>
+          ) : (
+            <View className='scanner-hero-placeholder'>
+              <View className='placeholder-icon-wrap'>
+                <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
               </View>
-            )}
-          </View>
-
-          {/* 分析状态文字 */}
-          <View className='scanner-status-text'>
-            <Text className='scanner-status-label'>
-              {executionMode === 'strict' ? '精准模式分析完成' : '标准模式分析完成'}
-            </Text>
-            <Text className='scanner-status-desc'>{healthAdvice || '分析完成，请看下方结果'}</Text>
-          </View>
+              <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
+            </View>
+          )}
+          <View className='scanner-hero-gradient' />
+          {imagePaths.length > 1 && (
+            <View className='image-counter'>
+              <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
+            </View>
+          )}
         </View>
 
         <View className='content-container'>

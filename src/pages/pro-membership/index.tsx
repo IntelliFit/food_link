@@ -28,7 +28,7 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 
 const FEATURES: Array<{ iconClass: string; free: string; pro: string }> = [
-  { iconClass: 'icon-paizhao-xianxing', free: '每日3次拍照', pro: '每日20次拍照' },
+  { iconClass: 'icon-paizhao-xianxing', free: '每日10次拍照', pro: '每日20次拍照' },
   { iconClass: 'icon-jiesuo',           free: '标准识别模式', pro: '精准识别模式' },
   { iconClass: 'icon-shuben',           free: '—',           pro: '计划指导 + 强督促' },
   { iconClass: 'icon-shouxieqianming',  free: '基础分享海报', pro: '精美分享海报' },
@@ -226,7 +226,7 @@ function ProMembershipPage() {
           {!isPro && (
             <View className='status-row'>
               <Text className='status-label'>今日免费次数</Text>
-              <Text className='status-value'>{membership.daily_remaining ?? 3} / {membership.daily_limit ?? 3} 次</Text>
+              <Text className='status-value'>{membership.daily_remaining ?? 10} / {membership.daily_limit ?? 10} 次</Text>
             </View>
           )}
         </View>

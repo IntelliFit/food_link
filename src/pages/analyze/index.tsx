@@ -537,7 +537,7 @@ function AnalyzePage() {
       {/* 今日配额提示条 */}
       {membershipStatus && (
         <View
-          className={`quota-bar ${membershipStatus.is_pro ? 'quota-bar--pro' : (membershipStatus.daily_remaining ?? 3) <= 1 ? 'quota-bar--warn' : ''}`}
+          className={`quota-bar ${membershipStatus.is_pro ? 'quota-bar--pro' : (membershipStatus.daily_remaining ?? 10) <= 1 ? 'quota-bar--warn' : ''}`}
           onClick={() => !membershipStatus.is_pro && Taro.navigateTo({ url: '/pages/pro-membership/index' })}
         >
           <Text className='quota-bar-text'>

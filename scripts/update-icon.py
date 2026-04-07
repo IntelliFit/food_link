@@ -32,7 +32,7 @@ for parent, _, files in os.walk('./scripts/tmp'):
             content = open(filepath, 'r', encoding='utf-8').read().replace('font-size: 16px;', '')
             open(filepath, 'w', encoding='utf-8').write(content)
             shutil.move(filepath, os.path.join('src/assets/iconfont', file))
-        elif file.endswith('.woff2'):
+        elif file.endswith('.woff2') or file.endswith('.woff') or file.endswith('ttf'):
             shutil.move(filepath, os.path.join('src/assets/iconfont', file))
 
 # 删除压缩包和解压区域

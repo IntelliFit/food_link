@@ -154,7 +154,7 @@ export const IconExercise = ({ size = 48, color = '#000000', className = '' }: I
 export const IconSend = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
   return (
     <View
-      className={`iconfont icon-fasong ${className}`}
+      className={`iconfont icon-send ${className}`}
       style={{ fontSize: `${size}rpx`, color }}
     />
   )

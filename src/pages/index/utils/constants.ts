@@ -31,3 +31,6 @@ export const DEFAULT_SIMPLE_TARGET: SimpleTargetState = {
   carbsLevel: 10,    // 默认275g碳水
   fatLevel: 8        // 默认50g脂肪
 }
+
+/** 首页摄入超标/警示用色（柔和红，与 `index.scss` 中 `$home-warning-red` 保持一致） */
+export const HOME_WARNING_RED = '#e57373'

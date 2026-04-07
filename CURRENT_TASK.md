@@ -34,3 +34,11 @@
 
 - Previous Task: 运动记录功能 UI 实现
 - Previous Status: done
+
+---
+
+## 2026-04-07 运动记录 API（补充）
+
+- **根因**：远端库缺少 `public.user_exercise_logs`；`analysis_tasks_task_type_check` 未包含 `exercise`（及 debug 队列类型）。
+- **已做**：`backend/sql/migrate_exercise_logs_and_task_type.sql`；`POST` 在 CHECK 失败时回退 `food_text*` + `payload.exercise`，文字 Worker 开头转 `process_one_exercise_task`；`GET` 表未就绪时返回空列表；后端已重启，`curl` 验证 `GET/POST` 200。
+- **待办（一次性）**：在 Supabase SQL Editor 执行上述 SQL（或配置 `SUPABASE_DB_URL` 后 `python backend/scripts/apply_exercise_migration.py`），否则运动结果落库仍依赖回退路径且需文字 Worker 消费。

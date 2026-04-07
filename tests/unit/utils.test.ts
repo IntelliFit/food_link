@@ -1,10 +1,6 @@
 /**
  * 工具函数单元测试
  */
-import { calculateDeviation } from '../../backend/test_backend/utils';
-
-// 如果 calculateDeviation 在 frontend 中也有，请调整路径
-// 这里假设它在 test_backend/utils 中
 
 // 简单测试本地工具函数
 const formatDate = (date: Date): string => {

@@ -59,7 +59,7 @@ function RecordTextPage() {
           title: '今日次数已用完',
           content: isPro
             ? `今日 ${membership.daily_limit ?? 20} 次分析已用完，请明日再试。`
-            : '免费版每日限3次，开通食探会员可提升至每日20次。',
+            : '免费版每日限10次，开通食探会员可提升至每日20次。',
           confirmText: isPro ? '知道了' : '去开通',
           cancelText: '取消',
           showCancel: !isPro,

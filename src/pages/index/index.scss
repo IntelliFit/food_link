@@ -9,12 +9,24 @@ $purple-color: #8b5cf6;
 $purple-light: #f3e8ff;
 
 $bg-color: #f8fafc;
-$card-bg: #FEFEFE;
+// 首页各模块白底：颜色 alpha 槽**字面量**为 50%（即 `rgb(... / 50%)`）
+$module-card-bg-alpha: 50%;
+$card-bg: rgb(255 255 255 / #{$module-card-bg-alpha});
+// 弹窗/底部表单保持不透明白底，避免与遮罩叠字发灰
+$modal-sheet-bg: #ffffff;
 $gradient-end: #EFF1F4;
 $text-primary: #1f2937;
 $text-secondary: #6b7280;
 $text-tertiary: #9ca3af;
 $blue-color: #3b82f6;
+
+// 首页摄入超标/警示（柔和红，避免纯 #ef4444 刺眼）
+$home-warning-red: #e57373;
+$home-warning-border: #f5d4d4;
+$home-warning-surface: #fef8f8;
+
+// 日期选中胶囊：沿用主题绿半透明；边框与背景同色（避免色差）
+$date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 页面基础 - 整体渐变背景
 .home-page {
@@ -88,10 +100,6 @@ $blue-color: #3b82f6;
 .date-list {
   display: flex;
   justify-content: space-between;
-  background: $card-bg;
-  border-radius: 24rpx;
-  padding: 20rpx 16rpx;
-  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
 .date-item {
@@ -103,7 +111,6 @@ $blue-color: #3b82f6;
   width: 88rpx;
   height: 160rpx;
   border-radius: 44rpx;
-  border: 3rpx solid transparent;
   padding: 12rpx 0 16rpx;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -130,6 +137,7 @@ $blue-color: #3b82f6;
     width: 64rpx;
     height: 64rpx;
     border-radius: 50%;
+    border: 2rpx solid transparent;
     background: #fff;
     display: flex;
     align-items: center;
@@ -157,7 +165,7 @@ $blue-color: #3b82f6;
     
     // 超过目标 - 红色
     &.is-over {
-      background: #ef4444;
+      background: $home-warning-red;
       
       .date-num-text {
         color: #fff;
@@ -165,15 +173,27 @@ $blue-color: #3b82f6;
     }
   }
   
-  // 选中状态 - 仅外框变绿色
+  // 选中状态：半透明主题绿胶囊；中间日期圆透明；日期数字为白色
   &.is-selected {
-    background: #f1f5f9;
-    border-color: $primary-color;
-    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 30%);
-    
+    background: $date-capsule-selected-bg;
+    border-color: $date-capsule-selected-bg;
+    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 22%);
+
     .date-day-name {
-      color: $primary-color;
+      color: #fff;
       font-weight: 600;
+    }
+
+    .date-day-circle {
+      background: transparent !important;
+      border-color: transparent !important;
+      box-shadow: none !important;
+
+      &.is-empty .date-num-text,
+      &.is-recorded .date-num-text,
+      &.is-over .date-num-text {
+        color: #fff;
+      }
     }
   }
 }
@@ -217,6 +237,10 @@ $blue-color: #3b82f6;
   font-weight: 700;
   color: $text-primary;
   line-height: 72rpx;
+
+  &.is-over {
+    color: $home-warning-red;
+  }
 }
 
 .card-unit {
@@ -230,6 +254,43 @@ $blue-color: #3b82f6;
   flex-direction: column;
   align-items: flex-end;
   gap: 8rpx;
+}
+
+// 编辑目标上方：仅数字 已摄入/目标（无汉字；超标时左侧为柔和红）
+.target-energy-nums-only {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.target-energy-intake-num {
+  color: $text-secondary;
+  font-weight: 600;
+
+  &.is-over {
+    color: $home-warning-red;
+  }
+}
+
+.target-energy-target-num {
+  color: $text-secondary;
+  font-weight: 500;
+}
+
+.target-energy-slash-only {
+  padding: 0 4rpx;
+  color: $text-tertiary;
+  font-weight: 500;
+}
+
+.target-energy-num-muted {
+  color: $text-tertiary;
+  font-weight: 500;
 }
 
 .target-text {
@@ -282,10 +343,15 @@ $blue-color: #3b82f6;
   height: 100%;
   background: linear-gradient(90deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border-radius: 9999rpx;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, background 0.25s ease;
 
   &.thick {
     border-radius: 9999rpx;
+  }
+
+  // 热量摄入超过目标：纯色柔和红（无渐变）
+  &.is-over {
+    background: $home-warning-red;
   }
 }
 
@@ -328,12 +394,24 @@ $blue-color: #3b82f6;
   align-items: center;
   justify-content: space-between;
   padding: 16rpx 12rpx;
-  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+  background: linear-gradient(
+    135deg,
+    rgb(250 250 250 / #{$module-card-bg-alpha}) 0%,
+    rgb(245 245 245 / #{$module-card-bg-alpha}) 100%
+  );
   border-radius: 16rpx;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 2rpx solid transparent;
+  box-sizing: border-box;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 
   &:active {
     transform: scale(0.98);
+  }
+
+  // 与 `.meal-item.is-warning` 一致：摄入超过目标
+  &.is-warning {
+    border-color: $home-warning-border;
+    background: $home-warning-surface;
   }
 }
 
@@ -344,6 +422,16 @@ $blue-color: #3b82f6;
   gap: 8rpx;
   flex: 1;
   min-width: 0;
+}
+
+// 超标时：标签上方极简超出克数（与环图左对齐留白区）
+.macro-over-hint {
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 28rpx;
+  color: $home-warning-red;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: -4rpx;
 }
 
 .macro-title-row {
@@ -360,17 +448,19 @@ $blue-color: #3b82f6;
 }
 
 .macro-label-horizontal {
-  font-size: 26rpx;
-  font-weight: 600;
-  line-height: 36rpx;
+  font-size: 24rpx;
+  font-weight: 400;
+  line-height: 34rpx;
   color: #000;
+  white-space: nowrap;
 }
 
 .macro-value-row {
   display: flex;
   align-items: baseline;
   gap: 4rpx;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .macro-current-value {
@@ -384,6 +474,17 @@ $blue-color: #3b82f6;
   font-weight: 600;
   line-height: 38rpx;
   color: #000;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.macro-target-unit {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 30rpx;
+  margin-left: 4rpx;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .macro-target-hint {
@@ -548,10 +649,11 @@ $blue-color: #3b82f6;
 }
 
 .macro-label {
-  font-size: 18rpx;
+  font-size: 16rpx;
   font-weight: 400;
-  line-height: 26rpx;
+  line-height: 22rpx;
   color: $text-secondary;
+  white-space: nowrap;
 }
 
 // 大仪表盘布局
@@ -601,9 +703,9 @@ $blue-color: #3b82f6;
 }
 
 .macro-gauge-value {
-  font-size: 28rpx;
-  font-weight: 700;
-  line-height: 36rpx;
+  font-size: 26rpx;
+  font-weight: 500;
+  line-height: 32rpx;
   max-width: 100rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -649,49 +751,71 @@ $blue-color: #3b82f6;
   margin-bottom: 24rpx; // 增加间距
 }
 
+// 与今日餐食一致：外层不再使用独立白底卡片，避免双重白框
 .expiry-card {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+// 首页骨架：与 `keyframes` 同文件，供保质期/餐食加载态复用
+@keyframes home-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@mixin home-skeleton-block {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e5e7eb 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: home-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.expiry-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.expiry-skeleton-item {
   background: $card-bg;
-  border-radius: 24rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.04);
+  border-radius: 16rpx;
+  padding: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
 }
 
-.expiry-loading {
-  padding: 40rpx 0;
-  text-align: center;
-}
-
-.expiry-summary-top {
+.expiry-skeleton-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  margin-bottom: 20rpx;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
 }
 
-.expiry-summary-text {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: $text-primary;
-  line-height: 40rpx;
+.expiry-skeleton-item .home-line-wide {
+  flex: 1;
+  height: 32rpx;
+  border-radius: 8rpx;
+  @include home-skeleton-block;
 }
 
-.expiry-summary-badge {
-  padding: 6rpx 14rpx;
+.expiry-skeleton-item .home-line-tag {
+  width: 88rpx;
+  height: 32rpx;
   border-radius: 9999rpx;
-  font-size: 22rpx;
-  font-weight: 600;
-  line-height: 30rpx;
+  @include home-skeleton-block;
+}
 
-  &.overdue {
-    color: #dc2626;
-    background: #fee2e2;
-  }
-
-  &.soon {
-    color: #d97706;
-    background: #fef3c7;
-  }
+.expiry-skeleton-item .home-line-narrow {
+  width: 70%;
+  height: 26rpx;
+  border-radius: 8rpx;
+  @include home-skeleton-block;
 }
 
 .expiry-list {
@@ -700,13 +824,19 @@ $blue-color: #3b82f6;
   gap: 16rpx;
 }
 
+// 单条样式对齐 `.meal-item`：白底、圆角、轻阴影
 .expiry-item {
-  padding: 18rpx 20rpx;
-  border-radius: 18rpx;
-  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: $card-bg;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
+  border: 2rpx solid transparent;
 
   &:active {
-    opacity: 0.75;
+    opacity: 0.86;
   }
 }
 
@@ -715,7 +845,7 @@ $blue-color: #3b82f6;
   align-items: center;
   justify-content: space-between;
   gap: 16rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 12rpx;
 }
 
 .expiry-item-name {
@@ -824,13 +954,85 @@ $blue-color: #3b82f6;
   gap: 16rpx;
 }
 
-.meals-loading {
-  padding: 60rpx 0;
-  text-align: center;
+.meals-skeleton {
   display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.meal-skeleton-item {
+  display: flex;
+  align-items: stretch;
+  gap: 20rpx;
+  background: $card-bg;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
+}
+
+.meal-skeleton-thumb {
+  width: 130rpx;
+  height: 130rpx;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+  @include home-skeleton-block;
+}
+
+.meal-skeleton-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.meal-skeleton-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.meal-skeleton-top .home-line-title {
+  flex: 1;
+  height: 32rpx;
+  border-radius: 8rpx;
+  @include home-skeleton-block;
+}
+
+.meal-skeleton-top .home-line-cal {
+  width: 120rpx;
+  height: 40rpx;
+  border-radius: 8rpx;
+  @include home-skeleton-block;
+}
+
+.home-skeleton-bar {
   width: 100%;
-  justify-content: center;
+  height: 10rpx;
+  border-radius: 9999rpx;
+  @include home-skeleton-block;
+}
+
+.meal-skeleton-foot {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
+}
+
+.meal-skeleton-foot .home-line-foot-l {
+  flex: 1;
+  height: 26rpx;
+  border-radius: 8rpx;
+  @include home-skeleton-block;
+}
+
+.meal-skeleton-foot .home-line-foot-r {
+  width: 56rpx;
+  height: 26rpx;
+  border-radius: 8rpx;
+  @include home-skeleton-block;
 }
 
 .loading-text {
@@ -862,10 +1064,10 @@ $blue-color: #3b82f6;
   border: 2rpx solid transparent;
   transition: all 0.2s ease;
 
-  // 超过100%时的红色警示样式
+  // 超过100%时的柔和红色警示样式
   &.is-warning {
-    border-color: #fecaca;
-    background: #fef2f2;
+    border-color: $home-warning-border;
+    background: $home-warning-surface;
   }
 }
 
@@ -931,19 +1133,25 @@ $blue-color: #3b82f6;
 .meal-content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .meal-main {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20rpx;
+  align-items: flex-start;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
 }
 
 .meal-title-wrap {
   display: flex;
   align-items: center;
   gap: 12rpx;
+  flex: 1;
+  min-width: 0;
 }
 
 .meal-name {
@@ -960,25 +1168,47 @@ $blue-color: #3b82f6;
   padding: 2rpx 10rpx;
   border-radius: 8rpx;
   line-height: 28rpx;
+  flex-shrink: 0;
+}
+
+// 右上：已摄入 + 数字（右对齐、等宽数字）
+.meal-calorie-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.meal-calorie-label {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+  margin-bottom: 2rpx;
 }
 
 .meal-calorie {
-  font-size: 26rpx;
-  font-weight: 600;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 44rpx;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5rpx;
+}
+
+.meal-calorie-unit {
+  font-size: 22rpx;
+  font-weight: 500;
   color: $text-secondary;
-  line-height: 36rpx;
 }
 
 .meal-progress-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  margin-bottom: 4rpx;
+  width: 100%;
+  margin-bottom: 10rpx;
 }
 
 .meal-progress-bar-bg {
-  flex: 1;
-  height: 8rpx;
+  width: 100%;
+  height: 10rpx;
   background: #e5e7eb;
   border-radius: 9999rpx;
   overflow: hidden;
@@ -990,60 +1220,62 @@ $blue-color: #3b82f6;
   transition: width 0.3s ease;
 
   &.is-warning {
-    // 超过100%时的红色警示样式，背景色由行内样式控制
-    box-shadow: 0 0 8rpx rgba(239, 68, 68, 0.4);
+    // 超过100%时的柔和红色警示，背景色由行内样式控制
+    box-shadow: 0 0 8rpx rgb(229 115 115 / 35%);
   }
 }
 
-.meal-progress-text {
-  font-size: 20rpx;
-  color: $text-tertiary;
-  line-height: 28rpx;
-  min-width: 120rpx;
-  text-align: right;
-  flex-shrink: 0;
+// 进度条下方一行：左目标/参考，右完成度
+.meal-progress-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 6rpx;
 }
 
-.meal-progress-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2rpx;
-  flex-shrink: 0;
+.meal-progress-text {
+  font-size: 22rpx;
+  color: $text-secondary;
+  line-height: 32rpx;
+  flex: 1;
+  min-width: 0;
 }
 
 .meal-progress-percent {
-  font-size: 20rpx;
+  font-size: 22rpx;
   font-weight: 600;
-  line-height: 28rpx;
+  line-height: 32rpx;
   color: $primary-color;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 
-  // 超过100%时变红
   &.is-over {
-    color: #ef4444;
+    color: $home-warning-red;
   }
 }
 
 // 加餐类型的进度条红色警示
 .meal-item.is-warning .meal-snack-progress-fill {
-  background-color: #ef4444 !important;
+  background-color: $home-warning-red !important;
 }
 
 .meal-item.is-warning .meal-snack-progress-percent {
-  color: #ef4444 !important;
+  color: $home-warning-red !important;
 }
 
 .meal-time {
   font-size: 20rpx;
   color: $text-tertiary;
   line-height: 28rpx;
+  margin-top: 2rpx;
 }
 
 .meal-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6rpx;
-  margin-top: 6rpx;
+  margin-top: 8rpx;
 }
 
 .meal-tag {
@@ -1148,7 +1380,7 @@ $blue-color: #3b82f6;
 .target-modal-content {
   position: relative;
   width: 100%;
-  background: $card-bg;
+  background: $modal-sheet-bg;
   border-radius: 40rpx 40rpx 0 0;
   padding: 40rpx 32rpx calc(120rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
@@ -1308,7 +1540,7 @@ $blue-color: #3b82f6;
   width: 72rpx;
   height: 72rpx;
   border-radius: 16rpx;
-  background: #fff;
+  background: $modal-sheet-bg;
   border: 2rpx solid #e5e7eb;
   display: flex;
   align-items: center;
@@ -1533,8 +1765,8 @@ $blue-color: #3b82f6;
   margin-left: 8rpx;
   
   &.up {
-    color: #ef4444;
-    background: rgb(239 68 68 / 10%);
+    color: $home-warning-red;
+    background: rgb(229 115 115 / 12%);
   }
   
   &.down {
@@ -1689,6 +1921,41 @@ $blue-color: #3b82f6;
   line-height: 34rpx;
 }
 
+// 记录喝水弹窗：覆盖底部大留白，仅保留安全区与内容边距；底部再增加约 30px 呼吸空间
+.target-modal-content.water-modal-content {
+  padding-bottom: calc(28rpx + 150px + env(safe-area-inset-bottom));
+}
+
+.target-modal-header .water-modal-clear-link {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: $home-warning-red;
+  line-height: 34rpx;
+  font-weight: 500;
+}
+
+.water-modal-records-hint {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+}
+
+.water-modal-actions-single {
+  flex-direction: column;
+  margin-top: 28rpx;
+  padding-bottom: 12rpx;
+  gap: 0;
+
+  .target-modal-btn.primary {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
 // 餐食图片预览
 .meal-images {
   display: flex;
@@ -1737,7 +2004,7 @@ $blue-color: #3b82f6;
 // 弹窗按钮样式扩展
 .target-modal-btn {
   &.danger {
-    background: rgb(239 68 68 / 10%);
+    background: rgb(229 115 115 / 10%);
   }
   
   &.primary {
@@ -1747,7 +2014,7 @@ $blue-color: #3b82f6;
 
 .target-modal-btn-text {
   &.danger {
-    color: #ef4444;
+    color: $home-warning-red;
   }
 }
 
@@ -1873,7 +2140,7 @@ $blue-color: #3b82f6;
 
 // 滑块卡片
 .target-slider-card {
-  background: #fff;
+  background: $modal-sheet-bg;
   border-radius: 20rpx;
   padding: 24rpx;
   box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
@@ -1995,7 +2262,7 @@ $blue-color: #3b82f6;
 // 卡路里水池 - Canvas 正弦波效果
 .target-calorie-pool {
   position: relative;
-  background: #fff;
+  background: $card-bg;
   border: 2rpx solid #e5e7eb;
   border-radius: 20rpx;
   padding: 28rpx;
@@ -2075,7 +2342,7 @@ $blue-color: #3b82f6;
 }
 
 .target-form-item {
-  background: #fff;
+  background: $modal-sheet-bg;
   border-radius: 20rpx;
   padding: 24rpx;
   box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
@@ -2180,7 +2447,7 @@ $blue-color: #3b82f6;
 .record-menu-content {
   position: relative;
   width: 100%;
-  background: #fff;
+  background: $modal-sheet-bg;
   border-radius: 32rpx 32rpx 0 0;
   padding: 32rpx 24rpx;
   padding-bottom: calc(64rpx + env(safe-area-inset-bottom));

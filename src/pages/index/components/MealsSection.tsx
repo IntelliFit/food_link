@@ -2,6 +2,7 @@ import { View, Text, Image } from '@tarojs/components'
 import { Empty, Button } from '@taroify/core'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight } from '../../../components/iconfont'
 import { formatDisplayNumber } from '../utils/helpers'
+import { HOME_WARNING_RED } from '../utils/constants'
 import type { HomeMealItem } from '../../../utils/api'
 
 // 餐次对应的 iconfont 图标及颜色
@@ -15,13 +16,13 @@ const MEAL_ICON_CONFIG = {
   snack: { Icon: IconSnack, color: '#00bc7d', bgColor: '#ecfdf5', label: '加餐' }
 } as const
 
-// 餐次进度条颜色：正常为绿色，超过100%为红色警示
+// 餐次进度条颜色：正常为绿色，超过100%为柔和红警示
 const MEAL_PROGRESS_COLOR_NORMAL = '#00bc7d'
-const MEAL_PROGRESS_COLOR_WARNING = '#ef4444'
+const MEAL_PROGRESS_COLOR_WARNING = HOME_WARNING_RED
 
-// 百分比文字颜色
+// 百分比文字颜色（与进度条一致；完成度颜色由 SCSS .meal-progress-percent 控制）
 const PERCENT_COLOR_NORMAL = '#00bc7d'
-const PERCENT_COLOR_WARNING = '#ef4444'
+const PERCENT_COLOR_WARNING = HOME_WARNING_RED
 
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
 
@@ -79,14 +80,28 @@ export function MealsSection({
         <Text className='section-title'>今日餐食</Text>
         <View className='view-all-btn' onClick={onViewAllMeals}>
           <Text className='view-all-text'>查看全部</Text>
-          <IconChevronRight size={16} color='#00bc7d' />
         </View>
       </View>
       
       <View className='meals-list'>
         {loading ? (
-          <View className='meals-loading'>
-            <View className='loading-spinner-md' />
+          <View className='meals-skeleton'>
+            {[1, 2, 3].map((i) => (
+              <View key={i} className='meal-skeleton-item'>
+                <View className='meal-skeleton-thumb' />
+                <View className='meal-skeleton-body'>
+                  <View className='meal-skeleton-top'>
+                    <View className='home-line-title' />
+                    <View className='home-line-cal' />
+                  </View>
+                  <View className='home-skeleton-bar' />
+                  <View className='meal-skeleton-foot'>
+                    <View className='home-line-foot-l' />
+                    <View className='home-line-foot-r' />
+                  </View>
+                </View>
+              </View>
+            ))}
           </View>
         ) : meals.length === 0 ? (
           <View className='meals-empty'>
@@ -151,10 +166,16 @@ export function MealsSection({
                         <Text className='meal-snack-hint'>参考</Text>
                       )}
                     </View>
-                    <Text className='meal-calorie'>{formatDisplayNumber(mealCalorie)} kcal</Text>
+                    <View className='meal-calorie-stack'>
+                      <Text className='meal-calorie-label'>已摄入</Text>
+                      <Text className='meal-calorie'>
+                        {formatDisplayNumber(mealCalorie)}
+                        <Text className='meal-calorie-unit'> kcal</Text>
+                      </Text>
+                    </View>
                   </View>
                   {isSnackMeal ? (
-                    // 加餐显示：进度条 + 时间
+                    // 加餐：整行进度条 + 下一行左目标/参考、右完成度
                     <>
                       <View className='meal-progress-wrap'>
                         <View className='meal-progress-bar-bg'>
@@ -166,15 +187,15 @@ export function MealsSection({
                             }}
                           />
                         </View>
-                        <View className='meal-progress-meta'>
-                          <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
-                          <Text className='meal-progress-text'>{targetText}</Text>
-                        </View>
+                      </View>
+                      <View className='meal-progress-foot'>
+                        <Text className='meal-progress-text'>{targetText}</Text>
+                        <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                       </View>
                       {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                     </>
                   ) : (
-                    // 正餐完整显示：进度条 + 目标
+                    // 正餐：同上
                     <>
                       <View className='meal-progress-wrap'>
                         <View className='meal-progress-bar-bg'>
@@ -186,10 +207,10 @@ export function MealsSection({
                             }}
                           />
                         </View>
-                        <View className='meal-progress-meta'>
-                          <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
-                          <Text className='meal-progress-text'>{targetText}</Text>
-                        </View>
+                      </View>
+                      <View className='meal-progress-foot'>
+                        <Text className='meal-progress-text'>{targetText}</Text>
+                        <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                       </View>
                       {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                       {meal.tags?.length > 0 && (

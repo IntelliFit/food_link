@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
 import {
@@ -12,9 +12,6 @@ import {
   friendCleanupDuplicates,
   communityGetFeed,
   communityGetPublicFeed,
-  getPublicFoodLibraryList,
-  likePublicFoodLibraryItem,
-  unlikePublicFoodLibraryItem,
   communityLike,
   communityUnlike,
   communityGetComments,
@@ -31,13 +28,11 @@ import {
   type CommunityAuthorScope,
   type FeedCommentItem,
   type CheckinLeaderboardItem,
-  type PublicFoodLibraryItem,
   type MealType,
   type DietGoal
 } from '../../utils/api'
-import { Button as TaroifyButton, Divider } from '@taroify/core'
+import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
-import '@taroify/core/divider/style'
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
@@ -96,12 +91,48 @@ function formatFeedTime(recordTime: string): string {
   }
 }
 
-function formatLibraryLocation(item: PublicFoodLibraryItem): string {
+/** 与首页一致的细线搜索图标（替代「搜」字） */
+function FeedSearchGlyph() {
   return (
-    item.merchant_address
-    || item.detail_address
-    || [item.province, item.city, item.district].filter(Boolean).join(' ')
-    || ''
+    <View className='feed-search-svg'>
+      <svg viewBox='0 0 24 24' fill='none' style={{ width: '100%', height: '100%' }}>
+        <circle cx='11' cy='11' r='7' stroke='#94a3b8' strokeWidth='2' />
+        <path d='M20 20l-4.35-4.35' stroke='#94a3b8' strokeWidth='2' strokeLinecap='round' />
+      </svg>
+    </View>
+  )
+}
+
+/** 筛选：极简漏斗图标（点击展开排序/餐次/目标） */
+function FeedFilterFunnelIcon() {
+  return (
+    <View className='feed-filter-funnel-svg'>
+      <svg viewBox='0 0 24 24' fill='none' style={{ width: '100%', height: '100%' }}>
+        <path
+          d='M5 5h14l-4.5 7v7l-5-2.5V12L5 5z'
+          stroke='#64748b'
+          strokeWidth='1.75'
+          strokeLinejoin='round'
+        />
+      </svg>
+    </View>
+  )
+}
+
+/** 排行榜入口右侧：圆形底 + 右向箭头，替代纯文本「>」 */
+function RankingEntryChevron() {
+  return (
+    <View className='ranking-chevron'>
+      <svg viewBox='0 0 24 24' fill='none' style={{ width: '100%', height: '100%' }}>
+        <path
+          d='M9 18l6-6-6-6'
+          stroke='#fff'
+          strokeWidth='2.2'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+        />
+      </svg>
+    </View>
   )
 }
 
@@ -219,25 +250,6 @@ function buildFeedQueryParams(
   }
 }
 
-function getLibraryRecommendParams(
-  sortBy: CommunityFeedSortBy,
-  dietGoal: DietGoal | 'all',
-) {
-  if (sortBy === 'balanced') {
-    return { sort_by: 'balanced' as const }
-  }
-  if (sortBy === 'hot') {
-    return { sort_by: 'hot' as const }
-  }
-  if (dietGoal === 'fat_loss') {
-    return { sort_by: 'recommended' as const, suitable_for_fat_loss: true }
-  }
-  if (dietGoal === 'muscle_gain') {
-    return { sort_by: 'high_protein' as const }
-  }
-  return { sort_by: 'recommended' as const }
-}
-
 function CommunityPage() {
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
   const [friends, setFriends] = useState<FriendListItem[]>([])
@@ -289,8 +301,9 @@ function CommunityPage() {
   const [lbPreviewLoading, setLbPreviewLoading] = useState(false)
   /** 任意请求进行中（含静默），用于首次进入时骨架 */
   const [lbPreviewFetching, setLbPreviewFetching] = useState(false)
-  const [libraryRecommendList, setLibraryRecommendList] = useState<PublicFoodLibraryItem[]>([])
   const [feedSortBy, setFeedSortBy] = useState<CommunityFeedSortBy>('recommended')
+  /** 动态筛选：漏斗展开后再显示排序/餐次/目标，避免占满一屏 */
+  const [feedFilterExpanded, setFeedFilterExpanded] = useState(false)
   const [feedMealType, setFeedMealType] = useState<MealType | 'all'>('all')
   const [feedDietGoal, setFeedDietGoal] = useState<DietGoal | 'all'>('all')
   const [feedAuthorScope, setFeedAuthorScope] = useState<CommunityAuthorScope>('all')
@@ -322,23 +335,6 @@ function CommunityPage() {
       if (!silent) setLbPreviewLoading(false)
     }
   }, [])
-
-  const loadLibraryRecommend = useCallback(async () => {
-    if (!getAccessToken()) {
-      setLibraryRecommendList([])
-      return
-    }
-    try {
-      const params = getLibraryRecommendParams(feedSortBy, feedDietGoal)
-      const res = await getPublicFoodLibraryList({
-        ...params,
-        limit: 4
-      })
-      setLibraryRecommendList(res.list || [])
-    } catch {
-      // 保留上次推荐，避免页面闪空
-    }
-  }, [feedDietGoal, feedSortBy])
 
   const loadInteractionNotificationsBadge = useCallback(async () => {
     if (!getAccessToken()) {
@@ -659,11 +655,10 @@ function CommunityPage() {
     if (getAccessToken()) {
       tasks.push(loadFriendsAndRequests(false))
       tasks.push(loadCheckinPreview(false))
-      tasks.push(loadLibraryRecommend())
       tasks.push(loadInteractionNotificationsBadge())
     }
     Promise.all(tasks)
-  }, [loadFriendsAndRequests, refreshFeed, loadCheckinPreview, loadLibraryRecommend, loadInteractionNotificationsBadge])
+  }, [loadFriendsAndRequests, refreshFeed, loadCheckinPreview, loadInteractionNotificationsBadge])
 
   // 评论栏弹出后延迟聚焦，等滑入动画完成
   useEffect(() => {
@@ -723,16 +718,12 @@ function CommunityPage() {
     setHasMore(true)
     lastFeedRefreshTime.current = 0
     refreshFeed(false, true)
-    if (loggedIn) {
-      loadLibraryRecommend()
-    }
   }, [
     clearCache,
     feedAuthorScope,
     feedDietGoal,
     feedMealType,
     feedSortBy,
-    loadLibraryRecommend,
     loggedIn,
     priorityAuthorIds,
     refreshFeed,
@@ -758,12 +749,10 @@ function CommunityPage() {
 
     if (token) {
       loadCheckinPreview(true)
-      loadLibraryRecommend()
       loadInteractionNotificationsBadge()
     } else {
       setLbPreviewTop([])
       setLbPreviewMyRank(null)
-      setLibraryRecommendList([])
       setUnreadNotificationCount(0)
     }
 
@@ -871,7 +860,6 @@ function CommunityPage() {
         loadFriendsAndRequests(false)
         refreshFeed(false, true)
         loadCheckinPreview(true)
-        loadLibraryRecommend()
       }
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
@@ -956,39 +944,6 @@ function CommunityPage() {
     Taro.navigateTo({ url: '/pages/food-library/index' })
   }
 
-  const handleLibraryLike = async (item: PublicFoodLibraryItem) => {
-    if (!getAccessToken()) {
-      Taro.showToast({ title: '请先登录', icon: 'none' })
-      return
-    }
-
-    const previousList = libraryRecommendList
-    const nextList = previousList.map((it) =>
-      it.id === item.id
-        ? {
-          ...it,
-          liked: !it.liked,
-          like_count: it.liked ? Math.max(0, it.like_count - 1) : it.like_count + 1
-        }
-        : it
-    )
-    setLibraryRecommendList(nextList)
-
-    try {
-      if (item.liked) {
-        await unlikePublicFoodLibraryItem(item.id)
-      } else {
-        await likePublicFoodLibraryItem(item.id)
-      }
-    } catch (e) {
-      setLibraryRecommendList(previousList)
-      Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
-    }
-  }
-
-  const recommendedLibraryItems = libraryRecommendList.slice(0, 3)
-  const shouldInsertLibraryAfter = (feedIndex: number) => (feedIndex + 1) % 4 === 0
-
   const filteredFeedList = feedSearchKeyword.trim()
     ? feedList.filter((item) => {
       const kw = feedSearchKeyword.trim().toLowerCase()
@@ -998,72 +953,13 @@ function CommunityPage() {
     })
     : feedList
 
-  const renderLibraryCard = (libItem: PublicFoodLibraryItem, key: string) => {
-    const locationText = formatLibraryLocation(libItem)
-
-    return (
-      <View
-        key={key}
-        className='library-feed-card'
-        onClick={() => Taro.navigateTo({ url: `/pages/food-library-detail/index?id=${libItem.id}` })}
-      >
-        <View className='library-feed-image-wrap'>
-          {libItem.image_path ? (
-            <Image className='library-feed-image' src={libItem.image_path} mode='aspectFill' />
-          ) : (
-            <View className='library-feed-image-placeholder'>暂无图片</View>
-          )}
-          {libItem.suitable_for_fat_loss ? (
-            <Text className='library-feed-badge'>适合减脂</Text>
-          ) : null}
-        </View>
-        <View className='library-feed-body'>
-          <View className='library-feed-top'>
-            <Text className='library-feed-eyebrow'>
-              {libItem.recommend_reason ? `公共食物库推荐 · ${libItem.recommend_reason}` : '公共食物库推荐'}
-            </Text>
-            <Text className='library-feed-title' numberOfLines={1}>
-              {libItem.food_name || libItem.description || '健康餐'}
-            </Text>
-            {libItem.description ? (
-              <Text className='library-feed-desc' numberOfLines={2}>{libItem.description}</Text>
-            ) : null}
-          </View>
-
-          {libItem.merchant_name ? (
-            <View className='library-feed-line'>
-              <Text className='library-feed-line-icon'>店</Text>
-              <Text className='library-feed-line-text' numberOfLines={1}>{libItem.merchant_name}</Text>
-            </View>
-          ) : null}
-
-          {locationText ? (
-            <View className='library-feed-line'>
-              <Text className='library-feed-line-icon'>址</Text>
-              <Text className='library-feed-line-text' numberOfLines={1}>{locationText}</Text>
-            </View>
-          ) : null}
-
-          <View className='library-feed-footer'>
-            <View className='library-feed-metas'>
-              <Text className='library-feed-calorie'>{Math.round(libItem.total_calories || 0)} kcal</Text>
-              <Text className='library-feed-meta'>藏 {libItem.collection_count || 0}</Text>
-            </View>
-            <View
-              className='library-feed-like'
-              onClick={(e) => {
-                e.stopPropagation()
-                handleLibraryLike(libItem)
-              }}
-            >
-              <Text className={`library-feed-like-icon iconfont icon-good ${libItem.liked ? 'liked' : ''}`} />
-              <Text className='library-feed-like-text'>{libItem.like_count}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    )
-  }
+  const feedFilterSummary = useMemo(() => {
+    const sortLabel = FEED_SORT_OPTIONS.find(o => o.value === feedSortBy)?.label ?? ''
+    const mealLabel = FEED_MEAL_OPTIONS.find(o => o.value === feedMealType)?.label ?? ''
+    const goalLabel = FEED_GOAL_OPTIONS.find(o => o.value === feedDietGoal)?.label ?? ''
+    const priority = loggedIn && feedAuthorScope === 'priority' ? '特别关注' : ''
+    return [sortLabel, mealLabel, goalLabel, priority].filter(Boolean).join(' · ')
+  }, [feedSortBy, feedMealType, feedDietGoal, feedAuthorScope, loggedIn])
 
   /** 暂存草稿的 key */
   const draftKey = (recordId: string) => `comment_draft_${recordId}`
@@ -1348,12 +1244,6 @@ function CommunityPage() {
           lowerThreshold={100}
         >
           <View className='community-scroll-content'>
-            <Divider className='refresh-divider' />
-            <View className='page-header'>
-              <Text className='page-title'>健康圈子</Text>
-              <Text className='page-subtitle'>与好友一起分享健康饮食</Text>
-            </View>
-
             {/* 好友区域（仅登录后显示） */}
                 {loggedIn && (
                   <View className='friends-section'>
@@ -1361,23 +1251,20 @@ function CommunityPage() {
                       <Text className='section-title'>好友</Text>
                       <View className='header-actions'>
                         {requests.length > 0 && (
-                          <View className='requests-badge' onClick={() => setShowRequests(true)}>
+                          <View className='requests-badge friend-action-pill friend-action-pill--amber' onClick={() => setShowRequests(true)}>
                             <Text className='requests-badge-text'>好友请求 ({requests.length})</Text>
                           </View>
                         )}
-                        <View className='view-all-btn notification-entry' onClick={handleOpenNotifications}>
+                        <View className='view-all-btn friend-action-pill notification-entry' onClick={handleOpenNotifications}>
                           <Text className='view-all-text'>
                             互动消息{unreadNotificationCount > 0 ? ` (${unreadNotificationCount})` : ''}
                           </Text>
-                          <Text className='arrow'>{'>'}</Text>
                         </View>
-                        <View className='view-all-btn' onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}>
+                        <View className='view-all-btn friend-action-pill' onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}>
                           <Text className='view-all-text'>好友管理</Text>
-                          <Text className='arrow'>{'>'}</Text>
                         </View>
-                        <View className='view-all-btn' onClick={() => setShowAddFriend(true)}>
+                        <View className='view-all-btn friend-action-pill' onClick={() => setShowAddFriend(true)}>
                           <Text className='view-all-text'>添加好友</Text>
-                          <Text className='arrow'>{'>'}</Text>
                         </View>
                       </View>
                     </View>
@@ -1472,13 +1359,13 @@ function CommunityPage() {
                   ) : null}
                 </View>
               </View>
-              <Text className='ranking-arrow'>{'>'}</Text>
+              <RankingEntryChevron />
             </View>
 
             {/* 饮食动态 */}
             <View className='feed-section'>
               <View className='section-header feed-section-header'>
-                <Text className='section-title'>{loggedIn ? '好友动态与推荐' : '饮食动态'}</Text>
+                <Text className='section-title'>{loggedIn ? '好友动态' : '饮食动态'}</Text>
                 {loggedIn ? (
                   <Text className='feed-section-link' onClick={openFoodLibrary}>食物库</Text>
                 ) : null}
@@ -1486,7 +1373,7 @@ function CommunityPage() {
               <View className='feed-filter-panel'>
                 <View className='feed-search-wrap'>
                   <View className='feed-search-icon-wrap'>
-                    <Text className='feed-search-icon'>搜</Text>
+                    <FeedSearchGlyph />
                   </View>
                   <Input
                     className='feed-search-input'
@@ -1500,66 +1387,84 @@ function CommunityPage() {
                     <Text className='feed-search-clear' onClick={() => setFeedSearchKeyword('')}>清除</Text>
                   ) : null}
                 </View>
-                <View className='feed-filter-labeled-row'>
-                  <Text className='feed-filter-label'>排序</Text>
-                  <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
-                    <View className='feed-filter-row-inner'>
-                      {FEED_SORT_OPTIONS.map((opt) => (
-                        <View
-                          key={opt.value}
-                          className={`feed-filter-chip ${feedSortBy === opt.value ? 'active' : ''}`}
-                          onClick={() => setFeedSortBy(opt.value)}
-                        >
-                          <Text className='feed-filter-chip-text'>{opt.label}</Text>
-                        </View>
-                      ))}
-                      {loggedIn ? (
-                        <View
-                          className={`feed-filter-chip ${feedAuthorScope === 'priority' ? 'active' : ''}`}
-                          onClick={() => setFeedAuthorScope(feedAuthorScope === 'priority' ? 'all' : 'priority')}
-                        >
-                          <Text className='feed-filter-chip-text'>
-                            {feedAuthorScope === 'priority' ? '特别关注中' : '特别关注'}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </ScrollView>
+                <View className='feed-filter-trigger-row'>
+                  <View
+                    className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''}`}
+                    onClick={() => setFeedFilterExpanded((v) => !v)}
+                  >
+                    <FeedFilterFunnelIcon />
+                  </View>
+                  <Text
+                    className='feed-filter-summary'
+                    onClick={() => setFeedFilterExpanded((v) => !v)}
+                  >
+                    {feedFilterSummary}
+                  </Text>
                 </View>
-                <View className='feed-filter-labeled-row'>
-                  <Text className='feed-filter-label'>餐次</Text>
-                  <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
-                    <View className='feed-filter-row-inner'>
-                      {FEED_MEAL_OPTIONS.map((opt) => (
-                        <View
-                          key={opt.value}
-                          className={`feed-filter-chip ${feedMealType === opt.value ? 'active' : ''}`}
-                          onClick={() => setFeedMealType(opt.value)}
-                        >
-                          <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                {feedFilterExpanded ? (
+                  <View className='feed-filter-expanded'>
+                    <View className='feed-filter-labeled-row'>
+                      <Text className='feed-filter-label'>排序</Text>
+                      <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
+                        <View className='feed-filter-row-inner'>
+                          {FEED_SORT_OPTIONS.map((opt) => (
+                            <View
+                              key={opt.value}
+                              className={`feed-filter-chip ${feedSortBy === opt.value ? 'active' : ''}`}
+                              onClick={() => setFeedSortBy(opt.value)}
+                            >
+                              <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                            </View>
+                          ))}
+                          {loggedIn ? (
+                            <View
+                              className={`feed-filter-chip ${feedAuthorScope === 'priority' ? 'active' : ''}`}
+                              onClick={() => setFeedAuthorScope(feedAuthorScope === 'priority' ? 'all' : 'priority')}
+                            >
+                              <Text className='feed-filter-chip-text'>
+                                {feedAuthorScope === 'priority' ? '特别关注中' : '特别关注'}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
-                      ))}
+                      </ScrollView>
                     </View>
-                  </ScrollView>
-                </View>
-                <View className='feed-filter-labeled-row'>
-                  <Text className='feed-filter-label'>目标</Text>
-                  <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
-                    <View className='feed-filter-row-inner'>
-                      {FEED_GOAL_OPTIONS.map((opt) => (
-                        <View
-                          key={opt.value}
-                          className={`feed-filter-chip ${feedDietGoal === opt.value ? 'active' : ''}`}
-                          onClick={() => setFeedDietGoal(opt.value)}
-                        >
-                          <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                    <View className='feed-filter-labeled-row'>
+                      <Text className='feed-filter-label'>餐次</Text>
+                      <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
+                        <View className='feed-filter-row-inner'>
+                          {FEED_MEAL_OPTIONS.map((opt) => (
+                            <View
+                              key={opt.value}
+                              className={`feed-filter-chip ${feedMealType === opt.value ? 'active' : ''}`}
+                              onClick={() => setFeedMealType(opt.value)}
+                            >
+                              <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                            </View>
+                          ))}
                         </View>
-                      ))}
+                      </ScrollView>
                     </View>
-                  </ScrollView>
-                </View>
+                    <View className='feed-filter-labeled-row'>
+                      <Text className='feed-filter-label'>目标</Text>
+                      <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
+                        <View className='feed-filter-row-inner'>
+                          {FEED_GOAL_OPTIONS.map((opt) => (
+                            <View
+                              key={opt.value}
+                              className={`feed-filter-chip ${feedDietGoal === opt.value ? 'active' : ''}`}
+                              onClick={() => setFeedDietGoal(opt.value)}
+                            >
+                              <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </View>
+                  </View>
+                ) : null}
               </View>
-              {showSkeleton ? (
+              {(showSkeleton || (loadingFeed && feedList.length === 0)) ? (
                 <View className='skeleton-container'>
                   {[1, 2, 3].map(i => (
                     <View key={i} className='skeleton-feed-card'>
@@ -1576,21 +1481,20 @@ function CommunityPage() {
                       </View>
                       <View className='skeleton-image' />
                       <View className='skeleton-meta'>
-                        <View className='skeleton-line' style={{ width: '150rpx', height: '24rpx' }} />
+                        <View className='skeleton-line skeleton-meta-pill' />
+                        <View className='skeleton-line skeleton-meta-wide' />
+                      </View>
+                      <View className='skeleton-feed-actions'>
+                        <View className='skeleton-line skeleton-action' />
+                        <View className='skeleton-line skeleton-action' />
                       </View>
                     </View>
                   ))}
                 </View>
-              ) : loadingFeed && feedList.length === 0 ? (
-                <View className='loading-spinner-md' />
               ) : filteredFeedList.length === 0 ? (
                 feedSearchKeyword.trim() ? (
                   <View className='feed-empty'>
                     <Text className='feed-empty-text'>未找到匹配「{feedSearchKeyword.trim()}」的动态</Text>
-                  </View>
-                ) : recommendedLibraryItems.length > 0 ? (
-                  <View className='feed-list'>
-                    {recommendedLibraryItems.map((libItem, idx) => renderLibraryCard(libItem, `library-empty-${libItem.id}-${idx}`))}
                   </View>
                 ) : (
                   <View className='feed-empty'>
@@ -1605,11 +1509,11 @@ function CommunityPage() {
                 )
               ) : (
                 <View className='feed-list'>
-                  {filteredFeedList.map((item, index) => (
+                  {filteredFeedList.map((item) => (
                     <View key={item.record.id}>
                       <View
                         id={`feed-card-${item.record.id}`}
-                        className='feed-card'
+                        className={`feed-card${item.record.description?.trim() && !item.record.image_path ? ' feed-card-text-only' : ''}`}
                         onClick={() => handleViewDetail(item.record)}
                       >
                         <View className='feed-header'>
@@ -1627,14 +1531,9 @@ function CommunityPage() {
                             </Text>
                           </View>
                         </View>
-                        {(item.recommend_reason || item.record.diet_goal) ? (
+                        {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
                           <View className='feed-tags'>
-                            {item.recommend_reason ? (
-                              <Text className='feed-tag highlight'>{item.recommend_reason}</Text>
-                            ) : null}
-                            {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
-                              <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
-                            ) : null}
+                            <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
                           </View>
                         ) : null}
                         {item.record.description && (
@@ -1729,13 +1628,6 @@ function CommunityPage() {
                           </View>
                         )}
                       </View>
-                      {shouldInsertLibraryAfter(index) ? (() => {
-                        const libraryIndex = Math.floor((index + 1) / 4) - 1
-                        const libraryItem = recommendedLibraryItems[libraryIndex]
-                        return libraryItem
-                          ? renderLibraryCard(libraryItem, `library-inline-${libraryItem.id}-${index}`)
-                          : null
-                      })() : null}
                     </View>
                   ))}
                 </View>

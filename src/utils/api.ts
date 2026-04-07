@@ -262,11 +262,13 @@ export interface HomeFoodExpirySummary {
   items: HomeFoodExpiryItem[]
 }
 
-/** 首页仪表盘接口返回（不含运动） */
+/** 首页仪表盘接口返回 */
 export interface HomeDashboard {
   intakeData: HomeIntakeData
   meals: HomeMealItem[]
   expirySummary?: HomeFoodExpirySummary
+  /** 当日运动消耗汇总（千卡），来自 user_exercise_logs */
+  exerciseBurnedKcal?: number
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -1393,7 +1395,7 @@ export async function getUnlimitedQRCode(
  * 与首页 dashboard 一致：日期条曾用 2025 显示年时，后端需使用真实数据年（如 2026）。
  * 身体指标写入接口也经此映射，避免与统计周范围错年。
  */
-function mapCalendarDateToApi(date?: string): string | undefined {
+export function mapCalendarDateToApi(date?: string): string | undefined {
   if (!date) return undefined
   return date.replace(/^2025-/, '2026-')
 }
@@ -3115,7 +3117,7 @@ export interface ExerciseLogItem {
 /** 获取运动记录列表 */
 export async function getExerciseLogs(params?: { date?: string; start_date?: string; end_date?: string }): Promise<{ logs: ExerciseLogItem[]; total_calories: number; count: number }> {
   const queryParams = new URLSearchParams()
-  if (params?.date) queryParams.set('date', params.date)
+  if (params?.date) queryParams.set('date', mapCalendarDateToApi(params.date) ?? params.date)
   if (params?.start_date) queryParams.set('start_date', params.start_date)
   if (params?.end_date) queryParams.set('end_date', params.end_date)
 
@@ -3127,17 +3129,71 @@ export async function getExerciseLogs(params?: { date?: string; start_date?: str
   return response.data as { logs: ExerciseLogItem[]; total_calories: number; count: number }
 }
 
-/** 创建运动记录 */
-export async function createExerciseLog(data: { exercise_desc: string; calories_burned: number; date?: string }): Promise<{ message: string; item: ExerciseLogItem; today_total: number }> {
+/** 单日运动消耗汇总（千卡），与 `GET /api/home/dashboard` 的 `exerciseBurnedKcal` 同源 */
+export async function getExerciseDailyCalories(date?: string): Promise<{
+  date: string
+  total_calories_burned: number
+}> {
+  const apiDate = mapCalendarDateToApi(date)
+  const url =
+    apiDate != null
+      ? `/api/exercise-calories/daily?date=${encodeURIComponent(apiDate)}`
+      : '/api/exercise-calories/daily'
+  const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取运动消耗失败')
+  }
+  return response.data as { date: string; total_calories_burned: number }
+}
+
+/** 将 FastAPI 422 等返回的 detail 转成可读字符串（避免 [object Object]） */
+function formatFastApiErrorDetail(data: unknown): string {
+  const detail = (data as { detail?: unknown })?.detail
+  if (detail == null) return '保存运动记录失败'
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((e: { msg?: string; loc?: unknown }) => {
+        const loc = e?.loc != null ? JSON.stringify(e.loc) : ''
+        const msg = typeof e?.msg === 'string' ? e.msg : JSON.stringify(e)
+        return loc ? `${loc}: ${msg}` : msg
+      })
+      .join('; ')
+  }
+  if (typeof detail === 'object') return JSON.stringify(detail)
+  return String(detail)
+}
+
+/** 运动异步任务完成后 result 结构（与食物分析共用 analysis_tasks） */
+export interface ExerciseTaskResultPayload {
+  exercise_log: ExerciseLogItem
+  estimated_calories: number
+  ai_response?: string | null
+  today_total: number
+}
+
+/** 提交运动分析任务（后台 Worker 调用大模型并落库；返回 task_id，需轮询 getAnalyzeTask） */
+export async function createExerciseLog(data: {
+  exercise_desc: string
+  date?: string
+}): Promise<{ task_id: string; message: string }> {
+  const trimmed = data.exercise_desc.trim()
+  const parts: string[] = [`exercise_desc=${encodeURIComponent(trimmed)}`]
+  if (data.date) {
+    parts.push(`date=${encodeURIComponent(data.date)}`)
+  }
   const response = await authenticatedRequest('/api/exercise-logs', {
     method: 'POST',
-    data,
-    timeout: 15000
+    header: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    data: parts.join('&'),
+    timeout: 30000
   })
   if (response.statusCode !== 200) {
-    throw new Error((response.data as any)?.detail || '保存运动记录失败')
+    throw new Error(formatFastApiErrorDetail(response.data))
   }
-  return response.data as { message: string; item: ExerciseLogItem; today_total: number }
+  return response.data as { task_id: string; message: string }
 }
 
 /** 删除运动记录 */

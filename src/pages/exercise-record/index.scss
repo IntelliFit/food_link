@@ -10,10 +10,15 @@ $text-tertiary: #9ca3af;
 $border-color: #e5e7eb;
 
 .exercise-record-page {
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
+  box-sizing: border-box;
+  overflow-x: hidden;
   background: $bg-color;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
 }
 
 // 头部统计
@@ -40,6 +45,52 @@ $border-color: #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* 与 custom-tab-bar 底部「分析」柱状图一致（选中态绿色） */
+.stats-icon-wrap--tab-stats {
+  background: #ecfdf5;
+}
+
+/* 自 custom-tab-bar/index.wxss .stats-icon.active，尺寸适配 80rpx 容器 */
+.exercise-header-stats-icon {
+  width: 48rpx;
+  height: 48rpx;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6rpx;
+  box-sizing: border-box;
+  background: linear-gradient(to top, transparent 6rpx, #07c160 6rpx, #07c160 26rpx, transparent 26rpx);
+  background-size: 6rpx 20rpx;
+  background-position: center bottom 6rpx;
+  background-repeat: no-repeat;
+  transition: all 0.2s ease;
+}
+
+.exercise-header-stats-icon::before {
+  content: '';
+  position: absolute;
+  width: 6rpx;
+  height: 14rpx;
+  background: #07c160;
+  border-radius: 1rpx;
+  left: 5rpx;
+  bottom: 6rpx;
+  transition: all 0.2s ease;
+}
+
+.exercise-header-stats-icon::after {
+  content: '';
+  position: absolute;
+  width: 6rpx;
+  height: 26rpx;
+  background: #07c160;
+  border-radius: 1rpx;
+  right: 5rpx;
+  bottom: 6rpx;
+  transition: all 0.2s ease;
 }
 
 .stats-info {
@@ -85,8 +136,17 @@ $border-color: #e5e7eb;
 // 聊天容器
 .chat-container {
   flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
   padding: 16rpx 24rpx;
   overflow-y: auto;
+
+  &--empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
 }
 
 // 空状态
@@ -94,7 +154,8 @@ $border-color: #e5e7eb;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 120rpx;
+  padding-top: 40rpx;
+  padding-bottom: 40rpx;
 }
 
 .empty-icon-wrap {
@@ -124,10 +185,11 @@ $border-color: #e5e7eb;
   margin-bottom: 48rpx;
 }
 
-// 快捷示例
-.quick-examples {
+// 输入区上方：试试这样说 + 横向滑动预设
+.quick-examples-strip {
   width: 100%;
-  padding: 0 24rpx;
+  box-sizing: border-box;
+  margin-bottom: 16rpx;
 }
 
 .quick-examples-title {
@@ -135,23 +197,31 @@ $border-color: #e5e7eb;
   font-size: 24rpx;
   color: $text-tertiary;
   line-height: 34rpx;
-  margin-bottom: 16rpx;
+  margin-bottom: 12rpx;
   text-align: center;
 }
 
-.example-tags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+.quick-chips-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.quick-chips-inner {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
   gap: 16rpx;
+  padding: 4rpx 4rpx 8rpx 0;
+  box-sizing: border-box;
 }
 
 .example-tag {
+  flex-shrink: 0;
   background: $card-bg;
   border: 2rpx solid $border-color;
   border-radius: 9999rpx;
   padding: 16rpx 28rpx;
-  
+
   &:active {
     background: $exercise-light;
     border-color: $exercise-color;
@@ -162,6 +232,7 @@ $border-color: #e5e7eb;
   font-size: 26rpx;
   color: $text-secondary;
   line-height: 36rpx;
+  white-space: nowrap;
 }
 
 // 聊天列表
@@ -214,6 +285,47 @@ $border-color: #e5e7eb;
   font-weight: 500;
 }
 
+.chat-result--pending {
+  flex-wrap: wrap;
+}
+
+.chat-pending-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  border: 3rpx solid rgb(249 115 22 / 25%);
+  border-top-color: $exercise-color;
+  border-radius: 50%;
+  animation: exercise-spin 0.7s linear infinite;
+}
+
+@keyframes exercise-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chat-result--error {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  background: #fef2f2;
+  border: 1rpx solid #fecaca;
+}
+
+.chat-result-text--error {
+  color: #b91c1c;
+  font-weight: 400;
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.chat-dismiss-fail {
+  font-size: 22rpx;
+  color: $text-tertiary;
+  margin-left: 12rpx;
+  flex-shrink: 0;
+}
+
 .chat-time {
   font-size: 20rpx;
   color: $text-tertiary;
@@ -235,16 +347,26 @@ $border-color: #e5e7eb;
   line-height: 28rpx;
 }
 
-// 输入区域
+// 输入区域（与屏幕同宽，内容水平居中）
 .input-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 16rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
   background: $card-bg;
   border-top: 2rpx solid $border-color;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .input-wrap {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16rpx;
   background: $bg-color;
   border-radius: 9999rpx;
@@ -263,7 +385,8 @@ $border-color: #e5e7eb;
   color: $text-tertiary;
 }
 
-.send-btn {
+/** 记运动输入框右侧发送：图标仅用 iconfont icon-send，不用 send-btn 类名 */
+.exercise-send-trigger {
   width: 64rpx;
   height: 64rpx;
   background: $exercise-color;
@@ -278,13 +401,19 @@ $border-color: #e5e7eb;
     opacity: 0.9;
   }
   
-  &.disabled {
+  &.is-disabled {
     background: $text-tertiary;
     opacity: 0.5;
   }
+
+  .iconfont.icon-send {
+    font-size: 28rpx;
+    color: #fff;
+    line-height: 1;
+  }
 }
 
-.send-spinner {
+.exercise-send-spinner {
   width: 28rpx;
   height: 28rpx;
   border: 4rpx solid rgb(255 255 255 / 30%);
@@ -297,13 +426,4 @@ $border-color: #e5e7eb;
   to {
     transform: rotate(360deg);
   }
-}
-
-.input-hint {
-  display: block;
-  font-size: 22rpx;
-  color: $text-tertiary;
-  line-height: 32rpx;
-  text-align: center;
-  margin-top: 12rpx;
 }

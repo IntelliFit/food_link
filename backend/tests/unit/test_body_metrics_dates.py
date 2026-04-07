@@ -2,13 +2,10 @@
 身体指标：recorded_on 错年纠正与体重 LOCF 趋势（回归 2026-04 前后端错年写入问题）
 """
 import pytest
-from datetime import datetime
+from datetime import date
 from unittest.mock import patch
 
-# main 较重，仅用于纯函数单测
-import main
 from main import (
-    CHINA_TZ,
     _canonical_recorded_on_body_metric,
     _build_weight_locf_series,
     _aggregate_weight_daily,
@@ -16,13 +13,9 @@ from main import (
 
 
 def _freeze_today_2026_04_07():
-    """固定 main.datetime.now(CHINA_TZ) 为 2026-04-07，勿替换整个 datetime 类（否则会破坏 isinstance）。"""
+    """固定「中国时区今天」为 2026-04-07（Py3.12 不可 patch datetime.datetime.now，改 patch 业务函数）。"""
 
-    def fake_now(tz=None):
-        t = tz or CHINA_TZ
-        return datetime(2026, 4, 7, 12, 0, 0, tzinfo=t)
-
-    return patch.object(main.datetime, "now", fake_now)
+    return patch("main._today_china_date_for_body_metrics", return_value=date(2026, 4, 7))
 
 
 @pytest.mark.unit

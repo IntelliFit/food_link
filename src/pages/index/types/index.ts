@@ -72,7 +72,6 @@ export interface DateSelectorProps {
 export interface CalorieCardProps {
   intakeData: HomeIntakeData
   isSwitchingDate: boolean
-  animatedRemainingCalories: number
   calorieProgress: number
   onOpenTargetEditor: () => void
 }

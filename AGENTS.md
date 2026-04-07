@@ -57,6 +57,13 @@
 - 该命令会正确设置 `NODE_ENV=development` 和 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`
 - 不要直接使用 `taro build --type weapp --watch`，这可能导致 API 地址错误
 
+### 代码修改后重启前后端（代理必须执行）
+
+- 在完成**会影响运行结果**的修改后（例如 `backend/` Python、`src/` 前端业务与配置），在回合结束前**应主动重启**开发中的前后端，避免仍跑旧进程。
+- **无需**为纯文档、仅单测断言、仅格式化等改动反复重启。
+- 推荐一键：`npm run dev:restart`（调用 `scripts/restart-dev.sh`：先结束残留的 `run_backend.py` 与 `taro build --type weapp`，再以 `nohup` 后台启动 `dev:backend` 与 `dev:weapp`，日志写入项目根目录 `backend-dev.log`、`weapp-dev.log`）。
+- 若用户已在其它终端手动跑 watch，可先与其确认再 `pkill`，避免误关无关进程。
+
 ### 提交前清理
 
 - 提交代码前必须清理项目根目录下的临时文件

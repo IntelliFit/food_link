@@ -1,172 +1,332 @@
 import { View, Text, Input, ScrollView } from '@tarojs/components'
-import { useState, useRef, useEffect } from 'react'
-import Taro from '@tarojs/taro'
-import { Button } from '@taroify/core'
-import { IconSend, IconExercise } from '../../components/iconfont'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import Taro, { useDidShow } from '@tarojs/taro'
+import { IconExercise } from '../../components/iconfont'
+import {
+  getAccessToken,
+  createExerciseLog,
+  getExerciseLogs,
+  deleteExerciseLog,
+  getAnalyzeTask,
+  type ExerciseLogItem,
+  type ExerciseTaskResultPayload
+} from '../../utils/api'
+import { formatDateKey } from '../index/utils/helpers'
+import { HOME_DASHBOARD_REFRESH_EVENT } from '../../utils/home-events'
 import './index.scss'
 
-// 模拟的运动记录类型
+/** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
+const EXERCISE_PENDING_TASKS_KEY = 'exercise_pending_tasks_v1'
+
+const EXERCISE_QUICK_PRESETS: string[] = [
+  '跑步30分钟',
+  '游泳45分钟',
+  '瑜伽1小时',
+  '骑车20分钟',
+  '健身40分钟',
+  '跳绳15分钟',
+  '散步45分钟',
+  'HIIT20分钟'
+]
+
 interface ExerciseRecord {
   id: string
   content: string
   calories: number
-  duration?: number
   createdAt: string
 }
 
-// 模拟解析运动描述
-function parseExerciseDescription(input: string): { type: string; calories: number; duration?: number } | null {
-  const lowerInput = input.toLowerCase()
-  
-  // 简单的运动类型匹配和热量估算
-  const exerciseTypes = [
-    { keywords: ['跑步', '慢跑', '跑'], caloriesPerHour: 600, type: '跑步' },
-    { keywords: ['游泳', '游'], caloriesPerHour: 500, type: '游泳' },
-    { keywords: ['骑行', '骑车', '自行车'], caloriesPerHour: 400, type: '骑行' },
-    { keywords: ['走路', '散步', '走'], caloriesPerHour: 250, type: '走路' },
-    { keywords: ['健身', '力量训练', '举重'], caloriesPerHour: 350, type: '健身' },
-    { keywords: ['瑜伽', '瑜伽'], caloriesPerHour: 200, type: '瑜伽' },
-    { keywords: ['篮球', '打球'], caloriesPerHour: 450, type: '篮球' },
-    { keywords: ['羽毛球', '羽毛球'], caloriesPerHour: 350, type: '羽毛球' },
-    { keywords: ['跳绳', '跳绳'], caloriesPerHour: 700, type: '跳绳' },
-    { keywords: ['爬楼梯', '爬楼'], caloriesPerHour: 500, type: '爬楼梯' },
-    { keywords: ['跳舞', '舞蹈'], caloriesPerHour: 400, type: '跳舞' },
-    { keywords: ['椭圆机', '椭圆仪'], caloriesPerHour: 450, type: '椭圆机' },
-    { keywords: ['划船机', '划船'], caloriesPerHour: 500, type: '划船机' },
-    { keywords: ['HIIT', '高强度'], caloriesPerHour: 800, type: 'HIIT' }
-  ]
-  
-  // 匹配运动类型
-  let matchedType = exerciseTypes.find(type => 
-    type.keywords.some(keyword => lowerInput.includes(keyword))
-  )
-  
-  if (!matchedType) {
-    matchedType = { caloriesPerHour: 300, type: '运动' }
-  }
-  
-  // 提取时长（分钟）
-  let duration: number | undefined
-  const durationMatch = input.match(/(\d+)\s*(分钟|分|min|小时|h)/i)
-  if (durationMatch) {
-    const value = parseInt(durationMatch[1])
-    const unit = durationMatch[2]
-    if (unit.includes('小时') || unit.includes('h')) {
-      duration = value * 60
-    } else {
-      duration = value
-    }
-  }
-  
-  // 计算热量
-  const calories = duration 
-    ? Math.round((matchedType.caloriesPerHour / 60) * duration)
-    : Math.round(matchedType.caloriesPerHour * 0.5) // 默认30分钟
-  
+/** 本地「分析中 / 失败」卡片（不跳转页面） */
+interface PendingExerciseCard {
+  clientId: string
+  taskId: string
+  content: string
+  status: 'pending' | 'failed'
+  errorMessage?: string
+  createdAt: string
+}
+
+function mapLogToRecord(log: ExerciseLogItem): ExerciseRecord {
   return {
-    type: matchedType.type,
-    calories,
-    duration
+    id: log.id,
+    content: log.exercise_desc,
+    calories: log.calories_burned,
+    createdAt: log.recorded_at
   }
 }
+
+function applyExerciseTaskResult(task: { result?: unknown }): ExerciseTaskResultPayload | null {
+  const raw = task.result as ExerciseTaskResultPayload | undefined
+  if (raw?.exercise_log) return raw
+  return null
+}
+
+/** API 可能把 error_message 存成对象序列化，统一成可读短句 */
+function normalizeTaskErrorMessage(raw: unknown): string {
+  if (raw == null) return '分析失败'
+  if (typeof raw === 'string') {
+    const t = raw.trim()
+    if (t.startsWith('{') && t.includes('"message"')) {
+      try {
+        const j = JSON.parse(t) as { message?: string }
+        if (typeof j.message === 'string') return j.message
+      } catch {
+        /* ignore */
+      }
+    }
+    return t || '分析失败'
+  }
+  if (typeof raw === 'object' && raw !== null && 'message' in raw) {
+    const m = (raw as { message?: unknown }).message
+    return typeof m === 'string' ? m : JSON.stringify(raw)
+  }
+  return String(raw)
+}
+
+type DisplayRow =
+  | { key: string; kind: 'server'; record: ExerciseRecord }
+  | { key: string; kind: 'pending'; item: PendingExerciseCard }
 
 export default function ExerciseRecordPage() {
   const [inputValue, setInputValue] = useState('')
   const [records, setRecords] = useState<ExerciseRecord[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const scrollRef = useRef<{ scrollTo: (params: { top: number; animated?: boolean }) => void } | null>(null)
+  const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const pollingTaskIdsRef = useRef<Set<string>>(new Set())
 
-  // 加载今日记录
-  useEffect(() => {
-    loadTodayRecords()
+  const loadTodayRecords = useCallback(async (): Promise<void> => {
+    if (!getAccessToken()) {
+      setRecords([])
+      return
+    }
+    try {
+      const today = formatDateKey(new Date())
+      const { logs } = await getExerciseLogs({ date: today })
+      setRecords(logs.map(mapLogToRecord))
+    } catch (e) {
+      console.error('[exercise-record] load logs', e)
+    }
   }, [])
 
-  const loadTodayRecords = () => {
+  const persistPendingOnly = useCallback((items: PendingExerciseCard[]) => {
     try {
-      const stored = Taro.getStorageSync('exercise_records_today')
-      if (stored) {
-        setRecords(stored as ExerciseRecord[])
+      const toSave = items.filter((p) => p.status === 'pending').map((p) => ({
+        clientId: p.clientId,
+        taskId: p.taskId,
+        content: p.content,
+        createdAt: p.createdAt
+      }))
+      Taro.setStorageSync(EXERCISE_PENDING_TASKS_KEY, JSON.stringify(toSave))
+    } catch (e) {
+      console.error('[exercise-record] persist pending', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    persistPendingOnly(pendingItems)
+  }, [pendingItems, persistPendingOnly])
+
+  const loadPendingFromStorage = useCallback((): void => {
+    try {
+      const raw = Taro.getStorageSync(EXERCISE_PENDING_TASKS_KEY)
+      if (!raw || typeof raw !== 'string') return
+      const parsed = JSON.parse(raw) as Array<{
+        clientId: string
+        taskId: string
+        content: string
+        createdAt: string
+      }>
+      if (!Array.isArray(parsed)) return
+      setPendingItems(
+        parsed.map((row) => ({
+          clientId: row.clientId,
+          taskId: row.taskId,
+          content: row.content,
+          status: 'pending' as const,
+          createdAt: row.createdAt
+        }))
+      )
+    } catch (e) {
+      console.error('[exercise-record] load pending storage', e)
+    }
+  }, [])
+
+  const pollForTask = useCallback(
+    async (taskId: string, clientId: string): Promise<void> => {
+      if (pollingTaskIdsRef.current.has(taskId)) return
+      pollingTaskIdsRef.current.add(taskId)
+      const maxAttempts = 120
+      try {
+        for (let i = 0; i < maxAttempts; i++) {
+          if (i > 0) {
+            await new Promise<void>((resolve) => setTimeout(() => resolve(), 2000))
+          }
+          const task = await getAnalyzeTask(taskId)
+          const payload = applyExerciseTaskResult(task)
+          if (task.status === 'done' && payload) {
+            setPendingItems((prev) => prev.filter((p) => p.clientId !== clientId))
+            setInputValue('')
+            await loadTodayRecords()
+            Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+            Taro.showToast({
+              title: `已记录 ${payload.estimated_calories} kcal`,
+              icon: 'success'
+            })
+            return
+          }
+          if (task.status === 'failed' || task.status === 'violated') {
+            const msg = normalizeTaskErrorMessage(task.error_message)
+            setPendingItems((prev) =>
+              prev.map((p) =>
+                p.clientId === clientId ? { ...p, status: 'failed' as const, errorMessage: msg } : p
+              )
+            )
+            return
+          }
+        }
+        setPendingItems((prev) =>
+          prev.map((p) =>
+            p.clientId === clientId
+              ? { ...p, status: 'failed' as const, errorMessage: '分析超时，请稍后下拉刷新' }
+              : p
+          )
+        )
+      } catch (e) {
+        console.error('[exercise-record] poll', e)
+        setPendingItems((prev) =>
+          prev.map((p) =>
+            p.clientId === clientId
+              ? {
+                  ...p,
+                  status: 'failed' as const,
+                  errorMessage: e instanceof Error ? e.message : '网络异常'
+                }
+              : p
+          )
+        )
+      } finally {
+        pollingTaskIdsRef.current.delete(taskId)
       }
-    } catch {
-      // ignore
-    }
-  }
+    },
+    [loadTodayRecords]
+  )
 
-  const saveRecords = (newRecords: ExerciseRecord[]) => {
+  useEffect(() => {
+    void loadTodayRecords()
+    loadPendingFromStorage()
+  }, [loadPendingFromStorage])
+
+  useEffect(() => {
+    pendingItems.filter((p) => p.status === 'pending').forEach((p) => {
+      void pollForTask(p.taskId, p.clientId)
+    })
+  }, [pendingItems, pollForTask])
+
+  useDidShow(() => {
+    void loadTodayRecords()
     try {
-      Taro.setStorageSync('exercise_records_today', newRecords)
+      const raw = Taro.getStorageSync(EXERCISE_PENDING_TASKS_KEY)
+      if (!raw || typeof raw !== 'string') return
+      const parsed = JSON.parse(raw) as Array<{ taskId: string; clientId: string }>
+      if (!Array.isArray(parsed)) return
+      parsed.forEach((row) => void pollForTask(row.taskId, row.clientId))
     } catch {
-      // ignore
+      /* ignore */
     }
-  }
+  })
 
-  const handleSend = async () => {
+  const displayRows: DisplayRow[] = useMemo(() => {
+    const rows: DisplayRow[] = []
+    records.forEach((r) => rows.push({ key: `s-${r.id}`, kind: 'server', record: r }))
+    pendingItems.forEach((p) => rows.push({ key: `p-${p.clientId}`, kind: 'pending', item: p }))
+    return rows.sort(
+      (a, b) =>
+        new Date(a.kind === 'server' ? a.record.createdAt : a.item.createdAt).getTime() -
+        new Date(b.kind === 'server' ? b.record.createdAt : b.item.createdAt).getTime()
+    )
+  }, [records, pendingItems])
+
+  const totalCalories = records.reduce((sum, r) => sum + r.calories, 0)
+  const recordCount = records.length + pendingItems.filter((p) => p.status === 'pending').length
+
+  const runSubmitFlow = async (): Promise<void> => {
     const content = inputValue.trim()
     if (!content) {
       Taro.showToast({ title: '请输入运动描述', icon: 'none' })
       return
     }
-
-    setIsLoading(true)
-    
-    // 模拟解析延迟
-    await new Promise(resolve => setTimeout(resolve, 800))
-    
-    const parsed = parseExerciseDescription(content)
-    
-    if (parsed) {
-      const newRecord: ExerciseRecord = {
-        id: Date.now().toString(),
-        content,
-        calories: parsed.calories,
-        duration: parsed.duration,
-        createdAt: new Date().toISOString()
-      }
-      
-      const updatedRecords = [...records, newRecord]
-      setRecords(updatedRecords)
-      saveRecords(updatedRecords)
-      setInputValue('')
-      
-      Taro.showToast({ 
-        title: `已记录: ${parsed.type} ${parsed.calories}kcal`, 
-        icon: 'success' 
-      })
-    } else {
-      Taro.showToast({ title: '无法识别运动类型', icon: 'none' })
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
     }
-    
-    setIsLoading(false)
+    if (submitting) return
+
+    setSubmitting(true)
+    Taro.showLoading({ title: '提交中...', mask: true })
+    try {
+      const { task_id: taskId } = await createExerciseLog({ exercise_desc: content })
+      const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+      const createdAt = new Date().toISOString()
+      setInputValue('')
+      setPendingItems((prev) => [
+        ...prev,
+        { clientId, taskId, content, status: 'pending', createdAt }
+      ])
+      void pollForTask(taskId, clientId)
+    } catch (e) {
+      console.error('[exercise-record] send', e)
+      const msg = e instanceof Error ? e.message : '提交失败'
+      Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
+    } finally {
+      Taro.hideLoading()
+      setSubmitting(false)
+    }
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string): void => {
     Taro.showModal({
       title: '确认删除',
       content: '确定要删除这条运动记录吗？',
-      success: (res) => {
-        if (res.confirm) {
-          const updatedRecords = records.filter(r => r.id !== id)
-          setRecords(updatedRecords)
-          saveRecords(updatedRecords)
+      success: async (res) => {
+        if (!res.confirm) return
+        if (!getAccessToken()) {
+          Taro.navigateTo({ url: '/pages/login/index' })
+          return
+        }
+        Taro.showLoading({ title: '删除中...', mask: true })
+        try {
+          await deleteExerciseLog(id)
+          setRecords((prev) => prev.filter((r) => r.id !== id))
+          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+          Taro.showToast({ title: '已删除', icon: 'success' })
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : '删除失败'
+          Taro.showToast({ title: msg, icon: 'none' })
+        } finally {
+          Taro.hideLoading()
         }
       }
     })
   }
 
-  const formatTime = (isoString: string) => {
+  const dismissFailedCard = (clientId: string): void => {
+    setPendingItems((prev) => prev.filter((p) => p.clientId !== clientId))
+  }
+
+  const formatTime = (isoString: string): string => {
     const date = new Date(isoString)
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
-  const totalCalories = records.reduce((sum, r) => sum + r.calories, 0)
+  const listEmpty = displayRows.length === 0
 
   return (
     <View className='exercise-record-page'>
-      {/* 头部统计 */}
       <View className='header-stats'>
         <View className='stats-card'>
-          <View className='stats-icon-wrap'>
-            <IconExercise size={40} color='#f97316' />
+          <View className='stats-icon-wrap stats-icon-wrap--tab-stats'>
+            {/* 与 custom-tab-bar「分析」相同的 CSS 柱状图（选中绿 #07c160） */}
+            <View className='exercise-header-stats-icon' />
           </View>
           <View className='stats-info'>
             <Text className='stats-label'>今日消耗</Text>
@@ -175,75 +335,98 @@ export default function ExerciseRecordPage() {
               <Text className='stats-unit'>kcal</Text>
             </View>
           </View>
-          <Text className='stats-count'>{records.length} 次记录</Text>
+          <Text className='stats-count'>{recordCount} 次记录</Text>
         </View>
       </View>
 
-      {/* 聊天记录区域 */}
       <ScrollView
-        className='chat-container'
+        className={`chat-container ${listEmpty ? 'chat-container--empty' : ''}`}
         scrollY
         scrollWithAnimation
         scrollTop={99999}
         enhanced
         showScrollbar={false}
       >
-        {records.length === 0 ? (
+        {listEmpty ? (
           <View className='empty-state'>
             <View className='empty-icon-wrap'>
               <IconExercise size={80} color='#d1d5db' />
             </View>
             <Text className='empty-title'>还没有运动记录</Text>
             <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如："跑步30分钟" 或 "游泳1小时"</Text>
-            
-            {/* 快捷示例 */}
-            <View className='quick-examples'>
-              <Text className='quick-examples-title'>试试这样说：</Text>
-              <View className='example-tags'>
-                {['跑步30分钟', '游泳45分钟', '瑜伽1小时', '骑车20分钟'].map((example) => (
-                  <View 
-                    key={example} 
-                    className='example-tag'
-                    onClick={() => setInputValue(example)}
-                  >
-                    <Text className='example-tag-text'>{example}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
           </View>
         ) : (
           <View className='chat-list'>
-            {records.map((record) => (
-              <View key={record.id} className='chat-item user'>
-                <View className='chat-bubble'>
-                  <Text className='chat-content'>{record.content}</Text>
-                </View>
-                <View className='chat-meta'>
-                  <View className='chat-result'>
-                    <IconExercise size={14} color='#f97316' />
-                    <Text className='chat-result-text'>
-                      消耗 {record.calories} kcal
-                      {record.duration ? ` · ${record.duration}分钟` : ''}
-                    </Text>
+            {displayRows.map((row) =>
+              row.kind === 'server' ? (
+                <View key={row.key} className='chat-item user'>
+                  <View className='chat-bubble'>
+                    <Text className='chat-content'>{row.record.content}</Text>
                   </View>
-                  <Text className='chat-time'>{formatTime(record.createdAt)}</Text>
+                  <View className='chat-meta'>
+                    <View className='chat-result'>
+                      <IconExercise size={14} color='#f97316' />
+                      <Text className='chat-result-text'>消耗 {row.record.calories} kcal</Text>
+                    </View>
+                    <Text className='chat-time'>{formatTime(row.record.createdAt)}</Text>
+                  </View>
+                  <View className='chat-delete' onClick={() => handleDelete(row.record.id)}>
+                    <Text className='chat-delete-text'>删除</Text>
+                  </View>
                 </View>
-                <View 
-                  className='chat-delete'
-                  onClick={() => handleDelete(record.id)}
-                >
-                  <Text className='chat-delete-text'>删除</Text>
+              ) : (
+                <View key={row.key} className='chat-item user'>
+                  <View className='chat-bubble'>
+                    <Text className='chat-content'>{row.item.content}</Text>
+                  </View>
+                  <View className='chat-meta'>
+                    {row.item.status === 'pending' ? (
+                      <View className='chat-result chat-result--pending'>
+                        <View className='chat-pending-spinner' />
+                        <Text className='chat-result-text'>分析中，估算消耗…</Text>
+                      </View>
+                    ) : (
+                      <View className='chat-result chat-result--error'>
+                        <Text className='chat-result-text chat-result-text--error'>
+                          {row.item.errorMessage || '分析失败'}
+                        </Text>
+                        <Text className='chat-dismiss-fail' onClick={() => dismissFailedCard(row.item.clientId)}>
+                          关闭
+                        </Text>
+                      </View>
+                    )}
+                    <Text className='chat-time'>{formatTime(row.item.createdAt)}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              )
+            )}
           </View>
         )}
         <View style={{ height: '20rpx' }} />
       </ScrollView>
 
-      {/* 输入区域 */}
       <View className='input-section'>
+        <View className='quick-examples-strip'>
+          <Text className='quick-examples-title'>试试这样说：</Text>
+          <ScrollView
+            className='quick-chips-scroll'
+            scrollX
+            enhanced
+            showScrollbar={false}
+          >
+            <View className='quick-chips-inner'>
+              {EXERCISE_QUICK_PRESETS.map((example) => (
+                <View
+                  key={example}
+                  className='example-tag'
+                  onClick={() => setInputValue(example)}
+                >
+                  <Text className='example-tag-text'>{example}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
         <View className='input-wrap'>
           <Input
             className='chat-input'
@@ -252,21 +435,20 @@ export default function ExerciseRecordPage() {
             placeholder='今天做了什么运动？'
             placeholderClass='input-placeholder'
             confirmType='send'
-            onConfirm={handleSend}
-            disabled={isLoading}
+            onConfirm={runSubmitFlow}
+            disabled={submitting}
           />
-          <View 
-            className={`send-btn ${!inputValue.trim() || isLoading ? 'disabled' : ''}`}
-            onClick={handleSend}
+          <View
+            className={`exercise-send-trigger ${!inputValue.trim() || submitting ? 'is-disabled' : ''}`}
+            onClick={runSubmitFlow}
           >
-            {isLoading ? (
-              <View className='send-spinner' />
+            {submitting ? (
+              <View className='exercise-send-spinner' />
             ) : (
-              <IconSend size={28} color='#fff' />
+              <Text className='iconfont icon-send' />
             )}
           </View>
         </View>
-        <Text className='input-hint'>输入运动描述，AI自动计算热量消耗</Text>
       </View>
     </View>
   )
