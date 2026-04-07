@@ -1061,16 +1061,15 @@ function IndexPage() {
 
               return (
                 <View key={key} className='macro-card-horizontal'>
-                  {/* 左侧：名称 + 数值 */}
+                  {/* 左侧：名称 + 目标总量 */}
                   <View className='macro-left-content'>
                     <View className='macro-title-row'>
                       <Text className='macro-label-horizontal' style={{ color }}>{label}</Text>
                     </View>
                     <View className='macro-value-row'>
-                      <Text className='macro-current-value' style={{ color }}>
-                        {formatDisplayNumber(animatedValue)}
+                      <Text className='macro-target-value' style={{ color }}>
+                        {formatDisplayNumber(targetValue)}g
                       </Text>
-                      <Text className='macro-target-hint'>/ {formatDisplayNumber(targetValue)}g</Text>
                     </View>
                   </View>
 
@@ -1081,7 +1080,7 @@ function IndexPage() {
                         className='macro-ring-bg-horizontal'
                         style={{
                           backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='#f0f0f0' stroke-width='12'/><circle cx='50' cy='50' r='40' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 40}' stroke-dashoffset='${2 * Math.PI * 40 * (1 - animatedProgress / 100)}'/></svg>`
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><circle cx='60' cy='60' r='48' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='60' cy='60' r='48' fill='none' stroke='${color}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 48}' stroke-dashoffset='${2 * Math.PI * 48 * (1 - animatedProgress / 100)}'/></svg>`
                           )}")`,
                           backgroundSize: '100% 100%'
                         }}
@@ -1094,9 +1093,12 @@ function IndexPage() {
                             <View className='loading-dot' />
                           </View>
                         ) : (
-                          <Text className='macro-percentage' style={{ color }}>
-                            {Math.round(animatedProgress)}%
-                          </Text>
+                          <View className='macro-gauge-text-wrap'>
+                            <Text className='macro-intake-label' style={{ color }}>已摄入</Text>
+                            <Text className='macro-intake-value' style={{ color }}>
+                              {formatDisplayNumber(animatedValue)}g
+                            </Text>
+                          </View>
                         )}
                       </View>
                     </View>
