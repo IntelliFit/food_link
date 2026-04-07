@@ -6,6 +6,7 @@
 
 ## 2026-04-07
 
+- 🔧 chore: 移除 `debug/`、`artifacts/`、`docs/verification/` 下验证用 PNG，并加入 `.gitignore` 防止再提交
 - 🎨 style: 「记录喝水」弹窗 `.water-modal-content` 底部增加约 30px padding `src/pages/index/index.scss`
 - 🎨 style: 首页模块白底 alpha 字面量 `50%`（`$module-card-bg-alpha`）；弹窗实色白；运动千卡 `useAnimatedNumber` `src/pages/index/index.scss` `src/pages/index/index-wave.scss` `src/pages/index/index.tsx`
 - 🔧 chore: `npm run dev:restart` + `scripts/restart-dev.sh` 一键重启前后端；`AGENTS.md`/`.cursorrules` 约定有影响运行的改动后自动重启 `package.json` `scripts/restart-dev.sh` `AGENTS.md` `.cursorrules`

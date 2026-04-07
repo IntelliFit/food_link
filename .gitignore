@@ -86,6 +86,11 @@ coverage/
 .cache/
 .env.development
 
+# 本地验证截图目录（勿提交）
+/debug/
+/artifacts/
+/docs/verification/
+
 # 调试/测试截图
 check_*.png
 gauge_*.png
