@@ -6,6 +6,7 @@
 
 ## 2026-04-07
 
+- 🎨 style: 从合并前提交恢复下午已调好的界面：首页/统计/分析中/记录相关样式与布局，iconfont 与 `index` 组件；`index.tsx` 保留 `HomeFoodExpiry*` 与身体指标缓存迁移，快到期入口改为 `pages/expiry`；`app.config.ts`/`app.scss` 保持与远端合并后的白边修复与路由 `src/pages/index/` `src/pages/stats/` `src/pages/analyze-loading/` `src/pages/record*` `src/assets/iconfont/`
 - 🐛 fix: 进一步消除多页左侧 1px 白线：`page` 使用对称负边距与 `calc(100% + 2px)` 扩展宽度盖住亚像素缝；`page > view` 全宽约束 `src/app.scss`
 - 🎨 style: 首页「食物保质期」去掉顶部提醒条；外层取消独立白底外框；每条记录白底圆角阴影与「今日餐食」条目一致 `src/pages/index/index.tsx` `src/pages/index/index.scss`
 - ✨ feat: 首页接入「食物保质期」区块：展示 dashboard 返回的待吃完条目与摘要、空态引导 `src/pages/index/index.tsx` `src/pages/index/index.scss`

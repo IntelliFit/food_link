@@ -302,13 +302,6 @@ function formatExpiryMeta(item: HomeFoodExpiryItem): string {
     .join(' · ')
 }
 
-function getExpiryTagClass(urgency: FoodExpiryItem['urgency_level']): string {
-  if (urgency === 'overdue') return 'overdue'
-  if (urgency === 'today') return 'today'
-  if (urgency === 'soon') return 'soon'
-  return 'normal'
-}
-
 // 餐次对应的 iconfont 图标及颜色
 const MEAL_ICON_CONFIG = {
   breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐' },
@@ -351,7 +344,7 @@ function IndexPage() {
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   
-  const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()))
+  const [selectedDate, setSelectedDate] = useState(normalizeTo2025(formatDateKey(new Date())))
 
   // 体重/喝水状态
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetricsStorage>(getStoredBodyMetrics())
@@ -407,14 +400,17 @@ function IndexPage() {
         const date = new Date(today)
         date.setDate(today.getDate() + offset)
         const dateKey = formatDateKey(date)
-        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
+        // 将日期转换为2025年格式用于前端显示
+        const displayDateKey = normalizeTo2025(dateKey)
+        // 匹配时需要与后端返回的格式匹配
+        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === displayDateKey)
         const hasRecord = dayData && dayData.calories > 0
         const calories = dayData?.calories || 0
         const target = stats.tdee || 2000
         const intakeRatio = hasRecord ? calories / target : 0
         
         nextWeekHeatmapCells.push({
-          date: dateKey,
+          date: displayDateKey,
           dayName: SHORT_DAY_NAMES[date.getDay()],
           dayNum: String(date.getDate()),
           calories,
@@ -462,7 +458,7 @@ function IndexPage() {
   const skipNextRefreshRef = useRef(false)
   
   Taro.useDidShow(() => {
-    const today = formatDateKey(new Date())
+    const today = normalizeTo2025(formatDateKey(new Date()))
     const currentSelected = selectedDateRef.current
     console.log('[DEBUG] useDidShow, selectedDate:', currentSelected, 'today:', today, 'skip:', skipNextRefreshRef.current)
 
@@ -728,7 +724,7 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    const today = formatDateKey(new Date())
+    const today = normalizeTo2025(formatDateKey(new Date()))
     Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(today)}` })
   }
 
@@ -748,14 +744,6 @@ function IndexPage() {
     Taro.navigateTo({ url: '/pages/expiry/index' })
   }
 
-  const openFoodExpiryEdit = (id: string) => {
-    if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
-      return
-    }
-    Taro.navigateTo({ url: `/pages/food-expiry-edit/index?id=${encodeURIComponent(id)}` })
-  }
-
   const openExerciseRecord = () => {
     if (!getAccessToken()) {
       Taro.navigateTo({ url: '/pages/login/index' })
@@ -767,6 +755,7 @@ function IndexPage() {
   const handleDateSelect = (date: string) => {
     console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
+    // date 已经是2025格式，直接使用
     setSelectedDate(date)
     // 立即进入日期切换状态，显示加载中并归零数字
     setIsSwitchingDate(true)
@@ -957,8 +946,7 @@ function IndexPage() {
       ? Number((calorieInputValue - caloriesFromMacroInputs).toFixed(1))
       : null
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
-  /** 登录用户展示食物保质期区块（无数据时显示引导） */
-  const showFoodExpiryBlock = Boolean(getAccessToken())
+  const shouldShowExpirySection = expirySummary.pendingCount > 0
 
   const macroAnimations = useMemo(() => {
     return MACRO_CONFIGS.map(({ key }) => {
@@ -1101,9 +1089,8 @@ function IndexPage() {
                     </View>
                     <View className='macro-value-row'>
                       <Text className='macro-target-value'>
-                        {formatDisplayNumber(targetValue)}
+                        {formatDisplayNumber(targetValue)}g
                       </Text>
-                      <Text className='macro-target-unit'>g</Text>
                     </View>
                   </View>
 
@@ -1128,7 +1115,7 @@ function IndexPage() {
                           </View>
                         ) : (
                           <View className='macro-gauge-text-wrap'>
-                            <Text className='macro-intake-value' style={{ color }}>
+                            <Text className='macro-intake-value'>
                               {formatDisplayNumber(animatedValue)}
                             </Text>
                           </View>
@@ -1150,6 +1137,7 @@ function IndexPage() {
               <View className='body-status-title-wrap'>
                 <Text className='body-status-title'>体重</Text>
               </View>
+              <IconChevronRight size={16} color='#9ca3af' />
             </View>
             <View className='body-status-content'>
               {weightSummary.latestWeight ? (
@@ -1179,6 +1167,7 @@ function IndexPage() {
               <View className='body-status-title-wrap'>
                 <Text className='body-status-title'>喝水</Text>
               </View>
+              <IconChevronRight size={16} color='#9ca3af' />
             </View>
             <View className='body-status-content'>
               <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
@@ -1203,6 +1192,7 @@ function IndexPage() {
               <View className='body-status-title-wrap'>
                 <Text className='body-status-title'>运动</Text>
               </View>
+              <IconChevronRight size={16} color='#9ca3af' />
             </View>
             <View className='body-status-content'>
               <Text className='body-status-value'>--</Text>
@@ -1214,58 +1204,47 @@ function IndexPage() {
           </View>
         </View>
 
-        {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
-        {showFoodExpiryBlock && (
+        {/* 快到期食物 */}
+        {shouldShowExpirySection && (
           <View className='expiry-section'>
             <View className='section-header'>
-              <Text className='expiry-title'>食物保质期</Text>
+              <Text className='expiry-title'>快到期食物</Text>
               <View className='view-all-btn' onClick={openFoodExpiryList}>
                 <Text className='view-all-text'>查看全部</Text>
+                <IconChevronRight size={16} color='#00bc7d' />
               </View>
             </View>
 
             <View className='expiry-card'>
               {loading ? (
                 <View className='expiry-loading'>
-                  <View className='loading-spinner-md' />
-                </View>
-              ) : expirySummary.pendingCount === 0 ? (
-                <View className='expiry-empty' onClick={openFoodExpiryList}>
-                  <Text className='expiry-empty-title'>暂无待吃完记录</Text>
-                  <Text className='expiry-empty-desc'>
-                    添加家中食物与预计吃完时间，我们会在首页展示最紧急的几项并提醒即将过期。
-                  </Text>
+                  <Text className='loading-text'>加载中...</Text>
                 </View>
               ) : (
                 <>
                   <View className='expiry-summary-top'>
                     <Text className='expiry-summary-text'>
-                      待吃完 {expirySummary.pendingCount} 样
-                      {expirySummary.soonCount > 0 ? ` · ${expirySummary.soonCount} 样需优先关注` : ''}
+                      待处理 {expirySummary.pendingCount} 项
                     </Text>
-                    {expirySummary.overdueCount > 0 ? (
-                      <Text className='expiry-summary-badge overdue'>已过期 {expirySummary.overdueCount}</Text>
-                    ) : expirySummary.soonCount > 0 ? (
-                      <Text className='expiry-summary-badge soon'>即将到期 {expirySummary.soonCount}</Text>
-                    ) : null}
+                    {expirySummary.overdueCount > 0 && (
+                      <Text className='expiry-summary-badge overdue'>
+                        {expirySummary.overdueCount} 项已过期
+                      </Text>
+                    )}
+                    {expirySummary.overdueCount === 0 && expirySummary.soonCount > 0 && (
+                      <Text className='expiry-summary-badge soon'>
+                        {expirySummary.soonCount} 项临近截止
+                      </Text>
+                    )}
                   </View>
-
                   <View className='expiry-list'>
                     {expirySummary.items.map((item) => (
-                      <View
-                        key={item.id}
-                        className='expiry-item'
-                        onClick={() => openFoodExpiryEdit(item.id)}
-                      >
+                      <View key={item.id} className='expiry-item' onClick={openFoodExpiryList}>
                         <View className='expiry-item-main'>
                           <Text className='expiry-item-name'>{item.food_name}</Text>
-                          <Text className={`expiry-item-tag ${getExpiryTagClass(item.urgency_level)}`}>
-                            {getExpiryUrgencyText(item)}
-                          </Text>
+                          <Text className={`expiry-item-tag ${item.urgency_level}`}>{getExpiryUrgencyText(item)}</Text>
                         </View>
-                        <Text className='expiry-item-meta'>
-                          {formatExpiryMeta(item) || '点击编辑'}
-                        </Text>
+                        <Text className='expiry-item-meta'>{formatExpiryMeta(item)}</Text>
                       </View>
                     ))}
                   </View>
@@ -1281,6 +1260,7 @@ function IndexPage() {
             <Text className='meals-title'>今日餐食</Text>
             <View className='view-all-btn' onClick={handleViewAllMeals}>
               <Text className='view-all-text'>查看全部</Text>
+              <IconChevronRight size={16} color='#00bc7d' />
             </View>
           </View>
           

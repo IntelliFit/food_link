@@ -678,9 +678,9 @@
 
 .meal-gauge-left {
   display: flex;
-  align-items: center;
-  gap: 16rpx;
-  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8rpx;
 }
 
 .meal-gauge-icon-wrap {
@@ -690,13 +690,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-
-.meal-gauge-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
 }
 
 .meal-gauge-label {
@@ -705,9 +698,9 @@
   font-weight: 600;
 }
 
-.meal-gauge-cal {
-  font-size: 22rpx;
-  font-weight: 500;
+.meal-gauge-percent {
+  font-size: 28rpx;
+  font-weight: 700;
 }
 
 .meal-gauge-right {
@@ -716,8 +709,31 @@
   justify-content: center;
 }
 
-.meal-gauge-percent {
-  font-size: 32rpx;
+.meal-gauge-circle {
+  position: relative;
+  width: 90rpx;
+  height: 90rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.meal-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-cal {
+  font-size: 22rpx;
   font-weight: 700;
 }
 

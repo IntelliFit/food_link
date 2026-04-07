@@ -388,11 +388,6 @@ function AnalyzePage() {
         execution_mode: executionMode
       })
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
-      // 分析页曾清空 storage 中的本地路径，跳转 loading 前写回，便于展示「刚拍的图」
-      if (imagePaths.length > 0) {
-        Taro.setStorageSync('analyzeImagePath', imagePaths[0])
-        Taro.setStorageSync('analyzeImagePaths', imagePaths)
-      }
       Taro.hideLoading()
       Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}&execution_mode=${executionMode}` })
     } catch (error: any) {
@@ -517,10 +512,6 @@ function AnalyzePage() {
     // 保存执行模式到 storage，让分析页读取
     Taro.setStorageSync('analyzeExecutionMode', executionMode)
     Taro.setStorageSync('analyzeTaskType', 'food')
-    if (imagePaths.length > 0) {
-      Taro.setStorageSync('analyzeImagePath', imagePaths[0])
-      Taro.setStorageSync('analyzeImagePaths', imagePaths)
-    }
 
     // 跳转到分析 loading 页面，使用 debug 任务 ID
     // analyze-loading 页面会识别 debug 前缀，进入调试模式

@@ -1,25 +1,17 @@
-@font-face {
+    @font-face {
   font-family: "iconfont"; /* Project id 5122763 */
-  src: url('iconfont.woff2?t=1775552355146') format('woff2'),
-       url('iconfont.woff?t=1775552355146') format('woff'),
-       url('iconfont.ttf?t=1775552355146') format('truetype'),
-       url('iconfont.svg?t=1775552355146#iconfont') format('svg');
+  src: url('//at.alicdn.com/t/c/font_5122763_j67802wwx9r.woff2?t=1771259695259') format('woff2'),
+       url('//at.alicdn.com/t/c/font_5122763_j67802wwx9r.woff?t=1771259695259') format('woff'),
+       url('//at.alicdn.com/t/c/font_5122763_j67802wwx9r.ttf?t=1771259695259') format('truetype'),
+       url('//at.alicdn.com/t/c/font_5122763_j67802wwx9r.svg?t=1771259695259#iconfont') format('svg');
 }
 
 .iconfont {
   font-family: "iconfont" !important;
-  
+  font-size: 16px;
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-.icon-picture:before {
-  content: "\e6de";
-}
-
-.icon-send:before {
-  content: "\e888";
 }
 
 .icon-nannv-nv:before {
@@ -201,4 +193,3 @@
 .icon-xingzhuang-wenzi:before {
   content: "\eb99";
 }
-

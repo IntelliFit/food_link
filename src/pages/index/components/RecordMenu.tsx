@@ -19,6 +19,7 @@ const GRID_FEATURES = [
   {
     id: 'camera',
     label: '拍照识别',
+    subLabel: 'Scan Food',
     color: '#e85d75',
     bgColor: '#fef2f4',
     Icon: IconCamera,
@@ -26,6 +27,7 @@ const GRID_FEATURES = [
   {
     id: 'album',
     label: '相册上传',
+    subLabel: 'Photo Library',
     color: '#10b981',
     bgColor: '#ecfdf5',
     Icon: IconAlbum,
@@ -33,6 +35,7 @@ const GRID_FEATURES = [
   {
     id: 'text',
     label: '文本输入',
+    subLabel: 'Text Input',
     color: '#f59e0b',
     bgColor: '#fffbeb',
     Icon: IconText,
@@ -40,6 +43,7 @@ const GRID_FEATURES = [
   {
     id: 'manual',
     label: '手动输入',
+    subLabel: 'Manual Entry',
     color: '#3b82f6',
     bgColor: '#eff6ff',
     Icon: IconEdit,
@@ -62,8 +66,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
 
     switch (modeId) {
       case 'camera':
-        // record 为 tabBar 页，必须用 switchTab，navigateTo 会失败无反应
-        Taro.switchTab({ url: '/pages/record/index' })
+        Taro.navigateTo({ url: '/pages/record/index?mode=simple' })
         break
       case 'album':
         Taro.chooseImage({
@@ -124,6 +127,9 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                 <View className='record-menu-grid-text-wrap'>
                   <Text className='record-menu-grid-label' style={{ color: feature.color }}>
                     {feature.label}
+                  </Text>
+                  <Text className='record-menu-grid-sublabel'>
+                    {feature.subLabel}
                   </Text>
                 </View>
               </View>
