@@ -917,7 +917,8 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    Taro.navigateTo({ url: '/pages/stats/index' })
+    // stats 为 tabBar「分析」页，必须用 switchTab，navigateTo 无法打开 tab 页
+    Taro.switchTab({ url: '/pages/stats/index' })
   }
 
   const openFoodExpiryList = () => {

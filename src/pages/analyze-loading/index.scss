@@ -142,6 +142,7 @@
 // 与摄影页 `record/index.scss` 中 `.scanner-frame` 同尺寸、同四角圆角与扫描线
 .scanner-frame-v3 {
   width: 640rpx;
+  border-radius: 80rpx;
   height: 640rpx;
   position: relative;
   overflow: hidden;

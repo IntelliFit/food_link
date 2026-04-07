@@ -6,6 +6,8 @@
 
 ## 2026-04-08
 
+- 🔧 chore: 发布微信小程序 **2.0.11**；`package.json` 版本号；`npm run build:weapp:preview` 后 `cli upload` `package.json`
+- 🐛 fix: 首页「查看饮食统计」改为 `switchTab` 进入 tabBar「分析」页（`/pages/stats/index`），修复原先 `navigateTo` 无法打开 tab 页 `src/pages/index/index.tsx`
 - 🐛 fix: 文字分析 loading 不再沿用上次拍照图：清 storage、`food_text` 用与结果页一致的无图占位视觉；纠错重分析走文字链时同步清图 `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss` `src/pages/record-text/index.tsx` `src/pages/result/index.tsx`
 - ✨ feat: 主热量「粗进度条」与三大营养素圆环、圆心克数接入 `useAnimatedProgress`/`useAnimatedNumber`（与喝水条同源缓动）`src/pages/index/index.tsx`
 - 🐛 fix: 仪表盘换日缓动：`selectedDate|busy|idle` 作 `resetDep`；`useLayoutEffect` 内 `resetDep` 变化时先同步归零再 rAF，并清 `dist` 后 `build:weapp:preview` + CLI 重启开发者工具 `src/pages/index/hooks/useAnimatedNumber.ts` `useAnimatedProgress.ts` `src/pages/index/index.tsx`
