@@ -1,58 +1,36 @@
 # CURRENT_TASK
 
-- Task: 运动记录功能 UI 实现
-- Status: done（代码已实现并编译通过）
+- Task: 保质期订阅提醒功能落地
+- Status: in_progress（主链路代码已实现，旧 `user_food_expiry_items` 链路已移除，`dev:weapp` 已编译通过，待数据库建表与真机/开发者工具联调）
 - Scope:
-  ## 功能描述
-  在首页添加"记运动"入口，用户可以通过聊天框形式输入运动描述，前端自动解析运动类型并估算热量消耗。
+  ## 本次实现
+  - `pages/expiry/*` 绑定 `/api/expiry/*` 新链路，并移除旧 `/api/food-expiry/*`
+  - 删除旧页面 `pages/food-expiry/*` 与对应前端 API 封装
+  - 首页“快到期食物”摘要与跳转入口已切到新链路 `pages/expiry/* + food_expiry_items`
+  - 新增小程序订阅提醒登记接口 `POST /api/expiry/items/{id}/subscribe`
+  - 新增保质期通知任务表 `food_expiry_notification_jobs`
+  - 新增独立保质期通知 Worker，按队列轮询并发送小程序订阅消息
+  - 新增后自动弹出“是否订阅到期提醒”弹窗，用户同意后登记当天提醒任务
+  - 修复 `src/utils/api.ts` 构建常量读取方式，避免 `ReferenceError` 且恢复开发环境 API 地址注入
+  - `npm run dev:weapp` 脚本已追加 `--no-check`，绕过当前机器上的 Taro doctor Rust panic
 
-  ## 实现内容
-  
-  ### 1. 首页运动卡片入口
-  - 在体重/喝水卡片区域新增运动卡片（3列网格布局）
-  - 点击跳转至运动记录页面
-  - 显示今日消耗热量统计（当前显示 "--" 占位）
-  
-  ### 2. 运动记录页面
-  - 页面路径: `pages/exercise-record/index`
-  - 聊天框UI设计，类似聊天界面
-  - 支持输入自然语言描述（如"跑步30分钟"）
-  - 前端自动解析运动类型并计算热量消耗
-  - 显示历史记录列表
-  - 支持快捷示例点击填充
-  
-  ### 3. 运动类型与热量计算
-  支持解析以下运动类型：
-  - 跑步: 600 kcal/小时
-  - 游泳: 500 kcal/小时
-  - 骑行: 400 kcal/小时
-  - 走路: 250 kcal/小时
-  - 健身: 350 kcal/小时
-  - 瑜伽: 200 kcal/小时
-  - 篮球: 450 kcal/小时
-  - 羽毛球: 350 kcal/小时
-  - 跳绳: 700 kcal/小时
-  - 爬楼梯: 500 kcal/小时
-  - 跳舞: 400 kcal/小时
-  - 椭圆机: 450 kcal/小时
-  - 划船机: 500 kcal/小时
-  - HIIT: 800 kcal/小时
-  
-  ## 修改文件
-  - `src/components/iconfont/index.tsx`: 新增 IconExercise、IconSend 图标
-  - `src/pages/index/index.tsx`: 添加运动卡片入口和跳转逻辑
-  - `src/pages/index/index.scss`: 修改 body-status-section 为3列网格布局，添加运动卡片样式
-  - `src/app.config.ts`: 注册 exercise-record 页面
-  - `src/pages/exercise-record/index.tsx`: 新建运动记录页面
-  - `src/pages/exercise-record/index.scss`: 新建运动记录页面样式
-  - `src/pages/exercise-record/index.config.ts`: 新建页面配置
+  ## 当前阻塞
+  - 需要在数据库执行 `backend/database/food_expiry_notification_jobs.sql`
+  - 后端环境需配置 `EXPIRY_SUBSCRIBE_TEMPLATE_ID`
+  - 前端环境需将 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 替换为真正的小程序订阅消息模板 ID（当前 `.env.development` 里仍是旧服务通知模板 ID）
+  - 已确认 `expiry-notify-worker` 会正常抢占并处理 `food_expiry_notification_jobs`，当前“未提醒”不是 worker 未运行，而是微信发送阶段报错：`argument invalid! data.character_string5.value`
+  - 2026-04-07 已修复后端 `quantity_note -> character_string5` 的字符清洗：中文/空值不再直接发给微信，改为发送前统一收敛成 ASCII 安全值，旧队列快照在 worker 重试时也会自动清洗
+  - 若修复后仍报参错，需要继续核对真实模板 ID 与字段定义是否匹配，尤其第 5 个字段是否确实还是 `character_string`
+  - 微信开发者工具端口 `9420` 已监听，但 `mrc` 仍无法完成握手；本轮重启 CLI 自动化所需提权未获批准，暂未拿到截图证据
 
-  ## 待后续实现
-  - 后端API：保存/获取运动记录
-  - 与首页热量统计联动（增加"运动消耗"维度）
-  - 运动数据持久化存储（目前仅本地存储）
+  ## 下一步
+  - 执行新表 SQL 并确认 Supabase 中 `food_expiry_items` / `food_expiry_notification_jobs` 可用
+  - 将前后端 `*_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 一并替换成真实的小程序订阅消息模板 ID，并核对该模板第 5 个字段是否确实是 `character_string`
+  - 用真实模板 ID 重新联调一次新增-订阅-入队-Worker 发送，重点确认修复后 `character_string5` 不再因中文/空值报错
+  - 配置小程序订阅消息模板 ID 后联调新增-订阅-入队-Worker 发送
+  - 如继续验证前端，优先排查开发者工具自动化握手失败，并在开发者工具内确认“自动化”已对当前项目窗口开启
 
 ---
 
-- Previous Task: 波浪水池渲染优化 - 修复动画速度过慢和摄入目标变化时的剧烈波动问题
+- Previous Task: 运动记录功能 UI 实现
 - Previous Status: done

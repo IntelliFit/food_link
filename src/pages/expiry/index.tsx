@@ -3,12 +3,13 @@ import { useCallback, useMemo, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getFoodExpiryDashboard,
-  getFoodExpiryList as getFoodExpiryItems,
-  updateFoodExpiryItem,
+  listManagedFoodExpiryItems,
+  updateManagedFoodExpiryStatus,
   type FoodExpiryDashboard,
   type FoodExpiryItem,
   type FoodExpiryStatus,
 } from '../../utils/api'
+import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 
 import './index.scss'
 
@@ -40,7 +41,7 @@ export default function ExpiryPage() {
     try {
       const [dashboardRes, listRes] = await Promise.all([
         getFoodExpiryDashboard(),
-        getFoodExpiryItems(),
+        listManagedFoodExpiryItems(),
       ])
       setDashboard(dashboardRes)
       setItems(listRes.items || [])
@@ -80,8 +81,9 @@ export default function ExpiryPage() {
 
     Taro.showLoading({ title: '处理中...' })
     try {
-      await updateFoodExpiryItem(item.id, { status } as any)
+      await updateManagedFoodExpiryStatus(item.id, status)
       Taro.hideLoading()
+      Taro.eventCenter.trigger(FOOD_EXPIRY_CHANGED_EVENT)
       Taro.showToast({ title: '更新成功', icon: 'success' })
       loadData()
     } catch (error: any) {

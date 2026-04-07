@@ -1,10 +1,27 @@
 import Taro from '@tarojs/taro'
 
-declare const __API_BASE_URL__: string
+function readInjectedString(
+  getter: () => string,
+  fallback = ''
+): string {
+  try {
+    const value = getter()
+    return typeof value === 'string' ? value : fallback
+  } catch (error) {
+    return fallback
+  }
+}
 
 // 使用构建时注入的 API 基础 URL
 // config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
-export const API_BASE_URL = __API_BASE_URL__ || 'https://healthymax.cn'
+export const API_BASE_URL = readInjectedString(
+  () => __API_BASE_URL__,
+  'https://healthymax.cn'
+)
+export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
+  () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
+  ''
+)
 
 // 调试日志
 console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
@@ -219,7 +236,7 @@ export interface HomeMealItem {
   image_paths?: string[] | null
 }
 
-export interface FoodExpiryItem {
+export interface HomeFoodExpiryItem {
   id: string
   user_id: string
   food_name: string
@@ -238,30 +255,18 @@ export interface FoodExpiryItem {
   urgency_level: 'overdue' | 'today' | 'soon' | 'normal'
 }
 
-export interface FoodExpirySummary {
+export interface HomeFoodExpirySummary {
   pendingCount: number
   soonCount: number
   overdueCount: number
-  items: FoodExpiryItem[]
+  items: HomeFoodExpiryItem[]
 }
-
-export interface CreateFoodExpiryRequest {
-  food_name: string
-  quantity_text?: string
-  storage_location?: string
-  note?: string
-  deadline_precision: 'date' | 'datetime'
-  deadline_date: string
-  deadline_time?: string
-}
-
-export interface UpdateFoodExpiryRequest extends CreateFoodExpiryRequest {}
 
 /** 首页仪表盘接口返回（不含运动） */
 export interface HomeDashboard {
   intakeData: HomeIntakeData
   meals: HomeMealItem[]
-  expirySummary?: FoodExpirySummary
+  expirySummary?: HomeFoodExpirySummary
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -532,6 +537,19 @@ export interface UpsertFoodExpiryItemRequest {
   note?: string
   source_type?: FoodExpirySourceType
   status?: FoodExpiryStatus
+}
+
+export interface FoodExpirySubscribeRequest {
+  subscribe_status: string
+  err_msg?: string
+}
+
+export interface FoodExpirySubscribeResponse {
+  subscribed: boolean
+  schedule_created: boolean
+  status?: string
+  scheduled_at?: string | null
+  message: string
 }
 
 export interface CreateMembershipPaymentResponse {
@@ -1403,74 +1421,6 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   return res.data as HomeDashboard
 }
 
-export async function getFoodExpiryList(status: 'pending' | 'completed' = 'pending'): Promise<{ items: FoodExpiryItem[] }> {
-  const res = await authenticatedRequest(`/api/food-expiry/list?status=${encodeURIComponent(status)}`, {
-    method: 'GET',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '获取食物保质期列表失败')
-  }
-  return res.data as { items: FoodExpiryItem[] }
-}
-
-export async function createFoodExpiryItem(data: CreateFoodExpiryRequest): Promise<{ id: string; message: string; item: FoodExpiryItem }> {
-  const res = await authenticatedRequest('/api/food-expiry', {
-    method: 'POST',
-    data,
-    timeout: 15000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '创建食物保质期失败')
-  }
-  return res.data as { id: string; message: string; item: FoodExpiryItem }
-}
-
-export async function getFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
-    method: 'GET',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '获取食物保质期详情失败')
-  }
-  return res.data as { item: FoodExpiryItem }
-}
-
-export async function updateFoodExpiryItem(id: string, data: UpdateFoodExpiryRequest): Promise<{ message: string; item: FoodExpiryItem }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
-    method: 'PUT',
-    data,
-    timeout: 15000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '更新食物保质期失败')
-  }
-  return res.data as { message: string; item: FoodExpiryItem }
-}
-
-export async function completeFoodExpiryItem(id: string): Promise<{ message: string; item: FoodExpiryItem }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}/complete`, {
-    method: 'POST',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '标记已吃完失败')
-  }
-  return res.data as { message: string; item: FoodExpiryItem }
-}
-
-export async function deleteFoodExpiryItem(id: string): Promise<{ message: string }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
-    method: 'DELETE',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '删除食物保质期失败')
-  }
-  return res.data as { message: string }
-}
-
 /**
  * 获取首页可编辑目标值
  */
@@ -1939,6 +1889,77 @@ export async function getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
     console.error('获取保质期摘要失败:', error)
     throw new Error(error.message || '获取保质期摘要失败')
   }
+}
+
+export async function listManagedFoodExpiryItems(status?: FoodExpiryStatus): Promise<{ items: FoodExpiryItem[] }> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  const response = await authenticatedRequest(`/api/expiry/items${query}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取保质期列表失败')
+  }
+  return response.data as { items: FoodExpiryItem[] }
+}
+
+export async function createManagedFoodExpiryItem(data: UpsertFoodExpiryItemRequest): Promise<{ message: string; item: FoodExpiryItem }> {
+  const response = await authenticatedRequest('/api/expiry/items', {
+    method: 'POST',
+    data,
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '创建保质期条目失败')
+  }
+  return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function getManagedFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取保质期详情失败')
+  }
+  return response.data as { item: FoodExpiryItem }
+}
+
+export async function updateManagedFoodExpiryItem(id: string, data: UpsertFoodExpiryItemRequest): Promise<{ message: string; item: FoodExpiryItem }> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}`, {
+    method: 'PUT',
+    data,
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '更新保质期条目失败')
+  }
+  return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function updateManagedFoodExpiryStatus(id: string, status: FoodExpiryStatus): Promise<{ message: string; item: FoodExpiryItem }> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}/status`, {
+    method: 'POST',
+    data: { status },
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '更新保质期状态失败')
+  }
+  return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function subscribeManagedFoodExpiryItem(id: string, data: FoodExpirySubscribeRequest): Promise<FoodExpirySubscribeResponse> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}/subscribe`, {
+    method: 'POST',
+    data,
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '登记保质期提醒失败')
+  }
+  return response.data as FoodExpirySubscribeResponse
 }
 
 /**

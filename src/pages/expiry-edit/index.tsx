@@ -2,12 +2,15 @@ import { View, Text, Input, Textarea, Picker, ScrollView } from '@tarojs/compone
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
 import {
-  createFoodExpiryItem,
-  getFoodExpiryItem,
-  updateFoodExpiryItem,
+  createManagedFoodExpiryItem,
+  getManagedFoodExpiryItem,
+  updateManagedFoodExpiryItem,
+  subscribeManagedFoodExpiryItem,
   type FoodExpiryItem,
   type FoodExpiryStorageType,
+  EXPIRY_SUBSCRIBE_TEMPLATE_ID,
 } from '../../utils/api'
+import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 
 import './index.scss'
 
@@ -102,7 +105,7 @@ export default function ExpiryEditPage() {
     if (!itemId) return
     setLoading(true)
     try {
-      const res = await getFoodExpiryItem(itemId)
+      const res = await getManagedFoodExpiryItem(itemId)
       hydrateForm(res.item)
     } catch (error: any) {
       Taro.showToast({ title: error?.message || '加载失败', icon: 'none' })
@@ -151,12 +154,21 @@ export default function ExpiryEditPage() {
 
     Taro.showLoading({ title: isEdit ? '保存中...' : '创建中...' })
     try {
+      let savedItem: FoodExpiryItem | null = null
       if (isEdit && itemId) {
-        await updateFoodExpiryItem(itemId, payload)
+        const res = await updateManagedFoodExpiryItem(itemId, payload)
+        savedItem = res.item
       } else {
-        await createFoodExpiryItem(payload)
+        const res = await createManagedFoodExpiryItem(payload)
+        savedItem = res.item
       }
       Taro.hideLoading()
+
+      if (!isEdit && savedItem?.id) {
+        await promptExpirySubscribe(savedItem)
+      }
+
+      Taro.eventCenter.trigger(FOOD_EXPIRY_CHANGED_EVENT)
       Taro.showToast({ title: isEdit ? '保存成功' : '创建成功', icon: 'success' })
       setTimeout(() => {
         const pages = Taro.getCurrentPages()
@@ -169,6 +181,45 @@ export default function ExpiryEditPage() {
     } catch (error: any) {
       Taro.hideLoading()
       Taro.showToast({ title: error?.message || '提交失败', icon: 'none' })
+    }
+  }
+
+  const promptExpirySubscribe = async (item: FoodExpiryItem) => {
+    if (!EXPIRY_SUBSCRIBE_TEMPLATE_ID) {
+      console.warn('[expiry] 未配置订阅消息模板 ID，跳过提醒订阅')
+      return
+    }
+
+    const modalRes = await Taro.showModal({
+      title: '订阅到期提醒',
+      content: '是否订阅到期提醒？到期当天会通过微信服务通知提醒你。',
+      confirmText: '去订阅',
+      cancelText: '暂不',
+      confirmColor: '#00bc7d',
+    })
+    if (!modalRes.confirm) return
+
+    try {
+      const subscribeRes = await (Taro as any).requestSubscribeMessage({
+        tmplIds: [EXPIRY_SUBSCRIBE_TEMPLATE_ID],
+      })
+      const subscribeStatus = String((subscribeRes as any)?.[EXPIRY_SUBSCRIBE_TEMPLATE_ID] || '')
+      const result = await subscribeManagedFoodExpiryItem(item.id, {
+        subscribe_status: subscribeStatus || 'unknown',
+        err_msg: (subscribeRes as any)?.errMsg,
+      })
+
+      if (result.subscribed && result.schedule_created) {
+        Taro.showToast({ title: '已订阅当天提醒', icon: 'none' })
+        return
+      }
+
+      if (!result.subscribed) {
+        Taro.showToast({ title: '未订阅提醒', icon: 'none' })
+      }
+    } catch (error: any) {
+      console.error('[expiry] requestSubscribeMessage failed:', error)
+      Taro.showToast({ title: error?.message || '订阅提醒失败', icon: 'none' })
     }
   }
 

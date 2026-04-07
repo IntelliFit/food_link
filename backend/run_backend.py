@@ -21,6 +21,7 @@ TEXT_WORKER_COUNT = int(os.getenv("TEXT_WORKER_COUNT", "1"))  # 文字分析 Wor
 HEALTH_REPORT_WORKER_COUNT = int(os.getenv("HEALTH_REPORT_WORKER_COUNT", "1"))  # 病历提取 Worker
 COMMENT_WORKER_COUNT = int(os.getenv("COMMENT_WORKER_COUNT", "1"))  # 评论审核 Worker
 PUBLIC_LIBRARY_MODERATION_WORKER_COUNT = int(os.getenv("PUBLIC_LIBRARY_MODERATION_WORKER_COUNT", "1"))  # 食物库审核
+EXPIRY_NOTIFICATION_WORKER_COUNT = int(os.getenv("EXPIRY_NOTIFICATION_WORKER_COUNT", "1"))  # 保质期通知
 FOOD_DEBUG_TASK_QUEUE = str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}
 FOOD_TASK_TYPE = "food_debug" if FOOD_DEBUG_TASK_QUEUE else "food"
 TEXT_FOOD_TASK_TYPE = "food_text_debug" if FOOD_DEBUG_TASK_QUEUE else "food_text"
@@ -55,6 +56,12 @@ def run_comment_worker_process(worker_id: int) -> None:
     run_comment_worker(worker_id=worker_id, poll_interval=2.0)
 
 
+def run_expiry_notification_worker_process(worker_id: int) -> None:
+    """子进程入口：运行保质期通知 Worker。"""
+    from worker import run_food_expiry_notification_worker
+    run_food_expiry_notification_worker(worker_id=worker_id, poll_interval=2.0)
+
+
 def main() -> None:
     workers: list[multiprocessing.Process] = []
     
@@ -87,13 +94,20 @@ def main() -> None:
         p = multiprocessing.Process(target=run_public_library_moderation_worker_process, args=(i,), daemon=True)
         p.start()
         workers.append(p)
+
+    # 启动保质期通知 Worker
+    for i in range(EXPIRY_NOTIFICATION_WORKER_COUNT):
+        p = multiprocessing.Process(target=run_expiry_notification_worker_process, args=(i,), daemon=True)
+        p.start()
+        workers.append(p)
     
     print(
         f"[run_backend] 已启动 {WORKER_COUNT} 个图片分析 Worker + "
         f"{TEXT_WORKER_COUNT} 个文字分析 Worker + "
         f"{HEALTH_REPORT_WORKER_COUNT} 个病历提取 Worker + "
         f"{COMMENT_WORKER_COUNT} 个评论审核 Worker + "
-        f"{PUBLIC_LIBRARY_MODERATION_WORKER_COUNT} 个食物库审核 Worker"
+        f"{PUBLIC_LIBRARY_MODERATION_WORKER_COUNT} 个食物库审核 Worker + "
+        f"{EXPIRY_NOTIFICATION_WORKER_COUNT} 个保质期通知 Worker"
         f"（food_task_type={FOOD_TASK_TYPE}, text_task_type={TEXT_FOOD_TASK_TYPE}）",
         flush=True
     )

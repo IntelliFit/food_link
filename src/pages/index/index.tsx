@@ -18,8 +18,8 @@ import {
   type HomeMealItem,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
-  type FoodExpiryItem,
-  type FoodExpirySummary
+  type HomeFoodExpiryItem,
+  type HomeFoodExpirySummary
 } from '../../utils/api'
 import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop, IconExercise } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
@@ -40,7 +40,7 @@ function normalizeTo2025(dateStr: string): string {
   return dateStr.replace(/^2026-/, '2025-')
 }
 
-const DEFAULT_EXPIRY_SUMMARY: FoodExpirySummary = {
+const DEFAULT_EXPIRY_SUMMARY: HomeFoodExpirySummary = {
   pendingCount: 0,
   soonCount: 0,
   overdueCount: 0,
@@ -265,7 +265,7 @@ function clearWaterForDate(metrics: BodyMetricsStorage, date: string): BodyMetri
   return next
 }
 
-function getExpiryUrgencyText(item: FoodExpiryItem): string {
+function getExpiryUrgencyText(item: HomeFoodExpiryItem): string {
   if (item.urgency_level === 'overdue') return '已过期'
   if (item.urgency_level === 'today') return '今天截止'
   if (item.urgency_level === 'soon') {
@@ -275,7 +275,7 @@ function getExpiryUrgencyText(item: FoodExpiryItem): string {
   return '待处理'
 }
 
-function formatExpiryMeta(item: FoodExpiryItem): string {
+function formatExpiryMeta(item: HomeFoodExpiryItem): string {
   return [item.deadline_label, item.storage_location || '', item.quantity_text || '']
     .filter(Boolean)
     .join(' · ')
@@ -315,7 +315,7 @@ const MACRO_CONFIGS: Array<{
 function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
   const [meals, setMeals] = useState<HomeMealItem[]>([])
-  const [expirySummary, setExpirySummary] = useState<FoodExpirySummary>(DEFAULT_EXPIRY_SUMMARY)
+  const [expirySummary, setExpirySummary] = useState<HomeFoodExpirySummary>(DEFAULT_EXPIRY_SUMMARY)
   const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(createWeekHeatmapCells())
   const [loading, setLoading] = useState(true)
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
@@ -678,7 +678,7 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    Taro.navigateTo({ url: '/pages/food-expiry/index' })
+    Taro.navigateTo({ url: '/pages/expiry/index' })
   }
 
   const openExerciseRecord = () => {
