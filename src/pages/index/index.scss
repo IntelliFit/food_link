@@ -103,7 +103,6 @@ $blue-color: #3b82f6;
   width: 88rpx;
   height: 160rpx;
   border-radius: 44rpx;
-  background: #f1f5f9;
   border: 3rpx solid transparent;
   padding: 12rpx 0 16rpx;
   overflow: hidden;
@@ -316,7 +315,7 @@ $blue-color: #3b82f6;
 // 新版三大营养素 - 三卡片水平并排，每个卡片内部左右布局
 .macros-section-horizontal {
   display: flex;
-  margin-top: 5px;
+  margin-top: 10px;
   flex-direction: row;
   gap: 12rpx;
 }

@@ -6,6 +6,8 @@
 
 ## 2026-04-07
 
+- 🎨 style: 更换首页标题类名，移除不必要 margin-bottom，快到期食物改为 expiry-title，今日餐食改为 meals-title `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 分离快到期食物和今日餐食标题样式，新增 expiry-title 和 meals-title 类，移除 margin-bottom `src/pages/index/index.scss` `src/pages/index/index.tsx`
 - 🐛 fix: 修复首页点击底部导航栏中间按钮无响应问题：改进了 custom-tab-bar 事件通知机制，当已在首页时直接通过多方案降级策略触发事件，不再依赖 switchTab 生命周期 `custom-tab-bar/index.js` `src/pages/index/index.tsx`
 - 🎨 style: 优化编辑今日目标界面布局，将加减按钮移到输入框左右两侧形成水平布局，缩小各板块间距 `src/pages/index/index.scss`
 
