@@ -4,9 +4,12 @@
 
 ---
 
+## 2026-04-08
+
+- 🔧 chore: 微信上传版本号更正为 **2.0.10**（继 2.0.9）；`package.json` 同步；`NODE_ENV=production` 构建后 `cli upload`
+
 ## 2026-04-07
 
-- 🔧 chore: `NODE_ENV=production` 构建后 `cli upload` 上传小程序 v1.0.1 至微信后台（约 1.7MB）
 - 🎨 style: 圈子本周打卡榜横幅去掉「点我查看完整榜单」文案；预览条内当前用户头像/昵称加大 `src/pages/community/index.tsx` `src/pages/community/index.scss`
 - 🎨 style: 分析结果页头图改为 fixed + 随滚动从大图收至全宽横条（ScrollView 动态 padding 保持与白卡叠层），白卡上滑可完全盖住头图 `src/pages/result/index.tsx` `src/pages/result/index.scss`
 - 🔧 refactor: 分析结果营养概览三色柱高度按「蛋白/碳水/脂肪」供能占三者总供能比例（4:4:9 kcal/g）绘制 `src/pages/result/index.tsx`
