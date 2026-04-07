@@ -1064,10 +1064,10 @@ function IndexPage() {
                   {/* 左侧：名称 + 目标总量 */}
                   <View className='macro-left-content'>
                     <View className='macro-title-row'>
-                      <Text className='macro-label-horizontal' style={{ color }}>{label}</Text>
+                      <Text className='macro-label-horizontal'>{label}</Text>
                     </View>
                     <View className='macro-value-row'>
-                      <Text className='macro-target-value' style={{ color }}>
+                      <Text className='macro-target-value'>
                         {formatDisplayNumber(targetValue)}g
                       </Text>
                     </View>
@@ -1094,9 +1094,8 @@ function IndexPage() {
                           </View>
                         ) : (
                           <View className='macro-gauge-text-wrap'>
-                            <Text className='macro-intake-label' style={{ color }}>已摄入</Text>
-                            <Text className='macro-intake-value' style={{ color }}>
-                              {formatDisplayNumber(animatedValue)}g
+                            <Text className='macro-intake-value'>
+                              {formatDisplayNumber(animatedValue)}
                             </Text>
                           </View>
                         )}
