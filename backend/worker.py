@@ -47,6 +47,9 @@ from database import (
     add_public_food_library_comment_sync,
     create_feed_interaction_notification_sync,
     update_public_food_library_status_sync,
+    claim_next_pending_food_expiry_notification_job_sync,
+    update_food_expiry_notification_job_sync,
+    get_food_expiry_item_v2_sync,
 )
 from metabolic import get_age_from_birthday
 from image_compressor import compress_task_images
@@ -71,6 +74,13 @@ MEAL_NAMES = {
 }
 
 CHINA_TZ = timezone(timedelta(hours=8))
+EXPIRY_NOTIFICATION_PAGE = "/pages/expiry/index"
+EXPIRY_NOTIFICATION_DEFAULT_HOUR = 9
+EXPIRY_NOTIFICATION_RETRY_DELAYS_MINUTES = [5, 30, 120]
+_wechat_access_token_cache: Dict[str, Any] = {
+    "token": None,
+    "fetched_at": 0,
+}
 
 VALID_RECOGNITION_OUTCOMES = {"ok", "soft_reject", "hard_reject"}
 VALID_ALLOWED_FOOD_CATEGORIES = {"carb", "lean_protein", "unknown"}
@@ -119,6 +129,251 @@ TEXT_STRICT_SOFT_GUIDANCE_DEFAULT = [
 TEXT_AMBIGUOUS_QUANTITY_PATTERN = re.compile(
     r"(适量|少许|一点|一些|少量|若干|大概|大约|差不多|左右|一个?多|几个?|半碗|一碗|一勺|几勺|一点点)"
 )
+
+
+def _get_wechat_access_token_sync() -> str:
+    current_time = int(time.time())
+    if (
+        _wechat_access_token_cache["token"]
+        and current_time - int(_wechat_access_token_cache.get("fetched_at") or 0) < 5400
+    ):
+        return str(_wechat_access_token_cache["token"])
+
+    appid = os.getenv("APPID", "").strip()
+    secret = os.getenv("SECRET", "").strip()
+    if not appid or not secret:
+        raise RuntimeError("缺少 APPID 或 SECRET 环境变量")
+
+    with httpx.Client(timeout=10.0) as client:
+        stable_resp = client.post(
+            "https://api.weixin.qq.com/cgi-bin/stable_token",
+            json={
+                "grant_type": "client_credential",
+                "appid": appid,
+                "secret": secret,
+                "force_refresh": False,
+            },
+        )
+        if stable_resp.is_success:
+            stable_data = stable_resp.json()
+            if not stable_data.get("errcode") and stable_data.get("access_token"):
+                _wechat_access_token_cache["token"] = stable_data["access_token"]
+                _wechat_access_token_cache["fetched_at"] = current_time
+                return str(stable_data["access_token"])
+
+        fallback_resp = client.get(
+            "https://api.weixin.qq.com/cgi-bin/token",
+            params={
+                "grant_type": "client_credential",
+                "appid": appid,
+                "secret": secret,
+            },
+        )
+        if not fallback_resp.is_success:
+            raise RuntimeError(f"获取 access_token 失败: HTTP {fallback_resp.status_code}")
+        data = fallback_resp.json()
+        if data.get("errcode"):
+            raise RuntimeError(f"获取 access_token 失败: {data.get('errmsg') or data.get('errcode')}")
+        token = data.get("access_token")
+        if not token:
+            raise RuntimeError("获取 access_token 失败: access_token 为空")
+        _wechat_access_token_cache["token"] = token
+        _wechat_access_token_cache["fetched_at"] = current_time
+        return str(token)
+
+
+def _normalize_expiry_item_for_notification(item: Dict[str, Any]) -> Dict[str, Any]:
+    item = dict(item)
+    expire_date_raw = str(item.get("expire_date") or "").strip()
+    days_until_expire: Optional[int] = None
+    urgency = "fresh"
+    if expire_date_raw:
+        try:
+            expire_date = datetime.strptime(expire_date_raw, "%Y-%m-%d").date()
+            days_until_expire = (expire_date - datetime.now(CHINA_TZ).date()).days
+            if days_until_expire < 0:
+                urgency = "expired"
+            elif days_until_expire == 0:
+                urgency = "today"
+            elif days_until_expire <= 2:
+                urgency = "soon"
+        except Exception:
+            days_until_expire = None
+    item["days_until_expire"] = days_until_expire
+    item["urgency"] = urgency
+    item["storage_type_label"] = {
+        "room_temp": "常温",
+        "refrigerated": "冷藏",
+        "frozen": "冷冻",
+    }.get(str(item.get("storage_type") or "").strip(), "未填写")
+    return item
+
+
+def _build_food_expiry_job_schedule_sync(item: Dict[str, Any]) -> Optional[datetime]:
+    expire_date_raw = str(item.get("expire_date") or "").strip()
+    if not expire_date_raw:
+        return None
+    try:
+        expire_date = datetime.strptime(expire_date_raw, "%Y-%m-%d").date()
+    except Exception:
+        return None
+    now_local = datetime.now(CHINA_TZ)
+    if expire_date < now_local.date():
+        return None
+    scheduled_local = datetime.combine(
+        expire_date,
+        datetime.min.time(),
+        tzinfo=CHINA_TZ,
+    ).replace(hour=EXPIRY_NOTIFICATION_DEFAULT_HOUR, minute=0, second=0, microsecond=0)
+    if expire_date == now_local.date() and scheduled_local <= now_local:
+        return now_local
+    return scheduled_local
+
+
+def _normalize_food_expiry_character_string(value: Any, fallback: str = "NA") -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return fallback
+
+    sanitized = re.sub(r"[^A-Za-z0-9\s\-_.,:/+#()xX]", "", raw)
+    sanitized = re.sub(r"\s+", " ", sanitized).strip()
+    return sanitized[:32] or fallback
+
+
+def _build_food_expiry_template_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+    normalized_item = _normalize_expiry_item_for_notification(item)
+    expire_date = str(normalized_item.get("expire_date") or "").strip()
+    quantity = _normalize_food_expiry_character_string(normalized_item.get("quantity_note"))
+    return {
+        "thing1": {"value": str(normalized_item.get("food_name") or "").strip() or "未命名食物"},
+        "time2": {"value": f"{expire_date} 09:00" if expire_date else "未填写"},
+        "thing3": {"value": "今天到期，请优先处理"},
+        "thing4": {"value": str(normalized_item.get("storage_type_label") or "").strip() or "未填写"},
+        "character_string5": {"value": quantity},
+    }
+
+
+def _sanitize_food_expiry_template_payload(data: Any, item: Dict[str, Any]) -> Dict[str, Any]:
+    fallback = _build_food_expiry_template_payload(item)
+    if not isinstance(data, dict):
+        return fallback
+
+    sanitized = dict(data)
+    character_field = sanitized.get("character_string5")
+    raw_value = character_field.get("value") if isinstance(character_field, dict) else None
+    sanitized["character_string5"] = {
+        "value": _normalize_food_expiry_character_string(raw_value or item.get("quantity_note"))
+    }
+    return sanitized
+
+
+def _send_food_expiry_subscribe_message(job: Dict[str, Any], item: Dict[str, Any]) -> Dict[str, Any]:
+    access_token = _get_wechat_access_token_sync()
+    payload_snapshot = job.get("payload_snapshot") if isinstance(job.get("payload_snapshot"), dict) else {}
+    data = _sanitize_food_expiry_template_payload(payload_snapshot.get("data"), item)
+    page = str(payload_snapshot.get("page") or EXPIRY_NOTIFICATION_PAGE)
+
+    request_payload = {
+        "touser": job.get("openid"),
+        "template_id": job.get("template_id"),
+        "page": page,
+        "data": data,
+        "miniprogram_state": "formal",
+        "lang": "zh_CN",
+    }
+
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(
+            f"https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token={access_token}",
+            json=request_payload,
+        )
+    if not response.is_success:
+        raise RuntimeError(f"微信通知发送失败: HTTP {response.status_code}")
+
+    result = response.json()
+    if result.get("errcode") not in (None, 0):
+        raise RuntimeError(f"微信通知发送失败: {result.get('errmsg') or result.get('errcode')}")
+    return result
+
+
+def process_one_food_expiry_notification_job(job: Dict[str, Any]) -> None:
+    item_id = str(job.get("expiry_item_id") or "").strip()
+    item = get_food_expiry_item_v2_sync(item_id) if item_id else None
+    if not item:
+        update_food_expiry_notification_job_sync(
+            job["id"],
+            {"status": "cancelled", "last_error": "关联保质期条目不存在"},
+        )
+        return
+
+    normalized_item = _normalize_expiry_item_for_notification(item)
+    if str(normalized_item.get("status") or "").strip().lower() != "active":
+        update_food_expiry_notification_job_sync(
+            job["id"],
+            {"status": "cancelled", "last_error": "条目已不处于保鲜中"},
+        )
+        return
+
+    scheduled_local = _build_food_expiry_job_schedule_sync(normalized_item)
+    if not scheduled_local:
+        update_food_expiry_notification_job_sync(
+            job["id"],
+            {"status": "cancelled", "last_error": "条目已过期或截止日期无效"},
+        )
+        return
+
+    scheduled_at = str(job.get("scheduled_at") or "")
+    expected_schedule_utc = scheduled_local.astimezone(timezone.utc).isoformat()
+    if scheduled_at and expected_schedule_utc > scheduled_at and scheduled_local > datetime.now(CHINA_TZ):
+        update_food_expiry_notification_job_sync(
+            job["id"],
+            {
+                "status": "cancelled",
+                "last_error": "条目提醒时间已变化，旧任务作废",
+            },
+        )
+        return
+
+    try:
+        result = _send_food_expiry_subscribe_message(job, normalized_item)
+        update_food_expiry_notification_job_sync(
+            job["id"],
+            {
+                "status": "sent",
+                "sent_at": datetime.now(timezone.utc).isoformat(),
+                "last_error": None,
+                "payload_snapshot": {
+                    **(job.get("payload_snapshot") if isinstance(job.get("payload_snapshot"), dict) else {}),
+                    "wx_result": result,
+                },
+            },
+        )
+    except Exception as exc:
+        retry_count = int(job.get("retry_count") or 0) + 1
+        max_retry_count = int(job.get("max_retry_count") or len(EXPIRY_NOTIFICATION_RETRY_DELAYS_MINUTES))
+        if retry_count >= max_retry_count:
+            update_food_expiry_notification_job_sync(
+                job["id"],
+                {
+                    "status": "failed",
+                    "retry_count": retry_count,
+                    "last_error": str(exc)[:500],
+                },
+            )
+            raise
+
+        delay_index = min(retry_count - 1, len(EXPIRY_NOTIFICATION_RETRY_DELAYS_MINUTES) - 1)
+        next_time = datetime.now(timezone.utc) + timedelta(minutes=EXPIRY_NOTIFICATION_RETRY_DELAYS_MINUTES[delay_index])
+        update_food_expiry_notification_job_sync(
+            job["id"],
+            {
+                "status": "pending",
+                "retry_count": retry_count,
+                "scheduled_at": next_time.isoformat(),
+                "last_error": str(exc)[:500],
+            },
+        )
+        raise
 FOOD_CONTEXT_TERMS = {
     "面包", "吐司", "欧包", "贝果", "汉堡", "三明治", "蛋糕", "饼干", "曲奇", "甜甜圈",
     "蛋挞", "月饼", "包子", "馒头", "饺子", "烧麦", "米饭", "炒饭", "盖饭", "饭团",
@@ -1908,6 +2163,34 @@ def run_comment_worker(worker_id: int, poll_interval: float = 2.0) -> None:
             sleep_time = min(poll_interval + backoff_count, max_backoff)
             error_msg = str(e)[:100]
             print(f"[comment-worker-{worker_id}] 错误: {error_msg}，{sleep_time}s 后重试", flush=True)
+            time.sleep(sleep_time)
+
+
+def run_food_expiry_notification_worker(worker_id: int, poll_interval: float = 2.0) -> None:
+    """保质期提醒 Worker 进程入口。"""
+    print(f"[expiry-notify-worker-{worker_id}] 启动，处理保质期通知任务", flush=True)
+    backoff_count = 0
+    max_backoff = 30
+
+    while True:
+        try:
+            job = claim_next_pending_food_expiry_notification_job_sync()
+            if job:
+                print(f"[expiry-notify-worker-{worker_id}] 处理任务 {job['id']}", flush=True)
+                process_one_food_expiry_notification_job(job)
+                print(f"[expiry-notify-worker-{worker_id}] 任务 {job['id']} 完成", flush=True)
+                backoff_count = 0
+            else:
+                backoff_count = 0
+                time.sleep(poll_interval)
+        except KeyboardInterrupt:
+            print(f"[expiry-notify-worker-{worker_id}] 退出", flush=True)
+            break
+        except Exception as e:
+            backoff_count = min(backoff_count + 1, max_backoff)
+            sleep_time = min(poll_interval + backoff_count, max_backoff)
+            error_msg = str(e)[:100]
+            print(f"[expiry-notify-worker-{worker_id}] 错误: {error_msg}，{sleep_time}s 后重试", flush=True)
             time.sleep(sleep_time)
 
 

@@ -2,12 +2,16 @@ import { View, Text, Input, Textarea, Picker, ScrollView } from '@tarojs/compone
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
 import {
-  createFoodExpiryItem,
-  getFoodExpiryItem,
-  updateFoodExpiryItem,
+  createManagedFoodExpiryItem,
+  getManagedFoodExpiryItem,
+  updateManagedFoodExpiryItem,
+  subscribeManagedFoodExpiryItem,
+  EXPIRY_SUBSCRIBE_TEMPLATE_ID,
   type FoodExpiryItem,
-  type CreateFoodExpiryRequest,
+  type FoodExpiryStorageType,
+  type UpsertFoodExpiryItemRequest,
 } from '../../utils/api'
+import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 
 import './index.scss'
 
@@ -85,18 +89,23 @@ export default function ExpiryEditPage() {
 
   const hydrateForm = (item: FoodExpiryItem) => {
     setFoodName(item.food_name || '')
-    // 优先使用 category，如果不存在则尝试从 storage_location 推断分类
-    const storageLocationFromItem = item.storage_location || '冷藏'
-    const inferredCategory = storageLocationFromItem === '常温' ? '主食' : '乳制品'
-    const nextCategory = inferredCategory
-    setCategory(nextCategory)
-    setCustomCategory(CATEGORY_OPTIONS.includes(nextCategory) ? '' : nextCategory)
-    setStorageLocation(storageLocationFromItem)
-    setQuantityText(item.quantity_text || '')
-    // 数据库使用 deadline_at，格式为 ISO 字符串，需要提取日期部分
-    const deadlineAt = (item as any).deadline_at || addDays(3)
-    const datePart = deadlineAt.split('T')[0]
-    setDeadlineDate(datePart || addDays(3))
+    const cat = item.category?.trim() || '其他'
+    if (CATEGORY_OPTIONS.includes(cat)) {
+      setCategory(cat)
+      setCustomCategory('')
+    } else {
+      setCustomCategory(cat)
+      setCategory(cat)
+    }
+    const locationMap: Record<FoodExpiryStorageType, string> = {
+      room_temp: '常温',
+      refrigerated: '冷藏',
+      frozen: '冷冻',
+    }
+    setStorageLocation(locationMap[item.storage_type] || '冷藏')
+    setQuantityText(item.quantity_note || '')
+    const datePart = item.expire_date?.split('T')[0] || addDays(3)
+    setDeadlineDate(datePart)
     setNote(item.note || '')
   }
 
@@ -104,7 +113,7 @@ export default function ExpiryEditPage() {
     if (!itemId) return
     setLoading(true)
     try {
-      const res = await getFoodExpiryItem(itemId)
+      const res = await getManagedFoodExpiryItem(itemId)
       hydrateForm(res.item)
     } catch (error: any) {
       Taro.showToast({ title: error?.message || '加载失败', icon: 'none' })
@@ -141,23 +150,38 @@ export default function ExpiryEditPage() {
       return
     }
 
-    const payload: CreateFoodExpiryRequest = {
+    const storageTypeFromLabel: Record<string, FoodExpiryStorageType> = {
+      常温: 'room_temp',
+      冷藏: 'refrigerated',
+      冷冻: 'frozen',
+    }
+    const payload: UpsertFoodExpiryItemRequest = {
       food_name: foodName.trim(),
-      quantity_text: quantityText.trim() || undefined,
-      storage_location: storageLocation.trim() || undefined,
+      category: normalizedCategory,
+      storage_type: storageTypeFromLabel[storageLocation.trim()] || 'refrigerated',
+      quantity_note: quantityText.trim() || undefined,
+      expire_date: deadlineDate,
       note: note.trim() || undefined,
-      deadline_precision: 'date',
-      deadline_date: deadlineDate,
+      source_type: 'manual',
     }
 
     Taro.showLoading({ title: isEdit ? '保存中...' : '创建中...' })
     try {
+      let savedItem: FoodExpiryItem | null = null
       if (isEdit && itemId) {
-        await updateFoodExpiryItem(itemId, payload)
+        const res = await updateManagedFoodExpiryItem(itemId, payload)
+        savedItem = res.item
       } else {
-        await createFoodExpiryItem(payload)
+        const res = await createManagedFoodExpiryItem(payload)
+        savedItem = res.item
       }
       Taro.hideLoading()
+
+      if (!isEdit && savedItem?.id) {
+        await promptExpirySubscribe(savedItem)
+      }
+
+      Taro.eventCenter.trigger(FOOD_EXPIRY_CHANGED_EVENT)
       Taro.showToast({ title: isEdit ? '保存成功' : '创建成功', icon: 'success' })
       setTimeout(() => {
         const pages = Taro.getCurrentPages()
@@ -170,6 +194,45 @@ export default function ExpiryEditPage() {
     } catch (error: any) {
       Taro.hideLoading()
       Taro.showToast({ title: error?.message || '提交失败', icon: 'none' })
+    }
+  }
+
+  const promptExpirySubscribe = async (item: FoodExpiryItem) => {
+    if (!EXPIRY_SUBSCRIBE_TEMPLATE_ID) {
+      console.warn('[expiry] 未配置订阅消息模板 ID，跳过提醒订阅')
+      return
+    }
+
+    const modalRes = await Taro.showModal({
+      title: '订阅到期提醒',
+      content: '是否订阅到期提醒？到期当天会通过微信服务通知提醒你。',
+      confirmText: '去订阅',
+      cancelText: '暂不',
+      confirmColor: '#00bc7d',
+    })
+    if (!modalRes.confirm) return
+
+    try {
+      const subscribeRes = await (Taro as any).requestSubscribeMessage({
+        tmplIds: [EXPIRY_SUBSCRIBE_TEMPLATE_ID],
+      })
+      const subscribeStatus = String((subscribeRes as any)?.[EXPIRY_SUBSCRIBE_TEMPLATE_ID] || '')
+      const result = await subscribeManagedFoodExpiryItem(item.id, {
+        subscribe_status: subscribeStatus || 'unknown',
+        err_msg: (subscribeRes as any)?.errMsg,
+      })
+
+      if (result.subscribed && result.schedule_created) {
+        Taro.showToast({ title: '已订阅当天提醒', icon: 'none' })
+        return
+      }
+
+      if (!result.subscribed) {
+        Taro.showToast({ title: '未订阅提醒', icon: 'none' })
+      }
+    } catch (error: any) {
+      console.error('[expiry] requestSubscribeMessage failed:', error)
+      Taro.showToast({ title: error?.message || '订阅提醒失败', icon: 'none' })
     }
   }
 
