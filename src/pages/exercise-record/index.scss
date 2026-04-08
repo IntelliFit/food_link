@@ -265,8 +265,24 @@ $border-color: #e5e7eb;
 
 .chat-meta {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 16rpx;
+}
+
+.chat-meta-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.chat-reasoning {
+  font-size: 22rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+  word-break: break-all;
 }
 
 .chat-result {

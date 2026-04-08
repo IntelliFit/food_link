@@ -36,6 +36,15 @@ from database import (
     create_user_exercise_log_sync,
     get_exercise_calories_by_date_sync,
     get_user_by_id_sync,
+    get_latest_user_weight_record_sync,
+    create_analysis_task_sync,
+    create_precision_session_round_sync,
+    create_precision_item_estimate_sync,
+    get_precision_session_by_id_sync,
+    update_precision_session_sync,
+    list_precision_item_estimates_sync,
+    get_precision_item_estimate_by_source_task_sync,
+    update_precision_item_estimate_sync,
     get_food_record_by_id_sync,
     get_feed_comment_by_id_sync,
     insert_health_document_sync,
@@ -115,6 +124,10 @@ STRICT_REASON_BY_TAG = {
     "cook_method_unclear": "当前烹饪方式不够明确，营养估算可信度有限。",
     "weight_uncertain": "当前重量仍存在不确定性，结果不建议直接用于精准执行。",
 }
+
+
+def _precision_task_type(base_task_type: str) -> str:
+    return f"{base_task_type}_debug" if FOOD_ANALYSIS_DEBUG else base_task_type
 STRICT_HARD_GUIDANCE_DEFAULT = [
     "请只保留一个主体食物，分开单独拍摄。",
     "请把食物拨开，避免酱汁、配菜或其他食物遮挡主体。",
@@ -626,6 +639,428 @@ def _parse_analysis_result_items(parsed: Dict[str, Any]) -> List[Dict[str, Any]]
     return items
 
 
+PRECISION_PLAN_STATUSES = {"needs_user_input", "needs_retake", "ready_for_estimate"}
+PRECISION_SPLIT_STRATEGIES = {"single_item", "multi_item_parallel", "retake_required", "user_annotation_required"}
+PRECISION_MAX_AGGREGATE_WAIT_SECONDS = 120
+
+
+def _get_llm_client_config(source_type: str) -> Dict[str, str]:
+    llm_provider = os.getenv("LLM_PROVIDER", "qwen").lower()
+    if llm_provider == "gemini":
+        api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+        if not api_key:
+            raise RuntimeError("缺少 OFOXAI_API_KEY 环境变量")
+        return {
+            "provider": llm_provider,
+            "api_key": api_key,
+            "api_url": "https://api.ofox.ai/v1/chat/completions",
+            "model": OFOX_VISION_MODEL_NAME if source_type == "image" else OFOX_TEXT_MODEL_NAME,
+        }
+    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+    if not api_key:
+        raise RuntimeError("缺少 DASHSCOPE_API_KEY 环境变量")
+    return {
+        "provider": llm_provider,
+        "api_key": api_key,
+        "api_url": f"{DASHSCOPE_BASE_URL}/chat/completions",
+        "model": QWEN_VL_MODEL if source_type == "image" else QWEN_TEXT_MODEL,
+    }
+
+
+def _run_json_completion_sync(
+    *,
+    source_type: str,
+    content: Any,
+    timeout_seconds: float,
+    temperature: float = 0.3,
+) -> Dict[str, Any]:
+    config = _get_llm_client_config(source_type)
+    with httpx.Client(timeout=timeout_seconds) as client:
+        response = client.post(
+            config["api_url"],
+            headers={
+                "Authorization": f"Bearer {config['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": config["model"],
+                "messages": [{"role": "user", "content": content}],
+                "response_format": {"type": "json_object"},
+                "temperature": temperature,
+            },
+        )
+    if not response.is_success:
+        err = response.json() if response.content else {}
+        msg = err.get("error", {}).get("message") or f"API 错误: {response.status_code}"
+        raise RuntimeError(msg)
+    data = response.json()
+    raw_content = data.get("choices", [{}])[0].get("message", {}).get("content")
+    if not raw_content:
+        raise RuntimeError("AI 返回了空响应")
+    json_str = re.sub(r"```json", "", raw_content)
+    json_str = re.sub(r"```", "", json_str).strip()
+    parsed = json.loads(json_str)
+    if isinstance(parsed, dict):
+        return parsed
+    raise RuntimeError("AI 返回结果格式异常")
+
+
+def _normalize_precision_plan_items(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    items: List[Dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            continue
+        item_name = _normalize_text(item.get("item_name") or item.get("name"))
+        if not item_name:
+            continue
+        item_key = _normalize_text(item.get("item_key")) or f"item_{index + 1}"
+        items.append({
+            "item_key": item_key,
+            "item_name": item_name,
+            "item_hint": _normalize_text(item.get("item_hint")),
+            "requires_reference": bool(item.get("requires_reference")),
+        })
+    return items
+
+
+def _normalize_precision_plan_result(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    precision_status = (_normalize_text(parsed.get("precisionStatus")) or "").lower()
+    if precision_status not in PRECISION_PLAN_STATUSES:
+        precision_status = "needs_user_input"
+
+    split_strategy = (_normalize_text(parsed.get("splitStrategy")) or "").lower()
+    if split_strategy not in PRECISION_SPLIT_STRATEGIES:
+        split_strategy = "single_item"
+
+    detected_items = _normalize_string_list(parsed.get("detectedItemsSummary"))
+    followup = _normalize_string_list(parsed.get("followupQuestions"))
+    retake = _normalize_string_list(parsed.get("retakeInstructions") or parsed.get("retakeGuidance"))
+    pending_requirements = _normalize_string_list(parsed.get("pendingRequirements"))
+    reference_object_suggestions = _normalize_string_list(parsed.get("referenceObjectSuggestions"))
+    uncertainty_notes = _normalize_string_list(parsed.get("uncertaintyNotes"))
+    items_to_estimate = _normalize_precision_plan_items(parsed.get("itemsToEstimate"))
+    rejection_reason = _normalize_text(parsed.get("rejectionReason"))
+    description = _normalize_text(parsed.get("description"))
+    insight = _normalize_text(parsed.get("insight"))
+    reference_object_needed = bool(parsed.get("referenceObjectNeeded"))
+
+    if precision_status == "ready_for_estimate" and not items_to_estimate:
+        precision_status = "needs_user_input"
+        split_strategy = "user_annotation_required"
+        followup = followup or ["我还不能稳定拆分出这餐里的主体食物，请你补充每个主体分别是什么。"]
+        pending_requirements = pending_requirements or ["item_annotation"]
+
+    if precision_status == "ready_for_estimate" and len(items_to_estimate) > 1 and split_strategy == "single_item":
+        split_strategy = "multi_item_parallel"
+
+    if precision_status == "needs_retake":
+        split_strategy = "retake_required"
+
+    return {
+        "precisionStatus": precision_status,
+        "splitStrategy": split_strategy,
+        "detectedItemsSummary": detected_items,
+        "followupQuestions": followup,
+        "retakeInstructions": retake,
+        "pendingRequirements": pending_requirements,
+        "referenceObjectNeeded": reference_object_needed,
+        "referenceObjectSuggestions": reference_object_suggestions,
+        "uncertaintyNotes": uncertainty_notes,
+        "itemsToEstimate": items_to_estimate,
+        "rejectionReason": rejection_reason,
+        "description": description,
+        "insight": insight,
+    }
+
+
+def _build_reference_objects_hint(reference_objects: List[Dict[str, Any]]) -> str:
+    if not reference_objects:
+        return "当前没有提供参考物。"
+    lines: List[str] = []
+    for ref in reference_objects:
+        dims = ref.get("dimensions_mm") or {}
+        dim_tokens = []
+        if dims.get("length") is not None:
+            dim_tokens.append(f"长{dims.get('length')}mm")
+        if dims.get("width") is not None:
+            dim_tokens.append(f"宽{dims.get('width')}mm")
+        if dims.get("height") is not None:
+            dim_tokens.append(f"高{dims.get('height')}mm")
+        placement = _normalize_text(ref.get("placement_note"))
+        applies = ref.get("applies_to_items") or []
+        apply_text = f"，适用于 {', '.join(applies)}" if applies else ""
+        placement_text = f"，摆放说明：{placement}" if placement else ""
+        dim_text = "，".join(dim_tokens) if dim_tokens else "尺寸未提供"
+        lines.append(f"- {ref.get('reference_name')}: {dim_text}{placement_text}{apply_text}")
+    return "参考物信息：\n" + "\n".join(lines)
+
+
+def _build_precision_plan_prompt(
+    *,
+    source_type: str,
+    raw_input: str,
+    additional_context: str,
+    reference_objects: List[Dict[str, Any]],
+    previous_rounds: List[Dict[str, Any]],
+) -> str:
+    previous_context = []
+    for round_row in previous_rounds[-3:]:
+        planner_result = round_row.get("planner_result") or {}
+        if planner_result:
+            previous_context.append(json.dumps(planner_result, ensure_ascii=False))
+    previous_block = "\n".join(previous_context)
+    raw_input_block = raw_input or "无"
+    return f"""
+你是精准模式的“规划器”，目标不是直接估完整营养，而是判断当前信息是否足够进入精估，以及后续应该如何推进。
+
+请基于当前输入，返回 JSON，决定以下三类之一：
+1. needs_user_input：信息还不够，但可以通过追问继续
+2. needs_retake：当前图片/信息质量不足，建议重拍
+3. ready_for_estimate：信息足够，可以进入并行分项估计
+
+当前输入类型：{source_type}
+原始输入：
+{raw_input_block}
+
+用户补充说明：
+{additional_context or "无"}
+
+{_build_reference_objects_hint(reference_objects)}
+
+最近几轮历史（如有）：
+{previous_block or "无"}
+
+要求：
+- 如果有多个主体食物，请不要一次估完整餐，拆成 itemsToEstimate，后续并行估计。
+- 如果缺比例尺且会显著影响估重，请把 referenceObjectNeeded 设为 true。
+- 如果主体不清、遮挡重、角度不足，请优先 needs_retake。
+- 如果只是缺少文字说明、参考物、烹饪方式、数量等，可用 needs_user_input。
+- itemsToEstimate 中每个主体至少给 item_key、item_name，可选 item_hint。
+
+只返回 JSON，结构如下：
+{{
+  "precisionStatus": "needs_user_input | needs_retake | ready_for_estimate",
+  "splitStrategy": "single_item | multi_item_parallel | retake_required | user_annotation_required",
+  "detectedItemsSummary": ["米饭", "鸡腿", "西兰花"],
+  "followupQuestions": ["请补充米饭大概几两", "鸡腿是否去骨"],
+  "retakeInstructions": ["请补一张顶部图", "请把鸡腿和米饭分开拍"],
+  "pendingRequirements": ["reference_object", "cook_method"],
+  "referenceObjectNeeded": true,
+  "referenceObjectSuggestions": ["筷子", "银行卡", "易拉罐"],
+  "uncertaintyNotes": ["米饭厚度不清楚"],
+  "rejectionReason": "当前主体遮挡严重",
+  "description": "可继续精估" ,
+  "insight": "先补充信息再进入精估。",
+  "itemsToEstimate": [
+    {{"item_key": "rice", "item_name": "米饭", "item_hint": "主食区域", "requires_reference": true}},
+    {{"item_key": "chicken_leg", "item_name": "鸡腿", "item_hint": "右侧肉类主体", "requires_reference": false}}
+  ]
+}}
+""".strip()
+
+
+def _build_precision_item_estimate_prompt(
+    *,
+    source_type: str,
+    item_name: str,
+    item_hint: Optional[str],
+    raw_input: str,
+    additional_context: str,
+    reference_objects: List[Dict[str, Any]],
+) -> str:
+    input_block = raw_input or "无"
+    hint_block = f"主体提示：{item_hint}\n" if item_hint else ""
+    return f"""
+你是精准模式的分项估计器。你现在只需要聚焦一个主体食物：{item_name}。
+{hint_block}
+原始输入：
+{input_block}
+
+补充说明：
+{additional_context or "无"}
+
+{_build_reference_objects_hint(reference_objects)}
+
+要求：
+- 只输出这个主体食物自己的估计结果，不要把其他食物并进去。
+- 如果画面/描述里还有其他食物，忽略它们。
+- 参考物和尺寸如果可用，请用于估重。
+- 仅返回 JSON。
+
+JSON 结构：
+{{
+  "item": {{
+    "name": "{item_name}",
+    "estimatedWeightGrams": 180,
+    "nutrients": {{
+      "calories": 200,
+      "protein": 4,
+      "carbs": 44,
+      "fat": 1,
+      "fiber": 1,
+      "sugar": 0
+    }}
+  }},
+  "uncertaintyNotes": ["如果没有参考物，重量可能有一定波动"]
+}}
+""".strip()
+
+
+def _run_precision_plan_sync(task: Dict[str, Any]) -> Dict[str, Any]:
+    payload = task.get("payload") or {}
+    source_type = str(payload.get("source_type") or "image").strip().lower()
+    session_id = str(payload.get("precision_session_id") or "").strip()
+    if source_type not in {"image", "text"} or not session_id:
+        raise RuntimeError("精准模式规划任务缺少 source_type 或 precision_session_id")
+    session = get_precision_session_by_id_sync(session_id)
+    if not session:
+        raise RuntimeError("精准模式会话不存在")
+    latest_inputs = session.get("latest_inputs") or {}
+    additional_context = str(latest_inputs.get("additionalContext") or "")
+    reference_objects = latest_inputs.get("reference_objects") or session.get("reference_objects") or []
+    previous_rounds = list_precision_session_rounds_sync(session_id)
+    if source_type == "image":
+        image_urls = task.get("image_paths") or latest_inputs.get("image_urls") or []
+        image_url = task.get("image_url") or latest_inputs.get("image_url")
+        raw_input = additional_context or "图片输入"
+        prompt = _build_precision_plan_prompt(
+            source_type=source_type,
+            raw_input=raw_input,
+            additional_context=additional_context,
+            reference_objects=reference_objects,
+            previous_rounds=previous_rounds,
+        )
+        content_parts = [{"type": "text", "text": prompt}]
+        for url in (image_urls or ([image_url] if image_url else [])):
+            content_parts.append({"type": "image_url", "image_url": {"url": url}})
+        parsed = _run_json_completion_sync(
+            source_type="image",
+            content=content_parts,
+            timeout_seconds=90.0,
+            temperature=0.2,
+        )
+    else:
+        text_input = task.get("text_input") or latest_inputs.get("text") or ""
+        prompt = _build_precision_plan_prompt(
+            source_type=source_type,
+            raw_input=text_input,
+            additional_context=additional_context,
+            reference_objects=reference_objects,
+            previous_rounds=previous_rounds,
+        )
+        parsed = _run_json_completion_sync(
+            source_type="text",
+            content=prompt,
+            timeout_seconds=60.0,
+            temperature=0.2,
+        )
+    return _normalize_precision_plan_result(parsed)
+
+
+def _run_precision_item_estimate_sync(task: Dict[str, Any]) -> Dict[str, Any]:
+    payload = task.get("payload") or {}
+    source_type = str(payload.get("source_type") or "image").strip().lower()
+    item_name = str(payload.get("item_name") or "").strip()
+    if source_type not in {"image", "text"} or not item_name:
+        raise RuntimeError("精准模式子项估计任务缺少 source_type 或 item_name")
+    item_hint = _normalize_text(payload.get("item_hint"))
+    additional_context = str(payload.get("additionalContext") or "")
+    reference_objects = payload.get("reference_objects") or []
+    if source_type == "image":
+        image_urls = task.get("image_paths") or payload.get("image_urls") or []
+        image_url = task.get("image_url") or payload.get("image_url")
+        prompt = _build_precision_item_estimate_prompt(
+            source_type=source_type,
+            item_name=item_name,
+            item_hint=item_hint,
+            raw_input=additional_context or "图片输入",
+            additional_context=additional_context,
+            reference_objects=reference_objects,
+        )
+        content_parts = [{"type": "text", "text": prompt}]
+        for url in (image_urls or ([image_url] if image_url else [])):
+            content_parts.append({"type": "image_url", "image_url": {"url": url}})
+        parsed = _run_json_completion_sync(
+            source_type="image",
+            content=content_parts,
+            timeout_seconds=90.0,
+            temperature=0.2,
+        )
+    else:
+        text_input = task.get("text_input") or payload.get("text") or ""
+        prompt = _build_precision_item_estimate_prompt(
+            source_type=source_type,
+            item_name=item_name,
+            item_hint=item_hint,
+            raw_input=text_input,
+            additional_context=additional_context,
+            reference_objects=reference_objects,
+        )
+        parsed = _run_json_completion_sync(
+            source_type="text",
+            content=prompt,
+            timeout_seconds=60.0,
+            temperature=0.2,
+        )
+    item_payload = parsed.get("item") if isinstance(parsed.get("item"), dict) else parsed
+    item_result = _normalize_analysis_response_payload({"items": [item_payload]} if isinstance(item_payload, dict) else item_payload)
+    items = _parse_analysis_result_items(item_result)
+    if not items:
+        raise RuntimeError("精准模式子项估计未返回有效结果")
+    uncertainty_notes = _normalize_string_list(parsed.get("uncertaintyNotes"))
+    return {
+        "item": items[0],
+        "uncertaintyNotes": uncertainty_notes,
+    }
+
+
+def _build_precision_final_result(
+    session_id: str,
+    round_index: int,
+    split_strategy: str,
+    estimates: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = []
+    uncertainty_notes: List[str] = []
+    for estimate in sorted(estimates, key=lambda item: int(item.get("item_index") or 0)):
+        result = estimate.get("result") or {}
+        item = result.get("item")
+        if isinstance(item, dict):
+            item["originalWeightGrams"] = item.get("originalWeightGrams") or item.get("estimatedWeightGrams") or 0
+            items.append(item)
+        uncertainty_notes.extend(_normalize_string_list(result.get("uncertaintyNotes")))
+    item_names = [str(item.get("name") or "").strip() for item in items if str(item.get("name") or "").strip()]
+    description = "、".join(item_names[:4]) if item_names else "精准估计结果"
+    if len(item_names) > 4:
+        description += "等"
+    insight = "已按主体拆分并并行估计，若仍有明显遮挡或比例尺不足，建议继续补充参考物或重拍。"
+    return {
+        "description": description or "精准估计结果",
+        "insight": insight,
+        "items": items,
+        "pfc_ratio_comment": None,
+        "absorption_notes": None,
+        "context_advice": None,
+        "recognitionOutcome": "ok",
+        "rejectionReason": None,
+        "retakeGuidance": None,
+        "allowedFoodCategory": "unknown",
+        "followupQuestions": None,
+        "precisionSessionId": session_id,
+        "precisionStatus": "done",
+        "precisionRoundIndex": round_index,
+        "pendingRequirements": None,
+        "retakeInstructions": None,
+        "referenceObjectNeeded": None,
+        "referenceObjectSuggestions": None,
+        "detectedItemsSummary": item_names,
+        "splitStrategy": split_strategy,
+        "uncertaintyNotes": uncertainty_notes or None,
+    }
+
+
 def _merge_guidance(primary: List[str], fallback: List[str]) -> List[str]:
     merged: List[str] = []
     seen = set()
@@ -845,6 +1280,84 @@ def _format_health_profile_sync(user: Dict[str, Any]) -> str:
     if not lines:
         return ""
     return "用户健康档案（供营养建议参考）：\n" + "\n".join(lines)
+
+
+def _safe_float_or_none(value: Any) -> Optional[float]:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _build_exercise_profile_snapshot_sync(user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """运动估算专用：优先使用提交时快照，缺失字段再回源补齐。"""
+    snapshot = dict(payload.get("profile_snapshot") or {})
+    user = None
+    latest_weight_row = None
+
+    try:
+        user = get_user_by_id_sync(user_id)
+    except Exception as e:
+        print(f"[_build_exercise_profile_snapshot_sync] 获取用户失败: {e}", flush=True)
+
+    try:
+        latest_weight_row = get_latest_user_weight_record_sync(user_id)
+    except Exception as e:
+        print(f"[_build_exercise_profile_snapshot_sync] 获取最近体重失败: {e}", flush=True)
+
+    if user:
+        if snapshot.get("height_cm") is None:
+            height_cm = _safe_float_or_none(user.get("height"))
+            if height_cm is not None:
+                snapshot["height_cm"] = round(height_cm, 1)
+
+        if not snapshot.get("gender"):
+            gender = str(user.get("gender") or "").strip().lower()
+            if gender in {"male", "female"}:
+                snapshot["gender"] = gender
+
+        if not snapshot.get("birthday"):
+            birthday = str(user.get("birthday") or "").strip()
+            if birthday:
+                snapshot["birthday"] = birthday
+
+        if snapshot.get("age_years") is None and snapshot.get("birthday"):
+            age_years = get_age_from_birthday(str(snapshot["birthday"]))
+            if age_years is not None:
+                snapshot["age_years"] = age_years
+
+        if not snapshot.get("activity_level"):
+            activity_level = str(user.get("activity_level") or "").strip()
+            if activity_level:
+                snapshot["activity_level"] = activity_level
+
+        if snapshot.get("bmr") is None:
+            bmr = _safe_float_or_none(user.get("bmr"))
+            if bmr is not None:
+                snapshot["bmr"] = round(bmr, 1)
+
+        if snapshot.get("tdee") is None:
+            tdee = _safe_float_or_none(user.get("tdee"))
+            if tdee is not None:
+                snapshot["tdee"] = round(tdee, 1)
+
+    if snapshot.get("weight_kg") is None:
+        if latest_weight_row and latest_weight_row.get("weight_kg") is not None:
+            weight_kg = _safe_float_or_none(latest_weight_row.get("weight_kg"))
+            if weight_kg is not None:
+                snapshot["weight_kg"] = round(weight_kg, 1)
+                snapshot["weight_source"] = "latest_weight_record"
+                if latest_weight_row.get("recorded_on"):
+                    snapshot["weight_recorded_on"] = str(latest_weight_row.get("recorded_on"))
+        elif user and user.get("weight") is not None:
+            weight_kg = _safe_float_or_none(user.get("weight"))
+            if weight_kg is not None:
+                snapshot["weight_kg"] = round(weight_kg, 1)
+                snapshot["weight_source"] = "user_profile"
+
+    return snapshot
 
 
 def _format_health_risk_summary_sync(user: Dict[str, Any]) -> str:
@@ -1807,6 +2320,249 @@ def process_one_text_food_task(task: Dict[str, Any]) -> None:
             print(f"[food_analysis] 任务 {task_id} 已被取消，放弃错误写入", flush=True)
 
 
+def process_one_precision_plan_task(task: Dict[str, Any]) -> None:
+    """处理精准模式规划任务：判断追问/重拍/并行估计。"""
+    task_id = task["id"]
+    payload = task.get("payload") or {}
+    session_id = str(payload.get("precision_session_id") or "").strip()
+    if not session_id:
+        update_analysis_task_result_sync(task_id, status="failed", error_message="精准模式规划任务缺少 precision_session_id")
+        return
+    try:
+        planner_result = _run_precision_plan_sync(task)
+        session = get_precision_session_by_id_sync(session_id)
+        if not session:
+            raise RuntimeError("精准模式会话不存在")
+        round_index = int(payload.get("round_index") or session.get("round_index") or 1)
+        create_precision_session_round_sync(
+            session_id,
+            round_index,
+            "assistant",
+            {},
+            planner_result,
+        )
+
+        precision_status = planner_result["precisionStatus"]
+        split_strategy = planner_result["splitStrategy"]
+        latest_inputs = session.get("latest_inputs") or {}
+
+        if precision_status in {"needs_user_input", "needs_retake"}:
+            update_precision_session_sync(
+                session_id,
+                {
+                    "status": "needs_retake" if precision_status == "needs_retake" else "needs_user_input",
+                    "latest_planner_result": planner_result,
+                    "pending_requirements": planner_result.get("pendingRequirements") or [],
+                    "split_plan": {
+                        "splitStrategy": split_strategy,
+                        "items": planner_result.get("itemsToEstimate") or [],
+                    },
+                },
+            )
+            update_analysis_task_result_sync(
+                task_id,
+                status="done",
+                result={
+                    "description": planner_result.get("description") or ("建议先重拍后继续" if precision_status == "needs_retake" else "请先补充信息"),
+                    "insight": planner_result.get("insight") or "精准模式会根据你补充的信息继续估计。",
+                    "items": [],
+                    "pfc_ratio_comment": None,
+                    "absorption_notes": None,
+                    "context_advice": None,
+                    "recognitionOutcome": "soft_reject",
+                    "rejectionReason": planner_result.get("rejectionReason"),
+                    "retakeGuidance": planner_result.get("retakeInstructions") or None,
+                    "allowedFoodCategory": "unknown",
+                    "followupQuestions": planner_result.get("followupQuestions") or None,
+                    "precisionSessionId": session_id,
+                    "precisionStatus": precision_status,
+                    "precisionRoundIndex": round_index,
+                    "pendingRequirements": planner_result.get("pendingRequirements") or None,
+                    "retakeInstructions": planner_result.get("retakeInstructions") or None,
+                    "referenceObjectNeeded": planner_result.get("referenceObjectNeeded"),
+                    "referenceObjectSuggestions": planner_result.get("referenceObjectSuggestions") or None,
+                    "detectedItemsSummary": planner_result.get("detectedItemsSummary") or None,
+                    "splitStrategy": split_strategy,
+                    "uncertaintyNotes": planner_result.get("uncertaintyNotes") or None,
+                },
+            )
+            return
+
+        items_to_estimate = planner_result.get("itemsToEstimate") or []
+        child_task_ids: List[str] = []
+        for item_index, item in enumerate(items_to_estimate):
+            item_payload = {
+                "precision_session_id": session_id,
+                "source_type": payload.get("source_type") or session.get("source_type") or "image",
+                "round_index": round_index,
+                "item_index": item_index,
+                "item_key": item.get("item_key"),
+                "item_name": item.get("item_name"),
+                "item_hint": item.get("item_hint"),
+                "additionalContext": latest_inputs.get("additionalContext"),
+                "reference_objects": latest_inputs.get("reference_objects") or session.get("reference_objects") or [],
+                "image_url": latest_inputs.get("image_url"),
+                "image_urls": latest_inputs.get("image_urls") or [],
+                "text": latest_inputs.get("text"),
+            }
+            if item_payload["source_type"] == "image":
+                child_task = create_analysis_task_sync(
+                    user_id=task["user_id"],
+                    task_type=_precision_task_type("precision_item_estimate"),
+                    image_url=item_payload.get("image_url"),
+                    image_urls=item_payload.get("image_urls") or None,
+                    payload=item_payload,
+                )
+            else:
+                child_task = create_analysis_task_sync(
+                    user_id=task["user_id"],
+                    task_type=_precision_task_type("precision_item_estimate"),
+                    text_input=item_payload.get("text"),
+                    payload=item_payload,
+                )
+            child_task_ids.append(child_task["id"])
+            create_precision_item_estimate_sync(
+                session_id=session_id,
+                round_index=round_index,
+                item_index=item_index,
+                item_key=str(item.get("item_key")),
+                item_name=str(item.get("item_name")),
+                payload=item_payload,
+                source_task_id=child_task["id"],
+            )
+
+        aggregate_task = create_analysis_task_sync(
+            user_id=task["user_id"],
+            task_type=_precision_task_type("precision_aggregate"),
+            payload={
+                "precision_session_id": session_id,
+                "round_index": round_index,
+                "split_strategy": split_strategy,
+                "child_task_ids": child_task_ids,
+            },
+        )
+        update_precision_session_sync(
+            session_id,
+            {
+                "status": "estimating",
+                "split_plan": {
+                    "splitStrategy": split_strategy,
+                    "items": items_to_estimate,
+                },
+                "latest_planner_result": planner_result,
+                "pending_requirements": [],
+                "current_task_id": aggregate_task["id"],
+            },
+        )
+        update_analysis_task_result_sync(
+            task_id,
+            status="done",
+            result={
+                "description": planner_result.get("description") or "正在拆分主体并并行估计",
+                "insight": planner_result.get("insight") or "精准模式已进入并行估计阶段。",
+                "items": [],
+                "precisionSessionId": session_id,
+                "precisionStatus": "estimating",
+                "precisionRoundIndex": round_index,
+                "detectedItemsSummary": planner_result.get("detectedItemsSummary") or None,
+                "splitStrategy": split_strategy,
+                "uncertaintyNotes": planner_result.get("uncertaintyNotes") or None,
+                "redirectTaskId": aggregate_task["id"],
+            },
+        )
+    except Exception as e:
+        err_msg = str(e) or type(e).__name__
+        update_precision_session_sync(
+            session_id,
+            {
+                "status": "failed",
+                "last_error": err_msg,
+            },
+        )
+        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+
+
+def process_one_precision_item_estimate_task(task: Dict[str, Any]) -> None:
+    """处理精准模式子项估计任务。"""
+    task_id = task["id"]
+    estimate_row = get_precision_item_estimate_by_source_task_sync(task_id)
+    try:
+        if estimate_row:
+            update_precision_item_estimate_sync(estimate_row["id"], {"status": "processing"})
+        result = _run_precision_item_estimate_sync(task)
+        if estimate_row:
+            update_precision_item_estimate_sync(
+                estimate_row["id"],
+                {
+                    "status": "done",
+                    "result": result,
+                    "error_message": None,
+                },
+            )
+        update_analysis_task_result_sync(task_id, status="done", result=result)
+    except Exception as e:
+        err_msg = str(e) or type(e).__name__
+        if estimate_row:
+            update_precision_item_estimate_sync(
+                estimate_row["id"],
+                {
+                    "status": "failed",
+                    "error_message": err_msg,
+                },
+            )
+        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+
+
+def process_one_precision_aggregate_task(task: Dict[str, Any]) -> None:
+    """处理精准模式聚合任务：等待并行子估计完成后，汇总最终结果。"""
+    task_id = task["id"]
+    payload = task.get("payload") or {}
+    session_id = str(payload.get("precision_session_id") or "").strip()
+    round_index = int(payload.get("round_index") or 1)
+    split_strategy = str(payload.get("split_strategy") or "single_item")
+    if not session_id:
+        update_analysis_task_result_sync(task_id, status="failed", error_message="精准模式聚合任务缺少 precision_session_id")
+        return
+    try:
+        deadline = time.time() + PRECISION_MAX_AGGREGATE_WAIT_SECONDS
+        estimates: List[Dict[str, Any]] = []
+        while time.time() < deadline:
+            estimates = list_precision_item_estimates_sync(session_id, round_index)
+            if estimates and all(str(item.get("status") or "") in {"done", "failed"} for item in estimates):
+                break
+            time.sleep(1.0)
+        if not estimates:
+            raise RuntimeError("精准模式聚合未找到子项估计结果")
+
+        final_result = _build_precision_final_result(
+            session_id=session_id,
+            round_index=round_index,
+            split_strategy=split_strategy,
+            estimates=estimates,
+        )
+        update_precision_session_sync(
+            session_id,
+            {
+                "status": "done",
+                "final_result": final_result,
+                "current_task_id": task_id,
+                "last_error": None,
+            },
+        )
+        update_analysis_task_result_sync(task_id, status="done", result=final_result)
+    except Exception as e:
+        err_msg = str(e) or type(e).__name__
+        update_precision_session_sync(
+            session_id,
+            {
+                "status": "failed",
+                "last_error": err_msg,
+                "current_task_id": task_id,
+            },
+        )
+        update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
+
+
 def process_one_public_library_moderation_task(task: Dict[str, Any]) -> None:
     """处理公共食物库文本审核任务。若违规，则标记失败且更新 library_item 状态为 rejected；若通过则更新为 published。"""
     task_id = task["id"]
@@ -2232,18 +2988,33 @@ def process_one_exercise_task(task: Dict[str, Any]) -> None:
         return
 
     try:
-        calories, ai_raw = estimate_exercise_calories_sync(text)
-        row = create_user_exercise_log_sync(user_id, text, calories, recorded_on)
+        profile_snapshot = _build_exercise_profile_snapshot_sync(user_id, payload)
+        print(
+            f"[process_one_exercise_task] start task_id={task_id} user_id={user_id} text={text!r} "
+            f"recorded_on={recorded_on} profile_snapshot={json.dumps(profile_snapshot, ensure_ascii=False)}",
+            flush=True,
+        )
+        calories, ai_raw, reasoning = estimate_exercise_calories_sync(text, profile_snapshot)
+        row = create_user_exercise_log_sync(
+            user_id, text, calories, recorded_on, ai_reasoning=reasoning
+        )
         day = row.get("recorded_on") or recorded_on
         total = get_exercise_calories_by_date_sync(user_id, day) if day else 0
         result = {
             "exercise_log": row,
             "estimated_calories": calories,
             "ai_response": ai_raw,
+            "reasoning": reasoning,
+            "profile_snapshot": profile_snapshot,
             "today_total": total,
         }
         update_analysis_task_result_sync(task_id, "done", result=result)
+        print(
+            f"[process_one_exercise_task] done task_id={task_id} calories={calories} today_total={total}",
+            flush=True,
+        )
     except ExerciseLlmError as e:
+        print(f"[process_one_exercise_task] llm_error task_id={task_id} error={e}", flush=True)
         update_analysis_task_result_sync(task_id, "failed", error_message=str(e))
     except Exception as e:
         err = _stringify_exception_for_task(e)
@@ -2264,6 +3035,12 @@ def run_worker(worker_id: int, task_type: str = "food", poll_interval: float = 2
         "food_debug": process_one_food_task,
         "food_text": process_one_text_food_task,
         "food_text_debug": process_one_text_food_task,
+        "precision_plan": process_one_precision_plan_task,
+        "precision_plan_debug": process_one_precision_plan_task,
+        "precision_item_estimate": process_one_precision_item_estimate_task,
+        "precision_item_estimate_debug": process_one_precision_item_estimate_task,
+        "precision_aggregate": process_one_precision_aggregate_task,
+        "precision_aggregate_debug": process_one_precision_aggregate_task,
         "health_report": process_one_health_report_task,
         "public_food_library_text": process_one_public_library_moderation_task,
         "exercise": process_one_exercise_task,

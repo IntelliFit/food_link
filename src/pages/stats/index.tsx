@@ -2,7 +2,15 @@ import { View, Text, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { Switch } from '@taroify/core'
-import { getStatsSummary, generateStatsInsight, saveStatsInsight, getBodyMetricsSummary, type StatsSummary } from '../../utils/api'
+import {
+  getStatsSummary,
+  generateStatsInsight,
+  saveStatsInsight,
+  getBodyMetricsSummary,
+  type StatsSummary,
+  type BodyMetricWeightEntry,
+  type BodyMetricWaterDay,
+} from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
@@ -61,6 +69,76 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value))
 }
 
+const WATER_GOAL_DEFAULT = 2000
+
+type StoredBodyMetrics = {
+  weightEntries: Array<{ date: string; value: number; recorded_at?: string }>
+  waterByDate: Record<string, { date: string; total: number; logs: number[] }>
+  waterGoalMl: number
+}
+
+function normalizeStoredBodyMetrics(raw: unknown): StoredBodyMetrics {
+  const fallback: StoredBodyMetrics = {
+    weightEntries: [],
+    waterByDate: {},
+    waterGoalMl: WATER_GOAL_DEFAULT,
+  }
+
+  if (!raw || typeof raw !== 'object') {
+    return fallback
+  }
+
+  const source = raw as Record<string, unknown>
+
+  const weightEntries = Array.isArray(source.weightEntries)
+    ? source.weightEntries
+      .map(item => {
+        if (!item || typeof item !== 'object') return null
+        const obj = item as Record<string, unknown>
+        const date = typeof obj.date === 'string' ? obj.date : ''
+        const value = toSafeNumber(obj.value, NaN)
+        const recordedAt = typeof obj.recorded_at === 'string' ? obj.recorded_at : undefined
+        if (!date || !Number.isFinite(value)) return null
+        return { date, value, recorded_at: recordedAt }
+      })
+      .filter((item): item is { date: string; value: number; recorded_at?: string } => Boolean(item))
+    : []
+
+  const waterByDate: StoredBodyMetrics['waterByDate'] = {}
+  if (source.waterByDate && typeof source.waterByDate === 'object' && !Array.isArray(source.waterByDate)) {
+    Object.entries(source.waterByDate as Record<string, unknown>).forEach(([key, value]) => {
+      if (!value || typeof value !== 'object') return
+      const obj = value as Record<string, unknown>
+      const date = typeof obj.date === 'string' && obj.date ? obj.date : key
+      const total = toSafeNumber(obj.total)
+      const logs = Array.isArray(obj.logs)
+        ? obj.logs
+          .map(log => toSafeNumber(log, NaN))
+          .filter(log => Number.isFinite(log))
+        : []
+      if (!date) return
+      waterByDate[date] = { date, total, logs }
+    })
+  }
+
+  const waterGoalMl = toSafeNumber(source.waterGoalMl, WATER_GOAL_DEFAULT)
+
+  return {
+    weightEntries,
+    waterByDate,
+    waterGoalMl,
+  }
+}
+
+function getStoredBodyMetrics(): StoredBodyMetrics {
+  try {
+    return normalizeStoredBodyMetrics(Taro.getStorageSync('body_metrics_storage'))
+  } catch {
+    // ignore
+  }
+  return normalizeStoredBodyMetrics(null)
+}
+
 export default function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
@@ -86,32 +164,90 @@ export default function StatsPage() {
       // 并行获取统计数据和体重/喝水数据
       const [statsRes, bodyMetricsRes] = await Promise.all([
         getStatsSummary(r),
-        getBodyMetricsSummary(r).catch(() => null)
+        getBodyMetricsSummary(r).catch(() => null),
       ])
-      
-      // 如果 stats 返回的 body_metrics 为空或缺失，使用 bodyMetricsRes 的数据
-      if (bodyMetricsRes) {
-        // 检查是否有有效的体重或喝水数据
-        const hasWeightData = bodyMetricsRes.weight_entries && bodyMetricsRes.weight_entries.length > 0
-        const hasWaterData = bodyMetricsRes.water_daily && bodyMetricsRes.water_daily.some((d: any) => d.total > 0)
-        
-        if (hasWeightData || hasWaterData) {
-          statsRes.body_metrics = {
-            weight_entries: bodyMetricsRes.weight_entries || [],
-            latest_weight: bodyMetricsRes.latest_weight || null,
-            previous_weight: bodyMetricsRes.previous_weight || null,
-            weight_change: bodyMetricsRes.weight_change ?? null,
-            water_daily: bodyMetricsRes.water_daily || [],
-            water_goal_ml: bodyMetricsRes.water_goal_ml || 2000,
-            total_water_ml: bodyMetricsRes.total_water_ml || 0,
-            avg_daily_water_ml: bodyMetricsRes.avg_daily_water_ml || 0,
-            water_recorded_days: bodyMetricsRes.water_recorded_days || 0
-          }
+
+      const cloudWeightEntries = Array.isArray(bodyMetricsRes?.weight_entries)
+        ? bodyMetricsRes.weight_entries.filter(
+          (entry): entry is BodyMetricWeightEntry => Boolean(entry && typeof entry.date === 'string'),
+        )
+        : []
+      const cloudWaterDaily = Array.isArray(bodyMetricsRes?.water_daily)
+        ? bodyMetricsRes.water_daily
+          .filter((entry): entry is BodyMetricWaterDay => Boolean(entry && typeof entry.date === 'string'))
+          .map(entry => ({
+            date: entry.date,
+            total: toSafeNumber(entry.total),
+            logs: Array.isArray(entry.logs)
+              ? entry.logs.map(log => toSafeNumber(log, NaN)).filter(log => Number.isFinite(log))
+              : [],
+          }))
+        : []
+
+      const hasCloudWeight = cloudWeightEntries.length > 0
+      const hasCloudWater = cloudWaterDaily.some(d => toSafeNumber(d.total) > 0)
+
+      const storedMetrics =
+        !hasCloudWeight || !hasCloudWater ? getStoredBodyMetrics() : null
+
+      const storedWeightEntries = (storedMetrics?.weightEntries || []).map(e => ({
+        date: e.date,
+        value: e.value,
+        recorded_at: e.recorded_at,
+      }))
+      const storedWaterDaily = Object.values(storedMetrics?.waterByDate || {}).map(w => ({
+        date: w.date,
+        total: toSafeNumber(w.total),
+        logs: Array.isArray(w.logs)
+          ? w.logs.map(log => toSafeNumber(log, NaN)).filter(log => Number.isFinite(log))
+          : [],
+      }))
+
+      const weightEntries = hasCloudWeight ? cloudWeightEntries : storedWeightEntries
+      const waterDaily = hasCloudWater ? cloudWaterDaily : storedWaterDaily
+
+      const totalWaterMl = waterDaily.reduce((sum: number, d) => sum + toSafeNumber(d.total), 0)
+      const recordedDays = waterDaily.filter(d => toSafeNumber(d.total) > 0).length
+      const avgDailyWaterMl = recordedDays > 0 ? Math.round(totalWaterMl / recordedDays) : 0
+
+      const sortedWeight = [...weightEntries].sort((a, b) => `${b.date || ''}`.localeCompare(`${a.date || ''}`))
+      const latestWeight = sortedWeight[0] || null
+      const previousWeight = sortedWeight[1] || null
+      const weightChange =
+        latestWeight && previousWeight
+          ? Math.round((latestWeight.value - previousWeight.value) * 10) / 10
+          : null
+
+      if (weightEntries.length > 0 || waterDaily.length > 0) {
+        statsRes.body_metrics = {
+          range: r,
+          start_date: bodyMetricsRes?.start_date ?? '',
+          end_date: bodyMetricsRes?.end_date ?? '',
+          weight_trend_daily: bodyMetricsRes?.weight_trend_daily,
+          weight_entries: weightEntries,
+          latest_weight: latestWeight,
+          previous_weight: previousWeight,
+          weight_change: weightChange,
+          water_daily: waterDaily,
+          today_water: bodyMetricsRes?.today_water ?? {
+            date: formatLocalDate(),
+            total: 0,
+            logs: [],
+          },
+          water_goal_ml: toSafeNumber(
+            bodyMetricsRes?.water_goal_ml,
+            storedMetrics?.waterGoalMl || WATER_GOAL_DEFAULT,
+          ),
+          total_water_ml: hasCloudWater ? (bodyMetricsRes?.total_water_ml || 0) : totalWaterMl,
+          avg_daily_water_ml: hasCloudWater ? (bodyMetricsRes?.avg_daily_water_ml || 0) : avgDailyWaterMl,
+          water_recorded_days: hasCloudWater ? (bodyMetricsRes?.water_recorded_days || 0) : recordedDays,
         }
       }
+
       setData(statsRes)
     } catch (e: unknown) {
-      setError((e as Error).message || '获取统计失败')
+      console.error('[stats] fetchStats failed:', e)
+      setError((e as Error)?.message || '获取统计失败')
     } finally {
       setLoading(false)
     }

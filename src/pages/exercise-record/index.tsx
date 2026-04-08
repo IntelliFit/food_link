@@ -34,6 +34,8 @@ interface ExerciseRecord {
   content: string
   calories: number
   createdAt: string
+  /** 模型思考过程（有则展示） */
+  reasoning?: string | null
 }
 
 /** 本地「分析中 / 失败」卡片（不跳转页面） */
@@ -51,7 +53,8 @@ function mapLogToRecord(log: ExerciseLogItem): ExerciseRecord {
     id: log.id,
     content: log.exercise_desc,
     calories: log.calories_burned,
-    createdAt: log.recorded_at
+    createdAt: log.recorded_at,
+    reasoning: log.ai_reasoning ?? undefined
   }
 }
 
@@ -364,9 +367,14 @@ export default function ExerciseRecordPage() {
                     <Text className='chat-content'>{row.record.content}</Text>
                   </View>
                   <View className='chat-meta'>
-                    <View className='chat-result'>
-                      <IconExercise size={14} color='#f97316' />
-                      <Text className='chat-result-text'>消耗 {row.record.calories} kcal</Text>
+                    <View className='chat-meta-left'>
+                      <View className='chat-result'>
+                        <IconExercise size={14} color='#f97316' />
+                        <Text className='chat-result-text'>消耗 {row.record.calories} kcal</Text>
+                      </View>
+                      {row.record.reasoning ? (
+                        <Text className='chat-reasoning'>{row.record.reasoning}</Text>
+                      ) : null}
                     </View>
                     <Text className='chat-time'>{formatTime(row.record.createdAt)}</Text>
                   </View>

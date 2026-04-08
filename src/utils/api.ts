@@ -57,6 +57,23 @@ export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode = 'standard' | 'strict'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
+export type PrecisionSourceType = 'image' | 'text'
+export type PrecisionStatus = 'needs_user_input' | 'needs_retake' | 'estimating' | 'done'
+export type PrecisionSplitStrategy = 'single_item' | 'multi_item_parallel' | 'retake_required' | 'user_annotation_required'
+
+export interface PrecisionReferenceDimensions {
+  length?: number
+  width?: number
+  height?: number
+}
+
+export interface PrecisionReferenceObjectInput {
+  reference_type: 'preset' | 'custom'
+  reference_name: string
+  dimensions_mm?: PrecisionReferenceDimensions
+  placement_note?: string
+  applies_to_items?: string[]
+}
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
@@ -110,6 +127,17 @@ export interface AnalyzeResponse {
   retakeGuidance?: string[]
   allowedFoodCategory?: AllowedFoodCategory
   followupQuestions?: string[]
+  precisionSessionId?: string
+  precisionStatus?: PrecisionStatus
+  precisionRoundIndex?: number
+  pendingRequirements?: string[]
+  retakeInstructions?: string[]
+  referenceObjectNeeded?: boolean
+  referenceObjectSuggestions?: string[]
+  detectedItemsSummary?: string[]
+  splitStrategy?: PrecisionSplitStrategy
+  uncertaintyNotes?: string[]
+  redirectTaskId?: string
 }
 
 // ---------- 双模型对比分析接口 ----------
@@ -145,6 +173,10 @@ export interface FoodRecordItemPayload {
   ratio: number
   intake: number
   nutrients: Nutrients
+  manual_source?: 'public_library' | 'nutrition_library'
+  manual_source_id?: string
+  manual_source_title?: string
+  manual_portion_label?: string
 }
 
 /** 确认记录请求：餐次 + 识别结果与营养汇总 + 用户状态与专业分析 */
@@ -1106,6 +1138,8 @@ export interface AnalyzeTaskSubmitParams {
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
   previousResult?: AnalyzeResponse
+  precision_session_id?: string
+  reference_objects?: PrecisionReferenceObjectInput[]
   correctionItems?: Array<{
     name: string
     weight: number
@@ -1165,6 +1199,8 @@ export interface AnalyzeTextTaskSubmitParams {
   additionalContext?: string
   execution_mode?: ExecutionMode
   previousResult?: AnalyzeResponse
+  precision_session_id?: string
+  reference_objects?: PrecisionReferenceObjectInput[]
   correctionItems?: Array<{
     name: string
     weight: number
@@ -1190,6 +1226,44 @@ export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): 
   })
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '提交任务失败'
+    throw new Error(msg)
+  }
+  return res.data as { task_id: string; message: string }
+}
+
+export interface ContinuePrecisionSessionParams {
+  source_type: PrecisionSourceType
+  image_url?: string
+  image_urls?: string[]
+  text?: string
+  additionalContext?: string
+  meal_type?: MealType
+  timezone_offset_minutes?: number
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+  is_multi_view?: boolean
+  reference_objects?: PrecisionReferenceObjectInput[]
+}
+
+export async function continuePrecisionSession(
+  sessionId: string,
+  body: ContinuePrecisionSessionParams,
+): Promise<{ task_id: string; message: string }> {
+  const payload: ContinuePrecisionSessionParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset(),
+  }
+  const res = await authenticatedRequest(`/api/precision-sessions/${sessionId}/continue`, {
+    method: 'POST',
+    data: payload,
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '继续精准模式失败'
     throw new Error(msg)
   }
   return res.data as { task_id: string; message: string }
@@ -2255,14 +2329,25 @@ export interface ManualFoodSearchResult {
   items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }> | null
   image_path?: string | null
   image_paths?: string[] | null
+  portion_label?: string
+  source_label?: string
+  recommend_reason?: string
+  usage_count?: number
+  collected?: boolean
+  like_count?: number
+  collection_count?: number
+  match_score?: number
 }
 
 export async function searchManualFood(q: string, limit: number = 20): Promise<ManualFoodSearchResult[]> {
+  const token = getAccessToken()
   const params = new URLSearchParams({ q: q.trim(), limit: String(limit) })
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/manual-food/search?${params.toString()}`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders({
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }),
     timeout: 10000
   })
   if (response.statusCode !== 200) {
@@ -2272,15 +2357,20 @@ export async function searchManualFood(q: string, limit: number = 20): Promise<M
 }
 
 export interface ManualFoodBrowseResult {
+  recent_items: ManualFoodSearchResult[]
+  collected_public_library: ManualFoodSearchResult[]
   public_library: ManualFoodSearchResult[]
   nutrition_library: ManualFoodSearchResult[]
 }
 
 export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/manual-food/browse`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders({
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }),
     timeout: 15000
   })
   if (response.statusCode !== 200) {
@@ -3112,6 +3202,8 @@ export interface ExerciseLogItem {
   calories_burned: number
   recorded_on: string
   recorded_at: string
+  /** 模型估算时的思考过程（需库表含 ai_reasoning 列） */
+  ai_reasoning?: string | null
 }
 
 /** 获取运动记录列表 */
@@ -3169,6 +3261,10 @@ export interface ExerciseTaskResultPayload {
   exercise_log: ExerciseLogItem
   estimated_calories: number
   ai_response?: string | null
+  /** 与 calories 配套的思考过程（中文） */
+  reasoning?: string | null
+  /** 估算时使用的用户画像快照 */
+  profile_snapshot?: Record<string, any> | null
   today_total: number
 }
 
@@ -3209,7 +3305,13 @@ export async function deleteExerciseLog(logId: string): Promise<{ message: strin
 }
 
 /** AI 估算运动卡路里 */
-export async function estimateExerciseCalories(exerciseDesc: string): Promise<{ estimated_calories: number; exercise_desc: string; ai_response?: string }> {
+export async function estimateExerciseCalories(exerciseDesc: string): Promise<{
+  estimated_calories: number
+  exercise_desc: string
+  ai_response?: string
+  reasoning?: string
+  profile_snapshot?: Record<string, any>
+}> {
   const response = await authenticatedRequest('/api/exercise-logs/estimate-calories', {
     method: 'POST',
     data: { exercise_desc: exerciseDesc },
@@ -3218,5 +3320,11 @@ export async function estimateExerciseCalories(exerciseDesc: string): Promise<{ 
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '估算卡路里失败')
   }
-  return response.data as { estimated_calories: number; exercise_desc: string; ai_response?: string }
+  return response.data as {
+    estimated_calories: number
+    exercise_desc: string
+    ai_response?: string
+    reasoning?: string
+    profile_snapshot?: Record<string, any>
+  }
 }

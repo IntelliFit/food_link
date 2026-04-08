@@ -227,7 +227,7 @@ function ProfilePage() {
       id: 6,
       icon: <ShieldOutlined size='20' />,
       title: '食探会员',
-      desc: membershipStatus?.is_pro ? '会员已开通' : '每日20次 · 精准模式',
+      desc: membershipStatus?.is_pro ? '会员已开通' : '每日10次 · 精准模式',
       path: '/pages/pro-membership/index'
     }
   ]
@@ -427,12 +427,27 @@ function ProfilePage() {
               </View>
               <View className='card-body'>
                 <View className='progress-info'>
-                  <Text className='progress-text'>今日分析 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit ?? 20} 次</Text>
-                  <View className='progress-bar'>
-                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus.daily_used ?? 0) / (membershipStatus.daily_limit ?? 20)) * 100, 100)}%` }} />
-                  </View>
+                  {membershipStatus.daily_limit != null ? (
+                    <>
+                      <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit} 次</Text>
+                      <View className='progress-bar'>
+                        <View
+                          className='progress-inner'
+                          style={{
+                            width: `${Math.min(((membershipStatus.daily_used ?? 0) / membershipStatus.daily_limit) * 100, 100)}%`
+                          }}
+                        />
+                      </View>
+                    </>
+                  ) : (
+                    <Text className='progress-text'>今日拍照分析 {membershipStatus.daily_used ?? 0} 次</Text>
+                  )}
                 </View>
-                <Text className='card-tip'>剩余 {membershipStatus.daily_remaining ?? (membershipStatus.daily_limit ?? 20)} 次 · 精准模式已解锁</Text>
+                <Text className='card-tip'>
+                  {membershipStatus.daily_limit != null
+                    ? `剩余 ${membershipStatus.daily_remaining ?? 0} 次 · 精准模式已解锁`
+                    : '当前不限次 · 精准模式已解锁'}
+                </Text>
               </View>
             </>
           ) : (
@@ -448,12 +463,29 @@ function ProfilePage() {
               </View>
               <View className='card-body'>
                 <View className='progress-info'>
-                  <Text className='progress-text'>今日分析 {membershipStatus?.daily_used ?? 0}/{membershipStatus?.daily_limit ?? 10} 次</Text>
-                  <View className='progress-bar'>
-                    <View className='progress-inner' style={{ width: `${Math.min(((membershipStatus?.daily_used ?? 0) / (membershipStatus?.daily_limit ?? 10)) * 100, 100)}%` }} />
-                  </View>
+                  {membershipStatus?.daily_limit != null ? (
+                    <>
+                      <Text className='progress-text'>
+                        今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit} 次
+                      </Text>
+                      <View className='progress-bar'>
+                        <View
+                          className='progress-inner'
+                          style={{
+                            width: `${Math.min(((membershipStatus.daily_used ?? 0) / membershipStatus.daily_limit) * 100, 100)}%`
+                          }}
+                        />
+                      </View>
+                    </>
+                  ) : (
+                    <Text className='progress-text'>今日拍照分析 {membershipStatus?.daily_used ?? 0} 次</Text>
+                  )}
                 </View>
-                <Text className='card-tip'>开通会员每日享20次 · 解锁精准模式</Text>
+                <Text className='card-tip'>
+                  {membershipStatus?.daily_limit != null
+                    ? `剩余 ${membershipStatus?.daily_remaining ?? 0} 次 · 开通会员每日享10次`
+                    : '当前不限次 · 开通会员享专属权益'}
+                </Text>
               </View>
             </>
           )}

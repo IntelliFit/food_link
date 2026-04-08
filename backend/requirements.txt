@@ -8,5 +8,7 @@ python-jose[cryptography]==3.3.0
 supabase==2.27.2
 psycopg2-binary==2.9.10
 Pillow>=10.0.0
+# realtime（supabase 依赖）需要 websockets 13+，否则报 No module named 'websockets.asyncio'
+websockets>=13.0,<16
 # 注：Gemini 模型通过 OfoxAI 的 OpenAI 兼容接口调用，无需额外 SDK
 # psycopg2-binary：仅 scripts/apply_exercise_migration.py 直连 Postgres 执行 SQL 迁移时需要

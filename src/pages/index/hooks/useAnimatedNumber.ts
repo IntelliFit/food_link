@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 
+const getNow = (): number => {
+  if (typeof globalThis !== 'undefined' && globalThis.performance && typeof globalThis.performance.now === 'function') {
+    return globalThis.performance.now()
+  }
+  return Date.now()
+}
+
 export function useAnimatedNumber(target: number, duration: number = 600, delay: number = 0): number {
   const [displayValue, setDisplayValue] = useState(target)
   const animationRef = useRef<{ startTime: number | null; startValue: number; rafId: number | null }>({
@@ -14,7 +21,7 @@ export function useAnimatedNumber(target: number, duration: number = 600, delay:
     }
 
     const startValue = displayValue
-    const startTime = performance.now() + delay
+    const startTime = getNow() + delay
     animationRef.current = { startTime, startValue, rafId: null }
 
     const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3)

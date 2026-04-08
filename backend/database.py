@@ -591,6 +591,52 @@ async def list_user_weight_records(
         raise
 
 
+async def get_latest_user_weight_record(user_id: str) -> Optional[Dict[str, Any]]:
+    """读取用户最近一次体重记录（按 recorded_on/created_at 倒序）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_weight_records")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("recorded_on", desc=True)
+            .order("created_at", desc=True)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_latest_user_weight_record] 错误: {e}")
+        raise
+
+
+def get_latest_user_weight_record_sync(user_id: str) -> Optional[Dict[str, Any]]:
+    """同步版：读取用户最近一次体重记录，供 Worker 使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_weight_records")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("recorded_on", desc=True)
+            .order("created_at", desc=True)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_latest_user_weight_record_sync] 错误: {e}")
+        raise
+
+
 async def create_user_weight_record(
     user_id: str,
     recorded_on: str,
@@ -2212,6 +2258,46 @@ def _normalize_feed_comment_row(
     }
 
 
+def _find_recent_duplicate_feed_comment_sync(
+    supabase,
+    user_id: str,
+    record_id: str,
+    content: str,
+    parent_comment_id: Optional[str] = None,
+    reply_to_user_id: Optional[str] = None,
+    window_seconds: int = 8,
+) -> Optional[Dict[str, Any]]:
+    normalized_content = (content or "").strip()
+    if not normalized_content:
+        return None
+
+    try:
+        result = (
+            supabase.table("feed_comments")
+            .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
+            .eq("user_id", user_id)
+            .eq("record_id", record_id)
+            .eq("content", normalized_content)
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[_find_recent_duplicate_feed_comment_sync] 查询失败: {e}")
+        return None
+
+    now = datetime.now(timezone.utc)
+    for row in list(result.data or []):
+        if row.get("parent_comment_id") != parent_comment_id:
+            continue
+        if row.get("reply_to_user_id") != reply_to_user_id:
+            continue
+        created_at = _parse_iso_datetime(row.get("created_at"))
+        if created_at and (now - created_at).total_seconds() <= window_seconds:
+            return row
+    return None
+
+
 def _slice_feed_comment_preview(comments: List[Dict[str, Any]], comments_limit: int) -> List[Dict[str, Any]]:
     if comments_limit <= 0:
         return []
@@ -2847,10 +2933,25 @@ async def add_feed_comment(
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        normalized_content = content.strip()
+        duplicate = _find_recent_duplicate_feed_comment_sync(
+            supabase,
+            user_id=user_id,
+            record_id=record_id,
+            content=normalized_content,
+            parent_comment_id=parent_comment_id,
+            reply_to_user_id=reply_to_user_id,
+        )
+        if duplicate:
+            return {
+                **duplicate,
+                "_deduped": True,
+            }
+
         row = {
             "user_id": user_id,
             "record_id": record_id,
-            "content": content.strip(),
+            "content": normalized_content,
             "parent_comment_id": parent_comment_id,
             "reply_to_user_id": reply_to_user_id,
         }
@@ -2874,10 +2975,25 @@ def add_feed_comment_sync(
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        normalized_content = content.strip()
+        duplicate = _find_recent_duplicate_feed_comment_sync(
+            supabase,
+            user_id=user_id,
+            record_id=record_id,
+            content=normalized_content,
+            parent_comment_id=parent_comment_id,
+            reply_to_user_id=reply_to_user_id,
+        )
+        if duplicate:
+            return {
+                **duplicate,
+                "_deduped": True,
+            }
+
         row = {
             "user_id": user_id,
             "record_id": record_id,
-            "content": content.strip(),
+            "content": normalized_content,
             "parent_comment_id": parent_comment_id,
             "reply_to_user_id": reply_to_user_id,
         }
@@ -4385,69 +4501,349 @@ async def update_pro_membership_payment_record(order_no: str, data: Dict[str, An
 
 # ---------- 手动记录：食物搜索 ----------
 
-async def search_manual_food(q: str, limit: int = 20) -> List[Dict[str, Any]]:
+def _normalize_manual_food_keyword(value: Any) -> str:
+    return re.sub(r"\s+", "", str(value or "").strip().lower())
+
+
+def _safe_manual_food_number(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except Exception:
+        return 0.0
+
+
+def _build_manual_public_food_result(
+    row: Dict[str, Any],
+    *,
+    collected: bool = False,
+) -> Dict[str, Any]:
+    items_raw = row.get("items") or []
+    total_weight = sum(
+        max(int((it or {}).get("weight") or (it or {}).get("estimatedWeightGrams") or 0), 0)
+        for it in items_raw
+        if isinstance(it, dict)
+    ) if items_raw else 100
+    return {
+        "id": row["id"],
+        "source": "public_library",
+        "title": row.get("food_name") or row.get("description") or "公共食物库",
+        "subtitle": row.get("merchant_name") or "公共食物库",
+        "default_weight_grams": total_weight or 100,
+        "total_calories": _safe_manual_food_number(row.get("total_calories")),
+        "total_protein": _safe_manual_food_number(row.get("total_protein")),
+        "total_carbs": _safe_manual_food_number(row.get("total_carbs")),
+        "total_fat": _safe_manual_food_number(row.get("total_fat")),
+        "items": items_raw,
+        "image_path": row.get("image_path"),
+        "image_paths": row.get("image_paths"),
+        "portion_label": "1份",
+        "source_label": "公共库",
+        "like_count": int(row.get("like_count") or 0),
+        "collection_count": int(row.get("collection_count") or 0),
+        "collected": bool(collected),
+    }
+
+
+def _build_manual_nutrition_food_result(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "source": "nutrition_library",
+        "title": row.get("canonical_name") or "未知食物",
+        "subtitle": "标准食物词典 · 每100g",
+        "default_weight_grams": 100,
+        "total_calories": _safe_manual_food_number(row.get("kcal_per_100g")),
+        "total_protein": _safe_manual_food_number(row.get("protein_per_100g")),
+        "total_carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
+        "total_fat": _safe_manual_food_number(row.get("fat_per_100g")),
+        "nutrients_per_100g": {
+            "calories": _safe_manual_food_number(row.get("kcal_per_100g")),
+            "protein": _safe_manual_food_number(row.get("protein_per_100g")),
+            "carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
+            "fat": _safe_manual_food_number(row.get("fat_per_100g")),
+        },
+        "items": None,
+        "image_path": None,
+        "image_paths": None,
+        "portion_label": "100g",
+        "source_label": "营养词典",
+        "collected": False,
+        "like_count": 0,
+        "collection_count": 0,
+    }
+
+
+def _compute_manual_food_match_score(
+    *,
+    query: str,
+    item: Dict[str, Any],
+    usage_count: int,
+    collected: bool,
+) -> float:
+    normalized_query = _normalize_manual_food_keyword(query)
+    normalized_title = _normalize_manual_food_keyword(item.get("title"))
+    normalized_subtitle = _normalize_manual_food_keyword(item.get("subtitle"))
+    raw_query = str(query or "").strip().lower()
+    raw_title = str(item.get("title") or "").strip().lower()
+    score = 0.0
+
+    if normalized_title == normalized_query:
+        score += 140.0
+    elif normalized_title.startswith(normalized_query):
+        score += 95.0
+    elif normalized_query and normalized_query in normalized_title:
+        score += 62.0
+
+    if raw_title == raw_query:
+        score += 30.0
+    elif raw_title.startswith(raw_query):
+        score += 18.0
+
+    if normalized_subtitle and normalized_query and normalized_query in normalized_subtitle:
+        score += 14.0
+
+    if item.get("source") == "public_library":
+        score += min(float(item.get("like_count") or 0), 60.0) * 0.45
+        score += min(float(item.get("collection_count") or 0), 40.0) * 0.35
+
+    if collected:
+        score += 28.0
+    if usage_count > 0:
+        score += min(float(usage_count), 8.0) * 12.0
+
+    return round(score, 2)
+
+
+def _build_manual_food_recommend_reason(
+    *,
+    item: Dict[str, Any],
+    usage_count: int,
+    collected: bool,
+) -> str:
+    if usage_count >= 2:
+        return f"最近常吃 · {usage_count}次"
+    if usage_count == 1:
+        return "最近吃过"
+    if collected:
+        return "已收藏"
+    if item.get("source") == "public_library" and int(item.get("like_count") or 0) >= 3:
+        return f"{int(item.get('like_count') or 0)}人喜欢"
+    if item.get("source") == "public_library":
+        return "公共库实餐"
+    return "标准营养词典"
+
+
+async def _get_manual_food_usage_stats(
+    user_id: Optional[str],
+    *,
+    limit_records: int = 120,
+) -> Dict[str, Any]:
+    if not user_id:
+        return {
+            "name_counter": Counter(),
+            "source_counter": Counter(),
+            "recent_entries": [],
+        }
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        rows = (
+            supabase.table("user_food_records")
+            .select("items,record_time,created_at")
+            .eq("user_id", user_id)
+            .order("record_time", desc=True)
+            .limit(limit_records)
+            .execute()
+        )
+        name_counter: Counter = Counter()
+        source_counter: Counter = Counter()
+        recent_entries: List[Dict[str, Any]] = []
+        seen_recent_keys = set()
+        for row in list(rows.data or []):
+            record_time = row.get("record_time") or row.get("created_at")
+            for item in (row.get("items") or []):
+                if not isinstance(item, dict):
+                    continue
+                source = str(item.get("manual_source") or item.get("source") or "").strip()
+                source_id = str(item.get("manual_source_id") or item.get("source_id") or "").strip()
+                source_title = str(item.get("manual_source_title") or item.get("name") or "").strip()
+                normalized_name = _normalize_manual_food_keyword(source_title)
+                if not normalized_name:
+                    continue
+                name_counter[normalized_name] += 1
+                if source and source_id:
+                    source_counter[f"{source}:{source_id}"] += 1
+                    recent_key = f"{source}:{source_id}"
+                else:
+                    recent_key = f"name:{normalized_name}"
+                if recent_key in seen_recent_keys:
+                    continue
+                seen_recent_keys.add(recent_key)
+                recent_entries.append({
+                    "recent_key": recent_key,
+                    "source": source or None,
+                    "source_id": source_id or None,
+                    "title": source_title,
+                    "last_used_at": record_time,
+                })
+        return {
+            "name_counter": name_counter,
+            "source_counter": source_counter,
+            "recent_entries": recent_entries,
+        }
+    except Exception as e:
+        print(f"[_get_manual_food_usage_stats] 错误: {e}")
+        return {
+            "name_counter": Counter(),
+            "source_counter": Counter(),
+            "recent_entries": [],
+        }
+
+
+def _annotate_manual_food_results(
+    results: List[Dict[str, Any]],
+    *,
+    query: str,
+    usage_stats: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    name_counter = (usage_stats or {}).get("name_counter") or Counter()
+    source_counter = (usage_stats or {}).get("source_counter") or Counter()
+    annotated: List[Dict[str, Any]] = []
+    for item in results:
+        normalized_title = _normalize_manual_food_keyword(item.get("title"))
+        source_key = f"{item.get('source')}:{item.get('id')}"
+        usage_count = int(source_counter.get(source_key) or name_counter.get(normalized_title) or 0)
+        collected = bool(item.get("collected"))
+        score = _compute_manual_food_match_score(
+            query=query,
+            item=item,
+            usage_count=usage_count,
+            collected=collected,
+        ) if query else (
+            usage_count * 12.0
+            + (26.0 if collected else 0.0)
+            + min(float(item.get("like_count") or 0), 60.0) * 0.4
+        )
+        annotated.append({
+            **item,
+            "usage_count": usage_count,
+            "recommend_reason": _build_manual_food_recommend_reason(
+                item=item,
+                usage_count=usage_count,
+                collected=collected,
+            ),
+            "match_score": round(score, 2),
+        })
+    annotated.sort(
+        key=lambda item: (
+            float(item.get("match_score") or 0),
+            int(item.get("usage_count") or 0),
+            1 if item.get("source") == "public_library" else 0,
+            int(item.get("like_count") or 0),
+            -len(str(item.get("title") or "")),
+        ),
+        reverse=True,
+    )
+    return annotated
+
+
+def _build_recent_manual_food_items(
+    candidates: List[Dict[str, Any]],
+    usage_stats: Optional[Dict[str, Any]],
+    *,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    if not candidates:
+        return []
+    recent_entries = list((usage_stats or {}).get("recent_entries") or [])
+    if not recent_entries:
+        return []
+
+    by_source_key = {
+        f"{item.get('source')}:{item.get('id')}": item
+        for item in candidates
+    }
+    by_name: Dict[str, List[Dict[str, Any]]] = {}
+    for item in candidates:
+        by_name.setdefault(_normalize_manual_food_keyword(item.get("title")), []).append(item)
+
+    picked: List[Dict[str, Any]] = []
+    seen_keys = set()
+    for entry in recent_entries:
+        if len(picked) >= limit:
+            break
+        candidate = None
+        recent_key = entry.get("recent_key")
+        if recent_key and recent_key in by_source_key:
+            candidate = by_source_key[recent_key]
+        else:
+            matched = by_name.get(_normalize_manual_food_keyword(entry.get("title")))
+            if matched:
+                candidate = matched[0]
+        if not candidate:
+            continue
+        source_key = f"{candidate.get('source')}:{candidate.get('id')}"
+        if source_key in seen_keys:
+            continue
+        seen_keys.add(source_key)
+        picked.append(candidate)
+    return picked
+
+
+async def search_manual_food(
+    q: str,
+    limit: int = 20,
+    current_user_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     统一搜索公共食物库 + 标准食物营养词典（含别名），
-    返回格式统一的结果列表，供手动记录使用。
+    并结合用户收藏/最近使用记录做统一重排。
     """
     if not q or not q.strip():
         return []
     q = q.strip()
     check_supabase_configured()
     supabase = get_supabase_client()
+    usage_stats = await _get_manual_food_usage_stats(current_user_id)
     results: List[Dict[str, Any]] = []
+    search_limit = max(min(limit * 3, 60), 20)
 
-    # 1) 搜索 public_food_library（优先展示）
+    collected_ids = set()
+    if current_user_id:
+        try:
+            collected_items = await list_collected_public_food_library(current_user_id, limit=80)
+            collected_ids = {str(item.get("id")) for item in collected_items if item.get("id")}
+        except Exception as e:
+            print(f"[search_manual_food] 读取收藏失败: {e}")
+
     try:
         pfl = supabase.table("public_food_library")\
-            .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths")\
+            .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths,like_count,collection_count")\
             .eq("status", "published")\
             .or_(f"food_name.ilike.%{q}%,description.ilike.%{q}%,merchant_name.ilike.%{q}%")\
-            .limit(limit)\
+            .limit(search_limit)\
             .execute()
         for row in (pfl.data or []):
-            items_raw = row.get("items") or []
-            total_weight = sum(
-                max(int(it.get("weight") or it.get("estimatedWeightGrams") or 0), 0)
-                for it in items_raw
-            ) if items_raw else 100
-            results.append({
-                "id": row["id"],
-                "source": "public_library",
-                "title": row.get("food_name") or row.get("description") or "公共食物库",
-                "subtitle": row.get("merchant_name") or "公共食物库",
-                "default_weight_grams": total_weight or 100,
-                "total_calories": float(row.get("total_calories") or 0),
-                "total_protein": float(row.get("total_protein") or 0),
-                "total_carbs": float(row.get("total_carbs") or 0),
-                "total_fat": float(row.get("total_fat") or 0),
-                "items": items_raw,
-                "image_path": row.get("image_path"),
-                "image_paths": row.get("image_paths"),
-            })
+            row_id = str(row.get("id") or "")
+            results.append(_build_manual_public_food_result(
+                row,
+                collected=row_id in collected_ids,
+            ))
     except Exception as e:
         print(f"[search_manual_food] public_food_library 搜索出错: {e}")
 
-    remaining = limit - len(results)
-    if remaining <= 0:
-        return results[:limit]
-
-    # 2) 搜索 food_nutrition_library + food_nutrition_aliases
     try:
-        # 直接按 canonical_name 匹配
         fnl = supabase.table("food_nutrition_library")\
             .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
             .eq("is_active", True)\
             .ilike("canonical_name", f"%{q}%")\
-            .limit(remaining)\
+            .limit(search_limit)\
             .execute()
         matched_ids = {row["id"] for row in (fnl.data or [])}
-
-        # 别名匹配
         alias_rows = supabase.table("food_nutrition_aliases")\
             .select("food_id,alias_name")\
             .ilike("alias_name", f"%{q}%")\
-            .limit(remaining)\
+            .limit(search_limit)\
             .execute()
         alias_food_ids = [r["food_id"] for r in (alias_rows.data or []) if r["food_id"] not in matched_ids]
 
@@ -4456,75 +4852,61 @@ async def search_manual_food(q: str, limit: int = 20) -> List[Dict[str, Any]]:
             extra = supabase.table("food_nutrition_library")\
                 .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
                 .eq("is_active", True)\
-                .in_("id", alias_food_ids[:remaining])\
+                .in_("id", alias_food_ids[:search_limit])\
                 .execute()
             extra_rows = extra.data or []
 
         all_fnl = list(fnl.data or []) + extra_rows
+        seen_ids = set()
         for row in all_fnl:
-            results.append({
-                "id": str(row["id"]),
-                "source": "nutrition_library",
-                "title": row.get("canonical_name") or "未知食物",
-                "subtitle": "标准食物词典 · 每100g",
-                "default_weight_grams": 100,
-                "total_calories": float(row.get("kcal_per_100g") or 0),
-                "total_protein": float(row.get("protein_per_100g") or 0),
-                "total_carbs": float(row.get("carbs_per_100g") or 0),
-                "total_fat": float(row.get("fat_per_100g") or 0),
-                "nutrients_per_100g": {
-                    "calories": float(row.get("kcal_per_100g") or 0),
-                    "protein": float(row.get("protein_per_100g") or 0),
-                    "carbs": float(row.get("carbs_per_100g") or 0),
-                    "fat": float(row.get("fat_per_100g") or 0),
-                },
-                "items": None,
-                "image_path": None,
-                "image_paths": None,
-            })
+            row_id = str(row.get("id") or "")
+            if not row_id or row_id in seen_ids:
+                continue
+            seen_ids.add(row_id)
+            results.append(_build_manual_nutrition_food_result(row))
     except Exception as e:
         print(f"[search_manual_food] food_nutrition_library 搜索出错: {e}")
 
-    return results[:limit]
+    annotated = _annotate_manual_food_results(results, query=q, usage_stats=usage_stats)
+    return annotated[:limit]
 
 
-async def browse_manual_food_library() -> Dict[str, List[Dict[str, Any]]]:
+async def browse_manual_food_library(
+    current_user_id: Optional[str] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
     """
-    返回两个食物数据源的全量数据，供前端可视化浏览。
-    public_food_library ~38 条, food_nutrition_library ~122 条, 数据量小可全量返回。
+    返回手动记录默认浏览数据，并在已登录时补充最近常吃与收藏公共库。
     """
     check_supabase_configured()
     supabase = get_supabase_client()
+    usage_stats = await _get_manual_food_usage_stats(current_user_id)
     public_items: List[Dict[str, Any]] = []
     nutrition_items: List[Dict[str, Any]] = []
+    collected_public_library: List[Dict[str, Any]] = []
+    collected_ids = set()
+
+    if current_user_id:
+        try:
+            collected_raw = await list_collected_public_food_library(current_user_id, limit=20)
+            for row in collected_raw:
+                item = _build_manual_public_food_result(row, collected=True)
+                collected_public_library.append(item)
+                collected_ids.add(str(item.get("id")))
+        except Exception as e:
+            print(f"[browse_manual_food_library] 收藏公共库出错: {e}")
 
     try:
         pfl = supabase.table("public_food_library")\
-            .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths")\
+            .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths,like_count,collection_count")\
             .eq("status", "published")\
             .order("like_count", desc=True)\
-            .limit(200)\
+            .limit(60)\
             .execute()
         for row in (pfl.data or []):
-            items_raw = row.get("items") or []
-            total_weight = sum(
-                max(int(it.get("weight") or it.get("estimatedWeightGrams") or 0), 0)
-                for it in items_raw
-            ) if items_raw else 100
-            public_items.append({
-                "id": row["id"],
-                "source": "public_library",
-                "title": row.get("food_name") or row.get("description") or "公共食物库",
-                "subtitle": row.get("merchant_name") or "公共食物库",
-                "default_weight_grams": total_weight or 100,
-                "total_calories": float(row.get("total_calories") or 0),
-                "total_protein": float(row.get("total_protein") or 0),
-                "total_carbs": float(row.get("total_carbs") or 0),
-                "total_fat": float(row.get("total_fat") or 0),
-                "items": items_raw,
-                "image_path": row.get("image_path"),
-                "image_paths": row.get("image_paths"),
-            })
+            public_items.append(_build_manual_public_food_result(
+                row,
+                collected=str(row.get("id") or "") in collected_ids,
+            ))
     except Exception as e:
         print(f"[browse_manual_food_library] public_food_library 出错: {e}")
 
@@ -4533,35 +4915,27 @@ async def browse_manual_food_library() -> Dict[str, List[Dict[str, Any]]]:
             .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
             .eq("is_active", True)\
             .order("canonical_name")\
-            .limit(500)\
+            .limit(160)\
             .execute()
         for row in (fnl.data or []):
-            nutrition_items.append({
-                "id": str(row["id"]),
-                "source": "nutrition_library",
-                "title": row.get("canonical_name") or "未知食物",
-                "subtitle": "标准食物词典 · 每100g",
-                "default_weight_grams": 100,
-                "total_calories": float(row.get("kcal_per_100g") or 0),
-                "total_protein": float(row.get("protein_per_100g") or 0),
-                "total_carbs": float(row.get("carbs_per_100g") or 0),
-                "total_fat": float(row.get("fat_per_100g") or 0),
-                "nutrients_per_100g": {
-                    "calories": float(row.get("kcal_per_100g") or 0),
-                    "protein": float(row.get("protein_per_100g") or 0),
-                    "carbs": float(row.get("carbs_per_100g") or 0),
-                    "fat": float(row.get("fat_per_100g") or 0),
-                },
-                "items": None,
-                "image_path": None,
-                "image_paths": None,
-            })
+            nutrition_items.append(_build_manual_nutrition_food_result(row))
     except Exception as e:
         print(f"[browse_manual_food_library] food_nutrition_library 出错: {e}")
 
+    public_items = _annotate_manual_food_results(public_items, query="", usage_stats=usage_stats)
+    nutrition_items = _annotate_manual_food_results(nutrition_items, query="", usage_stats=usage_stats)
+    collected_public_library = _annotate_manual_food_results(collected_public_library, query="", usage_stats=usage_stats)
+    recent_items = _build_recent_manual_food_items(
+        public_items + nutrition_items,
+        usage_stats,
+        limit=8,
+    )
+
     return {
-        "public_library": public_items,
-        "nutrition_library": nutrition_items,
+        "recent_items": recent_items,
+        "collected_public_library": collected_public_library[:8],
+        "public_library": public_items[:18],
+        "nutrition_library": nutrition_items[:36],
     }
 
 
@@ -4638,6 +5012,7 @@ def create_user_exercise_log_sync(
     exercise_desc: str,
     calories_burned: int,
     recorded_on: Optional[str] = None,
+    ai_reasoning: Optional[str] = None,
 ) -> Dict[str, Any]:
     """新增一条运动记录（Worker 同步调用）。"""
     check_supabase_configured()
@@ -4650,6 +5025,8 @@ def create_user_exercise_log_sync(
             "calories_burned": int(calories_burned),
             "recorded_on": day,
         }
+        if ai_reasoning is not None and str(ai_reasoning).strip():
+            row["ai_reasoning"] = str(ai_reasoning).strip()[:4000]
         result = supabase.table("user_exercise_logs").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
@@ -4664,9 +5041,12 @@ async def create_user_exercise_log(
     exercise_desc: str,
     calories_burned: int,
     recorded_on: Optional[str] = None,
+    ai_reasoning: Optional[str] = None,
 ) -> Dict[str, Any]:
     """新增一条运动记录。"""
-    return create_user_exercise_log_sync(user_id, exercise_desc, calories_burned, recorded_on)
+    return create_user_exercise_log_sync(
+        user_id, exercise_desc, calories_burned, recorded_on, ai_reasoning=ai_reasoning
+    )
 
 
 async def delete_user_exercise_log(user_id: str, log_id: str) -> bool:

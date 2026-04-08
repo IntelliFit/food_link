@@ -2,8 +2,22 @@ import { View, Text, Image, Textarea } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Switch } from '@taroify/core'
-import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, uploadAnalyzeImageFile, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile,getMyMembership, MembershipStatus } from '../../utils/api'
-import type { ExecutionMode } from '../../utils/api'
+import {
+  imageToBase64,
+  compressImagePathForUpload,
+  uploadAnalyzeImage,
+  uploadAnalyzeImageFile,
+  submitAnalyzeTask,
+  continuePrecisionSession,
+  getAccessToken,
+  MealType,
+  DietGoal,
+  ActivityTiming,
+  getHealthProfile,
+  getMyMembership,
+  MembershipStatus
+} from '../../utils/api'
+import type { ExecutionMode, PrecisionReferenceObjectInput } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
 
 import './index.scss'
@@ -33,6 +47,20 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
   { value: 'daily', label: '日常', iconClass: 'icon-duoren' },
   { value: 'before_sleep', label: '睡前', iconClass: 'icon-shuijue' },
   { value: 'none', label: '无', iconClass: 'icon-nothing' }
+]
+
+const REFERENCE_PRESETS: Array<{
+  value: string
+  label: string
+  dimensions: { length?: number; width?: number; height?: number }
+}> = [
+  { value: 'chopsticks', label: '筷子', dimensions: { length: 240, width: 7, height: 7 } },
+  { value: 'spoon', label: '勺子', dimensions: { length: 170, width: 40, height: 15 } },
+  { value: 'bank_card', label: '银行卡', dimensions: { length: 85.6, width: 54, height: 0.8 } },
+  { value: 'can', label: '易拉罐', dimensions: { height: 122, width: 66, length: 66 } },
+  { value: 'bottle', label: '瓶装水', dimensions: { height: 210, width: 65, length: 65 } },
+  { value: 'plate', label: '常见餐盘', dimensions: { length: 220, width: 220, height: 25 } },
+  { value: 'custom', label: '自定义', dimensions: {} }
 ]
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; tips: string[] }> = {
@@ -184,6 +212,14 @@ function AnalyzePage() {
     checkDevMode()
   }, [])
 
+  const [precisionSessionId, setPrecisionSessionId] = useState('')
+  const [referencePreset, setReferencePreset] = useState('chopsticks')
+  const [referenceName, setReferenceName] = useState('筷子')
+  const [referenceLength, setReferenceLength] = useState('240')
+  const [referenceWidth, setReferenceWidth] = useState('7')
+  const [referenceHeight, setReferenceHeight] = useState('7')
+  const [referencePlacementNote, setReferencePlacementNote] = useState('')
+
   const normalizeExecutionMode = (value: unknown): ExecutionMode => {
     return value === 'strict' ? 'strict' : 'standard'
   }
@@ -221,6 +257,13 @@ function AnalyzePage() {
   })
 
   useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    const nextSessionId = String(params?.precision_session_id || '').trim()
+    if (nextSessionId) {
+      setPrecisionSessionId(nextSessionId)
+      setExecutionMode('strict')
+    }
+
     // 1. 获取饮食目标
     const initDietGoal = async () => {
       try {
@@ -235,7 +278,7 @@ function AnalyzePage() {
             setDietGoal(profile.diet_goal as DietGoal)
             Taro.setStorageSync('dietGoal', profile.diet_goal)
           }
-          if (profile.execution_mode) {
+          if (!nextSessionId && profile.execution_mode) {
             setExecutionMode(normalizeExecutionMode(profile.execution_mode))
           }
           // 加载会员状态和配额
@@ -269,6 +312,35 @@ function AnalyzePage() {
     }
     initStoredImagePath()
   }, [])
+
+  const handleReferencePresetSelect = (value: string) => {
+    setReferencePreset(value)
+    const target = REFERENCE_PRESETS.find(item => item.value === value)
+    if (!target) return
+    setReferenceName(target.label)
+    setReferenceLength(target.dimensions.length != null ? String(target.dimensions.length) : '')
+    setReferenceWidth(target.dimensions.width != null ? String(target.dimensions.width) : '')
+    setReferenceHeight(target.dimensions.height != null ? String(target.dimensions.height) : '')
+  }
+
+  const buildReferenceObjects = (): PrecisionReferenceObjectInput[] => {
+    if (executionMode !== 'strict') return []
+    const name = referenceName.trim()
+    if (!name) return []
+    const length = Number(referenceLength)
+    const width = Number(referenceWidth)
+    const height = Number(referenceHeight)
+    return [{
+      reference_type: referencePreset === 'custom' ? 'custom' : 'preset',
+      reference_name: name,
+      dimensions_mm: {
+        ...(Number.isFinite(length) && length > 0 ? { length } : {}),
+        ...(Number.isFinite(width) && width > 0 ? { width } : {}),
+        ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+      },
+      placement_note: referencePlacementNote.trim() || undefined,
+    }]
+  }
 
   const handleChooseImage = async () => {
     if (!isMultiView && imagePaths.length >= 1) {
@@ -374,20 +446,42 @@ function AnalyzePage() {
       }
 
       const primaryImageUrl = imageUrls[0]
+      const referenceObjects = buildReferenceObjects()
 
       Taro.showLoading({ title: '提交任务...', mask: true })
-      const { task_id } = await submitAnalyzeTask({
-        image_url: primaryImageUrl,
-        image_urls: imageUrls,
+      const commonPayload = {
         meal_type: mealType,
         diet_goal: dietGoal,
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
-        modelName: 'gemini',
         is_multi_view: isMultiView,
-        execution_mode: executionMode
-      })
+        reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
+      }
+      const response = precisionSessionId
+        ? await continuePrecisionSession(precisionSessionId, {
+            source_type: 'image',
+            image_url: primaryImageUrl,
+            image_urls: imageUrls,
+            ...commonPayload,
+          })
+        : await submitAnalyzeTask({
+            image_url: primaryImageUrl,
+            image_urls: imageUrls,
+            modelName: 'gemini',
+            execution_mode: executionMode,
+            ...commonPayload,
+          })
+      const { task_id } = response
+      Taro.setStorageSync('analyzeMealType', mealType)
+      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+      Taro.setStorageSync('analyzeTaskType', 'food')
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
+      if (precisionSessionId) {
+        Taro.setStorageSync('analyzePrecisionSessionId', precisionSessionId)
+      } else {
+        Taro.removeStorageSync('analyzePrecisionSessionId')
+      }
       Taro.hideLoading()
       Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}&execution_mode=${executionMode}` })
     } catch (error: any) {
@@ -542,7 +636,7 @@ function AnalyzePage() {
         >
           <Text className='quota-bar-text'>
             今日剩余 {membershipStatus.daily_remaining ?? '--'}/{membershipStatus.daily_limit ?? '--'} 次
-            {!membershipStatus.is_pro && '  →开通会员每日20次'}
+            {!membershipStatus.is_pro && '  →开通会员解锁精准模式'}
           </Text>
         </View>
       )}
@@ -661,6 +755,97 @@ function AnalyzePage() {
           </View>
         </View>
       </View>
+
+      {executionMode === 'strict' && (
+        <View className='details-section'>
+          <View className='section-header'>
+            <Text className='section-title'>参考物</Text>
+          </View>
+          <Text className='section-hint'>
+            精准模式下可录入一个参考物和尺寸，系统会在需要时把它当作比例尺参与估重。
+          </Text>
+
+          {precisionSessionId ? (
+            <View className='precision-session-tip'>
+              <Text className='precision-session-tip-text'>当前正在继续上一轮精准估计，本次拍照会接到原会话继续判断。</Text>
+            </View>
+          ) : null}
+
+          <View className='state-options'>
+            {REFERENCE_PRESETS.map((preset) => (
+              <View
+                key={preset.value}
+                className={`state-option ${referencePreset === preset.value ? 'active' : ''}`}
+                onClick={() => handleReferencePresetSelect(preset.value)}
+              >
+                <Text className='state-label'>{preset.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View className='precision-reference-grid'>
+            <View className='precision-reference-field'>
+              <Text className='precision-reference-label'>名称</Text>
+              <Textarea
+                className='details-input precision-reference-input'
+                value={referenceName}
+                onInput={(e) => setReferenceName(e.detail.value)}
+                maxlength={30}
+                autoHeight
+                showConfirmBar={false}
+              />
+            </View>
+            <View className='precision-reference-row'>
+              <View className='precision-reference-field short'>
+                <Text className='precision-reference-label'>长(mm)</Text>
+                <Textarea
+                  className='details-input precision-reference-input'
+                  value={referenceLength}
+                  onInput={(e) => setReferenceLength(e.detail.value)}
+                  maxlength={8}
+                  autoHeight
+                  showConfirmBar={false}
+                />
+              </View>
+              <View className='precision-reference-field short'>
+                <Text className='precision-reference-label'>宽(mm)</Text>
+                <Textarea
+                  className='details-input precision-reference-input'
+                  value={referenceWidth}
+                  onInput={(e) => setReferenceWidth(e.detail.value)}
+                  maxlength={8}
+                  autoHeight
+                  showConfirmBar={false}
+                />
+              </View>
+              <View className='precision-reference-field short'>
+                <Text className='precision-reference-label'>高(mm)</Text>
+                <Textarea
+                  className='details-input precision-reference-input'
+                  value={referenceHeight}
+                  onInput={(e) => setReferenceHeight(e.detail.value)}
+                  maxlength={8}
+                  autoHeight
+                  showConfirmBar={false}
+                />
+              </View>
+            </View>
+            <View className='precision-reference-field'>
+              <Text className='precision-reference-label'>摆放说明</Text>
+              <Textarea
+                className='details-input precision-reference-input'
+                placeholder='例如：和米饭在同一平面，放在盘子右下角'
+                placeholderClass='input-placeholder'
+                value={referencePlacementNote}
+                onInput={(e) => setReferencePlacementNote(e.detail.value)}
+                maxlength={80}
+                autoHeight
+                showConfirmBar={false}
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* 餐次（AI 将结合餐次分析） */}
       <View className='meal-section'>
