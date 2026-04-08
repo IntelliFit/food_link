@@ -138,12 +138,22 @@
     background: #fff7ed;
     border-color: #fed7aa;
   }
+
+  &--exhausted {
+    background: #fef2f2;
+    border-color: #fecaca;
+    pointer-events: none;
+  }
 }
 
 .quota-bar-text {
   font-size: 24rpx;
   color: #374151;
   font-weight: 500;
+}
+
+.quota-bar--exhausted .quota-bar-text {
+  color: #b91c1c;
 }
 
 // 图标字体在本页的统一样式

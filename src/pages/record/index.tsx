@@ -89,8 +89,8 @@ function RecordPage() {
       Taro.showModal({
         title: '今日次数已用完',
         content: isPro
-          ? `今日 ${membershipStatus.daily_limit ?? 10} 次拍照已用完，请明日再试。`
-          : '免费版每日限10次，开通食探会员可解锁精准模式等功能。',
+          ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
+          : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
         confirmText: isPro ? '知道了' : '去开通',
         cancelText: '取消',
         showCancel: !isPro,
@@ -142,8 +142,8 @@ function RecordPage() {
       Taro.showModal({
         title: '今日次数已用完',
         content: isPro
-          ? `今日 ${membershipStatus.daily_limit ?? 10} 次拍照已用完，请明日再试。`
-          : '免费版每日限10次，开通食探会员可解锁精准模式等功能。',
+          ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
+          : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
         confirmText: isPro ? '知道了' : '去开通',
         cancelText: '取消',
         showCancel: !isPro,

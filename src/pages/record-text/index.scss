@@ -8,6 +8,32 @@
   overflow-x: hidden;
 }
 
+.record-text-quota-bar {
+  margin: 0 32rpx 16rpx;
+  padding: 14rpx 24rpx;
+  background: #f0fdf4;
+  border-radius: 16rpx;
+  border: 1rpx solid #d1fae5;
+  text-align: center;
+  box-sizing: border-box;
+
+  &--exhausted {
+    background: #fef2f2;
+    border-color: #fecaca;
+    pointer-events: none;
+  }
+}
+
+.record-text-quota-bar-text {
+  font-size: 24rpx;
+  color: #374151;
+  font-weight: 500;
+}
+
+.record-text-quota-bar--exhausted .record-text-quota-bar-text {
+  color: #b91c1c;
+}
+
 .content-scroll {
   flex: 1;
   padding: 32rpx;

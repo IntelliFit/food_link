@@ -1,5 +1,6 @@
 import { View, Text } from '@tarojs/components'
 import Taro from '@tarojs/taro'
+import { getAccessToken, getMyMembership } from '../../../utils/api'
 import {
   IconCamera,
   IconAlbum,
@@ -65,22 +66,53 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         // record 为 tabBar 页，必须用 switchTab，navigateTo 会失败无反应
         Taro.switchTab({ url: '/pages/record/index' })
         break
-      case 'album':
-        Taro.chooseImage({
-          count: 1,
-          sizeType: ['compressed'],
-          sourceType: ['album'],
-          success: (res) => {
-            const imagePath = res.tempFilePaths[0]
-            Taro.setStorageSync('analyzeImagePath', imagePath)
-            Taro.navigateTo({ url: '/pages/analyze/index' })
-          },
-          fail: (err) => {
-            if (err.errMsg?.includes('cancel')) return
-            Taro.showToast({ title: '选择图片失败', icon: 'none' })
+      case 'album': {
+        // 与 record 页「相册」一致：先校验今日次数，避免选图上传后 submit 才 429
+        if (!getAccessToken()) {
+          Taro.navigateTo({ url: '/pages/login/index' })
+          break
+        }
+        void (async () => {
+          try {
+            const membershipStatus = await getMyMembership()
+            if (membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
+              const isPro = membershipStatus.is_pro
+              Taro.showModal({
+                title: '今日次数已用完',
+                content: isPro
+                  ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
+                  : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
+                confirmText: isPro ? '知道了' : '去开通',
+                cancelText: '取消',
+                showCancel: !isPro,
+                success: (r) => {
+                  if (!isPro && r.confirm) {
+                    Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                  }
+                }
+              })
+              return
+            }
+          } catch {
+            // 会员接口失败时仍允许选图，由分析提交接口提示
           }
-        })
+          Taro.chooseImage({
+            count: 1,
+            sizeType: ['compressed'],
+            sourceType: ['album'],
+            success: (res) => {
+              const imagePath = res.tempFilePaths[0]
+              Taro.setStorageSync('analyzeImagePath', imagePath)
+              Taro.navigateTo({ url: '/pages/analyze/index' })
+            },
+            fail: (err) => {
+              if (err.errMsg?.includes('cancel')) return
+              Taro.showToast({ title: '选择图片失败', icon: 'none' })
+            }
+          })
+        })()
         break
+      }
       case 'text':
         Taro.navigateTo({ url: '/pages/record-text/index' })
         break

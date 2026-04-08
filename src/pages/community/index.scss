@@ -1,15 +1,12 @@
 /* 页面根节点：高度由 JS 通过 getSystemInfoSync 设定固定像素值（避免 100vh 随键盘变化）；
    100vh 仅作兜底（JS 未就绪时）。flex 让 ScrollView 获得准确高度。 */
+// 微信朋友圈式页面底：浅灰全屏，白底动态块贴边无左右留白
+$moments-page-bg: #ededed;
+$moments-hairline: #e5e5e5;
+
 .community-page {
   height: 100vh;
-  // 与首页 home-page 一致的绿系顶栏渐变 + 浅灰底
-  background: linear-gradient(
-    180deg,
-    rgb(0 188 125 / 15%) 0%,
-    rgb(0 188 125 / 8%) 25%,
-    #eff1f4 60%,
-    #eff1f4 100%
-  );
+  background: $moments-page-bg;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -47,16 +44,16 @@ $community-feed-card-alpha: 50%;
   box-sizing: border-box;
 }
 
-/* 滚动内容底部留白，避免最后一条被 tab 栏遮挡 */
+/* 滚动内容：横向无内边距，白卡片与灰底直接贴边（朋友圈式） */
 .community-scroll-content {
-  padding-top: 24rpx;
-  padding-bottom: 160rpx;
+  padding: 0 0 160rpx;
   box-sizing: border-box;
 }
 
 /* 触底加载更多 */
 .load-more-wrapper {
-  padding: 32rpx 48rpx 16rpx;
+  padding: 24rpx 24rpx 16rpx;
+  background: $moments-page-bg;
 }
 
 .load-more-loading {
@@ -132,28 +129,38 @@ $community-feed-card-alpha: 50%;
 // - 卡 padding 上下 72 + 头区 约 112 + 可选标签/文案 0–120 + 图 384+24 + 营养行 约 80 + 操作区 约 88 + 可选评论 0–∞
 // 典型「有图」完整卡片约 760–920rpx；无图、无文案可低至约 280–420rpx。骨架按「有图 + 短文案」取上沿。
 .skeleton-container {
-  padding: 0 32rpx;
+  padding: 0;
 }
 
 .skeleton-feed-card {
-  background: rgb(255 255 255 / #{$community-feed-card-alpha});
-  border-radius: 28rpx;
-  padding: 36rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(0 188 125 / 4%);
-  border: 1rpx solid rgb(0 188 125 / 4%);
+  background: #fff;
+  border-radius: 0;
+  padding: 24rpx;
+  margin-bottom: 0;
+  border: none;
+  border-bottom: 1rpx solid $moments-hairline;
+  box-shadow: none;
 }
 
-.skeleton-feed-header {
+.skeleton-feed-moments {
   display: flex;
-  align-items: center;
-  gap: 24rpx;
-  margin-bottom: 24rpx;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.skeleton-feed-avatar-col {
+  flex-shrink: 0;
+  width: 80rpx;
+}
+
+.skeleton-feed-main-col {
+  flex: 1;
+  min-width: 0;
 }
 
 .skeleton-avatar {
-  width: 84rpx;
-  height: 84rpx;
+  width: 80rpx;
+  height: 80rpx;
   border-radius: 50%;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
@@ -162,9 +169,9 @@ $community-feed-card-alpha: 50%;
 }
 
 .skeleton-user-info {
-  flex: 1;
   display: flex;
   flex-direction: column;
+  margin-bottom: 12rpx;
 }
 
 .skeleton-line {
@@ -182,11 +189,11 @@ $community-feed-card-alpha: 50%;
 .skeleton-image {
   width: 100%;
   height: 384rpx;
-  border-radius: 24rpx;
+  border-radius: 8rpx;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .skeleton-meta {
@@ -214,8 +221,8 @@ $community-feed-card-alpha: 50%;
   display: flex;
   align-items: center;
   gap: 48rpx;
-  padding-top: 24rpx;
-  border-top: 1rpx solid #f1f5f9;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #f0f0f0;
   margin-top: 16rpx;
 }
 
@@ -237,12 +244,13 @@ $community-feed-card-alpha: 50%;
 
 // 未登录提示
 .login-tip {
-  margin: 32rpx;
-  padding: 56rpx 48rpx;
+  margin: 0;
+  padding: 56rpx 24rpx;
   background: #fff;
-  border-radius: 28rpx;
+  border-radius: 0;
+  border-bottom: 1rpx solid $moments-hairline;
   text-align: center;
-  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 6%);
+  box-shadow: none;
 }
 
 .login-tip-text {
@@ -263,11 +271,13 @@ $community-feed-card-alpha: 50%;
   --button-default-height: 80rpx;
 }
 
-// 顶部快捷区：无整块白底，与页面渐变融合
+// 顶部快捷区：全宽白底条，下划线与朋友圈列表衔接
 .friends-quick-bar {
-  padding: 0 32rpx;
-  margin-bottom: 28rpx;
+  padding: 20rpx 24rpx 24rpx;
+  margin-bottom: 0;
   box-sizing: border-box;
+  background: #fff;
+  border-bottom: 1rpx solid $moments-hairline;
 }
 
 .friends-requests-banner {
@@ -329,17 +339,16 @@ $community-feed-card-alpha: 50%;
   justify-content: flex-start;
   gap: 12rpx;
   padding: 28rpx 12rpx 24rpx;
-  border-radius: 22rpx;
-  background: rgb(255 255 255 / 42%);
-  border: 1rpx solid rgb(0 188 125 / 10%);
-  box-shadow: 0 4rpx 16rpx rgb(15 23 42 / 5%);
+  border-radius: 12rpx;
+  background: #f7f7f7;
+  border: none;
+  box-shadow: none;
   box-sizing: border-box;
   min-height: 0;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease;
 
   &:active {
-    transform: scale(0.98);
-    box-shadow: 0 2rpx 10rpx rgb(15 23 42 / 6%);
+    background: #efefef;
   }
 }
 
@@ -572,68 +581,65 @@ $community-feed-card-alpha: 50%;
   line-height: 32rpx;
 }
 
-// 本周打卡排行榜（与应用主色一致的绿青渐变）
+// 本周打卡排行榜：对齐首页「统计入口」绿渐变卡片（圆角、留白、投影），非表情图标
+$home-primary-start: #00bc7d;
+$home-primary-end: #00bba7;
+
 .ranking-banner {
-  background: linear-gradient(135deg, #047857 0%, #00a36c 38%, #00bc7d 72%, #14b8a6 100%);
-  border-radius: 28rpx;
-  padding: 28rpx 32rpx;
-  margin: 0 24rpx 0;
-  border: 1rpx solid rgb(255 255 255 / 22%);
+  margin: 16rpx 24rpx 16rpx;
+  padding: 28rpx 24rpx;
+  background: linear-gradient(135deg, $home-primary-start 0%, $home-primary-end 100%);
+  border-radius: 24rpx;
+  border: none;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow:
-    0 14rpx 40rpx rgb(0 188 125 / 22%),
-    0 4rpx 14rpx rgb(0 0 0 / 8%);
-  transition: all 0.25s ease;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20rpx;
+  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 25%);
+  box-sizing: border-box;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 
   &:active {
-    transform: scale(0.99);
+    transform: scale(0.995);
+    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 20%);
   }
 }
 
-.ranking-content {
+.ranking-head {
   display: flex;
   align-items: flex-start;
-  gap: 16rpx;
-  flex: 1;
+  gap: 20rpx;
   min-width: 0;
 }
 
-.ranking-icon-wrap {
-  width: 64rpx;
-  height: 64rpx;
-  background: rgb(255 255 255 / 20%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  backdrop-filter: blur(8rpx);
-}
-
-.ranking-icon-emoji {
-  font-size: 32rpx;
-  line-height: 1;
-}
-
-.ranking-text-block {
+.ranking-head-text {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.ranking-text {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
 }
 
-// 横幅内：前三名缩略预览
+// 与首页 .stats-entry-icon 一致：白底半透明方角图标槽
+.ranking-icon-wrap {
+  width: 64rpx;
+  height: 64rpx;
+  background: rgb(255 255 255 / 20%);
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+// 前三名直接铺在绿底上，无额外浅底容器
 .ranking-preview {
   width: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-sizing: border-box;
 }
 
 .ranking-preview-row {
@@ -641,7 +647,7 @@ $community-feed-card-alpha: 50%;
   flex-direction: row;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10rpx;
+  gap: 12rpx;
 }
 
 .ranking-preview-cell {
@@ -690,8 +696,22 @@ $community-feed-card-alpha: 50%;
 }
 
 .ranking-preview-avatar-fallback {
-  font-size: 30rpx;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(255 255 255 / 18%);
+}
+
+.ranking-preview-avatar-ico {
+  font-size: 28rpx;
+  color: rgb(255 255 255 / 88%);
   line-height: 1;
+
+  &::before {
+    font-size: inherit;
+  }
 }
 
 .ranking-preview-name {
@@ -721,7 +741,7 @@ $community-feed-card-alpha: 50%;
     border-width: 4rpx;
   }
 
-  .ranking-preview-avatar-fallback {
+  .ranking-preview-avatar-ico {
     font-size: 44rpx;
   }
 
@@ -741,16 +761,16 @@ $community-feed-card-alpha: 50%;
   font-size: 20rpx;
   color: rgb(255 255 255 / 85%);
   text-align: center;
-  padding: 8rpx 0 0;
+  padding: 0;
 }
 
 .ranking-preview-skeleton {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 32rpx;
-  padding: 8rpx 0 0;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 0;
 }
 
 .ranking-preview-sk-dot {
@@ -786,37 +806,28 @@ $community-feed-card-alpha: 50%;
   font-size: 30rpx;
   font-weight: 600;
   color: #fff;
-  line-height: 40rpx;
+  line-height: 42rpx;
 }
 
 .ranking-subtitle {
   font-size: 24rpx;
-  color: #fef3c6;
-  line-height: 32rpx;
+  color: rgb(255 255 255 / 80%);
+  line-height: 34rpx;
 }
 
-.ranking-chevron {
-  width: 48rpx;
-  height: 48rpx;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 22%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 10rpx;
-  box-sizing: border-box;
-}
-
-// 最新动态（与上方排行榜留出间距）
+// 好友动态：标题+筛选为全宽白底，列表区无左右边距
 .feed-section {
-  padding: 0 32rpx 32rpx;
-  margin-top: 28rpx;
+  padding: 0 0 0;
+  margin-top: 0;
+  background: $moments-page-bg;
 }
 
 .feed-filter-panel {
-  margin-bottom: 24rpx;
+  margin-bottom: 0;
   overflow: hidden;
+  padding: 0 24rpx 20rpx;
+  background: #fff;
+  border-bottom: 1rpx solid $moments-hairline;
 }
 
 .feed-filter-trigger-row {
@@ -864,7 +875,7 @@ $community-feed-card-alpha: 50%;
 .feed-filter-summary {
   flex: 1;
   min-width: 0;
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: #64748b;
   line-height: 1.45;
 }
@@ -990,9 +1001,9 @@ $community-feed-card-alpha: 50%;
 }
 
 .feed-filter-chip-text {
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: #334155;
-  line-height: 34rpx;
+  line-height: 36rpx;
   white-space: nowrap;
 }
 
@@ -1004,14 +1015,15 @@ $community-feed-card-alpha: 50%;
 }
 
 .feed-section .section-header {
-  margin-bottom: 24rpx;
-  padding: 0 8rpx;
+  margin-bottom: 0;
+  padding: 20rpx 24rpx 12rpx;
+  background: #fff;
 }
 
 .feed-list {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 0;
 }
 
 .feed-section-header {
@@ -1350,17 +1362,19 @@ $community-feed-card-alpha: 50%;
   font-weight: 600;
 }
 
+// 单条动态：全宽白底、无圆角与投影，条与条仅一条细线分隔（仿微信朋友圈）
 .feed-card {
-  background: rgb(255 255 255 / #{$community-feed-card-alpha});
-  border-radius: 28rpx;
-  padding: 36rpx;
-  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(0 188 125 / 4%);
+  background: #fff;
+  border-radius: 0;
+  padding: 24rpx 24rpx 20rpx;
+  box-shadow: none;
   margin-bottom: 0;
-  border: 1rpx solid rgb(0 188 125 / 4%);
-  transition: all 0.2s ease;
+  border: none;
+  border-bottom: 1rpx solid $moments-hairline;
+  transition: background 0.15s ease;
 
   &:active {
-    transform: scale(0.998);
+    background: #fafafa;
   }
 
   &:last-child {
@@ -1368,25 +1382,42 @@ $community-feed-card-alpha: 50%;
   }
 }
 
-.feed-header {
+// 朋友圈式两列：左列仅头像，右列含昵称、正文、营养、操作与评论区
+.feed-card-moments {
   display: flex;
-  align-items: center;
-  gap: 24rpx;
-  margin-bottom: 24rpx;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.feed-card-avatar-col {
+  flex-shrink: 0;
+  width: 80rpx;
+}
+
+.feed-card-main-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-card-name-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  margin-bottom: 12rpx;
 }
 
 .user-avatar {
-  width: 84rpx;
-  height: 84rpx;
+  width: 80rpx;
+  height: 80rpx;
   border-radius: 50%;
   background: linear-gradient(135deg, #00d492 0%, #00bba7 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40rpx;
+  font-size: 38rpx;
   flex-shrink: 0;
   overflow: hidden;
-  box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 25%);
+  box-shadow: none;
 }
 
 .user-avatar-img {
@@ -1398,23 +1429,16 @@ $community-feed-card-alpha: 50%;
   font-size: 40rpx;
 }
 
-.user-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
 .user-name {
-  font-size: 32rpx;
+  font-size: 36rpx;
   font-weight: 600;
-  color: #1e2939;
-  line-height: 48rpx;
+  color: #576b95;
+  line-height: 50rpx;
 }
 
 .post-time {
   font-size: 24rpx;
-  color: #6a7282;
+  color: #888;
   line-height: 32rpx;
 }
 
@@ -1436,13 +1460,16 @@ $community-feed-card-alpha: 50%;
   }
 }
 
+// 食物描述正文（与评论区正文同字号变量，便于统一）
+$feed-body-font-size: 30rpx;
+
 .feed-content {
-  font-size: 30rpx;
-  color: #475569;
-  line-height: 1.7;
-  margin-bottom: 24rpx;
+  font-size: $feed-body-font-size;
+  color: #333;
+  line-height: 1.65;
+  margin-bottom: 20rpx;
   word-break: break-word;
-  padding: 0 4rpx;
+  padding: 0;
 }
 
 /* 纯文字帖：小程序里 Text 的 margin-bottom 常不生效，用外层 View 撑开与 feed-meta 的间距 */
@@ -1465,11 +1492,12 @@ $community-feed-card-alpha: 50%;
 }
 
 .feed-empty {
-  padding: 72rpx 32rpx;
+  padding: 72rpx 24rpx;
   text-align: center;
   background: #fff;
-  border-radius: 28rpx;
-  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 5%);
+  border-radius: 0;
+  border-bottom: 1rpx solid $moments-hairline;
+  box-shadow: none;
 }
 
 .feed-empty-text {
@@ -1520,22 +1548,22 @@ $community-feed-card-alpha: 50%;
 
 .feed-image {
   background: linear-gradient(152.3deg, #d1fae5 0%, #a7f3d0 50%, #6ee7b7 100%);
-  border-radius: 24rpx;
+  border-radius: 8rpx;
   height: 384rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4rpx 20rpx rgb(0 188 125 / 15%);
+  box-shadow: none;
 }
 
 .feed-image-content {
   width: 100%;
   height: 100%;
-  border-radius: 24rpx;
+  border-radius: 8rpx;
 }
 
 .image-placeholder {
@@ -1549,7 +1577,8 @@ $community-feed-card-alpha: 50%;
 .feed-tags {
   display: flex;
   gap: 16rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: 16rpx;
+  margin-top: 0;
   flex-wrap: wrap;
 }
 
@@ -1576,9 +1605,9 @@ $community-feed-card-alpha: 50%;
   display: flex;
   align-items: center;
   gap: 48rpx;
-  padding-top: 24rpx;
-  border-top: 1rpx solid #f1f5f9;
-  margin-top: 24rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid #f0f0f0;
+  margin-top: 16rpx;
 }
 
 .action-item {
@@ -1639,20 +1668,21 @@ $community-feed-card-alpha: 50%;
   }
 }
 
-// 卡片内评论列表（前 5 条）— 信息流式：统一字号层级，弱化「气泡」感
+// 卡片内评论列表：略小于主贴正文，行距与条间距略放大，读起来更顺
+$comment-body-font-size: 28rpx;
+
 .feed-comments {
-  margin-top: 20rpx;
-  padding: 16rpx 18rpx;
-  background: #f2f3f5;
-  border-radius: 12rpx;
-  border: none;
+  margin-top: 10rpx;
+  padding: 14rpx 14rpx 12rpx;
+  background: #f7f7f7;
+  border-radius: 4rpx;
 }
 
 .feed-comment-item {
   display: flex;
   align-items: flex-start;
-  gap: 16rpx;
-  margin-bottom: 20rpx;
+  gap: 10rpx;
+  margin-bottom: 14rpx;
   padding: 0;
 
   &:last-child {
@@ -1662,19 +1692,11 @@ $community-feed-card-alpha: 50%;
   &.is-temp {
     opacity: 0.88;
   }
-
-  &.is-reply {
-    .comment-avatar {
-      width: 40rpx;
-      height: 40rpx;
-      margin-top: 2rpx;
-    }
-  }
 }
 
 .comment-avatar {
-  width: 48rpx;
-  height: 48rpx;
+  width: 44rpx;
+  height: 44rpx;
   border-radius: 50%;
   background: #e5e7eb;
   display: flex;
@@ -1682,7 +1704,7 @@ $community-feed-card-alpha: 50%;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
-  margin-top: 2rpx;
+  margin-top: 1rpx;
 }
 
 .comment-avatar-img {
@@ -1699,19 +1721,7 @@ $community-feed-card-alpha: 50%;
   min-width: 0;
 
   &.is-reply {
-    position: relative;
-    padding-left: 12rpx;
-
-    &::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 4rpx;
-      bottom: 4rpx;
-      width: 2rpx;
-      border-radius: 999rpx;
-      background: #e5e7eb;
-    }
+    padding-left: 4rpx;
   }
 }
 
@@ -1719,9 +1729,9 @@ $community-feed-card-alpha: 50%;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6rpx 12rpx;
+  gap: 4rpx 8rpx;
   min-width: 0;
-  line-height: 40rpx;
+  line-height: 34rpx;
 }
 
 .comment-reply-join {
@@ -1734,28 +1744,28 @@ $community-feed-card-alpha: 50%;
 .comment-content-text {
   display: block;
   margin-top: 6rpx;
-  font-size: 30rpx;
-  line-height: 46rpx;
-  color: #374151;
+  font-size: $comment-body-font-size;
+  line-height: 1.62;
+  color: #333;
   word-break: break-all;
 }
 
 .comment-author {
-  font-size: 30rpx;
+  font-size: 26rpx;
   font-weight: 600;
-  color: #111827;
+  color: #576b95;
   max-width: 100%;
 }
 
 .comment-reply-arrow {
-  font-size: 24rpx;
-  color: #9ca3af;
+  font-size: 22rpx;
+  color: #94a3b8;
   font-weight: 400;
 }
 
 .comment-reply-target {
-  font-size: 24rpx;
-  color: #4b5563;
+  font-size: 22rpx;
+  color: #64748b;
   font-weight: 500;
   max-width: 280rpx;
   overflow: hidden;
@@ -1766,8 +1776,8 @@ $community-feed-card-alpha: 50%;
 .comment-status-badge {
   display: inline-flex;
   align-items: center;
-  margin-top: 10rpx;
-  padding: 2rpx 10rpx;
+  margin-top: 8rpx;
+  padding: 2rpx 8rpx;
   border-radius: 6rpx;
   font-size: 20rpx;
   color: #6b7280;
@@ -1775,15 +1785,15 @@ $community-feed-card-alpha: 50%;
 }
 
 .feed-comments-more {
-  margin-top: 12rpx;
-  padding-top: 14rpx;
-  border-top: 1rpx solid rgb(0 0 0 / 6%);
+  margin-top: 10rpx;
+  padding-top: 2rpx;
 }
 
 .feed-comments-more-text {
   font-size: 26rpx;
   color: #576b95;
   font-weight: 500;
+  line-height: 36rpx;
 }
 
 // 内联评论输入：在帖子下方，键盘弹起时帖子自然在键盘正上方
@@ -1940,11 +1950,11 @@ $community-feed-card-alpha: 50%;
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
-  padding: 20rpx 24rpx;
+  gap: 10rpx;
+  padding: 12rpx 20rpx;
   background: #fff;
   border-top: 1rpx solid #e5e7eb;
-  box-shadow: 0 -4rpx 24rpx rgb(0 0 0 / 8%);
+  box-shadow: 0 -4rpx 20rpx rgb(0 0 0 / 6%);
   transform: translateY(120%);
   transition: transform 0.22s ease, opacity 0.18s ease;
 
@@ -1958,22 +1968,22 @@ $community-feed-card-alpha: 50%;
 .comment-bottom-main {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 12rpx;
 }
 
 .comment-bottom-input {
   flex: 1;
   width: 0;
-  height: 76rpx;
-  min-height: 76rpx;
-  padding: 0 28rpx;
-  background: #f2f3f5;
-  border-radius: 38rpx;
+  height: 72rpx;
+  min-height: 72rpx;
+  padding: 0 24rpx;
+  background: #f5f6f8;
+  border-radius: 36rpx;
   font-size: 28rpx;
-  line-height: 76rpx;
-  color: #111827;
-  caret-color: #111827;
-  border: 1rpx solid rgb(0 0 0 / 6%);
+  line-height: 72rpx;
+  color: #1e2939;
+  caret-color: #1e2939;
+  border: none;
   box-sizing: border-box;
 }
 
@@ -1981,12 +1991,11 @@ $community-feed-card-alpha: 50%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
+  gap: 12rpx;
   margin-bottom: 0;
-  padding: 12rpx 16rpx;
-  border-radius: 12rpx;
-  background: #f2f3f5;
-  border: 1rpx solid rgb(0 0 0 / 6%);
+  padding: 8rpx 12rpx;
+  border-radius: 10rpx;
+  background: #f5f6f8;
 }
 
 .comment-reply-tip-text {
@@ -2009,11 +2018,11 @@ $community-feed-card-alpha: 50%;
 
 .comment-bottom-send {
   flex-shrink: 0;
-  min-width: 112rpx;
-  padding: 0 28rpx;
-  height: 76rpx;
-  line-height: 76rpx;
-  border-radius: 38rpx;
+  min-width: 108rpx;
+  padding: 0 24rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  border-radius: 36rpx;
   text-align: center;
   box-sizing: border-box;
   background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);

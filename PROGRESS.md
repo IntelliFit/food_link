@@ -6,8 +6,16 @@
 
 ## 2026-04-08
 
-- 🎨 style: 圈子动态评论区改为信息流布局与统一字号（与正文 30rpx 对齐），弱化气泡；底部输入/回复条配色对齐常见社交应用 `src/pages/community/index.scss`
-- ✨ feat: 圈子评论发送增加同步提交锁 + 发送中态与输入禁用，防止连点重复提交 `src/pages/community/index.tsx`
+- ✨ feat: 拍照/文字分析日限调整为普通用户 30 次、会员 100 次（`backend/main.py`）；图片分析页与文字分析页在次数用尽时禁用主按钮并提示；文字分析页增加配额条 `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss` `src/pages/record-text/index.tsx` `src/pages/record-text/index.scss` `src/pages/profile/index.tsx` `src/pages/pro-membership/index.tsx` `src/pages/record/index.tsx` `src/pages/index/components/RecordMenu.tsx`
+- 🐛 fix: 首页记录菜单「相册上传」补全与拍摄页一致的今日次数校验，避免选图上传后 `submit` 才 429；`submitAnalyzeTask` 等解析字符串型 JSON 响应体并抛出带 `statusCode` 的错误；分析失败时对配额用尽展示后端原文并区分「去开通」/「知道了」`src/pages/index/components/RecordMenu.tsx` `src/utils/api.ts` `src/pages/analyze/index.tsx`
+- 🐛 fix: 分析页主按钮改为 `View`+`Text` 合法结构（避免 `<text>` 内嵌 `<view>` 导致小程序点击无效）；点击直接提交并 `redirectTo` analyze-loading；`submitAnalyzeTask`/`continuePrecisionSession` 统一解析 `task_id`/`taskId`；从 `analyzeImagePath` 恢复时同步 `analyzeImagePaths` `src/pages/analyze/index.tsx` `src/utils/api.ts`
+- 🎨 style: 打卡榜去掉内层浅底容器与右侧箭头，标题一行+前三名直接铺在绿渐变卡上；缺省头像 `icon-duoren` `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🎨 style: 圈子卡片内评论区再微调：评论正文 28rpx、昵称 26rpx，条间距与灰块内边距略收紧/加行距 `src/pages/community/index.scss`
+- 🎨 style: 圈子动态改为左头像+右主内容两列（正文/营养/操作/评论均在右列）；主贴昵称 36rpx `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🎨 style: 圈子动态列表改为微信朋友圈式全宽白底条、灰底 `#ededed` 贴边无左右留白，卡片无圆角/无间距、细线分隔；头像与评论区灰底对齐微信习惯 `src/pages/community/index.scss`
+- 🔧 chore: 动态卡片评论按钮增加 `feed-action-comment` 类名，便于自动化与区分顶部「互动消息」同图标 `src/pages/community/index.tsx`
+- 🎨 style: 圈子评论区与筛选条字号统一（26rpx 摘要/芯片），收紧留白、去掉回复竖条与「查看全部」顶部分割线；底部输入条与动态正文同色阶 `src/pages/community/index.scss`
+- ✨ feat: 评论发送用 `flushSync` 首帧锁定「发送中」+ 修正 `trimmed` 传参，配合 ref 锁与输入禁用，避免慢网连点重复提交 `src/pages/community/index.tsx`
 - 🎨 style: 记运动页列表改为统一全宽简约卡片（文案/千卡/时间/删除），非聊天气泡；pending/失败态同卡片规范 `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss`
 - 🎨 style: 拍摄卡路里页顶部栏仅保留返回，移除「文字/手动/历史」三入口 `src/pages/record/index.tsx` `src/pages/record/index.scss`
 - 🐛 fix: 拍照/相册分析进入 loading 前写回 `analyzeImagePath(s)` 并带 `task_type=food`，与文字链 `food_text` 占位图区分；分析历史进入进行中任务时回填任务图 `src/pages/analyze/index.tsx` `src/pages/analyze-loading/index.tsx` `src/pages/analyze-history/index.tsx`

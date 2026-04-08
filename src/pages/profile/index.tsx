@@ -227,7 +227,7 @@ function ProfilePage() {
       id: 6,
       icon: <ShieldOutlined size='20' />,
       title: '食探会员',
-      desc: membershipStatus?.is_pro ? '会员已开通' : '每日10次 · 精准模式',
+      desc: membershipStatus?.is_pro ? '会员已开通' : '每日30次 · 会员100次',
       path: '/pages/pro-membership/index'
     }
   ]
@@ -483,7 +483,7 @@ function ProfilePage() {
                 </View>
                 <Text className='card-tip'>
                   {membershipStatus?.daily_limit != null
-                    ? `剩余 ${membershipStatus?.daily_remaining ?? 0} 次 · 开通会员每日享10次`
+                    ? `剩余 ${membershipStatus?.daily_remaining ?? 0} 次 · 开通会员每日最高100次`
                     : '当前不限次 · 开通会员享专属权益'}
                 </Text>
               </View>

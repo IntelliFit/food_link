@@ -891,9 +891,8 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
 }
 
 function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string {
-  const d = data as { detail?: string; message?: string } | null | undefined
-  if (d && typeof d.detail === 'string' && d.detail.trim()) return d.detail.trim()
-  if (d && typeof d.message === 'string' && d.message.trim()) return d.message.trim()
+  const parsed = parseFastApiDetail(data)
+  if (parsed) return parsed
   if (statusCode === 413) {
     return '图片体积过大，请重新拍照或选择较小的图片后再试'
   }
@@ -901,6 +900,50 @@ function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string
     return '登录已失效，请重新登录后再试'
   }
   return `上传图片失败（HTTP ${statusCode}）`
+}
+
+/** 微信端 `Taro.request` 的 `data` 有时为已解析对象，有时为 JSON 字符串 */
+function normalizeTaroResponseJson(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>
+  }
+  if (typeof raw === 'string') {
+    const text = raw.trim()
+    if (!text) return null
+    try {
+      const parsed = JSON.parse(text) as unknown
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+/** 解析 FastAPI `detail`（字符串或校验错误数组） */
+function parseFastApiDetail(data: unknown): string | undefined {
+  const obj = normalizeTaroResponseJson(data)
+  if (!obj) return undefined
+  const d = obj.detail
+  if (typeof d === 'string' && d.trim()) return d.trim()
+  if (Array.isArray(d) && d.length > 0) {
+    const first = d[0] as { msg?: string }
+    if (typeof first?.msg === 'string' && first.msg.trim()) return first.msg.trim()
+  }
+  const m = obj.message
+  if (typeof m === 'string' && m.trim()) return m.trim()
+  return undefined
+}
+
+/** 抛出带 HTTP 状态码的错误，便于页面区分 429 等场景 */
+function throwHttpErrorWithStatus(statusCode: number, data: unknown, fallback: string): never {
+  const msg = parseFastApiDetail(data) || fallback
+  const err = new Error(msg) as Error & { statusCode: number }
+  err.statusCode = statusCode
+  throw err
 }
 
 function parseUploadAnalyzeResponseData(rawData: unknown): Record<string, any> | null {
@@ -1183,10 +1226,16 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
     timeout: 10000
   })
   if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '提交任务失败'
-    throw new Error(msg)
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交任务失败')
   }
-  return res.data as { task_id: string; message: string }
+  const data = normalizeTaroResponseJson(res.data)
+  const taskId = String(data?.task_id ?? data?.taskId ?? '').trim()
+  const message = String(data?.message ?? '任务已提交')
+  if (!taskId) {
+    console.error('[submitAnalyzeTask] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return { task_id: taskId, message }
 }
 
 /** 文字分析提交参数 */
@@ -1227,10 +1276,17 @@ export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): 
     timeout: 10000
   })
   if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '提交任务失败'
-    throw new Error(msg)
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交任务失败')
   }
-  return res.data as { task_id: string; message: string }
+  const parsed = normalizeTaroResponseJson(res.data)
+  if (!parsed?.task_id && !parsed?.taskId) {
+    console.error('[submitTextAnalyzeTask] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return {
+    task_id: String(parsed.task_id ?? parsed.taskId ?? '').trim(),
+    message: String(parsed.message ?? '任务已提交')
+  }
 }
 
 export interface ContinuePrecisionSessionParams {
@@ -1265,10 +1321,16 @@ export async function continuePrecisionSession(
     timeout: 10000
   })
   if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '继续精准模式失败'
-    throw new Error(msg)
+    throwHttpErrorWithStatus(res.statusCode, res.data, '继续精准模式失败')
   }
-  return res.data as { task_id: string; message: string }
+  const data = normalizeTaroResponseJson(res.data)
+  const taskId = String(data?.task_id ?? data?.taskId ?? '').trim()
+  const message = String(data?.message ?? '任务已提交')
+  if (!taskId) {
+    console.error('[continuePrecisionSession] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return { task_id: taskId, message }
 }
 
 /** 查询单条分析任务 */

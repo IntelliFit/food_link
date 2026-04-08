@@ -28,7 +28,7 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 
 const FEATURES: Array<{ iconClass: string; free: string; pro: string }> = [
-  { iconClass: 'icon-paizhao-xianxing', free: '每日10次拍照', pro: '每日10次拍照' },
+  { iconClass: 'icon-paizhao-xianxing', free: '每日30次拍照分析', pro: '每日100次拍照分析' },
   { iconClass: 'icon-jiesuo',           free: '标准识别模式', pro: '精准识别模式' },
   { iconClass: 'icon-shuben',           free: '—',           pro: '计划指导 + 强督促' },
   { iconClass: 'icon-shouxieqianming',  free: '基础分享海报', pro: '精美分享海报' },

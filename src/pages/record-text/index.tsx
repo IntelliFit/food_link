@@ -1,7 +1,7 @@
 import { View, Text, Textarea, ScrollView } from '@tarojs/components'
-import { useState } from 'react'
-import Taro from '@tarojs/taro'
-import { getAccessToken, submitTextAnalyzeTask, getMyMembership } from '../../utils/api'
+import { useState, useEffect } from 'react'
+import Taro, { useDidShow } from '@tarojs/taro'
+import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type MembershipStatus } from '../../utils/api'
 import { withAuth } from '../../utils/withAuth'
 import './index.scss'
 
@@ -35,6 +35,28 @@ function RecordTextPage() {
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
   const [loading, setLoading] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+
+  const isQuotaExhausted = Boolean(
+    membershipStatus &&
+      membershipStatus.daily_limit != null &&
+      membershipStatus.daily_remaining !== null &&
+      membershipStatus.daily_remaining <= 0
+  )
+
+  const refreshMembership = () => {
+    if (getAccessToken()) {
+      getMyMembership().then(setMembershipStatus).catch(() => {})
+    }
+  }
+
+  useDidShow(() => {
+    refreshMembership()
+  })
+
+  useEffect(() => {
+    refreshMembership()
+  }, [])
 
   const commonFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 
@@ -50,16 +72,27 @@ function RecordTextPage() {
       return
     }
 
-    // 配额检查
+    if (isQuotaExhausted) {
+      Taro.showModal({
+        title: '今日次数已用完',
+        content: '今日拍照/文字分析次数已达上限，请明日再试。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
+      return
+    }
+
+    // 配额兜底（与按钮禁用一致，防止并发）
     try {
       const membership = await getMyMembership()
       if (membership.daily_remaining !== null && membership.daily_remaining <= 0) {
         const isPro = membership.is_pro
+        const limit = membership.daily_limit ?? 30
         Taro.showModal({
           title: '今日次数已用完',
           content: isPro
-            ? `今日 ${membership.daily_limit ?? 10} 次分析已用完，请明日再试。`
-            : '免费版每日限10次，开通食探会员可解锁精准模式等功能。',
+            ? `今日 ${limit} 次分析已用完，请明日再试。`
+            : `免费版每日限 ${limit} 次，开通食探会员可享更高额度与精准模式等功能。`,
           confirmText: isPro ? '知道了' : '去开通',
           cancelText: '取消',
           showCancel: !isPro,
@@ -104,15 +137,24 @@ function RecordTextPage() {
       })
     } catch (e: any) {
       Taro.hideLoading()
+      const statusCode = (e as { statusCode?: number })?.statusCode
       const errMsg = e?.message || '提交任务失败'
-      if (e?.statusCode === 429 || errMsg.includes('上限')) {
+      const isQuota =
+        statusCode === 429 ||
+        errMsg.includes('上限') ||
+        errMsg.includes('已达上限') ||
+        errMsg.includes('次数已达') ||
+        errMsg.includes('明日再试')
+      if (isQuota) {
+        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员')
         Taro.showModal({
           title: '今日次数已用完',
           content: errMsg,
-          confirmText: '去开通会员',
+          confirmText: suggestPro ? '去开通会员' : '知道了',
           cancelText: '取消',
+          showCancel: suggestPro,
           success: (res) => {
-            if (res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }
         })
       } else {
@@ -125,6 +167,23 @@ function RecordTextPage() {
 
   return (
     <View className='record-text-page'>
+      {membershipStatus && (
+        <View
+          className={`record-text-quota-bar ${isQuotaExhausted ? 'record-text-quota-bar--exhausted' : ''}`}
+          onClick={() => {
+            if (isQuotaExhausted) return
+            if (!membershipStatus.is_pro) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }}
+        >
+          <Text className='record-text-quota-bar-text'>
+            {isQuotaExhausted
+              ? '今日拍照/文字分析次数已用尽，请明日再试'
+              : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
+                  !membershipStatus.is_pro ? '  →开通会员享更高额度' : ''
+                }`}
+          </Text>
+        </View>
+      )}
       <ScrollView className='content-scroll' scrollY>
         {/* 输入区域 */}
         <View className='input-section'>
@@ -230,10 +289,10 @@ function RecordTextPage() {
       {/* 底部按钮 */}
       <View className='bottom-bar'>
         <View
-          className={`submit-btn ${!foodText.trim() || loading ? 'disabled' : ''}`}
+          className={`submit-btn ${!foodText.trim() || loading || isQuotaExhausted ? 'disabled' : ''}`}
           onClick={handleSubmit}
         >
-          <Text>{loading ? '分析中...' : '开始智能分析'}</Text>
+          <Text>{loading ? '分析中...' : isQuotaExhausted ? '今日次数已用完' : '开始智能分析'}</Text>
         </View>
       </View>
     </View>

@@ -41,9 +41,9 @@ from exercise_llm import ExerciseLlmError, estimate_exercise_calories_sync
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
 FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
-# 拍照/文字分析每日上限（限次开启时生效；产品临时将 Pro 从 20 调整为 10）
-FOOD_ANALYSIS_DAILY_LIMIT_NON_PRO = 10
-FOOD_ANALYSIS_DAILY_LIMIT_PRO = 10
+# 拍照/文字分析每日上限（限次开启时生效）
+FOOD_ANALYSIS_DAILY_LIMIT_NON_PRO = 30
+FOOD_ANALYSIS_DAILY_LIMIT_PRO = 100
 from auth import create_access_token
 from database import (
     get_user_by_openid,

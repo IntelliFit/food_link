@@ -233,6 +233,14 @@ function AnalyzePage() {
     })
   }
 
+  /** 日配额已用尽（后端开启日限时 daily_limit 与 daily_remaining 均有值） */
+  const isQuotaExhausted = Boolean(
+    membershipStatus &&
+      membershipStatus.daily_limit != null &&
+      membershipStatus.daily_remaining !== null &&
+      membershipStatus.daily_remaining <= 0
+  )
+
   const handleMultiViewChange = (value: any) => {
     const nextValue =
       typeof value === 'boolean'
@@ -302,7 +310,10 @@ function AnalyzePage() {
         if (storedPath) {
           const path = String(storedPath)
           const [stablePath] = await persistImagePathsImmediately([path])
-          setImagePaths(stablePath ? [stablePath] : [path])
+          const finalPath = stablePath || path
+          setImagePaths([finalPath])
+          // 与提交分析时写入的 analyzeImagePaths 一致，避免仅单 key 时多图逻辑异常
+          Taro.setStorageSync('analyzeImagePaths', [finalPath])
           // 清除存储，避免下次进入页面时误用
           Taro.removeStorageSync('analyzeImagePath')
         }
@@ -471,7 +482,14 @@ function AnalyzePage() {
             execution_mode: executionMode,
             ...commonPayload,
           })
-      const { task_id } = response
+      const task_id = String(
+        (response as { task_id?: string; taskId?: string }).task_id
+          ?? (response as { task_id?: string; taskId?: string }).taskId
+          ?? ''
+      ).trim()
+      if (!task_id) {
+        throw new Error('服务器未返回任务编号，请稍后重试')
+      }
       Taro.setStorageSync('analyzeMealType', mealType)
       Taro.setStorageSync('analyzeDietGoal', dietGoal)
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
@@ -483,23 +501,33 @@ function AnalyzePage() {
         Taro.setStorageSync('analyzeImagePath', imagePaths[0])
         Taro.setStorageSync('analyzeImagePaths', imagePaths)
       }
-      Taro.setStorageSync('analyzeTaskType', 'food')
       Taro.hideLoading()
+      setIsAnalyzing(false)
+      const q = `task_id=${encodeURIComponent(task_id)}&execution_mode=${encodeURIComponent(executionMode)}&task_type=food`
       Taro.redirectTo({
-        url: `/pages/analyze-loading/index?task_id=${task_id}&execution_mode=${executionMode}&task_type=food`
+        url: `/pages/analyze-loading/index?${q}`
       })
     } catch (error: any) {
       Taro.hideLoading()
       setIsAnalyzing(false)
+      const statusCode = (error as { statusCode?: number })?.statusCode
       const errMsg = error?.message || '分析失败，请重试'
-      if (error?.statusCode === 429 || errMsg.includes('上限')) {
+      const isQuotaExhausted =
+        statusCode === 429 ||
+        errMsg.includes('上限') ||
+        errMsg.includes('已达上限') ||
+        errMsg.includes('次数已达') ||
+        errMsg.includes('明日再试')
+      if (isQuotaExhausted) {
+        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员')
         Taro.showModal({
           title: '今日次数已用完',
           content: errMsg,
-          confirmText: '去开通会员',
+          confirmText: suggestPro ? '去开通会员' : '知道了',
           cancelText: '取消',
+          showCancel: suggestPro,
           success: (res) => {
-            if (res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }
         })
       } else {
@@ -513,20 +541,23 @@ function AnalyzePage() {
     }
   }
 
-  const handleConfirm = () => {
-    if (imagePaths.length === 0) {
-      handleChooseImage() // 如果没图片，点击确认直接触发选择
+  /** 主按钮：无图则唤起选图；有图则直接提交并进入 analyze-loading（与拍照后进页再分析一致） */
+  const handleAnalyzePress = () => {
+    if (isAnalyzing) return
+    if (isQuotaExhausted) {
+      Taro.showModal({
+        title: '今日次数已用完',
+        content: '今日拍照/文字分析次数已达上限，请明日再试。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
       return
     }
-    Taro.showModal({
-      title: '确认分析',
-      content: `确定开始分析这 ${imagePaths.length} 张图片吗？`,
-      confirmText: '确定',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) doAnalyze()
-      }
-    })
+    if (imagePaths.length === 0) {
+      void handleChooseImage()
+      return
+    }
+    void doAnalyze()
   }
 
   const handleVoiceInput = () => {
@@ -639,12 +670,18 @@ function AnalyzePage() {
       {/* 今日配额提示条 */}
       {membershipStatus && (
         <View
-          className={`quota-bar ${membershipStatus.is_pro ? 'quota-bar--pro' : (membershipStatus.daily_remaining ?? 10) <= 1 ? 'quota-bar--warn' : ''}`}
-          onClick={() => !membershipStatus.is_pro && Taro.navigateTo({ url: '/pages/pro-membership/index' })}
+          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${membershipStatus.is_pro ? 'quota-bar--pro' : !isQuotaExhausted && (membershipStatus.daily_remaining ?? 0) <= 1 ? 'quota-bar--warn' : ''}`}
+          onClick={() => {
+            if (isQuotaExhausted) return
+            if (!membershipStatus.is_pro) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }}
         >
           <Text className='quota-bar-text'>
-            今日剩余 {membershipStatus.daily_remaining ?? '--'}/{membershipStatus.daily_limit ?? '--'} 次
-            {!membershipStatus.is_pro && '  →开通会员解锁精准模式'}
+            {isQuotaExhausted
+              ? '今日拍照/文字分析次数已用尽，请明日再试'
+              : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
+                  !membershipStatus.is_pro ? '  →开通会员解锁精准模式' : ''
+                }`}
           </Text>
         </View>
       )}
@@ -927,12 +964,20 @@ function AnalyzePage() {
       {/* 确认按钮 */}
       <View className='confirm-section'>
         <View
-          className={`confirm-btn ${imagePaths.length === 0 || isAnalyzing ? 'disabled' : ''}`}
-          onClick={!isAnalyzing ? handleConfirm : undefined}
+          className={`confirm-btn ${imagePaths.length === 0 || isAnalyzing || isQuotaExhausted ? 'disabled' : ''}`}
+          onClick={handleAnalyzePress}
         >
-          <Text className='confirm-btn-text'>
-            {isAnalyzing ? <View className='btn-spinner' /> : (imagePaths.length === 0 ? '请先拍照' : `分析 ${imagePaths.length} 张图片`)}
-          </Text>
+          {isAnalyzing ? (
+            <View className='btn-spinner' />
+          ) : (
+            <Text className='confirm-btn-text'>
+              {isQuotaExhausted
+                ? '今日分析次数已用完'
+                : imagePaths.length === 0
+                  ? '请先拍照或选图'
+                  : `分析 ${imagePaths.length} 张图片`}
+            </Text>
+          )}
         </View>
 
         {/* 开发者调试按钮 */}

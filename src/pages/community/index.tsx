@@ -1,5 +1,6 @@
 import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { flushSync } from 'react-dom'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
 import {
@@ -33,6 +34,8 @@ import {
 } from '../../utils/api'
 import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
+
+import { IconTrendingUp } from '../../components/iconfont'
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
@@ -104,23 +107,6 @@ function FeedSearchGlyph() {
 }
 
 
-/** 排行榜入口右侧：圆形底 + 右向箭头，替代纯文本「>」 */
-function RankingEntryChevron() {
-  return (
-    <View className='ranking-chevron'>
-      <svg viewBox='0 0 24 24' fill='none' style={{ width: '100%', height: '100%' }}>
-        <path
-          d='M9 18l6-6-6-6'
-          stroke='#fff'
-          strokeWidth='2.2'
-          strokeLinecap='round'
-          strokeLinejoin='round'
-        />
-      </svg>
-    </View>
-  )
-}
-
 // 缓存键名常量
 const CACHE_KEYS = {
   FEED: 'community_feed_cache',
@@ -136,7 +122,6 @@ const CACHE_KEYS = {
 const CACHE_DURATION = 5 * 60 * 1000
 const TEMP_COMMENT_MAX_AGE_MS = 5 * 60 * 1000
 const COMMENT_DEDUPE_WINDOW_MS = 10 * 60 * 1000
-const COMMENT_SUBMIT_GUARD_MS = 2000
 const COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY = 'community_notification_target_v1'
 const COMMUNITY_NOTIFICATION_TARGET_MAX_AGE_MS = 10 * 60 * 1000
 
@@ -263,7 +248,6 @@ function CommunityPage() {
   const commentSubmitLockRef = useRef(false)
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
-  const commentSubmitInFlightRef = useRef(false)
   const lastCommentSubmitRef = useRef<{ signature: string; timestamp: number }>({
     signature: '',
     timestamp: 0
@@ -1154,14 +1138,19 @@ function CommunityPage() {
   }
 
   const submitComment = async () => {
-    if (!expandedCommentRecordId || !commentContent.trim()) return
+    if (!expandedCommentRecordId) return
+    const trimmed = commentContent.trim()
+    if (!trimmed) return
     if (commentSubmitLockRef.current) return
     commentSubmitLockRef.current = true
-    setCommentSubmitting(true)
+    // 首帧同步置「发送中」，避免网络慢时连点发送多次请求
+    flushSync(() => {
+      setCommentSubmitting(true)
+    })
     try {
       const { comment } = await communityPostComment(
         expandedCommentRecordId,
-        trimmedContent,
+        trimmed,
         {
           parent_comment_id: replyTargetComment?.id,
           reply_to_user_id: replyTargetComment?.user_id
@@ -1306,7 +1295,7 @@ function CommunityPage() {
               </View>
             )}
 
-            {/* 本周打卡排行榜（内嵌前三名预览） */}
+            {/* 本周打卡排行榜：标题一行 + 前三名直接铺在绿底上，无内嵌浅底容器 */}
             <View
               className='ranking-banner'
               onClick={() => {
@@ -1317,63 +1306,60 @@ function CommunityPage() {
                 Taro.navigateTo({ url: '/pages/checkin-leaderboard/index' })
               }}
             >
-              <View className='ranking-content'>
+              <View className='ranking-head'>
                 <View className='ranking-icon-wrap'>
-                  <Text className='ranking-icon-emoji'>🏆</Text>
+                  <IconTrendingUp size={36} color='rgb(255 255 255 / 95%)' />
                 </View>
-                <View className='ranking-text-block'>
-                  <View className='ranking-text'>
-                    <Text className='ranking-title'>本周打卡排行榜</Text>
-                    <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
-                  </View>
-                  {loggedIn ? (
-                    <View className='ranking-preview'>
-                      {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
-                        <View className='ranking-preview-skeleton'>
-                          <View className='ranking-preview-sk-dot' />
-                          <View className='ranking-preview-sk-dot' />
-                          <View className='ranking-preview-sk-dot' />
-                        </View>
-                      ) : lbPreviewTop.length > 0 ? (
-                        <>
-                          <View className='ranking-preview-row'>
-                            {lbPreviewTop.map((row) => (
-                              <View
-                                key={row.user_id}
-                                className={`ranking-preview-cell${row.is_me ? ' is-me' : ''}`}
-                              >
-                                <Text
-                                  className={`ranking-preview-rank ${row.rank === 1 ? 'r1' : row.rank === 2 ? 'r2' : 'r3'}`}
-                                >
-                                  {row.rank}
-                                </Text>
-                                <View className='ranking-preview-avatar-wrap'>
-                                  {row.avatar ? (
-                                    <Image
-                                      className='ranking-preview-avatar'
-                                      src={row.avatar}
-                                      mode='aspectFill'
-                                    />
-                                  ) : (
-                                    <Text className='ranking-preview-avatar-fallback'>👤</Text>
-                                  )}
-                                </View>
-                                <Text className='ranking-preview-name' numberOfLines={1}>
-                                  {row.nickname}
-                                </Text>
-                                <Text className='ranking-preview-count'>{row.checkin_count}次</Text>
-                              </View>
-                            ))}
-                          </View>
-                        </>
-                      ) : (
-                        <Text className='ranking-preview-placeholder'>暂无预览，下拉刷新试试</Text>
-                      )}
-                    </View>
-                  ) : null}
+                <View className='ranking-head-text'>
+                  <Text className='ranking-title'>本周打卡排行榜</Text>
+                  <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
                 </View>
               </View>
-              <RankingEntryChevron />
+              {loggedIn ? (
+                <View className='ranking-preview'>
+                  {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
+                    <View className='ranking-preview-skeleton'>
+                      <View className='ranking-preview-sk-dot' />
+                      <View className='ranking-preview-sk-dot' />
+                      <View className='ranking-preview-sk-dot' />
+                    </View>
+                  ) : lbPreviewTop.length > 0 ? (
+                    <View className='ranking-preview-row'>
+                      {lbPreviewTop.map((row) => (
+                        <View
+                          key={row.user_id}
+                          className={`ranking-preview-cell${row.is_me ? ' is-me' : ''}`}
+                        >
+                          <Text
+                            className={`ranking-preview-rank ${row.rank === 1 ? 'r1' : row.rank === 2 ? 'r2' : 'r3'}`}
+                          >
+                            {row.rank}
+                          </Text>
+                          <View className='ranking-preview-avatar-wrap'>
+                            {row.avatar ? (
+                              <Image
+                                className='ranking-preview-avatar'
+                                src={row.avatar}
+                                mode='aspectFill'
+                              />
+                            ) : (
+                              <View className='ranking-preview-avatar-fallback'>
+                                <Text className='iconfont icon-duoren ranking-preview-avatar-ico' />
+                              </View>
+                            )}
+                          </View>
+                          <Text className='ranking-preview-name' numberOfLines={1}>
+                            {row.nickname}
+                          </Text>
+                          <Text className='ranking-preview-count'>{row.checkin_count}次</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text className='ranking-preview-placeholder'>暂无预览，下拉刷新试试</Text>
+                  )}
+                </View>
+              ) : null}
             </View>
 
             {/* 饮食动态 */}
@@ -1482,13 +1468,15 @@ function CommunityPage() {
                 <View className='skeleton-container'>
                   {[1, 2, 3].map(i => (
                     <View key={i} className='skeleton-feed-card'>
-                      <View className='skeleton-feed-header'>
-                        <View className='skeleton-avatar' />
-                        <View className='skeleton-user-info'>
-                          <View className='skeleton-line' style={{ width: '120rpx', height: '28rpx' }} />
-                          <View className='skeleton-line' style={{ width: '200rpx', height: '24rpx', marginTop: '8rpx' }} />
+                      <View className='skeleton-feed-moments'>
+                        <View className='skeleton-feed-avatar-col'>
+                          <View className='skeleton-avatar' />
                         </View>
-                      </View>
+                        <View className='skeleton-feed-main-col'>
+                          <View className='skeleton-user-info'>
+                            <View className='skeleton-line' style={{ width: '160rpx', height: '32rpx' }} />
+                            <View className='skeleton-line' style={{ width: '220rpx', height: '24rpx', marginTop: '8rpx' }} />
+                          </View>
                       <View className='skeleton-content'>
                         <View className='skeleton-line' style={{ width: '100%', height: '24rpx' }} />
                         <View className='skeleton-line' style={{ width: '80%', height: '24rpx', marginTop: '12rpx' }} />
@@ -1501,6 +1489,8 @@ function CommunityPage() {
                       <View className='skeleton-feed-actions'>
                         <View className='skeleton-line skeleton-action' />
                         <View className='skeleton-line skeleton-action' />
+                      </View>
+                        </View>
                       </View>
                     </View>
                   ))}
@@ -1530,123 +1520,127 @@ function CommunityPage() {
                         className={`feed-card${item.record.description?.trim() && !item.record.image_path ? ' feed-card-text-only' : ''}`}
                         onClick={() => handleViewDetail(item.record)}
                       >
-                        <View className='feed-header'>
-                          <View className='user-avatar'>
-                            {item.author.avatar ? (
-                              <Image src={item.author.avatar} mode='aspectFill' className='user-avatar-img' />
-                            ) : (
-                              <Text className='user-avatar-placeholder'>👤</Text>
-                            )}
-                          </View>
-                          <View className='user-info'>
-                            <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
-                            <Text className='post-time'>
-                              {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
-                            </Text>
-                          </View>
-                        </View>
-                        {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
-                          <View className='feed-tags'>
-                            <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
-                          </View>
-                        ) : null}
-                        {item.record.description &&
-                          (item.record.image_path ? (
-                            <Text className='feed-content'>{item.record.description}</Text>
-                          ) : (
-                            <View className='feed-content-wrap feed-content-wrap--text-only'>
-                              <Text className='feed-content'>{item.record.description}</Text>
+                        <View className='feed-card-moments'>
+                          <View className='feed-card-avatar-col'>
+                            <View className='user-avatar'>
+                              {item.author.avatar ? (
+                                <Image src={item.author.avatar} mode='aspectFill' className='user-avatar-img' />
+                              ) : (
+                                <Text className='user-avatar-placeholder'>👤</Text>
+                              )}
                             </View>
-                          ))}
-                        {item.record.image_path && (
-                          <View className='feed-image'>
-                            <Image
-                              src={item.record.image_path}
-                              mode='aspectFill'
-                              className='feed-image-content'
-                            />
                           </View>
-                        )}
-                        <View className='feed-meta'>
-                          <View className='feed-calorie'>
-                            <Text className='feed-calorie-num'>
-                              {Number(item.record.total_calories || 0).toFixed(0)}
-                            </Text>
-                            <Text className='feed-calorie-unit'> kcal</Text>
-                          </View>
-                          <Text className='feed-macros'>
-                            蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
-                          </Text>
-                        </View>
-                        <View
-                          className='feed-actions'
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <View
-                            className='action-item'
-                            onClick={() => handleLike(item)}
-                          >
-                            <Text
-                              className={`action-icon iconfont icon-good ${item.liked ? 'liked' : ''}`}
-                            />
-                            <Text className='action-count'>{item.like_count}</Text>
-                          </View>
-                          <View
-                            className='action-item'
-                            onClick={() => openCommentModal(item.record.id)}
-                          >
-                            <Text className='action-icon iconfont icon-pinglun' />
-                          <Text className='action-count'>评论 {item.comment_count || 0}</Text>
-                          </View>
-                          {item.is_mine ? (
-                            <View
-                              className='action-item action-delete'
-                              onClick={() => handleHideFeed(item)}
-                            >
-                              <Text className='action-icon action-delete-icon'>×</Text>
-                              <Text className='action-count action-delete-text'>移除</Text>
+                          <View className='feed-card-main-col'>
+                            <View className='feed-card-name-block'>
+                              <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
+                              <Text className='post-time'>
+                                {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
+                              </Text>
                             </View>
-                          ) : null}
-                        </View>
-                        {(item.comments?.length ?? 0) > 0 && (
-                          <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
-                            {(item.comments || []).map((c) => (
-                              <View
-                                key={c.id}
-                                className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''} ${c.reply_to_user_id ? 'is-reply' : ''}`}
-                                onClick={() => openCommentModal(item.record.id, c)}
-                              >
-                                <View className='comment-avatar'>
-                                  {c.avatar ? (
-                                    <Image src={c.avatar} mode='aspectFill' className='comment-avatar-img' />
-                                  ) : (
-                                    <Text className='comment-avatar-placeholder'>👤</Text>
-                                  )}
-                                </View>
-                                <View className={`comment-body ${c.reply_to_user_id ? 'is-reply' : ''}`}>
-                                  <View className='comment-meta-line'>
-                                    <Text className='comment-author'>{c.nickname || '用户'}</Text>
-                                    {c.reply_to_user_id ? (
-                                      <View className='comment-reply-join'>
-                                        <Text className='comment-reply-arrow'>回复</Text>
-                                        <Text className='comment-reply-target'>{c.reply_to_nickname || '用户'}</Text>
-                                      </View>
-                                    ) : null}
-                                  </View>
-                                  <Text className='comment-content-text'>{c.content}</Text>
-                                  {c._is_temp ? (
-                                    <Text className='comment-status-badge'>审核中</Text>
-                                  ) : null}
-                                </View>
-                              </View>
-                            ))}
-                            {(item.comment_count || 0) > (item.comments?.length || 0) ? (
-                              <View className='feed-comments-more' onClick={() => handleLoadAllComments(item.record.id)}>
-                                <Text className='feed-comments-more-text'>查看全部评论</Text>
+                            {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
+                              <View className='feed-tags'>
+                                <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
                               </View>
                             ) : null}
+                            {item.record.description &&
+                              (item.record.image_path ? (
+                                <Text className='feed-content'>{item.record.description}</Text>
+                              ) : (
+                                <View className='feed-content-wrap feed-content-wrap--text-only'>
+                                  <Text className='feed-content'>{item.record.description}</Text>
+                                </View>
+                              ))}
+                            {item.record.image_path && (
+                              <View className='feed-image'>
+                                <Image
+                                  src={item.record.image_path}
+                                  mode='aspectFill'
+                                  className='feed-image-content'
+                                />
+                              </View>
+                            )}
+                            <View className='feed-meta'>
+                              <View className='feed-calorie'>
+                                <Text className='feed-calorie-num'>
+                                  {Number(item.record.total_calories || 0).toFixed(0)}
+                                </Text>
+                                <Text className='feed-calorie-unit'> kcal</Text>
+                              </View>
+                              <Text className='feed-macros'>
+                                蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
+                              </Text>
+                            </View>
+                            <View
+                              className='feed-actions'
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <View
+                                className='action-item'
+                                onClick={() => handleLike(item)}
+                              >
+                                <Text
+                                  className={`action-icon iconfont icon-good ${item.liked ? 'liked' : ''}`}
+                                />
+                                <Text className='action-count'>{item.like_count}</Text>
+                              </View>
+                              <View
+                                className='action-item feed-action-comment'
+                                onClick={() => openCommentModal(item.record.id)}
+                              >
+                                <Text className='action-icon iconfont icon-pinglun' />
+                                <Text className='action-count'>评论 {item.comment_count || 0}</Text>
+                              </View>
+                              {item.is_mine ? (
+                                <View
+                                  className='action-item action-delete'
+                                  onClick={() => handleHideFeed(item)}
+                                >
+                                  <Text className='action-icon action-delete-icon'>×</Text>
+                                  <Text className='action-count action-delete-text'>移除</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            {(item.comments?.length ?? 0) > 0 && (
+                              <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
+                                {(item.comments || []).map((c) => (
+                                  <View
+                                    key={c.id}
+                                    className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''} ${c.reply_to_user_id ? 'is-reply' : ''}`}
+                                    onClick={() => openCommentModal(item.record.id, c)}
+                                  >
+                                    <View className='comment-avatar'>
+                                      {c.avatar ? (
+                                        <Image src={c.avatar} mode='aspectFill' className='comment-avatar-img' />
+                                      ) : (
+                                        <Text className='comment-avatar-placeholder'>👤</Text>
+                                      )}
+                                    </View>
+                                    <View className={`comment-body ${c.reply_to_user_id ? 'is-reply' : ''}`}>
+                                      <View className='comment-meta-line'>
+                                        <Text className='comment-author'>{c.nickname || '用户'}</Text>
+                                        {c.reply_to_user_id ? (
+                                          <View className='comment-reply-join'>
+                                            <Text className='comment-reply-arrow'>回复</Text>
+                                            <Text className='comment-reply-target'>{c.reply_to_nickname || '用户'}</Text>
+                                          </View>
+                                        ) : null}
+                                      </View>
+                                      <Text className='comment-content-text'>{c.content}</Text>
+                                      {c._is_temp ? (
+                                        <Text className='comment-status-badge'>审核中</Text>
+                                      ) : null}
+                                    </View>
+                                  </View>
+                                ))}
+                                {(item.comment_count || 0) > (item.comments?.length || 0) ? (
+                                  <View className='feed-comments-more' onClick={() => handleLoadAllComments(item.record.id)}>
+                                    <Text className='feed-comments-more-text'>查看全部评论</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                            )}
                           </View>
-                        )}
+                        </View>
                       </View>
                     </View>
                   ))}
@@ -1707,7 +1701,9 @@ function CommunityPage() {
             value={commentContent}
             onInput={(e) => setCommentContent(e.detail.value)}
             confirmType='send'
-            onConfirm={submitComment}
+            onConfirm={() => {
+              void submitComment()
+            }}
             focus={commentInputFocus}
             maxlength={500}
             cursorSpacing={24}
@@ -1715,7 +1711,10 @@ function CommunityPage() {
           />
           <View
             className={`comment-bottom-send ${(!commentContent.trim() || commentSubmitting) ? 'disabled' : ''} ${commentSubmitting ? 'is-submitting' : ''}`}
-            onClick={submitComment}
+            hoverClass='none'
+            onClick={() => {
+              void submitComment()
+            }}
           >
             <Text className='comment-bottom-send-text'>{commentSubmitting ? '发送中' : '发送'}</Text>
           </View>
