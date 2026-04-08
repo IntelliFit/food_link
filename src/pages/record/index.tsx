@@ -23,23 +23,21 @@ function RecordPage() {
   
   const cameraContextRef = useRef<Taro.CameraContext | null>(null)
 
-  // 检查相机权限
+  /**
+   * 相机权限：仅当用户在小程序内「明确拒绝过」camera（authSetting 为 false）时拦截。
+   * 不再主动调用 wx.authorize(scope.camera)：该接口易在未真正拒绝时失败，导致一进页就误判为需去设置。
+   * 首次或未授权时由 <Camera> 拉起系统授权；用户拒绝时由 onError 处理。
+   */
   const checkCameraAuth = useCallback(async () => {
     try {
       const { authSetting } = await Taro.getSetting()
-      if (authSetting['scope.camera']) {
-        setCameraAuth('authorized')
+      if (authSetting['scope.camera'] === false) {
+        setCameraAuth('denied')
       } else {
-        setCameraAuth('pending')
-        try {
-          await Taro.authorize({ scope: 'scope.camera' })
-          setCameraAuth('authorized')
-        } catch {
-          setCameraAuth('denied')
-        }
+        setCameraAuth('authorized')
       }
     } catch {
-      setCameraAuth('denied')
+      setCameraAuth('authorized')
     }
   }, [])
 
@@ -173,7 +171,7 @@ function RecordPage() {
     })
   }, [membershipStatus])
 
-  // 相机错误处理
+  // 官方文档：binderror 在用户不允许使用摄像头时触发
   const handleCameraError = useCallback((e: any) => {
     console.error('相机错误:', e)
     setCameraAuth('denied')
@@ -185,10 +183,12 @@ function RecordPage() {
       success: (res) => {
         if (res.authSetting['scope.camera']) {
           setCameraAuth('authorized')
+        } else {
+          void checkCameraAuth()
         }
       }
     })
-  }, [])
+  }, [checkCameraAuth])
 
   // 权限拒绝页面
   if (cameraAuth === 'denied') {

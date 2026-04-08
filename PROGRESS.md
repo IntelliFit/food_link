@@ -6,6 +6,7 @@
 
 ## 2026-04-09
 
+- 🐛 fix: 拍照页移除前置 `authorize(scope.camera)`，仅当 `getSetting` 明确为 false 时显示拒绝页，避免已授权仍误判需去设置 `src/pages/record/index.tsx`
 - 🎨 style: 分享海报 Canvas 改为主题绿渐变全幅绘制，去掉 AI 建议/描述等文案；记录详情海报弹窗全屏无白边 `src/utils/poster.ts` `src/pages/record-detail/index.scss`
 - 🎨 style: 分析结果页上滑时头图高度缩小且左右内边距收至 0（图片宽度与屏宽一致后停止横向收缩）`src/pages/result/index.tsx` `src/pages/result/index.scss`
 - 🔧 refactor: 移除拍照分析页长按与页内调试按钮；首页记录菜单调试区支持预置测试图 URL（`dev-debug-storage`）+ 假数据，结果页「不写库」仅依赖 `analyzeDebugPreview` `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss` `src/pages/index/components/RecordMenu.tsx` `src/pages/index/index.scss` `src/pages/result/index.tsx` `src/utils/dev-debug-storage.ts` `src/utils/dev-debug-tools.ts`
