@@ -34,6 +34,8 @@ interface ExerciseRecord {
   content: string
   calories: number
   createdAt: string
+  /** 模型思考过程（有则展示） */
+  reasoning?: string | null
 }
 
 /** 本地「分析中 / 失败」卡片（不跳转页面） */
@@ -51,7 +53,8 @@ function mapLogToRecord(log: ExerciseLogItem): ExerciseRecord {
     id: log.id,
     content: log.exercise_desc,
     calories: log.calories_burned,
-    createdAt: log.recorded_at
+    createdAt: log.recorded_at,
+    reasoning: log.ai_reasoning ?? undefined
   }
 }
 

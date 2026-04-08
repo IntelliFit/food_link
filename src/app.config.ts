@@ -16,6 +16,8 @@ export default defineAppConfig({
     'pages/profile/index',
     'pages/expiry/index',
     'pages/expiry-edit/index',
+    // 兼容旧入口：历史缓存可能仍尝试打开 pages/food-expiry/index
+    'pages/food-expiry/index',
     'pages/pro-membership/index',
     'pages/recipes/index',
     'pages/recipe-edit/index',
@@ -80,9 +82,6 @@ export default defineAppConfig({
   permission: {
     'scope.userLocation': {
       desc: '你的位置信息将用于分享食物时标记商家位置'
-    },
-    'scope.camera': {
-      desc: '需要使用相机拍照识别食物'
     }
   },
   requiredPrivateInfos: [

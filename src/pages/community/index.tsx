@@ -136,6 +136,7 @@ const CACHE_KEYS = {
 const CACHE_DURATION = 5 * 60 * 1000
 const TEMP_COMMENT_MAX_AGE_MS = 5 * 60 * 1000
 const COMMENT_DEDUPE_WINDOW_MS = 10 * 60 * 1000
+const COMMENT_SUBMIT_GUARD_MS = 2000
 const COMMUNITY_NOTIFICATION_TARGET_STORAGE_KEY = 'community_notification_target_v1'
 const COMMUNITY_NOTIFICATION_TARGET_MAX_AGE_MS = 10 * 60 * 1000
 
@@ -262,6 +263,11 @@ function CommunityPage() {
   const commentSubmitLockRef = useRef(false)
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
+  const commentSubmitInFlightRef = useRef(false)
+  const lastCommentSubmitRef = useRef<{ signature: string; timestamp: number }>({
+    signature: '',
+    timestamp: 0
+  })
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [feedScrollIntoView, setFeedScrollIntoView] = useState('')
 
@@ -1155,7 +1161,7 @@ function CommunityPage() {
     try {
       const { comment } = await communityPostComment(
         expandedCommentRecordId,
-        commentContent.trim(),
+        trimmedContent,
         {
           parent_comment_id: replyTargetComment?.id,
           reply_to_user_id: replyTargetComment?.user_id
@@ -1172,6 +1178,9 @@ function CommunityPage() {
       const newList = feedList.map(item => {
         if (item.record.id !== expandedCommentRecordId) return item
         const currentComments = item.comments || []
+        if (currentComments.some((existing) => existing.id === displayComment.id)) {
+          return item
+        }
         const nextComments = [...currentComments, displayComment]
         return {
           ...item,
@@ -1189,6 +1198,10 @@ function CommunityPage() {
       setReplyTargetComment(null)
       Taro.showToast({ title: '评论成功', icon: 'success' })
     } catch (e) {
+      lastCommentSubmitRef.current = {
+        signature: '',
+        timestamp: 0
+      }
       Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
     } finally {
       commentSubmitLockRef.current = false

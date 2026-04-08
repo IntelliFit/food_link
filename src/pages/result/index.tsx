@@ -1,7 +1,22 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, submitTextAnalyzeTask, type ExecutionMode, type AnalyzeRecognitionOutcome, type AllowedFoodCategory } from '../../utils/api'
+import {
+  AnalyzeResponse,
+  FoodItem,
+  MealType,
+  saveFoodRecord,
+  getAccessToken,
+  createUserRecipe,
+  updateAnalysisTaskResult,
+  submitAnalyzeTask,
+  submitTextAnalyzeTask,
+  continuePrecisionSession,
+  type ExecutionMode,
+  type AnalyzeRecognitionOutcome,
+  type AllowedFoodCategory,
+  type PrecisionReferenceObjectInput
+} from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
 import { withAuth } from '../../utils/withAuth'
 
@@ -54,6 +69,13 @@ const FOOD_CATEGORY_LABEL: Record<AllowedFoodCategory, string> = {
   lean_protein: '单个瘦肉',
   unknown: '混合/其他'
 }
+
+const PRECISION_REFERENCE_PRESETS = [
+  { value: 'chopsticks', label: '筷子', dimensions: { length: 240, width: 7, height: 7 } },
+  { value: 'spoon', label: '勺子', dimensions: { length: 170, width: 40, height: 15 } },
+  { value: 'bank_card', label: '银行卡', dimensions: { length: 85.6, width: 54, height: 0.8 } },
+  { value: 'custom', label: '自定义', dimensions: {} },
+]
 
 const RECOGNITION_OUTCOME_META: Record<AnalyzeRecognitionOutcome, { title: string; desc: string }> = {
   ok: {
@@ -140,6 +162,13 @@ const RESULT_HERO_MIN_RPX = 200
 /** 纵向滑动多少 px 内完成收缩（与 scrollTop 同单位） */
 const RESULT_HERO_SHRINK_SCROLL_PX = 420
 
+const normalizePrecisionStringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : []
+)
+
+
 function ResultPage() {
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
   const [imagePaths, setImagePaths] = useState<string[]>([])
@@ -165,6 +194,23 @@ function ResultPage() {
   const [retakeGuidance, setRetakeGuidance] = useState<string[]>([])
   const [allowedFoodCategory, setAllowedFoodCategory] = useState<AllowedFoodCategory>('unknown')
   const [followupQuestions, setFollowupQuestions] = useState<string[]>([])
+  const [precisionSessionId, setPrecisionSessionId] = useState('')
+  const [precisionStatus, setPrecisionStatus] = useState<string>('')
+  const [pendingRequirements, setPendingRequirements] = useState<string[]>([])
+  const [retakeInstructions, setRetakeInstructions] = useState<string[]>([])
+  const [referenceObjectNeeded, setReferenceObjectNeeded] = useState(false)
+  const [referenceObjectSuggestions, setReferenceObjectSuggestions] = useState<string[]>([])
+  const [detectedItemsSummary, setDetectedItemsSummary] = useState<string[]>([])
+  const [splitStrategy, setSplitStrategy] = useState('')
+  const [uncertaintyNotes, setUncertaintyNotes] = useState<string[]>([])
+  const [precisionFollowupText, setPrecisionFollowupText] = useState('')
+  const [continuingPrecision, setContinuingPrecision] = useState(false)
+  const [precisionReferencePreset, setPrecisionReferencePreset] = useState('chopsticks')
+  const [precisionReferenceName, setPrecisionReferenceName] = useState('筷子')
+  const [precisionReferenceLength, setPrecisionReferenceLength] = useState('240')
+  const [precisionReferenceWidth, setPrecisionReferenceWidth] = useState('7')
+  const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('7')
+  const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
@@ -292,8 +338,10 @@ function ResultPage() {
       const storedPath = Taro.getStorageSync('analyzeImagePath')
       const storedMode = Taro.getStorageSync('analyzeExecutionMode')
       const storedTaskType = normalizeTaskType(Taro.getStorageSync('analyzeTaskType'))
+      const storedPrecisionSessionId = String(Taro.getStorageSync('analyzePrecisionSessionId') || '').trim()
       setTaskType(storedTaskType)
       setExecutionMode(normalizeExecutionMode(storedMode))
+      setPrecisionSessionId(storedPrecisionSessionId)
 
       if (storedTaskType === 'food_text') {
         setImagePaths([])
@@ -321,6 +369,15 @@ function ResultPage() {
         setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
         setAllowedFoodCategory(normalizeAllowedFoodCategory(result.allowedFoodCategory))
         setFollowupQuestions(Array.isArray(result.followupQuestions) ? result.followupQuestions.filter(Boolean) : [])
+        setPrecisionSessionId(result.precisionSessionId || storedPrecisionSessionId)
+        setPrecisionStatus(result.precisionStatus || '')
+        setPendingRequirements(normalizePrecisionStringList(result.pendingRequirements))
+        setRetakeInstructions(normalizePrecisionStringList(result.retakeInstructions))
+        setReferenceObjectNeeded(Boolean(result.referenceObjectNeeded))
+        setReferenceObjectSuggestions(normalizePrecisionStringList(result.referenceObjectSuggestions))
+        setDetectedItemsSummary(normalizePrecisionStringList(result.detectedItemsSummary))
+        setSplitStrategy(String(result.splitStrategy || ''))
+        setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
         const items = convertApiDataToItems(result.items)
         setNutritionItems(items)
         calculateNutritionStats(items)
@@ -354,6 +411,72 @@ function ResultPage() {
   const shouldShowRecognitionCard = isStrictMode
   const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0
   const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
+  const shouldShowPrecisionContinueCard = Boolean(
+    precisionSessionId && precisionStatus && precisionStatus !== 'done'
+  )
+
+  const handlePrecisionReferencePresetSelect = (value: string) => {
+    setPrecisionReferencePreset(value)
+    const target = PRECISION_REFERENCE_PRESETS.find(item => item.value === value)
+    if (!target) return
+    setPrecisionReferenceName(target.label)
+    setPrecisionReferenceLength(target.dimensions.length != null ? String(target.dimensions.length) : '')
+    setPrecisionReferenceWidth(target.dimensions.width != null ? String(target.dimensions.width) : '')
+    setPrecisionReferenceHeight(target.dimensions.height != null ? String(target.dimensions.height) : '')
+  }
+
+  const buildPrecisionReferenceObjects = (): PrecisionReferenceObjectInput[] => {
+    const name = precisionReferenceName.trim()
+    if (!name) return []
+    const length = Number(precisionReferenceLength)
+    const width = Number(precisionReferenceWidth)
+    const height = Number(precisionReferenceHeight)
+    return [{
+      reference_type: precisionReferencePreset === 'custom' ? 'custom' : 'preset',
+      reference_name: name,
+      dimensions_mm: {
+        ...(Number.isFinite(length) && length > 0 ? { length } : {}),
+        ...(Number.isFinite(width) && width > 0 ? { width } : {}),
+        ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+      },
+      placement_note: precisionReferencePlacement.trim() || undefined,
+    }]
+  }
+
+  const handleContinuePrecision = async () => {
+    if (!precisionSessionId) return
+    setContinuingPrecision(true)
+    Taro.showLoading({ title: '继续精准估计...', mask: true })
+    try {
+      const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
+      const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
+      const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
+      const payload = {
+        source_type: taskType === 'food_text' ? 'text' as const : 'image' as const,
+        text: taskType === 'food_text' ? String(Taro.getStorageSync('analyzeTextInput') || '').trim() || description : undefined,
+        additionalContext: precisionFollowupText.trim() || undefined,
+        meal_type: savedMealType,
+        diet_goal: savedDietGoal,
+        activity_timing: savedActivityTiming,
+        reference_objects: buildPrecisionReferenceObjects(),
+      }
+      const { task_id } = await continuePrecisionSession(precisionSessionId, payload)
+      Taro.hideLoading()
+      Taro.redirectTo({
+        url: `/pages/analyze-loading/index?task_id=${task_id}&task_type=${taskType}&execution_mode=strict`
+      })
+    } catch (e: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: e?.message || '继续精准模式失败', icon: 'none' })
+    } finally {
+      setContinuingPrecision(false)
+    }
+  }
+
+  const handleRetakePrecision = () => {
+    if (!precisionSessionId) return
+    Taro.navigateTo({ url: `/pages/analyze/index?precision_session_id=${precisionSessionId}` })
+  }
 
   /** 概览区三色柱高度：按该成分供能在「蛋白+碳水+脂肪」总供能中的占比（4/4/9 kcal·g⁻¹） */
   const macroEnergyBarPercents = useMemo(() => {
@@ -694,6 +817,10 @@ function ResultPage() {
 
   /** 点击保存按钮：打开餐次选择弹窗 */
   const handleConfirmAndShare = () => {
+    if (shouldShowPrecisionContinueCard) {
+      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
+      return
+    }
     if (isStrictHardReject) {
       Taro.showModal({
         title: '当前结果不建议直接用于精准执行',
@@ -742,6 +869,10 @@ function ResultPage() {
   }
 
   const handleOpenLibraryUpload = () => {
+    if (shouldShowPrecisionContinueCard) {
+      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
+      return
+    }
     if (!hasUploadableImage) {
       Taro.showToast({ title: '当前结果没有可上传的实物图片', icon: 'none' })
       return
@@ -781,6 +912,10 @@ function ResultPage() {
 
   // 收藏食物（保存为可复用模板）
   const handleSaveAsRecipe = () => {
+    if (shouldShowPrecisionContinueCard) {
+      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
+      return
+    }
     if (isStrictHardReject) {
       Taro.showToast({ title: '请先重拍后再收藏', icon: 'none' })
       return
@@ -1188,6 +1323,161 @@ function ResultPage() {
                     <Text className='followup-question-text'>{question}</Text>
                   </View>
                 ))}
+              </View>
+            </View>
+          )}
+
+          {shouldShowPrecisionContinueCard && (
+            <View className='precision-continue-card'>
+              <View className='followup-question-header'>
+                <View className='followup-question-title-wrap'>
+                  <Text className='followup-question-label'>精准模式下一步</Text>
+                  <Text className='followup-question-title'>
+                    {precisionStatus === 'needs_retake' ? '这轮建议先重拍再继续' : '这轮还需要你补充更多信息'}
+                  </Text>
+                </View>
+              </View>
+              {detectedItemsSummary.length > 0 && (
+                <Text className='followup-question-desc'>
+                  当前识别到的主体：{detectedItemsSummary.join('、')}
+                </Text>
+              )}
+              {pendingRequirements.length > 0 && (
+                <Text className='followup-question-desc'>
+                  待补充：{pendingRequirements.join('、')}
+                </Text>
+              )}
+              {referenceObjectNeeded && (
+                <Text className='followup-question-desc'>
+                  当前建议补一个参考物，帮助后续按比例尺继续估重。
+                </Text>
+              )}
+              {referenceObjectSuggestions.length > 0 && (
+                <Text className='followup-question-desc'>
+                  可选参考物：{referenceObjectSuggestions.join('、')}
+                </Text>
+              )}
+              {retakeInstructions.length > 0 && (
+                <View className='followup-question-list'>
+                  {retakeInstructions.map((tip, idx) => (
+                    <View key={`${tip}-${idx}`} className='followup-question-item'>
+                      <Text className='followup-question-dot'>{idx + 1}.</Text>
+                      <Text className='followup-question-text'>{tip}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {followupQuestions.length > 0 && (
+                <View className='followup-question-list'>
+                  {followupQuestions.map((question, idx) => (
+                    <View key={`${question}-${idx}`} className='followup-question-item'>
+                      <Text className='followup-question-dot'>{idx + 1}.</Text>
+                      <Text className='followup-question-text'>{question}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {uncertaintyNotes.length > 0 && (
+                <View className='followup-question-list'>
+                  {uncertaintyNotes.map((note, idx) => (
+                    <View key={`${note}-${idx}`} className='followup-question-item'>
+                      <Text className='followup-question-dot'>•</Text>
+                      <Text className='followup-question-text'>{note}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View className='additional-context-wrapper'>
+                <View className='context-label'>
+                  <Text className='iconfont icon-jishiben'></Text>
+                  <Text>补充说明</Text>
+                </View>
+                <Textarea
+                  className='context-textarea'
+                  placeholder='例如：米饭大约 2 两；鸡腿已去骨；参考物和食物在同一平面'
+                  value={precisionFollowupText}
+                  onInput={(e: any) => setPrecisionFollowupText(e.detail.value)}
+                  maxlength={200}
+                  autoHeight
+                />
+              </View>
+
+              <View className='precision-reference-block'>
+                <Text className='insight-label'>参考物</Text>
+                <View className='state-options'>
+                  {PRECISION_REFERENCE_PRESETS.map((preset) => (
+                    <View
+                      key={preset.value}
+                      className={`state-option ${precisionReferencePreset === preset.value ? 'active' : ''}`}
+                      onClick={() => handlePrecisionReferencePresetSelect(preset.value)}
+                    >
+                      <Text className='state-label'>{preset.label}</Text>
+                    </View>
+                  ))}
+                </View>
+                <View className='correction-row'>
+                  <View className='correction-inputs'>
+                    <Input
+                      className='correction-input name-input'
+                      value={precisionReferenceName}
+                      placeholder='参考物名称'
+                      onInput={(e: any) => setPrecisionReferenceName(e.detail.value)}
+                    />
+                    <View className='weight-input-wrapper'>
+                      <Input
+                        className='correction-input weight-input'
+                        type='digit'
+                        value={precisionReferenceLength}
+                        placeholder='长'
+                        onInput={(e: any) => setPrecisionReferenceLength(e.detail.value)}
+                      />
+                      <Text className='weight-unit'>mm</Text>
+                    </View>
+                    <View className='weight-input-wrapper'>
+                      <Input
+                        className='correction-input weight-input'
+                        type='digit'
+                        value={precisionReferenceWidth}
+                        placeholder='宽'
+                        onInput={(e: any) => setPrecisionReferenceWidth(e.detail.value)}
+                      />
+                      <Text className='weight-unit'>mm</Text>
+                    </View>
+                    <View className='weight-input-wrapper'>
+                      <Input
+                        className='correction-input weight-input'
+                        type='digit'
+                        value={precisionReferenceHeight}
+                        placeholder='高'
+                        onInput={(e: any) => setPrecisionReferenceHeight(e.detail.value)}
+                      />
+                      <Text className='weight-unit'>mm</Text>
+                    </View>
+                  </View>
+                </View>
+                <Textarea
+                  className='context-textarea'
+                  placeholder='摆放说明，例如：和米饭在同一平面，放在盘子右边'
+                  value={precisionReferencePlacement}
+                  onInput={(e: any) => setPrecisionReferencePlacement(e.detail.value)}
+                  maxlength={100}
+                  autoHeight
+                />
+              </View>
+
+              <View className='precision-continue-actions'>
+                <View
+                  className={`secondary-btn ${continuingPrecision ? 'disabled' : ''}`}
+                  onClick={continuingPrecision ? undefined : handleContinuePrecision}
+                >
+                  <Text className='btn-text'>{continuingPrecision ? '提交中...' : '提交补充信息'}</Text>
+                </View>
+                {taskType === 'food' ? (
+                  <View className='primary-btn soft-warning' onClick={handleRetakePrecision}>
+                    <Text className='btn-text'>重新拍照继续</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
           )}

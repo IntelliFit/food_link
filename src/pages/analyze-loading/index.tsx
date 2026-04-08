@@ -154,6 +154,12 @@ const normalizeTaskType = (value: unknown): 'food' | 'food_text' | 'exercise' =>
   return 'food'
 }
 
+const pickSourceTaskTypeFromTask = (task: AnalysisTask): 'food' | 'food_text' => {
+  if (task.task_type === 'food_text') return 'food_text'
+  const payload = task.payload as Record<string, unknown> | undefined
+  return payload?.source_type === 'text' ? 'food_text' : 'food'
+}
+
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
   if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'standard') {
@@ -319,9 +325,14 @@ function AnalyzeLoadingPage() {
       try {
         const task: AnalysisTask = await getAnalyzeTask(taskId)
         const taskMode = pickExecutionModeFromTask(task)
+        const effectiveTaskType = pickSourceTaskTypeFromTask(task)
         if (taskMode) {
           setExecutionMode(taskMode)
           Taro.setStorageSync('analyzeExecutionMode', taskMode)
+        }
+        if (effectiveTaskType !== taskType) {
+          setTaskType(effectiveTaskType)
+          Taro.setStorageSync('analyzeTaskType', effectiveTaskType)
         }
         if (task.status === 'done' && task.result) {
           const exResult = task.result as ExerciseTaskResultPayload | undefined
@@ -350,6 +361,11 @@ function AnalyzeLoadingPage() {
             return
           }
 
+          const result = task.result as AnalyzeResponse
+          if (result.redirectTaskId && result.redirectTaskId !== taskId) {
+            setTaskId(result.redirectTaskId)
+            return
+          }
           setStatus('done')
           if (timeoutTimerRef.current) {
             clearTimeout(timeoutTimerRef.current)
@@ -365,12 +381,19 @@ function AnalyzeLoadingPage() {
           }
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzePendingCorrectionItems')
-          const result = task.result as AnalyzeResponse
           const payload = task.payload || {}
           const settledMode = taskMode || executionMode
           Taro.setStorageSync('analyzeExecutionMode', settledMode)
+          if (result.precisionSessionId) {
+            Taro.setStorageSync('analyzePrecisionSessionId', result.precisionSessionId)
+          } else {
+            Taro.removeStorageSync('analyzePrecisionSessionId')
+          }
 
-          if (taskType === 'food_text') {
+          // 根据任务类型跳转到不同的结果页面
+          if (effectiveTaskType === 'food_text') {
+            // 文字分析：跳转到统一的结果页（复用图片分析页）
+            // 必须同时清空单图和多图缓存，避免上一次拍照识别残留的图片混入本次纯文字结果。
             Taro.removeStorageSync('analyzeImagePath')
             Taro.removeStorageSync('analyzeImagePaths')
             Taro.setStorageSync('analyzeTextInput', task.text_input || '')

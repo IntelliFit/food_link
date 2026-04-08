@@ -51,6 +51,12 @@ const getTotalCalories = (task: AnalysisTask): number => {
   return result.items?.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0) || 0
 }
 
+const pickSourceTaskType = (task: AnalysisTask): 'food' | 'food_text' => {
+  if (task.task_type === 'food_text') return 'food_text'
+  const payload = task.payload as Record<string, unknown> | undefined
+  return payload?.source_type === 'text' ? 'food_text' : 'food'
+}
+
 function formatTime(iso: string): { text: string; isToday: boolean } {
   try {
     const d = new Date(iso)
@@ -254,11 +260,18 @@ function AnalyzeHistoryPage() {
     setLoading(true)
     try {
       // 获取图片分析和文字分析任务
-      const [foodRes, textRes] = await Promise.all([
+      const [foodRes, textRes, precisionPlanRes, precisionAggregateRes] = await Promise.all([
         listAnalyzeTasks({ task_type: 'food' }).catch(() => ({ tasks: [] })),
-        listAnalyzeTasks({ task_type: 'food_text' }).catch(() => ({ tasks: [] }))
+        listAnalyzeTasks({ task_type: 'food_text' }).catch(() => ({ tasks: [] })),
+        listAnalyzeTasks({ task_type: 'precision_plan' }).catch(() => ({ tasks: [] })),
+        listAnalyzeTasks({ task_type: 'precision_aggregate' }).catch(() => ({ tasks: [] })),
       ])
-      const allTasks = [...(foodRes.tasks || []), ...(textRes.tasks || [])]
+      const allTasks = [
+        ...(foodRes.tasks || []),
+        ...(textRes.tasks || []),
+        ...(precisionPlanRes.tasks || []),
+        ...(precisionAggregateRes.tasks || []),
+      ]
       // 按创建时间倒序排列
       allTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       setTasks(allTasks)
@@ -320,13 +333,14 @@ function AnalyzeHistoryPage() {
     if (task.status === 'done' && task.result) {
       const result = task.result as AnalyzeResponse
       const payload = task.payload || {}
+      const sourceTaskType = pickSourceTaskType(task)
       // 图片分析任务有 image_url / image_paths，文字分析任务有 text_input
-      if (task.image_paths && task.image_paths.length > 0) {
+      if (sourceTaskType === 'food' && task.image_paths && task.image_paths.length > 0) {
         Taro.setStorageSync('analyzeImagePaths', task.image_paths)
         Taro.setStorageSync('analyzeImagePath', task.image_paths[0])
         Taro.removeStorageSync('analyzeTextInput')
         Taro.removeStorageSync('analyzeTextAdditionalContext')
-      } else if (task.image_url) {
+      } else if (sourceTaskType === 'food' && task.image_url) {
         Taro.setStorageSync('analyzeImagePaths', [task.image_url])
         Taro.setStorageSync('analyzeImagePath', task.image_url)
         Taro.removeStorageSync('analyzeTextInput')
@@ -344,7 +358,13 @@ function AnalyzeHistoryPage() {
       Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
       Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
       Taro.setStorageSync('analyzeExecutionMode', pickExecutionMode(task))
+      if (result.precisionSessionId) {
+        Taro.setStorageSync('analyzePrecisionSessionId', result.precisionSessionId)
+      } else {
+        Taro.removeStorageSync('analyzePrecisionSessionId')
+      }
       Taro.setStorageSync('analyzeSourceTaskId', task.id)
+      Taro.setStorageSync('analyzeTaskType', sourceTaskType)
       Taro.navigateTo({ url: '/pages/result/index' })
       return
     }

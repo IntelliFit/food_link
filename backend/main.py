@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Cookie, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +41,9 @@ from exercise_llm import ExerciseLlmError, estimate_exercise_calories_sync
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
 FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+# 拍照/文字分析每日上限（限次开启时生效；产品临时将 Pro 从 20 调整为 10）
+FOOD_ANALYSIS_DAILY_LIMIT_NON_PRO = 10
+FOOD_ANALYSIS_DAILY_LIMIT_PRO = 10
 from auth import create_access_token
 from database import (
     get_user_by_openid,
@@ -153,6 +158,7 @@ from database import (
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
     get_today_food_analysis_count,
+    get_latest_user_weight_record,
     search_manual_food,
     log_unresolved_food,
     browse_manual_food_library,
@@ -317,6 +323,11 @@ def _get_food_task_type(base_task_type: str) -> str:
     return f"{base_task_type}_debug" if _is_food_debug_queue_enabled() else base_task_type
 
 
+def _should_use_exercise_debug_queue() -> bool:
+    """本地联调时让运动任务也走隔离队列，避免被共享库里的旧 worker 抢走。"""
+    return _is_food_debug_queue_enabled()
+
+
 def _build_execution_mode_hint(execution_mode: str) -> str:
     """构建执行模式提示词约束。"""
     if execution_mode == "strict":
@@ -330,6 +341,132 @@ def _build_execution_mode_hint(execution_mode: str) -> str:
 执行模式：标准模式（standard）
 - 可以给出常规估算值；若不确定，请给保守估算并提示存在偏差风险。
 """.strip()
+
+
+PRECISION_SOURCE_TYPES = {"image", "text"}
+PRECISION_SESSION_ACTIVE_STATUSES = {"collecting", "estimating", "needs_user_input", "needs_retake"}
+
+
+def _serialize_reference_objects(
+    reference_objects: Optional[List[PrecisionReferenceObjectInput]],
+) -> List[Dict[str, Any]]:
+    result: List[Dict[str, Any]] = []
+    for ref in reference_objects or []:
+        ref_name = str(ref.reference_name or "").strip()
+        if not ref_name:
+            continue
+        dims = ref.dimensions_mm.dict() if ref.dimensions_mm else {}
+        normalized_dims = {
+            "length": float(dims["length"]) if dims.get("length") is not None else None,
+            "width": float(dims["width"]) if dims.get("width") is not None else None,
+            "height": float(dims["height"]) if dims.get("height") is not None else None,
+        }
+        result.append({
+            "reference_type": str(ref.reference_type or "preset").strip() or "preset",
+            "reference_name": ref_name,
+            "dimensions_mm": normalized_dims,
+            "placement_note": str(ref.placement_note or "").strip() or None,
+            "applies_to_items": [str(item).strip() for item in (ref.applies_to_items or []) if str(item).strip()],
+        })
+    return result
+
+
+def _build_precision_intermediate_response(
+    *,
+    session_id: str,
+    round_index: int,
+    planner_result: Dict[str, Any],
+    redirect_task_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    followup_questions = planner_result.get("followupQuestions")
+    retake_instructions = planner_result.get("retakeInstructions")
+    if not isinstance(followup_questions, list):
+        followup_questions = []
+    if not isinstance(retake_instructions, list):
+        retake_instructions = []
+    precision_status = str(planner_result.get("precisionStatus") or "needs_user_input")
+    detected_items_summary = planner_result.get("detectedItemsSummary")
+    if not isinstance(detected_items_summary, list):
+        detected_items_summary = []
+    pending_requirements = planner_result.get("pendingRequirements")
+    if not isinstance(pending_requirements, list):
+        pending_requirements = []
+    reference_object_suggestions = planner_result.get("referenceObjectSuggestions")
+    if not isinstance(reference_object_suggestions, list):
+        reference_object_suggestions = []
+    uncertainty_notes = planner_result.get("uncertaintyNotes")
+    if not isinstance(uncertainty_notes, list):
+        uncertainty_notes = []
+    description = str(planner_result.get("description") or "")
+    insight = str(planner_result.get("insight") or "")
+    if not description:
+        description = "需要继续补充信息" if precision_status == "needs_user_input" else "建议先重拍后继续"
+    if not insight:
+        insight = "精准模式会根据你补充的信息继续估计。"
+    response = {
+        "description": description,
+        "insight": insight,
+        "items": [],
+        "pfc_ratio_comment": None,
+        "absorption_notes": None,
+        "context_advice": None,
+        "recognitionOutcome": "soft_reject" if precision_status != "done" else "ok",
+        "rejectionReason": str(planner_result.get("rejectionReason") or "").strip() or None,
+        "retakeGuidance": retake_instructions or None,
+        "allowedFoodCategory": str(planner_result.get("allowedFoodCategory") or "unknown"),
+        "followupQuestions": followup_questions or None,
+        "precisionSessionId": session_id,
+        "precisionStatus": precision_status,
+        "precisionRoundIndex": round_index,
+        "pendingRequirements": pending_requirements or None,
+        "retakeInstructions": retake_instructions or None,
+        "referenceObjectNeeded": bool(planner_result.get("referenceObjectNeeded")),
+        "referenceObjectSuggestions": reference_object_suggestions or None,
+        "detectedItemsSummary": detected_items_summary or None,
+        "splitStrategy": str(planner_result.get("splitStrategy") or ""),
+        "uncertaintyNotes": uncertainty_notes or None,
+    }
+    if redirect_task_id:
+        response["redirectTaskId"] = redirect_task_id
+    return response
+
+
+def _build_precision_continue_payload(
+    *,
+    source_type: str,
+    meal_type: Optional[str],
+    timezone_offset_minutes: Optional[int],
+    diet_goal: Optional[str],
+    activity_timing: Optional[str],
+    user_goal: Optional[str],
+    remaining_calories: Optional[float],
+    additional_context: Optional[str],
+    is_multi_view: Optional[bool],
+    reference_objects: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    return {
+        "source_type": source_type,
+        "meal_type": meal_type,
+        "timezone_offset_minutes": timezone_offset_minutes,
+        "diet_goal": diet_goal,
+        "activity_timing": activity_timing,
+        "user_goal": user_goal,
+        "remaining_calories": remaining_calories,
+        "additionalContext": additional_context,
+        "is_multi_view": bool(is_multi_view),
+        "reference_objects": reference_objects or [],
+    }
+
+
+def _create_precision_plan_task_payload(
+    session_id: str,
+    source_type: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    next_payload = dict(payload or {})
+    next_payload["precision_session_id"] = session_id
+    next_payload["source_type"] = source_type
+    return next_payload
 
 
 def _parse_china_datetime(value: Any) -> Optional[datetime]:
@@ -970,7 +1107,7 @@ def _get_food_analysis_daily_limit(is_pro: bool) -> Optional[int]:
     """临时关闭拍照分析日限；恢复时只需打开环境变量。"""
     if not FOOD_ANALYSIS_DAILY_LIMIT_ENABLED:
         return None
-    return 20 if is_pro else 10
+    return FOOD_ANALYSIS_DAILY_LIMIT_PRO if is_pro else FOOD_ANALYSIS_DAILY_LIMIT_NON_PRO
 
 
 def _get_private_key(private_key_pem: str):
@@ -1094,6 +1231,20 @@ class FoodItemResponse(BaseModel):
     nutrients: Nutrients
 
 
+class PrecisionReferenceDimensions(BaseModel):
+    length: Optional[float] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+
+
+class PrecisionReferenceObjectInput(BaseModel):
+    reference_type: str = Field(default="preset", description="preset / custom")
+    reference_name: str = Field(..., description="参考物名称")
+    dimensions_mm: Optional[PrecisionReferenceDimensions] = Field(default=None, description="参考物尺寸（毫米）")
+    placement_note: Optional[str] = Field(default=None, description="摆放说明")
+    applies_to_items: Optional[List[str]] = Field(default=None, description="适用主体 item_key 列表")
+
+
 class AnalyzeRequest(BaseModel):
     base64Image: Optional[str] = Field(None, description="Base64 编码的图片数据（与 image_url 二选一）")
     base64Image: Optional[str] = Field(None, description="Base64 编码的图片数据（与 image_url 二选一）")
@@ -1122,6 +1273,17 @@ class AnalyzeResponse(BaseModel):
     retakeGuidance: Optional[List[str]] = Field(default=None, description="精准模式下的重拍/拆拍建议")
     allowedFoodCategory: Optional[str] = Field(default=None, description="精准模式允许识别的食物类别: carb / lean_protein / unknown")
     followupQuestions: Optional[List[str]] = Field(default=None, description="文字精准模式下还需补充的问题")
+    precisionSessionId: Optional[str] = Field(default=None, description="精准模式会话 ID")
+    precisionStatus: Optional[str] = Field(default=None, description="精准模式状态: needs_user_input / needs_retake / estimating / done")
+    precisionRoundIndex: Optional[int] = Field(default=None, description="精准模式当前轮次")
+    pendingRequirements: Optional[List[str]] = Field(default=None, description="待补充要求")
+    retakeInstructions: Optional[List[str]] = Field(default=None, description="结构化重拍要求")
+    referenceObjectNeeded: Optional[bool] = Field(default=None, description="是否需要参考物")
+    referenceObjectSuggestions: Optional[List[str]] = Field(default=None, description="建议参考物列表")
+    detectedItemsSummary: Optional[List[str]] = Field(default=None, description="识别到的主体摘要")
+    splitStrategy: Optional[str] = Field(default=None, description="single_item / multi_item_parallel / retake_required / user_annotation_required")
+    uncertaintyNotes: Optional[List[str]] = Field(default=None, description="不确定性说明")
+    redirectTaskId: Optional[str] = Field(default=None, description="loading 页面需要继续跟踪的新 task_id")
 
 
 # ---------- 双模型对比分析响应模型 ----------
@@ -1617,6 +1779,69 @@ def _format_health_profile_for_analysis(user: Dict[str, Any]) -> str:
     return "用户健康档案（供营养建议参考）：\n" + "\n".join(lines)
 
 
+def _safe_float_or_none(value: Any) -> Optional[float]:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+async def _build_exercise_profile_snapshot(user_id: str) -> Dict[str, Any]:
+    """构建运动热量估算所需的用户画像快照。"""
+    snapshot: Dict[str, Any] = {}
+    user = await get_user_by_id(user_id)
+    latest_weight_row = None
+    try:
+        latest_weight_row = await get_latest_user_weight_record(user_id)
+    except Exception as e:
+        print(f"[_build_exercise_profile_snapshot] 获取最近体重失败: {e}")
+
+    if user:
+        height_cm = _safe_float_or_none(user.get("height"))
+        if height_cm is not None:
+            snapshot["height_cm"] = round(height_cm, 1)
+
+        gender = str(user.get("gender") or "").strip().lower()
+        if gender in {"male", "female"}:
+            snapshot["gender"] = gender
+
+        birthday = str(user.get("birthday") or "").strip()
+        if birthday:
+            snapshot["birthday"] = birthday
+            age_years = get_age_from_birthday(birthday)
+            if age_years is not None:
+                snapshot["age_years"] = age_years
+
+        activity_level = str(user.get("activity_level") or "").strip()
+        if activity_level:
+            snapshot["activity_level"] = activity_level
+
+        bmr = _safe_float_or_none(user.get("bmr"))
+        if bmr is not None:
+            snapshot["bmr"] = round(bmr, 1)
+
+        tdee = _safe_float_or_none(user.get("tdee"))
+        if tdee is not None:
+            snapshot["tdee"] = round(tdee, 1)
+
+    if latest_weight_row and latest_weight_row.get("weight_kg") is not None:
+        weight_kg = _safe_float_or_none(latest_weight_row.get("weight_kg"))
+        if weight_kg is not None:
+            snapshot["weight_kg"] = round(weight_kg, 1)
+            snapshot["weight_source"] = "latest_weight_record"
+            if latest_weight_row.get("recorded_on"):
+                snapshot["weight_recorded_on"] = str(latest_weight_row.get("recorded_on"))
+    elif user and user.get("weight") is not None:
+        weight_kg = _safe_float_or_none(user.get("weight"))
+        if weight_kg is not None:
+            snapshot["weight_kg"] = round(weight_kg, 1)
+            snapshot["weight_source"] = "user_profile"
+
+    return snapshot
+
+
 def _format_health_risk_summary_for_analysis(user: Dict[str, Any]) -> str:
     """标准模式只保留影响建议的最小风险摘要，避免长档案拉高 token。"""
     hc = user.get("health_condition") or {}
@@ -1730,7 +1955,7 @@ async def analyze_food(
                 if daily_used_sync >= quota_limit_sync:
                     raise HTTPException(
                         status_code=429,
-                        detail=f"今日拍照次数已达上限（{quota_limit_sync}次），{'请明日再试' if is_pro_sync else '开通食探会员可提升至每日20次'}"
+                        detail=f"今日拍照次数已达上限（{quota_limit_sync}次），{'请明日再试' if is_pro_sync else '请明日再试，或开通食探会员解锁精准模式'}"
                     )
             # strict 模式需要 Pro 会员
             if execution_mode == "strict" and not is_pro_sync:
@@ -1959,6 +2184,8 @@ class AnalyzeSubmitRequest(BaseModel):
     execution_mode: Optional[str] = Field(default=None, description="执行模式: standard / strict")
     previousResult: Optional[Dict[str, Any]] = Field(default=None, description="上一轮分析结果")
     correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
+    precision_session_id: Optional[str] = Field(default=None, description="精准模式会话 ID（继续多轮交互时传入）")
+    reference_objects: Optional[List[PrecisionReferenceObjectInput]] = Field(default=None, description="参考物列表")
 
 
 @app.post("/api/analyze/submit")
@@ -1986,7 +2213,7 @@ async def analyze_submit(
         if daily_used >= quota_limit:
             raise HTTPException(
                 status_code=429,
-                detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '开通食探会员可提升至每日20次'}"
+                detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '请明日再试，或开通食探会员解锁精准模式'}"
             )
 
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
@@ -2011,7 +2238,112 @@ async def analyze_submit(
         "execution_mode": effective_mode,
         "previousResult": body.previousResult,
         "correctionItems": body.correctionItems,
+        "reference_objects": _serialize_reference_objects(body.reference_objects),
     }
+
+    if effective_mode == "strict" or body.precision_session_id:
+        session = None
+        source_type = "image"
+        if body.precision_session_id:
+            session = await asyncio.to_thread(get_precision_session_by_id_sync, body.precision_session_id)
+            if not session:
+                raise HTTPException(status_code=404, detail="精准模式会话不存在")
+            if session.get("user_id") != user_info["user_id"]:
+                raise HTTPException(status_code=403, detail="无权继续该精准模式会话")
+            if session.get("source_type") != source_type:
+                raise HTTPException(status_code=400, detail="精准模式会话类型与当前提交不一致")
+            if session.get("status") not in PRECISION_SESSION_ACTIVE_STATUSES:
+                raise HTTPException(status_code=400, detail="该精准模式会话已结束，无法继续")
+
+        latest_inputs = {
+            **_build_precision_continue_payload(
+                source_type=source_type,
+                meal_type=body.meal_type,
+                timezone_offset_minutes=body.timezone_offset_minutes,
+                diet_goal=body.diet_goal,
+                activity_timing=body.activity_timing,
+                user_goal=body.user_goal,
+                remaining_calories=body.remaining_calories,
+                additional_context=body.additionalContext,
+                is_multi_view=body.is_multi_view,
+                reference_objects=payload["reference_objects"],
+            ),
+            "image_url": body.image_url.strip() if body.image_url else None,
+            "image_urls": body.image_urls or [],
+        }
+
+        if session:
+            next_round_index = int(session.get("round_index") or 1) + 1
+            await asyncio.to_thread(
+                update_precision_session_sync,
+                session["id"],
+                {
+                    "status": "collecting",
+                    "round_index": next_round_index,
+                    "latest_inputs": latest_inputs,
+                    "reference_objects": payload["reference_objects"] or (session.get("reference_objects") or []),
+                    "last_error": None,
+                },
+            )
+            await asyncio.to_thread(
+                create_precision_session_round_sync,
+                session["id"],
+                next_round_index,
+                "user",
+                latest_inputs,
+                None,
+            )
+            current_session_id = session["id"]
+            current_round_index = next_round_index
+        else:
+            session = await asyncio.to_thread(
+                create_precision_session_sync,
+                user_info["user_id"],
+                source_type,
+                "strict",
+                latest_inputs,
+                payload["reference_objects"],
+            )
+            await asyncio.to_thread(
+                create_precision_session_round_sync,
+                session["id"],
+                int(session.get("round_index") or 1),
+                "user",
+                latest_inputs,
+                None,
+            )
+            current_session_id = session["id"]
+            current_round_index = int(session.get("round_index") or 1)
+
+        precision_payload = _create_precision_plan_task_payload(
+            current_session_id,
+            source_type,
+            {
+                **payload,
+                "round_index": current_round_index,
+            },
+        )
+        precision_task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_info["user_id"],
+            task_type=_get_food_task_type("precision_plan"),
+            image_url=body.image_url.strip() if body.image_url else None,
+            image_urls=body.image_urls,
+            payload=precision_payload,
+        )
+        await asyncio.to_thread(
+            update_precision_session_sync,
+            current_session_id,
+            {
+                "status": "collecting",
+                "current_task_id": precision_task["id"],
+            },
+        )
+        return {
+            "task_id": precision_task["id"],
+            "message": "精准模式任务已提交，系统将先判断是否需要补充信息或拆分估计",
+        }
+
     _debug_log_food_submit(
         "image_submit_request",
         {
@@ -2514,6 +2846,24 @@ class AnalyzeTextSubmitRequest(BaseModel):
     execution_mode: Optional[str] = Field(default=None, description="执行模式: standard / strict")
     previousResult: Optional[Dict[str, Any]] = Field(default=None, description="上一轮分析结果")
     correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
+    precision_session_id: Optional[str] = Field(default=None, description="精准模式会话 ID（继续多轮交互时传入）")
+    reference_objects: Optional[List[PrecisionReferenceObjectInput]] = Field(default=None, description="参考物列表")
+
+
+class ContinuePrecisionSessionRequest(BaseModel):
+    source_type: str = Field(..., description="image / text")
+    image_url: Optional[str] = Field(None, description="新的主图 URL")
+    image_urls: Optional[List[str]] = Field(None, description="新的图片 URL 列表")
+    text: Optional[str] = Field(None, description="补充文字或新的文字记录")
+    additionalContext: Optional[str] = Field(default=None, description="本轮补充说明")
+    meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机")
+    user_goal: Optional[str] = Field(default=None, description="用户目标")
+    remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算")
+    is_multi_view: Optional[bool] = Field(default=False, description="是否多视角")
+    reference_objects: Optional[List[PrecisionReferenceObjectInput]] = Field(default=None, description="参考物列表")
 
 
 @app.post("/api/analyze-text/submit")
@@ -2544,7 +2894,110 @@ async def analyze_text_submit(
         "execution_mode": effective_mode,
         "previousResult": body.previousResult,
         "correctionItems": body.correctionItems,
+        "reference_objects": _serialize_reference_objects(body.reference_objects),
     }
+
+    if effective_mode == "strict" or body.precision_session_id:
+        session = None
+        source_type = "text"
+        if body.precision_session_id:
+            session = await asyncio.to_thread(get_precision_session_by_id_sync, body.precision_session_id)
+            if not session:
+                raise HTTPException(status_code=404, detail="精准模式会话不存在")
+            if session.get("user_id") != user_info["user_id"]:
+                raise HTTPException(status_code=403, detail="无权继续该精准模式会话")
+            if session.get("source_type") != source_type:
+                raise HTTPException(status_code=400, detail="精准模式会话类型与当前提交不一致")
+            if session.get("status") not in PRECISION_SESSION_ACTIVE_STATUSES:
+                raise HTTPException(status_code=400, detail="该精准模式会话已结束，无法继续")
+
+        latest_inputs = {
+            **_build_precision_continue_payload(
+                source_type=source_type,
+                meal_type=body.meal_type,
+                timezone_offset_minutes=body.timezone_offset_minutes,
+                diet_goal=body.diet_goal,
+                activity_timing=body.activity_timing,
+                user_goal=body.user_goal,
+                remaining_calories=body.remaining_calories,
+                additional_context=body.additionalContext,
+                is_multi_view=False,
+                reference_objects=payload["reference_objects"],
+            ),
+            "text": body.text.strip(),
+        }
+
+        if session:
+            next_round_index = int(session.get("round_index") or 1) + 1
+            await asyncio.to_thread(
+                update_precision_session_sync,
+                session["id"],
+                {
+                    "status": "collecting",
+                    "round_index": next_round_index,
+                    "latest_inputs": latest_inputs,
+                    "reference_objects": payload["reference_objects"] or (session.get("reference_objects") or []),
+                    "last_error": None,
+                },
+            )
+            await asyncio.to_thread(
+                create_precision_session_round_sync,
+                session["id"],
+                next_round_index,
+                "user",
+                latest_inputs,
+                None,
+            )
+            current_session_id = session["id"]
+            current_round_index = next_round_index
+        else:
+            session = await asyncio.to_thread(
+                create_precision_session_sync,
+                user_info["user_id"],
+                source_type,
+                "strict",
+                latest_inputs,
+                payload["reference_objects"],
+            )
+            await asyncio.to_thread(
+                create_precision_session_round_sync,
+                session["id"],
+                int(session.get("round_index") or 1),
+                "user",
+                latest_inputs,
+                None,
+            )
+            current_session_id = session["id"]
+            current_round_index = int(session.get("round_index") or 1)
+
+        precision_payload = _create_precision_plan_task_payload(
+            current_session_id,
+            source_type,
+            {
+                **payload,
+                "round_index": current_round_index,
+            },
+        )
+        precision_task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_info["user_id"],
+            task_type=_get_food_task_type("precision_plan"),
+            text_input=body.text.strip(),
+            payload=precision_payload,
+        )
+        await asyncio.to_thread(
+            update_precision_session_sync,
+            current_session_id,
+            {
+                "status": "collecting",
+                "current_task_id": precision_task["id"],
+            },
+        )
+        return {
+            "task_id": precision_task["id"],
+            "message": "精准模式任务已提交，系统将先判断是否需要补充信息或拆分估计",
+        }
+
     _debug_log_food_submit(
         "text_submit_request",
         {
@@ -2580,6 +3033,117 @@ async def analyze_text_submit(
     except Exception as e:
         print(f"[analyze-text/submit] 错误: {e}")
         raise HTTPException(status_code=500, detail="提交任务失败")
+
+
+@app.post("/api/precision-sessions/{session_id}/continue")
+async def continue_precision_session(
+    session_id: str,
+    body: ContinuePrecisionSessionRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    source_type = str(body.source_type or "").strip().lower()
+    if source_type not in PRECISION_SOURCE_TYPES:
+        raise HTTPException(status_code=400, detail="source_type 必须为 image 或 text")
+
+    session = await asyncio.to_thread(get_precision_session_by_id_sync, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="精准模式会话不存在")
+    if session.get("user_id") != user_info["user_id"]:
+        raise HTTPException(status_code=403, detail="无权继续该精准模式会话")
+    if session.get("source_type") != source_type:
+        raise HTTPException(status_code=400, detail="精准模式会话类型与当前提交不一致")
+    if session.get("status") not in PRECISION_SESSION_ACTIVE_STATUSES:
+        raise HTTPException(status_code=400, detail="该精准模式会话已结束，无法继续")
+
+    reference_objects = _serialize_reference_objects(body.reference_objects)
+    latest_inputs = {
+        **_build_precision_continue_payload(
+            source_type=source_type,
+            meal_type=body.meal_type,
+            timezone_offset_minutes=body.timezone_offset_minutes,
+            diet_goal=body.diet_goal,
+            activity_timing=body.activity_timing,
+            user_goal=body.user_goal,
+            remaining_calories=body.remaining_calories,
+            additional_context=body.additionalContext,
+            is_multi_view=body.is_multi_view,
+            reference_objects=reference_objects,
+        ),
+    }
+    task_kwargs: Dict[str, Any] = {
+        "user_id": user_info["user_id"],
+        "task_type": _get_food_task_type("precision_plan"),
+        "payload": _create_precision_plan_task_payload(
+            session_id,
+            source_type,
+            {
+                "meal_type": body.meal_type,
+                "timezone_offset_minutes": body.timezone_offset_minutes,
+                "diet_goal": body.diet_goal,
+                "activity_timing": body.activity_timing,
+                "user_goal": body.user_goal,
+                "remaining_calories": body.remaining_calories,
+                "additionalContext": body.additionalContext,
+                "execution_mode": "strict",
+                "is_multi_view": body.is_multi_view,
+                "reference_objects": reference_objects,
+                "round_index": int(session.get("round_index") or 1) + 1,
+            },
+        ),
+    }
+    if source_type == "image":
+        if body.image_urls and len(body.image_urls) > 1 and not body.is_multi_view:
+            raise HTTPException(status_code=400, detail="上传多张图片前请先开启多视角模式")
+        if body.image_url:
+            task_kwargs["image_url"] = body.image_url.strip()
+            latest_inputs["image_url"] = body.image_url.strip()
+        if body.image_urls:
+            task_kwargs["image_urls"] = body.image_urls
+            latest_inputs["image_urls"] = body.image_urls
+        if not latest_inputs.get("image_url") and not latest_inputs.get("image_urls") and not body.additionalContext and not reference_objects:
+            raise HTTPException(status_code=400, detail="请至少补充说明、参考物或新的图片")
+    else:
+        text_value = str(body.text or "").strip()
+        if text_value:
+            latest_inputs["text"] = text_value
+            task_kwargs["text_input"] = text_value
+        elif not body.additionalContext and not reference_objects:
+            raise HTTPException(status_code=400, detail="请至少补充说明、参考物或新的文字描述")
+
+    next_round_index = int(session.get("round_index") or 1) + 1
+    await asyncio.to_thread(
+        update_precision_session_sync,
+        session_id,
+        {
+            "status": "collecting",
+            "round_index": next_round_index,
+            "latest_inputs": latest_inputs,
+            "reference_objects": reference_objects or (session.get("reference_objects") or []),
+            "last_error": None,
+        },
+    )
+    await asyncio.to_thread(
+        create_precision_session_round_sync,
+        session_id,
+        next_round_index,
+        "user",
+        latest_inputs,
+        None,
+    )
+    try:
+        task = await asyncio.to_thread(create_analysis_task_sync, **task_kwargs)
+        await asyncio.to_thread(
+            update_precision_session_sync,
+            session_id,
+            {
+                "status": "collecting",
+                "current_task_id": task["id"],
+            },
+        )
+        return {"task_id": task["id"], "message": "精准模式已继续，系统正在重新规划本轮估计"}
+    except Exception as e:
+        print(f"[precision/continue] 错误: {e}")
+        raise HTTPException(status_code=500, detail="继续精准模式失败")
 
 
 @app.get("/api")
@@ -3137,14 +3701,15 @@ async def get_my_membership(
         result = _format_membership_response(membership)
         is_pro = result["is_pro"]
         daily_limit = _get_food_analysis_daily_limit(is_pro)
+        today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+        daily_used_count = await get_today_food_analysis_count(user_info["user_id"], today_str)
+        # 关闭日限时仍返回今日实际分析次数，供「我的」等页展示；不返回上限与剩余（避免前端把 null 当成 0/3）
         if daily_limit is None:
             result["daily_limit"] = None
-            result["daily_used"] = None
+            result["daily_used"] = daily_used_count
             result["daily_remaining"] = None
             return result
-        today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-        daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
-        daily_used = min(daily_used, daily_limit)
+        daily_used = min(daily_used_count, daily_limit)
         result["daily_limit"] = daily_limit
         result["daily_used"] = daily_used
         result["daily_remaining"] = max(daily_limit - daily_used, 0)
@@ -3982,6 +4547,10 @@ class FoodRecordItem(BaseModel):
     ratio: float = 100  # 摄入比例 %
     intake: float = 0  # 实际摄入 g
     nutrients: FoodRecordItemNutrients = Field(default_factory=FoodRecordItemNutrients)
+    manual_source: Optional[str] = Field(default=None, description="手动记录来源: public_library / nutrition_library")
+    manual_source_id: Optional[str] = Field(default=None, description="手动记录来源条目 ID")
+    manual_source_title: Optional[str] = Field(default=None, description="手动记录来源原始标题")
+    manual_portion_label: Optional[str] = Field(default=None, description="默认份量标签，如 1份 / 100g")
 
 
 class CriticalSampleItem(BaseModel):
@@ -4028,6 +4597,7 @@ async def save_critical_samples(
 async def manual_food_search(
     q: str = "",
     limit: int = 20,
+    user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
     手动记录搜索接口（无需登录）。
@@ -4041,7 +4611,11 @@ async def manual_food_search(
     if limit > 50:
         limit = 50
     try:
-        results = await search_manual_food(q, limit=limit)
+        results = await search_manual_food(
+            q,
+            limit=limit,
+            current_user_id=user_info["user_id"] if user_info else None,
+        )
         if not results:
             asyncio.create_task(log_unresolved_food(q))
         return {"results": results}
@@ -4051,13 +4625,17 @@ async def manual_food_search(
 
 
 @app.get("/api/manual-food/browse")
-async def manual_food_browse():
+async def manual_food_browse(
+    user_info: Optional[dict] = Depends(get_optional_user_info),
+):
     """
     浏览食物数据库（无需登录）。
     返回公共食物库和标准营养词典的全量数据，供前端可视化展示。
     """
     try:
-        data = await browse_manual_food_library()
+        data = await browse_manual_food_library(
+            current_user_id=user_info["user_id"] if user_info else None,
+        )
         return data
     except Exception as e:
         print(f"[manual_food_browse] 错误: {e}")
@@ -4097,18 +4675,26 @@ async def save_food_record(
     normalized_meal_type = _normalize_meal_type(body.meal_type)
     items_payload = [
         {
-            "name": item.name,
-            "weight": item.weight,
-            "ratio": item.ratio,
-            "intake": item.intake,
-            "nutrients": {
-                "calories": item.nutrients.calories,
-                "protein": item.nutrients.protein,
-                "carbs": item.nutrients.carbs,
-                "fat": item.nutrients.fat,
-                "fiber": item.nutrients.fiber,
-                "sugar": item.nutrients.sugar,
+            **{
+                "name": item.name,
+                "weight": item.weight,
+                "ratio": item.ratio,
+                "intake": item.intake,
+                "nutrients": {
+                    "calories": item.nutrients.calories,
+                    "protein": item.nutrients.protein,
+                    "carbs": item.nutrients.carbs,
+                    "fat": item.nutrients.fat,
+                    "fiber": item.nutrients.fiber,
+                    "sugar": item.nutrients.sugar,
+                },
             },
+            **({
+                "manual_source": item.manual_source,
+                "manual_source_id": item.manual_source_id,
+                "manual_source_title": item.manual_source_title,
+                "manual_portion_label": item.manual_portion_label,
+            } if item.manual_source or item.manual_source_id or item.manual_source_title or item.manual_portion_label else {}),
         }
         for item in body.items
     ]
@@ -6094,11 +6680,12 @@ async def api_community_comment_post(
             parent_comment_id=parent_comment_id,
             reply_to_user_id=reply_to_user_id,
         )
+        is_deduped = bool(comment.get("_deduped"))
 
         try:
             record = get_food_record_by_id_sync(record_id)
             record_owner_id = (record or {}).get("user_id")
-            if record_owner_id and record_owner_id != user_info["user_id"]:
+            if (not is_deduped) and record_owner_id and record_owner_id != user_info["user_id"]:
                 create_feed_interaction_notification_sync(
                     recipient_user_id=record_owner_id,
                     actor_user_id=user_info["user_id"],
@@ -6109,7 +6696,7 @@ async def api_community_comment_post(
                     content_preview=(content or "")[:120],
                 )
 
-            if reply_to_user_id and reply_to_user_id != user_info["user_id"]:
+            if (not is_deduped) and reply_to_user_id and reply_to_user_id != user_info["user_id"]:
                 create_feed_interaction_notification_sync(
                     recipient_user_id=reply_to_user_id,
                     actor_user_id=user_info["user_id"],
@@ -6119,7 +6706,7 @@ async def api_community_comment_post(
                     notification_type="reply_received",
                     content_preview=(content or "")[:120],
                 )
-            elif parent_comment_id:
+            elif (not is_deduped) and parent_comment_id:
                 parent_comment_sync = get_feed_comment_by_id_sync(parent_comment_id)
                 parent_owner_id = (parent_comment_sync or {}).get("user_id")
                 if parent_owner_id and parent_owner_id != user_info["user_id"]:
@@ -7810,10 +8397,13 @@ async def api_activate_prompt(
 
 # ===== 运动记录 API =====
 
-async def _estimate_exercise_calories_llm(exercise_desc: str) -> Tuple[int, Optional[str]]:
+async def _estimate_exercise_calories_llm(
+    exercise_desc: str,
+    profile_snapshot: Optional[Dict[str, Any]] = None,
+) -> Tuple[int, Optional[str], str]:
     """将运动描述交给大模型估算千卡（与 Worker 共用 exercise_llm 实现）。"""
     try:
-        return await asyncio.to_thread(estimate_exercise_calories_sync, exercise_desc)
+        return await asyncio.to_thread(estimate_exercise_calories_sync, exercise_desc, profile_snapshot)
     except ExerciseLlmError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
 
@@ -7828,6 +8418,7 @@ class ExerciseLogResponse(BaseModel):
     calories_burned: int
     recorded_on: str
     recorded_at: str
+    ai_reasoning: Optional[str] = None
 
 
 @app.get("/api/exercise-logs")
@@ -7892,6 +8483,23 @@ async def create_exercise_log(
         raise HTTPException(status_code=422, detail="运动描述过长")
 
     recorded_on = _parse_date_string(date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+    profile_snapshot = await _build_exercise_profile_snapshot(user_id)
+    task_payload = {"recorded_on": recorded_on}
+    if profile_snapshot:
+        task_payload["profile_snapshot"] = profile_snapshot
+
+    if _should_use_exercise_debug_queue():
+        task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_id,
+            task_type=exercise_fallback_task_type(),
+            text_input=desc,
+            payload={**task_payload, "exercise": True},
+        )
+        return {
+            "task_id": task["id"],
+            "message": "运动分析任务已提交，请轮询任务状态直至完成",
+        }
 
     try:
         task = await asyncio.to_thread(
@@ -7899,7 +8507,7 @@ async def create_exercise_log(
             user_id=user_id,
             task_type="exercise",
             text_input=desc,
-            payload={"recorded_on": recorded_on},
+            payload=task_payload,
         )
     except Exception as e:
         err_s = str(e)
@@ -7915,7 +8523,7 @@ async def create_exercise_log(
                     user_id=user_id,
                     task_type=exercise_fallback_task_type(),
                     text_input=desc,
-                    payload={"recorded_on": recorded_on, "exercise": True},
+                    payload={**task_payload, "exercise": True},
                 )
             except Exception as e2:
                 print(f"[create_exercise_log] 回退投递仍失败: {e2}")
@@ -7961,11 +8569,17 @@ async def estimate_exercise_calories(
     """仅调用大模型估算千卡（不落库），与 Worker 共用 exercise_llm。"""
     _ = user_info
     try:
-        calories, ai_raw = await _estimate_exercise_calories_llm(body.exercise_desc)
+        profile_snapshot = await _build_exercise_profile_snapshot(user_info["user_id"])
+        calories, ai_raw, reasoning = await _estimate_exercise_calories_llm(
+            body.exercise_desc,
+            profile_snapshot,
+        )
         return {
             "estimated_calories": calories,
             "exercise_desc": body.exercise_desc.strip(),
             "ai_response": ai_raw,
+            "reasoning": reasoning,
+            "profile_snapshot": profile_snapshot,
         }
     except HTTPException:
         raise

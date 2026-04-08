@@ -12,7 +12,7 @@
   "scripts": {
     "prepare": "husky",
     "new": "taro new",
-    "dev:backend": "cd backend && ./venv/bin/python run_backend.py",
+    "dev:backend": "node scripts/run-backend.cjs",
     "dev:restart": "bash scripts/restart-dev.sh",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -97,6 +97,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "babel-preset-taro": "4.1.10",
     "consola": "^3.2.3",
+    "cross-env": "^7.0.3",
     "eslint": "^8.57.0",
     "eslint-config-taro": "4.1.10",
     "eslint-plugin-react": "^7.34.1",
