@@ -1,5 +1,9 @@
 # CURRENT_TASK
 
+- Task: 运动热量估算 Instructor 结构化输出（已完成代码与单测）
+- Status: done（`backend/exercise_llm.py` 已切 Instructor；`pytest tests/unit/test_exercise_llm.py` 通过；部署需 `pip install -r backend/requirements.txt`）
+- Note: 可选环境变量 `EXERCISE_CALORIES_INSTRUCTOR_MODE=json|md_json|tools`（默认 `md_json`）
+
 - Task: 保质期订阅提醒功能落地
 - Status: in_progress（主链路代码已实现，旧 `user_food_expiry_items` 链路已移除，`dev:weapp` 已编译通过，待数据库建表与真机/开发者工具联调）
 - Scope:

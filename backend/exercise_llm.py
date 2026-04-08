@@ -1,13 +1,18 @@
 """
-运动热量估算：调用 OfoxAI 大模型（与 main 中逻辑一致，供 Worker 同步调用）。
-要求模型先输出思考过程，再给出千卡，且仅允许 JSON，便于解析与展示。
+运动热量估算：通过 Instructor + Pydantic 从 OfoxAI（OpenAI 兼容）获取结构化输出，
+避免手写 JSON 解析在模型格式漂移时失败。
 """
 import json
 import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
-import httpx
+import instructor
+from instructor import Mode
+from instructor.core.exceptions import InstructorError
+from openai import APIError as OpenAIAPIError
+from openai import OpenAI
+from pydantic import BaseModel, Field
 
 OFOXAI_BASE_URL = os.getenv("OFOXAI_BASE_URL", "https://api.ofox.ai/v1")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
@@ -21,19 +26,27 @@ ACTIVITY_LEVEL_LABELS = {
 
 EXERCISE_CALORIES_SYSTEM_PROMPT = (
     "你是运动热量估算助手。用户用自然语言描述自己完成的一次运动。\n"
-    "你必须先进行简要推理，再给出千卡结果。不要套用固定公式代码，但推理中应体现："
-    "运动类型、时长、强度或配速/距离等关键信息；若缺少体重等个体数据，可在 reasoning 中明确写出合理假设（例如假设体重约 65kg），再据此估算。\n"
-    "\n"
-    "输出要求（必须严格遵守）：\n"
-    "1) 只输出一个 JSON 对象，不要 markdown 代码块，不要任何 JSON 以外的文字。\n"
-    "2) JSON 仅包含两个键：\n"
-    '   - "reasoning": 字符串，简体中文，2～5 句，说明你的理解、假设与估算思路。\n'
-    '   - "calories_kcal": 整数，范围 1～5000，表示本次运动消耗千卡。\n'
-    "3) reasoning 与 calories_kcal 必须同时存在且 calories_kcal 为合理正整数。\n"
-    "4) reasoning 保持简洁，优先给关键依据，不要写太长，避免输出被截断。\n"
-    "示例："
-    '{"reasoning":"用户跑步30分钟，配速约5分/公里，属中等强度有氧。假设体重约65kg，按常见跑步消耗水平估算。","calories_kcal":320}'
+    "你必须先用简体中文写清推理过程，再给出千卡估计。\n"
+    "推理应体现：运动类型、时长、强度或配速/距离等；若缺少体重等信息，仅在 reasoning 中写明合理假设。\n"
+    "不要输出 JSON 以外的多余说明；结构化字段由系统从回复中提取。"
 )
+
+
+class ExerciseCaloriesEstimate(BaseModel):
+    """Instructor 结构化输出：与 Ofox 模型约定一致。"""
+
+    reasoning: str = Field(
+        ...,
+        min_length=1,
+        max_length=4000,
+        description="简体中文，2～5 句，说明理解、假设与估算依据",
+    )
+    calories_kcal: int = Field(
+        ...,
+        ge=1,
+        le=5000,
+        description="本次运动消耗的总千卡（正整数）",
+    )
 
 
 class ExerciseLlmError(Exception):
@@ -42,6 +55,16 @@ class ExerciseLlmError(Exception):
     def __init__(self, message: str, status_code: int = 500):
         super().__init__(message)
         self.status_code = status_code
+
+
+def _exercise_instructor_mode() -> Mode:
+    """EXERCISE_CALORIES_INSTRUCTOR_MODE: json | md_json | tools（默认 md_json，兼容 ```json 包裹）。"""
+    raw = (os.getenv("EXERCISE_CALORIES_INSTRUCTOR_MODE") or "md_json").strip().lower()
+    if raw == "json":
+        return Mode.JSON
+    if raw == "tools":
+        return Mode.TOOLS
+    return Mode.MD_JSON
 
 
 def _strip_markdown_fence(text: str) -> str:
@@ -57,7 +80,7 @@ def _strip_markdown_fence(text: str) -> str:
 
 
 def _parse_json_object_loose(text: str) -> Dict[str, Any]:
-    """从模型输出中解析 JSON 对象。"""
+    """从模型输出中解析 JSON 对象（单测与应急兜底，不保证上游格式）。"""
     raw = _strip_markdown_fence(text)
     if not raw:
         raise ExerciseLlmError("运动热量估算结果为空", 502)
@@ -99,7 +122,7 @@ def _coerce_calories_kcal(data: Dict[str, Any]) -> int:
     if v is None:
         v = data.get("calories") or data.get("kcal")
     if v is None:
-        raise ExerciseLlmError('JSON 缺少 calories_kcal（或兼容字段）', 502)
+        raise ExerciseLlmError("JSON 缺少 calories_kcal（或兼容字段）", 502)
     try:
         c = int(float(v))
     except (TypeError, ValueError):
@@ -156,13 +179,27 @@ def _format_exercise_profile_snapshot(profile_snapshot: Dict[str, Any]) -> str:
     return "已知用户真实档案（请优先使用，不要随意假设这些字段）：\n" + "\n".join(lines)
 
 
+def _raw_text_from_instructor_result(estimate: ExerciseCaloriesEstimate) -> str:
+    """尽量返回模型原始文本，否则序列化结构化结果。"""
+    raw_resp = getattr(estimate, "_raw_response", None)
+    if raw_resp is not None and getattr(raw_resp, "choices", None):
+        try:
+            msg = raw_resp.choices[0].message
+            content = (msg.content or "").strip() if msg else ""
+            if content:
+                return content
+        except (IndexError, AttributeError):
+            pass
+    return estimate.model_dump_json(ensure_ascii=False)
+
+
 def estimate_exercise_calories_sync(
     exercise_desc: str,
     profile_snapshot: Optional[Dict[str, Any]] = None,
 ) -> Tuple[int, str, str]:
     """
     同步调用大模型估算千卡。
-    返回 (calories, raw_ai_text, reasoning)；raw 为模型原始输出字符串。
+    返回 (calories, raw_ai_text, reasoning)；raw 为模型原始输出或结构化序列化。
     失败抛出 ExerciseLlmError。
     """
     desc = (exercise_desc or "").strip()
@@ -174,10 +211,6 @@ def estimate_exercise_calories_sync(
         raise ExerciseLlmError("AI 服务未配置", 503)
 
     model_name = os.getenv("EXERCISE_CALORIES_MODEL_NAME", GEMINI_MODEL_NAME)
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
     user_prompt = f"用户运动描述：{desc}"
     profile_text = _format_exercise_profile_snapshot(profile_snapshot or {})
     if profile_text:
@@ -187,40 +220,40 @@ def estimate_exercise_calories_sync(
             + "\n\n请结合这些真实信息再做推理；只有缺失字段才允许自行做合理假设，并在 reasoning 中明确写出。"
         )
 
-    payload = {
-        "model": model_name,
-        "messages": [
-            {"role": "system", "content": EXERCISE_CALORIES_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.35,
-        "max_tokens": 900,
-    }
+    mode = _exercise_instructor_mode()
+    openai_client = OpenAI(
+        base_url=OFOXAI_BASE_URL.rstrip("/"),
+        api_key=api_key,
+        timeout=60.0,
+    )
+    client = instructor.from_openai(openai_client, mode=mode)
+    max_retries = int(os.getenv("EXERCISE_CALORIES_INSTRUCTOR_MAX_RETRIES", "3"))
 
     try:
-        with httpx.Client(timeout=60.0) as client:
-            response = client.post(
-                f"{OFOXAI_BASE_URL}/chat/completions",
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            result = response.json()
-    except httpx.HTTPStatusError as e:
-        print(f"[estimate_exercise_calories_sync] AI API 错误: {e}")
-        raise ExerciseLlmError("AI 服务暂时不可用", 502)
-    except httpx.RequestError as e:
-        print(f"[estimate_exercise_calories_sync] AI 请求异常: {e}")
-        raise ExerciseLlmError("AI 服务连接失败", 502)
+        estimate = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": EXERCISE_CALORIES_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_model=ExerciseCaloriesEstimate,
+            temperature=0.35,
+            max_tokens=900,
+            max_retries=max_retries,
+        )
+    except (InstructorError, OpenAIAPIError) as e:
+        print(f"[estimate_exercise_calories_sync] Instructor/OpenAI 错误: {e}", flush=True)
+        raise ExerciseLlmError("运动热量估算失败，请稍后重试", 502) from e
+    except Exception as e:
+        print(f"[estimate_exercise_calories_sync] 未预期错误: {e}", flush=True)
+        raise ExerciseLlmError("运动热量估算失败", 502) from e
 
-    ai_content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    raw = ai_content.strip() if ai_content else None
-    if not raw:
-        raise ExerciseLlmError("模型返回内容为空", 502)
+    reasoning = estimate.reasoning.strip()
+    if not reasoning:
+        raise ExerciseLlmError("reasoning 为空", 502)
+    calories = int(estimate.calories_kcal)
 
-    data = _parse_json_object_loose(raw)
-    reasoning = _coerce_reasoning(data)
-    calories = _coerce_calories_kcal(data)
+    raw = _raw_text_from_instructor_result(estimate)
 
     print(
         f"[estimate_exercise_calories_sync] desc={desc!r} calories={calories} reasoning_len={len(reasoning)}",

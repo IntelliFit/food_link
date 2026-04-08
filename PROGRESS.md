@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-04-09
+
+- ✨ feat: 运动热量估算改用 Instructor + Pydantic 结构化输出，替代手写 JSON 解析；新增单元测试 `backend/tests/unit/test_exercise_llm.py`；依赖增加 `instructor`、`openai` `backend/exercise_llm.py` `backend/requirements.txt`
+
 ## 2026-04-08
 
 - ✨ feat: 拍照/文字分析日限调整为普通用户 30 次、会员 100 次（`backend/main.py`）；图片分析页与文字分析页在次数用尽时禁用主按钮并提示；文字分析页增加配额条 `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss` `src/pages/record-text/index.tsx` `src/pages/record-text/index.scss` `src/pages/profile/index.tsx` `src/pages/pro-membership/index.tsx` `src/pages/record/index.tsx` `src/pages/index/components/RecordMenu.tsx`
