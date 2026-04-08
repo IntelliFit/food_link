@@ -6,7 +6,7 @@
 
 ## 2026-04-09
 
-- 🔧 chore: 微信小程序版本号 **2.0.12**（`package.json`）；`npm run build:weapp` 通过；上传体验版：`npm run build:weapp:preview` 后微信开发者工具 `cli upload`（与 2.0.11 流程一致）
+- 🔧 chore: 微信小程序版本号 **2.0.12**（`package.json`）；`npm run build:weapp` / `build:weapp:preview` 通过；已用开发者工具 `cli upload` 上传（版本说明：分享海报深色米白卡）
 - 🔧 refactor: 分享海报 `computePosterHeight` 与 `drawRecordPoster` 内边距与区块高度对齐，避免底部裁剪 `src/utils/poster.ts`
 - 🎨 style: 分享海报 Canvas 深色页底 + 米白一体卡（总热量在卡内居中）；无整屏绿底/绿渐变；PFC 条灰阶；预览弹窗中性底与纯色按钮 `src/utils/poster.ts` `src/pages/record-detail/index.scss`
 - ✨ feat: 首页今日餐食卡片点击进入 `record-detail`（`primary_record_id` + `ui=home`）；剩余可摄入整块卡去掉整卡点击与导航态样式；`day-record` 仅保留日期行+汇总+列表；记录详情 home 模式扁平化贴近首页 `backend/main.py` `src/utils/api.ts` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/day-record/index.tsx` `src/pages/day-record/index.scss` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
