@@ -133,8 +133,8 @@ $border-color: #e5e7eb;
   font-weight: 500;
 }
 
-// 聊天容器
-.chat-container {
+// 记录列表滚动区（卡片统一宽度 = 100% 内容区）
+.records-scroll {
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -235,63 +235,125 @@ $border-color: #e5e7eb;
   white-space: nowrap;
 }
 
-// 聊天列表
-.chat-list {
+// 记录列表：每条卡片同宽（100% 父级内容宽）
+.records-list {
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 20rpx;
 }
 
-.chat-item {
+.exercise-record-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: $card-bg;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  border: 2rpx solid rgb(0 0 0 / 4%);
+  box-shadow: 0 2rpx 12rpx rgb(15 23 42 / 4%);
+
+  &--failed {
+    border-color: rgb(254 202 202 / 80%);
+  }
+}
+
+.exercise-record-card__top {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.chat-bubble {
-  max-width: 80%;
-  background: $exercise-color;
-  border-radius: 24rpx 24rpx 4rpx 24rpx;
-  padding: 24rpx 28rpx;
-  margin-bottom: 12rpx;
-}
-
-.chat-content {
+.exercise-record-card__title {
+  flex: 1;
+  min-width: 0;
   font-size: 30rpx;
-  color: #fff;
+  font-weight: 500;
+  color: $text-primary;
   line-height: 44rpx;
   word-break: break-all;
 }
 
-.chat-meta {
+.exercise-record-card__delete {
+  flex-shrink: 0;
+  padding: 4rpx 0 4rpx 16rpx;
+
+  &:active {
+    opacity: 0.65;
+  }
+}
+
+.exercise-record-card__delete-text {
+  font-size: 26rpx;
+  color: $text-tertiary;
+  line-height: 36rpx;
+}
+
+.exercise-record-card__divider {
+  height: 2rpx;
+  background: $border-color;
+  margin: 20rpx 0;
+  width: 100%;
+}
+
+.exercise-record-card__bottom {
   display: flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: space-between;
   gap: 16rpx;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.chat-result {
+.exercise-record-card__kcal {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 8rpx;
-  background: $exercise-light;
-  padding: 8rpx 16rpx;
-  border-radius: 9999rpx;
+  gap: 10rpx;
+  min-width: 0;
 }
 
-.chat-result-text {
-  font-size: 22rpx;
+.exercise-record-card__kcal-num {
+  font-size: 36rpx;
+  font-weight: 700;
   color: $exercise-color;
-  line-height: 32rpx;
+  line-height: 44rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.exercise-record-card__kcal-unit {
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
   font-weight: 500;
 }
 
-.chat-result--pending {
-  flex-wrap: wrap;
+.exercise-record-card__time {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+  font-variant-numeric: tabular-nums;
 }
 
-.chat-pending-spinner {
-  width: 24rpx;
-  height: 24rpx;
+.exercise-record-card__pending {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.exercise-record-card__spinner {
+  width: 28rpx;
+  height: 28rpx;
+  flex-shrink: 0;
   border: 3rpx solid rgb(249 115 22 / 25%);
   border-top-color: $exercise-color;
   border-radius: 50%;
@@ -304,47 +366,45 @@ $border-color: #e5e7eb;
   }
 }
 
-.chat-result--error {
-  flex-wrap: wrap;
-  align-items: flex-start;
+.exercise-record-card__pending-text {
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 36rpx;
+}
+
+.exercise-record-card__fail {
+  margin-top: 16rpx;
+  padding: 16rpx 18rpx;
   background: #fef2f2;
+  border-radius: 12rpx;
   border: 1rpx solid #fecaca;
 }
 
-.chat-result-text--error {
+.exercise-record-card__fail-msg {
+  display: block;
+  font-size: 26rpx;
   color: #b91c1c;
-  font-weight: 400;
-  flex: 1;
-  min-width: 0;
+  line-height: 38rpx;
   word-break: break-all;
 }
 
-.chat-dismiss-fail {
-  font-size: 22rpx;
-  color: $text-tertiary;
-  margin-left: 12rpx;
-  flex-shrink: 0;
+.exercise-record-card__fail-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12rpx;
 }
 
-.chat-time {
-  font-size: 20rpx;
+.exercise-record-card__dismiss {
+  font-size: 24rpx;
   color: $text-tertiary;
-  line-height: 28rpx;
-}
+  line-height: 34rpx;
+  padding: 4rpx 8rpx;
 
-.chat-delete {
-  margin-top: 8rpx;
-  padding: 4rpx 12rpx;
-  
   &:active {
     opacity: 0.7;
   }
-}
-
-.chat-delete-text {
-  font-size: 20rpx;
-  color: $text-tertiary;
-  line-height: 28rpx;
 }
 
 // 输入区域（与屏幕同宽，内容水平居中）

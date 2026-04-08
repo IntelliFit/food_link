@@ -26,15 +26,17 @@ camera {
   z-index: 1;
 }
 
-// 顶部控制栏 - 高斯模糊毛玻璃效果
+// 顶部控制栏 - 高斯模糊毛玻璃效果（仅返回键）
 .top-control-bar {
   position: absolute;
   top: 95rpx;
   left: 14rpx;
-  right: 200rpx;
+  right: auto;
+  width: auto;
   height: 62rpx;
   display: flex;
   align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -75,30 +77,6 @@ camera {
       margin-top: -4rpx;
     }
   }
-  
-  &.action-btn {
-    flex: 1;
-    padding: 0 16rpx;
-    margin: 0 4rpx;
-    
-    &:active {
-      background: rgba(0, 188, 125, 0.3);
-    }
-    
-    .action-text {
-      font-size: 24rpx;
-      color: #fff;
-      font-weight: 500;
-      text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
-    }
-  }
-}
-
-.top-divider {
-  width: 1rpx;
-  height: 32rpx;
-  background: rgba(255, 255, 255, 0.3);
-  margin: 0 8rpx;
 }
 
 // 扫描框容器 - 中央偏上

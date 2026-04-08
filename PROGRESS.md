@@ -6,6 +6,11 @@
 
 ## 2026-04-08
 
+- 🎨 style: 圈子动态评论区改为信息流布局与统一字号（与正文 30rpx 对齐），弱化气泡；底部输入/回复条配色对齐常见社交应用 `src/pages/community/index.scss`
+- ✨ feat: 圈子评论发送增加同步提交锁 + 发送中态与输入禁用，防止连点重复提交 `src/pages/community/index.tsx`
+- 🎨 style: 记运动页列表改为统一全宽简约卡片（文案/千卡/时间/删除），非聊天气泡；pending/失败态同卡片规范 `src/pages/exercise-record/index.tsx` `src/pages/exercise-record/index.scss`
+- 🎨 style: 拍摄卡路里页顶部栏仅保留返回，移除「文字/手动/历史」三入口 `src/pages/record/index.tsx` `src/pages/record/index.scss`
+- 🐛 fix: 拍照/相册分析进入 loading 前写回 `analyzeImagePath(s)` 并带 `task_type=food`，与文字链 `food_text` 占位图区分；分析历史进入进行中任务时回填任务图 `src/pages/analyze/index.tsx` `src/pages/analyze-loading/index.tsx` `src/pages/analyze-history/index.tsx`
 - 🔧 chore: 发布微信小程序 **2.0.11**；`package.json` 版本号；`npm run build:weapp:preview` 后 `cli upload` `package.json`
 - 🐛 fix: 首页「查看饮食统计」改为 `switchTab` 进入 tabBar「分析」页（`/pages/stats/index`），修复原先 `navigateTo` 无法打开 tab 页 `src/pages/index/index.tsx`
 - 🐛 fix: 文字分析 loading 不再沿用上次拍照图：清 storage、`food_text` 用与结果页一致的无图占位视觉；纠错重分析走文字链时同步清图 `src/pages/analyze-loading/index.tsx` `src/pages/analyze-loading/index.scss` `src/pages/record-text/index.tsx` `src/pages/result/index.tsx`

@@ -10,13 +10,6 @@ import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 
-// 顶部功能按钮（文字、手动、历史）
-const TOP_ACTIONS = [
-  { id: 'text', label: '文字', icon: 'icon-xingzhuang-wenzi' },
-  { id: 'manual', label: '手动', icon: 'icon-shiwu' },
-  { id: 'history', label: '历史', icon: 'icon-shizhong' },
-]
-
 type CameraAuthStatus = 'pending' | 'authorized' | 'denied'
 
 function RecordPage() {
@@ -180,21 +173,6 @@ function RecordPage() {
     })
   }, [membershipStatus])
 
-  // 顶部功能按钮点击
-  const handleTopAction = useCallback((actionId: string) => {
-    switch (actionId) {
-      case 'text':
-        Taro.navigateTo({ url: '/pages/record-text/index' })
-        break
-      case 'manual':
-        Taro.navigateTo({ url: '/pages/record-manual/index' })
-        break
-      case 'history':
-        Taro.navigateTo({ url: '/pages/analyze-history/index' })
-        break
-    }
-  }, [])
-
   // 相机错误处理
   const handleCameraError = useCallback((e: any) => {
     console.error('相机错误:', e)
@@ -240,26 +218,11 @@ function RecordPage() {
         onError={handleCameraError}
       />
 
-      {/* 顶部控制栏 - 返回按钮 + 功能按钮组合 */}
+      {/* 顶部控制栏：仅保留返回 */}
       <View className='top-control-bar'>
-        {/* 返回按钮 - 图标 */}
         <View className='top-btn back-btn' onClick={handleGoBack}>
           <Text className='back-arrow'>&#8249;</Text>
         </View>
-        
-        {/* 分隔线 */}
-        <View className='top-divider' />
-        
-        {/* 功能按钮组（文字、手动、历史）- 使用文字 */}
-        {TOP_ACTIONS.map(action => (
-          <View
-            key={action.id}
-            className='top-btn action-btn'
-            onClick={() => handleTopAction(action.id)}
-          >
-            <Text className='action-text'>{action.label}</Text>
-          </View>
-        ))}
       </View>
 
       {/* 中间扫描框区域 */}

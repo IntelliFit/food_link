@@ -188,8 +188,8 @@ function AnalyzeLoadingPage() {
 
   const syncImagePathFromStorage = useCallback(() => {
     try {
+      // 仅以 URL task_type 为准：food_text = 文字链（占位图）；food / food_image 等 = 拍照或相册（用 storage 里的本地/远端预览）
       const type = normalizeTaskType(Taro.getCurrentInstance().router?.params?.task_type)
-      // 文字分析：与结果页一致，不展示历史拍照图；并清除残留 storage
       if (type === 'food_text') {
         Taro.removeStorageSync('analyzeImagePath')
         Taro.removeStorageSync('analyzeImagePaths')

@@ -350,8 +350,23 @@ function AnalyzeHistoryPage() {
     }
     if (task.status === 'pending' || task.status === 'processing') {
       const mode = pickExecutionMode(task)
+      const isTextTask = task.task_type === 'food_text'
+      const isExercise = task.task_type === 'exercise'
+      // 与 analyze-loading 一致：图片任务回填预览图；文字任务清图避免沿用旧照片
+      if (!isTextTask && !isExercise) {
+        if (task.image_paths && task.image_paths.length > 0) {
+          Taro.setStorageSync('analyzeImagePaths', task.image_paths)
+          Taro.setStorageSync('analyzeImagePath', task.image_paths[0])
+        } else if (task.image_url) {
+          Taro.setStorageSync('analyzeImagePaths', [task.image_url])
+          Taro.setStorageSync('analyzeImagePath', task.image_url)
+        }
+      } else if (isTextTask) {
+        Taro.removeStorageSync('analyzeImagePath')
+        Taro.removeStorageSync('analyzeImagePaths')
+      }
       Taro.navigateTo({
-        url: `/pages/analyze-loading/index?task_id=${task.id}&task_type=${task.task_type}&execution_mode=${mode}`
+        url: `/pages/analyze-loading/index?task_id=${task.id}&task_type=${encodeURIComponent(task.task_type)}&execution_mode=${mode}`
       })
       return
     }

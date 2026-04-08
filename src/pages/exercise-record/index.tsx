@@ -340,7 +340,7 @@ export default function ExerciseRecordPage() {
       </View>
 
       <ScrollView
-        className={`chat-container ${listEmpty ? 'chat-container--empty' : ''}`}
+        className={`records-scroll ${listEmpty ? 'records-scroll--empty' : ''}`}
         scrollY
         scrollWithAnimation
         scrollTop={99999}
@@ -356,47 +356,64 @@ export default function ExerciseRecordPage() {
             <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如："跑步30分钟" 或 "游泳1小时"</Text>
           </View>
         ) : (
-          <View className='chat-list'>
+          <View className='records-list'>
             {displayRows.map((row) =>
               row.kind === 'server' ? (
-                <View key={row.key} className='chat-item user'>
-                  <View className='chat-bubble'>
-                    <Text className='chat-content'>{row.record.content}</Text>
-                  </View>
-                  <View className='chat-meta'>
-                    <View className='chat-result'>
-                      <IconExercise size={14} color='#f97316' />
-                      <Text className='chat-result-text'>消耗 {row.record.calories} kcal</Text>
+                <View key={row.key} className='exercise-record-card'>
+                  <View className='exercise-record-card__top'>
+                    <Text className='exercise-record-card__title'>{row.record.content}</Text>
+                    <View
+                      className='exercise-record-card__delete'
+                      onClick={() => handleDelete(row.record.id)}
+                    >
+                      <Text className='exercise-record-card__delete-text'>删除</Text>
                     </View>
-                    <Text className='chat-time'>{formatTime(row.record.createdAt)}</Text>
                   </View>
-                  <View className='chat-delete' onClick={() => handleDelete(row.record.id)}>
-                    <Text className='chat-delete-text'>删除</Text>
+                  <View className='exercise-record-card__divider' />
+                  <View className='exercise-record-card__bottom'>
+                    <View className='exercise-record-card__kcal'>
+                      <IconExercise size={28} color='#f97316' />
+                      <Text className='exercise-record-card__kcal-num'>{row.record.calories}</Text>
+                      <Text className='exercise-record-card__kcal-unit'>kcal</Text>
+                    </View>
+                    <Text className='exercise-record-card__time'>{formatTime(row.record.createdAt)}</Text>
                   </View>
                 </View>
               ) : (
-                <View key={row.key} className='chat-item user'>
-                  <View className='chat-bubble'>
-                    <Text className='chat-content'>{row.item.content}</Text>
+                <View
+                  key={row.key}
+                  className={`exercise-record-card ${row.item.status === 'failed' ? 'exercise-record-card--failed' : ''}`}
+                >
+                  <View className='exercise-record-card__top'>
+                    <Text className='exercise-record-card__title'>{row.item.content}</Text>
                   </View>
-                  <View className='chat-meta'>
-                    {row.item.status === 'pending' ? (
-                      <View className='chat-result chat-result--pending'>
-                        <View className='chat-pending-spinner' />
-                        <Text className='chat-result-text'>分析中，估算消耗…</Text>
+                  {row.item.status === 'pending' ? (
+                    <>
+                      <View className='exercise-record-card__divider' />
+                      <View className='exercise-record-card__bottom'>
+                        <View className='exercise-record-card__pending'>
+                          <View className='exercise-record-card__spinner' />
+                          <Text className='exercise-record-card__pending-text'>分析中，估算消耗…</Text>
+                        </View>
+                        <Text className='exercise-record-card__time'>{formatTime(row.item.createdAt)}</Text>
                       </View>
-                    ) : (
-                      <View className='chat-result chat-result--error'>
-                        <Text className='chat-result-text chat-result-text--error'>
-                          {row.item.errorMessage || '分析失败'}
-                        </Text>
-                        <Text className='chat-dismiss-fail' onClick={() => dismissFailedCard(row.item.clientId)}>
+                    </>
+                  ) : (
+                    <View className='exercise-record-card__fail'>
+                      <Text className='exercise-record-card__fail-msg'>
+                        {row.item.errorMessage || '分析失败'}
+                      </Text>
+                      <View className='exercise-record-card__fail-row'>
+                        <Text className='exercise-record-card__time'>{formatTime(row.item.createdAt)}</Text>
+                        <Text
+                          className='exercise-record-card__dismiss'
+                          onClick={() => dismissFailedCard(row.item.clientId)}
+                        >
                           关闭
                         </Text>
                       </View>
-                    )}
-                    <Text className='chat-time'>{formatTime(row.item.createdAt)}</Text>
-                  </View>
+                    </View>
+                  )}
                 </View>
               )
             )}

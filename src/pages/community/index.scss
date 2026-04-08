@@ -1639,51 +1639,50 @@ $community-feed-card-alpha: 50%;
   }
 }
 
-// 卡片内评论列表（前 5 条）
+// 卡片内评论列表（前 5 条）— 信息流式：统一字号层级，弱化「气泡」感
 .feed-comments {
-  margin-top: 24rpx;
-  padding: 20rpx;
-  background: #f8fafc;
-  border-radius: 16rpx;
-  border: 1rpx solid #f1f5f9;
+  margin-top: 20rpx;
+  padding: 16rpx 18rpx;
+  background: #f2f3f5;
+  border-radius: 12rpx;
+  border: none;
 }
 
 .feed-comment-item {
   display: flex;
   align-items: flex-start;
   gap: 16rpx;
-  margin-bottom: 16rpx;
-  padding: 8rpx 0;
+  margin-bottom: 20rpx;
+  padding: 0;
 
   &:last-child {
     margin-bottom: 0;
   }
 
   &.is-temp {
-    opacity: 0.92;
+    opacity: 0.88;
   }
 
   &.is-reply {
     .comment-avatar {
-      width: 34rpx;
-      height: 34rpx;
-      margin-top: 6rpx;
-      box-shadow: 0 0 0 4rpx rgb(16 185 129 / 8%);
+      width: 40rpx;
+      height: 40rpx;
+      margin-top: 2rpx;
     }
   }
 }
 
 .comment-avatar {
-  width: 40rpx;
-  height: 40rpx;
+  width: 48rpx;
+  height: 48rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  background: #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
-  margin-top: 4rpx;
+  margin-top: 2rpx;
 }
 
 .comment-avatar-img {
@@ -1692,7 +1691,7 @@ $community-feed-card-alpha: 50%;
 }
 
 .comment-avatar-placeholder {
-  font-size: 20rpx;
+  font-size: 22rpx;
 }
 
 .comment-body {
@@ -1701,17 +1700,17 @@ $community-feed-card-alpha: 50%;
 
   &.is-reply {
     position: relative;
-    padding-left: 18rpx;
+    padding-left: 12rpx;
 
     &::before {
       content: '';
       position: absolute;
       left: 0;
-      top: 8rpx;
-      bottom: 10rpx;
-      width: 4rpx;
+      top: 4rpx;
+      bottom: 4rpx;
+      width: 2rpx;
       border-radius: 999rpx;
-      background: linear-gradient(180deg, rgb(16 185 129 / 80%) 0%, rgb(52 211 153 / 20%) 100%);
+      background: #e5e7eb;
     }
   }
 }
@@ -1720,70 +1719,71 @@ $community-feed-card-alpha: 50%;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8rpx;
+  gap: 6rpx 12rpx;
   min-width: 0;
+  line-height: 40rpx;
 }
 
-.comment-content-bubble {
-  margin-top: 8rpx;
-  padding: 14rpx 18rpx;
-  border-radius: 18rpx;
-  background: rgb(255 255 255 / 92%);
-  border: 1rpx solid rgb(226 232 240 / 90%);
-
-  &.is-reply {
-    background: linear-gradient(135deg, rgb(236 253 245 / 95%) 0%, rgb(240 253 250 / 98%) 100%);
-    border-color: rgb(16 185 129 / 18%);
-    box-shadow: 0 6rpx 18rpx rgb(16 185 129 / 8%);
-  }
+.comment-reply-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  flex-wrap: wrap;
 }
 
 .comment-content-text {
   display: block;
-  font-size: 26rpx;
-  line-height: 1.6;
-  color: #475569;
+  margin-top: 6rpx;
+  font-size: 30rpx;
+  line-height: 46rpx;
+  color: #374151;
   word-break: break-all;
 }
 
 .comment-author {
+  font-size: 30rpx;
   font-weight: 600;
-  color: #334155;
+  color: #111827;
+  max-width: 100%;
 }
 
 .comment-reply-arrow {
-  font-size: 22rpx;
-  color: #64748b;
+  font-size: 24rpx;
+  color: #9ca3af;
+  font-weight: 400;
 }
 
 .comment-reply-target {
   font-size: 24rpx;
-  color: #0f766e;
-  background: rgb(20 184 166 / 10%);
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
+  color: #4b5563;
+  font-weight: 500;
+  max-width: 280rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .comment-status-badge {
   display: inline-flex;
   align-items: center;
-  margin-top: 8rpx;
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
-  font-size: 22rpx;
-  color: #0f766e;
-  background: rgb(20 184 166 / 12%);
+  margin-top: 10rpx;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  font-size: 20rpx;
+  color: #6b7280;
+  background: rgb(0 0 0 / 5%);
 }
 
 .feed-comments-more {
-  margin-top: 16rpx;
-  padding-top: 16rpx;
-  border-top: 1rpx solid #e2e8f0;
+  margin-top: 12rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid rgb(0 0 0 / 6%);
 }
 
 .feed-comments-more-text {
-  font-size: 24rpx;
-  color: #00a870;
+  font-size: 26rpx;
+  color: #576b95;
+  font-weight: 500;
 }
 
 // 内联评论输入：在帖子下方，键盘弹起时帖子自然在键盘正上方
@@ -1967,13 +1967,13 @@ $community-feed-card-alpha: 50%;
   height: 76rpx;
   min-height: 76rpx;
   padding: 0 28rpx;
-  background: #f1f5f9;
+  background: #f2f3f5;
   border-radius: 38rpx;
   font-size: 28rpx;
   line-height: 76rpx;
-  color: #1e293b;
-  caret-color: #1e293b;
-  border: 1rpx solid #e2e8f0;
+  color: #111827;
+  caret-color: #111827;
+  border: 1rpx solid rgb(0 0 0 / 6%);
   box-sizing: border-box;
 }
 
@@ -1982,50 +1982,76 @@ $community-feed-card-alpha: 50%;
   align-items: center;
   justify-content: space-between;
   gap: 16rpx;
-  margin-bottom: 16rpx;
-  padding: 12rpx 18rpx;
-  border-radius: 18rpx;
-  background: #f0fdf4;
-  border: 1rpx solid #dcfce7;
+  margin-bottom: 0;
+  padding: 12rpx 16rpx;
+  border-radius: 12rpx;
+  background: #f2f3f5;
+  border: 1rpx solid rgb(0 0 0 / 6%);
 }
 
 .comment-reply-tip-text {
   flex: 1;
   min-width: 0;
-  font-size: 24rpx;
-  color: #166534;
+  font-size: 26rpx;
+  color: #4b5563;
 }
 
 .comment-reply-tip-close {
   flex-shrink: 0;
-  font-size: 24rpx;
-  color: #16a34a;
+  font-size: 26rpx;
+  color: #576b95;
+  font-weight: 500;
 }
 
 .comment-bottom-placeholder {
-  color: #94a3b8;
+  color: #9ca3af;
 }
 
 .comment-bottom-send {
   flex-shrink: 0;
-  padding: 0 32rpx;
+  min-width: 112rpx;
+  padding: 0 28rpx;
   height: 76rpx;
   line-height: 76rpx;
-  font-size: 28rpx;
-  color: #fff;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
   border-radius: 38rpx;
   text-align: center;
-  box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 25%);
-  transition: opacity 0.2s ease;
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+  box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 22%);
+  transition: opacity 0.15s ease, background 0.15s ease;
 
-  &.disabled {
-    opacity: 0.45;
-    pointer-events: none;
+  .comment-bottom-send-text {
+    font-size: 28rpx;
+    color: #fff;
+    font-weight: 500;
   }
 
-  &:active {
-    opacity: 0.8;
+  &:not(.disabled):active {
+    opacity: 0.88;
+  }
+
+  &.disabled {
+    pointer-events: none;
+    box-shadow: none;
+  }
+
+  &.disabled:not(.is-submitting) {
+    opacity: 1;
+    background: #e5e7eb;
+    box-shadow: none;
+
+    .comment-bottom-send-text {
+      color: #9ca3af;
+    }
+  }
+
+  &.disabled.is-submitting {
+    opacity: 1;
+    background: #94a3b8;
+
+    .comment-bottom-send-text {
+      color: #fff;
+    }
   }
 }
 

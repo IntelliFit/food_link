@@ -388,8 +388,17 @@ function AnalyzePage() {
         execution_mode: executionMode
       })
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
+      // 进入 analyze 页时 initStoredImagePath 会 remove 掉 analyzeImage*，这里必须把当前预览图写回，
+      // analyze-loading 才能用本地路径做全屏背景与取景框前景（与文字链路的占位图区分）
+      if (imagePaths.length > 0) {
+        Taro.setStorageSync('analyzeImagePath', imagePaths[0])
+        Taro.setStorageSync('analyzeImagePaths', imagePaths)
+      }
+      Taro.setStorageSync('analyzeTaskType', 'food')
       Taro.hideLoading()
-      Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}&execution_mode=${executionMode}` })
+      Taro.redirectTo({
+        url: `/pages/analyze-loading/index?task_id=${task_id}&execution_mode=${executionMode}&task_type=food`
+      })
     } catch (error: any) {
       Taro.hideLoading()
       setIsAnalyzing(false)
@@ -512,11 +521,15 @@ function AnalyzePage() {
     // 保存执行模式到 storage，让分析页读取
     Taro.setStorageSync('analyzeExecutionMode', executionMode)
     Taro.setStorageSync('analyzeTaskType', 'food')
+    if (imagePaths.length > 0) {
+      Taro.setStorageSync('analyzeImagePath', imagePaths[0])
+      Taro.setStorageSync('analyzeImagePaths', imagePaths)
+    }
 
     // 跳转到分析 loading 页面，使用 debug 任务 ID
     // analyze-loading 页面会识别 debug 前缀，进入调试模式
     Taro.navigateTo({
-      url: `/pages/analyze-loading/index?task_id=debug-task-${Date.now()}&execution_mode=${executionMode}`
+      url: `/pages/analyze-loading/index?task_id=debug-task-${Date.now()}&execution_mode=${executionMode}&task_type=food`
     })
   }
 

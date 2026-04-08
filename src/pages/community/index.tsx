@@ -258,6 +258,8 @@ function CommunityPage() {
   const [expandedCommentRecordId, setExpandedCommentRecordId] = useState<string | null>(null)
   const [commentContent, setCommentContent] = useState('')
   const [commentSubmitting, setCommentSubmitting] = useState(false)
+  /** 同步防抖：点击发送瞬间即锁定，避免 setState 批处理前连点重复提交 */
+  const commentSubmitLockRef = useRef(false)
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
@@ -1147,6 +1149,8 @@ function CommunityPage() {
 
   const submitComment = async () => {
     if (!expandedCommentRecordId || !commentContent.trim()) return
+    if (commentSubmitLockRef.current) return
+    commentSubmitLockRef.current = true
     setCommentSubmitting(true)
     try {
       const { comment } = await communityPostComment(
@@ -1187,6 +1191,7 @@ function CommunityPage() {
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
     } finally {
+      commentSubmitLockRef.current = false
       setCommentSubmitting(false)
     }
   }
@@ -1609,15 +1614,13 @@ function CommunityPage() {
                                   <View className='comment-meta-line'>
                                     <Text className='comment-author'>{c.nickname || '用户'}</Text>
                                     {c.reply_to_user_id ? (
-                                      <>
+                                      <View className='comment-reply-join'>
                                         <Text className='comment-reply-arrow'>回复</Text>
                                         <Text className='comment-reply-target'>{c.reply_to_nickname || '用户'}</Text>
-                                      </>
+                                      </View>
                                     ) : null}
                                   </View>
-                                  <View className={`comment-content-bubble ${c.reply_to_user_id ? 'is-reply' : ''}`}>
-                                    <Text className='comment-content-text'>{c.content}</Text>
-                                  </View>
+                                  <Text className='comment-content-text'>{c.content}</Text>
                                   {c._is_temp ? (
                                     <Text className='comment-status-badge'>审核中</Text>
                                   ) : null}
@@ -1695,12 +1698,13 @@ function CommunityPage() {
             focus={commentInputFocus}
             maxlength={500}
             cursorSpacing={24}
+            disabled={commentSubmitting}
           />
           <View
-            className={`comment-bottom-send ${(!commentContent.trim() || commentSubmitting) ? 'disabled' : ''}`}
+            className={`comment-bottom-send ${(!commentContent.trim() || commentSubmitting) ? 'disabled' : ''} ${commentSubmitting ? 'is-submitting' : ''}`}
             onClick={submitComment}
           >
-            <Text>{commentSubmitting ? '...' : '发送'}</Text>
+            <Text className='comment-bottom-send-text'>{commentSubmitting ? '发送中' : '发送'}</Text>
           </View>
         </View>
       </View>
