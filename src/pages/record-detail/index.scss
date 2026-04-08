@@ -492,64 +492,75 @@
   height: 1500rpx;
 }
 
-/* 海报预览弹窗 */
+/* 海报预览弹窗：全宽铺满，无外层白边；海报图顶到底栏之间无嵌套卡片感 */
 .poster-modal {
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 48rpx;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
   box-sizing: border-box;
 }
 
 .poster-modal-mask {
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / 60%);
+  background: rgb(0 0 0 / 55%);
   backdrop-filter: blur(4px);
 }
 
 .poster-modal-content {
   position: relative;
+  z-index: 1;
   width: 100%;
-  max-height: 85vh;
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 32rpx;
+  height: 100%;
+  max-height: 100vh;
+  background: #0f172a;
+  border-radius: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 .poster-modal-title {
   display: block;
-  font-size: 34rpx;
+  font-size: 32rpx;
   font-weight: 600;
-  color: #1e293b;
+  color: #f8fafc;
   text-align: center;
-  margin-bottom: 28rpx;
+  padding: 24rpx 24rpx 20rpx;
+  padding-top: calc(24rpx + env(safe-area-inset-top));
   flex-shrink: 0;
+  background: linear-gradient(180deg, rgb(15 23 42 / 95%) 0%, rgb(15 23 42 / 70%) 100%);
 }
 
 .poster-scroll-area {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  margin-bottom: 36rpx;
+  margin-bottom: 0;
   -webkit-overflow-scrolling: touch;
+  width: 100%;
 }
 
 .poster-modal-image {
   width: 100%;
-  border-radius: 16rpx;
+  border-radius: 0;
   display: block;
+  vertical-align: top;
 }
 
 .poster-modal-actions-col {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+  flex-shrink: 0;
+  padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: #0f172a;
+  border-top: 1rpx solid rgb(255 255 255 / 8%);
 
   .share-row {
     display: flex;
