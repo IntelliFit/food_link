@@ -138,69 +138,64 @@
   box-shadow: 0 -12rpx 40rpx rgb(15 23 42 / 6%);
 }
 
-.mode-result-card {
-  padding: 28rpx 30rpx;
-  border: 1rpx solid transparent;
-  border-radius: 32rpx;
-  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%);
-  overflow: hidden;
+// 识别模式：左侧「标准/精准」+ 设为默认，右侧上传公共库
+.execution-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 0 4rpx;
+}
 
-  &.strict {
-    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-    border-color: #bbf7d0;
-  }
+.execution-mode-left {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.library-upload-entry--mode-row {
+  flex-shrink: 0;
+  padding: 10rpx 18rpx;
+}
+
+.execution-mode-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8rpx 20rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid transparent;
 
   &.standard {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    background: #f1f5f9;
     border-color: #e2e8f0;
+  }
+
+  &.strict {
+    background: rgb(0 188 125 / 10%);
+    border-color: rgb(0 188 125 / 28%);
   }
 }
 
-.mode-result-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18rpx;
-  margin-bottom: 12rpx;
-}
-
-.mode-result-title-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.mode-result-label {
-  font-size: 22rpx;
-  color: #64748b;
-}
-
-.mode-result-title {
-  font-size: 31rpx;
+.execution-mode-tag-text {
+  font-size: 24rpx;
   font-weight: 700;
   color: #0f172a;
+  letter-spacing: 2rpx;
 }
 
-.mode-result-action {
+.execution-mode-tag.strict .execution-mode-tag-text {
+  color: #047857;
+}
+
+.execution-mode-default-link {
   flex-shrink: 0;
   font-size: 24rpx;
   color: #0f766e;
-  background: rgb(255 255 255 / 70%);
-  border-radius: 999rpx;
-  padding: 8rpx 20rpx;
-}
-
-.mode-result-desc {
-  font-size: 25rpx;
-  color: #1e293b;
-  line-height: 1.6;
-  margin-bottom: 8rpx;
-}
-
-.mode-result-note {
-  font-size: 22rpx;
-  color: #475569;
-  line-height: 1.6;
+  font-weight: 500;
+  padding: 8rpx 16rpx;
 }
 
 .recognition-status-card {
@@ -413,6 +408,10 @@
   margin-bottom: 48rpx;
 }
 
+.nutrition-overview-card .macro-grid {
+  margin-top: 8rpx;
+}
+
 .calories-main {
   display: flex;
   flex-direction: column;
@@ -476,17 +475,8 @@
   flex-direction: column;
   gap: 12rpx;
 
+  // 与首页仪表盘三大营养素环/图例一致（index.tsx MACRO_COLORS）
   &.protein {
-    .macro-progress {
-      background: #00bc7d;
-    }
-
-    .macro-label {
-      color: #00bc7d;
-    }
-  }
-
-  &.carbs {
     .macro-progress {
       background: #3b82f6;
     }
@@ -496,13 +486,23 @@
     }
   }
 
-  &.fat {
+  &.carbs {
     .macro-progress {
-      background: #f59e0b;
+      background: #eab308;
     }
 
     .macro-label {
-      color: #f59e0b;
+      color: #ca8a04;
+    }
+  }
+
+  &.fat {
+    .macro-progress {
+      background: #f97316;
+    }
+
+    .macro-label {
+      color: #f97316;
     }
   }
 }
@@ -791,17 +791,134 @@ transitiontransition
 }
 
 .ingredient-main {
-  padding: 22rpx 24rpx;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  padding: 20rpx 24rpx 16rpx;
   border-bottom: 1rpx solid #f1f5f9;
+}
+
+.ingredient-header--title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  width: 100%;
+}
+
+.ingredient-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
 }
 
 .ingredient-header {
   display: flex;
   align-items: center;
   gap: 10rpx;
+}
+
+// 热量 + 三大营养素：四格等分；样式从简，数值色与首页 MACRO_COLORS 一致
+.ingredient-nutrition-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8rpx;
+  padding: 14rpx 16rpx;
+  background: #f1f5f9;
+  border-bottom: 1rpx solid #e2e8f0;
+}
+
+.ingredient-summary-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  min-width: 0;
+  padding: 10rpx 4rpx;
+  border-radius: 8rpx;
+  background: #fff;
+  border: 1rpx solid #e2e8f0;
+
+  &--cal {
+    justify-content: center;
+  }
+
+  &--protein:active {
+    background: rgb(59 130 246 / 6%);
+  }
+
+  &--carbs:active {
+    background: rgb(234 179 8 / 8%);
+  }
+
+  &--fat:active {
+    background: rgb(249 115 22 / 6%);
+  }
+}
+
+// 总 kcal：不展示「热量」文案，数字与格内视觉体量接近小卡高度
+.ingredient-cal-kcal-line {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4rpx;
+  flex-wrap: wrap;
+}
+
+.ingredient-cal-kcal-num {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #0f172a;
+  font-family: 'DIN Alternate', sans-serif;
+  line-height: 1.15;
+}
+
+.ingredient-cal-kcal-unit {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.ingredient-macro-name {
+  font-size: 20rpx;
+  color: #64748b;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.ingredient-macro-value-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2rpx;
+}
+
+// 首页 index.tsx：protein #3b82f6 · carbs #eab308 · fat #f97316
+.ingredient-macro-num {
+  font-size: 28rpx;
+  font-weight: 700;
+  font-family: 'DIN Alternate', sans-serif;
+  line-height: 1.1;
+
+  &--protein {
+    color: #3b82f6;
+  }
+
+  &--carbs {
+    color: #eab308;
+  }
+
+  &--fat {
+    color: #f97316;
+  }
+}
+
+.ingredient-macro-g {
+  font-size: 20rpx;
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 .edit-icon-wrapper {
@@ -854,26 +971,8 @@ transitiontransition
   color: #0f172a;
 }
 
-.ingredient-calories {
-  display: flex;
-  align-items: baseline;
-  gap: 4rpx;
-}
-
-.cal-val {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #f59e0b;
-  font-family: 'DIN Alternate', sans-serif;
-}
-
-.cal-unit {
-  font-size: 20rpx;
-  color: #94a3b8;
-}
-
 .ingredient-controls {
-  padding: 18rpx 24rpx 20rpx;
+  padding: 18rpx 24rpx 22rpx;
   background: #f8fafc;
   display: flex;
   flex-direction: column;
@@ -896,21 +995,21 @@ transitiontransition
 .weight-adjuster {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 20rpx;
   background: #fff;
-  padding: 6rpx;
-  border-radius: 14rpx;
+  padding: 8rpx;
+  border-radius: 16rpx;
   box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 2%);
 }
 
 .adjust-btn {
-  width: 52rpx;
-  height: 52rpx;
-  border-radius: 10rpx;
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 14rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28rpx;
+  font-size: 36rpx;
   font-weight: 600;
   color: #475569;
   background: #f1f5f9;
@@ -939,89 +1038,38 @@ transitiontransition
   text-align: center;
 }
 
-// 比例滑块控制器
+// 与「估算重量」一致：左标签 + 右侧控件区（滑条与百分比同排）
 .ratio-control {
   display: flex;
-  flex-direction: column;
-  gap: 10rpx;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 
-.ratio-header {
+.ratio-control-right {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 12rpx;
+  min-width: 0;
 }
 
 .ratio-display {
+  flex-shrink: 0;
   font-size: 24rpx;
   font-weight: 700;
   color: #059669;
   font-family: 'DIN Alternate', sans-serif;
+  min-width: 64rpx;
+  text-align: right;
 }
 
 .ratio-slider-modern {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   padding: 0;
-}
-
-.macro-editor {
-  margin-top: 2rpx;
-  padding: 0;
-}
-
-.macro-editor-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10rpx;
-}
-
-.macro-editor-item {
-  &.protein {
-    .macro-editor-chip {
-      background: rgb(0 188 125 / 7%);
-      border-color: rgb(0 188 125 / 18%);
-    }
-  }
-
-  &.carbs {
-    .macro-editor-chip {
-      background: rgb(59 130 246 / 7%);
-      border-color: rgb(59 130 246 / 16%);
-    }
-  }
-
-  &.fat {
-    .macro-editor-chip {
-      background: rgb(245 158 11 / 8%);
-      border-color: rgb(245 158 11 / 18%);
-    }
-  }
-}
-
-.macro-editor-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-  align-items: flex-start;
-  justify-content: center;
-  min-height: 72rpx;
-  padding: 10rpx 12rpx;
-  border-radius: 12rpx;
-  border: 1rpx solid #dbe3ec;
-  background: #fff;
-}
-
-.macro-editor-item-label {
-  font-size: 19rpx;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.macro-editor-value {
-  font-size: 24rpx;
-  font-weight: 700;
-  color: #0f172a;
-  font-family: 'DIN Alternate', sans-serif;
 }
 
 // 底部固定操作栏
@@ -1041,6 +1089,25 @@ transitiontransition
   display: flex;
   flex-direction: column;
   gap: 20rpx;
+}
+
+// 底部：轻量纯文字纠错入口（无图标、无底与边框）
+.footer-correction-link {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rpx 8rpx 0;
+}
+
+.footer-correction-link-text {
+  font-size: 24rpx;
+  font-weight: 400;
+  color: #059669;
+  line-height: 1.5;
+}
+
+.footer-correction-link:active .footer-correction-link-text {
+  color: #047857;
 }
 
 .action-grid {

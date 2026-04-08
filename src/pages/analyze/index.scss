@@ -670,11 +670,38 @@
     font-size: 22rpx;
     color: #9ca3af;
   }
+}
 
-  .compact-switch {
-    transform: scale(0.75);
-    transform-origin: right center;
+// 与系统 Switch 视觉接近的纯 View 开关（不依赖 components/Switch，避免小程序端 react 解析异常）
+.multiview-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 88rpx;
+  height: 48rpx;
+  border-radius: 999rpx;
+  background: #e5e7eb;
+  box-sizing: border-box;
+  transition: background 0.2s ease;
+
+  &--on {
+    background: #00bc7d;
   }
+}
+
+.multiview-toggle-knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 12%);
+  transition: transform 0.2s ease;
+}
+
+.multiview-toggle--on .multiview-toggle-knob {
+  transform: translateX(40rpx);
 }
 
 // 按钮 spinner 样式

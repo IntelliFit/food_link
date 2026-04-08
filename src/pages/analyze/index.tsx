@@ -1,7 +1,6 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { useEffect, useState, type CSSProperties } from 'react'
-import { Switch } from '@taroify/core'
+import { useEffect, useState } from 'react'
 import {
   imageToBase64,
   compressImagePathForUpload,
@@ -241,20 +240,18 @@ function AnalyzePage() {
       membershipStatus.daily_remaining <= 0
   )
 
-  const handleMultiViewChange = (value: any) => {
-    const nextValue =
-      typeof value === 'boolean'
-        ? value
-        : value && typeof value === 'object' && typeof value.detail?.value === 'boolean'
-          ? value.detail.value
-          : Boolean(value)
-
+  /** 多视角开关：纯 View 实现，避免任意 Switch 组件在分包内触发 react 未定义 */
+  const handleMultiViewSwitchChange = (e: { detail?: { value?: boolean } }) => {
+    const nextValue = e.detail?.value === true
     if (!nextValue && imagePaths.length > 1) {
       showMultiViewRequiredModal()
       return
     }
-
     setIsMultiView(nextValue)
+  }
+
+  const toggleMultiView = () => {
+    handleMultiViewSwitchChange({ detail: { value: !isMultiView } })
   }
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）
@@ -801,12 +798,12 @@ function AnalyzePage() {
             <Text className='multiview-compact-title'>多视角辅助</Text>
             <Text className='multiview-compact-hint'>开启后才可上传多张，并按同一食物的不同角度处理</Text>
           </View>
-          <Switch
-            className='compact-switch'
-            checked={isMultiView}
-            onChange={handleMultiViewChange}
-            style={{ '--switch-checked-background-color': '#00bc7d' } as CSSProperties}
-          />
+          <View
+            className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
+            onClick={toggleMultiView}
+          >
+            <View className='multiview-toggle-knob' />
+          </View>
         </View>
       </View>
 

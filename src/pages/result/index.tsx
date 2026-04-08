@@ -35,19 +35,6 @@ const MEAL_OPTIONS = [
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
-const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; note: string }> = {
-  strict: {
-    title: '精准模式',
-    desc: '本次结果更强调分项估计的准确度，优先处理主体少、边界清楚的样本。',
-    note: '单个食物最稳；混合餐最多 2-3 个主体，菜太多时建议拆开拍。'
-  },
-  standard: {
-    title: '标准模式',
-    desc: '本次结果更强调记录效率，适合快速记录日常餐食。',
-    note: '当前默认使用标准模式，精准模式仍在完善中。'
-  }
-}
-
 const normalizeExecutionMode = (value: unknown): ExecutionMode => (
   value === 'strict' ? 'strict' : 'standard'
 )
@@ -493,6 +480,29 @@ function ResultPage() {
       fat: (fatKcal / total) * 100,
     }
   }, [nutritionStats.protein, nutritionStats.carbs, nutritionStats.fat])
+
+  /** 与 analyze 页「模拟进入结果页」等调试文案区分，仅展示面向用户的最终分析 */
+  const isDebugInsightText = (s: string | null | undefined): boolean => {
+    if (s == null || !String(s).trim()) return false
+    const t = String(s).trim()
+    return /【调试】|调试预览|调试随机|随机样本/.test(t)
+  }
+
+  /** 与加载逻辑一致：接口空串时用默认句，避免首屏 healthAdvice 为空导致整块 AI 分析被隐藏 */
+  const resolvedHealthInsight = (healthAdvice?.trim() || '保持健康饮食！')
+
+  const showInsightDescription = Boolean(description?.trim()) && !isDebugInsightText(description)
+  const showInsightHealth =
+    !isDebugInsightText(healthAdvice) && !isDebugInsightText(resolvedHealthInsight)
+  const showInsightPfc = Boolean(pfcRatioComment?.trim()) && !isDebugInsightText(pfcRatioComment)
+  const showInsightAbsorption = Boolean(absorptionNotes?.trim()) && !isDebugInsightText(absorptionNotes)
+  const showInsightContext = Boolean(contextAdvice?.trim()) && !isDebugInsightText(contextAdvice)
+  const showInsightCard =
+    showInsightDescription ||
+    showInsightHealth ||
+    showInsightPfc ||
+    showInsightAbsorption ||
+    showInsightContext
 
   // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
@@ -1264,16 +1274,26 @@ function ResultPage() {
         onScroll={handleResultScroll}
       >
         <View className='content-container'>
-          <View className={`mode-result-card ${executionMode}`}>
-            <View className='mode-result-header'>
-              <View className='mode-result-title-wrap'>
-                <Text className='mode-result-label'>本次识别模式</Text>
-                <Text className='mode-result-title'>{EXECUTION_MODE_META[executionMode].title}</Text>
+          <View className='execution-mode-row'>
+            <View className='execution-mode-left'>
+              <View className={`execution-mode-tag ${executionMode}`}>
+                <Text className='execution-mode-tag-text'>
+                  {executionMode === 'strict' ? '精准' : '标准'}
+                </Text>
               </View>
-              <Text className='mode-result-action' onClick={handleDefaultModeEdit}>设为默认</Text>
+              <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>
+                设为默认
+              </Text>
             </View>
-            <Text className='mode-result-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
-            <Text className='mode-result-note'>{EXECUTION_MODE_META[executionMode].note}</Text>
+            {hasUploadableImage ? (
+              <View
+                className={`library-upload-entry library-upload-entry--mode-row ${saving ? 'disabled' : ''}`}
+                onClick={saving ? undefined : handleOpenLibraryUpload}
+              >
+                <Text className='library-upload-text'>上传公共库</Text>
+                <Text className='library-upload-arrow'>›</Text>
+              </View>
+            ) : null}
           </View>
 
           {shouldShowRecognitionCard && (
@@ -1523,67 +1543,71 @@ function ResultPage() {
             </View>
           </View>
 
-          {/* AI 健康透视 */}
-          <View className='insight-card'>
-            <View className='card-header'>
-              <Text className='card-title'>
-                <Text className='iconfont icon-a-144-lvye'></Text>
-                AI 饮食分析
-              </Text>
+          {/* AI 饮食分析（隐藏调试文案，仅展示最终可读结论） */}
+          {showInsightCard && (
+            <View className='insight-card'>
+              <View className='card-header'>
+                <Text className='card-title'>
+                  <Text className='iconfont icon-a-144-lvye'></Text>
+                  AI 饮食分析
+                </Text>
+              </View>
+
+              {showInsightDescription && (
+                <View className='insight-item intro'>
+                  <View className='insight-icon-wrapper blue'>
+                    <Text className='insight-icon iconfont icon-jishiben'></Text>
+                  </View>
+                  <Text className='insight-content'>{description}</Text>
+                </View>
+              )}
+
+              {showInsightHealth && (
+                <View className='insight-item highlight'>
+                  <View className='insight-icon-wrapper green'>
+                    <Text className='insight-icon iconfont icon-good'></Text>
+                  </View>
+                  <Text className='insight-content'>{resolvedHealthInsight}</Text>
+                </View>
+              )}
+
+              {showInsightPfc && (
+                <View className='insight-item ratio'>
+                  <View className='insight-icon-wrapper orange'>
+                    <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
+                  </View>
+                  <View className='insight-body'>
+                    <Text className='insight-label'>营养比例</Text>
+                    <Text className='insight-content'>{pfcRatioComment}</Text>
+                  </View>
+                </View>
+              )}
+
+              {showInsightAbsorption && (
+                <View className='insight-item absorption'>
+                  <View className='insight-icon-wrapper purple'>
+                    <Text className='insight-icon iconfont icon-huore'></Text>
+                  </View>
+                  <View className='insight-body'>
+                    <Text className='insight-label'>吸收与利用</Text>
+                    <Text className='insight-content'>{absorptionNotes}</Text>
+                  </View>
+                </View>
+              )}
+
+              {showInsightContext && (
+                <View className='insight-item context'>
+                  <View className='insight-icon-wrapper teal'>
+                    <Text className='insight-icon iconfont icon-shizhong'></Text>
+                  </View>
+                  <View className='insight-body'>
+                    <Text className='insight-label'>情境建议</Text>
+                    <Text className='insight-content'>{contextAdvice}</Text>
+                  </View>
+                </View>
+              )}
             </View>
-
-            {description && (
-              <View className='insight-item intro'>
-                <View className='insight-icon-wrapper blue'>
-                  <Text className='insight-icon iconfont icon-jishiben'></Text>
-                </View>
-                <Text className='insight-content'>{description}</Text>
-              </View>
-            )}
-
-            <View className='insight-item highlight'>
-              <View className='insight-icon-wrapper green'>
-                <Text className='insight-icon iconfont icon-good'></Text>
-              </View>
-              <Text className='insight-content'>{healthAdvice}</Text>
-            </View>
-
-            {pfcRatioComment && (
-              <View className='insight-item ratio'>
-                <View className='insight-icon-wrapper orange'>
-                  <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>营养比例</Text>
-                  <Text className='insight-content'>{pfcRatioComment}</Text>
-                </View>
-              </View>
-            )}
-
-            {absorptionNotes && (
-              <View className='insight-item absorption'>
-                <View className='insight-icon-wrapper purple'>
-                  <Text className='insight-icon iconfont icon-huore'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>吸收与利用</Text>
-                  <Text className='insight-content'>{absorptionNotes}</Text>
-                </View>
-              </View>
-            )}
-
-            {contextAdvice && (
-              <View className='insight-item context'>
-                <View className='insight-icon-wrapper teal'>
-                  <Text className='insight-icon iconfont icon-shizhong'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>情境建议</Text>
-                  <Text className='insight-content'>{contextAdvice}</Text>
-                </View>
-              </View>
-            )}
-          </View>
+          )}
 
           {/* 包含成分 */}
           <View className='ingredients-section'>
@@ -1596,19 +1620,47 @@ function ResultPage() {
               {nutritionItems.map((item) => (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
-                    <View className='ingredient-header'>
+                    <View className='ingredient-header ingredient-header--title-row'>
                       <Text className='ingredient-name'>{item.name}</Text>
-                      <View className='edit-icon-wrapper' onClick={() => handleEditName(item.id, item.name)}>
-                        <Text className='iconfont icon-shouxieqianming'></Text>
-                      </View>
-                      <View className='delete-icon-wrapper' onClick={() => handleDeleteItem(item.id, item.name)}>
-                        <Text className='delete-icon'>×</Text>
+                      <View className='ingredient-header-actions'>
+                        <View className='edit-icon-wrapper' onClick={() => handleEditName(item.id, item.name)}>
+                          <Text className='iconfont icon-shouxieqianming'></Text>
+                        </View>
+                        <View className='delete-icon-wrapper' onClick={() => handleDeleteItem(item.id, item.name)}>
+                          <Text className='delete-icon'>×</Text>
+                        </View>
                       </View>
                     </View>
-                    <View className='ingredient-calories'>
-                      <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
-                      <Text className='cal-unit'>kcal</Text>
+                  </View>
+
+                  <View className='ingredient-nutrition-strip'>
+                    <View className='ingredient-summary-cell ingredient-summary-cell--cal'>
+                      <View className='ingredient-cal-kcal-line'>
+                        <Text className='ingredient-cal-kcal-num'>
+                          {Math.round(item.calorie * (item.ratio / 100))}
+                        </Text>
+                        <Text className='ingredient-cal-kcal-unit'>kcal</Text>
+                      </View>
                     </View>
+                    {MACRO_FIELDS.map((field) => {
+                      const meta = MACRO_FIELD_META[field]
+                      const intakeMacro = item[field] * (item.ratio / 100)
+                      return (
+                        <View
+                          key={`${item.id}-${field}`}
+                          className={`ingredient-summary-cell ingredient-summary-cell--${meta.className}`}
+                          onClick={() => handleMacroEdit(item.id, field, item[field])}
+                        >
+                          <Text className='ingredient-macro-name'>{meta.label}</Text>
+                          <View className='ingredient-macro-value-line'>
+                            <Text className={`ingredient-macro-num ingredient-macro-num--${meta.className}`}>
+                              {formatMacroDisplay(intakeMacro)}
+                            </Text>
+                            <Text className='ingredient-macro-g'>g</Text>
+                          </View>
+                        </View>
+                      )
+                    })}
                   </View>
 
                   <View className='ingredient-controls'>
@@ -1628,42 +1680,22 @@ function ResultPage() {
                     </View>
 
                     <View className='ratio-control'>
-                      <View className='ratio-header'>
-                        <Text className='control-label'>实际摄入</Text>
+                      <Text className='control-label'>实际摄入</Text>
+                      <View className='ratio-control-right'>
+                        <Slider
+                          className='ratio-slider-modern'
+                          value={item.ratio}
+                          min={0}
+                          max={100}
+                          step={5}
+                          activeColor='#00bc7d'
+                          backgroundColor='#e5e7eb'
+                          blockSize={16}
+                          blockColor='#ffffff'
+                          showValue={false}
+                          onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                        />
                         <Text className='ratio-display'>{item.ratio}%</Text>
-                      </View>
-                      <Slider
-                        className='ratio-slider-modern'
-                        value={item.ratio}
-                        min={0}
-                        max={100}
-                        step={5}
-                        activeColor='#00bc7d'
-                        backgroundColor='#e5e7eb'
-                        blockSize={16}
-                        blockColor='#ffffff'
-                        showValue={false}
-                        onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
-                      />
-                    </View>
-
-                    <View className='macro-editor'>
-                      <View className='macro-editor-grid'>
-                        {MACRO_FIELDS.map((field) => {
-                          const meta = MACRO_FIELD_META[field]
-                          const intakeMacro = item[field] * (item.ratio / 100)
-                          return (
-                            <View key={`${item.id}-${field}`} className={`macro-editor-item ${meta.className}`}>
-                              <View
-                                className='macro-editor-chip'
-                                onClick={() => handleMacroEdit(item.id, field, item[field])}
-                              >
-                                <Text className='macro-editor-item-label'>{meta.label}</Text>
-                                <Text className='macro-editor-value'>{formatMacroDisplay(intakeMacro)}g</Text>
-                              </View>
-                            </View>
-                          )
-                        })}
                       </View>
                     </View>
                   </View>
@@ -1690,25 +1722,10 @@ function ResultPage() {
                 </View>
               </View>
 
-              <View
-                className='feedback-link-row'
-              >
-                <View className='correction-entry' onClick={openCorrectionDrawer}>
-                  <View className='correction-entry-icon-box'>
-                    <Text className='iconfont icon-shouxieqianming correction-icon'></Text>
-                  </View>
-                  <Text className='correction-text'>{shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}</Text>
-                  <Text className='correction-arrow'>›</Text>
-                </View>
-                {hasUploadableImage ? (
-                  <View
-                    className={`library-upload-entry ${saving ? 'disabled' : ''}`}
-                    onClick={saving ? undefined : handleOpenLibraryUpload}
-                  >
-                    <Text className='library-upload-text'>上传公共库</Text>
-                    <Text className='library-upload-arrow'>›</Text>
-                  </View>
-                ) : null}
+              <View className='footer-correction-link' onClick={openCorrectionDrawer}>
+                <Text className='footer-correction-link-text'>
+                  {shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}
+                </Text>
               </View>
             </View>
           </View>

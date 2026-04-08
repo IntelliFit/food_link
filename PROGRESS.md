@@ -6,6 +6,13 @@
 
 ## 2026-04-09
 
+- 🐛 fix: 拍照分析页去掉 `Switch` 组件（含 `@tarojs/components`），多视角改为纯 `View` 滑块开关，避免再次出现 `useState`/`react` 未定义白屏 `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss`
+- 🎨 style: 结果页「包含成分」营养条简化：去「热量」标签仅突出 kcal 数字；宏量数值色与首页一致（`#3b82f6` / `#eab308` / `#f97316`）`src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🎨 style: 底部「识别有误？点击纠错」纯文字链改为绿色系（`#059669` / 按下 `#047857`）`src/pages/result/index.scss`
+- 🎨 style: 结果页纠错改为底部「收藏/记录」下纯文字链；成分卡四指标改为四格条带布局，实际摄入与滑块同排对齐估算重量行 `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🐛 fix: 分析结果页 AI 饮食分析因首屏 `healthAdvice` 为空未展示主建议；改为 `resolvedHealthInsight` 与接口一致回退；上传公共库在「标准」行右侧 `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🐛 fix: 拍照分析页 `@taroify/core` Switch 在小程序端导致 `react` 未定义、`useState` 报错白屏，改为 `@tarojs/components` 原生 `Switch` `src/pages/analyze/index.tsx`
+- 🎨 style: 分析结果页识别模式改为「标准/精准」圆角标签；总览与成分宏量色对齐首页；AI 饮食分析隐藏含「调试」的文案；成分卡宏量紧挨本项热量、估算重量加减加大 `src/pages/result/index.tsx` `src/pages/result/index.scss`
 - 🔧 refactor: 食物分析结果页撤销近期 UI 改版，恢复为仓库已提交版本（头图底部渐变、原营养概览与识别模式卡片等）`src/pages/result/index.tsx` `src/pages/result/index.scss`
 - 🎨 style: 统计「趋势」与分析相关页红/绿/白与首页日期热力对齐（主绿 `#00bc7d`、柔和红 `#e57373`、白底）；仅改色不动结构 `src/pages/stats/index.scss` `src/pages/analyze/index.scss` `src/pages/analyze-history/*` `src/pages/analyze-loading/index.scss`
 - 🎨 style: 分析页开发者「模拟进入结果页」使用合法 `AnalyzeResponse` 随机数据（与下方结果页还原并存）`src/pages/analyze/index.tsx`
