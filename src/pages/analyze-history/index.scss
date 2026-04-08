@@ -57,7 +57,7 @@
   }
 
   &.delete {
-    background: #ef4444;
+    background: #e57373;
   }
 
   &:active {
@@ -83,8 +83,8 @@
   }
 
   &.task-card-violated {
-    border: 1rpx solid #fecaca;
-    background: #fff5f5;
+    border: 1rpx solid #f5d4d4;
+    background: #fef8f8;
 
     &:active {
       background: #fef2f2;
@@ -195,17 +195,17 @@
 
     &.status-done {
       background: #d1fae5;
-      .status-text { color: #059669; }
+      .status-text { color: #00bc7d; }
     }
 
     &.status-failed {
-      background: #fee2e2;
-      .status-text { color: #dc2626; }
+      background: #fef8f8;
+      .status-text { color: #c53030; }
     }
 
     &.status-violated {
-      background: #fee2e2;
-      .status-text { color: #b91c1c; }
+      background: #fef8f8;
+      .status-text { color: #c53030; }
     }
 
     &.status-timed_out {
@@ -265,18 +265,18 @@
     }
 
     &.recognition-hard_reject {
-      background: #fef2f2;
-      border-color: #fca5a5;
+      background: #fef8f8;
+      border-color: #f5d4d4;
 
       .recognition-tag-text {
-        color: #b91c1c;
+        color: #b45353;
       }
     }
   }
 
   .violation-reason {
     font-size: 22rpx;
-    color: #dc2626;
+    color: #c53030;
     line-height: 30rpx;
     margin-top: 4rpx;
     display: -webkit-box;
@@ -292,7 +292,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    background: linear-gradient(135deg, #fef8f8 0%, #fef2f2 100%);
   }
 
   .arrow {

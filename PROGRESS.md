@@ -6,6 +6,9 @@
 
 ## 2026-04-09
 
+- 🔧 refactor: 食物分析结果页撤销近期 UI 改版，恢复为仓库已提交版本（头图底部渐变、原营养概览与识别模式卡片等）`src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🎨 style: 统计「趋势」与分析相关页红/绿/白与首页日期热力对齐（主绿 `#00bc7d`、柔和红 `#e57373`、白底）；仅改色不动结构 `src/pages/stats/index.scss` `src/pages/analyze/index.scss` `src/pages/analyze-history/*` `src/pages/analyze-loading/index.scss`
+- 🎨 style: 分析页开发者「模拟进入结果页」使用合法 `AnalyzeResponse` 随机数据（与下方结果页还原并存）`src/pages/analyze/index.tsx`
 - ✨ feat: 运动热量估算改用 Instructor + Pydantic 结构化输出，替代手写 JSON 解析；新增单元测试 `backend/tests/unit/test_exercise_llm.py`；依赖增加 `instructor`、`openai` `backend/exercise_llm.py` `backend/requirements.txt`
 
 ## 2026-04-08

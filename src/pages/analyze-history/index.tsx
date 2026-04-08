@@ -140,7 +140,7 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
       title: '确认删除',
       content: '删除后无法恢复，是否确认删除？',
       confirmText: '删除',
-      confirmColor: '#ef4444',
+      confirmColor: '#e57373',
       cancelText: '取消',
       success: (res) => {
         if (res.confirm) {
@@ -200,7 +200,7 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
         <View className='thumb'>
           {task.status === 'violated' || task.is_violated ? (
             <View className='thumb-violated'>
-              <Text className='iconfont icon-jinggao' style={{ fontSize: '48rpx', color: '#ef4444' }} />
+              <Text className='iconfont icon-jinggao' style={{ fontSize: '48rpx', color: '#e57373' }} />
             </View>
           ) : task.image_url ? (
             <Image src={task.image_url} mode='aspectFill' />

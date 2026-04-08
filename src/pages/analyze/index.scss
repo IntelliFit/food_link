@@ -140,8 +140,8 @@
   }
 
   &--exhausted {
-    background: #fef2f2;
-    border-color: #fecaca;
+    background: #fef8f8;
+    border-color: #f5d4d4;
     pointer-events: none;
   }
 }
@@ -153,7 +153,7 @@
 }
 
 .quota-bar--exhausted .quota-bar-text {
-  color: #b91c1c;
+  color: #b45353;
 }
 
 // 图标字体在本页的统一样式

@@ -31,7 +31,7 @@
   width: 88rpx;
   height: 160rpx;
   border-radius: 44rpx;
-  background: #f1f5f9;
+  background: transparent;
   border: 3rpx solid transparent;
   padding: 22rpx 0 16rpx;
   overflow: hidden;
@@ -84,9 +84,9 @@
       }
     }
     
-    // 超过目标 - 红色
+    // 超过目标 - 红色（与首页日期热力柔和红一致）
     &.is-over {
-      background: #ef4444;
+      background: #e57373;
       
       .date-num-text {
         color: #fff;
@@ -333,17 +333,17 @@
 .streak-icon {
   width: 80rpx;
   height: 80rpx;
-  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  background: linear-gradient(135deg, #fef8f8 0%, #fef2f2 100%);
   border-radius: 22rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4rpx 12rpx rgb(244 63 94 / 8%);
+  box-shadow: 0 4rpx 12rpx rgb(229 115 115 / 10%);
 }
 
 .streak-icon-font {
   font-size: 40rpx;
-  color: #f43f5e;
+  color: #e57373;
 }
 
 .streak-content {
@@ -376,8 +376,8 @@
 
 .streak-badge {
   font-size: 22rpx;
-  color: #f43f5e;
-  background: #fff1f2;
+  color: #e57373;
+  background: #fef8f8;
   padding: 8rpx 20rpx;
   border-radius: 100rpx;
   font-weight: 600;
@@ -410,16 +410,16 @@
   align-items: center;
   border: 2rpx solid transparent;
   transition: all 0.2s ease;
-  background: #f1f5f9;
+  background: #fff;
   
   // 月视图下稍微小一点
   .month-view & {
     min-height: 64rpx;
   }
   
-  // 无记录
+  // 无记录（与首页「无记录」白底一致）
   &.is-empty {
-    background: #f1f5f9;
+    background: #fff;
     
     .heatmap-cell-label {
       color: #94a3b8;
@@ -444,9 +444,9 @@
     }
   }
   
-  // 超过目标 - 红色
+  // 超过目标 - 红色（与首页一致）
   &.is-over {
-    background: #ef4444;
+    background: #e57373;
     
     .heatmap-cell-label {
       color: #fff;
@@ -551,12 +551,12 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+  background: linear-gradient(180deg, #00bc7d 0%, #00a86e 100%);
   border-radius: 100rpx;
   transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.over {
-    background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+    background: linear-gradient(180deg, #fca5a5 0%, #e57373 100%);
   }
 }
 
@@ -858,14 +858,14 @@
   margin-bottom: 16rpx;
   padding: 16rpx 18rpx;
   border-radius: 18rpx;
-  background: rgb(254 226 226 / 88%);
-  border: 1rpx solid rgb(239 68 68 / 12%);
+  background: rgb(254 248 248 / 92%);
+  border: 1rpx solid rgb(245 212 212 / 90%);
 }
 
 .analysis-error-text {
   font-size: 22rpx;
   line-height: 34rpx;
-  color: #b91c1c;
+  color: #b45353;
 }
 
 // Loading & Error
