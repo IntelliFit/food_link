@@ -636,6 +636,21 @@
       font-size: 26rpx;
     }
   }
+
+  // 记录详情 / 海报预览（本地预览）
+  &--tertiary {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 8rpx 24rpx rgb(16 185 129 / 28%), 0 4rpx 8rpx rgb(5 150 105 / 18%);
+    padding: 20rpx 40rpx;
+
+    &:active {
+      box-shadow: 0 6rpx 16rpx rgb(16 185 129 / 28%);
+    }
+
+    .debug-btn-text {
+      font-size: 26rpx;
+    }
+  }
 }
 
 .debug-btn-text {

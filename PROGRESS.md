@@ -6,6 +6,7 @@
 
 ## 2026-04-09
 
+- ✨ feat: 开发者模式下调试结果页「记录」不写库，组装本地 `FoodRecord` 进 `record-detail` 便于调海报；拍照分析页增加「预览记录详情海报」快捷入口 `src/utils/dev-record-preview.ts` `src/pages/result/index.tsx` `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss`
 - 🐛 fix: 拍照分析页去掉 `Switch` 组件（含 `@tarojs/components`），多视角改为纯 `View` 滑块开关，避免再次出现 `useState`/`react` 未定义白屏 `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss`
 - 🎨 style: 结果页「包含成分」营养条简化：去「热量」标签仅突出 kcal 数字；宏量数值色与首页一致（`#3b82f6` / `#eab308` / `#f97316`）`src/pages/result/index.tsx` `src/pages/result/index.scss`
 - 🎨 style: 底部「识别有误？点击纠错」纯文字链改为绿色系（`#059669` / 按下 `#047857`）`src/pages/result/index.scss`

@@ -18,6 +18,7 @@ import {
 } from '../../utils/api'
 import type { AnalyzeResponse, ExecutionMode, FoodItem, PrecisionReferenceObjectInput } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
+import { foodRecordFromAnalyzeResponse } from '../../utils/dev-record-preview'
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
@@ -644,6 +645,22 @@ function AnalyzePage() {
     }
   }
 
+  /** 调试：用当前随机样本直接打开「记录详情」，便于调分享海报样式（不请求后端） */
+  const handleDebugRecordDetailPoster = () => {
+    const mock = buildRandomDebugAnalyzeResponse()
+    const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
+    const rec = foodRecordFromAnalyzeResponse(mock, {
+      mealType,
+      dietGoal,
+      activityTiming,
+      imagePaths: imagePaths.length > 0 ? imagePaths : [],
+      userId: uid,
+    })
+    Taro.setStorageSync('recordDetail', rec)
+    Taro.showToast({ title: '进入记录详情（海报预览）', icon: 'none', duration: 1500 })
+    Taro.navigateTo({ url: '/pages/record-detail/index' })
+  }
+
   // 开发者模式：直接进入结果页调试样式
   const handleDebugResultPage = () => {
     const mockResult = buildRandomDebugAnalyzeResponse()
@@ -1026,6 +1043,9 @@ function AnalyzePage() {
               onClick={handleDebugAnalyzeLoadingPage}
             >
               <Text className='debug-btn-text'>⏳ 调试：进入分析 Loading 页</Text>
+            </View>
+            <View className='debug-btn debug-btn--tertiary' onClick={handleDebugRecordDetailPoster}>
+              <Text className='debug-btn-text'>📇 调试：预览记录详情海报</Text>
             </View>
           </>
         )}

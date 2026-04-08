@@ -5,6 +5,7 @@ import {
   AnalyzeResponse,
   FoodItem,
   MealType,
+  type SaveFoodRecordRequest,
   saveFoodRecord,
   getAccessToken,
   createUserRecipe,
@@ -18,6 +19,7 @@ import {
   type PrecisionReferenceObjectInput
 } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
+import { foodRecordFromSavePayload } from '../../utils/dev-record-preview'
 import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
@@ -755,7 +757,7 @@ function ResultPage() {
         Taro.removeStorageSync('analyzeActivityTiming')
 
         const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
-        const payload = {
+        const payload: SaveFoodRecordRequest = {
           meal_type: mealType as MealType,
           image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
           image_paths: hasUploadableImage && imagePaths.length > 0 ? imagePaths : undefined,
@@ -787,6 +789,34 @@ function ResultPage() {
           context_advice: contextAdvice ?? undefined,
           source_task_id: sourceTaskId
         }
+
+        /** 开发者模式 / 调试结果预览：不写库，直接进记录详情调海报与分享样式 */
+        const devModeOn =
+          Taro.getStorageSync('devMode') === true ||
+          Taro.getStorageSync('devMode') === 'true' ||
+          Taro.getStorageSync('analyzeDebugPreview') === '1'
+        if (devModeOn) {
+          const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
+          const record = foodRecordFromSavePayload(payload, uid)
+          Taro.setStorageSync('recordDetail', record)
+          if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
+          Taro.removeStorageSync('analyzeDebugPreview')
+
+          if (saveOnly) {
+            Taro.showToast({ title: '调试：已跳过接口保存', icon: 'none' })
+            setTimeout(() => {
+              Taro.navigateBack({ delta: 2 })
+            }, 800)
+            return
+          }
+
+          Taro.showToast({ title: '调试：进入记录详情预览', icon: 'success' })
+          setTimeout(() => {
+            Taro.navigateTo({ url: '/pages/record-detail/index' })
+          }, 400)
+          return
+        }
+
         const saveResult = await saveFoodRecord(payload)
         if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
 
