@@ -16,10 +16,8 @@ import {
   getMyMembership,
   MembershipStatus
 } from '../../utils/api'
-import type { AnalyzeResponse, ExecutionMode, FoodItem, PrecisionReferenceObjectInput } from '../../utils/api'
+import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
-import { foodRecordFromAnalyzeResponse } from '../../utils/dev-record-preview'
-
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
 
@@ -197,21 +195,6 @@ function AnalyzePage() {
   const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
-  const [isDevMode, setIsDevMode] = useState(false)
-
-  // 初始化时检查开发者模式
-  useEffect(() => {
-    const checkDevMode = () => {
-      try {
-        const devMode = Taro.getStorageSync('devMode')
-        setIsDevMode(devMode === true || devMode === 'true')
-      } catch {
-        setIsDevMode(false)
-      }
-    }
-    checkDevMode()
-  }, [])
-
   const [precisionSessionId, setPrecisionSessionId] = useState('')
   const [referencePreset, setReferencePreset] = useState('chopsticks')
   const [referenceName, setReferenceName] = useState('筷子')
@@ -573,148 +556,8 @@ function AnalyzePage() {
     })
   }
 
-  /** 开发者调试：生成与正式接口一致的 AnalyzeResponse，数值随机便于看布局 */
-  const buildRandomDebugAnalyzeResponse = (): AnalyzeResponse => {
-    const round1 = (n: number) => Math.round(n * 10) / 10
-    const rnd = (min: number, max: number) => min + Math.random() * (max - min)
-    const kcalFromMacros = (p: number, c: number, f: number) =>
-      Math.round(round1(p) * 4 + round1(c) * 4 + round1(f) * 9)
-
-    const w1 = Math.round(rnd(140, 320))
-    const w2 = Math.round(rnd(90, 240))
-    const p1 = round1(rnd(6, 32))
-    const c1 = round1(rnd(12, 58))
-    const f1 = round1(rnd(4, 26))
-    const p2 = round1(rnd(2, 16))
-    const c2 = round1(rnd(4, 32))
-    const f2 = round1(rnd(1, 12))
-    const cal1 = kcalFromMacros(p1, c1, f1)
-    const cal2 = kcalFromMacros(p2, c2, f2)
-
-    const items: FoodItem[] = [
-      {
-        itemId: 1,
-        name: '调试 · 咖喱鸡饭',
-        estimatedWeightGrams: w1,
-        originalWeightGrams: w1,
-        nutrients: {
-          calories: cal1,
-          protein: p1,
-          carbs: c1,
-          fat: f1,
-          fiber: round1(rnd(1, 7)),
-          sugar: round1(rnd(0, 14))
-        }
-      },
-      {
-        itemId: 2,
-        name: '调试 · 蔬菜沙拉',
-        estimatedWeightGrams: w2,
-        originalWeightGrams: w2,
-        nutrients: {
-          calories: cal2,
-          protein: p2,
-          carbs: c2,
-          fat: f2,
-          fiber: round1(rnd(0, 5)),
-          sugar: round1(rnd(0, 9))
-        }
-      }
-    ]
-
-    const tw = w1 + w2
-    const tp = round1(p1 + p2)
-    const tc = round1(c1 + c2)
-    const tf = round1(f1 + f2)
-    const tcal = cal1 + cal2
-    const pe = tp * 4
-    const ce = tc * 4
-    const fe = tf * 9
-    const te = pe + ce + fe
-    const pp = te > 0 ? Math.round((pe / te) * 100) : 0
-    const cp = te > 0 ? Math.round((ce / te) * 100) : 0
-    const fp = te > 0 ? Math.round((fe / te) * 100) : 0
-
-    return {
-      description: `【调试预览】随机样本：估算总重约 ${tw}g，总热量约 ${tcal} kcal。数据每次点击都会变化，仅用于看样式。`,
-      insight: `【调试】随机营养汇总：蛋白质约 ${tp}g、碳水约 ${tc}g、脂肪约 ${tf}g。供能占比约 蛋白 ${pp}% / 碳水 ${cp}% / 脂肪 ${fp}%。`,
-      items,
-      pfc_ratio_comment: `三大营养素供能比例（调试随机）：蛋白质约 ${pp}%、碳水化合物约 ${cp}%、脂肪约 ${fp}%。`,
-      absorption_notes: `【调试】吸收与利用：示例占位文案，便于检查「吸收与利用」区块样式。`,
-      context_advice: `【调试】情境建议：示例占位文案，便于检查「情境建议」区块样式。`
-    }
-  }
-
-  /** 调试：用当前随机样本直接打开「记录详情」，便于调分享海报样式（不请求后端） */
-  const handleDebugRecordDetailPoster = () => {
-    const mock = buildRandomDebugAnalyzeResponse()
-    const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
-    const rec = foodRecordFromAnalyzeResponse(mock, {
-      mealType,
-      dietGoal,
-      activityTiming,
-      imagePaths: imagePaths.length > 0 ? imagePaths : [],
-      userId: uid,
-    })
-    Taro.setStorageSync('recordDetail', rec)
-    Taro.showToast({ title: '进入记录详情（海报预览）', icon: 'none', duration: 1500 })
-    Taro.navigateTo({ url: '/pages/record-detail/index' })
-  }
-
-  // 开发者模式：直接进入结果页调试样式
-  const handleDebugResultPage = () => {
-    const mockResult = buildRandomDebugAnalyzeResponse()
-
-    if (imagePaths.length > 0) {
-      Taro.setStorageSync('analyzeImagePath', imagePaths[0])
-      Taro.setStorageSync('analyzeImagePaths', imagePaths)
-    } else {
-      Taro.setStorageSync('analyzeImagePath', '')
-      Taro.setStorageSync('analyzeImagePaths', [])
-    }
-    Taro.setStorageSync('analyzeResult', JSON.stringify(mockResult))
-    Taro.setStorageSync('analyzeMealType', mealType)
-    Taro.setStorageSync('analyzeDietGoal', dietGoal)
-    Taro.setStorageSync('analyzeActivityTiming', activityTiming)
-    Taro.setStorageSync('analyzeSourceTaskId', 'debug-task-id')
-    Taro.setStorageSync('analyzeTaskType', 'food')
-    Taro.setStorageSync('analyzeCompareMode', false)
-    Taro.setStorageSync('analyzeExecutionMode', executionMode)
-    Taro.setStorageSync('analyzeDebugPreview', '1')
-
-    Taro.navigateTo({ url: '/pages/result/index' })
-  }
-
-  // 开发者模式：进入分析 Loading 页面调试
-  const handleDebugAnalyzeLoadingPage = () => {
-    // 保存执行模式到 storage，让分析页读取
-    Taro.setStorageSync('analyzeExecutionMode', executionMode)
-    Taro.setStorageSync('analyzeTaskType', 'food')
-    if (imagePaths.length > 0) {
-      Taro.setStorageSync('analyzeImagePath', imagePaths[0])
-      Taro.setStorageSync('analyzeImagePaths', imagePaths)
-    }
-
-    // 跳转到分析 loading 页面，使用 debug 任务 ID
-    // analyze-loading 页面会识别 debug 前缀，进入调试模式
-    Taro.navigateTo({
-      url: `/pages/analyze-loading/index?task_id=debug-task-${Date.now()}&execution_mode=${executionMode}&task_type=food`
-    })
-  }
-
-  // 长按启用开发者模式
-  const handleEnableDevMode = () => {
-    Taro.setStorageSync('devMode', true)
-    setIsDevMode(true)
-    Taro.showToast({
-      title: '开发者模式已启用',
-      icon: 'none',
-      duration: 2000
-    })
-  }
-
   return (
-    <View className='analyze-page' onLongPress={handleEnableDevMode}>
+    <View className='analyze-page'>
       {/* 提示：长按页面任意位置可启用开发者模式 */}
       {/* 今日配额提示条 */}
       {membershipStatus && (
@@ -1028,27 +871,6 @@ function AnalyzePage() {
             </Text>
           )}
         </View>
-
-        {/* 开发者调试按钮 */}
-        {isDevMode && (
-          <>
-            <View
-              className='debug-btn'
-              onClick={handleDebugResultPage}
-            >
-              <Text className='debug-btn-text'>🛠 调试：模拟进入结果页</Text>
-            </View>
-            <View
-              className='debug-btn debug-btn--secondary'
-              onClick={handleDebugAnalyzeLoadingPage}
-            >
-              <Text className='debug-btn-text'>⏳ 调试：进入分析 Loading 页</Text>
-            </View>
-            <View className='debug-btn debug-btn--tertiary' onClick={handleDebugRecordDetailPoster}>
-              <Text className='debug-btn-text'>📇 调试：预览记录详情海报</Text>
-            </View>
-          </>
-        )}
 
         <View
           className='history-link'

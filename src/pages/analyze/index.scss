@@ -602,64 +602,6 @@
   letter-spacing: 2rpx;
 }
 
-// 开发者调试按钮
-.debug-btn {
-  pointer-events: auto;
-  width: 100%;
-  max-width: 600rpx;
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  border-radius: 44rpx;
-  padding: 24rpx 48rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 24rpx rgb(99 102 241 / 30%), 0 4rpx 8rpx rgb(99 102 241 / 20%);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  margin-top: 20rpx;
-
-  &:active {
-    transform: scale(0.96);
-    box-shadow: 0 6rpx 16rpx rgb(99 102 241 / 30%);
-  }
-
-  // 次要调试按钮（分析 Loading 页）
-  &--secondary {
-    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-    box-shadow: 0 8rpx 24rpx rgb(14 165 233 / 30%), 0 4rpx 8rpx rgb(14 165 233 / 20%);
-    padding: 20rpx 40rpx;
-
-    &:active {
-      box-shadow: 0 6rpx 16rpx rgb(14 165 233 / 30%);
-    }
-
-    .debug-btn-text {
-      font-size: 26rpx;
-    }
-  }
-
-  // 记录详情 / 海报预览（本地预览）
-  &--tertiary {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    box-shadow: 0 8rpx 24rpx rgb(16 185 129 / 28%), 0 4rpx 8rpx rgb(5 150 105 / 18%);
-    padding: 20rpx 40rpx;
-
-    &:active {
-      box-shadow: 0 6rpx 16rpx rgb(16 185 129 / 28%);
-    }
-
-    .debug-btn-text {
-      font-size: 26rpx;
-    }
-  }
-}
-
-.debug-btn-text {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: 2rpx;
-}
-
 // 多视角辅助模式 (紧凑版)
 .multiview-compact {
   display: flex;

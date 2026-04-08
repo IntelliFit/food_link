@@ -31,6 +31,8 @@ export default defineConfig<'vite'>(async (merge) => {
     defineConstants: {
       __API_BASE_URL__: JSON.stringify(apiBaseUrl),
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
+      /** 仅 development 构建为 true；上传/体验版等走 production 构建为 false，用于隐藏调试 UI 与调试保存分支 */
+      __ENABLE_DEV_DEBUG_UI__: JSON.stringify(process.env.NODE_ENV === 'development'),
     },
     copy: {
       patterns: [

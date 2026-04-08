@@ -6,6 +6,10 @@
 
 ## 2026-04-09
 
+- 🎨 style: 分析结果页上滑时头图高度缩小且左右内边距收至 0（图片宽度与屏宽一致后停止横向收缩）`src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🔧 refactor: 移除拍照分析页长按与页内调试按钮；首页记录菜单调试区支持预置测试图 URL（`dev-debug-storage`）+ 假数据，结果页「不写库」仅依赖 `analyzeDebugPreview` `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss` `src/pages/index/components/RecordMenu.tsx` `src/pages/index/index.scss` `src/pages/result/index.tsx` `src/utils/dev-debug-storage.ts` `src/utils/dev-debug-tools.ts`
+- 🔧 refactor: 注入 `__ENABLE_DEV_DEBUG_UI__`（仅 `NODE_ENV=development` 为 true），线上 production 构建不展示调试 UI、结果页不写库调试分支 `config/index.ts` `types/build-constants.d.ts` `src/pages/index/components/RecordMenu.tsx` `src/pages/analyze/index.tsx` `src/pages/result/index.tsx`
+- ✨ feat: 首页记录菜单「历史记录」下展示可展开调试工具（后改为仅 development 构建 + 预置图 URL），抽离 `buildRandomDebugAnalyzeResponse` 至 `dev-debug-mock` `src/pages/index/components/RecordMenu.tsx` `src/pages/index/index.scss` `src/utils/dev-debug-mock.ts` `src/utils/dev-debug-tools.ts` `src/pages/analyze/index.tsx`
 - ✨ feat: 开发者模式下调试结果页「记录」不写库，组装本地 `FoodRecord` 进 `record-detail` 便于调海报；拍照分析页增加「预览记录详情海报」快捷入口 `src/utils/dev-record-preview.ts` `src/pages/result/index.tsx` `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss`
 - 🐛 fix: 拍照分析页去掉 `Switch` 组件（含 `@tarojs/components`），多视角改为纯 `View` 滑块开关，避免再次出现 `useState`/`react` 未定义白屏 `src/pages/analyze/index.tsx` `src/pages/analyze/index.scss`
 - 🎨 style: 结果页「包含成分」营养条简化：去「热量」标签仅突出 kcal 数字；宏量数值色与首页一致（`#3b82f6` / `#eab308` / `#f97316`）`src/pages/result/index.tsx` `src/pages/result/index.scss`

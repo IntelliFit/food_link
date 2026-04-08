@@ -145,11 +145,15 @@ const normalizeFoodNameForCorrection = (value: unknown) => (
     .replace(/[()（）\[\]【】,，。./\\\-_:：;；·]/g, '')
 )
 
-/** 结果页头图：全宽；上滑时在区间内从「大图高度」收缩到「顶栏条高度」 */
+/** 结果页头图：上滑时在区间内高度收缩，同时左右内边距收至 0（图片可视宽度与屏宽一致时停止横向收缩） */
 const RESULT_HERO_MAX_RPX = 700
 const RESULT_HERO_MIN_RPX = 200
 /** 纵向滑动多少 px 内完成收缩（与 scrollTop 同单位） */
 const RESULT_HERO_SHRINK_SCROLL_PX = 420
+/** 初始时左右留白（rpx），scrollTop=0 时图片区域窄于屏宽；滑满后 margin=0，与手机宽度一致 */
+const RESULT_HERO_INSET_MAX_RPX = 48
+/** 初始圆角（rpx），随上滑与内边距同步收至 0 */
+const RESULT_HERO_INNER_RADIUS_MAX_RPX = 24
 
 const normalizePrecisionStringList = (value: unknown): string[] => (
   Array.isArray(value)
@@ -234,11 +238,27 @@ function ResultPage() {
     }
   }, [])
 
-  /** 上滑时头图高度在 [MIN, MAX] 间插值；到底后保持 MIN，白卡继续上滑将其盖住 */
-  const resultHeroRpx = useMemo(() => {
-    const t = Math.min(1, resultScrollTop / RESULT_HERO_SHRINK_SCROLL_PX)
-    return RESULT_HERO_MAX_RPX - (RESULT_HERO_MAX_RPX - RESULT_HERO_MIN_RPX) * t
-  }, [resultScrollTop])
+  /** 上滑进度 0~1：同时驱动高度、左右内边距与圆角 */
+  const resultHeroShrinkT = useMemo(
+    () => Math.min(1, resultScrollTop / RESULT_HERO_SHRINK_SCROLL_PX),
+    [resultScrollTop]
+  )
+
+  const resultHeroRpx = useMemo(
+    () => RESULT_HERO_MAX_RPX - (RESULT_HERO_MAX_RPX - RESULT_HERO_MIN_RPX) * resultHeroShrinkT,
+    [resultHeroShrinkT]
+  )
+
+  /** 横向：内边距 →0 时图片区域宽度 = 屏宽 */
+  const resultHeroInsetRpx = useMemo(
+    () => RESULT_HERO_INSET_MAX_RPX * (1 - resultHeroShrinkT),
+    [resultHeroShrinkT]
+  )
+
+  const resultHeroInnerRadiusRpx = useMemo(
+    () => RESULT_HERO_INNER_RADIUS_MAX_RPX * (1 - resultHeroShrinkT),
+    [resultHeroShrinkT]
+  )
 
   /** 与原先 margin 叠层一致：内容区起点 = 头图底 − 40rpx */
   const resultScrollPaddingTopRpx = resultHeroRpx - 40
@@ -790,11 +810,9 @@ function ResultPage() {
           source_task_id: sourceTaskId
         }
 
-        /** 开发者模式 / 调试结果预览：不写库，直接进记录详情调海报与分享样式 */
+        /** 从记录菜单「模拟分析结果」进入时带 analyzeDebugPreview：不写库，仅预览记录详情（仅 development 构建） */
         const devModeOn =
-          Taro.getStorageSync('devMode') === true ||
-          Taro.getStorageSync('devMode') === 'true' ||
-          Taro.getStorageSync('analyzeDebugPreview') === '1'
+          __ENABLE_DEV_DEBUG_UI__ && Taro.getStorageSync('analyzeDebugPreview') === '1'
         if (devModeOn) {
           const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
           const record = foodRecordFromSavePayload(payload, uid)
@@ -1257,41 +1275,50 @@ function ResultPage() {
 
   return (
     <View className='result-page'>
-      {/* 固定头图：不随列表平移；上滑时高度逐渐收至全宽横条，之后由白卡内容上滑吞没 */}
+      {/* 固定头图：不随列表平移；上滑时高度缩小 + 左右内边距收至 0（图片宽度与屏宽一致），白卡内容上滑叠盖 */}
       <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
-        {imagePaths.length > 0 ? (
-          <Swiper
-            className='scanner-hero-swiper'
-            circular
-            indicatorDots={false}
-            onChange={(e) => setCurrentImageIndex(e.detail.current)}
-            current={currentImageIndex}
-          >
-            {imagePaths.map((path, index) => (
-              <SwiperItem key={index} className='scanner-hero-swiper-item'>
-                <Image
-                  src={path}
-                  mode='aspectFill'
-                  className='scanner-hero-image'
-                  onClick={() => handlePreviewImage(path)}
-                />
-              </SwiperItem>
-            ))}
-          </Swiper>
-        ) : (
-          <View className='scanner-hero-placeholder'>
-            <View className='placeholder-icon-wrap'>
-              <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
+        <View
+          className='scanner-hero-inner'
+          style={{
+            marginLeft: `${resultHeroInsetRpx}rpx`,
+            marginRight: `${resultHeroInsetRpx}rpx`,
+            borderRadius: `${resultHeroInnerRadiusRpx}rpx`
+          }}
+        >
+          {imagePaths.length > 0 ? (
+            <Swiper
+              className='scanner-hero-swiper'
+              circular
+              indicatorDots={false}
+              onChange={(e) => setCurrentImageIndex(e.detail.current)}
+              current={currentImageIndex}
+            >
+              {imagePaths.map((path, index) => (
+                <SwiperItem key={index} className='scanner-hero-swiper-item'>
+                  <Image
+                    src={path}
+                    mode='aspectFill'
+                    className='scanner-hero-image'
+                    onClick={() => handlePreviewImage(path)}
+                  />
+                </SwiperItem>
+              ))}
+            </Swiper>
+          ) : (
+            <View className='scanner-hero-placeholder'>
+              <View className='placeholder-icon-wrap'>
+                <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
+              </View>
+              <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
             </View>
-            <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
-          </View>
-        )}
-        <View className='scanner-hero-gradient' />
-        {imagePaths.length > 1 && (
-          <View className='image-counter'>
-            <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
-          </View>
-        )}
+          )}
+          <View className='scanner-hero-gradient' />
+          {imagePaths.length > 1 && (
+            <View className='image-counter'>
+              <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <ScrollView

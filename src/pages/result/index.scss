@@ -30,6 +30,16 @@
   transform: translateZ(0);
 }
 
+/* 上滑时 margin 由大→0、圆角收平，使图片可视区域从「窄于屏宽」过渡到与屏同宽 */
+.scanner-hero-inner {
+  position: relative;
+  width: auto;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform: translateZ(0);
+}
+
 .scanner-hero-swiper {
   position: absolute;
   inset: 0;
