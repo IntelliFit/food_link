@@ -11,24 +11,13 @@
   padding: 32rpx;
 }
 
-.expiry-edit-title {
-  display: block;
-  font-size: 44rpx;
-  font-weight: 700;
-  color: #16332a;
-}
-
-.expiry-edit-desc {
-  display: block;
-  margin-top: 12rpx;
-  font-size: 24rpx;
-  color: #61756d;
-  line-height: 1.6;
-}
-
 .expiry-edit-block {
   margin-top: 28rpx;
   padding: 28rpx;
+
+  &:first-child {
+    margin-top: 0;
+  }
   background: rgb(255 255 255 / 94%);
   border-radius: 28rpx;
   box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);

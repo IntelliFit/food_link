@@ -908,18 +908,36 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    const today = formatDateKey(new Date())
-    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(today)}` })
+    const raw = selectedDateRef.current || formatDateKey(new Date())
+    const d = mapCalendarDateToApi(raw) || raw
+    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
   }
 
-  const openRecordSummary = () => {
+  /** 「查看饮食统计」入口：进入当日记录列表 */
+  const openDayRecordForSelectedDate = useCallback(() => {
     if (!getAccessToken()) {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    // stats 为 tabBar「分析」页，必须用 switchTab，navigateTo 无法打开 tab 页
-    Taro.switchTab({ url: '/pages/stats/index' })
-  }
+    const d = mapCalendarDateToApi(selectedDate) || selectedDate
+    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+  }, [selectedDate])
+
+  /** 今日餐食单条 → 该餐最新一条识别记录详情（生成分享海报）；缩略图点击仍为预览图片 */
+  const openMealRecordDetail = useCallback((meal: HomeMealItem) => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    const rid = meal.primary_record_id
+    if (!rid || String(rid).trim() === '') {
+      Taro.showToast({ title: '暂无关联记录，请稍后重试', icon: 'none' })
+      return
+    }
+    Taro.navigateTo({
+      url: `/pages/record-detail/index?id=${encodeURIComponent(String(rid))}&ui=home`
+    })
+  }, [])
 
   const openFoodExpiryList = () => {
     if (!getAccessToken()) {
@@ -934,7 +952,7 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    Taro.navigateTo({ url: `/pages/food-expiry-edit/index?id=${encodeURIComponent(id)}` })
+    Taro.navigateTo({ url: `/pages/expiry-edit/index?id=${encodeURIComponent(id)}` })
   }
 
   const openExerciseRecord = () => {
@@ -1143,7 +1161,8 @@ function IndexPage() {
   const dashboardBusy = loading || isSwitchingDate
   const dashboardAnimResetKey = `${selectedDate}|${dashboardBusy ? 'busy' : 'idle'}`
 
-  const animatedHeadlineCalories = useAnimatedNumber(calorieHeadlineBase, 800, 0, dashboardAnimResetKey)
+  /** 与主热量条、三大营养素圆环同为 600ms + easeOutCubic，避免数字与条不同步 */
+  const animatedHeadlineCalories = useAnimatedNumber(calorieHeadlineBase, 600, 0, dashboardAnimResetKey)
 
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
@@ -1224,7 +1243,7 @@ function IndexPage() {
           onSelect={handleDateSelect} 
         />
 
-        {/* 热量总览卡片 + 三大营养素合并 */}
+        {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
         <View className='main-card combined-card'>
           <View className='main-card-header'>
             <View className='main-card-title'>
@@ -1423,7 +1442,7 @@ function IndexPage() {
                 />
               </View>
               <Text className='body-status-progress-text'>
-                {dashboardBusy ? '-- 加载中' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+                {dashboardBusy ? '-- 加载中' : `${Math.round(animatedWaterProgress)}% / ${bodyMetrics.waterGoalMl}ml`}
               </Text>
             </View>
           </View>
@@ -1455,63 +1474,6 @@ function IndexPage() {
             </Text>
           </View>
         </View>
-
-        {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
-        {showFoodExpiryBlock && (
-          <View className='expiry-section'>
-            <View className='section-header'>
-              <Text className='expiry-title'>食物保质期</Text>
-              <View className='view-all-btn' onClick={openFoodExpiryList}>
-                <Text className='view-all-text'>查看全部</Text>
-              </View>
-            </View>
-
-            <View className='expiry-card'>
-              {loading ? (
-                <View className='expiry-skeleton'>
-                  {[1, 2, 3].map((i) => (
-                    <View key={i} className='expiry-skeleton-item'>
-                      <View className='expiry-skeleton-row'>
-                        <View className='home-line-wide' />
-                        <View className='home-line-tag' />
-                      </View>
-                      <View className='home-line-narrow' />
-                    </View>
-                  ))}
-                </View>
-              ) : expirySummary.pendingCount === 0 ? (
-                <View className='expiry-empty' onClick={openFoodExpiryList}>
-                  <Text className='expiry-empty-title'>暂无待吃完记录</Text>
-                  <Text className='expiry-empty-desc'>
-                    添加家中食物与预计吃完时间，我们会在首页展示最紧急的几项并提醒即将过期。
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  <View className='expiry-list'>
-                    {expirySummary.items.map((item) => (
-                      <View
-                        key={item.id}
-                        className='expiry-item'
-                        onClick={() => openFoodExpiryEdit(item.id)}
-                      >
-                        <View className='expiry-item-main'>
-                          <Text className='expiry-item-name'>{item.food_name}</Text>
-                          <Text className={`expiry-item-tag ${getExpiryTagClass(item.urgency_level)}`}>
-                            {getExpiryUrgencyText(item)}
-                          </Text>
-                        </View>
-                        <Text className='expiry-item-meta'>
-                          {formatExpiryMeta(item) || '点击编辑'}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              )}
-            </View>
-          </View>
-        )}
 
         {/* 今日餐食区域 */}
         <View className='meals-section'>
@@ -1575,10 +1537,17 @@ function IndexPage() {
                   : `目标 ${formatDisplayNumber(mealTarget)} kcal`
                 
                 return (
-                  <View key={`${meal.type}-${index}`} className={`meal-item ${mealProgress > 100 ? 'is-warning' : ''}`}>
+                  <View
+                    key={`${meal.type}-${index}`}
+                    className={`meal-item meal-item--tappable ${mealProgress > 100 ? 'is-warning' : ''}`}
+                    onClick={() => openMealRecordDetail(meal)}
+                  >
                     <View
                       className={`meal-media-wrap ${hasRealImage ? 'is-photo' : 'is-icon'}`}
-                      onClick={() => previewHomeMealImages(meal)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        previewHomeMealImages(meal)
+                      }}
                     >
                       {hasRealImage ? (
                         <Image
@@ -1599,18 +1568,22 @@ function IndexPage() {
                     </View>
                     <View className='meal-content'>
                       <View className='meal-main'>
-                        <View className='meal-title-wrap'>
-                          <Text className='meal-name'>{meal.name || label}</Text>
-                          {isSnackMeal && (
-                            <Text className='meal-snack-hint'>参考</Text>
-                          )}
-                        </View>
-                        <View className='meal-calorie-stack'>
-                          <Text className='meal-calorie-label'>已摄入</Text>
-                          <Text className='meal-calorie'>
-                            {formatDisplayNumber(mealCalorie)}
-                            <Text className='meal-calorie-unit'> kcal</Text>
-                          </Text>
+                        <View className='meal-header-block'>
+                          <View className='meal-title-left'>
+                            <Text className='meal-name'>{meal.name || label}</Text>
+                            {isSnackMeal && (
+                              <Text className='meal-snack-hint'>参考</Text>
+                            )}
+                          </View>
+                          <View className='meal-header-right'>
+                            <Text className='meal-calorie'>
+                              {formatDisplayNumber(mealCalorie)}
+                              <Text className='meal-calorie-unit'> kcal</Text>
+                            </Text>
+                            {meal.time ? (
+                              <Text className='meal-time-inline'>{meal.time}</Text>
+                            ) : null}
+                          </View>
                         </View>
                       </View>
                       <View className='meal-progress-wrap'>
@@ -1628,7 +1601,6 @@ function IndexPage() {
                         <Text className='meal-progress-text'>{targetText}</Text>
                         <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                       </View>
-                      {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                       {meal.tags?.length > 0 && (
                         <View className='meal-tags'>
                           {meal.tags.map((tag) => (
@@ -1644,8 +1616,65 @@ function IndexPage() {
           </View>
         </View>
 
+        {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
+        {showFoodExpiryBlock && (
+          <View className='expiry-section'>
+            <View className='section-header'>
+              <Text className='expiry-title'>食物保质期</Text>
+              <View className='view-all-btn' onClick={openFoodExpiryList}>
+                <Text className='view-all-text'>查看全部</Text>
+              </View>
+            </View>
+
+            <View className='expiry-card'>
+              {loading ? (
+                <View className='expiry-skeleton'>
+                  {[1, 2, 3].map((i) => (
+                    <View key={i} className='expiry-skeleton-item'>
+                      <View className='expiry-skeleton-row'>
+                        <View className='home-line-wide' />
+                        <View className='home-line-tag' />
+                      </View>
+                      <View className='home-line-narrow' />
+                    </View>
+                  ))}
+                </View>
+              ) : expirySummary.pendingCount === 0 ? (
+                <View className='expiry-empty' onClick={openFoodExpiryList}>
+                  <Text className='expiry-empty-title'>暂无待吃完记录</Text>
+                  <Text className='expiry-empty-desc'>
+                    添加家中食物与预计吃完时间，我们会在首页展示最紧急的几项并提醒即将过期。
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View className='expiry-list'>
+                    {expirySummary.items.map((item) => (
+                      <View
+                        key={item.id}
+                        className='expiry-item'
+                        onClick={() => openFoodExpiryEdit(item.id)}
+                      >
+                        <View className='expiry-item-main'>
+                          <Text className='expiry-item-name'>{item.food_name}</Text>
+                          <Text className={`expiry-item-tag ${getExpiryTagClass(item.urgency_level)}`}>
+                            {getExpiryUrgencyText(item)}
+                          </Text>
+                        </View>
+                        <Text className='expiry-item-meta'>
+                          {formatExpiryMeta(item) || '点击编辑'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* 查看统计入口 */}
-        <StatsEntry onClick={openRecordSummary} />
+        <StatsEntry onClick={openDayRecordForSelectedDate} />
 
         {/* 底部留白 */}
         <View className='bottom-spacer' />

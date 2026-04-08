@@ -24,7 +24,7 @@ export function CalorieCard({
   const headlineBase = isCalorieOver
     ? Number((intakeData.current - intakeData.target).toFixed(1))
     : remaining
-  const animatedHeadlineCalories = useAnimatedNumber(headlineBase, 800, 0)
+  const animatedHeadlineCalories = useAnimatedNumber(headlineBase, 600, 0)
 
   return (
     <View className='main-card'>

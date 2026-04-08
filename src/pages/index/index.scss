@@ -339,11 +339,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
+// 宽度由 useAnimatedProgress 逐帧驱动，勿再加 CSS width transition，否则会与缓动叠加、观感发涩
 .progress-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border-radius: 9999rpx;
-  transition: width 0.3s ease, background 0.25s ease;
+  transition: background 0.2s ease;
 
   &.thick {
     border-radius: 9999rpx;
@@ -748,7 +749,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .expiry-section {
-  margin-top: 20rpx; // 与上方（体重/喝水/运动）多留一点呼吸感
+  margin-top: 36rpx; // 与上方「今日餐食」区块多留间距
   margin-bottom: 28rpx;
 }
 
@@ -920,7 +921,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 今日餐食区域
 .meals-section {
-  margin-top: 20rpx; // 与上方（保质期或无保质期时与身体指标区）多留一点间距
+  margin-top: 36rpx; // 与上方「体重/喝水/运动」等卡片多留间距
   margin-bottom: 40rpx; // 增加底部间距，更舒适的呼吸感
 }
 
@@ -1058,10 +1059,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .meal-item {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: 16rpx;
   background: $card-bg;
-  border-radius: 16rpx;
-  padding: 20rpx;
+  border-radius: 14rpx;
+  padding: 16rpx;
   box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
   border: 2rpx solid transparent;
   transition: all 0.2s ease;
@@ -1071,12 +1072,16 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     border-color: $home-warning-border;
     background: $home-warning-surface;
   }
+
+  &.meal-item--tappable:active {
+    opacity: 0.92;
+  }
 }
 
 .meal-media-wrap {
   position: relative;
-  width: 130rpx;
-  height: 130rpx;
+  width: 120rpx;
+  height: 120rpx;
   border-radius: 12rpx;
   overflow: hidden;
   flex-shrink: 0;
@@ -1141,11 +1146,39 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-main {
+  margin-bottom: 10rpx;
+}
+
+// 首行：左侧餐名+标签，右侧大卡（上）+ 时间（下，靠右）
+.meal-header-block {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16rpx;
-  margin-bottom: 16rpx;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.meal-title-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.meal-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 2rpx;
+}
+
+.meal-time-inline {
+  font-size: 20rpx;
+  color: $text-tertiary;
+  line-height: 28rpx;
+  font-variant-numeric: tabular-nums;
 }
 
 .meal-title-wrap {
@@ -1173,39 +1206,24 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   flex-shrink: 0;
 }
 
-// 右上：已摄入 + 数字（右对齐、等宽数字）
-.meal-calorie-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  flex-shrink: 0;
-}
-
-.meal-calorie-label {
-  font-size: 20rpx;
-  color: $text-tertiary;
-  line-height: 28rpx;
-  margin-bottom: 2rpx;
-}
-
 .meal-calorie {
-  font-size: 32rpx;
+  font-size: 30rpx;
   font-weight: 700;
   color: $text-primary;
-  line-height: 44rpx;
+  line-height: 40rpx;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.5rpx;
 }
 
 .meal-calorie-unit {
-  font-size: 22rpx;
+  font-size: 20rpx;
   font-weight: 500;
   color: $text-secondary;
 }
 
 .meal-progress-wrap {
   width: 100%;
-  margin-bottom: 10rpx;
+  margin-bottom: 8rpx;
 }
 
 .meal-progress-bar-bg {
@@ -1233,7 +1251,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   align-items: center;
   justify-content: space-between;
   gap: 16rpx;
-  margin-bottom: 6rpx;
+  margin-bottom: 0;
 }
 
 .meal-progress-text {
@@ -1266,18 +1284,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   color: $home-warning-red !important;
 }
 
-.meal-time {
-  font-size: 20rpx;
-  color: $text-tertiary;
-  line-height: 28rpx;
-  margin-top: 2rpx;
-}
-
 .meal-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6rpx;
-  margin-top: 8rpx;
+  margin-top: 6rpx;
 }
 
 .meal-tag {

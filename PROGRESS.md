@@ -6,6 +6,17 @@
 
 ## 2026-04-09
 
+- 🔧 chore: 微信小程序版本号 **2.0.12**（`package.json`）；`npm run build:weapp` 通过；上传体验版：`npm run build:weapp:preview` 后微信开发者工具 `cli upload`（与 2.0.11 流程一致）
+- 🔧 refactor: 分享海报 `computePosterHeight` 与 `drawRecordPoster` 内边距与区块高度对齐，避免底部裁剪 `src/utils/poster.ts`
+- 🎨 style: 分享海报 Canvas 深色页底 + 米白一体卡（总热量在卡内居中）；无整屏绿底/绿渐变；PFC 条灰阶；预览弹窗中性底与纯色按钮 `src/utils/poster.ts` `src/pages/record-detail/index.scss`
+- ✨ feat: 首页今日餐食卡片点击进入 `record-detail`（`primary_record_id` + `ui=home`）；剩余可摄入整块卡去掉整卡点击与导航态样式；`day-record` 仅保留日期行+汇总+列表；记录详情 home 模式扁平化贴近首页 `backend/main.py` `src/utils/api.ts` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/day-record/index.tsx` `src/pages/day-record/index.scss` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🐛 fix: `day-record` 每次展示从路由读取 `date` 并 `mapCalendarDateToApi` 拉列表，修复首页带参进入仍用旧日期；首页跳转与「查看全部」使用映射后日期 `src/pages/day-record/index.tsx` `src/pages/index/index.tsx`
+- 🎨 style: 首页今日餐食卡片去掉「已摄入」、时间并入餐名行右侧、整体略收紧 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/MealsSection.tsx`
+- ⚡ perf: `GET /api/home/dashboard` 内将当日记录、保质期列表、运动消耗三处 DB 查询改为 `asyncio.gather` 并行，降低串行等待 `backend/main.py`
+- 🎨 style: 首页主热量条去掉与 JS 缓动叠加的 `width` CSS transition；剩余热量大数字缓动改为 600ms 与三大营养素圆环一致 `src/pages/index/index.scss` `src/pages/index/index.tsx` `src/pages/index/components/CalorieCard.tsx`
+- 🎨 style: 首页「今日餐食」与「食物保质期」区块对调顺序，并加大相对上方的外边距 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- ✨ feat: 首页热量总览卡与「查看饮食统计」入口改为进入当日记录列表（再进记录详情即可用已有分享海报），编辑目标点击不触发跳转 `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🐛 fix: 首页保质期条目跳转改为正确路由 `pages/expiry-edit`；编辑页去掉主体大标题与「常买牛奶」说明文案 `src/pages/index/index.tsx` `src/pages/expiry-edit/index.tsx` `src/pages/expiry-edit/index.scss`
 - 🐛 fix: 拍照页移除前置 `authorize(scope.camera)`，仅当 `getSetting` 明确为 false 时显示拒绝页，避免已授权仍误判需去设置 `src/pages/record/index.tsx`
 - 🎨 style: 分享海报 Canvas 改为主题绿渐变全幅绘制，去掉 AI 建议/描述等文案；记录详情海报弹窗全屏无白边 `src/utils/poster.ts` `src/pages/record-detail/index.scss`
 - 🎨 style: 分析结果页上滑时头图高度缩小且左右内边距收至 0（图片宽度与屏宽一致后停止横向收缩）`src/pages/result/index.tsx` `src/pages/result/index.scss`

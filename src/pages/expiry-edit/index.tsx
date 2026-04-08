@@ -240,9 +240,6 @@ export default function ExpiryEditPage() {
     <View className='expiry-edit-page'>
       <ScrollView scrollY className='expiry-edit-scroll'>
         <View className='expiry-edit-panel'>
-          <Text className='expiry-edit-title'>{pageTitle}</Text>
-          <Text className='expiry-edit-desc'>先把常买的牛奶、水果、剩菜记进来，之后这里会帮你按到期时间排序。</Text>
-
           {!isEdit && (
             <View className='expiry-edit-block'>
               <Text className='expiry-edit-label'>常用模板</Text>

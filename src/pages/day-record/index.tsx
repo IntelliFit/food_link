@@ -1,12 +1,13 @@
 import { Image, ScrollView, Text, View } from '@tarojs/components'
 import { withAuth } from '../../utils/withAuth'
 import { useCallback, useState } from 'react'
-import Taro, { useDidShow, useRouter } from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import {
   deleteFoodRecord,
   getAccessToken,
   getFoodRecordList,
   getHomeDashboard,
+  mapCalendarDateToApi,
   type FoodRecord,
 } from '../../utils/api'
 
@@ -78,9 +79,11 @@ type DayRecordCard = {
 }
 
 function DayRecordPage() {
-  const router = useRouter()
-  const initialDate = router.params?.date || formatDateKey(new Date())
-  const [selectedDate] = useState(initialDate)
+  /** 每次进入须从路由读 date；仅用 useState(initial) 会导致从首页带参跳转时仍停留在旧日期 */
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = Taro.getCurrentInstance()?.router?.params?.date
+    return typeof d === 'string' && d.length >= 8 ? d : formatDateKey(new Date())
+  })
   const [records, setRecords] = useState<DayRecordCard[]>([])
   const [historyTotalCalorie, setHistoryTotalCalorie] = useState(0)
   const [targetCalories, setTargetCalories] = useState(2000)
@@ -96,12 +99,17 @@ function DayRecordPage() {
       return
     }
 
+    const raw = Taro.getCurrentInstance()?.router?.params?.date
+    const dateParam = typeof raw === 'string' && raw.length >= 8 ? raw : formatDateKey(new Date())
+    setSelectedDate(dateParam)
+    const listDate = mapCalendarDateToApi(dateParam) || dateParam
+
     setLoading(true)
     setError(null)
     try {
       const [recordRes, dashboardRes] = await Promise.all([
-        getFoodRecordList(selectedDate),
-        getHomeDashboard().catch(() => null),
+        getFoodRecordList(listDate),
+        getHomeDashboard(listDate).catch(() => null),
       ])
       const nextRecords = (recordRes.records || []).map((record: FoodRecord) => {
         const imageUrls = (record.image_paths && record.image_paths.length > 0)
@@ -142,14 +150,16 @@ function DayRecordPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedDate])
+  }, [])
 
   useDidShow(() => {
     loadDayRecords()
   })
 
   const openRecordDetail = (recordId: string) => {
-    Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}` })
+    Taro.navigateTo({
+      url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}&ui=home`
+    })
   }
 
   const previewMealImages = (e: { stopPropagation: () => void }, meal: DayRecordCard) => {
@@ -194,10 +204,8 @@ function DayRecordPage() {
   return (
     <View className='day-record-page'>
       <ScrollView className='day-record-scroll' scrollY enhanced showScrollbar={false}>
-        <View className='day-record-hero'>
-          <Text className='day-record-hero-title'>当天饮食记录</Text>
-          <Text className='day-record-hero-date'>{formatDisplayDate(selectedDate)}</Text>
-          <Text className='day-record-hero-desc'>这里专门看这一天吃了什么，不再和拍照录入混在一起。</Text>
+        <View className='day-record-top'>
+          <Text className='day-record-date-line'>{formatDisplayDate(selectedDate)}</Text>
         </View>
 
         <View className='day-record-summary'>
@@ -264,9 +272,6 @@ function DayRecordPage() {
                     <View className='day-record-card-copy'>
                       <Text className='day-record-card-name'>{meal.mealName}</Text>
                       <Text className='day-record-card-time'>{meal.time}</Text>
-                      <Text className='day-record-card-preview-tip'>
-                        {meal.hasRealImage ? '点小图可预览照片' : '本条记录没有实物照片'}
-                      </Text>
                     </View>
                   </View>
                   <View className='day-record-card-actions'>

@@ -7,33 +7,16 @@
   min-height: 100vh;
 }
 
-.day-record-hero {
-  padding: 40rpx 32rpx 28rpx;
+.day-record-top {
+  padding: 28rpx 32rpx 20rpx;
 }
 
-.day-record-hero-title {
+.day-record-date-line {
   display: block;
-  font-size: 42rpx;
-  line-height: 58rpx;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.day-record-hero-date {
-  display: block;
-  margin-top: 12rpx;
   font-size: 30rpx;
-  line-height: 42rpx;
-  color: #00a36c;
+  line-height: 44rpx;
+  color: #0f172a;
   font-weight: 700;
-}
-
-.day-record-hero-desc {
-  display: block;
-  margin-top: 10rpx;
-  font-size: 24rpx;
-  line-height: 36rpx;
-  color: #64748b;
 }
 
 .day-record-summary {

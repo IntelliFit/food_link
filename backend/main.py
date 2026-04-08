@@ -5536,6 +5536,12 @@ async def get_home_dashboard(
         time_str = "00:00"
         if times:
             time_str = _format_china_time_hhmm(times[0])
+        # list_food_records 按 record_time 倒序；按餐聚合时同餐次内首条即该餐最新一条，供首页跳转记录详情/生成海报
+        primary_record_id = None
+        if items:
+            rid = items[0].get("id")
+            if rid is not None:
+                primary_record_id = str(rid)
         meals_out.append({
             "type": meal_type,
             "name": MEAL_NAMES.get(meal_type, meal_type),
@@ -5546,6 +5552,7 @@ async def get_home_dashboard(
             "tags": [SNACK_TARGET_TAG] if "snack" in meal_type else [],
             "image_path": meal_image_urls[0] if meal_image_urls else None,
             "image_paths": meal_image_urls,
+            "primary_record_id": primary_record_id,
         })
 
     exercise_burned = await get_exercise_calories_by_date(user_id, target_date)

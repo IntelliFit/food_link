@@ -268,6 +268,8 @@ export interface HomeMealItem {
   tags: string[]
   image_path?: string | null
   image_paths?: string[] | null
+  /** 该餐次内最新一条饮食记录 id，用于跳转记录详情/生成分享海报 */
+  primary_record_id?: string | null
 }
 
 export interface HomeFoodExpiryItem {

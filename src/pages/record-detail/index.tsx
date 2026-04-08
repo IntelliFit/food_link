@@ -183,7 +183,9 @@ function RecordDetailPage() {
     }
 
     loadRecord()
-  }, [router.params?.id])
+  }, [router.params?.id, router.params?.ui])
+
+  const isHomeUi = router.params?.ui === 'home'
 
   const shareRecordId = record?.id || router.params?.id || ''
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
@@ -357,7 +359,7 @@ function RecordDetailPage() {
 
   if (loading || !record) {
     return (
-      <View className='record-detail-page'>
+      <View className={`record-detail-page${isHomeUi ? ' record-detail-page--home' : ''}`}>
         <View className='empty-tip'>{loading ? <View className='loading-spinner' /> : '记录不存在'}</View>
       </View>
     )
@@ -606,7 +608,7 @@ function RecordDetailPage() {
   }
 
   return (
-    <ScrollView className='record-detail-page' scrollY>
+    <ScrollView className={`record-detail-page${isHomeUi ? ' record-detail-page--home' : ''}`} scrollY>
       <View className='detail-card'>
         <View className='detail-header'>
           <View className='meal-badge'>

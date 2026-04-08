@@ -86,7 +86,7 @@ export function BodyStatusSection({
             />
           </View>
           <Text className='body-status-progress-text'>
-            {Math.round(animatedWaterProgress)}% / 目标 {waterGoalMl}ml
+            {Math.round(animatedWaterProgress)}% / {waterGoalMl}ml
           </Text>
         </View>
       </View>

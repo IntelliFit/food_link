@@ -160,18 +160,22 @@ export function MealsSection({
                 </View>
                 <View className='meal-content'>
                   <View className='meal-main'>
-                    <View className='meal-title-wrap'>
-                      <Text className='meal-name'>{meal.name || label}</Text>
-                      {isSnackMeal && (
-                        <Text className='meal-snack-hint'>参考</Text>
-                      )}
-                    </View>
-                    <View className='meal-calorie-stack'>
-                      <Text className='meal-calorie-label'>已摄入</Text>
-                      <Text className='meal-calorie'>
-                        {formatDisplayNumber(mealCalorie)}
-                        <Text className='meal-calorie-unit'> kcal</Text>
-                      </Text>
+                    <View className='meal-header-block'>
+                      <View className='meal-title-left'>
+                        <Text className='meal-name'>{meal.name || label}</Text>
+                        {isSnackMeal && (
+                          <Text className='meal-snack-hint'>参考</Text>
+                        )}
+                      </View>
+                      <View className='meal-header-right'>
+                        <Text className='meal-calorie'>
+                          {formatDisplayNumber(mealCalorie)}
+                          <Text className='meal-calorie-unit'> kcal</Text>
+                        </Text>
+                        {meal.time ? (
+                          <Text className='meal-time-inline'>{meal.time}</Text>
+                        ) : null}
+                      </View>
                     </View>
                   </View>
                   {isSnackMeal ? (
@@ -192,7 +196,6 @@ export function MealsSection({
                         <Text className='meal-progress-text'>{targetText}</Text>
                         <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                       </View>
-                      {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                     </>
                   ) : (
                     // 正餐：同上
@@ -212,7 +215,6 @@ export function MealsSection({
                         <Text className='meal-progress-text'>{targetText}</Text>
                         <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
                       </View>
-                      {meal.time && <Text className='meal-time'>{meal.time}</Text>}
                       {meal.tags?.length > 0 && (
                         <View className='meal-tags'>
                           {meal.tags.map((tag) => (
