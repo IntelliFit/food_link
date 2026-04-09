@@ -27,7 +27,7 @@
   display: block;
   font-size: 38rpx;
   font-weight: bold;
-  color: #ffffff;
+  color: #fff;
   line-height: 52rpx;
   margin-bottom: 8rpx;
 }
@@ -42,7 +42,7 @@
 .header-icon {
   width: 56rpx;
   height: 56rpx;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(255 255 255 / 20%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -53,17 +53,16 @@
 
 .experts-list {
   display: flex;
-  flex-direction: row;
+  flex-flow: row wrap;
   justify-content: center;
   align-items: center;
   gap: 16rpx;
   padding-bottom: 4rpx;
   width: 100%;
-  flex-wrap: wrap;
 }
 
 .expert-btn {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(255 255 255 / 15%);
   border-radius: 16rpx;
   padding: 20rpx 12rpx;
   display: flex;
@@ -91,7 +90,7 @@
 
 .expert-name {
   font-size: 24rpx;
-  color: #ffffff;
+  color: #fff;
   line-height: 32rpx;
   text-align: center;
   font-weight: 500;
@@ -106,11 +105,11 @@
 
 // 健康档案卡片
 .health-profile-card {
-  background: #ffffff;
+  background: #fff;
   border-radius: 24rpx;
   padding: 28rpx 24rpx;
   margin: -20rpx 24rpx 24rpx;
-  box-shadow: 0px 4rpx 12rpx rgba(0, 0, 0, 0.08), 0px 2rpx 4rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 8%), 0 2rpx 4rpx rgb(0 0 0 / 6%);
   position: relative;
   z-index: 1;
 }
@@ -137,13 +136,13 @@
 
 .detail-text {
   font-size: 28rpx;
-  color: #009966;
+  color: #096;
   line-height: 40rpx;
 }
 
 .detail-arrow {
   font-size: 28rpx;
-  color: #009966;
+  color: #096;
 }
 
 .profile-metrics {
@@ -211,7 +210,7 @@
 .suggestion-icon {
   width: 52rpx;
   height: 52rpx;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgb(255 255 255 / 25%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -230,7 +229,7 @@
 .suggestion-title {
   font-size: 34rpx;
   font-weight: 600;
-  color: #ffffff;
+  color: #fff;
   line-height: 48rpx;
   margin-bottom: 4rpx;
 }
@@ -250,19 +249,19 @@
 }
 
 .suggestion-btn {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgb(255 255 255 / 25%);
   border-radius: 14rpx;
   padding: 10rpx 20rpx;
   height: 40rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
+  border: 1rpx solid rgb(255 255 255 / 30%);
 }
 
 .suggestion-btn-text {
   font-size: 26rpx;
-  color: #ffffff;
+  color: #fff;
   line-height: 36rpx;
   font-weight: 500;
 }
@@ -288,7 +287,7 @@
 }
 
 .question-btn {
-  background: #ffffff;
+  background: #fff;
   border-radius: 16rpx;
   padding: 18rpx 20rpx;
   font-size: 28rpx;
@@ -298,7 +297,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0px 2rpx 6rpx rgba(0, 0, 0, 0.06), 0px 1rpx 2rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2rpx 6rpx rgb(0 0 0 / 6%), 0 1rpx 2rpx rgb(0 0 0 / 4%);
   transition: all 0.2s ease;
 }
 
@@ -327,10 +326,10 @@
 }
 
 .message-card {
-  background: #ffffff;
+  background: #fff;
   border-radius: 20rpx;
   padding: 20rpx 24rpx;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 0, 0, 0.06), 0px 1rpx 3rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 6%), 0 1rpx 3rpx rgb(0 0 0 / 4%);
   max-width: 75%;
   word-break: break-word;
 }
@@ -343,7 +342,7 @@
   align-self: flex-end;
   background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
   margin-left: auto;
-  box-shadow: 0px 2rpx 8rpx rgba(0, 188, 125, 0.2), 0px 1rpx 3rpx rgba(0, 188, 125, 0.15);
+  box-shadow: 0 2rpx 8rpx rgb(0 188 125 / 20%), 0 1rpx 3rpx rgb(0 188 125 / 15%);
 }
 
 .message-header {
@@ -365,7 +364,7 @@
 .message-sender {
   font-size: 26rpx;
   font-weight: 600;
-  color: #009966;
+  color: #096;
   line-height: 36rpx;
 }
 
@@ -379,7 +378,7 @@
 }
 
 .user-message .message-content {
-  color: #ffffff;
+  color: #fff;
 }
 
 .message-time {
@@ -390,7 +389,7 @@
 }
 
 .user-message .message-time {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgb(255 255 255 / 90%);
 }
 
 // 输入框
@@ -399,12 +398,12 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: #ffffff;
+  background: #fff;
   border-top: 1rpx solid #e5e7eb;
   padding: 20rpx 24rpx;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
   z-index: 100;
-  box-shadow: 0px -2rpx 8rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 -2rpx 8rpx rgb(0 0 0 / 4%);
 }
 
 .input-container {
@@ -427,29 +426,17 @@
 
 .input-box:focus-within {
   border-color: #00bc7d;
-  background: #ffffff;
+  background: #fff;
 }
 
 .input-placeholder {
   font-size: 28rpx;
-  color: rgba(10, 10, 10, 0.5);
+  color: rgb(10 10 10 / 50%);
   line-height: normal;
-}
-
-.send-btn {
-  width: 64rpx;
-  height: 64rpx;
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0px 4rpx 12rpx rgba(0, 188, 125, 0.3);
 }
 
 .send-icon {
   font-size: 32rpx;
-  color: #ffffff;
+  color: #fff;
   font-weight: bold;
 }

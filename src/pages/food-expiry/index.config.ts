@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '食物保质期'
+  navigationBarTitleText: '食材保质期'
 })

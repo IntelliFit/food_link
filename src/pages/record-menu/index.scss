@@ -1,0 +1,156 @@
+// 记录菜单页面 - 参考 Cal AI 设计风格
+
+// 颜色变量定义
+$text-primary: #1f2937;
+$text-secondary: #6b7280;
+$text-tertiary: #9ca3af;
+.record-menu-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  display: flex;
+  flex-direction: column;
+  padding: 0 32rpx;
+  padding-top: calc(env(safe-area-inset-top) + 48rpx);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 32rpx);
+  box-sizing: border-box;
+}
+
+// 主功能网格 - 2x2 布局
+.main-modes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+  margin-bottom: 48rpx;
+}
+
+.mode-card {
+  border-radius: 28rpx;
+  padding: 48rpx 28rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  transition: all 0.2s ease;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+
+  &:active {
+    transform: scale(0.98);
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  }
+}
+
+.mode-icon-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+}
+
+.mode-label {
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+// 分隔线
+.section-divider {
+  height: 2rpx;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.06), transparent);
+  margin-bottom: 48rpx;
+}
+
+// 其他功能列表
+.other-modes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  flex: 1;
+}
+
+.section-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $text-secondary;
+  margin-bottom: 16rpx;
+  padding-left: 8rpx;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 28rpx 24rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+
+  &:active {
+    background: #f8fafc;
+    transform: scale(0.99);
+  }
+}
+
+.list-icon-wrap {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.list-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.list-label {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.list-desc {
+  font-size: 24rpx;
+  color: $text-tertiary;
+}
+
+.list-arrow {
+  font-size: 32rpx;
+  color: #cbd5e1;
+  font-weight: 300;
+  padding-right: 8rpx;
+}
+
+// 底部取消按钮
+.menu-footer {
+  margin-top: 48rpx;
+  display: flex;
+  justify-content: center;
+}
+
+.cancel-btn {
+  padding: 28rpx 80rpx;
+  background: #ffffff;
+  border-radius: 100rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.98);
+    box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+  }
+}
+
+.cancel-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: $text-secondary;
+}

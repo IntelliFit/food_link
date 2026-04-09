@@ -1,0 +1,489 @@
+// 颜色变量
+$primary-color: #00bc7d;
+$exercise-color: #f97316;
+$exercise-light: #fff7ed;
+$bg-color: #f8fafc;
+$card-bg: #fff;
+$text-primary: #1f2937;
+$text-secondary: #6b7280;
+$text-tertiary: #9ca3af;
+$border-color: #e5e7eb;
+
+.exercise-record-page {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  background: $bg-color;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+// 头部统计
+.header-stats {
+  padding: 24rpx 24rpx 16rpx;
+  background: linear-gradient(180deg, #fff 0%, $bg-color 100%);
+}
+
+.stats-card {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  background: $card-bg;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
+}
+
+.stats-icon-wrap {
+  width: 80rpx;
+  height: 80rpx;
+  background: $exercise-light;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 与 custom-tab-bar 底部「分析」柱状图一致（选中态绿色） */
+.stats-icon-wrap--tab-stats {
+  background: #ecfdf5;
+}
+
+/* 自 custom-tab-bar/index.wxss .stats-icon.active，尺寸适配 80rpx 容器 */
+.exercise-header-stats-icon {
+  width: 48rpx;
+  height: 48rpx;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6rpx;
+  box-sizing: border-box;
+  background: linear-gradient(to top, transparent 6rpx, #07c160 6rpx, #07c160 26rpx, transparent 26rpx);
+  background-size: 6rpx 20rpx;
+  background-position: center bottom 6rpx;
+  background-repeat: no-repeat;
+  transition: all 0.2s ease;
+}
+
+.exercise-header-stats-icon::before {
+  content: '';
+  position: absolute;
+  width: 6rpx;
+  height: 14rpx;
+  background: #07c160;
+  border-radius: 1rpx;
+  left: 5rpx;
+  bottom: 6rpx;
+  transition: all 0.2s ease;
+}
+
+.exercise-header-stats-icon::after {
+  content: '';
+  position: absolute;
+  width: 6rpx;
+  height: 26rpx;
+  background: #07c160;
+  border-radius: 1rpx;
+  right: 5rpx;
+  bottom: 6rpx;
+  transition: all 0.2s ease;
+}
+
+.stats-info {
+  flex: 1;
+}
+
+.stats-label {
+  display: block;
+  font-size: 24rpx;
+  color: $text-secondary;
+  line-height: 34rpx;
+  margin-bottom: 4rpx;
+}
+
+.stats-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.stats-value {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: $text-primary;
+  line-height: 60rpx;
+}
+
+.stats-unit {
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+}
+
+.stats-count {
+  font-size: 24rpx;
+  color: $exercise-color;
+  background: $exercise-light;
+  padding: 8rpx 16rpx;
+  border-radius: 9999rpx;
+  font-weight: 500;
+}
+
+// 记录列表滚动区（卡片统一宽度 = 100% 内容区）
+.records-scroll {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16rpx 24rpx;
+  overflow-y: auto;
+
+  &--empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+
+// 空状态
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 40rpx;
+  padding-bottom: 40rpx;
+}
+
+.empty-icon-wrap {
+  width: 160rpx;
+  height: 160rpx;
+  background: #f3f4f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32rpx;
+}
+
+.empty-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: $text-primary;
+  line-height: 44rpx;
+  margin-bottom: 12rpx;
+}
+
+.empty-desc {
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 40rpx;
+  text-align: center;
+  margin-bottom: 48rpx;
+}
+
+// 输入区上方：试试这样说 + 横向滑动预设
+.quick-examples-strip {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 16rpx;
+}
+
+.quick-examples-title {
+  display: block;
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+  margin-bottom: 12rpx;
+  text-align: center;
+}
+
+.quick-chips-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.quick-chips-inner {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16rpx;
+  padding: 4rpx 4rpx 8rpx 0;
+  box-sizing: border-box;
+}
+
+.example-tag {
+  flex-shrink: 0;
+  background: $card-bg;
+  border: 2rpx solid $border-color;
+  border-radius: 9999rpx;
+  padding: 16rpx 28rpx;
+
+  &:active {
+    background: $exercise-light;
+    border-color: $exercise-color;
+  }
+}
+
+.example-tag-text {
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 36rpx;
+  white-space: nowrap;
+}
+
+// 记录列表：每条卡片同宽（100% 父级内容宽）
+.records-list {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.exercise-record-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: $card-bg;
+  border-radius: 20rpx;
+  padding: 28rpx 24rpx;
+  border: 2rpx solid rgb(0 0 0 / 4%);
+  box-shadow: 0 2rpx 12rpx rgb(15 23 42 / 4%);
+
+  &--failed {
+    border-color: rgb(254 202 202 / 80%);
+  }
+}
+
+.exercise-record-card__top {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.exercise-record-card__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 500;
+  color: $text-primary;
+  line-height: 44rpx;
+  word-break: break-all;
+}
+
+.exercise-record-card__delete {
+  flex-shrink: 0;
+  padding: 4rpx 0 4rpx 16rpx;
+
+  &:active {
+    opacity: 0.65;
+  }
+}
+
+.exercise-record-card__delete-text {
+  font-size: 26rpx;
+  color: $text-tertiary;
+  line-height: 36rpx;
+}
+
+.exercise-record-card__divider {
+  height: 2rpx;
+  background: $border-color;
+  margin: 20rpx 0;
+  width: 100%;
+}
+
+.exercise-record-card__bottom {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.exercise-record-card__kcal {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.exercise-record-card__kcal-num {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: $exercise-color;
+  line-height: 44rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.exercise-record-card__kcal-unit {
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+  font-weight: 500;
+}
+
+.exercise-record-card__time {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.exercise-record-card__pending {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.exercise-record-card__spinner {
+  width: 28rpx;
+  height: 28rpx;
+  flex-shrink: 0;
+  border: 3rpx solid rgb(249 115 22 / 25%);
+  border-top-color: $exercise-color;
+  border-radius: 50%;
+  animation: exercise-spin 0.7s linear infinite;
+}
+
+@keyframes exercise-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.exercise-record-card__pending-text {
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 36rpx;
+}
+
+.exercise-record-card__fail {
+  margin-top: 16rpx;
+  padding: 16rpx 18rpx;
+  background: #fef2f2;
+  border-radius: 12rpx;
+  border: 1rpx solid #fecaca;
+}
+
+.exercise-record-card__fail-msg {
+  display: block;
+  font-size: 26rpx;
+  color: #b91c1c;
+  line-height: 38rpx;
+  word-break: break-all;
+}
+
+.exercise-record-card__fail-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12rpx;
+}
+
+.exercise-record-card__dismiss {
+  font-size: 24rpx;
+  color: $text-tertiary;
+  line-height: 34rpx;
+  padding: 4rpx 8rpx;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+// 输入区域（与屏幕同宽，内容水平居中）
+.input-section {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 16rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  background: $card-bg;
+  border-top: 2rpx solid $border-color;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.input-wrap {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  background: $bg-color;
+  border-radius: 9999rpx;
+  padding: 12rpx 12rpx 12rpx 24rpx;
+}
+
+.chat-input {
+  flex: 1;
+  height: 64rpx;
+  font-size: 30rpx;
+  color: $text-primary;
+  line-height: 44rpx;
+}
+
+.input-placeholder {
+  color: $text-tertiary;
+}
+
+/** 记运动输入框右侧发送：图标仅用 iconfont icon-send，不用 send-btn 类名 */
+.exercise-send-trigger {
+  width: 64rpx;
+  height: 64rpx;
+  background: $exercise-color;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  
+  &:active {
+    transform: scale(0.95);
+    opacity: 0.9;
+  }
+  
+  &.is-disabled {
+    background: $text-tertiary;
+    opacity: 0.5;
+  }
+
+  .iconfont.icon-send {
+    font-size: 28rpx;
+    color: #fff;
+    line-height: 1;
+  }
+}
+
+.exercise-send-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border: 4rpx solid rgb(255 255 255 / 30%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

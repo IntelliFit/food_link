@@ -1,0 +1,13 @@
+#!/bin/sh
+# 提交前清理根目录下的临时文件
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# 删除根目录下的临时文件（不包括子目录）
+# *.png - 调试截图
+# *.html - 预览文件
+# *.py - 调试脚本
+# *.js - 根目录下的临时 JS 文件
+find . -maxdepth 1 \( -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" \) -type f -delete
+
+# 如果删除了文件，需要重新 stage
+git add -A

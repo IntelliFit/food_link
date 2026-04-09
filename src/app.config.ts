@@ -4,6 +4,9 @@ export default defineAppConfig({
     'pages/community/index',
     'pages/checkin-leaderboard/index',
     'pages/record/index',
+    'pages/record-menu/index',
+    'pages/record-text/index',
+    'pages/record-manual/index',
     'pages/analyze/index',
     'pages/analyze-loading/index',
     'pages/analyze-history/index',
@@ -11,6 +14,10 @@ export default defineAppConfig({
     'pages/result-text/index',
     'pages/ai-assistant/index',
     'pages/profile/index',
+    'pages/expiry/index',
+    'pages/expiry-edit/index',
+    // 兼容旧入口：历史缓存可能仍尝试打开 pages/food-expiry/index
+    'pages/food-expiry/index',
     'pages/pro-membership/index',
     'pages/recipes/index',
     'pages/recipe-edit/index',
@@ -20,8 +27,6 @@ export default defineAppConfig({
     'pages/stats/index',
     'pages/day-record/index',
     'pages/record-detail/index',
-    'pages/food-expiry/index',
-    'pages/food-expiry-edit/index',
     'pages/food-library/index',
     'pages/food-library-detail/index',
     'pages/interaction-notifications/index',
@@ -33,10 +38,14 @@ export default defineAppConfig({
     'pages/agreement/index',
     'pages/privacy/index',
     'pages/privacy-settings/index',
-    'pages/friends/index'
+    'pages/friends/index',
+    'pages/profile-settings/index',
+    'pages/exercise-record/index'
   ],
   window: {
     backgroundTextStyle: 'light',
+    // 与 `app.scss` 中 page 背景一致，避免导航/页面与 WebView 边缘亚像素缝隙露出默认白底形成一条细白线
+    backgroundColor: '#f9fafb',
     navigationBarBackgroundColor: '#fff',
     navigationBarTitleText: 'Food Link',
     navigationBarTextStyle: 'black'

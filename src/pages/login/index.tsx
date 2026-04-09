@@ -280,17 +280,17 @@ export default function LoginPage() {
 
             <View className='login-actions'>
                 <TaroifyButton
-                    className='wx-login-btn'
-                    shape="round"
-                    onClick={handleWxLogin}
-                    loading={loading && !showProfileForm}
+                  className='wx-login-btn'
+                  shape='round'
+                  onClick={handleWxLogin}
+                  loading={loading && !showProfileForm}
                 >
                     微信一键登录
                 </TaroifyButton>
                 <TaroifyButton
-                    className='skip-login-btn'
-                    variant="text"
-                    onClick={handleSkip}
+                  className='skip-login-btn'
+                  variant='text'
+                  onClick={handleSkip}
                 >
                     暂不登录，随便看看
                 </TaroifyButton>
@@ -298,8 +298,8 @@ export default function LoginPage() {
 
             <View className='login-footer'>
                 <View
-                    className='agreement-row'
-                    onClick={() => setAgreed(prev => !prev)}
+                  className='agreement-row'
+                  onClick={() => setAgreed(prev => !prev)}
                 >
                     <View className={`agreement-checkbox ${agreed ? 'checked' : ''}`}>
                         {agreed && <Text className='agreement-check-icon'>✓</Text>}
@@ -307,8 +307,8 @@ export default function LoginPage() {
                     <Text className='agreement-text'>
                         我已阅读并同意
                         <Text
-                            className='agreement-link'
-                            onClick={(e) => {
+                          className='agreement-link'
+                          onClick={(e) => {
                                 e.stopPropagation()
                                 Taro.navigateTo({ url: '/pages/agreement/index' })
                             }}
@@ -317,8 +317,8 @@ export default function LoginPage() {
                         </Text>
                         和
                         <Text
-                            className='agreement-link'
-                            onClick={(e) => {
+                          className='agreement-link'
+                          onClick={(e) => {
                                 e.stopPropagation()
                                 Taro.navigateTo({ url: '/pages/privacy/index' })
                             }}
@@ -339,16 +339,16 @@ export default function LoginPage() {
                         </View>
                         <View className='phone-bind-actions'>
                             <Button
-                                className='wx-login-btn-native phone-bind-btn'
-                                openType='getPhoneNumber'
-                                onGetPhoneNumber={handleBindPhone}
+                              className='wx-login-btn-native phone-bind-btn'
+                              openType='getPhoneNumber'
+                              onGetPhoneNumber={handleBindPhone}
                             >
                                 授权手机号
                             </Button>
                             <TaroifyButton
-                                className='skip-phone-btn'
-                                variant="text"
-                                onClick={() => {
+                              className='skip-phone-btn'
+                              variant='text'
+                              onClick={() => {
                                     setShowPhoneBindModal(false)
                                     finishLoginFlow()
                                 }}
@@ -375,28 +375,28 @@ export default function LoginPage() {
                                     <Text className='iconfont icon-camera camera-icon' style={{ fontSize: '60rpx', color: '#ccc' }}>📷</Text>
                                 )}
                                 <Button
-                                    className='avatar-choose-btn'
-                                    openType='chooseAvatar'
-                                    onChooseAvatar={handleChooseAvatar}
+                                  className='avatar-choose-btn'
+                                  openType='chooseAvatar'
+                                  onChooseAvatar={handleChooseAvatar}
                                 />
                                 <View className='choose-tip'>点击修改</View>
                             </View>
 
                             <Input
-                                className='nickname-input'
-                                type='nickname'
-                                placeholder='请输入昵称'
-                                value={tempNickname}
-                                onBlur={handleNicknameBlur}
-                                onInput={(e) => setTempNickname(e.detail.value)}
+                              className='nickname-input'
+                              type='nickname'
+                              placeholder='请输入昵称'
+                              value={tempNickname}
+                              onBlur={handleNicknameBlur}
+                              onInput={(e) => setTempNickname(e.detail.value)}
                             />
                         </View>
 
                         <TaroifyButton
-                            className='save-btn'
-                            block
-                            shape="round"
-                            onClick={handleSaveProfile}
+                          className='save-btn'
+                          block
+                          shape='round'
+                          onClick={handleSaveProfile}
                         >
                             进入首页
                         </TaroifyButton>

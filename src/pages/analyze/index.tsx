@@ -1,12 +1,27 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
-import Taro from '@tarojs/taro'
-import { useEffect, useState, type CSSProperties } from 'react'
-import { Switch } from '@taroify/core'
-import { imageToBase64, compressImagePathForUpload, uploadAnalyzeImage, uploadAnalyzeImageFile, submitAnalyzeTask, getAccessToken, MealType, DietGoal, ActivityTiming, getHealthProfile } from '../../utils/api'
-import type { ExecutionMode } from '../../utils/api'
-import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
+import Taro, { useDidShow } from '@tarojs/taro'
+import { useEffect, useState } from 'react'
+import {
+  imageToBase64,
+  compressImagePathForUpload,
+  uploadAnalyzeImage,
+  uploadAnalyzeImageFile,
+  submitAnalyzeTask,
+  continuePrecisionSession,
+  getAccessToken,
+  MealType,
+  DietGoal,
+  ActivityTiming,
+  getHealthProfile,
+  getMyMembership,
+  MembershipStatus
+} from '../../utils/api'
+import type { AnalyzeResponse, ExecutionMode, FoodItem, PrecisionReferenceObjectInput } from '../../utils/api'
+import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
+import { foodRecordFromAnalyzeResponse } from '../../utils/dev-record-preview'
 
 import './index.scss'
+import { withAuth } from '../../utils/withAuth'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
@@ -32,6 +47,20 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
   { value: 'daily', label: '日常', iconClass: 'icon-duoren' },
   { value: 'before_sleep', label: '睡前', iconClass: 'icon-shuijue' },
   { value: 'none', label: '无', iconClass: 'icon-nothing' }
+]
+
+const REFERENCE_PRESETS: Array<{
+  value: string
+  label: string
+  dimensions: { length?: number; width?: number; height?: number }
+}> = [
+  { value: 'chopsticks', label: '筷子', dimensions: { length: 240, width: 7, height: 7 } },
+  { value: 'spoon', label: '勺子', dimensions: { length: 170, width: 40, height: 15 } },
+  { value: 'bank_card', label: '银行卡', dimensions: { length: 85.6, width: 54, height: 0.8 } },
+  { value: 'can', label: '易拉罐', dimensions: { height: 122, width: 66, length: 66 } },
+  { value: 'bottle', label: '瓶装水', dimensions: { height: 210, width: 65, length: 65 } },
+  { value: 'plate', label: '常见餐盘', dimensions: { length: 220, width: 220, height: 25 } },
+  { value: 'custom', label: '自定义', dimensions: {} }
 ]
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; tips: string[] }> = {
@@ -158,7 +187,7 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
   return persistedPaths
 }
 
-export default function AnalyzePage() {
+function AnalyzePage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>('breakfast')
@@ -167,20 +196,80 @@ export default function AnalyzePage() {
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [isDevMode, setIsDevMode] = useState(false)
 
-  const handleMultiViewChange = (value: any) => {
-    if (typeof value === 'boolean') {
-      setIsMultiView(value)
-      return
+  // 初始化时检查开发者模式
+  useEffect(() => {
+    const checkDevMode = () => {
+      try {
+        const devMode = Taro.getStorageSync('devMode')
+        setIsDevMode(devMode === true || devMode === 'true')
+      } catch {
+        setIsDevMode(false)
+      }
     }
-    if (value && typeof value === 'object' && typeof value.detail?.value === 'boolean') {
-      setIsMultiView(value.detail.value)
-      return
-    }
-    setIsMultiView(Boolean(value))
+    checkDevMode()
+  }, [])
+
+  const [precisionSessionId, setPrecisionSessionId] = useState('')
+  const [referencePreset, setReferencePreset] = useState('chopsticks')
+  const [referenceName, setReferenceName] = useState('筷子')
+  const [referenceLength, setReferenceLength] = useState('240')
+  const [referenceWidth, setReferenceWidth] = useState('7')
+  const [referenceHeight, setReferenceHeight] = useState('7')
+  const [referencePlacementNote, setReferencePlacementNote] = useState('')
+
+  const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+    return value === 'strict' ? 'strict' : 'standard'
   }
 
+  const showMultiViewRequiredModal = () => {
+    Taro.showModal({
+      title: '请先开启多视角模式',
+      content: '未开启多视角模式时仅支持上传 1 张图片。若要拍同一份食物的多个视角，请先开启多视角模式。',
+      showCancel: false,
+      confirmText: '我知道了'
+    })
+  }
+
+  /** 日配额已用尽（后端开启日限时 daily_limit 与 daily_remaining 均有值） */
+  const isQuotaExhausted = Boolean(
+    membershipStatus &&
+      membershipStatus.daily_limit != null &&
+      membershipStatus.daily_remaining !== null &&
+      membershipStatus.daily_remaining <= 0
+  )
+
+  /** 多视角开关：纯 View 实现，避免任意 Switch 组件在分包内触发 react 未定义 */
+  const handleMultiViewSwitchChange = (e: { detail?: { value?: boolean } }) => {
+    const nextValue = e.detail?.value === true
+    if (!nextValue && imagePaths.length > 1) {
+      showMultiViewRequiredModal()
+      return
+    }
+    setIsMultiView(nextValue)
+  }
+
+  const toggleMultiView = () => {
+    handleMultiViewSwitchChange({ detail: { value: !isMultiView } })
+  }
+
+  // 每次进入拍照页都刷新配额（从分析结果页返回时）
+  useDidShow(() => {
+    if (getAccessToken()) {
+      getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
+    }
+  })
+
   useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    const nextSessionId = String(params?.precision_session_id || '').trim()
+    if (nextSessionId) {
+      setPrecisionSessionId(nextSessionId)
+      setExecutionMode('strict')
+    }
+
     // 1. 获取饮食目标
     const initDietGoal = async () => {
       try {
@@ -195,8 +284,15 @@ export default function AnalyzePage() {
             setDietGoal(profile.diet_goal as DietGoal)
             Taro.setStorageSync('dietGoal', profile.diet_goal)
           }
-          if (profile.execution_mode) {
-            setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
+          if (!nextSessionId && profile.execution_mode) {
+            setExecutionMode(normalizeExecutionMode(profile.execution_mode))
+          }
+          // 加载会员状态和配额
+          try {
+            const ms = await getMyMembership()
+            setMembershipStatus(ms)
+          } catch (err) {
+            console.error('获取会员状态失败:', err)
           }
         }
       } catch (err) {
@@ -212,7 +308,10 @@ export default function AnalyzePage() {
         if (storedPath) {
           const path = String(storedPath)
           const [stablePath] = await persistImagePathsImmediately([path])
-          setImagePaths(stablePath ? [stablePath] : [path])
+          const finalPath = stablePath || path
+          setImagePaths([finalPath])
+          // 与提交分析时写入的 analyzeImagePaths 一致，避免仅单 key 时多图逻辑异常
+          Taro.setStorageSync('analyzeImagePaths', [finalPath])
           // 清除存储，避免下次进入页面时误用
           Taro.removeStorageSync('analyzeImagePath')
         }
@@ -223,13 +322,47 @@ export default function AnalyzePage() {
     initStoredImagePath()
   }, [])
 
+  const handleReferencePresetSelect = (value: string) => {
+    setReferencePreset(value)
+    const target = REFERENCE_PRESETS.find(item => item.value === value)
+    if (!target) return
+    setReferenceName(target.label)
+    setReferenceLength(target.dimensions.length != null ? String(target.dimensions.length) : '')
+    setReferenceWidth(target.dimensions.width != null ? String(target.dimensions.width) : '')
+    setReferenceHeight(target.dimensions.height != null ? String(target.dimensions.height) : '')
+  }
+
+  const buildReferenceObjects = (): PrecisionReferenceObjectInput[] => {
+    if (executionMode !== 'strict') return []
+    const name = referenceName.trim()
+    if (!name) return []
+    const length = Number(referenceLength)
+    const width = Number(referenceWidth)
+    const height = Number(referenceHeight)
+    return [{
+      reference_type: referencePreset === 'custom' ? 'custom' : 'preset',
+      reference_name: name,
+      dimensions_mm: {
+        ...(Number.isFinite(length) && length > 0 ? { length } : {}),
+        ...(Number.isFinite(width) && width > 0 ? { width } : {}),
+        ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+      },
+      placement_note: referencePlacementNote.trim() || undefined,
+    }]
+  }
+
   const handleChooseImage = async () => {
+    if (!isMultiView && imagePaths.length >= 1) {
+      showMultiViewRequiredModal()
+      return
+    }
+
     const remain = 3 - imagePaths.length
     if (remain <= 0) return
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
       const res = await Taro.chooseImage({
-        count: remain,
+        count: isMultiView ? remain : 1,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
       })
@@ -263,8 +396,22 @@ export default function AnalyzePage() {
   }
 
   const handleStrictModeTap = () => {
-    notifyStrictModeUnavailable()
-    setExecutionMode('standard')
+    if (membershipStatus?.is_pro) {
+      setExecutionMode('strict')
+      return
+    }
+    Taro.showModal({
+      title: '解锁精准模式',
+      content: '精准模式需要开通食探会员才能使用，是否前往开通？',
+      confirmText: '去开通',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          Taro.navigateTo({ url: '/pages/pro-membership/index' })
+        }
+        // 取消：保持标准模式
+      }
+    })
   }
 
   const doAnalyze = async () => {
@@ -274,6 +421,10 @@ export default function AnalyzePage() {
     }
     if (imagePaths.length === 0) {
       Taro.showToast({ title: '请先选择图片', icon: 'none' })
+      return
+    }
+    if (!isMultiView && imagePaths.length > 1) {
+      showMultiViewRequiredModal()
       return
     }
 
@@ -304,48 +455,107 @@ export default function AnalyzePage() {
       }
 
       const primaryImageUrl = imageUrls[0]
+      const referenceObjects = buildReferenceObjects()
 
       Taro.showLoading({ title: '提交任务...', mask: true })
-      const { task_id } = await submitAnalyzeTask({
-        image_url: primaryImageUrl,
-        image_urls: imageUrls,
+      const commonPayload = {
         meal_type: mealType,
         diet_goal: dietGoal,
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
-        modelName: 'gemini',
         is_multi_view: isMultiView,
-        execution_mode: executionMode
-      })
+        reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
+      }
+      const response = precisionSessionId
+        ? await continuePrecisionSession(precisionSessionId, {
+            source_type: 'image',
+            image_url: primaryImageUrl,
+            image_urls: imageUrls,
+            ...commonPayload,
+          })
+        : await submitAnalyzeTask({
+            image_url: primaryImageUrl,
+            image_urls: imageUrls,
+            modelName: 'gemini',
+            execution_mode: executionMode,
+            ...commonPayload,
+          })
+      const task_id = String(
+        (response as { task_id?: string; taskId?: string }).task_id
+          ?? (response as { task_id?: string; taskId?: string }).taskId
+          ?? ''
+      ).trim()
+      if (!task_id) {
+        throw new Error('服务器未返回任务编号，请稍后重试')
+      }
+      Taro.setStorageSync('analyzeMealType', mealType)
+      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+      Taro.setStorageSync('analyzeTaskType', 'food')
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
+      // 进入 analyze 页时 initStoredImagePath 会 remove 掉 analyzeImage*，这里必须把当前预览图写回，
+      // analyze-loading 才能用本地路径做全屏背景与取景框前景（与文字链路的占位图区分）
+      if (imagePaths.length > 0) {
+        Taro.setStorageSync('analyzeImagePath', imagePaths[0])
+        Taro.setStorageSync('analyzeImagePaths', imagePaths)
+      }
       Taro.hideLoading()
-      Taro.redirectTo({ url: `/pages/analyze-loading/index?task_id=${task_id}&execution_mode=${executionMode}` })
+      setIsAnalyzing(false)
+      const q = `task_id=${encodeURIComponent(task_id)}&execution_mode=${encodeURIComponent(executionMode)}&task_type=food`
+      Taro.redirectTo({
+        url: `/pages/analyze-loading/index?${q}`
+      })
     } catch (error: any) {
       Taro.hideLoading()
       setIsAnalyzing(false)
-      Taro.showModal({
-        title: '分析失败',
-        content: error.message || '分析失败，请重试',
-        showCancel: false,
-        confirmText: '确定'
-      })
+      const statusCode = (error as { statusCode?: number })?.statusCode
+      const errMsg = error?.message || '分析失败，请重试'
+      const isQuotaExhausted =
+        statusCode === 429 ||
+        errMsg.includes('上限') ||
+        errMsg.includes('已达上限') ||
+        errMsg.includes('次数已达') ||
+        errMsg.includes('明日再试')
+      if (isQuotaExhausted) {
+        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员')
+        Taro.showModal({
+          title: '今日次数已用完',
+          content: errMsg,
+          confirmText: suggestPro ? '去开通会员' : '知道了',
+          cancelText: '取消',
+          showCancel: suggestPro,
+          success: (res) => {
+            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }
+        })
+      } else {
+        Taro.showModal({
+          title: '分析失败',
+          content: errMsg,
+          showCancel: false,
+          confirmText: '确定'
+        })
+      }
     }
   }
 
-  const handleConfirm = () => {
-    if (imagePaths.length === 0) {
-      handleChooseImage() // 如果没图片，点击确认直接触发选择
+  /** 主按钮：无图则唤起选图；有图则直接提交并进入 analyze-loading（与拍照后进页再分析一致） */
+  const handleAnalyzePress = () => {
+    if (isAnalyzing) return
+    if (isQuotaExhausted) {
+      Taro.showModal({
+        title: '今日次数已用完',
+        content: '今日拍照/文字分析次数已达上限，请明日再试。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
       return
     }
-    Taro.showModal({
-      title: '确认分析',
-      content: `确定开始分析这 ${imagePaths.length} 张图片吗？`,
-      confirmText: '确定',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) doAnalyze()
-      }
-    })
+    if (imagePaths.length === 0) {
+      void handleChooseImage()
+      return
+    }
+    void doAnalyze()
   }
 
   const handleVoiceInput = () => {
@@ -363,9 +573,169 @@ export default function AnalyzePage() {
     })
   }
 
+  /** 开发者调试：生成与正式接口一致的 AnalyzeResponse，数值随机便于看布局 */
+  const buildRandomDebugAnalyzeResponse = (): AnalyzeResponse => {
+    const round1 = (n: number) => Math.round(n * 10) / 10
+    const rnd = (min: number, max: number) => min + Math.random() * (max - min)
+    const kcalFromMacros = (p: number, c: number, f: number) =>
+      Math.round(round1(p) * 4 + round1(c) * 4 + round1(f) * 9)
+
+    const w1 = Math.round(rnd(140, 320))
+    const w2 = Math.round(rnd(90, 240))
+    const p1 = round1(rnd(6, 32))
+    const c1 = round1(rnd(12, 58))
+    const f1 = round1(rnd(4, 26))
+    const p2 = round1(rnd(2, 16))
+    const c2 = round1(rnd(4, 32))
+    const f2 = round1(rnd(1, 12))
+    const cal1 = kcalFromMacros(p1, c1, f1)
+    const cal2 = kcalFromMacros(p2, c2, f2)
+
+    const items: FoodItem[] = [
+      {
+        itemId: 1,
+        name: '调试 · 咖喱鸡饭',
+        estimatedWeightGrams: w1,
+        originalWeightGrams: w1,
+        nutrients: {
+          calories: cal1,
+          protein: p1,
+          carbs: c1,
+          fat: f1,
+          fiber: round1(rnd(1, 7)),
+          sugar: round1(rnd(0, 14))
+        }
+      },
+      {
+        itemId: 2,
+        name: '调试 · 蔬菜沙拉',
+        estimatedWeightGrams: w2,
+        originalWeightGrams: w2,
+        nutrients: {
+          calories: cal2,
+          protein: p2,
+          carbs: c2,
+          fat: f2,
+          fiber: round1(rnd(0, 5)),
+          sugar: round1(rnd(0, 9))
+        }
+      }
+    ]
+
+    const tw = w1 + w2
+    const tp = round1(p1 + p2)
+    const tc = round1(c1 + c2)
+    const tf = round1(f1 + f2)
+    const tcal = cal1 + cal2
+    const pe = tp * 4
+    const ce = tc * 4
+    const fe = tf * 9
+    const te = pe + ce + fe
+    const pp = te > 0 ? Math.round((pe / te) * 100) : 0
+    const cp = te > 0 ? Math.round((ce / te) * 100) : 0
+    const fp = te > 0 ? Math.round((fe / te) * 100) : 0
+
+    return {
+      description: `【调试预览】随机样本：估算总重约 ${tw}g，总热量约 ${tcal} kcal。数据每次点击都会变化，仅用于看样式。`,
+      insight: `【调试】随机营养汇总：蛋白质约 ${tp}g、碳水约 ${tc}g、脂肪约 ${tf}g。供能占比约 蛋白 ${pp}% / 碳水 ${cp}% / 脂肪 ${fp}%。`,
+      items,
+      pfc_ratio_comment: `三大营养素供能比例（调试随机）：蛋白质约 ${pp}%、碳水化合物约 ${cp}%、脂肪约 ${fp}%。`,
+      absorption_notes: `【调试】吸收与利用：示例占位文案，便于检查「吸收与利用」区块样式。`,
+      context_advice: `【调试】情境建议：示例占位文案，便于检查「情境建议」区块样式。`
+    }
+  }
+
+  /** 调试：用当前随机样本直接打开「记录详情」，便于调分享海报样式（不请求后端） */
+  const handleDebugRecordDetailPoster = () => {
+    const mock = buildRandomDebugAnalyzeResponse()
+    const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
+    const rec = foodRecordFromAnalyzeResponse(mock, {
+      mealType,
+      dietGoal,
+      activityTiming,
+      imagePaths: imagePaths.length > 0 ? imagePaths : [],
+      userId: uid,
+    })
+    Taro.setStorageSync('recordDetail', rec)
+    Taro.showToast({ title: '进入记录详情（海报预览）', icon: 'none', duration: 1500 })
+    Taro.navigateTo({ url: '/pages/record-detail/index' })
+  }
+
+  // 开发者模式：直接进入结果页调试样式
+  const handleDebugResultPage = () => {
+    const mockResult = buildRandomDebugAnalyzeResponse()
+
+    if (imagePaths.length > 0) {
+      Taro.setStorageSync('analyzeImagePath', imagePaths[0])
+      Taro.setStorageSync('analyzeImagePaths', imagePaths)
+    } else {
+      Taro.setStorageSync('analyzeImagePath', '')
+      Taro.setStorageSync('analyzeImagePaths', [])
+    }
+    Taro.setStorageSync('analyzeResult', JSON.stringify(mockResult))
+    Taro.setStorageSync('analyzeMealType', mealType)
+    Taro.setStorageSync('analyzeDietGoal', dietGoal)
+    Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+    Taro.setStorageSync('analyzeSourceTaskId', 'debug-task-id')
+    Taro.setStorageSync('analyzeTaskType', 'food')
+    Taro.setStorageSync('analyzeCompareMode', false)
+    Taro.setStorageSync('analyzeExecutionMode', executionMode)
+    Taro.setStorageSync('analyzeDebugPreview', '1')
+
+    Taro.navigateTo({ url: '/pages/result/index' })
+  }
+
+  // 开发者模式：进入分析 Loading 页面调试
+  const handleDebugAnalyzeLoadingPage = () => {
+    // 保存执行模式到 storage，让分析页读取
+    Taro.setStorageSync('analyzeExecutionMode', executionMode)
+    Taro.setStorageSync('analyzeTaskType', 'food')
+    if (imagePaths.length > 0) {
+      Taro.setStorageSync('analyzeImagePath', imagePaths[0])
+      Taro.setStorageSync('analyzeImagePaths', imagePaths)
+    }
+
+    // 跳转到分析 loading 页面，使用 debug 任务 ID
+    // analyze-loading 页面会识别 debug 前缀，进入调试模式
+    Taro.navigateTo({
+      url: `/pages/analyze-loading/index?task_id=debug-task-${Date.now()}&execution_mode=${executionMode}&task_type=food`
+    })
+  }
+
+  // 长按启用开发者模式
+  const handleEnableDevMode = () => {
+    Taro.setStorageSync('devMode', true)
+    setIsDevMode(true)
+    Taro.showToast({
+      title: '开发者模式已启用',
+      icon: 'none',
+      duration: 2000
+    })
+  }
+
   return (
-    <View className='analyze-page'>
-      {/* 模式提示条（更接近网页信息架构：先告知规则，再执行上传） */}
+    <View className='analyze-page' onLongPress={handleEnableDevMode}>
+      {/* 提示：长按页面任意位置可启用开发者模式 */}
+      {/* 今日配额提示条 */}
+      {membershipStatus && (
+        <View
+          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${membershipStatus.is_pro ? 'quota-bar--pro' : !isQuotaExhausted && (membershipStatus.daily_remaining ?? 0) <= 1 ? 'quota-bar--warn' : ''}`}
+          onClick={() => {
+            if (isQuotaExhausted) return
+            if (!membershipStatus.is_pro) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }}
+        >
+          <Text className='quota-bar-text'>
+            {isQuotaExhausted
+              ? '今日拍照/文字分析次数已用尽，请明日再试'
+              : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
+                  !membershipStatus.is_pro ? '  →开通会员解锁精准模式' : ''
+                }`}
+          </Text>
+        </View>
+      )}
+
+      {/* 模式提示条 */}
       <View className={`mode-banner ${executionMode}`}>
         <View className='mode-banner-header'>
           <View className='mode-title-wrap'>
@@ -416,7 +786,8 @@ export default function AnalyzePage() {
                 <View className='remove-btn' onClick={(e) => {
                   e.stopPropagation()
                   handleRemoveImage(index)
-                }}>
+                }}
+                >
                   <Text className='close-icon'>×</Text>
                 </View>
               </View>
@@ -433,7 +804,7 @@ export default function AnalyzePage() {
             <View className='placeholder-content'>
               <Text className='iconfont icon-xiangji' style={{ fontSize: '64rpx', color: '#9ca3af', marginBottom: '16rpx' }} />
               <Text className='placeholder-text'>点击拍摄/上传食物</Text>
-              <Text className='placeholder-sub'>支持多图 (最多3张)</Text>
+              <Text className='placeholder-sub'>未开启多视角时仅支持 1 张，开启后最多 3 张</Text>
             </View>
           </View>
         )}
@@ -442,14 +813,14 @@ export default function AnalyzePage() {
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>将多张图片视为同一食物的不同角度</Text>
+            <Text className='multiview-compact-hint'>开启后才可上传多张，并按同一食物的不同角度处理</Text>
           </View>
-          <Switch
-            className='compact-switch'
-            checked={isMultiView}
-            onChange={handleMultiViewChange}
-            style={{ '--switch-checked-background-color': '#00bc7d' } as CSSProperties}
-          />
+          <View
+            className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
+            onClick={toggleMultiView}
+          >
+            <View className='multiview-toggle-knob' />
+          </View>
         </View>
       </View>
 
@@ -478,6 +849,97 @@ export default function AnalyzePage() {
           </View>
         </View>
       </View>
+
+      {executionMode === 'strict' && (
+        <View className='details-section'>
+          <View className='section-header'>
+            <Text className='section-title'>参考物</Text>
+          </View>
+          <Text className='section-hint'>
+            精准模式下可录入一个参考物和尺寸，系统会在需要时把它当作比例尺参与估重。
+          </Text>
+
+          {precisionSessionId ? (
+            <View className='precision-session-tip'>
+              <Text className='precision-session-tip-text'>当前正在继续上一轮精准估计，本次拍照会接到原会话继续判断。</Text>
+            </View>
+          ) : null}
+
+          <View className='state-options'>
+            {REFERENCE_PRESETS.map((preset) => (
+              <View
+                key={preset.value}
+                className={`state-option ${referencePreset === preset.value ? 'active' : ''}`}
+                onClick={() => handleReferencePresetSelect(preset.value)}
+              >
+                <Text className='state-label'>{preset.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View className='precision-reference-grid'>
+            <View className='precision-reference-field'>
+              <Text className='precision-reference-label'>名称</Text>
+              <Textarea
+                className='details-input precision-reference-input'
+                value={referenceName}
+                onInput={(e) => setReferenceName(e.detail.value)}
+                maxlength={30}
+                autoHeight
+                showConfirmBar={false}
+              />
+            </View>
+            <View className='precision-reference-row'>
+              <View className='precision-reference-field short'>
+                <Text className='precision-reference-label'>长(mm)</Text>
+                <Textarea
+                  className='details-input precision-reference-input'
+                  value={referenceLength}
+                  onInput={(e) => setReferenceLength(e.detail.value)}
+                  maxlength={8}
+                  autoHeight
+                  showConfirmBar={false}
+                />
+              </View>
+              <View className='precision-reference-field short'>
+                <Text className='precision-reference-label'>宽(mm)</Text>
+                <Textarea
+                  className='details-input precision-reference-input'
+                  value={referenceWidth}
+                  onInput={(e) => setReferenceWidth(e.detail.value)}
+                  maxlength={8}
+                  autoHeight
+                  showConfirmBar={false}
+                />
+              </View>
+              <View className='precision-reference-field short'>
+                <Text className='precision-reference-label'>高(mm)</Text>
+                <Textarea
+                  className='details-input precision-reference-input'
+                  value={referenceHeight}
+                  onInput={(e) => setReferenceHeight(e.detail.value)}
+                  maxlength={8}
+                  autoHeight
+                  showConfirmBar={false}
+                />
+              </View>
+            </View>
+            <View className='precision-reference-field'>
+              <Text className='precision-reference-label'>摆放说明</Text>
+              <Textarea
+                className='details-input precision-reference-input'
+                placeholder='例如：和米饭在同一平面，放在盘子右下角'
+                placeholderClass='input-placeholder'
+                value={referencePlacementNote}
+                onInput={(e) => setReferencePlacementNote(e.detail.value)}
+                maxlength={80}
+                autoHeight
+                showConfirmBar={false}
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* 餐次（AI 将结合餐次分析） */}
       <View className='meal-section'>
@@ -551,13 +1013,43 @@ export default function AnalyzePage() {
       {/* 确认按钮 */}
       <View className='confirm-section'>
         <View
-          className={`confirm-btn ${imagePaths.length === 0 || isAnalyzing ? 'disabled' : ''}`}
-          onClick={!isAnalyzing ? handleConfirm : undefined}
+          className={`confirm-btn ${imagePaths.length === 0 || isAnalyzing || isQuotaExhausted ? 'disabled' : ''}`}
+          onClick={handleAnalyzePress}
         >
-          <Text className='confirm-btn-text'>
-            {isAnalyzing ? '提交中...' : (imagePaths.length === 0 ? '请先拍照' : `分析 ${imagePaths.length} 张图片`)}
-          </Text>
+          {isAnalyzing ? (
+            <View className='btn-spinner' />
+          ) : (
+            <Text className='confirm-btn-text'>
+              {isQuotaExhausted
+                ? '今日分析次数已用完'
+                : imagePaths.length === 0
+                  ? '请先拍照或选图'
+                  : `分析 ${imagePaths.length} 张图片`}
+            </Text>
+          )}
         </View>
+
+        {/* 开发者调试按钮 */}
+        {isDevMode && (
+          <>
+            <View
+              className='debug-btn'
+              onClick={handleDebugResultPage}
+            >
+              <Text className='debug-btn-text'>🛠 调试：模拟进入结果页</Text>
+            </View>
+            <View
+              className='debug-btn debug-btn--secondary'
+              onClick={handleDebugAnalyzeLoadingPage}
+            >
+              <Text className='debug-btn-text'>⏳ 调试：进入分析 Loading 页</Text>
+            </View>
+            <View className='debug-btn debug-btn--tertiary' onClick={handleDebugRecordDetailPoster}>
+              <Text className='debug-btn-text'>📇 调试：预览记录详情海报</Text>
+            </View>
+          </>
+        )}
+
         <View
           className='history-link'
           onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
@@ -568,3 +1060,5 @@ export default function AnalyzePage() {
     </View>
   )
 }
+
+export default withAuth(AnalyzePage)

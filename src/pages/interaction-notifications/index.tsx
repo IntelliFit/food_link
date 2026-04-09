@@ -1,3 +1,4 @@
+import { withAuth } from '../../utils/withAuth'
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useCallback, useState } from 'react'
 import Taro from '@tarojs/taro'
@@ -42,20 +43,36 @@ function formatTimeLabel(timeStr: string): string {
   }
 }
 
-function buildNotificationTitle(item: FeedInteractionNotification): string {
-  if (item.notification_type === 'like_received') {
-    return `${item.actor.nickname || '有人'}赞了你的动态`
-  }
-  if (item.notification_type === 'comment_received') {
-    return `${item.actor.nickname || '有人'}评论了你的动态`
-  }
-  if (item.notification_type === 'reply_received') {
-    return `${item.actor.nickname || '有人'}回复了你的评论`
-  }
-  return '你的评论未通过审核'
+function getNotificationType(item: FeedInteractionNotification): string {
+  return String((item as { notification_type?: unknown }).notification_type || '').trim().toLowerCase()
 }
 
-export default function InteractionNotificationsPage() {
+function buildNotificationTitle(item: FeedInteractionNotification): string {
+  const notificationType = getNotificationType(item)
+  if (notificationType === 'like_received') {
+    return `${item.actor.nickname || '有人'}赞了你的动态`
+  }
+  if (notificationType === 'comment_received') {
+    return `${item.actor.nickname || '有人'}评论了你的动态`
+  }
+  if (notificationType === 'reply_received') {
+    return `${item.actor.nickname || '有人'}回复了你的评论`
+  }
+  if (notificationType === 'comment_rejected') {
+    return '你的评论未通过审核'
+  }
+  return '你收到一条互动消息'
+}
+
+function buildNotificationContent(item: FeedInteractionNotification): string {
+  const notificationType = getNotificationType(item)
+  if (notificationType === 'comment_rejected') {
+    return item.content_preview || '系统拦截了一条评论，点击查看详情'
+  }
+  return item.content_preview || '点击查看详情'
+}
+
+function InteractionNotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [markingRead, setMarkingRead] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -118,13 +135,13 @@ export default function InteractionNotificationsPage() {
           className={`mark-read-btn ${(markingRead || unreadCount <= 0) ? 'disabled' : ''}`}
           onClick={handleMarkAllRead}
         >
-          <Text>{markingRead ? '处理中...' : '全部已读'}</Text>
+          {markingRead ? <View className='btn-spinner' /> : <Text>全部已读</Text>}
         </View>
       </View>
 
       {loading ? (
         <View className='notifications-loading'>
-          <Text>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       ) : list.length === 0 ? (
         <View className='notifications-empty'>
@@ -152,7 +169,7 @@ export default function InteractionNotificationsPage() {
                   {!item.is_read ? <View className='notification-dot' /> : null}
                 </View>
                 <Text className='notification-content' numberOfLines={2}>
-                  {item.content_preview || '点击查看详情'}
+                  {buildNotificationContent(item)}
                 </Text>
                 <Text className='notification-time'>{formatTimeLabel(item.created_at)}</Text>
               </View>
@@ -163,3 +180,5 @@ export default function InteractionNotificationsPage() {
     </View>
   )
 }
+
+export default withAuth(InteractionNotificationsPage)

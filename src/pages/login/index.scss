@@ -2,7 +2,7 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background-color: #ffffff;
+    background-color: #fff;
     padding: 0 40rpx;
 
     .login-header {
@@ -22,13 +22,13 @@
         .app-name {
             font-size: 40rpx;
             font-weight: bold;
-            color: #333333;
+            color: #333;
             margin-bottom: 12rpx;
         }
 
         .app-slogan {
             font-size: 28rpx;
-            color: #999999;
+            color: #999;
         }
     }
 
@@ -39,15 +39,16 @@
 
         .wx-login-btn {
             width: 100%;
+
             --button-default-height: 96rpx;
             --button-border-radius: 48rpx;
+
             font-size: 32rpx;
             font-weight: 500;
-
             // 覆盖 Taroify 默认样式以匹配设计
             background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
             border: none;
-            color: #ffffff;
+            color: #fff;
         }
 
         /* 原生 Button（getPhoneNumber）与主按钮同风格 */
@@ -59,7 +60,7 @@
             font-weight: 500;
             background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
             border: none;
-            color: #ffffff;
+            color: #fff;
 
             &::after {
                 border: none;
@@ -81,10 +82,12 @@
 
         .skip-login-btn {
             width: 100%;
+
             --button-default-height: 96rpx;
             --button-border-radius: 48rpx;
+
             font-size: 30rpx;
-            color: #666666;
+            color: #666;
             background: transparent;
             border: none;
         }
@@ -102,7 +105,7 @@
         align-items: center;
         gap: 12rpx;
         font-size: 24rpx;
-        color: #999999;
+        color: #999;
     }
 
     .agreement-checkbox {
@@ -114,7 +117,7 @@
         align-items: center;
         justify-content: center;
         box-sizing: border-box;
-        background: #ffffff;
+        background: #fff;
 
         &.checked {
             border-color: #00bc7d;
@@ -124,7 +127,7 @@
 
     .agreement-check-icon {
         font-size: 22rpx;
-        color: #ffffff;
+        color: #fff;
     }
 
     .agreement-text {
@@ -141,11 +144,8 @@
 // 完善信息弹窗样式（复用 profile 页面的样式，稍作调整）
 .profile-form-modal {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    inset: 0;
+    background: rgb(0 0 0 / 60%);
     backdrop-filter: blur(8rpx);
     display: flex;
     align-items: center;
@@ -165,12 +165,12 @@
 }
 
 .profile-form-content {
-    background: #ffffff;
+    background: #fff;
     border-radius: 40rpx;
     width: 90%;
     max-width: 600rpx;
     padding: 56rpx 40rpx;
-    box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);
+    box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 30%);
     animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -225,7 +225,7 @@
     font-weight: 500;
     background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
     border: none;
-    color: #ffffff;
+    color: #fff;
 
     &::after {
         border: none;
@@ -275,7 +275,7 @@
         bottom: 0;
         left: 0;
         right: 0;
-        background: rgba(0, 0, 0, 0.3);
+        background: rgb(0 0 0 / 30%);
         color: white;
         font-size: 20rpx;
         text-align: center;
@@ -311,7 +311,7 @@
 
     &:focus {
         border-color: #00bc7d;
-        background: #ffffff;
+        background: #fff;
     }
 }
 
@@ -321,7 +321,7 @@
     border-radius: 48rpx;
     font-size: 32rpx;
     font-weight: 600;
-    box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.2);
+    box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 20%);
     border: none;
 
     &:active {

@@ -4,10 +4,13 @@
     align-items: center;
     justify-content: space-between;
     height: 800px;
+
     /* Further increased height */
+
     /* Significantly increased height */
     position: relative;
     background: transparent;
+
     /* Minimalist: remove background block */
     border-radius: 0;
     width: 100%;
@@ -16,6 +19,7 @@
     /* Left Side: The Ruler Scroll View */
     .ruler-scroll-view {
         width: 320px;
+
         /* Wider ruler area */
         height: 100%;
         position: relative;
@@ -30,6 +34,7 @@
 
         .ruler-content {
             padding-top: 300px;
+
             /* Half of wrapper height */
             padding-bottom: 300px;
         }
@@ -46,6 +51,7 @@
                 top: 50%;
                 background-color: #e5e7eb;
                 height: 2px;
+
                 /* Thicker standard tick */
                 border-radius: 2px;
                 transition: width 0.2s, background-color 0.2s;
@@ -56,6 +62,7 @@
             &.tick-10 {
                 .tick-mark {
                     width: 140px;
+
                     /* Much longer */
                     background-color: #1f2937;
                     height: 3px;
@@ -66,6 +73,7 @@
                     left: 156px;
                     top: 50%;
                     font-size: 32px;
+
                     /* Larger font */
                     font-weight: 600;
                     color: #374151;
@@ -99,8 +107,10 @@
         left: 0;
         top: 50%;
         width: 160px;
+
         /* Wider to match new ticks */
         height: 3px;
+
         /* Slightly thicker */
         background-color: #00bc7d;
         transform: translateY(-50%);
@@ -133,6 +143,7 @@
 
             .val-text {
                 font-size: 80px;
+
                 /* Slightly smaller but bold */
                 font-weight: 600;
                 color: #111827;

@@ -1,3 +1,4 @@
+import { withAuth } from '../../utils/withAuth'
 import { View, Text, ScrollView, Image, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
@@ -34,7 +35,7 @@ type QuickUploadDraft = {
 // 城市区域数据（示例）
 
 
-export default function FoodLibrarySharePage() {
+function FoodLibrarySharePage() {
   const routerParams = Taro.getCurrentInstance().router?.params
   const sourceRecordId = routerParams?.source_record_id
   const quickUploadMode = routerParams?.quick_upload === '1'
@@ -537,11 +538,11 @@ export default function FoodLibrarySharePage() {
   const displayLength = Math.max(imagePaths.length, imageUrls.length)
 
   return (
-    <View className="share-page">
+    <View className='share-page'>
       {quickUploadMode && (
-        <View className="quick-upload-tip">
-          <Text className="quick-upload-title">上传到公共食物库</Text>
-          <Text className="quick-upload-subtitle">
+        <View className='quick-upload-tip'>
+          <Text className='quick-upload-title'>上传到公共食物库</Text>
+          <Text className='quick-upload-subtitle'>
             已自动带入刚识别的餐食，补充商家、位置或是否自制后即可上传。
           </Text>
         </View>
@@ -549,116 +550,116 @@ export default function FoodLibrarySharePage() {
 
       {/* 选择来源 */}
       {!quickUploadMode && !sourceRecordId && (
-        <View className="source-section">
-          <Text className="section-title">选择来源</Text>
-          <View className="source-options">
+        <View className='source-section'>
+          <Text className='section-title'>选择来源</Text>
+          <View className='source-options'>
             <View
               className={`source-option ${sourceType === 'upload' ? 'active' : ''}`}
               onClick={() => setSourceType('upload')}
             >
-              <Text className="source-icon iconfont icon-paizhao-xianxing" />
-              <Text className="source-text">拍照上传</Text>
+              <Text className='source-icon iconfont icon-paizhao-xianxing' />
+              <Text className='source-text'>拍照上传</Text>
             </View>
             <View
               className={`source-option ${sourceType === 'record' ? 'active' : ''}`}
               onClick={() => { setSourceType('record'); setShowRecordModal(true) }}
             >
-              <Text className="source-icon iconfont icon-ic_detail" />
-              <Text className="source-text">从记录选择</Text>
+              <Text className='source-icon iconfont icon-ic_detail' />
+              <Text className='source-text'>从记录选择</Text>
             </View>
           </View>
         </View>
       )}
 
       {/* 图片区域：最多 3 张，每张识别后叠加计算 */}
-      <View className="image-section">
-        <Text className="section-title">
-          食物图片 <Text className="required">*</Text>
-          {displayLength > 0 && <Text className="image-count">（{displayLength}/3）</Text>}
+      <View className='image-section'>
+        <Text className='section-title'>
+          食物图片 <Text className='required'>*</Text>
+          {displayLength > 0 && <Text className='image-count'>（{displayLength}/3）</Text>}
         </Text>
         {displayLength > 0 ? (
-          <View className="share-image-grid">
+          <View className='share-image-grid'>
             {Array.from({ length: displayLength }).map((_, index) => (
-              <View key={index} className="share-grid-item">
+              <View key={index} className='share-grid-item'>
                 <Image
                   src={imageUrls[index] || imagePaths[index]}
-                  mode="aspectFill"
-                  className="share-grid-image"
+                  mode='aspectFill'
+                  className='share-grid-image'
                   onClick={() => handlePreviewImage(index)}
                 />
                 <View
-                  className="share-remove-btn"
+                  className='share-remove-btn'
                   onClick={(e) => { e.stopPropagation(); handleRemoveImage(index) }}
                 >
-                  <Text className="share-close-icon">×</Text>
+                  <Text className='share-close-icon'>×</Text>
                 </View>
               </View>
             ))}
             {displayLength < MAX_IMAGES && (
-              <View className="share-grid-item share-add-btn" onClick={handleChooseImage}>
-                <Text className="share-add-icon">+</Text>
-                <Text className="share-add-text">添加</Text>
+              <View className='share-grid-item share-add-btn' onClick={handleChooseImage}>
+                <Text className='share-add-icon'>+</Text>
+                <Text className='share-add-text'>添加</Text>
               </View>
             )}
           </View>
         ) : (
-          <View className="image-upload-area" onClick={handleChooseImage}>
-            <Text className="upload-icon iconfont icon-paizhao-xianxing" />
-            <Text className="upload-text">点击上传食物图片（最多 3 张，每张识别后叠加计算）</Text>
+          <View className='image-upload-area' onClick={handleChooseImage}>
+            <Text className='upload-icon iconfont icon-paizhao-xianxing' />
+            <Text className='upload-text'>点击上传食物图片（最多 3 张，每张识别后叠加计算）</Text>
           </View>
         )}
       </View>
 
       {/* 营养信息 */}
-      <View className="nutrition-section">
-        <Text className="section-title">营养信息</Text>
-        <View className="nutrition-summary">
-          <View className="nutrition-item">
-            <Text className="nutrition-value">{totalCalories.toFixed(0)}</Text>
-            <Text className="nutrition-label">热量 kcal</Text>
+      <View className='nutrition-section'>
+        <Text className='section-title'>营养信息</Text>
+        <View className='nutrition-summary'>
+          <View className='nutrition-item'>
+            <Text className='nutrition-value'>{totalCalories.toFixed(0)}</Text>
+            <Text className='nutrition-label'>热量 kcal</Text>
           </View>
-          <View className="nutrition-item">
-            <Text className="nutrition-value">{totalProtein.toFixed(1)}</Text>
-            <Text className="nutrition-label">蛋白质 g</Text>
+          <View className='nutrition-item'>
+            <Text className='nutrition-value'>{totalProtein.toFixed(1)}</Text>
+            <Text className='nutrition-label'>蛋白质 g</Text>
           </View>
-          <View className="nutrition-item">
-            <Text className="nutrition-value">{totalCarbs.toFixed(1)}</Text>
-            <Text className="nutrition-label">碳水 g</Text>
+          <View className='nutrition-item'>
+            <Text className='nutrition-value'>{totalCarbs.toFixed(1)}</Text>
+            <Text className='nutrition-label'>碳水 g</Text>
           </View>
-          <View className="nutrition-item">
-            <Text className="nutrition-value">{totalFat.toFixed(1)}</Text>
-            <Text className="nutrition-label">脂肪 g</Text>
+          <View className='nutrition-item'>
+            <Text className='nutrition-value'>{totalFat.toFixed(1)}</Text>
+            <Text className='nutrition-label'>脂肪 g</Text>
           </View>
         </View>
-        <Text className="nutrition-tip">营养数据由 AI 自动识别</Text>
+        <Text className='nutrition-tip'>营养数据由 AI 自动识别</Text>
       </View>
 
       {/* 商家信息 */}
-      <View className="merchant-section">
-        <Text className="section-title">商家信息</Text>
-        <View className="form-item">
-          <Text className="form-label">
+      <View className='merchant-section'>
+        <Text className='section-title'>商家信息</Text>
+        <View className='form-item'>
+          <Text className='form-label'>
             食物名称（已自动带入，可修改）
           </Text>
           <Input
-            className="form-input"
-            placeholder="如：麻辣香锅、烤鸡腿饭等"
+            className='form-input'
+            placeholder='如：麻辣香锅、烤鸡腿饭等'
             value={foodName}
             onInput={e => setFoodName(e.detail.value)}
           />
         </View>
-        <View className="form-item">
-          <Text className="form-label">商家名称（可选）</Text>
+        <View className='form-item'>
+          <Text className='form-label'>商家名称（可选）</Text>
           <Input
-            className="form-input"
+            className='form-input'
             placeholder={isHomemade ? '自制餐食可不填' : '如：沙县小吃、肯德基等'}
             value={merchantName}
             onInput={e => setMerchantName(e.detail.value)}
           />
         </View>
-        <View className="form-item">
-          <Text className="form-label">餐食来源</Text>
-          <View className="source-tag-row">
+        <View className='form-item'>
+          <Text className='form-label'>餐食来源</Text>
+          <View className='source-tag-row'>
             <View
               className={`source-tag-chip ${isHomemade ? 'active' : ''}`}
               onClick={() => setIsHomemade(true)}
@@ -673,10 +674,10 @@ export default function FoodLibrarySharePage() {
             </View>
           </View>
         </View>
-        <View className="form-item">
-          <Text className="form-label">口味评分（可选）</Text>
-          <View className="rating-row">
-            <View className="rating-stars">
+        <View className='form-item'>
+          <Text className='form-label'>口味评分（可选）</Text>
+          <View className='rating-row'>
+            <View className='rating-stars'>
               {[1, 2, 3, 4, 5].map(n => (
                 <Text
                   key={n}
@@ -692,18 +693,18 @@ export default function FoodLibrarySharePage() {
       </View>
 
       {/* 标签 */}
-      <View className="tags-section">
-        <Text className="section-title">标签</Text>
-        <View className="switch-row">
-          <Text className="switch-label">适合减脂</Text>
+      <View className='tags-section'>
+        <Text className='section-title'>标签</Text>
+        <View className='switch-row'>
+          <Text className='switch-label'>适合减脂</Text>
           <View
             className={`switch-btn ${suitableForFatLoss ? 'active' : ''}`}
             onClick={() => setSuitableForFatLoss(!suitableForFatLoss)}
           >
-            <View className="switch-dot" />
+            <View className='switch-dot' />
           </View>
         </View>
-        <View className="quick-tags">
+        <View className='quick-tags'>
           {QUICK_TAGS.map(tag => (
             <View
               key={tag}
@@ -714,22 +715,22 @@ export default function FoodLibrarySharePage() {
             </View>
           ))}
         </View>
-        <View className="custom-tag-row">
+        <View className='custom-tag-row'>
           <Input
-            className="tag-input"
-            placeholder="自定义标签"
+            className='tag-input'
+            placeholder='自定义标签'
             value={customTag}
             onInput={e => setCustomTag(e.detail.value)}
             onConfirm={handleAddTag}
           />
-          <View className="add-tag-btn" onClick={handleAddTag}>添加</View>
+          <View className='add-tag-btn' onClick={handleAddTag}>添加</View>
         </View>
         {userTags.length > 0 && (
-          <View className="selected-tags">
+          <View className='selected-tags'>
             {userTags.map(tag => (
-              <View key={tag} className="selected-tag">
+              <View key={tag} className='selected-tag'>
                 <Text>{tag}</Text>
-                <Text className="remove-tag" onClick={() => removeTag(tag)}>×</Text>
+                <Text className='remove-tag' onClick={() => removeTag(tag)}>×</Text>
               </View>
             ))}
           </View>
@@ -737,17 +738,17 @@ export default function FoodLibrarySharePage() {
       </View>
 
       {/* 商家地址 */}
-      <View className="location-section">
-        <View className="location-title-row">
-          <Text className="section-title">商家地址（可选）</Text>
-          <View className="search-location-btn" onClick={handleNavigateLocationSearch}>
-            <Text className="iconfont icon-dizhi" />
+      <View className='location-section'>
+        <View className='location-title-row'>
+          <Text className='section-title'>商家地址（可选）</Text>
+          <View className='search-location-btn' onClick={handleNavigateLocationSearch}>
+            <Text className='iconfont icon-dizhi' />
             <Text>搜索地址</Text>
           </View>
         </View>
-        <View className="form-item" onClick={() => setShowCityPicker(true)}>
-          <Text className="form-label">城市/区域</Text>
-          <View className="form-input city-display">
+        <View className='form-item' onClick={() => setShowCityPicker(true)}>
+          <Text className='form-label'>城市/区域</Text>
+          <View className='form-input city-display'>
             <Text className={province ? 'city-value' : 'city-placeholder'}>
               {province
                 ? `${province}${city ? ' ' + city : ''} ${district}`.trim()
@@ -755,11 +756,11 @@ export default function FoodLibrarySharePage() {
             </Text>
           </View>
         </View>
-        <View className="form-item">
-          <Text className="form-label">详细地址</Text>
+        <View className='form-item'>
+          <Text className='form-label'>详细地址</Text>
           <Input
-            className="form-input"
-            placeholder="如：XX路XX号"
+            className='form-input'
+            placeholder='如：XX路XX号'
             value={detailAddress}
             onInput={e => setDetailAddress(e.detail.value)}
           />
@@ -767,11 +768,11 @@ export default function FoodLibrarySharePage() {
       </View>
 
       {/* 备注 */}
-      <View className="merchant-section">
-        <Text className="section-title">补充说明（可选）</Text>
+      <View className='merchant-section'>
+        <Text className='section-title'>补充说明（可选）</Text>
         <Textarea
-          className="form-textarea"
-          placeholder="分享你对这份餐食的评价或建议..."
+          className='form-textarea'
+          placeholder='分享你对这份餐食的评价或建议...'
           value={userNotes}
           onInput={e => setUserNotes(e.detail.value)}
           maxlength={500}
@@ -779,19 +780,19 @@ export default function FoodLibrarySharePage() {
       </View>
 
       {/* 提交栏 */}
-      <View className="submit-bar">
+      <View className='submit-bar'>
         <View
           className={`submit-btn ${canSubmit ? '' : 'disabled'}`}
           onClick={canSubmit ? handleSubmit : undefined}
         >
-          {submitting ? '提交中...' : analyzing ? '识别中...' : '分享到公共库'}
+          {submitting || analyzing ? <View className='btn-spinner' /> : '分享到公共库'}
         </View>
       </View>
 
       {/* 城市选择弹窗 */}
-      <Popup open={showCityPicker} placement="bottom" onClose={() => setShowCityPicker(false)}>
+      <Popup open={showCityPicker} placement='bottom' onClose={() => setShowCityPicker(false)}>
         <AreaPicker
-          title="选择城市/区域"
+          title='选择城市/区域'
           areaList={areaList}
           onConfirm={(values: any[]) => {
             // values 是 code 数组，如 ["110000", "110100", "110101"]
@@ -822,26 +823,26 @@ export default function FoodLibrarySharePage() {
 
       {/* 从记录选择弹窗 */}
       {showRecordModal && (
-        <View className="record-modal" onClick={() => setShowRecordModal(false)}>
-          <View className="record-modal-content" onClick={e => e.stopPropagation()}>
-            <View className="modal-header">
-              <Text className="modal-title">选择饮食记录</Text>
-              <Text className="modal-close" onClick={() => setShowRecordModal(false)}>✕</Text>
+        <View className='record-modal' onClick={() => setShowRecordModal(false)}>
+          <View className='record-modal-content' onClick={e => e.stopPropagation()}>
+            <View className='modal-header'>
+              <Text className='modal-title'>选择饮食记录</Text>
+              <Text className='modal-close' onClick={() => setShowRecordModal(false)}>✕</Text>
             </View>
             {records.length === 0 ? (
-              <View className="record-empty">暂无记录</View>
+              <View className='record-empty'>暂无记录</View>
             ) : (
-              <ScrollView className="record-list" scrollY enhanced showScrollbar={false}>
+              <ScrollView className='record-list' scrollY enhanced showScrollbar={false}>
                 {records.map(r => (
-                  <View key={r.id} className="record-item" onClick={() => handleSelectRecord(r)}>
+                  <View key={r.id} className='record-item' onClick={() => handleSelectRecord(r)}>
                     {r.image_path ? (
-                      <Image className="record-image" src={r.image_path} mode="aspectFill" />
+                      <Image className='record-image' src={r.image_path} mode='aspectFill' />
                     ) : (
-                      <View className="record-image-placeholder"><Text className="iconfont icon-shiwu" /></View>
+                      <View className='record-image-placeholder'><Text className='iconfont icon-shiwu' /></View>
                     )}
-                    <View className="record-info">
-                      <Text className="record-desc">{r.description || '饮食记录'}</Text>
-                      <Text className="record-meta">{r.total_calories.toFixed(0)} kcal · {r.record_time?.slice(0, 10)}</Text>
+                    <View className='record-info'>
+                      <Text className='record-desc'>{r.description || '饮食记录'}</Text>
+                      <Text className='record-meta'>{r.total_calories.toFixed(0)} kcal · {r.record_time?.slice(0, 10)}</Text>
                     </View>
                   </View>
                 ))}
@@ -854,3 +855,5 @@ export default function FoodLibrarySharePage() {
     </View>
   )
 }
+
+export default withAuth(FoodLibrarySharePage)

@@ -1,9 +1,10 @@
 import { View, Text, Input, ScrollView } from '@tarojs/components'
 import { useState } from 'react'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 
-export default function AiAssistantPage() {
+function AiAssistantPage() {
   const [inputValue, setInputValue] = useState('')
 
   // 专家列表
@@ -228,4 +229,5 @@ export default function AiAssistantPage() {
   )
 }
 
+export default withAuth(AiAssistantPage)
 

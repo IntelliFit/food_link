@@ -1,7 +1,16 @@
 import { View, Text, ScrollView } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getStatsSummary, generateStatsInsight, saveStatsInsight, type StatsSummary } from '../../utils/api'
+import { Switch } from '@taroify/core'
+import {
+  getStatsSummary,
+  generateStatsInsight,
+  saveStatsInsight,
+  getBodyMetricsSummary,
+  type StatsSummary,
+  type BodyMetricWeightEntry,
+  type BodyMetricWaterDay,
+} from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
@@ -56,6 +65,80 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value))
+}
+
+const WATER_GOAL_DEFAULT = 2000
+
+type StoredBodyMetrics = {
+  weightEntries: Array<{ date: string; value: number; recorded_at?: string }>
+  waterByDate: Record<string, { date: string; total: number; logs: number[] }>
+  waterGoalMl: number
+}
+
+function normalizeStoredBodyMetrics(raw: unknown): StoredBodyMetrics {
+  const fallback: StoredBodyMetrics = {
+    weightEntries: [],
+    waterByDate: {},
+    waterGoalMl: WATER_GOAL_DEFAULT,
+  }
+
+  if (!raw || typeof raw !== 'object') {
+    return fallback
+  }
+
+  const source = raw as Record<string, unknown>
+
+  const weightEntries = Array.isArray(source.weightEntries)
+    ? source.weightEntries
+      .map(item => {
+        if (!item || typeof item !== 'object') return null
+        const obj = item as Record<string, unknown>
+        const date = typeof obj.date === 'string' ? obj.date : ''
+        const value = toSafeNumber(obj.value, NaN)
+        const recordedAt = typeof obj.recorded_at === 'string' ? obj.recorded_at : undefined
+        if (!date || !Number.isFinite(value)) return null
+        return { date, value, recorded_at: recordedAt }
+      })
+      .filter((item): item is { date: string; value: number; recorded_at?: string } => Boolean(item))
+    : []
+
+  const waterByDate: StoredBodyMetrics['waterByDate'] = {}
+  if (source.waterByDate && typeof source.waterByDate === 'object' && !Array.isArray(source.waterByDate)) {
+    Object.entries(source.waterByDate as Record<string, unknown>).forEach(([key, value]) => {
+      if (!value || typeof value !== 'object') return
+      const obj = value as Record<string, unknown>
+      const date = typeof obj.date === 'string' && obj.date ? obj.date : key
+      const total = toSafeNumber(obj.total)
+      const logs = Array.isArray(obj.logs)
+        ? obj.logs
+          .map(log => toSafeNumber(log, NaN))
+          .filter(log => Number.isFinite(log))
+        : []
+      if (!date) return
+      waterByDate[date] = { date, total, logs }
+    })
+  }
+
+  const waterGoalMl = toSafeNumber(source.waterGoalMl, WATER_GOAL_DEFAULT)
+
+  return {
+    weightEntries,
+    waterByDate,
+    waterGoalMl,
+  }
+}
+
+function getStoredBodyMetrics(): StoredBodyMetrics {
+  try {
+    return normalizeStoredBodyMetrics(Taro.getStorageSync('body_metrics_storage'))
+  } catch {
+    // ignore
+  }
+  return normalizeStoredBodyMetrics(null)
+}
+
 export default function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
@@ -66,6 +149,7 @@ export default function StatsPage() {
   const [isTyping, setIsTyping] = useState(false)
   const [insightActionLoading, setInsightActionLoading] = useState(false)
   const [insightError, setInsightError] = useState<string | null>(null)
+  const [showCalories, setShowCalories] = useState(false)
 
   const fetchStats = useCallback(async (r: 'week' | 'month') => {
     setLoading(true)
@@ -77,10 +161,93 @@ export default function StatsPage() {
         setLoading(false)
         return
       }
-      const res = await getStatsSummary(r)
-      setData(res)
+      // 并行获取统计数据和体重/喝水数据
+      const [statsRes, bodyMetricsRes] = await Promise.all([
+        getStatsSummary(r),
+        getBodyMetricsSummary(r).catch(() => null),
+      ])
+
+      const cloudWeightEntries = Array.isArray(bodyMetricsRes?.weight_entries)
+        ? bodyMetricsRes.weight_entries.filter(
+          (entry): entry is BodyMetricWeightEntry => Boolean(entry && typeof entry.date === 'string'),
+        )
+        : []
+      const cloudWaterDaily = Array.isArray(bodyMetricsRes?.water_daily)
+        ? bodyMetricsRes.water_daily
+          .filter((entry): entry is BodyMetricWaterDay => Boolean(entry && typeof entry.date === 'string'))
+          .map(entry => ({
+            date: entry.date,
+            total: toSafeNumber(entry.total),
+            logs: Array.isArray(entry.logs)
+              ? entry.logs.map(log => toSafeNumber(log, NaN)).filter(log => Number.isFinite(log))
+              : [],
+          }))
+        : []
+
+      const hasCloudWeight = cloudWeightEntries.length > 0
+      const hasCloudWater = cloudWaterDaily.some(d => toSafeNumber(d.total) > 0)
+
+      const storedMetrics =
+        !hasCloudWeight || !hasCloudWater ? getStoredBodyMetrics() : null
+
+      const storedWeightEntries = (storedMetrics?.weightEntries || []).map(e => ({
+        date: e.date,
+        value: e.value,
+        recorded_at: e.recorded_at,
+      }))
+      const storedWaterDaily = Object.values(storedMetrics?.waterByDate || {}).map(w => ({
+        date: w.date,
+        total: toSafeNumber(w.total),
+        logs: Array.isArray(w.logs)
+          ? w.logs.map(log => toSafeNumber(log, NaN)).filter(log => Number.isFinite(log))
+          : [],
+      }))
+
+      const weightEntries = hasCloudWeight ? cloudWeightEntries : storedWeightEntries
+      const waterDaily = hasCloudWater ? cloudWaterDaily : storedWaterDaily
+
+      const totalWaterMl = waterDaily.reduce((sum: number, d) => sum + toSafeNumber(d.total), 0)
+      const recordedDays = waterDaily.filter(d => toSafeNumber(d.total) > 0).length
+      const avgDailyWaterMl = recordedDays > 0 ? Math.round(totalWaterMl / recordedDays) : 0
+
+      const sortedWeight = [...weightEntries].sort((a, b) => `${b.date || ''}`.localeCompare(`${a.date || ''}`))
+      const latestWeight = sortedWeight[0] || null
+      const previousWeight = sortedWeight[1] || null
+      const weightChange =
+        latestWeight && previousWeight
+          ? Math.round((latestWeight.value - previousWeight.value) * 10) / 10
+          : null
+
+      if (weightEntries.length > 0 || waterDaily.length > 0) {
+        statsRes.body_metrics = {
+          range: r,
+          start_date: bodyMetricsRes?.start_date ?? '',
+          end_date: bodyMetricsRes?.end_date ?? '',
+          weight_trend_daily: bodyMetricsRes?.weight_trend_daily,
+          weight_entries: weightEntries,
+          latest_weight: latestWeight,
+          previous_weight: previousWeight,
+          weight_change: weightChange,
+          water_daily: waterDaily,
+          today_water: bodyMetricsRes?.today_water ?? {
+            date: formatLocalDate(),
+            total: 0,
+            logs: [],
+          },
+          water_goal_ml: toSafeNumber(
+            bodyMetricsRes?.water_goal_ml,
+            storedMetrics?.waterGoalMl || WATER_GOAL_DEFAULT,
+          ),
+          total_water_ml: hasCloudWater ? (bodyMetricsRes?.total_water_ml || 0) : totalWaterMl,
+          avg_daily_water_ml: hasCloudWater ? (bodyMetricsRes?.avg_daily_water_ml || 0) : avgDailyWaterMl,
+          water_recorded_days: hasCloudWater ? (bodyMetricsRes?.water_recorded_days || 0) : recordedDays,
+        }
+      }
+
+      setData(statsRes)
     } catch (e: unknown) {
-      setError((e as Error).message || '获取统计失败')
+      console.error('[stats] fetchStats failed:', e)
+      setError((e as Error)?.message || '获取统计失败')
     } finally {
       setLoading(false)
     }
@@ -195,8 +362,7 @@ export default function StatsPage() {
     return (
       <View className='stats-page'>
         <View className='loading-wrap'>
-          <Text className='iconfont icon-jiazaixiao loading-icon' />
-          <Text className='loading-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )
@@ -228,6 +394,7 @@ export default function StatsPage() {
   const insightGeneratedDate = d.analysis_summary_generated_date || ''
   const insightNeedsRefresh = Boolean(d.analysis_summary_needs_refresh)
   const displayInsightText = aiDisplayText || (hasInsight && !isTyping ? d.analysis_summary : '')
+  const bodyMetrics = d.body_metrics
   const macroPercent = {
     protein: toSafeNumber(d.macro_percent?.protein),
     carbs: toSafeNumber(d.macro_percent?.carbs),
@@ -248,6 +415,19 @@ export default function StatsPage() {
   const maxDailyCalories = d.daily_calories.length > 0
     ? Math.max(...d.daily_calories.map(i => i.calories))
     : 2000
+  const weightTrend = bodyMetrics?.weight_entries || []
+  const latestWeight = bodyMetrics?.latest_weight || null
+  const previousWeight = bodyMetrics?.previous_weight || null
+  const weightChange = bodyMetrics?.weight_change
+  const waterDaily = bodyMetrics?.water_daily || []
+  const waterGoalMl = toSafeNumber(bodyMetrics?.water_goal_ml, 2000)
+  const avgDailyWaterMl = toSafeNumber(bodyMetrics?.avg_daily_water_ml)
+  const totalWaterMl = toSafeNumber(bodyMetrics?.total_water_ml)
+  const waterRecordedDays = toSafeNumber(bodyMetrics?.water_recorded_days)
+  const waterTrend = range === 'week' ? waterDaily.slice(-7) : waterDaily.slice(-14)
+  const maxWaterValue = waterTrend.length > 0
+    ? Math.max(waterGoalMl, ...waterTrend.map(item => toSafeNumber(item.total)))
+    : waterGoalMl
   const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
     const hasRecord = item.calories > 0
     const delta = hasRecord ? item.calories - tdee : 0
@@ -272,18 +452,14 @@ export default function StatsPage() {
   return (
     <View className='stats-page'>
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
-        <View className='page-header'>
-          <Text className='page-title'>饮食记录</Text>
-          <Text className='page-subtitle'>先看日历图，再往下看趋势和营养结构</Text>
-        </View>
+        {/* 页面头部已移除 - 标题和描述不再需要 */}
 
         {/* 周/月切换 - Segmented Control，切换时显示加载 */}
         <View className='tabs-container'>
           <View className={`segmented-control ${loading ? 'is-loading' : ''}`}>
             {loading && (
               <View className='tabs-loading'>
-                <Text className='iconfont icon-jiazaixiao tabs-loading-icon' />
-                <Text className='tabs-loading-text'>加载中</Text>
+                <View className='loading-spinner-md' />
               </View>
             )}
             <View
@@ -301,63 +477,69 @@ export default function StatsPage() {
           </View>
         </View>
 
-        <View className='stats-card heatmap-card'>
-          <View className='card-header'>
-            <Text className='iconfont icon-rili chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>日历图</Text>
-              <Text className='card-subtitle'>灰色未记录，橙色吃多了，蓝色吃少了</Text>
-            </View>
-          </View>
-          <View className='heatmap-legend'>
-            <View className='heatmap-legend-item'>
-              <View className='heatmap-legend-swatch none' />
-              <Text className='heatmap-legend-text'>未记录</Text>
-            </View>
-            <View className='heatmap-legend-item'>
-              <View className='heatmap-legend-swatch surplus' />
-              <Text className='heatmap-legend-text'>吃多了</Text>
-            </View>
-            <View className='heatmap-legend-item'>
-              <View className='heatmap-legend-swatch deficit' />
-              <Text className='heatmap-legend-text'>吃少了</Text>
-            </View>
-          </View>
-          {heatmapCells.length > 0 ? (
-            <>
-              <View className='heatmap-grid'>
-                {heatmapCells.map((item) => (
+        {/* 日历图 - 根据 range 显示不同视图 */}
+        {range === 'week' ? (
+          // 近一周：首页风格横向排列（7天）
+          <View className='date-selector-section'>
+            <View className='date-list'>
+              {heatmapCells.slice(-7).map((item) => {
+                let circleClass = 'is-empty'
+                if (item.calories > 0) {
+                  if (item.state === 'surplus') {
+                    circleClass = 'is-over'
+                  } else {
+                    circleClass = 'is-recorded'
+                  }
+                }
+                
+                const date = new Date(`${item.date}T12:00:00`)
+                const dayNames = ['日', '一', '二', '三', '四', '五', '六']
+                const dayName = dayNames[date.getDay()]
+                const dayNum = item.date.slice(-2).replace(/^0/, '')
+                
+                return (
                   <View
                     key={item.date}
-                    className={`heatmap-cell ${item.state} ${item.state !== 'none' ? `level-${item.level}` : ''} ${item.calories > 0 ? 'is-clickable' : ''}`}
+                    className={`date-item ${item.calories > 0 ? 'is-clickable' : ''}`}
+                    onClick={() => item.calories > 0 && openDayRecordPage(item.date)}
+                  >
+                    <Text className='date-day-name'>{dayName}</Text>
+                    <View className={`date-day-circle ${circleClass}`}>
+                      <Text className='date-num-text'>{dayNum}</Text>
+                    </View>
+                  </View>
+                )
+              })}
+            </View>
+          </View>
+        ) : (
+          // 近一月：日历网格视图（30天，约5行）
+          <View className='stats-card heatmap-card'>
+            <View className='heatmap-grid month-view'>
+              {heatmapCells.slice(-30).map((item) => {
+                let circleClass = 'is-empty'
+                if (item.calories > 0) {
+                  if (item.state === 'surplus') {
+                    circleClass = 'is-over'
+                  } else {
+                    circleClass = 'is-recorded'
+                  }
+                }
+                
+                return (
+                  <View
+                    key={item.date}
+                    className={`heatmap-cell ${circleClass} ${item.calories > 0 ? 'is-clickable' : ''}`}
                     onClick={() => item.calories > 0 && openDayRecordPage(item.date)}
                   >
                     <Text className='heatmap-cell-label'>{item.date.slice(-2)}</Text>
                     <View className='heatmap-cell-dot' />
                   </View>
-                ))}
-              </View>
-              {activeHeatmapCell ? (
-                <View className='heatmap-summary'>
-                  <Text className='heatmap-summary-text'>
-                    {activeHeatmapCell.calories > 0
-                      ? `${activeHeatmapCell.date} ${activeHeatmapCell.state === 'surplus' ? '吃多了' : '吃少了'} ${Math.abs(Math.round(activeHeatmapCell.delta))} kcal`
-                      : `最近周期内暂无饮食记录`}
-                  </Text>
-                  {activeHeatmapCell.calories > 0 && (
-                    <View className='heatmap-link-btn' onClick={() => openDayRecordPage(activeHeatmapCell.date)}>
-                      <Text className='heatmap-link-btn-text'>查看当天记录</Text>
-                    </View>
-                  )}
-                </View>
-              ) : null}
-            </>
-          ) : (
-            <View className='chart-empty-state'>
-              <Text className='empty-text'>暂无记录热图</Text>
+                )
+              })}
             </View>
-          )}
-        </View>
+          </View>
+        )}
 
         {/* 热量盈缺看板 - Hero Card */}
         <View className={`stats-card hero-card ${isSurplus ? 'surplus-mode' : 'deficit-mode'}`}>
@@ -405,27 +587,40 @@ export default function StatsPage() {
         </View>
 
         {/* 每日摄入趋势 - Bar Chart */}
-        {/* 每日摄入趋势 - Bar Chart */}
         <View className='stats-card chart-card'>
-          <View className='card-header'>
-            <Text className='iconfont icon-shangzhang chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>摄入趋势</Text>
-              <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '最近 14 天'}</Text>
+          <View className='card-header chart-card-header'>
+            <View className='chart-title-group'>
+              <Text className='iconfont icon-shangzhang chart-title-icon' />
+              <View className='card-header-copy'>
+                <Text className='card-title'>摄入趋势</Text>
+                <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '最近 14 天'}</Text>
+              </View>
+            </View>
+            <View className='chart-switch-wrap'>
+              <Text className='chart-switch-label'>显示数值</Text>
+              <Switch
+                className='chart-switch'
+                checked={showCalories}
+                onChange={(v) => setShowCalories(Boolean(typeof v === 'object' ? v.detail?.value : v))}
+                style={{ '--switch-checked-background-color': '#00bc7d' } as CSSProperties}
+              />
             </View>
           </View>
-            {chartDays.length > 0 ? (
-              <View className='bar-chart-container'>
-                {chartDays.map((item) => {
-                  const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10)
-                  return (
-                    <View key={item.date} className='chart-col'>
-                      <View className='bar-wrapper'>
-                        <View
-                          className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
-                          style={{ height: `${heightPct}%` }}
-                        ></View>
-                      </View>
+          {chartDays.length > 0 ? (
+            <View className='bar-chart-container'>
+              {chartDays.map((item) => {
+                const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10)
+                return (
+                  <View key={item.date} className='chart-col'>
+                    {showCalories && (
+                      <Text className='bar-calorie-text'>{Math.round(item.calories)}</Text>
+                    )}
+                    <View className='bar-wrapper'>
+                      <View
+                        className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
+                        style={{ height: `${heightPct}%` }}
+                      ></View>
+                    </View>
                     <Text className='bar-label'>{item.date.slice(5)}</Text>
                   </View>
                 )
@@ -455,7 +650,7 @@ export default function StatsPage() {
                 <Text className='macro-detail'>{totalProtein.toFixed(0)}g / {macroPercent.protein}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill protein' style={{ width: `${macroPercent.protein}%` }}></View>
+                <View className='progress-fill protein' style={{ width: `${clampPercent(macroPercent.protein)}%` }}></View>
               </View>
             </View>
 
@@ -468,7 +663,7 @@ export default function StatsPage() {
                 <Text className='macro-detail'>{totalCarbs.toFixed(0)}g / {macroPercent.carbs}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill carbs' style={{ width: `${macroPercent.carbs}%` }}></View>
+                <View className='progress-fill carbs' style={{ width: `${clampPercent(macroPercent.carbs)}%` }}></View>
               </View>
             </View>
 
@@ -481,38 +676,131 @@ export default function StatsPage() {
                 <Text className='macro-detail'>{totalFat.toFixed(0)}g / {macroPercent.fat}%</Text>
               </View>
               <View className='progress-track'>
-                <View className='progress-fill fat' style={{ width: `${macroPercent.fat}%` }}></View>
+                <View className='progress-fill fat' style={{ width: `${clampPercent(macroPercent.fat)}%` }}></View>
               </View>
             </View>
           </View>
         </View>
 
-        {/* 饮食结构 - Meal Structure */}
+        {/* 饮食结构 - Meal Structure 仪表盘风格 */}
         <View className='stats-card meal-structure-card'>
           <View className='card-header'>
             <Text className='iconfont icon-canciguanli chart-title-icon' />
             <Text className='card-title'>餐次结构</Text>
           </View>
-          <View className='meal-grid'>
-              {(['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'] as const).map((key) => {
-                const cal = byMeal[key]
-                const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
-                const MealIcon = MEAL_ICONS[key]
-                return (
-                <View key={key} className='meal-item'>
-                  <View className='meal-icon-box' style={{ backgroundColor: `${MEAL_ICON_COLORS[key]}14` }}>
-                    <MealIcon size={36} color={MEAL_ICON_COLORS[key]} />
+          <View className='meal-gauges-grid'>
+            {(['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'] as const).map((key) => {
+              const cal = byMeal[key]
+              const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
+              const MealIcon = MEAL_ICONS[key]
+              const color = MEAL_ICON_COLORS[key]
+              const radius = 43
+              const circumference = 2 * Math.PI * radius
+              const progress = Math.min(pct / 100, 1)
+              
+              return (
+                <View key={key} className='meal-gauge-item'>
+                  <View className='meal-gauge-left'>
+                    <View className='meal-gauge-icon-wrap' style={{ backgroundColor: `${color}14` }}>
+                      <MealIcon size={20} color={color} />
+                    </View>
+                    <Text className='meal-gauge-label'>{MEAL_NAMES[key]}</Text>
+                    <Text className='meal-gauge-percent' style={{ color }}>{pct.toFixed(1)}%</Text>
                   </View>
-                  <View className='meal-data'>
-                    <Text className='meal-name'>{MEAL_NAMES[key]}</Text>
-                    <Text className='meal-cal'>{cal.toFixed(0)}</Text>
-                  </View>
-                  <View className='meal-pct'>
-                    <Text>{pct.toFixed(1)}%</Text>
+                  
+                  <View className='meal-gauge-right'>
+                    <View className='meal-gauge-circle'>
+                      <View
+                        className='meal-gauge-ring'
+                        style={{
+                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='${radius}' fill='none' stroke='#f0f0f0' stroke-width='12'/><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${circumference}' stroke-dashoffset='${circumference * (1 - progress)}'/></svg>`
+                          )}")`,
+                          backgroundSize: '100% 100%'
+                        }}
+                      />
+                      <View className='meal-gauge-center'>
+                        <Text className='meal-gauge-cal' style={{ color }}>{Math.round(cal)}</Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
               )
             })}
+          </View>
+        </View>
+
+        <View className='stats-card body-metrics-card'>
+          <View className='card-header'>
+            <Text className='iconfont icon-shangzhang chart-title-icon' />
+            <View className='card-header-copy'>
+              <Text className='card-title'>体重与喝水</Text>
+              <Text className='card-subtitle'>跨设备同步后，这里会持续累积长期趋势</Text>
+            </View>
+          </View>
+
+          <View className='body-metrics-grid'>
+            <View className='body-metric-panel'>
+              <View className='body-metric-panel-header'>
+                <Text className='body-metric-title'>体重趋势</Text>
+                {latestWeight ? (
+                  <Text className='body-metric-main'>
+                    {latestWeight.value.toFixed(1)} kg
+                  </Text>
+                ) : (
+                  <Text className='body-metric-empty'>还没有云端体重记录</Text>
+                )}
+              </View>
+              {latestWeight ? (
+                <Text className='body-metric-sub'>
+                  {previousWeight
+                    ? `${weightChange && weightChange > 0 ? '+' : ''}${toSafeNumber(weightChange).toFixed(1)} kg，较上次`
+                    : '已开始累计体重趋势'}
+                </Text>
+              ) : null}
+              {weightTrend.length > 0 ? (
+                <View className='weight-chip-row'>
+                  {weightTrend.slice(-(range === 'week' ? 7 : 10)).map((item) => (
+                    <View key={item.date} className='weight-chip'>
+                      <Text className='weight-chip-date'>{item.date.slice(5)}</Text>
+                      <Text className='weight-chip-value'>{item.value.toFixed(1)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
+            <View className='body-metric-panel water-panel'>
+              <View className='body-metric-panel-header'>
+                <Text className='body-metric-title'>喝水趋势</Text>
+                <Text className='body-metric-main'>
+                  {avgDailyWaterMl.toFixed(0)} ml
+                </Text>
+              </View>
+              <Text className='body-metric-sub'>
+                日均 {avgDailyWaterMl.toFixed(0)} ml，目标 {waterGoalMl} ml，累计 {totalWaterMl.toFixed(0)} ml
+              </Text>
+              {waterTrend.length > 0 ? (
+                <View className='water-trend-chart'>
+                  {waterTrend.map((item) => {
+                    const pct = maxWaterValue > 0 ? Math.max((toSafeNumber(item.total) / maxWaterValue) * 100, 8) : 8
+                    return (
+                      <View key={item.date} className='water-trend-col'>
+                        <View className='water-trend-bar-wrap'>
+                          <View className='water-trend-bar' style={{ height: `${pct}%` }} />
+                        </View>
+                        <Text className='water-trend-label'>{item.date.slice(5)}</Text>
+                      </View>
+                    )
+                  })}
+                </View>
+              ) : null}
+              <View className='water-metric-footer'>
+                <Text className='water-metric-note'>
+                  {waterRecordedDays > 0 ? `已有 ${waterRecordedDays} 天饮水记录` : '还没有云端喝水记录'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
 

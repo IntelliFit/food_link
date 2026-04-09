@@ -1,8 +1,26 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, submitTextAnalyzeTask, type ExecutionMode, type AnalyzeRecognitionOutcome, type AllowedFoodCategory } from '../../utils/api'
+import {
+  AnalyzeResponse,
+  FoodItem,
+  MealType,
+  type SaveFoodRecordRequest,
+  saveFoodRecord,
+  getAccessToken,
+  createUserRecipe,
+  updateAnalysisTaskResult,
+  submitAnalyzeTask,
+  submitTextAnalyzeTask,
+  continuePrecisionSession,
+  type ExecutionMode,
+  type AnalyzeRecognitionOutcome,
+  type AllowedFoodCategory,
+  type PrecisionReferenceObjectInput
+} from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
+import { foodRecordFromSavePayload } from '../../utils/dev-record-preview'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 
@@ -18,19 +36,6 @@ const MEAL_OPTIONS = [
   { value: 'evening_snack' as const, label: '晚加餐' },
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
-
-const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; note: string }> = {
-  strict: {
-    title: '精准模式',
-    desc: '本次结果更强调分项估计的准确度，优先处理主体少、边界清楚的样本。',
-    note: '单个食物最稳；混合餐最多 2-3 个主体，菜太多时建议拆开拍。'
-  },
-  standard: {
-    title: '标准模式',
-    desc: '本次结果更强调记录效率，适合快速记录日常餐食。',
-    note: '当前默认使用标准模式，精准模式仍在完善中。'
-  }
-}
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => (
   value === 'strict' ? 'strict' : 'standard'
@@ -53,6 +58,13 @@ const FOOD_CATEGORY_LABEL: Record<AllowedFoodCategory, string> = {
   lean_protein: '单个瘦肉',
   unknown: '混合/其他'
 }
+
+const PRECISION_REFERENCE_PRESETS = [
+  { value: 'chopsticks', label: '筷子', dimensions: { length: 240, width: 7, height: 7 } },
+  { value: 'spoon', label: '勺子', dimensions: { length: 170, width: 40, height: 15 } },
+  { value: 'bank_card', label: '银行卡', dimensions: { length: 85.6, width: 54, height: 0.8 } },
+  { value: 'custom', label: '自定义', dimensions: {} },
+]
 
 const RECOGNITION_OUTCOME_META: Record<AnalyzeRecognitionOutcome, { title: string; desc: string }> = {
   ok: {
@@ -133,8 +145,20 @@ const normalizeFoodNameForCorrection = (value: unknown) => (
     .replace(/[()（）\[\]【】,，。./\\\-_:：;；·]/g, '')
 )
 
+/** 结果页头图：全宽；上滑时在区间内从「大图高度」收缩到「顶栏条高度」 */
+const RESULT_HERO_MAX_RPX = 700
+const RESULT_HERO_MIN_RPX = 200
+/** 纵向滑动多少 px 内完成收缩（与 scrollTop 同单位） */
+const RESULT_HERO_SHRINK_SCROLL_PX = 420
 
-export default function ResultPage() {
+const normalizePrecisionStringList = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value.map(item => String(item || '').trim()).filter(Boolean)
+    : []
+)
+
+
+function ResultPage() {
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
@@ -159,6 +183,23 @@ export default function ResultPage() {
   const [retakeGuidance, setRetakeGuidance] = useState<string[]>([])
   const [allowedFoodCategory, setAllowedFoodCategory] = useState<AllowedFoodCategory>('unknown')
   const [followupQuestions, setFollowupQuestions] = useState<string[]>([])
+  const [precisionSessionId, setPrecisionSessionId] = useState('')
+  const [precisionStatus, setPrecisionStatus] = useState<string>('')
+  const [pendingRequirements, setPendingRequirements] = useState<string[]>([])
+  const [retakeInstructions, setRetakeInstructions] = useState<string[]>([])
+  const [referenceObjectNeeded, setReferenceObjectNeeded] = useState(false)
+  const [referenceObjectSuggestions, setReferenceObjectSuggestions] = useState<string[]>([])
+  const [detectedItemsSummary, setDetectedItemsSummary] = useState<string[]>([])
+  const [splitStrategy, setSplitStrategy] = useState('')
+  const [uncertaintyNotes, setUncertaintyNotes] = useState<string[]>([])
+  const [precisionFollowupText, setPrecisionFollowupText] = useState('')
+  const [continuingPrecision, setContinuingPrecision] = useState(false)
+  const [precisionReferencePreset, setPrecisionReferencePreset] = useState('chopsticks')
+  const [precisionReferenceName, setPrecisionReferenceName] = useState('筷子')
+  const [precisionReferenceLength, setPrecisionReferenceLength] = useState('240')
+  const [precisionReferenceWidth, setPrecisionReferenceWidth] = useState('7')
+  const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('7')
+  const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
@@ -169,6 +210,38 @@ export default function ResultPage() {
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
+
+  /** 驱动头图收缩：与 ScrollView 的 scrollTop 同步 */
+  const [resultScrollTop, setResultScrollTop] = useState(0)
+  const resultScrollRafRef = useRef<number | null>(null)
+  const pendingResultScrollTopRef = useRef(0)
+
+  const handleResultScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
+    const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
+    pendingResultScrollTopRef.current = st
+    if (resultScrollRafRef.current != null) return
+    resultScrollRafRef.current = requestAnimationFrame(() => {
+      resultScrollRafRef.current = null
+      setResultScrollTop(pendingResultScrollTopRef.current)
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (resultScrollRafRef.current != null) {
+        cancelAnimationFrame(resultScrollRafRef.current)
+      }
+    }
+  }, [])
+
+  /** 上滑时头图高度在 [MIN, MAX] 间插值；到底后保持 MIN，白卡继续上滑将其盖住 */
+  const resultHeroRpx = useMemo(() => {
+    const t = Math.min(1, resultScrollTop / RESULT_HERO_SHRINK_SCROLL_PX)
+    return RESULT_HERO_MAX_RPX - (RESULT_HERO_MAX_RPX - RESULT_HERO_MIN_RPX) * t
+  }, [resultScrollTop])
+
+  /** 与原先 margin 叠层一致：内容区起点 = 头图底 − 40rpx */
+  const resultScrollPaddingTopRpx = resultHeroRpx - 40
 
   const openQuickUpload = () => {
     const draftImageUrls = (imagePaths.length > 0 ? imagePaths : (imagePath ? [imagePath] : []))
@@ -254,8 +327,10 @@ export default function ResultPage() {
       const storedPath = Taro.getStorageSync('analyzeImagePath')
       const storedMode = Taro.getStorageSync('analyzeExecutionMode')
       const storedTaskType = normalizeTaskType(Taro.getStorageSync('analyzeTaskType'))
+      const storedPrecisionSessionId = String(Taro.getStorageSync('analyzePrecisionSessionId') || '').trim()
       setTaskType(storedTaskType)
       setExecutionMode(normalizeExecutionMode(storedMode))
+      setPrecisionSessionId(storedPrecisionSessionId)
 
       if (storedTaskType === 'food_text') {
         setImagePaths([])
@@ -283,6 +358,15 @@ export default function ResultPage() {
         setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
         setAllowedFoodCategory(normalizeAllowedFoodCategory(result.allowedFoodCategory))
         setFollowupQuestions(Array.isArray(result.followupQuestions) ? result.followupQuestions.filter(Boolean) : [])
+        setPrecisionSessionId(result.precisionSessionId || storedPrecisionSessionId)
+        setPrecisionStatus(result.precisionStatus || '')
+        setPendingRequirements(normalizePrecisionStringList(result.pendingRequirements))
+        setRetakeInstructions(normalizePrecisionStringList(result.retakeInstructions))
+        setReferenceObjectNeeded(Boolean(result.referenceObjectNeeded))
+        setReferenceObjectSuggestions(normalizePrecisionStringList(result.referenceObjectSuggestions))
+        setDetectedItemsSummary(normalizePrecisionStringList(result.detectedItemsSummary))
+        setSplitStrategy(String(result.splitStrategy || ''))
+        setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
         const items = convertApiDataToItems(result.items)
         setNutritionItems(items)
         calculateNutritionStats(items)
@@ -316,8 +400,111 @@ export default function ResultPage() {
   const shouldShowRecognitionCard = isStrictMode
   const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0
   const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
+  const shouldShowPrecisionContinueCard = Boolean(
+    precisionSessionId && precisionStatus && precisionStatus !== 'done'
+  )
 
+  const handlePrecisionReferencePresetSelect = (value: string) => {
+    setPrecisionReferencePreset(value)
+    const target = PRECISION_REFERENCE_PRESETS.find(item => item.value === value)
+    if (!target) return
+    setPrecisionReferenceName(target.label)
+    setPrecisionReferenceLength(target.dimensions.length != null ? String(target.dimensions.length) : '')
+    setPrecisionReferenceWidth(target.dimensions.width != null ? String(target.dimensions.width) : '')
+    setPrecisionReferenceHeight(target.dimensions.height != null ? String(target.dimensions.height) : '')
+  }
 
+  const buildPrecisionReferenceObjects = (): PrecisionReferenceObjectInput[] => {
+    const name = precisionReferenceName.trim()
+    if (!name) return []
+    const length = Number(precisionReferenceLength)
+    const width = Number(precisionReferenceWidth)
+    const height = Number(precisionReferenceHeight)
+    return [{
+      reference_type: precisionReferencePreset === 'custom' ? 'custom' : 'preset',
+      reference_name: name,
+      dimensions_mm: {
+        ...(Number.isFinite(length) && length > 0 ? { length } : {}),
+        ...(Number.isFinite(width) && width > 0 ? { width } : {}),
+        ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+      },
+      placement_note: precisionReferencePlacement.trim() || undefined,
+    }]
+  }
+
+  const handleContinuePrecision = async () => {
+    if (!precisionSessionId) return
+    setContinuingPrecision(true)
+    Taro.showLoading({ title: '继续精准估计...', mask: true })
+    try {
+      const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
+      const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
+      const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
+      const payload = {
+        source_type: taskType === 'food_text' ? 'text' as const : 'image' as const,
+        text: taskType === 'food_text' ? String(Taro.getStorageSync('analyzeTextInput') || '').trim() || description : undefined,
+        additionalContext: precisionFollowupText.trim() || undefined,
+        meal_type: savedMealType,
+        diet_goal: savedDietGoal,
+        activity_timing: savedActivityTiming,
+        reference_objects: buildPrecisionReferenceObjects(),
+      }
+      const { task_id } = await continuePrecisionSession(precisionSessionId, payload)
+      Taro.hideLoading()
+      Taro.redirectTo({
+        url: `/pages/analyze-loading/index?task_id=${task_id}&task_type=${taskType}&execution_mode=strict`
+      })
+    } catch (e: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: e?.message || '继续精准模式失败', icon: 'none' })
+    } finally {
+      setContinuingPrecision(false)
+    }
+  }
+
+  const handleRetakePrecision = () => {
+    if (!precisionSessionId) return
+    Taro.navigateTo({ url: `/pages/analyze/index?precision_session_id=${precisionSessionId}` })
+  }
+
+  /** 概览区三色柱高度：按该成分供能在「蛋白+碳水+脂肪」总供能中的占比（4/4/9 kcal·g⁻¹） */
+  const macroEnergyBarPercents = useMemo(() => {
+    const proteinKcal = nutritionStats.protein * 4
+    const carbsKcal = nutritionStats.carbs * 4
+    const fatKcal = nutritionStats.fat * 9
+    const total = proteinKcal + carbsKcal + fatKcal
+    if (total <= 0) {
+      return { protein: 0, carbs: 0, fat: 0 }
+    }
+    return {
+      protein: (proteinKcal / total) * 100,
+      carbs: (carbsKcal / total) * 100,
+      fat: (fatKcal / total) * 100,
+    }
+  }, [nutritionStats.protein, nutritionStats.carbs, nutritionStats.fat])
+
+  /** 与 analyze 页「模拟进入结果页」等调试文案区分，仅展示面向用户的最终分析 */
+  const isDebugInsightText = (s: string | null | undefined): boolean => {
+    if (s == null || !String(s).trim()) return false
+    const t = String(s).trim()
+    return /【调试】|调试预览|调试随机|随机样本/.test(t)
+  }
+
+  /** 与加载逻辑一致：接口空串时用默认句，避免首屏 healthAdvice 为空导致整块 AI 分析被隐藏 */
+  const resolvedHealthInsight = (healthAdvice?.trim() || '保持健康饮食！')
+
+  const showInsightDescription = Boolean(description?.trim()) && !isDebugInsightText(description)
+  const showInsightHealth =
+    !isDebugInsightText(healthAdvice) && !isDebugInsightText(resolvedHealthInsight)
+  const showInsightPfc = Boolean(pfcRatioComment?.trim()) && !isDebugInsightText(pfcRatioComment)
+  const showInsightAbsorption = Boolean(absorptionNotes?.trim()) && !isDebugInsightText(absorptionNotes)
+  const showInsightContext = Boolean(contextAdvice?.trim()) && !isDebugInsightText(contextAdvice)
+  const showInsightCard =
+    showInsightDescription ||
+    showInsightHealth ||
+    showInsightPfc ||
+    showInsightAbsorption ||
+    showInsightContext
 
   // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
@@ -570,7 +757,7 @@ export default function ResultPage() {
         Taro.removeStorageSync('analyzeActivityTiming')
 
         const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
-        const payload = {
+        const payload: SaveFoodRecordRequest = {
           meal_type: mealType as MealType,
           image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
           image_paths: hasUploadableImage && imagePaths.length > 0 ? imagePaths : undefined,
@@ -602,6 +789,34 @@ export default function ResultPage() {
           context_advice: contextAdvice ?? undefined,
           source_task_id: sourceTaskId
         }
+
+        /** 开发者模式 / 调试结果预览：不写库，直接进记录详情调海报与分享样式 */
+        const devModeOn =
+          Taro.getStorageSync('devMode') === true ||
+          Taro.getStorageSync('devMode') === 'true' ||
+          Taro.getStorageSync('analyzeDebugPreview') === '1'
+        if (devModeOn) {
+          const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
+          const record = foodRecordFromSavePayload(payload, uid)
+          Taro.setStorageSync('recordDetail', record)
+          if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
+          Taro.removeStorageSync('analyzeDebugPreview')
+
+          if (saveOnly) {
+            Taro.showToast({ title: '调试：已跳过接口保存', icon: 'none' })
+            setTimeout(() => {
+              Taro.navigateBack({ delta: 2 })
+            }, 800)
+            return
+          }
+
+          Taro.showToast({ title: '调试：进入记录详情预览', icon: 'success' })
+          setTimeout(() => {
+            Taro.navigateTo({ url: '/pages/record-detail/index' })
+          }, 400)
+          return
+        }
+
         const saveResult = await saveFoodRecord(payload)
         if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
 
@@ -642,6 +857,10 @@ export default function ResultPage() {
 
   /** 点击保存按钮：打开餐次选择弹窗 */
   const handleConfirmAndShare = () => {
+    if (shouldShowPrecisionContinueCard) {
+      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
+      return
+    }
     if (isStrictHardReject) {
       Taro.showModal({
         title: '当前结果不建议直接用于精准执行',
@@ -690,6 +909,10 @@ export default function ResultPage() {
   }
 
   const handleOpenLibraryUpload = () => {
+    if (shouldShowPrecisionContinueCard) {
+      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
+      return
+    }
     if (!hasUploadableImage) {
       Taro.showToast({ title: '当前结果没有可上传的实物图片', icon: 'none' })
       return
@@ -729,6 +952,10 @@ export default function ResultPage() {
 
   // 收藏食物（保存为可复用模板）
   const handleSaveAsRecipe = () => {
+    if (shouldShowPrecisionContinueCard) {
+      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
+      return
+    }
     if (isStrictHardReject) {
       Taro.showToast({ title: '请先重拍后再收藏', icon: 'none' })
       return
@@ -1000,6 +1227,10 @@ export default function ResultPage() {
 
           // 4. 跳转到 loading 页面重新走解析流程
           const nextTaskType = shouldResubmitWithImage ? 'food_image' : 'food_text'
+          if (!shouldResubmitWithImage) {
+            Taro.removeStorageSync('analyzeImagePath')
+            Taro.removeStorageSync('analyzeImagePaths')
+          }
           Taro.navigateTo({
             url: `/pages/analyze-loading/index?task_id=${taskId}&task_type=${nextTaskType}&execution_mode=${savedExecutionMode}`
           })
@@ -1026,63 +1257,73 @@ export default function ResultPage() {
 
   return (
     <View className='result-page'>
+      {/* 固定头图：不随列表平移；上滑时高度逐渐收至全宽横条，之后由白卡内容上滑吞没 */}
+      <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
+        {imagePaths.length > 0 ? (
+          <Swiper
+            className='scanner-hero-swiper'
+            circular
+            indicatorDots={false}
+            onChange={(e) => setCurrentImageIndex(e.detail.current)}
+            current={currentImageIndex}
+          >
+            {imagePaths.map((path, index) => (
+              <SwiperItem key={index} className='scanner-hero-swiper-item'>
+                <Image
+                  src={path}
+                  mode='aspectFill'
+                  className='scanner-hero-image'
+                  onClick={() => handlePreviewImage(path)}
+                />
+              </SwiperItem>
+            ))}
+          </Swiper>
+        ) : (
+          <View className='scanner-hero-placeholder'>
+            <View className='placeholder-icon-wrap'>
+              <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
+            </View>
+            <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
+          </View>
+        )}
+        <View className='scanner-hero-gradient' />
+        {imagePaths.length > 1 && (
+          <View className='image-counter'>
+            <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
+          </View>
+        )}
+      </View>
+
       <ScrollView
         className='result-scroll'
+        style={{ paddingTop: `${resultScrollPaddingTopRpx}rpx` }}
         scrollY
+        scrollWithAnimation={false}
         enhanced
         showScrollbar={false}
+        onScroll={handleResultScroll}
       >
-        {/* 顶部图片区域 - 沉浸式设计 */}
-        <View className='hero-section'>
-          {imagePaths.length > 0 ? (
-            <Swiper
-              className='hero-swiper'
-              circular
-              indicatorDots={false}
-              onChange={(e) => setCurrentImageIndex(e.detail.current)}
-              current={currentImageIndex}
-            >
-              {imagePaths.map((path, index) => (
-                <SwiperItem key={index} className='hero-swiper-item'>
-                  <Image
-                    src={path}
-                    mode='aspectFill'
-                    className='hero-image'
-                    onClick={() => handlePreviewImage(path)}
-                  />
-                </SwiperItem>
-              ))}
-            </Swiper>
-          ) : (
-            <View className='hero-placeholder logo-placeholder'>
-              <View className='placeholder-icon-wrap'>
-                <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
-              </View>
-              <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
-            </View>
-          )}
-
-          {/* Image Counter Badge */}
-          {imagePaths.length > 1 && (
-            <View className='image-counter'>
-              <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
-            </View>
-          )}
-
-          <View className='hero-overlay'></View>
-        </View>
-
         <View className='content-container'>
-          <View className={`mode-result-card ${executionMode}`}>
-            <View className='mode-result-header'>
-              <View className='mode-result-title-wrap'>
-                <Text className='mode-result-label'>本次识别模式</Text>
-                <Text className='mode-result-title'>{EXECUTION_MODE_META[executionMode].title}</Text>
+          <View className='execution-mode-row'>
+            <View className='execution-mode-left'>
+              <View className={`execution-mode-tag ${executionMode}`}>
+                <Text className='execution-mode-tag-text'>
+                  {executionMode === 'strict' ? '精准' : '标准'}
+                </Text>
               </View>
-              <Text className='mode-result-action' onClick={handleDefaultModeEdit}>设为默认</Text>
+              <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>
+                设为默认
+              </Text>
             </View>
-            <Text className='mode-result-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
-            <Text className='mode-result-note'>{EXECUTION_MODE_META[executionMode].note}</Text>
+            {hasUploadableImage ? (
+              <View
+                className={`library-upload-entry library-upload-entry--mode-row ${saving ? 'disabled' : ''}`}
+                onClick={saving ? undefined : handleOpenLibraryUpload}
+              >
+                <Text className='library-upload-text'>上传公共库</Text>
+                <Text className='library-upload-arrow'>›</Text>
+              </View>
+            ) : null}
           </View>
 
           {shouldShowRecognitionCard && (
@@ -1136,6 +1377,161 @@ export default function ResultPage() {
             </View>
           )}
 
+          {shouldShowPrecisionContinueCard && (
+            <View className='precision-continue-card'>
+              <View className='followup-question-header'>
+                <View className='followup-question-title-wrap'>
+                  <Text className='followup-question-label'>精准模式下一步</Text>
+                  <Text className='followup-question-title'>
+                    {precisionStatus === 'needs_retake' ? '这轮建议先重拍再继续' : '这轮还需要你补充更多信息'}
+                  </Text>
+                </View>
+              </View>
+              {detectedItemsSummary.length > 0 && (
+                <Text className='followup-question-desc'>
+                  当前识别到的主体：{detectedItemsSummary.join('、')}
+                </Text>
+              )}
+              {pendingRequirements.length > 0 && (
+                <Text className='followup-question-desc'>
+                  待补充：{pendingRequirements.join('、')}
+                </Text>
+              )}
+              {referenceObjectNeeded && (
+                <Text className='followup-question-desc'>
+                  当前建议补一个参考物，帮助后续按比例尺继续估重。
+                </Text>
+              )}
+              {referenceObjectSuggestions.length > 0 && (
+                <Text className='followup-question-desc'>
+                  可选参考物：{referenceObjectSuggestions.join('、')}
+                </Text>
+              )}
+              {retakeInstructions.length > 0 && (
+                <View className='followup-question-list'>
+                  {retakeInstructions.map((tip, idx) => (
+                    <View key={`${tip}-${idx}`} className='followup-question-item'>
+                      <Text className='followup-question-dot'>{idx + 1}.</Text>
+                      <Text className='followup-question-text'>{tip}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {followupQuestions.length > 0 && (
+                <View className='followup-question-list'>
+                  {followupQuestions.map((question, idx) => (
+                    <View key={`${question}-${idx}`} className='followup-question-item'>
+                      <Text className='followup-question-dot'>{idx + 1}.</Text>
+                      <Text className='followup-question-text'>{question}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {uncertaintyNotes.length > 0 && (
+                <View className='followup-question-list'>
+                  {uncertaintyNotes.map((note, idx) => (
+                    <View key={`${note}-${idx}`} className='followup-question-item'>
+                      <Text className='followup-question-dot'>•</Text>
+                      <Text className='followup-question-text'>{note}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View className='additional-context-wrapper'>
+                <View className='context-label'>
+                  <Text className='iconfont icon-jishiben'></Text>
+                  <Text>补充说明</Text>
+                </View>
+                <Textarea
+                  className='context-textarea'
+                  placeholder='例如：米饭大约 2 两；鸡腿已去骨；参考物和食物在同一平面'
+                  value={precisionFollowupText}
+                  onInput={(e: any) => setPrecisionFollowupText(e.detail.value)}
+                  maxlength={200}
+                  autoHeight
+                />
+              </View>
+
+              <View className='precision-reference-block'>
+                <Text className='insight-label'>参考物</Text>
+                <View className='state-options'>
+                  {PRECISION_REFERENCE_PRESETS.map((preset) => (
+                    <View
+                      key={preset.value}
+                      className={`state-option ${precisionReferencePreset === preset.value ? 'active' : ''}`}
+                      onClick={() => handlePrecisionReferencePresetSelect(preset.value)}
+                    >
+                      <Text className='state-label'>{preset.label}</Text>
+                    </View>
+                  ))}
+                </View>
+                <View className='correction-row'>
+                  <View className='correction-inputs'>
+                    <Input
+                      className='correction-input name-input'
+                      value={precisionReferenceName}
+                      placeholder='参考物名称'
+                      onInput={(e: any) => setPrecisionReferenceName(e.detail.value)}
+                    />
+                    <View className='weight-input-wrapper'>
+                      <Input
+                        className='correction-input weight-input'
+                        type='digit'
+                        value={precisionReferenceLength}
+                        placeholder='长'
+                        onInput={(e: any) => setPrecisionReferenceLength(e.detail.value)}
+                      />
+                      <Text className='weight-unit'>mm</Text>
+                    </View>
+                    <View className='weight-input-wrapper'>
+                      <Input
+                        className='correction-input weight-input'
+                        type='digit'
+                        value={precisionReferenceWidth}
+                        placeholder='宽'
+                        onInput={(e: any) => setPrecisionReferenceWidth(e.detail.value)}
+                      />
+                      <Text className='weight-unit'>mm</Text>
+                    </View>
+                    <View className='weight-input-wrapper'>
+                      <Input
+                        className='correction-input weight-input'
+                        type='digit'
+                        value={precisionReferenceHeight}
+                        placeholder='高'
+                        onInput={(e: any) => setPrecisionReferenceHeight(e.detail.value)}
+                      />
+                      <Text className='weight-unit'>mm</Text>
+                    </View>
+                  </View>
+                </View>
+                <Textarea
+                  className='context-textarea'
+                  placeholder='摆放说明，例如：和米饭在同一平面，放在盘子右边'
+                  value={precisionReferencePlacement}
+                  onInput={(e: any) => setPrecisionReferencePlacement(e.detail.value)}
+                  maxlength={100}
+                  autoHeight
+                />
+              </View>
+
+              <View className='precision-continue-actions'>
+                <View
+                  className={`secondary-btn ${continuingPrecision ? 'disabled' : ''}`}
+                  onClick={continuingPrecision ? undefined : handleContinuePrecision}
+                >
+                  <Text className='btn-text'>{continuingPrecision ? '提交中...' : '提交补充信息'}</Text>
+                </View>
+                {taskType === 'food' ? (
+                  <View className='primary-btn soft-warning' onClick={handleRetakePrecision}>
+                    <Text className='btn-text'>重新拍照继续</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          )}
+
           {/* 核心营养概览 */}
           <View className='nutrition-overview-card'>
             <View className='nutrition-header'>
@@ -1155,21 +1551,21 @@ export default function ResultPage() {
             <View className='macro-grid'>
               <View className='macro-item protein'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.protein / 50) * 100, 100)}%` }}></View>
+                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.protein}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.protein * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>蛋白质</Text>
               </View>
               <View className='macro-item carbs'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.carbs / 100) * 100, 100)}%` }}></View>
+                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.carbs}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.carbs * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>碳水</Text>
               </View>
               <View className='macro-item fat'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${Math.min((nutritionStats.fat / 40) * 100, 100)}%` }}></View>
+                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.fat}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.fat * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>脂肪</Text>
@@ -1177,67 +1573,71 @@ export default function ResultPage() {
             </View>
           </View>
 
-          {/* AI 健康透视 */}
-          <View className='insight-card'>
-            <View className='card-header'>
-              <Text className='card-title'>
-                <Text className='iconfont icon-a-144-lvye'></Text>
-                AI 饮食分析
-              </Text>
+          {/* AI 饮食分析（隐藏调试文案，仅展示最终可读结论） */}
+          {showInsightCard && (
+            <View className='insight-card'>
+              <View className='card-header'>
+                <Text className='card-title'>
+                  <Text className='iconfont icon-a-144-lvye'></Text>
+                  AI 饮食分析
+                </Text>
+              </View>
+
+              {showInsightDescription && (
+                <View className='insight-item intro'>
+                  <View className='insight-icon-wrapper blue'>
+                    <Text className='insight-icon iconfont icon-jishiben'></Text>
+                  </View>
+                  <Text className='insight-content'>{description}</Text>
+                </View>
+              )}
+
+              {showInsightHealth && (
+                <View className='insight-item highlight'>
+                  <View className='insight-icon-wrapper green'>
+                    <Text className='insight-icon iconfont icon-good'></Text>
+                  </View>
+                  <Text className='insight-content'>{resolvedHealthInsight}</Text>
+                </View>
+              )}
+
+              {showInsightPfc && (
+                <View className='insight-item ratio'>
+                  <View className='insight-icon-wrapper orange'>
+                    <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
+                  </View>
+                  <View className='insight-body'>
+                    <Text className='insight-label'>营养比例</Text>
+                    <Text className='insight-content'>{pfcRatioComment}</Text>
+                  </View>
+                </View>
+              )}
+
+              {showInsightAbsorption && (
+                <View className='insight-item absorption'>
+                  <View className='insight-icon-wrapper purple'>
+                    <Text className='insight-icon iconfont icon-huore'></Text>
+                  </View>
+                  <View className='insight-body'>
+                    <Text className='insight-label'>吸收与利用</Text>
+                    <Text className='insight-content'>{absorptionNotes}</Text>
+                  </View>
+                </View>
+              )}
+
+              {showInsightContext && (
+                <View className='insight-item context'>
+                  <View className='insight-icon-wrapper teal'>
+                    <Text className='insight-icon iconfont icon-shizhong'></Text>
+                  </View>
+                  <View className='insight-body'>
+                    <Text className='insight-label'>情境建议</Text>
+                    <Text className='insight-content'>{contextAdvice}</Text>
+                  </View>
+                </View>
+              )}
             </View>
-
-            {description && (
-              <View className='insight-item intro'>
-                <View className='insight-icon-wrapper blue'>
-                  <Text className='insight-icon iconfont icon-jishiben'></Text>
-                </View>
-                <Text className='insight-content'>{description}</Text>
-              </View>
-            )}
-
-            <View className='insight-item highlight'>
-              <View className='insight-icon-wrapper green'>
-                <Text className='insight-icon iconfont icon-good'></Text>
-              </View>
-              <Text className='insight-content'>{healthAdvice}</Text>
-            </View>
-
-            {pfcRatioComment && (
-              <View className='insight-item ratio'>
-                <View className='insight-icon-wrapper orange'>
-                  <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>营养比例</Text>
-                  <Text className='insight-content'>{pfcRatioComment}</Text>
-                </View>
-              </View>
-            )}
-
-            {absorptionNotes && (
-              <View className='insight-item absorption'>
-                <View className='insight-icon-wrapper purple'>
-                  <Text className='insight-icon iconfont icon-huore'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>吸收与利用</Text>
-                  <Text className='insight-content'>{absorptionNotes}</Text>
-                </View>
-              </View>
-            )}
-
-            {contextAdvice && (
-              <View className='insight-item context'>
-                <View className='insight-icon-wrapper teal'>
-                  <Text className='insight-icon iconfont icon-shizhong'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>情境建议</Text>
-                  <Text className='insight-content'>{contextAdvice}</Text>
-                </View>
-              </View>
-            )}
-          </View>
+          )}
 
           {/* 包含成分 */}
           <View className='ingredients-section'>
@@ -1250,19 +1650,47 @@ export default function ResultPage() {
               {nutritionItems.map((item) => (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
-                    <View className='ingredient-header'>
+                    <View className='ingredient-header ingredient-header--title-row'>
                       <Text className='ingredient-name'>{item.name}</Text>
-                      <View className='edit-icon-wrapper' onClick={() => handleEditName(item.id, item.name)}>
-                        <Text className='iconfont icon-shouxieqianming'></Text>
-                      </View>
-                      <View className='delete-icon-wrapper' onClick={() => handleDeleteItem(item.id, item.name)}>
-                        <Text className='delete-icon'>×</Text>
+                      <View className='ingredient-header-actions'>
+                        <View className='edit-icon-wrapper' onClick={() => handleEditName(item.id, item.name)}>
+                          <Text className='iconfont icon-shouxieqianming'></Text>
+                        </View>
+                        <View className='delete-icon-wrapper' onClick={() => handleDeleteItem(item.id, item.name)}>
+                          <Text className='delete-icon'>×</Text>
+                        </View>
                       </View>
                     </View>
-                    <View className='ingredient-calories'>
-                      <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
-                      <Text className='cal-unit'>kcal</Text>
+                  </View>
+
+                  <View className='ingredient-nutrition-strip'>
+                    <View className='ingredient-summary-cell ingredient-summary-cell--cal'>
+                      <View className='ingredient-cal-kcal-line'>
+                        <Text className='ingredient-cal-kcal-num'>
+                          {Math.round(item.calorie * (item.ratio / 100))}
+                        </Text>
+                        <Text className='ingredient-cal-kcal-unit'>kcal</Text>
+                      </View>
                     </View>
+                    {MACRO_FIELDS.map((field) => {
+                      const meta = MACRO_FIELD_META[field]
+                      const intakeMacro = item[field] * (item.ratio / 100)
+                      return (
+                        <View
+                          key={`${item.id}-${field}`}
+                          className={`ingredient-summary-cell ingredient-summary-cell--${meta.className}`}
+                          onClick={() => handleMacroEdit(item.id, field, item[field])}
+                        >
+                          <Text className='ingredient-macro-name'>{meta.label}</Text>
+                          <View className='ingredient-macro-value-line'>
+                            <Text className={`ingredient-macro-num ingredient-macro-num--${meta.className}`}>
+                              {formatMacroDisplay(intakeMacro)}
+                            </Text>
+                            <Text className='ingredient-macro-g'>g</Text>
+                          </View>
+                        </View>
+                      )
+                    })}
                   </View>
 
                   <View className='ingredient-controls'>
@@ -1282,42 +1710,22 @@ export default function ResultPage() {
                     </View>
 
                     <View className='ratio-control'>
-                      <View className='ratio-header'>
-                        <Text className='control-label'>实际摄入</Text>
+                      <Text className='control-label'>实际摄入</Text>
+                      <View className='ratio-control-right'>
+                        <Slider
+                          className='ratio-slider-modern'
+                          value={item.ratio}
+                          min={0}
+                          max={100}
+                          step={5}
+                          activeColor='#00bc7d'
+                          backgroundColor='#e5e7eb'
+                          blockSize={16}
+                          blockColor='#ffffff'
+                          showValue={false}
+                          onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                        />
                         <Text className='ratio-display'>{item.ratio}%</Text>
-                      </View>
-                      <Slider
-                        className='ratio-slider-modern'
-                        value={item.ratio}
-                        min={0}
-                        max={100}
-                        step={5}
-                        activeColor='#00bc7d'
-                        backgroundColor='#e5e7eb'
-                        blockSize={16}
-                        blockColor='#ffffff'
-                        showValue={false}
-                        onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
-                      />
-                    </View>
-
-                    <View className='macro-editor'>
-                      <View className='macro-editor-grid'>
-                        {MACRO_FIELDS.map((field) => {
-                          const meta = MACRO_FIELD_META[field]
-                          const intakeMacro = item[field] * (item.ratio / 100)
-                          return (
-                            <View key={`${item.id}-${field}`} className={`macro-editor-item ${meta.className}`}>
-                              <View
-                                className='macro-editor-chip'
-                                onClick={() => handleMacroEdit(item.id, field, item[field])}
-                              >
-                                <Text className='macro-editor-item-label'>{meta.label}</Text>
-                                <Text className='macro-editor-value'>{formatMacroDisplay(intakeMacro)}g</Text>
-                              </View>
-                            </View>
-                          )
-                        })}
                       </View>
                     </View>
                   </View>
@@ -1340,31 +1748,14 @@ export default function ResultPage() {
                   className={`primary-btn ${saving ? 'loading' : ''} ${(isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''}`}
                   onClick={handleConfirmAndShare}
                 >
-                  <Text className='btn-text'>
-                    {saving ? '保存中...' : ((isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录')}
-                  </Text>
+                  {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>{(isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录'}</Text>}
                 </View>
               </View>
 
-              <View
-                className={`feedback-link-row`}
-              >
-                <View className='correction-entry' onClick={openCorrectionDrawer}>
-                  <View className='correction-entry-icon-box'>
-                    <Text className='iconfont icon-shouxieqianming correction-icon'></Text>
-                  </View>
-                  <Text className='correction-text'>{shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}</Text>
-                  <Text className='correction-arrow'>›</Text>
-                </View>
-                {hasUploadableImage ? (
-                  <View
-                    className={`library-upload-entry ${saving ? 'disabled' : ''}`}
-                    onClick={saving ? undefined : handleOpenLibraryUpload}
-                  >
-                    <Text className='library-upload-text'>上传公共库</Text>
-                    <Text className='library-upload-arrow'>›</Text>
-                  </View>
-                ) : null}
+              <View className='footer-correction-link' onClick={openCorrectionDrawer}>
+                <Text className='footer-correction-link-text'>
+                  {shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}
+                </Text>
               </View>
             </View>
           </View>
@@ -1488,8 +1879,8 @@ export default function ResultPage() {
               className={`drawer-submit-btn ${isResubmitting ? 'loading' : ''}`}
               onClick={handleSubmitCorrection}
             >
-              <Text className='iconfont icon-loading'></Text>
-              <Text>{isResubmitting ? '提交中...' : '重新智能分析'}</Text>
+              {isResubmitting ? <View className='btn-spinner' /> : <Text className='iconfont icon-loading'></Text>}
+              <Text>{isResubmitting ? '' : '重新智能分析'}</Text>
             </View>
           </View>
         </View>
@@ -1497,3 +1888,5 @@ export default function ResultPage() {
     </View>
   )
 }
+
+export default withAuth(ResultPage)

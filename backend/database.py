@@ -54,6 +54,16 @@ def check_supabase_configured():
         raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
 
 
+def exercise_fallback_task_type() -> str:
+    """
+    当数据库尚未允许 task_type=exercise 时，用文字食物队列类型 + payload.exercise 投递。
+    与 run_backend.py 中 TEXT_FOOD_TASK_TYPE / food_text_debug 逻辑一致。
+    """
+    if str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        return "food_text_debug"
+    return "food_text"
+
+
 async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
     """
     通过 openid 查询用户
@@ -552,6 +562,266 @@ async def upsert_insight_cache(
         raise
 
 
+async def list_user_weight_records(
+    user_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """读取用户体重记录（按记录日和创建时间升序）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = (
+            supabase.table("user_weight_records")
+            .select("*")
+            .eq("user_id", user_id)
+        )
+        if start_date:
+            query = query.gte("recorded_on", start_date)
+        if end_date:
+            query = query.lte("recorded_on", end_date)
+        query = query.order("recorded_on", desc=False).order("created_at", desc=False).order("updated_at", desc=False)
+        if limit:
+            query = query.limit(limit)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_user_weight_records] 错误: {e}")
+        raise
+
+
+async def get_latest_user_weight_record(user_id: str) -> Optional[Dict[str, Any]]:
+    """读取用户最近一次体重记录（按 recorded_on/created_at 倒序）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_weight_records")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("recorded_on", desc=True)
+            .order("created_at", desc=True)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_latest_user_weight_record] 错误: {e}")
+        raise
+
+
+def get_latest_user_weight_record_sync(user_id: str) -> Optional[Dict[str, Any]]:
+    """同步版：读取用户最近一次体重记录，供 Worker 使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_weight_records")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("recorded_on", desc=True)
+            .order("created_at", desc=True)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_latest_user_weight_record_sync] 错误: {e}")
+        raise
+
+
+async def create_user_weight_record(
+    user_id: str,
+    recorded_on: str,
+    weight_kg: float,
+    source_type: str = "manual",
+    note: Optional[str] = None,
+    client_record_id: Optional[str] = None,
+    recorded_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    """新增一条体重记录；若携带 client_record_id，则按该客户端记录 ID 幂等写入。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        created_at = recorded_at or now_iso
+        row = {
+            "user_id": user_id,
+            "recorded_on": recorded_on,
+            "weight_kg": round(float(weight_kg), 1),
+            "source_type": source_type or "manual",
+            "note": note,
+            "updated_at": created_at,
+        }
+        if recorded_at:
+            row["created_at"] = created_at
+        if client_record_id:
+            row["client_record_id"] = client_record_id
+            try:
+                result = (
+                    supabase.table("user_weight_records")
+                    .upsert(row, on_conflict="user_id,client_record_id")
+                    .execute()
+                )
+            except Exception as upsert_error:
+                print(f"[create_user_weight_record] client_record_id upsert 回退普通 insert: {upsert_error}")
+                fallback_row = dict(row)
+                fallback_row.pop("client_record_id", None)
+                result = supabase.table("user_weight_records").insert(fallback_row).execute()
+        else:
+            result = supabase.table("user_weight_records").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("写入体重记录失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_user_weight_record] 错误: {e}")
+        raise
+
+
+async def upsert_user_weight_record(
+    user_id: str,
+    recorded_on: str,
+    weight_kg: float,
+    source_type: str = "manual",
+    note: Optional[str] = None,
+    client_record_id: Optional[str] = None,
+    recorded_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    """兼容旧调用名，实际行为与 create_user_weight_record 一致。"""
+    return await create_user_weight_record(
+        user_id=user_id,
+        recorded_on=recorded_on,
+        weight_kg=weight_kg,
+        source_type=source_type,
+        note=note,
+        client_record_id=client_record_id,
+        recorded_at=recorded_at,
+    )
+
+
+async def list_user_water_logs(
+    user_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """读取用户喝水日志（按时间升序）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = (
+            supabase.table("user_water_logs")
+            .select("*")
+            .eq("user_id", user_id)
+        )
+        if start_date:
+            query = query.gte("recorded_on", start_date)
+        if end_date:
+            query = query.lte("recorded_on", end_date)
+        query = query.order("recorded_on", desc=False).order("recorded_at", desc=False)
+        if limit:
+            query = query.limit(limit)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_user_water_logs] 错误: {e}")
+        raise
+
+
+async def create_user_water_log(
+    user_id: str,
+    amount_ml: int,
+    recorded_on: Optional[str] = None,
+    source_type: str = "manual",
+) -> Dict[str, Any]:
+    """新增一条喝水日志。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        day = recorded_on or datetime.now(CHINA_TZ).date().isoformat()
+        row = {
+            "user_id": user_id,
+            "amount_ml": int(amount_ml),
+            "recorded_on": day,
+            "source_type": source_type or "manual",
+        }
+        result = supabase.table("user_water_logs").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("新增喝水日志失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_user_water_log] 错误: {e}")
+        raise
+
+
+async def delete_user_water_logs_by_date(user_id: str, recorded_on: str) -> int:
+    """删除指定日期的喝水日志。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_water_logs")
+            .delete()
+            .eq("user_id", user_id)
+            .eq("recorded_on", recorded_on)
+            .execute()
+        )
+        return len(result.data or [])
+    except Exception as e:
+        print(f"[delete_user_water_logs_by_date] 错误: {e}")
+        raise
+
+
+async def get_user_body_metric_settings(user_id: str) -> Optional[Dict[str, Any]]:
+    """读取用户身体指标设置。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_body_metric_settings")
+            .select("*")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_user_body_metric_settings] 错误: {e}")
+        return None
+
+
+async def upsert_user_body_metric_settings(user_id: str, water_goal_ml: int) -> Dict[str, Any]:
+    """写入用户喝水目标。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        row = {
+            "user_id": user_id,
+            "water_goal_ml": int(water_goal_ml),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        result = (
+            supabase.table("user_body_metric_settings")
+            .upsert(row, on_conflict="user_id")
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("写入身体指标设置失败：返回数据为空")
+    except Exception as e:
+        print(f"[upsert_user_body_metric_settings] 错误: {e}")
+        raise
+
+
 async def insert_critical_samples(
     user_id: str,
     items: List[Dict[str, Any]],
@@ -668,8 +938,10 @@ def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
             return up.data[0]
         return None
     except Exception as e:
-        print(f"[claim_next_pending_task_sync] 错误: {e}")
-        raise
+        # 不抛出异常，避免工作进程因网络问题（502/503等）崩溃
+        error_msg = str(e)[:200]
+        print(f"[claim_next_pending_task_sync] 网络错误，稍后重试: {error_msg}")
+        return None
 
 
 def update_analysis_task_result_sync(
@@ -677,17 +949,37 @@ def update_analysis_task_result_sync(
     status: str,
     result: Optional[Dict[str, Any]] = None,
     error_message: Optional[str] = None,
-) -> None:
-    """更新任务结果（done / failed）。"""
+) -> bool:
+    """
+    更新任务结果（done / failed）。
+    如果任务已被取消或删除，则跳过更新并返回 False。
+    
+    Returns:
+        bool: 是否成功更新
+    """
     check_supabase_configured()
     supabase = get_supabase_client()
-    row = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
-    if result is not None:
-        row["result"] = result
-    if error_message is not None:
-        row["error_message"] = error_message
+    
     try:
+        # 先检查任务是否存在且不是 cancelled 状态
+        check = supabase.table("analysis_tasks").select("status").eq("id", task_id).execute()
+        if not check.data or len(check.data) == 0:
+            print(f"[update_analysis_task_result_sync] 任务 {task_id} 不存在，跳过更新")
+            return False
+        
+        current_status = check.data[0].get("status")
+        if current_status == "cancelled":
+            print(f"[update_analysis_task_result_sync] 任务 {task_id} 已被取消，跳过更新")
+            return False
+        
+        row = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
+        if result is not None:
+            row["result"] = result
+        if error_message is not None:
+            row["error_message"] = error_message
+        
         supabase.table("analysis_tasks").update(row).eq("id", task_id).execute()
+        return True
     except Exception as e:
         print(f"[update_analysis_task_result_sync] 错误: {e}")
         raise
@@ -846,6 +1138,362 @@ def list_analysis_tasks_by_user_sync(
         raise
 
 
+def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: bool = True) -> dict:
+    """
+    删除用户的分析任务。
+    支持删除任何状态的任务，包括进行中的任务(pending/processing)。
+    对于进行中的任务，会先标记为 cancelled 状态，然后清理关联资源，最后删除记录。
+    
+    Args:
+        task_id: 任务ID
+        user_id: 用户ID
+        cancel_processing: 是否允许取消进行中的任务（默认True）
+    
+    Returns:
+        dict: 包含删除结果和清理的资源信息
+        {
+            "deleted": bool,
+            "cancelled": bool,  # 是否取消了进行中的任务
+            "images_deleted": int,  # 删除的图片数量
+            "message": str
+        }
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    
+    result = {
+        "deleted": False,
+        "cancelled": False,
+        "images_deleted": 0,
+        "message": ""
+    }
+    
+    try:
+        # 先查询任务确认归属和状态，同时获取图片信息
+        r = supabase.table("analysis_tasks").select(
+            "id, status, image_url, image_paths, task_type"
+        ).eq("id", task_id).eq("user_id", user_id).execute()
+        
+        if not r.data or len(r.data) == 0:
+            raise Exception("任务不存在或无权限")
+        
+        task = r.data[0]
+        task_status = task.get("status")
+        
+        # 如果是进行中的任务，先标记为 cancelled
+        if task_status in ("pending", "processing"):
+            if not cancel_processing:
+                raise Exception("进行中的任务无法删除")
+            
+            # 更新状态为 cancelled，这样 worker 会跳过这个任务
+            supabase.table("analysis_tasks").update({
+                "status": "cancelled",
+                "error_message": "用户主动取消任务",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", task_id).eq("user_id", user_id).execute()
+            
+            result["cancelled"] = True
+            print(f"[delete_analysis_task_sync] 任务 {task_id} 已标记为 cancelled")
+            
+            # 给 worker 一点时间来放弃这个任务
+            import time
+            time.sleep(0.5)
+        
+        # 清理关联的图片资源
+        images_to_delete = []
+        
+        # 从 image_url 字段获取
+        if task.get("image_url"):
+            images_to_delete.append(task["image_url"])
+        
+        # 从 image_paths 字段获取（可能是 JSON 数组）
+        image_paths = task.get("image_paths")
+        if image_paths:
+            if isinstance(image_paths, str):
+                try:
+                    import json
+                    image_paths = json.loads(image_paths)
+                except:
+                    image_paths = [image_paths]
+            if isinstance(image_paths, list):
+                images_to_delete.extend(image_paths)
+        
+        # 根据任务类型确定存储桶
+        bucket_name = FOOD_ANALYZE_BUCKET
+        if task.get("task_type") == "health_report":
+            bucket_name = HEALTH_REPORTS_BUCKET
+        
+        # 删除图片
+        for image_url in images_to_delete:
+            if image_url:
+                try:
+                    delete_image_from_storage(image_url, bucket_name)
+                    result["images_deleted"] += 1
+                except Exception as img_e:
+                    print(f"[delete_analysis_task_sync] 删除图片失败 {image_url}: {img_e}")
+        
+        # 执行删除任务记录
+        supabase.table("analysis_tasks").delete().eq("id", task_id).eq("user_id", user_id).execute()
+        result["deleted"] = True
+        
+        if result["cancelled"]:
+            result["message"] = f"任务已取消并删除，清理了 {result['images_deleted']} 个关联资源"
+        else:
+            result["message"] = f"任务已删除，清理了 {result['images_deleted']} 个关联资源"
+        
+        print(f"[delete_analysis_task_sync] {result['message']}")
+        return result
+        
+    except Exception as e:
+        print(f"[delete_analysis_task_sync] 错误: {e}")
+        raise
+
+
+def mark_timed_out_tasks_sync(timeout_minutes: int = 5) -> int:
+    """
+    将超时的 pending/processing 任务标记为 timed_out。
+    返回被标记的任务数量。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 计算超时时间点
+        cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+        
+        # 更新超时任务
+        result = supabase.table("analysis_tasks").update({
+            "status": "timed_out",
+            "error_message": "分析超时，请重试",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }).in_("status", ["pending", "processing"]).lt("created_at", cutoff_time.isoformat()).execute()
+        
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            print(f"[mark_timed_out_tasks_sync] 标记了 {count} 个超时任务")
+        return count
+    except Exception as e:
+        print(f"[mark_timed_out_tasks_sync] 错误: {e}")
+        return 0
+
+
+# ==================== 精准模式会话相关函数 ====================
+
+def create_precision_session_sync(
+    user_id: str,
+    source_type: str,
+    execution_mode: str = "strict",
+    latest_inputs: Optional[Dict[str, Any]] = None,
+    reference_objects: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """创建精准模式会话。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "source_type": source_type,
+        "execution_mode": execution_mode,
+        "status": "collecting",
+        "round_index": 1,
+        "latest_inputs": latest_inputs or {},
+        "pending_requirements": [],
+        "reference_objects": reference_objects or [],
+    }
+    try:
+        result = supabase.table("precision_sessions").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建精准模式会话失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_precision_session_sync] 错误: {e}")
+        raise
+
+
+def get_precision_session_by_id_sync(session_id: str) -> Optional[Dict[str, Any]]:
+    """按 ID 查询精准模式会话。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("precision_sessions")
+            .select("*")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_precision_session_by_id_sync] 错误: {e}")
+        raise
+
+
+def update_precision_session_sync(session_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """更新精准模式会话并返回最新记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = dict(updates or {})
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        result = (
+            supabase.table("precision_sessions")
+            .update(row)
+            .eq("id", session_id)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("更新精准模式会话失败：会话不存在")
+    except Exception as e:
+        print(f"[update_precision_session_sync] 错误: {e}")
+        raise
+
+
+def create_precision_session_round_sync(
+    session_id: str,
+    round_index: int,
+    actor_role: str,
+    input_payload: Optional[Dict[str, Any]] = None,
+    planner_result: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """写入精准模式会话轮次记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "session_id": session_id,
+        "round_index": round_index,
+        "actor_role": actor_role,
+        "input_payload": input_payload or {},
+    }
+    if planner_result is not None:
+        row["planner_result"] = planner_result
+    try:
+        result = supabase.table("precision_session_rounds").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建精准模式轮次记录失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_precision_session_round_sync] 错误: {e}")
+        raise
+
+
+def list_precision_session_rounds_sync(session_id: str) -> List[Dict[str, Any]]:
+    """查询精准模式会话的所有轮次。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("precision_session_rounds")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("round_index")
+            .order("created_at")
+            .execute()
+        )
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_precision_session_rounds_sync] 错误: {e}")
+        raise
+
+
+def create_precision_item_estimate_sync(
+    session_id: str,
+    round_index: int,
+    item_index: int,
+    item_key: str,
+    item_name: str,
+    payload: Optional[Dict[str, Any]] = None,
+    source_task_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """创建单个精准模式子项估计记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "session_id": session_id,
+        "round_index": round_index,
+        "item_index": item_index,
+        "item_key": item_key,
+        "item_name": item_name,
+        "status": "pending",
+        "payload": payload or {},
+    }
+    if source_task_id:
+        row["source_task_id"] = source_task_id
+    try:
+        result = supabase.table("precision_item_estimates").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建精准模式子项估计失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_precision_item_estimate_sync] 错误: {e}")
+        raise
+
+
+def list_precision_item_estimates_sync(
+    session_id: str,
+    round_index: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """查询精准模式子项估计列表。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = (
+            supabase.table("precision_item_estimates")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("round_index")
+            .order("item_index")
+        )
+        if round_index is not None:
+            query = query.eq("round_index", round_index)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_precision_item_estimates_sync] 错误: {e}")
+        raise
+
+
+def get_precision_item_estimate_by_source_task_sync(source_task_id: str) -> Optional[Dict[str, Any]]:
+    """按 source_task_id 查询精准模式子项估计记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("precision_item_estimates")
+            .select("*")
+            .eq("source_task_id", source_task_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_precision_item_estimate_by_source_task_sync] 错误: {e}")
+        raise
+
+
+def update_precision_item_estimate_sync(estimate_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """更新精准模式子项估计并返回最新记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = dict(updates or {})
+    row["updated_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        result = (
+            supabase.table("precision_item_estimates")
+            .update(row)
+            .eq("id", estimate_id)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("更新精准模式子项估计失败：记录不存在")
+    except Exception as e:
+        print(f"[update_precision_item_estimate_sync] 错误: {e}")
+        raise
+
+
 # ==================== 评论任务相关函数 ====================
 
 def create_comment_task_sync(
@@ -919,8 +1567,11 @@ def claim_next_pending_comment_task_sync(comment_type: Optional[str] = None) -> 
             return up.data[0]
         return None
     except Exception as e:
-        print(f"[claim_next_pending_comment_task_sync] 错误: {e}")
-        raise
+        # 不抛出异常，避免工作进程因网络问题（502/503等）崩溃
+        # 返回 None 让工作进程休眠后重试
+        error_msg = str(e)[:200]  # 限制错误信息长度
+        print(f"[claim_next_pending_comment_task_sync] 网络错误，稍后重试: {error_msg}")
+        return None
 
 
 def update_comment_task_result_sync(
@@ -1607,6 +2258,46 @@ def _normalize_feed_comment_row(
     }
 
 
+def _find_recent_duplicate_feed_comment_sync(
+    supabase,
+    user_id: str,
+    record_id: str,
+    content: str,
+    parent_comment_id: Optional[str] = None,
+    reply_to_user_id: Optional[str] = None,
+    window_seconds: int = 8,
+) -> Optional[Dict[str, Any]]:
+    normalized_content = (content or "").strip()
+    if not normalized_content:
+        return None
+
+    try:
+        result = (
+            supabase.table("feed_comments")
+            .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
+            .eq("user_id", user_id)
+            .eq("record_id", record_id)
+            .eq("content", normalized_content)
+            .order("created_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[_find_recent_duplicate_feed_comment_sync] 查询失败: {e}")
+        return None
+
+    now = datetime.now(timezone.utc)
+    for row in list(result.data or []):
+        if row.get("parent_comment_id") != parent_comment_id:
+            continue
+        if row.get("reply_to_user_id") != reply_to_user_id:
+            continue
+        created_at = _parse_iso_datetime(row.get("created_at"))
+        if created_at and (now - created_at).total_seconds() <= window_seconds:
+            return row
+    return None
+
+
 def _slice_feed_comment_preview(comments: List[Dict[str, Any]], comments_limit: int) -> List[Dict[str, Any]]:
     if comments_limit <= 0:
         return []
@@ -2242,10 +2933,25 @@ async def add_feed_comment(
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        normalized_content = content.strip()
+        duplicate = _find_recent_duplicate_feed_comment_sync(
+            supabase,
+            user_id=user_id,
+            record_id=record_id,
+            content=normalized_content,
+            parent_comment_id=parent_comment_id,
+            reply_to_user_id=reply_to_user_id,
+        )
+        if duplicate:
+            return {
+                **duplicate,
+                "_deduped": True,
+            }
+
         row = {
             "user_id": user_id,
             "record_id": record_id,
-            "content": content.strip(),
+            "content": normalized_content,
             "parent_comment_id": parent_comment_id,
             "reply_to_user_id": reply_to_user_id,
         }
@@ -2269,10 +2975,25 @@ def add_feed_comment_sync(
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        normalized_content = content.strip()
+        duplicate = _find_recent_duplicate_feed_comment_sync(
+            supabase,
+            user_id=user_id,
+            record_id=record_id,
+            content=normalized_content,
+            parent_comment_id=parent_comment_id,
+            reply_to_user_id=reply_to_user_id,
+        )
+        if duplicate:
+            return {
+                **duplicate,
+                "_deduped": True,
+            }
+
         row = {
             "user_id": user_id,
             "record_id": record_id,
-            "content": content.strip(),
+            "content": normalized_content,
             "parent_comment_id": parent_comment_id,
             "reply_to_user_id": reply_to_user_id,
         }
@@ -2978,107 +3699,268 @@ async def hide_food_record_from_feed(user_id: str, record_id: str) -> bool:
 
 # ---------- 食物保质期 ----------
 
-async def create_food_expiry_item(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    """创建食物保质期项。"""
+def _normalize_food_expiry_date_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    value_str = str(value).strip()
+    if not value_str:
+        return None
+    return value_str[:10]
+
+
+async def create_food_expiry_item_v2(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建新版食物保质期项。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     row = {
         "user_id": user_id,
         "food_name": data.get("food_name"),
-        "quantity_text": data.get("quantity_text"),
-        "storage_location": data.get("storage_location"),
+        "category": data.get("category"),
+        "storage_type": data.get("storage_type") or "refrigerated",
+        "quantity_note": data.get("quantity_note"),
+        "expire_date": _normalize_food_expiry_date_value(data.get("expire_date")),
+        "opened_date": _normalize_food_expiry_date_value(data.get("opened_date")),
         "note": data.get("note"),
-        "deadline_at": data.get("deadline_at"),
-        "deadline_precision": data.get("deadline_precision") or "date",
-        "completed_at": data.get("completed_at"),
+        "source_type": data.get("source_type") or "manual",
+        "status": data.get("status") or "active",
     }
     try:
-        result = supabase.table("user_food_expiry_items").insert(row).execute()
+        result = supabase.table("food_expiry_items").insert(row).execute()
         return result.data[0] if result.data else {}
     except Exception as e:
-        print(f"[create_food_expiry_item] 错误: {e}")
+        print(f"[create_food_expiry_item_v2] 错误: {e}")
         raise
 
 
-async def list_food_expiry_items(user_id: str, status: str = "pending") -> List[Dict[str, Any]]:
-    """列出用户的食物保质期项。"""
+async def list_food_expiry_items_v2(user_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """列出新版食物保质期项。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("user_food_expiry_items").select("*").eq("user_id", user_id).execute()
-        items = result.data or []
-        if status == "completed":
-            completed_items = [item for item in items if item.get("completed_at")]
-            completed_items.sort(
-                key=lambda item: str(item.get("completed_at") or ""),
-                reverse=True,
-            )
-            return completed_items
-        pending_items = [item for item in items if not item.get("completed_at")]
-        pending_items.sort(key=lambda item: str(item.get("deadline_at") or ""))
-        return pending_items
+        query = supabase.table("food_expiry_items").select("*").eq("user_id", user_id)
+        if status:
+            query = query.eq("status", status)
+        result = query.execute()
+        return list(result.data or [])
     except Exception as e:
-        print(f"[list_food_expiry_items] 错误: {e}")
+        print(f"[list_food_expiry_items_v2] 错误: {e}")
         raise
 
 
-async def get_food_expiry_item(item_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-    """获取单个食物保质期项。"""
+async def get_food_expiry_item_v2(item_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    """获取新版单个食物保质期项。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
         result = (
-            supabase.table("user_food_expiry_items")
+            supabase.table("food_expiry_items")
             .select("*")
             .eq("id", item_id)
             .eq("user_id", user_id)
+            .limit(1)
             .execute()
         )
-        if result.data and len(result.data) > 0:
+        if result.data:
             return result.data[0]
         return None
     except Exception as e:
-        print(f"[get_food_expiry_item] 错误: {e}")
+        print(f"[get_food_expiry_item_v2] 错误: {e}")
         raise
 
 
-async def update_food_expiry_item(item_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    """更新食物保质期项。"""
+async def update_food_expiry_item_v2(item_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """更新新版食物保质期项。"""
     check_supabase_configured()
     supabase = get_supabase_client()
+    row = dict(data)
+    if "expire_date" in row:
+        row["expire_date"] = _normalize_food_expiry_date_value(row.get("expire_date"))
+    if "opened_date" in row:
+        row["opened_date"] = _normalize_food_expiry_date_value(row.get("opened_date"))
     try:
         result = (
-            supabase.table("user_food_expiry_items")
-            .update(data)
+            supabase.table("food_expiry_items")
+            .update(row)
             .eq("id", item_id)
             .eq("user_id", user_id)
             .execute()
         )
         return result.data[0] if result.data else {}
     except Exception as e:
-        print(f"[update_food_expiry_item] 错误: {e}")
+        print(f"[update_food_expiry_item_v2] 错误: {e}")
         raise
 
 
-async def complete_food_expiry_item(item_id: str, user_id: str) -> Dict[str, Any]:
-    """标记食物已吃完。"""
-    return await update_food_expiry_item(
-        item_id,
-        user_id,
-        {"completed_at": datetime.now(timezone.utc).isoformat()},
-    )
-
-
-async def delete_food_expiry_item(item_id: str, user_id: str) -> bool:
-    """删除食物保质期项。"""
+async def delete_food_expiry_item_v2(item_id: str, user_id: str) -> bool:
+    """删除新版食物保质期项。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        supabase.table("user_food_expiry_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
+        supabase.table("food_expiry_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
         return True
     except Exception as e:
-        print(f"[delete_food_expiry_item] 错误: {e}")
+        print(f"[delete_food_expiry_item_v2] 错误: {e}")
         raise
+
+
+async def list_food_expiry_notification_jobs_by_item(expiry_item_id: str) -> List[Dict[str, Any]]:
+    """获取某个保质期条目的通知任务。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("food_expiry_notification_jobs")
+            .select("*")
+            .eq("expiry_item_id", expiry_item_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_food_expiry_notification_jobs_by_item] 错误: {e}")
+        raise
+
+
+async def upsert_food_expiry_notification_job(
+    user_id: str,
+    expiry_item_id: str,
+    template_id: str,
+    openid: str,
+    scheduled_at: str,
+    payload_snapshot: Dict[str, Any],
+    max_retry_count: int = 3,
+) -> Dict[str, Any]:
+    """按条目幂等创建或更新通知任务。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    scheduled_at_iso = str(scheduled_at)
+    try:
+        existing_result = (
+            supabase.table("food_expiry_notification_jobs")
+            .select("*")
+            .eq("expiry_item_id", expiry_item_id)
+            .eq("template_id", template_id)
+            .neq("status", "sent")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        row = {
+            "user_id": user_id,
+            "expiry_item_id": expiry_item_id,
+            "template_id": template_id,
+            "openid": openid,
+            "status": "pending",
+            "scheduled_at": scheduled_at_iso,
+            "sent_at": None,
+            "last_error": None,
+            "retry_count": 0,
+            "max_retry_count": max_retry_count,
+            "payload_snapshot": payload_snapshot,
+        }
+        if existing_result.data:
+            existing = existing_result.data[0]
+            result = (
+                supabase.table("food_expiry_notification_jobs")
+                .update(row)
+                .eq("id", existing["id"])
+                .execute()
+            )
+            return result.data[0] if result.data else existing
+        result = supabase.table("food_expiry_notification_jobs").insert(row).execute()
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f"[upsert_food_expiry_notification_job] 错误: {e}")
+        raise
+
+
+async def cancel_food_expiry_notification_jobs_by_item(expiry_item_id: str) -> int:
+    """取消某个保质期条目的未完成通知任务。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("food_expiry_notification_jobs")
+            .update({
+                "status": "cancelled",
+                "last_error": None,
+            })
+            .eq("expiry_item_id", expiry_item_id)
+            .in_("status", ["pending", "processing", "failed"])
+            .execute()
+        )
+        return len(result.data or [])
+    except Exception as e:
+        print(f"[cancel_food_expiry_notification_jobs_by_item] 错误: {e}")
+        raise
+
+
+def claim_next_pending_food_expiry_notification_job_sync() -> Optional[Dict[str, Any]]:
+    """抢占下一条待发送的保质期通知任务。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        result = (
+            supabase.table("food_expiry_notification_jobs")
+            .select("*")
+            .eq("status", "pending")
+            .lte("scheduled_at", now_iso)
+            .order("scheduled_at", desc=False)
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return None
+        job = result.data[0]
+        claimed = (
+            supabase.table("food_expiry_notification_jobs")
+            .update({"status": "processing", "last_error": None})
+            .eq("id", job["id"])
+            .eq("status", "pending")
+            .execute()
+        )
+        if claimed.data:
+            return claimed.data[0]
+        return None
+    except Exception as e:
+        print(f"[claim_next_pending_food_expiry_notification_job_sync] 错误: {e}")
+        raise
+
+
+def update_food_expiry_notification_job_sync(
+    job_id: str,
+    data: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """更新单条保质期通知任务。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("food_expiry_notification_jobs").update(data).eq("id", job_id).execute()
+        if result.data:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[update_food_expiry_notification_job_sync] 错误: {e}")
+        raise
+
+
+def get_food_expiry_item_v2_sync(item_id: str) -> Optional[Dict[str, Any]]:
+    """同步获取新版食物保质期项，供 Worker 使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("food_expiry_items").select("*").eq("id", item_id).limit(1).execute()
+        if result.data:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_food_expiry_item_v2_sync] 错误: {e}")
+        raise
+
 
 
 # ---------- 用户私人食谱 ----------
@@ -3439,22 +4321,33 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
         raise
 
 
+# 计入「每日分析配额」的任务类型：与 create_analysis_task_sync 写入的类型一致。
+# 开发环境若开启 FOOD_DEBUG_TASK_QUEUE，任务为 food_debug / food_text_debug，须一并统计，否则会员页 daily_used 恒为 0。
+_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA = ("food", "food_text", "food_debug", "food_text_debug")
+
+
 async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
-    """统计用户今日（中国时区）的食物拍照分析次数（task_type 为 food 或 food_text）。"""
+    """统计用户今日（中国时区）的食物分析次数：analysis_tasks 表中上述 task_type 的创建条数（拍照与文字分析均计入）。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        # china_date_str 格式 "YYYY-MM-DD"，转换为 UTC 范围（UTC+8 = UTC-8h）
-        day_start_utc = f"{china_date_str}T00:00:00+08:00"
-        day_end_utc = f"{china_date_str}T23:59:59+08:00"
+        from datetime import date as _date, timedelta as _timedelta
+        china_date   = _date.fromisoformat(china_date_str)
+        next_date    = china_date + _timedelta(days=1)
+        day_start    = f"{china_date_str}T00:00:00+08:00"
+        day_end_excl = f"{next_date.strftime('%Y-%m-%d')}T00:00:00+08:00"
+
         result = supabase.table("analysis_tasks")\
-            .select("id", count="exact")\
+            .select("id")\
             .eq("user_id", user_id)\
-            .in_("task_type", ["food", "food_text"])\
-            .gte("created_at", day_start_utc)\
-            .lte("created_at", day_end_utc)\
+            .in_("task_type", list(_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA))\
+            .gte("created_at", day_start)\
+            .lt("created_at", day_end_excl)\
             .execute()
-        return result.count or 0
+
+        count = len(result.data) if result.data else 0
+        print(f"[get_today_food_analysis_count] user={user_id} date={china_date_str} count={count}")
+        return count
     except Exception as e:
         print(f"[get_today_food_analysis_count] 错误: {e}")
         return 0
@@ -3604,3 +4497,596 @@ async def update_pro_membership_payment_record(order_no: str, data: Dict[str, An
     except Exception as e:
         print(f"[update_pro_membership_payment_record] 错误: {e}")
         raise
+
+
+# ---------- 手动记录：食物搜索 ----------
+
+def _normalize_manual_food_keyword(value: Any) -> str:
+    return re.sub(r"\s+", "", str(value or "").strip().lower())
+
+
+def _safe_manual_food_number(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except Exception:
+        return 0.0
+
+
+def _build_manual_public_food_result(
+    row: Dict[str, Any],
+    *,
+    collected: bool = False,
+) -> Dict[str, Any]:
+    items_raw = row.get("items") or []
+    total_weight = sum(
+        max(int((it or {}).get("weight") or (it or {}).get("estimatedWeightGrams") or 0), 0)
+        for it in items_raw
+        if isinstance(it, dict)
+    ) if items_raw else 100
+    return {
+        "id": row["id"],
+        "source": "public_library",
+        "title": row.get("food_name") or row.get("description") or "公共食物库",
+        "subtitle": row.get("merchant_name") or "公共食物库",
+        "default_weight_grams": total_weight or 100,
+        "total_calories": _safe_manual_food_number(row.get("total_calories")),
+        "total_protein": _safe_manual_food_number(row.get("total_protein")),
+        "total_carbs": _safe_manual_food_number(row.get("total_carbs")),
+        "total_fat": _safe_manual_food_number(row.get("total_fat")),
+        "items": items_raw,
+        "image_path": row.get("image_path"),
+        "image_paths": row.get("image_paths"),
+        "portion_label": "1份",
+        "source_label": "公共库",
+        "like_count": int(row.get("like_count") or 0),
+        "collection_count": int(row.get("collection_count") or 0),
+        "collected": bool(collected),
+    }
+
+
+def _build_manual_nutrition_food_result(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "source": "nutrition_library",
+        "title": row.get("canonical_name") or "未知食物",
+        "subtitle": "标准食物词典 · 每100g",
+        "default_weight_grams": 100,
+        "total_calories": _safe_manual_food_number(row.get("kcal_per_100g")),
+        "total_protein": _safe_manual_food_number(row.get("protein_per_100g")),
+        "total_carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
+        "total_fat": _safe_manual_food_number(row.get("fat_per_100g")),
+        "nutrients_per_100g": {
+            "calories": _safe_manual_food_number(row.get("kcal_per_100g")),
+            "protein": _safe_manual_food_number(row.get("protein_per_100g")),
+            "carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
+            "fat": _safe_manual_food_number(row.get("fat_per_100g")),
+        },
+        "items": None,
+        "image_path": None,
+        "image_paths": None,
+        "portion_label": "100g",
+        "source_label": "营养词典",
+        "collected": False,
+        "like_count": 0,
+        "collection_count": 0,
+    }
+
+
+def _compute_manual_food_match_score(
+    *,
+    query: str,
+    item: Dict[str, Any],
+    usage_count: int,
+    collected: bool,
+) -> float:
+    normalized_query = _normalize_manual_food_keyword(query)
+    normalized_title = _normalize_manual_food_keyword(item.get("title"))
+    normalized_subtitle = _normalize_manual_food_keyword(item.get("subtitle"))
+    raw_query = str(query or "").strip().lower()
+    raw_title = str(item.get("title") or "").strip().lower()
+    score = 0.0
+
+    if normalized_title == normalized_query:
+        score += 140.0
+    elif normalized_title.startswith(normalized_query):
+        score += 95.0
+    elif normalized_query and normalized_query in normalized_title:
+        score += 62.0
+
+    if raw_title == raw_query:
+        score += 30.0
+    elif raw_title.startswith(raw_query):
+        score += 18.0
+
+    if normalized_subtitle and normalized_query and normalized_query in normalized_subtitle:
+        score += 14.0
+
+    if item.get("source") == "public_library":
+        score += min(float(item.get("like_count") or 0), 60.0) * 0.45
+        score += min(float(item.get("collection_count") or 0), 40.0) * 0.35
+
+    if collected:
+        score += 28.0
+    if usage_count > 0:
+        score += min(float(usage_count), 8.0) * 12.0
+
+    return round(score, 2)
+
+
+def _build_manual_food_recommend_reason(
+    *,
+    item: Dict[str, Any],
+    usage_count: int,
+    collected: bool,
+) -> str:
+    if usage_count >= 2:
+        return f"最近常吃 · {usage_count}次"
+    if usage_count == 1:
+        return "最近吃过"
+    if collected:
+        return "已收藏"
+    if item.get("source") == "public_library" and int(item.get("like_count") or 0) >= 3:
+        return f"{int(item.get('like_count') or 0)}人喜欢"
+    if item.get("source") == "public_library":
+        return "公共库实餐"
+    return "标准营养词典"
+
+
+async def _get_manual_food_usage_stats(
+    user_id: Optional[str],
+    *,
+    limit_records: int = 120,
+) -> Dict[str, Any]:
+    if not user_id:
+        return {
+            "name_counter": Counter(),
+            "source_counter": Counter(),
+            "recent_entries": [],
+        }
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        rows = (
+            supabase.table("user_food_records")
+            .select("items,record_time,created_at")
+            .eq("user_id", user_id)
+            .order("record_time", desc=True)
+            .limit(limit_records)
+            .execute()
+        )
+        name_counter: Counter = Counter()
+        source_counter: Counter = Counter()
+        recent_entries: List[Dict[str, Any]] = []
+        seen_recent_keys = set()
+        for row in list(rows.data or []):
+            record_time = row.get("record_time") or row.get("created_at")
+            for item in (row.get("items") or []):
+                if not isinstance(item, dict):
+                    continue
+                source = str(item.get("manual_source") or item.get("source") or "").strip()
+                source_id = str(item.get("manual_source_id") or item.get("source_id") or "").strip()
+                source_title = str(item.get("manual_source_title") or item.get("name") or "").strip()
+                normalized_name = _normalize_manual_food_keyword(source_title)
+                if not normalized_name:
+                    continue
+                name_counter[normalized_name] += 1
+                if source and source_id:
+                    source_counter[f"{source}:{source_id}"] += 1
+                    recent_key = f"{source}:{source_id}"
+                else:
+                    recent_key = f"name:{normalized_name}"
+                if recent_key in seen_recent_keys:
+                    continue
+                seen_recent_keys.add(recent_key)
+                recent_entries.append({
+                    "recent_key": recent_key,
+                    "source": source or None,
+                    "source_id": source_id or None,
+                    "title": source_title,
+                    "last_used_at": record_time,
+                })
+        return {
+            "name_counter": name_counter,
+            "source_counter": source_counter,
+            "recent_entries": recent_entries,
+        }
+    except Exception as e:
+        print(f"[_get_manual_food_usage_stats] 错误: {e}")
+        return {
+            "name_counter": Counter(),
+            "source_counter": Counter(),
+            "recent_entries": [],
+        }
+
+
+def _annotate_manual_food_results(
+    results: List[Dict[str, Any]],
+    *,
+    query: str,
+    usage_stats: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    name_counter = (usage_stats or {}).get("name_counter") or Counter()
+    source_counter = (usage_stats or {}).get("source_counter") or Counter()
+    annotated: List[Dict[str, Any]] = []
+    for item in results:
+        normalized_title = _normalize_manual_food_keyword(item.get("title"))
+        source_key = f"{item.get('source')}:{item.get('id')}"
+        usage_count = int(source_counter.get(source_key) or name_counter.get(normalized_title) or 0)
+        collected = bool(item.get("collected"))
+        score = _compute_manual_food_match_score(
+            query=query,
+            item=item,
+            usage_count=usage_count,
+            collected=collected,
+        ) if query else (
+            usage_count * 12.0
+            + (26.0 if collected else 0.0)
+            + min(float(item.get("like_count") or 0), 60.0) * 0.4
+        )
+        annotated.append({
+            **item,
+            "usage_count": usage_count,
+            "recommend_reason": _build_manual_food_recommend_reason(
+                item=item,
+                usage_count=usage_count,
+                collected=collected,
+            ),
+            "match_score": round(score, 2),
+        })
+    annotated.sort(
+        key=lambda item: (
+            float(item.get("match_score") or 0),
+            int(item.get("usage_count") or 0),
+            1 if item.get("source") == "public_library" else 0,
+            int(item.get("like_count") or 0),
+            -len(str(item.get("title") or "")),
+        ),
+        reverse=True,
+    )
+    return annotated
+
+
+def _build_recent_manual_food_items(
+    candidates: List[Dict[str, Any]],
+    usage_stats: Optional[Dict[str, Any]],
+    *,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    if not candidates:
+        return []
+    recent_entries = list((usage_stats or {}).get("recent_entries") or [])
+    if not recent_entries:
+        return []
+
+    by_source_key = {
+        f"{item.get('source')}:{item.get('id')}": item
+        for item in candidates
+    }
+    by_name: Dict[str, List[Dict[str, Any]]] = {}
+    for item in candidates:
+        by_name.setdefault(_normalize_manual_food_keyword(item.get("title")), []).append(item)
+
+    picked: List[Dict[str, Any]] = []
+    seen_keys = set()
+    for entry in recent_entries:
+        if len(picked) >= limit:
+            break
+        candidate = None
+        recent_key = entry.get("recent_key")
+        if recent_key and recent_key in by_source_key:
+            candidate = by_source_key[recent_key]
+        else:
+            matched = by_name.get(_normalize_manual_food_keyword(entry.get("title")))
+            if matched:
+                candidate = matched[0]
+        if not candidate:
+            continue
+        source_key = f"{candidate.get('source')}:{candidate.get('id')}"
+        if source_key in seen_keys:
+            continue
+        seen_keys.add(source_key)
+        picked.append(candidate)
+    return picked
+
+
+async def search_manual_food(
+    q: str,
+    limit: int = 20,
+    current_user_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    统一搜索公共食物库 + 标准食物营养词典（含别名），
+    并结合用户收藏/最近使用记录做统一重排。
+    """
+    if not q or not q.strip():
+        return []
+    q = q.strip()
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    usage_stats = await _get_manual_food_usage_stats(current_user_id)
+    results: List[Dict[str, Any]] = []
+    search_limit = max(min(limit * 3, 60), 20)
+
+    collected_ids = set()
+    if current_user_id:
+        try:
+            collected_items = await list_collected_public_food_library(current_user_id, limit=80)
+            collected_ids = {str(item.get("id")) for item in collected_items if item.get("id")}
+        except Exception as e:
+            print(f"[search_manual_food] 读取收藏失败: {e}")
+
+    try:
+        pfl = supabase.table("public_food_library")\
+            .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths,like_count,collection_count")\
+            .eq("status", "published")\
+            .or_(f"food_name.ilike.%{q}%,description.ilike.%{q}%,merchant_name.ilike.%{q}%")\
+            .limit(search_limit)\
+            .execute()
+        for row in (pfl.data or []):
+            row_id = str(row.get("id") or "")
+            results.append(_build_manual_public_food_result(
+                row,
+                collected=row_id in collected_ids,
+            ))
+    except Exception as e:
+        print(f"[search_manual_food] public_food_library 搜索出错: {e}")
+
+    try:
+        fnl = supabase.table("food_nutrition_library")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+            .eq("is_active", True)\
+            .ilike("canonical_name", f"%{q}%")\
+            .limit(search_limit)\
+            .execute()
+        matched_ids = {row["id"] for row in (fnl.data or [])}
+        alias_rows = supabase.table("food_nutrition_aliases")\
+            .select("food_id,alias_name")\
+            .ilike("alias_name", f"%{q}%")\
+            .limit(search_limit)\
+            .execute()
+        alias_food_ids = [r["food_id"] for r in (alias_rows.data or []) if r["food_id"] not in matched_ids]
+
+        extra_rows = []
+        if alias_food_ids:
+            extra = supabase.table("food_nutrition_library")\
+                .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+                .eq("is_active", True)\
+                .in_("id", alias_food_ids[:search_limit])\
+                .execute()
+            extra_rows = extra.data or []
+
+        all_fnl = list(fnl.data or []) + extra_rows
+        seen_ids = set()
+        for row in all_fnl:
+            row_id = str(row.get("id") or "")
+            if not row_id or row_id in seen_ids:
+                continue
+            seen_ids.add(row_id)
+            results.append(_build_manual_nutrition_food_result(row))
+    except Exception as e:
+        print(f"[search_manual_food] food_nutrition_library 搜索出错: {e}")
+
+    annotated = _annotate_manual_food_results(results, query=q, usage_stats=usage_stats)
+    return annotated[:limit]
+
+
+async def browse_manual_food_library(
+    current_user_id: Optional[str] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    返回手动记录默认浏览数据，并在已登录时补充最近常吃与收藏公共库。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    usage_stats = await _get_manual_food_usage_stats(current_user_id)
+    public_items: List[Dict[str, Any]] = []
+    nutrition_items: List[Dict[str, Any]] = []
+    collected_public_library: List[Dict[str, Any]] = []
+    collected_ids = set()
+
+    if current_user_id:
+        try:
+            collected_raw = await list_collected_public_food_library(current_user_id, limit=20)
+            for row in collected_raw:
+                item = _build_manual_public_food_result(row, collected=True)
+                collected_public_library.append(item)
+                collected_ids.add(str(item.get("id")))
+        except Exception as e:
+            print(f"[browse_manual_food_library] 收藏公共库出错: {e}")
+
+    try:
+        pfl = supabase.table("public_food_library")\
+            .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths,like_count,collection_count")\
+            .eq("status", "published")\
+            .order("like_count", desc=True)\
+            .limit(60)\
+            .execute()
+        for row in (pfl.data or []):
+            public_items.append(_build_manual_public_food_result(
+                row,
+                collected=str(row.get("id") or "") in collected_ids,
+            ))
+    except Exception as e:
+        print(f"[browse_manual_food_library] public_food_library 出错: {e}")
+
+    try:
+        fnl = supabase.table("food_nutrition_library")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+            .eq("is_active", True)\
+            .order("canonical_name")\
+            .limit(160)\
+            .execute()
+        for row in (fnl.data or []):
+            nutrition_items.append(_build_manual_nutrition_food_result(row))
+    except Exception as e:
+        print(f"[browse_manual_food_library] food_nutrition_library 出错: {e}")
+
+    public_items = _annotate_manual_food_results(public_items, query="", usage_stats=usage_stats)
+    nutrition_items = _annotate_manual_food_results(nutrition_items, query="", usage_stats=usage_stats)
+    collected_public_library = _annotate_manual_food_results(collected_public_library, query="", usage_stats=usage_stats)
+    recent_items = _build_recent_manual_food_items(
+        public_items + nutrition_items,
+        usage_stats,
+        limit=8,
+    )
+
+    return {
+        "recent_items": recent_items,
+        "collected_public_library": collected_public_library[:8],
+        "public_library": public_items[:18],
+        "nutrition_library": nutrition_items[:36],
+    }
+
+
+async def log_unresolved_food(raw_name: str) -> None:
+    """记录未命中的搜索词到 food_unresolved_logs，用于后续词典扩充。"""
+    if not raw_name or not raw_name.strip():
+        return
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    import re
+    normalized = re.sub(r'\s+', '', raw_name.strip().lower())
+    try:
+        existing = supabase.table("food_unresolved_logs")\
+            .select("id,hit_count")\
+            .eq("normalized_name", normalized)\
+            .limit(1)\
+            .execute()
+        if existing.data and len(existing.data) > 0:
+            row = existing.data[0]
+            supabase.table("food_unresolved_logs")\
+                .update({"hit_count": (row.get("hit_count") or 0) + 1})\
+                .eq("id", row["id"])\
+                .execute()
+        else:
+            supabase.table("food_unresolved_logs")\
+                .insert({"raw_name": raw_name.strip(), "normalized_name": normalized, "hit_count": 1})\
+                .execute()
+    except Exception as e:
+        print(f"[log_unresolved_food] 记录未命中词失败: {e}")
+
+
+# ===== 运动记录相关函数 =====
+
+async def list_user_exercise_logs(
+    user_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """读取用户运动记录（按时间倒序）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = (
+            supabase.table("user_exercise_logs")
+            .select("*")
+            .eq("user_id", user_id)
+        )
+        if start_date:
+            query = query.gte("recorded_on", start_date)
+        if end_date:
+            query = query.lte("recorded_on", end_date)
+        query = query.order("recorded_at", desc=True)
+        if limit:
+            query = query.limit(limit)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        err_s = str(e)
+        # 表未创建或 PostgREST 缓存中无表时，避免首页/记运动页整页 500
+        if (
+            "PGRST205" in err_s
+            or "Could not find the table" in err_s
+            or ("user_exercise_logs" in err_s and "relation" in err_s.lower())
+        ):
+            print(f"[list_user_exercise_logs] 表未就绪，返回空列表: {e}")
+            return []
+        print(f"[list_user_exercise_logs] 错误: {e}")
+        raise
+
+
+def create_user_exercise_log_sync(
+    user_id: str,
+    exercise_desc: str,
+    calories_burned: int,
+    recorded_on: Optional[str] = None,
+    ai_reasoning: Optional[str] = None,
+) -> Dict[str, Any]:
+    """新增一条运动记录（Worker 同步调用）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        day = recorded_on or datetime.now(CHINA_TZ).date().isoformat()
+        row = {
+            "user_id": user_id,
+            "exercise_desc": exercise_desc.strip(),
+            "calories_burned": int(calories_burned),
+            "recorded_on": day,
+        }
+        if ai_reasoning is not None and str(ai_reasoning).strip():
+            row["ai_reasoning"] = str(ai_reasoning).strip()[:4000]
+        result = supabase.table("user_exercise_logs").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("新增运动记录失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_user_exercise_log_sync] 错误: {e}")
+        raise
+
+
+async def create_user_exercise_log(
+    user_id: str,
+    exercise_desc: str,
+    calories_burned: int,
+    recorded_on: Optional[str] = None,
+    ai_reasoning: Optional[str] = None,
+) -> Dict[str, Any]:
+    """新增一条运动记录。"""
+    return create_user_exercise_log_sync(
+        user_id, exercise_desc, calories_burned, recorded_on, ai_reasoning=ai_reasoning
+    )
+
+
+async def delete_user_exercise_log(user_id: str, log_id: str) -> bool:
+    """删除指定ID的运动记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_exercise_logs")
+            .delete()
+            .eq("id", log_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return len(result.data or []) > 0
+    except Exception as e:
+        print(f"[delete_user_exercise_log] 错误: {e}")
+        raise
+
+
+def get_exercise_calories_by_date_sync(user_id: str, recorded_on: str) -> int:
+    """获取用户指定日期运动消耗的总卡路里（Worker 同步）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_exercise_logs")
+            .select("calories_burned")
+            .eq("user_id", user_id)
+            .eq("recorded_on", recorded_on)
+            .execute()
+        )
+        # PostgREST 可能将整型以字符串返回，与 GET /api/exercise-logs 中 int() 处理保持一致
+        total = sum(int(row.get("calories_burned") or 0) for row in (result.data or []))
+        return total
+    except Exception as e:
+        print(f"[get_exercise_calories_by_date_sync] 错误: {e}")
+        return 0
+
+
+async def get_exercise_calories_by_date(user_id: str, recorded_on: str) -> int:
+    """获取用户指定日期运动消耗的总卡路里。"""
+    return get_exercise_calories_by_date_sync(user_id, recorded_on)

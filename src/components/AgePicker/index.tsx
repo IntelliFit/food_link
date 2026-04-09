@@ -42,15 +42,15 @@ export default function AgePicker({
     }
 
     return (
-        <View className="age-picker-wrapper">
-            <View className="picker-view-container">
+        <View className='age-picker-wrapper'>
+            <View className='picker-view-container'>
                 <PickerView
-                    className="age-picker-view"
-                    indicatorClass="picker-indicator-visible"
-                    indicatorStyle="height: 120px;" // Native style inline
-                    style={{ width: '100%', height: '100%' }}
-                    value={pickVal}
-                    onChange={handleChange}
+                  className='age-picker-view'
+                  indicatorClass='picker-indicator-visible'
+                  indicatorStyle='height: 120px;' // Native style inline
+                  style={{ width: '100%', height: '100%' }}
+                  value={pickVal}
+                  onChange={handleChange}
                 >
                     <PickerViewColumn>
                         {ages.map((age) => {
@@ -59,10 +59,10 @@ export default function AgePicker({
                             // But we can check against current value if we accept slight delay
                             const isSelected = age === value
                             return (
-                                <View key={age} className="picker-item">
+                                <View key={age} className='picker-item'>
                                     <Text
-                                        className="age-number"
-                                        style={{
+                                      className='age-number'
+                                      style={{
                                             // Dynamic inline style for bolding selected item
                                             // This might update slightly delayed but is standard
                                             fontSize: isSelected ? '48px' : '32px',
@@ -81,7 +81,7 @@ export default function AgePicker({
                 </PickerView>
 
                 {/* Floating Unit Label */}
-                <Text className="static-unit-label">岁</Text>
+                <Text className='static-unit-label'>岁</Text>
             </View>
         </View>
     )

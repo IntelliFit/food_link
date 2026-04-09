@@ -11,6 +11,9 @@ node_modules/
 # 项目特定文件夹（不上传）
 hkh/
 
+# 本地一次性生成的孤儿对象扫描报告（勿提交）
+backend/reports/orphan-report-*.json
+
 # 环境变量（重要：包含敏感信息）
 .env
 .env.local
@@ -85,3 +88,29 @@ coverage/
 *.temp
 .cache/
 .env.development
+
+# 本地验证截图目录（勿提交）
+/debug/
+/artifacts/
+/docs/verification/
+
+# 调试/测试截图
+check_*.png
+gauge_*.png
+test_*.png
+verify*.png
+home_*.png
+after_*.png
+before_*.png
+final_*.png
+current-*.png
+weapp_*.png
+modal_*.png
+step*.png
+*.local.png
+
+# 根目录下的所有PNG截图（保留子目录中的PNG资源）
+/*.png
+/*.PNG
+
+.playwright-mcp

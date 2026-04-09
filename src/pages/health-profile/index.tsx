@@ -9,10 +9,13 @@ import {
   uploadReportImage,
   submitReportExtractionTask,
   imageToBase64,
+  getMyMembership,
   type HealthProfileUpdateRequest,
-  type ExecutionMode
+  type ExecutionMode,
+  type MembershipStatus,
 } from '../../utils/api'
 import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 import HeightRuler from '../../components/HeightRuler'
@@ -56,13 +59,13 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式（完善中）', desc: '该功能仍在完善中，暂时不可选。' },
+  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。需开通食探会员。' },
   { value: 'standard', title: '标准模式', desc: '记录更快，但估算波动更大，适合先建立习惯。' }
 ]
 
 const TOTAL_STEPS = 12 // 性别、生日、身高、体重、目标、活动、执行模式、病史、饮食、过敏、特殊情况、体检报告
 
-export default function HealthProfilePage() {
+function HealthProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
@@ -80,6 +83,7 @@ export default function HealthProfilePage() {
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
   const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -108,7 +112,7 @@ export default function HealthProfilePage() {
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
       if (profile.execution_mode) {
-        setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
+        setExecutionMode(profile.execution_mode)
         setExecutionModeTouched(true)
       }
       const hc = profile.health_condition
@@ -125,6 +129,7 @@ export default function HealthProfilePage() {
 
   useEffect(() => {
     loadProfile()
+    getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
   }, [])
 
   const goNext = () => {
@@ -224,9 +229,7 @@ export default function HealthProfilePage() {
   }
 
   const recommendExecutionMode = (goal: string): ExecutionMode => {
-    if (goal === 'fat_loss' || goal === 'muscle_gain') {
-      return normalizeAvailableExecutionMode('strict')
-    }
+    if (goal === 'fat_loss' || goal === 'muscle_gain') return 'strict'
     return 'standard'
   }
 
@@ -266,6 +269,7 @@ export default function HealthProfilePage() {
   const handleSubmit = async () => {
     // 合并预设病史和选中的自定义病史
     const allMedicalHistory = [...medicalHistory.filter(v => v !== 'none'), ...selectedCustomMedical]
+    let effectiveMode = executionMode
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
@@ -273,7 +277,7 @@ export default function HealthProfilePage() {
       weight: weight ? Number(weight) : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
-      execution_mode: executionMode,
+      execution_mode: effectiveMode,
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
@@ -284,6 +288,24 @@ export default function HealthProfilePage() {
       Taro.showToast({ title: '请完成前几项必填', icon: 'none' })
       return
     }
+
+    // 精准模式需要会员：填写完档案后提示
+    if (effectiveMode === 'strict' && !membershipStatus?.is_pro) {
+      const { confirm } = await Taro.showModal({
+        title: '解锁精准模式',
+        content: '精准模式需要开通食探会员才能使用，是否前往开通？\n若取消则自动切换至标准模式保存。',
+        confirmText: '去开通',
+        cancelText: '标准模式保存',
+      })
+      if (confirm) {
+        Taro.navigateTo({ url: '/pages/pro-membership/index' })
+        return
+      }
+      effectiveMode = 'standard'
+      setExecutionMode('standard')
+      req.execution_mode = 'standard'
+    }
+
     const { confirm } = await Taro.showModal({
       title: '确认保存',
       content: reportImageUrl
@@ -329,19 +351,19 @@ export default function HealthProfilePage() {
 
   if (loading) {
     return (
-      <View className="health-profile-page">
-        <View className="card step-card">
-          <Text className="step-card-title">加载中...</Text>
+      <View className='health-profile-page'>
+        <View className='card step-card'>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )
   }
 
   return (
-    <View className="health-profile-page">
+    <View className='health-profile-page'>
       {/* 进度条 */}
-      <View className="progress-wrap">
-        <View className="progress-dots">
+      <View className='progress-wrap'>
+        <View className='progress-dots'>
           {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
             <View
               key={i}
@@ -349,51 +371,51 @@ export default function HealthProfilePage() {
             />
           ))}
         </View>
-        <Text className="progress-text">
+        <Text className='progress-text'>
           {currentStep + 1} / {TOTAL_STEPS}
         </Text>
       </View>
 
       {/* 卡片容器：通过上一题/确认切换 */}
-      <View className="cards-wrap">
+      <View className='cards-wrap'>
         <View
-          className="cards-track"
+          className='cards-track'
           style={{
             transform: `translateX(-${currentStep * 750}rpx)`,
             transition: 'transform 0.3s ease-out'
           }}
         >
           {/* Step 0: 性别 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 1 题</Text>
-            <Text className="step-card-title">你的性别是？</Text>
-            <View className="choice-row choice-row-vertical">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 1 题</Text>
+            <Text className='step-card-title'>你的性别是？</Text>
+            <View className='choice-row choice-row-vertical'>
               <View
                 className={`option-card big ${gender === 'male' ? 'active' : ''}`}
                 onClick={() => handleSelectGender('male')}
               >
-                <Text className="option-icon iconfont icon-nannv-nan" />
-                <Text className="option-label">男</Text>
+                <Text className='option-icon iconfont icon-nannv-nan' />
+                <Text className='option-label'>男</Text>
               </View>
               <View
                 className={`option-card big ${gender === 'female' ? 'active' : ''}`}
                 onClick={() => handleSelectGender('female')}
               >
-                <Text className="option-icon iconfont icon-nannv-nv" />
-                <Text className="option-label">女</Text>
+                <Text className='option-icon iconfont icon-nannv-nv' />
+                <Text className='option-label'>女</Text>
               </View>
             </View>
-            <View className="card-footer card-footer-single">
-              <Button block color="primary" shape="round" className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
+            <View className='card-footer card-footer-single'>
+              <Button block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 1: 出生日期 (Changed to Age Selection) */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 2 题</Text>
-            <Text className="step-card-title">您的年龄是？</Text>
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 2 题</Text>
+            <Text className='step-card-title'>您的年龄是？</Text>
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <AgePicker
                 value={age}
@@ -407,18 +429,18 @@ export default function HealthProfilePage() {
                 max={100}
               />
             </View>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 2: 身高 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 3 题</Text>
-            <Text className="step-card-title">你的身高是？</Text>
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 3 题</Text>
+            <Text className='step-card-title'>你的身高是？</Text>
             {/* 使用 HeightRuler 替换原有的输入 */}
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <HeightRuler
@@ -428,17 +450,17 @@ export default function HealthProfilePage() {
                 max={250}
               />
             </View>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 3: 体重 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 4 题</Text>
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 4 题</Text>
             {/* Title is handled inside WeightRuler for better layout */}
             <WeightRuler
               value={weight ? Number(weight) : 60}
@@ -447,19 +469,19 @@ export default function HealthProfilePage() {
               max={200}
               height={height ? Number(height) : 170}
             />
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 4: 目标选择 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 5 题</Text>
-            <Text className="step-card-title">您的目标？</Text>
-            <View className="option-list">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 5 题</Text>
+            <Text className='step-card-title'>您的目标？</Text>
+            <View className='option-list'>
               {GOAL_OPTIONS.map((opt) => (
                 <View
                   key={opt.value}
@@ -467,95 +489,95 @@ export default function HealthProfilePage() {
                   onClick={() => handleSelectDietGoal(opt.value)}
                 >
                   <Text className={`option-icon iconfont ${opt.icon}`}></Text>
-                  <View className="option-info">
-                    <Text className="option-label">{opt.label}</Text>
-                    <Text className="option-desc">{opt.desc}</Text>
+                  <View className='option-info'>
+                    <Text className='option-label'>{opt.label}</Text>
+                    <Text className='option-desc'>{opt.desc}</Text>
                   </View>
                 </View>
               ))}
             </View>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className={`card-next-btn ${dietGoal ? 'ready' : ''}`} onClick={goNext} disabled={!dietGoal}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${dietGoal ? 'ready' : ''}`} onClick={goNext} disabled={!dietGoal}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 5: 活动水平 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 6 题</Text>
-            <Text className="step-card-title">日常活动水平？</Text>
-            <View className="option-list">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 6 题</Text>
+            <Text className='step-card-title'>日常活动水平？</Text>
+            <View className='option-list'>
               {ACTIVITY_OPTIONS.map((o) => (
                 <View
                   key={o.value}
                   className={`option-card with-desc ${activityLevel === o.value ? 'active' : ''}`}
                   onClick={() => handleSelectActivity(o.value)}
                 >
-                  <Text className="option-icon">{o.icon}</Text>
-                  <Text className="option-label">{o.label}</Text>
-                  <Text className="option-desc">{o.desc}</Text>
+                  <Text className='option-icon'>{o.icon}</Text>
+                  <Text className='option-label'>{o.label}</Text>
+                  <Text className='option-desc'>{o.desc}</Text>
                 </View>
               ))}
             </View>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 6: 执行模式 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 7 题</Text>
-            <Text className="step-card-title">选择你的执行模式</Text>
-            <View className="option-list">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 7 题</Text>
+            <Text className='step-card-title'>选择你的执行模式</Text>
+            <View className='option-list'>
               {EXECUTION_MODE_OPTIONS.map((mode) => (
                 <View
                   key={mode.value}
                   className={`option-card with-desc ${executionMode === mode.value ? 'active' : ''}`}
                   onClick={() => {
                     if (mode.value === 'strict') {
-                      notifyStrictModeUnavailable()
-                      setExecutionMode('standard')
+                      setExecutionMode('strict')
+                      setExecutionModeTouched(true)
                       return
                     }
                     setExecutionMode(mode.value)
                     setExecutionModeTouched(true)
                   }}
                 >
-                  <View className="option-info">
-                    <Text className="option-label">{mode.title}</Text>
-                    <Text className="option-desc">{mode.desc}</Text>
+                  <View className='option-info'>
+                    <Text className='option-label'>{mode.title}</Text>
+                    <Text className='option-desc'>{mode.desc}</Text>
                   </View>
                 </View>
               ))}
             </View>
-            <Text className="skip-hint">
+            <Text className='skip-hint'>
               当前推荐：{recommendExecutionMode(dietGoal || 'maintain') === 'strict' ? '精准模式' : '标准模式'}
             </Text>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className={`card-next-btn ${executionMode ? 'ready' : ''}`} onClick={goNext} disabled={!executionMode}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${executionMode ? 'ready' : ''}`} onClick={goNext} disabled={!executionMode}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 7: 既往病史（多选） */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 8 题</Text>
-            <Text className="step-card-title">是否有以下病史？（可多选）</Text>
-            <View className="option-grid">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 8 题</Text>
+            <Text className='step-card-title'>是否有以下病史？（可多选）</Text>
+            <View className='option-grid'>
               {MEDICAL_OPTIONS.map((o) => (
                 <View
                   key={o.value}
                   className={`option-card small ${medicalHistory.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleMedical(o.value)}
                 >
-                  <Text className="option-label">{o.label}</Text>
+                  <Text className='option-label'>{o.label}</Text>
                 </View>
               ))}
               {/* 显示用户添加的自定义病史 */}
@@ -566,109 +588,109 @@ export default function HealthProfilePage() {
                   onClick={() => toggleCustomMedical(item)}
                   onLongPress={() => handleRemoveCustomMedical(item)}
                 >
-                  <Text className="option-label">{item}</Text>
+                  <Text className='option-label'>{item}</Text>
                 </View>
               ))}
             </View>
             {/* 自定义病史输入 */}
-            <View className="custom-input-wrap">
+            <View className='custom-input-wrap'>
               <Input
-                className="custom-input"
-                placeholder="其他病史，输入后点击添加"
+                className='custom-input'
+                placeholder='其他病史，输入后点击添加'
                 value={customMedical}
                 onInput={(e) => setCustomMedical(e.detail.value)}
                 onConfirm={handleAddCustomMedical}
               />
-              <View className="custom-input-btn" onClick={handleAddCustomMedical}>
+              <View className='custom-input-btn' onClick={handleAddCustomMedical}>
                 <Text>添加</Text>
               </View>
             </View>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 8: 特殊饮食（多选） */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 9 题</Text>
-            <Text className="step-card-title">特殊饮食习惯？（可多选）</Text>
-            <View className="option-grid">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 9 题</Text>
+            <Text className='step-card-title'>特殊饮食习惯？（可多选）</Text>
+            <View className='option-grid'>
               {DIET_OPTIONS.map((o) => (
                 <View
                   key={o.value}
                   className={`option-card small ${dietPreference.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleDiet(o.value)}
                 >
-                  <Text className="option-icon">{o.icon}</Text>
-                  <Text className="option-label">{o.label}</Text>
+                  <Text className='option-icon'>{o.icon}</Text>
+                  <Text className='option-label'>{o.label}</Text>
                 </View>
               ))}
             </View>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 9: 过敏源 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 10 题（选填）</Text>
-            <Text className="step-card-title">有过敏源吗？</Text>
-            <View className="input-card">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 10 题（选填）</Text>
+            <Text className='step-card-title'>有过敏源吗？</Text>
+            <View className='input-card'>
               <Textarea
-                className="card-textarea"
-                placeholder="如：海鲜、花生，多个用顿号分隔"
+                className='card-textarea'
+                placeholder='如：海鲜、花生，多个用顿号分隔'
                 value={allergies}
                 onInput={(e) => setAllergies(e.detail.value)}
                 maxlength={200}
               />
             </View>
-            <Text className="skip-hint">没有可留空</Text>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
+            <Text className='skip-hint'>没有可留空</Text>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 10: 特殊情况和问题补充 */}
-          <View className="card step-card">
-            <Text className="step-card-step">第 11 题（选填）</Text>
-            <Text className="step-card-title">特殊情况和补充？</Text>
-            <View className="input-card">
+          <View className='card step-card'>
+            <Text className='step-card-step'>第 11 题（选填）</Text>
+            <Text className='step-card-title'>特殊情况和补充？</Text>
+            <View className='input-card'>
               {/* 这里使用 textarea 或者普通的 Input 都行。原项目设计风格用 Input 为主 */}
               <Textarea
-                className="card-textarea"
-                placeholder="例如：孕期、哺乳期、手术恢复期等"
+                className='card-textarea'
+                placeholder='例如：孕期、哺乳期、手术恢复期等'
                 value={healthNotes}
                 onInput={(e) => setHealthNotes(e.detail.value)}
                 maxlength={500}
               />
             </View>
-            <Text className="skip-hint">记录身体的特殊情况，让分析更准确（没有可留空）</Text>
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
-              <Button block color="primary" shape="round" className="card-next-btn ready" onClick={goNext}>
+            <Text className='skip-hint'>记录身体的特殊情况，让分析更准确（没有可留空）</Text>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 确认
               </Button>
             </View>
           </View>
 
           {/* Step 11: 体检报告上传 */}
-          <View className="card step-card upload-step">
-            <View className="upload-hero">
-              <View className="hero-icon-wrapper">
-                <Text className="hero-icon iconfont icon-yiliaohangyedeICON-"></Text>
+          <View className='card step-card upload-step'>
+            <View className='upload-hero'>
+              <View className='hero-icon-wrapper'>
+                <Text className='hero-icon iconfont icon-yiliaohangyedeICON-'></Text>
               </View>
-              <Text className="step-card-step">第 12 题（选填）</Text>
-              <Text className="step-card-title" style={{ marginBottom: '16rpx' }}>上传体检报告</Text>
-              <Text className="step-card-subtitle" style={{ textAlign: 'center', marginBottom: '0' }}>AI 深度分析关键指标，定制专属方案</Text>
+              <Text className='step-card-step'>第 12 题（选填）</Text>
+              <Text className='step-card-title' style={{ marginBottom: '16rpx' }}>上传体检报告</Text>
+              <Text className='step-card-subtitle' style={{ textAlign: 'center', marginBottom: '0' }}>AI 深度分析关键指标，定制专属方案</Text>
             </View>
 
             <View
@@ -677,58 +699,58 @@ export default function HealthProfilePage() {
             >
               {reportImageUrl ? (
                 <>
-                  <Image src={reportImageUrl} mode="aspectFit" className="preview-image" />
-                  <View className="reupload-mask">
-                    <Text className="iconfont icon-xiangji" style={{ fontSize: '48rpx', color: '#fff' }}></Text>
-                    <Text className="reupload-text">点击更换图片</Text>
+                  <Image src={reportImageUrl} mode='aspectFit' className='preview-image' />
+                  <View className='reupload-mask'>
+                    <Text className='iconfont icon-xiangji' style={{ fontSize: '48rpx', color: '#fff' }}></Text>
+                    <Text className='reupload-text'>点击更换图片</Text>
                   </View>
                 </>
               ) : (
-                <View className="upload-placeholder">
-                  <Text className="upload-icon-font iconfont icon-paizhao-xianxing"></Text>
-                  <Text className="upload-title">点击上传报告</Text>
-                  <Text className="upload-desc">支持 JPG / PNG 格式图片</Text>
+                <View className='upload-placeholder'>
+                  <Text className='upload-icon-font iconfont icon-paizhao-xianxing'></Text>
+                  <Text className='upload-title'>点击上传报告</Text>
+                  <Text className='upload-desc'>支持 JPG / PNG 格式图片</Text>
                 </View>
               )}
             </View>
 
-            <View className="benefit-list">
-              <View className="benefit-item">
-                <View className="benefit-icon-wrap">
-                  <Text className="benefit-icon iconfont icon-jiesuo"></Text>
+            <View className='benefit-list'>
+              <View className='benefit-item'>
+                <View className='benefit-icon-wrap'>
+                  <Text className='benefit-icon iconfont icon-jiesuo'></Text>
                 </View>
-                <View className="benefit-content">
-                  <Text className="benefit-title">精准提取</Text>
-                  <Text className="benefit-text">自动识别血糖、血脂等关键指标</Text>
-                </View>
-              </View>
-              <View className="benefit-item">
-                <View className="benefit-icon-wrap">
-                  <Text className="benefit-icon iconfont icon-shentinianling"></Text>
-                </View>
-                <View className="benefit-content">
-                  <Text className="benefit-title">风险评估</Text>
-                  <Text className="benefit-text">结合个人情况评估潜在健康风险</Text>
+                <View className='benefit-content'>
+                  <Text className='benefit-title'>精准提取</Text>
+                  <Text className='benefit-text'>自动识别血糖、血脂等关键指标</Text>
                 </View>
               </View>
-              <View className="benefit-item">
-                <View className="benefit-icon-wrap">
-                  <Text className="benefit-icon iconfont icon-shuben"></Text>
+              <View className='benefit-item'>
+                <View className='benefit-icon-wrap'>
+                  <Text className='benefit-icon iconfont icon-shentinianling'></Text>
                 </View>
-                <View className="benefit-content">
-                  <Text className="benefit-title">饮食建议</Text>
-                  <Text className="benefit-text">根据指标生成针对性饮食指导</Text>
+                <View className='benefit-content'>
+                  <Text className='benefit-title'>风险评估</Text>
+                  <Text className='benefit-text'>结合个人情况评估潜在健康风险</Text>
+                </View>
+              </View>
+              <View className='benefit-item'>
+                <View className='benefit-icon-wrap'>
+                  <Text className='benefit-icon iconfont icon-shuben'></Text>
+                </View>
+                <View className='benefit-content'>
+                  <Text className='benefit-title'>饮食建议</Text>
+                  <Text className='benefit-text'>根据指标生成针对性饮食指导</Text>
                 </View>
               </View>
             </View>
 
-            <View className="card-footer">
-              <View className="card-prev-link" onClick={goPrev}>上一题</View>
+            <View className='card-footer'>
+              <View className='card-prev-link' onClick={goPrev}>上一题</View>
               <Button
                 block
-                color="primary"
-                shape="round"
-                className="card-next-btn ready primary"
+                color='primary'
+                shape='round'
+                className='card-next-btn ready primary'
                 onClick={handleSubmit}
                 loading={saving}
               >
@@ -741,3 +763,5 @@ export default function HealthProfilePage() {
     </View>
   )
 }
+
+export default withAuth(HealthProfilePage)

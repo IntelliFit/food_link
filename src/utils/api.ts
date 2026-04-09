@@ -1,9 +1,32 @@
 import Taro from '@tarojs/taro'
 
-declare const __API_BASE_URL__: string
+function readInjectedString(
+  getter: () => string,
+  fallback = ''
+): string {
+  try {
+    const value = getter()
+    return typeof value === 'string' ? value : fallback
+  } catch (error) {
+    return fallback
+  }
+}
 
-export const API_BASE_URL =
-  __API_BASE_URL__ || 'https://healthymax.cn'
+// 使用构建时注入的 API 基础 URL
+// config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
+export const API_BASE_URL = readInjectedString(
+  () => __API_BASE_URL__,
+  'https://healthymax.cn'
+)
+export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
+  () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
+  ''
+)
+
+// 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
+if (process.env.NODE_ENV !== 'production') {
+  console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
+}
 
 function isNgrokFreeDomain(url: string): boolean {
   return /^https:\/\/[^/]+\.ngrok-free\.dev(?:\/|$)/i.test(url)
@@ -36,6 +59,23 @@ export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode = 'standard' | 'strict'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
+export type PrecisionSourceType = 'image' | 'text'
+export type PrecisionStatus = 'needs_user_input' | 'needs_retake' | 'estimating' | 'done'
+export type PrecisionSplitStrategy = 'single_item' | 'multi_item_parallel' | 'retake_required' | 'user_annotation_required'
+
+export interface PrecisionReferenceDimensions {
+  length?: number
+  width?: number
+  height?: number
+}
+
+export interface PrecisionReferenceObjectInput {
+  reference_type: 'preset' | 'custom'
+  reference_name: string
+  dimensions_mm?: PrecisionReferenceDimensions
+  placement_note?: string
+  applies_to_items?: string[]
+}
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
@@ -89,6 +129,17 @@ export interface AnalyzeResponse {
   retakeGuidance?: string[]
   allowedFoodCategory?: AllowedFoodCategory
   followupQuestions?: string[]
+  precisionSessionId?: string
+  precisionStatus?: PrecisionStatus
+  precisionRoundIndex?: number
+  pendingRequirements?: string[]
+  retakeInstructions?: string[]
+  referenceObjectNeeded?: boolean
+  referenceObjectSuggestions?: string[]
+  detectedItemsSummary?: string[]
+  splitStrategy?: PrecisionSplitStrategy
+  uncertaintyNotes?: string[]
+  redirectTaskId?: string
 }
 
 // ---------- 双模型对比分析接口 ----------
@@ -124,6 +175,10 @@ export interface FoodRecordItemPayload {
   ratio: number
   intake: number
   nutrients: Nutrients
+  manual_source?: 'public_library' | 'nutrition_library'
+  manual_source_id?: string
+  manual_source_title?: string
+  manual_portion_label?: string
 }
 
 /** 确认记录请求：餐次 + 识别结果与营养汇总 + 用户状态与专业分析 */
@@ -211,9 +266,11 @@ export interface HomeMealItem {
   target: number
   progress: number
   tags: string[]
+  image_path?: string | null
+  image_paths?: string[] | null
 }
 
-export interface FoodExpiryItem {
+export interface HomeFoodExpiryItem {
   id: string
   user_id: string
   food_name: string
@@ -232,30 +289,20 @@ export interface FoodExpiryItem {
   urgency_level: 'overdue' | 'today' | 'soon' | 'normal'
 }
 
-export interface FoodExpirySummary {
+export interface HomeFoodExpirySummary {
   pendingCount: number
   soonCount: number
   overdueCount: number
-  items: FoodExpiryItem[]
+  items: HomeFoodExpiryItem[]
 }
 
-export interface CreateFoodExpiryRequest {
-  food_name: string
-  quantity_text?: string
-  storage_location?: string
-  note?: string
-  deadline_precision: 'date' | 'datetime'
-  deadline_date: string
-  deadline_time?: string
-}
-
-export interface UpdateFoodExpiryRequest extends CreateFoodExpiryRequest {}
-
-/** 首页仪表盘接口返回（不含运动） */
+/** 首页仪表盘接口返回 */
 export interface HomeDashboard {
   intakeData: HomeIntakeData
   meals: HomeMealItem[]
-  expirySummary?: FoodExpirySummary
+  expirySummary?: HomeFoodExpirySummary
+  /** 当日运动消耗汇总（千卡），来自 user_exercise_logs */
+  exerciseBurnedKcal?: number
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -361,6 +408,45 @@ export interface StatsSummary {
   analysis_summary: string
   analysis_summary_generated_date?: string | null
   analysis_summary_needs_refresh?: boolean
+  body_metrics?: BodyMetricsSummary
+}
+
+export interface BodyMetricWeightEntry {
+  id?: string
+  date: string
+  value: number
+  client_id?: string | null
+  recorded_at?: string | null
+}
+
+export interface BodyMetricWaterDay {
+  date: string
+  total: number
+  logs: number[]
+}
+
+export interface BodyMetricsSummary {
+  range: 'week' | 'month'
+  start_date: string
+  end_date: string
+  weight_entries: BodyMetricWeightEntry[]
+  /** 统计区间内每日体重（LOCF：无新记录时沿用上次体重，供趋势展示） */
+  weight_trend_daily?: Array<{ date: string; value: number }>
+  latest_weight?: BodyMetricWeightEntry | null
+  previous_weight?: BodyMetricWeightEntry | null
+  weight_change?: number | null
+  water_goal_ml: number
+  today_water: BodyMetricWaterDay
+  water_daily: BodyMetricWaterDay[]
+  total_water_ml: number
+  avg_daily_water_ml: number
+  water_recorded_days: number
+}
+
+export interface BodyMetricsLocalSnapshot {
+  weight_entries: BodyMetricWeightEntry[]
+  water_by_date: Record<string, { total: number; logs: number[] }>
+  water_goal_ml?: number
 }
 
 // 登录请求接口
@@ -435,10 +521,73 @@ export interface MembershipStatus {
   current_period_start?: string | null
   expires_at?: string | null
   last_paid_at?: string | null
+  daily_limit: number | null
+  daily_used: number | null
+  daily_remaining: number | null
 }
 
 export interface MembershipPlansResponse {
   list: MembershipPlan[]
+}
+
+export type FoodExpiryStorageType = 'room_temp' | 'refrigerated' | 'frozen'
+export type FoodExpiryStatus = 'active' | 'consumed' | 'discarded'
+export type FoodExpirySourceType = 'manual' | 'ocr' | 'ai'
+export type FoodExpiryUrgency = 'expired' | 'today' | 'soon' | 'fresh'
+
+export interface FoodExpiryItem {
+  id: string
+  user_id: string
+  food_name: string
+  category?: string | null
+  storage_type: FoodExpiryStorageType
+  storage_type_label?: string
+  quantity_note?: string | null
+  expire_date: string
+  opened_date?: string | null
+  note?: string | null
+  source_type: FoodExpirySourceType
+  status: FoodExpiryStatus
+  status_label?: string
+  urgency?: FoodExpiryUrgency
+  urgency_label?: string
+  days_until_expire?: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FoodExpiryDashboard {
+  active_count: number
+  expired_count: number
+  today_count: number
+  soon_count: number
+  processed_count: number
+  preview_items: FoodExpiryItem[]
+}
+
+export interface UpsertFoodExpiryItemRequest {
+  food_name: string
+  category?: string
+  storage_type?: FoodExpiryStorageType
+  quantity_note?: string
+  expire_date: string
+  opened_date?: string
+  note?: string
+  source_type?: FoodExpirySourceType
+  status?: FoodExpiryStatus
+}
+
+export interface FoodExpirySubscribeRequest {
+  subscribe_status: string
+  err_msg?: string
+}
+
+export interface FoodExpirySubscribeResponse {
+  subscribed: boolean
+  schedule_created: boolean
+  status?: string
+  scheduled_at?: string | null
+  message: string
 }
 
 export interface CreateMembershipPaymentResponse {
@@ -742,9 +891,8 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
 }
 
 function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string {
-  const d = data as { detail?: string; message?: string } | null | undefined
-  if (d && typeof d.detail === 'string' && d.detail.trim()) return d.detail.trim()
-  if (d && typeof d.message === 'string' && d.message.trim()) return d.message.trim()
+  const parsed = parseFastApiDetail(data)
+  if (parsed) return parsed
   if (statusCode === 413) {
     return '图片体积过大，请重新拍照或选择较小的图片后再试'
   }
@@ -752,6 +900,50 @@ function formatUploadAnalyzeHttpError(statusCode: number, data: unknown): string
     return '登录已失效，请重新登录后再试'
   }
   return `上传图片失败（HTTP ${statusCode}）`
+}
+
+/** 微信端 `Taro.request` 的 `data` 有时为已解析对象，有时为 JSON 字符串 */
+function normalizeTaroResponseJson(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>
+  }
+  if (typeof raw === 'string') {
+    const text = raw.trim()
+    if (!text) return null
+    try {
+      const parsed = JSON.parse(text) as unknown
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+/** 解析 FastAPI `detail`（字符串或校验错误数组） */
+function parseFastApiDetail(data: unknown): string | undefined {
+  const obj = normalizeTaroResponseJson(data)
+  if (!obj) return undefined
+  const d = obj.detail
+  if (typeof d === 'string' && d.trim()) return d.trim()
+  if (Array.isArray(d) && d.length > 0) {
+    const first = d[0] as { msg?: string }
+    if (typeof first?.msg === 'string' && first.msg.trim()) return first.msg.trim()
+  }
+  const m = obj.message
+  if (typeof m === 'string' && m.trim()) return m.trim()
+  return undefined
+}
+
+/** 抛出带 HTTP 状态码的错误，便于页面区分 429 等场景 */
+function throwHttpErrorWithStatus(statusCode: number, data: unknown, fallback: string): never {
+  const msg = parseFastApiDetail(data) || fallback
+  const err = new Error(msg) as Error & { statusCode: number }
+  err.statusCode = statusCode
+  throw err
 }
 
 function parseUploadAnalyzeResponseData(rawData: unknown): Record<string, any> | null {
@@ -991,6 +1183,8 @@ export interface AnalyzeTaskSubmitParams {
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
   previousResult?: AnalyzeResponse
+  precision_session_id?: string
+  reference_objects?: PrecisionReferenceObjectInput[]
   correctionItems?: Array<{
     name: string
     weight: number
@@ -1032,10 +1226,16 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
     timeout: 10000
   })
   if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '提交任务失败'
-    throw new Error(msg)
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交任务失败')
   }
-  return res.data as { task_id: string; message: string }
+  const data = normalizeTaroResponseJson(res.data)
+  const taskId = String(data?.task_id ?? data?.taskId ?? '').trim()
+  const message = String(data?.message ?? '任务已提交')
+  if (!taskId) {
+    console.error('[submitAnalyzeTask] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return { task_id: taskId, message }
 }
 
 /** 文字分析提交参数 */
@@ -1050,6 +1250,8 @@ export interface AnalyzeTextTaskSubmitParams {
   additionalContext?: string
   execution_mode?: ExecutionMode
   previousResult?: AnalyzeResponse
+  precision_session_id?: string
+  reference_objects?: PrecisionReferenceObjectInput[]
   correctionItems?: Array<{
     name: string
     weight: number
@@ -1074,10 +1276,61 @@ export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): 
     timeout: 10000
   })
   if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '提交任务失败'
-    throw new Error(msg)
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交任务失败')
   }
-  return res.data as { task_id: string; message: string }
+  const parsed = normalizeTaroResponseJson(res.data)
+  if (!parsed?.task_id && !parsed?.taskId) {
+    console.error('[submitTextAnalyzeTask] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return {
+    task_id: String(parsed.task_id ?? parsed.taskId ?? '').trim(),
+    message: String(parsed.message ?? '任务已提交')
+  }
+}
+
+export interface ContinuePrecisionSessionParams {
+  source_type: PrecisionSourceType
+  image_url?: string
+  image_urls?: string[]
+  text?: string
+  additionalContext?: string
+  meal_type?: MealType
+  timezone_offset_minutes?: number
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+  is_multi_view?: boolean
+  reference_objects?: PrecisionReferenceObjectInput[]
+}
+
+export async function continuePrecisionSession(
+  sessionId: string,
+  body: ContinuePrecisionSessionParams,
+): Promise<{ task_id: string; message: string }> {
+  const payload: ContinuePrecisionSessionParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset(),
+  }
+  const res = await authenticatedRequest(`/api/precision-sessions/${sessionId}/continue`, {
+    method: 'POST',
+    data: payload,
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '继续精准模式失败')
+  }
+  const data = normalizeTaroResponseJson(res.data)
+  const taskId = String(data?.task_id ?? data?.taskId ?? '').trim()
+  const message = String(data?.message ?? '任务已提交')
+  if (!taskId) {
+    console.error('[continuePrecisionSession] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return { task_id: taskId, message }
 }
 
 /** 查询单条分析任务 */
@@ -1121,6 +1374,30 @@ export async function updateAnalysisTaskResult(taskId: string, result: AnalyzeRe
     throw new Error(msg)
   }
   return res.data as { message: string; task: AnalysisTask }
+}
+
+/**
+ * 删除分析任务
+ * DELETE /api/analyze/tasks/{task_id}
+ * 支持删除进行中的任务，会自动取消并清理关联资源
+ */
+export interface DeleteTaskResult {
+  message: string
+  deleted: boolean
+  cancelled?: boolean
+  images_deleted?: number
+}
+
+export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResult> {
+  const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '删除任务失败'
+    throw new Error(msg)
+  }
+  return res.data as DeleteTaskResult
 }
 
 /**
@@ -1253,83 +1530,45 @@ export async function getUnlimitedQRCode(
 }
 
 /**
+ * 与首页 dashboard 一致：日期条曾用 2025 显示年时，后端需使用真实数据年（如 2026）。
+ * 身体指标写入接口也经此映射，避免与统计周范围错年。
+ */
+export function mapCalendarDateToApi(date?: string): string | undefined {
+  if (!date) return undefined
+  return date.replace(/^2025-/, '2026-')
+}
+
+/**
  * 获取首页仪表盘数据（今日摄入 + 今日餐食，不含运动）
  */
-export async function getHomeDashboard(): Promise<HomeDashboard> {
-  const res = await authenticatedRequest('/api/home/dashboard', { method: 'GET', timeout: 10000 })
+export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
+  // 添加时间戳禁用缓存
+  const timestamp = Date.now()
+  const apiDate = mapCalendarDateToApi(date)
+  const url = apiDate 
+    ? `/api/home/dashboard?date=${encodeURIComponent(apiDate)}&_t=${timestamp}`
+    : `/api/home/dashboard?_t=${timestamp}`
+  console.log('[DEBUG API] ====== 请求开始 ======')
+  console.log('[DEBUG API] 原始日期参数:', date)
+  console.log('[DEBUG API] 转换后日期:', apiDate)
+  console.log('[DEBUG API] 请求 URL:', url)
+  
+  const res = await authenticatedRequest(url, { 
+    method: 'GET', 
+    timeout: 10000,
+    header: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache'
+    }
+  })
+  console.log('[DEBUG API] 响应状态:', res.statusCode)
+  console.log('[DEBUG API] 响应数据 intakeData:', res.data?.intakeData)
+  console.log('[DEBUG API] ====== 请求结束 ======')
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取首页数据失败'
     throw new Error(msg)
   }
   return res.data as HomeDashboard
-}
-
-export async function getFoodExpiryList(status: 'pending' | 'completed' = 'pending'): Promise<{ items: FoodExpiryItem[] }> {
-  const res = await authenticatedRequest(`/api/food-expiry/list?status=${encodeURIComponent(status)}`, {
-    method: 'GET',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '获取食物保质期列表失败')
-  }
-  return res.data as { items: FoodExpiryItem[] }
-}
-
-export async function createFoodExpiryItem(data: CreateFoodExpiryRequest): Promise<{ id: string; message: string; item: FoodExpiryItem }> {
-  const res = await authenticatedRequest('/api/food-expiry', {
-    method: 'POST',
-    data,
-    timeout: 15000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '创建食物保质期失败')
-  }
-  return res.data as { id: string; message: string; item: FoodExpiryItem }
-}
-
-export async function getFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
-    method: 'GET',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '获取食物保质期详情失败')
-  }
-  return res.data as { item: FoodExpiryItem }
-}
-
-export async function updateFoodExpiryItem(id: string, data: UpdateFoodExpiryRequest): Promise<{ message: string; item: FoodExpiryItem }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
-    method: 'PUT',
-    data,
-    timeout: 15000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '更新食物保质期失败')
-  }
-  return res.data as { message: string; item: FoodExpiryItem }
-}
-
-export async function completeFoodExpiryItem(id: string): Promise<{ message: string; item: FoodExpiryItem }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}/complete`, {
-    method: 'POST',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '标记已吃完失败')
-  }
-  return res.data as { message: string; item: FoodExpiryItem }
-}
-
-export async function deleteFoodExpiryItem(id: string): Promise<{ message: string }> {
-  const res = await authenticatedRequest(`/api/food-expiry/${id}`, {
-    method: 'DELETE',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    throw new Error((res.data as any)?.detail || '删除食物保质期失败')
-  }
-  return res.data as { message: string }
 }
 
 /**
@@ -1419,6 +1658,70 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
     throw new Error(msg)
   }
   return res.data as StatsSummary
+}
+
+export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
+  const res = await authenticatedRequest(
+    `/api/body-metrics/summary?range=${encodeURIComponent(range)}`,
+    { method: 'GET', timeout: 10000 }
+  )
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取身体指标失败'
+    throw new Error(msg)
+  }
+  return res.data as BodyMetricsSummary
+}
+
+export async function saveBodyWeightRecord(value: number, date?: string, clientId?: string): Promise<{ message: string; item: BodyMetricWeightEntry }> {
+  const res = await authenticatedRequest('/api/body-metrics/weight', {
+    method: 'POST',
+    data: { value, date: mapCalendarDateToApi(date), client_id: clientId },
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '保存体重失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; item: BodyMetricWeightEntry }
+}
+
+export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: { id?: string; date: string; amount_ml: number } }> {
+  const res = await authenticatedRequest('/api/body-metrics/water', {
+    method: 'POST',
+    data: { amount_ml: amountMl, date: mapCalendarDateToApi(date) },
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '保存喝水记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; item: { id?: string; date: string; amount_ml: number } }
+}
+
+export async function resetBodyWaterLogs(date?: string): Promise<{ message: string; deleted_count: number; date: string }> {
+  const res = await authenticatedRequest('/api/body-metrics/water/reset', {
+    method: 'POST',
+    data: { date: mapCalendarDateToApi(date) },
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '清空喝水记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; deleted_count: number; date: string }
+}
+
+export async function syncLocalBodyMetrics(snapshot: BodyMetricsLocalSnapshot): Promise<{ message: string; imported_weight_count: number; imported_water_count: number }> {
+  const res = await authenticatedRequest('/api/body-metrics/sync-local', {
+    method: 'POST',
+    data: snapshot,
+    timeout: 15000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '同步身体指标失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; imported_weight_count: number; imported_water_count: number }
 }
 
 /**
@@ -1722,6 +2025,93 @@ export async function getMyMembership(): Promise<MembershipStatus> {
   }
 }
 
+export async function getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
+  try {
+    const response = await authenticatedRequest('/api/expiry/dashboard', {
+      method: 'GET'
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取保质期摘要失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as FoodExpiryDashboard
+  } catch (error: any) {
+    console.error('获取保质期摘要失败:', error)
+    throw new Error(error.message || '获取保质期摘要失败')
+  }
+}
+
+export async function listManagedFoodExpiryItems(status?: FoodExpiryStatus): Promise<{ items: FoodExpiryItem[] }> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  const response = await authenticatedRequest(`/api/expiry/items${query}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取保质期列表失败')
+  }
+  return response.data as { items: FoodExpiryItem[] }
+}
+
+export async function createManagedFoodExpiryItem(data: UpsertFoodExpiryItemRequest): Promise<{ message: string; item: FoodExpiryItem }> {
+  const response = await authenticatedRequest('/api/expiry/items', {
+    method: 'POST',
+    data,
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '创建保质期条目失败')
+  }
+  return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function getManagedFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取保质期详情失败')
+  }
+  return response.data as { item: FoodExpiryItem }
+}
+
+export async function updateManagedFoodExpiryItem(id: string, data: UpsertFoodExpiryItemRequest): Promise<{ message: string; item: FoodExpiryItem }> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}`, {
+    method: 'PUT',
+    data,
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '更新保质期条目失败')
+  }
+  return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function updateManagedFoodExpiryStatus(id: string, status: FoodExpiryStatus): Promise<{ message: string; item: FoodExpiryItem }> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}/status`, {
+    method: 'POST',
+    data: { status },
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '更新保质期状态失败')
+  }
+  return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function subscribeManagedFoodExpiryItem(id: string, data: FoodExpirySubscribeRequest): Promise<FoodExpirySubscribeResponse> {
+  const response = await authenticatedRequest(`/api/expiry/items/${id}/subscribe`, {
+    method: 'POST',
+    data,
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '登记保质期提醒失败')
+  }
+  return response.data as FoodExpirySubscribeResponse
+}
+
 /**
  * 创建会员支付单
  */
@@ -1745,6 +2135,31 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
     throw new Error(error.message || '创建会员支付单失败')
   }
 }
+
+// ============================================================
+// TODO: [TEST] 以下测试函数在正式上线前必须删除
+// ============================================================
+/**
+ * [TEST ONLY] 切换测试账号会员状态（active ⇌ expired）
+ * TODO: [TEST] 正式上线前删除此函数。
+ */
+export async function toggleTestMembership(): Promise<{ ok: boolean; is_pro: boolean; status: string }> {
+  try {
+    const response = await authenticatedRequest('/api/dev/toggle-test-membership', {
+      method: 'POST'
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '切换失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { ok: boolean; is_pro: boolean; status: string }
+  } catch (error: any) {
+    console.error('切换测试会员状态失败:', error)
+    throw new Error(error.message || '切换失败')
+  }
+}
+// TODO: [TEST] 测试函数结束
+// ============================================================
 
 /**
  * 更新用户信息
@@ -1955,6 +2370,77 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
     console.error('健康报告 OCR 失败:', error)
     throw new Error(error.message || '识别失败，请重试')
   }
+}
+
+// ---------- 手动记录：食物搜索 ----------
+
+export interface ManualFoodSearchResult {
+  id: string
+  source: 'public_library' | 'nutrition_library'
+  title: string
+  subtitle: string
+  default_weight_grams: number
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  nutrients_per_100g?: {
+    calories: number
+    protein: number
+    carbs: number
+    fat: number
+  }
+  items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }> | null
+  image_path?: string | null
+  image_paths?: string[] | null
+  portion_label?: string
+  source_label?: string
+  recommend_reason?: string
+  usage_count?: number
+  collected?: boolean
+  like_count?: number
+  collection_count?: number
+  match_score?: number
+}
+
+export async function searchManualFood(q: string, limit: number = 20): Promise<ManualFoodSearchResult[]> {
+  const token = getAccessToken()
+  const params = new URLSearchParams({ q: q.trim(), limit: String(limit) })
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/manual-food/search?${params.toString()}`,
+    method: 'GET',
+    header: withNgrokBypassHeaders({
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }),
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '搜索失败')
+  }
+  return ((response.data as any)?.results || []) as ManualFoodSearchResult[]
+}
+
+export interface ManualFoodBrowseResult {
+  recent_items: ManualFoodSearchResult[]
+  collected_public_library: ManualFoodSearchResult[]
+  public_library: ManualFoodSearchResult[]
+  nutrition_library: ManualFoodSearchResult[]
+}
+
+export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
+  const token = getAccessToken()
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/manual-food/browse`,
+    method: 'GET',
+    header: withNgrokBypassHeaders({
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }),
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取食物库失败')
+  }
+  return response.data as ManualFoodBrowseResult
 }
 
 // ---------- 好友与圈子 ----------
@@ -2353,15 +2839,14 @@ export async function communityGetComments(recordId: string): Promise<{ list: Fe
   return response.data as { list: FeedCommentItem[] }
 }
 
-/** 
- * 发表评论（异步审核版本）
- * 返回任务 ID 和临时评论数据，前端需要本地缓存显示
+/**
+ * 发表评论（直接发布）
  */
 export async function communityPostComment(
   recordId: string,
   content: string,
   options?: { parent_comment_id?: string; reply_to_user_id?: string }
-): Promise<{ task_id: string; temp_comment: FeedCommentItem }> {
+): Promise<{ comment: FeedCommentItem }> {
   const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, {
     method: 'POST',
     data: {
@@ -2371,7 +2856,7 @@ export async function communityPostComment(
     }
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发表失败')
-  return response.data as { task_id: string; temp_comment: FeedCommentItem }
+  return response.data as { comment: FeedCommentItem }
 }
 
 /** 获取我最近的圈子评论审核任务 */
@@ -2609,15 +3094,14 @@ export async function getPublicFoodLibraryComments(itemId: string): Promise<{ li
   return response.data as { list: PublicFoodLibraryComment[] }
 }
 
-/** 
- * 发表公共食物库评论（异步审核版本，可选评分 1-5）
- * 返回任务 ID 和临时评论数据，前端需要本地缓存显示
+/**
+ * 发表公共食物库评论（直接发布，可选评分 1-5）
  */
 export async function postPublicFoodLibraryComment(
   itemId: string,
   content: string,
   rating?: number
-): Promise<{ task_id: string; temp_comment: PublicFoodLibraryComment }> {
+): Promise<{ comment: PublicFoodLibraryComment }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, {
     method: 'POST',
     data: { content: content.trim(), ...(rating !== undefined && { rating }) }
@@ -2625,7 +3109,7 @@ export async function postPublicFoodLibraryComment(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '发表失败')
   }
-  return response.data as { task_id: string; temp_comment: PublicFoodLibraryComment }
+  return response.data as { comment: PublicFoodLibraryComment }
 }
 
 // ---------- 用户私人食谱 ----------
@@ -2761,7 +3245,7 @@ export async function deleteUserRecipe(recipeId: string): Promise<{ message: str
 }
 
 /** 使用食谱（一键记录，可指定餐次） */
-export async function useUserRecipe(recipeId: string, mealType?: string): Promise<{ message: string; record_id: string }> {
+export async function applyUserRecipe(recipeId: string, mealType?: string): Promise<{ message: string; record_id: string }> {
   const response = await authenticatedRequest(`/api/recipes/${recipeId}/use`, {
     method: 'POST',
     data: { meal_type: mealType },
@@ -2771,4 +3255,140 @@ export async function useUserRecipe(recipeId: string, mealType?: string): Promis
     throw new Error((response.data as any)?.detail || '使用食谱失败')
   }
   return response.data as { message: string; record_id: string }
+}
+
+// ===== 运动记录 API =====
+
+/** 运动记录项 */
+export interface ExerciseLogItem {
+  id: string
+  exercise_desc: string
+  calories_burned: number
+  recorded_on: string
+  recorded_at: string
+  /** 模型估算时的思考过程（需库表含 ai_reasoning 列） */
+  ai_reasoning?: string | null
+}
+
+/** 获取运动记录列表 */
+export async function getExerciseLogs(params?: { date?: string; start_date?: string; end_date?: string }): Promise<{ logs: ExerciseLogItem[]; total_calories: number; count: number }> {
+  const queryParams = new URLSearchParams()
+  if (params?.date) queryParams.set('date', mapCalendarDateToApi(params.date) ?? params.date)
+  if (params?.start_date) queryParams.set('start_date', params.start_date)
+  if (params?.end_date) queryParams.set('end_date', params.end_date)
+
+  const url = `/api/exercise-logs${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+  const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取运动记录失败')
+  }
+  return response.data as { logs: ExerciseLogItem[]; total_calories: number; count: number }
+}
+
+/** 单日运动消耗汇总（千卡），与 `GET /api/home/dashboard` 的 `exerciseBurnedKcal` 同源 */
+export async function getExerciseDailyCalories(date?: string): Promise<{
+  date: string
+  total_calories_burned: number
+}> {
+  const apiDate = mapCalendarDateToApi(date)
+  const url =
+    apiDate != null
+      ? `/api/exercise-calories/daily?date=${encodeURIComponent(apiDate)}`
+      : '/api/exercise-calories/daily'
+  const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取运动消耗失败')
+  }
+  return response.data as { date: string; total_calories_burned: number }
+}
+
+/** 将 FastAPI 422 等返回的 detail 转成可读字符串（避免 [object Object]） */
+function formatFastApiErrorDetail(data: unknown): string {
+  const detail = (data as { detail?: unknown })?.detail
+  if (detail == null) return '保存运动记录失败'
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((e: { msg?: string; loc?: unknown }) => {
+        const loc = e?.loc != null ? JSON.stringify(e.loc) : ''
+        const msg = typeof e?.msg === 'string' ? e.msg : JSON.stringify(e)
+        return loc ? `${loc}: ${msg}` : msg
+      })
+      .join('; ')
+  }
+  if (typeof detail === 'object') return JSON.stringify(detail)
+  return String(detail)
+}
+
+/** 运动异步任务完成后 result 结构（与食物分析共用 analysis_tasks） */
+export interface ExerciseTaskResultPayload {
+  exercise_log: ExerciseLogItem
+  estimated_calories: number
+  ai_response?: string | null
+  /** 与 calories 配套的思考过程（中文） */
+  reasoning?: string | null
+  /** 估算时使用的用户画像快照 */
+  profile_snapshot?: Record<string, any> | null
+  today_total: number
+}
+
+/** 提交运动分析任务（后台 Worker 调用大模型并落库；返回 task_id，需轮询 getAnalyzeTask） */
+export async function createExerciseLog(data: {
+  exercise_desc: string
+  date?: string
+}): Promise<{ task_id: string; message: string }> {
+  const trimmed = data.exercise_desc.trim()
+  const parts: string[] = [`exercise_desc=${encodeURIComponent(trimmed)}`]
+  if (data.date) {
+    parts.push(`date=${encodeURIComponent(data.date)}`)
+  }
+  const response = await authenticatedRequest('/api/exercise-logs', {
+    method: 'POST',
+    header: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    data: parts.join('&'),
+    timeout: 30000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error(formatFastApiErrorDetail(response.data))
+  }
+  return response.data as { task_id: string; message: string }
+}
+
+/** 删除运动记录 */
+export async function deleteExerciseLog(logId: string): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/exercise-logs/${logId}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '删除运动记录失败')
+  }
+  return response.data as { message: string }
+}
+
+/** AI 估算运动卡路里 */
+export async function estimateExerciseCalories(exerciseDesc: string): Promise<{
+  estimated_calories: number
+  exercise_desc: string
+  ai_response?: string
+  reasoning?: string
+  profile_snapshot?: Record<string, any>
+}> {
+  const response = await authenticatedRequest('/api/exercise-logs/estimate-calories', {
+    method: 'POST',
+    data: { exercise_desc: exerciseDesc },
+    timeout: 35000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '估算卡路里失败')
+  }
+  return response.data as {
+    estimated_calories: number
+    exercise_desc: string
+    ai_response?: string
+    reasoning?: string
+    profile_snapshot?: Record<string, any>
+  }
 }

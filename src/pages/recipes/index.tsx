@@ -1,7 +1,8 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getUserRecipes, deleteUserRecipe, useUserRecipe, type UserRecipe, type FoodRecord } from '../../utils/api'
+import { getUserRecipes, deleteUserRecipe, applyUserRecipe, type UserRecipe, type FoodRecord } from '../../utils/api'
+import { withAuth } from '../../utils/withAuth'
 import './index.scss'
 
 /** 餐次映射 */
@@ -15,7 +16,7 @@ const MEAL_TYPE_NAMES: Record<string, string> = {
   snack: '午加餐'
 }
 
-export default function RecipesPage() {
+function RecipesPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'favorite'>('all')
   const [recipes, setRecipes] = useState<UserRecipe[]>([])
   const [loading, setLoading] = useState(false)
@@ -79,7 +80,7 @@ export default function RecipesPage() {
       if (!confirm) return
 
       Taro.showLoading({ title: '记录中...', mask: true })
-      await useUserRecipe(recipe.id, selectedMealType)
+      await applyUserRecipe(recipe.id, selectedMealType)
       Taro.hideLoading()
       Taro.showToast({ title: '已添加到饮食记录', icon: 'success' })
       // 刷新列表以更新使用次数
@@ -185,8 +186,7 @@ export default function RecipesPage() {
       <ScrollView className='recipe-list' scrollY>
         {loading ? (
           <View className='empty-state'>
-            <Text className='iconfont icon-shizhong empty-icon'></Text>
-            <Text className='empty-text'>加载中...</Text>
+            <View className='loading-spinner-md' />
           </View>
         ) : recipes.length > 0 ? (
           <View className='recipes-grid'>
@@ -337,3 +337,5 @@ export default function RecipesPage() {
     </View>
   )
 }
+
+export default withAuth(RecipesPage)

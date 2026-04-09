@@ -105,39 +105,39 @@ export default function WeightRuler({
     }
 
     return (
-        <View className="weight-ruler-wrapper">
-            <View className="value-display-area">
-                <Text className="label-question">您的体重是多少?</Text>
+        <View className='weight-ruler-wrapper'>
+            <View className='value-display-area'>
+                <Text className='label-question'>您的体重是多少?</Text>
 
-                <View className="current-value-display">
-                    <Text className="val-text">{value.toFixed(1)}</Text>
-                    <Text className="unit-text">公斤</Text>
+                <View className='current-value-display'>
+                    <Text className='val-text'>{value.toFixed(1)}</Text>
+                    <Text className='unit-text'>公斤</Text>
                 </View>
             </View>
 
-            <View className="bmi-card">
-                <View className="bmi-header">
-                    <Text className="bmi-label">您的BMI:</Text>
+            <View className='bmi-card'>
+                <View className='bmi-header'>
+                    <Text className='bmi-label'>您的BMI:</Text>
                     <Text className={`bmi-value status-${bmiStatus}`}>{bmi}</Text>
                     <View className={`bmi-tag status-${bmiStatus}`}>
                         <Text>{bmiLabel}</Text>
                     </View>
                 </View>
-                <Text className="bmi-desc">您的身材{bmiLabel === '健康' ? '很棒，请保持！' : '需要注意哦'}</Text>
+                <Text className='bmi-desc'>您的身材{bmiLabel === '健康' ? '很棒，请保持！' : '需要注意哦'}</Text>
             </View>
 
-            <View className="ruler-container" style={{ width: '100%' }}>
-                <View className="center-indicator" />
+            <View className='ruler-container' style={{ width: '100%' }}>
+                <View className='center-indicator' />
                 <ScrollView
-                    className="ruler-scroll-view"
-                    scrollX
-                    scrollLeft={scrollLeft}
-                    onScroll={handleScroll}
-                    scrollWithAnimation={false}
-                    enhanced
-                    showScrollbar={false}
+                  className='ruler-scroll-view'
+                  scrollX
+                  scrollLeft={scrollLeft}
+                  onScroll={handleScroll}
+                  scrollWithAnimation={false}
+                  enhanced
+                  showScrollbar={false}
                 >
-                    <View className="ruler-track" style={{ paddingLeft: `calc(50% - ${TICK_WIDTH / 2}px)`, paddingRight: `calc(50% - ${TICK_WIDTH / 2}px)` }}>
+                    <View className='ruler-track' style={{ paddingLeft: `calc(50% - ${TICK_WIDTH / 2}px)`, paddingRight: `calc(50% - ${TICK_WIDTH / 2}px)` }}>
                         {ticks.map((val, idx) => {
                             const isMajor = idx % 10 === 0 // Integer kg
                             const isMedium = idx % 5 === 0 && !isMajor // 0.5 kg
@@ -146,13 +146,13 @@ export default function WeightRuler({
 
                             return (
                                 <View
-                                    key={idx}
-                                    className={`ruler-tick ${isMajor ? 'tick-major' : isMedium ? 'tick-medium' : 'tick-minor'}`}
-                                    style={{ width: `${TICK_WIDTH}px` }}
+                                  key={idx}
+                                  className={`ruler-tick ${isMajor ? 'tick-major' : isMedium ? 'tick-medium' : 'tick-minor'}`}
+                                  style={{ width: `${TICK_WIDTH}px` }}
                                 >
-                                    <View className="tick-mark" />
+                                    <View className='tick-mark' />
                                     {isMajor && (
-                                        <Text className="tick-label">{val.toFixed(0)}</Text>
+                                        <Text className='tick-label'>{val.toFixed(0)}</Text>
                                     )}
                                 </View>
                             )

@@ -129,3 +129,73 @@ export const IconChevronRight = ({ size = 48, color = '#000000', className = '' 
     />
   )
 }
+
+/** 水滴图标 */
+export const IconWaterDrop = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-yiliaohangyedeICON- ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 运动/跑步图标 */
+export const IconExercise = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-sport-2 ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 发送图标 */
+export const IconSend = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-send ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 相册/图片图标 */
+export const IconAlbum = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-shiwu ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 编辑/手写图标 */
+export const IconEdit = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-shouxieqianming ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 历史/记录图标 */
+export const IconHistory = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-jishiben ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
+/** 麦克风/语音输入图标 */
+export const IconMicrophone = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon--yuyinshuruzhong ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}

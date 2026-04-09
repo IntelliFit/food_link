@@ -1,47 +1,125 @@
 .stats-page {
   min-height: 100vh;
-  background: #ffffff;
+  background: linear-gradient(180deg,
+    rgb(0 188 125 / 15%) 0%,
+    rgb(0 188 125 / 8%) 25%,
+    #EFF1F4 60%,
+    #EFF1F4 100%
+  );
   padding-bottom: 200rpx;
   box-sizing: border-box;
 }
 
-// 页面头部
-.page-header {
-  padding: 56rpx 32rpx 28rpx;
+// 页面头部已移除
+
+// 日期选择器 - 首页风格
+.date-selector-section {
+  margin: 24rpx 32rpx 28rpx;
+}
+
+.date-list {
+  display: flex;
+  justify-content: space-between;
+}
+
+.date-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  width: 88rpx;
+  height: 160rpx;
+  border-radius: 44rpx;
   background: transparent;
+  border: 3rpx solid transparent;
+  padding: 22rpx 0 16rpx;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  
+  &:active {
+    transform: scale(0.96);
+  }
+  
+  // 星期几
+  .date-day-name {
+    position: relative;
+    z-index: 1;
+    font-size: 22rpx;
+    color: #9ca3af;
+    line-height: 30rpx;
+    font-weight: 500;
+  }
+  
+  // 日期数字 - 圆形
+  .date-day-circle {
+    position: relative;
+    z-index: 1;
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 8%);
+    transition: all 0.2s ease;
+    
+    // 无记录 - 白色（默认）
+    &.is-empty {
+      background: #fff;
+      
+      .date-num-text {
+        color: #1f2937;
+      }
+    }
+    
+    // 有记录但未超过目标 - 绿色
+    &.is-recorded {
+      background: #00bc7d;
+      
+      .date-num-text {
+        color: #fff;
+      }
+    }
+    
+    // 超过目标 - 红色（与首页日期热力柔和红一致）
+    &.is-over {
+      background: #e57373;
+      
+      .date-num-text {
+        color: #fff;
+      }
+    }
+  }
+  
+  // 可点击状态
+  &.is-clickable {
+    cursor: pointer;
+  }
 }
 
-.page-title {
-  display: block;
-  font-size: 44rpx;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 60rpx;
-  margin-bottom: 12rpx;
-  letter-spacing: -0.5rpx;
-}
-
-.page-subtitle {
-  display: block;
-  font-size: 28rpx;
-  color: #64748b;
-  line-height: 40rpx;
+.date-num-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 36rpx;
 }
 
 // Tabs
 .tabs-container {
-  padding: 0 32rpx 32rpx;
+  padding: 16rpx 32rpx 0;
 }
 
 .segmented-control {
   position: relative;
   display: flex;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgb(255 255 255 / 60%);
   backdrop-filter: blur(10px);
   padding: 8rpx;
   border-radius: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
-  border: 1rpx solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
+  border: 1rpx solid rgb(255 255 255 / 50%);
 
   &.is-loading .segment-item {
     opacity: 0.7;
@@ -88,22 +166,22 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.active {
-    background: #ffffff;
+    background: #fff;
     color: #00bc7d;
     font-weight: 600;
-    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 6%);
   }
 }
 
 // 通用卡片
 .stats-card {
   margin: 0 32rpx 28rpx;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgb(255 255 255 / 92%);
   backdrop-filter: blur(24px);
   border-radius: 28rpx;
   padding: 36rpx 32rpx;
-  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.04), 0 1rpx 3rpx rgba(0, 0, 0, 0.02);
-  border: 1rpx solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%), 0 1rpx 3rpx rgb(0 0 0 / 2%);
+  border: 1rpx solid rgb(255 255 255 / 80%);
 }
 
 .card-header {
@@ -144,24 +222,24 @@
 // Hero Card
 .hero-card {
   padding: 40rpx;
-  color: #ffffff;
+  color: #fff;
   position: relative;
   overflow: hidden;
   border: none;
 
   &.deficit-mode {
     background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-    box-shadow: 0 12rpx 32rpx rgba(0, 188, 125, 0.3);
+    box-shadow: 0 12rpx 32rpx rgb(0 188 125 / 30%);
   }
 
   &.surplus-mode {
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    box-shadow: 0 12rpx 32rpx rgba(245, 158, 11, 0.3);
+    box-shadow: 0 12rpx 32rpx rgb(245 158 11 / 30%);
   }
 
   .card-header,
   .card-title {
-    color: rgba(255, 255, 255, 0.9);
+    color: rgb(255 255 255 / 90%);
   }
 }
 
@@ -180,7 +258,7 @@
 
 .hero-badge {
   font-size: 22rpx;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgb(255 255 255 / 25%);
   padding: 8rpx 18rpx;
   border-radius: 100rpx;
   font-weight: 600;
@@ -215,7 +293,7 @@
 .hero-grid {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.1);
+  background: rgb(0 0 0 / 10%);
   border-radius: 20rpx;
   padding: 24rpx;
 }
@@ -231,7 +309,7 @@
 .hero-divider {
   width: 1rpx;
   height: 48rpx;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(255 255 255 / 20%);
 }
 
 .hero-label {
@@ -255,17 +333,17 @@
 .streak-icon {
   width: 80rpx;
   height: 80rpx;
-  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  background: linear-gradient(135deg, #fef8f8 0%, #fef2f2 100%);
   border-radius: 22rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4rpx 12rpx rgba(244, 63, 94, 0.08);
+  box-shadow: 0 4rpx 12rpx rgb(229 115 115 / 10%);
 }
 
 .streak-icon-font {
   font-size: 40rpx;
-  color: #f43f5e;
+  color: #e57373;
 }
 
 .streak-content {
@@ -298,203 +376,145 @@
 
 .streak-badge {
   font-size: 22rpx;
-  color: #f43f5e;
-  background: #fff1f2;
+  color: #e57373;
+  background: #fef8f8;
   padding: 8rpx 20rpx;
   border-radius: 100rpx;
   font-weight: 600;
 }
 
-.heatmap-card .card-header {
-  align-items: flex-start;
-}
+// 旧的 heatmap 样式已移除，替换为首页风格的日期选择器
 
-.heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 20rpx;
-  margin-bottom: 20rpx;
-  flex-wrap: wrap;
-}
-
-.heatmap-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.heatmap-legend-swatch {
-  width: 20rpx;
-  height: 20rpx;
-  border-radius: 50%;
-  border: 2rpx solid transparent;
-
-  &.none {
-    background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-    border-color: rgba(100, 116, 139, 0.16);
-  }
-
-  &.surplus {
-    background: rgba(249, 115, 22, 0.15);
-    border-color: transparent;
-  }
-
-  &.deficit {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: transparent;
-  }
-}
-
-.heatmap-legend-text {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #64748b;
+// 日历网格视图（近一月模式）
+.heatmap-card {
+  padding: 20rpx;
 }
 
 .heatmap-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 20rpx 16rpx;
-  padding: 10rpx 0;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 16rpx;
+  
+  // 月视图（30天）需要更紧凑
+  &.month-view {
+    gap: 12rpx;
+  }
 }
 
 .heatmap-cell {
   aspect-ratio: 1;
   border-radius: 50%;
-  padding: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   border: 2rpx solid transparent;
   transition: all 0.2s ease;
-  position: relative;
-  box-sizing: border-box;
-}
-
-.heatmap-cell.is-clickable:active {
-  transform: scale(0.95);
-  background: rgba(0, 188, 125, 0.05);
-}
-
-.heatmap-cell.none {
-  background: linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%);
-  border-color: rgba(100, 116, 139, 0.16);
-}
-
-.heatmap-cell.surplus.level-1 {
-  background: rgba(249, 115, 22, 0.15);
-}
-
-.heatmap-cell.surplus.level-2 {
-  background: rgba(249, 115, 22, 0.35);
-}
-
-.heatmap-cell.deficit.level-1 {
-  background: rgba(59, 130, 246, 0.15);
-}
-
-.heatmap-cell.deficit.level-2 {
-  background: rgba(59, 130, 246, 0.35);
+  background: #fff;
+  
+  // 月视图下稍微小一点
+  .month-view & {
+    min-height: 64rpx;
+  }
+  
+  // 无记录（与首页「无记录」白底一致）
+  &.is-empty {
+    background: #fff;
+    
+    .heatmap-cell-label {
+      color: #94a3b8;
+    }
+    
+    .heatmap-cell-dot {
+      background: #cbd5e1;
+    }
+  }
+  
+  // 有记录未超标 - 绿色
+  &.is-recorded {
+    background: #00bc7d;
+    
+    .heatmap-cell-label {
+      color: #fff;
+    }
+    
+    .heatmap-cell-dot {
+      background: #fff;
+      opacity: 0.6;
+    }
+  }
+  
+  // 超过目标 - 红色（与首页一致）
+  &.is-over {
+    background: #e57373;
+    
+    .heatmap-cell-label {
+      color: #fff;
+    }
+    
+    .heatmap-cell-dot {
+      background: #fff;
+      opacity: 0.6;
+    }
+  }
+  
+  &.is-clickable:active {
+    transform: scale(0.95);
+  }
 }
 
 .heatmap-cell-label {
   font-size: 26rpx;
-  line-height: 1;
   font-weight: 600;
+  line-height: 1;
   margin-top: -2rpx;
-}
-
-.heatmap-cell.none .heatmap-cell-label {
-  color: #475569;
-}
-
-.heatmap-cell.surplus.level-1 .heatmap-cell-label {
-  color: #f97316;
-}
-.heatmap-cell.surplus.level-2 .heatmap-cell-label {
-  color: #c2410c;
-}
-
-.heatmap-cell.deficit.level-1 .heatmap-cell-label {
-  color: #3b82f6;
-}
-.heatmap-cell.deficit.level-2 .heatmap-cell-label {
-  color: #1d4ed8;
+  
+  .month-view & {
+    font-size: 22rpx;
+  }
 }
 
 .heatmap-cell-dot {
-  width: 8rpx;
-  height: 8rpx;
+  width: 6rpx;
+  height: 6rpx;
   border-radius: 50%;
-  background: currentColor;
-  opacity: 0.3;
-  margin-top: 6rpx;
-  position: absolute;
-  bottom: 12rpx;
-}
-
-.heatmap-cell.none .heatmap-cell-dot {
-  background: #cbd5e1;
-  opacity: 1;
-}
-
-.heatmap-cell.surplus.level-1 .heatmap-cell-dot {
-  background: #f97316;
-  opacity: 0.6;
-}
-.heatmap-cell.surplus.level-2 .heatmap-cell-dot {
-  background: #c2410c;
-  opacity: 0.7;
-}
-
-.heatmap-cell.deficit.level-1 .heatmap-cell-dot {
-  background: #3b82f6;
-  opacity: 0.6;
-}
-.heatmap-cell.deficit.level-2 .heatmap-cell-dot {
-  background: #1d4ed8;
-  opacity: 0.7;
-}
-
-.heatmap-summary {
-  margin-top: 20rpx;
-  padding: 20rpx 22rpx;
-  border-radius: 20rpx;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.heatmap-summary-text {
-  flex: 1;
-  font-size: 24rpx;
-  line-height: 34rpx;
-  color: #475569;
-}
-
-.heatmap-link-btn {
-  flex-shrink: 0;
-  padding: 12rpx 20rpx;
-  border-radius: 999rpx;
-  background: #eff6ff;
-}
-
-.heatmap-link-btn-text {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #2563eb;
-  font-weight: 600;
+  margin-top: 4rpx;
 }
 
 // Chart Card：容器给列固定高度，柱子用 flex 占满上方空间，避免 height:100% 循环依赖导致不渲染
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chart-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.chart-switch-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.chart-switch-label {
+  font-size: 20rpx;
+  color: #64748b;
+}
+
+.chart-switch {
+  transform: scale(0.75);
+  transform-origin: right center;
+}
+
 .bar-chart-container {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  height: 240rpx;
+  height: 280rpx;
   padding: 0 16rpx;
 }
 
@@ -502,9 +522,18 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12rpx;
+  gap: 8rpx;
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+.bar-calorie-text {
+  font-size: 18rpx;
+  color: #64748b;
+  line-height: 24rpx;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .bar-wrapper {
@@ -522,12 +551,12 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  background: linear-gradient(180deg, #34d399 0%, #059669 100%);
+  background: linear-gradient(180deg, #00bc7d 0%, #00a86e 100%);
   border-radius: 100rpx;
   transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.over {
-    background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%);
+    background: linear-gradient(180deg, #fca5a5 0%, #e57373 100%);
   }
 }
 
@@ -626,68 +655,92 @@
   }
 }
 
-// Meal Structure
+// Meal Structure - 仪表盘风格（两列布局）
 .meal-structure-card .card-header {
-  margin-bottom: 28rpx;
+  margin-bottom: 24rpx;
 }
 
-.meal-grid {
+.meal-gauges-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20rpx;
+  gap: 16rpx;
 }
 
-.meal-item {
-  background: #f8fafc;
+.meal-gauge-item {
+  background: white;
   border-radius: 20rpx;
-  padding: 22rpx 20rpx;
+  padding: 20rpx;
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  border: 1rpx solid rgba(0, 0, 0, 0.03);
+  justify-content: space-between;
+  border: 1rpx solid rgb(0 0 0 / 3%);
 }
 
-.meal-icon-box {
-  width: 68rpx;
-  height: 68rpx;
-  border-radius: 18rpx;
+.meal-gauge-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8rpx;
+}
+
+.meal-gauge-icon-wrap {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 10rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
-.meal-data {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
+.meal-gauge-label {
+  font-size: 24rpx;
+  color: #334155;
+  font-weight: 600;
 }
 
-.meal-name {
-  font-size: 22rpx;
-  color: #94a3b8;
-}
-
-.meal-cal {
+.meal-gauge-percent {
   font-size: 28rpx;
   font-weight: 700;
-  color: #1e2939;
 }
 
-.meal-pct {
-  font-size: 24rpx;
-  color: #00bc7d;
-  font-weight: 600;
-  background: #ecfdf5;
-  padding: 4rpx 12rpx;
-  border-radius: 100rpx;
+.meal-gauge-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-circle {
+  position: relative;
+  width: 90rpx;
+  height: 90rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.meal-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-gauge-cal {
+  font-size: 22rpx;
+  font-weight: 700;
 }
 
 // Analysis
 .analysis-card {
   background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
-  border-color: rgba(59, 130, 246, 0.1);
+  border-color: rgb(59 130 246 / 10%);
 
   .card-header {
     justify-content: space-between;
@@ -699,7 +752,7 @@
   }
 
   .card-subtitle {
-    color: rgba(29, 78, 216, 0.6);
+    color: rgb(29 78 216 / 60%);
   }
 }
 
@@ -708,7 +761,7 @@
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
   background: #dbeafe;
-  border: 1rpx solid rgba(37, 99, 235, 0.12);
+  border: 1rpx solid rgb(37 99 235 / 12%);
 
   &.disabled {
     opacity: 0.65;
@@ -726,12 +779,12 @@
   margin-bottom: 16rpx;
   padding: 16rpx 18rpx;
   border-radius: 18rpx;
-  background: rgba(219, 234, 254, 0.72);
-  border: 1rpx solid rgba(59, 130, 246, 0.08);
+  background: rgb(219 234 254 / 72%);
+  border: 1rpx solid rgb(59 130 246 / 8%);
 
   &.warning {
-    background: rgba(254, 249, 195, 0.9);
-    border-color: rgba(245, 158, 11, 0.14);
+    background: rgb(254 249 195 / 90%);
+    border-color: rgb(245 158 11 / 14%);
   }
 }
 
@@ -791,13 +844,13 @@
   padding: 18rpx 28rpx;
   border-radius: 999rpx;
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 10rpx 24rpx rgba(37, 99, 235, 0.18);
+  box-shadow: 0 10rpx 24rpx rgb(37 99 235 / 18%);
 }
 
 .analysis-empty-action-text {
   font-size: 24rpx;
   line-height: 32rpx;
-  color: #ffffff;
+  color: #fff;
   font-weight: 600;
 }
 
@@ -805,14 +858,14 @@
   margin-bottom: 16rpx;
   padding: 16rpx 18rpx;
   border-radius: 18rpx;
-  background: rgba(254, 226, 226, 0.88);
-  border: 1rpx solid rgba(239, 68, 68, 0.12);
+  background: rgb(254 248 248 / 92%);
+  border: 1rpx solid rgb(245 212 212 / 90%);
 }
 
 .analysis-error-text {
   font-size: 22rpx;
   line-height: 34rpx;
-  color: #b91c1c;
+  color: #b45353;
 }
 
 // Loading & Error
@@ -850,9 +903,146 @@
   border-radius: 100rpx;
   font-size: 28rpx;
   font-weight: 600;
-  box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.25);
+  box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 25%);
 }
 
 .footer-placeholder {
   height: 120rpx;
+}
+
+.body-metrics-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.body-metric-panel {
+  padding: 24rpx;
+  border-radius: 28rpx;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(244 247 251 / 92%) 100%),
+    linear-gradient(135deg, rgb(59 130 246 / 6%) 0%, rgb(16 185 129 / 4%) 100%);
+  border: 1rpx solid rgb(148 163 184 / 12%);
+}
+
+.water-panel {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(239 246 255 / 92%) 100%),
+    linear-gradient(135deg, rgb(59 130 246 / 8%) 0%, rgb(14 165 233 / 4%) 100%);
+}
+
+.body-metric-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.body-metric-title {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.body-metric-main {
+  font-size: 34rpx;
+  line-height: 44rpx;
+  color: #111827;
+  font-weight: 800;
+}
+
+.body-metric-empty {
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #94a3b8;
+}
+
+.body-metric-sub {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #64748b;
+}
+
+.weight-chip-row {
+  margin-top: 18rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.weight-chip {
+  min-width: 92rpx;
+  padding: 12rpx 14rpx;
+  border-radius: 20rpx;
+  background: rgb(241 245 249 / 95%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.weight-chip-date {
+  font-size: 18rpx;
+  color: #94a3b8;
+  line-height: 24rpx;
+}
+
+.weight-chip-value {
+  font-size: 22rpx;
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 30rpx;
+}
+
+.water-trend-chart {
+  margin-top: 20rpx;
+  min-height: 180rpx;
+  display: flex;
+  align-items: flex-end;
+  gap: 12rpx;
+}
+
+.water-trend-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.water-trend-bar-wrap {
+  width: 100%;
+  height: 150rpx;
+  padding: 10rpx;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 24rpx;
+  background: rgb(226 232 240 / 50%);
+}
+
+.water-trend-bar {
+  width: 100%;
+  border-radius: 999rpx;
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  box-shadow: 0 8rpx 20rpx rgb(37 99 235 / 16%);
+}
+
+.water-trend-label {
+  font-size: 18rpx;
+  line-height: 24rpx;
+  color: #94a3b8;
+}
+
+.water-metric-footer {
+  margin-top: 12rpx;
+}
+
+.water-metric-note {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
 }

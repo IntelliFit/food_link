@@ -81,31 +81,31 @@ export default function HeightRuler({
     }, [min, max, onChange, value])
 
     return (
-        <View className="height-ruler-wrapper">
+        <View className='height-ruler-wrapper'>
             {/* Scrollable Ruler */}
             <ScrollView
-                className="ruler-scroll-view"
-                scrollY
-                scrollTop={scrollTop}
-                onScroll={handleScroll}
-                scrollWithAnimation={false} // Immediate feedback
-                enhanced
-                showScrollbar={false}
+              className='ruler-scroll-view'
+              scrollY
+              scrollTop={scrollTop}
+              onScroll={handleScroll}
+              scrollWithAnimation={false} // Immediate feedback
+              enhanced
+              showScrollbar={false}
             >
-                <View className="ruler-content" style={{ paddingTop: `calc(400rpx - ${ITEM_HEIGHT / 2}px)`, paddingBottom: `calc(400rpx - ${ITEM_HEIGHT / 2}px)` }}>
+                <View className='ruler-content' style={{ paddingTop: `calc(400rpx - ${ITEM_HEIGHT / 2}px)`, paddingBottom: `calc(400rpx - ${ITEM_HEIGHT / 2}px)` }}>
                     {ticks.map((val) => {
                         const isTen = val % 10 === 0
                         const isFive = val % 5 === 0 && !isTen
 
                         return (
                             <View
-                                key={val}
-                                className={`ruler-item ${isTen ? 'tick-10' : isFive ? 'tick-5' : 'tick-1'}`}
-                                style={{ height: `${ITEM_HEIGHT}px` }}
+                              key={val}
+                              className={`ruler-item ${isTen ? 'tick-10' : isFive ? 'tick-5' : 'tick-1'}`}
+                              style={{ height: `${ITEM_HEIGHT}px` }}
                             >
-                                <View className="tick-mark" />
+                                <View className='tick-mark' />
                                 {isTen && (
-                                    <Text className="tick-text">{val}</Text>
+                                    <Text className='tick-text'>{val}</Text>
                                 )}
                             </View>
                         )
@@ -114,15 +114,15 @@ export default function HeightRuler({
             </ScrollView>
 
             {/* Fixed Indicator */}
-            <View className="center-indicator" />
+            <View className='center-indicator' />
 
             {/* Right Side: Display */}
-            <View className="value-display-area">
-                <Text className="label-question">您的身高是?</Text>
+            <View className='value-display-area'>
+                <Text className='label-question'>您的身高是?</Text>
 
-                <View className="current-value-display">
-                    <Text className="val-text">{value}</Text>
-                    <Text className="unit-text">厘米</Text>
+                <View className='current-value-display'>
+                    <Text className='val-text'>{value}</Text>
+                    <Text className='unit-text'>厘米</Text>
                 </View>
             </View>
         </View>

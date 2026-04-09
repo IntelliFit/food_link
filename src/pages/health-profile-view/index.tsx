@@ -2,6 +2,7 @@ import { View, Text, ScrollView } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getHealthProfile, type HealthProfile } from '../../utils/api'
+import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
 
@@ -39,7 +40,7 @@ const DIET_PREF_MAP: Record<string, string> = {
   none: '无'
 }
 
-export default function HealthProfileViewPage() {
+function HealthProfileViewPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<HealthProfile | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -77,7 +78,7 @@ export default function HealthProfileViewPage() {
     return (
       <View className='health-profile-view-page'>
         <View className='loading-wrap'>
-          <Text className='loading-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )
@@ -255,3 +256,5 @@ export default function HealthProfileViewPage() {
     </View>
   )
 }
+
+export default withAuth(HealthProfileViewPage)

@@ -1,0 +1,66 @@
+.horizontal-wheel-picker {
+  position: relative;
+  width: 300px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 选中项目的背景高亮 */
+.wheel-active-bg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 40px;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 滚动区域 */
+.wheel-scroll {
+  width: 300px;
+  height: 56px;
+  position: relative;
+  z-index: 2;
+}
+
+/* 内容容器 */
+.wheel-content {
+  display: flex;
+  align-items: center;
+  height: 56px;
+}
+
+/* 单个数字项 */
+.wheel-item {
+  flex-shrink: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 数字文本 */
+.wheel-number {
+  font-size: 22px;
+  font-weight: 400;
+  transition: all 0.15s ease;
+}
+
+.wheel-item.active .wheel-number {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+/* 单位 */
+.wheel-unit {
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 2px;
+  opacity: 0.8;
+}

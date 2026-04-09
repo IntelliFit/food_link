@@ -1,10 +1,11 @@
-<view class="custom-tab-bar">
+<view class="custom-tab-bar {{hidden ? 'hidden' : ''}}">
   <view 
     wx:for="{{tabList}}" 
     wx:key="index"
     class="tab-item {{item.isCenter ? 'center-item' : ''}} {{selectedIndex === index ? 'selected' : ''}}"
     data-index="{{index}}"
     data-path="{{item.pagePath}}"
+    data-iscenter="{{item.isCenter}}"
     bindtap="switchTab"
   >
     <view class="icon-wrapper">
@@ -19,6 +20,6 @@
         />
       </block>
     </view>
-    <text class="tab-text">{{item.text}}</text>
+    <text class="tab-text" wx:if="{{!item.isCenter}}">{{item.text}}</text>
   </view>
 </view>

@@ -65,6 +65,10 @@ uvicorn main:app --reload --host 0.0.0.0 --port 3010
 
 服务将在 `http://localhost:3010` 启动（或你配置的端口）。
 
+### 运动记录相关表（Supabase）
+
+若 `GET /api/exercise-logs` 一直为空、Worker 写入运动失败，请在 **Supabase → SQL Editor** 中执行 `sql/migrate_exercise_logs_and_task_type.sql`（或配置 `SUPABASE_DB_URL` 后运行 `python scripts/apply_exercise_migration.py`）。执行后 `task_type=exercise` 可直接入库，无需 API 回退到 `food_text`。
+
 ## API 文档
 
 启动服务后，访问以下地址查看自动生成的 API 文档：

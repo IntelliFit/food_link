@@ -50,6 +50,7 @@
 
             .val-text {
                 font-size: 110px;
+
                 /* Larger */
                 font-weight: 600;
                 color: #111827;
@@ -74,8 +75,9 @@
         display: flex;
         flex-direction: column;
         margin-bottom: 80px;
+
         /* Space between BMI and ruler */
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 4px 12px rgb(0 0 0 / 5%);
         align-items: center;
 
         .bmi-header {
@@ -149,6 +151,7 @@
     .ruler-container {
         width: 100%;
         height: 240px;
+
         /* Taller ruler area */
         position: relative;
         overflow: hidden;
@@ -163,8 +166,10 @@
             z-index: 10;
             border-radius: 2px;
             height: 140px;
+
             /* Taller line */
             top: 50px;
+
             /* Aligned */
         }
 
@@ -184,13 +189,17 @@
             .ruler-track {
                 display: inline-flex;
                 align-items: flex-start;
+
                 /* Align ticks to top */
                 height: 100%;
+
                 /* Front/End padding to center min/max */
                 padding-left: 50vw;
+
                 /* Center the first item */
                 padding-right: 50vw;
                 padding-top: 40px;
+
                 /* Offset for ticks */
             }
 
@@ -200,16 +209,22 @@
                 display: flex;
                 flex-direction: column;
                 align-items: center;
+
                 /* Width per 0.1kg step? No, typically 1 tick = 0.1kg or 1 tick = 1kg? */
+
                 /* Assuming 1 tick = 1 unit for now, or 0.1 unit. */
+
                 /* Let's say 1 tick = 0.5kg or 1kg. The image shows big numbers like 69, 70, 71. */
+
                 /* And smaller ticks in between. */
                 width: 20px;
+
                 /* Distance between ticks */
 
                 .tick-mark {
                     width: 2px;
                     background-color: #d1d5db;
+
                     /* Light gray */
                     transition: height 0.2s, background-color 0.2s;
                 }
@@ -218,6 +233,7 @@
                 .tick-label {
                     position: absolute;
                     top: -40px;
+
                     /* Above the tick */
                     font-size: 28px;
                     color: #1f2937;
@@ -231,6 +247,7 @@
                     .tick-mark {
                         height: 80px;
                         background-color: #1f2937;
+
                         /* Darker */
                         width: 3px;
                     }

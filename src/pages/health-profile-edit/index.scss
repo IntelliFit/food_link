@@ -31,7 +31,7 @@
     border-radius: 24rpx;
     padding: 40rpx 32rpx;
     margin-bottom: 24rpx;
-    box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+    box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 4%);
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
@@ -361,7 +361,7 @@
     .reupload-mask {
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.4);
+      background: rgb(0 0 0 / 40%);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -405,7 +405,7 @@
     padding-right: calc(32rpx + env(safe-area-inset-right));
     padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
     background: #fff;
-    box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.04);
+    box-shadow: 0 -4rpx 12rpx rgb(0 0 0 / 4%);
     box-sizing: border-box;
 
     .refill-link {
@@ -435,7 +435,7 @@
       font-size: 32rpx;
       font-weight: 600;
       color: #fff;
-      box-shadow: 0 8rpx 20rpx rgba(0, 188, 125, 0.3);
+      box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 30%);
       box-sizing: border-box;
     }
   }

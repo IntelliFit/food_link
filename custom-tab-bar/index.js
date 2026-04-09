@@ -1,6 +1,7 @@
 Component({
   data: {
     selectedIndex: 0,
+    hidden: false,
     tabList: [
       { 
         id: 'home',
@@ -18,7 +19,7 @@ Component({
       { 
         id: 'record',
         pagePath: '/pages/record/index', 
-        text: '记录',
+        text: '',
         isCenter: true,
         iconPath: './icons/record.png',
         selectedIconPath: './icons/record-active.png'
@@ -43,8 +44,10 @@ Component({
   lifetimes: {
     attached() {
       this.updateSelected()
+      this.updateHidden()
       this.data.timer = setInterval(() => {
         this.updateSelected()
+        this.updateHidden()
       }, 300)
     },
     
@@ -73,8 +76,135 @@ Component({
       }
     },
     
+    // 检查是否需要隐藏 tabBar（在摄影模式下隐藏）
+    updateHidden() {
+      try {
+        const pages = getCurrentPages()
+        if (pages.length > 0) {
+          const currentPage = pages[pages.length - 1]
+          const currentPath = '/' + currentPage.route
+
+          // 在记录饮食摄影页面隐藏 tabBar
+          const shouldHide = currentPath === '/pages/record/index'
+
+          if (shouldHide !== this.data.hidden) {
+            this.setData({ hidden: shouldHide })
+          }
+        }
+      } catch (error) {
+        console.error('CustomTabBar updateHidden error:', error)
+      }
+    },
+    
     switchTab(e) {
-      const { index, path } = e.currentTarget.dataset
+      const { index, path, iscenter } = e.currentTarget.dataset
+
+      // 中间记录按钮特殊处理：切换到首页并显示记录菜单弹窗
+      if (iscenter) {
+        // 设置标记，让首页显示记录菜单弹窗（storage 作为兜底方案）
+        wx.setStorageSync('showRecordMenuModal', true)
+        
+        // 获取当前页面信息
+        const pages = getCurrentPages()
+        const isAlreadyHome = pages.length > 0 && pages[pages.length - 1].route === 'pages/index/index'
+        
+        if (isAlreadyHome) {
+          // 如果已经在首页，直接通过全局事件通知首页显示菜单
+          let eventTriggered = false
+          
+          // 方案1：尝试触发 app.eventCenter.callbacks 中注册的方法
+          try {
+            if (typeof getApp === 'function') {
+              const app = getApp()
+              if (app && app.eventCenter && app.eventCenter.callbacks && typeof app.eventCenter.callbacks['showRecordMenu'] === 'function') {
+                app.eventCenter.callbacks['showRecordMenu']()
+                eventTriggered = true
+                console.log('[CustomTabBar] 通过 app.eventCenter.callbacks 触发事件成功')
+              }
+            }
+          } catch (err) {
+            console.error('[CustomTabBar] 触发 app.eventCenter.callbacks 失败:', err)
+          }
+          
+          // 方案2：尝试触发 Taro 的全局事件中心（__taroAppInstance 是 Taro 内部使用的）
+          if (!eventTriggered) {
+            try {
+              const app = getApp()
+              if (app && app.__taroAppInstance && app.__taroAppInstance.eventCenter && typeof app.__taroAppInstance.eventCenter.trigger === 'function') {
+                app.__taroAppInstance.eventCenter.trigger('showRecordMenu')
+                eventTriggered = true
+                console.log('[CustomTabBar] 通过 __taroAppInstance.eventCenter 触发事件成功')
+              }
+            } catch (err) {
+              console.error('[CustomTabBar] 触发 __taroAppInstance.eventCenter 失败:', err)
+            }
+          }
+          
+          // 方案3：通过页面实例直接调用（如果页面有暴露方法）
+          if (!eventTriggered) {
+            try {
+              const currentPage = pages[pages.length - 1]
+              if (currentPage) {
+                // 尝试调用页面上的 selectComponent 获取组件并触发方法
+                const recordMenuComponent = currentPage.selectComponent && currentPage.selectComponent('.record-menu-trigger')
+                if (recordMenuComponent && recordMenuComponent.showMenu) {
+                  recordMenuComponent.showMenu()
+                  eventTriggered = true
+                }
+              }
+            } catch (err) {
+              console.error('[CustomTabBar] 通过页面实例调用失败:', err)
+            }
+          }
+          
+          console.log('[CustomTabBar] 已经在首页，事件触发状态:', eventTriggered)
+          // 已经在首页，不需要 switchTab，直接返回
+          return
+        }
+        
+        // 不在首页，切换到首页
+        // storage 标记已设置，首页的 useDidShow 会检测到这个标记
+        // 但为了确保可靠性，在 switchTab 完成后也尝试触发事件
+        wx.switchTab({ 
+          url: '/pages/index/index',
+          success: () => {
+            // 延迟触发事件，确保首页已经加载完成
+            setTimeout(() => {
+              let eventTriggered = false
+              
+              // 方案1：尝试触发 app.eventCenter.callbacks 中注册的方法
+              try {
+                const app = getApp()
+                if (app && app.eventCenter && app.eventCenter.callbacks && typeof app.eventCenter.callbacks['showRecordMenu'] === 'function') {
+                  app.eventCenter.callbacks['showRecordMenu']()
+                  eventTriggered = true
+                  console.log('[CustomTabBar] switchTab success 通过 callbacks 触发成功')
+                }
+              } catch (err) {
+                console.error('[CustomTabBar] switchTab success 触发 callbacks 失败:', err)
+              }
+              
+              // 方案2：尝试触发 Taro 的全局事件中心
+              if (!eventTriggered) {
+                try {
+                  const app = getApp()
+                  if (app && app.__taroAppInstance && app.__taroAppInstance.eventCenter && typeof app.__taroAppInstance.eventCenter.trigger === 'function') {
+                    app.__taroAppInstance.eventCenter.trigger('showRecordMenu')
+                    eventTriggered = true
+                    console.log('[CustomTabBar] switchTab success 通过 __taroAppInstance 触发成功')
+                  }
+                } catch (err) {
+                  console.error('[CustomTabBar] switchTab success 触发 __taroAppInstance 失败:', err)
+                }
+              }
+              
+              console.log('[CustomTabBar] switchTab success 事件触发状态:', eventTriggered)
+            }, 150)
+          }
+        })
+        return
+      }
+
       this.setData({ selectedIndex: index })
       wx.switchTab({ url: path })
     }

@@ -1,4 +1,5 @@
 import { View, Text, ScrollView, Slider } from '@tarojs/components'
+import { withAuth } from '../../utils/withAuth'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord } from '../../utils/api'
@@ -54,7 +55,7 @@ const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number
   roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
 )
 
-export default function ResultTextPage() {
+function ResultTextPage() {
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
   const [nutritionStats, setNutritionStats] = useState({
@@ -318,8 +319,7 @@ export default function ResultTextPage() {
     return (
       <View className='result-text-page'>
         <View className='empty-state'>
-          <Text className='empty-icon iconfont icon-shizhong'></Text>
-          <Text className='empty-text'>加载中...</Text>
+          <View className='loading-spinner-md' />
         </View>
       </View>
     )
@@ -535,7 +535,7 @@ export default function ResultTextPage() {
         <View className='pba-safe-area'>
           <View className='action-grid'>
             <View className={`primary-btn ${saving ? 'loading' : ''}`} onClick={saving ? undefined : handleConfirmAndShare}>
-              <Text className='btn-text'>{saving ? '保存中...' : '确认记录'}</Text>
+              {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>确认记录</Text>}
             </View>
           </View>
         </View>
@@ -572,3 +572,5 @@ export default function ResultTextPage() {
     </View>
   )
 }
+
+export default withAuth(ResultTextPage)

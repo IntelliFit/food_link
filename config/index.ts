@@ -11,6 +11,7 @@ export default defineConfig<'vite'>(async (merge) => {
     (process.env.NODE_ENV === 'development'
       ? 'http://127.0.0.1:3010'
       : 'https://healthymax.cn')
+  const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
 
   const baseConfig: UserConfigExport<'vite'> = {
     projectName: 'food_link',
@@ -29,6 +30,7 @@ export default defineConfig<'vite'>(async (merge) => {
     ],
     defineConstants: {
       __API_BASE_URL__: JSON.stringify(apiBaseUrl),
+      __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
     },
     copy: {
       patterns: [

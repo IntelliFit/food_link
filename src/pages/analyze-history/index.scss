@@ -1,55 +1,90 @@
 .analyze-history-page {
   min-height: 100vh;
-  background: #f9fafb;
+  background: #f5f5f5;
   padding-bottom: 40rpx;
 }
 
-.header {
-  background: #ffffff;
-  padding: 40rpx 32rpx;
-  margin-bottom: 24rpx;
-  border-bottom: 1rpx solid #f3f4f6;
-
-  .title {
-    display: block;
-    font-size: 38rpx;
-    font-weight: 700;
-    color: #111827;
-    margin-bottom: 12rpx;
-  }
-
-  .desc {
-    display: block;
-    font-size: 26rpx;
-    color: #6b7280;
-    line-height: 36rpx;
-  }
-}
-
 .list {
-  padding: 0 32rpx;
+  padding: 24rpx;
   box-sizing: border-box;
 }
 
-.task-card {
-  background: #ffffff;
-  border-radius: 20rpx;
-  padding: 24rpx;
-  margin-bottom: 24rpx;
+// 左滑卡片容器
+.swipeable-card-wrapper {
+  position: relative;
+  margin-bottom: 16rpx;
+  overflow: hidden;
+  border-radius: 16rpx;
+}
+
+// 背景操作按钮
+.action-buttons {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.action-btn {
+  width: 140rpx;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 24rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
-  transition: all 0.2s ease;
+  justify-content: center;
+  gap: 8rpx;
+
+  .iconfont {
+    font-size: 36rpx;
+    color: #fff;
+  }
+
+  .action-text {
+    font-size: 24rpx;
+    color: #fff;
+    font-weight: 500;
+  }
+
+  &.share {
+    background: #00bc7d;
+
+    &.disabled {
+      background: #d1d5db;
+      pointer-events: none;
+    }
+  }
+
+  &.delete {
+    background: #e57373;
+  }
 
   &:active {
-    transform: scale(0.98);
-    background: #f9fafb;
+    opacity: 0.8;
+  }
+}
+
+// 任务卡片 - 紧凑设计
+.task-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
+  transition: transform 0.2s ease;
+  position: relative;
+  z-index: 1;
+
+  &:active {
+    background: #fafafa;
   }
 
   &.task-card-violated {
-    border: 1rpx solid #fecaca;
-    background: #fff5f5;
+    border: 1rpx solid #f5d4d4;
+    background: #fef8f8;
 
     &:active {
       background: #fef2f2;
@@ -57,9 +92,9 @@
   }
 
   .thumb {
-    width: 120rpx;
-    height: 120rpx;
-    border-radius: 16rpx;
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 12rpx;
     background: #f3f4f6;
     flex-shrink: 0;
     overflow: hidden;
@@ -89,66 +124,112 @@
     gap: 8rpx;
   }
 
-  .time {
-    font-size: 24rpx;
-    color: #9ca3af;
-    line-height: 32rpx;
+  // 主行：左侧时间+热量 | 右侧状态+标签
+  .main-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16rpx;
   }
 
-  .task-type-tag {
+  .left-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    flex: 1;
+  }
+
+  .right-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 8rpx;
+    min-height: 100rpx; // 与左侧对齐
+  }
+
+  // 垂直排列的标签行
+  .tag-row-vertical {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6rpx;
+  }
+
+  // 卡路里字体更大，时间字体更小
+  .calories {
+    font-size: 32rpx;
+    color: #1f2937;
+    font-weight: 600;
+    line-height: 44rpx;
+  }
+
+  .time {
+    font-size: 22rpx;
+    color: #6b7280;
+    line-height: 30rpx;
+  }
+
+  // 状态徽章
+  .status-badge {
     display: inline-flex;
     align-items: center;
-    align-self: flex-start;
     padding: 4rpx 12rpx;
     border-radius: 8rpx;
-    background: linear-gradient(135deg, #dcfce7 0%, #d1fae5 100%);
-    border: 1rpx solid #bbf7d0;
-    margin-bottom: 4rpx;
+    background: #f3f4f6;
 
-    .task-type-text {
+    .status-text {
       font-size: 22rpx;
-      color: #15803d;
-      font-weight: 600;
-      line-height: 28rpx;
+      font-weight: 500;
+    }
+
+    &.status-pending {
+      background: #fef3c7;
+      .status-text { color: #d97706; }
+    }
+
+    &.status-processing {
+      background: #dbeafe;
+      .status-text { color: #2563eb; }
+    }
+
+    &.status-done {
+      background: #d1fae5;
+      .status-text { color: #00bc7d; }
+    }
+
+    &.status-failed {
+      background: #fef8f8;
+      .status-text { color: #c53030; }
+    }
+
+    &.status-violated {
+      background: #fef8f8;
+      .status-text { color: #c53030; }
+    }
+
+    &.status-timed_out {
+      background: #fef3c7;
+      .status-text { color: #d97706; }
     }
   }
 
-  .tag-row {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-    margin-bottom: 4rpx;
-  }
-
+  // 精准模式标签
   .mode-tag {
     display: inline-flex;
     align-items: center;
-    align-self: flex-start;
-    padding: 4rpx 12rpx;
-    border-radius: 8rpx;
+    padding: 2rpx 10rpx;
+    border-radius: 6rpx;
     border: 1rpx solid transparent;
 
-    .mode-tag-text {
-      font-size: 22rpx;
-      font-weight: 600;
-      line-height: 28rpx;
-    }
-
-    &.mode-strict {
-      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-      border-color: #a7f3d0;
+    &.strict {
+      background: #ecfdf5;
+      border-color: #6ee7b7;
 
       .mode-tag-text {
         color: #047857;
-      }
-    }
-
-    &.mode-standard {
-      background: #f1f5f9;
-      border-color: #e2e8f0;
-
-      .mode-tag-text {
-        color: #475569;
+        font-size: 20rpx;
+        font-weight: 600;
       }
     }
   }
@@ -156,15 +237,13 @@
   .recognition-tag {
     display: inline-flex;
     align-items: center;
-    align-self: flex-start;
-    padding: 4rpx 12rpx;
-    border-radius: 8rpx;
+    padding: 2rpx 10rpx;
+    border-radius: 6rpx;
     border: 1rpx solid transparent;
 
     .recognition-tag-text {
-      font-size: 22rpx;
-      font-weight: 600;
-      line-height: 28rpx;
+      font-size: 20rpx;
+      font-weight: 500;
     }
 
     &.recognition-ok {
@@ -186,85 +265,18 @@
     }
 
     &.recognition-hard_reject {
-      background: #fef2f2;
-      border-color: #fca5a5;
+      background: #fef8f8;
+      border-color: #f5d4d4;
 
       .recognition-tag-text {
-        color: #b91c1c;
+        color: #b45353;
       }
-    }
-  }
-
-  .status-row {
-    display: flex;
-    align-items: center;
-    gap: 12rpx;
-  }
-
-  .status-dot {
-    width: 12rpx;
-    height: 12rpx;
-    border-radius: 50%;
-  }
-
-  .status-text {
-    font-size: 28rpx;
-    font-weight: 600;
-  }
-
-  .status-pending {
-    .status-dot {
-      background: #f59e0b;
-    }
-
-    .status-text {
-      color: #f59e0b;
-    }
-  }
-
-  .status-processing {
-    .status-dot {
-      background: #3b82f6;
-    }
-
-    .status-text {
-      color: #3b82f6;
-    }
-  }
-
-  .status-done {
-    .status-dot {
-      background: #00bc7d;
-    }
-
-    .status-text {
-      color: #00bc7d;
-    }
-  }
-
-  .status-failed {
-    .status-dot {
-      background: #ef4444;
-    }
-
-    .status-text {
-      color: #ef4444;
-    }
-  }
-
-  .status-violated {
-    .status-dot {
-      background: #dc2626;
-    }
-
-    .status-text {
-      color: #dc2626;
     }
   }
 
   .violation-reason {
     font-size: 22rpx;
-    color: #dc2626;
+    color: #c53030;
     line-height: 30rpx;
     margin-top: 4rpx;
     display: -webkit-box;
@@ -280,13 +292,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    background: linear-gradient(135deg, #fef8f8 0%, #fef2f2 100%);
   }
 
   .arrow {
-    font-size: 32rpx;
+    font-size: 28rpx;
     color: #d1d5db;
-    margin-left: 8rpx;
+    margin-left: 4rpx;
   }
 }
 
