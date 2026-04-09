@@ -2500,6 +2500,8 @@ def process_one_precision_item_estimate_task(task: Dict[str, Any]) -> None:
                 },
             )
         update_analysis_task_result_sync(task_id, status="done", result=result)
+    except (RuntimeError, ValueError) as e:
+        update_analysis_task_result_sync(task_id, status="failed", error_message=str(e))
     except Exception as e:
         err_msg = str(e) or type(e).__name__
         if estimate_row:
