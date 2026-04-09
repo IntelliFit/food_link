@@ -1,5 +1,47 @@
 # CURRENT_TASK
 
+- Task: 互动消息点击动态偶发跳转失败
+- Status: done（已改为“按 `record_id` 直接取动态上下文”，不再依赖当前社区 Feed 的筛选/分页状态碰运气）
+- Scope:
+  - 根因定位：
+    - `src/pages/interaction-notifications/index.tsx` 点击通知后会缓存 `record_id/comment_id`，再 `switchTab` 回 `pages/community/index`
+    - `src/pages/community/index.tsx` 旧逻辑 `ensureFeedReadyForNotification(...)` 不是直接按 `record_id` 取动态，而是基于当前 Feed 列表继续翻页查找
+    - 该查找过程与社区页当前筛选、缓存列表和分页 offset 耦合；一旦社区页当前 Feed 不是“默认全量列表”，就可能把目标动态跳过去，因此表现成“有时成功、有时失败”
+  - 已修复：
+    - 后端 `backend/main.py`
+      - 新增 `GET /api/community/feed/{record_id}/context`
+      - 直接基于 `record_id` 返回该动态的互动上下文（权限校验、作者信息、点赞态、评论预览）
+    - 前端 `src/utils/api.ts`
+      - 新增 `communityGetFeedContext(recordId, commentsLimit)`
+    - 前端 `src/pages/community/index.tsx`
+      - `ensureFeedReadyForNotification(...)` 改为优先调用新接口获取目标动态
+      - 拿到目标动态后直接插入当前 Feed 顶部并滚动定位，再按需补拉完整评论列表
+      - 移除原先依赖当前 Feed 分页继续猜目标动态的实现
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+  - 已手动拉起本地前后端：
+    - `backend-dev.log` 显示 `Uvicorn running on http://0.0.0.0:3010`
+    - `weapp-dev.log` 显示 `built in 23161ms`
+    - `dist/pages/community/index.js` 时间戳已更新到本轮修改
+  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
+    - `mrc where --port 9420`
+    - `mrc screenshot .\\interaction-notification-debug.png --port 9420`
+    - `mrc logs error 20 --port 9420`
+  - 当前阻塞：三条命令均因 `ws://localhost:9420` 无法连接失败，说明微信开发者工具当前未对本项目开启自动化端口，因此本轮未拿到截图与点击证据
+
+- Task: 真机调试报错 `ERR_CONNECTION_REFUSED` + `tmpl_0_svg not found`
+- Status: diagnosed（未改代码）
+- Scope:
+  - 真机日志里的 `[API] 构建时 API_BASE_URL: http://127.0.0.1:3010` 说明当前安装到手机/真机调试的仍是 `dev:weapp` 开发构建产物。
+  - `config/index.ts` 在 development 下会把 `__API_BASE_URL__` 注入为 `http://127.0.0.1:3010`；`.env.development` 当前也显式写死 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`。
+  - 该地址在真机上指向“手机自己”的回环地址，不是开发电脑，所以 `/api/home/dashboard`、`/api/user/profile`、`/api/membership/me`、`/api/expiry/*` 全部会报 `request:fail -102:net::ERR_CONNECTION_REFUSED`。
+  - `WXMLRT_$gwx ... Template tmpl_0_svg not found` 不是后端问题，源码里存在多处直接 JSX `<svg>`：如 `src/components/TabBarIcons/index.tsx`、`src/pages/community/index.tsx` 的 `FeedSearchGlyph()`、`src/pages/friends/index.tsx` 的多组图标；这类写法在小程序端会编译/运行不稳定，真机上更容易直接丢失对应模板。
+  - `not node js file system! path:/saaa_config.json` 与 `better_log_persist.log` / `wxfile://usr/miniprogramLog/log2` 更像微信开发者工具/日志插件自身噪音，不是当前业务主故障。
+- Next step:
+  - 真机联调若要打本地后端，需把开发构建的 `TARO_APP_API_BASE_URL` 改成电脑局域网 IP（例如 `http://192.168.x.x:3010`），并确保手机与电脑同网、后端监听对外网卡、系统防火墙放通 `3010`。
+  - 真机预览/体验版若要稳定联调，直接用 `npm run build:weapp:preview` 或 `npm run dev:weapp:online`，走 `https://healthymax.cn`。
+  - 后续需要修掉 `tmpl_0_svg` 时，优先把小程序页面里的直接 `<svg>` 改成 iconfont / 图片资源 / CSS 绘制 / 小程序兼容组件。
+
 - Task: 运动热量估算 Instructor 结构化输出（已完成代码与单测）
 - Status: done（`backend/exercise_llm.py` 已切 Instructor；`pytest tests/unit/test_exercise_llm.py` 通过；部署需 `pip install -r backend/requirements.txt`）
 - Note: 可选环境变量 `EXERCISE_CALORIES_INSTRUCTOR_MODE=json|md_json|tools`（默认 `md_json`）
@@ -58,6 +100,20 @@
     - 先以 `--window-seconds 45` 预览，识别出 `13` 个重复簇、`22` 条待删重复评论
     - 已执行 `python backend/cleanup_duplicate_feed_comments.py --window-seconds 45 --apply`
     - 二次复查结果：总评论数从 `183 -> 157`，重复簇降为 `0`
+  - 2026-04-10 二次清理：
+    - 新增脚本 `backend/cleanup_duplicate_feed_notifications.py`
+    - 评论表再次预览识别出 `3` 个新重复簇、`10` 条待删重复评论（含 `你好` 与“炒饭很好吃啊”两组）
+    - 通知表预览识别出 `3` 个重复簇、`10` 条待删重复通知
+    - 已执行：
+      - `python backend/cleanup_duplicate_feed_comments.py --window-seconds 45 --apply`
+      - `python backend/cleanup_duplicate_feed_notifications.py --window-seconds 45 --apply`
+    - 定点复查：
+      - `feed_comments` 总数 `171`
+      - `feed_interaction_notifications` 总数 `187`
+      - 用户截图中的 `你好` 与“我靠马哥你这炒饭看着真的很好吃啊”重复评论/重复通知已查不到
+    - 额外修复：
+      - `backend/worker.py` 的旧评论 worker 现也会在 `add_feed_comment_sync()` 命中 `_deduped` 时跳过重复通知
+      - `backend/database.py` 的 `create_feed_interaction_notification_sync()` 已补短时间通知幂等，避免同一事件短时间重复插入
 
 - Task: 手动记录升级为“搜索优先单餐工作台”
 - Status: done（前端改成搜索优先工作台；后端搜索补收藏/最近常吃重排；保存补来源元数据并在保存后回到当天记录页）
@@ -1376,7 +1432,7 @@
 ## 本地补充（与远端合并后保留）
 
 - Task: 运动记录出现“成功落库但显示 0 kcal”
-- Status: in_progress（已完成“思考过程 + 身高体重档案快照”后端接入；2026-04-08 晚又补本地隔离队列与更宽松 JSON 解析，待用户继续复测）
+- Status: done（已修复旧 `0 kcal` 与部分高强度动作失败；2026-04-10 已补“后台自动拆分多项目运动 + 数字/规则兜底”）
 - Scope:
   - 已确认当前工作区基线就是远端最新 `origin/dev`，并非旧代码未同步。
   - 真实根因在 `backend/exercise_llm.py`：
@@ -1393,18 +1449,37 @@
     - 本地 `backend/.env` 已开启 `FOOD_DEBUG_TASK_QUEUE=1`，避免共享 Supabase 时被外部旧 worker 抢任务
     - `POST /api/exercise-logs` 在本地调试队列开启时，改为直接投递 `food_text_debug + payload.exercise=true`，由本地 `food_text_debug` worker 路由到 `process_one_exercise_task`
     - `backend/exercise_llm.py` 已补“无外层花括号 / 半残 JSON”兜底解析，降低模型轻微格式漂移导致整条失败的概率
+    - `backend/exercise_llm.py` 已进一步收紧主提示词与 `reasoning` schema 上限，避免输出长推导
+    - `backend/exercise_llm.py` 已新增“主链路因 `max_tokens length limit` 截断时，自动切换短 JSON fallback”逻辑；同类高强度动作 + 完整画像快照已可本地复现成功
 - Verification:
   - `python -m py_compile backend/exercise_llm.py backend/worker.py backend/main.py backend/database.py` 通过
   - `ReadLints` 检查 `exercise-record / api` 相关前端文件，无新增报错
   - `mrc where --port 9420` 可连接，但当前目标页是另一套小程序 `training/today-training`，不是 `food_link`
   - 2026-04-08 晚直接查库确认：同一用户最新运动任务里既出现“带 `ai_reasoning` 的 702 kcal 新记录”，也出现“`ai_reasoning=null` 的 0 kcal 旧记录”，说明共享库中确有旧 worker 在消费 `exercise` 主队列
+  - 2026-04-10 代码复核补充：前端展示的文案“运动热量估算失败，请稍后重试”并不是前端兜底文案，而是后端 `backend/exercise_llm.py` 在捕获 `InstructorError / OpenAIAPIError` 后主动回写到任务错误信息；这说明失败点已经进入“调用上游 AI 结构化估算”阶段，而不是用户这句运动描述本身为空。
+  - 已精确复现截图对应失败任务 `68e994ad-73ba-42be-9cc3-8c7e36e3a061`：同一条描述 + 同一份 `profile_snapshot` 在本地直接调用 `estimate_exercise_calories_sync()` 时连续 3 次命中 `IncompleteOutputException: The output is incomplete due to a max_tokens length limit.`，随后被 Instructor 包装成 `InstructorRetryException`，最终落成“运动热量估算失败，请稍后重试”。
+  - 该问题更像当前 `gemini-3-flash-preview + Instructor MD_JSON + max_tokens=900` 组合在部分高强度动作描述下触发的“输出被截断”问题；不是接口鉴权缺失，因为本地同环境可成功调用多数其他运动描述。
+  - 2026-04-10 修复后验证：
+    - `python -m pytest backend/tests/unit/test_exercise_llm.py -q` 10 通过
+    - 直接复现同类高强度描述 + 完整画像快照，已成功返回 `165 kcal`
+    - 本地后端与 `dev:weapp` 已重新拉起，`backend-dev.log` 显示 `run_backend.py` 已在 `3010` 监听
+  - 2026-04-10 继续修复与复测补充：
+    - 已新增“后台自动拆分多项目运动”链路：按换行/分号/句号拆段后逐项估算并求和
+    - 分项估算新增三层兜底：`短 JSON -> 纯数字 -> 规则估算（运动关键词 + 时长 + 体重）`
+    - 用用户提供的多项目样本
+      - 晨跑 20 分钟
+      - 跳绳 15 分钟
+      - 俯卧撑 10 分钟
+      - 深蹲 15 分钟
+      - 拉伸 10 分钟
+      做 UTF-8 本地复测，已成功返回总计 `518 kcal`，不再直接报错
 - Next step:
   - 统一执行数据库 SQL：
     - `backend/sql/migrate_exercise_logs_and_task_type.sql`（若线上还未执行）
     - `backend/sql/add_exercise_ai_reasoning.sql`
-  - 用户重启后端后，在小程序重新提交一条如 `跑步30分钟 5分配速`
-  - 若仍异常，直接查看后端终端里的 `process_one_exercise_task` / `estimate_exercise_calories_sync` 新日志
-  - 旧的 `0 kcal` 历史记录需手动删除后重提，旧数据不会自动回填
+  - 让用户在小程序里直接复测“多项目详细清单”是否已不再报错
+  - 若后续要继续提准确率，再单独优化规则估算对“组数 / 每组时长 / 每组次数 / 负重”的理解，当前版本优先解决稳定性
+  - 旧的 `0 kcal` 历史记录仍需手动删除后重提，旧数据不会自动回填
 
 - Task: 微信开发者工具启动时报错 `scope.camera` + `ENOENT dist/pages/food-expiry/*`
 - Status: in_progress（已定位根因，待用户在 DevTools 清理启动页缓存并确认是否需要提交配置修复）

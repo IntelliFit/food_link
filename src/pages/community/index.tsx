@@ -15,6 +15,7 @@ import {
   communityLike,
   communityUnlike,
   communityGetComments,
+  communityGetFeedContext,
   communityGetCommentTasks,
   communityGetNotifications,
   communityPostComment,
@@ -1049,41 +1050,20 @@ function CommunityPage() {
       saveToCache(nextList)
     }
 
-    const fetchFeedPage = async (nextOffset: number) => {
-      const res = await communityGetFeed(undefined, nextOffset, PAGE_SIZE, true, 5)
-      const mergedPage = await mergeFeedTempComments(res.list || [], nextOffset === 0)
-      return {
-        list: mergedPage,
-        hasMore: res.has_more ?? mergedPage.length >= PAGE_SIZE
-      }
-    }
+    let targetItem = accumulated.find((item) => item.record.id === recordId) || null
+    if (!targetItem) {
+      const contextRes = await communityGetFeedContext(recordId, 5)
+      const contextItem = contextRes.item
+      if (!contextItem?.record?.id) return null
 
-    if (!accumulated.some((item) => item.record.id === recordId)) {
-      if (accumulated.length === 0) {
-        const firstPage = await fetchFeedPage(0)
-        accumulated = firstPage.list
-        nextHasMore = firstPage.hasMore
-      }
+      const mergedContext = await mergeFeedTempComments([contextItem], true)
+      targetItem = mergedContext[0] || null
+      if (!targetItem) return null
 
-      let nextOffset = accumulated.length
-      while (!accumulated.some((item) => item.record.id === recordId) && nextHasMore) {
-        const page = await fetchFeedPage(nextOffset)
-        if (!page.list.length) {
-          nextHasMore = false
-          break
-        }
-
-        const existingIds = new Set(accumulated.map((item) => item.record.id))
-        const dedupedPage = page.list.filter((item) => !existingIds.has(item.record.id))
-        accumulated = [...accumulated, ...dedupedPage]
-        nextHasMore = page.hasMore
-        nextOffset = accumulated.length
-      }
-
+      accumulated = [targetItem, ...accumulated.filter((item) => item.record.id !== recordId)]
       syncAccumulatedState(accumulated, nextHasMore)
     }
 
-    let targetItem = accumulated.find((item) => item.record.id === recordId) || null
     if (!targetItem) return null
 
     const previewComments = targetItem.comments || []
@@ -1105,7 +1085,7 @@ function CommunityPage() {
     syncAccumulatedState(accumulated, nextHasMore)
     targetItem = accumulated.find((item) => item.record.id === recordId) || null
     return targetItem
-  }, [PAGE_SIZE, feedList, hasMore, mergeFeedTempComments, saveToCache])
+  }, [feedList, hasMore, mergeFeedTempComments, saveToCache])
 
   const handlePendingNotificationNavigation = useCallback(async () => {
     if (pendingNotificationNavigationRef.current) return

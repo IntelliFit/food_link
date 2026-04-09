@@ -3552,6 +3552,38 @@ def create_feed_interaction_notification_sync(
         "content_preview": content_preview,
     }
     try:
+        normalized_preview = str(content_preview or "").strip()
+        duplicate_q = (
+            supabase.table("feed_interaction_notifications")
+            .select("id, recipient_user_id, actor_user_id, record_id, comment_id, parent_comment_id, notification_type, content_preview, created_at")
+            .eq("recipient_user_id", recipient_user_id)
+            .eq("notification_type", notification_type)
+            .order("created_at", desc=True)
+            .limit(10)
+        )
+        if actor_user_id:
+            duplicate_q = duplicate_q.eq("actor_user_id", actor_user_id)
+        if record_id:
+            duplicate_q = duplicate_q.eq("record_id", record_id)
+        duplicate_rows = list((duplicate_q.execute().data or []))
+
+        now = datetime.now(timezone.utc)
+        for existing in duplicate_rows:
+            if str(existing.get("parent_comment_id") or "") != str(parent_comment_id or ""):
+                continue
+            if str(existing.get("content_preview") or "").strip() != normalized_preview:
+                continue
+            existing_comment_id = str(existing.get("comment_id") or "")
+            current_comment_id = str(comment_id or "")
+            created_at = _parse_iso_datetime(existing.get("created_at"))
+            if not created_at:
+                continue
+            delta_seconds = abs((now - created_at).total_seconds())
+            if current_comment_id and existing_comment_id == current_comment_id and delta_seconds <= 3600:
+                return existing
+            if delta_seconds <= 45:
+                return existing
+
         result = supabase.table("feed_interaction_notifications").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from instructor.core.exceptions import InstructorError
 from pydantic import ValidationError
 
 # 确保以 backend 为根导入
@@ -17,6 +18,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from exercise_llm import (  # noqa: E402
     ExerciseCaloriesEstimate,
     ExerciseLlmError,
+    _estimate_exercise_calories_numeric_fallback,
+    _estimate_exercise_calories_plain_json_fallback,
+    _estimate_exercise_calories_rule_fallback,
+    _parse_first_positive_int,
+    _split_exercise_segments,
+    _should_prefer_plain_json,
     _coerce_calories_kcal,
     _coerce_reasoning,
     _parse_json_object_loose,
@@ -102,3 +109,98 @@ class TestEstimateExerciseCaloriesSyncMocked:
             with pytest.raises(ExerciseLlmError) as ei:
                 estimate_exercise_calories_sync("走路")
         assert "未配置" in str(ei.value)
+
+    def test_incomplete_output_falls_back_to_plain_json(self) -> None:
+        fake_openai = MagicMock()
+        fake_instructor_client = MagicMock()
+        fake_instructor_client.chat.completions.create.side_effect = InstructorError(
+            "The output is incomplete due to a max_tokens length limit."
+        )
+
+        with patch.dict(
+            "os.environ",
+            {"OFOXAI_API_KEY": "test-key"},
+            clear=False,
+        ):
+            with patch("exercise_llm.OpenAI", return_value=fake_openai):
+                with patch(
+                    "exercise_llm.instructor.from_openai",
+                    return_value=fake_instructor_client,
+                ):
+                    with patch(
+                        "exercise_llm._estimate_exercise_calories_plain_json_fallback",
+                        return_value=(185, '{"reasoning":"高强度力量训练","calories_kcal":185}', "高强度力量训练"),
+                    ) as fallback:
+                        cal, raw, reasoning = estimate_exercise_calories_sync(
+                            "负重引体",
+                            {"weight_kg": 70.2},
+                        )
+
+        assert fallback.called
+        assert cal == 185
+        assert "185" in raw
+        assert reasoning == "高强度力量训练"
+
+
+class TestExerciseFallbackJson:
+    def test_plain_json_fallback_parses_response(self) -> None:
+        fake_openai = MagicMock()
+        fake_resp = MagicMock()
+        fake_resp.choices = [MagicMock()]
+        fake_resp.choices[0].message.content = (
+            '{"reasoning":"按高强度力量训练估算","calories_kcal":188}'
+        )
+        fake_openai.chat.completions.create.return_value = fake_resp
+
+        cal, raw, reasoning = _estimate_exercise_calories_plain_json_fallback(
+            fake_openai,
+            "test-model",
+            "用户运动描述：负重引体",
+        )
+
+        assert cal == 188
+        assert '"calories_kcal":188' in raw
+        assert reasoning == "按高强度力量训练估算"
+
+    def test_long_multi_segment_desc_prefers_plain_json(self) -> None:
+        desc = (
+            "晨跑20分钟：配速6'30\"-7'00\"/公里。\n"
+            "跳绳15分钟：中等节奏，3组。\n"
+            "俯卧撑10分钟：3组，每组12-15个。"
+        )
+        assert _should_prefer_plain_json(desc) is True
+
+    def test_split_segments(self) -> None:
+        desc = "晨跑20分钟：轻松慢跑。\n跳绳15分钟：中等节奏。\n拉伸10分钟。"
+        assert _split_exercise_segments(desc) == [
+            "晨跑20分钟：轻松慢跑",
+            "跳绳15分钟：中等节奏",
+            "拉伸10分钟",
+        ]
+
+    def test_parse_first_positive_int(self) -> None:
+        assert _parse_first_positive_int("约 245 kcal") == 245
+
+    def test_numeric_fallback_parses_integer(self) -> None:
+        fake_openai = MagicMock()
+        fake_resp = MagicMock()
+        fake_resp.choices = [MagicMock()]
+        fake_resp.choices[0].message.content = "245"
+        fake_openai.chat.completions.create.return_value = fake_resp
+
+        cal, raw = _estimate_exercise_calories_numeric_fallback(
+            fake_openai,
+            "test-model",
+            "用户运动描述：跳绳15分钟",
+        )
+
+        assert cal == 245
+        assert raw == "245"
+
+    def test_rule_fallback_uses_duration_and_weight(self) -> None:
+        cal, reasoning = _estimate_exercise_calories_rule_fallback(
+            "跳绳15分钟，中等节奏",
+            {"weight_kg": 70.0},
+        )
+        assert cal > 0
+        assert "跳绳" in reasoning
