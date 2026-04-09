@@ -1,7 +1,6 @@
 /**
  * 识别记录海报（Canvas 2D）
- * 深色页背景 + 单卡米白区（参考 Swiss/餐饮卡：上图下文、热量居中主标题感）
- * 不使用任何绿色背景或渐变底；无 PRO 徽章
+ * 参考图样式：有边距圆角卡片 + 日期左下角 + 热量左上角 + 三列宏量 + 简洁食物列表
  */
 import type { FoodRecord } from './api'
 
@@ -24,24 +23,30 @@ function getRecordDateInfo(recordTime: string) {
 export const POSTER_WIDTH  = 375
 export const POSTER_HEIGHT = 812
 
-/** 页背景（深灰黑，无绿） */
-const PAGE_BG = '#141414'
-/** 卡片米白（与参考图接近） */
-const CREAM = '#F9F7F2'
+/** 页背景 */
+const PAGE_BG = '#f5f5f5'
+/** 卡片背景 - 使用与首页一致的绿色到白色渐变 */
+const CARD_BG_START = 'rgba(0, 188, 125, 0.15)'
+const CARD_BG_MID = 'rgba(0, 188, 125, 0.08)'
+const CARD_BG_END = '#EFF1F4'
 const TEXT_INK = '#0f172a'
 const TEXT_MUTED = '#64748b'
 const TEXT_SUB = '#94a3b8'
 const LINE = '#e5e7eb'
-const CARD_BORDER = '#2a2a2a'
 
-const CARD_MARGIN = 16
-const CARD_TOP = 20
-const IMG_H = 260
-const CARD_RADIUS = 20
-const INNER_PAD = 22
+/** 宏量营养配色 */
+const MACRO_PROTEIN = '#3b82f6'
+const MACRO_CARBS = '#eab308'
+const MACRO_FAT = '#f97316'
+
+const CARD_MARGIN = 0
+const CARD_TOP = 0
+const IMG_H = 280
+const CARD_RADIUS = 0
+const INNER_PAD = 20
 const BOTTOM_SAFE = 24
 
-/** 高度计算（与 drawRecordPoster 内边距一致） */
+/** 高度计算 */
 export function computePosterHeight(
   _ctx: CanvasRenderingContext2D,
   record: FoodRecord,
@@ -55,20 +60,19 @@ export function computePosterHeight(
   const items = record.items || []
   const maxItems = 4
   const n = items.length
+  
   const creamContent =
-    INNER +
-    26 +
-    50 +
-    36 +
-    28 +
-    72 +
-    (p + c + f > 0 ? 44 : 0) +
-    22 +
-    Math.min(n, maxItems) * 36 +
+    INNER +           // 顶部内边距
+    20 +              // 总摄入标签
+    46 +              // 热量数值
+    20 +              // 热量与宏量间距
+    50 +              // 宏量营养区域
+    (p + c + f > 0 ? 16 : 0) +  // 进度条
+    24 +              // 分隔线与食物列表间距
+    Math.min(n, maxItems) * 42 + // 食物项（增大间距）
     (n > maxItems ? 20 : 0) +
-    (n <= 2 ? 6 : 0) +
-    20 +
-    108
+    32 +              // 底部间距
+    90                // footer高度
 
   return Math.max(CARD_TOP + IMG_H + creamContent + BOTTOM_SAFE, POSTER_HEIGHT)
 }
@@ -105,44 +109,6 @@ function drawRoundedRect(
   ctx.closePath()
 }
 
-/** PFC：中性色块，无绿底 */
-function drawPFCBarSolid(
-  ctx: CanvasRenderingContext2D,
-  p: number, c: number, f: number,
-  barX: number, barY: number, barW: number
-) {
-  const total = p + c + f
-  if (total <= 0) return
-  const barH = 8
-  ctx.save()
-  drawRoundedRect(ctx, barX, barY, barW, barH, barH / 2)
-  ctx.fillStyle = LINE
-  ctx.fill()
-  const pW = barW * (p / total)
-  const cW = barW * (c / total)
-  const fW = barW * (f / total)
-  let sx = barX
-  if (pW > 0.5) {
-    drawRoundedRect(ctx, sx, barY, pW, barH, { tl: barH / 2, tr: 0, br: 0, bl: barH / 2 })
-    ctx.fillStyle = '#404040'
-    ctx.fill()
-  }
-  sx += pW
-  if (cW > 0.5) {
-    ctx.beginPath()
-    ctx.rect(sx, barY, cW, barH)
-    ctx.fillStyle = '#737373'
-    ctx.fill()
-  }
-  sx += cW
-  if (fW > 0.5) {
-    drawRoundedRect(ctx, sx, barY, fW, barH, { tl: 0, tr: barH / 2, br: barH / 2, bl: 0 })
-    ctx.fillStyle = '#a3a3a3'
-    ctx.fill()
-  }
-  ctx.restore()
-}
-
 export function drawRecordPoster(
   ctx: CanvasRenderingContext2D,
   options: PosterDrawOptions
@@ -157,28 +123,19 @@ export function drawRecordPoster(
   const items = record.items || []
   const maxItems = 4
 
-  ctx.fillStyle = PAGE_BG
+  const cardX = 0
+  const cardW = W
+  const cardTop = 0
+  const totalCardH = H
+
+  // 米白色卡片背景（全屏无margin，顶格渲染）
+  ctx.fillStyle = '#F9F7F2'
   ctx.fillRect(0, 0, W, H)
 
-  const cardX = CARD_MARGIN
-  const cardW = W - CARD_MARGIN * 2
-  const cardTop = CARD_TOP
-  const totalCardH = H - cardTop - BOTTOM_SAFE
-
-  // 整张米白圆角卡（上图下文一体）
-  drawRoundedRect(ctx, cardX, cardTop, cardW, totalCardH, CARD_RADIUS)
-  ctx.fillStyle = CREAM
-  ctx.fill()
+  // 顶图（全宽，无圆角）
   ctx.save()
-  drawRoundedRect(ctx, cardX, cardTop, cardW, totalCardH, CARD_RADIUS)
-  ctx.strokeStyle = CARD_BORDER
-  ctx.lineWidth = 1
-  ctx.stroke()
-  ctx.restore()
-
-  // 顶图：仅圆角与卡片上沿一致
-  ctx.save()
-  drawRoundedRect(ctx, cardX, cardTop, cardW, IMG_H, { tl: CARD_RADIUS, tr: CARD_RADIUS, br: 0, bl: 0 })
+  ctx.beginPath()
+  ctx.rect(cardX, cardTop, cardW, IMG_H)
   ctx.clip()
   if (image && image.width && image.height) {
     const scale = Math.max(cardW / image.width, IMG_H / image.height)
@@ -196,7 +153,7 @@ export function drawRecordPoster(
     ctx.fillText('No Image', cardX + cardW / 2, cardTop + IMG_H / 2)
   }
 
-  // 餐次角标（参考图左上 pill）
+  // 餐次角标（左上）
   const mealName = MEAL_NAMES[record.meal_type] || '记录'
   const tagPad = 12
   const tagH = 26
@@ -211,97 +168,193 @@ export function drawRecordPoster(
   ctx.textBaseline = 'middle'
   ctx.fillText(mealName, cardX + tagPad + tagW / 2, cardTop + tagPad + tagH / 2)
   ctx.restore()
+
+  // 日期：左下角，格式 "9 Apr."，日期和月份底部对齐
+  const dateInfo = getRecordDateInfo(record.record_time)
+  const datePad = 16
+  const monthStr = String(dateInfo.month).charAt(0).toUpperCase() + String(dateInfo.month).slice(1).toLowerCase()
+  const dayStr = String(dateInfo.day)
+  
+  // 底部渐变遮罩
+  const gradientH = 80
+  const grad = ctx.createLinearGradient(0, cardTop + IMG_H - gradientH, 0, cardTop + IMG_H)
+  grad.addColorStop(0, 'rgba(0,0,0,0)')
+  grad.addColorStop(1, 'rgba(0,0,0,0.45)')
+  ctx.save()
+  ctx.fillStyle = grad
+  ctx.fillRect(cardX, cardTop + IMG_H - gradientH, cardW, gradientH)
+  ctx.restore()
+  
+  // 绘制日期（底部对齐，月份往上调整）
+  ctx.save()
+  const tx = cardX + datePad
+  const ty = cardTop + IMG_H - datePad
+  
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'bottom'
+  ctx.font = 'bold 40px sans-serif'
+  ctx.fillStyle = '#ffffff'
+  const dayW = ctx.measureText(dayStr).width
+  ctx.fillText(dayStr, tx, ty)
+  
+  // 月份往上调整（ty - 6 使月份位置更高）
+  ctx.font = '500 16px sans-serif'
+  ctx.fillText(` ${monthStr}.`, tx + dayW, ty - 6)
+  ctx.restore()
   ctx.restore()
 
   const contentW = cardW - INNER_PAD * 2
   const cx = cardX + INNER_PAD
-  let cy = cardTop + IMG_H + INNER_PAD
+  // 增加顶部间距，确保热量数字不会与图片重叠
+  let cy = cardTop + IMG_H + 28
 
-  const dateInfo = getRecordDateInfo(record.record_time)
-  ctx.textAlign = 'center'
+  // 热量：左上角大数字（无"总摄入"标签）
+  ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillStyle = TEXT_SUB
-  ctx.font = '600 11px sans-serif'
-  ctx.fillText(`${dateInfo.month} ${dateInfo.day}`, cardX + cardW / 2, cy)
-  cy += 26
-
-  // 总热量：居中、主标题层级（参考图大标题）
   ctx.fillStyle = TEXT_INK
-  ctx.font = 'bold 46px sans-serif'
+  ctx.font = 'bold 44px sans-serif'
   const calStr = cal.toLocaleString('en-US')
-  ctx.fillText(calStr, cardX + cardW / 2, cy)
-  cy += 50
+  ctx.fillText(calStr, cx, cy)
+  const calStrW = ctx.measureText(calStr).width
   ctx.fillStyle = TEXT_MUTED
-  ctx.font = '600 13px sans-serif'
-  ctx.fillText('kcal · 总摄入', cardX + cardW / 2, cy)
-  cy += 36
+  ctx.font = '600 14px sans-serif'
+  ctx.fillText(' kcal', cx + calStrW, cy + 18)
+  cy += 54
 
-  ctx.fillStyle = TEXT_INK
-  ctx.font = '600 15px sans-serif'
-  ctx.fillText('宏量营养', cardX + cardW / 2, cy)
-  cy += 28
-
-  const colW = contentW / 3
-  ctx.textAlign = 'center'
+  // 宏量营养：蛋白质左对齐，脂肪右对齐，数值字体减小
+  const macroY = cy
+  const valueY = macroY + 18
+  
+  // 标签行
   ctx.textBaseline = 'top'
-  const macroRows: [number, string][] = [
-    [p, '蛋白质'],
-    [c, '碳水'],
-    [f, '脂肪'],
-  ]
-  for (let i = 0; i < 3; i++) {
-    const [val, lab] = macroRows[i]
-    const x = cx + i * colW + colW / 2
-    ctx.fillStyle = TEXT_SUB
-    ctx.font = '600 9px sans-serif'
-    ctx.fillText(lab.toUpperCase(), x, cy)
-    ctx.fillStyle = TEXT_INK
-    ctx.font = 'bold 21px sans-serif'
-    ctx.fillText(`${val}g`, x, cy + 18)
-  }
-  cy += 72
+  ctx.font = '600 11px sans-serif'
+  
+  // 蛋白质（左对齐）
+  ctx.textAlign = 'left'
+  ctx.fillStyle = MACRO_PROTEIN
+  ctx.fillText('蛋白质', cx, macroY)
+  
+  // 碳水（居中）
+  ctx.textAlign = 'center'
+  ctx.fillStyle = MACRO_CARBS
+  ctx.fillText('碳水', cx + contentW / 2, macroY)
+  
+  // 脂肪（右对齐）
+  ctx.textAlign = 'right'
+  ctx.fillStyle = MACRO_FAT
+  ctx.fillText('脂肪', cx + contentW, macroY)
+  
+  // 数值行（字体减小）
+  ctx.fillStyle = TEXT_INK
+  ctx.font = 'bold 20px sans-serif'  // 从 28px 减小到 20px
+  
+  // 蛋白质数值（左对齐）
+  ctx.textAlign = 'left'
+  ctx.fillText(`${p}g`, cx, valueY)
+  
+  // 碳水数值（居中）
+  ctx.textAlign = 'center'
+  ctx.fillText(`${c}g`, cx + contentW / 2, valueY)
+  
+  // 脂肪数值（右对齐）
+  ctx.textAlign = 'right'
+  ctx.fillText(`${f}g`, cx + contentW, valueY)
+  
+  cy += 44  // 增加数值与进度条之间的间距（从38增加到44）
 
+  // PFC 进度条
   if (p + c + f > 0) {
-    drawPFCBarSolid(ctx, p, c, f, cx, cy, contentW)
-    cy += 44
+    const total = p + c + f
+    const barW = contentW
+    const barH = 8
+    const pW = barW * (p / total)
+    const cW = barW * (c / total)
+    const fW = barW * (f / total)
+    
+    // 背景
+    ctx.save()
+    drawRoundedRect(ctx, cx, cy, barW, barH, barH / 2)
+    ctx.fillStyle = LINE
+    ctx.fill()
+    
+    // 蛋白质段
+    let sx = cx
+    if (pW > 0.5) {
+      drawRoundedRect(ctx, sx, cy, pW, barH, { tl: barH / 2, tr: 0, br: 0, bl: barH / 2 })
+      ctx.fillStyle = MACRO_PROTEIN
+      ctx.fill()
+    }
+    sx += pW
+    // 碳水段
+    if (cW > 0.5) {
+      ctx.beginPath()
+      ctx.rect(sx, cy, cW, barH)
+      ctx.fillStyle = MACRO_CARBS
+      ctx.fill()
+    }
+    sx += cW
+    // 脂肪段
+    if (fW > 0.5) {
+      drawRoundedRect(ctx, sx, cy, fW, barH, { tl: 0, tr: barH / 2, br: barH / 2, bl: 0 })
+      ctx.fillStyle = MACRO_FAT
+      ctx.fill()
+    }
+    ctx.restore()
+    cy += 24
   }
 
+  // 分隔线
   ctx.beginPath()
   ctx.moveTo(cx, cy)
   ctx.lineTo(cx + contentW, cy)
   ctx.strokeStyle = LINE
   ctx.lineWidth = 1
   ctx.stroke()
-  cy += 22
+  cy += 20
 
+  // 食物列表：简洁样式，无背景色（与参考图一致）
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
+  ctx.textBaseline = 'middle'
+  
   for (let i = 0; i < Math.min(items.length, maxItems); i++) {
     const item = items[i]
     const ratio = (item.ratio ?? 100) / 100
     const itemCal = Math.round((item.nutrients?.calories ?? 0) * ratio)
     const nm = item.name.length > 12 ? item.name.slice(0, 12) + '…' : item.name
+    
+    const itemY = cy
+    const itemH = 40
+    
+    // 食物名称（左侧，放大）
     ctx.fillStyle = TEXT_INK
-    ctx.font = '600 14px sans-serif'
-    ctx.fillText(nm, cx, cy)
+    ctx.font = '600 16px sans-serif'
+    ctx.fillText(nm, cx, itemY + itemH / 2)
+    
+    // 右侧信息：克数 · 热量（放大）
     ctx.textAlign = 'right'
     ctx.fillStyle = TEXT_MUTED
-    ctx.font = '12px sans-serif'
-    ctx.fillText(`${item.intake ?? 0}g · ${itemCal} kcal`, cx + contentW, cy)
+    ctx.font = '14px sans-serif'
+    const infoText = `${item.intake ?? 0}g · ${itemCal} kcal`
+    ctx.fillText(infoText, cx + contentW, itemY + itemH / 2)
+    
     ctx.textAlign = 'left'
-    cy += 36
+    cy += itemH + 2
   }
+  
   if (items.length > maxItems) {
+    cy += 8
     ctx.fillStyle = TEXT_SUB
-    ctx.font = '12px sans-serif'
-    ctx.fillText(`…还有 ${items.length - maxItems} 项`, cx, cy - 2)
-    cy += 20
+    ctx.font = 'italic 12px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText(`还有 ${items.length - maxItems} 项`, cx + contentW / 2, cy)
+    ctx.textAlign = 'left'
+    cy += 16
   }
-  if (items.length <= 2) cy += 6
 
-  const footerY = Math.min(cy + 20, cardTop + totalCardH - 100)
-  const avatarSz = 22
-  const titleX = sharerAvatarImage ? cx + avatarSz + 10 : cx
+  // Footer：头像、分享文字、二维码（放到最底部）
+  const footerY = cardTop + totalCardH - 82  // 固定到底部
+  const avatarSz = 36
+  const titleX = sharerAvatarImage ? cx + avatarSz + 12 : cx
 
   if (sharerAvatarImage) {
     ctx.save()
@@ -315,18 +368,18 @@ export function drawRecordPoster(
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_INK
-  ctx.font = 'bold 13px sans-serif'
+  ctx.font = 'bold 15px sans-serif'
   const displayName = (sharerNickname || '').trim()
   const nameText = displayName ? `${displayName} 的饮食分享` : '智健食探'
-  ctx.fillText(nameText, titleX, footerY + 14)
+  ctx.fillText(nameText, titleX, footerY + 16)
 
   ctx.fillStyle = TEXT_SUB
-  ctx.font = '10px sans-serif'
-  ctx.fillText('扫码登录食探，可一键成为好友', titleX, footerY + 32)
+  ctx.font = '12px sans-serif'
+  ctx.fillText('扫码登录食探，可一键成为好友', titleX, footerY + 36)
 
   const qrSize = 72
   const qrX = cx + contentW - qrSize
-  const qrY = footerY - 2
+  const qrY = footerY - 4
   if (qrCodeImage) {
     ctx.save()
     drawRoundedRect(ctx, qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, 8)

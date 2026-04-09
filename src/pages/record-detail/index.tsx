@@ -559,6 +559,8 @@ function RecordDetailPage() {
               destWidth: POSTER_WIDTH * 2,
               destHeight: dynamicHeight * 2,
               fileType: 'png',
+              /** 保留圆角外透明像素（Canvas 2D，基础库 ≥2.32.0） */
+              transparent: true,
               success: (resp) => {
                 Taro.hideLoading()
                 setPosterGenerating(false)
@@ -960,7 +962,6 @@ function RecordDetailPage() {
           <View className='poster-modal'>
             <View className='poster-modal-mask' onClick={() => setShowPosterModal(false)} catchMove />
             <View className='poster-modal-content'>
-              <Text className='poster-modal-title'>分享海报</Text>
               <ScrollView scrollY className='poster-scroll-area'>
                 <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
               </ScrollView>
@@ -973,7 +974,6 @@ function RecordDetailPage() {
                     保存图片
                   </Button>
                 </View>
-                <Button className='poster-modal-btn close-btn' onClick={() => setShowPosterModal(false)}>关闭</Button>
               </View>
             </View>
           </View>

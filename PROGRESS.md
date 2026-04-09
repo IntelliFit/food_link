@@ -6,6 +6,8 @@
 
 ## 2026-04-09
 
+- 🎨 style: 分享海报预览去掉底部「关闭」；头图日期改为一行英文大写（如 APR 09）、字号加大、无底与边框，白字轻阴影压图 `src/utils/poster.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🎨 style: 分享海报 Canvas 外侧透明、米白卡顶格全宽；日期叠在食物图左下角，下区左上总摄入与首页三色宏量；预览弹窗海报顶格、内容区透明；导出 PNG 带透明 `src/utils/poster.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
 - 🔧 refactor: 圈子动态卡片仅点击图片/热量/营养条进入记录详情，并带 `ui=home` 与首页今日餐食详情样式一致；整卡不再点击进入 `src/pages/community/index.tsx` `src/pages/community/index.scss`
 - 🎨 style: 圈子评论区去掉独立全屏 mask；点击滚动内容区空白处冒泡关闭输入栏（交互区 `stopPropagation`），恢复无遮罩浏览 `src/pages/community/index.tsx` `src/pages/community/index.scss`
 - ✨ feat: 圈子评论乐观发送（立即展示+清空输入）、签名防抖与短锁防重复、失败回滚与 Toast；发送按钮改为 `icon-send`、请求中 spinner；缓存写入前剥离 `_is_pending` `src/pages/community/index.tsx` `src/pages/community/index.scss` `src/utils/api.ts`
