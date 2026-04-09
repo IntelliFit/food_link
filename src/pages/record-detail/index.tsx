@@ -197,7 +197,7 @@ function RecordDetailPage() {
     return {
       title,
       path: sharePath,
-      imageUrl: posterImageUrl || undefined
+      imageUrl: posterImageUrl || record?.image_path || undefined
     }
   })
 
@@ -206,7 +206,7 @@ function RecordDetailPage() {
     return {
       title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
-      imageUrl: posterImageUrl || undefined
+      imageUrl: posterImageUrl || record?.image_path || undefined
     }
   })
 
@@ -484,19 +484,28 @@ function RecordDetailPage() {
         canvas.width = POSTER_WIDTH * dpr
         canvas.height = POSTER_HEIGHT * dpr
 
-        const loadImage = (src: string) => {
-          return new Promise<{ width: number; height: number } | null>((resolve) => {
-            if (!src || !canvas.createImage) {
-              resolve(null)
-              return
+        const loadImage = async (src: string): Promise<{ width: number; height: number } | null> => {
+          if (!src || !canvas.createImage) return null
+
+          let localSrc = src
+          if (/^https?:\/\//.test(src)) {
+            try {
+              const info = await Taro.getImageInfo({ src })
+              localSrc = info.path
+            } catch (e) {
+              console.error('Download image fail', src, e)
+              return null
             }
-            const img = canvas.createImage()
+          }
+
+          return new Promise<{ width: number; height: number } | null>((resolve) => {
+            const img = canvas.createImage!()
             img.onload = () => resolve(img)
             img.onerror = (e) => {
-              console.error('Load image fail', src, e)
+              console.error('Load image fail', localSrc, e)
               resolve(null)
             }
-            img.src = src
+            img.src = localSrc
           })
         }
 
@@ -582,6 +591,18 @@ function RecordDetailPage() {
           }
         })
       })
+  }
+
+  const handleSharePosterImage = () => {
+    if (!posterImageUrl) return
+    // @ts-ignore — showShareImageMenu 在 Taro 类型里可能缺失，但微信基础库 2.14.3+ 支持
+    Taro.showShareImageMenu({
+      path: posterImageUrl,
+      fail: (err) => {
+        console.error('showShareImageMenu fail', err)
+        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+      }
+    })
   }
 
   const handleSavePoster = () => {
