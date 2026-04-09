@@ -6641,6 +6641,43 @@ async def api_community_comments(
         raise HTTPException(status_code=500, detail="获取评论失败")
 
 
+@app.get("/api/community/feed/{record_id}/context")
+async def api_community_feed_record_context(
+    record_id: str,
+    comments_limit: int = 5,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """按记录 ID 获取单条圈子动态的互动上下文，用于通知跳转定位。"""
+    try:
+        current_user_id = user_info["user_id"]
+        record = await _ensure_feed_record_interactable(current_user_id, record_id)
+        author = await get_user_by_id(record.get("user_id")) if record.get("user_id") else None
+        likes_map = await get_feed_likes_for_records([record_id], current_user_id)
+        preview_limit = max(0, min(comments_limit, 20))
+        comments = await list_feed_comments(record_id, limit=preview_limit) if preview_limit > 0 else []
+        like_info = likes_map.get(record_id, {"count": 0, "liked": False})
+
+        item = {
+            "record": record,
+            "author": {
+                "id": (author or {}).get("id"),
+                "nickname": (author or {}).get("nickname") or "用户",
+                "avatar": (author or {}).get("avatar") or "",
+            },
+            "like_count": like_info.get("count", 0),
+            "liked": like_info.get("liked", False),
+            "is_mine": record.get("user_id") == current_user_id,
+            "comments": comments,
+            "comment_count": len(comments),
+        }
+        return {"item": item}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[api/community/feed/context] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取动态上下文失败")
+
+
 @app.post("/api/community/feed/{record_id}/comments")
 async def api_community_comment_post(
     record_id: str,

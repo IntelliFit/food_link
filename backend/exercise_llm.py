@@ -24,11 +24,38 @@ ACTIVITY_LEVEL_LABELS = {
     "very_active": "极高活动",
 }
 
+RULE_BASED_METS = [
+    (("跳绳",), 11.0, "跳绳"),
+    (("跑步", "慢跑", "晨跑"), 8.3, "跑步"),
+    (("冲刺",), 11.5, "冲刺跑"),
+    (("骑车", "骑行", "单车"), 6.8, "骑行"),
+    (("游泳",), 8.0, "游泳"),
+    (("俯卧撑", "引体", "臂屈伸"), 8.0, "徒手力量训练"),
+    (("深蹲", "硬拉", "卧推"), 6.0, "力量训练"),
+    (("瑜伽",), 3.0, "瑜伽"),
+    (("拉伸", "放松"), 2.3, "拉伸"),
+    (("步行", "走路", "快走"), 3.8, "步行"),
+]
+
 EXERCISE_CALORIES_SYSTEM_PROMPT = (
     "你是运动热量估算助手。用户用自然语言描述自己完成的一次运动。\n"
-    "你必须先用简体中文写清推理过程，再给出千卡估计。\n"
-    "推理应体现：运动类型、时长、强度或配速/距离等；若缺少体重等信息，仅在 reasoning 中写明合理假设。\n"
+    "你必须先用简体中文给出非常简短的估算依据，再给出千卡估计。\n"
+    "reasoning 只允许 1-2 句，总长度尽量控制在 80 个汉字以内；不要展开长篇推导。\n"
+    "推理应只覆盖：运动类型、时长、强度或配速/距离等；若缺少体重等信息，仅在 reasoning 中一句话写明合理假设。\n"
     "不要输出 JSON 以外的多余说明；结构化字段由系统从回复中提取。"
+)
+
+EXERCISE_CALORIES_FALLBACK_SYSTEM_PROMPT = (
+    "你是运动热量估算助手。\n"
+    "只输出一个 JSON 对象，不要 markdown，不要代码块，不要额外解释。\n"
+    '格式固定为：{"reasoning":"一句简短中文，不超过60字","calories_kcal":123}\n'
+    "reasoning 只保留结论，不要展开推导。"
+)
+
+EXERCISE_CALORIES_NUMERIC_SYSTEM_PROMPT = (
+    "你是运动热量估算助手。\n"
+    "根据用户运动描述和画像信息估算本次运动消耗。\n"
+    "只输出一个正整数，表示总消耗千卡；不要单位、不要解释、不要任何其他字符。"
 )
 
 
@@ -38,8 +65,8 @@ class ExerciseCaloriesEstimate(BaseModel):
     reasoning: str = Field(
         ...,
         min_length=1,
-        max_length=4000,
-        description="简体中文，2～5 句，说明理解、假设与估算依据",
+        max_length=200,
+        description="简体中文，1～2句，总长度尽量不超过80字，只写简短估算依据",
     )
     calories_kcal: int = Field(
         ...,
@@ -179,6 +206,55 @@ def _format_exercise_profile_snapshot(profile_snapshot: Dict[str, Any]) -> str:
     return "已知用户真实档案（请优先使用，不要随意假设这些字段）：\n" + "\n".join(lines)
 
 
+def _compact_exercise_desc(desc: str) -> str:
+    """把多段运动描述压缩成更短的摘要，尽量保留时长/配速/组数/负重等关键信息。"""
+    raw = (desc or "").strip()
+    if not raw:
+        return ""
+    parts = [p.strip(" ;,.，。") for p in re.split(r"[\r\n;；。]+", raw) if p.strip()]
+    compact_parts = []
+    for part in parts[:8]:
+        part = re.sub(r"\s+", "", part)
+        part = part.replace("：", ":").replace("，", ",")
+        if len(part) > 60:
+            m = re.match(r"^(.{0,60}?)(?:,|，|以|主要|为主)", part)
+            if m and m.group(1):
+                part = m.group(1)
+            else:
+                part = part[:60]
+        compact_parts.append(part)
+    return "；".join(compact_parts)
+
+
+def _should_prefer_plain_json(desc: str) -> bool:
+    text = (desc or "").strip()
+    if not text:
+        return False
+    separators = text.count("\n") + text.count("；") + text.count(";") + text.count("。")
+    colon_count = text.count("：") + text.count(":")
+    return len(text) >= 110 or separators >= 2 or colon_count >= 2
+
+
+def _split_exercise_segments(desc: str) -> list[str]:
+    raw = (desc or "").strip()
+    if not raw:
+        return []
+    segments = []
+    for part in re.split(r"[\r\n;；。]+", raw):
+        cleaned = re.sub(r"\s+", " ", part).strip(" ;,.，。")
+        if len(cleaned) >= 4:
+            segments.append(cleaned)
+    return segments[:8]
+
+
+def _should_estimate_by_segments(desc: str, segments: list[str]) -> bool:
+    if len(segments) < 2:
+        return False
+    if len(desc or "") >= 80:
+        return True
+    return any((":" in s or "：" in s) for s in segments)
+
+
 def _raw_text_from_instructor_result(estimate: ExerciseCaloriesEstimate) -> str:
     """尽量返回模型原始文本，否则序列化结构化结果。"""
     raw_resp = getattr(estimate, "_raw_response", None)
@@ -193,9 +269,167 @@ def _raw_text_from_instructor_result(estimate: ExerciseCaloriesEstimate) -> str:
     return estimate.model_dump_json(ensure_ascii=False)
 
 
+def _is_incomplete_output_error(error: Exception) -> bool:
+    text = str(error or "").lower()
+    return (
+        "max_tokens length limit" in text
+        or "output is incomplete" in text
+        or "incompleteoutputexception" in text
+    )
+
+
+def _estimate_exercise_calories_plain_json_fallback(
+    openai_client: OpenAI,
+    model_name: str,
+    user_prompt: str,
+) -> Tuple[int, str, str]:
+    """主链路被截断时，降级到更短的纯 JSON 输出，避免 reasoning 过长再次炸掉。"""
+    resp = openai_client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {"role": "system", "content": EXERCISE_CALORIES_FALLBACK_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+        max_tokens=int(os.getenv("EXERCISE_CALORIES_FALLBACK_MAX_TOKENS", "220")),
+    )
+    raw = ""
+    if getattr(resp, "choices", None):
+        try:
+            raw = (resp.choices[0].message.content or "").strip()
+        except (IndexError, AttributeError):
+            raw = ""
+    if not raw:
+        raise ExerciseLlmError("运动热量估算结果为空", 502)
+
+    data = _parse_json_object_loose(raw)
+    reasoning = _coerce_reasoning(data)
+    calories = _coerce_calories_kcal(data)
+    return calories, raw, reasoning
+
+
+def _parse_first_positive_int(text: str) -> int:
+    m = re.search(r"(\d{1,4})", text or "")
+    if not m:
+        raise ExerciseLlmError(f"未找到有效热量数字，原始片段: {(text or '')[:120]}", 502)
+    value = int(m.group(1))
+    if value <= 0:
+        raise ExerciseLlmError(f"热量数字必须为正整数，得到: {value}", 502)
+    return min(value, 5000)
+
+
+def _estimate_exercise_calories_numeric_fallback(
+    openai_client: OpenAI,
+    model_name: str,
+    user_prompt: str,
+) -> Tuple[int, str]:
+    resp = openai_client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {"role": "system", "content": EXERCISE_CALORIES_NUMERIC_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.1,
+        max_tokens=int(os.getenv("EXERCISE_CALORIES_NUMERIC_MAX_TOKENS", "32")),
+    )
+    raw = ""
+    if getattr(resp, "choices", None):
+        try:
+            raw = (resp.choices[0].message.content or "").strip()
+        except (IndexError, AttributeError):
+            raw = ""
+    if not raw:
+        raise ExerciseLlmError("运动热量估算结果为空", 502)
+    return _parse_first_positive_int(raw), raw
+
+
+def _extract_duration_minutes(desc: str) -> Optional[float]:
+    text = desc or ""
+    total = 0.0
+    matched = False
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(小时|h|hour)", text, flags=re.IGNORECASE):
+        total += float(m.group(1)) * 60.0
+        matched = True
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(分钟|min)", text, flags=re.IGNORECASE):
+        total += float(m.group(1))
+        matched = True
+    return total if matched and total > 0 else None
+
+
+def _pick_rule_based_met(desc: str) -> Tuple[float, str]:
+    text = desc or ""
+    for keywords, met, label in RULE_BASED_METS:
+        if any(k in text for k in keywords):
+            return met, label
+    return 5.0, "一般运动"
+
+
+def _estimate_exercise_calories_rule_fallback(
+    exercise_desc: str,
+    profile_snapshot: Optional[Dict[str, Any]] = None,
+) -> Tuple[int, str]:
+    minutes = _extract_duration_minutes(exercise_desc)
+    if not minutes:
+        raise ExerciseLlmError("规则估算缺少时长信息", 502)
+    met, label = _pick_rule_based_met(exercise_desc)
+    weight = 70.0
+    if isinstance(profile_snapshot, dict):
+        try:
+            raw_weight = profile_snapshot.get("weight_kg")
+            if raw_weight:
+                weight = float(raw_weight)
+        except (TypeError, ValueError):
+            pass
+    calories = int(round(met * 3.5 * weight / 200.0 * minutes))
+    calories = max(1, min(calories, 5000))
+    reasoning = f"规则估算：{label}约{int(round(minutes))}分钟"
+    return calories, reasoning
+
+
+def _estimate_exercise_calories_short_path(
+    openai_client: OpenAI,
+    model_name: str,
+    user_prompt: str,
+    original_desc: str,
+    profile_snapshot: Optional[Dict[str, Any]] = None,
+) -> Tuple[int, str, str]:
+    try:
+        return _estimate_exercise_calories_plain_json_fallback(
+            openai_client,
+            model_name,
+            user_prompt,
+        )
+    except Exception as e:
+        print(f"[estimate_exercise_calories_sync] short json 失败，尝试 numeric fallback: {e}", flush=True)
+    try:
+        calories, raw = _estimate_exercise_calories_numeric_fallback(
+            openai_client,
+            model_name,
+            user_prompt,
+        )
+        reasoning = "按简化分项估算"
+        return calories, raw, reasoning
+    except Exception as e:
+        print(f"[estimate_exercise_calories_sync] numeric fallback 失败，尝试规则估算: {e}", flush=True)
+    calories, reasoning = _estimate_exercise_calories_rule_fallback(
+        original_desc,
+        profile_snapshot,
+    )
+    raw = json.dumps(
+        {
+            "reasoning": reasoning,
+            "calories_kcal": calories,
+            "source": "rule_fallback",
+        },
+        ensure_ascii=False,
+    )
+    return calories, raw, reasoning
+
+
 def estimate_exercise_calories_sync(
     exercise_desc: str,
     profile_snapshot: Optional[Dict[str, Any]] = None,
+    allow_segmented_fallback: bool = True,
 ) -> Tuple[int, str, str]:
     """
     同步调用大模型估算千卡。
@@ -211,7 +445,9 @@ def estimate_exercise_calories_sync(
         raise ExerciseLlmError("AI 服务未配置", 503)
 
     model_name = os.getenv("EXERCISE_CALORIES_MODEL_NAME", GEMINI_MODEL_NAME)
-    user_prompt = f"用户运动描述：{desc}"
+    compact_desc = _compact_exercise_desc(desc)
+    prompt_desc = compact_desc or desc
+    user_prompt = f"用户运动描述：{prompt_desc}"
     profile_text = _format_exercise_profile_snapshot(profile_snapshot or {})
     if profile_text:
         user_prompt += (
@@ -226,8 +462,84 @@ def estimate_exercise_calories_sync(
         api_key=api_key,
         timeout=60.0,
     )
+
+    segments = _split_exercise_segments(desc)
+    if allow_segmented_fallback and _should_estimate_by_segments(desc, segments):
+        print(
+            f"[estimate_exercise_calories_sync] 多项目描述，拆分估算 segments={len(segments)}",
+            flush=True,
+        )
+        segment_rows = []
+        total = 0
+        for segment in segments:
+            segment_prompt = f"用户运动描述：{_compact_exercise_desc(segment) or segment}"
+            if profile_text:
+                segment_prompt += (
+                    "\n\n"
+                    + profile_text
+                    + "\n\n请仅基于这一项运动估算。"
+                )
+            cal, _, seg_reasoning = _estimate_exercise_calories_short_path(
+                openai_client,
+                model_name,
+                segment_prompt,
+                segment,
+                profile_snapshot,
+            )
+            total += cal
+            segment_rows.append(
+                {
+                    "segment": segment,
+                    "calories_kcal": cal,
+                    "reasoning": seg_reasoning,
+                }
+            )
+        reasoning = "分项估算：" + "；".join(
+            f"{row['segment'][:16]}≈{row['calories_kcal']}kcal" for row in segment_rows[:6]
+        )
+        if len(reasoning) > 200:
+            reasoning = reasoning[:200] + "…"
+        raw = json.dumps(
+            {
+                "segments": segment_rows,
+                "reasoning": reasoning,
+                "calories_kcal": total,
+            },
+            ensure_ascii=False,
+        )
+        print(
+            f"[estimate_exercise_calories_sync] segmented success desc_len={len(desc)} total={total}",
+            flush=True,
+        )
+        return total, raw, reasoning
+
     client = instructor.from_openai(openai_client, mode=mode)
     max_retries = int(os.getenv("EXERCISE_CALORIES_INSTRUCTOR_MAX_RETRIES", "3"))
+
+    if _should_prefer_plain_json(desc):
+        print(
+            f"[estimate_exercise_calories_sync] 多段/长描述，优先走短 JSON 路线 desc_len={len(desc)} compact_len={len(prompt_desc)}",
+            flush=True,
+        )
+        try:
+            calories, raw, reasoning = _estimate_exercise_calories_short_path(
+                openai_client,
+                model_name,
+                user_prompt,
+                desc,
+                profile_snapshot,
+            )
+            print(
+                f"[estimate_exercise_calories_sync] plain-json preferred success desc={desc!r} "
+                f"calories={calories} reasoning_len={len(reasoning)}",
+                flush=True,
+            )
+            return calories, raw, reasoning
+        except Exception as e:
+            print(
+                f"[estimate_exercise_calories_sync] plain-json preferred 失败，回退 Instructor: {e}",
+                flush=True,
+            )
 
     try:
         estimate = client.chat.completions.create(
@@ -242,6 +554,31 @@ def estimate_exercise_calories_sync(
             max_retries=max_retries,
         )
     except (InstructorError, OpenAIAPIError) as e:
+        if _is_incomplete_output_error(e):
+            print(
+                "[estimate_exercise_calories_sync] 主链路输出被截断，尝试短 JSON fallback",
+                flush=True,
+            )
+            try:
+                calories, raw, reasoning = _estimate_exercise_calories_short_path(
+                    openai_client,
+                    model_name,
+                    user_prompt,
+                    desc,
+                    profile_snapshot,
+                )
+                print(
+                    f"[estimate_exercise_calories_sync] fallback success desc={desc!r} "
+                    f"calories={calories} reasoning_len={len(reasoning)}",
+                    flush=True,
+                )
+                return calories, raw, reasoning
+            except Exception as fallback_error:
+                print(
+                    "[estimate_exercise_calories_sync] fallback 失败: "
+                    f"{fallback_error}",
+                    flush=True,
+                )
         print(f"[estimate_exercise_calories_sync] Instructor/OpenAI 错误: {e}", flush=True)
         raise ExerciseLlmError("运动热量估算失败，请稍后重试", 502) from e
     except Exception as e:

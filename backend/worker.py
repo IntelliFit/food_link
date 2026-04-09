@@ -2839,8 +2839,10 @@ def process_one_comment_task(task: Dict[str, Any]) -> None:
                 parent_comment_id=parent_comment_id,
                 reply_to_user_id=reply_to_user_id,
             )
+            is_deduped = bool(comment.get("_deduped"))
         elif comment_type == "public_food_library":
             comment = add_public_food_library_comment_sync(user_id, target_id, content, rating)
+            is_deduped = False
         else:
             raise ValueError(f"未知的评论类型: {comment_type}")
         
@@ -2848,7 +2850,7 @@ def process_one_comment_task(task: Dict[str, Any]) -> None:
             try:
                 record = get_food_record_by_id_sync(target_id)
                 record_owner_id = (record or {}).get("user_id")
-                if record_owner_id and record_owner_id != user_id:
+                if (not is_deduped) and record_owner_id and record_owner_id != user_id:
                     create_feed_interaction_notification_sync(
                         recipient_user_id=record_owner_id,
                         actor_user_id=user_id,
@@ -2861,7 +2863,7 @@ def process_one_comment_task(task: Dict[str, Any]) -> None:
 
                 reply_to_user_id = extra.get("reply_to_user_id")
                 parent_comment_id = extra.get("parent_comment_id")
-                if reply_to_user_id and reply_to_user_id != user_id:
+                if (not is_deduped) and reply_to_user_id and reply_to_user_id != user_id:
                     create_feed_interaction_notification_sync(
                         recipient_user_id=reply_to_user_id,
                         actor_user_id=user_id,
@@ -2871,7 +2873,7 @@ def process_one_comment_task(task: Dict[str, Any]) -> None:
                         notification_type="reply_received",
                         content_preview=(content or "")[:120],
                     )
-                elif parent_comment_id:
+                elif (not is_deduped) and parent_comment_id:
                     parent_comment = get_feed_comment_by_id_sync(parent_comment_id)
                     parent_owner_id = (parent_comment or {}).get("user_id")
                     if parent_owner_id and parent_owner_id != user_id:

@@ -2867,6 +2867,19 @@ export async function communityGetComments(recordId: string): Promise<{ list: Fe
   return response.data as { list: FeedCommentItem[] }
 }
 
+/** 获取单条动态的互动上下文（用于互动消息定位） */
+export async function communityGetFeedContext(
+  recordId: string,
+  commentsLimit: number = 5
+): Promise<{ item: CommunityFeedItem }> {
+  const response = await authenticatedRequest(
+    `/api/community/feed/${recordId}/context?comments_limit=${Math.max(0, commentsLimit)}`,
+    { method: 'GET' }
+  )
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态上下文失败')
+  return response.data as { item: CommunityFeedItem }
+}
+
 /**
  * 发表评论（直接发布）
  */
