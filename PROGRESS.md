@@ -4,8 +4,23 @@
 
 ---
 
+## 2026-04-10
+
+- 🎨 style: 海报分享底栏微信/保存改用 `iconfont icon-wechat`、`iconfont icon-download` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🎨 style: 分享海报食物列表与底部二维码区之间略增留白 `LAYOUT_FOOTER_GAP_AFTER_LIST` `src/utils/poster.ts`
+- 🐛 fix: 分享海报预览图 0×0 不可见：`aspectFit`+flex 父级高度未建立时微信 `<image>` 不渲染；改回 `widthFix`、`poster-modal-card-wrap` 去掉 `flex:1`，预览区 `overflow-y:auto` 兼顾过长海报 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🔧 refactor: 分享海报 footer 改为紧跟食物列表动态定位，去掉 `Math.max(..., 812)` 与贴底留白；`computePosterHeight` 与 `drawRecordPoster` 共用布局常量 `src/utils/poster.ts`
+- 🐛 fix: 记录详情页 React #310：`handleSharePosterImage` 的 `useCallback` 不得在 `loading/!record` 提前 return 之后，已上移至所有提前 return 之前 `src/pages/record-detail/index.tsx`
+- ✨ feat: 海报预览外层改为知乎风深色顶栏+居中预览+底部双圆形渠道；微信改为 `showShareImageMenu` 分享图片（非小程序卡片），保存仍为相册 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+
 ## 2026-04-09
 
+- 🎨 style: 记录详情页统一为首页「今日餐食」进入同款扁平布局：合并双卡片容器、去掉白卡片与块级 margin，食物行与营养汇总改为分割线与透明底 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🎨 style: 分析结果页头图 `scanner-hero-inner` 左右 margin 固定为 0、全宽铺满，移除上滑时动态左右留白 `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🐛 fix: 体验版/真机双底部导航：关闭「忽略未使用文件」避免 `custom-tab-bar` 被静态依赖误判未打包；`packOptions.include` 显式包含 `custom-tab-bar`；`app.json` 已 `tabBar.custom: true` 时底层原生栏不应与自定义栏并存 `project.config.json` `project.private.config.json`
+- 🐛 fix: 分析结果页在 iOS 上大面积空白：scroll-view 避免直接 padding、底栏 `position:fixed` 移出 scroll-view；页面与滚动区使用明确高度；关闭 scroll-view `enhanced` 以提升兼容性 `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- 🎨 style: 分享海报宏量区微调：上方「蛋白质/碳水/脂肪」标签字体增大，下方克数数字略收小，强化信息层级 `src/utils/poster.ts`
+- ✨ feat: 分享海报增强社交对比信息：总热量右侧新增“较昨同餐热量增减”胶囊组件（有昨日同餐数据才显示），并放大蛋白质/碳水/脂肪数值字号提升可读性 `src/pages/record-detail/index.tsx` `src/utils/poster.ts`
 - 🎨 style: 分享海报预览去掉底部「关闭」；头图日期改为一行英文大写（如 APR 09）、字号加大、无底与边框，白字轻阴影压图 `src/utils/poster.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
 - 🎨 style: 分享海报 Canvas 外侧透明、米白卡顶格全宽；日期叠在食物图左下角，下区左上总摄入与首页三色宏量；预览弹窗海报顶格、内容区透明；导出 PNG 带透明 `src/utils/poster.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
 - 🔧 refactor: 圈子动态卡片仅点击图片/热量/营养条进入记录详情，并带 `ui=home` 与首页今日餐食详情样式一致；整卡不再点击进入 `src/pages/community/index.tsx` `src/pages/community/index.scss`

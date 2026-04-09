@@ -1,9 +1,9 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5122763 */
-  src: url('iconfont.woff2?t=1775590637989') format('woff2'),
-       url('iconfont.woff?t=1775590637989') format('woff'),
-       url('iconfont.ttf?t=1775590637989') format('truetype'),
-       url('iconfont.svg?t=1775590637989#iconfont') format('svg');
+  src: url('iconfont.woff2?t=1775763423677') format('woff2'),
+       url('iconfont.woff?t=1775763423677') format('woff'),
+       url('iconfont.ttf?t=1775763423677') format('truetype'),
+       url('iconfont.svg?t=1775763423677#iconfont') format('svg');
 }
 
 .iconfont {
@@ -14,12 +14,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-.icon-filter-filling:before {
-  content: "\e68a";
+.icon-download:before {
+  content: "\e66c";
 }
 
-/* 筛选（与 filter-filling 同形，供 class `icon-filter` 使用） */
-.icon-filter:before {
+.icon-wechat:before {
+  content: "\e883";
+}
+
+.icon-filter-filling:before {
   content: "\e68a";
 }
 

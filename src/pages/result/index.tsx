@@ -146,14 +146,12 @@ const normalizeFoodNameForCorrection = (value: unknown) => (
     .replace(/[()（）\[\]【】,，。./\\\-_:：;；·]/g, '')
 )
 
-/** 结果页头图：上滑时在区间内高度收缩，同时左右内边距收至 0（图片可视宽度与屏宽一致时停止横向收缩） */
+/** 结果页头图：上滑时在区间内高度收缩；左右不留 margin（全宽铺满） */
 const RESULT_HERO_MAX_RPX = 700
 const RESULT_HERO_MIN_RPX = 200
 /** 纵向滑动多少 px 内完成收缩（与 scrollTop 同单位） */
 const RESULT_HERO_SHRINK_SCROLL_PX = 420
-/** 初始时左右留白（rpx），scrollTop=0 时图片区域窄于屏宽；滑满后 margin=0，与手机宽度一致 */
-const RESULT_HERO_INSET_MAX_RPX = 48
-/** 初始圆角（rpx），随上滑与内边距同步收至 0 */
+/** 初始圆角（rpx），随上滑收至 0 */
 const RESULT_HERO_INNER_RADIUS_MAX_RPX = 24
 
 const normalizePrecisionStringList = (value: unknown): string[] => (
@@ -241,7 +239,7 @@ function ResultPage() {
     }
   }, [])
 
-  /** 上滑进度 0~1：同时驱动高度、左右内边距与圆角 */
+  /** 上滑进度 0~1：驱动头图高度与内层圆角 */
   const resultHeroShrinkT = useMemo(
     () => Math.min(1, resultScrollTop / RESULT_HERO_SHRINK_SCROLL_PX),
     [resultScrollTop]
@@ -252,18 +250,12 @@ function ResultPage() {
     [resultHeroShrinkT]
   )
 
-  /** 横向：内边距 →0 时图片区域宽度 = 屏宽 */
-  const resultHeroInsetRpx = useMemo(
-    () => RESULT_HERO_INSET_MAX_RPX * (1 - resultHeroShrinkT),
-    [resultHeroShrinkT]
-  )
-
   const resultHeroInnerRadiusRpx = useMemo(
     () => RESULT_HERO_INNER_RADIUS_MAX_RPX * (1 - resultHeroShrinkT),
     [resultHeroShrinkT]
   )
 
-  /** 与原先 margin 叠层一致：内容区起点 = 头图底 − 40rpx */
+  /** 内容区起点 = 头图底 − 40rpx */
   const resultScrollPaddingTopRpx = resultHeroRpx - 40
 
   const openQuickUpload = () => {
@@ -1278,13 +1270,11 @@ function ResultPage() {
 
   return (
     <View className='result-page'>
-      {/* 固定头图：不随列表平移；上滑时高度缩小 + 左右内边距收至 0（图片宽度与屏宽一致），白卡内容上滑叠盖 */}
+      {/* 固定头图：不随列表平移；上滑时高度缩小，内层始终全宽无左右 margin */}
       <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
         <View
           className='scanner-hero-inner'
           style={{
-            marginLeft: `${resultHeroInsetRpx}rpx`,
-            marginRight: `${resultHeroInsetRpx}rpx`,
             borderRadius: `${resultHeroInnerRadiusRpx}rpx`
           }}
         >
@@ -1324,15 +1314,22 @@ function ResultPage() {
         </View>
       </View>
 
+      {/*
+        iOS 微信小程序：scroll-view 上直接设 padding、或在 scroll-view 内嵌套 position:fixed，
+        容易导致内容区高度计算异常出现大面积空白。顶部留白改为内层 View；底栏移出 scroll-view。
+      */}
       <ScrollView
         className='result-scroll'
-        style={{ paddingTop: `${resultScrollPaddingTopRpx}rpx` }}
         scrollY
         scrollWithAnimation={false}
-        enhanced
+        enhanced={false}
         showScrollbar={false}
         onScroll={handleResultScroll}
       >
+        <View
+          className='result-scroll-inner'
+          style={{ paddingTop: `${resultScrollPaddingTopRpx}rpx` }}
+        >
         <View className='content-container'>
           <View className='execution-mode-row'>
             <View className='execution-mode-left'>
@@ -1763,34 +1760,35 @@ function ResultPage() {
               ))}
             </View>
           </View>
-
-          {/* 底部操作区域 */}
-          <View className='footer-actions'>
-            <View className='pba-safe-area'>
-              <View className='action-grid'>
-                <View
-                  className={`secondary-btn ${isStrictHardReject ? 'disabled' : ''}`}
-                  onClick={isStrictHardReject ? undefined : handleSaveAsRecipe}
-                >
-                  <Text className='btn-text'>收藏餐食</Text>
-                </View>
-                <View
-                  className={`primary-btn ${saving ? 'loading' : ''} ${(isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''}`}
-                  onClick={handleConfirmAndShare}
-                >
-                  {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>{(isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录'}</Text>}
-                </View>
-              </View>
-
-              <View className='footer-correction-link' onClick={openCorrectionDrawer}>
-                <Text className='footer-correction-link-text'>
-                  {shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}
-                </Text>
-              </View>
-            </View>
-          </View>
+        </View>
         </View>
       </ScrollView>
+
+      {/* 底部固定栏：必须放在 scroll-view 外，避免 iOS 上 fixed 相对滚动容器失效 */}
+      <View className='footer-actions'>
+        <View className='pba-safe-area'>
+          <View className='action-grid'>
+            <View
+              className={`secondary-btn ${isStrictHardReject ? 'disabled' : ''}`}
+              onClick={isStrictHardReject ? undefined : handleSaveAsRecipe}
+            >
+              <Text className='btn-text'>收藏餐食</Text>
+            </View>
+            <View
+              className={`primary-btn ${saving ? 'loading' : ''} ${(isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''}`}
+              onClick={handleConfirmAndShare}
+            >
+              {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>{(isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录'}</Text>}
+            </View>
+          </View>
+
+          <View className='footer-correction-link' onClick={openCorrectionDrawer}>
+            <Text className='footer-correction-link-text'>
+              {shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}
+            </Text>
+          </View>
+        </View>
+      </View>
 
       {/* 餐次选择弹窗 */}
       <View

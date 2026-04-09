@@ -8,6 +8,7 @@ import {
   getFriendInviteProfile,
   acceptFriendInvite,
   updateFoodRecord,
+  getFoodRecordList,
   getMyMembership,
   type FoodRecord,
   type Nutrients
@@ -107,6 +108,23 @@ function getInviteCodeFromUserId(userId: string): string {
   return raw.length >= 8 ? raw.slice(0, 8) : ''
 }
 
+type PosterCalorieCompare = {
+  deltaKcal: number
+  baselineKcal: number
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function normalizeMealType(mealType?: string): string {
+  if (!mealType) return ''
+  return mealType === 'snack' ? 'afternoon_snack' : mealType
+}
+
 function RecordDetailPage() {
   const router = useRouter()
   const [record, setRecord] = React.useState<FoodRecord | null>(null)
@@ -123,6 +141,42 @@ function RecordDetailPage() {
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
   const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
   const [inviteLoading, setInviteLoading] = React.useState(false)
+  const [posterCalorieCompare, setPosterCalorieCompare] = React.useState<PosterCalorieCompare | null>(null)
+
+  const loadPosterCalorieCompare = useCallback(async (currentRecord: FoodRecord) => {
+    if (!getAccessToken()) {
+      setPosterCalorieCompare(null)
+      return
+    }
+    try {
+      const recordDate = new Date(currentRecord.record_time)
+      if (Number.isNaN(recordDate.getTime())) {
+        setPosterCalorieCompare(null)
+        return
+      }
+      const yesterday = new Date(recordDate)
+      yesterday.setDate(recordDate.getDate() - 1)
+      const yesterdayKey = toDateKey(yesterday)
+      const { records } = await getFoodRecordList(yesterdayKey)
+      const targetMealType = normalizeMealType(currentRecord.meal_type)
+      const yesterdaySameMeal = (records || []).find(
+        (item) => normalizeMealType(item.meal_type) === targetMealType
+      )
+      if (!yesterdaySameMeal) {
+        setPosterCalorieCompare(null)
+        return
+      }
+      const currentCalories = Math.round(currentRecord.total_calories ?? 0)
+      const baselineCalories = Math.round(yesterdaySameMeal.total_calories ?? 0)
+      setPosterCalorieCompare({
+        deltaKcal: currentCalories - baselineCalories,
+        baselineKcal: baselineCalories
+      })
+    } catch (error) {
+      console.warn('[poster] load yesterday same-meal compare failed', error)
+      setPosterCalorieCompare(null)
+    }
+  }, [])
 
   useEffect(() => {
     // 加载会员状态（用于海报样式判断）
@@ -141,6 +195,7 @@ function RecordDetailPage() {
           const res = await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
+          loadPosterCalorieCompare(fetchedRecord)
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
             setOwnerNickname(inviterProfile.nickname || '')
@@ -169,6 +224,7 @@ function RecordDetailPage() {
           const stored = Taro.getStorageSync('recordDetail')
           if (stored) {
             setRecord(stored as FoodRecord)
+            loadPosterCalorieCompare(stored as FoodRecord)
             Taro.removeStorageSync('recordDetail')
             setLoading(false)
           } else {
@@ -183,9 +239,7 @@ function RecordDetailPage() {
     }
 
     loadRecord()
-  }, [router.params?.id, router.params?.ui])
-
-  const isHomeUi = router.params?.ui === 'home'
+  }, [loadPosterCalorieCompare, router.params?.id])
 
   const shareRecordId = record?.id || router.params?.id || ''
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
@@ -357,9 +411,23 @@ function RecordDetailPage() {
     setEditItems(prev => prev.filter((_, i) => i !== index))
   }, [editItems])
 
+  /** 分享海报为图片（须在 loading/record 提前 return 之前声明，避免 Hooks 数量不一致） */
+  const handleSharePosterImage = useCallback(() => {
+    if (!posterImageUrl) return
+    // showShareImageMenu：微信基础库 2.14.3+，弹出转发图片菜单（非小程序卡片）
+    // @ts-ignore Taro 类型可能未收录
+    Taro.showShareImageMenu({
+      path: posterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        console.error('showShareImageMenu fail', err)
+        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+      }
+    })
+  }, [posterImageUrl])
+
   if (loading || !record) {
     return (
-      <View className={`record-detail-page${isHomeUi ? ' record-detail-page--home' : ''}`}>
+      <View className='record-detail-page'>
         <View className='empty-tip'>{loading ? <View className='loading-spinner' /> : '记录不存在'}</View>
       </View>
     )
@@ -556,6 +624,10 @@ function RecordDetailPage() {
               width: POSTER_WIDTH,
               height: dynamicHeight,
               record,
+              calorieCompare: posterCalorieCompare ? {
+                deltaKcal: posterCalorieCompare.deltaKcal,
+                baselineKcal: posterCalorieCompare.baselineKcal
+              } : undefined,
               image: mainImg,
               qrCodeImage: qrImg,
               sharerNickname: ownerNickname,
@@ -593,18 +665,6 @@ function RecordDetailPage() {
       })
   }
 
-  const handleSharePosterImage = () => {
-    if (!posterImageUrl) return
-    // @ts-ignore — showShareImageMenu 在 Taro 类型里可能缺失，但微信基础库 2.14.3+ 支持
-    Taro.showShareImageMenu({
-      path: posterImageUrl,
-      fail: (err) => {
-        console.error('showShareImageMenu fail', err)
-        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
-      }
-    })
-  }
-
   const handleSavePoster = () => {
     if (!posterImageUrl) return
     Taro.saveImageToPhotosAlbum({
@@ -631,8 +691,8 @@ function RecordDetailPage() {
   }
 
   return (
-    <ScrollView className={`record-detail-page${isHomeUi ? ' record-detail-page--home' : ''}`} scrollY>
-      <View className='detail-card'>
+    <ScrollView className='record-detail-page' scrollY>
+      <View className='record-detail-body'>
         <View className='detail-header'>
           <View className='meal-badge'>
             <View className='meal-icon'>
@@ -773,13 +833,7 @@ function RecordDetailPage() {
             {posterGenerating ? '生成中...' : '生成分享海报'}
           </Button>
         </View>
-      </View>
 
-      <View className='poster-canvas-wrap'>
-        <Canvas type='2d' id='recordPosterCanvas' className='poster-canvas' style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }} />
-      </View>
-
-      <View className='detail-card'>
         <Text className='food-list-title'>食物明细</Text>
         {items.length > 0 ? (
           items.map((item, index) => {
@@ -872,6 +926,10 @@ function RecordDetailPage() {
             })()}
           </View>
         </View>
+      </View>
+
+      <View className='poster-canvas-wrap'>
+        <Canvas type='2d' id='recordPosterCanvas' className='poster-canvas' style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }} />
       </View>
 
       {/* 编辑记录弹窗 */}
@@ -980,20 +1038,34 @@ function RecordDetailPage() {
       {/* 海报预览弹窗 */}
       {
         showPosterModal && posterImageUrl && (
-          <View className='poster-modal'>
-            <View className='poster-modal-mask' onClick={() => setShowPosterModal(false)} catchMove />
-            <View className='poster-modal-content'>
-              <ScrollView scrollY className='poster-scroll-area'>
-                <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
-              </ScrollView>
-              <View className='poster-modal-actions-col'>
-                <View className='share-row'>
-                  <Button className='poster-modal-btn share-chat-btn' openType='share'>
-                    微信好友/群聊
-                  </Button>
-                  <Button className='poster-modal-btn share-moments-btn' onClick={handleSavePoster}>
-                    保存图片
-                  </Button>
+          <View className='poster-modal' catchMove>
+            <View className='poster-modal-shell' catchMove>
+              <View className='poster-modal-topbar'>
+                <View className='poster-modal-close' onClick={() => setShowPosterModal(false)}>
+                  <Text className='poster-modal-close-x'>×</Text>
+                </View>
+                <Text className='poster-modal-title'>分享</Text>
+                <View className='poster-modal-topbar-placeholder' />
+              </View>
+              <View className='poster-scroll-area'>
+                <View className='poster-modal-scroll-inner'>
+                  <View className='poster-modal-card-wrap'>
+                    <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
+                  </View>
+                </View>
+              </View>
+              <View className='poster-modal-bottom-bar'>
+                <View className='poster-share-channel' onClick={handleSharePosterImage}>
+                  <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
+                    <Text className='iconfont icon-wechat poster-share-channel-glyph' />
+                  </View>
+                  <Text className='poster-share-channel-label'>微信</Text>
+                </View>
+                <View className='poster-share-channel' onClick={handleSavePoster}>
+                  <View className='poster-share-channel-icon poster-share-channel-icon-save'>
+                    <Text className='iconfont icon-download poster-share-channel-glyph' />
+                  </View>
+                  <Text className='poster-share-channel-label'>保存图片</Text>
                 </View>
               </View>
             </View>

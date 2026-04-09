@@ -44,43 +44,54 @@ const CARD_TOP = 0
 const IMG_H = 280
 const CARD_RADIUS = 0
 const INNER_PAD = 20
-const BOTTOM_SAFE = 24
 
-/** 高度计算 */
+/** 与 drawRecordPoster 中 cy 推进一致，用于紧凑动态高度 */
+const LAYOUT_IMG_BOTTOM_GAP = 28
+const LAYOUT_CAL_BLOCK = 54
+const LAYOUT_MACRO_BLOCK = 44
+const LAYOUT_BAR_EXTRA = 24
+const LAYOUT_DIVIDER_AFTER = 20
+const LAYOUT_ITEM_ROW = 42
+const LAYOUT_OVERFLOW_EXTRA = 24
+/** 食物列表最后一行与 footer（头像/二维码区）之间的垂直间距（px） */
+const LAYOUT_FOOTER_GAP_AFTER_LIST = 22
+/** footer 锚点（头像顶边）到画布底：含二维码与底边距，与绘制一致 */
+const LAYOUT_FOOTER_ANCHOR_TAIL = 84
+
+/** 高度计算（与 drawRecordPoster 同步；不再强制定高 812，按餐食项数压缩空白） */
 export function computePosterHeight(
   _ctx: CanvasRenderingContext2D,
   record: FoodRecord,
   _width: number = POSTER_WIDTH,
   _isPro: boolean = false
 ): number {
-  const INNER = INNER_PAD
   const p = Math.round(record.total_protein ?? 0)
   const c = Math.round(record.total_carbs ?? 0)
   const f = Math.round(record.total_fat ?? 0)
   const items = record.items || []
   const maxItems = 4
   const n = items.length
-  
-  const creamContent =
-    INNER +           // 顶部内边距
-    20 +              // 总摄入标签
-    46 +              // 热量数值
-    20 +              // 热量与宏量间距
-    50 +              // 宏量营养区域
-    (p + c + f > 0 ? 16 : 0) +  // 进度条
-    24 +              // 分隔线与食物列表间距
-    Math.min(n, maxItems) * 42 + // 食物项（增大间距）
-    (n > maxItems ? 20 : 0) +
-    32 +              // 底部间距
-    90                // footer高度
 
-  return Math.max(CARD_TOP + IMG_H + creamContent + BOTTOM_SAFE, POSTER_HEIGHT)
+  let cy = IMG_H + LAYOUT_IMG_BOTTOM_GAP
+  cy += LAYOUT_CAL_BLOCK
+  cy += LAYOUT_MACRO_BLOCK
+  if (p + c + f > 0) cy += LAYOUT_BAR_EXTRA
+  cy += LAYOUT_DIVIDER_AFTER
+  cy += Math.min(n, maxItems) * LAYOUT_ITEM_ROW
+  if (n > maxItems) cy += LAYOUT_OVERFLOW_EXTRA
+
+  const footerY = cy + LAYOUT_FOOTER_GAP_AFTER_LIST
+  return footerY + LAYOUT_FOOTER_ANCHOR_TAIL
 }
 
 export interface PosterDrawOptions {
   width: number
   height: number
   record: FoodRecord
+  calorieCompare?: {
+    deltaKcal: number
+    baselineKcal: number
+  }
   image: { width: number; height: number } | null
   qrCodeImage?: { width: number; height: number } | null
   sharerNickname?: string
@@ -114,6 +125,7 @@ export function drawRecordPoster(
   options: PosterDrawOptions
 ): void {
   const { width: W, height: H, record, image, qrCodeImage,
+          calorieCompare,
           sharerNickname, sharerAvatarImage } = options
 
   const cal = Math.round(record.total_calories ?? 0)
@@ -126,7 +138,6 @@ export function drawRecordPoster(
   const cardX = 0
   const cardW = W
   const cardTop = 0
-  const totalCardH = H
 
   // 米白色卡片背景（全屏无margin，顶格渲染）
   ctx.fillStyle = '#F9F7F2'
@@ -205,8 +216,7 @@ export function drawRecordPoster(
 
   const contentW = cardW - INNER_PAD * 2
   const cx = cardX + INNER_PAD
-  // 增加顶部间距，确保热量数字不会与图片重叠
-  let cy = cardTop + IMG_H + 28
+  let cy = cardTop + IMG_H + LAYOUT_IMG_BOTTOM_GAP
 
   // 热量：左上角大数字（无"总摄入"标签）
   ctx.textAlign = 'left'
@@ -219,7 +229,45 @@ export function drawRecordPoster(
   ctx.fillStyle = TEXT_MUTED
   ctx.font = '600 14px sans-serif'
   ctx.fillText(' kcal', cx + calStrW, cy + 18)
-  cy += 54
+  if (calorieCompare && Number.isFinite(calorieCompare.deltaKcal) && Number.isFinite(calorieCompare.baselineKcal)) {
+    const absDelta = Math.abs(Math.round(calorieCompare.deltaKcal))
+    const prefix = calorieCompare.deltaKcal > 0 ? '+' : calorieCompare.deltaKcal < 0 ? '-' : '±'
+    const chipText = `较昨 ${prefix}${absDelta}`
+    const chipH = 30
+    const chipW = 168
+    const chipX = cx + contentW - chipW
+    const chipY = cy + 10
+    const level = absDelta >= 250 ? 3 : absDelta >= 120 ? 2 : absDelta >= 40 ? 1 : 0
+
+    ctx.save()
+    drawRoundedRect(ctx, chipX, chipY, chipW, chipH, chipH / 2)
+    ctx.fillStyle = '#e8cd93'
+    ctx.fill()
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#111827'
+    ctx.font = '700 12px sans-serif'
+    ctx.fillText(chipText, chipX + 12, chipY + chipH / 2 + 0.5)
+
+    const iconBaseX = chipX + chipW - 58
+    const iconCenterY = chipY + chipH / 2
+    for (let i = 0; i < 3; i++) {
+      const iconX = iconBaseX + i * 18
+      ctx.beginPath()
+      ctx.arc(iconX, iconCenterY, 6.5, 0, Math.PI * 2)
+      ctx.strokeStyle = '#111827'
+      ctx.lineWidth = 1.3
+      ctx.stroke()
+      if (i < level) {
+        ctx.beginPath()
+        ctx.arc(iconX, iconCenterY, 2.8, 0, Math.PI * 2)
+        ctx.fillStyle = '#111827'
+        ctx.fill()
+      }
+    }
+    ctx.restore()
+  }
+  cy += LAYOUT_CAL_BLOCK
 
   // 宏量营养：蛋白质左对齐，脂肪右对齐，数值字体减小
   const macroY = cy
@@ -227,7 +275,7 @@ export function drawRecordPoster(
   
   // 标签行
   ctx.textBaseline = 'top'
-  ctx.font = '600 11px sans-serif'
+  ctx.font = '600 13px sans-serif'
   
   // 蛋白质（左对齐）
   ctx.textAlign = 'left'
@@ -244,9 +292,9 @@ export function drawRecordPoster(
   ctx.fillStyle = MACRO_FAT
   ctx.fillText('脂肪', cx + contentW, macroY)
   
-  // 数值行（字体减小）
+  // 数值行（适当放大，增强海报可读性）
   ctx.fillStyle = TEXT_INK
-  ctx.font = 'bold 20px sans-serif'  // 从 28px 减小到 20px
+  ctx.font = 'bold 21px sans-serif'
   
   // 蛋白质数值（左对齐）
   ctx.textAlign = 'left'
@@ -260,7 +308,7 @@ export function drawRecordPoster(
   ctx.textAlign = 'right'
   ctx.fillText(`${f}g`, cx + contentW, valueY)
   
-  cy += 44  // 增加数值与进度条之间的间距（从38增加到44）
+  cy += LAYOUT_MACRO_BLOCK
 
   // PFC 进度条
   if (p + c + f > 0) {
@@ -300,7 +348,7 @@ export function drawRecordPoster(
       ctx.fill()
     }
     ctx.restore()
-    cy += 24
+    cy += LAYOUT_BAR_EXTRA
   }
 
   // 分隔线
@@ -310,7 +358,7 @@ export function drawRecordPoster(
   ctx.strokeStyle = LINE
   ctx.lineWidth = 1
   ctx.stroke()
-  cy += 20
+  cy += LAYOUT_DIVIDER_AFTER
 
   // 食物列表：简洁样式，无背景色（与参考图一致）
   ctx.textAlign = 'left'
@@ -351,8 +399,8 @@ export function drawRecordPoster(
     cy += 16
   }
 
-  // Footer：头像、分享文字、二维码（放到最底部）
-  const footerY = cardTop + totalCardH - 82  // 固定到底部
+  // Footer：紧跟食物列表，避免大块留白（总高度 H 由 computePosterHeight 与之一致）
+  const footerY = cy + LAYOUT_FOOTER_GAP_AFTER_LIST
   const avatarSz = 36
   const titleX = sharerAvatarImage ? cx + avatarSz + 12 : cx
 
