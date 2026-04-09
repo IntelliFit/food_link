@@ -2,6 +2,7 @@ import { View, Text, Textarea, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type MembershipStatus } from '../../utils/api'
+import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import { withAuth } from '../../utils/withAuth'
 import './index.scss'
 
@@ -31,7 +32,7 @@ const ACTIVITY_TIMINGS = [
 function RecordTextPage() {
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
-  const [selectedMeal, setSelectedMeal] = useState('breakfast')
+  const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
   const [loading, setLoading] = useState(false)

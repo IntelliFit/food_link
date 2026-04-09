@@ -1,6 +1,6 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   imageToBase64,
   compressImagePathForUpload,
@@ -18,6 +18,7 @@ import {
 } from '../../utils/api'
 import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
+import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
 
@@ -188,7 +189,7 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
 function AnalyzePage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
-  const [mealType, setMealType] = useState<MealType>('breakfast')
+  const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState<DietGoal>('none')
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
@@ -202,6 +203,9 @@ function AnalyzePage() {
   const [referenceWidth, setReferenceWidth] = useState('7')
   const [referenceHeight, setReferenceHeight] = useState('7')
   const [referencePlacementNote, setReferencePlacementNote] = useState('')
+
+  const imagePathsRef = useRef<string[]>([])
+  imagePathsRef.current = imagePaths
 
   const normalizeExecutionMode = (value: unknown): ExecutionMode => {
     return value === 'strict' ? 'strict' : 'standard'
@@ -238,10 +242,13 @@ function AnalyzePage() {
     handleMultiViewSwitchChange({ detail: { value: !isMultiView } })
   }
 
-  // 每次进入拍照页都刷新配额（从分析结果页返回时）
+  // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
   useDidShow(() => {
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
+    }
+    if (imagePathsRef.current.length === 0) {
+      setMealType(inferDefaultMealTypeFromLocalTime())
     }
   })
 

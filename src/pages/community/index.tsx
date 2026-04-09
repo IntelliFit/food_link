@@ -1,6 +1,5 @@
 import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { flushSync } from 'react-dom'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
 import {
@@ -39,6 +38,11 @@ import { IconTrendingUp } from '../../components/iconfont'
 
 import './index.scss'
 import { withAuth } from '../../utils/withAuth'
+
+/** 同一条动态、同一回复目标、同一内容在短窗口内视为重复点击 */
+const COMMENT_SEND_DEBOUNCE_MS = 450
+/** 发送后短锁，与签名防抖一起防止连点 */
+const COMMENT_TAP_LOCK_MS = 320
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -243,9 +247,10 @@ function CommunityPage() {
   // 评论：当前评论的 recordId、输入内容、提交中、延迟聚焦
   const [expandedCommentRecordId, setExpandedCommentRecordId] = useState<string | null>(null)
   const [commentContent, setCommentContent] = useState('')
-  const [commentSubmitting, setCommentSubmitting] = useState(false)
-  /** 同步防抖：点击发送瞬间即锁定，避免 setState 批处理前连点重复提交 */
-  const commentSubmitLockRef = useRef(false)
+  /** 后台发表评论中的请求数，用于发送按钮 spinner（不阻塞继续输入） */
+  const [commentInFlightCount, setCommentInFlightCount] = useState(0)
+  /** 短锁：与签名防抖一起防止连点 */
+  const commentTapLockRef = useRef(false)
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
   const lastCommentSubmitRef = useRef<{ signature: string; timestamp: number }>({
@@ -254,6 +259,8 @@ function CommunityPage() {
   })
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [feedScrollIntoView, setFeedScrollIntoView] = useState('')
+  /** 动态卡片内评论：超过 3 条时默认只展示 2 条，点此展开/收起（仿微信朋友圈） */
+  const [feedCommentPreviewExpanded, setFeedCommentPreviewExpanded] = useState<Record<string, boolean>>({})
 
   // 固定页面高度
   const [pageHeight, setPageHeight] = useState(0)
@@ -396,8 +403,17 @@ function CommunityPage() {
   const saveToCache = useCallback((feedData?: CommunityFeedItem[], friendsData?: FriendListItem[], requestsData?: FriendRequestItem[]) => {
     try {
       if (feedData) {
-        // 只缓存前30条，避免缓存过大
-        const dataToCache = feedData.slice(0, 30)
+        // 乐观评论未落库，不写入缓存，避免冷启动出现幽灵评论
+        const dataToCache = feedData.slice(0, 30).map((item) => {
+          const comments = item.comments || []
+          const pending = comments.filter((c) => c._is_pending)
+          if (pending.length === 0) return item
+          return {
+            ...item,
+            comments: comments.filter((c) => !c._is_pending),
+            comment_count: Math.max(0, (item.comment_count || 0) - pending.length)
+          }
+        })
         Taro.setStorageSync(CACHE_KEYS.FEED, JSON.stringify(dataToCache))
         Taro.setStorageSync(CACHE_KEYS.FEED_TIMESTAMP, Date.now().toString())
       }
@@ -896,14 +912,16 @@ function CommunityPage() {
     })
   }
 
-  /** 点击帖子查看详情（通过 URL 参数传递记录 ID，从数据库获取最新数据） */
+  /** 点击帖子图片/热量/营养进入识别记录详情（与首页「今日餐食」同入口：`ui=home` 样式一致） */
   const handleViewDetail = (record: CommunityFeedItem['record']) => {
     if (!record.id) {
       Taro.showToast({ title: '记录 ID 缺失', icon: 'none' })
       return
     }
     try {
-      Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}` })
+      Taro.navigateTo({
+        url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}&ui=home`
+      })
     } catch (e) {
       Taro.showToast({ title: '打开详情失败', icon: 'none' })
     }
@@ -958,6 +976,30 @@ function CommunityPage() {
     setExpandedCommentRecordId(null)
     setReplyTargetComment(null)
   }
+
+  /** 评论输入展开时隐藏底部 tab（含自定义 tabBar：见 `community_comment_bar_visible`） */
+  useEffect(() => {
+    if (expandedCommentRecordId) {
+      try {
+        Taro.setStorageSync('community_comment_bar_visible', '1')
+      } catch (_) {}
+      Taro.hideTabBar({ animation: true }).catch(() => {})
+    } else {
+      try {
+        Taro.removeStorageSync('community_comment_bar_visible')
+      } catch (_) {}
+      Taro.showTabBar({ animation: true }).catch(() => {})
+    }
+  }, [expandedCommentRecordId])
+
+  useEffect(() => {
+    return () => {
+      try {
+        Taro.removeStorageSync('community_comment_bar_visible')
+      } catch (_) {}
+      Taro.showTabBar({ animation: true }).catch(() => {})
+    }
+  }, [])
 
   /** 点击评论：打开底部输入栏，同一帖再点则关闭 */
   const openCommentModal = (recordId: string, replyComment?: FeedCommentItem | null) => {
@@ -1124,6 +1166,7 @@ function CommunityPage() {
       } : item), true)
       setFeedList(mergedList)
       saveToCache(mergedList)
+      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [recordId]: true }))
     } catch (e) {
       Taro.showToast({ title: (e as Error).message || '获取评论失败', icon: 'none' })
     }
@@ -1141,60 +1184,118 @@ function CommunityPage() {
     if (!expandedCommentRecordId) return
     const trimmed = commentContent.trim()
     if (!trimmed) return
-    if (commentSubmitLockRef.current) return
-    commentSubmitLockRef.current = true
-    // 首帧同步置「发送中」，避免网络慢时连点发送多次请求
-    flushSync(() => {
-      setCommentSubmitting(true)
-    })
-    try {
-      const { comment } = await communityPostComment(
-        expandedCommentRecordId,
-        trimmed,
-        {
-          parent_comment_id: replyTargetComment?.id,
-          reply_to_user_id: replyTargetComment?.user_id
-        }
-      )
-      const localUserDisplay = getLocalUserDisplay()
-      const displayComment = {
-        ...comment,
-        reply_to_nickname: replyTargetComment?.nickname || comment.reply_to_nickname || '',
-        nickname: comment.nickname || localUserDisplay.nickname,
-        avatar: comment.avatar || localUserDisplay.avatar
-      }
 
-      const newList = feedList.map(item => {
-        if (item.record.id !== expandedCommentRecordId) return item
+    const dedupeSig = `${expandedCommentRecordId}|${replyTargetComment?.id || ''}|${trimmed}`
+    const now = Date.now()
+    if (
+      lastCommentSubmitRef.current.signature === dedupeSig &&
+      now - lastCommentSubmitRef.current.timestamp < COMMENT_SEND_DEBOUNCE_MS
+    ) {
+      return
+    }
+    lastCommentSubmitRef.current = { signature: dedupeSig, timestamp: now }
+
+    if (commentTapLockRef.current) return
+    commentTapLockRef.current = true
+    setTimeout(() => {
+      commentTapLockRef.current = false
+    }, COMMENT_TAP_LOCK_MS)
+
+    const recordId = expandedCommentRecordId
+    const replySnap = replyTargetComment
+    const clientKey = `pending_${now}_${Math.random().toString(36).slice(2, 9)}`
+    const uid = String(Taro.getStorageSync('user_id') || '')
+    const localUserDisplay = getLocalUserDisplay()
+
+    const optimistic: FeedCommentItem = {
+      id: clientKey,
+      user_id: uid || 'pending',
+      record_id: recordId,
+      parent_comment_id: replySnap?.id ?? null,
+      reply_to_user_id: replySnap?.user_id ?? null,
+      reply_to_nickname: replySnap?.nickname,
+      content: trimmed,
+      created_at: new Date().toISOString(),
+      nickname: localUserDisplay.nickname,
+      avatar: localUserDisplay.avatar,
+      _is_pending: true
+    }
+
+    setFeedList((prev) => {
+      const next = prev.map((item) => {
+        if (item.record.id !== recordId) return item
         const currentComments = item.comments || []
-        if (currentComments.some((existing) => existing.id === displayComment.id)) {
-          return item
-        }
-        const nextComments = [...currentComments, displayComment]
+        const nextComments = [...currentComments, optimistic]
         return {
           ...item,
           comments: nextComments.slice(-Math.max(5, nextComments.length)),
           comment_count: (item.comment_count || 0) + 1
         }
       })
-      setFeedList(newList)
+      saveToCache(next)
+      return next
+    })
 
-      saveToCache(newList)
+    try {
+      Taro.removeStorageSync(draftKey(recordId))
+    } catch (_) {}
+    setCommentContent('')
+    setReplyTargetComment(null)
 
-      try { Taro.removeStorageSync(draftKey(expandedCommentRecordId)) } catch (_) {}
-      setCommentContent('')
-      setExpandedCommentRecordId(null)
-      setReplyTargetComment(null)
-      Taro.showToast({ title: '评论成功', icon: 'success' })
-    } catch (e) {
-      lastCommentSubmitRef.current = {
-        signature: '',
-        timestamp: 0
+    setCommentInFlightCount((c) => c + 1)
+    try {
+      const { comment } = await communityPostComment(recordId, trimmed, {
+        parent_comment_id: replySnap?.id,
+        reply_to_user_id: replySnap?.user_id
+      })
+      const displayComment: FeedCommentItem = {
+        ...comment,
+        reply_to_nickname: replySnap?.nickname || comment.reply_to_nickname || '',
+        nickname: comment.nickname || localUserDisplay.nickname,
+        avatar: comment.avatar || localUserDisplay.avatar,
+        _is_pending: false
       }
+
+      setFeedList((prev) => {
+        const next = prev.map((item) => {
+          if (item.record.id !== recordId) return item
+          const comments = item.comments || []
+          const idx = comments.findIndex((c) => c.id === clientKey)
+          if (idx === -1) {
+            if (comments.some((existing) => existing.id === displayComment.id)) {
+              return item
+            }
+            const appended = [...comments, displayComment]
+            return {
+              ...item,
+              comments: appended.slice(-Math.max(5, appended.length))
+            }
+          }
+          const nextComments = [...comments]
+          nextComments[idx] = displayComment
+          return { ...item, comments: nextComments }
+        })
+        saveToCache(next)
+        return next
+      })
+    } catch (e) {
+      lastCommentSubmitRef.current = { signature: '', timestamp: 0 }
+      setFeedList((prev) => {
+        const next = prev.map((item) => {
+          if (item.record.id !== recordId) return item
+          const comments = (item.comments || []).filter((c) => c.id !== clientKey)
+          return {
+            ...item,
+            comments,
+            comment_count: Math.max(0, (item.comment_count || 0) - 1)
+          }
+        })
+        saveToCache(next)
+        return next
+      })
       Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
     } finally {
-      commentSubmitLockRef.current = false
-      setCommentSubmitting(false)
+      setCommentInFlightCount((c) => Math.max(0, c - 1))
     }
   }
 
@@ -1242,10 +1343,15 @@ function CommunityPage() {
           onScrollToLower={loadMoreFeed}
           lowerThreshold={100}
         >
-          <View className='community-scroll-content'>
+          <View
+            className='community-scroll-content'
+            onClick={() => {
+              if (expandedCommentRecordId) closeCommentModal()
+            }}
+          >
             {/* 快捷入口：无标题、无整块白底；三键等分 + 可选好友请求条 */}
             {loggedIn && (
-              <View className='friends-quick-bar'>
+              <View className='friends-quick-bar' onClick={(e) => e.stopPropagation()}>
                 {requests.length > 0 ? (
                   <View className='friends-requests-banner' onClick={() => setShowRequests(true)}>
                     <Text className='friends-requests-banner-label'>好友请求</Text>
@@ -1282,7 +1388,7 @@ function CommunityPage() {
 
             {/* 未登录提示条 */}
             {!loggedIn && (
-              <View className='login-tip'>
+              <View className='login-tip' onClick={(e) => e.stopPropagation()}>
                 <Text className='login-tip-text'>登录后可添加好友、点赞和评论</Text>
                 <TaroifyButton
                   className='login-tip-btn'
@@ -1298,7 +1404,8 @@ function CommunityPage() {
             {/* 本周打卡排行榜：标题一行 + 前三名直接铺在绿底上，无内嵌浅底容器 */}
             <View
               className='ranking-banner'
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation()
                 if (!getAccessToken()) {
                   Taro.navigateTo({ url: '/pages/login/index' })
                   return
@@ -1367,10 +1474,18 @@ function CommunityPage() {
               <View className='section-header feed-section-header'>
                 <Text className='section-title'>{loggedIn ? '好友动态' : '饮食动态'}</Text>
                 {loggedIn ? (
-                  <Text className='feed-section-link' onClick={openFoodLibrary}>食物库</Text>
+                  <Text
+                    className='feed-section-link'
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openFoodLibrary()
+                    }}
+                  >
+                    食物库
+                  </Text>
                 ) : null}
               </View>
-              <View className='feed-filter-panel'>
+              <View className='feed-filter-panel' onClick={(e) => e.stopPropagation()}>
                 <View className='feed-search-wrap'>
                   <View className='feed-search-icon-wrap'>
                     <FeedSearchGlyph />
@@ -1465,7 +1580,7 @@ function CommunityPage() {
                 ) : null}
               </View>
               {(showSkeleton || (loadingFeed && feedList.length === 0)) ? (
-                <View className='skeleton-container'>
+                <View className='skeleton-container' onClick={(e) => e.stopPropagation()}>
                   {[1, 2, 3].map(i => (
                     <View key={i} className='skeleton-feed-card'>
                       <View className='skeleton-feed-moments'>
@@ -1518,7 +1633,6 @@ function CommunityPage() {
                       <View
                         id={`feed-card-${item.record.id}`}
                         className={`feed-card${item.record.description?.trim() && !item.record.image_path ? ' feed-card-text-only' : ''}`}
-                        onClick={() => handleViewDetail(item.record)}
                       >
                         <View className='feed-card-moments'>
                           <View className='feed-card-avatar-col'>
@@ -1551,7 +1665,13 @@ function CommunityPage() {
                                 </View>
                               ))}
                             {item.record.image_path && (
-                              <View className='feed-image'>
+                              <View
+                                className='feed-image feed-tap-to-detail'
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleViewDetail(item.record)
+                                }}
+                              >
                                 <Image
                                   src={item.record.image_path}
                                   mode='aspectFill'
@@ -1560,15 +1680,29 @@ function CommunityPage() {
                               </View>
                             )}
                             <View className='feed-meta'>
-                              <View className='feed-calorie'>
+                              <View
+                                className='feed-calorie feed-tap-to-detail'
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleViewDetail(item.record)
+                                }}
+                              >
                                 <Text className='feed-calorie-num'>
                                   {Number(item.record.total_calories || 0).toFixed(0)}
                                 </Text>
                                 <Text className='feed-calorie-unit'> kcal</Text>
                               </View>
-                              <Text className='feed-macros'>
-                                蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
-                              </Text>
+                              <View
+                                className='feed-macros feed-tap-to-detail'
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleViewDetail(item.record)
+                                }}
+                              >
+                                <Text className='feed-macros-text'>
+                                  蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
+                                </Text>
+                              </View>
                             </View>
                             <View
                               className='feed-actions'
@@ -1600,12 +1734,19 @@ function CommunityPage() {
                                 </View>
                               ) : null}
                             </View>
-                            {(item.comments?.length ?? 0) > 0 && (
+                            {(item.comments?.length ?? 0) > 0 && (() => {
+                              const list = item.comments || []
+                              const rid = item.record.id
+                              const isListExpanded = feedCommentPreviewExpanded[rid] === true
+                              const shouldFoldList = list.length > 3 && !isListExpanded
+                              const displayed = shouldFoldList ? list.slice(0, 2) : list
+                              const foldedHiddenCount = shouldFoldList ? list.length - 2 : 0
+                              return (
                               <View className='feed-comments' onClick={(e) => e.stopPropagation()}>
-                                {(item.comments || []).map((c) => (
+                                {displayed.map((c) => (
                                   <View
                                     key={c.id}
-                                    className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''} ${c.reply_to_user_id ? 'is-reply' : ''}`}
+                                    className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''} ${c._is_pending ? 'is-pending' : ''} ${c.reply_to_user_id ? 'is-reply' : ''}`}
                                     onClick={() => openCommentModal(item.record.id, c)}
                                   >
                                     <View className='comment-avatar'>
@@ -1632,13 +1773,44 @@ function CommunityPage() {
                                     </View>
                                   </View>
                                 ))}
+                                {foldedHiddenCount > 0 ? (
+                                  <View
+                                    className='feed-comments-expand-row'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [rid]: true }))
+                                    }}
+                                  >
+                                    <Text className='feed-comments-expand-text'>
+                                      展开 {foldedHiddenCount} 条评论
+                                    </Text>
+                                  </View>
+                                ) : null}
+                                {isListExpanded && list.length > 3 ? (
+                                  <View
+                                    className='feed-comments-expand-row feed-comments-collapse-row'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [rid]: false }))
+                                    }}
+                                  >
+                                    <Text className='feed-comments-expand-text'>收起</Text>
+                                  </View>
+                                ) : null}
                                 {(item.comment_count || 0) > (item.comments?.length || 0) ? (
-                                  <View className='feed-comments-more' onClick={() => handleLoadAllComments(item.record.id)}>
+                                  <View
+                                    className='feed-comments-more'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void handleLoadAllComments(item.record.id)
+                                    }}
+                                  >
                                     <Text className='feed-comments-more-text'>查看全部评论</Text>
                                   </View>
                                 ) : null}
                               </View>
-                            )}
+                              )
+                            })()}
                           </View>
                         </View>
                       </View>
@@ -1648,7 +1820,7 @@ function CommunityPage() {
               )}
               {/* 加载更多提示 */}
               {feedList.length > 0 && (
-                <View className='load-more-wrapper'>
+                <View className='load-more-wrapper' onClick={(e) => e.stopPropagation()}>
                   {loadingMore ? (
                     <View className='load-more-loading'>
                       <View className='loading-spinner'>
@@ -1678,21 +1850,11 @@ function CommunityPage() {
         </ScrollView>
       </View>
 
-      {/* 底部评论输入栏：mask 和 bar 始终渲染，通过 CSS 切换可见性，避免 DOM 增删导致 ScrollView 重置 */}
-      <View
-        className={`comment-bottom-mask ${expandedCommentRecordId ? 'visible' : ''}`}
-        onClick={closeCommentModal}
-      />
+      {/* 底部评论输入栏：始终渲染，通过 CSS 切换可见性，避免 DOM 增删导致 ScrollView 重置 */}
       <View
         className={`comment-bottom-bar ${expandedCommentRecordId ? 'visible' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {replyTargetComment ? (
-          <View className='comment-reply-tip'>
-            <Text className='comment-reply-tip-text'>正在回复 {replyTargetComment.nickname || '用户'}</Text>
-            <Text className='comment-reply-tip-close' onClick={() => setReplyTargetComment(null)}>取消</Text>
-          </View>
-        ) : null}
         <View className='comment-bottom-main'>
           <Input
             className='comment-bottom-input'
@@ -1707,16 +1869,19 @@ function CommunityPage() {
             focus={commentInputFocus}
             maxlength={500}
             cursorSpacing={24}
-            disabled={commentSubmitting}
           />
           <View
-            className={`comment-bottom-send ${(!commentContent.trim() || commentSubmitting) ? 'disabled' : ''} ${commentSubmitting ? 'is-submitting' : ''}`}
+            className={`comment-bottom-send ${!commentContent.trim() && commentInFlightCount === 0 ? 'disabled' : ''} ${commentInFlightCount > 0 ? 'is-submitting' : ''} ${commentContent.trim() ? 'is-ready' : ''}`}
             hoverClass='none'
             onClick={() => {
               void submitComment()
             }}
           >
-            <Text className='comment-bottom-send-text'>{commentSubmitting ? '发送中' : '发送'}</Text>
+            {commentInFlightCount > 0 ? (
+              <View className='comment-bottom-send-spinner' />
+            ) : (
+              <Text className='iconfont icon-send comment-bottom-send-icon' />
+            )}
           </View>
         </View>
       </View>

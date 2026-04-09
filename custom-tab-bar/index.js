@@ -76,7 +76,7 @@ Component({
       }
     },
     
-    // 检查是否需要隐藏 tabBar（在摄影模式下隐藏）
+    // 检查是否需要隐藏 tabBar（拍照页 / 圈子评论输入展开）
     updateHidden() {
       try {
         const pages = getCurrentPages()
@@ -84,8 +84,16 @@ Component({
           const currentPage = pages[pages.length - 1]
           const currentPath = '/' + currentPage.route
 
-          // 在记录饮食摄影页面隐藏 tabBar
-          const shouldHide = currentPath === '/pages/record/index'
+          let communityCommentOpen = false
+          try {
+            communityCommentOpen = wx.getStorageSync('community_comment_bar_visible') === '1'
+          } catch (e) {
+            // ignore
+          }
+
+          const shouldHide =
+            currentPath === '/pages/record/index' ||
+            (currentPath === '/pages/community/index' && communityCommentOpen)
 
           if (shouldHide !== this.data.hidden) {
             this.setData({ hidden: shouldHide })

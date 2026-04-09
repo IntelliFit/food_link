@@ -11,6 +11,7 @@ import {
   type Nutrients,
 } from '../../utils/api'
 import { withAuth } from '../../utils/withAuth'
+import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import './index.scss'
 
 const MEALS = [
@@ -112,7 +113,7 @@ function buildNutrientsFromWeight(
 
 function RecordManualPage() {
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
-  const [selectedMeal, setSelectedMeal] = useState('breakfast')
+  const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
   const [searchText, setSearchText] = useState('')
@@ -129,6 +130,8 @@ function RecordManualPage() {
     const storedMeal = Taro.getStorageSync('analyzeMealType')
     if (typeof storedMeal === 'string' && MEALS.some((meal) => meal.id === storedMeal)) {
       setSelectedMeal(storedMeal)
+    } else {
+      setSelectedMeal(inferDefaultMealTypeFromLocalTime())
     }
     loadBrowseData()
   }, [])

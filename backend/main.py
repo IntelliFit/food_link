@@ -5539,9 +5539,11 @@ async def get_home_dashboard(
         # list_food_records 按 record_time 倒序；按餐聚合时同餐次内首条即该餐最新一条，供首页跳转记录详情/生成海报
         primary_record_id = None
         if items:
-            rid = items[0].get("id")
-            if rid is not None:
-                primary_record_id = str(rid)
+            for rec in items:
+                rid = rec.get("id")
+                if rid is not None and str(rid).strip() != "":
+                    primary_record_id = str(rid)
+                    break
         meals_out.append({
             "type": meal_type,
             "name": MEAL_NAMES.get(meal_type, meal_type),

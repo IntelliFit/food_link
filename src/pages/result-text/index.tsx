@@ -3,6 +3,7 @@ import { withAuth } from '../../utils/withAuth'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord } from '../../utils/api'
+import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 
 import './index.scss'
 
@@ -74,7 +75,9 @@ function ResultTextPage() {
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
-  const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>('breakfast')
+  const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(
+    () => getSavedSelectableMealType() ?? inferDefaultMealTypeFromLocalTime()
+  )
 
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
     return items.map((item, index) => ({
@@ -237,7 +240,7 @@ function ResultTextPage() {
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
     // 确定餐次
-    let mealType = confirmedMealType || 'breakfast'
+    let mealType = confirmedMealType || inferDefaultMealTypeFromLocalTime()
 
     setSaving(true)
     try {
@@ -292,8 +295,7 @@ function ResultTextPage() {
 
   /** 点击保存按钮：打开餐次选择弹窗 */
   const handleConfirmAndShare = () => {
-    // 默认选中
-    setSelectedMealType('breakfast')
+    setSelectedMealType(getSavedSelectableMealType() ?? inferDefaultMealTypeFromLocalTime())
     setShowMealSelector(true)
   }
 

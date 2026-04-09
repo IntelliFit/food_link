@@ -14,6 +14,7 @@ import {
   addBodyWaterLog,
   resetBodyWaterLogs,
   mapCalendarDateToApi,
+  resolveHomeMealPrimaryRecordId,
   type DashboardTargets,
   type HomeIntakeData,
   type HomeMealItem,
@@ -929,13 +930,15 @@ function IndexPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    const rid = meal.primary_record_id
-    if (!rid || String(rid).trim() === '') {
-      Taro.showToast({ title: '暂无关联记录，请稍后重试', icon: 'none' })
+    const rid = resolveHomeMealPrimaryRecordId(meal)
+    if (!rid) {
+      const raw = selectedDateRef.current || formatDateKey(new Date())
+      const d = mapCalendarDateToApi(raw) || raw
+      Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
       return
     }
     Taro.navigateTo({
-      url: `/pages/record-detail/index?id=${encodeURIComponent(String(rid))}&ui=home`
+      url: `/pages/record-detail/index?id=${encodeURIComponent(rid)}&ui=home`
     })
   }, [])
 

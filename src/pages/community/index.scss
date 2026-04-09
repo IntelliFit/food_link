@@ -1544,6 +1544,20 @@ $feed-body-font-size: 30rpx;
   background: #f8fafc;
   border-radius: 24rpx;
   border: 1rpx solid #e2e8f0;
+  box-sizing: border-box;
+}
+
+.feed-macros-text {
+  font-size: 24rpx;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/** 仅图片/热量/营养可进入详情，按下反馈 */
+.feed-tap-to-detail {
+  &:active {
+    opacity: 0.88;
+  }
 }
 
 .feed-image {
@@ -1692,6 +1706,10 @@ $comment-body-font-size: 28rpx;
   &.is-temp {
     opacity: 0.88;
   }
+
+  &.is-pending {
+    opacity: 0.92;
+  }
 }
 
 .comment-avatar {
@@ -1794,6 +1812,28 @@ $comment-body-font-size: 28rpx;
   color: #576b95;
   font-weight: 500;
   line-height: 36rpx;
+}
+
+/* 仿微信：超过 3 条时折叠，展开 / 收起 */
+.feed-comments-expand-row {
+  padding: 4rpx 0 2rpx;
+  margin-top: 2rpx;
+
+  &:active {
+    opacity: 0.72;
+  }
+}
+
+.feed-comments-expand-text {
+  font-size: 26rpx;
+  color: #576b95;
+  font-weight: 400;
+  line-height: 36rpx;
+}
+
+.feed-comments-collapse-row {
+  margin-top: 6rpx;
+  padding-top: 4rpx;
 }
 
 // 内联评论输入：在帖子下方，键盘弹起时帖子自然在键盘正上方
@@ -1921,28 +1961,12 @@ $comment-body-font-size: 28rpx;
   box-shadow: 0 24rpx 64rpx rgb(0 0 0 / 20%);
 }
 
-// 底部评论输入栏蒙层（始终渲染，通过 CSS 切换，避免 DOM 增删触发原生布局重算）
-.comment-bottom-mask {
-  position: fixed;
-  inset: 0 0 calc(100rpx + env(safe-area-inset-bottom));
-  background: rgb(0 0 0 / 15%);
-  z-index: 1000;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-
-  &.visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
 // 底部评论输入栏：固定在底部，滑入滑出
 .comment-bottom-bar {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(100rpx + env(safe-area-inset-bottom));
+  bottom: 0;
   z-index: 1001;
   width: 100%;
   box-sizing: border-box;
@@ -1987,56 +2011,34 @@ $comment-body-font-size: 28rpx;
   box-sizing: border-box;
 }
 
-.comment-reply-tip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12rpx;
-  margin-bottom: 0;
-  padding: 8rpx 12rpx;
-  border-radius: 10rpx;
-  background: #f5f6f8;
-}
-
-.comment-reply-tip-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 26rpx;
-  color: #4b5563;
-}
-
-.comment-reply-tip-close {
-  flex-shrink: 0;
-  font-size: 26rpx;
-  color: #576b95;
-  font-weight: 500;
-}
-
 .comment-bottom-placeholder {
   color: #9ca3af;
 }
 
 .comment-bottom-send {
   flex-shrink: 0;
-  min-width: 108rpx;
-  padding: 0 24rpx;
+  width: 72rpx;
   height: 72rpx;
-  line-height: 72rpx;
-  border-radius: 36rpx;
-  text-align: center;
+  min-width: 72rpx;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
   background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
   box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 22%);
-  transition: opacity 0.15s ease, background 0.15s ease;
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.12s ease;
 
-  .comment-bottom-send-text {
-    font-size: 28rpx;
+  .comment-bottom-send-icon.iconfont.icon-send {
+    font-size: 30rpx;
     color: #fff;
-    font-weight: 500;
+    line-height: 1;
   }
 
   &:not(.disabled):active {
     opacity: 0.88;
+    transform: scale(0.96);
   }
 
   &.disabled {
@@ -2049,18 +2051,38 @@ $comment-body-font-size: 28rpx;
     background: #e5e7eb;
     box-shadow: none;
 
-    .comment-bottom-send-text {
+    .comment-bottom-send-icon.iconfont.icon-send {
       color: #9ca3af;
     }
   }
 
-  &.disabled.is-submitting {
+  /** 有内容且仍有请求在途：保持主色 + spinner */
+  &.is-submitting.is-ready {
+    opacity: 1;
+    background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 22%);
+  }
+
+  /** 输入已空但请求未完成：中性色 + spinner */
+  &.is-submitting:not(.is-ready) {
     opacity: 1;
     background: #94a3b8;
+    box-shadow: none;
+  }
+}
 
-    .comment-bottom-send-text {
-      color: #fff;
-    }
+.comment-bottom-send-spinner {
+  width: 30rpx;
+  height: 30rpx;
+  border: 4rpx solid rgb(255 255 255 / 35%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: community-comment-spin 0.85s linear infinite;
+}
+
+@keyframes community-comment-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

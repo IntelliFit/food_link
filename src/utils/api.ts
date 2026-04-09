@@ -270,6 +270,28 @@ export interface HomeMealItem {
   image_paths?: string[] | null
   /** 该餐次内最新一条饮食记录 id，用于跳转记录详情/生成分享海报 */
   primary_record_id?: string | null
+  /** 部分网关/序列化可能为 camelCase，与 primary_record_id 等价 */
+  primaryRecordId?: string | null
+}
+
+/** 解析首页餐食卡片对应的记录 id（兼容 snake_case / camelCase） */
+export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<string, unknown>): string | null {
+  const m = meal as Record<string, unknown>
+  const candidates = [m.primary_record_id, m.primaryRecordId]
+  for (const v of candidates) {
+    if (v != null && String(v).trim() !== '') {
+      return String(v)
+    }
+  }
+  return null
+}
+
+function normalizeHomeMealItem(raw: unknown): HomeMealItem {
+  const row = raw as HomeMealItem
+  return {
+    ...row,
+    primary_record_id: resolveHomeMealPrimaryRecordId(row as Record<string, unknown>),
+  }
 }
 
 export interface HomeFoodExpiryItem {
@@ -1570,7 +1592,9 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
     const msg = (res.data as any)?.detail || '获取首页数据失败'
     throw new Error(msg)
   }
-  return res.data as HomeDashboard
+  const data = res.data as HomeDashboard
+  const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
+  return { ...data, meals }
 }
 
 /**
@@ -2574,6 +2598,8 @@ export interface FeedCommentItem {
   nickname: string
   avatar: string
   _is_temp?: boolean  // 标记为临时评论（未通过审核）
+  /** 乐观更新：已展示、等待接口落库 */
+  _is_pending?: boolean
 }
 
 export interface CommunityCommentTask {

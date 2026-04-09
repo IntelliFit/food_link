@@ -6,6 +6,13 @@
 
 ## 2026-04-09
 
+- 🔧 refactor: 圈子动态卡片仅点击图片/热量/营养条进入记录详情，并带 `ui=home` 与首页今日餐食详情样式一致；整卡不再点击进入 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🎨 style: 圈子评论区去掉独立全屏 mask；点击滚动内容区空白处冒泡关闭输入栏（交互区 `stopPropagation`），恢复无遮罩浏览 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- ✨ feat: 圈子评论乐观发送（立即展示+清空输入）、签名防抖与短锁防重复、失败回滚与 Toast；发送按钮改为 `icon-send`、请求中 spinner；缓存写入前剥离 `_is_pending` `src/pages/community/index.tsx` `src/pages/community/index.scss` `src/utils/api.ts`
+- 🎨 style: 圈子评论输入展开时隐藏底部导航栏（自定义 tab 同步 `community_comment_bar_visible`）；去掉「正在回复…/取消」提示行 `src/pages/community/index.tsx` `src/pages/community/index.scss` `custom-tab-bar/index.js`
+- 🎨 style: 圈子动态评论超过 3 条时默认只展示前 2 条，增加「展开 X 条评论 / 收起」仿微信折叠；拉取全部评论后自动展开 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- ✨ feat: 拍照/文字分析、手动记录与结果页默认餐次改为按设备本地时间推断（非写死早餐），新增 `inferDefaultMealTypeFromLocalTime` `src/utils/infer-default-meal-type.ts`；分析页无图再次进入时同步刷新默认餐次 `src/pages/analyze/index.tsx` `src/pages/record-text/index.tsx` `src/pages/record-manual/index.tsx` `src/pages/result/index.tsx` `src/pages/result-text/index.tsx`
+- 🐛 fix: 首页今日餐食点击无 `primary_record_id` 时误报「暂无关联记录」：`getHomeDashboard` 归一化 `primaryRecordId`/snake_case；后端按餐次扫描首条有效记录 id；无 id 时降级进入当日记录列表 `src/utils/api.ts` `src/pages/index/index.tsx` `backend/main.py`
 - 🔧 chore: 微信小程序版本号 **2.0.12**（`package.json`）；`npm run build:weapp` / `build:weapp:preview` 通过；已用开发者工具 `cli upload` 上传（版本说明：分享海报深色米白卡）
 - 🔧 refactor: 分享海报 `computePosterHeight` 与 `drawRecordPoster` 内边距与区块高度对齐，避免底部裁剪 `src/utils/poster.ts`
 - 🎨 style: 分享海报 Canvas 深色页底 + 米白一体卡（总热量在卡内居中）；无整屏绿底/绿渐变；PFC 条灰阶；预览弹窗中性底与纯色按钮 `src/utils/poster.ts` `src/pages/record-detail/index.scss`

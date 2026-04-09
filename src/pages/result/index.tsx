@@ -20,6 +20,7 @@ import {
 } from '../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
 import { foodRecordFromSavePayload } from '../../utils/dev-record-preview'
+import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
@@ -207,7 +208,9 @@ function ResultPage() {
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
-  const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>('breakfast')
+  const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(
+    () => getSavedSelectableMealType() ?? inferDefaultMealTypeFromLocalTime()
+  )
 
   // 二次纠错抽屉状态
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
@@ -757,10 +760,10 @@ function ResultPage() {
     const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
     const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
 
-    // 确定餐次：优先使用确认过的餐次，否则尝试从缓存读取，最后默认早餐
+    // 确定餐次：优先使用确认过的餐次，否则尝试从缓存读取，最后按当前时间推断
     let mealType = confirmedMealType
     if (!mealType) {
-      mealType = toSelectableMealType(savedMealType) || 'breakfast'
+      mealType = toSelectableMealType(savedMealType) || inferDefaultMealTypeFromLocalTime()
     }
     const mealLabel = MEAL_OPTIONS.find((o) => o.value === mealType)?.label || '早餐'
 
@@ -892,7 +895,7 @@ function ResultPage() {
             saveRecord(false, savedMealType)
             return
           }
-          setSelectedMealType('breakfast')
+          setSelectedMealType(inferDefaultMealTypeFromLocalTime())
           setShowMealSelector(true)
         }
       })
@@ -911,7 +914,7 @@ function ResultPage() {
             saveRecord(false, savedMealType)
             return
           }
-          setSelectedMealType('breakfast')
+          setSelectedMealType(inferDefaultMealTypeFromLocalTime())
           setShowMealSelector(true)
         }
       })
@@ -922,7 +925,7 @@ function ResultPage() {
       saveRecord(false, savedMealType)
       return
     }
-    setSelectedMealType('breakfast')
+    setSelectedMealType(inferDefaultMealTypeFromLocalTime())
     setShowMealSelector(true)
   }
 
