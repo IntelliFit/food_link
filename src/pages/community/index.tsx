@@ -38,7 +38,7 @@ import '@taroify/core/button/style'
 import { IconTrendingUp } from '../../components/iconfont'
 
 import './index.scss'
-import { withAuth } from '../../utils/withAuth'
+import { withAuth, redirectToLogin } from '../../utils/withAuth'
 
 /** 同一条动态、同一回复目标、同一内容在短窗口内视为重复点击 */
 const COMMENT_SEND_DEBOUNCE_MS = 450
@@ -930,7 +930,7 @@ function CommunityPage() {
 
   const openFoodLibrary = () => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.navigateTo({ url: '/pages/food-library/index' })
@@ -1284,7 +1284,7 @@ function CommunityPage() {
    */
   const handlePhotoAnalyze = () => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.chooseImage({
@@ -1374,7 +1374,7 @@ function CommunityPage() {
                   className='login-tip-btn'
                   shape='round'
                   style={{ background: 'linear-gradient(to right, #00bc7d 0%, #00bba7 100%)', border: 'none', color: '#fff' }}
-                  onClick={() => Taro.navigateTo({ url: '/pages/login/index' })}
+                  onClick={() => redirectToLogin()}
                 >
                   去登录
                 </TaroifyButton>
@@ -1387,7 +1387,7 @@ function CommunityPage() {
               onClick={(e) => {
                 e.stopPropagation()
                 if (!getAccessToken()) {
-                  Taro.navigateTo({ url: '/pages/login/index' })
+                  redirectToLogin()
                   return
                 }
                 Taro.navigateTo({ url: '/pages/checkin-leaderboard/index' })
@@ -1961,4 +1961,4 @@ function CommunityPage() {
   )
 }
 
-export default withAuth(CommunityPage)
+export default withAuth(CommunityPage, { public: true })

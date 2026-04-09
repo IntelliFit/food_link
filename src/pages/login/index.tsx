@@ -36,6 +36,7 @@ function safeNavigateBack() {
 
 const TAB_PAGE_PATHS = new Set([
     '/pages/index/index',
+    '/pages/stats/index',
     '/pages/community/index',
     '/pages/record/index',
     '/pages/profile/index'

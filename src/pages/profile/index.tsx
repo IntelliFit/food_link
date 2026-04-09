@@ -27,7 +27,7 @@ import {
 } from '../../utils/api'
 
 import './index.scss'
-import { withAuth } from '../../utils/withAuth'
+import { withAuth, redirectToLogin } from '../../utils/withAuth'
 
 interface UserInfo {
   avatar: string
@@ -242,7 +242,7 @@ function ProfilePage() {
   const handleServiceClick = (service: typeof services[0]) => {
     // 检查登录
     if (!isLoggedIn) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
 
@@ -300,7 +300,7 @@ function ProfilePage() {
     }
 
     if (!isLoggedIn) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     // 好友管理
@@ -322,7 +322,7 @@ function ProfilePage() {
 
   const handleSettings = () => {
     if (!isLoggedIn) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.navigateTo({ url: '/pages/profile-settings/index' })
@@ -330,7 +330,7 @@ function ProfilePage() {
 
   // 处理去登录
   const handleGoLogin = () => {
-    Taro.navigateTo({ url: '/pages/login/index' })
+    redirectToLogin()
   }
 
   // 处理退出登录
@@ -563,4 +563,4 @@ function ProfilePage() {
   )
 }
 
-export default withAuth(ProfilePage)
+export default withAuth(ProfilePage, { public: true })

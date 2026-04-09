@@ -14,6 +14,7 @@ import {
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
+import { withAuth, redirectToLogin } from '../../utils/withAuth'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -139,11 +140,13 @@ function getStoredBodyMetrics(): StoredBodyMetrics {
   return normalizeStoredBodyMetrics(null)
 }
 
-export default function StatsPage() {
+function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<StatsSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** 未登录：可进入分析 Tab 浏览引导，不拉取需登录接口 */
+  const [guestBrowse, setGuestBrowse] = useState(false)
   const [aiDisplayText, setAiDisplayText] = useState('')
   const typingTimerRef = useRef<any>(null)
   const [isTyping, setIsTyping] = useState(false)
@@ -157,10 +160,12 @@ export default function StatsPage() {
     try {
       const token = Taro.getStorageSync('access_token')
       if (!token) {
-        setError('请先登录')
+        setGuestBrowse(true)
+        setData(null)
         setLoading(false)
         return
       }
+      setGuestBrowse(false)
       // 并行获取统计数据和体重/喝水数据
       const [statsRes, bodyMetricsRes] = await Promise.all([
         getStatsSummary(r),
@@ -357,6 +362,20 @@ export default function StatsPage() {
     }
     // 只在后端完整洞察文本变化时重新触发打字
   }, [data?.analysis_summary])
+
+  if (guestBrowse) {
+    return (
+      <View className='stats-page stats-page--guest'>
+        <View className='stats-guest-card'>
+          <Text className='stats-guest-title'>登录后查看饮食分析</Text>
+          <Text className='stats-guest-desc'>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
+          <View className='stats-guest-btn' onClick={() => redirectToLogin()}>
+            <Text className='stats-guest-btn-text'>去登录</Text>
+          </View>
+        </View>
+      </View>
+    )
+  }
 
   if (loading && !data) {
     return (
@@ -862,3 +881,4 @@ export default function StatsPage() {
   )
 }
 
+export default withAuth(StatsPage, { public: true })

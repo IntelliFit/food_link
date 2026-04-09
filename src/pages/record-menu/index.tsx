@@ -2,7 +2,7 @@ import { View, Text, Image } from '@tarojs/components'
 import { useCallback, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getAccessToken } from '../../utils/api'
-import { withAuth } from '../../utils/withAuth'
+import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { IconCamera, IconAlbum, IconText, IconEdit, IconHistory } from '../../components/iconfont'
 
 import './index.scss'
@@ -59,7 +59,7 @@ function RecordMenuPage() {
   // 检查登录状态
   const checkAuth = useCallback(() => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return false
     }
     return true
@@ -179,4 +179,4 @@ function RecordMenuPage() {
   )
 }
 
-export default withAuth(RecordMenuPage)
+export default withAuth(RecordMenuPage, { public: true })

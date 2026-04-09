@@ -6,7 +6,7 @@ import {
   getMyMembership,
   type MembershipStatus,
 } from '../../utils/api'
-import { withAuth } from '../../utils/withAuth'
+import { withAuth, redirectToLogin } from '../../utils/withAuth'
 
 import './index.scss'
 
@@ -78,7 +78,7 @@ function RecordPage() {
   // 拍照处理
   const handleTakePhoto = useCallback(async () => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
 
@@ -131,7 +131,7 @@ function RecordPage() {
   // 从相册选择
   const handleChooseFromAlbum = useCallback(() => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
 
@@ -267,4 +267,4 @@ function RecordPage() {
   )
 }
 
-export default withAuth(RecordPage)
+export default withAuth(RecordPage, { public: true })

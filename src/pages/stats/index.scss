@@ -8,6 +8,53 @@
   );
   padding-bottom: 200rpx;
   box-sizing: border-box;
+
+  &--guest {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 120rpx 48rpx 200rpx;
+  }
+}
+
+.stats-guest-card {
+  width: 100%;
+  padding: 40rpx 36rpx;
+  background: rgb(255 255 255 / 90%);
+  border-radius: 24rpx;
+  border: 1rpx solid rgb(0 188 125 / 18%);
+  box-shadow: 0 12rpx 40rpx rgb(0 188 125 / 10%);
+}
+
+.stats-guest-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 16rpx;
+}
+
+.stats-guest-desc {
+  display: block;
+  font-size: 26rpx;
+  color: #6b7280;
+  line-height: 1.55;
+  margin-bottom: 36rpx;
+}
+
+.stats-guest-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, #00bc7d 0%, #00bba7 100%);
+}
+
+.stats-guest-btn-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #fff;
 }
 
 // 页面头部已移除

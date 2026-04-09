@@ -52,6 +52,40 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   padding: 180rpx 32rpx 140rpx; // 增加整体padding，更舒适的边距
 }
 
+// 未登录：首页顶部引导（审核要求先浏览再授权）
+.home-login-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 22rpx 26rpx;
+  margin-bottom: 20rpx;
+  background: rgb(255 255 255 / 88%);
+  border-radius: 20rpx;
+  border: 1rpx solid rgb(0 188 125 / 22%);
+  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 8%);
+}
+
+.home-login-banner-text {
+  flex: 1;
+  font-size: 26rpx;
+  color: $text-secondary;
+  line-height: 1.45;
+}
+
+.home-login-banner-btn {
+  flex-shrink: 0;
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
+}
+
+.home-login-banner-btn-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
 // 问候区
 .greeting-section {
   display: flex;

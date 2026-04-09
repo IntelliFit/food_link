@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
+import { redirectToLogin } from '../../../utils/withAuth'
 import { getAccessToken, getMyMembership } from '../../../utils/api'
 import {
   IconCamera,
@@ -99,7 +100,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
       case 'album': {
         // 与 record 页「相册」一致：先校验今日次数，避免选图上传后 submit 才 429
         if (!getAccessToken()) {
-          Taro.navigateTo({ url: '/pages/login/index' })
+          redirectToLogin()
           break
         }
         void (async () => {

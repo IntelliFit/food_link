@@ -29,7 +29,7 @@ import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../utils/home-events'
 
 import './index.scss'
-import { withAuth } from '../../utils/withAuth'
+import { withAuth, redirectToLogin } from '../../utils/withAuth'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -771,7 +771,7 @@ function IndexPage() {
 
   const openTargetEditor = () => {
     if (!getAccessToken()) {
-      Taro.showToast({ title: '登录后可编辑目标', icon: 'none' })
+      redirectToLogin()
       return
     }
     setTargetForm(createTargetForm(intakeData))
@@ -897,7 +897,7 @@ function IndexPage() {
 
   const handleQuickRecord = (type: 'photo' | 'text') => {
     if (type === 'photo' && !getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.setStorageSync('recordPageTab', type)
@@ -906,7 +906,7 @@ function IndexPage() {
 
   const handleViewAllMeals = () => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     const raw = selectedDateRef.current || formatDateKey(new Date())
@@ -917,7 +917,7 @@ function IndexPage() {
   /** 「查看饮食统计」入口：进入当日记录列表 */
   const openDayRecordForSelectedDate = useCallback(() => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     const d = mapCalendarDateToApi(selectedDate) || selectedDate
@@ -927,7 +927,7 @@ function IndexPage() {
   /** 今日餐食单条 → 该餐最新一条识别记录详情（生成分享海报）；缩略图点击仍为预览图片 */
   const openMealRecordDetail = useCallback((meal: HomeMealItem) => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     const rid = resolveHomeMealPrimaryRecordId(meal)
@@ -944,7 +944,7 @@ function IndexPage() {
 
   const openFoodExpiryList = () => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.navigateTo({ url: '/pages/expiry/index' })
@@ -952,7 +952,7 @@ function IndexPage() {
 
   const openFoodExpiryEdit = (id: string) => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.navigateTo({ url: `/pages/expiry-edit/index?id=${encodeURIComponent(id)}` })
@@ -960,7 +960,7 @@ function IndexPage() {
 
   const openExerciseRecord = () => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.navigateTo({ url: '/pages/exercise-record/index' })
@@ -989,7 +989,7 @@ function IndexPage() {
   // 体重/喝水相关回调函数
   const openWeightEditor = () => {
     if (!getAccessToken()) {
-      Taro.showToast({ title: '登录后可记录体重', icon: 'none' })
+      redirectToLogin()
       return
     }
     const summary = deriveWeightSummary(bodyMetrics.weightEntries, selectedDate)
@@ -1047,7 +1047,7 @@ function IndexPage() {
 
   const openWaterEditor = () => {
     if (!getAccessToken()) {
-      Taro.showToast({ title: '登录后可记录喝水', icon: 'none' })
+      redirectToLogin()
       return
     }
     if (waterBlurTimerRef.current) {
@@ -1061,7 +1061,7 @@ function IndexPage() {
 
   const addWaterAmount = async (amount: number) => {
     if (!getAccessToken()) {
-      Taro.showToast({ title: '登录后可记录喝水', icon: 'none' })
+      redirectToLogin()
       return
     }
 
@@ -1098,7 +1098,7 @@ function IndexPage() {
 
   const clearTodayWater = async () => {
     if (!getAccessToken()) {
-      Taro.showToast({ title: '登录后可操作', icon: 'none' })
+      redirectToLogin()
       return
     }
 
@@ -1238,6 +1238,20 @@ function IndexPage() {
       <View className='page-content'>
         {/* 问候区 */}
         <GreetingSection />
+
+        {!getAccessToken() && (
+          <View
+            className='home-login-banner'
+            onClick={() => redirectToLogin()}
+          >
+            <Text className='home-login-banner-text'>
+              登录后可同步饮食记录、身体数据与云端目标
+            </Text>
+            <View className='home-login-banner-btn'>
+              <Text className='home-login-banner-btn-text'>去登录</Text>
+            </View>
+          </View>
+        )}
 
         {/* 日期选择器 */}
         <DateSelector 
@@ -1844,4 +1858,4 @@ function IndexPage() {
   )
 }
 
-export default withAuth(IndexPage)
+export default withAuth(IndexPage, { public: true })

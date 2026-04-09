@@ -1,5 +1,9 @@
 # CURRENT_TASK
 
+- Task: 微信审核「先浏览后登录」整改
+- Status: done（Tab 可进、首页/分析引导、操作点统一跳转登录页并带 redirect；已 `npm run build:weapp`）
+- Scope: `src/pages/index|stats|profile|record|community|record-menu`、`src/pages/login/index.tsx`、`src/pages/index/components/RecordMenu.tsx`
+
 - Task: 互动消息点击动态偶发跳转失败
 - Status: done（已改为“按 `record_id` 直接取动态上下文”，不再依赖当前社区 Feed 的筛选/分页状态碰运气）
 - Scope:

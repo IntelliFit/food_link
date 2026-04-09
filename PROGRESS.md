@@ -6,6 +6,7 @@
 
 ## 2026-04-10
 
+- ✨ feat: 符合审核「先浏览后登录」：Tab 五页未登录可进入；首页增加登录引导条；需登录操作统一 `redirectToLogin`；分析页未登录展示说明+去登录；登录完成回跳补全 `stats` Tab `src/pages/index/*`、`src/pages/stats/*`、`src/pages/profile/index.tsx`、`src/pages/record/index.tsx`、`src/pages/community/index.tsx`、`src/pages/record-menu/index.tsx`、`src/pages/login/index.tsx`
 - 🎨 style: 海报分享底栏微信/保存改用 `iconfont icon-wechat`、`iconfont icon-download` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
 - 🎨 style: 分享海报食物列表与底部二维码区之间略增留白 `LAYOUT_FOOTER_GAP_AFTER_LIST` `src/utils/poster.ts`
 - 🐛 fix: 分享海报预览图 0×0 不可见：`aspectFit`+flex 父级高度未建立时微信 `<image>` 不渲染；改回 `widthFix`、`poster-modal-card-wrap` 去掉 `flex:1`，预览区 `overflow-y:auto` 兼顾过长海报 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
