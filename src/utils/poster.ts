@@ -539,14 +539,12 @@ export interface DailySummaryPosterInput {
 
 /** 今日小结布局常量（与 drawDailySummaryPoster 同步） */
 const DAILY_BG = '#FAF8F5'
-/** 连续/坚持目标胶囊（并排双块时可与 DAILY_STREAK_PILL2 搭配） */
-const DAILY_STREAK_PILL_BG = '#E5C68D'
-const DAILY_STREAK_PILL_TEXT = '#2c2618'
-const DAILY_STREAK_PILL2_BG = '#D8E4E8'
-const DAILY_STREAK_PILL2_TEXT = '#1a3d52'
-/** 顶栏大字标题：参考图 ECO/FOOD 双色块 */
+/** 顶栏大字标题：参考图 ECO/FOOD 双色块（今日总结 / 坚持目标） */
 const DAILY_TITLE_LINE1 = '#5B9A3D'
 const DAILY_TITLE_LINE2 = '#1e3a5f'
+/** 日期圆角条背景与描边（主色苔绿弱对比） */
+const DAILY_DATE_PILL_BG = 'rgba(139, 158, 68, 0.14)'
+const DAILY_DATE_PILL_STROKE = 'rgba(139, 158, 68, 0.38)'
 /** 中央热量圆：苔绿底 + 浅字 */
 const DAILY_RING_FILL = '#8B9E44'
 const DAILY_RING_INNER_TEXT = '#EAEAE0'
@@ -571,12 +569,11 @@ const DEFAULT_EXERCISE_GOAL_KCAL = 500
 const VBAR_TRACK_H = 104
 /** 标签区加高，避免五字挤叠（与下方字号同步） */
 const VBAR_LABEL_H = 26
-/** 顶栏：两行大字「今日」「总结」+ 日期（与 draw 中 cy 推进一致） */
+/** 顶栏：两行同字号大字 + 标题与日期圆角条间距 + 日期条高度（与 draw 一致） */
 const DAILY_HEADER_TITLE_LINE1_H = 44
 const DAILY_HEADER_TITLE_LINE2_H = 44
-const DAILY_HEADER_DATE_H = 20
-/** 并排成就胶囊行高（与 draw 中 pill 高度一致） */
-const DAILY_STREAK_ROW_H = 30
+const DAILY_HEADER_TITLE_TO_DATE_GAP = 12
+const DAILY_HEADER_DATE_PILL_H = 30
 /** 竖条轨道底色（与 LINE 区分时可单独调） */
 const DAILY_VBAR_TRACK_BG = '#EAEAE0'
 /** 底栏二维码边长（缩小后需与 compute 中 footerReserve 同步） */
@@ -591,7 +588,6 @@ const DAILY_INV_PHI = 1 / DAILY_PHI
 function getDailyLayoutMetrics(W: number): {
   topPad: number
   gapAfterDate: number
-  gapAfterStreak: number
   gapAfterCircle: number
   vbarLabelGap: number
   gapBeforeFooter: number
@@ -610,7 +606,6 @@ function getDailyLayoutMetrics(W: number): {
   return {
     topPad: g13,
     gapAfterDate: g13,
-    gapAfterStreak: g13,
     gapAfterCircle: g21,
     vbarLabelGap: 8,
     gapBeforeFooter: g13,
@@ -624,13 +619,13 @@ function getDailyLayoutMetrics(W: number): {
 
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** 顶栏短英文日期，如 9 Apr */
-function formatDailyPosterShortDateEn(dateKey: string): string {
+/** 顶栏日期圆角条：日 + 月缩写 + 年，如 11 Apr 2026 */
+function formatDailyPosterDatePillEn(dateKey: string): string {
   const parts = dateKey.split('-').map(Number)
   if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return ''
-  const [_y, mo, d] = parts
+  const [y, mo, d] = parts
   const mon = EN_MONTHS[mo - 1] ?? ''
-  return `${d} ${mon}`
+  return `${d} ${mon} ${y}`
 }
 
 /**
@@ -659,10 +654,9 @@ export function computeDailySummaryPosterHeight(_d?: DailySummaryPosterInput): n
     m.topPad +
     DAILY_HEADER_TITLE_LINE1_H +
     DAILY_HEADER_TITLE_LINE2_H +
-    DAILY_HEADER_DATE_H +
+    DAILY_HEADER_TITLE_TO_DATE_GAP +
+    DAILY_HEADER_DATE_PILL_H +
     m.gapAfterDate +
-    DAILY_STREAK_ROW_H +
-    m.gapAfterStreak +
     m.circleD +
     m.gapAfterCircle +
     vBarRow
@@ -671,61 +665,6 @@ export function computeDailySummaryPosterHeight(_d?: DailySummaryPosterInput): n
 
 /** 画布占位最大高度（离屏 Canvas 初始 style，实际导出以 compute 为准；顶栏双行标题后略增） */
 export const DAILY_SUMMARY_POSTER_MAX_HEIGHT = 740
-
-/**
- * 顶栏成就：并排两枚圆角块（连续天数 / 坚持目标），参考图分层信息排布
- */
-function drawDailyStreakPillRow(
-  ctx: CanvasRenderingContext2D,
-  cX: number,
-  yTop: number,
-  maxContentW: number,
-  streakDays: number,
-  greenDays: number
-): number {
-  const pillPadX = 11
-  const pillPadY = 7
-  const gapPills = 10
-  const t1 = `连续 ${streakDays} 天`
-  const t2 = `坚持目标 ${greenDays} 天`
-  let fs = 11
-  ctx.font = `600 ${fs}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
-  let w1 = ctx.measureText(t1).width + pillPadX * 2
-  let w2 = ctx.measureText(t2).width + pillPadX * 2
-  while (w1 + gapPills + w2 > maxContentW - 8 && fs > 9) {
-    fs -= 1
-    ctx.font = `600 ${fs}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
-    w1 = ctx.measureText(t1).width + pillPadX * 2
-    w2 = ctx.measureText(t2).width + pillPadX * 2
-  }
-  const pillH = fs + pillPadY * 2
-  const totalW = w1 + gapPills + w2
-  let x = cX - totalW / 2
-  const r = 11
-
-  drawRoundedRect(ctx, x, yTop, w1, pillH, r)
-  ctx.fillStyle = DAILY_STREAK_PILL_BG
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(120, 95, 55, 0.4)'
-  ctx.lineWidth = 1
-  ctx.stroke()
-  ctx.fillStyle = DAILY_STREAK_PILL_TEXT
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(t1, x + w1 / 2, yTop + pillH / 2)
-
-  x += w1 + gapPills
-  drawRoundedRect(ctx, x, yTop, w2, pillH, r)
-  ctx.fillStyle = DAILY_STREAK_PILL2_BG
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(30, 61, 82, 0.35)'
-  ctx.lineWidth = 1
-  ctx.stroke()
-  ctx.fillStyle = DAILY_STREAK_PILL2_TEXT
-  ctx.fillText(t2, x + w2 / 2, yTop + pillH / 2)
-
-  return pillH
-}
 
 /**
  * 圆内百分比字号：参考图二约占圆直径 60%～65% 宽，取最大不溢出字号
@@ -799,27 +738,43 @@ export function drawDailySummaryPoster(
 
   let cy = m.topPad
 
-  /** 顶部：参考图式双行大字（今日 / 总结）+ 英文短日期 + 并排成就块 */
+  /** 顶部：参考图式双行同字号大字（今日总结 / 坚持目标）+ 小字日期圆角条（含年） */
+  const titleFont =
+    'bold 38px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   ctx.fillStyle = DAILY_TITLE_LINE1
-  ctx.font = 'bold 38px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif'
-  ctx.fillText('今日', cX, cy)
+  ctx.font = titleFont
+  ctx.fillText('今日总结', cX, cy)
   cy += DAILY_HEADER_TITLE_LINE1_H
   ctx.fillStyle = DAILY_TITLE_LINE2
-  ctx.font = 'bold 38px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif'
-  ctx.fillText('总结', cX, cy)
-  cy += DAILY_HEADER_TITLE_LINE2_H
-  ctx.fillStyle = TEXT_SUB
-  ctx.font = '600 13px system-ui, -apple-system, sans-serif'
-  const shortFromKey = d.posterDateKey ? formatDailyPosterShortDateEn(d.posterDateKey) : ''
-  const dateLine =
-    shortFromKey.length > 0 ? shortFromKey : `${d.dateLabelPrimary} ${d.dateLabelSecondary}`.trim()
-  ctx.fillText(dateLine, cX, cy)
-  cy += DAILY_HEADER_DATE_H + m.gapAfterDate
+  ctx.font = titleFont
+  ctx.fillText(`坚持目标 ${d.greenDays} 天`, cX, cy)
+  cy += DAILY_HEADER_TITLE_LINE2_H + DAILY_HEADER_TITLE_TO_DATE_GAP
 
-  const streakH = drawDailyStreakPillRow(ctx, cX, cy, contentW, d.streakDays, d.greenDays)
-  cy += streakH + m.gapAfterStreak
+  const datePillText = d.posterDateKey
+    ? formatDailyPosterDatePillEn(d.posterDateKey)
+    : `${d.dateLabelPrimary} ${d.dateLabelSecondary}`.trim()
+  ctx.font = '600 12px system-ui, -apple-system, "PingFang SC", sans-serif'
+  let displayDate = datePillText || '—'
+  const pillPadX = 14
+  const maxPillW = contentW - 8
+  while (displayDate.length > 1 && ctx.measureText(displayDate).width + pillPadX * 2 > maxPillW) {
+    displayDate = displayDate.slice(0, -1)
+  }
+  const pillW = Math.min(ctx.measureText(displayDate).width + pillPadX * 2, maxPillW)
+  const pillH = DAILY_HEADER_DATE_PILL_H
+  const pillX = cX - pillW / 2
+  drawRoundedRect(ctx, pillX, cy, pillW, pillH, 10)
+  ctx.fillStyle = DAILY_DATE_PILL_BG
+  ctx.fill()
+  ctx.strokeStyle = DAILY_DATE_PILL_STROKE
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.fillStyle = TEXT_SUB
+  ctx.textBaseline = 'middle'
+  ctx.fillText(displayDate, cX, cy + pillH / 2)
+  cy += pillH + m.gapAfterDate
 
   /** 中央大圆：直径 = 卡片宽 75%；苔绿底 + 浅色字；副文仅当日摄入 kcal */
   const circleD = m.circleD

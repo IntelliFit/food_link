@@ -6,6 +6,8 @@
 
 ## 2026-04-11
 
+- 🔧 chore: 发布软件包版本 **2.0.14**（`package.json` / `package-lock.json`）`package.json` `package-lock.json`
+- 🎨 style: 今日小结顶栏改为「今日总结」「坚持目标」双行大字，下去掉连续天数；日期含年置于圆角条小字 `src/utils/poster.ts`
 - 🎨 style: 今日小结圆与五竖条总宽改为卡片 65%，竖条间隙 22；五色进度条按主色 #8B9E44 三角色相与邻近色重配 `src/utils/poster.ts`
 - ⚡ perf: 首页去掉 useDidShow 与首屏 useEffect 重复拉 dashboard；今日数据 TTL 缓存 + 脏标记，饮食保存/删除/运动/保质期事件再拉；减少 `dashboard/summary/exercise-logs` 重复请求 `src/pages/index/index.tsx` `src/utils/home-events.ts` `src/pages/result/index.tsx` `src/pages/record-manual/index.tsx` `src/pages/day-record/index.tsx`
 - 🎨 style: 今日小结顶栏仿参考图双行双色「今日」「总结」+ 短日期；连续/坚持目标并排双胶囊；圆内百分比用 Arial Black/Impact 900 字重 `src/utils/poster.ts`
