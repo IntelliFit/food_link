@@ -8,7 +8,7 @@ import {
   getFriendInviteProfile,
   acceptFriendInvite,
   updateFoodRecord,
-  getFoodRecordList,
+  getPosterCalorieCompare,
   getMyMembership,
   type FoodRecord,
   type Nutrients
@@ -109,20 +109,28 @@ function getInviteCodeFromUserId(userId: string): string {
 }
 
 type PosterCalorieCompare = {
+  mealPlanKcal: number
+  hasBaseline: boolean
   deltaKcal: number
   baselineKcal: number
 }
 
-function toDateKey(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function normalizeMealType(mealType?: string): string {
-  if (!mealType) return ''
-  return mealType === 'snack' ? 'afternoon_snack' : mealType
+/** 拉取海报胶囊数据：计划热量 + 可选「较昨」；无昨日同餐时仍返回计划用于右侧三点 */
+async function fetchPosterCalorieCompareForRecord(record: FoodRecord): Promise<PosterCalorieCompare | null> {
+  if (!getAccessToken() || !record.id) return null
+  try {
+    const data = await getPosterCalorieCompare(record.id)
+    if (!data) return null
+    return {
+      mealPlanKcal: Number.isFinite(data.meal_plan_kcal) ? data.meal_plan_kcal : 0,
+      hasBaseline: !!data.has_baseline,
+      deltaKcal: Number.isFinite(data.delta_kcal) ? data.delta_kcal : 0,
+      baselineKcal: Number.isFinite(data.baseline_kcal) ? data.baseline_kcal : 0,
+    }
+  } catch (error) {
+    console.warn('[poster] poster-calorie-compare failed', error)
+    return null
+  }
 }
 
 function RecordDetailPage() {
@@ -141,42 +149,6 @@ function RecordDetailPage() {
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
   const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
   const [inviteLoading, setInviteLoading] = React.useState(false)
-  const [posterCalorieCompare, setPosterCalorieCompare] = React.useState<PosterCalorieCompare | null>(null)
-
-  const loadPosterCalorieCompare = useCallback(async (currentRecord: FoodRecord) => {
-    if (!getAccessToken()) {
-      setPosterCalorieCompare(null)
-      return
-    }
-    try {
-      const recordDate = new Date(currentRecord.record_time)
-      if (Number.isNaN(recordDate.getTime())) {
-        setPosterCalorieCompare(null)
-        return
-      }
-      const yesterday = new Date(recordDate)
-      yesterday.setDate(recordDate.getDate() - 1)
-      const yesterdayKey = toDateKey(yesterday)
-      const { records } = await getFoodRecordList(yesterdayKey)
-      const targetMealType = normalizeMealType(currentRecord.meal_type)
-      const yesterdaySameMeal = (records || []).find(
-        (item) => normalizeMealType(item.meal_type) === targetMealType
-      )
-      if (!yesterdaySameMeal) {
-        setPosterCalorieCompare(null)
-        return
-      }
-      const currentCalories = Math.round(currentRecord.total_calories ?? 0)
-      const baselineCalories = Math.round(yesterdaySameMeal.total_calories ?? 0)
-      setPosterCalorieCompare({
-        deltaKcal: currentCalories - baselineCalories,
-        baselineKcal: baselineCalories
-      })
-    } catch (error) {
-      console.warn('[poster] load yesterday same-meal compare failed', error)
-      setPosterCalorieCompare(null)
-    }
-  }, [])
 
   useEffect(() => {
     // 加载会员状态（用于海报样式判断）
@@ -195,7 +167,6 @@ function RecordDetailPage() {
           const res = await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
-          loadPosterCalorieCompare(fetchedRecord)
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
             setOwnerNickname(inviterProfile.nickname || '')
@@ -224,7 +195,6 @@ function RecordDetailPage() {
           const stored = Taro.getStorageSync('recordDetail')
           if (stored) {
             setRecord(stored as FoodRecord)
-            loadPosterCalorieCompare(stored as FoodRecord)
             Taro.removeStorageSync('recordDetail')
             setLoading(false)
           } else {
@@ -239,7 +209,7 @@ function RecordDetailPage() {
     }
 
     loadRecord()
-  }, [loadPosterCalorieCompare, router.params?.id])
+  }, [router.params?.id])
 
   const shareRecordId = record?.id || router.params?.id || ''
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
@@ -603,8 +573,9 @@ function RecordDetailPage() {
         Promise.all([
           loadImage(record.image_path || ''),
           loadQRImage(),
-          loadImage(ownerAvatar || '')
-        ]).then(([mainImg, qrImg, avatarImg]) => {
+          loadImage(ownerAvatar || ''),
+          fetchPosterCalorieCompareForRecord(record)
+        ]).then(([mainImg, qrImg, avatarImg, calorieCompare]) => {
           try {
             const ctx = canvas.getContext('2d')
             if (!ctx) {
@@ -614,7 +585,13 @@ function RecordDetailPage() {
               return
             }
 
-            const dynamicHeight = computePosterHeight(ctx, record, POSTER_WIDTH, isProUser)
+            const dynamicHeight = computePosterHeight(
+              ctx,
+              record,
+              POSTER_WIDTH,
+              isProUser,
+              calorieCompare || undefined
+            )
             canvas.width = POSTER_WIDTH * dpr
             canvas.height = dynamicHeight * dpr
             ctx.scale(dpr, dpr)
@@ -624,10 +601,7 @@ function RecordDetailPage() {
               width: POSTER_WIDTH,
               height: dynamicHeight,
               record,
-              calorieCompare: posterCalorieCompare ? {
-                deltaKcal: posterCalorieCompare.deltaKcal,
-                baselineKcal: posterCalorieCompare.baselineKcal
-              } : undefined,
+              calorieCompare: calorieCompare || undefined,
               image: mainImg,
               qrCodeImage: qrImg,
               sharerNickname: ownerNickname,

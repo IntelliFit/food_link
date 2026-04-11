@@ -4797,6 +4797,86 @@ async def get_food_record_detail(
         raise HTTPException(status_code=500, detail="获取记录详情失败")
 
 
+def _record_time_to_china_date_str(record_time: Any) -> str:
+    """将记录时间转为上海时区自然日 YYYY-MM-DD（与 list_food_records 一致）。"""
+    if record_time is None:
+        return ""
+    try:
+        if isinstance(record_time, datetime):
+            dt = record_time
+        else:
+            s = str(record_time).strip()
+            if not s:
+                return ""
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(CHINA_TZ).date().isoformat()
+    except Exception:
+        return ""
+
+
+def _china_yesterday_ymd(ymd: str) -> str:
+    if not ymd:
+        return ""
+    d = datetime.strptime(ymd, "%Y-%m-%d").date()
+    return (d - timedelta(days=1)).isoformat()
+
+
+@app.get("/api/food-record/{record_id}/poster-calorie-compare")
+async def get_poster_calorie_compare(
+    record_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    分享海报热量行数据：含该餐计划热量 meal_plan_kcal（仪表盘分配）与可选「较昨同餐」对比。
+    昨日同餐按中国自然日 + 餐次归一化，与 /api/food-record/list 一致；无昨日记录时 has_baseline=false。
+    仅记录本人可调用。
+    """
+    user_id = user_info["user_id"]
+    try:
+        record = await get_food_record_by_id(record_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="记录不存在")
+        if str(record.get("user_id")) != str(user_id):
+            raise HTTPException(status_code=403, detail="仅记录本人可获取对比")
+
+        record_day = _record_time_to_china_date_str(record.get("record_time"))
+        if not record_day:
+            raise HTTPException(status_code=400, detail="记录时间无效")
+
+        yday = _china_yesterday_ymd(record_day)
+        records = await list_food_records(user_id=user_id, date=yday, limit=100)
+        target = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
+        same_meal: List[Dict[str, Any]] = []
+        for r in records:
+            if _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time")) == target:
+                same_meal.append(r)
+
+        baseline = sum(float(x.get("total_calories") or 0) for x in same_meal)
+        has_baseline = len(same_meal) > 0
+        current = float(record.get("total_calories") or 0)
+        delta = round(current - baseline)
+
+        owner = await get_user_by_id(user_id)
+        dash = _get_dashboard_targets(owner) if owner else {"calorie_target": 2000.0}
+        meal_targets = _build_dashboard_meal_targets(float(dash["calorie_target"]))
+        meal_plan_kcal = round(float(meal_targets.get(target, 0) or 0), 1)
+
+        return {
+            "has_baseline": has_baseline,
+            "baseline_kcal": round(baseline),
+            "delta_kcal": delta,
+            "current_kcal": round(current),
+            "meal_plan_kcal": meal_plan_kcal,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_poster_calorie_compare] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取海报热量对比失败")
+
+
 class UpdateFoodRecordRequest(BaseModel):
     meal_type: Optional[str] = Field(default=None, description="餐次")
     items: Optional[List[FoodRecordItem]] = Field(default=None, description="食物项列表")

@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-04-11
+
+- 🐛 fix: 海报热量行右侧胶囊在无昨日同餐时仍显示（仅计划达成三点）；「较昨 ±」仅在有昨日基线时出现 `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- ✨ feat: 海报「较昨」胶囊右侧三点改为本餐热量相对该餐仪表盘计划目标的达成度（≥33%/66%/100% 各亮一格）；接口返回 `meal_plan_kcal` `backend/main.py` `src/utils/api.ts` `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- 🎨 style: 海报「较昨」无昨日同餐时不显示占位；有对比时胶囊与热量同行、内容区右对齐 `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- 🎨 style: 分享海报热量行数字与 `kcal` 改为 alphabetic baseline 对齐；较昨胶囊背景 `#E5C68D`，与数字行同列右侧并微调垂直对齐 `src/utils/poster.ts`
+- ✨ feat: 新增 `GET /api/food-record/{id}/poster-calorie-compare`（服务端中国自然日 + 餐次归一化）；海报对比改走该接口；有昨日同餐基线时才绘制「较昨」胶囊 `backend/main.py` `src/utils/api.ts` `src/pages/record-detail/index.tsx` `src/utils/poster.ts`
+- 🐛 fix: 分享海报「较昨同餐」仍不显示：昨日日期与后端中国自然日不一致 → 新增 `getChinaCalendarDateKey` / `addCalendarDaysYmd`；所有者 `user_id` 大小写归一化比对 `src/utils/china-date.ts` `src/pages/record-detail/index.tsx`
+- 🎨 style: 较昨胶囊紧贴 `kcal` 右侧、浅金卡其底+描边、右侧三点等级；有对比时热量区增高避免裁切 `src/utils/poster.ts`
+- 🐛 fix: 分享海报「较昨同餐 + 三点强度」在快速点生成时丢失：改为与头图/二维码并行请求昨日同餐对比；仅记录所有者拉取；昨日同餐多条记录合并热量 `src/pages/record-detail/index.tsx`
+
 ## 2026-04-10
 
 - ✨ feat: 符合审核「先浏览后登录」：Tab 五页未登录可进入；首页增加登录引导条；需登录操作统一 `redirectToLogin`；分析页未登录展示说明+去登录；登录完成回跳补全 `stats` Tab `src/pages/index/*`、`src/pages/stats/*`、`src/pages/profile/index.tsx`、`src/pages/record/index.tsx`、`src/pages/community/index.tsx`、`src/pages/record-menu/index.tsx`、`src/pages/login/index.tsx`

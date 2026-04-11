@@ -1454,6 +1454,32 @@ export async function getFoodRecordList(date?: string): Promise<{ records: FoodR
   return res.data as { records: FoodRecord[] }
 }
 
+/** 分享海报「较昨同餐」对比（服务端按中国自然日计算；仅本人；403 不触发重登） */
+export interface PosterCalorieCompareResponse {
+  has_baseline: boolean
+  baseline_kcal: number
+  delta_kcal: number
+  current_kcal: number
+  /** 当前餐次在仪表盘目标下的计划热量（与首页三餐分配/加餐参考一致） */
+  meal_plan_kcal: number
+}
+
+export async function getPosterCalorieCompare(recordId: string): Promise<PosterCalorieCompareResponse | null> {
+  const token = getAccessToken()
+  if (!token) return null
+  const res = await Taro.request({
+    url: `${API_BASE_URL}/api/food-record/${encodeURIComponent(recordId)}/poster-calorie-compare`,
+    method: 'GET',
+    header: withNgrokBypassHeaders({
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    }),
+    timeout: 10000,
+  })
+  if (res.statusCode === 200) return res.data as PosterCalorieCompareResponse
+  return null
+}
+
 /**
  * 获取单条饮食记录详情（通过 ID，从数据库获取最新数据）
  */

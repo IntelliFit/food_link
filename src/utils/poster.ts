@@ -48,22 +48,40 @@ const INNER_PAD = 20
 /** 与 drawRecordPoster 中 cy 推进一致，用于紧凑动态高度 */
 const LAYOUT_IMG_BOTTOM_GAP = 28
 const LAYOUT_CAL_BLOCK = 54
+/** 有「较昨」胶囊且可能换行时，热量区需略增高，避免裁切 */
+const LAYOUT_CAL_BLOCK_WITH_COMPARE = 82
 const LAYOUT_MACRO_BLOCK = 44
 const LAYOUT_BAR_EXTRA = 24
 const LAYOUT_DIVIDER_AFTER = 20
 const LAYOUT_ITEM_ROW = 42
 const LAYOUT_OVERFLOW_EXTRA = 24
 /** 食物列表最后一行与 footer（头像/二维码区）之间的垂直间距（px） */
-const LAYOUT_FOOTER_GAP_AFTER_LIST = 22
+const LAYOUT_FOOTER_GAP_AFTER_LIST = 45
 /** footer 锚点（头像顶边）到画布底：含二维码与底边距，与绘制一致 */
 const LAYOUT_FOOTER_ANCHOR_TAIL = 84
+
+/** 海报热量行右侧胶囊：计划达成三点始终可画；「较昨」仅在有昨日同餐基线时展示 */
+export interface PosterCalorieCompareInput {
+  /** 该餐次计划热量（首页仪表盘分配），用于三点达成度 */
+  mealPlanKcal: number
+  hasBaseline: boolean
+  deltaKcal: number
+  baselineKcal: number
+}
+
+function shouldShowPosterCalorieChip(c?: PosterCalorieCompareInput): boolean {
+  if (!c || !Number.isFinite(c.mealPlanKcal)) return false
+  /** 有计划目标时展示达成点；无计划但有昨日对比时仍展示「较昨」条 */
+  return c.mealPlanKcal > 0 || c.hasBaseline
+}
 
 /** 高度计算（与 drawRecordPoster 同步；不再强制定高 812，按餐食项数压缩空白） */
 export function computePosterHeight(
   _ctx: CanvasRenderingContext2D,
   record: FoodRecord,
   _width: number = POSTER_WIDTH,
-  _isPro: boolean = false
+  _isPro: boolean = false,
+  calorieCompare?: PosterCalorieCompareInput
 ): number {
   const p = Math.round(record.total_protein ?? 0)
   const c = Math.round(record.total_carbs ?? 0)
@@ -72,8 +90,10 @@ export function computePosterHeight(
   const maxItems = 4
   const n = items.length
 
+  const hasCompare = shouldShowPosterCalorieChip(calorieCompare)
+
   let cy = IMG_H + LAYOUT_IMG_BOTTOM_GAP
-  cy += LAYOUT_CAL_BLOCK
+  cy += hasCompare ? LAYOUT_CAL_BLOCK_WITH_COMPARE : LAYOUT_CAL_BLOCK
   cy += LAYOUT_MACRO_BLOCK
   if (p + c + f > 0) cy += LAYOUT_BAR_EXTRA
   cy += LAYOUT_DIVIDER_AFTER
@@ -88,15 +108,25 @@ export interface PosterDrawOptions {
   width: number
   height: number
   record: FoodRecord
-  calorieCompare?: {
-    deltaKcal: number
-    baselineKcal: number
-  }
+  calorieCompare?: PosterCalorieCompareInput
   image: { width: number; height: number } | null
   qrCodeImage?: { width: number; height: number } | null
   sharerNickname?: string
   sharerAvatarImage?: { width: number; height: number } | null
   isPro?: boolean
+}
+
+/**
+ * 本餐热量相对该餐计划目标的达成度：33% / 66% / 100% 各点亮一格（共 3 格）。
+ * 计划为 0 或无效时不点亮。
+ */
+function mealPlanAchievementLevel(currentKcal: number, mealPlanKcal: number): number {
+  if (!Number.isFinite(mealPlanKcal) || mealPlanKcal <= 0 || !Number.isFinite(currentKcal)) return 0
+  const ratio = currentKcal / mealPlanKcal
+  if (ratio >= 1) return 3
+  if (ratio >= 0.66) return 2
+  if (ratio >= 0.33) return 1
+  return 0
 }
 
 function drawRoundedRect(
@@ -218,56 +248,86 @@ export function drawRecordPoster(
   const cx = cardX + INNER_PAD
   let cy = cardTop + IMG_H + LAYOUT_IMG_BOTTOM_GAP
 
-  // 热量：左上角大数字（无"总摄入"标签）
+  // 热量：数字与「 kcal」共用 alphabetic baseline 下沿对齐；胶囊条同一行靠右（紧跟 kcal 或换行）
+  const calBaselineY = cy + 38
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
+  ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_INK
   ctx.font = 'bold 44px sans-serif'
   const calStr = cal.toLocaleString('en-US')
-  ctx.fillText(calStr, cx, cy)
+  ctx.fillText(calStr, cx, calBaselineY)
   const calStrW = ctx.measureText(calStr).width
   ctx.fillStyle = TEXT_MUTED
   ctx.font = '600 14px sans-serif'
-  ctx.fillText(' kcal', cx + calStrW, cy + 18)
-  if (calorieCompare && Number.isFinite(calorieCompare.deltaKcal) && Number.isFinite(calorieCompare.baselineKcal)) {
-    const absDelta = Math.abs(Math.round(calorieCompare.deltaKcal))
-    const prefix = calorieCompare.deltaKcal > 0 ? '+' : calorieCompare.deltaKcal < 0 ? '-' : '±'
-    const chipText = `较昨 ${prefix}${absDelta}`
-    const chipH = 30
-    const chipW = 168
-    const chipX = cx + contentW - chipW
-    const chipY = cy + 10
-    const level = absDelta >= 250 ? 3 : absDelta >= 120 ? 2 : absDelta >= 40 ? 1 : 0
+  const kcalSuffix = ' kcal'
+  ctx.fillText(kcalSuffix, cx + calStrW, calBaselineY)
+  const kcalSuffixW = ctx.measureText(kcalSuffix).width
+
+  if (shouldShowPosterCalorieChip(calorieCompare)) {
+    const cc = calorieCompare!
+    const absDelta = Math.abs(Math.round(cc.deltaKcal))
+    const prefix = cc.deltaKcal > 0 ? '+' : cc.deltaKcal < 0 ? '-' : '±'
+    const chipText = cc.hasBaseline ? `较昨 ${prefix}${absDelta}` : ''
+    /** 三点：本餐热量相对该餐计划目标的 33% / 66% / 100% 档位 */
+    const level = mealPlanAchievementLevel(cal, cc.mealPlanKcal)
+
+    const chipH = 32
+    const padL = chipText ? 12 : 10
+    const padR = 10
+    const dotGap = 7
+    const dotR = 4.5
+    const dotsBandW = dotGap * 2 + dotR * 2 * 3
 
     ctx.save()
-    drawRoundedRect(ctx, chipX, chipY, chipW, chipH, chipH / 2)
-    ctx.fillStyle = '#e8cd93'
-    ctx.fill()
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = '#111827'
-    ctx.font = '700 12px sans-serif'
-    ctx.fillText(chipText, chipX + 12, chipY + chipH / 2 + 0.5)
+    ctx.font = '800 13px sans-serif'
+    const textW = chipText ? ctx.measureText(chipText).width : 0
+    const chipW = Math.ceil(padL + textW + padR + dotsBandW + (chipText ? 10 : 6))
+    /** 同一行最右侧（内容区内右对齐） */
+    let chipX = cx + contentW - chipW
+    let chipY = calBaselineY - chipH / 2 - 14
+    const kcalBlockRight = cx + calStrW + kcalSuffixW
+    const minGap = 8
+    if (kcalBlockRight + minGap > chipX) {
+      chipY = calBaselineY + 14
+    }
 
-    const iconBaseX = chipX + chipW - 58
+    /** 胶囊条背景色（产品指定）+ 深色字 + 右侧三点等级 */
+    const CHIP_BG = '#E5C68D'
+    const CHIP_STROKE = 'rgba(17, 24, 39, 0.12)'
+    drawRoundedRect(ctx, chipX, chipY, chipW, chipH, chipH / 2)
+    ctx.fillStyle = CHIP_BG
+    ctx.fill()
+    ctx.strokeStyle = CHIP_STROKE
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.fillStyle = '#111827'
+    ctx.font = '800 13px sans-serif'
+    if (chipText) {
+      ctx.fillText(chipText, chipX + padL, chipY + chipH / 2 + 0.5)
+    }
+
+    const dotsLeft = chipX + chipW - padR - dotsBandW
     const iconCenterY = chipY + chipH / 2
     for (let i = 0; i < 3; i++) {
-      const iconX = iconBaseX + i * 18
+      const iconX = dotsLeft + dotR + i * (dotR * 2 + dotGap)
       ctx.beginPath()
-      ctx.arc(iconX, iconCenterY, 6.5, 0, Math.PI * 2)
+      ctx.arc(iconX, iconCenterY, dotR, 0, Math.PI * 2)
       ctx.strokeStyle = '#111827'
-      ctx.lineWidth = 1.3
+      ctx.lineWidth = 1.35
       ctx.stroke()
       if (i < level) {
         ctx.beginPath()
-        ctx.arc(iconX, iconCenterY, 2.8, 0, Math.PI * 2)
+        ctx.arc(iconX, iconCenterY, dotR - 2.2, 0, Math.PI * 2)
         ctx.fillStyle = '#111827'
         ctx.fill()
       }
     }
     ctx.restore()
   }
-  cy += LAYOUT_CAL_BLOCK
+  cy += shouldShowPosterCalorieChip(calorieCompare) ? LAYOUT_CAL_BLOCK_WITH_COMPARE : LAYOUT_CAL_BLOCK
 
   // 宏量营养：蛋白质左对齐，脂肪右对齐，数值字体减小
   const macroY = cy
