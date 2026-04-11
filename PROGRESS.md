@@ -6,6 +6,7 @@
 
 ## 2026-04-11
 
+- 🐛 fix: 首页「编辑今日目标」保存时移除未定义 `targetMode` 的残留分支，统一用 `targetForm` 提交 `src/pages/index/index.tsx`
 - 📝 docs: `AGENTS.md` 增加「发布新版本」流程；「我的」页底部版本号经 `__APP_VERSION__` 与 `package.json` 同步 `AGENTS.md` `config/index.ts` `types/build-constants.d.ts` `src/pages/profile/index.tsx` `tests/setupTests.ts`
 - 🔧 chore: 发布软件包版本 **2.0.14**（`package.json` / `package-lock.json`）`package.json` `package-lock.json`
 - 🎨 style: 今日小结顶栏改为「今日总结」「坚持目标」双行大字，下去掉连续天数；日期含年置于圆角条小字 `src/utils/poster.ts`

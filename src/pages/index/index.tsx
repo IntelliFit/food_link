@@ -906,55 +906,37 @@ function IndexPage() {
   }
 
   const handleSaveTargets = async () => {
-    let payload: DashboardTargets
-    
-    // 根据当前模式计算payload
-    if (targetMode === 'simple') {
-      // 普通模式：从档位计算实际克数
-      const protein = getGramsFromLevel('protein', simpleTarget.proteinLevel)
-      const carbs = getGramsFromLevel('carbs', simpleTarget.carbsLevel)
-      const fat = getGramsFromLevel('fat', simpleTarget.fatLevel)
-      const calories = calculateCaloriesFromLevels(simpleTarget)
-      
-      payload = {
-        calorie_target: calories,
-        protein_target: protein,
-        carbs_target: carbs,
-        fat_target: fat
-      }
-    } else {
-      // 精确模式：使用表单输入值
-      payload = {
-        calorie_target: Number(targetForm.calorieTarget),
-        protein_target: Number(targetForm.proteinTarget),
-        carbs_target: Number(targetForm.carbsTarget),
-        fat_target: Number(targetForm.fatTarget)
-      }
-      
-      if (Object.values(payload).some((value) => !Number.isFinite(value))) {
-        Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
-        return
-      }
+    // 「编辑今日目标」弹层仅支持数字表单（与 TargetEditor 一致）
+    let payload: DashboardTargets = {
+      calorie_target: Number(targetForm.calorieTarget),
+      protein_target: Number(targetForm.proteinTarget),
+      carbs_target: Number(targetForm.carbsTarget),
+      fat_target: Number(targetForm.fatTarget)
+    }
 
-      if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
-        Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
-        return
-      }
+    if (Object.values(payload).some((value) => !Number.isFinite(value))) {
+      Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
+      return
+    }
 
-      if (payload.protein_target < 0 || payload.protein_target > 500) {
-        Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
-        return
-      }
+    if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
+      Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
+      return
+    }
 
-      if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
-        Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
-        return
-      }
+    if (payload.protein_target < 0 || payload.protein_target > 500) {
+      Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
+      return
+    }
 
-      if (payload.fat_target < 0 || payload.fat_target > 300) {
-        Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
-        return
-      }
+    if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
+      Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
+      return
+    }
+
+    if (payload.fat_target < 0 || payload.fat_target > 300) {
+      Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
+      return
     }
 
     const normalized = alignPayloadWithCalorieTarget(payload)
