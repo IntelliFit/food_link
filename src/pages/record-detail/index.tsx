@@ -1010,19 +1010,22 @@ function RecordDetailPage() {
       {/* 海报预览弹窗 */}
       {
         showPosterModal && posterImageUrl && (
-          <View className='poster-modal' catchMove>
+          <View className='poster-modal poster-modal--sheet' catchMove>
             <View className='poster-modal-shell' catchMove>
-              <View className='poster-modal-topbar'>
-                <View className='poster-modal-close' onClick={() => setShowPosterModal(false)}>
-                  <Text className='poster-modal-close-x'>×</Text>
-                </View>
-                <Text className='poster-modal-title'>分享</Text>
-                <View className='poster-modal-topbar-placeholder' />
+              <View className='poster-modal-topbar poster-modal-topbar--light poster-modal-topbar--title-only'>
+                <Text className='poster-modal-title poster-modal-title--light'>分享</Text>
               </View>
-              <View className='poster-scroll-area'>
-                <View className='poster-modal-scroll-inner'>
-                  <View className='poster-modal-card-wrap'>
-                    <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
+              <View className='poster-modal-dark-body'>
+                <View className='poster-modal-inline-back' onClick={() => setShowPosterModal(false)}>
+                  <View className='poster-modal-close poster-modal-inline-close-hit'>
+                    <Text className='poster-modal-close-x'>×</Text>
+                  </View>
+                </View>
+                <View className='poster-scroll-area'>
+                  <View className='poster-modal-scroll-inner'>
+                    <View className='poster-modal-card-wrap'>
+                      <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
+                    </View>
                   </View>
                 </View>
               </View>

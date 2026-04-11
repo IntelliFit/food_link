@@ -517,6 +517,60 @@
   background: #0a0a0a;
 }
 
+.poster-modal--sheet .poster-modal-topbar--light {
+  background: #fff;
+  border-bottom: 1rpx solid rgba(15, 23, 42, 0.08);
+}
+
+.poster-modal-topbar--title-only {
+  justify-content: center;
+  padding-left: 32rpx;
+  padding-right: 32rpx;
+}
+
+.poster-modal-topbar--title-only .poster-modal-title {
+  flex: none;
+  width: 100%;
+  text-align: center;
+}
+
+.poster-modal-title--light {
+  color: #111827;
+}
+
+.poster-modal-dark-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a0a;
+}
+
+.poster-modal-inline-back {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 16rpx 24rpx 12rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.poster-modal-inline-back .poster-modal-close.poster-modal-inline-close-hit {
+  width: 88rpx;
+  height: 88rpx;
+  min-width: 88rpx;
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.poster-modal-inline-back .poster-modal-close-x {
+  color: rgba(255, 255, 255, 0.95);
+}
+
 .poster-modal-shell {
   position: relative;
   z-index: 1;
@@ -617,7 +671,7 @@
   flex-direction: row;
   justify-content: space-around;
   align-items: flex-start;
-  padding: 28rpx 48rpx calc(28rpx + env(safe-area-inset-bottom));
+  padding: 28rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, #000 40%);
   border-top: 1rpx solid rgba(255, 255, 255, 0.06);
 }

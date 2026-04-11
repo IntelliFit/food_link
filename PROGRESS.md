@@ -6,6 +6,7 @@
 
 ## 2026-04-11
 
+- 🎨 style: 分享弹层白底顶栏居中标题；黑底区关闭为记录详情同款 `poster-modal-close` + `poster-modal-close-x`（×）；底栏仅微信+保存 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
 - 🐛 fix: 首页「编辑今日目标」保存时移除未定义 `targetMode` 的残留分支，统一用 `targetForm` 提交 `src/pages/index/index.tsx`
 - 📝 docs: `AGENTS.md` 增加「发布新版本」流程；「我的」页底部版本号经 `__APP_VERSION__` 与 `package.json` 同步 `AGENTS.md` `config/index.ts` `types/build-constants.d.ts` `src/pages/profile/index.tsx` `tests/setupTests.ts`
 - 🔧 chore: 发布软件包版本 **2.0.14**（`package.json` / `package-lock.json`）`package.json` `package-lock.json`
