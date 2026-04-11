@@ -385,6 +385,35 @@ async def insert_food_record(
         raise
 
 
+async def get_food_record_by_user_and_source_task(
+    user_id: str,
+    source_task_id: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    同一用户从同一识别任务只能对应一条饮食记录，用于幂等保存，避免好友动态重复出现。
+    """
+    tid = (source_task_id or "").strip()
+    if not tid:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("user_food_records")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("source_task_id", tid)
+            .order("record_time", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = list(result.data or [])
+        return rows[0] if rows else None
+    except Exception as e:
+        print(f"[get_food_record_by_user_and_source_task] 错误: {e}")
+        raise
+
+
 async def list_food_records(
     user_id: str,
     date: Optional[str] = None,
@@ -3528,6 +3557,81 @@ async def get_feed_comment_by_id(comment_id: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"[get_feed_comment_by_id] 错误: {e}")
         raise
+
+
+def delete_feed_comment_tree_sync(actor_user_id: str, record_id: str, comment_id: str) -> int:
+    """
+    删除一条圈子评论及其所有层级回复（同一 record_id 下 parent 链）。
+    仅允许：评论作者本人，或该条动态（饮食记录）发布者。
+    返回删除条数；评论不存在或 record 不匹配时返回 0。
+    无权删除时抛出 PermissionError。
+    """
+    comment = get_feed_comment_by_id_sync(comment_id)
+    if not comment or str(comment.get("record_id") or "") != str(record_id):
+        return 0
+    record = get_food_record_by_id_sync(record_id)
+    if not record:
+        return 0
+    author_id = str(comment.get("user_id") or "")
+    record_owner_id = str(record.get("user_id") or "")
+    if author_id != actor_user_id and record_owner_id != actor_user_id:
+        raise PermissionError("无权删除该评论")
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("feed_comments")
+            .select("id, parent_comment_id")
+            .eq("record_id", record_id)
+            .execute()
+        )
+        rows = list(result.data or [])
+    except Exception as e:
+        print(f"[delete_feed_comment_tree_sync] 查询失败: {e}")
+        raise
+
+    children_map: Dict[str, List[str]] = {}
+    id_set: set = set()
+    for r in rows:
+        cid = str(r.get("id") or "").strip()
+        if not cid:
+            continue
+        id_set.add(cid)
+        pid = r.get("parent_comment_id")
+        if pid:
+            pk = str(pid).strip()
+            children_map.setdefault(pk, []).append(cid)
+
+    if comment_id not in id_set:
+        return 0
+
+    to_delete: set = set()
+    stack = [comment_id]
+    while stack:
+        cur = stack.pop()
+        if cur in to_delete:
+            continue
+        to_delete.add(cur)
+        for ch in children_map.get(cur, []):
+            if ch not in to_delete:
+                stack.append(ch)
+
+    if not to_delete:
+        return 0
+
+    ids_list = list(to_delete)
+    batch_size = 80
+    deleted_total = 0
+    for i in range(0, len(ids_list), batch_size):
+        batch = ids_list[i : i + batch_size]
+        try:
+            supabase.table("feed_comments").delete().in_("id", batch).execute()
+            deleted_total += len(batch)
+        except Exception as e:
+            print(f"[delete_feed_comment_tree_sync] 删除失败: {e}")
+            raise
+    return deleted_total
 
 
 def create_feed_interaction_notification_sync(

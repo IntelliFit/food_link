@@ -1,6 +1,6 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import {
   AnalyzeResponse,
   FoodItem,
@@ -22,11 +22,26 @@ import { normalizeAvailableExecutionMode } from '../../utils/execution-mode'
 import { foodRecordFromSavePayload } from '../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import { withAuth } from '../../utils/withAuth'
+import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
 
 import './index.scss'
 
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
+/** 按 analyzeSourceTaskId 记录已保存的 food record id，用于返回结果页时显示「查看结果」 */
+const ANALYZE_COMMITTED_SESSION_KEY = 'analyze_committed_session'
+
+function isAnalyzeSessionCommitted(): boolean {
+  try {
+    const tid = Taro.getStorageSync('analyzeSourceTaskId')
+    if (!tid) return false
+    const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
+    const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string }>) : {}
+    return Boolean(map[String(tid)]?.record_id)
+  } catch {
+    return false
+  }
+}
 
 const MEAL_OPTIONS = [
   { value: 'breakfast' as const, label: '早餐' },
@@ -180,6 +195,8 @@ function ResultPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
+  const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [recognitionOutcome, setRecognitionOutcome] = useState<AnalyzeRecognitionOutcome>('ok')
   const [rejectionReason, setRejectionReason] = useState<string | null>(null)
@@ -335,6 +352,30 @@ function ResultPage() {
     setTotalWeight(Math.round(total))
   }
 
+  const hydrateCommittedRecord = useCallback(() => {
+    try {
+      const tid = Taro.getStorageSync('analyzeSourceTaskId')
+      if (!tid) {
+        setCommittedRecordId(null)
+        return
+      }
+      const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
+      const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string }>) : {}
+      const rec = map[String(tid)]
+      if (rec?.record_id) {
+        setCommittedRecordId(String(rec.record_id))
+      } else {
+        setCommittedRecordId(null)
+      }
+    } catch {
+      setCommittedRecordId(null)
+    }
+  }, [])
+
+  useDidShow(() => {
+    hydrateCommittedRecord()
+  })
+
   useEffect(() => {
     // 获取传递的图片路径和分析结果
     try {
@@ -385,6 +426,7 @@ function ResultPage() {
         const items = convertApiDataToItems(result.items)
         setNutritionItems(items)
         calculateNutritionStats(items)
+        hydrateCommittedRecord()
       } else {
         Taro.showModal({
           title: '提示',
@@ -403,7 +445,7 @@ function ResultPage() {
         icon: 'none'
       })
     }
-  }, [])
+  }, [hydrateCommittedRecord])
 
   const handleDefaultModeEdit = () => {
     Taro.navigateTo({ url: '/pages/health-profile-edit/index' })
@@ -764,6 +806,10 @@ function ResultPage() {
     const activityTiming = savedActivityTiming || 'none'
 
     const doSave = async () => {
+      if (isAnalyzeSessionCommitted()) {
+        Taro.showToast({ title: '该餐已记录', icon: 'none' })
+        return
+      }
       setSaving(true)
       try {
         // 清除相关缓存
@@ -812,7 +858,6 @@ function ResultPage() {
           const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
           const record = foodRecordFromSavePayload(payload, uid)
           Taro.setStorageSync('recordDetail', record)
-          if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
           Taro.removeStorageSync('analyzeDebugPreview')
 
           if (saveOnly) {
@@ -831,19 +876,43 @@ function ResultPage() {
         }
 
         const saveResult = await saveFoodRecord(payload)
-        if (sourceTaskId) Taro.removeStorageSync('analyzeSourceTaskId')
+        try {
+          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+        } catch {
+          /* ignore */
+        }
+        const tidForCommit = sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
+        if (tidForCommit) {
+          try {
+            const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
+            const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string; at?: number }>) : {}
+            map[String(tidForCommit)] = { record_id: saveResult.id, at: Date.now() }
+            Taro.setStorageSync(ANALYZE_COMMITTED_SESSION_KEY, JSON.stringify(map))
+          } catch (e) {
+            console.error('写入已记录会话失败:', e)
+          }
+        }
+        setCommittedRecordId(saveResult.id)
 
         if (saveOnly) {
-          Taro.showToast({ title: '记录成功', icon: 'success' })
+          Taro.showToast({
+            title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
+            icon: saveResult.already_saved ? 'none' : 'success',
+          })
           setTimeout(() => {
             Taro.navigateBack({ delta: 2 })
           }, 1200)
           return
         }
 
-        Taro.showToast({ title: '记录成功', icon: 'success' })
+        Taro.showToast({
+          title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
+          icon: saveResult.already_saved ? 'none' : 'success',
+        })
         setTimeout(() => {
-          Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}` })
+          Taro.navigateTo({
+            url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}&ui=home`
+          })
         }, 500)
       } catch (e: any) {
         Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
@@ -868,8 +937,31 @@ function ResultPage() {
     }
   }
 
+  /** 已保存后跳转记录详情（不重复写入、不重复发动态） */
+  const handleViewCommittedResult = useCallback(() => {
+    try {
+      const tid = Taro.getStorageSync('analyzeSourceTaskId')
+      const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
+      const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string }>) : {}
+      const rid = (tid && map[String(tid)]?.record_id) || committedRecordId
+      if (!rid) {
+        Taro.showToast({ title: '未找到已保存记录', icon: 'none' })
+        return
+      }
+      Taro.navigateTo({
+        url: `/pages/record-detail/index?id=${encodeURIComponent(String(rid))}&ui=home`
+      })
+    } catch {
+      Taro.showToast({ title: '无法打开记录', icon: 'none' })
+    }
+  }, [committedRecordId])
+
   /** 点击保存按钮：打开餐次选择弹窗 */
   const handleConfirmAndShare = () => {
+    if (isAnalyzeSessionCommitted() || committedRecordId) {
+      handleViewCommittedResult()
+      return
+    }
     if (shouldShowPrecisionContinueCard) {
       Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
       return
@@ -1775,10 +1867,20 @@ function ResultPage() {
               <Text className='btn-text'>收藏餐食</Text>
             </View>
             <View
-              className={`primary-btn ${saving ? 'loading' : ''} ${(isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''}`}
+              className={`primary-btn ${saving ? 'loading' : ''} ${!isAnalyzeSessionCommitted() && !committedRecordId && (isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''} ${isAnalyzeSessionCommitted() || committedRecordId ? 'is-committed' : ''}`}
               onClick={handleConfirmAndShare}
             >
-              {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>{(isStrictSoftReject || isStrictHardReject) ? '仍要记录' : '记录'}</Text>}
+              {saving ? (
+                <View className='btn-spinner' />
+              ) : (
+                <Text className='btn-text'>
+                  {isAnalyzeSessionCommitted() || committedRecordId
+                    ? '查看结果'
+                    : (isStrictSoftReject || isStrictHardReject)
+                      ? '仍要记录'
+                      : '记录'}
+                </Text>
+              )}
             </View>
           </View>
 

@@ -14,6 +14,7 @@ import {
   type Nutrients
 } from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../utils/poster'
+import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import { withAuth } from '../../utils/withAuth'
 
@@ -525,15 +526,12 @@ function RecordDetailPage() {
         const loadImage = async (src: string): Promise<{ width: number; height: number } | null> => {
           if (!src || !canvas.createImage) return null
 
-          let localSrc = src
-          if (/^https?:\/\//.test(src)) {
-            try {
-              const info = await Taro.getImageInfo({ src })
-              localSrc = info.path
-            } catch (e) {
-              console.error('Download image fail', src, e)
-              return null
-            }
+          let localSrc: string
+          try {
+            localSrc = await resolveCanvasImageSrc(src)
+          } catch (e) {
+            console.error('resolveCanvasImageSrc fail', src, e)
+            return null
           }
 
           return new Promise<{ width: number; height: number } | null>((resolve) => {

@@ -257,6 +257,15 @@ export interface HomeIntakeData {
   }
 }
 
+/** 首页同一餐次下的单条饮食记录摘要（用于多选跳转） */
+export interface HomeMealRecordEntry {
+  id: string
+  record_time?: string
+  total_calories?: number
+  /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
+  title?: string
+}
+
 /** 首页今日餐食单条 */
 export interface HomeMealItem {
   type: string
@@ -272,6 +281,8 @@ export interface HomeMealItem {
   primary_record_id?: string | null
   /** 部分网关/序列化可能为 camelCase，与 primary_record_id 等价 */
   primaryRecordId?: string | null
+  /** 该餐次下全部记录（新→旧，与 primary 一致）；多条时首页需供用户选择 */
+  meal_record_entries?: HomeMealRecordEntry[] | null
 }
 
 /** 解析首页餐食卡片对应的记录 id（兼容 snake_case / camelCase） */
@@ -288,8 +299,12 @@ export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<strin
 
 function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const row = raw as HomeMealItem
+  const entries = Array.isArray(row.meal_record_entries)
+    ? row.meal_record_entries.filter((e) => e && String(e.id || '').trim() !== '')
+    : []
   return {
     ...row,
+    meal_record_entries: entries.length > 0 ? entries : row.meal_record_entries,
     primary_record_id: resolveHomeMealPrimaryRecordId(row as Record<string, unknown>),
   }
 }
@@ -320,6 +335,12 @@ export interface HomeFoodExpirySummary {
   items: HomeFoodExpiryItem[]
 }
 
+/** 首页成就：连续打卡与历史「全绿」达标天数（与仪表盘目标一致） */
+export interface HomeAchievement {
+  streak_days: number
+  green_days: number
+}
+
 /** 首页仪表盘接口返回 */
 export interface HomeDashboard {
   intakeData: HomeIntakeData
@@ -327,6 +348,7 @@ export interface HomeDashboard {
   expirySummary?: HomeFoodExpirySummary
   /** 当日运动消耗汇总（千卡），来自 user_exercise_logs */
   exerciseBurnedKcal?: number
+  achievement?: HomeAchievement
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -1178,7 +1200,12 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
  * 拍照识别完成后确认记录：选择餐次后保存到服务器
  * @param payload 餐次 + 识别结果与营养汇总
  */
-export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ id: string; message: string }> {
+export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{
+  id: string
+  message: string
+  /** 与 source_task_id 对应的记录已存在，未重复写入（好友动态不重复） */
+  already_saved?: boolean
+}> {
   const res = await authenticatedRequest('/api/food-record/save', {
     method: 'POST',
     data: payload,
@@ -1188,7 +1215,11 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ 
     const msg = (res.data as any)?.detail || '保存记录失败'
     throw new Error(msg)
   }
-  return res.data as { id: string; message: string }
+  return res.data as {
+    id: string
+    message: string
+    already_saved?: boolean
+  }
 }
 
 // ---------- 异步分析任务（提交后 Worker 执行，可稍后在分析历史查看） ----------
@@ -2924,6 +2955,19 @@ export async function communityPostComment(
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发表失败')
   return response.data as { comment: FeedCommentItem }
+}
+
+/** 删除圈子评论（本人或动态作者；子回复一并删除） */
+export async function communityDeleteComment(
+  recordId: string,
+  commentId: string
+): Promise<{ deleted: number }> {
+  const response = await authenticatedRequest(
+    `/api/community/feed/${encodeURIComponent(recordId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'DELETE' }
+  )
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
+  return response.data as { deleted: number }
 }
 
 /** 获取我最近的圈子评论审核任务 */

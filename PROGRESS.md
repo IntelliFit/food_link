@@ -6,6 +6,28 @@
 
 ## 2026-04-11
 
+- 🎨 style: 今日小结圆与五竖条总宽改为卡片 65%，竖条间隙 22；五色进度条按主色 #8B9E44 三角色相与邻近色重配 `src/utils/poster.ts`
+- ⚡ perf: 首页去掉 useDidShow 与首屏 useEffect 重复拉 dashboard；今日数据 TTL 缓存 + 脏标记，饮食保存/删除/运动/保质期事件再拉；减少 `dashboard/summary/exercise-logs` 重复请求 `src/pages/index/index.tsx` `src/utils/home-events.ts` `src/pages/result/index.tsx` `src/pages/record-manual/index.tsx` `src/pages/day-record/index.tsx`
+- 🎨 style: 今日小结顶栏仿参考图双行双色「今日」「总结」+ 短日期；连续/坚持目标并排双胶囊；圆内百分比用 Arial Black/Impact 900 字重 `src/utils/poster.ts`
+- 🎨 style: 今日小结顶栏「今日总结」+ 短日期 9 Apr；圆内百分比绝对居中、下方「已摄入」行；百分比用系统半粗体；宏量标签 15px；画布高度略减 `src/utils/poster.ts`
+- 🎨 style: 今日小结顶栏改为英文艺术标题 TODAY'S / SUMMARY + 英文日期行；圆内百分比与 kcal 加间距；宏量标签 12px 加粗、竖条间隙 17 `src/utils/poster.ts` `src/pages/index/index.tsx`
+- 🎨 style: 今日小结五竖条加高、条宽收窄、间隙 13；轨道 `#EAEAE0`、进度用 clip 防溢出；圆内百分比按直径约 64% 宽自适应加粗字号 `src/utils/poster.ts`
+- 🎨 style: 今日小结布局按黄金分割（φ）微调：Fibonacci 级垂直留白、圆–竖条间距 21、竖条间隙 φ⁻¹·8、圆内字按 R 比例、头像与昵称间距 8φ `src/utils/poster.ts`
+- 🎨 style: 今日小结中央圆直径与五竖条总宽均为卡片宽 75%，竖条组水平居中 `src/utils/poster.ts`
+- 🎨 style: 今日小结五竖条均分加宽、轨道与填充双端圆角；圆内底 `#8B9E44`、百分比与摄入 `#EAEAE0`、副文仅摄入 kcal；二维码缩小、头像与文案按行高居中对齐 `src/utils/poster.ts`
+- 🎨 style: 今日小结海报改版为参考图布局：去顶栏标题；顶区两行日期；`#E5C68D` 成就胶囊在圆环上；中央圆内热量完成比与摄入；下排五竖条（蛋白/碳水/脂肪/喝水/运动）自下而上；底栏不变 `src/utils/poster.ts` `src/pages/index/index.tsx`
+- 🎨 style: 今日小结分享预览黑底居中；连续/坚持目标用 `#E5C68D` 胶囊，「坚持目标」文案；三卡仿首页 body-status（新底色+喝水进度条）；热量条与宏量、宏量与三卡加间距 `src/utils/poster.ts` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/record-detail/index.scss`
+- 🎨 style: 今日小结海报紧凑重排：整卡统一米白纯色无顶区渐变；「剩余可摄入」右上显示连续+全绿；体重/喝水/运动为三枚水感圆角卡；底栏昵称与二维码贴画布底；高度随 `posterData` 计算 `src/utils/poster.ts` `src/pages/index/index.tsx`
+- 🐛 fix: 今日小结分享预览隐藏自定义底栏（`home_poster_modal_visible` + `custom-tab-bar`）；Canvas 二维码/头像 data URL 先落盘再 `createImage`；海报底改为米白色；记录详情海报同步图片加载 `src/pages/index/index.tsx` `custom-tab-bar/index.js` `src/utils/weapp-canvas-image.ts` `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- ✨ feat: 首页问候区右上角生成「今日小结」分享图（Canvas 与单条海报同源、无食物图），含摄入/宏量/体重喝水运动与连续记录·全绿天数；非今日选中日显示「饮食小结」；`achievement` 来自 dashboard `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/GreetingSection.tsx` `src/utils/poster.ts`
+- 🎨 style: 首页同餐多选操作面板仅名称 + 时间（无热量）、单行截断；`meal_record_entries.title` 仍由后端提供 `src/pages/index/index.tsx`
+- ✨ feat: 首页「今日餐食」同餐多条记录时弹出操作面板选择再进详情；仪表盘返回 `meal_record_entries` `backend/main.py` `src/utils/api.ts` `src/pages/index/index.tsx`
+- ✨ feat: 分析结果页保存后记住会话，返回结果页主按钮改为「查看结果」（浅绿描边），仅跳转详情不重复保存/发动态；`analyze_committed_session` `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- ✨ feat: 圈子评论长按删除（仿微信）：本人或动态作者可删，级联子回复；`DELETE /api/community/feed/{record_id}/comments/{comment_id}` `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页每次显示时轻量同步 `friendGetRequests`，待处理为 0 时好友管理角标消失（避免 5 分钟缓存未刷新）`src/pages/community/index.tsx`
+- ✨ feat: 圈子「好友管理」待处理申请角标绝对定位右上角（不占流）；点击进入好友页默认「收到的请求」`src/pages/community/index.tsx` `src/pages/community/index.scss` `src/pages/friends/index.tsx`
+- 🔧 chore: pytest 启用 pytest-timeout（默认 120s/例、仅计函数体）+ conftest 收集时补打标记；Jest 配置 `testTimeout: 120000` `backend/pytest.ini` `backend/requirements.txt` `backend/tests/conftest.py` `jest.config.cjs`
+- 🐛 fix: 同一识别任务重复保存饮食记录导致好友动态重复：`/api/food-record/save` 按 `source_task_id` 幂等返回已有记录；可选 DB 唯一索引 `backend/database/migrations/20260411_user_food_records_unique_source_task.sql` `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/result/index.tsx`
 - 🐛 fix: 海报热量行右侧胶囊在无昨日同餐时仍显示（仅计划达成三点）；「较昨 ±」仅在有昨日基线时出现 `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
 - ✨ feat: 海报「较昨」胶囊右侧三点改为本餐热量相对该餐仪表盘计划目标的达成度（≥33%/66%/100% 各亮一格）；接口返回 `meal_plan_kcal` `backend/main.py` `src/utils/api.ts` `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
 - 🎨 style: 海报「较昨」无昨日同餐时不显示占位；有对比时胶囊与热量同行、内容区右对齐 `src/utils/poster.ts` `src/pages/record-detail/index.tsx`

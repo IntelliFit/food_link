@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Slider } from '@tarojs/components'
+import { View, Text, Input, Image, Slider, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -10,23 +10,39 @@ import {
   getStoredDashboardTargets,
   getBodyMetricsSummary,
   getExerciseLogs,
+  getUnlimitedQRCode,
+  getFriendInviteProfile,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
   mapCalendarDateToApi,
   resolveHomeMealPrimaryRecordId,
   type DashboardTargets,
+  type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
+  type HomeMealRecordEntry,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary
 } from '../../utils/api'
+import {
+  drawDailySummaryPoster,
+  computeDailySummaryPosterHeight,
+  DAILY_SUMMARY_POSTER_MAX_HEIGHT,
+  POSTER_WIDTH,
+  type DailySummaryPosterInput
+} from '../../utils/poster'
+import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
 import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
-import { HOME_DASHBOARD_REFRESH_EVENT } from '../../utils/home-events'
+import {
+  HOME_DASHBOARD_REFRESH_EVENT,
+  HOME_INTAKE_DATA_CHANGED_EVENT,
+  HOME_DASHBOARD_CACHE_TTL_MS
+} from '../../utils/home-events'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -45,6 +61,77 @@ import {
 import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu } from './components'
+
+/** 微信操作面板单行不宜过长，总长度含「 · 」分隔符一并限制 */
+const HOME_MEAL_PICKER_LINE_MAX_CHARS = 34
+
+function truncatePickerText(text: string, maxLen: number): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  if (t.length <= maxLen) return t
+  if (maxLen <= 1) return '…'
+  return `${t.slice(0, maxLen - 1)}…`
+}
+
+/** 首页同一餐多条记录时，操作面板单行：名称（可截断）· 时间（不展示热量） */
+function formatHomeMealPickerEntry(entry: HomeMealRecordEntry): string {
+  let timePart = ''
+  if (entry.record_time) {
+    try {
+      const d = new Date(entry.record_time)
+      if (!Number.isNaN(d.getTime())) {
+        const h = d.getHours()
+        const m = d.getMinutes()
+        timePart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const timeSuffix = timePart ? ` · ${timePart}` : ''
+
+  const rawTitle = (entry.title || '').trim()
+  if (!rawTitle) {
+    return timePart || '饮食记录'
+  }
+  if (!timePart) {
+    return truncatePickerText(rawTitle, HOME_MEAL_PICKER_LINE_MAX_CHARS)
+  }
+
+  const maxTitle = Math.max(4, HOME_MEAL_PICKER_LINE_MAX_CHARS - timeSuffix.length)
+  const titleShort = truncatePickerText(rawTitle, maxTitle)
+  const line = `${titleShort}${timeSuffix}`
+  if (line.length <= HOME_MEAL_PICKER_LINE_MAX_CHARS) return line
+  return truncatePickerText(line, HOME_MEAL_PICKER_LINE_MAX_CHARS)
+}
+
+const HOME_MEAL_ACTION_SHEET_MAX = 6
+
+/** 与记录详情页海报一致：邀请码用于小程序码 scene */
+function getInviteCodeFromUserId(userId: string): string {
+  const raw = (userId || '').replace(/-/g, '').toLowerCase()
+  return raw.length >= 8 ? raw.slice(0, 8) : ''
+}
+
+/** 海报顶栏：月日一行 */
+function formatPosterDatePrimary(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+    return dateKey
+  }
+  const [_y, m, d] = parts
+  return `${m}月${d}日`
+}
+
+/** 海报顶栏：星期一行 */
+function formatPosterWeekdayLabel(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+    return ''
+  }
+  const [y, m, d] = parts
+  const dt = new Date(y, m - 1, d)
+  return `周${SHORT_DAY_NAMES[dt.getDay()] ?? '—'}`
+}
 
 // 与后端/统计周对齐：真实日历为 2026 时，仅在与「可能带错年」的接口字段比对时做归一
 function normalizeTo2025(dateStr: string): string {
@@ -472,9 +559,19 @@ function IndexPage() {
   const waterBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 快速切换日期时忽略非最新一次 dashboard 的响应（微信小程序无 AbortController，无法掐断请求） */
   const loadDashboardSeqRef = useRef(0)
+  /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
+  const homeLastLoadRef = useRef<{ date: string; ts: number } | null>(null)
+  /** 为 true 时下次「今日」展示必须重拉（饮食/运动/保质期等变更） */
+  const homeDataStaleRef = useRef(true)
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
+
+  /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
+  const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>({ streak_days: 0, green_days: 0 })
+  const [dailyPosterGenerating, setDailyPosterGenerating] = useState(false)
+  const [dailyPosterImageUrl, setDailyPosterImageUrl] = useState<string | null>(null)
+  const [showDailyPosterModal, setShowDailyPosterModal] = useState(false)
 
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string) => {
@@ -485,14 +582,12 @@ function IndexPage() {
         ? targetDate
         : (selectedDateRef.current || formatDateKey(new Date()))
 
-    console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate, 'resolvedDate:', resolvedDate, 'seq:', seq)
-    console.log('[DEBUG] getAccessToken:', getAccessToken() ? '有token' : '无token')
     if (!getAccessToken()) {
-      console.log('[DEBUG] 无token，返回默认值')
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(0)
+      setHomeAchievement({ streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
       setWeekHeatmapCells(createWeekHeatmapCells())
       setLoading(false)
@@ -502,7 +597,6 @@ function IndexPage() {
 
     setLoading(true)
     try {
-      console.log('[DEBUG] 请求 API, date:', resolvedDate)
       const exerciseLogParams = { date: resolvedDate }
       const [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
         getHomeDashboard(resolvedDate),
@@ -513,20 +607,12 @@ function IndexPage() {
       if (seq !== loadDashboardSeqRef.current) {
         return
       }
-      console.log('[DEBUG] API 返回:', res)
-      console.log('[DEBUG] intakeData.current:', res.intakeData?.current)
-      console.log('[DEBUG] intakeData.macros:', res.intakeData?.macros)
       const intake = res.intakeData
-      console.log('[DEBUG] 处理后的 intake:', intake)
-      
-      console.log('[DEBUG] 设置 intakeData:', intake)
       setIntakeData(intake)
-      console.log('[DEBUG] 设置 meals:', res.meals)
       setMeals(res.meals || [])
       
       // 构建7天热力图数据 - 始终以今天为中心（不随点击滚动）
       const today = new Date()
-      console.log('[DEBUG] 构建热力图, 中心日期(今天):', formatDateKey(today))
       const nextWeekHeatmapCells: WeekHeatmapCell[] = []
       for (let offset = -3; offset <= 3; offset++) {
         const date = new Date(today)
@@ -553,8 +639,12 @@ function IndexPage() {
       setExerciseBurnedKcal(
         mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
       )
+      setHomeAchievement(res.achievement ?? { streak_days: 0, green_days: 0 })
       setWeekHeatmapCells(nextWeekHeatmapCells)
       setTargetForm(createTargetForm(intake))
+
+      homeLastLoadRef.current = { date: resolvedDate, ts: Date.now() }
+      homeDataStaleRef.current = false
 
       // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
       if (bodyMetricsRes) {
@@ -575,17 +665,17 @@ function IndexPage() {
         })
       }
 
-      console.log('[DEBUG] 所有数据设置完成')
     } catch (error) {
       if (seq !== loadDashboardSeqRef.current) {
         return
       }
-      console.error('[DEBUG] API 调用失败:', error)
+      console.error('首页 dashboard 加载失败:', error)
       Taro.showToast({ title: '加载失败: ' + (error as Error).message, icon: 'none', duration: 3000 })
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(0)
+      setHomeAchievement({ streak_days: 0, green_days: 0 })
       setWeekHeatmapCells(createWeekHeatmapCells())
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
     } finally {
@@ -604,7 +694,6 @@ function IndexPage() {
   Taro.useDidShow(() => {
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
-    console.log('[DEBUG] useDidShow, selectedDate:', currentSelected, 'today:', today, 'skip:', skipNextRefreshRef.current)
 
     // 检查是否需要显示记录菜单（从底部导航栏中间按钮点击）
     const shouldShowRecordMenu = Taro.getStorageSync('showRecordMenuModal')
@@ -614,38 +703,26 @@ function IndexPage() {
     }
 
     if (skipNextRefreshRef.current) {
-      console.log('[DEBUG] 跳过本次刷新')
       skipNextRefreshRef.current = false
       return
     }
 
     if (currentSelected === today || !currentSelected) {
-      console.log('[DEBUG] 刷新今天数据')
-      loadDashboard(today)
-    } else {
-      console.log('[DEBUG] 当前显示非今天，不自动刷新')
-    }
-  })
-
-  /**
-   * 挂载后补拉一次 dashboard（含运动消耗）。
-   * 部分环境下仅依赖 useDidShow 会晚于首屏或时序异常，导致运动千卡一直为 0。
-   */
-  useEffect(() => {
-    const today = formatDateKey(new Date())
-    if (!getAccessToken()) {
-      return
-    }
-    if (skipNextRefreshRef.current) {
-      skipNextRefreshRef.current = false
-      return
-    }
-    const cur = selectedDateRef.current
-    if (cur === today || !cur) {
+      if (!getAccessToken()) {
+        return
+      }
+      const last = homeLastLoadRef.current
+      const canCache =
+        !homeDataStaleRef.current &&
+        last !== null &&
+        last.date === today &&
+        Date.now() - last.ts < HOME_DASHBOARD_CACHE_TTL_MS
+      if (canCache) {
+        return
+      }
       void loadDashboard(today)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅首屏补拉，避免与 loadDashboard 依赖链重复触发
-  }, [])
+  })
 
   useShareAppMessage(() => ({
     title: '食探 - AI 智能饮食记录',
@@ -669,30 +746,44 @@ function IndexPage() {
     }
   }, [])
 
+  /** 「今日小结」预览：自定义 tabBar 通过 storage 隐藏底栏（见 custom-tab-bar/updateHidden） */
   useEffect(() => {
-    const refreshHome = () => {
-      loadDashboard()
-    }
-    Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
-    return () => {
-      Taro.eventCenter.off(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
-    }
-  }, [loadDashboard])
-
-  /** 记运动落库后通知：仅在看「今天」时重拉 dashboard，与 exerciseBurnedKcal 对齐 */
-  useEffect(() => {
-    const onExerciseRefresh = (): void => {
-      const today = formatDateKey(new Date())
-      const currentSelected = selectedDateRef.current
-      if (currentSelected === today || !currentSelected) {
-        loadDashboard(today)
+    if (showDailyPosterModal) {
+      try {
+        Taro.setStorageSync('home_poster_modal_visible', '1')
+      } catch {
+        /* ignore */
+      }
+    } else {
+      try {
+        Taro.removeStorageSync('home_poster_modal_visible')
+      } catch {
+        /* ignore */
       }
     }
-    Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, onExerciseRefresh)
     return () => {
-      Taro.eventCenter.off(HOME_DASHBOARD_REFRESH_EVENT, onExerciseRefresh)
+      try {
+        Taro.removeStorageSync('home_poster_modal_visible')
+      } catch {
+        /* ignore */
+      }
     }
-  }, [loadDashboard])
+  }, [showDailyPosterModal])
+
+  /** 饮食/运动/保质期等变更：仅标记脏数据，回到首页或由 useDidShow 再拉，避免重复请求 */
+  useEffect(() => {
+    const markHomeStale = (): void => {
+      homeDataStaleRef.current = true
+    }
+    Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
+    Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
+    Taro.eventCenter.on(HOME_INTAKE_DATA_CHANGED_EVENT, markHomeStale)
+    return () => {
+      Taro.eventCenter.off(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
+      Taro.eventCenter.off(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
+      Taro.eventCenter.off(HOME_INTAKE_DATA_CHANGED_EVENT, markHomeStale)
+    }
+  }, [])
 
   // 监听记录菜单标记变化（解决首页直接点击绿色按钮无响应问题）
   useEffect(() => {
@@ -924,21 +1015,46 @@ function IndexPage() {
     Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
   }, [selectedDate])
 
-  /** 今日餐食单条 → 该餐最新一条识别记录详情（生成分享海报）；缩略图点击仍为预览图片 */
+  /** 今日餐食单条 → 识别记录详情（多条同餐时先选哪一条） */
   const openMealRecordDetail = useCallback((meal: HomeMealItem) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
     }
-    const rid = resolveHomeMealPrimaryRecordId(meal)
-    if (!rid) {
-      const raw = selectedDateRef.current || formatDateKey(new Date())
-      const d = mapCalendarDateToApi(raw) || raw
-      Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+    const entries = Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()) : []
+    if (entries.length === 0) {
+      const rid = resolveHomeMealPrimaryRecordId(meal)
+      if (!rid) {
+        const raw = selectedDateRef.current || formatDateKey(new Date())
+        const d = mapCalendarDateToApi(raw) || raw
+        Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+        return
+      }
+      Taro.navigateTo({
+        url: `/pages/record-detail/index?id=${encodeURIComponent(rid)}&ui=home`
+      })
       return
     }
-    Taro.navigateTo({
-      url: `/pages/record-detail/index?id=${encodeURIComponent(rid)}&ui=home`
+    if (entries.length === 1) {
+      Taro.navigateTo({
+        url: `/pages/record-detail/index?id=${encodeURIComponent(entries[0].id)}&ui=home`
+      })
+      return
+    }
+    const slice = entries.slice(0, HOME_MEAL_ACTION_SHEET_MAX)
+    const itemList = slice.map((e) => formatHomeMealPickerEntry(e))
+    Taro.showActionSheet({
+      itemList,
+      alertText: meal.name || '选择记录',
+      success: (res) => {
+        const idx = res.tapIndex
+        if (idx < 0 || idx >= slice.length) return
+        const picked = slice[idx]
+        Taro.navigateTo({
+          url: `/pages/record-detail/index?id=${encodeURIComponent(picked.id)}&ui=home`
+        })
+      },
+      fail: () => {}
     })
   }, [])
 
@@ -1232,12 +1348,239 @@ function IndexPage() {
   const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
   const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey)
 
+  const handleShareDailyPosterImage = useCallback(() => {
+    if (!dailyPosterImageUrl) return
+    // @ts-ignore Taro 类型可能未收录 showShareImageMenu
+    Taro.showShareImageMenu({
+      path: dailyPosterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        console.error('showShareImageMenu fail', err)
+        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+      }
+    })
+  }, [dailyPosterImageUrl])
+
+  const handleSaveDailyPoster = useCallback(() => {
+    if (!dailyPosterImageUrl) return
+    Taro.saveImageToPhotosAlbum({
+      filePath: dailyPosterImageUrl,
+      success: () => {
+        Taro.showToast({ title: '已保存到相册', icon: 'success' })
+        setShowDailyPosterModal(false)
+      },
+      fail: (err) => {
+        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
+          Taro.showModal({
+            title: '提示',
+            content: '需要您授权保存图片到相册',
+            confirmText: '去设置',
+            success: (r) => {
+              if (r.confirm) Taro.openSetting()
+            }
+          })
+        } else {
+          Taro.showToast({ title: '保存失败', icon: 'none' })
+        }
+      }
+    })
+  }, [dailyPosterImageUrl])
+
+  const handleShareDailySummary = useCallback(() => {
+    if (!getAccessToken()) {
+      redirectToLogin()
+      return
+    }
+    if (loading || isSwitchingDate) {
+      Taro.showToast({ title: '数据加载中，请稍候', icon: 'none' })
+      return
+    }
+    if (dailyPosterGenerating) return
+
+    setDailyPosterGenerating(true)
+    Taro.showLoading({ title: '生成分享图...' })
+
+    const query = Taro.createSelectorQuery()
+    query
+      .select('#homeDailyPosterCanvas')
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        if (!res?.[0]?.node) {
+          Taro.hideLoading()
+          setDailyPosterGenerating(false)
+          Taro.showToast({ title: '画布未就绪，请重试', icon: 'none' })
+          return
+        }
+        const canvas = res[0].node as HTMLCanvasElement & {
+          createImage?: () => {
+            src: string
+            onload: () => void
+            onerror: (err?: unknown) => void
+            width: number
+            height: number
+          }
+        }
+        const dpr = 2
+
+        const loadImage = async (src: string): Promise<{ width: number; height: number } | null> => {
+          if (!src || !canvas.createImage) return null
+
+          let localSrc: string
+          try {
+            localSrc = await resolveCanvasImageSrc(src)
+          } catch (e) {
+            console.error('resolveCanvasImageSrc fail', src, e)
+            return null
+          }
+
+          return new Promise<{ width: number; height: number } | null>((resolve) => {
+            const img = canvas.createImage!()
+            img.onload = () => resolve(img)
+            img.onerror = (e) => {
+              console.error('Load image fail', localSrc, e)
+              resolve(null)
+            }
+            img.src = localSrc
+          })
+        }
+
+        const loadQRImage = async (inviteCode: string) => {
+          const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
+          const isDevelopmentEnv =
+            typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
+          const envCandidates: Array<'develop' | 'trial' | 'release'> = isDevelopmentEnv
+            ? ['develop', 'trial', 'release']
+            : ['release', 'trial', 'develop']
+
+          for (const envVersion of envCandidates) {
+            try {
+              const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
+              const img = await loadImage(base64)
+              if (img) return img
+            } catch (e) {
+              console.warn(`QR code load failed for env=${envVersion}`, e)
+            }
+          }
+          return null
+        }
+
+        const run = async (): Promise<void> => {
+          let inviteCode = ''
+          let sharerNickname = ''
+          let avatarUrl = ''
+          try {
+            const uid = Taro.getStorageSync('user_id') as string
+            if (uid) {
+              const profile = await getFriendInviteProfile(uid)
+              sharerNickname = profile.nickname || ''
+              avatarUrl = profile.avatar || ''
+              inviteCode = profile.invite_code || getInviteCodeFromUserId(uid)
+            }
+          } catch {
+            /* 无头像昵称仍可出图 */
+          }
+
+          const [qrImg, avatarImg] = await Promise.all([loadQRImage(inviteCode), loadImage(avatarUrl || '')])
+
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            Taro.hideLoading()
+            setDailyPosterGenerating(false)
+            Taro.showToast({ title: '画布不可用', icon: 'none' })
+            return
+          }
+
+          const totalCurrent = normalizeDisplayNumber(intakeData.current)
+          const totalTarget = normalizeDisplayNumber(intakeData.target)
+          const waterProg = clampVisualProgress(
+            calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
+          )
+
+          const posterData: DailySummaryPosterInput = {
+            dateLabelPrimary: formatPosterDatePrimary(selectedDate),
+            dateLabelSecondary: formatPosterWeekdayLabel(selectedDate),
+            posterDateKey: selectedDate,
+            intakeCurrent: totalCurrent,
+            intakeTarget: totalTarget,
+            streakDays: Math.max(0, Math.floor(homeAchievement.streak_days)),
+            greenDays: Math.max(0, Math.floor(homeAchievement.green_days)),
+            macros: {
+              protein: {
+                current: normalizeDisplayNumber(intakeData.macros.protein.current),
+                target: normalizeDisplayNumber(intakeData.macros.protein.target)
+              },
+              carbs: {
+                current: normalizeDisplayNumber(intakeData.macros.carbs.current),
+                target: normalizeDisplayNumber(intakeData.macros.carbs.target)
+              },
+              fat: {
+                current: normalizeDisplayNumber(intakeData.macros.fat.current),
+                target: normalizeDisplayNumber(intakeData.macros.fat.target)
+              }
+            },
+            waterProgressPct: waterProg,
+            exerciseKcal: Math.round(exerciseBurnedKcal)
+          }
+
+          const heightPx = computeDailySummaryPosterHeight(posterData)
+
+          canvas.width = POSTER_WIDTH * dpr
+          canvas.height = heightPx * dpr
+          ctx.scale(dpr, dpr)
+
+          drawDailySummaryPoster(ctx, {
+            width: POSTER_WIDTH,
+            height: heightPx,
+            data: posterData,
+            qrCodeImage: qrImg,
+            sharerNickname,
+            sharerAvatarImage: avatarImg
+          })
+
+          Taro.canvasToTempFilePath({
+            canvas: canvas as any,
+            destWidth: POSTER_WIDTH * 2,
+            destHeight: heightPx * 2,
+            fileType: 'png',
+            success: (resp) => {
+              Taro.hideLoading()
+              setDailyPosterGenerating(false)
+              setDailyPosterImageUrl(resp.tempFilePath)
+              setShowDailyPosterModal(true)
+            },
+            fail: (err) => {
+              Taro.hideLoading()
+              setDailyPosterGenerating(false)
+              Taro.showToast({ title: '生成失败', icon: 'none' })
+              console.error('canvasToTempFilePath fail', err)
+            }
+          })
+        }
+
+        void run().catch((e) => {
+          Taro.hideLoading()
+          setDailyPosterGenerating(false)
+          Taro.showToast({ title: '生成失败', icon: 'none' })
+          console.error('daily summary poster', e)
+        })
+      })
+  }, [
+    loading,
+    isSwitchingDate,
+    dailyPosterGenerating,
+    intakeData,
+    selectedDate,
+    todayWater,
+    bodyMetrics.waterGoalMl,
+    exerciseBurnedKcal,
+    homeAchievement
+  ])
+
   return (
     <View className='home-page'>
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}
-        <GreetingSection />
+        <GreetingSection onSharePress={handleShareDailySummary} />
 
         {!getAccessToken() && (
           <View
@@ -1854,6 +2197,50 @@ function IndexPage() {
 
       {/* 记录菜单弹窗 */}
       <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} />
+
+      <View className='poster-canvas-wrap'>
+        <Canvas
+          type='2d'
+          id='homeDailyPosterCanvas'
+          className='poster-canvas'
+          style={{ width: `${POSTER_WIDTH}px`, height: `${DAILY_SUMMARY_POSTER_MAX_HEIGHT}px` }}
+        />
+      </View>
+
+      {showDailyPosterModal && dailyPosterImageUrl && (
+        <View className='poster-modal' catchMove>
+          <View className='poster-modal-shell' catchMove>
+            <View className='poster-modal-topbar'>
+              <View className='poster-modal-close' onClick={() => setShowDailyPosterModal(false)}>
+                <Text className='poster-modal-close-x'>×</Text>
+              </View>
+              <Text className='poster-modal-title'>分享</Text>
+              <View className='poster-modal-topbar-placeholder' />
+            </View>
+            <View className='poster-scroll-area'>
+              <View className='poster-modal-scroll-inner'>
+                <View className='poster-modal-card-wrap'>
+                  <Image src={dailyPosterImageUrl} mode='widthFix' className='poster-modal-image' />
+                </View>
+              </View>
+            </View>
+            <View className='poster-modal-bottom-bar'>
+              <View className='poster-share-channel' onClick={handleShareDailyPosterImage}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
+                  <Text className='iconfont icon-wechat poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>微信</Text>
+              </View>
+              <View className='poster-share-channel' onClick={handleSaveDailyPoster}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-save'>
+                  <Text className='iconfont icon-download poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>保存图片</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

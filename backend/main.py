@@ -52,6 +52,7 @@ from database import (
     get_user_by_id,
     insert_health_document,
     insert_food_record,
+    get_food_record_by_user_and_source_task,
     update_food_record,
     create_analysis_task_sync,
     get_analysis_task_by_id_sync,
@@ -113,6 +114,7 @@ from database import (
     add_public_food_library_comment_sync,
     get_food_record_by_id_sync,
     get_feed_comment_by_id_sync,
+    delete_feed_comment_tree_sync,
     # 公共食物库
     create_public_food_library_item,
     list_public_food_library,
@@ -272,6 +274,25 @@ def _build_dashboard_meal_targets(calorie_target: float) -> Dict[str, float]:
         targets[snack_meal_type] = SNACK_MEAL_TARGET_REFERENCE
 
     return targets
+
+
+def _meal_entry_title_from_record(rec: Dict[str, Any]) -> str:
+    """
+    首页「今日餐食」同餐多选：展示分析结果中的餐食标题（描述首行，否则取首条食物名称）。
+    """
+    desc = (rec.get("description") or "").strip()
+    if desc:
+        first_line = desc.splitlines()[0].strip()
+        if first_line:
+            return first_line[:120]
+    items = rec.get("items")
+    if isinstance(items, list) and len(items) > 0:
+        first = items[0]
+        if isinstance(first, dict):
+            name = (first.get("name") or "").strip()
+            if name:
+                return name[:120]
+    return ""
 
 
 def _normalize_execution_mode(value: Optional[str], default: str = DEFAULT_EXECUTION_MODE) -> str:
@@ -4661,6 +4682,16 @@ class SaveFoodRecordRequest(BaseModel):
     source_task_id: Optional[str] = Field(default=None, description="来源识别任务 ID（从 analysis_tasks 保存而来时传入）")
 
 
+def _is_duplicate_key_error(exc: BaseException) -> bool:
+    """Postgres / Supabase 唯一约束冲突（部署 uq_user_food_user_source_task 后并发插入也会命中）。"""
+    msg = str(exc).lower()
+    if "23505" in msg:
+        return True
+    if "duplicate key" in msg or "unique constraint" in msg:
+        return True
+    return False
+
+
 @app.post("/api/food-record/save")
 async def save_food_record(
     body: SaveFoodRecordRequest,
@@ -4668,6 +4699,7 @@ async def save_food_record(
 ):
     """
     拍照识别完成后确认记录：支持早/午/晚三餐 + 早/午/晚加餐。
+    同一识别任务（source_task_id）仅生成一条记录，避免好友动态重复。
     """
     user_id = user_info["user_id"]
     if body.meal_type not in VALID_MEAL_TYPES:
@@ -4699,32 +4731,55 @@ async def save_food_record(
         for item in body.items
     ]
     try:
-        row = await insert_food_record(
-            user_id=user_id,
-            meal_type=normalized_meal_type,
-            image_path=body.image_path,
-            description=body.description or "",
-            insight=body.insight or "",
-            items=items_payload,
-            total_calories=body.total_calories,
-            total_protein=body.total_protein,
-            total_carbs=body.total_carbs,
-            total_fat=body.total_fat,
-            total_weight_grams=body.total_weight_grams,
-            diet_goal=body.diet_goal,
-            activity_timing=body.activity_timing,
-            pfc_ratio_comment=body.pfc_ratio_comment,
-            absorption_notes=body.absorption_notes,
-            context_advice=body.context_advice,
-            source_task_id=body.source_task_id,
-        )
+        stid = (body.source_task_id or "").strip() or None
+        if stid:
+            existing = await get_food_record_by_user_and_source_task(user_id, stid)
+            if existing and existing.get("id"):
+                return {
+                    "id": existing["id"],
+                    "message": "记录已存在",
+                    "already_saved": True,
+                }
+        try:
+            row = await insert_food_record(
+                user_id=user_id,
+                meal_type=normalized_meal_type,
+                image_path=body.image_path,
+                description=body.description or "",
+                insight=body.insight or "",
+                items=items_payload,
+                total_calories=body.total_calories,
+                total_protein=body.total_protein,
+                total_carbs=body.total_carbs,
+                total_fat=body.total_fat,
+                total_weight_grams=body.total_weight_grams,
+                diet_goal=body.diet_goal,
+                activity_timing=body.activity_timing,
+                pfc_ratio_comment=body.pfc_ratio_comment,
+                absorption_notes=body.absorption_notes,
+                context_advice=body.context_advice,
+                source_task_id=stid,
+            )
+        except Exception as insert_err:
+            if stid and _is_duplicate_key_error(insert_err):
+                existing = await get_food_record_by_user_and_source_task(user_id, stid)
+                if existing and existing.get("id"):
+                    return {
+                        "id": existing["id"],
+                        "message": "记录已存在",
+                        "already_saved": True,
+                    }
+            print(f"[save_food_record] 错误: {insert_err}")
+            raise HTTPException(status_code=500, detail="保存记录失败") from insert_err
         # 后台预刷新 AI 营养洞察（周/月），不阻塞本次保存
         try:
             asyncio.create_task(_refresh_stats_insight_for_user(user_id))
         except Exception as bg_err:
             print(f"[save_food_record] 启动后台刷新 AI 洞察失败: {bg_err}")
 
-        return {"id": row.get("id"), "message": "记录成功"}
+        return {"id": row.get("id"), "message": "记录成功", "already_saved": False}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[save_food_record] 错误: {e}")
         raise HTTPException(status_code=500, detail="保存记录失败")
@@ -5521,6 +5576,60 @@ async def update_dashboard_targets(
         raise HTTPException(status_code=500, detail="更新首页目标失败")
 
 
+async def _count_green_days(user_id: str, lookback_days: int = 365) -> int:
+    """
+    统计「全绿达标」天数（近 lookback_days 天）：当日有饮食记录且
+    总热量与三大宏量均不超过当前仪表盘目标（目标为 0 的项不约束）。
+    """
+    try:
+        user = await get_user_by_id(user_id)
+        if not user:
+            return 0
+        targets = _get_dashboard_targets(user)
+        cal_t = float(targets["calorie_target"])
+        p_t = float(targets["protein_target"])
+        c_t = float(targets["carbs_target"])
+        f_t = float(targets["fat_target"])
+
+        today = datetime.now(CHINA_TZ).date()
+        start = today - timedelta(days=lookback_days)
+        records = await list_food_records_by_range(
+            user_id=user_id,
+            start_date=start.isoformat(),
+            end_date=today.isoformat(),
+        )
+        by_day: Dict[str, List[dict]] = {}
+        for r in records:
+            rt = r.get("record_time")
+            if not rt:
+                continue
+            try:
+                dt = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                day_key = dt.astimezone(CHINA_TZ).date().isoformat()
+            except Exception:
+                continue
+            by_day.setdefault(day_key, []).append(r)
+
+        green = 0
+        for rows in by_day.values():
+            tc = sum(float(x.get("total_calories") or 0) for x in rows)
+            tp = sum(float(x.get("total_protein") or 0) for x in rows)
+            tc2 = sum(float(x.get("total_carbs") or 0) for x in rows)
+            tf = sum(float(x.get("total_fat") or 0) for x in rows)
+            ok_cal = cal_t <= 0 or tc <= cal_t
+            ok_p = p_t <= 0 or tp <= p_t
+            ok_c = c_t <= 0 or tc2 <= c_t
+            ok_f = f_t <= 0 or tf <= f_t
+            if ok_cal and ok_p and ok_c and ok_f:
+                green += 1
+        return green
+    except Exception as e:
+        print(f"[_count_green_days] 错误: {e}")
+        return 0
+
+
 @app.get("/api/home/dashboard")
 async def get_home_dashboard(
     date: Optional[str] = None,
@@ -5611,19 +5720,24 @@ async def get_home_dashboard(
                     continue
                 seen_image_urls.add(image_url)
                 meal_image_urls.append(image_url)
-        # 取该餐次最早一条记录的时间作为展示时间
+        # 取该餐次最早一条记录的时间作为展示时间（items 与 records 同序：最新在前）
         times = [x.get("record_time") for x in items if x.get("record_time")]
         time_str = "00:00"
         if times:
             time_str = _format_china_time_hhmm(times[0])
-        # list_food_records 按 record_time 倒序；按餐聚合时同餐次内首条即该餐最新一条，供首页跳转记录详情/生成海报
-        primary_record_id = None
-        if items:
-            for rec in items:
-                rid = rec.get("id")
-                if rid is not None and str(rid).strip() != "":
-                    primary_record_id = str(rid)
-                    break
+        # list_food_records 按 record_time 倒序；同餐次内首条为该餐最新一条
+        meal_record_entries: List[Dict[str, Any]] = []
+        for rec in items:
+            rid = rec.get("id")
+            if rid is None or str(rid).strip() == "":
+                continue
+            meal_record_entries.append({
+                "id": str(rid),
+                "record_time": rec.get("record_time"),
+                "total_calories": round(float(rec.get("total_calories") or 0), 1),
+                "title": _meal_entry_title_from_record(rec),
+            })
+        primary_record_id = meal_record_entries[0]["id"] if meal_record_entries else None
         meals_out.append({
             "type": meal_type,
             "name": MEAL_NAMES.get(meal_type, meal_type),
@@ -5635,15 +5749,23 @@ async def get_home_dashboard(
             "image_path": meal_image_urls[0] if meal_image_urls else None,
             "image_paths": meal_image_urls,
             "primary_record_id": primary_record_id,
+            "meal_record_entries": meal_record_entries,
         })
 
     exercise_burned = await get_exercise_calories_by_date(user_id, target_date)
+
+    streak_days = await get_streak_days(user_id)
+    green_days = await _count_green_days(user_id)
 
     return {
         "intakeData": intake_data,
         "meals": meals_out,
         "expirySummary": _build_food_expiry_summary(expiry_items),
         "exerciseBurnedKcal": round(float(exercise_burned), 1),
+        "achievement": {
+            "streak_days": streak_days,
+            "green_days": green_days,
+        },
     }
 
 
@@ -6867,6 +6989,28 @@ async def api_community_comment_post(
     except Exception as e:
         print(f"[api/community/feed/comment] 错误: {e}")
         raise HTTPException(status_code=500, detail="发表失败")
+
+
+@app.delete("/api/community/feed/{record_id}/comments/{comment_id}")
+async def api_community_comment_delete(
+    record_id: str,
+    comment_id: str,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """删除圈子评论：仅评论者本人或该条动态（饮食记录）作者，子回复一并删除。"""
+    await _ensure_feed_record_interactable(user_info["user_id"], record_id)
+    try:
+        deleted = delete_feed_comment_tree_sync(
+            user_info["user_id"], record_id, comment_id
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="无权删除该评论")
+    except Exception as e:
+        print(f"[api/community/feed/comment/delete] 错误: {e}")
+        raise HTTPException(status_code=500, detail="删除失败")
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="评论不存在或已删除")
+    return {"deleted": deleted}
 
 
 @app.get("/api/community/comment-tasks")

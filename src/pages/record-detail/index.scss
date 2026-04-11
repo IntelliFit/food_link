@@ -576,12 +576,15 @@
   /* 海报过高时可滚动；勿用 overflow:hidden 否则子项 flex 下易出现 0 高 */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .poster-modal-scroll-inner {
-  flex: 1;
-  min-height: 0;
-  max-height: 100%;
+  flex-shrink: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;

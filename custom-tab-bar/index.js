@@ -91,9 +91,17 @@ Component({
             // ignore
           }
 
+          let homePosterModalOpen = false
+          try {
+            homePosterModalOpen = wx.getStorageSync('home_poster_modal_visible') === '1'
+          } catch (e) {
+            // ignore
+          }
+
           const shouldHide =
             currentPath === '/pages/record/index' ||
-            (currentPath === '/pages/community/index' && communityCommentOpen)
+            (currentPath === '/pages/community/index' && communityCommentOpen) ||
+            (currentPath === '/pages/index/index' && homePosterModalOpen)
 
           if (shouldHide !== this.data.hidden) {
             this.setData({ hidden: shouldHide })

@@ -511,4 +511,440 @@ export function drawRecordPoster(
   }
 }
 
+/** 首页「今日小结」分享图：参考图布局（日期 + 成就胶囊 + 热量圆环 + 五竖条） */
+export interface DailySummaryPosterInput {
+  /** 如「4月11日」（兼容旧逻辑，顶栏已改英文时可不展示） */
+  dateLabelPrimary: string
+  /** 如「周六」 */
+  dateLabelSecondary: string
+  /** YYYY-MM-DD，顶栏英文星期与日期；建议传入 */
+  posterDateKey?: string
+  intakeCurrent: number
+  intakeTarget: number
+  streakDays: number
+  /** 展示为「坚持目标 X 天」 */
+  greenDays: number
+  macros: {
+    protein: { current: number; target: number }
+    carbs: { current: number; target: number }
+    fat: { current: number; target: number }
+  }
+  /** 喝水完成度 0–100+（与首页一致） */
+  waterProgressPct: number
+  /** 当日运动消耗千卡 */
+  exerciseKcal: number
+  /** 运动竖条满刻度（千卡），默认 500 */
+  exerciseGoalKcal?: number
+}
+
+/** 今日小结布局常量（与 drawDailySummaryPoster 同步） */
+const DAILY_BG = '#FAF8F5'
+/** 连续/坚持目标胶囊（并排双块时可与 DAILY_STREAK_PILL2 搭配） */
+const DAILY_STREAK_PILL_BG = '#E5C68D'
+const DAILY_STREAK_PILL_TEXT = '#2c2618'
+const DAILY_STREAK_PILL2_BG = '#D8E4E8'
+const DAILY_STREAK_PILL2_TEXT = '#1a3d52'
+/** 顶栏大字标题：参考图 ECO/FOOD 双色块 */
+const DAILY_TITLE_LINE1 = '#5B9A3D'
+const DAILY_TITLE_LINE2 = '#1e3a5f'
+/** 中央热量圆：苔绿底 + 浅字 */
+const DAILY_RING_FILL = '#8B9E44'
+const DAILY_RING_INNER_TEXT = '#EAEAE0'
+/**
+ * 五竖条填充色：以主色苔绿 #8B9E44 为基准，按三角色相（约 +120° / +240°）取青蓝与紫灰，
+ * 另用同系邻近色（金橄榄、暖赭）区分碳水/脂肪，整体与海报米白底、圆环绿统一。
+ */
+const BAR_COLORS = {
+  /** 三角色相之一：青灰蓝（蛋白） */
+  protein: '#4A6B7A',
+  /** 主色邻近：橄榄金（碳水） */
+  carbs: '#9A8F3D',
+  /** 暖色衔接：赭陶（脂肪） */
+  fat: '#B87A52',
+  /** 三角色相之二：灰青（喝水） */
+  water: '#3F7A8A',
+  /** 三角色相之三：灰紫（运动） */
+  exercise: '#75608A'
+} as const
+const DEFAULT_EXERCISE_GOAL_KCAL = 500
+/** 五竖条轨道高度（拉长条身；与 compute 同步） */
+const VBAR_TRACK_H = 104
+/** 标签区加高，避免五字挤叠（与下方字号同步） */
+const VBAR_LABEL_H = 26
+/** 顶栏：两行大字「今日」「总结」+ 日期（与 draw 中 cy 推进一致） */
+const DAILY_HEADER_TITLE_LINE1_H = 44
+const DAILY_HEADER_TITLE_LINE2_H = 44
+const DAILY_HEADER_DATE_H = 20
+/** 并排成就胶囊行高（与 draw 中 pill 高度一致） */
+const DAILY_STREAK_ROW_H = 30
+/** 竖条轨道底色（与 LINE 区分时可单独调） */
+const DAILY_VBAR_TRACK_BG = '#EAEAE0'
+/** 底栏二维码边长（缩小后需与 compute 中 footerReserve 同步） */
+const DAILY_QR_SIZE = 54
+/** 中央圆直径、五竖条总宽度 = 卡片宽度 W 的该比例（与 compute 中 POSTER_WIDTH 一致） */
+const DAILY_MAIN_BLOCK_W_RATIO = 0.65
+/** 黄金分割比 φ（1.618…），用于主区块间距与竖条间隙 */
+const DAILY_PHI = (1 + Math.sqrt(5)) / 2
+const DAILY_INV_PHI = 1 / DAILY_PHI
+
+/** 今日小结布局度量（绘制与高度计算共用，垂直节奏为 Fibonacci 级：8/13/21） */
+function getDailyLayoutMetrics(W: number): {
+  topPad: number
+  gapAfterDate: number
+  gapAfterStreak: number
+  gapAfterCircle: number
+  vbarLabelGap: number
+  gapBeforeFooter: number
+  footerTopPad: number
+  bottomPad: number
+  circleD: number
+  barsTotalW: number
+  barGap: number
+} {
+  const circleD = W * DAILY_MAIN_BLOCK_W_RATIO
+  const barsTotalW = W * DAILY_MAIN_BLOCK_W_RATIO
+  const g13 = Math.round(8 * DAILY_PHI) // 13，φ·8
+  const g21 = Math.round(g13 * DAILY_PHI) // 21，主区块间「呼吸」留白
+  /** 竖条水平间隙：加大以在 65% 总宽内进一步缩窄单条宽度 */
+  const barGap = 22
+  return {
+    topPad: g13,
+    gapAfterDate: g13,
+    gapAfterStreak: g13,
+    gapAfterCircle: g21,
+    vbarLabelGap: 8,
+    gapBeforeFooter: g13,
+    footerTopPad: g13,
+    bottomPad: g13,
+    circleD,
+    barsTotalW,
+    barGap
+  }
+}
+
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** 顶栏短英文日期，如 9 Apr */
+function formatDailyPosterShortDateEn(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return ''
+  const [_y, mo, d] = parts
+  const mon = EN_MONTHS[mo - 1] ?? ''
+  return `${d} ${mon}`
+}
+
+/**
+ * 圆内百分比：粗黑展示数字体（参考海报风，接近 Montserrat/Arial Black）
+ * 与 measureDailyRingPctFontSize 必须一致
+ */
+function dailyRingPctFont(px: number): string {
+  return `900 ${px}px "Arial Black", Impact, "Helvetica Neue", Helvetica, Arial, sans-serif`
+}
+
+/** 竖条：目标为 0 时不约束，按 0% */
+function ratioPct(current: number, target: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(target) || target <= 0) return 0
+  return (current / target) * 100
+}
+
+/**
+ * 今日小结画布高度（圆环 + 五竖条 + 底栏）
+ */
+export function computeDailySummaryPosterHeight(_d?: DailySummaryPosterInput): number {
+  const m = getDailyLayoutMetrics(POSTER_WIDTH)
+  const vBarRow = VBAR_TRACK_H + VBAR_LABEL_H + m.vbarLabelGap
+  const footerReserve = m.footerTopPad + DAILY_QR_SIZE
+
+  const contentBottom =
+    m.topPad +
+    DAILY_HEADER_TITLE_LINE1_H +
+    DAILY_HEADER_TITLE_LINE2_H +
+    DAILY_HEADER_DATE_H +
+    m.gapAfterDate +
+    DAILY_STREAK_ROW_H +
+    m.gapAfterStreak +
+    m.circleD +
+    m.gapAfterCircle +
+    vBarRow
+  return Math.ceil(contentBottom + m.gapBeforeFooter + footerReserve + m.bottomPad)
+}
+
+/** 画布占位最大高度（离屏 Canvas 初始 style，实际导出以 compute 为准；顶栏双行标题后略增） */
+export const DAILY_SUMMARY_POSTER_MAX_HEIGHT = 740
+
+/**
+ * 顶栏成就：并排两枚圆角块（连续天数 / 坚持目标），参考图分层信息排布
+ */
+function drawDailyStreakPillRow(
+  ctx: CanvasRenderingContext2D,
+  cX: number,
+  yTop: number,
+  maxContentW: number,
+  streakDays: number,
+  greenDays: number
+): number {
+  const pillPadX = 11
+  const pillPadY = 7
+  const gapPills = 10
+  const t1 = `连续 ${streakDays} 天`
+  const t2 = `坚持目标 ${greenDays} 天`
+  let fs = 11
+  ctx.font = `600 ${fs}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
+  let w1 = ctx.measureText(t1).width + pillPadX * 2
+  let w2 = ctx.measureText(t2).width + pillPadX * 2
+  while (w1 + gapPills + w2 > maxContentW - 8 && fs > 9) {
+    fs -= 1
+    ctx.font = `600 ${fs}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
+    w1 = ctx.measureText(t1).width + pillPadX * 2
+    w2 = ctx.measureText(t2).width + pillPadX * 2
+  }
+  const pillH = fs + pillPadY * 2
+  const totalW = w1 + gapPills + w2
+  let x = cX - totalW / 2
+  const r = 11
+
+  drawRoundedRect(ctx, x, yTop, w1, pillH, r)
+  ctx.fillStyle = DAILY_STREAK_PILL_BG
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(120, 95, 55, 0.4)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.fillStyle = DAILY_STREAK_PILL_TEXT
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(t1, x + w1 / 2, yTop + pillH / 2)
+
+  x += w1 + gapPills
+  drawRoundedRect(ctx, x, yTop, w2, pillH, r)
+  ctx.fillStyle = DAILY_STREAK_PILL2_BG
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(30, 61, 82, 0.35)'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.fillStyle = DAILY_STREAK_PILL2_TEXT
+  ctx.fillText(t2, x + w2 / 2, yTop + pillH / 2)
+
+  return pillH
+}
+
+/**
+ * 圆内百分比字号：参考图二约占圆直径 60%～65% 宽，取最大不溢出字号
+ */
+function measureDailyRingPctFontSize(ctx: CanvasRenderingContext2D, pctStr: string, circleD: number): number {
+  const maxW = circleD * 0.64
+  let lo = 28
+  let hi = 160
+  let best = 28
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2)
+    ctx.font = dailyRingPctFont(mid)
+    const tw = ctx.measureText(pctStr).width
+    if (tw <= maxW) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return Math.max(32, best)
+}
+
+/** 竖向进度条：轨道为胶囊形；填充在轨道 path 内 clip，避免底部圆角溢出 */
+function drawDailyVerticalBar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  yTop: number,
+  w: number,
+  trackH: number,
+  pctRaw: number,
+  fillColor: string
+): void {
+  const pct = Math.min(100, Math.max(0, pctRaw))
+  const rTrack = w / 2
+  drawRoundedRect(ctx, x, yTop, w, trackH, rTrack)
+  ctx.fillStyle = DAILY_VBAR_TRACK_BG
+  ctx.fill()
+
+  const fillH = (trackH * pct) / 100
+  if (fillH <= 0) return
+
+  ctx.save()
+  drawRoundedRect(ctx, x, yTop, w, trackH, rTrack)
+  ctx.clip()
+  const yFill = yTop + trackH - fillH
+  ctx.fillStyle = fillColor
+  ctx.fillRect(x, yFill, w, fillH)
+  ctx.restore()
+}
+
+export function drawDailySummaryPoster(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    width: number
+    height: number
+    data: DailySummaryPosterInput
+    qrCodeImage?: { width: number; height: number } | null
+    sharerNickname?: string
+    sharerAvatarImage?: { width: number; height: number } | null
+  }
+): void {
+  const { width: W, height: _H, data: d, qrCodeImage, sharerNickname, sharerAvatarImage } = options
+  const cx = INNER_PAD
+  const contentW = W - INNER_PAD * 2
+  const cX = W / 2
+  const m = getDailyLayoutMetrics(W)
+
+  ctx.fillStyle = DAILY_BG
+  ctx.fillRect(0, 0, W, _H)
+
+  let cy = m.topPad
+
+  /** 顶部：参考图式双行大字（今日 / 总结）+ 英文短日期 + 并排成就块 */
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillStyle = DAILY_TITLE_LINE1
+  ctx.font = 'bold 38px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif'
+  ctx.fillText('今日', cX, cy)
+  cy += DAILY_HEADER_TITLE_LINE1_H
+  ctx.fillStyle = DAILY_TITLE_LINE2
+  ctx.font = 'bold 38px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif'
+  ctx.fillText('总结', cX, cy)
+  cy += DAILY_HEADER_TITLE_LINE2_H
+  ctx.fillStyle = TEXT_SUB
+  ctx.font = '600 13px system-ui, -apple-system, sans-serif'
+  const shortFromKey = d.posterDateKey ? formatDailyPosterShortDateEn(d.posterDateKey) : ''
+  const dateLine =
+    shortFromKey.length > 0 ? shortFromKey : `${d.dateLabelPrimary} ${d.dateLabelSecondary}`.trim()
+  ctx.fillText(dateLine, cX, cy)
+  cy += DAILY_HEADER_DATE_H + m.gapAfterDate
+
+  const streakH = drawDailyStreakPillRow(ctx, cX, cy, contentW, d.streakDays, d.greenDays)
+  cy += streakH + m.gapAfterStreak
+
+  /** 中央大圆：直径 = 卡片宽 75%；苔绿底 + 浅色字；副文仅当日摄入 kcal */
+  const circleD = m.circleD
+  const R = circleD / 2
+  const circleCy = cy + R
+  ctx.beginPath()
+  ctx.arc(cX, circleCy, R, 0, Math.PI * 2)
+  ctx.fillStyle = DAILY_RING_FILL
+  ctx.fill()
+
+  const tgt = d.intakeTarget > 0 ? d.intakeTarget : 1
+  const calPct = tgt > 0 ? (d.intakeCurrent / tgt) * 100 : 0
+  const calPctRound = Math.round(calPct)
+
+  const pctStr = `${calPctRound}%`
+  const pctFs = measureDailyRingPctFontSize(ctx, pctStr, circleD)
+  const kcalFs = Math.max(12, Math.min(18, Math.round(pctFs * 0.26)))
+  /** 百分比几何中心在圆心；已摄入行在下方，行距与字号挂钩 */
+  const ringGapAfterPct = Math.max(16, Math.round(pctFs * 0.14))
+  const kcalStr = `已摄入 ${Math.round(d.intakeCurrent)} kcal`
+
+  ctx.fillStyle = DAILY_RING_INNER_TEXT
+  ctx.font = dailyRingPctFont(pctFs)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(pctStr, cX, circleCy)
+
+  ctx.fillStyle = DAILY_RING_INNER_TEXT
+  ctx.font = `600 ${kcalFs}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
+  ctx.textBaseline = 'middle'
+  const kcalCy = circleCy + pctFs / 2 + ringGapAfterPct + kcalFs / 2
+  ctx.fillText(kcalStr, cX, kcalCy)
+
+  cy = circleCy + R + m.gapAfterCircle
+
+  /** 五竖条：均分 contentW，蛋白质、碳水、脂肪、喝水、运动（自下而上） */
+  const pt = Math.min(100, ratioPct(d.macros.protein.current, d.macros.protein.target))
+  const ct = Math.min(100, ratioPct(d.macros.carbs.current, d.macros.carbs.target))
+  const ft = Math.min(100, ratioPct(d.macros.fat.current, d.macros.fat.target))
+  const wt = Math.min(100, Math.max(0, d.waterProgressPct))
+  const exGoal =
+    d.exerciseGoalKcal != null && d.exerciseGoalKcal > 0 ? d.exerciseGoalKcal : DEFAULT_EXERCISE_GOAL_KCAL
+  const exPct = Math.min(100, (d.exerciseKcal / Math.max(1, exGoal)) * 100)
+
+  const labels = ['蛋白质', '碳水', '脂肪', '喝水', '运动']
+  const pcts = [pt, ct, ft, wt, exPct]
+  const colors: string[] = [
+    BAR_COLORS.protein,
+    BAR_COLORS.carbs,
+    BAR_COLORS.fat,
+    BAR_COLORS.water,
+    BAR_COLORS.exercise
+  ]
+
+  /** 五竖条总宽 = 卡片宽 75%，整组水平居中；间隙取 φ 相关比例 */
+  const barsTotalW = m.barsTotalW
+  const barGap = m.barGap
+  const barW = (barsTotalW - barGap * 4) / 5
+  let bx = cX - barsTotalW / 2
+  const barTopY = cy
+  const labelOffsetY = Math.round(m.vbarLabelGap * DAILY_INV_PHI)
+
+  for (let i = 0; i < 5; i++) {
+    drawDailyVerticalBar(ctx, bx, barTopY, barW, VBAR_TRACK_H, pcts[i], colors[i])
+    ctx.fillStyle = '#334155'
+    ctx.font = '600 15px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(labels[i], bx + barW / 2, barTopY + VBAR_TRACK_H + labelOffsetY)
+    bx += barW + barGap
+  }
+
+  /** 底栏：头像与文案垂直居中对齐；二维码缩小 */
+  const bottomPad = m.bottomPad
+  const qrSize = DAILY_QR_SIZE
+  const qrY = _H - bottomPad - qrSize
+  const qrMidY = qrY + qrSize / 2
+  const avatarSz = 32
+  const titleX = sharerAvatarImage ? cx + avatarSz + Math.round(8 * DAILY_PHI) : cx
+
+  if (sharerAvatarImage) {
+    const avatarY = qrMidY - avatarSz / 2
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx + avatarSz / 2, qrMidY, avatarSz / 2, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.drawImage(sharerAvatarImage as CanvasImageSource, cx, avatarY, avatarSz, avatarSz)
+    ctx.restore()
+  }
+
+  ctx.textAlign = 'left'
+  ctx.fillStyle = TEXT_INK
+  ctx.font = 'bold 14px sans-serif'
+  const displayName = (sharerNickname || '').trim()
+  const nameText = displayName ? `${displayName} 的今日小结` : '食探 · 今日小结'
+  ctx.font = 'bold 14px sans-serif'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(nameText, titleX, qrMidY - 8)
+
+  ctx.fillStyle = TEXT_SUB
+  ctx.font = '11px sans-serif'
+  ctx.fillText('扫码登录食探，可一键成为好友', titleX, qrMidY + 8)
+
+  const qrX = cx + contentW - qrSize
+  if (qrCodeImage) {
+    ctx.save()
+    drawRoundedRect(ctx, qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, 8)
+    ctx.strokeStyle = '#d4d4d4'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+    ctx.drawImage(qrCodeImage as CanvasImageSource, qrX, qrY, qrSize, qrSize)
+  } else {
+    drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 8)
+    ctx.strokeStyle = LINE
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.15)'
+    ctx.fill()
+    ctx.fillStyle = TEXT_MUTED
+    ctx.font = '10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('去记录', qrX + qrSize / 2, qrY + qrSize / 2)
+  }
+}
+
 export type { FoodRecord }
