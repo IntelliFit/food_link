@@ -1399,12 +1399,13 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
 }
 
 /** 查询当前用户的分析任务列表 */
-export async function listAnalyzeTasks(params?: { task_type?: string; status?: string }): Promise<{ tasks: AnalysisTask[] }> {
+export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
   const q = new URLSearchParams()
   if (params?.task_type) q.set('task_type', params.task_type)
   if (params?.status) q.set('status', params.status)
+  if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
   const url = `/api/analyze/tasks${q.toString() ? '?' + q.toString() : ''}`
-  const res = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  const res = await authenticatedRequest(url, { method: 'GET', timeout: 20000 })
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取任务列表失败'
     throw new Error(msg)

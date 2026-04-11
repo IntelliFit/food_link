@@ -100,6 +100,7 @@ Component({
 
           const shouldHide =
             currentPath === '/pages/record/index' ||
+            currentPath === '/pages/record-menu/index' ||
             (currentPath === '/pages/community/index' && communityCommentOpen) ||
             (currentPath === '/pages/index/index' && homePosterModalOpen)
 

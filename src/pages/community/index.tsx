@@ -1003,18 +1003,16 @@ function CommunityPage() {
     setReplyTargetComment(null)
   }
 
-  /** 评论输入展开时隐藏底部 tab（含自定义 tabBar：见 `community_comment_bar_visible`） */
+  /** 仅写 storage，由 custom-tab-bar 轮询 updateHidden 隐藏底栏；勿调 showTabBar/hideTabBar（自定义 tabBar 下易双导航栏） */
   useEffect(() => {
     if (expandedCommentRecordId) {
       try {
         Taro.setStorageSync('community_comment_bar_visible', '1')
       } catch (_) {}
-      Taro.hideTabBar({ animation: true }).catch(() => {})
     } else {
       try {
         Taro.removeStorageSync('community_comment_bar_visible')
       } catch (_) {}
-      Taro.showTabBar({ animation: true }).catch(() => {})
     }
   }, [expandedCommentRecordId])
 
@@ -1023,7 +1021,6 @@ function CommunityPage() {
       try {
         Taro.removeStorageSync('community_comment_bar_visible')
       } catch (_) {}
-      Taro.showTabBar({ animation: true }).catch(() => {})
     }
   }, [])
 

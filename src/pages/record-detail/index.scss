@@ -1,6 +1,37 @@
+/* 页面根：承接离屏 Canvas 与 fixed 海报层（与首页 home-page 一致，避免层叠在 ScrollView 内错位） */
+.record-detail-root {
+  min-height: 100vh;
+  position: relative;
+  background: #f9fafb;
+  box-sizing: border-box;
+}
+
+/* 与系统导航栏视觉接近：固定顶栏，分享全屏层打开时不再露出第二条「标题栏」 */
+.record-detail-fixed-nav.custom-nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  border-bottom: 1rpx solid rgba(15, 23, 42, 0.08);
+}
+
+/* 顶栏占位后的主区域（paddingTop 由 JS 注入导航总高） */
+.record-detail-below-nav {
+  box-sizing: border-box;
+}
+
+.record-detail-loading-placeholder {
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* 识别记录详情页：与首页「今日餐食」进入同屏 — 扁平背景、无分块白卡片 margin */
 .record-detail-page {
-  min-height: 100vh;
+  /* 不再写死 100vh：顶栏已占高度，避免与占位叠加产生整页多余滚动 */
   background: #f9fafb;
   padding: 24rpx 24rpx 64rpx;
   box-sizing: border-box;

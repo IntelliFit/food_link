@@ -6,6 +6,10 @@
 
 ## 2026-04-11
 
+- 🎨 style: 识别记录详情改为 `navigationStyle: custom` + `CustomNavBar`，避免系统导航栏叠在分享全屏层上，与首页「分享今日卡片」白底顶栏 + 黑底关布局一致 `src/pages/record-detail/index.config.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🎨 style: 记录详情海报预览层移出 `ScrollView` 至页面根（与首页分享层一致），顶栏标题与首页同为「分享今日卡片」；修复真机 fixed 全屏相对滚动容器错位 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🐛 fix: 「分析历史」改为单次 `listAnalyzeTasks` + 前端筛选，并加 22s 超时与请求序号，避免真机四路 `Promise.all` 一路挂起导致永远 loading `src/pages/analyze-history/index.tsx` `src/utils/api.ts`
+- 🐛 fix: 自定义 tabBar 下移除 `hideTabBar`/`showTabBar`，避免与原生文字 tabBar 叠成双导航；记录菜单页改由 `custom-tab-bar` 路径隐藏 `src/pages/record/index.tsx` `src/pages/community/index.tsx` `src/pages/record-menu/index.tsx` `custom-tab-bar/index.js`
 - 🎨 style: 分享弹层白底顶栏居中标题；黑底区关闭为记录详情同款 `poster-modal-close` + `poster-modal-close-x`（×）；底栏仅微信+保存 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
 - 🐛 fix: 首页「编辑今日目标」保存时移除未定义 `targetMode` 的残留分支，统一用 `targetForm` 提交 `src/pages/index/index.tsx`
 - 📝 docs: `AGENTS.md` 增加「发布新版本」流程；「我的」页底部版本号经 `__APP_VERSION__` 与 `package.json` 同步 `AGENTS.md` `config/index.ts` `types/build-constants.d.ts` `src/pages/profile/index.tsx` `tests/setupTests.ts`

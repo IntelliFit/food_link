@@ -1,6 +1,6 @@
 import { View, Text, Camera, Image } from '@tarojs/components'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import Taro, { useDidShow, useDidHide, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getAccessToken,
   getMyMembership,
@@ -47,11 +47,7 @@ function RecordPage() {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
     }
     setScanning(true)
-    Taro.hideTabBar({ animation: true }).catch(() => {})
-  })
-
-  useDidHide(() => {
-    Taro.showTabBar({ animation: true }).catch(() => {})
+    // 自定义 tabBar 时勿调用 hideTabBar/showTabBar，否则会与原生 tabBar 叠成双导航栏；见 custom-tab-bar/updateHidden
   })
 
   useEffect(() => {

@@ -1,5 +1,7 @@
 # DECISIONS
 
+- `2026-04-11`: `app.config` 已启用 `tabBar.custom: true` 时，业务页**不得**再调用 `wx.hideTabBar` / `wx.showTabBar`（Taro 同名 API）做显隐；否则在开发/体验版等环境下易与**系统原生文字 tabBar**叠成双导航。底栏显隐统一由根目录 `custom-tab-bar` 的 `hidden` + `updateHidden`（路径与 storage）控制；`pages/record-menu/index` 视为需隐藏底栏的子页之一。
+
 - `2026-04-10`: `food_link` 真机调试不得继续使用 `dev:weapp` 默认注入的 `http://127.0.0.1:3010`。在真机上，`127.0.0.1` 永远指向手机自身；若要联本地后端，必须改成开发电脑的局域网 IP，或直接使用 `build:weapp:preview / dev:weapp:online` 走 `https://healthymax.cn`。
 - `2026-04-10`: 小程序端应避免直接在页面 JSX 中渲染原生 `<svg>` 作为常规图标方案。当前 `tmpl_0_svg not found` 已定位到多处直接 `<svg>` 写法；后续图标实现优先使用 iconfont、图片资源或其它 weapp 兼容方案。
 - `2026-04-10`: 互动消息点击动态的定位链路不能再依赖社区页当前 Feed 的筛选、缓存列表或分页 offset。正式口径改为：通知跳转优先按 `record_id` 直取单条动态上下文，再在社区页插入并滚动到目标动态；评论/回复类通知再按 `comment_id / parent_comment_id` 补拉完整评论区并打开输入框。
