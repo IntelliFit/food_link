@@ -6,6 +6,7 @@
 
 ## 2026-04-11
 
+- 📝 docs: `AGENTS.md` 增加「发布新版本」流程；「我的」页底部版本号经 `__APP_VERSION__` 与 `package.json` 同步 `AGENTS.md` `config/index.ts` `types/build-constants.d.ts` `src/pages/profile/index.tsx` `tests/setupTests.ts`
 - 🔧 chore: 发布软件包版本 **2.0.14**（`package.json` / `package-lock.json`）`package.json` `package-lock.json`
 - 🎨 style: 今日小结顶栏改为「今日总结」「坚持目标」双行大字，下去掉连续天数；日期含年置于圆角条小字 `src/utils/poster.ts`
 - 🎨 style: 今日小结圆与五竖条总宽改为卡片 65%，竖条间隙 22；五色进度条按主色 #8B9E44 三角色相与邻近色重配 `src/utils/poster.ts`

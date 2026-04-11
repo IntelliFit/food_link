@@ -555,7 +555,7 @@ function ProfilePage() {
       )}
 
       <View className='profile-version'>
-        <Text>版本号 v2.0.7</Text>
+        <Text>版本号 v{__APP_VERSION__}</Text>
       </View>
 
 

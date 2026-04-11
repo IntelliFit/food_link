@@ -1,8 +1,18 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
 import devConfig from './dev'
 import prodConfig from './prod'
+
+/** 与 package.json 的 version 一致，供「我的」页底部等展示 */
+function readPackageVersion(): string {
+  const pkgPath = join(process.cwd(), 'package.json')
+  return JSON.parse(readFileSync(pkgPath, 'utf-8')).version as string
+}
+
+const packageVersion = readPackageVersion()
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
@@ -33,6 +43,8 @@ export default defineConfig<'vite'>(async (merge) => {
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
       /** 仅 development 构建为 true；上传/体验版等走 production 构建为 false，用于隐藏调试 UI 与调试保存分支 */
       __ENABLE_DEV_DEBUG_UI__: JSON.stringify(process.env.NODE_ENV === 'development'),
+      /** 与 package.json version 同步，发布新版本时随 npm version 一并更新 */
+      __APP_VERSION__: JSON.stringify(packageVersion),
     },
     copy: {
       patterns: [
