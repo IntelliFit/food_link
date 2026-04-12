@@ -46,13 +46,6 @@ function formatRegisterDate(value: string | undefined | null): string {
   return `${y}-${m}-${day}`
 }
 
-function formatExpiry(value?: string | null): string {
-  if (!value) return '--'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '--'
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
   if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
   if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
@@ -226,8 +219,13 @@ function ProfilePage() {
     {
       id: 6,
       icon: <ShieldOutlined size='20' />,
-      title: '食探会员',
-      desc: membershipStatus?.is_pro ? '会员已开通' : '每日30次 · 会员100次',
+      title: '积分充值',
+      desc:
+        typeof membershipStatus?.points_balance === 'number'
+          ? `积分 ${membershipStatus.points_balance.toFixed(1)} · 充值与说明`
+          : membershipStatus === null
+            ? '充值与积分说明'
+            : '进入查看充值与积分说明',
       path: '/pages/pro-membership/index'
     }
   ]
@@ -368,7 +366,7 @@ function ProfilePage() {
       2: '#8b5cf6', // 食物管理 - 紫
       3: '#3b82f6', // 饮食记录 - 蓝
       5: '#ef4444', // 附近美食 - 红
-      6: '#f59e0b'  // 食探会员 - 金
+      6: '#f59e0b'  // 积分充值入口 - 金
     }
     return colors[id] || '#6b7280'
   }
@@ -408,87 +406,45 @@ function ProfilePage() {
         <Arrow size={20} color='#c8c9cc' className='user-arrow' />
       </View>
 
-      {/* 会员卡片（仅登录后展示） */}
+      {/* 积分账户卡片（仅登录后展示，不再展示旧版会员订阅 UI） */}
       {isLoggedIn && (
         <View
-          className={`profile-card member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
+          className='profile-card member-card member-card--free'
           onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
         >
-          {membershipStatus?.is_pro ? (
-            <>
-              <View className='card-header'>
-                <View>
-                  <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
-                  <View className='card-title-row'>
-                    <Text className='card-title'>食探会员</Text>
-                    <Text className='card-pro-badge'>PRO</Text>
-                  </View>
-                </View>
-              </View>
-              <View className='card-body'>
-                <View className='progress-info'>
-                  {membershipStatus.daily_limit != null ? (
-                    <>
-                      <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit} 次</Text>
-                      <View className='progress-bar'>
-                        <View
-                          className='progress-inner'
-                          style={{
-                            width: `${Math.min(((membershipStatus.daily_used ?? 0) / membershipStatus.daily_limit) * 100, 100)}%`
-                          }}
-                        />
-                      </View>
-                    </>
-                  ) : (
-                    <Text className='progress-text'>今日拍照分析 {membershipStatus.daily_used ?? 0} 次</Text>
-                  )}
-                </View>
-                <Text className='card-tip'>
-                  {membershipStatus.daily_limit != null
-                    ? `剩余 ${membershipStatus.daily_remaining ?? 0} 次 · 精准模式已解锁`
-                    : '当前不限次 · 精准模式已解锁'}
+          <View className='card-header'>
+            <View>
+              <Text className='card-validity'>注册时间 {registerDate}</Text>
+              <Text className='card-title'>积分账户</Text>
+            </View>
+            <View className='card-upgrade-btn'>
+              <Text className='card-upgrade-text'>充值</Text>
+            </View>
+          </View>
+          <View className='card-body'>
+            {membershipStatus === null ? (
+              <Text className='progress-text'>正在同步积分…</Text>
+            ) : typeof membershipStatus.points_balance === 'number' ? (
+              <>
+                <Text className='progress-text'>
+                  当前积分 {membershipStatus.points_balance.toFixed(1)}
                 </Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View className='card-header'>
-                <View>
-                  <Text className='card-validity'>注册时间 {registerDate}</Text>
-                  <Text className='card-title'>食探会员</Text>
-                </View>
-                <View className='card-upgrade-btn'>
-                  <Text className='card-upgrade-text'>立即开通</Text>
-                </View>
-              </View>
-              <View className='card-body'>
-                <View className='progress-info'>
-                  {membershipStatus?.daily_limit != null ? (
-                    <>
-                      <Text className='progress-text'>
-                        今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit} 次
-                      </Text>
-                      <View className='progress-bar'>
-                        <View
-                          className='progress-inner'
-                          style={{
-                            width: `${Math.min(((membershipStatus.daily_used ?? 0) / membershipStatus.daily_limit) * 100, 100)}%`
-                          }}
-                        />
-                      </View>
-                    </>
-                  ) : (
-                    <Text className='progress-text'>今日拍照分析 {membershipStatus?.daily_used ?? 0} 次</Text>
-                  )}
-                </View>
-                <Text className='card-tip'>
-                  {membershipStatus?.daily_limit != null
-                    ? `剩余 ${membershipStatus?.daily_remaining ?? 0} 次 · 开通会员每日最高100次`
-                    : '当前不限次 · 开通会员享专属权益'}
+                <Text className='card-tip card-tip--spaced'>
+                  标准分析 1 分/次 · 精准 2 分/次 · 运动 0.5 分/次
                 </Text>
-              </View>
-            </>
-          )}
+                {membershipStatus.invite_code ? (
+                  <Text className='card-tip'>邀请码 {membershipStatus.invite_code} · 好友注册双方各 +20 积分</Text>
+                ) : (
+                  <Text className='card-tip'>分享邀请码，好友注册双方各 +20 积分</Text>
+                )}
+              </>
+            ) : (
+              <>
+                <Text className='progress-text'>点击查看积分说明与充值</Text>
+                <Text className='card-tip'>标准分析 1 分/次 · 精准 2 分/次 · 运动 0.5 分/次</Text>
+              </>
+            )}
+          </View>
           <View className='card-bg-icon'>
             <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
           </View>

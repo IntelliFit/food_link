@@ -220,12 +220,15 @@ function AnalyzePage() {
     })
   }
 
-  /** 日配额已用尽（后端开启日限时 daily_limit 与 daily_remaining 均有值） */
+  const pointsMode = Boolean(membershipStatus && typeof membershipStatus.points_balance === 'number')
+  /** 积分制：不足 1 分无法发起标准分析；旧版日限：daily_remaining<=0 */
   const isQuotaExhausted = Boolean(
     membershipStatus &&
-      membershipStatus.daily_limit != null &&
-      membershipStatus.daily_remaining !== null &&
-      membershipStatus.daily_remaining <= 0
+      (pointsMode
+        ? (membershipStatus.points_balance as number) < 1
+        : membershipStatus.daily_limit != null &&
+          membershipStatus.daily_remaining !== null &&
+          membershipStatus.daily_remaining <= 0)
   )
 
   /** 多视角开关：纯 View 实现，避免任意 Switch 组件在分包内触发 react 未定义 */
@@ -386,20 +389,26 @@ function AnalyzePage() {
   }
 
   const handleStrictModeTap = () => {
-    if (membershipStatus?.is_pro) {
+    const canStrict =
+      typeof membershipStatus?.points_balance === 'number'
+        ? membershipStatus.points_balance >= 2
+        : Boolean(membershipStatus?.is_pro)
+    if (canStrict) {
       setExecutionMode('strict')
       return
     }
     Taro.showModal({
-      title: '解锁精准模式',
-      content: '精准模式需要开通食探会员才能使用，是否前往开通？',
-      confirmText: '去开通',
+      title: '积分不足',
+      content:
+        typeof membershipStatus?.points_balance === 'number'
+          ? '精准模式每次消耗 2 积分，当前积分不足。请先充值或改用标准模式（1 积分/次）。'
+          : '精准模式需要至少 2 积分/次，请先充值或改用标准模式。',
+      confirmText: '去充值',
       cancelText: '取消',
       success: (res) => {
         if (res.confirm) {
           Taro.navigateTo({ url: '/pages/pro-membership/index' })
         }
-        // 取消：保持标准模式
       }
     })
   }
@@ -569,18 +578,38 @@ function AnalyzePage() {
       {/* 今日配额提示条 */}
       {membershipStatus && (
         <View
-          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${membershipStatus.is_pro ? 'quota-bar--pro' : !isQuotaExhausted && (membershipStatus.daily_remaining ?? 0) <= 1 ? 'quota-bar--warn' : ''}`}
+          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${
+            pointsMode
+              ? !isQuotaExhausted && (membershipStatus.points_balance as number) < 2
+                ? 'quota-bar--warn'
+                : ''
+              : membershipStatus.is_pro
+                ? 'quota-bar--pro'
+                : !isQuotaExhausted && (membershipStatus.daily_remaining ?? 0) <= 1
+                  ? 'quota-bar--warn'
+                  : ''
+          }`}
           onClick={() => {
             if (isQuotaExhausted) return
+            if (pointsMode) {
+              Taro.navigateTo({ url: '/pages/pro-membership/index' })
+              return
+            }
             if (!membershipStatus.is_pro) Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }}
         >
           <Text className='quota-bar-text'>
-            {isQuotaExhausted
-              ? '今日拍照/文字分析次数已用尽，请明日再试'
-              : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
-                  !membershipStatus.is_pro ? '  →开通会员解锁精准模式' : ''
-                }`}
+            {pointsMode
+              ? isQuotaExhausted
+                ? '积分不足，无法发起分析（标准需 1 分），请先充值'
+                : `积分余额 ${(membershipStatus.points_balance as number).toFixed(1)} · 标准 1 / 精准 2 / 运动 0.5${
+                    (membershipStatus.points_balance as number) < 2 ? '  →充值后可用精准' : ''
+                  }`
+              : isQuotaExhausted
+                ? '今日拍照/文字分析次数已用尽，请明日再试'
+                : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
+                    !membershipStatus.is_pro ? '  →开通会员解锁精准模式' : ''
+                  }`}
           </Text>
         </View>
       )}

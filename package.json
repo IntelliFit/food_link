@@ -29,7 +29,7 @@
     "build:qq": "taro build --type qq",
     "build:jd": "taro build --type jd",
     "build:harmony-hybrid": "taro build --type harmony-hybrid",
-    "dev:weapp": "cross-env NODE_ENV=development npm run build:weapp -- --watch --no-check",
+    "dev:weapp": "cross-env NODE_ENV=development TARO_APP_API_BASE_URL=http://127.0.0.1:3010 npm run build:weapp -- --watch --no-check",
     "dev:weapp:online": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://healthymax.cn npm run build:weapp -- --watch --no-check",
     "dev:swan": "npm run build:swan -- --watch",
     "dev:alipay": "npm run build:alipay -- --watch",

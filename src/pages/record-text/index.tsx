@@ -38,11 +38,14 @@ function RecordTextPage() {
   const [loading, setLoading] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
 
+  const pointsMode = Boolean(membershipStatus && typeof membershipStatus.points_balance === 'number')
   const isQuotaExhausted = Boolean(
     membershipStatus &&
-      membershipStatus.daily_limit != null &&
-      membershipStatus.daily_remaining !== null &&
-      membershipStatus.daily_remaining <= 0
+      (pointsMode
+        ? (membershipStatus.points_balance as number) < 1
+        : membershipStatus.daily_limit != null &&
+          membershipStatus.daily_remaining !== null &&
+          membershipStatus.daily_remaining <= 0)
   )
 
   const refreshMembership = () => {
@@ -74,19 +77,44 @@ function RecordTextPage() {
     }
 
     if (isQuotaExhausted) {
-      Taro.showModal({
-        title: '今日次数已用完',
-        content: '今日拍照/文字分析次数已达上限，请明日再试。',
-        showCancel: false,
-        confirmText: '知道了'
-      })
+      if (pointsMode) {
+        Taro.showModal({
+          title: '积分不足',
+          content: '标准分析需至少 1 积分，请先充值。',
+          confirmText: '去充值',
+          cancelText: '取消',
+          success: (res) => {
+            if (res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }
+        })
+      } else {
+        Taro.showModal({
+          title: '今日次数已用完',
+          content: '今日拍照/文字分析次数已达上限，请明日再试。',
+          showCancel: false,
+          confirmText: '知道了'
+        })
+      }
       return
     }
 
     // 配额兜底（与按钮禁用一致，防止并发）
     try {
       const membership = await getMyMembership()
-      if (membership.daily_remaining !== null && membership.daily_remaining <= 0) {
+      if (typeof membership.points_balance === 'number') {
+        if (membership.points_balance < 1) {
+          Taro.showModal({
+            title: '积分不足',
+            content: '标准分析需至少 1 积分，请先充值。',
+            confirmText: '去充值',
+            cancelText: '取消',
+            success: (res) => {
+              if (res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            }
+          })
+          return
+        }
+      } else if (membership.daily_remaining !== null && membership.daily_remaining <= 0) {
         const isPro = membership.is_pro
         const limit = membership.daily_limit ?? 30
         Taro.showModal({
@@ -140,22 +168,29 @@ function RecordTextPage() {
       Taro.hideLoading()
       const statusCode = (e as { statusCode?: number })?.statusCode
       const errMsg = e?.message || '提交任务失败'
+      const isPointsShort = statusCode === 400 && errMsg.includes('积分')
       const isQuota =
+        isPointsShort ||
         statusCode === 429 ||
         errMsg.includes('上限') ||
         errMsg.includes('已达上限') ||
         errMsg.includes('次数已达') ||
         errMsg.includes('明日再试')
       if (isQuota) {
-        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员')
+        const suggestRecharge = isPointsShort || errMsg.includes('积分')
+        const suggestPro = !suggestRecharge && (errMsg.includes('开通') || errMsg.includes('会员'))
         Taro.showModal({
-          title: '今日次数已用完',
+          title: suggestRecharge ? '积分不足' : '今日次数已用完',
           content: errMsg,
-          confirmText: suggestPro ? '去开通会员' : '知道了',
+          confirmText: suggestRecharge ? '去充值' : suggestPro ? '去开通会员' : '知道了',
           cancelText: '取消',
-          showCancel: suggestPro,
+          showCancel: suggestRecharge || suggestPro,
           success: (res) => {
-            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            if (res.confirm) {
+              if (suggestRecharge || suggestPro) {
+                Taro.navigateTo({ url: '/pages/pro-membership/index' })
+              }
+            }
           }
         })
       } else {
@@ -173,15 +208,21 @@ function RecordTextPage() {
           className={`record-text-quota-bar ${isQuotaExhausted ? 'record-text-quota-bar--exhausted' : ''}`}
           onClick={() => {
             if (isQuotaExhausted) return
-            if (!membershipStatus.is_pro) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }}
         >
           <Text className='record-text-quota-bar-text'>
-            {isQuotaExhausted
-              ? '今日拍照/文字分析次数已用尽，请明日再试'
-              : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
-                  !membershipStatus.is_pro ? '  →开通会员享更高额度' : ''
-                }`}
+            {pointsMode
+              ? isQuotaExhausted
+                ? '积分不足，无法发起分析（标准需 1 分），请先充值'
+                : `积分余额 ${(membershipStatus.points_balance as number).toFixed(1)} · 标准 1 / 精准 2 / 运动 0.5${
+                    (membershipStatus.points_balance as number) < 2 ? '  →充值后可用精准' : ''
+                  }`
+              : isQuotaExhausted
+                ? '今日拍照/文字分析次数已用尽，请明日再试'
+                : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
+                    !membershipStatus.is_pro ? '  →开通会员享更高额度' : ''
+                  }`}
           </Text>
         </View>
       )}

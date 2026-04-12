@@ -289,12 +289,15 @@ function HealthProfilePage() {
       return
     }
 
-    // 精准模式需要会员：填写完档案后提示
-    if (effectiveMode === 'strict' && !membershipStatus?.is_pro) {
+    const canStrict =
+      typeof membershipStatus?.points_balance === 'number'
+        ? (membershipStatus.points_balance as number) >= 2
+        : Boolean(membershipStatus?.is_pro)
+    if (effectiveMode === 'strict' && !canStrict) {
       const { confirm } = await Taro.showModal({
-        title: '解锁精准模式',
-        content: '精准模式需要开通食探会员才能使用，是否前往开通？\n若取消则自动切换至标准模式保存。',
-        confirmText: '去开通',
+        title: '积分不足',
+        content: '精准模式每次消耗 2 积分，当前积分不足。是否前往充值？\n若取消则自动以标准模式保存。',
+        confirmText: '去充值',
         cancelText: '标准模式保存',
       })
       if (confirm) {

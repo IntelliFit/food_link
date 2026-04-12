@@ -40,7 +40,9 @@ from exercise_llm import ExerciseLlmError, estimate_exercise_calories_sync
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
-FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+# 积分制上线后默认关闭「每日次数」限次（由积分扣减代替）；需要旧逻辑时可设 FOOD_ANALYSIS_DAILY_LIMIT_ENABLED=1
+FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+POINTS_SYSTEM_ENABLED = os.getenv("POINTS_SYSTEM_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 # 拍照/文字分析每日上限（限次开启时生效）
 FOOD_ANALYSIS_DAILY_LIMIT_NON_PRO = 30
 FOOD_ANALYSIS_DAILY_LIMIT_PRO = 100
@@ -173,6 +175,16 @@ from database import (
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
+from user_points import (
+    POINTS_EXERCISE,
+    YUAN_TO_POINTS,
+    add_user_points,
+    create_new_user_with_points,
+    ensure_registration_invite_code,
+    food_dispatch_cost,
+    get_user_points_balance,
+    try_deduct_user_points,
+)
 
 # 从 .env 文件加载环境变量
 BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -189,6 +201,30 @@ VALID_MODE_SET_BY = {"system", "user_manual", "coach_manual"}
 def _get_china_today_str() -> str:
     """返回中国时区的今天日期字符串。"""
     return datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+
+
+async def _require_points_food_dispatch(user_id: str, execution_mode: Optional[str], reason: str) -> None:
+    """标准分析 1 分、精准 2 分（与 is_pro 无关）。"""
+    if not POINTS_SYSTEM_ENABLED:
+        return
+    cost = food_dispatch_cost(execution_mode)
+    ok, bal = await try_deduct_user_points(user_id, cost, reason)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail=f"积分不足（当前 {float(bal):.1f}，本操作需要 {float(cost):.1f}）",
+        )
+
+
+async def _require_points_amount(user_id: str, amount: Decimal, reason: str) -> None:
+    if not POINTS_SYSTEM_ENABLED:
+        return
+    ok, bal = await try_deduct_user_points(user_id, amount, reason)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail=f"积分不足（当前 {float(bal):.1f}，本操作需要 {float(amount):.1f}）",
+        )
 
 
 def _format_china_time_hhmm(value: Any) -> str:
@@ -516,12 +552,66 @@ def _load_pem_value(value_or_path: Optional[str], env_name: str) -> str:
     raise HTTPException(status_code=500, detail=f"{env_name} 配置无效，既不是 PEM 内容也不是可读文件路径")
 
 
+def _normalize_wechat_merchant_serial_no(raw: str) -> str:
+    """商户 API 证书序列号：去空格、统一大写，避免复制时混入空格导致签名错误。"""
+    return (raw or "").strip().replace(" ", "").upper()
+
+
+async def _wechat_pay_jsapi_create_order(config: Dict[str, str], request_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    微信支付 V3：JSAPI/小程序下单 POST /v3/pay/transactions/jsapi。
+    请求体与 Authorization 签名必须使用同一字节序列（UTF-8）。
+    """
+    canonical_url = "/v3/pay/transactions/jsapi"
+    request_body = json.dumps(request_payload, ensure_ascii=False, separators=(",", ":"))
+    authorization = _build_wechatpay_authorization(
+        mchid=config["mchid"],
+        serial_no=config["serial_no"],
+        private_key_pem=config["private_key"],
+        method="POST",
+        canonical_url=canonical_url,
+        body=request_body,
+    )
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(
+            f"https://api.mch.weixin.qq.com{canonical_url}",
+            content=request_body.encode("utf-8"),
+            headers={
+                "Authorization": authorization,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "food-link/1.0",
+            },
+        )
+
+    if response.status_code not in (200, 201):
+        try:
+            error_data = response.json()
+            code = error_data.get("code")
+            error_msg = error_data.get("message") or error_data.get("detail") or response.text
+        except Exception:
+            code = None
+            error_msg = response.text
+        hint = ""
+        err_s = str(error_msg)
+        if "签名" in err_s or code in ("SIGN_ERROR", "INVALID_REQUEST", "SIGNATURE_ERROR"):
+            hint = (
+                " 排查：1) WECHAT_PAY_SERIAL_NO 必须填写「商户API证书」序列号（与 apiclient_key.pem 为同一套，"
+                "不是平台证书序列号）；2) 私钥为 apiclient_key.pem 完整内容；3) 服务器时间准确。"
+                " 可用 openssl x509 -in apiclient_cert.pem -noout -serial 核对序列号。"
+            )
+        raise HTTPException(status_code=502, detail=f"微信下单失败：{error_msg}{hint}")
+
+    return response.json()
+
+
 def _get_wechat_pay_config() -> Dict[str, str]:
     """读取微信支付配置。"""
     appid = os.getenv("APPID", "").strip()
     mchid = os.getenv("WECHAT_PAY_MCHID", "").strip()
     notify_url = os.getenv("WECHAT_PAY_NOTIFY_URL", "").strip()
-    serial_no = os.getenv("WECHAT_PAY_SERIAL_NO", "").strip()
+    # 须与「商户API证书」一致（非平台证书）；建议大写十六进制、无空格（与商户平台展示一致）
+    serial_no = _normalize_wechat_merchant_serial_no(os.getenv("WECHAT_PAY_SERIAL_NO", ""))
     api_v3_key = os.getenv("WECHAT_PAY_API_V3_KEY", "").strip()
     private_key = _load_pem_value(
         os.getenv("WECHAT_PAY_PRIVATE_KEY") or os.getenv("WECHAT_PAY_PRIVATE_KEY_PATH"),
@@ -1659,6 +1749,7 @@ def _strip_standard_mode_extras(
 class LoginRequest(BaseModel):
     code: str = Field(..., description="微信小程序登录凭证 code")
     phoneCode: Optional[str] = Field(default=None, description="获取手机号的 code（可选）")
+    inviteCode: Optional[str] = Field(default=None, description="注册时填写的邀请码（可选，新老用户各 +20 积分）")
 
 
 class LoginResponse(BaseModel):
@@ -1694,6 +1785,10 @@ class MembershipStatusResponse(BaseModel):
     daily_limit: Optional[int] = None
     daily_used: Optional[int] = None
     daily_remaining: Optional[int] = None
+    # 积分制（替代会员权限区分的主展示字段）
+    points_balance: Optional[float] = None
+    invite_code: Optional[str] = None
+    points_per_yuan: Optional[float] = None
 
 
 class MembershipPlansListResponse(BaseModel):
@@ -1716,6 +1811,17 @@ class CreateMembershipPaymentResponse(BaseModel):
     order_no: str
     plan_code: str
     amount: float
+    pay_params: PaymentParamsResponse
+
+
+class CreatePointsRechargeRequest(BaseModel):
+    amount_yuan: float = Field(..., gt=0, le=50000, description="充值金额（元），1 元兑换积分见 points_per_yuan")
+
+
+class CreatePointsRechargeResponse(BaseModel):
+    order_no: str
+    amount_yuan: float
+    points_to_add: float
     pay_params: PaymentParamsResponse
 
 
@@ -1925,6 +2031,7 @@ async def analyze_food(
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
         state_hint = ""
+        state_parts: List[str] = []
         if request.diet_goal or request.activity_timing:
             diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
             activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
@@ -1964,8 +2071,8 @@ async def analyze_food(
         if execution_mode is None:
             execution_mode = _normalize_execution_mode(None)
 
-        # 配额检查（已登录用户）
-        if user_info:
+        # 已登录：旧版每日限次 / Pro 精准；积分制下由单次请求前扣积分（同步分析在下方扣）
+        if user_info and not POINTS_SYSTEM_ENABLED:
             membership = await _get_effective_membership(user_info["user_id"])
             membership_resp = _format_membership_response(membership)
             is_pro_sync = membership_resp["is_pro"]
@@ -1978,9 +2085,11 @@ async def analyze_food(
                         status_code=429,
                         detail=f"今日拍照次数已达上限（{quota_limit_sync}次），{'请明日再试' if is_pro_sync else '请明日再试，或开通食探会员解锁精准模式'}"
                     )
-            # strict 模式需要 Pro 会员
             if execution_mode == "strict" and not is_pro_sync:
                 execution_mode = "standard"
+
+        if user_info and POINTS_SYSTEM_ENABLED:
+            await _require_points_food_dispatch(user_info["user_id"], execution_mode, "food_analyze_sync")
 
         mode_hint = _build_execution_mode_hint(execution_mode)
         compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
@@ -2223,28 +2332,26 @@ async def analyze_submit(
     if body.image_urls and len(body.image_urls) > 1 and not body.is_multi_view:
         raise HTTPException(status_code=400, detail="上传多张图片前请先开启多视角模式")
 
-    # 配额检查
-    membership = await _get_effective_membership(user_info["user_id"])
-    membership_resp = _format_membership_response(membership)
-    is_pro = membership_resp["is_pro"]
-    quota_limit = _get_food_analysis_daily_limit(is_pro)
-    if quota_limit is not None:
-        today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-        daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
-        if daily_used >= quota_limit:
-            raise HTTPException(
-                status_code=429,
-                detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '请明日再试，或开通食探会员解锁精准模式'}"
-            )
-
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
     user = await get_user_by_id(user_info["user_id"])
     profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
     effective_mode = requested_mode or profile_mode
 
-    # strict 模式需要 Pro 会员
-    if effective_mode == "strict" and not is_pro:
-        effective_mode = "standard"
+    if not POINTS_SYSTEM_ENABLED:
+        membership = await _get_effective_membership(user_info["user_id"])
+        membership_resp = _format_membership_response(membership)
+        is_pro = membership_resp["is_pro"]
+        quota_limit = _get_food_analysis_daily_limit(is_pro)
+        if quota_limit is not None:
+            today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+            daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
+            if daily_used >= quota_limit:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '请明日再试，或开通食探会员解锁精准模式'}"
+                )
+        if effective_mode == "strict" and not is_pro:
+            effective_mode = "standard"
 
     payload = {
         "meal_type": body.meal_type,
@@ -2344,6 +2451,7 @@ async def analyze_submit(
                 "round_index": current_round_index,
             },
         )
+        await _require_points_food_dispatch(user_info["user_id"], "strict", "food_image_precision_plan")
         precision_task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -2376,6 +2484,7 @@ async def analyze_submit(
         },
     )
     try:
+        await _require_points_food_dispatch(user_info["user_id"], effective_mode, "food_image_analysis")
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -2999,6 +3108,7 @@ async def analyze_text_submit(
                 "round_index": current_round_index,
             },
         )
+        await _require_points_food_dispatch(user_info["user_id"], "strict", "food_text_precision_plan")
         precision_task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -3030,6 +3140,7 @@ async def analyze_text_submit(
     )
 
     try:
+        await _require_points_food_dispatch(user_info["user_id"], effective_mode, "food_text_analysis")
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -3152,6 +3263,7 @@ async def continue_precision_session(
         None,
     )
     try:
+        await _require_points_food_dispatch(user_info["user_id"], "strict", "precision_session_continue")
         task = await asyncio.to_thread(create_analysis_task_sync, **task_kwargs)
         await asyncio.to_thread(
             update_precision_session_sync,
@@ -3716,15 +3828,29 @@ async def get_membership_plans():
 async def get_my_membership(
     user_info: dict = Depends(get_current_user_info)
 ):
-    """获取当前登录用户的 Pro 会员状态（含今日配额）。"""
+    """获取当前用户状态：积分制下以 points_balance / invite_code 为主；会员字段保留兼容旧客户端。"""
     try:
         membership = await _get_effective_membership(user_info["user_id"])
         result = _format_membership_response(membership)
+        uid = user_info["user_id"]
+        if POINTS_SYSTEM_ENABLED:
+            result["is_pro"] = False
+            try:
+                icode = await ensure_registration_invite_code(uid)
+            except Exception:
+                icode = None
+            bal = await get_user_points_balance(uid)
+            result["points_balance"] = float(bal)
+            result["invite_code"] = icode
+            result["points_per_yuan"] = float(YUAN_TO_POINTS)
+            result["daily_limit"] = None
+            result["daily_used"] = None
+            result["daily_remaining"] = None
+            return result
         is_pro = result["is_pro"]
         daily_limit = _get_food_analysis_daily_limit(is_pro)
         today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-        daily_used_count = await get_today_food_analysis_count(user_info["user_id"], today_str)
-        # 关闭日限时仍返回今日实际分析次数，供「我的」等页展示；不返回上限与剩余（避免前端把 null 当成 0/3）
+        daily_used_count = await get_today_food_analysis_count(uid, today_str)
         if daily_limit is None:
             result["daily_limit"] = None
             result["daily_used"] = daily_used_count
@@ -3738,83 +3864,6 @@ async def get_my_membership(
     except Exception as e:
         print(f"[get_my_membership] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取会员状态失败: {str(e)}")
-
-
-# ============================================================
-# TODO: [TEST] 以下测试接口在正式上线前必须删除
-# ============================================================
-TEST_MEMBERSHIP_USER_ID = "6646baaa-e86b-410b-a801-d56936d2b8ef"
-
-@app.post("/api/dev/toggle-test-membership")
-async def toggle_test_membership():
-    """
-    [TEST ONLY] 切换测试账号 (6646baaa…) 的会员状态。
-    active → expired；其他状态 → active（30天有效期）。
-    TODO: [TEST] 正式上线前删除此接口。
-    """
-    try:
-        membership = await get_user_pro_membership(TEST_MEMBERSHIP_USER_ID)
-        now = datetime.now(timezone.utc)
-
-        if membership:
-            expires_at = _parse_datetime(membership.get("expires_at"))
-            is_currently_active = (
-                membership.get("status") == "active"
-                and expires_at is not None
-                and expires_at > now
-            )
-            if is_currently_active:
-                updated = await save_user_pro_membership(
-                    TEST_MEMBERSHIP_USER_ID,
-                    {
-                        "status": "expired",
-                        "expires_at": (now - timedelta(seconds=1)).isoformat(),
-                        "updated_at": now.isoformat(),
-                    }
-                )
-                new_is_pro = False
-            else:
-                updated = await save_user_pro_membership(
-                    TEST_MEMBERSHIP_USER_ID,
-                    {
-                        "status": "active",
-                        "current_plan_code": "pro_monthly",
-                        "current_period_start": now.isoformat(),
-                        "expires_at": (now + timedelta(days=30)).isoformat(),
-                        "last_paid_at": now.isoformat(),
-                        "updated_at": now.isoformat(),
-                    }
-                )
-                new_is_pro = True
-        else:
-            updated = await save_user_pro_membership(
-                TEST_MEMBERSHIP_USER_ID,
-                {
-                    "user_id": TEST_MEMBERSHIP_USER_ID,
-                    "status": "active",
-                    "current_plan_code": "pro_monthly",
-                    "first_activated_at": now.isoformat(),
-                    "current_period_start": now.isoformat(),
-                    "expires_at": (now + timedelta(days=30)).isoformat(),
-                    "last_paid_at": now.isoformat(),
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                }
-            )
-            new_is_pro = True
-
-        return {
-            "ok": True,
-            "is_pro": new_is_pro,
-            "status": updated.get("status"),
-            "expires_at": updated.get("expires_at"),
-        }
-    except Exception as e:
-        print(f"[toggle_test_membership] 错误: {e}")
-        raise HTTPException(status_code=500, detail=f"切换会员状态失败: {str(e)}")
-# ============================================================
-# TODO: [TEST] 测试接口结束
-# ============================================================
 
 
 @app.post("/api/membership/pay/create", response_model=CreateMembershipPaymentResponse)
@@ -3839,7 +3888,6 @@ async def create_membership_payment(
         amount = _to_decimal_amount(plan.get("amount") or "0")
         duration_months = int(plan.get("duration_months") or 1)
         order_no = _generate_membership_order_no()
-        canonical_url = "/v3/pay/transactions/jsapi"
         request_payload = {
             "appid": config["appid"],
             "mchid": config["mchid"],
@@ -3854,37 +3902,7 @@ async def create_membership_payment(
                 "openid": openid,
             },
         }
-        request_body = json.dumps(request_payload, ensure_ascii=False, separators=(",", ":"))
-        authorization = _build_wechatpay_authorization(
-            mchid=config["mchid"],
-            serial_no=config["serial_no"],
-            private_key_pem=config["private_key"],
-            method="POST",
-            canonical_url=canonical_url,
-            body=request_body,
-        )
-
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"https://api.mch.weixin.qq.com{canonical_url}",
-                content=request_body.encode("utf-8"),
-                headers={
-                    "Authorization": authorization,
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "User-Agent": "food-link/1.0",
-                },
-            )
-
-        if response.status_code not in (200, 201):
-            try:
-                error_data = response.json()
-                error_msg = error_data.get("message") or error_data.get("detail") or response.text
-            except Exception:
-                error_msg = response.text
-            raise HTTPException(status_code=502, detail=f"微信下单失败: {error_msg}")
-
-        response_data = response.json()
+        response_data = await _wechat_pay_jsapi_create_order(config, request_payload)
         prepay_id = (response_data.get("prepay_id") or "").strip()
         if not prepay_id:
             raise HTTPException(status_code=502, detail="微信下单失败：未返回 prepay_id")
@@ -3927,6 +3945,90 @@ async def create_membership_payment(
     except Exception as e:
         print(f"[create_membership_payment] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"创建会员支付失败: {str(e)}")
+
+
+@app.post("/api/points/recharge/create", response_model=CreatePointsRechargeResponse)
+async def create_points_recharge_payment(
+    body: CreatePointsRechargeRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """微信 JSAPI 下单：按充值金额（元）兑换积分（默认 1 元 = 20 积分，见环境变量 POINTS_YUAN_TO_POINTS）。"""
+    try:
+        config = _get_wechat_pay_config()
+        user = await get_user_by_id(user_info["user_id"])
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        openid = (user.get("openid") or "").strip()
+        if not openid:
+            raise HTTPException(status_code=400, detail="当前用户缺少 openid，无法发起微信支付")
+
+        amount = Decimal(str(body.amount_yuan)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if amount < Decimal("0.01"):
+            raise HTTPException(status_code=400, detail="充值金额过小")
+        points_to_add = (amount * YUAN_TO_POINTS).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        order_no = _generate_membership_order_no()
+        pts_int = int(round(float(points_to_add)))
+        request_payload = {
+            "appid": config["appid"],
+            "mchid": config["mchid"],
+            "description": f"食探积分充值{pts_int}积分",
+            "out_trade_no": order_no,
+            "notify_url": config["notify_url"],
+            "amount": {
+                "total": _amount_to_fen(amount),
+                "currency": "CNY",
+            },
+            "payer": {
+                "openid": openid,
+            },
+        }
+        response_data = await _wechat_pay_jsapi_create_order(config, request_payload)
+        prepay_id = (response_data.get("prepay_id") or "").strip()
+        if not prepay_id:
+            raise HTTPException(status_code=502, detail="微信下单失败：未返回 prepay_id")
+
+        await create_pro_membership_payment_record(
+            {
+                "user_id": user_info["user_id"],
+                "plan_code": "points_recharge",
+                "order_no": order_no,
+                "amount": float(amount),
+                "currency": "CNY",
+                # 0 = 非订阅（积分充值）；需 DB 允许 duration_months>=0，见 backend/sql/migrate_pro_membership_payment_duration_months_allow_zero.sql
+                "duration_months": 0,
+                "pay_channel": "wechat_mini_program",
+                "trade_type": "JSAPI",
+                "status": "pending",
+                "wx_openid": openid,
+                "wx_prepay_id": prepay_id,
+                "extra": {
+                    "kind": "points_recharge",
+                    "points_to_add": float(points_to_add),
+                    "yuan": float(amount),
+                    "create_order_payload": request_payload,
+                    "wechat_create_order_response": response_data,
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+        pay_params = _build_mini_program_pay_params(
+            appid=config["appid"],
+            prepay_id=prepay_id,
+            private_key_pem=config["private_key"],
+        )
+
+        return {
+            "order_no": order_no,
+            "amount_yuan": float(amount),
+            "points_to_add": float(points_to_add),
+            "pay_params": pay_params,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[create_points_recharge_payment] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"创建积分充值订单失败: {str(e)}")
 
 
 @app.post("/api/payment/wechat/notify/membership")
@@ -3996,6 +4098,26 @@ async def wechat_membership_notify(request: Request):
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
+
+    if (payment_record.get("plan_code") or "").strip() == "points_recharge":
+        extra = payment_record.get("extra") or {}
+        if isinstance(extra, str):
+            try:
+                extra = json.loads(extra)
+            except Exception:
+                extra = {}
+        pts = Decimal(str(extra.get("points_to_add") or 0))
+        if pts > 0:
+            try:
+                await add_user_points(
+                    payment_record["user_id"],
+                    pts,
+                    "points_recharge_wechat",
+                    {"order_no": order_no, "yuan": extra.get("yuan")},
+                )
+            except Exception as pe:
+                print(f"[wechat_membership_notify] points recharge grant failed: {pe}")
+        return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
 
     membership = await get_user_pro_membership(payment_record["user_id"])
     existing_expires_at = _parse_datetime(membership.get("expires_at")) if membership else None
@@ -7780,7 +7902,7 @@ async def login(request: LoginRequest):
             
             print(f"[api/login] 用户已存在，user_id: {user_id}, openid: {openid}")
         else:
-            # 新用户，创建记录
+            # 新用户：初始积分 + 邀请码；可选邀请奖励
             print(f"[api/login] 创建新用户，openid: {openid}")
             user_data = {
                 "openid": openid,
@@ -7789,8 +7911,8 @@ async def login(request: LoginRequest):
                 "nickname": "",
                 "telephone": pure_phone_number
             }
-            
-            user = await create_user(user_data)
+            invite_raw = (request.inviteCode or "").strip() or None
+            user = await create_new_user_with_points(user_data, invite_code_from_client=invite_raw)
             user_id = user["id"]
             print(f"[api/login] 新用户创建成功，user_id: {user_id}")
         
@@ -8752,6 +8874,8 @@ async def create_exercise_log(
     if len(desc) > 200:
         raise HTTPException(status_code=422, detail="运动描述过长")
 
+    await _require_points_amount(user_id, POINTS_EXERCISE, "exercise_log_async")
+
     recorded_on = _parse_date_string(date, "date") or datetime.now(CHINA_TZ).date().isoformat()
     profile_snapshot = await _build_exercise_profile_snapshot(user_id)
     task_payload = {"recorded_on": recorded_on}
@@ -8837,7 +8961,7 @@ async def estimate_exercise_calories(
     user_info: dict = Depends(get_current_user_info),
 ):
     """仅调用大模型估算千卡（不落库），与 Worker 共用 exercise_llm。"""
-    _ = user_info
+    await _require_points_amount(user_info["user_id"], POINTS_EXERCISE, "exercise_estimate_calories")
     try:
         profile_snapshot = await _build_exercise_profile_snapshot(user_info["user_id"])
         calories, ai_raw, reasoning = await _estimate_exercise_calories_llm(

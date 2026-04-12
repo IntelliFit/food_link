@@ -200,9 +200,17 @@
     }
 
     .card-tip {
+      display: block;
       color: rgba(255, 255, 255, 0.8);
       font-size: 22rpx;
+      line-height: 1.5;
       text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+      margin-top: 8rpx;
+    }
+
+    .card-tip--spaced {
+      margin-top: 14rpx;
+      margin-bottom: 10rpx;
     }
 
     .progress-bar {

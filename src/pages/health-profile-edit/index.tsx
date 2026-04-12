@@ -443,14 +443,18 @@ function HealthProfileEditPage() {
                   className={`option-card ${executionMode === opt.value ? 'active' : ''}`}
                   onClick={() => {
                     if (opt.value === 'strict') {
-                      if (membershipStatus?.is_pro) {
+                      const canStrict =
+                        typeof membershipStatus?.points_balance === 'number'
+                          ? membershipStatus.points_balance >= 2
+                          : Boolean(membershipStatus?.is_pro)
+                      if (canStrict) {
                         setExecutionMode('strict')
                         return
                       }
                       Taro.showModal({
-                        title: '解锁精准模式',
-                        content: '精准模式需要开通食探会员才能使用，是否前往开通？若取消则保持当前模式。',
-                        confirmText: '去开通',
+                        title: '积分不足',
+                        content: '精准模式每次消耗 2 积分，当前积分不足。是否前往充值？',
+                        confirmText: '去充值',
                         cancelText: '取消',
                         success: (res) => {
                           if (res.confirm) {

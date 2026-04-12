@@ -12,6 +12,44 @@ import './index.scss'
 
 type CameraAuthStatus = 'pending' | 'authorized' | 'denied'
 
+function showFoodAnalysisQuotaModal(ms: MembershipStatus) {
+  if (typeof ms.points_balance === 'number') {
+    Taro.showModal({
+      title: '积分不足',
+      content: '标准分析需至少 1 积分，请先充值。',
+      confirmText: '去充值',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+      }
+    })
+    return
+  }
+  const isPro = ms.is_pro
+  Taro.showModal({
+    title: '今日次数已用完',
+    content: isPro
+      ? `今日 ${ms.daily_limit ?? 30} 次拍照已用完，请明日再试。`
+      : `免费版每日限 ${ms.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
+    confirmText: isPro ? '知道了' : '去开通',
+    cancelText: '取消',
+    showCancel: !isPro,
+    success: (res) => {
+      if (!isPro && res.confirm) {
+        Taro.navigateTo({ url: '/pages/pro-membership/index' })
+      }
+    }
+  })
+}
+
+function isFoodAnalysisBlocked(ms: MembershipStatus | null): boolean {
+  if (!ms) return false
+  if (typeof ms.points_balance === 'number') {
+    return ms.points_balance < 1
+  }
+  return ms.daily_remaining !== null && ms.daily_remaining <= 0
+}
+
 function RecordPage() {
   // 相机相关状态
   const [cameraAuth, setCameraAuth] = useState<CameraAuthStatus>('pending')
@@ -78,22 +116,8 @@ function RecordPage() {
       return
     }
 
-    if (membershipStatus && membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
-      const isPro = membershipStatus.is_pro
-      Taro.showModal({
-        title: '今日次数已用完',
-        content: isPro
-          ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-          : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-        confirmText: isPro ? '知道了' : '去开通',
-        cancelText: '取消',
-        showCancel: !isPro,
-        success: (res) => {
-          if (!isPro && res.confirm) {
-            Taro.navigateTo({ url: '/pages/pro-membership/index' })
-          }
-        }
-      })
+    if (membershipStatus && isFoodAnalysisBlocked(membershipStatus)) {
+      showFoodAnalysisQuotaModal(membershipStatus)
       return
     }
 
@@ -131,22 +155,8 @@ function RecordPage() {
       return
     }
 
-    if (membershipStatus && membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
-      const isPro = membershipStatus.is_pro
-      Taro.showModal({
-        title: '今日次数已用完',
-        content: isPro
-          ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-          : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-        confirmText: isPro ? '知道了' : '去开通',
-        cancelText: '取消',
-        showCancel: !isPro,
-        success: (res) => {
-          if (!isPro && res.confirm) {
-            Taro.navigateTo({ url: '/pages/pro-membership/index' })
-          }
-        }
-      })
+    if (membershipStatus && isFoodAnalysisBlocked(membershipStatus)) {
+      showFoodAnalysisQuotaModal(membershipStatus)
       return
     }
 

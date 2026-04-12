@@ -106,7 +106,20 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         void (async () => {
           try {
             const membershipStatus = await getMyMembership()
-            if (membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
+            if (typeof membershipStatus.points_balance === 'number') {
+              if (membershipStatus.points_balance < 1) {
+                Taro.showModal({
+                  title: '积分不足',
+                  content: '标准分析需至少 1 积分，请先充值。',
+                  confirmText: '去充值',
+                  cancelText: '取消',
+                  success: (r) => {
+                    if (r.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                  }
+                })
+                return
+              }
+            } else if (membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
               const isPro = membershipStatus.is_pro
               Taro.showModal({
                 title: '今日次数已用完',

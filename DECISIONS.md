@@ -30,6 +30,12 @@
 
 - `2026-04-01`: 饮食记录的商业化口径从"每日次数限制"转向"积分制"。当前拟定的基础规则是：`标准分析 1 积分/次`、`精准分析 3 积分/次`、`新用户赠送 20 积分`，积分仅对 `拍照记录` 与 `文字记录` 生效。
 
+- `2026-04-09`: 商业化正式切换为**积分制**（`POINTS_SYSTEM_ENABLED` 默认开启），不再以 Pro/非 Pro 区分权限；扣费规则：**标准食物分析（拍照/文字）1 分/次**、**精准模式 2 分/次**、**运动热量大模型估算 0.5 分/次**；新用户初始 **100** 积分；充值 **1 元 = 20 积分**（`POINTS_YUAN_TO_POINTS`）；注册用户各有 **registration_invite_code**，新用户登录时传入邀请码则**邀请人与被邀请人各 +20** 积分。数据库需执行 `backend/database/user_points.sql`；积分充值走 `POST /api/points/recharge/create` + 原微信支付回调（`plan_code=points_recharge` 分支发积分）。旧「每日次数」由 `FOOD_ANALYSIS_DAILY_LIMIT_ENABLED` 控制，默认关闭。
+
+- `2026-04-09`: 积分充值订单复用 `pro_membership_payment_records`，`plan_code=points_recharge` 时 `duration_months=0` 表示非订阅；须执行 `backend/sql/migrate_pro_membership_payment_duration_months_allow_zero.sql`，将 `duration_months_check` 放宽为 `duration_months >= 0`，否则插入会触发 PostgreSQL `23514`。
+
+- `2026-04-09`: `pro_membership_payment_records.plan_code` 外键指向 `membership_plan_config.code`，须在库中插入 `code=points_recharge` 的占位行（`is_active=false`，`duration_months=0`，不在套餐列表展示）；同表原 CHECK 常限制 `duration_months>=1`，迁移脚本会先放宽为 `>=0` 再插入；见 `backend/sql/migrate_membership_plan_config_points_recharge_fk.sql`。否则插入触发 `23503` 或 `23514`。
+
 - `2026-04-01`: `手动记录` 必须作为独立记录模式新增，且永久免费。手动记录不走 AI 分析，不消耗积分；其食物选择链路优先使用 `public_food_library`，再兜底 `food_nutrition_library + food_nutrition_aliases`，未命中再进入 `food_unresolved_logs` 供后续词典扩充。
 
 - `2026-04-08`: 手动记录的产品形态从“浏览食物表”收口为“搜索优先单餐工作台”。空搜索时优先展示 `最近常吃 / 收藏优先 / 公共库推荐 / 标准营养词典` 四层；有搜索词时统一走远程搜索混排，不再依赖前端本地筛选和“两栏 tab 切换”。

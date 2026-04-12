@@ -504,6 +504,8 @@ export interface LoginRequest {
 export interface LoginRequestParams {
   code: string
   phoneCode?: string
+  /** 注册时填写邀请人码，双方各得积分（后端校验） */
+  inviteCode?: string
 }
 
 // 登录响应接口
@@ -570,6 +572,12 @@ export interface MembershipStatus {
   daily_limit: number | null
   daily_used: number | null
   daily_remaining: number | null
+  /** 积分制：当前余额 */
+  points_balance?: number | null
+  /** 自己的注册邀请码（分享用） */
+  invite_code?: string | null
+  /** 每 1 元充值可兑换积分（与后端 POINTS_YUAN_TO_POINTS 一致） */
+  points_per_yuan?: number | null
 }
 
 export interface MembershipPlansResponse {
@@ -640,6 +648,20 @@ export interface CreateMembershipPaymentResponse {
   order_no: string
   plan_code: string
   amount: number
+  pay_params: {
+    timeStamp: string
+    nonceStr: string
+    package: string
+    signType: 'RSA'
+    paySign: string
+  }
+}
+
+/** 积分充值下单（微信支付 JSAPI），回调到账后增加积分 */
+export interface CreatePointsRechargeResponse {
+  order_no: string
+  amount_yuan: number
+  points_to_add: number
   pay_params: {
     timeStamp: string
     nonceStr: string
@@ -1987,7 +2009,7 @@ export async function authenticatedRequest(
  * @param phoneCode 获取手机号的 code（可选）
  * @returns Promise<LoginResponse> 登录结果
  */
-export async function login(code: string, phoneCode?: string): Promise<LoginResponse> {
+export async function login(code: string, phoneCode?: string, inviteCode?: string): Promise<LoginResponse> {
   try {
     const requestData: LoginRequestParams = {
       code: code
@@ -1995,6 +2017,9 @@ export async function login(code: string, phoneCode?: string): Promise<LoginResp
 
     if (phoneCode) {
       requestData.phoneCode = phoneCode
+    }
+    if (inviteCode?.trim()) {
+      requestData.inviteCode = inviteCode.trim()
     }
 
     const response = await Taro.request({
@@ -2094,7 +2119,8 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
 export async function getMyMembership(): Promise<MembershipStatus> {
   try {
     const response = await authenticatedRequest('/api/membership/me', {
-      method: 'GET'
+      method: 'GET',
+      timeout: 15000
     })
 
     if (response.statusCode !== 200) {
@@ -2220,30 +2246,20 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
   }
 }
 
-// ============================================================
-// TODO: [TEST] 以下测试函数在正式上线前必须删除
-// ============================================================
 /**
- * [TEST ONLY] 切换测试账号会员状态（active ⇌ expired）
- * TODO: [TEST] 正式上线前删除此函数。
+ * 创建积分充值支付单（1 元兑换积分数以服务端 points_per_yuan 为准）
  */
-export async function toggleTestMembership(): Promise<{ ok: boolean; is_pro: boolean; status: string }> {
-  try {
-    const response = await authenticatedRequest('/api/dev/toggle-test-membership', {
-      method: 'POST'
-    })
-    if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '切换失败'
-      throw new Error(errorMsg)
-    }
-    return response.data as { ok: boolean; is_pro: boolean; status: string }
-  } catch (error: any) {
-    console.error('切换测试会员状态失败:', error)
-    throw new Error(error.message || '切换失败')
+export async function createPointsRechargePayment(amountYuan: number): Promise<CreatePointsRechargeResponse> {
+  const response = await authenticatedRequest('/api/points/recharge/create', {
+    method: 'POST',
+    data: { amount_yuan: amountYuan }
+  })
+  if (response.statusCode !== 200) {
+    const errorMsg = (response.data as any)?.detail || '创建积分充值订单失败'
+    throw new Error(errorMsg)
   }
+  return response.data as CreatePointsRechargeResponse
 }
-// TODO: [TEST] 测试函数结束
-// ============================================================
 
 /**
  * 更新用户信息
