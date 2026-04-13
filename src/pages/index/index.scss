@@ -808,35 +808,53 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .expiry-skeleton-item {
-  background: $card-bg;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: #ffffff;
   border-radius: 16rpx;
-  padding: 20rpx;
+  padding: 16rpx;
   box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
 }
 
-.expiry-skeleton-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 12rpx;
+.expiry-skeleton-thumb {
+  width: 130rpx;
+  height: 130rpx;
+  border-radius: 16rpx;
+  flex-shrink: 0;
+  @include home-skeleton-block;
 }
 
-.expiry-skeleton-item .home-line-wide {
+.expiry-skeleton-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.expiry-skeleton-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.expiry-skeleton-top .home-line-title {
   flex: 1;
   height: 32rpx;
   border-radius: 8rpx;
   @include home-skeleton-block;
 }
 
-.expiry-skeleton-item .home-line-tag {
+.expiry-skeleton-top .home-line-tag {
   width: 88rpx;
   height: 32rpx;
   border-radius: 9999rpx;
   @include home-skeleton-block;
 }
 
-.expiry-skeleton-item .home-line-narrow {
+.expiry-skeleton-mid .home-line-foot-l {
   width: 70%;
   height: 26rpx;
   border-radius: 8rpx;
@@ -852,11 +870,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 // 单条样式对齐 `.meal-item`：白底、圆角、轻阴影
 .expiry-item {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  background: $card-bg;
+  align-items: center;
+  gap: 16rpx;
+  background: #ffffff;
   border-radius: 16rpx;
-  padding: 20rpx;
+  padding: 16rpx;
   box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
   border: 2rpx solid transparent;
 
@@ -865,55 +883,82 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
-.expiry-item-main {
+.expiry-media-wrap {
+  position: relative;
+  width: 130rpx;
+  height: 130rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expiry-icon-wrap {
+  width: 100%;
+  height: 100%;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expiry-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.expiry-header-block {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 12rpx;
+  gap: 12rpx;
+  min-width: 0;
 }
 
-.expiry-item-name {
-  flex: 1;
-  min-width: 0;
+.expiry-name {
   font-size: 28rpx;
   font-weight: 600;
   color: $text-primary;
   line-height: 40rpx;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.expiry-item-tag {
+.expiry-time-pill {
   flex-shrink: 0;
-  padding: 4rpx 12rpx;
+  background: #f3f4f6;
   border-radius: 9999rpx;
-  font-size: 20rpx;
-  font-weight: 600;
-  line-height: 28rpx;
-
-  &.overdue {
-    color: #dc2626;
-    background: #fee2e2;
-  }
-
-  &.today {
-    color: #ea580c;
-    background: #ffedd5;
-  }
-
-  &.soon {
-    color: #d97706;
-    background: #fef3c7;
-  }
-
-  &.normal {
-    color: $text-secondary;
-    background: #e5e7eb;
-  }
+  padding: 4rpx 14rpx;
 }
 
-.expiry-item-meta {
-  display: block;
+.expiry-time-pill-text {
+  font-size: 20rpx;
+  font-weight: 500;
+  color: $text-secondary;
+  line-height: 28rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.expiry-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12rpx;
+}
+
+.expiry-meta-text {
   font-size: 24rpx;
+  font-weight: 500;
   color: $text-secondary;
   line-height: 34rpx;
 }

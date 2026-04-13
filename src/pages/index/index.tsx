@@ -2113,11 +2113,16 @@ function IndexPage() {
                 <View className='expiry-skeleton'>
                   {[1, 2, 3].map((i) => (
                     <View key={i} className='expiry-skeleton-item'>
-                      <View className='expiry-skeleton-row'>
-                        <View className='home-line-wide' />
-                        <View className='home-line-tag' />
+                      <View className='expiry-skeleton-thumb' />
+                      <View className='expiry-skeleton-body'>
+                        <View className='expiry-skeleton-top'>
+                          <View className='home-line-title' />
+                          <View className='home-line-tag' />
+                        </View>
+                        <View className='expiry-skeleton-mid'>
+                          <View className='home-line-foot-l' />
+                        </View>
                       </View>
-                      <View className='home-line-narrow' />
                     </View>
                   ))}
                 </View>
@@ -2131,23 +2136,45 @@ function IndexPage() {
               ) : (
                 <>
                   <View className='expiry-list'>
-                    {expirySummary.items.map((item) => (
-                      <View
-                        key={item.id}
-                        className='expiry-item'
-                        onClick={() => openFoodExpiryEdit(item.id)}
-                      >
-                        <View className='expiry-item-main'>
-                          <Text className='expiry-item-name'>{item.food_name}</Text>
-                          <Text className={`expiry-item-tag ${getExpiryTagClass(item.urgency_level)}`}>
-                            {getExpiryUrgencyText(item)}
-                          </Text>
+                    {expirySummary.items.map((item) => {
+                      const isUrgent = item.urgency_level === 'overdue' || item.urgency_level === 'today'
+                      const iconClass = isUrgent ? 'icon-guoqi1' : 'icon-kefulan'
+                      const iconColor =
+                        item.urgency_level === 'overdue' ? '#dc2626'
+                        : item.urgency_level === 'today' ? '#ea580c'
+                        : item.urgency_level === 'soon' ? '#d97706'
+                        : '#6b7280'
+                      const bgColor =
+                        item.urgency_level === 'overdue' ? '#fee2e2'
+                        : item.urgency_level === 'today' ? '#ffedd5'
+                        : item.urgency_level === 'soon' ? '#fef3c7'
+                        : '#f3f4f6'
+
+                      return (
+                        <View
+                          key={item.id}
+                          className='expiry-item'
+                          onClick={() => openFoodExpiryEdit(item.id)}
+                        >
+                          <View className='expiry-media-wrap'>
+                            <View className='expiry-icon-wrap' style={{ backgroundColor: bgColor }}>
+                              <Text className={`iconfont ${iconClass}`} style={{ color: iconColor, fontSize: '52rpx' }} />
+                            </View>
+                          </View>
+                          <View className='expiry-content'>
+                            <View className='expiry-header-block'>
+                              <Text className='expiry-name' numberOfLines={1}>{item.food_name}</Text>
+                              <View className='expiry-time-pill'>
+                                <Text className='expiry-time-pill-text'>{getExpiryUrgencyText(item)}</Text>
+                              </View>
+                            </View>
+                            <View className='expiry-meta-row'>
+                              <Text className='expiry-meta-text'>{formatExpiryMeta(item) || '点击编辑'}</Text>
+                            </View>
+                          </View>
                         </View>
-                        <Text className='expiry-item-meta'>
-                          {formatExpiryMeta(item) || '点击编辑'}
-                        </Text>
-                      </View>
-                    ))}
+                      )
+                    })}
                   </View>
                 </>
               )}
