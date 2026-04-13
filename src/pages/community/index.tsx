@@ -1610,12 +1610,12 @@ function CommunityPage() {
                     className='feed-filter-trigger-combined'
                     onClick={() => setFeedFilterExpanded((v) => !v)}
                   >
-                    <Text className='feed-filter-summary'>{feedFilterSummary}</Text>
                     <View
                       className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''} ${feedFilterIconActive ? 'is-active' : ''}`}
                     >
                       <Text className='iconfont icon-filter-filling' />
                     </View>
+                    <Text className='feed-filter-summary'>更多筛选</Text>
                   </View>
                 </View>
                 {feedFilterExpanded ? (
