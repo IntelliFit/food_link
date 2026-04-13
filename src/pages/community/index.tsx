@@ -1589,35 +1589,34 @@ function CommunityPage() {
                 ) : null}
               </View>
               <View className='feed-filter-panel' onClick={(e) => e.stopPropagation()}>
-                <View className='feed-search-wrap'>
-                  <View className='feed-search-icon-wrap'>
-                    <FeedSearchGlyph />
+                <View className='feed-filter-top-row'>
+                  <View className='feed-search-wrap'>
+                    <View className='feed-search-icon-wrap'>
+                      <FeedSearchGlyph />
+                    </View>
+                    <Input
+                      className='feed-search-input'
+                      placeholder='搜索动态内容或用户...'
+                      placeholderClass='feed-search-placeholder'
+                      value={feedSearchKeyword}
+                      onInput={(e) => setFeedSearchKeyword(e.detail.value)}
+                      confirmType='search'
+                    />
+                    {feedSearchKeyword ? (
+                      <Text className='feed-search-clear' onClick={() => setFeedSearchKeyword('')}>清除</Text>
+                    ) : null}
                   </View>
-                  <Input
-                    className='feed-search-input'
-                    placeholder='搜索动态内容或用户...'
-                    placeholderClass='feed-search-placeholder'
-                    value={feedSearchKeyword}
-                    onInput={(e) => setFeedSearchKeyword(e.detail.value)}
-                    confirmType='search'
-                  />
-                  {feedSearchKeyword ? (
-                    <Text className='feed-search-clear' onClick={() => setFeedSearchKeyword('')}>清除</Text>
-                  ) : null}
-                </View>
-                <View className='feed-filter-trigger-row'>
                   <View
-                    className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''} ${feedFilterIconActive ? 'is-active' : ''}`}
+                    className='feed-filter-trigger-combined'
                     onClick={() => setFeedFilterExpanded((v) => !v)}
                   >
-                    <Text className='iconfont icon-filter-filling' />
+                    <Text className='feed-filter-summary'>{feedFilterSummary}</Text>
+                    <View
+                      className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''} ${feedFilterIconActive ? 'is-active' : ''}`}
+                    >
+                      <Text className='iconfont icon-filter-filling' />
+                    </View>
                   </View>
-                  <Text
-                    className='feed-filter-summary'
-                    onClick={() => setFeedFilterExpanded((v) => !v)}
-                  >
-                    {feedFilterSummary}
-                  </Text>
                 </View>
                 {feedFilterExpanded ? (
                   <View className='feed-filter-expanded'>
@@ -1750,15 +1749,15 @@ function CommunityPage() {
                           <View className='feed-card-main-col'>
                             <View className='feed-card-name-block'>
                               <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
-                              <Text className='post-time'>
-                                {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
-                              </Text>
-                            </View>
-                            {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
-                              <View className='feed-tags'>
-                                <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
+                              <View className='feed-sub-meta-row'>
+                                <Text className='post-time'>
+                                  {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
+                                </Text>
+                                {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
+                                  <Text className='feed-tag-plain'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
+                                ) : null}
                               </View>
-                            ) : null}
+                            </View>
                             {item.record.description &&
                               (item.record.image_path ? (
                                 <Text className='feed-content'>{item.record.description}</Text>

@@ -782,23 +782,32 @@ $home-primary-end: #00bba7;
 .feed-filter-panel {
   margin-bottom: 0;
   overflow: hidden;
-  padding: 0 24rpx 20rpx;
+  padding: 0 24rpx 16rpx;
   background: #fff;
   border-bottom: 1rpx solid $moments-hairline;
 }
 
-.feed-filter-trigger-row {
+.feed-filter-top-row {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  margin-bottom: 8rpx;
-  padding: 0 4rpx;
+  gap: 12rpx;
+}
+
+.feed-filter-trigger-row {
+  display: none;
+}
+
+.feed-filter-trigger-combined {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
 }
 
 .feed-filter-funnel-btn {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 18rpx;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 16rpx;
   background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
   border: 1rpx solid #e2e8f0;
   box-shadow: 0 2rpx 0 #e8edf3, 0 6rpx 14rpx rgb(15 23 42 / 5%);
@@ -836,28 +845,31 @@ $home-primary-end: #00bba7;
 .feed-filter-summary {
   flex: 1;
   min-width: 0;
-  font-size: 26rpx;
+  font-size: 24rpx;
   color: #64748b;
   line-height: 1.45;
+  white-space: nowrap;
 }
 
 .feed-filter-expanded {
   padding-top: 16rpx;
-  margin-top: 8rpx;
+  margin-top: 12rpx;
   border-top: 1rpx solid #f1f5f9;
 }
 
 .feed-search-wrap {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  margin-bottom: 20rpx;
-  padding: 0 20rpx;
-  height: 72rpx;
+  gap: 12rpx;
+  margin-bottom: 0;
+  padding: 0 16rpx;
+  height: 64rpx;
   background: #f1f5f9;
-  border-radius: 36rpx;
+  border-radius: 32rpx;
   border: 1rpx solid #e2e8f0;
   transition: border-color 0.2s ease;
+  flex: 1;
+  min-width: 0;
 
   &:focus-within {
     border-color: #00bc7d;
@@ -1363,8 +1375,21 @@ $home-primary-end: #00bba7;
 .feed-card-name-block {
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
-  margin-bottom: 12rpx;
+  gap: 4rpx;
+  margin-bottom: 8rpx;
+}
+
+.feed-sub-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.feed-tag-plain {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 32rpx;
+  white-space: nowrap;
 }
 
 .user-avatar {
