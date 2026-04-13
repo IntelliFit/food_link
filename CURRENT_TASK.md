@@ -1,5 +1,103 @@
 # CURRENT_TASK
 
+- Task: 首页核心数据本地快照与静默云同步
+- Status: done（首页卡路里/餐食/运动/保质期改为本地快照优先渲染，网络返回后差异覆盖本地；缓存按日期保留最近60条）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - 新增 `home_dashboard_local_cache_v1` 本地快照存储与60条上限策略
+    - 首屏与切日优先读取本地快照，减少等待网络导致的空白/加载态
+    - `loadDashboard` 支持静默同步参数，后台请求完成后按差异覆盖本地快照
+
+- Task: 首页分享称号显示开关与功能下线
+- Status: done（分享弹层已移除“显示今日称号”开关，分享海报生成流程恢复为固定逻辑，不再维护称号显示状态）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - 删除 `Switch` 组件依赖与称号计算/切换状态
+    - 分享方法改回无参固定生成流程
+  - `src/pages/index/index.scss`
+    - 删除开关区域样式
+
+- Task: 今日小结圆内百分比字体回切思源宋体
+- Status: done（百分比数字与 `%` 已改回思源宋体，保留分离绘制和 baseline 对齐）
+- Scope:
+  - `src/utils/poster.ts`
+    - 圆内百分比主数字字体函数改回宋体族
+    - `%` 字体改回宋体族
+
+- Task: 今日小结圆内百分比与“已摄入”对齐修正
+- Status: done（`已摄入` 文案恢复水平居中；百分比数字与 `%` 统一思源黑体并按 baseline 对齐）
+- Scope:
+  - `src/utils/poster.ts`
+    - 百分比字体族改为思源黑体系
+    - 数字与 `%` 改为 `alphabetic` 基线对齐
+    - `已摄入` 文案强制 `textAlign: center`
+
+- Task: 调试器 WXSS 编译错误与存储超限修复
+- Status: done（已移除全局 `@font-face` 的本地 OTF 注入，`app-origin.wxss` 从约 22MB 回落到约 64KB）
+- Scope:
+  - `src/app.scss`
+    - 删除 `@font-face` 本地字体文件注入
+    - 保留思源黑体字体族优先级（系统字体名 + 回退链）
+
+- Task: 圈子动态正文加粗
+- Status: done（用户动态正文已加粗，提升浏览时正文可见性）
+- Scope:
+  - `src/pages/community/index.scss`
+    - `.feed-content` 新增 `font-weight: 600`
+
+- Task: 全站默认字体切换为思源黑体
+- Status: done（全局默认字体已改为思源黑体，包含页面与常用基础组件）
+- Scope:
+  - `src/app.scss`
+    - 注册 `Source Han Sans SC` 的 `@font-face`
+    - 统一覆盖 `page/view/text/button/input/textarea/picker/label` 默认字体族
+
+- Task: 今日小结百分比分离样式导致布局错位修复
+- Status: done（圆内百分比位置与层级已恢复原稳定布局，保留 `%` 小号分离与换色样式）
+- Scope:
+  - `src/utils/poster.ts`
+    - 百分比字号测量恢复为含 `%` 的原口径
+    - 数字与 `%` 分离绘制改回原圆心中线布局，避免与日期/底部文案冲突
+
+- Task: 今日小结底栏头像与文案行距微调
+- Status: done（底栏头像放大；“今日小结”与“扫码登录可一键成为好友”两行间距增大）
+- Scope:
+  - `src/utils/poster.ts`
+    - 头像尺寸 `avatarSz` 从 `32` 调整到 `38`
+    - 两行文案 Y 位置拉开，增强可读性
+
+- Task: 今日小结圆内百分比视觉强化（数字与%分离）
+- Status: done（百分比改为“数字 + %”分离绘制；数字更粗，`%` 明显缩小并换色，二者基线对齐后整体下移居中）
+- Scope:
+  - `src/utils/poster.ts`
+    - 圆内百分比从单字符串改为双文本分离绘制
+    - 新增数字/百分号独立字号、颜色与对齐逻辑
+
+- Task: 今日小结默认态标题区间距微调（坚持目标下移）
+- Status: done（称号开关默认改为关闭；默认双标题态下“坚持目标 X 天”已下移，并同步压缩其到圆球的留白）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - `showHonorTitleOnPoster` 默认值改为 `false`
+  - `src/utils/poster.ts`
+    - 新增 `DAILY_HEADER_DEFAULT_LINE2_OFFSET`
+    - 默认态标题绘制改为“第二行下移 + 下方留白等量回收”
+
+- Task: 首页分享卡片字体切换为思源宋体
+- Status: done（已下载思源宋体/思源黑体到项目，今日小结海报绘制字体统一切换为思源宋体）
+- Scope:
+  - `src/assets/fonts/SourceHanSerifSC-Regular.otf`
+  - `src/assets/fonts/SourceHanSansSC-Regular.otf`
+  - `src/utils/poster.ts`
+    - 新增 `DAILY_SUMMARY_SERIF_FAMILY` 字体族常量
+    - 今日小结海报各文本绘制（标题、称号、日期、百分比、底部文案）统一改用思源宋体字体族
+
+- Task: 首页风险卡片默认双标题行间距优化
+- Status: done（针对“今日总结 / 坚持目标”两行间距单独加大，修复用户反馈的标题区间距不协调）
+- Scope:
+  - `src/utils/poster.ts`
+    - 新增 `DAILY_HEADER_TITLE_LINE_GAP`
+    - 默认标题渲染与高度计算同步应用该间距
+
 - Task: 今日小结圆圈上方文案重构（美食品味 + 称号）
 - Status: done（显示称号时改为“你的今日美食品味为 / 「称号」”，称号更大更亮；关闭称号显示时自动恢复原日期胶囊样式）
 - Scope:
@@ -1692,3 +1790,27 @@
 - Next step:
   - 用户在微信开发者工具手动复测“分析页 -> 统计页”
   - 若仍报错，优先把控制台里 `[stats] fetchStats failed:` 后面的真实异常贴出来继续定位
+
+- Task: 首页「今日餐食」卡片数据不显示描述与三大营养素
+- Status: done（根因定位：数据库顶层 total_protein/carbs/fat 为 null 时后端默认返回 0，前端 v3 缓存写入并保留了这些 0 值；已修复后端兜底计算、前端脏缓存迁移与渲染条件）
+- Scope:
+  - 后端 `backend/main.py`：
+    - 新增 `_sum_macro_from_record_items()` 辅助函数
+    - 当 `total_protein/total_carbs/total_fat` 聚合为 0 时，自动从 `record.items[].nutrients` 明细中兜底重新计算宏量营养素
+    - `/api/home/dashboard` 的 `meals_out` 现在能正确返回 `protein/carbs/fat/description`
+  - 前端 `src/pages/index/index.tsx`：
+    - 放宽营养素渲染条件：从 `Number(meal.protein) > 0` 改为 `typeof meal.protein === 'number'`，确保只要后端返回了数据就显示（包括 0）
+    - 在 `getStoredHomeDashboardSnapshots()` 中增加临时迁移逻辑：若缓存快照中存在「有 description 但三大营养素全为 0」的餐食，判定为脏缓存并强制清空，促使下次切日时从后端拉取最新完整数据
+  - 前后端已重启：`npm run dev:restart` 成功，`backend-dev.log` 与 `weapp-dev.log` 均已正常输出
+- Verification:
+  - 后端日志确认：2026-04-13 请求返回 4 条记录，计算结果 `protein=42.5, carbs=190.1, fat=36.8`
+  - `mrc where --port 9420` 连接成功，当前页面 `pages/index/index`
+  - `mrc click '.date-item:nth-child(3)' --port 9420`（切到 4 月 13 日）成功
+  - 等待 4 秒后验证：
+    - `mrc exists '.meal-desc' --port 9420` → 存在
+    - `mrc exists '.meal-macro-pill' --port 9420` → 存在
+    - `mrc exists '.meal-type-tag' --port 9420` → 存在
+  - `mrc logs error 20 --port 9420` → 0 条错误
+  - 备注：`mrc screenshot` 在本环境仍持续 30s+ 超时，未能获取截图，但通过元素存在性检查已确认数据渲染链路正常
+- Next step:
+  - 用户在微信开发者工具中切到 4 月 13 日，确认今日餐食卡片已正确显示食物描述、时间胶囊、餐次标签、卡路里及蛋白质/碳水/脂肪图标数值

@@ -331,6 +331,22 @@ def _meal_entry_title_from_record(rec: Dict[str, Any]) -> str:
     return ""
 
 
+def _sum_macro_from_record_items(record: dict, macro_key: str) -> float:
+    """当顶层 total_protein/carbs/fat 缺失或为 0 时，从 items 明细中兜底计算该宏量营养素。"""
+    items = record.get("items")
+    if not isinstance(items, list):
+        return 0.0
+    total = 0.0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ratio = float(item.get("ratio", 100)) / 100.0
+        nutrients = item.get("nutrients") or {}
+        val = float(nutrients.get(macro_key) or 0) * ratio
+        total += val
+    return total
+
+
 def _normalize_execution_mode(value: Optional[str], default: str = DEFAULT_EXECUTION_MODE) -> str:
     mode = (value or "").strip().lower()
     if mode in VALID_EXECUTION_MODES:
@@ -5860,6 +5876,18 @@ async def get_home_dashboard(
                 "title": _meal_entry_title_from_record(rec),
             })
         primary_record_id = meal_record_entries[0]["id"] if meal_record_entries else None
+        meal_protein = sum(float(x.get("total_protein") or 0) for x in items)
+        if meal_protein == 0:
+            meal_protein = sum(_sum_macro_from_record_items(x, "protein") for x in items)
+        meal_carbs = sum(float(x.get("total_carbs") or 0) for x in items)
+        if meal_carbs == 0:
+            meal_carbs = sum(_sum_macro_from_record_items(x, "carbs") for x in items)
+        meal_fat = sum(float(x.get("total_fat") or 0) for x in items)
+        if meal_fat == 0:
+            meal_fat = sum(_sum_macro_from_record_items(x, "fat") for x in items)
+        # 拼接该餐次所有记录的标题作为描述
+        titles = [e["title"] for e in meal_record_entries if e.get("title")]
+        meal_description = "、".join(titles) if titles else ""
         meals_out.append({
             "type": meal_type,
             "name": MEAL_NAMES.get(meal_type, meal_type),
@@ -5872,6 +5900,10 @@ async def get_home_dashboard(
             "image_paths": meal_image_urls,
             "primary_record_id": primary_record_id,
             "meal_record_entries": meal_record_entries,
+            "protein": round(meal_protein, 1),
+            "carbs": round(meal_carbs, 1),
+            "fat": round(meal_fat, 1),
+            "description": meal_description,
         })
 
     exercise_burned = await get_exercise_calories_by_date(user_id, target_date)

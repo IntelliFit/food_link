@@ -6,6 +6,19 @@
 
 ## 2026-04-13
 
+- ⚡ perf: 首页仪表盘改为“本地快照优先 + 云端静默同步”：新增按日期缓存（最近60条），页面与切日优先秒开本地数据；云端返回后仅在差异时覆盖本地缓存，降低刷新白屏与加载等待 `src/pages/index/index.tsx`
+- 🔧 refactor: 首页分享弹层移除“显示今日称号”开关与称号切换逻辑，恢复固定海报生成流程（不再携带称号可见性状态） `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 今日小结圆内百分比数字与 `%` 字体改回思源宋体，保留分离绘制与 baseline 对齐布局 `src/utils/poster.ts`
+- 🐛 fix: 修复今日小结圆内数值排版偏移：`已摄入` 文案恢复居中；百分比数字与 `%` 改为思源黑体并按同一 baseline 对齐绘制 `src/utils/poster.ts`
+- 🐛 fix: 修复微信开发者工具 `WXSS 编译错误 + writeFile storage limit`：移除全局 `@font-face` 本地 OTF 注入，避免 `app-origin.wxss` 体积异常膨胀导致编译与写入失败 `src/app.scss`
+- 🎨 style: 圈子动态卡片正文文字加粗，提升用户动态内容可读性与信息权重 `src/pages/community/index.scss`
+- 🎨 style: 全局默认字体切换为思源黑体：在 `app.scss` 注册 `@font-face` 并统一覆盖页面及常用基础组件字体族，保证全站文案风格一致 `src/app.scss`
+- 🐛 fix: 修复今日小结圆内百分比分离绘制后的布局错位：恢复原稳定布局与字号测量策略，仅保留百分号小号分离与换色样式 `src/utils/poster.ts`
+- 🎨 style: 今日小结海报底栏视觉优化：用户头像尺寸上调，且“今日小结”与“扫码登录可一键成为好友”两行文案间距增大，底部信息层级更清晰 `src/utils/poster.ts`
+- 🎨 style: 今日小结中心百分比改为“数字 + %”分离绘制：数字进一步加粗，百分号大幅缩小并改色，与数字底线对齐后整体下移居中，强化核心数值层级 `src/utils/poster.ts`
+- 🎨 style: 首页分享弹层“显示今日称号”改为默认关闭；今日小结默认双标题态下将“坚持目标 X 天”下移并压缩其到圆球间距，修正标题区视觉留白 `src/pages/index/index.tsx` `src/utils/poster.ts`
+- 🎨 style: 下载并接入思源字体，首页分享卡片（今日小结海报）绘制字体统一切换为思源宋体，提升分享图文案风格一致性 `src/assets/fonts/SourceHanSerifSC-Regular.otf` `src/assets/fonts/SourceHanSansSC-Regular.otf` `src/utils/poster.ts`
+- 🎨 style: 调整首页分享卡片默认双标题（今日总结/坚持目标）的行间距，新增独立间距常量提升两行视觉呼吸感 `src/utils/poster.ts`
 - 🎨 style: 继续强化称号展示：放大“你的今日美食品味为”和称号字号，并收紧称号区到中心圆的垂直间距，减少留白浪费 `src/utils/poster.ts`
 - 🎨 style: 称号展示再强化：开启称号时隐藏“今日总结”；“你的今日美食品味为”与称号字体继续放大，并去掉称号两侧「」符号 `src/utils/poster.ts`
 - 🎨 style: 修正称号文案位置理解偏差：开启称号时将“你的今日美食品味为 / 「称号」”放到顶部标题区（替换“坚持目标 X 天”区域），并从圆内移除该文案；圆内仅保留日期胶囊与核心数值 `src/utils/poster.ts`

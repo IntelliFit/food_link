@@ -283,6 +283,12 @@ export interface HomeMealItem {
   primaryRecordId?: string | null
   /** 该餐次下全部记录（新→旧，与 primary 一致）；多条时首页需供用户选择 */
   meal_record_entries?: HomeMealRecordEntry[] | null
+  /** 该餐次宏量营养素聚合（g） */
+  protein?: number
+  carbs?: number
+  fat?: number
+  /** 该餐次食物描述（由多条记录标题拼接） */
+  description?: string
 }
 
 /** 解析首页餐食卡片对应的记录 id（兼容 snake_case / camelCase） */
