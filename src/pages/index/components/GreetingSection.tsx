@@ -1,5 +1,4 @@
 import { View, Text } from '@tarojs/components'
-import { IconTrendingUp } from '../../../components/iconfont'
 import { getGreeting } from '../utils/helpers'
 
 interface GreetingSectionProps {
@@ -18,7 +17,7 @@ export function GreetingSection({ onSharePress }: GreetingSectionProps) {
         className={`greeting-icon ${onSharePress ? 'greeting-icon--tappable' : ''}`}
         onClick={() => onSharePress?.()}
       >
-        <IconTrendingUp size={24} color='#00bc7d' />
+        <Text className='iconfont icon-share' />
       </View>
     </View>
   )

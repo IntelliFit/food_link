@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-04-13
+
+- 🎨 style: 继续强化称号展示：放大“你的今日美食品味为”和称号字号，并收紧称号区到中心圆的垂直间距，减少留白浪费 `src/utils/poster.ts`
+- 🎨 style: 称号展示再强化：开启称号时隐藏“今日总结”；“你的今日美食品味为”与称号字体继续放大，并去掉称号两侧「」符号 `src/utils/poster.ts`
+- 🎨 style: 修正称号文案位置理解偏差：开启称号时将“你的今日美食品味为 / 「称号」”放到顶部标题区（替换“坚持目标 X 天”区域），并从圆内移除该文案；圆内仅保留日期胶囊与核心数值 `src/utils/poster.ts`
+- 🎨 style: 首页海报圆圈上方文案区改为“你的今日美食品味为 / 「称号」”，称号使用更鲜艳主题色并放大；当关闭称号显示时自动回退为原日期胶囊样式 `src/utils/poster.ts`
+- 🎨 style: 单动态详情页评论输入交互与圈子动态统一：去掉取消按钮，仅保留同款 `icon-send` 发送按钮；点击页面其它区域自动收起输入框 `src/pages/interaction-feed-detail/index.tsx` `src/pages/interaction-feed-detail/index.scss`
+- 🐛 fix: 互动消息单动态页补强生命周期与参数兜底，避免守卫导致 `useLoad` 丢参后长时间 loading；改为页面内鉴权重定向、兼容 `recordId/record_id/id`，并为详情请求增加超时兜底 `src/pages/interaction-feed-detail/index.tsx`
+- 🎨 style: 今日小结头部主标题改为称号本身（替换“今日总结”并沿用其主色）；提升圆内日期与百分比对比度（深色日期胶囊 + 白字描边）以解决 57% 与日期看不清问题 `src/utils/poster.ts`
+- 🐛 fix: 互动消息单动态页修复“长期加载中”：缺少 `recordId` 时立即结束加载并提示；兼容 `record_id` 参数读取；移除顶部标题简介；加载态改为 spinner 动画 `src/pages/interaction-feed-detail/index.tsx` `src/pages/interaction-feed-detail/index.scss`
+- 📝 docs: 更新代理规范，前端加载态禁止显示“加载中”文字，统一用动画表达 `AGENTS.md`
+- 🎨 style: 分享弹层“显示今日称号”开关上边距提升到 `120rpx`；今日小结中心圆新增同色描边与按进度波浪液位填充（如 57% 仅填充到底部 57%）`src/pages/index/index.scss` `src/utils/poster.ts`
+- 🎨 style: 今日小结称号文案去掉“今日称号”前缀并放大，位置与日期互换：称号上移到原日期区域、日期下移到热量圆上半区且不显示年份，强化仪式感展示 `src/utils/poster.ts`
+- ✨ feat: 互动消息点击改为进入独立页面 `interaction-feed-detail`，单页只展示被点击动态并保留点赞/评论结构与交互，不再回圈子页滚动定位 `src/pages/interaction-notifications/index.tsx` `src/pages/interaction-feed-detail/index.tsx` `src/pages/interaction-feed-detail/index.scss` `src/pages/interaction-feed-detail/index.config.ts` `src/app.config.ts`
+- 🎨 style: 今日小结海报称号改为绝对定位到中央热量圆上半区；分享弹层“显示今日称号”开关增加上边距，修复顶部遮挡 `src/utils/poster.ts` `src/pages/index/index.scss`
+- ✨ feat: 首页分享新增「称号系统」独立模块，按当日热量/宏量/喝水/运动/打卡数据生成称号（如顶级吃货、素食主义者、减肥专家、蛋白质女王、美食博主）`src/utils/daily-honor-title.ts` `src/pages/index/index.tsx`
+- 🎨 style: 首页问候区右上角分享按钮改为 `iconfont icon-share`；分享弹层新增「显示今日称号」开关（默认开启），切换后自动重新生成海报 `src/pages/index/components/GreetingSection.tsx` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/utils/poster.ts`
+- 🎨 style: 圈子「好友动态/饮食动态」标题字号上调，并将搜索框下方筛选漏斗图标改为 `iconfont icon-filter-filling`，修复图标不渲染 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🐛 fix: 互动消息点击目标动态时，优先 `navigateBack` 回圈子页（无上级页再 `switchTab`），减少“很久才跳转/不跳转”体感问题 `src/pages/interaction-notifications/index.tsx`
+
 ## 2026-04-11
 
 - 🎨 style: 识别记录详情改为 `navigationStyle: custom` + `CustomNavBar`，避免系统导航栏叠在分享全屏层上，与首页「分享今日卡片」白底顶栏 + 黑底关布局一致 `src/pages/record-detail/index.config.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`

@@ -30,6 +30,7 @@ export default defineAppConfig({
     'pages/food-library/index',
     'pages/food-library-detail/index',
     'pages/interaction-notifications/index',
+    'pages/interaction-feed-detail/index',
 
     'pages/food-library-share/index',
     'pages/location-search/index',

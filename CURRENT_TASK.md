@@ -1,5 +1,145 @@
 # CURRENT_TASK
 
+- Task: 今日小结圆圈上方文案重构（美食品味 + 称号）
+- Status: done（显示称号时改为“你的今日美食品味为 / 「称号」”，称号更大更亮；关闭称号显示时自动恢复原日期胶囊样式）
+- Scope:
+  - `src/utils/poster.ts`
+    - 圆区顶部文案按 `honorTitle` 是否存在走双分支渲染
+    - 称号态：两行文案+高亮主题色大字
+    - 无称号态：沿用原日期胶囊
+
+- Task: 单动态详情页评论输入区与圈子交互对齐
+- Status: done（评论输入区去掉取消按钮，发送按钮改为圈子同款圆形 `icon-send`；点击页面其它区域可自动收起输入区）
+- Scope:
+  - `src/pages/interaction-feed-detail/index.tsx`
+    - 评论输入区改用 `comment-bottom-send` 同款发送按钮
+    - 评论按钮/评论项点击增加事件阻止，避免与外层收起逻辑冲突
+    - 增加输入框焦点、长度与 `cursorSpacing` 参数
+    - 新增透明 dismiss mask，点击空白处收起输入区
+  - `src/pages/interaction-feed-detail/index.scss`
+    - 新增 `.interaction-feed-detail-dismiss-mask` 遮罩层样式
+
+- Task: 互动消息单动态页“持续加载中”二次修复
+- Status: done（页面改为 `withAuth(..., { public: true })` 保证生命周期触发；页面内自行鉴权；兼容 `recordId/record_id/id` 取参；请求增加超时兜底，避免长期卡 loading）
+- Scope:
+  - `src/pages/interaction-feed-detail/index.tsx`
+    - 新增 `pickRecordId` 多键取参
+    - `loadDetail` 增加登录判断与超时 `Promise.race`
+    - `useDidShow` 在 `recordId` 为空时兜底回填路由参数
+    - 导出改为 `withAuth(..., { public: true })`
+
+- Task: 今日小结标题替换与圆内文字可读性优化
+- Status: done（称号上移替换“今日总结”；称号使用原主标题色；圆内日期和 57% 等核心数字提升对比度与描边）
+- Scope:
+  - `src/utils/poster.ts`
+    - 顶部首行改为称号文案（不再显示“今日总结”）
+    - 日期胶囊改深底白字
+    - 百分比与摄入 kcal 改白字并增加描边
+
+- Task: 互动消息单动态页加载卡住与头部清理
+- Status: done（修复缺参导致的持续 loading；兼容 `recordId/record_id`；移除页面标题和简介；加载态改为 spinner 动画）
+- Scope:
+  - `src/pages/interaction-feed-detail/index.tsx`
+    - `recordId` 缺失时不再卡在 loading，直接结束加载并提示
+    - 读取参数兼容 `recordId` 与 `record_id`
+    - 删除顶部标题与副标题块
+  - `src/pages/interaction-feed-detail/index.scss`
+    - 加载态改为动画 spinner（去掉“加载中...”文字）
+  - `AGENTS.md`
+    - 新增加载态规范：页面加载中不显示“加载中”文字，统一动画表达
+
+- Task: 今日小结开关位移与圆形液位进度效果
+- Status: done（“显示今日称号”开关 `margin-top` 提升到 `120rpx`；中心圆增加同色描边与波浪液位，按实际进度从下往上填充）
+- Scope:
+  - `src/pages/index/index.scss`
+    - `.poster-title-toggle-row` 上边距调整为 `120rpx`
+  - `src/utils/poster.ts`
+    - 中心圆改为“底色 + 波浪液位 + 同色描边”
+    - 液位按 `calPct` 映射（视觉封顶 100%）
+
+- Task: 今日小结称号与日期位置互换 + 字级强化
+- Status: done（称号去掉“今日称号”前缀并放大至接近主标题；称号与日期互换位置；日期移至热量圆上半区并去掉年份，且更贴近圆心）
+- Scope:
+  - `src/utils/poster.ts`
+    - 顶部原日期区改为展示称号大字
+    - 圆上半区改为展示日期
+    - 日期格式从 `d Mon YYYY` 收口为 `d Mon`
+
+- Task: 互动消息改为独立单动态详情页
+- Status: done（互动消息点击后进入 `pages/interaction-feed-detail/index`，页面只展示当前被点击动态，保留与圈子列表一致的卡片结构、点赞与评论信息，并支持直接评论）
+- Scope:
+  - `src/pages/interaction-notifications/index.tsx`
+    - 点击消息不再 `switchTab`/滚动定位，改为 `navigateTo` 独立详情页并透传 `recordId/commentId`
+  - `src/pages/interaction-feed-detail/index.tsx`
+    - 新增单动态详情页面，加载 `communityGetFeedContext + communityGetComments`
+    - 复用圈子动态卡片结构，支持点赞、评论查看、回复与发送
+  - `src/pages/interaction-feed-detail/index.scss`
+    - 复用圈子样式并补充详情页容器与目标评论高亮
+  - `src/pages/interaction-feed-detail/index.config.ts`
+  - `src/app.config.ts`
+    - 注册新页面路由
+- Verification:
+  - `mrc relaunch "/pages/interaction-feed-detail/index?recordId=test123&notificationType=comment_received" --port 9420` 可直达新页面
+  - `mrc where --port 9420` 显示当前页面为 `pages/interaction-feed-detail/index`
+  - `mrc logs error 20 --port 9420` 返回 `0` 条错误
+  - 备注：当前自动化环境未复现真实“互动消息列表点击某条已有数据”链路（受登录态/数据状态影响），已完成路由与页面级验证
+
+- Task: 今日小结称号位置与开关遮挡样式修正
+- Status: done（称号已改为绝对定位到热量圆上半区；分享弹层称号开关新增上边距，避免顶部被遮挡）
+- Scope:
+  - `src/utils/poster.ts`
+    - 称号渲染从下方流式区域迁移到圆形区内部上半区
+  - `src/pages/index/index.scss`
+    - `.poster-title-toggle-row` 增加 `margin-top`
+
+- Task: 首页分享称号系统与称号显示开关
+- Status: done（分享按钮改为 `iconfont icon-share`；新增独立 TS 称号系统按当日摄入/宏量/喝水/运动/打卡计算称号；分享页新增「显示今日称号」开关，默认开启，切换后自动重新生成海报）
+- Scope:
+  - `src/utils/daily-honor-title.ts`
+    - 新增称号计算模块 `resolveDailyHonorTitle(...)`
+    - 覆盖称号：`顶级吃货 / 素食主义者 / 减肥专家 / 蛋白质女王 / 美食博主`
+  - `src/pages/index/components/GreetingSection.tsx`
+    - 首页右上角分享图标改为 `iconfont icon-share`
+  - `src/pages/index/index.tsx`
+    - 接入称号计算并透传到海报数据
+    - 新增分享弹层开关：`showHonorTitleOnPoster`（默认 true）
+    - 切换开关后立即触发海报重生成
+  - `src/utils/poster.ts`
+    - `DailySummaryPosterInput` 新增 `honorTitle`
+    - 今日小结海报增加「今日称号」胶囊渲染
+  - `src/pages/index/index.scss`
+    - 补充分享弹层称号开关样式
+
+- Task: 按 skill 启动本地联调（前后端 + 微信开发者工具自动化）
+- Status: done（`dev:restart` 已成功；`/openapi.json` 返回 200；微信 CLI `auto --project ... --auto-port 9420` 已拉起并可通过 `mrc` 连接）
+- Scope:
+  - 环境与连接：
+    - `mrc --version` 可用（v1.0.0）
+    - `/Applications/wechatwebdevtools.app/Contents/MacOS/cli` 可执行
+    - `lsof -i :9420` 已监听，`mrc where --port 9420` 连接成功
+  - 本地服务：
+    - 执行 `npm run dev:restart`
+    - 期间发现旧后端实例异常占用 `3010` 且 `/openapi.json` 返回 500，已清理旧进程后重启
+    - 当前 `backend-dev.log` 显示 `Uvicorn running on http://0.0.0.0:3010`
+  - 调试动作：
+    - 已切换并调试 `pages/community/index`
+    - 已生成截图 `community-debug.png`
+    - 当前抓取错误日志为 `0` 条
+  - 当前注意项：
+    - `mrc screenshot` 在 `pages/interaction-notifications/index` 场景出现过一次挂起（已手动终止），该页调试建议优先在登录态下重试
+
+- Task: 圈子模块细节修复（标题字号、互动消息跳转、筛选漏斗图标）
+- Status: done（好友动态标题已调大；互动消息点击优先返回圈子页并定位对应动态；搜索框下方左侧筛选图标改为 `iconfont icon-filter-filling`）
+- Scope:
+  - `src/pages/community/index.tsx`
+    - 动态标题增加 `feed-section-title`，仅放大圈子模块标题
+    - 漏斗图标从 `icon-filter` 切换为 `icon-filter-filling`
+  - `src/pages/community/index.scss`
+    - 新增 `.feed-section-title` 字号
+    - 漏斗按钮图标样式同步切换到 `.icon-filter-filling`
+  - `src/pages/interaction-notifications/index.tsx`
+    - 点击通知后优先 `navigateBack` 返回上一个圈子页（保留已有页面状态），否则回退 `switchTab`
+
 - Task: 微信审核「先浏览后登录」整改
 - Status: done（Tab 可进、首页/分析引导、操作点统一跳转登录页并带 redirect；已 `npm run build:weapp`）
 - Scope: `src/pages/index|stats|profile|record|community|record-menu`、`src/pages/login/index.tsx`、`src/pages/index/components/RecordMenu.tsx`

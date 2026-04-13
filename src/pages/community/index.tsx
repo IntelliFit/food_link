@@ -1575,7 +1575,7 @@ function CommunityPage() {
             {/* 饮食动态 */}
             <View className='feed-section'>
               <View className='section-header feed-section-header'>
-                <Text className='section-title'>{loggedIn ? '好友动态' : '饮食动态'}</Text>
+                <Text className='section-title feed-section-title'>{loggedIn ? '好友动态' : '饮食动态'}</Text>
                 {loggedIn ? (
                   <Text
                     className='feed-section-link'
@@ -1610,7 +1610,7 @@ function CommunityPage() {
                     className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''} ${feedFilterIconActive ? 'is-active' : ''}`}
                     onClick={() => setFeedFilterExpanded((v) => !v)}
                   >
-                    <Text className='iconfont icon-filter' />
+                    <Text className='iconfont icon-filter-filling' />
                   </View>
                   <Text
                     className='feed-filter-summary'

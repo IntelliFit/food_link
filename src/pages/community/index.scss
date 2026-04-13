@@ -808,7 +808,7 @@ $home-primary-end: #00bba7;
   flex-shrink: 0;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
 
-  .icon-filter {
+  .icon-filter-filling {
     font-size: 34rpx;
     line-height: 1;
     color: #94a3b8;
@@ -820,13 +820,17 @@ $home-primary-end: #00bba7;
     box-shadow: 0 0 0 2rpx rgb(0 188 125 / 14%), 0 4rpx 12rpx rgb(0 188 125 / 10%);
   }
 
-  &.is-active .icon-filter {
+  &.is-active .icon-filter-filling {
     color: #00bc7d;
   }
 
   &:active {
     opacity: 0.92;
   }
+}
+
+.feed-section-title {
+  font-size: 36rpx;
 }
 
 .feed-filter-summary {

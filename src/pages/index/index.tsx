@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Slider, Canvas } from '@tarojs/components'
+import { View, Text, Input, Image, Slider, Canvas, Switch } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -35,7 +35,8 @@ import {
   type DailySummaryPosterInput
 } from '../../utils/poster'
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
-import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
+import { resolveDailyHonorTitle } from '../../utils/daily-honor-title'
+import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 import {
@@ -572,6 +573,7 @@ function IndexPage() {
   const [dailyPosterGenerating, setDailyPosterGenerating] = useState(false)
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = useState(false)
+  const [showHonorTitleOnPoster, setShowHonorTitleOnPoster] = useState(true)
 
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string) => {
@@ -1302,6 +1304,37 @@ function IndexPage() {
   const fatTargetRaw = normalizeDisplayNumber(intakeData.macros.fat.target)
   const fatRingPct = Math.min(100, calculateProgressPercent(fatCur, fatTargetRaw))
 
+  const dailyHonorTitle = useMemo(() => {
+    const result = resolveDailyHonorTitle({
+      intakeCurrentKcal: totalCurrent,
+      intakeTargetKcal: totalTarget,
+      proteinCurrentGram: proteinCur,
+      proteinTargetGram: proteinTargetRaw,
+      carbsCurrentGram: carbsCur,
+      carbsTargetGram: carbsTargetRaw,
+      fatCurrentGram: fatCur,
+      fatTargetGram: fatTargetRaw,
+      waterProgressPct: waterProgress,
+      exerciseKcal: exerciseBurnedKcal,
+      streakDays: Math.max(0, Math.floor(homeAchievement.streak_days)),
+      greenDays: Math.max(0, Math.floor(homeAchievement.green_days))
+    })
+    return result.title
+  }, [
+    totalCurrent,
+    totalTarget,
+    proteinCur,
+    proteinTargetRaw,
+    carbsCur,
+    carbsTargetRaw,
+    fatCur,
+    fatTargetRaw,
+    waterProgress,
+    exerciseBurnedKcal,
+    homeAchievement.streak_days,
+    homeAchievement.green_days
+  ])
+
   const waterDraftMl = parseCompleteNumber(waterInput)
   const showWaterAddFooter =
     waterInputFocused || (waterDraftMl != null && waterDraftMl > 0)
@@ -1367,7 +1400,7 @@ function IndexPage() {
     })
   }, [dailyPosterImageUrl])
 
-  const handleShareDailySummary = useCallback(() => {
+  const handleShareDailySummary = useCallback((showHonorTitle = showHonorTitleOnPoster) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
@@ -1500,7 +1533,8 @@ function IndexPage() {
               }
             },
             waterProgressPct: waterProg,
-            exerciseKcal: Math.round(exerciseBurnedKcal)
+            exerciseKcal: Math.round(exerciseBurnedKcal),
+            honorTitle: showHonorTitle ? dailyHonorTitle : ''
           }
 
           const heightPx = computeDailySummaryPosterHeight(posterData)
@@ -1554,8 +1588,18 @@ function IndexPage() {
     todayWater,
     bodyMetrics.waterGoalMl,
     exerciseBurnedKcal,
-    homeAchievement
+    homeAchievement,
+    dailyHonorTitle,
+    showHonorTitleOnPoster
   ])
+
+  const handleToggleHonorTitle = useCallback((e: { detail: { value: boolean } }) => {
+    const next = Boolean(e.detail?.value)
+    setShowHonorTitleOnPoster(next)
+    if (showDailyPosterModal) {
+      handleShareDailySummary(next)
+    }
+  }, [handleShareDailySummary, showDailyPosterModal])
 
   return (
     <View className='home-page'>
@@ -2207,6 +2251,14 @@ function IndexPage() {
               </View>
               <View className='poster-scroll-area'>
                 <View className='poster-modal-scroll-inner'>
+                  <View className='poster-title-toggle-row'>
+                    <Text className='poster-title-toggle-label'>显示今日称号</Text>
+                    <Switch
+                      color='#00bc7d'
+                      checked={showHonorTitleOnPoster}
+                      onChange={handleToggleHonorTitle}
+                    />
+                  </View>
                   <View className='poster-modal-card-wrap'>
                     <Image src={dailyPosterImageUrl} mode='widthFix' className='poster-modal-image' />
                   </View>

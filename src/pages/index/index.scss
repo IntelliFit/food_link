@@ -125,6 +125,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   justify-content: center;
   box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 15%);
 
+  .icon-share {
+    font-size: 30rpx;
+    color: #00bc7d;
+    line-height: 1;
+  }
+
   &--tappable:active {
     opacity: 0.82;
   }
@@ -3114,6 +3120,26 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   justify-content: center;
   padding: 16rpx 32rpx 24rpx;
   box-sizing: border-box;
+}
+
+.poster-title-toggle-row {
+  width: 100%;
+  max-width: 640rpx;
+  margin-top: 28rpx;
+  margin-bottom: 20rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.poster-title-toggle-label {
+  font-size: 26rpx;
+  color: #1e293b;
+  font-weight: 600;
 }
 
 .poster-modal-card-wrap {

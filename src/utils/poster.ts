@@ -535,6 +535,8 @@ export interface DailySummaryPosterInput {
   exerciseKcal: number
   /** 运动竖条满刻度（千卡），默认 500 */
   exerciseGoalKcal?: number
+  /** 当日称号（可选） */
+  honorTitle?: string
 }
 
 /** 今日小结布局常量（与 drawDailySummaryPoster 同步） */
@@ -542,9 +544,6 @@ const DAILY_BG = '#FAF8F5'
 /** 顶栏大字标题：参考图 ECO/FOOD 双色块（今日总结 / 坚持目标） */
 const DAILY_TITLE_LINE1 = '#5B9A3D'
 const DAILY_TITLE_LINE2 = '#1e3a5f'
-/** 日期圆角条背景与描边（主色苔绿弱对比） */
-const DAILY_DATE_PILL_BG = 'rgba(139, 158, 68, 0.14)'
-const DAILY_DATE_PILL_STROKE = 'rgba(139, 158, 68, 0.38)'
 /** 中央热量圆：苔绿底 + 浅字 */
 const DAILY_RING_FILL = '#8B9E44'
 const DAILY_RING_INNER_TEXT = '#EAEAE0'
@@ -619,13 +618,13 @@ function getDailyLayoutMetrics(W: number): {
 
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** 顶栏日期圆角条：日 + 月缩写 + 年，如 11 Apr 2026 */
+/** 顶栏日期文本：日 + 月缩写（不显示年份），如 11 Apr */
 function formatDailyPosterDatePillEn(dateKey: string): string {
   const parts = dateKey.split('-').map(Number)
   if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return ''
-  const [y, mo, d] = parts
+  const [, mo, d] = parts
   const mon = EN_MONTHS[mo - 1] ?? ''
-  return `${d} ${mon} ${y}`
+  return `${d} ${mon}`
 }
 
 /**
@@ -738,55 +737,120 @@ export function drawDailySummaryPoster(
 
   let cy = m.topPad
 
-  /** 顶部：参考图式双行同字号大字（今日总结 / 坚持目标）+ 小字日期圆角条（含年） */
+  /** 顶部：默认「今日总结 + 坚持目标」；开启称号时替换第二行为“你的今日美食品味为 / 「称号」” */
+  const honorTitle = String(d.honorTitle || '').trim()
+  const hasHonorBanner = honorTitle.length > 0
   const titleFont =
     'bold 38px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillStyle = DAILY_TITLE_LINE1
-  ctx.font = titleFont
-  ctx.fillText('今日总结', cX, cy)
-  cy += DAILY_HEADER_TITLE_LINE1_H
-  ctx.fillStyle = DAILY_TITLE_LINE2
-  ctx.font = titleFont
-  ctx.fillText(`坚持目标 ${d.greenDays} 天`, cX, cy)
-  cy += DAILY_HEADER_TITLE_LINE2_H + DAILY_HEADER_TITLE_TO_DATE_GAP
+  if (hasHonorBanner) {
+    ctx.fillStyle = '#64748b'
+    ctx.font = '600 28px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif'
+    ctx.fillText('你的今日美食品味为', cX, cy + 4)
+    cy += 44
 
-  const datePillText = d.posterDateKey
-    ? formatDailyPosterDatePillEn(d.posterDateKey)
-    : `${d.dateLabelPrimary} ${d.dateLabelSecondary}`.trim()
-  ctx.font = '600 12px system-ui, -apple-system, "PingFang SC", sans-serif'
-  let displayDate = datePillText || '—'
-  const pillPadX = 14
-  const maxPillW = contentW - 8
-  while (displayDate.length > 1 && ctx.measureText(displayDate).width + pillPadX * 2 > maxPillW) {
-    displayDate = displayDate.slice(0, -1)
+    ctx.fillStyle = DAILY_TITLE_LINE1
+    ctx.font = '700 50px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif'
+    ctx.fillText(honorTitle, cX, cy)
+    cy += 56 + Math.max(4, DAILY_HEADER_TITLE_TO_DATE_GAP - 8)
+  } else {
+    ctx.fillStyle = DAILY_TITLE_LINE1
+    ctx.font = titleFont
+    ctx.fillText('今日总结', cX, cy)
+    cy += DAILY_HEADER_TITLE_LINE1_H
+    ctx.fillStyle = DAILY_TITLE_LINE2
+    ctx.font = titleFont
+    ctx.fillText(`坚持目标 ${d.greenDays} 天`, cX, cy)
+    cy += DAILY_HEADER_TITLE_LINE2_H + DAILY_HEADER_TITLE_TO_DATE_GAP
   }
-  const pillW = Math.min(ctx.measureText(displayDate).width + pillPadX * 2, maxPillW)
-  const pillH = DAILY_HEADER_DATE_PILL_H
-  const pillX = cX - pillW / 2
-  drawRoundedRect(ctx, pillX, cy, pillW, pillH, 10)
-  ctx.fillStyle = DAILY_DATE_PILL_BG
-  ctx.fill()
-  ctx.strokeStyle = DAILY_DATE_PILL_STROKE
-  ctx.lineWidth = 1
-  ctx.stroke()
-  ctx.fillStyle = TEXT_SUB
-  ctx.textBaseline = 'middle'
-  ctx.fillText(displayDate, cX, cy + pillH / 2)
-  cy += pillH + m.gapAfterDate
 
-  /** 中央大圆：直径 = 卡片宽 75%；苔绿底 + 浅色字；副文仅当日摄入 kcal */
+  cy += DAILY_HEADER_DATE_PILL_H + m.gapAfterDate
+
+  /** 中央大圆：同色描边 + 波浪液位进度填充 */
   const circleD = m.circleD
   const R = circleD / 2
   const circleCy = cy + R
+  const tgt = d.intakeTarget > 0 ? d.intakeTarget : 1
+  const calPct = tgt > 0 ? (d.intakeCurrent / tgt) * 100 : 0
+  const liquidPct = Math.min(100, Math.max(0, calPct))
+  const liquidRatio = liquidPct / 100
+
+  // 圆形底色
   ctx.beginPath()
   ctx.arc(cX, circleCy, R, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(139, 158, 68, 0.18)'
+  ctx.fill()
+
+  // 波浪液位（从底部到当前进度）
+  const topY = circleCy - R + (1 - liquidRatio) * (R * 2)
+  const amp = 6
+  const waveLen = Math.max(60, circleD * 0.48)
+  const waveOffset = Math.PI / 6
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(cX, circleCy, R - 2, 0, Math.PI * 2)
+  ctx.clip()
+
+  ctx.beginPath()
+  ctx.moveTo(cX - R, circleCy + R)
+  ctx.lineTo(cX - R, topY)
+  for (let x = cX - R; x <= cX + R; x += 4) {
+    const y = topY + Math.sin(((x - (cX - R)) / waveLen) * Math.PI * 2 + waveOffset) * amp
+    ctx.lineTo(x, y)
+  }
+  ctx.lineTo(cX + R, circleCy + R)
+  ctx.closePath()
   ctx.fillStyle = DAILY_RING_FILL
   ctx.fill()
 
-  const tgt = d.intakeTarget > 0 ? d.intakeTarget : 1
-  const calPct = tgt > 0 ? (d.intakeCurrent / tgt) * 100 : 0
+  // 叠一层浅色波纹，增强“液体感”
+  ctx.beginPath()
+  ctx.moveTo(cX - R, circleCy + R)
+  ctx.lineTo(cX - R, topY + 6)
+  for (let x = cX - R; x <= cX + R; x += 4) {
+    const y = topY + 6 + Math.sin(((x - (cX - R)) / (waveLen * 0.9)) * Math.PI * 2 + waveOffset + Math.PI / 2) * (amp * 0.55)
+    ctx.lineTo(x, y)
+  }
+  ctx.lineTo(cX + R, circleCy + R)
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(234, 234, 224, 0.18)'
+  ctx.fill()
+  ctx.restore()
+
+  // 同色描边
+  ctx.beginPath()
+  ctx.arc(cX, circleCy, R - 1, 0, Math.PI * 2)
+  ctx.strokeStyle = DAILY_RING_FILL
+  ctx.lineWidth = 4
+  ctx.stroke()
+
+  /** 圆区顶部文案：仅保留日期胶囊（不放称号语句） */
+  const dateText = d.posterDateKey
+    ? formatDailyPosterDatePillEn(d.posterDateKey)
+    : `${d.dateLabelPrimary} ${d.dateLabelSecondary}`.trim()
+  if (dateText) {
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = '600 14px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif'
+    const padX = 12
+    const maxPillW = circleD - 20
+    const titleMeasureW = ctx.measureText(dateText).width + padX * 2
+    const pillW = Math.min(maxPillW, titleMeasureW)
+    const pillH = 28
+    const pillX = cX - pillW / 2
+    const pillY = circleCy - R + 52
+    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 14)
+    ctx.fillStyle = 'rgba(54, 83, 20, 0.34)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.36)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillText(dateText, cX, pillY + pillH / 2 + 0.5)
+  }
+
   const calPctRound = Math.round(calPct)
 
   const pctStr = `${calPctRound}%`
@@ -796,16 +860,22 @@ export function drawDailySummaryPoster(
   const ringGapAfterPct = Math.max(16, Math.round(pctFs * 0.14))
   const kcalStr = `已摄入 ${Math.round(d.intakeCurrent)} kcal`
 
-  ctx.fillStyle = DAILY_RING_INNER_TEXT
+  ctx.fillStyle = '#FFFFFF'
   ctx.font = dailyRingPctFont(pctFs)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  ctx.strokeStyle = 'rgba(54, 83, 20, 0.35)'
+  ctx.lineWidth = 2
+  ctx.strokeText(pctStr, cX, circleCy)
   ctx.fillText(pctStr, cX, circleCy)
 
-  ctx.fillStyle = DAILY_RING_INNER_TEXT
+  ctx.fillStyle = '#FFFFFF'
   ctx.font = `600 ${kcalFs}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`
   ctx.textBaseline = 'middle'
   const kcalCy = circleCy + pctFs / 2 + ringGapAfterPct + kcalFs / 2
+  ctx.strokeStyle = 'rgba(54, 83, 20, 0.30)'
+  ctx.lineWidth = 1.5
+  ctx.strokeText(kcalStr, cX, kcalCy)
   ctx.fillText(kcalStr, cX, kcalCy)
 
   cy = circleCy + R + m.gapAfterCircle
