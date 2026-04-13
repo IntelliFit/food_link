@@ -1711,7 +1711,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   min-width: 0;
   background: #ffffff;
   border-radius: 24rpx;
-  padding: 24rpx;
+  padding: 20rpx;
   box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 
   &:active {
@@ -1751,7 +1751,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   display: flex;
   align-items: baseline;
   gap: 8rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 12rpx;
 }
 
 .body-status-value {

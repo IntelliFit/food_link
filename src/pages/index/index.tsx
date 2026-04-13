@@ -833,31 +833,36 @@ function IndexPage() {
       return
     }
 
-    if (currentSelected === today || !currentSelected) {
-      if (!getAccessToken()) {
-        return
-      }
-      const last = homeLastLoadRef.current
-      const canCache =
-        !homeDataStaleRef.current &&
-        last !== null &&
-        last.date === today &&
-        Date.now() - last.ts < HOME_DASHBOARD_CACHE_TTL_MS
-      if (canCache) {
-        return
-      }
-      const localToday = getStoredHomeDashboardSnapshotByDate(today)
-      if (localToday) {
-        setIntakeData(localToday.intakeData)
-        setMeals(localToday.meals || [])
-        setExpirySummary(localToday.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-        setExerciseBurnedKcal(localToday.exerciseBurnedKcal || 0)
-        setHomeAchievement(localToday.achievement || { streak_days: 0, green_days: 0 })
-        setTargetForm(createTargetForm(localToday.intakeData || DEFAULT_INTAKE))
-        setLoading(false)
-      }
-      void loadDashboard(today, Boolean(localToday))
+    // 数据变脏（饮食/运动/保质期变更）时，无论当前选中哪天都应刷新
+    const shouldRefresh = (currentSelected === today || !currentSelected) || homeDataStaleRef.current
+    if (!shouldRefresh) {
+      return
     }
+
+    if (!getAccessToken()) {
+      return
+    }
+    const targetDate = currentSelected || today
+    const last = homeLastLoadRef.current
+    const canCache =
+      !homeDataStaleRef.current &&
+      last !== null &&
+      last.date === targetDate &&
+      Date.now() - last.ts < HOME_DASHBOARD_CACHE_TTL_MS
+    if (canCache) {
+      return
+    }
+    const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
+    if (localSnapshot) {
+      setIntakeData(localSnapshot.intakeData)
+      setMeals(localSnapshot.meals || [])
+      setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
+      setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
+      setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
+      setLoading(false)
+    }
+    void loadDashboard(targetDate, Boolean(localSnapshot))
   })
 
   useShareAppMessage(() => ({
@@ -1909,17 +1914,9 @@ function IndexPage() {
                 </>
               )}
             </View>
-            <View className='body-status-progress-wrap'>
-              <View className='body-status-progress-bg'>
-                <View 
-                  className='body-status-progress-fill water'
-                  style={{ width: `${dashboardBusy ? 0 : clampVisualProgress(animatedWaterProgress)}%` }}
-                />
-              </View>
-              <Text className='body-status-progress-text'>
-                {dashboardBusy ? '-- 加载中' : `${Math.round(animatedWaterProgress)}% / ${bodyMetrics.waterGoalMl}ml`}
-              </Text>
-            </View>
+            <Text className='body-status-hint'>
+              {dashboardBusy ? '记录喝水，保持水分' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+            </Text>
           </View>
 
           {/* 运动卡片 */}

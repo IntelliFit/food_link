@@ -3410,6 +3410,8 @@ export async function getExerciseLogs(params?: { date?: string; start_date?: str
   if (params?.date) queryParams.set('date', mapCalendarDateToApi(params.date) ?? params.date)
   if (params?.start_date) queryParams.set('start_date', params.start_date)
   if (params?.end_date) queryParams.set('end_date', params.end_date)
+  // 禁用微信小程序 GET 请求缓存
+  queryParams.set('_t', String(Date.now()))
 
   const url = `/api/exercise-logs${queryParams.toString() ? '?' + queryParams.toString() : ''}`
   const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
