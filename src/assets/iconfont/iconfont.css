@@ -1,9 +1,9 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5122763 */
-  src: url('iconfont.woff2?t=1776108007480') format('woff2'),
-       url('iconfont.woff?t=1776108007480') format('woff'),
-       url('iconfont.ttf?t=1776108007480') format('truetype'),
-       url('iconfont.svg?t=1776108007480#iconfont') format('svg');
+  src: url('iconfont.woff2?t=1776108699878') format('woff2'),
+       url('iconfont.woff?t=1776108699878') format('woff'),
+       url('iconfont.ttf?t=1776108699878') format('truetype'),
+       url('iconfont.svg?t=1776108699878#iconfont') format('svg');
 }
 
 .iconfont {
@@ -12,6 +12,18 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-target:before {
+  content: "\e852";
+}
+
+.icon-all:before {
+  content: "\e755";
+}
+
+.icon-right-arrow:before {
+  content: "\e62f";
 }
 
 .icon-kefulan:before {

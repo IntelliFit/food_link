@@ -235,6 +235,14 @@ $border-color: #e5e7eb;
   white-space: nowrap;
 }
 
+// 记录列表加载态
+.exercise-logs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+}
+
 // 记录列表：每条卡片同宽（100% 父级内容宽）
 .records-list {
   width: 100%;

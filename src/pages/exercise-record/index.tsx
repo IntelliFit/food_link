@@ -90,24 +90,65 @@ type DisplayRow =
   | { key: string; kind: 'server'; record: ExerciseRecord }
   | { key: string; kind: 'pending'; item: PendingExerciseCard }
 
+function getRouterDate(): string {
+  const params = Taro.getCurrentInstance().router?.params || {}
+  const dateParam = params.date
+  if (typeof dateParam === 'string' && dateParam.length > 0) return dateParam
+  return formatDateKey(new Date())
+}
+
+function formatDateLabel(dateStr: string): string {
+  const today = formatDateKey(new Date())
+  if (dateStr === today) return '今日'
+  const parts = dateStr.split('-').map(Number)
+  if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+    return `${parts[1]}月${parts[2]}日`
+  }
+  return dateStr
+}
+
+function patchHomeDashboardCache(
+  date: string,
+  patch: { exerciseBurnedKcal: number }
+): void {
+  try {
+    const key = 'home_dashboard_local_cache_v3'
+    const raw = Taro.getStorageSync(key) as unknown
+    if (!Array.isArray(raw)) return
+    const idx = raw.findIndex((item: { date?: string }) => item.date === date)
+    if (idx === -1) return
+    raw[idx] = { ...raw[idx], ...patch, updatedAt: Date.now() }
+    Taro.setStorageSync(key, raw)
+  } catch {
+    // ignore
+  }
+}
+
 export default function ExerciseRecordPage() {
+  const [targetDate, setTargetDate] = useState<string>(getRouterDate)
   const [inputValue, setInputValue] = useState('')
   const [records, setRecords] = useState<ExerciseRecord[]>([])
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [loadingLogs, setLoadingLogs] = useState(false)
   const pollingTaskIdsRef = useRef<Set<string>>(new Set())
 
-  const loadTodayRecords = useCallback(async (): Promise<void> => {
+  const loadRecordsForDate = useCallback(async (date: string): Promise<ExerciseRecord[]> => {
     if (!getAccessToken()) {
       setRecords([])
-      return
+      return []
     }
+    setLoadingLogs(true)
     try {
-      const today = formatDateKey(new Date())
-      const { logs } = await getExerciseLogs({ date: today })
-      setRecords(logs.map(mapLogToRecord))
+      const { logs } = await getExerciseLogs({ date })
+      const mapped = logs.map(mapLogToRecord)
+      setRecords(mapped)
+      return mapped
     } catch (e) {
       console.error('[exercise-record] load logs', e)
+      return []
+    } finally {
+      setLoadingLogs(false)
     }
   }, [])
 
@@ -169,7 +210,9 @@ export default function ExerciseRecordPage() {
           if (task.status === 'done' && payload) {
             setPendingItems((prev) => prev.filter((p) => p.clientId !== clientId))
             setInputValue('')
-            await loadTodayRecords()
+            const updatedRecords = await loadRecordsForDate(targetDate)
+            const newTotal = updatedRecords.reduce((sum, r) => sum + r.calories, 0)
+            patchHomeDashboardCache(targetDate, { exerciseBurnedKcal: newTotal })
             Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
             Taro.showToast({
               title: `已记录 ${payload.estimated_calories} kcal`,
@@ -211,13 +254,15 @@ export default function ExerciseRecordPage() {
         pollingTaskIdsRef.current.delete(taskId)
       }
     },
-    [loadTodayRecords]
+    [loadRecordsForDate, targetDate]
   )
 
   useEffect(() => {
-    void loadTodayRecords()
+    const date = getRouterDate()
+    setTargetDate(date)
+    void loadRecordsForDate(date)
     loadPendingFromStorage()
-  }, [loadPendingFromStorage])
+  }, [loadPendingFromStorage, loadRecordsForDate])
 
   useEffect(() => {
     pendingItems.filter((p) => p.status === 'pending').forEach((p) => {
@@ -226,7 +271,9 @@ export default function ExerciseRecordPage() {
   }, [pendingItems, pollForTask])
 
   useDidShow(() => {
-    void loadTodayRecords()
+    const date = getRouterDate()
+    setTargetDate(date)
+    void loadRecordsForDate(date)
     try {
       const raw = Taro.getStorageSync(EXERCISE_PENDING_TASKS_KEY)
       if (!raw || typeof raw !== 'string') return
@@ -299,7 +346,10 @@ export default function ExerciseRecordPage() {
         Taro.showLoading({ title: '删除中...', mask: true })
         try {
           await deleteExerciseLog(id)
-          setRecords((prev) => prev.filter((r) => r.id !== id))
+          const newRecords = records.filter((r) => r.id !== id)
+          const newTotal = newRecords.reduce((sum, r) => sum + r.calories, 0)
+          setRecords(newRecords)
+          patchHomeDashboardCache(targetDate, { exerciseBurnedKcal: newTotal })
           Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
           Taro.showToast({ title: '已删除', icon: 'success' })
         } catch (e) {
@@ -332,7 +382,7 @@ export default function ExerciseRecordPage() {
             <View className='exercise-header-stats-icon' />
           </View>
           <View className='stats-info'>
-            <Text className='stats-label'>今日消耗</Text>
+            <Text className='stats-label'>{formatDateLabel(targetDate)}消耗</Text>
             <View className='stats-value-wrap'>
               <Text className='stats-value'>{totalCalories}</Text>
               <Text className='stats-unit'>kcal</Text>
@@ -350,13 +400,17 @@ export default function ExerciseRecordPage() {
         enhanced
         showScrollbar={false}
       >
-        {listEmpty ? (
+        {loadingLogs ? (
+          <View className='exercise-logs-loading'>
+            <View className='loading-spinner-md' />
+          </View>
+        ) : listEmpty ? (
           <View className='empty-state'>
             <View className='empty-icon-wrap'>
               <IconExercise size={80} color='#d1d5db' />
             </View>
             <Text className='empty-title'>还没有运动记录</Text>
-            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如："跑步30分钟" 或 "游泳1小时"</Text>
+            <Text className='empty-desc'>在下方输入{targetDate === formatDateKey(new Date()) ? '今天' : '这天'}做了什么运动{'\n'}例如："跑步30分钟" 或 "游泳1小时"</Text>
           </View>
         ) : (
           <View className='records-list'>

@@ -187,44 +187,12 @@ function getStoredHomeDashboardSnapshots(): HomeDashboardLocalSnapshot[] {
         if (!item || typeof item !== 'object') return false
         const date = (item as { date?: unknown }).date
         if (typeof date !== 'string' || date.length === 0) return false
-        // 防御旧缓存：meals 必须包含 protein/carbs/fat/description 新字段
-        const meals = (item as { meals?: unknown }).meals
-        if (Array.isArray(meals) && meals.length > 0) {
-          const first = meals[0] as Record<string, unknown> | undefined
-          if (
-            first &&
-            (typeof first.protein !== 'number' ||
-              typeof first.carbs !== 'number' ||
-              typeof first.fat !== 'number' ||
-              typeof first.description !== 'string')
-          ) {
-            return false
-          }
-        }
+        // meals 为可选数组；protein/carbs/fat/description 在 HomeMealItem 中均为可选字段，
+        // 旧缓存缺少这些字段是合法的，不应因此过滤掉整条快照
         return true
       })
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
       .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
-    // 临时迁移：若快照中存在有 description 但三大营养素全为 0 的餐食，视为脏缓存，强制清空
-    const hasDirtyZeroMacro = valid.some((snap) => {
-      const ms = (snap as { meals?: HomeMealItem[] }).meals
-      if (!ms || ms.length === 0) return false
-      return ms.some((m) => {
-        return (
-          typeof m.description === 'string' &&
-          m.description.length > 0 &&
-          m.protein === 0 &&
-          m.carbs === 0 &&
-          m.fat === 0
-        )
-      })
-    })
-    if (hasDirtyZeroMacro) {
-      try {
-        Taro.removeStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY)
-      } catch {}
-      return []
-    }
     return valid
   } catch {
     return []
@@ -1209,30 +1177,74 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: '/pages/exercise-record/index' })
+    const date = selectedDateRef.current || formatDateKey(new Date())
+    Taro.navigateTo({ url: `/pages/exercise-record/index?date=${encodeURIComponent(date)}` })
   }
+
+  // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
+  const syncDashboardForDate = useCallback(async (date: string) => {
+    const seq = ++loadDashboardSeqRef.current
+    if (!getAccessToken()) return
+    try {
+      const [res, exerciseLogsRes] = await Promise.all([
+        getHomeDashboard(date),
+        getExerciseLogs({ date }).catch(() => null)
+      ])
+      if (seq !== loadDashboardSeqRef.current) return
+      const intake = res.intakeData
+      const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
+      const nextAchievement = res.achievement ?? { streak_days: 0, green_days: 0 }
+      setIntakeData(intake)
+      setMeals(res.meals || [])
+      setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(nextExerciseKcal)
+      setHomeAchievement(nextAchievement)
+      setTargetForm(createTargetForm(intake))
+      const normalizedDate = mapCalendarDateToApi(date) || date
+      saveHomeDashboardSnapshot({
+        date: normalizedDate,
+        updatedAt: Date.now(),
+        intakeData: intake,
+        meals: res.meals || [],
+        expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+        exerciseBurnedKcal: nextExerciseKcal,
+        achievement: nextAchievement
+      })
+      homeLastLoadRef.current = { date, ts: Date.now() }
+      homeDataStaleRef.current = false
+    } catch (err) {
+      // 静默失败，不打扰用户；本地缓存已保证基本可用性
+    }
+  }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
   const handleDateSelect = (date: string) => {
     console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
     setSelectedDate(date)
-    // 立即进入日期切换状态，显示加载中并归零数字
+    // 1. 无条件从本地缓存读取并立刻渲染
     const localSnapshot = getStoredHomeDashboardSnapshotByDate(date)
     if (localSnapshot) {
+      console.log('[DEBUG] 命中本地缓存:', date)
       setIntakeData(localSnapshot.intakeData)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
-      setLoading(false)
-      setIsSwitchingDate(false)
-      loadDashboard(date, true)
-      return
+    } else {
+      console.log('[DEBUG] 未命中本地缓存, 清空为默认态:', date)
+      setIntakeData(DEFAULT_INTAKE)
+      setMeals([])
+      setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(0)
+      setHomeAchievement({ streak_days: 0, green_days: 0 })
+      setTargetForm(createTargetForm(DEFAULT_INTAKE))
     }
-
-    setIsSwitchingDate(true)
-    loadDashboard(date)
+    // 2. 结束 loading，确保用户立刻看到内容（或默认空态）
+    setLoading(false)
+    setIsSwitchingDate(false)
+    // 3. 后台异步同步该日数据
+    void syncDashboardForDate(date)
   }
 
   // 体重/喝水相关回调函数
@@ -1778,6 +1790,7 @@ function IndexPage() {
                 </View>
               )}
               <View className='target-edit-btn' onClick={openTargetEditor}>
+                <Text className='iconfont icon-target target-edit-icon' />
                 <Text className='target-edit-text'>编辑目标</Text>
               </View>
             </View>
@@ -1956,7 +1969,7 @@ function IndexPage() {
               <Text className='meals-title'>今日餐食</Text>
             </View>
             <View className='view-all-btn' onClick={handleViewAllMeals}>
-              <Text className='view-all-text'>查看全部</Text>
+              <Text className='iconfont icon-right-arrow view-all-arrow' />
             </View>
           </View>
           
@@ -2102,9 +2115,12 @@ function IndexPage() {
         {showFoodExpiryBlock && (
           <View className='expiry-section'>
             <View className='section-header'>
-              <Text className='expiry-title'>食物保质期</Text>
+              <View className='meals-title-wrap'>
+                <Text className='iconfont icon-kefulan meals-title-icon' />
+                <Text className='meals-title expiry-title'>食物保质期</Text>
+              </View>
               <View className='view-all-btn' onClick={openFoodExpiryList}>
-                <Text className='view-all-text'>查看全部</Text>
+                <Text className='iconfont icon-right-arrow view-all-arrow' />
               </View>
             </View>
 

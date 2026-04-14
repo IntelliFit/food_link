@@ -61,7 +61,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   padding: 22rpx 26rpx;
   margin-bottom: 20rpx;
   background: rgb(255 255 255 / 88%);
-  border-radius: 20rpx;
+  border-radius: 24rpx;
   border: 1rpx solid rgb(0 188 125 / 22%);
   box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 8%);
 }
@@ -76,7 +76,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .home-login-banner-btn {
   flex-shrink: 0;
   padding: 12rpx 28rpx;
-  border-radius: 999rpx;
+  border-radius: 9999rpx;
   background: linear-gradient(90deg, $primary-gradient-start 0%, $primary-gradient-end 100%);
 }
 
@@ -344,14 +344,24 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .target-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
   padding: 4rpx 12rpx;
   background: #f3f4f6;
   border: 1rpx solid #e5e7eb;
   border-radius: 9999rpx;
-  
+
   &:active {
     background: #e5e7eb;
   }
+}
+
+.target-edit-icon {
+  font-size: 18rpx;
+  color: #6b7280;
+  line-height: 1;
 }
 
 .target-edit-text {
@@ -1016,6 +1026,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-size: 26rpx;
   color: $primary-color;
   font-weight: 500;
+  line-height: 36rpx;
+}
+
+.view-all-arrow {
+  font-size: 28rpx;
+  color: $primary-color;
   line-height: 36rpx;
 }
 
@@ -1928,7 +1944,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .water-progress-bar-bg {
   height: 12rpx;
   background: rgb(186 230 253 / 60%);
-  border-radius: 999rpx;
+  border-radius: 9999rpx;
   overflow: hidden;
   margin-bottom: 20rpx;
 }
@@ -1936,7 +1952,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .water-progress-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, #3b82f6 0%, #0ea5e9 100%);
-  border-radius: 999rpx;
+  border-radius: 9999rpx;
   transition: width 0.5s ease;
 }
 
@@ -2252,7 +2268,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   position: relative;
   height: 48rpx;
   background: #f1f5f9;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   overflow: hidden;
 }
 
@@ -2261,7 +2277,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   left: 0;
   top: 0;
   bottom: 0;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   display: flex;
   align-items: center;
   padding-left: 16rpx;
@@ -2338,7 +2354,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   width: 100%;
   height: 100%;
   pointer-events: none;
-  border-radius: 18rpx; // 与父容器圆角一致
+  border-radius: 20rpx; // 与父容器圆角一致
   overflow: hidden;
 }
 

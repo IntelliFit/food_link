@@ -1814,3 +1814,37 @@
   - 备注：`mrc screenshot` 在本环境仍持续 30s+ 超时，未能获取截图，但通过元素存在性检查已确认数据渲染链路正常
 - Next step:
   - 用户在微信开发者工具中切到 4 月 13 日，确认今日餐食卡片已正确显示食物描述、时间胶囊、餐次标签、卡路里及蛋白质/碳水/脂肪图标数值
+
+- Task: 修复首页切换日期时本地缓存失效导致数据归零
+- Status: done
+- Scope:
+  - `src/pages/index/index.tsx`
+    - `getStoredHomeDashboardSnapshots()` 移除了对 `meals[0]` 中 `protein/carbs/fat/description` 字段的强制存在性检查
+    - 这些字段在 `HomeMealItem` 类型中本来就是可选字段，旧缓存缺失它们是合法状态
+- Root cause:
+  - 过滤条件过于严格，把合法的旧格式缓存全部过滤掉
+  - `getStoredHomeDashboardSnapshotByDate()` 因此返回 `null`
+  - `handleDateSelect()` 的 else 分支把所有状态重置为默认值，导致用户看到数据先归零、再等网络请求返回
+- Verification:
+  - `npm run build:weapp -- --no-check` 编译成功
+  - 使用 `miniprogram-automator` 直连 9420 端口对比验证：
+    - 本地缓存 2 条，旧过滤逻辑 0 条通过，新过滤逻辑 2 条全部通过
+
+- Task: 运动记录页加载历史记录时增加 loading spinner
+- Status: done
+- Scope:
+  - `src/pages/exercise-record/index.tsx`
+    - 新增 `loadingLogs` state，`loadTodayRecords` 请求期间显示加载动画
+    - 列表区域在加载期间显示居中的 `loading-spinner-md`，不显示文字（符合加载态规范）
+  - `src/pages/exercise-record/index.scss`
+    - 新增 `.exercise-logs-loading` 样式
+- Verification: `npm run build:weapp -- --no-check` 编译通过
+
+- Task: 确认首页本地缓存60条上限
+- Status: done（代码已严格限制，无需修改）
+- Scope: `src/pages/index/index.tsx`
+- 结论：
+  - 当前只有一个缓存键 `home_dashboard_local_cache_v3`，按日期存储完整 dashboard 快照
+  - `HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 60`
+  - 读写两端均有 `.slice(0, 60)` 截断，快照总数严格不超过60条
+- 注意：目前不是按蛋白质/碳水/脂肪等类别分别存60天数组，而是每天一个完整快照。若需要按类别独立存储60天历史，需额外设计。
