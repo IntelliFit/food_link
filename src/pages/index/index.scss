@@ -477,6 +477,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   min-width: 0;
 }
 
+// 超标提示占位槽：预留固定高度，避免有/无提示时三列对齐错乱
+.macro-excess-slot {
+  height: 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
 // 超标时：标签上方极简超出克数（与环图左对齐留白区）
 .macro-over-hint {
   font-size: 20rpx;
@@ -484,7 +492,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   line-height: 28rpx;
   color: $home-warning-red;
   font-variant-numeric: tabular-nums;
-  margin-bottom: -4rpx;
 }
 
 .macro-title-row {

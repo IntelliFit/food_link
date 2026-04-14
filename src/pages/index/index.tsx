@@ -1837,9 +1837,11 @@ function IndexPage() {
                 <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
                   {/* 左侧：超标时顶部极简超出量；名称 + 目标总量 */}
                   <View className='macro-left-content'>
-                    {macroExcessG != null && macroExcessG > 0 && (
-                      <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}g</Text>
-                    )}
+                    <View className='macro-excess-slot'>
+                      {macroExcessG != null && macroExcessG > 0 && (
+                        <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}g</Text>
+                      )}
+                    </View>
                     <View className='macro-title-row'>
                       <Text className={`iconfont ${iconClass}`} style={{ color, marginRight: '6rpx', fontSize: '26rpx' }} />
                       <Text className='macro-label-horizontal'>{label}</Text>
