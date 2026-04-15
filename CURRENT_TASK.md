@@ -1,5 +1,23 @@
 # CURRENT_TASK
 
+- Task: 首页餐食卡片直达风险海报与海报居中修复
+- Status: done（已提交并推送）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - 餐食卡片点击后弹出 Action Sheet，支持「修改记录」和「生成风险海报」
+    - 海报生成前预加载 iconfont，config 同步补充 copy 规则
+  - `src/pages/record-detail/index.tsx`
+    - 支持 `autoPoster=1` 路由参数，进入页面后自动触发生成海报
+  - `src/utils/poster.ts`
+    - 标题区「今日总结」与「坚持目标 X 天」垂直居中
+    - 圆内百分比与「已摄入」整体严格垂直居中
+    - 底部恢复五竖条（蛋白质/碳水/脂肪/喝水/运动）
+  - `src/pages/index/index.scss`
+    - 餐食卡片多图时显示餐次图标与目标能量
+- Verification:
+  - 构建通过
+  - commit `9d250df` 已推送至 origin/main
+
 - Task: 每日总结分享海报底部布局重设计
 - Status: done（已移除 5 根竖条，改为两行 icon+数值标签；百分比与百分号作为整体在圆心居中；日期胶囊下移到「坚持目标 X 天」下方）
 - Scope:

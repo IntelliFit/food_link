@@ -12,6 +12,7 @@ import {
   getExerciseLogs,
   getUnlimitedQRCode,
   getFriendInviteProfile,
+  getSharedFoodRecord,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
@@ -25,7 +26,8 @@ import {
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
-  type HomeFoodExpirySummary
+  type HomeFoodExpirySummary,
+  type FoodRecord
 } from '../../utils/api'
 import {
   drawDailySummaryPoster,
@@ -60,7 +62,7 @@ import {
 } from './utils/constants'
 import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu } from './components'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal } from './components'
 
 /** 微信操作面板单行不宜过长，总长度含「 · 」分隔符一并限制 */
 const HOME_MEAL_PICKER_LINE_MAX_CHARS = 34
@@ -626,6 +628,13 @@ function IndexPage() {
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = useState(false)
 
+  // 餐食卡片操作状态
+  const [mealActionSheetVisible, setMealActionSheetVisible] = useState(false)
+  const [mealActionRecordId, setMealActionRecordId] = useState<string | null>(null)
+  const [mealActionRecord, setMealActionRecord] = useState<FoodRecord | null>(null)
+  const [showRecordEditModal, setShowRecordEditModal] = useState(false)
+  const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
+
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string, silent = false) => {
     const seq = ++loadDashboardSeqRef.current
@@ -1113,29 +1122,16 @@ function IndexPage() {
     Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
   }, [selectedDate])
 
-  /** 今日餐食单条 → 先弹 Action Sheet（多条同餐时先选记录） */
+  /** 今日餐食单条 → 弹出记录操作菜单（多条同餐时先选记录） */
   const openMealRecordDetail = useCallback((meal: HomeMealItem) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
     }
 
-    const showMealActionSheet = (recordId: string) => {
-      Taro.showActionSheet({
-        itemList: ['修改记录', '生成风险海报'],
-        success: (res) => {
-          if (res.tapIndex === 0) {
-            Taro.navigateTo({
-              url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}&ui=home`
-            })
-          } else if (res.tapIndex === 1) {
-            Taro.navigateTo({
-              url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}&ui=home&autoPoster=1`
-            })
-          }
-        },
-        fail: () => {}
-      })
+    const openActionSheet = (recordId: string) => {
+      setMealActionRecordId(recordId)
+      setMealActionSheetVisible(true)
     }
 
     const entries = Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()) : []
@@ -1147,11 +1143,11 @@ function IndexPage() {
         Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
         return
       }
-      showMealActionSheet(rid)
+      openActionSheet(rid)
       return
     }
     if (entries.length === 1) {
-      showMealActionSheet(entries[0].id)
+      openActionSheet(entries[0].id)
       return
     }
     const slice = entries.slice(0, HOME_MEAL_ACTION_SHEET_MAX)
@@ -1163,11 +1159,45 @@ function IndexPage() {
         const idx = res.tapIndex
         if (idx < 0 || idx >= slice.length) return
         const picked = slice[idx]
-        showMealActionSheet(picked.id)
+        openActionSheet(picked.id)
       },
       fail: () => {}
     })
   }, [])
+
+  const handleMealEdit = async () => {
+    if (!mealActionRecordId) return
+    Taro.showLoading({ title: '加载中...', mask: true })
+    try {
+      const res = await getSharedFoodRecord(mealActionRecordId)
+      setMealActionRecord(res.record)
+      setShowRecordEditModal(true)
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
+  const handleMealPoster = async () => {
+    if (!mealActionRecordId) return
+    Taro.showLoading({ title: '加载中...', mask: true })
+    try {
+      const res = await getSharedFoodRecord(mealActionRecordId)
+      setMealActionRecord(res.record)
+      setShowRecordPosterModal(true)
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
+  const handleRecordEditSuccess = () => {
+    setShowRecordEditModal(false)
+    const raw = selectedDateRef.current || formatDateKey(new Date())
+    syncDashboardForDate(raw)
+  }
 
   const openFoodExpiryList = () => {
     if (!getAccessToken()) {
@@ -2455,6 +2485,29 @@ function IndexPage() {
           </View>
         </View>
       )}
+
+      {/* 餐食卡片操作菜单 */}
+      <MealActionSheet
+        visible={mealActionSheetVisible}
+        onClose={() => setMealActionSheetVisible(false)}
+        onEdit={handleMealEdit}
+        onPoster={handleMealPoster}
+      />
+
+      {/* 餐食记录编辑弹窗 */}
+      <MealRecordEditModal
+        visible={showRecordEditModal}
+        record={mealActionRecord}
+        onClose={() => setShowRecordEditModal(false)}
+        onSuccess={handleRecordEditSuccess}
+      />
+
+      {/* 餐食记录海报弹窗 */}
+      <MealRecordPosterModal
+        visible={showRecordPosterModal}
+        record={mealActionRecord}
+        onClose={() => setShowRecordPosterModal(false)}
+      />
     </View>
   )
 }
