@@ -60,6 +60,12 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
         }))
       )
+      Taro.hideTabBar({ animation: true }).catch(() => {})
+    } else if (!visible) {
+      Taro.showTabBar({ animation: true }).catch(() => {})
+    }
+    return () => {
+      Taro.showTabBar({ animation: true }).catch(() => {})
     }
   }, [visible, record])
 
