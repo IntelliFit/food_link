@@ -2521,7 +2521,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .record-menu-modal {
   position: fixed;
   inset: 0;
-  z-index: 10001;
+  z-index: 100001;
   display: flex;
   align-items: flex-end;
   justify-content: center;
