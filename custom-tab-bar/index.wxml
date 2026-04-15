@@ -14,7 +14,7 @@
       </block>
       <block wx:elif="{{item.isCenter}}">
         <view class="center-icon-wrapper">
-          <text class="center-plus">+</text>
+          <text class="iconfont icon-huore center-icon"></text>
         </view>
       </block>
       <block wx:else>

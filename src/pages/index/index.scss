@@ -49,7 +49,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .page-content {
   position: relative;
   z-index: 1;
-  padding: 180rpx 32rpx 140rpx; // 增加整体padding，更舒适的边距
+  padding: 180rpx 32rpx 160rpx; // 底部留出 tab-bar 高度 + safe-area 空间
 }
 
 // 未登录：首页顶部引导（审核要求先浏览再授权）

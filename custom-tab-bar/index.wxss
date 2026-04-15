@@ -1,10 +1,23 @@
+/* 引入 iconfont */
+@font-face {
+  font-family: 'iconfont';
+  src: url('/assets/iconfont/iconfont.ttf') format('truetype');
+}
+
+.iconfont {
+  font-family: 'iconfont';
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 /* 底部导航栏 - 优雅下凹曲线 + 悬浮按钮 + 底部阴影 */
 .custom-tab-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 100rpx;
+  height: 120rpx;
   background: transparent;
   display: flex;
   align-items: flex-end;
@@ -21,8 +34,8 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 140rpx;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 140' preserveAspectRatio='none'%3E%3Cpath d='M0,40 Q0,0 40,0 L280,0 Q310,0 330,25 Q375,90 420,25 Q440,0 470,0 L710,0 Q750,0 750,40 L750,140 L0,140 Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  height: 160rpx;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 160' preserveAspectRatio='none'%3E%3Cpath d='M0,40 Q0,0 40,0 L280,0 Q310,0 330,25 Q375,100 420,25 Q440,0 470,0 L710,0 Q750,0 750,40 L750,160 L0,160 Z' fill='%23ffffff'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 -6rpx 20rpx rgba(0, 0, 0, 0.12));
@@ -39,8 +52,8 @@
   gap: 4rpx;
   transition: all 0.2s ease;
   position: relative;
-  height: 100rpx;
-  padding-bottom: 8rpx;
+  height: 120rpx;
+  padding-bottom: 12rpx;
   box-sizing: border-box;
 }
 
@@ -144,18 +157,17 @@
   width: 96rpx;
   height: 96rpx;
   background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
-  border-radius: 32rpx;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 10rpx 30rpx rgba(92, 184, 150, 0.35);
-  transform: translateY(-36rpx);
+  transform: translateY(-40rpx);
 }
 
-.center-plus {
-  font-size: 56rpx;
+.center-icon {
+  font-size: 48rpx;
   color: #fff;
-  font-weight: 300;
   line-height: 1;
 }
 
