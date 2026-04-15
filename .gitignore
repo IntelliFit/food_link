@@ -113,4 +113,5 @@ step*.png
 /*.png
 /*.PNG
 
-.playwright-mcp
+.playwright-mcp/
+tmp/
