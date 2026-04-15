@@ -213,6 +213,18 @@ function RecordDetailPage() {
     loadRecord()
   }, [router.params?.id])
 
+  // 从首页餐食卡片跳转且带 autoPoster=1 时，自动触发生成海报
+  const autoPosterTriggeredRef = React.useRef(false)
+  useEffect(() => {
+    if (record && router.params?.autoPoster === '1' && !autoPosterTriggeredRef.current) {
+      autoPosterTriggeredRef.current = true
+      const timer = setTimeout(() => {
+        handleGeneratePoster()
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [record, router.params?.autoPoster])
+
   const shareRecordId = record?.id || router.params?.id || ''
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
   const inviteCode = ownerInviteCode || getInviteCodeFromUserId(shareOwnerId)

@@ -60,6 +60,10 @@ export default defineConfig<'vite'>(async (merge) => {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
         },
+        {
+          from: 'src/assets/iconfont',
+          to: 'assets/iconfont'
+        },
 
       ],
       options: {

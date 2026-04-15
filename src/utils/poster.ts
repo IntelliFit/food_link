@@ -653,7 +653,7 @@ function ratioPct(current: number, target: number): number {
  */
 export function computeDailySummaryPosterHeight(_d?: DailySummaryPosterInput): number {
   const m = getDailyLayoutMetrics(POSTER_WIDTH)
-  const statsRowH = 70
+  const vBarRow = VBAR_TRACK_H + VBAR_LABEL_H + m.vbarLabelGap
   const footerReserve = m.footerTopPad + DAILY_QR_SIZE
 
   const contentBottom =
@@ -666,7 +666,7 @@ export function computeDailySummaryPosterHeight(_d?: DailySummaryPosterInput): n
     m.gapAfterDate +
     m.circleD +
     m.gapAfterCircle +
-    statsRowH
+    vBarRow
   return Math.ceil(contentBottom + m.gapBeforeFooter + footerReserve + m.bottomPad)
 }
 
@@ -762,21 +762,26 @@ export function drawDailySummaryPoster(
     ctx.fillText(honorTitle, cX, cy)
     cy += 56 + Math.max(4, DAILY_HEADER_TITLE_TO_DATE_GAP - 8)
   } else {
+    const line2Y = m.topPad + DAILY_HEADER_TITLE_LINE1_H + DAILY_HEADER_TITLE_LINE_GAP + DAILY_HEADER_DEFAULT_LINE2_OFFSET
+    const summaryCenterY = m.topPad + (line2Y - m.topPad) / 2
+
     ctx.fillStyle = DAILY_TITLE_LINE1
     ctx.font = titleFont
-    ctx.fillText('今日总结', cX, cy)
-    cy += DAILY_HEADER_TITLE_LINE1_H + DAILY_HEADER_TITLE_LINE_GAP
-    cy += DAILY_HEADER_DEFAULT_LINE2_OFFSET
+    ctx.textBaseline = 'middle'
+    ctx.fillText('今日总结', cX, summaryCenterY)
+
+    ctx.textBaseline = 'top'
     ctx.fillStyle = DAILY_TITLE_LINE2
     ctx.font = titleFont
-    ctx.fillText(`坚持目标 ${d.greenDays} 天`, cX, cy)
-    cy += DAILY_HEADER_TITLE_LINE2_H + DAILY_HEADER_TITLE_TO_DATE_GAP
+    ctx.fillText(`坚持目标 ${d.greenDays} 天`, cX, line2Y)
+    cy = line2Y + DAILY_HEADER_TITLE_LINE2_H + DAILY_HEADER_TITLE_TO_DATE_GAP
   }
 
   /** 日期胶囊：移到坚持目标下方 */
   const dateText = d.posterDateKey
     ? formatDailyPosterDatePillEn(d.posterDateKey)
     : `${d.dateLabelPrimary} ${d.dateLabelSecondary}`.trim()
+  const circleD = m.circleD
   if (dateText) {
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
@@ -801,7 +806,6 @@ export function drawDailySummaryPoster(
   cy += m.gapAfterDate
 
   /** 中央大圆：同色描边 + 波浪液位进度填充 */
-  const circleD = m.circleD
   const R = circleD / 2
   const circleCy = cy + R
   const tgt = d.intakeTarget > 0 ? d.intakeTarget : 1
@@ -827,106 +831,112 @@ export function drawDailySummaryPoster(
   const pctMeasureStr = `${calPctRound}%`
   const pctFs = measureDailyRingPctFontSize(ctx, pctMeasureStr, circleD)
   const pctSignFs = Math.max(16, Math.min(30, Math.round(pctFs * 0.42)))
-  const kcalFs = Math.max(12, Math.min(18, Math.round(pctFs * 0.26)))
+  const kcalFs = Math.max(10, Math.min(14, Math.round(pctFs * 0.22)))
   const kcalStr = `已摄入 ${Math.round(d.intakeCurrent)} kcal`
 
-  // 圆内文字：深字白底，无描边
-  const pctNumFill = '#1f2937'
-  const pctSignFill = '#1f2937'
+  // 圆内文字：百分比用主题色，已摄入深灰且更小
+  const pctNumFill = DAILY_TITLE_LINE2
+  const pctSignFill = DAILY_TITLE_LINE2
   const kcalFill = '#1f2937'
 
   ctx.font = dailyRingPctFont(pctFs)
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
   const pctNumW = ctx.measureText(pctNumberStr).width
   ctx.font = `700 ${pctSignFs}px ${DAILY_SUMMARY_SANS_FAMILY}`
   const pctSignW = ctx.measureText('%').width
   const pctGap = Math.max(2, Math.round(pctFs * 0.04))
-  const ringGapAfterPct = Math.max(14, Math.round(pctFs * 0.12))
+  const ringGapAfterPct = Math.max(10, Math.round(pctFs * 0.1))
 
-  // 百分比 + 已摄入 整体在圆内垂直居中
+  // 百分比 + 已摄入 整体在圆内严格垂直居中
   const totalRingTextH = pctFs + ringGapAfterPct + kcalFs
-  const pctY = circleCy - totalRingTextH / 2 + pctFs * 0.32
-  const kcalCy = pctY + (pctFs - pctFs * 0.32) + ringGapAfterPct + kcalFs / 2
+  const pctCenterY = circleCy - totalRingTextH / 2 + pctFs / 2
+  const kcalCenterY = circleCy + totalRingTextH / 2 - kcalFs / 2
 
   const totalPctW = pctNumW + pctGap + pctSignW
   const pctStartX = cX - totalPctW / 2
 
+  ctx.textBaseline = 'middle'
   ctx.fillStyle = pctNumFill
   ctx.font = dailyRingPctFont(pctFs)
   ctx.textAlign = 'left'
-  ctx.fillText(pctNumberStr, pctStartX, pctY)
+  ctx.fillText(pctNumberStr, pctStartX, pctCenterY)
 
   ctx.fillStyle = pctSignFill
   ctx.font = `700 ${pctSignFs}px ${DAILY_SUMMARY_SANS_FAMILY}`
-  ctx.fillText('%', pctStartX + pctNumW + pctGap, pctY)
+  ctx.fillText('%', pctStartX + pctNumW + pctGap, pctCenterY)
 
   ctx.fillStyle = kcalFill
   ctx.font = `600 ${kcalFs}px ${DAILY_SUMMARY_SANS_FAMILY}`
   ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(kcalStr, cX, kcalCy)
+  ctx.fillText(kcalStr, cX, kcalCenterY)
 
   cy = circleCy + R + m.gapAfterCircle
 
-  /** 圆下方统计：蛋白质/碳水/脂肪一行，喝水/运动第二行，取消进度条 */
-  function drawStatRow(
-    ctx2: CanvasRenderingContext2D,
-    items: Array<{ label: string; value: string; icon: string; iconColor: string }>,
-    rowY: number
-  ): void {
-    const iconFont = `14px iconfont, ${DAILY_SUMMARY_SANS_FAMILY}`
-    const labelFont = `12px ${DAILY_SUMMARY_SANS_FAMILY}`
-    const valueFont = `bold 13px ${DAILY_SUMMARY_SANS_FAMILY}`
-    const itemGap = 24
-    let totalW = 0
-    const widths: number[] = []
-    for (const item of items) {
-      ctx2.font = iconFont
-      const iconW = ctx2.measureText(item.icon).width
-      ctx2.font = labelFont
-      const labelW = ctx2.measureText(item.label).width
-      ctx2.font = valueFont
-      const valueW = ctx2.measureText(item.value).width
-      const w = Math.max(16, iconW) + 8 + labelW + 6 + valueW
-      widths.push(w)
-      totalW += w
+  /** 五竖条：均分 contentW，蛋白质、碳水、脂肪、喝水、运动（自下而上） */
+  const pt = Math.min(100, ratioPct(d.macros.protein.current, d.macros.protein.target))
+  const ct = Math.min(100, ratioPct(d.macros.carbs.current, d.macros.carbs.target))
+  const ft = Math.min(100, ratioPct(d.macros.fat.current, d.macros.fat.target))
+  const wt = Math.min(100, Math.max(0, d.waterProgressPct))
+  const exGoal =
+    d.exerciseGoalKcal != null && d.exerciseGoalKcal > 0 ? d.exerciseGoalKcal : DEFAULT_EXERCISE_GOAL_KCAL
+  const exPct = Math.min(100, (d.exerciseKcal / Math.max(1, exGoal)) * 100)
+
+  const labels = ['蛋白质', '碳水', '脂肪', '喝水', '运动']
+  const pcts = [pt, ct, ft, wt, exPct]
+  const colors: string[] = [
+    BAR_COLORS.protein,
+    BAR_COLORS.carbs,
+    BAR_COLORS.fat,
+    BAR_COLORS.water,
+    BAR_COLORS.exercise
+  ]
+
+  /** 五竖条总宽 = 卡片宽 75%，整组水平居中；间隙取 φ 相关比例 */
+  const barsTotalW = m.barsTotalW
+  const barGap = m.barGap
+  const barW = (barsTotalW - barGap * 4) / 5
+  let bx = cX - barsTotalW / 2
+  const barTopY = cy
+
+  const valY = barTopY + VBAR_TRACK_H + 4
+  const lblY = barTopY + VBAR_TRACK_H + 32
+  const labelValues = [
+    `${Math.round(normalizeDisplayNumber(d.macros.protein.current))}/${Math.round(normalizeDisplayNumber(d.macros.protein.target))}g`,
+    `${Math.round(normalizeDisplayNumber(d.macros.carbs.current))}/${Math.round(normalizeDisplayNumber(d.macros.carbs.target))}g`,
+    `${Math.round(normalizeDisplayNumber(d.macros.fat.current))}/${Math.round(normalizeDisplayNumber(d.macros.fat.target))}g`,
+    [`${Math.round(d.waterCurrentMl || 0)}/${Math.round(d.waterGoalMl || 2000)}`, 'ml'],
+    [`${Math.round(d.exerciseKcal)}/${Math.round(exGoal)}`, 'kcal']
+  ] as (string | string[])[]
+  const hasValue = [
+    d.macros.protein.current > 0,
+    d.macros.carbs.current > 0,
+    d.macros.fat.current > 0,
+    (d.waterCurrentMl || 0) > 0,
+    d.exerciseKcal > 0
+  ]
+
+  for (let i = 0; i < 5; i++) {
+    drawDailyVerticalBar(ctx, bx, barTopY, barW, VBAR_TRACK_H, pcts[i], colors[i])
+    if (hasValue[i]) {
+      ctx.fillStyle = '#374151'
+      ctx.font = `500 11px ${DAILY_SUMMARY_SANS_FAMILY}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      const val = labelValues[i]
+      if (Array.isArray(val)) {
+        ctx.fillText(val[0], bx + barW / 2, valY)
+        ctx.fillText(val[1], bx + barW / 2, valY + 12)
+      } else {
+        ctx.fillText(val, bx + barW / 2, valY)
+      }
     }
-    totalW += itemGap * (items.length - 1)
-    let x = cX - totalW / 2
-    for (let i = 0; i < items.length; i++) {
-      ctx2.textAlign = 'center'
-      ctx2.textBaseline = 'middle'
-      ctx2.font = iconFont
-      ctx2.fillStyle = items[i].iconColor
-      ctx2.fillText(items[i].icon, x + Math.max(16, ctx2.measureText(items[i].icon).width) / 2, rowY)
-      const iconW = ctx2.measureText(items[i].icon).width
-
-      ctx2.textAlign = 'left'
-      ctx2.font = labelFont
-      ctx2.fillStyle = '#6b7280'
-      ctx2.fillText(items[i].label, x + Math.max(16, iconW) + 8, rowY)
-      const labelW = ctx2.measureText(items[i].label).width
-
-      ctx2.font = valueFont
-      ctx2.fillStyle = '#1f2937'
-      ctx2.fillText(items[i].value, x + Math.max(16, iconW) + 8 + labelW + 6, rowY)
-
-      x += widths[i] + itemGap
-    }
+    ctx.fillStyle = '#1f2937'
+    ctx.font = `600 15px ${DAILY_SUMMARY_SANS_FAMILY}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(labels[i], bx + barW / 2, lblY)
+    bx += barW + barGap
   }
-
-  const row1 = [
-    { label: '蛋白质', value: `${Math.round(normalizeDisplayNumber(d.macros.protein.current))}g`, icon: '\uE62B', iconColor: '#3b82f6' },
-    { label: '碳水', value: `${Math.round(normalizeDisplayNumber(d.macros.carbs.current))}g`, icon: '\uE632', iconColor: '#eab308' },
-    { label: '脂肪', value: `${Math.round(normalizeDisplayNumber(d.macros.fat.current))}g`, icon: '\uE62A', iconColor: '#f97316' }
-  ]
-  const row2 = [
-    { label: '喝水', value: `${Math.round(d.waterCurrentMl || 0)}ml`, icon: '\uE645', iconColor: '#3b82f6' },
-    { label: '运动', value: `${Math.round(d.exerciseKcal)}kcal`, icon: '\uE70D', iconColor: '#f97316' }
-  ]
-  drawStatRow(ctx, row1, cy + 12)
-  drawStatRow(ctx, row2, cy + 12 + 30)
 
   /** 底栏：头像与文案垂直居中对齐；二维码缩小 */
   const bottomPad = m.bottomPad

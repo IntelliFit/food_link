@@ -551,15 +551,15 @@ function getExpiryTagClass(urgency: FoodExpiryItem['urgency_level']): string {
   return 'normal'
 }
 
-// 餐次对应的 iconfont 图标及颜色
+// 餐次对应的 iconfont 图标及颜色（与分析页保持一致）
 const MEAL_ICON_CONFIG = {
-  breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐' },
-  morning_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
-  lunch: { Icon: IconLunch, color: '#00bc7d', bgColor: '#ecfdf5', label: '午餐' },
-  afternoon_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
-  dinner: { Icon: IconDinner, color: '#00bc7d', bgColor: '#ecfdf5', label: '晚餐' },
-  evening_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
-  snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '零食' }
+  breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐', iconClass: 'icon-zaocan1' },
+  morning_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐', iconClass: 'icon-lingshi' },
+  lunch: { Icon: IconLunch, color: '#00bc7d', bgColor: '#ecfdf5', label: '午餐', iconClass: 'icon-wucan' },
+  afternoon_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐', iconClass: 'icon-lingshi' },
+  dinner: { Icon: IconDinner, color: '#00bc7d', bgColor: '#ecfdf5', label: '晚餐', iconClass: 'icon-wancan' },
+  evening_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐', iconClass: 'icon-lingshi' },
+  snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '零食', iconClass: 'icon-lingshi' }
 } as const
 
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
@@ -1113,12 +1113,31 @@ function IndexPage() {
     Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
   }, [selectedDate])
 
-  /** 今日餐食单条 → 识别记录详情（多条同餐时先选哪一条） */
+  /** 今日餐食单条 → 先弹 Action Sheet（多条同餐时先选记录） */
   const openMealRecordDetail = useCallback((meal: HomeMealItem) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
     }
+
+    const showMealActionSheet = (recordId: string) => {
+      Taro.showActionSheet({
+        itemList: ['修改记录', '生成风险海报'],
+        success: (res) => {
+          if (res.tapIndex === 0) {
+            Taro.navigateTo({
+              url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}&ui=home`
+            })
+          } else if (res.tapIndex === 1) {
+            Taro.navigateTo({
+              url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}&ui=home&autoPoster=1`
+            })
+          }
+        },
+        fail: () => {}
+      })
+    }
+
     const entries = Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()) : []
     if (entries.length === 0) {
       const rid = resolveHomeMealPrimaryRecordId(meal)
@@ -1128,15 +1147,11 @@ function IndexPage() {
         Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
         return
       }
-      Taro.navigateTo({
-        url: `/pages/record-detail/index?id=${encodeURIComponent(rid)}&ui=home`
-      })
+      showMealActionSheet(rid)
       return
     }
     if (entries.length === 1) {
-      Taro.navigateTo({
-        url: `/pages/record-detail/index?id=${encodeURIComponent(entries[0].id)}&ui=home`
-      })
+      showMealActionSheet(entries[0].id)
       return
     }
     const slice = entries.slice(0, HOME_MEAL_ACTION_SHEET_MAX)
@@ -1148,9 +1163,7 @@ function IndexPage() {
         const idx = res.tapIndex
         if (idx < 0 || idx >= slice.length) return
         const picked = slice[idx]
-        Taro.navigateTo({
-          url: `/pages/record-detail/index?id=${encodeURIComponent(picked.id)}&ui=home`
-        })
+        showMealActionSheet(picked.id)
       },
       fail: () => {}
     })
@@ -1672,9 +1685,32 @@ function IndexPage() {
 
           canvas.width = POSTER_WIDTH * dpr
           canvas.height = heightPx * dpr
-          ctx.scale(dpr, dpr)
 
-          drawDailySummaryPoster(ctx, {
+          // 预加载 iconfont，供 Canvas 绘制底部统计图标使用
+          try {
+            const fontLoader = (canvas as any).loadFontFace
+              ? (canvas as any).loadFontFace({
+                  family: 'iconfont',
+                  source: 'url("/assets/iconfont/iconfont.ttf")',
+                })
+              : Taro.loadFontFace({
+                  family: 'iconfont',
+                  source: 'url("/assets/iconfont/iconfont.ttf")',
+                  global: true,
+                })
+            await fontLoader
+            await new Promise((r) => setTimeout(r, 300))
+          } catch {
+            // ignore font load errors
+          }
+
+          // 字体加载后重新获取 context，确保 canvas 能使用新字体
+          const posterCtx = canvas.getContext('2d')
+          if (posterCtx) {
+            posterCtx.scale(dpr, dpr)
+          }
+
+          drawDailySummaryPoster(posterCtx || ctx, {
             width: POSTER_WIDTH,
             height: heightPx,
             data: posterData,
@@ -2013,7 +2049,7 @@ function IndexPage() {
             ) : (
               meals.map((meal, index) => {
                 const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
-                const { Icon, color, bgColor, label } = config
+                const { Icon, color, bgColor, label, iconClass } = config
                 const isSnackMeal = SNACK_MEAL_TYPES.has(meal.type)
                 const mealCalorie = normalizeDisplayNumber(meal.calorie)
                 const mealTarget = normalizeDisplayNumber(meal.target)
@@ -2023,13 +2059,7 @@ function IndexPage() {
                   : (meal.image_path ? [meal.image_path] : [])
                 const previewImage = mealImageUrls[0] || ''
                 const hasRealImage = mealImageUrls.length > 0
-                const targetText = isSnackMeal
-                  ? `参考 ${formatDisplayNumber(mealTarget)} kcal`
-                  : `目标 ${formatDisplayNumber(mealTarget)} kcal`
-                const totalMealCalories = meals.reduce((sum, m) => sum + Number(m.calorie || 0), 0)
-                const mealPercent = totalMealCalories > 0
-                  ? Math.max(1, Math.round((mealCalorie / totalMealCalories) * 100))
-                  : 0
+
 
                 return (
                   <View
@@ -2073,7 +2103,7 @@ function IndexPage() {
                           </View>
                         ) : null}
                       </View>
-                      {/* 第二行：🔥 卡路里 + 占比 */}
+                      {/* 第二行：🔥 卡路里，最右侧显示餐次+目标能量（2张及以上图片时） */}
                       <View className='meal-calorie-row'>
                         <View className='meal-calorie-wrap'>
                           <Text className='iconfont icon-huore' style={{ color: '#f97316', fontSize: '24rpx', marginRight: '4rpx' }} />
@@ -2082,7 +2112,17 @@ function IndexPage() {
                             <Text className='meal-calorie-unit'> kcal</Text>
                           </Text>
                         </View>
-                        <Text className='meal-calorie-percent'>{mealPercent}%</Text>
+                        {mealImageUrls.length >= 2 && (
+                          <View className='meal-calorie-extra'>
+                            <Text
+                              className={`iconfont ${iconClass} meal-type-icon-inline`}
+                              style={{ color }}
+                            />
+                            <Text className='meal-type-target'>
+                              {label} {formatDisplayNumber(mealTarget)} kcal
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       {/* 第三行：三大营养素 */}
                       <View className='meal-macros-row'>

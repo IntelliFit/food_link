@@ -1313,12 +1313,24 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   color: $text-secondary;
 }
 
-.meal-calorie-percent {
+.meal-calorie-extra {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-left: auto;
+}
+
+.meal-type-icon-inline {
+  font-size: 20rpx;
+  line-height: 32rpx;
+  margin-right: 4rpx;
+}
+
+.meal-type-target {
   font-size: 22rpx;
-  font-weight: 600;
+  font-weight: 500;
   color: $text-secondary;
   line-height: 32rpx;
-  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
