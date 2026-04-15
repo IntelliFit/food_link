@@ -3,7 +3,7 @@ $primary-gradient-start: #5cb896;
 $primary-gradient-end: #8dd3bf;
 $primary-color: #5cb896;
 
-$orange-color: #f97316; // 橙色 - 用于热量盈余提示
+$orange-color: #d48a5a; // 橙色 - 用于热量盈余提示
 
 $purple-color: #8b5cf6;
 $purple-light: #f3e8ff;
@@ -18,7 +18,7 @@ $gradient-end: #EFF1F4;
 $text-primary: #1f2937;
 $text-secondary: #6b7280;
 $text-tertiary: #9ca3af;
-$blue-color: #3b82f6;
+$blue-color: #6b9ac4;
 
 // 首页摄入超标/警示（柔和红，避免纯 #ef4444 刺眼）
 $home-warning-red: #e57373;
@@ -1194,7 +1194,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  background: linear-gradient(135deg, #f0f9f5 0%, #d8f0e8 100%);
 }
 
 .meal-thumb-image {
@@ -1910,7 +1910,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 // 运动卡片样式
 .exercise-card {
   .body-status-icon.exercise-icon {
-    background: #fff7ed;
+    background: #faf3ed;
     border-radius: 8rpx;
     width: 32rpx;
     height: 32rpx;
@@ -1920,7 +1920,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   }
   
   &:active {
-    background: #fff7ed;
+    background: #faf3ed;
   }
 }
 
@@ -1935,7 +1935,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .water-progress-section {
   margin-bottom: 28rpx;
   padding: 24rpx;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  background: linear-gradient(135deg, #f0f7fa 0%, #d8e8f0 100%);
   border-radius: 20rpx;
 }
 
@@ -1949,20 +1949,20 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .water-progress-label {
   font-size: 24rpx;
   line-height: 34rpx;
-  color: #0369a1;
+  color: #5a7a8a;
   font-weight: 600;
 }
 
 .water-progress-value {
   font-size: 32rpx;
   line-height: 44rpx;
-  color: #0284c7;
+  color: #6a8fa8;
   font-weight: 800;
 }
 
 .water-progress-bar-bg {
   height: 12rpx;
-  background: rgb(186 230 253 / 60%);
+  background: rgb(170 210 230 / 60%);
   border-radius: 9999rpx;
   overflow: hidden;
   margin-bottom: 20rpx;
@@ -1970,7 +1970,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 
 .water-progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6 0%, #0ea5e9 100%);
+  background: linear-gradient(90deg, #6b9ac4 0%, #7aa8c4 100%);
   border-radius: 9999rpx;
   transition: width 0.5s ease;
 }
@@ -2257,15 +2257,15 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   justify-content: center;
   
   &.protein {
-    background: #3b82f6;
+    background: #6b9ac4;
   }
   
   &.carbs {
-    background: #eab308;
+    background: #d4b86a;
   }
   
   &.fat {
-    background: #f97316;
+    background: #d48a5a;
   }
 }
 
@@ -2303,15 +2303,15 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   transition: width 0.1s ease;
   
   &.protein {
-    background: #c8e86c;
+    background: #c4d88a;
   }
   
   &.carbs {
-    background: #f0d878;
+    background: #e8d89a;
   }
   
   &.fat {
-    background: #f4b868;
+    background: #e4c48a;
   }
 }
 
@@ -2705,7 +2705,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   position: absolute;
   top: 16rpx;
   right: 16rpx;
-  background: #3b82f6;
+  background: #6b9ac4;
   padding: 4rpx 10rpx;
   border-radius: 6rpx;
 }
@@ -2804,7 +2804,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   align-items: center;
   justify-content: space-between;
   padding: 16rpx 20rpx;
-  background: linear-gradient(135deg, #f0f9f5 0%, #f0fdf4 100%);
+  background: linear-gradient(135deg, #f0f9f5 0%, #f0f9f5 100%);
   border-radius: 16rpx;
   border: 1rpx solid #bbf7d0;
 }

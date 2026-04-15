@@ -58,7 +58,7 @@ const GRID_FEATURES: Array<{
   {
     id: 'manual',
     label: '手动输入',
-    color: '#3b82f6',
+    color: '#6b9ac4',
     bgColor: '#eff6ff',
     Icon: IconEdit,
   },
