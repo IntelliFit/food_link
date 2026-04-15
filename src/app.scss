@@ -23,7 +23,7 @@ page {
   min-height: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
-  background-color: #f9fafb;
+  background-color: #f0f3f6;
   font-family: 'Source Han Sans SC', 'SourceHanSansSC-Regular', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -85,7 +85,7 @@ page > view {
   width: 40rpx;
   height: 40rpx;
   border: 4rpx solid #e2e8f0;
-  border-top-color: #00bc7d;
+  border-top-color: #5cb896;
   border-radius: 50%;
   animation: loading-spin 0.8s linear infinite;
 }
@@ -95,7 +95,7 @@ page > view {
   width: 48rpx;
   height: 48rpx;
   border: 4rpx solid #e2e8f0;
-  border-top-color: #00bc7d;
+  border-top-color: #5cb896;
   border-radius: 50%;
   animation: loading-spin 0.8s linear infinite;
 }
@@ -105,7 +105,7 @@ page > view {
   width: 60rpx;
   height: 60rpx;
   border: 5rpx solid #e2e8f0;
-  border-top-color: #00bc7d;
+  border-top-color: #5cb896;
   border-radius: 50%;
   animation: loading-spin 0.8s linear infinite;
 }

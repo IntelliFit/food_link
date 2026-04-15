@@ -16,7 +16,8 @@
 
 /* 下凹曲线背景（SVG 作为 data URI，全宽拉伸）
    参考图风格：中间按钮为旋转 45° 的圆角正方形，
-   下凹呈与按钮呼应的圆润半圆弧，深度约 40rpx，圆心在顶部上方 20rpx
+   下凹为平滑圆润的抛物线型，使用二次贝塞尔曲线绘制
+   顶部开口宽 140rpx，最大深度 55rpx
 */
 .custom-tab-bar::before {
   content: '';
@@ -25,7 +26,7 @@
   left: 0;
   right: 0;
   height: 120rpx;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 120' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L318,0 C318,33.14 341.86,40 375,40 C408.14,40 432,33.14 432,0 L750,0 L750,120 L0,120 Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 120' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L305,0 Q375,55 445,0 L750,0 L750,120 L0,120 Z' fill='%23ffffff'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 -6rpx 20rpx rgba(0, 0, 0, 0.12));
@@ -152,13 +153,13 @@
 .center-icon-wrapper {
   width: 88rpx;
   height: 88rpx;
-  background: #d4dc7a;
+  background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
   border-radius: 24rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10rpx 28rpx rgba(212, 220, 122, 0.4);
-  transform: rotate(45deg) translateY(-30rpx);
+  box-shadow: 0 10rpx 28rpx rgba(92, 184, 150, 0.4);
+  transform: rotate(45deg) translateY(-36rpx);
 }
 
 .center-plus {

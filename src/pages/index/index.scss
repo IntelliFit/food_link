@@ -28,15 +28,15 @@ $home-warning-surface: #fef8f8;
 // 日期选中胶囊：沿用主题绿半透明；边框与背景同色（避免色差）
 $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
-// 页面基础 - 整体渐变背景
+// 页面基础 - 整体渐变背景：更柔和的低饱和绿色过渡，衬托白面板
 .home-page {
   min-height: 100vh;
   position: relative;
   background: linear-gradient(180deg, 
-    rgb(92 184 150 / 15%) 0%,
-    rgb(0 188 125 / 8%) 25%,
-    #EFF1F4 60%,
-    #EFF1F4 100%
+    rgb(92 184 150 / 8%) 0%,
+    rgb(92 184 150 / 3%) 40%,
+    #f0f3f6 80%,
+    #f0f3f6 100%
   );
 }
 
