@@ -45,7 +45,7 @@
 }
 
 .tab-item.selected .tab-text {
-  color: #00bc7d;
+  color: #5cb896;
   font-weight: 500;
 }
 
@@ -117,11 +117,11 @@
 /* 选中状态 */
 .stats-icon.active::before,
 .stats-icon.active::after {
-  background: #00bc7d;
+  background: #5cb896;
 }
 
 .stats-icon.active {
-  background: linear-gradient(to top, transparent 6rpx, #00bc7d 6rpx, #00bc7d 24rpx, transparent 24rpx);
+  background: linear-gradient(to top, transparent 6rpx, #5cb896 6rpx, #5cb896 24rpx, transparent 24rpx);
   background-size: 5rpx 18rpx;
   background-position: center bottom 6rpx;
   background-repeat: no-repeat;
@@ -143,12 +143,12 @@
 .center-icon-wrapper {
   width: 96rpx;
   height: 96rpx;
-  background: linear-gradient(135deg, #00bc7d 0%, #00d68f 100%);
+  background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
   border-radius: 32rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10rpx 30rpx rgba(0, 188, 125, 0.35);
+  box-shadow: 0 10rpx 30rpx rgba(92, 184, 150, 0.35);
   transform: translateY(-36rpx);
 }
 
