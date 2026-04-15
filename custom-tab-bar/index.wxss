@@ -49,10 +49,10 @@
   left: 0;
   right: 0;
   height: 100%;  
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 96' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L265,0 C300,0 315,10 330,25 C345,38 360,38 375,38 C390,38 405,38 420,25 C435,10 450,0 485,0 L750,0 L750,96 L0,96 Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20750%2096%27%20preserveAspectRatio%3D%27none%27%3E%3Cpath%20d%3D%27M0%2C0%20L275%2C0%20C305%2C0%20320%2C10%20335%2C30%20C350%2C44%20360%2C44%20375%2C44%20C390%2C44%20400%2C44%20415%2C30%20C430%2C10%20445%2C0%20475%2C0%20L750%2C0%20L750%2C96%20L0%2C96%20Z%27%20fill%3D%27%23ffffff%27/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
-  filter: drop-shadow(0 -4rpx 14rpx rgba(0, 0, 0, 0.1));
+  filter: drop-shadow(0 -8rpx 28rpx rgba(0, 0, 0, 0.22));
   z-index: -1;
   pointer-events: none;
 }
@@ -138,7 +138,7 @@ image.tab-icon {
   top: 50%;
   margin-left: -48rpx;
   margin-top: -48rpx;
-  transform: translateY(calc(-38rpx - env(safe-area-inset-bottom) / 2));
+  transform: translateY(calc(-30rpx - env(safe-area-inset-bottom) / 2));
 }
 
 .center-icon {
