@@ -254,26 +254,6 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
         />
       </View>
 
-      {visible && posterGenerating && !posterImageUrl && (
-        <View className='poster-modal poster-modal--sheet' catchMove>
-          <View className='poster-modal-shell' catchMove>
-            <View className='poster-modal-topbar poster-modal-topbar--light poster-modal-topbar--title-only'>
-              <Text className='poster-modal-title poster-modal-title--light'>分享今日卡片</Text>
-            </View>
-            <View className='poster-modal-dark-body'>
-              <View className='poster-modal-inline-back' onClick={onClose}>
-                <View className='poster-modal-close poster-modal-inline-close-hit'>
-                  <Text className='poster-modal-close-x'>×</Text>
-                </View>
-              </View>
-              <View className='poster-scroll-area' style={{ justifyContent: 'center' }}>
-                <View className='loading-spinner' />
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
-
       {visible && posterImageUrl && (
         <View className='poster-modal poster-modal--sheet' catchMove>
           <View className='poster-modal-shell' catchMove>
