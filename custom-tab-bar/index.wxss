@@ -30,11 +30,11 @@
 /* 下凹曲线背景（SVG 作为 data URI，全宽拉伸）
    设计原则：下凹圆形切口与中央悬浮按钮同心圆
    - tab-bar 高度 120rpx，SVG 同高 120rpx
-   - 按钮直径 96rpx，translateY(-40rpx)，按钮中心距底部 20rpx
-   - 按钮中心在 SVG 坐标系 y = 120 - 20 = 100
-   - 下凹圆心与按钮同心 (375, 100)，半径 R = 120rpx
-   - 下凹与 SVG 顶部 y=0 相交于 x = 375 ± √(120² - 100²) ≈ 309 和 441
-   - 使用大弧 A 命令绘制从 (309,0) 到 (441,0) 的下半圆弧
+   - 悬浮按钮直径 96rpx，translateY(-40rpx)，视觉中心距 tab-bar 顶部 20rpx
+   - 下凹圆心与按钮同心 (375, 20)
+   - 下凹半径 R = 120rpx，与按钮半径 48rpx 形成 2.5:1 空间比
+   - 下凹与 SVG 顶部 y=0 相交于 x = 375 ± √(120² - 20²) ≈ 257 和 493
+   - 使用两段 cubic-bezier 精确绘制下半圆，避开 A 命令兼容性问题
 */
 .custom-tab-bar::before {
   content: '';
@@ -43,7 +43,7 @@
   left: 0;
   right: 0;
   height: 120rpx;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 120' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L309,0 A120,120 0 1 1 441,0 L750,0 L750,120 L0,120 Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 120' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L257,0 C257,86 309,140 375,140 C441,140 493,86 493,0 L750,0 L750,120 L0,120 Z' fill='%23ffffff'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 -6rpx 20rpx rgba(0, 0, 0, 0.12));
