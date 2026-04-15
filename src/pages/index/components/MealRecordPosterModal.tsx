@@ -72,6 +72,12 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
     if (!visible) {
       setPosterImageUrl(null)
       setPosterGenerating(false)
+      Taro.showTabBar({ animation: true }).catch(() => {})
+    } else {
+      Taro.hideTabBar({ animation: true }).catch(() => {})
+    }
+    return () => {
+      Taro.showTabBar({ animation: true }).catch(() => {})
     }
   }, [visible])
 
