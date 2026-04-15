@@ -12,9 +12,14 @@
       <block wx:if="{{item.id === 'stats'}}">
         <view class="stats-icon {{selectedIndex === index ? 'active' : ''}}"></view>
       </block>
+      <block wx:elif="{{item.isCenter}}">
+        <view class="center-icon-wrapper">
+          <text class="center-plus">+</text>
+        </view>
+      </block>
       <block wx:else>
         <image 
-          class="tab-icon {{item.isCenter ? 'center' : ''}}" 
+          class="tab-icon" 
           src="{{selectedIndex === index ? item.selectedIconPath : item.iconPath}}"
           mode="aspectFit"
         />

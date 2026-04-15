@@ -1,18 +1,33 @@
-/* 底部导航栏 - 参考微信/小红书设计 */
+/* 底部导航栏 - 优雅下凹曲线 + 悬浮按钮 + 底部阴影 */
 .custom-tab-bar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   height: 100rpx;
-  background: #ffffff;
+  background: transparent;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-around;
-  padding: 8rpx 20rpx 0;
+  padding: 0 20rpx;
   padding-bottom: calc(env(safe-area-inset-bottom));
-  box-shadow: 0px -1rpx 4rpx rgba(0, 0, 0, 0.06);
   z-index: 999;
+}
+
+/* 下凹曲线背景（SVG 作为 data URI，全宽拉伸） */
+.custom-tab-bar::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 140rpx;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 140' preserveAspectRatio='none'%3E%3Cpath d='M0,40 Q0,0 40,0 L280,0 Q310,0 330,25 Q375,90 420,25 Q440,0 470,0 L710,0 Q750,0 750,40 L750,140 L0,140 Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 -6rpx 20rpx rgba(0, 0, 0, 0.12));
+  z-index: -1;
+  pointer-events: none;
 }
 
 .tab-item {
@@ -20,15 +35,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  gap: 2rpx;
+  justify-content: flex-end;
+  gap: 4rpx;
   transition: all 0.2s ease;
   position: relative;
-  height: 100%;
+  height: 100rpx;
+  padding-bottom: 8rpx;
+  box-sizing: border-box;
 }
 
 .tab-item.selected .tab-text {
-  color: #07c160;
+  color: #00bc7d;
   font-weight: 500;
 }
 
@@ -45,13 +62,6 @@
   width: 44rpx;
   height: 44rpx;
   transition: all 0.2s ease;
-}
-
-/* 中间按钮图标 - 白色填充 */
-.tab-icon.center {
-  width: 56rpx;
-  height: 56rpx;
-  filter: brightness(0) invert(1);
 }
 
 .tab-item.selected .icon-wrapper {
@@ -104,46 +114,64 @@
   transition: all 0.2s ease;
 }
 
-/* 选中状态 - 微信绿 */
+/* 选中状态 */
 .stats-icon.active::before,
 .stats-icon.active::after {
-  background: #07c160;
+  background: #00bc7d;
 }
 
 .stats-icon.active {
-  background: linear-gradient(to top, transparent 6rpx, #07c160 6rpx, #07c160 24rpx, transparent 24rpx);
+  background: linear-gradient(to top, transparent 6rpx, #00bc7d 6rpx, #00bc7d 24rpx, transparent 24rpx);
   background-size: 5rpx 18rpx;
   background-position: center bottom 6rpx;
   background-repeat: no-repeat;
 }
 
-/* ===== 中间记录按钮 - 填充背景设计 ===== */
-.tab-item.center-item .icon-wrapper {
-  width: 88rpx;
-  height: 88rpx;
-  background: #07c160;
-  border-radius: 50%;
-  box-shadow: 0px 4rpx 16rpx rgba(7, 193, 96, 0.35);
+/* ===== 中间记录按钮 - 下凹曲线上的悬浮按钮 ===== */
+.tab-item.center-item {
+  z-index: 2;
 }
 
-.tab-item.center-item.selected .icon-wrapper {
-  transform: scale(1.02);
-  box-shadow: 0px 6rpx 20rpx rgba(7, 193, 96, 0.45);
+.tab-item.center-item .icon-wrapper {
+  width: 96rpx;
+  height: 96rpx;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.center-icon-wrapper {
+  width: 96rpx;
+  height: 96rpx;
+  background: linear-gradient(135deg, #00bc7d 0%, #00d68f 100%);
+  border-radius: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10rpx 30rpx rgba(0, 188, 125, 0.35);
+  transform: translateY(-36rpx);
+}
+
+.center-plus {
+  font-size: 56rpx;
+  color: #fff;
+  font-weight: 300;
+  line-height: 1;
 }
 
 /* ===== 文字样式 ===== */
 .tab-text {
   font-size: 20rpx;
-  color: #b0b0b0;
+  color: #9ca3af;
   line-height: 28rpx;
   transition: all 0.2s ease;
 }
 
-.tab-item.center-item .tab-text {
-  color: #666666;
-}
-
 /* 隐藏状态 */
 .custom-tab-bar.hidden {
+  display: none;
+}
+
+.custom-tab-bar.hidden::before {
   display: none;
 }
