@@ -15,7 +15,7 @@
 .icon-weibiaoti1:before { content: "\e625"; }
 .icon-quanzi:before { content: "\ee17"; }
 .icon-user:before { content: "\e7ae"; }
-.icon-huore:before { content: "\e601"; }
+.icon-kcal:before { content: "\e831"; }
 
 
 /* 底部导航栏 - 优雅下凹曲线 + 悬浮按钮 + 底部阴影 */
@@ -27,7 +27,7 @@
   height: calc(96rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   padding-bottom: env(safe-area-inset-bottom);
-  background: white;
+  background: transparent;
   display: flex;
   align-items: flex-end;
   justify-content: space-around;
@@ -67,7 +67,7 @@
   transition: all 0.2s ease;
   position: relative;
   height: 96rpx;
-  padding-bottom: 12rpx;
+  padding-bottom: 20rpx;
   box-sizing: border-box;
 }
 
@@ -77,8 +77,8 @@
 }
 
 .icon-wrapper {
-  width: 42rpx;
-  height: 42rpx;
+  width: 46rpx;
+  height: 46rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -86,7 +86,7 @@
 }
 
 .tab-icon {
-  font-size: 32rpx;
+  font-size: 36rpx;
   line-height: 1;
   color: #b0b0b0;
   transition: all 0.2s ease;
@@ -94,8 +94,8 @@
 
 /* 图片图标（如"我的"）兼容 */
 image.tab-icon {
-  width: 32rpx;
-  height: 32rpx;
+  width: 36rpx;
+  height: 36rpx;
   display: block;
 }
 

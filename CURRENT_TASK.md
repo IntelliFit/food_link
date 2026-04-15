@@ -1,15 +1,17 @@
 # CURRENT_TASK
 
-- Task: 底部 tab bar 图标放大 + 首页问候语时段图标 + 中心按钮换为卡路里图标
+- Task: 底部 tab bar  refinements（透明背景、图标下移放大、中心 kcal 图标、问候语时段图标）
 - Status: done（构建通过，截图因 mrc 间歇性超时未完成）
 - Scope:
   - `custom-tab-bar/index.wxss`
-    - `.tab-icon` 从 `28rpx` 放大到 `32rpx`
-    - `.icon-wrapper` 从 `36rpx` 放大到 `42rpx`
-    - 新增 `.icon-huore:before { content: "\e601"; }` 到 base64 iconfont 规则中
+    - `.custom-tab-bar` 背景改为 `transparent`（仅保留 SVG 白色曲线背景）
+    - `.tab-icon` 从 `28rpx` → `32rpx` → `36rpx`（二次放大）
+    - `.icon-wrapper` 从 `36rpx` → `42rpx` → `46rpx`（同步放大）
+    - `.tab-item` `padding-bottom` 从 `12rpx` 增加到 `20rpx`（图标文本整体下移）
     - `.center-plus` 重命名为 `.center-icon`，颜色改为 `#ffffff`
+    - base64 iconfont 规则中保留 `.icon-kcal:before { content: "\e831"; }`
   - `custom-tab-bar/index.wxml`
-    - 中间记录按钮的 `<text class="center-plus">+</text>` 替换为 `<text class="iconfont icon-huore center-icon"></text>`
+    - 中间记录按钮的 `+` 最终替换为白色 `icon-kcal`
   - `src/pages/index/utils/helpers.ts`
     - `getGreeting()` 返回 `{ text, iconClass }`，根据时段映射 `icon-zaoshang` / `icon-zhongwu` / `icon-wanshang`
   - `src/pages/index/components/GreetingSection.tsx`
@@ -19,8 +21,7 @@
 - Verification:
   - `npm run build:weapp -- --no-check` 通过
   - 微信开发者工具自动化端口已迁移至 `3001`（portman 分配）
-  - 截图验证：首页显示「☀ 早上好」图标正确；底部 tab 图标更大更清晰
-  - 中心按钮已由「+」改为白色 `icon-huore`（卡路里图标）
+  - 开发者工具已重新加载 `pages/index/index`，可直接在本地窗口查看效果
 
 - Task: 首页餐食卡片直达风险海报与海报居中修复
 - Status: done（已提交并推送）

@@ -1,9 +1,9 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5122763 */
-  src: url('iconfont.woff2?t=1776276185211') format('woff2'),
-       url('iconfont.woff?t=1776276185211') format('woff'),
-       url('iconfont.ttf?t=1776276185211') format('truetype'),
-       url('iconfont.svg?t=1776276185211#iconfont') format('svg');
+  src: url('iconfont.woff2?t=1776278410417') format('woff2'),
+       url('iconfont.woff?t=1776278410417') format('woff'),
+       url('iconfont.ttf?t=1776278410417') format('truetype'),
+       url('iconfont.svg?t=1776278410417#iconfont') format('svg');
 }
 
 .iconfont {
@@ -12,6 +12,10 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-kcal:before {
+  content: "\e831";
 }
 
 .icon-zhongwu:before {
