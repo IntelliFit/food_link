@@ -11,8 +11,8 @@ const MACRO_CONFIGS: Array<{
   unit: string
   Icon: typeof IconProtein
 }> = [
-  { key: 'protein', label: '蛋白质', subLabel: '剩余', color: '#96c4e4', unit: 'g', Icon: IconProtein },
-  { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#e8d084', unit: 'g', Icon: IconCarbs },
+  { key: 'protein', label: '蛋白质', subLabel: '剩余', color: '#7aa8d4', unit: 'g', Icon: IconProtein },
+  { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#d4b86a', unit: 'g', Icon: IconCarbs },
   { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f0aa7c', unit: 'g', Icon: IconFat }
 ]
 
