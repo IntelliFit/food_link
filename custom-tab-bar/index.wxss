@@ -35,7 +35,7 @@
   left: 0;
   right: 0;
   height: 160rpx;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 160' preserveAspectRatio='none'%3E%3Cpath d='M0,40 Q0,0 40,0 L303,0 A 72 72 0 1 1 447,0 L710,0 Q750,0 750,40 L750,160 L0,160 Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 160' preserveAspectRatio='none'%3E%3Cpath d='M0,40 Q0,0 40,0 L303,0 A72,72 0 0 1 375,72 A72,72 0 0 1 447,0 L710,0 Q750,0 750,40 L750,160 L0,160 Z' fill='%23ffffff'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 -6rpx 20rpx rgba(0, 0, 0, 0.12));
