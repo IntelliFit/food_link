@@ -60,12 +60,11 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
         }))
       )
-      Taro.hideTabBar({ animation: true }).catch(() => {})
     } else if (!visible) {
-      Taro.showTabBar({ animation: true }).catch(() => {})
+      // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
     return () => {
-      Taro.showTabBar({ animation: true }).catch(() => {})
+      // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
   }, [visible, record])
 

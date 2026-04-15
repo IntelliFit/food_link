@@ -72,12 +72,12 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
     if (!visible) {
       setPosterImageUrl(null)
       setPosterGenerating(false)
-      Taro.showTabBar({ animation: true }).catch(() => {})
+      // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     } else {
-      Taro.hideTabBar({ animation: true }).catch(() => {})
+      // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
     return () => {
-      Taro.showTabBar({ animation: true }).catch(() => {})
+      // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
   }, [visible])
 
