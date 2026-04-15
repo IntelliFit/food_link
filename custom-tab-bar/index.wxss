@@ -1,16 +1,3 @@
-/* 引入 iconfont */
-@font-face {
-  font-family: 'iconfont';
-  src: url('/assets/iconfont/iconfont.ttf') format('truetype');
-}
-
-.iconfont {
-  font-family: 'iconfont';
-  font-style: normal;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 /* 底部导航栏 - 优雅下凹曲线 + 悬浮按钮 + 底部阴影 */
 .custom-tab-bar {
   position: fixed;
@@ -28,13 +15,8 @@
 }
 
 /* 下凹曲线背景（SVG 作为 data URI，全宽拉伸）
-   设计原则：下凹圆形切口与中央悬浮按钮同心圆
-   - tab-bar 高度 120rpx，SVG 同高 120rpx
-   - 悬浮按钮直径 96rpx，translateY(-40rpx)，视觉中心距 tab-bar 顶部 20rpx
-   - 下凹圆心与按钮同心 (375, 20)
-   - 下凹半径 R = 84rpx（确保底部 y=104 落在 SVG 可视区内）
-   - 下凹与 SVG 顶部 y=0 相交于 x = 375 ± √(84² - 20²) ≈ 293 和 457
-   - 使用两段标准圆弧拼接下半圆
+   参考图风格：中间按钮为旋转 45° 的圆角正方形，
+   下凹呈圆润 V 型，深度约 55rpx，顶部宽 110rpx
 */
 .custom-tab-bar::before {
   content: '';
@@ -43,7 +25,7 @@
   left: 0;
   right: 0;
   height: 120rpx;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 120' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L293,0 A84,84 0 0 1 375,84 A84,84 0 0 1 457,0 L750,0 L750,120 L0,120 Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 750 120' preserveAspectRatio='none'%3E%3Cpath d='M0,0 L320,0 C340,45 360,55 375,55 C390,55 410,45 430,0 L750,0 L750,120 L0,120 Z' fill='%23ffffff'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 -6rpx 20rpx rgba(0, 0, 0, 0.12));
@@ -83,12 +65,6 @@
   width: 44rpx;
   height: 44rpx;
   transition: all 0.2s ease;
-}
-
-/* 首页图标加宽 */
-.tab-item:first-child .tab-icon {
-  width: 52rpx;
-  height: 48rpx;
 }
 
 /* 首页图标加宽 */
@@ -160,35 +136,37 @@
   background-repeat: no-repeat;
 }
 
-/* ===== 中间记录按钮 - 下凹曲线上的悬浮按钮 ===== */
+/* ===== 中间记录按钮 - 旋转 45° 的圆角正方形（参考图风格） ===== */
 .tab-item.center-item {
   z-index: 2;
 }
 
 .tab-item.center-item .icon-wrapper {
-  width: 96rpx;
-  height: 96rpx;
+  width: 88rpx;
+  height: 88rpx;
   background: transparent;
   border-radius: 0;
   box-shadow: none;
 }
 
 .center-icon-wrapper {
-  width: 96rpx;
-  height: 96rpx;
-  background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
-  border-radius: 50%;
+  width: 88rpx;
+  height: 88rpx;
+  background: #c4d88a;
+  border-radius: 22rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 10rpx 30rpx rgba(92, 184, 150, 0.35);
-  transform: translateY(-40rpx);
+  box-shadow: 0 8rpx 24rpx rgba(196, 216, 138, 0.35);
+  transform: rotate(45deg) translateY(-32rpx);
 }
 
-.center-icon {
-  font-size: 48rpx;
-  color: #fff;
+.center-plus {
+  font-size: 40rpx;
+  color: #1f2937;
+  font-weight: 500;
   line-height: 1;
+  transform: rotate(-45deg);
 }
 
 /* ===== 文字样式 ===== */
