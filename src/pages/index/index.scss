@@ -3,7 +3,7 @@ $primary-gradient-start: #5cb896;
 $primary-gradient-end: #8dd3bf;
 $primary-color: #5cb896;
 
-$orange-color: #f0aa7c; // 橙色 - 用于热量盈余提示
+$orange-color: #f0985c; // 橙色 - 用于热量盈余提示
 
 $purple-color: #8b5cf6;
 $purple-light: #f3e8ff;
@@ -18,7 +18,7 @@ $gradient-end: #EFF1F4;
 $text-primary: #1f2937;
 $text-secondary: #6b7280;
 $text-tertiary: #9ca3af;
-$blue-color: #7aa8d4;
+$blue-color: #5c9ed4;
 
 // 首页摄入超标/警示（柔和红，避免纯 #ef4444 刺眼）
 $home-warning-red: #e57373;
@@ -1970,7 +1970,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 
 .water-progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #7aa8d4 0%, #9ecce0 100%);
+  background: linear-gradient(90deg, #5c9ed4 0%, #8ec8e8 100%);
   border-radius: 9999rpx;
   transition: width 0.5s ease;
 }
@@ -2257,15 +2257,15 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   justify-content: center;
   
   &.protein {
-    background: #7aa8d4;
+    background: #5c9ed4;
   }
   
   &.carbs {
-    background: #d4b86a;
+    background: #d4ac52;
   }
   
   &.fat {
-    background: #f0aa7c;
+    background: #f0985c;
   }
 }
 
@@ -2705,7 +2705,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   position: absolute;
   top: 16rpx;
   right: 16rpx;
-  background: #7aa8d4;
+  background: #5c9ed4;
   padding: 4rpx 10rpx;
   border-radius: 6rpx;
 }
