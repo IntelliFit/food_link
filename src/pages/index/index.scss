@@ -100,12 +100,20 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .greeting-title {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
   font-size: 44rpx;
   font-weight: 700;
   color: $text-primary;
   line-height: 60rpx;
   margin-bottom: 8rpx;
+
+  &-icon {
+    font-size: 40rpx;
+    color: $text-primary;
+    line-height: 1;
+  }
 }
 
 .greeting-subtitle {
@@ -1037,7 +1045,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .view-all-arrow {
-  font-size: 28rpx;
+  font-size: 45rpx;
   color: $primary-color;
   line-height: 36rpx;
 }

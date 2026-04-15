@@ -7,10 +7,15 @@ interface GreetingSectionProps {
 }
 
 export function GreetingSection({ onSharePress }: GreetingSectionProps) {
+  const { text, iconClass } = getGreeting()
+
   return (
     <View className='greeting-section'>
       <View className='greeting-text'>
-        <Text className='greeting-title'>{getGreeting()}</Text>
+        <View className='greeting-title'>
+          <Text className={`iconfont ${iconClass} greeting-title-icon`} />
+          <Text>{text}</Text>
+        </View>
         <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
       </View>
       <View

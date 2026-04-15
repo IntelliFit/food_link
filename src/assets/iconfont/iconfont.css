@@ -1,9 +1,9 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5122763 */
-  src: url('iconfont.woff2?t=1776247778129') format('woff2'),
-       url('iconfont.woff?t=1776247778129') format('woff'),
-       url('iconfont.ttf?t=1776247778129') format('truetype'),
-       url('iconfont.svg?t=1776247778129#iconfont') format('svg');
+  src: url('iconfont.woff2?t=1776276185211') format('woff2'),
+       url('iconfont.woff?t=1776276185211') format('woff'),
+       url('iconfont.ttf?t=1776276185211') format('truetype'),
+       url('iconfont.svg?t=1776276185211#iconfont') format('svg');
 }
 
 .iconfont {
@@ -12,6 +12,34 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-zhongwu:before {
+  content: "\e82f";
+}
+
+.icon-zaoshang:before {
+  content: "\e718";
+}
+
+.icon-wanshang:before {
+  content: "\e607";
+}
+
+.icon-user:before {
+  content: "\e7ae";
+}
+
+.icon-weibiaoti1:before {
+  content: "\e625";
+}
+
+.icon-quanzi:before {
+  content: "\ee17";
+}
+
+.icon-shouye:before {
+  content: "\e606";
 }
 
 .icon-edit:before {
@@ -174,20 +202,8 @@
   content: "\e71f";
 }
 
-.icon-wanshang-qing:before {
-  content: "\e670";
-}
-
-.icon-zaoshang:before {
-  content: "\e65d";
-}
-
 .icon-zaocan:before {
   content: "\e617";
-}
-
-.icon-zaoshang1:before {
-  content: "\e64c";
 }
 
 .icon-zaocan1:before {

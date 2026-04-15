@@ -34,11 +34,11 @@ export function calculateCaloriesFromLevels(levels: SimpleTargetState): number {
   return proteinGrams * 4 + carbsGrams * 4 + fatGrams * 9
 }
 
-export function getGreeting(): string {
+export function getGreeting(): { text: string; iconClass: string } {
   const h = new Date().getHours()
-  if (h < 12) return '早上好'
-  if (h < 18) return '下午好'
-  return '晚上好'
+  if (h < 12) return { text: '早上好', iconClass: 'icon-zaoshang' }
+  if (h < 18) return { text: '中午好', iconClass: 'icon-zhongwu' }
+  return { text: '晚上好', iconClass: 'icon-wanshang' }
 }
 
 export function formatDisplayNumber(value: number): string {
