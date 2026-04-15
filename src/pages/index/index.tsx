@@ -2133,7 +2133,7 @@ function IndexPage() {
                           </View>
                         ) : null}
                       </View>
-                      {/* 第二行：🔥 卡路里，最右侧显示餐次+目标能量（2张及以上图片时） */}
+                      {/* 第二行：🔥 卡路里 + 餐次目标 */}
                       <View className='meal-calorie-row'>
                         <View className='meal-calorie-wrap'>
                           <Text className='iconfont icon-huore' style={{ color: '#f97316', fontSize: '24rpx', marginRight: '4rpx' }} />
@@ -2142,17 +2142,15 @@ function IndexPage() {
                             <Text className='meal-calorie-unit'> kcal</Text>
                           </Text>
                         </View>
-                        {mealImageUrls.length >= 2 && (
-                          <View className='meal-calorie-extra'>
-                            <Text
-                              className={`iconfont ${iconClass} meal-type-icon-inline`}
-                              style={{ color }}
-                            />
-                            <Text className='meal-type-target'>
-                              {label} {formatDisplayNumber(mealTarget)} kcal
-                            </Text>
-                          </View>
-                        )}
+                        <View className='meal-calorie-extra'>
+                          <Text
+                            className={`iconfont ${iconClass} meal-type-icon-inline`}
+                            style={{ color }}
+                          />
+                          <Text className='meal-type-target'>
+                            {label} {formatDisplayNumber(mealTarget)} kcal
+                          </Text>
+                        </View>
                       </View>
                       {/* 第三行：三大营养素 */}
                       <View className='meal-macros-row'>
