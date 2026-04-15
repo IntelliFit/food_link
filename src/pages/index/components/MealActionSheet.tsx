@@ -22,10 +22,10 @@ export function MealActionSheet({ visible, onClose, onEdit, onPoster }: MealActi
             onClick={() => { onClose(); onEdit() }}
           >
             <View className='record-menu-grid-icon-wrap'>
-              <Text className='iconfont icon-edit' style={{ fontSize: '40rpx', color: '#84b8dc' }} />
+              <Text className='iconfont icon-edit' style={{ fontSize: '40rpx', color: '#96c4e4' }} />
             </View>
             <View className='record-menu-grid-text-wrap'>
-              <Text className='record-menu-grid-label' style={{ color: '#84b8dc' }}>
+              <Text className='record-menu-grid-label' style={{ color: '#96c4e4' }}>
                 修改记录
               </Text>
             </View>

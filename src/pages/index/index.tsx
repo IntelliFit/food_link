@@ -579,9 +579,9 @@ const MACRO_CONFIGS: Array<{
   unit: string
   iconClass: string
 }> = [
-  { key: 'protein', label: '蛋白质', subLabel: '剩余', color: '#84b8dc', unit: 'g', iconClass: 'icon-danbaizhi' },
-  { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#e0c87a', unit: 'g', iconClass: 'icon-tanshui-dabiao' },
-  { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#e8a272', unit: 'g', iconClass: 'icon-zhifangyouheruhuazhifangzhipin' }
+  { key: 'protein', label: '蛋白质', subLabel: '剩余', color: '#96c4e4', unit: 'g', iconClass: 'icon-danbaizhi' },
+  { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#e8d084', unit: 'g', iconClass: 'icon-tanshui-dabiao' },
+  { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f0aa7c', unit: 'g', iconClass: 'icon-zhifangyouheruhuazhifangzhipin' }
 ]
 
 function IndexPage() {
@@ -1978,7 +1978,7 @@ function IndexPage() {
           <View className='body-status-card water-card' onClick={openWaterEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#84b8dc' }} />
+                <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#96c4e4' }} />
                 <Text className='body-status-title'>喝水</Text>
               </View>
             </View>
@@ -2004,7 +2004,7 @@ function IndexPage() {
           <View className='body-status-card exercise-card' onClick={openExerciseRecord}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#e8a272' }} />
+                <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0aa7c' }} />
                 <Text className='body-status-title'>运动</Text>
               </View>
             </View>
@@ -2136,7 +2136,7 @@ function IndexPage() {
                       {/* 第二行：🔥 卡路里 + 餐次目标 */}
                       <View className='meal-calorie-row'>
                         <View className='meal-calorie-wrap'>
-                          <Text className='iconfont icon-huore' style={{ color: '#e8a272', fontSize: '24rpx', marginRight: '4rpx' }} />
+                          <Text className='iconfont icon-huore' style={{ color: '#f0aa7c', fontSize: '24rpx', marginRight: '4rpx' }} />
                           <Text className='meal-calorie'>
                             {formatDisplayNumber(mealCalorie)}
                             <Text className='meal-calorie-unit'> kcal</Text>
@@ -2156,19 +2156,19 @@ function IndexPage() {
                       <View className='meal-macros-row'>
                         {typeof meal.protein === 'number' && (
                           <View className='meal-macro-pill'>
-                            <Text className='iconfont icon-danbaizhi' style={{ color: '#84b8dc', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='iconfont icon-danbaizhi' style={{ color: '#96c4e4', fontSize: '22rpx', marginRight: '4rpx' }} />
                             <Text className='meal-macro-text'>{formatDisplayNumber(meal.protein)}g</Text>
                           </View>
                         )}
                         {typeof meal.carbs === 'number' && (
                           <View className='meal-macro-pill'>
-                            <Text className='iconfont icon-tanshui-dabiao' style={{ color: '#e0c07a', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='iconfont icon-tanshui-dabiao' style={{ color: '#e8d080', fontSize: '22rpx', marginRight: '4rpx' }} />
                             <Text className='meal-macro-text'>{formatDisplayNumber(meal.carbs)}g</Text>
                           </View>
                         )}
                         {typeof meal.fat === 'number' && (
                           <View className='meal-macro-pill'>
-                            <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin' style={{ color: '#e8a272', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin' style={{ color: '#f0aa7c', fontSize: '22rpx', marginRight: '4rpx' }} />
                             <Text className='meal-macro-text'>{formatDisplayNumber(meal.fat)}g</Text>
                           </View>
                         )}
@@ -2378,7 +2378,7 @@ function IndexPage() {
                   className='water-quick-btn'
                   onClick={() => addWaterAmount(amount)}
                 >
-                  <IconWaterDrop size={16} color='#84b8dc' />
+                  <IconWaterDrop size={16} color='#96c4e4' />
                   <Text className='water-quick-btn-text'>+{amount}ml</Text>
                 </View>
               ))}
