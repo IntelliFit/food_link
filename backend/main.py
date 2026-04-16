@@ -5080,6 +5080,8 @@ class UpdateFoodRecordRequest(BaseModel):
     total_carbs: Optional[float] = Field(default=None, description="总碳水 g")
     total_fat: Optional[float] = Field(default=None, description="总脂肪 g")
     total_weight_grams: Optional[int] = Field(default=None, description="总重量 g")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机")
 
 
 @app.put("/api/food-record/{record_id}")
@@ -5123,6 +5125,10 @@ async def update_food_record_endpoint(
         data["total_fat"] = body.total_fat
     if body.total_weight_grams is not None:
         data["total_weight_grams"] = body.total_weight_grams
+    if body.diet_goal is not None:
+        data["diet_goal"] = body.diet_goal
+    if body.activity_timing is not None:
+        data["activity_timing"] = body.activity_timing
     if not data:
         raise HTTPException(status_code=400, detail="没有需要更新的字段")
     try:
@@ -5876,6 +5882,7 @@ async def get_home_dashboard(
                 "record_time": rec.get("record_time"),
                 "total_calories": round(float(rec.get("total_calories") or 0), 1),
                 "title": _meal_entry_title_from_record(rec),
+                "full_record": rec,
             })
         primary_record_id = meal_record_entries[0]["id"] if meal_record_entries else None
         meal_protein = sum(float(x.get("total_protein") or 0) for x in items)

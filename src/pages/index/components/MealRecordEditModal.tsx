@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, Button, Input, Slider } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { updateFoodRecord, type FoodRecord, type Nutrients } from '../../../utils/api'
+import { updateFoodRecord, type FoodRecord, type Nutrients, type MealType, type DietGoal, type ActivityTiming } from '../../../utils/api'
 
 import './MealRecordEditModal.scss'
 
@@ -23,6 +23,29 @@ const EDITABLE_NUTRIENT_META: Record<EditableNutrientField, { label: string; uni
   carbs: { label: '碳水', unit: 'g' },
   fat: { label: '脂肪', unit: 'g' }
 }
+
+const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
+  { value: 'breakfast', label: '早餐', iconClass: 'icon-zaocan1' },
+  { value: 'morning_snack', label: '早加餐', iconClass: 'icon-lingshi' },
+  { value: 'lunch', label: '午餐', iconClass: 'icon-wucan' },
+  { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
+  { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
+  { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' },
+]
+
+const DIET_GOAL_OPTIONS: Array<{ value: DietGoal; label: string; iconClass: string }> = [
+  { value: 'fat_loss', label: '减脂期', iconClass: 'icon-huore' },
+  { value: 'muscle_gain', label: '增肌期', iconClass: 'icon-zengji' },
+  { value: 'maintain', label: '维持体重', iconClass: 'icon-tianpingzuo' },
+  { value: 'none', label: '无', iconClass: 'icon-nothing' }
+]
+
+const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; iconClass: string }> = [
+  { value: 'post_workout', label: '练后', iconClass: 'icon-juzhong' },
+  { value: 'daily', label: '日常', iconClass: 'icon-duoren' },
+  { value: 'before_sleep', label: '睡前', iconClass: 'icon-shuijue' },
+  { value: 'none', label: '无', iconClass: 'icon-nothing' }
+]
 
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
@@ -48,6 +71,9 @@ interface MealRecordEditModalProps {
 export function MealRecordEditModal({ visible, record, onClose, onSuccess }: MealRecordEditModalProps) {
   const [editItems, setEditItems] = useState<EditableFoodItem[]>([])
   const [editSaving, setEditSaving] = useState(false)
+  const [mealType, setMealType] = useState<MealType>('breakfast')
+  const [dietGoal, setDietGoal] = useState<DietGoal>('none')
+  const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
 
   useEffect(() => {
     if (visible && record) {
@@ -60,6 +86,9 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
         }))
       )
+      setMealType((record.meal_type as MealType) || 'breakfast')
+      setDietGoal((record.diet_goal as DietGoal) || 'none')
+      setActivityTiming((record.activity_timing as ActivityTiming) || 'none')
     } else if (!visible) {
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
@@ -223,7 +252,10 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         total_protein: Math.round(totalProtein * 10) / 10,
         total_carbs: Math.round(totalCarbs * 10) / 10,
         total_fat: Math.round(totalFat * 10) / 10,
-        total_weight_grams: Math.round(totalWeight)
+        total_weight_grams: Math.round(totalWeight),
+        meal_type: mealType,
+        diet_goal: dietGoal,
+        activity_timing: activityTiming
       })
       Taro.hideLoading()
       setEditSaving(false)
@@ -248,6 +280,57 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           <View className='edit-modal-close' onClick={onClose} />
         </View>
         <ScrollView scrollY enhanced showScrollbar={false} className='edit-modal-body'>
+          {/* 餐次选择 */}
+          <View className='edit-meta-card'>
+            <Text className='edit-section-label'>餐次</Text>
+            <View className='meal-options'>
+              {MEAL_OPTIONS.map((opt) => (
+                <View
+                  key={opt.value}
+                  className={`meal-option ${mealType === opt.value ? 'active' : ''}`}
+                  onClick={() => setMealType(opt.value)}
+                >
+                  <Text className={`meal-icon iconfont ${opt.iconClass}`} />
+                  <Text className='meal-label'>{opt.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* 饮食目标 */}
+          <View className='edit-meta-card'>
+            <Text className='edit-section-label'>饮食目标</Text>
+            <View className='state-options'>
+              {DIET_GOAL_OPTIONS.map((opt) => (
+                <View
+                  key={opt.value}
+                  className={`state-option ${dietGoal === opt.value ? 'active' : ''}`}
+                  onClick={() => setDietGoal(opt.value)}
+                >
+                  <Text className={`state-icon iconfont ${opt.iconClass}`} />
+                  <Text className='state-label'>{opt.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* 运动时机 */}
+          <View className='edit-meta-card'>
+            <Text className='edit-section-label'>运动时机</Text>
+            <View className='state-options'>
+              {ACTIVITY_TIMING_OPTIONS.map((opt) => (
+                <View
+                  key={opt.value}
+                  className={`state-option ${activityTiming === opt.value ? 'active' : ''}`}
+                  onClick={() => setActivityTiming(opt.value)}
+                >
+                  <Text className={`state-icon iconfont ${opt.iconClass}`} />
+                  <Text className='state-label'>{opt.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
           {editItems.map((item, idx) => {
             return (
               <View key={idx} className='edit-food-card'>

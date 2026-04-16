@@ -264,6 +264,8 @@ export interface HomeMealRecordEntry {
   total_calories?: number
   /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
   title?: string
+  /** 完整记录数据，用于首页直接编辑而无需二次请求 */
+  full_record?: FoodRecord
 }
 
 /** 首页今日餐食单条 */
@@ -1540,6 +1542,27 @@ export async function getPosterCalorieCompare(recordId: string): Promise<PosterC
   return null
 }
 
+/** 餐次记录完整数据缓存（由 getHomeDashboard 填充，供首页直接编辑使用） */
+const mealFullRecordCache: Record<string, FoodRecord> = {}
+
+export function getCachedMealFullRecord(recordId: string): FoodRecord | undefined {
+  return mealFullRecordCache[recordId]
+}
+
+function stripMealFullRecordsFromDashboard(data: HomeDashboard): HomeDashboard {
+  const meals = (data.meals || []).map((meal) => {
+    const entries = (meal.meal_record_entries || []).map((entry) => {
+      if ((entry as any).full_record) {
+        mealFullRecordCache[entry.id] = (entry as any).full_record as FoodRecord
+      }
+      const { full_record, ...rest } = entry as any
+      return rest
+    })
+    return { ...meal, meal_record_entries: entries.length > 0 ? entries : meal.meal_record_entries }
+  })
+  return { ...data, meals }
+}
+
 /**
  * 获取单条饮食记录详情（通过 ID，从数据库获取最新数据）
  */
@@ -1564,6 +1587,8 @@ export interface UpdateFoodRecordRequest {
   total_carbs?: number
   total_fat?: number
   total_weight_grams?: number
+  diet_goal?: DietGoal
+  activity_timing?: ActivityTiming
 }
 
 /**
@@ -1680,7 +1705,7 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   }
   const data = res.data as HomeDashboard
   const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
-  return { ...data, meals }
+  return stripMealFullRecordsFromDashboard({ ...data, meals })
 }
 
 /**

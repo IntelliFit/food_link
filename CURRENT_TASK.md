@@ -1,5 +1,27 @@
 # CURRENT_TASK
 
+- Task: 首页修改食物参数优化（消除 loading + 支持编辑餐次/饮食目标/运动时机）
+- Status: done（前后端代码已落地，构建通过，开发者工具截图因 mrc 超时未完成）
+- Scope:
+  - `backend/main.py`
+    - `/api/home/dashboard` 的 `meal_record_entries` 新增 `full_record` 字段，直接附带完整记录数据
+    - `UpdateFoodRecordRequest` 与 `update_food_record_endpoint` 增加 `diet_goal`、`activity_timing` 支持
+  - `src/utils/api.ts`
+    - `HomeMealRecordEntry` 增加 `full_record?: FoodRecord`
+    - `UpdateFoodRecordRequest` 增加 `diet_goal` 和 `activity_timing`
+  - `src/pages/index/index.tsx`
+    - `openActionSheet` 时缓存对应的 `entry`；`handleMealEdit` / `handleMealPoster` 优先使用 `full_record`，有缓存时直接打开，不再显示「加载中」
+  - `src/pages/index/components/MealRecordEditModal.tsx`
+    - 新增 `mealType`、`dietGoal`、`activityTiming` 状态与编辑 UI（餐次 6 选、饮食目标 4 选、运动时机 4 选）
+    - `handleSaveEdit` 将新的元信息字段随 `updateFoodRecord` 一并提交
+  - `src/pages/index/components/MealRecordEditModal.scss`
+    - 新增 `.edit-meta-card`、`.meal-options`、`.meal-option`、`.state-options`、`.state-option` 样式
+- Verification:
+  - `npm run build:weapp -- --no-check` 通过，dist 产物已包含新 UI 与选项数据
+  - `python -m py_compile backend/main.py` 通过
+  - `mrc logs error 20 --port 9420` 返回 0 条错误
+  - 开发者工具 `mrc screenshot` 持续超时（已知环境问题），未拿到弹窗运行态截图
+
 - Task: 修复首页日期热图颜色丢失 + 本地 storage 自动补齐 7 天
 - Status: done（开发者工具 DOM 验证通过：日期圆圈已正确显示 is-recorded/is-over）
 - Scope:

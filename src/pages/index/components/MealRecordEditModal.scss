@@ -80,6 +80,19 @@
   box-sizing: border-box;
 }
 
+.edit-meta-card {
+  background: #f8fafc;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
 .edit-food-card {
   background: #f8fafc;
   border-radius: 20rpx;
@@ -91,6 +104,111 @@
   &:last-child {
     margin-bottom: 0;
   }
+}
+
+.meal-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.meal-option {
+  padding: 18rpx 10rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  border: 2rpx solid transparent;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8rpx;
+  position: relative;
+  overflow: hidden;
+
+  &.active {
+    border-color: #00bc7d;
+    background: #f0fdf9;
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 12%);
+
+    .meal-label {
+      color: #00bc7d;
+      font-weight: 600;
+    }
+
+    .meal-icon {
+      transform: scale(1.1);
+    }
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.meal-icon {
+  font-size: 36rpx;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.meal-label {
+  font-size: 24rpx;
+  color: #4b5563;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.state-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+}
+
+.state-option {
+  padding: 18rpx 6rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  border: 2rpx solid transparent;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8rpx;
+
+  &.active {
+    border-color: #00bc7d;
+    background: #f0fdf9;
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 12%);
+
+    .state-label {
+      color: #00bc7d;
+      font-weight: 600;
+    }
+
+    .state-icon {
+      transform: scale(1.1);
+    }
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.state-icon {
+  font-size: 32rpx;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.state-label {
+  font-size: 22rpx;
+  color: #4b5563;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .edit-food-header {

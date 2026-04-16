@@ -21,6 +21,7 @@
     "test:backend:coverage": "cd backend && source venv/bin/activate && pytest --cov=. --cov-report=html",
     "build:weapp": "taro build --type weapp",
     "build:weapp:preview": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://healthymax.cn npm run build:weapp",
+    "build:weapp:debug": "cross-env NODE_ENV=development TARO_APP_API_BASE_URL=https://healthymax.cn npm run build:weapp -- --no-check",
     "build:swan": "taro build --type swan",
     "build:alipay": "taro build --type alipay",
     "build:tt": "taro build --type tt",

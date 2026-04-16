@@ -94,6 +94,17 @@ export default defineConfig<'vite'>(async (merge) => {
           configResolved(config) {
             config.build.target = 'es2018'
           }
+        },
+        // debug: 开发构建时关闭压缩、保留 sourcemap，便于真机调试定位完整错误栈
+        {
+          name: 'taro-debug-build',
+          configResolved(config) {
+            if (process.env.NODE_ENV === 'development') {
+              config.build.minify = false
+              config.build.sourcemap = true
+              config.build.cssMinify = false
+            }
+          }
         }
       ],
     },

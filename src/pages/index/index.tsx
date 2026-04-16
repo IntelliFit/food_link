@@ -27,7 +27,8 @@ import {
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary,
-  type FoodRecord
+  type FoodRecord,
+  getCachedMealFullRecord
 } from '../../utils/api'
 import {
   drawDailySummaryPoster,
@@ -107,7 +108,7 @@ function formatHomeMealPickerEntry(entry: HomeMealRecordEntry): string {
 }
 
 const HOME_MEAL_ACTION_SHEET_MAX = 6
-const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache_v3'
+const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache_v4'
 const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 60
 
 interface HomeDashboardLocalSnapshot {
@@ -193,6 +194,10 @@ function getStoredHomeDashboardSnapshots(): HomeDashboardLocalSnapshot[] {
         // 旧缓存缺少这些字段是合法的，不应因此过滤掉整条快照
         return true
       })
+      .map((item) => ({
+        ...item,
+        meals: stripMealFullRecords(item.meals || [])
+      }))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
       .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
     return valid
@@ -207,9 +212,23 @@ function getStoredHomeDashboardSnapshotByDate(date: string): HomeDashboardLocalS
   return snapshots.find((item) => item.date === normalizedDate) || null
 }
 
+function stripMealFullRecords(meals: HomeMealItem[]): HomeMealItem[] {
+  return meals.map(meal => ({
+    ...meal,
+    meal_record_entries: meal.meal_record_entries?.map(entry => {
+      const { full_record, ...rest } = entry as HomeMealRecordEntry & { full_record?: unknown }
+      return rest
+    }) || null
+  }))
+}
+
 function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot): void {
-  const current = getStoredHomeDashboardSnapshots().filter((item) => item.date !== snapshot.date)
-  const next = [snapshot, ...current]
+  const cleanedSnapshot = {
+    ...snapshot,
+    meals: stripMealFullRecords(snapshot.meals || [])
+  }
+  const current = getStoredHomeDashboardSnapshots().filter((item) => item.date !== cleanedSnapshot.date)
+  const next = [cleanedSnapshot, ...current]
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
     .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
   try {
@@ -643,6 +662,8 @@ function IndexPage() {
   const syncDashboardSeqRef = useRef(0)
   /** 防止并发重复请求：同日期 dashboard 正在加载中时跳过新调用 */
   const loadDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
+  /** 防止并发重复请求：切日同步专用的 pending ref */
+  const syncDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
   /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
   const homeLastLoadRef = useRef<{ date: string; ts: number } | null>(null)
   /** 为 true 时下次「今日」展示必须重拉（饮食/运动/保质期等变更） */
@@ -780,53 +801,62 @@ function IndexPage() {
 
       // 若本地缓存不足 7 天，后台异步补齐近 7 天数据
       void (async () => {
-        const snapshots = getStoredHomeDashboardSnapshots()
-        if (snapshots.length >= 7) return
-        const today = new Date()
-        const missingDates: string[] = []
-        for (let offset = -6; offset <= 0; offset++) {
-          const d = new Date(today)
-          d.setDate(today.getDate() + offset)
-          const dateKey = formatDateKey(d)
-          if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
-            missingDates.push(dateKey)
-          }
-        }
-        if (missingDates.length === 0) return
-        const results = await Promise.all(
-          missingDates.map(async (date) => {
-            try {
-              const dayRes = await getHomeDashboard(date)
-              const normDate = mapCalendarDateToApi(date) || date
-              return {
-                date: normDate,
-                updatedAt: Date.now(),
-                intakeData: dayRes.intakeData,
-                meals: dayRes.meals || [],
-                expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
-                exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
-                achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
-              } as HomeDashboardLocalSnapshot
-            } catch {
-              return null
+        try {
+          const snapshots = getStoredHomeDashboardSnapshots()
+          if (snapshots.length >= 7) return
+          const today = new Date()
+          const missingDates: string[] = []
+          // 用 Array.from + forEach 替代 for 循环，规避 Terser 对带闭包 for 循环的已知优化 bug
+          Array.from({ length: 7 }).forEach((_, idx) => {
+            const offset = idx - 6
+            const d = new Date(today)
+            d.setDate(today.getDate() + offset)
+            const dateKey = formatDateKey(d)
+            if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
+              missingDates.push(dateKey)
             }
           })
-        )
-        results.forEach((snapshot) => {
-          if (snapshot) saveHomeDashboardSnapshot(snapshot)
-        })
-        // 完成后从缓存刷新热图 UI
-        setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
-        // 若当前选中日期已补齐，同步刷新首页数据
-        const currentDate = selectedDateRef.current || formatDateKey(new Date())
-        const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
-        if (refreshed) {
-          setIntakeData(refreshed.intakeData)
-          setMeals(refreshed.meals || [])
-          setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-          setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
-          setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
-          setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
+          if (missingDates.length === 0) return
+          console.log('[dashboard-backfill] missing dates:', missingDates)
+          const results = await Promise.all(
+            missingDates.map(async (date) => {
+              try {
+                const dayRes = await getHomeDashboard(date)
+                const normDate = mapCalendarDateToApi(date) || date
+                return {
+                  date: normDate,
+                  updatedAt: Date.now(),
+                  intakeData: dayRes.intakeData,
+                  meals: dayRes.meals || [],
+                  expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+                  exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
+                  achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
+                } as HomeDashboardLocalSnapshot
+              } catch (err) {
+                console.error('[dashboard-backfill] fetch failed for', date, err)
+                return null
+              }
+            })
+          )
+          results.forEach((snapshot) => {
+            if (snapshot) saveHomeDashboardSnapshot(snapshot)
+          })
+          // 完成后从缓存刷新热图 UI
+          setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+          // 若当前选中日期已补齐，同步刷新首页数据
+          const currentDate = selectedDateRef.current || formatDateKey(new Date())
+          const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
+          if (refreshed) {
+            setIntakeData(refreshed.intakeData)
+            setMeals(refreshed.meals || [])
+            setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+            setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
+            setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
+            setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
+          }
+          console.log('[dashboard-backfill] done')
+        } catch (err) {
+          console.error('[dashboard-backfill] unhandled error', err)
         }
       })()
 
@@ -1262,6 +1292,12 @@ function IndexPage() {
 
   const handleMealEdit = async () => {
     if (!mealActionRecordId) return
+    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
+    if (cachedRecord) {
+      setMealActionRecord(cachedRecord)
+      setShowRecordEditModal(true)
+      return
+    }
     Taro.showLoading({ title: '加载中...', mask: true })
     try {
       const res = await getSharedFoodRecord(mealActionRecordId)
@@ -1276,6 +1312,12 @@ function IndexPage() {
 
   const handleMealPoster = async () => {
     if (!mealActionRecordId) return
+    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
+    if (cachedRecord) {
+      setMealActionRecord(cachedRecord)
+      setShowRecordPosterModal(true)
+      return
+    }
     Taro.showLoading({ title: '加载中...', mask: true })
     try {
       const res = await getSharedFoodRecord(mealActionRecordId)
@@ -1323,15 +1365,15 @@ function IndexPage() {
   const syncDashboardForDate = useCallback(async (date: string) => {
     // 若同日期请求已在进行中，跳过本次调用
     if (
-      loadDashboardPendingRef.current &&
-      loadDashboardPendingRef.current.date === date
+      syncDashboardPendingRef.current &&
+      syncDashboardPendingRef.current.date === date
     ) {
       return
     }
     const seq = ++syncDashboardSeqRef.current
-    loadDashboardPendingRef.current = { date, seq }
+    syncDashboardPendingRef.current = { date, seq }
     if (!getAccessToken()) {
-      loadDashboardPendingRef.current = null
+      syncDashboardPendingRef.current = null
       return
     }
     try {
@@ -1378,8 +1420,8 @@ function IndexPage() {
     } catch (err) {
       // 静默失败，不打扰用户；本地缓存已保证基本可用性
     } finally {
-      if (loadDashboardPendingRef.current?.seq === seq) {
-        loadDashboardPendingRef.current = null
+      if (syncDashboardPendingRef.current?.seq === seq) {
+        syncDashboardPendingRef.current = null
       }
     }
   }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
