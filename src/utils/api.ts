@@ -1763,7 +1763,7 @@ export async function updateDashboardTargets(data: DashboardTargets): Promise<Da
 export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSummary> {
   const res = await authenticatedRequest(
     `/api/stats/summary?range=${encodeURIComponent(range)}`,
-    { method: 'GET', timeout: 10000 }
+    { method: 'GET', timeout: 30000 }
   )
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取统计失败'
@@ -1775,7 +1775,7 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
 export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
   const res = await authenticatedRequest(
     `/api/body-metrics/summary?range=${encodeURIComponent(range)}`,
-    { method: 'GET', timeout: 10000 }
+    { method: 'GET', timeout: 30000 }
   )
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取身体指标失败'

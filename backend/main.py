@@ -1111,9 +1111,11 @@ async def _build_body_metrics_summary(
     now = datetime.now(CHINA_TZ)
     extended_start = (now - timedelta(days=730)).date().isoformat()
     extended_end = now.date().isoformat()
-    weight_rows = await list_user_weight_records(user_id=user_id, start_date=extended_start, end_date=extended_end)
-    water_logs = await list_user_water_logs(user_id=user_id, start_date=extended_start, end_date=extended_end)
-    settings = await get_user_body_metric_settings(user_id)
+    weight_rows, water_logs, settings = await asyncio.gather(
+        list_user_weight_records(user_id=user_id, start_date=extended_start, end_date=extended_end),
+        list_user_water_logs(user_id=user_id, start_date=extended_start, end_date=extended_end),
+        get_user_body_metric_settings(user_id)
+    )
 
     weight_entries = _aggregate_weight_daily(weight_rows)
     latest_weight = weight_entries[-1] if weight_entries else None
@@ -6045,23 +6047,37 @@ async def get_stats_summary(
     today = end_date
     print(f"[get_stats_summary] Range: {range}, Start: {start_date}, End: {end_date}, User: {user_id}")
     try:
-        user = await get_user_by_id(user_id)
+        user_task = get_user_by_id(user_id)
+        records_task = list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
+        streak_task = get_streak_days(user_id)
+        body_metrics_task = _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+
+        user, records, streak_days, body_metrics_summary = await asyncio.gather(
+            user_task, records_task, streak_task, body_metrics_task,
+            return_exceptions=True
+        )
+
+        if isinstance(user, Exception):
+            raise user
         tdee = (user.get("tdee") and float(user["tdee"])) or 2000
-        records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
+
+        if isinstance(records, Exception):
+            raise records
         print(f"[get_stats_summary] Records found: {len(records)}")
         if records:
             print(f"[get_stats_summary] First record time: {records[0].get('record_time')} type: {type(records[0].get('record_time'))}")
-        streak_days = await get_streak_days(user_id)
+
+        if isinstance(streak_days, Exception):
+            raise streak_days
+
+        if isinstance(body_metrics_summary, Exception):
+            print(f"[get_stats_summary] 身体指标降级为空摘要: {body_metrics_summary}")
+            body_metrics_summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)
+        else:
+            print(f"[get_stats_summary] body_metrics_summary: {body_metrics_summary}")
     except Exception as e:
         print(f"[get_stats_summary] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取统计失败")
-
-    try:
-        body_metrics_summary = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
-        print(f"[get_stats_summary] body_metrics_summary: {body_metrics_summary}")
-    except Exception as body_metrics_error:
-        print(f"[get_stats_summary] 身体指标降级为空摘要: {body_metrics_error}")
-        body_metrics_summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)
 
     total_cal = sum(float(r.get("total_calories") or 0) for r in records)
     total_protein = sum(float(r.get("total_protein") or 0) for r in records)
