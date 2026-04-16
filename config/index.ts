@@ -87,6 +87,14 @@ export default defineConfig<'vite'>(async (merge) => {
             },
           ],
         }),
+        // fix: 覆盖 Taro 默认的 es6 target，避免 async/await 被编译为 generator
+        // 内联辅助函数与局部变量名冲突，导致真机偶发 "c is not a function"
+        {
+          name: 'taro-fix-target',
+          configResolved(config) {
+            config.build.target = 'es2018'
+          }
+        }
       ],
     },
     mini: {

@@ -1,6 +1,6 @@
 import { View, Text, Button, Input } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { ShieldOutlined } from '@taroify/icons'
+import { Arrow, QuestionOutlined } from '@taroify/icons'
 import '@taroify/icons/style'
 import { useCallback, useMemo, useState } from 'react'
 import {
@@ -29,6 +29,7 @@ function ProMembershipPage() {
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(false)
   const [rechargeYuan, setRechargeYuan] = useState('5')
+  const [showRulesModal, setShowRulesModal] = useState(false)
 
   const pointsPerYuan = membership?.points_per_yuan ?? 20
 
@@ -88,7 +89,7 @@ function ProMembershipPage() {
       title: '确认充值',
       content: `支付 ¥${y} 元，预计到账 ${rechargePreview.points} 积分（以支付成功为准）。`,
       confirmText: '去支付',
-      confirmColor: '#00bc7d'
+      confirmColor: '#5cb896'
     })
     if (!modalRes.confirm) return
 
@@ -146,46 +147,19 @@ function ProMembershipPage() {
   return (
     <View className='membership-page membership-page--points'>
       <View className='hero-section'>
-        <View className='hero-icon-wrap'>
-          <ShieldOutlined className='hero-icon-svg' />
-        </View>
         <Text className='hero-title'>积分账户</Text>
         <Text className='hero-subtitle'>按次计费，充值后立即增加可用积分</Text>
       </View>
 
       <View className='points-balance-card'>
-        <Text className='points-balance-label'>当前余额</Text>
-        <Text className='points-balance-value'>{balanceText}</Text>
-        <Text className='points-balance-hint'>
-          标准分析 1 分/次
-        </Text>
-        <Text className='points-balance-hint points-balance-hint--second'>
-          精准模式 2 分/次
-        </Text>
-        <Text className='points-balance-hint points-balance-hint--second'>
-          运动估算 0.5 分/次
-        </Text>
-      </View>
-
-      <View className='points-rules-card'>
-        <Text className='points-rules-title'>说明</Text>
-        <Text className='points-rules-line'>· 新用户注册赠送 100 积分</Text>
-        <Text className='points-rules-line'>
-          · 充值 1 元 = {pointsPerYuan} 积分（按整数元充值，按该比例兑换）
-        </Text>
-        <Text className='points-rules-line'>· 分享邀请码，好友注册双方各 +20 积分</Text>
-      </View>
-
-      <View className='invite-card'>
-        <View className='invite-row'>
-          <View className='invite-text-wrap'>
-            <Text className='invite-label'>我的邀请码</Text>
-            <Text className='invite-code'>{membership?.invite_code || '—'}</Text>
+        <View className='points-balance-label-row'>
+          <Text className='points-balance-label'>当前余额</Text>
+          <View className='points-balance-help' onClick={() => setShowRulesModal(true)}>
+            <QuestionOutlined className='points-balance-help-icon' />
+            <Text className='points-balance-help-text'>积分计费规则</Text>
           </View>
-          <Button className='invite-copy-btn' size='mini' onClick={copyInviteCode}>
-            复制
-          </Button>
         </View>
+        <Text className='points-balance-value'>{balanceText}</Text>
       </View>
 
       <View className='recharge-card'>
@@ -224,6 +198,44 @@ function ProMembershipPage() {
         </Button>
         <Text className='subscribe-hint'>到账可能有数秒延迟，以微信支付结果为准</Text>
       </View>
+
+      <View className='invite-card'>
+        <View className='invite-row'>
+          <View className='invite-text-wrap'>
+            <Text className='invite-label'>我的邀请码</Text>
+            <Text className='invite-code'>{membership?.invite_code || '—'}</Text>
+            <Text className='invite-label-hint'>分享邀请码，好友注册双方各 +20 积分</Text>
+          </View>
+          <Button className='invite-copy-btn' size='mini' onClick={copyInviteCode}>
+            复制
+          </Button>
+        </View>
+      </View>
+
+      {showRulesModal && (
+        <View className='rules-modal' catchMove>
+          <View className='rules-modal-mask' onClick={() => setShowRulesModal(false)} />
+          <View className='rules-modal-content'>
+            <View className='rules-modal-handle-bar' />
+            <View className='rules-modal-header'>
+              <Text className='rules-modal-title'>积分计费规则</Text>
+            </View>
+            <View className='rules-modal-body'>
+              <Text className='rules-modal-line'>1分/次 · 标准分析</Text>
+              <Text className='rules-modal-line'>2分/次 · 精准模式</Text>
+              <Text className='rules-modal-line'>0.5分/次 · 运动估算</Text>
+              <View className='rules-modal-divider' />
+              <Text className='rules-modal-line'>新用户注册赠送 100 积分</Text>
+              <Text className='rules-modal-line'>充值 1 元 = {pointsPerYuan} 积分（按整数元充值，按该比例兑换）</Text>
+            </View>
+            <View className='rules-modal-footer'>
+              <View className='rules-modal-close-btn' onClick={() => setShowRulesModal(false)}>
+                <Text className='rules-modal-close-text'>知道了</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

@@ -219,6 +219,31 @@ function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot): void {
   }
 }
 
+function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {
+  const today = new Date()
+  const cells: WeekHeatmapCell[] = []
+  for (let offset = -3; offset <= 3; offset++) {
+    const date = new Date(today)
+    date.setDate(today.getDate() + offset)
+    const dateKey = formatDateKey(date)
+    const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
+    const calories = snap ? snap.intakeData.current : 0
+    const target = snap ? snap.intakeData.target : 2000
+    const hasRecord = calories > 0
+    cells.push({
+      date: dateKey,
+      dayName: SHORT_DAY_NAMES[date.getDay()],
+      dayNum: String(date.getDate()),
+      calories,
+      target,
+      intakeRatio: hasRecord ? calories / target : 0,
+      state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
+      isToday: offset === 0
+    })
+  }
+  return cells
+}
+
 function parseCompleteNumber(value: string): number | null {
   const normalized = value.trim()
   if (!normalized || !/^\d+(\.\d+)?$/.test(normalized)) {
@@ -590,7 +615,7 @@ function IndexPage() {
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(initialLocalSnapshot?.intakeData || DEFAULT_INTAKE)
   const [meals, setMeals] = useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
   const [expirySummary, setExpirySummary] = useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(createWeekHeatmapCells())
+  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
   const [loading, setLoading] = useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
@@ -614,6 +639,8 @@ function IndexPage() {
   const waterBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 快速切换日期时忽略非最新一次 dashboard 的响应（微信小程序无 AbortController，无法掐断请求） */
   const loadDashboardSeqRef = useRef(0)
+  /** 切日同步专用的 seq ref，避免与 loadDashboard 共用导致竞态丢弃 */
+  const syncDashboardSeqRef = useRef(0)
   /** 防止并发重复请求：同日期 dashboard 正在加载中时跳过新调用 */
   const loadDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
   /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
@@ -639,7 +666,6 @@ function IndexPage() {
 
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string, silent = false) => {
-    const seq = ++loadDashboardSeqRef.current
     const resolvedDate =
       targetDate !== undefined && targetDate !== ''
         ? targetDate
@@ -652,6 +678,7 @@ function IndexPage() {
     ) {
       return
     }
+    const seq = ++loadDashboardSeqRef.current
     loadDashboardPendingRef.current = { date: resolvedDate, seq }
     /** 无参调用（如保质期事件、保存目标后刷新）必须与日历选中日期一致，否则会拉到「后端默认今天」覆盖当前选中日期的数据 */
     // resolvedDate 已在上方计算
@@ -686,39 +713,14 @@ function IndexPage() {
       const intake = res.intakeData
       setIntakeData(intake)
       setMeals(res.meals || [])
-      
-      // 构建7天热力图数据 - 始终以今天为中心（不随点击滚动）
-      const today = new Date()
-      const nextWeekHeatmapCells: WeekHeatmapCell[] = []
-      for (let offset = -3; offset <= 3; offset++) {
-        const date = new Date(today)
-        date.setDate(today.getDate() + offset)
-        const dateKey = formatDateKey(date)
-        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
-        const hasRecord = dayData && dayData.calories > 0
-        const calories = dayData?.calories || 0
-        const target = stats.tdee || 2000
-        const intakeRatio = hasRecord ? calories / target : 0
-        
-        nextWeekHeatmapCells.push({
-          date: dateKey,
-          dayName: SHORT_DAY_NAMES[date.getDay()],
-          dayNum: String(date.getDate()),
-          calories,
-          target,
-          intakeRatio,
-          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
-          isToday: offset === 0
-        })
-      }
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
       setExerciseBurnedKcal(nextExerciseKcal)
       const nextAchievement = res.achievement ?? { streak_days: 0, green_days: 0 }
       setHomeAchievement(nextAchievement)
-      setWeekHeatmapCells(nextWeekHeatmapCells)
       setTargetForm(createTargetForm(intake))
 
+      // 1. 先保存到本地 storage
       const normalizedDate = mapCalendarDateToApi(resolvedDate) || resolvedDate
       const nextSnapshot: HomeDashboardLocalSnapshot = {
         date: normalizedDate,
@@ -748,8 +750,85 @@ function IndexPage() {
         saveHomeDashboardSnapshot({ ...currentSnapshot, updatedAt: Date.now() })
       }
 
+      // 2. 再从 storage 优先、stats 回退构建7天热力图并更新 UI
+      const today = new Date()
+      const nextWeekHeatmapCells: WeekHeatmapCell[] = []
+      for (let offset = -3; offset <= 3; offset++) {
+        const date = new Date(today)
+        date.setDate(today.getDate() + offset)
+        const dateKey = formatDateKey(date)
+        const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
+        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
+        const calories = snap ? snap.intakeData.current : (dayData?.calories || 0)
+        const target = snap ? snap.intakeData.target : (stats.tdee || 2000)
+        const hasRecord = calories > 0
+        nextWeekHeatmapCells.push({
+          date: dateKey,
+          dayName: SHORT_DAY_NAMES[date.getDay()],
+          dayNum: String(date.getDate()),
+          calories,
+          target,
+          intakeRatio: hasRecord ? calories / target : 0,
+          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
+          isToday: offset === 0
+        })
+      }
+      setWeekHeatmapCells(nextWeekHeatmapCells)
+
       homeLastLoadRef.current = { date: resolvedDate, ts: Date.now() }
       homeDataStaleRef.current = false
+
+      // 若本地缓存不足 7 天，后台异步补齐近 7 天数据
+      void (async () => {
+        const snapshots = getStoredHomeDashboardSnapshots()
+        if (snapshots.length >= 7) return
+        const today = new Date()
+        const missingDates: string[] = []
+        for (let offset = -6; offset <= 0; offset++) {
+          const d = new Date(today)
+          d.setDate(today.getDate() + offset)
+          const dateKey = formatDateKey(d)
+          if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
+            missingDates.push(dateKey)
+          }
+        }
+        if (missingDates.length === 0) return
+        const results = await Promise.all(
+          missingDates.map(async (date) => {
+            try {
+              const dayRes = await getHomeDashboard(date)
+              const normDate = mapCalendarDateToApi(date) || date
+              return {
+                date: normDate,
+                updatedAt: Date.now(),
+                intakeData: dayRes.intakeData,
+                meals: dayRes.meals || [],
+                expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+                exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
+                achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
+              } as HomeDashboardLocalSnapshot
+            } catch {
+              return null
+            }
+          })
+        )
+        results.forEach((snapshot) => {
+          if (snapshot) saveHomeDashboardSnapshot(snapshot)
+        })
+        // 完成后从缓存刷新热图 UI
+        setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+        // 若当前选中日期已补齐，同步刷新首页数据
+        const currentDate = selectedDateRef.current || formatDateKey(new Date())
+        const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
+        if (refreshed) {
+          setIntakeData(refreshed.intakeData)
+          setMeals(refreshed.meals || [])
+          setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+          setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
+          setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
+          setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
+        }
+      })()
 
       // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
       if (bodyMetricsRes) {
@@ -784,6 +863,7 @@ function IndexPage() {
         setExerciseBurnedKcal(localFallback.exerciseBurnedKcal || 0)
         setHomeAchievement(localFallback.achievement || { streak_days: 0, green_days: 0 })
         setTargetForm(createTargetForm(localFallback.intakeData || DEFAULT_INTAKE))
+        setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
       } else {
         setIntakeData(DEFAULT_INTAKE)
         setMeals([])
@@ -1241,7 +1321,6 @@ function IndexPage() {
 
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
   const syncDashboardForDate = useCallback(async (date: string) => {
-    const seq = ++loadDashboardSeqRef.current
     // 若同日期请求已在进行中，跳过本次调用
     if (
       loadDashboardPendingRef.current &&
@@ -1249,6 +1328,7 @@ function IndexPage() {
     ) {
       return
     }
+    const seq = ++syncDashboardSeqRef.current
     loadDashboardPendingRef.current = { date, seq }
     if (!getAccessToken()) {
       loadDashboardPendingRef.current = null
@@ -1259,7 +1339,7 @@ function IndexPage() {
         getHomeDashboard(date),
         getExerciseLogs({ date }).catch(() => null)
       ])
-      if (seq !== loadDashboardSeqRef.current) return
+      if (seq !== syncDashboardSeqRef.current) return
       const intake = res.intakeData
       const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
       const nextAchievement = res.achievement ?? { streak_days: 0, green_days: 0 }
@@ -1279,6 +1359,20 @@ function IndexPage() {
         exerciseBurnedKcal: nextExerciseKcal,
         achievement: nextAchievement
       })
+      // 同步更新该日期在周热图中的颜色
+      setWeekHeatmapCells(prev => prev.map(cell => {
+        if (cell.date !== date) return cell
+        const calories = intake.current
+        const target = intake.target
+        const hasRecord = calories > 0
+        return {
+          ...cell,
+          calories,
+          target,
+          intakeRatio: hasRecord ? calories / target : 0,
+          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit'
+        }
+      }))
       homeLastLoadRef.current = { date, ts: Date.now() }
       homeDataStaleRef.current = false
     } catch (err) {

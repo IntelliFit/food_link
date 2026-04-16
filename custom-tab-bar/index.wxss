@@ -49,7 +49,7 @@
   left: 0;
   right: 0;
   height: 100%;  
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20750%2096%27%20preserveAspectRatio%3D%27none%27%3E%3Cpath%20d%3D%27M0%2C0%20L275%2C0%20C305%2C0%20320%2C10%20335%2C30%20C350%2C44%20360%2C44%20375%2C44%20C390%2C44%20400%2C44%20415%2C30%20C430%2C10%20445%2C0%20475%2C0%20L750%2C0%20L750%2C96%20L0%2C96%20Z%27%20fill%3D%27%23ffffff%27/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20750%2096%27%20preserveAspectRatio%3D%27none%27%3E%3Cpath%20d%3D%27M0%2C0%20L265%2C0%20C295%2C0%20315%2C10%20330%2C30%20C345%2C44%20360%2C44%20375%2C44%20C390%2C44%20405%2C44%20420%2C30%20C435%2C10%20455%2C0%20485%2C0%20L750%2C0%20L750%2C96%20L0%2C96%20Z%27%20fill%3D%27%23ffffff%27/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 -8rpx 28rpx rgba(0, 0, 0, 0.22));
@@ -113,8 +113,8 @@ image.tab-icon {
 }
 
 .tab-item.center-item .icon-wrapper {
-  width: 96rpx;
-  height: 96rpx;
+  width: 110rpx;
+  height: 110rpx;
   background: transparent;
   border-radius: 0;
   box-shadow: none;
@@ -125,8 +125,8 @@ image.tab-icon {
 }
 
 .center-icon-wrapper {
-  width: 96rpx;
-  height: 96rpx;
+  width: 110rpx;
+  height: 110rpx;
   background: #5cb896;
   border-radius: 50%;
   display: flex;
@@ -135,14 +135,14 @@ image.tab-icon {
   box-shadow: 0 8rpx 24rpx rgba(92, 184, 150, 0.55), 0 4rpx 8rpx rgba(0, 0, 0, 0.08);
   position: absolute;
   left: 50%;
-  top: 45%;
-  margin-left: -48rpx;
-  margin-top: -48rpx;
-  transform: translateY(-15rpx);
+  top: 39%;
+  margin-left: -55rpx;
+  margin-top: -55rpx;
+  transform: translateY(-18rpx);
 }
 
 .center-icon {
-  font-size: 48rpx;
+  font-size: 54rpx;
   color: #ffffff;
   font-weight: 500;
   line-height: 1;

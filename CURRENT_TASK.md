@@ -1,5 +1,29 @@
 # CURRENT_TASK
 
+- Task: 修复首页日期热图颜色丢失 + 本地 storage 自动补齐 7 天
+- Status: done（开发者工具 DOM 验证通过：日期圆圈已正确显示 is-recorded/is-over）
+- Scope:
+  - `src/pages/index/index.tsx`
+    - **根因**：`loadDashboard` 与 `syncDashboardForDate` 共用 `loadDashboardSeqRef`，且 `loadDashboardPendingRef` 跳过逻辑在 `++seq` 之后，导致并发竞争下 `seq` 不匹配，整个 `loadDashboard` 响应被丢弃，`weekHeatmapCells` 永远没被写入
+    - **修复**：
+      - `loadDashboard`：将 `loadDashboardPendingRef` 同日期跳过判断提前到 `++seq` 之前
+      - `syncDashboardForDate`：改为使用独立的 `syncDashboardSeqRef`，不再干扰 `loadDashboard` 的 seq 校验
+    - **storage 补齐**：在 `loadDashboard` 成功后，若 `getStoredHomeDashboardSnapshots().length < 7`，则后台并发请求缺失的近 7 天 `getHomeDashboard` 数据并写入 storage；完成后从 storage 刷新当前选中日期 UI
+- Verification:
+  - DOM 检查确认：13-16 号圆圈已显示 `is-recorded`（绿色），17-19 号保持 `is-empty`（白色）
+  - storage 检查确认：本地缓存已从 1 条自动补齐到 7 条（2026-04-10 ~ 04-16）
+
+- Task: 修复真机调试切换日期/分享餐食报 `c is not a function`
+- Status: fix applied, pending real-device verification
+- Scope:
+  - `config/index.ts`
+    - 新增 `taro-fix-target` Vite 插件，在 `configResolved` 中将 `build.target` 从 Taro 默认的 `es6` 覆盖为 `es2018`
+    - 阻止 `async/await` 被编译为 generator + 内联辅助函数，避免短变量名 `c` 在真机 JSCore 上与局部变量冲突
+- Verification:
+  - `npm run build:weapp` 产物：`dist/pages/index/index.js` 中 `function*`/`yield` 为 0，`async`/`await` 被保留
+  - `npm run dev:restart` 后开发者工具自动化验证通过（切换日期、分享海报、无报错）
+  - 需重新打包上传后在真机上复验
+
 - Task: 底部 tab bar  refinements（透明背景、图标下移放大、中心 kcal 图标、问候语时段图标）
 - Status: done（构建通过，截图因 mrc 间歇性超时未完成）
 - Scope:

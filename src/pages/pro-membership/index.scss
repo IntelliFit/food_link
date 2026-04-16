@@ -6,17 +6,17 @@
 
 // Hero 区域
 .hero-section {
-  background: linear-gradient(135deg, #00c896 0%, #00bc7d 50%, #00a86b 100%);
-  padding: 80rpx 40rpx 72rpx;
+  background: linear-gradient(135deg, #5cb896 0%, #5cb896 50%, #7bc4a8 100%);
+  padding: 48rpx 40rpx 64rpx;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
   border-bottom-left-radius: 48rpx;
   border-bottom-right-radius: 48rpx;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 12rpx 32rpx rgb(0 188 125 / 35%);
+  box-shadow: 0 12rpx 32rpx rgb(92 184 150 / 35%);
 
   &::before {
     content: '';
@@ -43,45 +43,45 @@
   }
 }
 
-.hero-icon-wrap {
-  width: 112rpx;
-  height: 112rpx;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 20%);
-  border: 2rpx solid rgb(255 255 255 / 40%);
+.hero-back-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 24rpx;
+  gap: 12rpx;
+  margin-bottom: 32rpx;
   position: relative;
   z-index: 1;
-  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 10%);
 }
 
-.hero-icon-svg {
-  font-size: 52rpx !important;
+.hero-back-icon {
+  width: 36rpx;
+  height: 36rpx;
+  transform: rotate(180deg);
   color: #fff !important;
-  filter: drop-shadow(0 2rpx 4rpx rgb(0 0 0 / 15%));
+}
+
+.hero-back-text {
+  font-size: 32rpx;
+  font-weight: 500;
+  color: #fff;
 }
 
 .hero-title {
-  font-size: 52rpx;
+  font-size: 56rpx;
   font-weight: 800;
   color: #fff;
-  letter-spacing: 2px;
+  letter-spacing: 2rpx;
   margin-bottom: 16rpx;
   position: relative;
   z-index: 1;
-  text-shadow: 0 2rpx 8rpx rgb(0 0 0 / 15%);
+  text-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.18);
 }
 
 .hero-subtitle {
-  font-size: 26rpx;
-  color: rgb(255 255 255 / 90%);
-  line-height: 1.6;
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.5;
   position: relative;
   z-index: 1;
-  text-shadow: 0 1rpx 4rpx rgb(0 0 0 / 10%);
 }
 
 // 特权对比
@@ -130,7 +130,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgb(0 188 125 / 5%);
+  background: rgb(92 184 150 / 5%);
 }
 
 .col-label-badge {
@@ -162,7 +162,7 @@
 
 .feature-icon-text {
   font-size: 34rpx;
-  color: #047857;
+  color: #4a9e7d;
 }
 
 .feature-text {
@@ -191,7 +191,7 @@
   justify-content: space-between;
   box-shadow: 0 4rpx 20rpx rgb(0 100 60 / 8%);
   border: 2rpx solid #d1fae5;
-  border-left: 5rpx solid #00bc7d;
+  border-left: 5rpx solid #5cb896;
 }
 
 .plan-card-left {
@@ -225,13 +225,13 @@
 .plan-price {
   font-size: 56rpx;
   font-weight: 800;
-  color: #00bc7d;
+  color: #5cb896;
 }
 
 .plan-price-symbol {
   font-size: 28rpx;
   font-weight: 700;
-  color: #00bc7d;
+  color: #5cb896;
 }
 
 .plan-period {
@@ -271,7 +271,7 @@
   color: #111827;
 
   &--active {
-    color: #00bc7d;
+    color: #5cb896;
   }
 }
 
@@ -292,18 +292,18 @@
 
 .subscribe-btn {
   width: 100%;
-  height: 96rpx;
-  line-height: 96rpx;
+  height: 104rpx;
+  line-height: 104rpx;
   border-radius: 999rpx;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a86b 100%);
+  background: linear-gradient(135deg, #5cb896 0%, #7bc4a8 100%);
   color: #fff;
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 700;
   border: none;
-  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 35%);
+  box-shadow: 0 8rpx 24rpx rgb(92 184 150 / 35%);
 
   &--renew {
-    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+    background: linear-gradient(135deg, #4a9e7d 0%, #3d8570 100%);
     box-shadow: 0 8rpx 24rpx rgb(4 120 87 / 30%);
   }
 
@@ -313,14 +313,14 @@
 
   .btn-spinner {
     display: inline-block;
-    width: 32rpx;
-    height: 32rpx;
+    width: 36rpx;
+    height: 36rpx;
     border: 3rpx solid rgb(255 255 255 / 30%);
     border-top-color: #fff;
     border-radius: 50%;
     animation: btn-spin 0.8s linear infinite;
     vertical-align: middle;
-    margin-right: 8rpx;
+    margin-right: 10rpx;
   }
 
   @keyframes btn-spin {
@@ -333,7 +333,7 @@
 .subscribe-hint {
   display: block;
   text-align: center;
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: #9ca3af;
   margin-top: 20rpx;
 }
@@ -365,36 +365,53 @@
     z-index: 2;
   }
 
+  .points-balance-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16rpx;
+  }
+
   .points-balance-label {
-    display: block;
-    font-size: 26rpx;
+    font-size: 30rpx;
     color: #6b7280;
-    margin-bottom: 12rpx;
+  }
+
+  .points-balance-help {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+  }
+
+  .points-balance-help-icon {
+    width: 28rpx;
+    height: 28rpx;
+    color: #9ca3af !important;
+  }
+
+  .points-balance-help-text {
+    font-size: 24rpx;
+    color: #9ca3af;
+    line-height: 1;
   }
 
   .points-balance-value {
     display: block;
-    font-size: 64rpx;
+    font-size: 72rpx;
     font-weight: 800;
-    color: #059669;
-    margin-bottom: 24rpx;
-    line-height: 1.2;
+    color: #5cb896;
+    margin-bottom: 8rpx;
+    line-height: 1.15;
   }
 
-  .points-balance-hint {
-    display: block;
+  .points-balance-rules {
+    display: none;
+  }
+
+  .points-rule-item {
     font-size: 26rpx;
     color: #4b5563;
-    line-height: 1.55;
-    margin-bottom: 10rpx;
-  }
-
-  .points-balance-hint--second {
-    margin-bottom: 0;
-  }
-
-  .points-balance-hint:last-child {
-    margin-bottom: 0;
+    line-height: 1.4;
   }
 
   .points-rules-card {
@@ -407,18 +424,18 @@
 
   .points-rules-title {
     display: block;
-    font-size: 30rpx;
+    font-size: 32rpx;
     font-weight: 700;
     color: #111827;
-    margin-bottom: 20rpx;
+    margin-bottom: 24rpx;
   }
 
   .points-rules-line {
     display: block;
-    font-size: 26rpx;
+    font-size: 28rpx;
     color: #4b5563;
     line-height: 1.65;
-    margin-bottom: 16rpx;
+    margin-bottom: 18rpx;
   }
 
   .points-rules-line:last-child {
@@ -430,7 +447,7 @@
     padding: 32rpx 32rpx;
     background: linear-gradient(135deg, #ecfdf5 0%, #fff 100%);
     border-radius: 20rpx;
-    border: 1rpx solid #a7f3d0;
+    border: 1rpx solid #c8e9dc;
   }
 
   .invite-row {
@@ -447,16 +464,24 @@
 
   .invite-label {
     display: block;
-    font-size: 24rpx;
-    color: #047857;
+    font-size: 26rpx;
+    color: #4a9e7d;
     margin-bottom: 12rpx;
+  }
+
+  .invite-label-hint {
+    display: block;
+    font-size: 22rpx;
+    color: #6b7280;
+    line-height: 1;
+    margin-top: 12rpx;
   }
 
   .invite-code {
     display: block;
-    font-size: 36rpx;
+    font-size: 40rpx;
     font-weight: 700;
-    color: #065f46;
+    color: #3d8570;
     letter-spacing: 4rpx;
     line-height: 1.35;
   }
@@ -464,11 +489,12 @@
   .invite-copy-btn {
     flex-shrink: 0;
     margin: 0;
-    background: #00bc7d !important;
+    background: #5cb896 !important;
     color: #fff !important;
-    font-size: 24rpx !important;
+    font-size: 26rpx !important;
     border-radius: 999rpx !important;
     border: none !important;
+    padding: 14rpx 32rpx !important;
   }
 
   .recharge-card {
@@ -504,7 +530,7 @@
 
   .recharge-preset--active {
     background: #ecfdf5;
-    border-color: #00bc7d;
+    border-color: #5cb896;
   }
 
   .recharge-preset-text {
@@ -537,7 +563,7 @@
   .recharge-preview {
     display: block;
     font-size: 26rpx;
-    color: #059669;
+    color: #5cb896;
     margin-bottom: 32rpx;
     line-height: 1.5;
   }
@@ -551,5 +577,112 @@
     text-align: center;
     line-height: 1.55;
     padding: 0 8rpx;
+  }
+
+  // 计费规则弹窗（仿照首页 record-menu-modal）
+  .rules-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100001;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 40rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  }
+
+  .rules-modal-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .rules-modal-content {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 100%;
+    max-height: 70vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: #ffffff;
+    border-radius: 32rpx;
+    padding: 28rpx 24rpx 28rpx;
+    box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 14%);
+    animation: slideUp 0.3s ease;
+  }
+
+  @keyframes slideUp {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .rules-modal-handle-bar {
+    width: 36rpx;
+    height: 4rpx;
+    background: #e5e7eb;
+    border-radius: 2rpx;
+    margin: 0 auto 24rpx;
+  }
+
+  .rules-modal-header {
+    text-align: center;
+    margin-bottom: 24rpx;
+  }
+
+  .rules-modal-title {
+    font-size: 32rpx;
+    font-weight: 600;
+    color: #1a1a1a;
+    line-height: 44rpx;
+  }
+
+  .rules-modal-body {
+    margin-bottom: 24rpx;
+  }
+
+  .rules-modal-line {
+    display: block;
+    font-size: 28rpx;
+    color: #4b5563;
+    line-height: 1.8;
+    text-align: center;
+    margin-bottom: 12rpx;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .rules-modal-divider {
+    height: 1rpx;
+    background: #e5e7eb;
+    margin: 20rpx 40rpx;
+  }
+
+  .rules-modal-footer {
+    margin-top: 8rpx;
+  }
+
+  .rules-modal-close-btn {
+    height: 88rpx;
+    background: #f3f4f6;
+    border-radius: 9999rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .rules-modal-close-text {
+    font-size: 28rpx;
+    font-weight: 500;
+    color: #6b7280;
+    line-height: 40rpx;
   }
 }

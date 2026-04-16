@@ -262,7 +262,7 @@ $community-feed-card-alpha: 50%;
 }
 
 .login-tip-btn {
-  // color: #00bc7d;
+  // color: #5cb896;
   // background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
   width: 220rpx;
   margin: 0 auto;
@@ -311,7 +311,7 @@ $community-feed-card-alpha: 50%;
 
 .friends-quick-cell-icon {
   font-size: 40rpx;
-  color: #00bc7d;
+  color: #5cb896;
   line-height: 1;
 }
 
@@ -381,12 +381,12 @@ $community-feed-card-alpha: 50%;
   width: 80rpx;
   height: 80rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #00d492 0%, #00bba7 100%);
+  background: linear-gradient(135deg, #00d492 0%, #8dd3bf 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 25%);
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 25%);
   position: relative;
 }
 
@@ -482,15 +482,15 @@ $community-feed-card-alpha: 50%;
   flex-direction: column;
   align-items: center;
   gap: 12rpx;
-  box-shadow: 0 6rpx 24rpx rgb(0 188 125 / 8%), 0 2rpx 8rpx rgb(0 0 0 / 4%);
+  box-shadow: 0 6rpx 24rpx rgb(92 184 150 / 8%), 0 2rpx 8rpx rgb(0 0 0 / 4%);
   min-width: 0;
   transition: all 0.25s ease;
   box-sizing: border-box;
-  border: 1rpx solid rgb(0 188 125 / 6%);
+  border: 1rpx solid rgb(92 184 150 / 6%);
 
   &:active {
     transform: scale(0.98);
-    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 12%);
+    box-shadow: 0 4rpx 16rpx rgb(92 184 150 / 12%);
   }
 }
 
@@ -539,8 +539,8 @@ $community-feed-card-alpha: 50%;
 }
 
 // 本周打卡排行榜：对齐首页「统计入口」绿渐变卡片（圆角、留白、投影），非表情图标
-$home-primary-start: #00bc7d;
-$home-primary-end: #00bba7;
+$home-primary-start: #5cb896;
+$home-primary-end: #8dd3bf;
 
 .ranking-banner {
   margin: 16rpx 24rpx 16rpx;
@@ -552,13 +552,13 @@ $home-primary-end: #00bba7;
   flex-direction: column;
   align-items: stretch;
   gap: 20rpx;
-  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 25%);
+  box-shadow: 0 8rpx 24rpx rgb(92 184 150 / 25%);
   box-sizing: border-box;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 
   &:active {
     transform: scale(0.995);
-    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 20%);
+    box-shadow: 0 4rpx 16rpx rgb(92 184 150 / 20%);
   }
 }
 
@@ -825,12 +825,12 @@ $home-primary-end: #00bba7;
 
   &.is-open,
   &.is-active {
-    border-color: #00bc7d;
-    box-shadow: 0 0 0 2rpx rgb(0 188 125 / 14%), 0 4rpx 12rpx rgb(0 188 125 / 10%);
+    border-color: #5cb896;
+    box-shadow: 0 0 0 2rpx rgb(92 184 150 / 14%), 0 4rpx 12rpx rgb(92 184 150 / 10%);
   }
 
   &.is-active .icon-filter-filling {
-    color: #00bc7d;
+    color: #5cb896;
   }
 
   &:active {
@@ -870,7 +870,7 @@ $home-primary-end: #00bba7;
   min-width: 0;
 
   &:focus-within {
-    border-color: #00bc7d;
+    border-color: #5cb896;
     background: #f8fffe;
   }
 }
@@ -908,7 +908,7 @@ $home-primary-end: #00bba7;
 .feed-search-clear {
   flex-shrink: 0;
   font-size: 24rpx;
-  color: #00bc7d;
+  color: #5cb896;
   padding: 8rpx 4rpx;
 }
 
@@ -960,9 +960,9 @@ $home-primary-end: #00bba7;
   transition: all 0.2s ease;
 
   &.active {
-    background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
+    background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
     border-color: transparent;
-    box-shadow: 0 6rpx 16rpx rgb(0 188 125 / 18%);
+    box-shadow: 0 6rpx 16rpx rgb(92 184 150 / 18%);
 
     .feed-filter-chip-text {
       color: #fff;
@@ -1008,7 +1008,7 @@ $home-primary-end: #00bba7;
   flex-shrink: 0;
   font-size: 24rpx;
   line-height: 1;
-  color: #00bc7d;
+  color: #5cb896;
   font-weight: 600;
 }
 
@@ -1016,8 +1016,8 @@ $home-primary-end: #00bba7;
   background: rgb(255 255 255 / #{$community-feed-card-alpha});
   border-radius: 28rpx;
   padding: 24rpx;
-  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(0 188 125 / 4%);
-  border: 1rpx solid rgb(0 188 125 / 5%);
+  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(92 184 150 / 4%);
+  border: 1rpx solid rgb(92 184 150 / 5%);
   display: flex;
   align-items: stretch;
   gap: 20rpx;
@@ -1057,7 +1057,7 @@ $home-primary-end: #00bba7;
   position: absolute;
   left: 12rpx;
   top: 12rpx;
-  background: rgb(0 188 125 / 92%);
+  background: rgb(92 184 150 / 92%);
   color: #fff;
   font-size: 20rpx;
   line-height: 1;
@@ -1081,7 +1081,7 @@ $home-primary-end: #00bba7;
   display: inline-block;
   font-size: 20rpx;
   line-height: 1;
-  color: #00a86b;
+  color: #5cb896;
   background: #ecfdf5;
   padding: 10rpx 14rpx;
   border-radius: 999rpx;
@@ -1160,7 +1160,7 @@ $home-primary-end: #00bba7;
 
 .library-feed-calorie {
   background: #ecfdf5;
-  color: #00a86b;
+  color: #5cb896;
   font-weight: 600;
 }
 
@@ -1180,7 +1180,7 @@ $home-primary-end: #00bba7;
   color: #94a3b8;
 
   &.liked {
-    color: #00bc7d;
+    color: #5cb896;
   }
 }
 
@@ -1194,8 +1194,8 @@ $home-primary-end: #00bba7;
   background: #fff;
   border-radius: 28rpx;
   padding: 32rpx;
-  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(0 188 125 / 4%);
-  border: 1rpx solid rgb(0 188 125 / 6%);
+  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(92 184 150 / 4%);
+  border: 1rpx solid rgb(92 184 150 / 6%);
 }
 
 .library-mix-header {
@@ -1225,7 +1225,7 @@ $home-primary-end: #00bba7;
 .library-mix-link {
   flex-shrink: 0;
   font-size: 24rpx;
-  color: #00bc7d;
+  color: #5cb896;
   font-weight: 600;
   line-height: 40rpx;
 }
@@ -1279,7 +1279,7 @@ $home-primary-end: #00bba7;
   position: absolute;
   left: 12rpx;
   top: 12rpx;
-  background: rgb(0 188 125 / 92%);
+  background: rgb(92 184 150 / 92%);
   color: #fff;
   font-size: 20rpx;
   line-height: 1;
@@ -1329,7 +1329,7 @@ $home-primary-end: #00bba7;
 
 .library-mix-calorie {
   background: #ecfdf5;
-  color: #00a86b;
+  color: #5cb896;
   font-weight: 600;
 }
 
@@ -1394,7 +1394,7 @@ $home-primary-end: #00bba7;
   width: 80rpx;
   height: 80rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #00d492 0%, #00bba7 100%);
+  background: linear-gradient(135deg, #00d492 0%, #8dd3bf 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1508,10 +1508,10 @@ $feed-body-font-size: 30rpx;
   color: #fff;
   font-weight: 600;
   line-height: 1.45;
-  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+  background: linear-gradient(to right, #5cb896 0%, #8dd3bf 100%);
   padding: 8rpx 18rpx;
   border-radius: 28rpx;
-  box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 30%);
 }
 
 .feed-calorie-num,
@@ -1849,7 +1849,7 @@ $comment-body-font-size: 28rpx;
   line-height: 72rpx;
   font-size: 28rpx;
   color: #fff;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+  background: linear-gradient(135deg, #5cb896 0%, #5cb896 100%);
   border-radius: 36rpx;
   border: none;
 
@@ -1905,10 +1905,10 @@ $comment-body-font-size: 28rpx;
   line-height: 76rpx;
   font-size: 28rpx;
   color: #fff;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+  background: linear-gradient(135deg, #5cb896 0%, #5cb896 100%);
   border-radius: 38rpx;
   border: none;
-  box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 25%);
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 25%);
 
   &::after {
     border: none;
@@ -2011,8 +2011,8 @@ $comment-body-font-size: 28rpx;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
-  box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 22%);
+  background: linear-gradient(135deg, #5cb896 0%, #5cb896 100%);
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 22%);
   transition: opacity 0.15s ease, background 0.15s ease, transform 0.12s ease;
 
   .comment-bottom-send-icon.iconfont.icon-send {
@@ -2044,8 +2044,8 @@ $comment-body-font-size: 28rpx;
   /** 有内容且仍有请求在途：保持主色 + spinner */
   &.is-submitting.is-ready {
     opacity: 1;
-    background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 22%);
+    background: linear-gradient(135deg, #5cb896 0%, #5cb896 100%);
+    box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 22%);
   }
 
   /** 输入已空但请求未完成：中性色 + spinner */
@@ -2127,7 +2127,7 @@ $comment-body-font-size: 28rpx;
   height: 72rpx;
   line-height: 72rpx;
   font-size: 28rpx;
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   border-radius: 12rpx;
 }
@@ -2169,7 +2169,7 @@ $comment-body-font-size: 28rpx;
 }
 
 .result-add-btn {
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   border-radius: 12rpx;
 }
@@ -2238,7 +2238,7 @@ $comment-body-font-size: 28rpx;
 }
 
 .request-accept {
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
 }
 
@@ -2290,7 +2290,7 @@ $comment-body-font-size: 28rpx;
 }
 
 .comment-submit {
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   border-radius: 12rpx;
 }

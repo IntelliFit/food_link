@@ -82,6 +82,9 @@ function ProfilePage() {
   // 好友请求数量
   const [friendRequestCount, setFriendRequestCount] = useState(0)
 
+  // 积分说明展开状态
+  const [showPointsTip, setShowPointsTip] = useState(false)
+
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
     loadUserInfo()
@@ -275,7 +278,7 @@ function ProfilePage() {
         content: '「附近美食」功能正在紧锣密鼓地开发中，即将上线，敬请期待！',
         showCancel: false,
         confirmText: '好的',
-        confirmColor: '#00bc7d'
+        confirmColor: '#5cb896'
       })
       return
     }
@@ -361,12 +364,12 @@ function ProfilePage() {
 
   const getServiceColor = (id: number) => {
     const colors: Record<number, string> = {
-      0: '#10b981', // 健康档案 - 绿
+      0: '#5cb896', // 健康档案 - 绿
       1: '#f59e0b', // 收藏餐食 - 橙
       2: '#8b5cf6', // 食物管理 - 紫
       3: '#3b82f6', // 饮食记录 - 蓝
       5: '#ef4444', // 附近美食 - 红
-      6: '#f59e0b'  // 积分充值入口 - 金
+      6: '#5cb896'  // 积分充值入口 - 绿
     }
     return colors[id] || '#6b7280'
   }
@@ -374,7 +377,7 @@ function ProfilePage() {
   const getSettingColor = (id: number) => {
     const colors: Record<number, string> = {
       2: '#3b82f6', // 好友管理 - 蓝
-      3: '#10b981', // 隐私设置 - 绿
+      3: '#5cb896', // 隐私设置 - 绿
       5: '#8b5cf6'  // 关于我们 - 紫
     }
     return colors[id] || '#6b7280'
@@ -415,7 +418,7 @@ function ProfilePage() {
           <View className='card-header'>
             <View>
               <Text className='card-validity'>注册时间 {registerDate}</Text>
-              <Text className='card-title'>积分账户</Text>
+              <Text className='card-title'>剩余积分</Text>
             </View>
             <View className='card-upgrade-btn'>
               <Text className='card-upgrade-text'>充值</Text>
@@ -423,26 +426,15 @@ function ProfilePage() {
           </View>
           <View className='card-body'>
             {membershipStatus === null ? (
-              <Text className='progress-text'>正在同步积分…</Text>
+              <View className='points-balance-skeleton' />
             ) : typeof membershipStatus.points_balance === 'number' ? (
               <>
-                <Text className='progress-text'>
-                  当前积分 {membershipStatus.points_balance.toFixed(1)}
+                <Text className='points-balance'>
+                  {membershipStatus.points_balance.toFixed(1)}
                 </Text>
-                <Text className='card-tip card-tip--spaced'>
-                  标准分析 1 分/次 · 精准 2 分/次 · 运动 0.5 分/次
-                </Text>
-                {membershipStatus.invite_code ? (
-                  <Text className='card-tip'>邀请码 {membershipStatus.invite_code} · 好友注册双方各 +20 积分</Text>
-                ) : (
-                  <Text className='card-tip'>分享邀请码，好友注册双方各 +20 积分</Text>
-                )}
               </>
             ) : (
-              <>
-                <Text className='progress-text'>点击查看积分说明与充值</Text>
-                <Text className='card-tip'>标准分析 1 分/次 · 精准 2 分/次 · 运动 0.5 分/次</Text>
-              </>
+              <Text className='points-balance'>点击查看积分说明与充值</Text>
             )}
           </View>
           <View className='card-bg-icon'>
