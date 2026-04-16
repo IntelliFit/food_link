@@ -135,7 +135,7 @@ image.tab-icon {
   box-shadow: 0 8rpx 24rpx rgba(92, 184, 150, 0.55), 0 4rpx 8rpx rgba(0, 0, 0, 0.08);
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 45%;
   margin-left: -48rpx;
   margin-top: -48rpx;
   transform: translateY(-15rpx);
