@@ -614,6 +614,8 @@ function IndexPage() {
   const waterBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 快速切换日期时忽略非最新一次 dashboard 的响应（微信小程序无 AbortController，无法掐断请求） */
   const loadDashboardSeqRef = useRef(0)
+  /** 防止并发重复请求：同日期 dashboard 正在加载中时跳过新调用 */
+  const loadDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
   /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
   const homeLastLoadRef = useRef<{ date: string; ts: number } | null>(null)
   /** 为 true 时下次「今日」展示必须重拉（饮食/运动/保质期等变更） */
@@ -638,11 +640,21 @@ function IndexPage() {
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string, silent = false) => {
     const seq = ++loadDashboardSeqRef.current
-    /** 无参调用（如保质期事件、保存目标后刷新）必须与日历选中日期一致，否则会拉到「后端默认今天」覆盖当前选中日期的数据 */
     const resolvedDate =
       targetDate !== undefined && targetDate !== ''
         ? targetDate
         : (selectedDateRef.current || formatDateKey(new Date()))
+
+    // 若同日期请求已在进行中，跳过本次调用（解决 useDidShow 多次触发导致的大量重复请求）
+    if (
+      loadDashboardPendingRef.current &&
+      loadDashboardPendingRef.current.date === resolvedDate
+    ) {
+      return
+    }
+    loadDashboardPendingRef.current = { date: resolvedDate, seq }
+    /** 无参调用（如保质期事件、保存目标后刷新）必须与日历选中日期一致，否则会拉到「后端默认今天」覆盖当前选中日期的数据 */
+    // resolvedDate 已在上方计算
 
     if (!getAccessToken()) {
       setIntakeData(DEFAULT_INTAKE)
@@ -782,6 +794,9 @@ function IndexPage() {
         setTargetForm(createTargetForm(DEFAULT_INTAKE))
       }
     } finally {
+      if (loadDashboardPendingRef.current?.seq === seq) {
+        loadDashboardPendingRef.current = null
+      }
       if (seq === loadDashboardSeqRef.current) {
         setLoading(false)
         setIsSwitchingDate(false)
@@ -1227,7 +1242,18 @@ function IndexPage() {
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
   const syncDashboardForDate = useCallback(async (date: string) => {
     const seq = ++loadDashboardSeqRef.current
-    if (!getAccessToken()) return
+    // 若同日期请求已在进行中，跳过本次调用
+    if (
+      loadDashboardPendingRef.current &&
+      loadDashboardPendingRef.current.date === date
+    ) {
+      return
+    }
+    loadDashboardPendingRef.current = { date, seq }
+    if (!getAccessToken()) {
+      loadDashboardPendingRef.current = null
+      return
+    }
     try {
       const [res, exerciseLogsRes] = await Promise.all([
         getHomeDashboard(date),
@@ -1257,6 +1283,10 @@ function IndexPage() {
       homeDataStaleRef.current = false
     } catch (err) {
       // 静默失败，不打扰用户；本地缓存已保证基本可用性
+    } finally {
+      if (loadDashboardPendingRef.current?.seq === seq) {
+        loadDashboardPendingRef.current = null
+      }
     }
   }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
