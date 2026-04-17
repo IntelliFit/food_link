@@ -15,6 +15,46 @@ from collections import Counter
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
 
+FOOD_LIBRARY_NUTRITION_SELECT = (
+    "kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, "
+    "fiber_per_100g, sugar_per_100g, saturated_fat_per_100g, cholesterol_mg_per_100g, "
+    "sodium_mg_per_100g, potassium_mg_per_100g, calcium_mg_per_100g, iron_mg_per_100g, "
+    "magnesium_mg_per_100g, zinc_mg_per_100g, vitamin_a_rae_mcg_per_100g, vitamin_c_mg_per_100g, "
+    "vitamin_d_mcg_per_100g, vitamin_e_mg_per_100g, vitamin_k_mcg_per_100g, thiamin_mg_per_100g, "
+    "riboflavin_mg_per_100g, niacin_mg_per_100g, vitamin_b6_mg_per_100g, folate_mcg_per_100g, "
+    "vitamin_b12_mcg_per_100g"
+)
+
+
+def _food_row_to_unit_nutrition(food: Dict[str, Any]) -> Dict[str, float]:
+    return {
+        "calories": float(food.get("kcal_per_100g") or 0),
+        "protein": float(food.get("protein_per_100g") or 0),
+        "carbs": float(food.get("carbs_per_100g") or 0),
+        "fat": float(food.get("fat_per_100g") or 0),
+        "fiber": float(food.get("fiber_per_100g") or 0),
+        "sugar": float(food.get("sugar_per_100g") or 0),
+        "saturatedFat": float(food.get("saturated_fat_per_100g") or 0),
+        "cholesterolMg": float(food.get("cholesterol_mg_per_100g") or 0),
+        "sodiumMg": float(food.get("sodium_mg_per_100g") or 0),
+        "potassiumMg": float(food.get("potassium_mg_per_100g") or 0),
+        "calciumMg": float(food.get("calcium_mg_per_100g") or 0),
+        "ironMg": float(food.get("iron_mg_per_100g") or 0),
+        "magnesiumMg": float(food.get("magnesium_mg_per_100g") or 0),
+        "zincMg": float(food.get("zinc_mg_per_100g") or 0),
+        "vitaminARaeMcg": float(food.get("vitamin_a_rae_mcg_per_100g") or 0),
+        "vitaminCMg": float(food.get("vitamin_c_mg_per_100g") or 0),
+        "vitaminDMcg": float(food.get("vitamin_d_mcg_per_100g") or 0),
+        "vitaminEMg": float(food.get("vitamin_e_mg_per_100g") or 0),
+        "vitaminKMcg": float(food.get("vitamin_k_mcg_per_100g") or 0),
+        "thiaminMg": float(food.get("thiamin_mg_per_100g") or 0),
+        "riboflavinMg": float(food.get("riboflavin_mg_per_100g") or 0),
+        "niacinMg": float(food.get("niacin_mg_per_100g") or 0),
+        "vitaminB6Mg": float(food.get("vitamin_b6_mg_per_100g") or 0),
+        "folateMcg": float(food.get("folate_mcg_per_100g") or 0),
+        "vitaminB12Mcg": float(food.get("vitamin_b12_mcg_per_100g") or 0),
+    }
+
 # 体检报告图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
 HEALTH_REPORTS_BUCKET = "health-reports"
 
@@ -621,7 +661,7 @@ def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any
     try:
         alias_res = (
             supabase.table("food_nutrition_aliases")
-            .select("normalized_alias, food_id, food_nutrition_library!inner(id, canonical_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, is_active)")
+            .select(f"normalized_alias, food_id, food_nutrition_library!inner(id, canonical_name, {FOOD_LIBRARY_NUTRITION_SELECT}, is_active)")
             .eq("normalized_alias", normalized)
             .limit(1)
             .execute()
@@ -636,12 +676,7 @@ def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any
                     "resolve_status": "exact_alias",
                     "matched_food_id": str(food.get("id")),
                     "matched_food_name": str(food.get("canonical_name") or raw_name),
-                    "unit_nutrition_per_100g": {
-                        "calories": float(food.get("kcal_per_100g") or 0),
-                        "protein": float(food.get("protein_per_100g") or 0),
-                        "carbs": float(food.get("carbs_per_100g") or 0),
-                        "fat": float(food.get("fat_per_100g") or 0),
-                    },
+                    "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
                     "score": 1.0,
                     "raw_name": raw_name,
                     "normalized_name": normalized,
@@ -649,7 +684,7 @@ def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any
 
         food_res = (
             supabase.table("food_nutrition_library")
-            .select("id, canonical_name, normalized_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g")
+            .select(f"id, canonical_name, normalized_name, {FOOD_LIBRARY_NUTRITION_SELECT}")
             .eq("is_active", True)
             .eq("normalized_name", normalized)
             .limit(1)
@@ -663,12 +698,7 @@ def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any
                 "resolve_status": "exact_canonical",
                 "matched_food_id": str(food.get("id")),
                 "matched_food_name": str(food.get("canonical_name") or raw_name),
-                "unit_nutrition_per_100g": {
-                    "calories": float(food.get("kcal_per_100g") or 0),
-                    "protein": float(food.get("protein_per_100g") or 0),
-                    "carbs": float(food.get("carbs_per_100g") or 0),
-                    "fat": float(food.get("fat_per_100g") or 0),
-                },
+                "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
                 "score": 1.0,
                 "raw_name": raw_name,
                 "normalized_name": normalized,
@@ -677,7 +707,7 @@ def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any
         # 模糊兜底：限制候选数量避免全表扫描压力
         all_foods_res = (
             supabase.table("food_nutrition_library")
-            .select("id, canonical_name, normalized_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g")
+            .select(f"id, canonical_name, normalized_name, {FOOD_LIBRARY_NUTRITION_SELECT}")
             .eq("is_active", True)
             .limit(500)
             .execute()
@@ -696,12 +726,7 @@ def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any
                 "resolve_status": "fuzzy",
                 "matched_food_id": str(best.get("id")),
                 "matched_food_name": str(best.get("canonical_name") or raw_name),
-                "unit_nutrition_per_100g": {
-                    "calories": float(best.get("kcal_per_100g") or 0),
-                    "protein": float(best.get("protein_per_100g") or 0),
-                    "carbs": float(best.get("carbs_per_100g") or 0),
-                    "fat": float(best.get("fat_per_100g") or 0),
-                },
+                "unit_nutrition_per_100g": _food_row_to_unit_nutrition(best),
                 "score": round(float(best_score), 4),
                 "raw_name": raw_name,
                 "normalized_name": normalized,
@@ -815,7 +840,7 @@ def search_food_nutrition_candidates_sync(query: str, limit: int = 5) -> List[Di
     try:
         foods_res = (
             supabase.table("food_nutrition_library")
-            .select("id, canonical_name, normalized_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g")
+            .select(f"id, canonical_name, normalized_name, source, {FOOD_LIBRARY_NUTRITION_SELECT}")
             .eq("is_active", True)
             .limit(600)
             .execute()
@@ -833,17 +858,13 @@ def search_food_nutrition_candidates_sync(query: str, limit: int = 5) -> List[Di
                 "canonical_name": str(row.get("canonical_name") or ""),
                 "match_source": "canonical",
                 "score": score,
-                "unit_nutrition_per_100g": {
-                    "calories": float(row.get("kcal_per_100g") or 0),
-                    "protein": float(row.get("protein_per_100g") or 0),
-                    "carbs": float(row.get("carbs_per_100g") or 0),
-                    "fat": float(row.get("fat_per_100g") or 0),
-                },
+                "source": str(row.get("source") or ""),
+                "unit_nutrition_per_100g": _food_row_to_unit_nutrition(row),
             }
 
         alias_res = (
             supabase.table("food_nutrition_aliases")
-            .select("normalized_alias, food_nutrition_library!inner(id, canonical_name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, is_active)")
+            .select(f"normalized_alias, food_nutrition_library!inner(id, canonical_name, source, {FOOD_LIBRARY_NUTRITION_SELECT}, is_active)")
             .limit(1200)
             .execute()
         )
@@ -865,12 +886,8 @@ def search_food_nutrition_candidates_sync(query: str, limit: int = 5) -> List[Di
                     "canonical_name": str(food.get("canonical_name") or ""),
                     "match_source": "alias",
                     "score": score,
-                    "unit_nutrition_per_100g": {
-                        "calories": float(food.get("kcal_per_100g") or 0),
-                        "protein": float(food.get("protein_per_100g") or 0),
-                        "carbs": float(food.get("carbs_per_100g") or 0),
-                        "fat": float(food.get("fat_per_100g") or 0),
-                    },
+                    "source": str(food.get("source") or ""),
+                    "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
                 }
 
         ranked = sorted(by_food_id.values(), key=lambda x: float(x.get("score") or 0), reverse=True)

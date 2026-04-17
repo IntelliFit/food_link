@@ -519,6 +519,25 @@ class Nutrients(BaseModel):
     fat: float = 0
     fiber: float = 0
     sugar: float = 0
+    saturatedFat: float = 0
+    cholesterolMg: float = 0
+    sodiumMg: float = 0
+    potassiumMg: float = 0
+    calciumMg: float = 0
+    ironMg: float = 0
+    magnesiumMg: float = 0
+    zincMg: float = 0
+    vitaminARaeMcg: float = 0
+    vitaminCMg: float = 0
+    vitaminDMcg: float = 0
+    vitaminEMg: float = 0
+    vitaminKMcg: float = 0
+    thiaminMg: float = 0
+    riboflavinMg: float = 0
+    niacinMg: float = 0
+    vitaminB6Mg: float = 0
+    folateMcg: float = 0
+    vitaminB12Mcg: float = 0
 
 
 class UnitNutritionPer100g(BaseModel):
@@ -526,6 +545,27 @@ class UnitNutritionPer100g(BaseModel):
     protein: float = 0
     carbs: float = 0
     fat: float = 0
+    fiber: float = 0
+    sugar: float = 0
+    saturatedFat: float = 0
+    cholesterolMg: float = 0
+    sodiumMg: float = 0
+    potassiumMg: float = 0
+    calciumMg: float = 0
+    ironMg: float = 0
+    magnesiumMg: float = 0
+    zincMg: float = 0
+    vitaminARaeMcg: float = 0
+    vitaminCMg: float = 0
+    vitaminDMcg: float = 0
+    vitaminEMg: float = 0
+    vitaminKMcg: float = 0
+    thiaminMg: float = 0
+    riboflavinMg: float = 0
+    niacinMg: float = 0
+    vitaminB6Mg: float = 0
+    folateMcg: float = 0
+    vitaminB12Mcg: float = 0
 
 
 class FoodItemResponse(BaseModel):
@@ -2944,6 +2984,25 @@ class FoodRecordItemNutrients(BaseModel):
     fat: float = 0
     fiber: float = 0
     sugar: float = 0
+    saturatedFat: float = 0
+    cholesterolMg: float = 0
+    sodiumMg: float = 0
+    potassiumMg: float = 0
+    calciumMg: float = 0
+    ironMg: float = 0
+    magnesiumMg: float = 0
+    zincMg: float = 0
+    vitaminARaeMcg: float = 0
+    vitaminCMg: float = 0
+    vitaminDMcg: float = 0
+    vitaminEMg: float = 0
+    vitaminKMcg: float = 0
+    thiaminMg: float = 0
+    riboflavinMg: float = 0
+    niacinMg: float = 0
+    vitaminB6Mg: float = 0
+    folateMcg: float = 0
+    vitaminB12Mcg: float = 0
 
 
 class FoodRecordItem(BaseModel):
@@ -3038,6 +3097,25 @@ async def save_food_record(
                 "fat": item.nutrients.fat,
                 "fiber": item.nutrients.fiber,
                 "sugar": item.nutrients.sugar,
+                "saturatedFat": item.nutrients.saturatedFat,
+                "cholesterolMg": item.nutrients.cholesterolMg,
+                "sodiumMg": item.nutrients.sodiumMg,
+                "potassiumMg": item.nutrients.potassiumMg,
+                "calciumMg": item.nutrients.calciumMg,
+                "ironMg": item.nutrients.ironMg,
+                "magnesiumMg": item.nutrients.magnesiumMg,
+                "zincMg": item.nutrients.zincMg,
+                "vitaminARaeMcg": item.nutrients.vitaminARaeMcg,
+                "vitaminCMg": item.nutrients.vitaminCMg,
+                "vitaminDMcg": item.nutrients.vitaminDMcg,
+                "vitaminEMg": item.nutrients.vitaminEMg,
+                "vitaminKMcg": item.nutrients.vitaminKMcg,
+                "thiaminMg": item.nutrients.thiaminMg,
+                "riboflavinMg": item.nutrients.riboflavinMg,
+                "niacinMg": item.nutrients.niacinMg,
+                "vitaminB6Mg": item.nutrients.vitaminB6Mg,
+                "folateMcg": item.nutrients.folateMcg,
+                "vitaminB12Mcg": item.nutrients.vitaminB12Mcg,
             },
         }
         for item in body.items

@@ -11,6 +11,27 @@ CREATE TABLE IF NOT EXISTS public.food_nutrition_library (
   protein_per_100g numeric NOT NULL DEFAULT 0,
   carbs_per_100g numeric NOT NULL DEFAULT 0,
   fat_per_100g numeric NOT NULL DEFAULT 0,
+  fiber_per_100g numeric NOT NULL DEFAULT 0,
+  sugar_per_100g numeric NOT NULL DEFAULT 0,
+  saturated_fat_per_100g numeric NOT NULL DEFAULT 0,
+  cholesterol_mg_per_100g numeric NOT NULL DEFAULT 0,
+  sodium_mg_per_100g numeric NOT NULL DEFAULT 0,
+  potassium_mg_per_100g numeric NOT NULL DEFAULT 0,
+  calcium_mg_per_100g numeric NOT NULL DEFAULT 0,
+  iron_mg_per_100g numeric NOT NULL DEFAULT 0,
+  magnesium_mg_per_100g numeric NOT NULL DEFAULT 0,
+  zinc_mg_per_100g numeric NOT NULL DEFAULT 0,
+  vitamin_a_rae_mcg_per_100g numeric NOT NULL DEFAULT 0,
+  vitamin_c_mg_per_100g numeric NOT NULL DEFAULT 0,
+  vitamin_d_mcg_per_100g numeric NOT NULL DEFAULT 0,
+  vitamin_e_mg_per_100g numeric NOT NULL DEFAULT 0,
+  vitamin_k_mcg_per_100g numeric NOT NULL DEFAULT 0,
+  thiamin_mg_per_100g numeric NOT NULL DEFAULT 0,
+  riboflavin_mg_per_100g numeric NOT NULL DEFAULT 0,
+  niacin_mg_per_100g numeric NOT NULL DEFAULT 0,
+  vitamin_b6_mg_per_100g numeric NOT NULL DEFAULT 0,
+  folate_mcg_per_100g numeric NOT NULL DEFAULT 0,
+  vitamin_b12_mcg_per_100g numeric NOT NULL DEFAULT 0,
   is_active boolean NOT NULL DEFAULT true,
   source text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
@@ -32,6 +53,27 @@ COMMENT ON COLUMN public.food_nutrition_library.kcal_per_100g IS '每100g热量�
 COMMENT ON COLUMN public.food_nutrition_library.protein_per_100g IS '每100g蛋白质（g）';
 COMMENT ON COLUMN public.food_nutrition_library.carbs_per_100g IS '每100g碳水（g）';
 COMMENT ON COLUMN public.food_nutrition_library.fat_per_100g IS '每100g脂肪（g）';
+COMMENT ON COLUMN public.food_nutrition_library.fiber_per_100g IS '每100g膳食纤维（g）';
+COMMENT ON COLUMN public.food_nutrition_library.sugar_per_100g IS '每100g糖（g）';
+COMMENT ON COLUMN public.food_nutrition_library.saturated_fat_per_100g IS '每100g饱和脂肪（g）';
+COMMENT ON COLUMN public.food_nutrition_library.cholesterol_mg_per_100g IS '每100g胆固醇（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.sodium_mg_per_100g IS '每100g钠（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.potassium_mg_per_100g IS '每100g钾（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.calcium_mg_per_100g IS '每100g钙（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.iron_mg_per_100g IS '每100g铁（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.magnesium_mg_per_100g IS '每100g镁（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.zinc_mg_per_100g IS '每100g锌（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.vitamin_a_rae_mcg_per_100g IS '每100g维生素A（RAE, mcg）';
+COMMENT ON COLUMN public.food_nutrition_library.vitamin_c_mg_per_100g IS '每100g维生素C（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.vitamin_d_mcg_per_100g IS '每100g维生素D（mcg）';
+COMMENT ON COLUMN public.food_nutrition_library.vitamin_e_mg_per_100g IS '每100g维生素E（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.vitamin_k_mcg_per_100g IS '每100g维生素K（mcg）';
+COMMENT ON COLUMN public.food_nutrition_library.thiamin_mg_per_100g IS '每100g维生素B1/硫胺素（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.riboflavin_mg_per_100g IS '每100g维生素B2/核黄素（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.niacin_mg_per_100g IS '每100g烟酸（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.vitamin_b6_mg_per_100g IS '每100g维生素B6（mg）';
+COMMENT ON COLUMN public.food_nutrition_library.folate_mcg_per_100g IS '每100g叶酸（DFE, mcg）';
+COMMENT ON COLUMN public.food_nutrition_library.vitamin_b12_mcg_per_100g IS '每100g维生素B12（mcg）';
 
 
 CREATE TABLE IF NOT EXISTS public.food_nutrition_aliases (

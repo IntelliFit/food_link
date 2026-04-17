@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, searchFoodNutritionCandidates } from '../../utils/api'
+import { AnalyzeResponse, FoodItem, MealType, Nutrients, UnitNutritionPer100g, saveFoodRecord, saveCriticalSamples, getAccessToken, createUserRecipe, updateAnalysisTaskResult, submitAnalyzeTask, searchFoodNutritionCandidates } from '../../utils/api'
 
 import './index.scss'
 
@@ -48,9 +48,75 @@ interface NutritionItem {
   unitProteinPer100g: number
   unitCarbsPer100g: number
   unitFatPer100g: number
+  nutrients: Nutrients
+  unitNutrientsPer100g: UnitNutritionPer100g
   matchedFoodName?: string | null
   isUnresolved?: boolean
   resolveStatus?: string | null
+}
+
+const createEmptyNutrients = (): Nutrients => ({
+  calories: 0,
+  protein: 0,
+  carbs: 0,
+  fat: 0,
+  fiber: 0,
+  sugar: 0,
+  saturatedFat: 0,
+  cholesterolMg: 0,
+  sodiumMg: 0,
+  potassiumMg: 0,
+  calciumMg: 0,
+  ironMg: 0,
+  magnesiumMg: 0,
+  zincMg: 0,
+  vitaminARaeMcg: 0,
+  vitaminCMg: 0,
+  vitaminDMcg: 0,
+  vitaminEMg: 0,
+  vitaminKMcg: 0,
+  thiaminMg: 0,
+  riboflavinMg: 0,
+  niacinMg: 0,
+  vitaminB6Mg: 0,
+  folateMcg: 0,
+  vitaminB12Mcg: 0
+})
+
+const createUnitNutrients = (unit?: Partial<UnitNutritionPer100g> | null): UnitNutritionPer100g => ({
+  ...createEmptyNutrients(),
+  ...(unit || {})
+})
+
+const scaleNutrientsByWeight = (weight: number, unit: UnitNutritionPer100g): Nutrients => {
+  const factor = (Number.isFinite(weight) ? weight : 0) / 100
+  return {
+    calories: Math.round(unit.calories * factor * 100) / 100,
+    protein: Math.round(unit.protein * factor * 100) / 100,
+    carbs: Math.round(unit.carbs * factor * 100) / 100,
+    fat: Math.round(unit.fat * factor * 100) / 100,
+    fiber: Math.round(unit.fiber * factor * 100) / 100,
+    sugar: Math.round(unit.sugar * factor * 100) / 100,
+    saturatedFat: Math.round(unit.saturatedFat * factor * 100) / 100,
+    cholesterolMg: Math.round(unit.cholesterolMg * factor * 100) / 100,
+    sodiumMg: Math.round(unit.sodiumMg * factor * 100) / 100,
+    potassiumMg: Math.round(unit.potassiumMg * factor * 100) / 100,
+    calciumMg: Math.round(unit.calciumMg * factor * 100) / 100,
+    ironMg: Math.round(unit.ironMg * factor * 100) / 100,
+    magnesiumMg: Math.round(unit.magnesiumMg * factor * 100) / 100,
+    zincMg: Math.round(unit.zincMg * factor * 100) / 100,
+    vitaminARaeMcg: Math.round(unit.vitaminARaeMcg * factor * 100) / 100,
+    vitaminCMg: Math.round(unit.vitaminCMg * factor * 100) / 100,
+    vitaminDMcg: Math.round(unit.vitaminDMcg * factor * 100) / 100,
+    vitaminEMg: Math.round(unit.vitaminEMg * factor * 100) / 100,
+    vitaminKMcg: Math.round(unit.vitaminKMcg * factor * 100) / 100,
+    thiaminMg: Math.round(unit.thiaminMg * factor * 100) / 100,
+    riboflavinMg: Math.round(unit.riboflavinMg * factor * 100) / 100,
+    niacinMg: Math.round(unit.niacinMg * factor * 100) / 100,
+    vitaminB6Mg: Math.round(unit.vitaminB6Mg * factor * 100) / 100,
+    folateMcg: Math.round(unit.folateMcg * factor * 100) / 100,
+    vitaminB12Mcg: Math.round(unit.vitaminB12Mcg * factor * 100) / 100
+  }
 }
 
 export default function ResultPage() {
@@ -101,29 +167,52 @@ export default function ResultPage() {
     return items.map((item, index) => {
       const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
       const safeWeight = Number.isFinite(item.estimatedWeightGrams) ? item.estimatedWeightGrams : 0
-      const unitCaloriesPer100g = item.unit_nutrition_per_100g?.calories
-        ?? (safeWeight > 0 ? (item.nutrients.calories * 100) / safeWeight : 0)
-      const unitProteinPer100g = item.unit_nutrition_per_100g?.protein
-        ?? (safeWeight > 0 ? (item.nutrients.protein * 100) / safeWeight : 0)
-      const unitCarbsPer100g = item.unit_nutrition_per_100g?.carbs
-        ?? (safeWeight > 0 ? (item.nutrients.carbs * 100) / safeWeight : 0)
-      const unitFatPer100g = item.unit_nutrition_per_100g?.fat
-        ?? (safeWeight > 0 ? (item.nutrients.fat * 100) / safeWeight : 0)
+      const fallbackUnit = createUnitNutrients({
+        calories: safeWeight > 0 ? (item.nutrients.calories * 100) / safeWeight : 0,
+        protein: safeWeight > 0 ? (item.nutrients.protein * 100) / safeWeight : 0,
+        carbs: safeWeight > 0 ? (item.nutrients.carbs * 100) / safeWeight : 0,
+        fat: safeWeight > 0 ? (item.nutrients.fat * 100) / safeWeight : 0,
+        fiber: safeWeight > 0 ? (item.nutrients.fiber * 100) / safeWeight : 0,
+        sugar: safeWeight > 0 ? (item.nutrients.sugar * 100) / safeWeight : 0,
+        saturatedFat: safeWeight > 0 ? (item.nutrients.saturatedFat * 100) / safeWeight : 0,
+        cholesterolMg: safeWeight > 0 ? (item.nutrients.cholesterolMg * 100) / safeWeight : 0,
+        sodiumMg: safeWeight > 0 ? (item.nutrients.sodiumMg * 100) / safeWeight : 0,
+        potassiumMg: safeWeight > 0 ? (item.nutrients.potassiumMg * 100) / safeWeight : 0,
+        calciumMg: safeWeight > 0 ? (item.nutrients.calciumMg * 100) / safeWeight : 0,
+        ironMg: safeWeight > 0 ? (item.nutrients.ironMg * 100) / safeWeight : 0,
+        magnesiumMg: safeWeight > 0 ? (item.nutrients.magnesiumMg * 100) / safeWeight : 0,
+        zincMg: safeWeight > 0 ? (item.nutrients.zincMg * 100) / safeWeight : 0,
+        vitaminARaeMcg: safeWeight > 0 ? (item.nutrients.vitaminARaeMcg * 100) / safeWeight : 0,
+        vitaminCMg: safeWeight > 0 ? (item.nutrients.vitaminCMg * 100) / safeWeight : 0,
+        vitaminDMcg: safeWeight > 0 ? (item.nutrients.vitaminDMcg * 100) / safeWeight : 0,
+        vitaminEMg: safeWeight > 0 ? (item.nutrients.vitaminEMg * 100) / safeWeight : 0,
+        vitaminKMcg: safeWeight > 0 ? (item.nutrients.vitaminKMcg * 100) / safeWeight : 0,
+        thiaminMg: safeWeight > 0 ? (item.nutrients.thiaminMg * 100) / safeWeight : 0,
+        riboflavinMg: safeWeight > 0 ? (item.nutrients.riboflavinMg * 100) / safeWeight : 0,
+        niacinMg: safeWeight > 0 ? (item.nutrients.niacinMg * 100) / safeWeight : 0,
+        vitaminB6Mg: safeWeight > 0 ? (item.nutrients.vitaminB6Mg * 100) / safeWeight : 0,
+        folateMcg: safeWeight > 0 ? (item.nutrients.folateMcg * 100) / safeWeight : 0,
+        vitaminB12Mcg: safeWeight > 0 ? (item.nutrients.vitaminB12Mcg * 100) / safeWeight : 0
+      })
+      const unitNutrientsPer100g = createUnitNutrients(item.unit_nutrition_per_100g || fallbackUnit)
+      const nutrients = scaleNutrientsByWeight(safeWeight, unitNutrientsPer100g)
       return {
         id: index + 1,
         name: item.name,
         weight: safeWeight,
         originalWeight: aiWeight,
-        calorie: calculateByUnit(safeWeight, unitCaloriesPer100g),
-        unitCaloriesPer100g,
+        calorie: nutrients.calories,
+        unitCaloriesPer100g: unitNutrientsPer100g.calories,
         intake: safeWeight,
         ratio: 100,
-        protein: calculateByUnit(safeWeight, unitProteinPer100g),
-        carbs: calculateByUnit(safeWeight, unitCarbsPer100g),
-        fat: calculateByUnit(safeWeight, unitFatPer100g),
-        unitProteinPer100g,
-        unitCarbsPer100g,
-        unitFatPer100g,
+        protein: nutrients.protein,
+        carbs: nutrients.carbs,
+        fat: nutrients.fat,
+        unitProteinPer100g: unitNutrientsPer100g.protein,
+        unitCarbsPer100g: unitNutrientsPer100g.carbs,
+        unitFatPer100g: unitNutrientsPer100g.fat,
+        nutrients,
+        unitNutrientsPer100g,
         matchedFoodName: item.matched_food_name,
         isUnresolved: item.is_unresolved,
         resolveStatus: item.resolve_status
@@ -220,6 +309,7 @@ export default function ResultPage() {
             ...item,
             weight: newWeight,
             intake: newIntake,
+            nutrients: scaleNutrientsByWeight(newWeight, item.unitNutrientsPer100g),
             // 由每100g单位值重新计算，避免累计误差
             calorie: calculateByUnit(newWeight, item.unitCaloriesPer100g),
             protein: calculateByUnit(newWeight, item.unitProteinPer100g),
@@ -312,14 +402,8 @@ export default function ResultPage() {
                         name: item.name,
                         estimatedWeightGrams: item.weight,
                         originalWeightGrams: item.originalWeight,
-                        nutrients: {
-                          calories: item.calorie,
-                          protein: item.protein,
-                          carbs: item.carbs,
-                          fat: item.fat,
-                          fiber: 0,
-                          sugar: 0
-                        }
+                        nutrients: item.nutrients,
+                        unit_nutrition_per_100g: item.unitNutrientsPer100g
                       })),
                       pfc_ratio_comment: pfcRatioComment || undefined,
                       absorption_notes: absorptionNotes || undefined,
@@ -375,6 +459,8 @@ export default function ResultPage() {
           if (x.id !== id) return x
           return {
             ...x,
+            nutrients: scaleNutrientsByWeight(x.weight, createUnitNutrients(selected.unit_nutrition_per_100g)),
+            unitNutrientsPer100g: createUnitNutrients(selected.unit_nutrition_per_100g),
             matchedFoodName: selected.canonical_name,
             unitCaloriesPer100g: selected.unit_nutrition_per_100g.calories,
             unitProteinPer100g: selected.unit_nutrition_per_100g.protein,
@@ -417,6 +503,8 @@ export default function ResultPage() {
             if (x.id !== id) return x
             return {
               ...x,
+              nutrients: scaleNutrientsByWeight(x.weight, createUnitNutrients({ calories: value })),
+              unitNutrientsPer100g: createUnitNutrients({ calories: value }),
               unitCaloriesPer100g: value,
               calorie: calculateByUnit(x.weight, value),
               unitProteinPer100g: 0,
@@ -476,14 +564,7 @@ export default function ResultPage() {
             weight: item.weight,
             ratio: item.ratio,
             intake: item.intake,
-            nutrients: {
-              calories: item.calorie,
-              protein: item.protein,
-              carbs: item.carbs,
-              fat: item.fat,
-              fiber: 0,
-              sugar: 0
-            }
+            nutrients: item.nutrients
           })),
           total_calories: nutritionStats.calories,
           total_protein: nutritionStats.protein,
@@ -679,14 +760,7 @@ export default function ResultPage() {
               weight: nutritionItem.weight,
               ratio: nutritionItem.ratio,
               intake: nutritionItem.intake,
-              nutrients: {
-                calories: nutritionItem.calorie,
-                protein: nutritionItem.protein,
-                carbs: nutritionItem.carbs,
-                fat: nutritionItem.fat,
-                fiber: 0,
-                sugar: 0
-              }
+              nutrients: nutritionItem.nutrients
             }))
 
             await createUserRecipe({
@@ -766,6 +840,8 @@ export default function ResultPage() {
         unitProteinPer100g: 0,
         unitCarbsPer100g: 0,
         unitFatPer100g: 0,
+        nutrients: createEmptyNutrients(),
+        unitNutrientsPer100g: createUnitNutrients(),
         matchedFoodName: null,
         isUnresolved: false,
         resolveStatus: 'manual'

@@ -63,6 +63,25 @@ export interface Nutrients {
   fat: number
   fiber: number
   sugar: number
+  saturatedFat: number
+  cholesterolMg: number
+  sodiumMg: number
+  potassiumMg: number
+  calciumMg: number
+  ironMg: number
+  magnesiumMg: number
+  zincMg: number
+  vitaminARaeMcg: number
+  vitaminCMg: number
+  vitaminDMcg: number
+  vitaminEMg: number
+  vitaminKMcg: number
+  thiaminMg: number
+  riboflavinMg: number
+  niacinMg: number
+  vitaminB6Mg: number
+  folateMcg: number
+  vitaminB12Mcg: number
 }
 
 export interface UnitNutritionPer100g {
@@ -70,6 +89,27 @@ export interface UnitNutritionPer100g {
   protein: number
   carbs: number
   fat: number
+  fiber: number
+  sugar: number
+  saturatedFat: number
+  cholesterolMg: number
+  sodiumMg: number
+  potassiumMg: number
+  calciumMg: number
+  ironMg: number
+  magnesiumMg: number
+  zincMg: number
+  vitaminARaeMcg: number
+  vitaminCMg: number
+  vitaminDMcg: number
+  vitaminEMg: number
+  vitaminKMcg: number
+  thiaminMg: number
+  riboflavinMg: number
+  niacinMg: number
+  vitaminB6Mg: number
+  folateMcg: number
+  vitaminB12Mcg: number
 }
 
 

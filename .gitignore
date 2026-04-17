@@ -85,3 +85,10 @@ coverage/
 *.temp
 .cache/
 .env.development
+backend/database/*.json
+backend/database/usda_import.sql
+backend/database/usda_alias_preview.sql
+backend/database/top_missing*.json
+backend/database/usda_*.json
+backend/database/top_missing*.sql
+backend/scripts/__pycache__/
