@@ -6,6 +6,7 @@
 
 ## 2026-04-22
 
+- 🔧 refactor: 新上传的 COS 对象 key 改为按年月日分层；食物图使用 `YYYY/MM/DD/uuid`，头像与体检报告使用 `user_id/YYYY/MM/DD/uuid`，历史数据保持兼容不迁移 `backend/database.py`
 - 🔒 security: 固化 `health-reports` 为代码级私有桶，不再依赖环境变量开关，避免线上误配置导致报告图被公网暴露 `backend/cos_storage.py`
 - 🔧 chore: 新增统一 COS 存储适配层并将后端上传/删除切到腾讯云 COS，公开桶统一返回 CDN 地址，`health-reports` 改为私有 key + 签名访问 `backend/cos_storage.py` `backend/database.py` `backend/main.py` `backend/worker.py`
 - 🔧 refactor: 压缩、孤儿清理、存储巡检脚本改为兼容 COS 与旧 Supabase URL，避免迁移后脚本仍按旧路径规则工作 `backend/image_compressor.py` `backend/compress_food_images.py` `backend/cleanup_orphans.py` `backend/check_storage.py` `backend/check_avatars.py`

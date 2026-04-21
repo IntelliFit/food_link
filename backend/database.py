@@ -30,6 +30,19 @@ FOOD_ANALYZE_BUCKET = FOOD_IMAGES_BUCKET
 _supabase_client = None
 
 
+def _current_storage_date_prefix() -> str:
+    """
+    统一使用中国自然日为对象 key 分层，避免新上传文件继续平铺在桶根目录。
+    目录格式：YYYY/MM/DD
+    """
+    return datetime.now(CHINA_TZ).strftime("%Y/%m/%d")
+
+
+def _build_bucket_key(*parts: str) -> str:
+    clean_parts = [str(part or "").strip("/") for part in parts if str(part or "").strip("/")]
+    return "/".join(clean_parts)
+
+
 def get_supabase_client():
     """
     获取 Supabase 客户端（延迟初始化）
@@ -1669,7 +1682,7 @@ def list_comment_tasks_by_user_sync(
 def upload_health_report_image(user_id: str, base64_image: str) -> Dict[str, str]:
     """
     将体检报告图片上传到 COS。
-    路径：health-reports/{user_id}/{uuid}.jpg
+    路径：health-reports/{user_id}/YYYY/MM/DD/{uuid}.jpg
     返回短期预览 URL 与内部存储 key。
     """
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
@@ -1677,7 +1690,7 @@ def upload_health_report_image(user_id: str, base64_image: str) -> Dict[str, str
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
-    path = f"{user_id}/{uuid.uuid4().hex}.jpg"
+    path = _build_bucket_key(user_id, _current_storage_date_prefix(), f"{uuid.uuid4().hex}.jpg")
     uploaded = upload_and_build_access(
         HEALTH_REPORTS_BUCKET,
         path,
@@ -1698,7 +1711,7 @@ def upload_food_analyze_image_bytes(
 ) -> str:
     """
     将食物分析图片字节上传到 COS，返回公网可访问的 URL。
-    路径：food-images/{uuid}.{ext}
+    路径：food-images/YYYY/MM/DD/{uuid}.{ext}
     """
     if not file_bytes:
         raise ValueError("图片文件为空")
@@ -1709,7 +1722,7 @@ def upload_food_analyze_image_bytes(
     if not re.fullmatch(r"\.[a-z0-9]{1,8}", safe_ext):
         safe_ext = ".jpg"
 
-    path = f"{uuid.uuid4().hex}{safe_ext}"
+    path = _build_bucket_key(_current_storage_date_prefix(), f"{uuid.uuid4().hex}{safe_ext}")
     safe_content_type = (content_type or "image/jpeg").strip() or "image/jpeg"
 
     try:
@@ -1734,7 +1747,7 @@ def upload_food_analyze_image_bytes(
 def upload_food_analyze_image(base64_image: str) -> str:
     """
     将食物分析图片上传到 COS，返回公网可访问的 URL。
-    路径：food-images/{uuid}.jpg
+    路径：food-images/YYYY/MM/DD/{uuid}.jpg
     """
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
@@ -1747,14 +1760,14 @@ def upload_food_analyze_image(base64_image: str) -> str:
 def upload_user_avatar(user_id: str, base64_image: str) -> str:
     """
     将用户头像上传到 COS，返回公网可访问的 URL。
-    路径：user-avatars/{user_id}/{uuid}.jpg
+    路径：user-avatars/{user_id}/YYYY/MM/DD/{uuid}.jpg
     """
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
-    path = f"{user_id}/{uuid.uuid4().hex}.jpg"
+    path = _build_bucket_key(user_id, _current_storage_date_prefix(), f"{uuid.uuid4().hex}.jpg")
     uploaded = upload_and_build_access(
         USER_AVATARS_BUCKET,
         path,

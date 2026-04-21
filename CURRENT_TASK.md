@@ -9,6 +9,7 @@
   - `backend/database.py`
     - 上传食物图、头像、体检报告改为走 COS
     - 删除图片改为从 URL/key 解析对象 key 后删除 COS 对象
+    - 新上传对象 key 改为按中国自然日分层：食物图 `YYYY/MM/DD/...`；头像/报告 `user_id/YYYY/MM/DD/...`
   - `backend/main.py`
     - 健康报告上传接口返回 `imageUrl + storageKey`
     - OCR / 异步提取任务支持传 `storageKey`
