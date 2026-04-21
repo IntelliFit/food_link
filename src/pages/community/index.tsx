@@ -938,7 +938,7 @@ function CommunityPage() {
     })
   }
 
-  /** 点击帖子图片/热量/营养进入识别记录详情（与首页「今日餐食」同入口：`ui=home` 样式一致） */
+  /** 点击帖子图片/热量/营养进入识别记录详情 */
   const handleViewDetail = (record: CommunityFeedItem['record']) => {
     if (!record.id) {
       Taro.showToast({ title: '记录 ID 缺失', icon: 'none' })
@@ -946,7 +946,7 @@ function CommunityPage() {
     }
     try {
       Taro.navigateTo({
-        url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}&ui=home`
+        url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}`
       })
     } catch (e) {
       Taro.showToast({ title: '打开详情失败', icon: 'none' })

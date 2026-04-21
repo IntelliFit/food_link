@@ -192,7 +192,7 @@ function InteractionFeedDetailPage() {
 
   const handleViewDetail = useCallback((id: string) => {
     if (!id) return
-    Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(id)}&ui=home` })
+    Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(id)}` })
   }, [])
 
   return (

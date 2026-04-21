@@ -17,7 +17,6 @@ import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } fr
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import { withAuth } from '../../utils/withAuth'
-import CustomNavBar, { getNavBarHeight } from '../../components/CustomNavBar'
 
 import './index.scss'
 
@@ -396,9 +395,6 @@ function RecordDetailPage() {
   }, [editItems])
 
   /** 分享海报为图片（须在 loading/record 提前 return 之前声明，避免 Hooks 数量不一致） */
-  /** 与系统导航栏同高的占位，配合 navigationStyle: custom */
-  const navBarTotalHeightPx = React.useMemo(() => getNavBarHeight(), [])
-
   const handleSharePosterImage = useCallback(() => {
     if (!posterImageUrl) return
     // showShareImageMenu：微信基础库 2.14.3+，弹出转发图片菜单（非小程序卡片）
@@ -415,17 +411,7 @@ function RecordDetailPage() {
   if (loading || !record) {
     return (
       <View className='record-detail-root'>
-        <CustomNavBar
-          title='识别记录详情'
-          showBack
-          background='#ffffff'
-          color='#111827'
-          className='record-detail-fixed-nav'
-        />
-        <View
-          className='record-detail-below-nav record-detail-loading-placeholder'
-          style={{ paddingTop: `${navBarTotalHeightPx}px` }}
-        >
+        <View className='record-detail-below-nav record-detail-loading-placeholder'>
           <View className='empty-tip'>{loading ? <View className='loading-spinner' /> : '记录不存在'}</View>
         </View>
       </View>
@@ -692,18 +678,11 @@ function RecordDetailPage() {
 
   return (
     <View className='record-detail-root'>
-      <CustomNavBar
-        title='识别记录详情'
-        showBack
-        background='#ffffff'
-        color='#111827'
-        className='record-detail-fixed-nav'
-      />
       {/*
         海报预览/离屏 Canvas 勿放在 ScrollView 内：真机上 fixed 全屏层会相对滚动容器错位；
         与首页「今日小结」分享层结构一致（根节点下独立一层）
       */}
-      <View className='record-detail-below-nav' style={{ paddingTop: `${navBarTotalHeightPx}px` }}>
+      <View className='record-detail-below-nav'>
       <ScrollView className='record-detail-page' scrollY>
       <View className='record-detail-body'>
         <View className='detail-header'>

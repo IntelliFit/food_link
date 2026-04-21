@@ -914,7 +914,7 @@ function ResultPage() {
         })
         setTimeout(() => {
           Taro.navigateTo({
-            url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}&ui=home`
+            url: `/pages/record-detail/index?id=${encodeURIComponent(saveResult.id)}`
           })
         }, 500)
       } catch (e: any) {
@@ -952,7 +952,7 @@ function ResultPage() {
         return
       }
       Taro.navigateTo({
-        url: `/pages/record-detail/index?id=${encodeURIComponent(String(rid))}&ui=home`
+        url: `/pages/record-detail/index?id=${encodeURIComponent(String(rid))}`
       })
     } catch {
       Taro.showToast({ title: '无法打开记录', icon: 'none' })

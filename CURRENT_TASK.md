@@ -1,5 +1,9 @@
 # CURRENT_TASK
 
+- Task: 「识别记录详情」与「当天饮食记录」一致使用微信系统导航栏与默认返回
+- Status: done（`navigationStyle: custom` 已移除；页面内 `CustomNavBar` 已删；开发联调已 `npm run dev:restart`）
+- Scope: `src/pages/record-detail/index.config.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+
 - Task: 首页修改食物参数优化（消除 loading + 支持编辑餐次/饮食目标/运动时机）
 - Status: done（前后端代码已落地，构建通过，开发者工具截图因 mrc 超时未完成）
 - Scope:

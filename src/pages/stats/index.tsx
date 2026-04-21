@@ -36,14 +36,15 @@ const MEAL_ICONS = {
   snack: IconSnack
 } as const
 
+/** 与首页低饱和风格一致：主餐用时间轴绿 #5cb896，加餐用柔和紫（对齐首页加餐色并降饱和） */
 const MEAL_ICON_COLORS: Record<string, string> = {
-  breakfast: '#f59e0b',
-  morning_snack: '#7b61ff',
-  lunch: '#00bc7d',
-  afternoon_snack: '#ad46ff',
-  dinner: '#2b7fff',
-  evening_snack: '#5b21b6',
-  snack: '#ad46ff'
+  breakfast: '#5cb896',
+  morning_snack: '#9b87c0',
+  lunch: '#5cb896',
+  afternoon_snack: '#9b87c0',
+  dinner: '#5cb896',
+  evening_snack: '#9b87c0',
+  snack: '#9b87c0'
 }
 
 function formatLocalDate(date: Date = new Date()): string {
@@ -621,7 +622,7 @@ function StatsPage() {
                 className='chart-switch'
                 checked={showCalories}
                 onChange={(v) => setShowCalories(Boolean(typeof v === 'object' ? v.detail?.value : v))}
-                style={{ '--switch-checked-background-color': '#00bc7d' } as CSSProperties}
+                style={{ '--switch-checked-background-color': '#5cb896' } as CSSProperties}
               />
             </View>
           </View>

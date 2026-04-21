@@ -6,17 +6,7 @@
   box-sizing: border-box;
 }
 
-/* 与系统导航栏视觉接近：固定顶栏，分享全屏层打开时不再露出第二条「标题栏」 */
-.record-detail-fixed-nav.custom-nav-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  border-bottom: 1rpx solid rgba(15, 23, 42, 0.08);
-}
-
-/* 顶栏占位后的主区域（paddingTop 由 JS 注入导航总高） */
+/* 主内容区（与 day-record 一致：微信默认导航栏，无自定义顶栏占位） */
 .record-detail-below-nav {
   box-sizing: border-box;
 }

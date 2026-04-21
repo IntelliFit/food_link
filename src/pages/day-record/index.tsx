@@ -159,7 +159,7 @@ function DayRecordPage() {
 
   const openRecordDetail = (recordId: string) => {
     Taro.navigateTo({
-      url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}&ui=home`
+      url: `/pages/record-detail/index?id=${encodeURIComponent(recordId)}`
     })
   }
 
