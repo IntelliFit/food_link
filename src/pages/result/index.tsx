@@ -23,6 +23,8 @@ import { foodRecordFromSavePayload } from '../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import { withAuth } from '../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../utils/home-dashboard-local-cache'
+import { formatDateKey } from '../index/utils/helpers'
 
 import './index.scss'
 
@@ -881,6 +883,7 @@ function ResultPage() {
         } catch {
           /* ignore */
         }
+        void refreshHomeDashboardLocalSnapshotFromCloud(formatDateKey(new Date()))
         const tidForCommit = sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
         if (tidForCommit) {
           try {

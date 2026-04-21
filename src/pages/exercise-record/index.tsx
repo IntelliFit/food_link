@@ -13,6 +13,8 @@ import {
 } from '../../utils/api'
 import { formatDateKey } from '../index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../utils/home-events'
+import { HOME_DASHBOARD_LOCAL_CACHE_KEY } from '../../utils/home-dashboard-local-cache'
+import { mapCalendarDateToApi } from '../../utils/api'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -112,13 +114,13 @@ function patchHomeDashboardCache(
   patch: { exerciseBurnedKcal: number }
 ): void {
   try {
-    const key = 'home_dashboard_local_cache_v3'
-    const raw = Taro.getStorageSync(key) as unknown
+    const raw = Taro.getStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY) as unknown
     if (!Array.isArray(raw)) return
-    const idx = raw.findIndex((item: { date?: string }) => item.date === date)
+    const norm = mapCalendarDateToApi(date) || date
+    const idx = raw.findIndex((item: { date?: string }) => item.date === date || item.date === norm)
     if (idx === -1) return
     raw[idx] = { ...raw[idx], ...patch, updatedAt: Date.now() }
-    Taro.setStorageSync(key, raw)
+    Taro.setStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY, raw)
   } catch {
     // ignore
   }

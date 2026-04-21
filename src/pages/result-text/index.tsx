@@ -5,6 +5,8 @@ import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord } from '../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../utils/home-dashboard-local-cache'
+import { formatDateKey } from '../index/utils/helpers'
 
 import './index.scss'
 
@@ -279,6 +281,7 @@ function ResultTextPage() {
       } catch {
         /* ignore */
       }
+      void refreshHomeDashboardLocalSnapshotFromCloud(formatDateKey(new Date()))
 
       if (saveOnly) {
         Taro.showToast({ title: '记录成功', icon: 'success' })

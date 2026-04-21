@@ -12,6 +12,7 @@ import {
 } from '../../utils/api'
 import { withAuth } from '../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../utils/home-dashboard-local-cache'
 import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import './index.scss'
 
@@ -408,10 +409,11 @@ function RecordManualPage() {
       } catch {
         /* ignore */
       }
+      const today = formatDateKey(new Date())
+      void refreshHomeDashboardLocalSnapshotFromCloud(today)
 
       Taro.showToast({ title: '记录成功', icon: 'success' })
       setTimeout(() => {
-        const today = formatDateKey(new Date())
         Taro.redirectTo({ url: `/pages/day-record/index?date=${today}` }).catch(() => {
           Taro.navigateTo({ url: `/pages/day-record/index?date=${today}` })
         })

@@ -46,6 +46,13 @@ import {
   HOME_INTAKE_DATA_CHANGED_EVENT,
   HOME_DASHBOARD_CACHE_TTL_MS
 } from '../../utils/home-events'
+import {
+  DEFAULT_EXPIRY_SUMMARY,
+  getStoredHomeDashboardSnapshots,
+  getStoredHomeDashboardSnapshotByDate,
+  saveHomeDashboardSnapshot,
+  type HomeDashboardLocalSnapshot
+} from '../../utils/home-dashboard-local-cache'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -108,18 +115,6 @@ function formatHomeMealPickerEntry(entry: HomeMealRecordEntry): string {
 }
 
 const HOME_MEAL_ACTION_SHEET_MAX = 6
-const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache_v4'
-const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 60
-
-interface HomeDashboardLocalSnapshot {
-  date: string
-  updatedAt: number
-  intakeData: HomeIntakeData
-  meals: HomeMealItem[]
-  expirySummary: HomeFoodExpirySummary
-  exerciseBurnedKcal: number
-  achievement: HomeAchievement
-}
 
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
 function getInviteCodeFromUserId(userId: string): string {
@@ -172,70 +167,6 @@ function migrateLegacy2025BodyMetricKeys(metrics: BodyMetricsStorage): BodyMetri
     saveBodyMetrics(next)
   }
   return next
-}
-
-const DEFAULT_EXPIRY_SUMMARY: HomeFoodExpirySummary = {
-  pendingCount: 0,
-  soonCount: 0,
-  overdueCount: 0,
-  items: []
-}
-
-function getStoredHomeDashboardSnapshots(): HomeDashboardLocalSnapshot[] {
-  try {
-    const raw = Taro.getStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY) as unknown
-    if (!Array.isArray(raw)) return []
-    const valid = raw
-      .filter((item): item is HomeDashboardLocalSnapshot => {
-        if (!item || typeof item !== 'object') return false
-        const date = (item as { date?: unknown }).date
-        if (typeof date !== 'string' || date.length === 0) return false
-        // meals 为可选数组；protein/carbs/fat/description 在 HomeMealItem 中均为可选字段，
-        // 旧缓存缺少这些字段是合法的，不应因此过滤掉整条快照
-        return true
-      })
-      .map((item) => ({
-        ...item,
-        meals: stripMealFullRecords(item.meals || [])
-      }))
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-      .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
-    return valid
-  } catch {
-    return []
-  }
-}
-
-function getStoredHomeDashboardSnapshotByDate(date: string): HomeDashboardLocalSnapshot | null {
-  const normalizedDate = mapCalendarDateToApi(date) || date
-  const snapshots = getStoredHomeDashboardSnapshots()
-  return snapshots.find((item) => item.date === normalizedDate) || null
-}
-
-function stripMealFullRecords(meals: HomeMealItem[]): HomeMealItem[] {
-  return meals.map(meal => ({
-    ...meal,
-    meal_record_entries: meal.meal_record_entries?.map(entry => {
-      const { full_record, ...rest } = entry as HomeMealRecordEntry & { full_record?: unknown }
-      return rest
-    }) || null
-  }))
-}
-
-function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot): void {
-  const cleanedSnapshot = {
-    ...snapshot,
-    meals: stripMealFullRecords(snapshot.meals || [])
-  }
-  const current = getStoredHomeDashboardSnapshots().filter((item) => item.date !== cleanedSnapshot.date)
-  const next = [cleanedSnapshot, ...current]
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-    .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
-  try {
-    Taro.setStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY, next)
-  } catch {
-    // ignore
-  }
 }
 
 function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {

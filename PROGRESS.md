@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-04-22
+
+- 🐛 fix: 拍照/文字/手动保存饮食记录后立即请求当日 dashboard 并写入 `home_dashboard_local_cache_v4`，回首页本地快照即时含新摄入与餐次；快照读写抽至 `src/utils/home-dashboard-local-cache.ts`，运动页补丁缓存键对齐 v4 `src/pages/exercise-record/index.tsx`
+
 ## 2026-04-13
 
 - ⚡ perf: 首页仪表盘改为“本地快照优先 + 云端静默同步”：新增按日期缓存（最近60条），页面与切日优先秒开本地数据；云端返回后仅在差异时覆盖本地缓存，降低刷新白屏与加载等待 `src/pages/index/index.tsx`
