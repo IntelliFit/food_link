@@ -1,6 +1,6 @@
 """
 数据库操作模块
-使用 Supabase 进行数据操作
+使用 Supabase 进行数据库操作，对象存储走腾讯云 COS。
 """
 from supabase import create_client
 import os
@@ -11,17 +11,20 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
 
+from cos_storage import (
+    FOOD_IMAGES_BUCKET,
+    HEALTH_REPORTS_BUCKET,
+    USER_AVATARS_BUCKET,
+    delete_object,
+    resolve_object_key,
+    upload_and_build_access,
+)
+
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
 
-# 体检报告图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
-HEALTH_REPORTS_BUCKET = "health-reports"
-
-# 食物分析图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
-FOOD_ANALYZE_BUCKET = "food-images"
-
-# 用户头像存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
-USER_AVATARS_BUCKET = "user-avatars"
+# 食物分析图片存储桶名
+FOOD_ANALYZE_BUCKET = FOOD_IMAGES_BUCKET
 
 # 延迟初始化 Supabase 客户端
 _supabase_client = None
@@ -1663,44 +1666,29 @@ def list_comment_tasks_by_user_sync(
         raise
 
 
-def upload_health_report_image(user_id: str, base64_image: str) -> str:
+def upload_health_report_image(user_id: str, base64_image: str) -> Dict[str, str]:
     """
-    将体检报告图片上传到 Supabase Storage，返回公网可访问的 URL。
+    将体检报告图片上传到 COS。
     路径：health-reports/{user_id}/{uuid}.jpg
-    需先在 Supabase Dashboard → Storage 创建 bucket「health-reports」并设为 Public。
+    返回短期预览 URL 与内部存储 key。
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
     path = f"{user_id}/{uuid.uuid4().hex}.jpg"
-    supabase.storage.from_(HEALTH_REPORTS_BUCKET).upload(
+    uploaded = upload_and_build_access(
+        HEALTH_REPORTS_BUCKET,
         path,
         file_bytes,
-        {"content-type": "image/jpeg", "upsert": "true"},
+        content_type="image/jpeg",
+        expires=3600,
     )
-    # 公网 URL：https://xxx.supabase.co/storage/v1/object/public/health-reports/...
-    result = supabase.storage.from_(HEALTH_REPORTS_BUCKET).get_public_url(path)
-    if isinstance(result, dict):
-        return result.get("publicUrl") or result.get("public_url") or ""
-    if hasattr(result, "public_url"):
-        return getattr(result, "public_url", "")
-    if hasattr(result, "publicUrl"):
-        return getattr(result, "publicUrl", "")
-    return str(result)
-
-
-def _resolve_public_storage_url(result: Any) -> str:
-    if isinstance(result, dict):
-        return (result.get("publicUrl") or result.get("public_url") or "").strip()
-    if hasattr(result, "public_url"):
-        return str(getattr(result, "public_url", "") or "").strip()
-    if hasattr(result, "publicUrl"):
-        return str(getattr(result, "publicUrl", "") or "").strip()
-    return str(result or "").strip()
+    return {
+        "storageKey": uploaded["key"],
+        "imageUrl": uploaded["url"],
+    }
 
 
 def upload_food_analyze_image_bytes(
@@ -1709,11 +1697,9 @@ def upload_food_analyze_image_bytes(
     content_type: str = "image/jpeg",
 ) -> str:
     """
-    将食物分析图片字节上传到 Supabase Storage，返回公网可访问的 URL。
+    将食物分析图片字节上传到 COS，返回公网可访问的 URL。
     路径：food-images/{uuid}.{ext}
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
     if not file_bytes:
         raise ValueError("图片文件为空")
 
@@ -1727,35 +1713,28 @@ def upload_food_analyze_image_bytes(
     safe_content_type = (content_type or "image/jpeg").strip() or "image/jpeg"
 
     try:
-        supabase.storage.from_(FOOD_ANALYZE_BUCKET).upload(
+        uploaded = upload_and_build_access(
+            FOOD_ANALYZE_BUCKET,
             path,
             file_bytes,
-            {"content-type": safe_content_type, "upsert": "true"},
+            content_type=safe_content_type,
         )
     except Exception as e:
         error_msg = str(e) or f"上传失败: {type(e).__name__}"
         if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower() or "timeout" in error_msg.lower():
-            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
-        raise Exception(f"上传图片到 Supabase Storage 失败: {error_msg}")
+            raise ConnectionError(f"连接 COS 失败: {error_msg}")
+        raise Exception(f"上传图片到 COS 失败: {error_msg}")
 
-    try:
-        result = supabase.storage.from_(FOOD_ANALYZE_BUCKET).get_public_url(path)
-        url = _resolve_public_storage_url(result)
-        if not url:
-            raise ValueError("无法获取图片公网 URL")
-        return url
-    except Exception as e:
-        error_msg = str(e) or f"获取 URL 失败: {type(e).__name__}"
-        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower():
-            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
-        raise Exception(f"获取图片公网 URL 失败: {error_msg}")
+    url = str(uploaded.get("url") or "").strip()
+    if not url:
+        raise ValueError("无法获取图片公网 URL")
+    return url
 
 
 def upload_food_analyze_image(base64_image: str) -> str:
     """
-    将食物分析图片上传到 Supabase Storage，返回公网可访问的 URL。
+    将食物分析图片上传到 COS，返回公网可访问的 URL。
     路径：food-images/{uuid}.jpg
-    需先在 Supabase Dashboard → Storage 创建 bucket「food-images」并设为 Public。
     """
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
@@ -1767,52 +1746,35 @@ def upload_food_analyze_image(base64_image: str) -> str:
 
 def upload_user_avatar(user_id: str, base64_image: str) -> str:
     """
-    将用户头像上传到 Supabase Storage，返回公网可访问的 URL。
+    将用户头像上传到 COS，返回公网可访问的 URL。
     路径：user-avatars/{user_id}/{uuid}.jpg
-    需先在 Supabase Dashboard → Storage 创建 bucket「user-avatars」并设为 Public。
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
     path = f"{user_id}/{uuid.uuid4().hex}.jpg"
-    supabase.storage.from_(USER_AVATARS_BUCKET).upload(
+    uploaded = upload_and_build_access(
+        USER_AVATARS_BUCKET,
         path,
         file_bytes,
-        {"content-type": "image/jpeg", "upsert": "true"},
+        content_type="image/jpeg",
     )
-    result = supabase.storage.from_(USER_AVATARS_BUCKET).get_public_url(path)
-    if isinstance(result, dict):
-        return result.get("publicUrl") or result.get("public_url") or ""
-    if hasattr(result, "public_url"):
-        return getattr(result, "public_url", "")
-    if hasattr(result, "publicUrl"):
-        return getattr(result, "publicUrl", "")
-    return str(result)
+    return uploaded["url"]
 
 def delete_image_from_storage(image_url: str, bucket_name: str = FOOD_ANALYZE_BUCKET) -> None:
     """
-    根据图片公网 URL 从 Supabase Storage 中删除指定图片。
-    如果 URL 含有类似 '/storage/v1/object/public/bucket_name/XXX.jpg'，则提取 XXX.jpg 作为 path 删除。
+    根据图片 URL / 原始 key 从 COS 中删除指定图片。
+    兼容旧 Supabase URL、新 CDN URL、COS URL 与原始 key。
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    object_key = resolve_object_key(image_url, bucket_name)
+    if not object_key:
+        print(f"[delete_image_from_storage] URL 对应路径解析失败: {image_url}")
+        return
     try:
-        # 提取 path，例如 "https://..../food-images/1234.jpg" 提取出 "1234.jpg"
-        # 简单粗暴的方式：由于 bucket 为 bucket_name，可以找这个字符串之后的部分
-        if bucket_name in image_url:
-            parts = image_url.split(f"{bucket_name}/")
-            if len(parts) == 2:
-                path = parts[1].split("?")[0]  # 忽略 query string
-                supabase.storage.from_(bucket_name).remove([path])
-                print(f"[delete_image_from_storage] 删除成功: {path}")
-            else:
-                print(f"[delete_image_from_storage] URL 对应路径解析失败: {image_url}")
-        else:
-             print(f"[delete_image_from_storage] URL 中未找到 bucket_name: {image_url}")
+        delete_object(bucket_name, object_key)
+        print(f"[delete_image_from_storage] 删除成功: {object_key}")
     except Exception as e:
         print(f"[delete_image_from_storage] 删除失败: {e}")
 

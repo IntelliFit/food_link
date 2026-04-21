@@ -64,6 +64,7 @@ from database import (
 )
 from metabolic import get_age_from_birthday
 from image_compressor import compress_task_images
+from cos_storage import HEALTH_REPORTS_BUCKET, resolve_reference_url
 
 ACTIVITY_LEVEL_LABELS = {
     "sedentary": "久坐",
@@ -2625,9 +2626,12 @@ def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
     base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     api_url = f"{base_url}/chat/completions"
-    image_url = task.get("image_url") or ""
-    if not image_url:
+    image_ref = task.get("image_url") or ""
+    if not image_ref:
         raise ValueError("任务缺少 image_url")
+    image_url = resolve_reference_url(HEALTH_REPORTS_BUCKET, image_ref, expires=3600)
+    if not image_url:
+        raise ValueError("任务图片引用无效")
 
     user_id = task.get("user_id")
     if not user_id:
@@ -2674,7 +2678,7 @@ def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]
     insert_health_document_sync(
         user_id=user_id,
         document_type="report",
-        image_url=image_url,
+        image_url=image_ref,
         extracted_content=extracted,
     )
 

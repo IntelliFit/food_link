@@ -21,6 +21,7 @@ from typing import List, Set
 
 import requests
 from dotenv import load_dotenv
+from cos_storage import FOOD_IMAGES_BUCKET, delete_object, list_objects, resolve_object_key
 
 load_dotenv("backend/.env")
 
@@ -38,7 +39,7 @@ REST_HEADERS = {
     "Authorization": f"Bearer {KEY}",
 }
 
-BUCKET = "food-images"
+BUCKET = FOOD_IMAGES_BUCKET
 
 
 def p(msg):
@@ -98,19 +99,9 @@ def paginated_query(table: str, select: str, limit=1000):
 def get_referenced_filenames() -> Set[str]:
     """Query all DB tables that reference food-images and extract filenames."""
     referenced = set()
-    food_images_prefix = f"{URL}/storage/v1/object/public/{BUCKET}/"
 
     def extract(url_str):
-        """Extract filename from a food-images URL."""
-        if not isinstance(url_str, str):
-            return None
-        if food_images_prefix in url_str:
-            return url_str.split(food_images_prefix)[-1]
-        if f"/storage/v1/object/{BUCKET}/" in url_str:
-            return url_str.split(f"/storage/v1/object/{BUCKET}/")[-1]
-        if url_str.endswith(".jpg") or url_str.endswith(".png") or url_str.endswith(".jpeg") or url_str.endswith(".webp"):
-            return url_str.rsplit("/", 1)[-1] if "/" in url_str else url_str
-        return None
+        return resolve_object_key(url_str, BUCKET)
 
     def extract_all_from_field(value):
         """Extract filenames from a field that could be string, list, or JSON."""
@@ -170,35 +161,16 @@ def get_referenced_filenames() -> Set[str]:
 # --- Step 2: List all files in bucket ---
 
 def list_all_bucket_files() -> List[dict]:
-    """List all objects in food-images bucket via Storage API."""
+    """List all objects in food-images bucket via COS."""
     p("Listing all files in food-images bucket ...")
     all_files = []
-    offset = 0
-    limit = 1000
-    while True:
-        r = retry_post(
-            f"{URL}/storage/v1/object/list/{BUCKET}",
-            headers=STORAGE_HEADERS,
-            json_data={
-                "prefix": "",
-                "limit": limit,
-                "offset": offset,
-                "sortBy": {"column": "name", "order": "asc"},
-            },
+    for item in list_objects(BUCKET):
+        all_files.append(
+            {
+                "name": item.key,
+                "metadata": {"size": item.size},
+            }
         )
-        if r.status_code != 200:
-            p(f"  WARN: list returned {r.status_code}")
-            break
-        items = r.json()
-        if not items:
-            break
-        for item in items:
-            meta = item.get("metadata")
-            if meta is not None:
-                all_files.append(item)
-        if len(items) < limit:
-            break
-        offset += limit
     p(f"  Total files in bucket: {len(all_files)}")
     return all_files
 
@@ -206,24 +178,19 @@ def list_all_bucket_files() -> List[dict]:
 # --- Step 3: Delete orphans ---
 
 def delete_files(filenames: List[str], batch_size=100):
-    """Delete files via Storage API in batches."""
+    """Delete files via COS in batches."""
     total = len(filenames)
     deleted = 0
     failed = 0
     for i in range(0, total, batch_size):
         batch = filenames[i:i + batch_size]
-        prefixed = [f"{name}" for name in batch]
-        r = requests.delete(
-            f"{URL}/storage/v1/object/{BUCKET}",
-            headers=STORAGE_HEADERS,
-            json={"prefixes": prefixed},
-            timeout=60,
-        )
-        if r.status_code == 200:
-            deleted += len(batch)
-        else:
-            p(f"  DELETE batch {i}-{i+len(batch)} failed: {r.status_code} {r.text[:200]}")
-            failed += len(batch)
+        for name in batch:
+            try:
+                delete_object(BUCKET, name)
+                deleted += 1
+            except Exception as exc:  # noqa: BLE001
+                p(f"  DELETE {name} failed: {exc}")
+                failed += 1
         if (i + batch_size) % 500 == 0 or i + batch_size >= total:
             p(f"  Progress: {min(i + batch_size, total)}/{total} (deleted={deleted}, failed={failed})")
     return deleted, failed

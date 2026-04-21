@@ -1,5 +1,5 @@
 """
-批量压缩 Supabase Storage 中的 food-images。
+批量压缩 COS 中的 food-images。
 
 默认行为:
 - 只处理被业务表引用的长期图片
@@ -39,9 +39,17 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 import requests
 from PIL import Image, ImageOps
+from cos_storage import (
+    FOOD_IMAGES_BUCKET,
+    build_public_url,
+    download_bytes,
+    list_objects,
+    resolve_object_key,
+    upload_bytes,
+)
 
 
-BUCKET_NAME = "food-images"
+BUCKET_NAME = FOOD_IMAGES_BUCKET
 DEFAULT_MAX_EDGE = 1280
 DEFAULT_JPEG_QUALITY = 62
 DEFAULT_WEBP_QUALITY = 58
@@ -126,45 +134,23 @@ class SupabaseStorageClient:
         return rows
 
     def list_bucket_objects(self, bucket: str, page_size: int = 100) -> List[StorageObject]:
-        offset = 0
         objects: List[StorageObject] = []
-        while True:
-            response = self._request_with_retry(
-                "POST",
-                f"{self.base_url}/storage/v1/object/list/{bucket}",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "prefix": "",
-                    "limit": page_size,
-                    "offset": offset,
-                    "sortBy": {"column": "name", "order": "asc"},
-                },
-            )
-            batch = response.json()
-            for item in batch:
-                metadata = item.get("metadata") or {}
-                objects.append(
-                    StorageObject(
-                        name=item.get("name") or "",
-                        created_at=item.get("created_at"),
-                        size=int(metadata.get("size") or 0),
-                        mimetype=str(metadata.get("mimetype") or "").strip(),
-                    )
+        for item in list_objects(bucket):
+            objects.append(
+                StorageObject(
+                    name=item.key,
+                    created_at=item.last_modified or None,
+                    size=item.size,
+                    mimetype="",
                 )
-            if len(batch) < page_size:
-                break
-            offset += page_size
+            )
         return objects
 
     def public_object_url(self, bucket: str, object_name: str) -> str:
-        return f"{self.base_url}/storage/v1/object/public/{bucket}/{object_name}"
+        return build_public_url(bucket, object_name)
 
     def download_object(self, bucket: str, object_name: str) -> bytes:
-        response = self._request_with_retry(
-            "GET",
-            f"{self.base_url}/storage/v1/object/{bucket}/{object_name}",
-        )
-        return response.content
+        return download_bytes(bucket, object_name)
 
     def upload_object(
         self,
@@ -174,16 +160,7 @@ class SupabaseStorageClient:
         content_type: str,
         upsert: bool = True,
     ) -> None:
-        headers = {
-            "Content-Type": content_type,
-            "x-upsert": "true" if upsert else "false",
-        }
-        self._request_with_retry(
-            "POST",
-            f"{self.base_url}/storage/v1/object/{bucket}/{object_name}",
-            headers=headers,
-            data=content,
-        )
+        upload_bytes(bucket, object_name, content, content_type=content_type)
 
 
 def flat_urls(value: object) -> List[str]:
@@ -216,22 +193,22 @@ def collect_referenced_food_urls(client: SupabaseStorageClient) -> Tuple[Set[str
     )
 
     record_urls = {
-        url
+        resolve_object_key(url, BUCKET_NAME)
         for row in records
         for url in (flat_urls(row.get("image_path")) + flat_urls(row.get("image_paths")))
-        if f"/{BUCKET_NAME}/" in url
+        if resolve_object_key(url, BUCKET_NAME)
     }
     public_urls = {
-        url
+        resolve_object_key(url, BUCKET_NAME)
         for row in public_food
         for url in (flat_urls(row.get("image_path")) + flat_urls(row.get("image_paths")))
-        if f"/{BUCKET_NAME}/" in url
+        if resolve_object_key(url, BUCKET_NAME)
     }
     analysis_urls = {
-        url
+        resolve_object_key(url, BUCKET_NAME)
         for row in analysis
         for url in (flat_urls(row.get("image_url")) + flat_urls(row.get("image_paths")))
-        if f"/{BUCKET_NAME}/" in url
+        if resolve_object_key(url, BUCKET_NAME)
     }
     return record_urls, public_urls, analysis_urls
 
@@ -244,10 +221,9 @@ def classify_scope(
     record_urls, public_urls, analysis_urls = collect_referenced_food_urls(client)
     chosen: List[StorageObject] = []
     for obj in objects:
-        url = client.public_object_url(BUCKET_NAME, obj.name)
-        in_record = url in record_urls
-        in_public = url in public_urls
-        in_analysis = url in analysis_urls
+        in_record = obj.name in record_urls
+        in_public = obj.name in public_urls
+        in_analysis = obj.name in analysis_urls
         if scope == "referenced" and (in_record or in_public):
             chosen.append(obj)
         elif scope == "recorded" and in_record:

@@ -22,7 +22,7 @@ interface UserInfo {
     meta: string
 }
 
-const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
+const APP_LOGO_URL = 'https://cdn-food-icon.coachlink.fit/shitan-nobackground.png'
 
 /** 安全返回：若当前是第一个页面则跳转首页 */
 function safeNavigateBack() {

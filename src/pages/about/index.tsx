@@ -6,7 +6,7 @@ import '@taroify/icons/style'
 import './index.scss'
 
 export default function AboutPage() {
-    const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
+    const APP_LOGO_URL = 'https://cdn-food-icon.coachlink.fit/shitan-nobackground.png'
 
     const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
 

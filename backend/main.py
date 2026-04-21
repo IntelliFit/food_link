@@ -37,6 +37,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from test_backend.utils import calculate_deviation
 from exercise_llm import ExerciseLlmError, estimate_exercise_calories_sync
+from cos_storage import HEALTH_REPORTS_BUCKET, resolve_reference_url
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
@@ -3677,7 +3678,7 @@ class HealthProfileUpdateRequest(BaseModel):
     )
     report_image_url: Optional[str] = Field(
         None,
-        description="体检报告图片公网 URL"
+        description="体检报告图片访问引用（可为公网 URL 或私有存储 key）"
     )
     diet_goal: Optional[str] = Field(
         None,
@@ -4260,7 +4261,7 @@ async def upload_avatar(
     user_info: dict = Depends(get_current_user_info),
 ):
     """
-    上传用户头像到 Supabase Storage，返回公网 URL。
+    上传用户头像到 COS，返回公网 URL。
     小程序先调此接口拿 imageUrl，再调 PUT /api/user/profile 更新 avatar 字段。
     """
     user_id = user_info["user_id"]
@@ -4273,7 +4274,7 @@ async def upload_avatar(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[upload_avatar] 错误: {e}")
-        raise HTTPException(status_code=500, detail="上传失败，请检查 Supabase Storage 是否已创建 bucket「user-avatars」并设为 Public")
+        raise HTTPException(status_code=500, detail="上传失败，请检查 COS user-avatars 存储桶配置")
 
 
 # ---------- 健康档案 API ----------
@@ -4525,10 +4526,13 @@ async def _ocr_extract_report_image(base64_image: str) -> Dict[str, Any]:
 
 
 async def _ocr_extract_report_by_url(image_url: str) -> Dict[str, Any]:
-    """体检报告 OCR：使用图片公网 URL 传给多模态模型，仅返回提取的 JSON，不写库。"""
+    """体检报告 OCR：使用图片访问引用（URL 或私有 key）传给多模态模型，仅返回提取的 JSON，不写库。"""
     api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="缺少 DASHSCOPE_API_KEY 环境变量")
+    resolved_image_url = resolve_reference_url(HEALTH_REPORTS_BUCKET, image_url, expires=3600)
+    if not resolved_image_url:
+        raise HTTPException(status_code=400, detail="体检报告图片引用无效")
     base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     api_url = f"{base_url}/chat/completions"
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -4542,7 +4546,7 @@ async def _ocr_extract_report_by_url(image_url: str) -> Dict[str, Any]:
                         "role": "user",
                         "content": [
                             {"type": "text", "text": _ocr_report_prompt()},
-                            {"type": "image_url", "image_url": {"url": image_url}},
+                            {"type": "image_url", "image_url": {"url": resolved_image_url}},
                         ],
                     }
                 ],
@@ -4562,7 +4566,7 @@ async def _ocr_extract_report_by_url(image_url: str) -> Dict[str, Any]:
 
 
 class UploadReportImageRequest(BaseModel):
-    """上传体检报告图片到 Supabase Storage"""
+    """上传体检报告图片到 COS"""
     base64Image: str = Field(..., description="Base64 编码的体检报告或病例截图")
 
 
@@ -4572,25 +4576,48 @@ async def upload_report_image(
     user_info: dict = Depends(get_current_user_info),
 ):
     """
-    将体检报告图片上传到 Supabase Storage，返回公网 URL。
-    小程序先调此接口拿 imageUrl，再调 ocr-extract 传 imageUrl 给多模态模型识别。
+    将体检报告图片上传到 COS。
+    返回短期预览 URL 与私有存储 key。
     """
     user_id = user_info["user_id"]
     if not body.base64Image:
         raise HTTPException(status_code=400, detail="base64Image 不能为空")
     try:
-        image_url = upload_health_report_image(user_id, body.base64Image)
-        return {"imageUrl": image_url}
+        upload_result = upload_health_report_image(user_id, body.base64Image)
+        return upload_result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[upload_report_image] 错误: {e}")
-        raise HTTPException(status_code=500, detail="上传失败，请检查 Supabase Storage 是否已创建 bucket「health-reports」并设为 Public")
+        raise HTTPException(status_code=500, detail="上传失败，请检查 COS health-reports 存储桶配置")
+
+
+@app.get("/api/user/health-profile/report-access-url")
+async def get_health_report_access_url(
+    storageKey: str = Query(..., description="体检报告图片私有存储 key"),
+    user_info: dict = Depends(get_current_user_info),
+):
+    """为私有 health-reports 对象生成短期访问 URL。"""
+    _ = user_info["user_id"]
+    key = (storageKey or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="storageKey 不能为空")
+    try:
+        image_url = resolve_reference_url(HEALTH_REPORTS_BUCKET, key, expires=3600)
+        if not image_url:
+            raise HTTPException(status_code=404, detail="未找到对应报告图片")
+        return {"imageUrl": image_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[get_health_report_access_url] 错误: {e}")
+        raise HTTPException(status_code=500, detail="生成访问地址失败")
 
 
 class SubmitReportExtractionTaskRequest(BaseModel):
     """提交病历信息提取任务（后台异步处理）"""
-    imageUrl: str = Field(..., description="体检报告图片在 Supabase Storage 的公网 URL")
+    imageUrl: Optional[str] = Field(None, description="体检报告图片访问 URL（兼容旧链路）")
+    storageKey: Optional[str] = Field(None, description="体检报告图片私有存储 key")
 
 
 @app.post("/api/user/health-profile/submit-report-extraction-task")
@@ -4604,14 +4631,15 @@ async def submit_report_extraction_task(
     用户无需等待，保存档案后即可退出。
     """
     user_id = user_info["user_id"]
-    if not body.imageUrl or not body.imageUrl.strip():
-        raise HTTPException(status_code=400, detail="imageUrl 不能为空")
+    image_ref = (body.storageKey or body.imageUrl or "").strip()
+    if not image_ref:
+        raise HTTPException(status_code=400, detail="storageKey 或 imageUrl 不能为空")
     try:
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_id,
             task_type="health_report",
-            image_url=body.imageUrl.strip(),
+            image_url=image_ref,
             payload={},
         )
         return {"taskId": str(task["id"])}
@@ -4623,6 +4651,7 @@ async def submit_report_extraction_task(
 class HealthReportOcrRequest(BaseModel):
     """体检报告 OCR 请求：imageUrl 或 base64Image 二选一"""
     imageUrl: Optional[str] = Field(None, description="体检报告图片公网 URL")
+    storageKey: Optional[str] = Field(None, description="体检报告图片私有存储 key")
     base64Image: Optional[str] = Field(None, description="Base64 编码的报告图片")
 
 
@@ -4633,11 +4662,12 @@ async def health_report_ocr_extract(
 ):
     """
     仅识别体检报告/病例截图，返回提取的 JSON，不写入数据库。
-    推荐先调 upload-report-image 拿到 imageUrl，再传 imageUrl 给本接口；也可直接传 base64Image。
+    推荐先调 upload-report-image 拿到 storageKey，再传 storageKey 给本接口；也可直接传 base64Image。
     """
-    if body.imageUrl:
+    image_ref = (body.storageKey or body.imageUrl or "").strip()
+    if image_ref:
         try:
-            extracted = await _ocr_extract_report_by_url(body.imageUrl)
+            extracted = await _ocr_extract_report_by_url(image_ref)
             return {"extracted": extracted}
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="OCR 返回格式解析失败")
@@ -4657,7 +4687,7 @@ async def health_report_ocr_extract(
         except Exception as e:
             print(f"[health_report_ocr_extract] 错误: {e}")
             raise HTTPException(status_code=500, detail=str(e))
-    raise HTTPException(status_code=400, detail="请传 imageUrl 或 base64Image")
+    raise HTTPException(status_code=400, detail="请传 storageKey、imageUrl 或 base64Image")
 
 
 @app.post("/api/user/health-profile/ocr")

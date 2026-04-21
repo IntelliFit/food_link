@@ -734,7 +734,7 @@ export interface HealthProfileUpdateRequest {
   health_notes?: string
   /** 体检报告 OCR 识别结果，保存时与问卷一并写入 user_health_documents */
   report_extract?: ReportExtract | null
-  /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
+  /** 体检报告图片访问引用（可为 URL 或私有存储 key），保存时写入 user_health_documents.image_url */
   report_image_url?: string
   diet_goal?: string
   execution_mode?: ExecutionMode
@@ -2309,7 +2309,7 @@ export async function bindPhone(phoneCode: string): Promise<{ telephone?: string
 }
 
 /**
- * 上传用户头像到 Supabase Storage
+ * 上传用户头像到 COS
  * @param base64Image Base64 编码的图片
  * @returns Promise<{ imageUrl: string }>
  */
@@ -2384,10 +2384,10 @@ export async function updateHealthProfile(
 }
 
 /**
- * 上传体检报告图片到 Supabase Storage，返回公网 URL。
- * 小程序先调此接口拿 imageUrl，再调 extractHealthReportOcr 传 imageUrl 给多模态模型识别。
+ * 上传体检报告图片到 COS。
+ * 返回短期预览 URL 与私有存储 key；提交后台 OCR 时优先传 storageKey。
  */
-export async function uploadReportImage(base64Image: string): Promise<{ imageUrl: string }> {
+export async function uploadReportImage(base64Image: string): Promise<{ imageUrl: string; storageKey?: string }> {
   try {
     const response = await authenticatedRequest('/api/user/health-profile/upload-report-image', {
       method: 'POST',
@@ -2397,7 +2397,7 @@ export async function uploadReportImage(base64Image: string): Promise<{ imageUrl
       const errorMsg = (response.data as any)?.detail || '上传失败'
       throw new Error(errorMsg)
     }
-    return response.data as { imageUrl: string }
+    return response.data as { imageUrl: string; storageKey?: string }
   } catch (error: any) {
     console.error('体检报告图片上传失败:', error)
     throw new Error(error.message || '上传失败，请重试')
@@ -2406,13 +2406,14 @@ export async function uploadReportImage(base64Image: string): Promise<{ imageUrl
 
 /**
  * 提交病历信息提取任务，后台异步处理，完成后自动更新到健康档案。用户无感知。
- * @param imageUrl 体检报告图片在 Supabase Storage 的公网 URL
+ * @param options 体检报告图片访问引用，优先传 storageKey
  */
-export async function submitReportExtractionTask(imageUrl: string): Promise<{ taskId: string }> {
+export async function submitReportExtractionTask(options: { imageUrl?: string; storageKey?: string }): Promise<{ taskId: string }> {
+  const { imageUrl, storageKey } = options
   try {
     const response = await authenticatedRequest('/api/user/health-profile/submit-report-extraction-task', {
       method: 'POST',
-      data: { imageUrl }
+      data: storageKey ? { storageKey, imageUrl } : { imageUrl }
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '提交失败'
@@ -2426,21 +2427,22 @@ export async function submitReportExtractionTask(imageUrl: string): Promise<{ ta
 }
 
 /**
- * 仅识别体检报告/病例截图，不写入数据库。推荐先 uploadReportImage 拿 imageUrl 再传此处。
- * @param options 传 imageUrl（推荐）或 base64Image
+ * 仅识别体检报告/病例截图，不写入数据库。推荐先 uploadReportImage 拿 storageKey 再传此处。
+ * @param options 传 storageKey（推荐）/ imageUrl / base64Image
  */
 export async function extractHealthReportOcr(options: {
+  storageKey?: string
   imageUrl?: string
   base64Image?: string
 }): Promise<{ extracted: Record<string, unknown> }> {
-  const { imageUrl, base64Image } = options
-  if (!imageUrl && !base64Image) {
-    throw new Error('请传 imageUrl 或 base64Image')
+  const { storageKey, imageUrl, base64Image } = options
+  if (!storageKey && !imageUrl && !base64Image) {
+    throw new Error('请传 storageKey、imageUrl 或 base64Image')
   }
   try {
     const response = await authenticatedRequest('/api/user/health-profile/ocr-extract', {
       method: 'POST',
-      data: imageUrl ? { imageUrl } : { base64Image }
+      data: storageKey ? { storageKey, imageUrl } : imageUrl ? { imageUrl } : { base64Image }
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || 'OCR 识别失败'
@@ -2450,6 +2452,22 @@ export async function extractHealthReportOcr(options: {
   } catch (error: any) {
     console.error('健康报告 OCR 识别失败:', error)
     throw new Error(error.message || '识别失败，请重试')
+  }
+}
+
+export async function getHealthReportAccessUrl(storageKey: string): Promise<{ imageUrl: string }> {
+  try {
+    const response = await authenticatedRequest(`/api/user/health-profile/report-access-url?storageKey=${encodeURIComponent(storageKey)}`, {
+      method: 'GET'
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取报告访问地址失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { imageUrl: string }
+  } catch (error: any) {
+    console.error('获取健康报告访问地址失败:', error)
+    throw new Error(error.message || '获取报告访问地址失败')
   }
 }
 

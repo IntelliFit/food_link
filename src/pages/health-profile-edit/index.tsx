@@ -80,6 +80,7 @@ function HealthProfileEditPage() {
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
   const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
+  const [reportStorageKey, setReportStorageKey] = useState<string | null>(null)
 
   const [customMedical, setCustomMedical] = useState<string>('')
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([])
@@ -224,7 +225,7 @@ function HealthProfileEditPage() {
       diet_preference: dietPreference.filter(v => v !== 'none'),
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : [],
       health_notes: healthNotes,
-      report_image_url: reportImageUrl || undefined
+      report_image_url: reportStorageKey || reportImageUrl || undefined
     }
 
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
@@ -265,8 +266,8 @@ function HealthProfileEditPage() {
     try {
       await updateHealthProfile(req)
       // 若有上传的体检报告图片，提交后台病历提取任务
-      if (reportImageUrl) {
-        submitReportExtractionTask(reportImageUrl).catch(() => {
+      if (reportStorageKey || reportImageUrl) {
+        submitReportExtractionTask({ storageKey: reportStorageKey || undefined, imageUrl: reportImageUrl || undefined }).catch(() => {
           // 静默失败
         })
       }
@@ -286,9 +287,10 @@ function HealthProfileEditPage() {
       const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })
       const base64 = await imageToBase64(res.tempFilePaths[0])
       Taro.showLoading({ title: '上传中...', mask: true })
-      const { imageUrl } = await uploadReportImage(base64)
+      const { imageUrl, storageKey } = await uploadReportImage(base64)
       Taro.hideLoading()
       setReportImageUrl(imageUrl)
+      setReportStorageKey(storageKey || null)
       Taro.showToast({ title: '上传成功，保存时将自动识别', icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()

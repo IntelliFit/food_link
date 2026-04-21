@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-04-22
+
+- 🔒 security: 固化 `health-reports` 为代码级私有桶，不再依赖环境变量开关，避免线上误配置导致报告图被公网暴露 `backend/cos_storage.py`
+- 🔧 chore: 新增统一 COS 存储适配层并将后端上传/删除切到腾讯云 COS，公开桶统一返回 CDN 地址，`health-reports` 改为私有 key + 签名访问 `backend/cos_storage.py` `backend/database.py` `backend/main.py` `backend/worker.py`
+- 🔧 refactor: 压缩、孤儿清理、存储巡检脚本改为兼容 COS 与旧 Supabase URL，避免迁移后脚本仍按旧路径规则工作 `backend/image_compressor.py` `backend/compress_food_images.py` `backend/cleanup_orphans.py` `backend/check_storage.py` `backend/check_avatars.py`
+- 🐛 fix: 登录页/关于页应用 Logo 改为腾讯云 icon CDN；健康档案上传报告改为保存私有 `storageKey` 并提交后台 OCR，避免使用会过期的临时预览链接 `src/pages/login/index.tsx` `src/pages/about/index.tsx` `src/utils/api.ts` `src/pages/health-profile/index.tsx` `src/pages/health-profile-edit/index.tsx`
+
 ## 2026-04-13
 
 - ⚡ perf: 首页仪表盘改为“本地快照优先 + 云端静默同步”：新增按日期缓存（最近60条），页面与切日优先秒开本地数据；云端返回后仅在差异时覆盖本地缓存，降低刷新白屏与加载等待 `src/pages/index/index.tsx`

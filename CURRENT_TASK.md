@@ -1,5 +1,36 @@
 # CURRENT_TASK
 
+- Task: 切换对象存储到腾讯云 COS/CDN（公开桶 CDN + 私有 health-reports）
+- Status: code done，pending end-to-end verification
+- Scope:
+  - `backend/cos_storage.py`
+    - 新增统一 COS 适配层：分桶配置、公开 CDN URL 生成、私有签名 URL、旧 Supabase URL / 新 CDN URL / 原始 key 统一解析
+    - `health-reports` 私有访问已写死到代码，不再依赖环境变量开关
+  - `backend/database.py`
+    - 上传食物图、头像、体检报告改为走 COS
+    - 删除图片改为从 URL/key 解析对象 key 后删除 COS 对象
+  - `backend/main.py`
+    - 健康报告上传接口返回 `imageUrl + storageKey`
+    - OCR / 异步提取任务支持传 `storageKey`
+    - 新增私有报告签名访问接口 `/api/user/health-profile/report-access-url`
+  - `backend/worker.py`
+    - health_report 异步任务执行前按私有 key 生成临时签名 URL，再传给 OCR 模型
+  - `backend/image_compressor.py` `backend/compress_food_images.py` `backend/cleanup_orphans.py` `backend/check_storage.py` `backend/check_avatars.py`
+    - 统一切到 COS，并兼容旧 Supabase URL 的 key 解析
+  - `src/pages/login/index.tsx` `src/pages/about/index.tsx`
+    - icon 资源改到 `cdn-food-icon.coachlink.fit`
+  - `src/utils/api.ts` `src/pages/health-profile/index.tsx` `src/pages/health-profile-edit/index.tsx`
+    - 健康报告上传后保存预览 URL 与 `storageKey`，后台任务优先提交 `storageKey`
+- Verification:
+  - `py_compile` 已通过：`backend/cos_storage.py`、`backend/database.py`、`backend/main.py`、`backend/worker.py`、`backend/image_compressor.py`、`backend/compress_food_images.py`、`backend/cleanup_orphans.py`、`backend/check_storage.py`、`backend/check_avatars.py`
+  - `ReadLints` 检查已通过，当前无新增 lints
+  - 运行时 smoke check 已通过：
+    - COS SDK 可导入
+    - 公开/私有桶配置可解析
+    - 旧 Supabase URL、新 CDN URL、原始 key 都可解析出对象 key
+    - 私有 `health-reports` 可生成签名 URL
+  - 待你在线上补做真实联调：新上传食物图/头像/报告、后台 OCR、旧图展示、海报加载、删除任务清理
+
 - Task: 修复首页日期热图颜色丢失 + 本地 storage 自动补齐 7 天
 - Status: done（开发者工具 DOM 验证通过：日期圆圈已正确显示 is-recorded/is-over）
 - Scope:
