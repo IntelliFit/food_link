@@ -15,6 +15,7 @@ import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../component
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -466,7 +467,7 @@ function StatsPage() {
 
   const openDayRecordPage = (date: string) => {
     if (!date) return
-    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(date)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(date)}` })
   }
 
   return (
@@ -823,6 +824,21 @@ function StatsPage() {
             </View>
           </View>
         </View>
+
+        {!guestBrowse ? (
+          <View
+            className='stats-card metabolic-entry-card'
+            onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/stats-metabolic/index') })}
+          >
+            <View className='card-header'>
+              <View className='card-header-copy'>
+                <Text className='card-title'>当日代谢动态</Text>
+                <Text className='card-subtitle'>分钟级吸收/消耗模拟与曲线（完整图表在子页打开）</Text>
+              </View>
+              <Text className='metabolic-entry-card__arrow'>›</Text>
+            </View>
+          </View>
+        ) : null}
 
         {/* 分析报告 */}
         <View className='stats-card analysis-card'>

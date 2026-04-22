@@ -1106,3 +1106,15 @@ $stats-blue-soft: #7aa9ce;
   line-height: 32rpx;
   color: #64748b;
 }
+
+.metabolic-entry-card {
+  cursor: pointer;
+}
+
+.metabolic-entry-card__arrow {
+  font-size: 44rpx;
+  line-height: 1;
+  color: #94a3b8;
+  align-self: center;
+  padding-left: 12rpx;
+}

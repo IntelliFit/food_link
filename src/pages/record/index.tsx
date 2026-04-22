@@ -7,6 +7,7 @@ import {
   type MembershipStatus,
 } from '../../utils/api'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
 
 import './index.scss'
 
@@ -20,7 +21,7 @@ function showFoodAnalysisQuotaModal(ms: MembershipStatus) {
       confirmText: '去充值',
       cancelText: '取消',
       success: (res) => {
-        if (res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+        if (res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
       }
     })
     return
@@ -36,7 +37,7 @@ function showFoodAnalysisQuotaModal(ms: MembershipStatus) {
     showCancel: !isPro,
     success: (res) => {
       if (!isPro && res.confirm) {
-        Taro.navigateTo({ url: '/pages/pro-membership/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
       }
     }
   })
@@ -132,7 +133,7 @@ function RecordPage() {
       })
       
       Taro.setStorageSync('analyzeImagePath', tempImagePath)
-      Taro.navigateTo({ url: '/pages/analyze/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
     } catch (err) {
       console.error('拍照失败:', err)
       Taro.showToast({ title: '拍照失败', icon: 'none' })
@@ -167,7 +168,7 @@ function RecordPage() {
       success: (res) => {
         const imagePath = res.tempFilePaths[0]
         Taro.setStorageSync('analyzeImagePath', imagePath)
-        Taro.navigateTo({ url: '/pages/analyze/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
       },
       fail: (err) => {
         if (err.errMsg.indexOf('cancel') > -1) return

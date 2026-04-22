@@ -1,0 +1,414 @@
+/* 当日代谢：与首页/统计页一致的浅色卡片与主题色（#5cb896、#5c9ed4、#e57373） */
+.metabolic-report {
+  margin: 0 32rpx 24rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  background: rgb(255 255 255 / 90%);
+  border: 1rpx solid rgb(92 184 150 / 20%);
+  box-shadow: 0 12rpx 40rpx rgb(92 184 150 / 10%);
+  box-sizing: border-box;
+}
+
+.metabolic-report__head {
+  padding: 28rpx 32rpx 8rpx;
+}
+
+.metabolic-report__head-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.metabolic-report__title-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.metabolic-report__phys-btn {
+  flex-shrink: 0;
+  padding: 8rpx 22rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 12%);
+  border: 1rpx solid rgb(92 184 150 / 28%);
+}
+
+.metabolic-report__phys-btn-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #5cb896;
+}
+
+.metabolic-report__title-icon {
+  font-size: 36rpx;
+  color: #5cb896;
+  line-height: 1;
+}
+
+.metabolic-report__title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.metabolic-report__gauges {
+  display: flex;
+  flex-direction: row;
+  gap: 20rpx;
+  padding: 8rpx 32rpx 12rpx;
+}
+
+.metabolic-report__gauge {
+  flex: 1;
+  padding: 20rpx 18rpx;
+  border-radius: 20rpx;
+  background: rgb(92 184 150 / 8%);
+  border: 1rpx solid rgb(92 184 150 / 14%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.metabolic-report__gauge-label {
+  display: block;
+  font-size: 22rpx;
+  color: #6b7280;
+  margin-bottom: 6rpx;
+  text-align: center;
+}
+
+.metabolic-report__gauge-value {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #5cb896;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.metabolic-report__gauge-unit {
+  font-size: 24rpx;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.metabolic-report__canvas-wrap {
+  position: relative;
+  margin: 8rpx 24rpx 20rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  background: rgb(248 250 252 / 90%);
+  border: 1rpx solid rgb(148 163 184 / 12%);
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 弹层打开时不再挂载 Canvas，占位保持布局；见 metabolic-dynamics-report.tsx */
+.metabolic-report__canvas-placeholder {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.metabolic-report__canvas {
+  display: block;
+}
+
+.metabolic-report__legend-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx 20rpx;
+  padding: 8rpx 32rpx 4rpx;
+}
+
+.metabolic-report__legend-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 4rpx;
+  flex-shrink: 0;
+}
+
+.metabolic-report__legend-dot--absorb {
+  background: rgb(92 184 150 / 70%);
+}
+
+.metabolic-report__legend-dot--burn {
+  background: rgb(92 158 212 / 95%);
+}
+
+.metabolic-report__legend-dot--silting {
+  background: linear-gradient(180deg, #f0985c, #e57373);
+}
+
+.metabolic-report__legend-dot--ref {
+  background: transparent;
+  border: 2rpx dashed rgb(100 116 139 / 65%);
+  box-sizing: border-box;
+}
+
+.metabolic-report__legend-dot--meal {
+  border: 2rpx dashed #f0985c;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.metabolic-report__legend-txt {
+  font-size: 22rpx;
+  color: #6b7280;
+  margin-right: 4rpx;
+}
+
+.metabolic-report__footnote {
+  display: block;
+  padding: 0 32rpx 24rpx;
+  font-size: 22rpx;
+  color: #9ca3af;
+  line-height: 1.45;
+}
+
+.metabolic-report__error {
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+}
+
+.metabolic-report__retry {
+  padding: 12rpx 32rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, #5cb896 0%, #8dd3bf 100%);
+}
+
+.metabolic-report__retry-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
+.metabolic-report__loading {
+  min-height: 160rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx;
+}
+
+.metabolic-report__spinner {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  border: 4rpx solid rgb(92 184 150 / 20%);
+  border-top-color: #5cb896;
+  animation: metabolic-spin 0.75s linear infinite;
+}
+
+@keyframes metabolic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 档案未完备：占位区强模糊 + 可点击遮罩 */
+.metabolic-report--gated .metabolic-report__gate-body {
+  position: relative;
+  margin-bottom: 8rpx;
+}
+
+.metabolic-report__ghost {
+  filter: blur(22px);
+  opacity: 0.42;
+  pointer-events: none;
+  transform: scale(1.03);
+}
+
+.metabolic-report__gauge--ghost {
+  min-height: 120rpx;
+  background: rgb(92 184 150 / 12%);
+  border-style: dashed;
+}
+
+.metabolic-report__canvas-wrap--ghost {
+  min-height: 280rpx;
+  margin: 8rpx 24rpx 20rpx;
+  background: linear-gradient(
+    165deg,
+    rgb(92 184 150 / 14%) 0%,
+    rgb(92 158 212 / 12%) 45%,
+    rgb(229 115 115 / 10%) 100%
+  );
+}
+
+.metabolic-report__legend-row--ghost {
+  padding: 8rpx 32rpx 20rpx;
+  gap: 16rpx;
+}
+
+.metabolic-report__legend-pill {
+  flex: 1;
+  min-width: 80rpx;
+  height: 28rpx;
+  border-radius: 8rpx;
+  background: rgb(148 163 184 / 25%);
+}
+
+.metabolic-report__gate-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx 40rpx;
+  box-sizing: border-box;
+  background: rgb(255 255 255 / 72%);
+  backdrop-filter: blur(6px);
+}
+
+.metabolic-report__gate-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 12rpx;
+  text-align: center;
+}
+
+.metabolic-report__gate-desc {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 1.5;
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+.metabolic-report__gate-cta {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #5cb896;
+  padding: 16rpx 40rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 14%);
+  border: 1rpx solid rgb(92 184 150 / 35%);
+}
+
+/* 「基础」弹层：全宽不超出视口（避免 100% 相对错误父级导致撑破屏幕） */
+.metabolic-phys-popup__backdrop.taroify-backdrop {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  left: 0 !important;
+  top: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.metabolic-phys-popup__portal.taroify-popup {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
+}
+
+.metabolic-phys-popup__portal.taroify-popup--bottom {
+  width: 100vw !important;
+  max-width: 100vw !important;
+}
+
+/* 「基础」弹层：与模拟 resolvePhysiology 一致 */
+.metabolic-phys-popup {
+  width: 100%;
+  max-width: 100%;
+  padding: 28rpx 28rpx 24rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.metabolic-phys-popup__title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 8rpx;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.metabolic-phys-popup__hint {
+  display: block;
+  font-size: 22rpx;
+  color: #9ca3af;
+  line-height: 1.4;
+  margin-bottom: 24rpx;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.metabolic-phys-popup__row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid rgb(229 231 235 / 80%);
+}
+
+.metabolic-phys-popup__row:last-of-type {
+  border-bottom: none;
+}
+
+.metabolic-phys-popup__label {
+  font-size: 26rpx;
+  color: #6b7280;
+  flex-shrink: 0;
+  max-width: 42%;
+}
+
+.metabolic-phys-popup__value {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1f2937;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.metabolic-phys-popup__foot {
+  margin-top: 28rpx;
+}
+
+.metabolic-phys-popup__close {
+  width: 100%;
+  padding: 22rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(90deg, #5cb896 0%, #8dd3bf 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.metabolic-phys-popup__close-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #fff;
+}

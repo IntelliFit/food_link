@@ -1,5 +1,9 @@
 # CURRENT_TASK
 
+- Task: 饮食海报底栏「微信好友 / 朋友圈」分入口（免先点「微信」再进一层）
+- Status: done（`openType=share` + `showShareImageMenu`；首页餐次/今日小结与记录详情已对齐，已 `npm run dev:restart`；`mrc where` 仍易阻塞未跑通截图）
+- Scope: `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/MealRecordPosterModal.*` `src/packageExtra/pages/record-detail/index.*`
+
 - Task: 「识别记录详情」与「当天饮食记录」一致使用微信系统导航栏与默认返回
 - Status: done（`navigationStyle: custom` 已移除；页面内 `CustomNavBar` 已删；开发联调已 `npm run dev:restart`）
 - Scope: `src/pages/record-detail/index.config.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`

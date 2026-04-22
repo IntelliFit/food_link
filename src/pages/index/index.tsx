@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Slider, Canvas } from '@tarojs/components'
+import { View, Text, Input, Image, Slider, Canvas, Button as TaroButton } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -38,6 +38,7 @@ import {
   type DailySummaryPosterInput
 } from '../../utils/poster'
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
+import { savePosterToPhotosAlbum } from '../../utils/weapp-save-image-album'
 import { IconCamera, IconText, IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
@@ -56,6 +57,7 @@ import {
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -70,7 +72,7 @@ import {
 } from './utils/constants'
 import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal } from './components'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
 
 /** 微信操作面板单行不宜过长，总长度含「 · 」分隔符一并限制 */
 const HOME_MEAL_PICKER_LINE_MAX_CHARS = 34
@@ -616,6 +618,31 @@ function IndexPage() {
   const [showRecordEditModal, setShowRecordEditModal] = useState(false)
   const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
 
+  const showRecordPosterModalRef = useRef(false)
+  const showDailyPosterModalRef = useRef(false)
+  const mealPosterShareForAppMessageRef = useRef<MealPosterSharePayload | null>(null)
+  const dailyPosterShareForAppMessageRef = useRef<{ imageUrl: string } | null>(null)
+
+  useEffect(() => {
+    showRecordPosterModalRef.current = showRecordPosterModal
+  }, [showRecordPosterModal])
+
+  useEffect(() => {
+    showDailyPosterModalRef.current = showDailyPosterModal
+  }, [showDailyPosterModal])
+
+  const handleMealPosterShareContext = useCallback((ctx: MealPosterSharePayload | null) => {
+    mealPosterShareForAppMessageRef.current = ctx
+  }, [])
+
+  useEffect(() => {
+    if (showDailyPosterModal && dailyPosterImageUrl) {
+      dailyPosterShareForAppMessageRef.current = { imageUrl: dailyPosterImageUrl }
+    } else {
+      dailyPosterShareForAppMessageRef.current = null
+    }
+  }, [showDailyPosterModal, dailyPosterImageUrl])
+
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string, silent = false) => {
     const resolvedDate =
@@ -898,10 +925,21 @@ function IndexPage() {
     void loadDashboard(targetDate, Boolean(localSnapshot))
   })
 
-  useShareAppMessage(() => ({
-    title: '食探 - AI 智能饮食记录',
-    path: '/pages/index/index'
-  }))
+  useShareAppMessage(() => {
+    if (showRecordPosterModalRef.current && mealPosterShareForAppMessageRef.current?.imageUrl) {
+      const m = mealPosterShareForAppMessageRef.current
+      return { title: m.title, path: m.path, imageUrl: m.imageUrl }
+    }
+    if (showDailyPosterModalRef.current && dailyPosterShareForAppMessageRef.current?.imageUrl) {
+      const d = dailyPosterShareForAppMessageRef.current
+      return {
+        title: '今日饮食小结',
+        path: '/pages/index/index',
+        imageUrl: d.imageUrl
+      }
+    }
+    return { title: '食探 - AI 智能饮食记录', path: '/pages/index/index' }
+  })
 
   useShareTimeline(() => ({
     title: '食探 - AI 智能饮食记录'
@@ -1165,7 +1203,7 @@ function IndexPage() {
     }
     const raw = selectedDateRef.current || formatDateKey(new Date())
     const d = mapCalendarDateToApi(raw) || raw
-    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
   }
 
   /** 「查看饮食统计」入口：进入当日记录列表 */
@@ -1175,7 +1213,7 @@ function IndexPage() {
       return
     }
     const d = mapCalendarDateToApi(selectedDate) || selectedDate
-    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
   }, [selectedDate])
 
   /** 今日餐食单条 → 弹出记录操作菜单（多条同餐时先选记录） */
@@ -1196,7 +1234,7 @@ function IndexPage() {
       if (!rid) {
         const raw = selectedDateRef.current || formatDateKey(new Date())
         const d = mapCalendarDateToApi(raw) || raw
-        Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+        Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
         return
       }
       openActionSheet(rid)
@@ -1272,7 +1310,7 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: '/pages/expiry/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
   }
 
   const openFoodExpiryEdit = (id: string) => {
@@ -1280,7 +1318,7 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: `/pages/expiry-edit/index?id=${encodeURIComponent(id)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/expiry-edit/index')}?id=${encodeURIComponent(id)}` })
   }
 
   const openExerciseRecord = () => {
@@ -1289,7 +1327,7 @@ function IndexPage() {
       return
     }
     const date = selectedDateRef.current || formatDateKey(new Date())
-    Taro.navigateTo({ url: `/pages/exercise-record/index?date=${encodeURIComponent(date)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(date)}` })
   }
 
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
@@ -1633,11 +1671,12 @@ function IndexPage() {
   const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
   const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey)
 
-  const handleShareDailyPosterImage = useCallback(() => {
+  const handleShareDailyPosterToMoments = useCallback(() => {
     if (!dailyPosterImageUrl) return
-    // @ts-ignore Taro 类型可能未收录 showShareImageMenu
+    // @ts-ignore needShowEntrance
     Taro.showShareImageMenu({
       path: dailyPosterImageUrl,
+      needShowEntrance: false,
       fail: (err: { errMsg?: string }) => {
         console.error('showShareImageMenu fail', err)
         Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
@@ -1647,25 +1686,13 @@ function IndexPage() {
 
   const handleSaveDailyPoster = useCallback(() => {
     if (!dailyPosterImageUrl) return
-    Taro.saveImageToPhotosAlbum({
-      filePath: dailyPosterImageUrl,
-      success: () => {
+    void savePosterToPhotosAlbum(dailyPosterImageUrl, {
+      onSuccess: () => {
         Taro.showToast({ title: '已保存到相册', icon: 'success' })
         setShowDailyPosterModal(false)
       },
-      fail: (err) => {
-        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
-          Taro.showModal({
-            title: '提示',
-            content: '需要您授权保存图片到相册',
-            confirmText: '去设置',
-            success: (r) => {
-              if (r.confirm) Taro.openSetting()
-            }
-          })
-        } else {
-          Taro.showToast({ title: '保存失败', icon: 'none' })
-        }
+      onToast: (message) => {
+        Taro.showToast({ title: message, icon: 'none' })
       }
     })
   }, [dailyPosterImageUrl])
@@ -2564,11 +2591,23 @@ function IndexPage() {
               </View>
             </View>
             <View className='poster-modal-bottom-bar'>
-              <View className='poster-share-channel' onClick={handleShareDailyPosterImage}>
+              <TaroButton
+                className='poster-share-channel poster-share-channel--btn'
+                openType='share'
+                plain
+                hoverClass='poster-share-channel--hover'
+                disabled={!dailyPosterImageUrl}
+              >
                 <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
                   <Text className='iconfont icon-wechat poster-share-channel-glyph' />
                 </View>
-                <Text className='poster-share-channel-label'>微信</Text>
+                <Text className='poster-share-channel-label'>微信好友</Text>
+              </TaroButton>
+              <View className='poster-share-channel' onClick={handleShareDailyPosterToMoments}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-moments'>
+                  <Text className='iconfont icon-fenxiang poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>朋友圈</Text>
               </View>
               <View className='poster-share-channel' onClick={handleSaveDailyPoster}>
                 <View className='poster-share-channel-icon poster-share-channel-icon-save'>
@@ -2602,6 +2641,7 @@ function IndexPage() {
         visible={showRecordPosterModal}
         record={mealActionRecord}
         onClose={() => setShowRecordPosterModal(false)}
+        onShareContextChange={handleMealPosterShareContext}
       />
     </View>
   )

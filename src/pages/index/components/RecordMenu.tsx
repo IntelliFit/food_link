@@ -19,6 +19,7 @@ import {
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
 interface RecordMenuProps {
   visible: boolean
@@ -114,7 +115,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                   confirmText: '去充值',
                   cancelText: '取消',
                   success: (r) => {
-                    if (r.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                    if (r.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
                   }
                 })
                 return
@@ -131,7 +132,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                 showCancel: !isPro,
                 success: (r) => {
                   if (!isPro && r.confirm) {
-                    Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                    Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
                   }
                 }
               })
@@ -147,7 +148,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
             success: (res) => {
               const imagePath = res.tempFilePaths[0]
               Taro.setStorageSync('analyzeImagePath', imagePath)
-              Taro.navigateTo({ url: '/pages/analyze/index' })
+              Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
             },
             fail: (err) => {
               if (err.errMsg?.includes('cancel')) return
@@ -158,17 +159,17 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         break
       }
       case 'text':
-        Taro.navigateTo({ url: '/pages/record-text/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })
         break
       case 'manual':
-        Taro.navigateTo({ url: '/pages/record-manual/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/record-manual/index') })
         break
     }
   }
 
   const handleHistoryClick = () => {
     onClose()
-    Taro.navigateTo({ url: '/pages/analyze-history/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
   }
 
   const runDevTool = (fn: () => void) => {

@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 import type { ExecutionMode } from './api'
+import { extraPkgUrl } from './subpackage-extra'
 
 export const STRICT_MODE_ENABLED = true
 
@@ -20,7 +21,7 @@ export const promptStrictModeUpgrade = (onCancel?: () => void) => {
     cancelText: '取消',
     success: (res) => {
       if (res.confirm) {
-        Taro.navigateTo({ url: '/pages/pro-membership/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
       } else {
         onCancel?.()
       }

@@ -1,21 +1,14 @@
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useCallback } from 'react'
 import { getAccessToken } from './api'
+import { extraPkgUrl } from './subpackage-extra'
 
-// 不需要登录的页面白名单
+// 不需要登录的页面白名单（含分包路径）
 const PUBLIC_PAGES = new Set([
-  '/pages/login/index',
-  '/pages/agreement/index',
-  '/pages/privacy/index',
-  '/pages/about/index',
-])
-
-// Tab 页面路径
-const TAB_PAGES = new Set([
-  '/pages/index/index',
-  '/pages/community/index',
-  '/pages/record/index',
-  '/pages/profile/index',
+  extraPkgUrl('/pages/login/index'),
+  extraPkgUrl('/pages/agreement/index'),
+  extraPkgUrl('/pages/privacy/index'),
+  extraPkgUrl('/pages/about/index'),
 ])
 
 /**
@@ -57,11 +50,12 @@ export function getCurrentPageRoute(): string {
  */
 export function redirectToLogin(redirectPath?: string) {
   const currentPath = redirectPath || getCurrentPagePath()
-  const loginUrl = `/pages/login/index?redirect=${encodeURIComponent(currentPath)}`
-  
+  const loginBase = extraPkgUrl('/pages/login/index')
+  const loginUrl = `${loginBase}?redirect=${encodeURIComponent(currentPath)}`
+
   // 检查当前页面是否已经是登录页，避免重复跳转
   const currentRoute = getCurrentPageRoute()
-  if (currentRoute === '/pages/login/index') {
+  if (currentRoute === loginBase) {
     return
   }
   

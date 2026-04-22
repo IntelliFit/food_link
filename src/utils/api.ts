@@ -1,5 +1,7 @@
 import Taro from '@tarojs/taro'
 
+import { extraPkgUrl } from './subpackage-extra'
+
 function readInjectedString(
   getter: () => string,
   fallback = ''
@@ -1970,7 +1972,7 @@ export function clearAllStorage() {
 }
 
 /** 登录页路径，token 失效时统一跳转 */
-const LOGIN_PAGE_URL = '/pages/login/index'
+const LOGIN_PAGE_URL = extraPkgUrl('/pages/login/index')
 
 /**
  * 清除登录态并跳转登录页（token 失效或未登录时调用）

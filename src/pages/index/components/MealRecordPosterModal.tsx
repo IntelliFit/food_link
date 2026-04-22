@@ -1,6 +1,7 @@
-import { View, Text, Image, Canvas } from '@tarojs/components'
+import { View, Text, Image, Canvas, Button } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   getUnlimitedQRCode,
   getFriendInviteProfile,
@@ -10,6 +11,7 @@ import {
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { savePosterToPhotosAlbum } from '../../../utils/weapp-save-image-album'
 
 import './MealRecordPosterModal.scss'
 
@@ -18,13 +20,22 @@ function getInviteCodeFromUserId(userId: string): string {
   return raw.length >= 8 ? raw.slice(0, 8) : ''
 }
 
+/** 供首页 useShareAppMessage 在餐次海报打开时带上卡片图与详情 path */
+export interface MealPosterSharePayload {
+  imageUrl: string
+  path: string
+  title: string
+}
+
 interface MealRecordPosterModalProps {
   visible: boolean
   record: FoodRecord | null
   onClose: () => void
+  /** 海报可分享时同步上下文；关闭或无图时传 null */
+  onShareContextChange?: (ctx: MealPosterSharePayload | null) => void
 }
 
-export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPosterModalProps) {
+export function MealRecordPosterModal({ visible, record, onClose, onShareContextChange }: MealRecordPosterModalProps) {
   const [posterGenerating, setPosterGenerating] = useState(false)
   const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
   const [isProUser, setIsProUser] = useState(false)
@@ -80,6 +91,19 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
   }, [visible])
+
+  useEffect(() => {
+    if (!onShareContextChange) return
+    if (visible && posterImageUrl && record) {
+      const oid = record.user_id || ''
+      const ic = ownerInviteCode || getInviteCodeFromUserId(oid)
+      const path = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}${oid ? `&from_user_id=${encodeURIComponent(oid)}` : ''}${ic ? `&invite_code=${encodeURIComponent(ic)}` : ''}`
+      const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
+      onShareContextChange({ imageUrl: posterImageUrl, path, title })
+    } else {
+      onShareContextChange(null)
+    }
+  }, [visible, posterImageUrl, record, ownerInviteCode, ownerNickname, onShareContextChange])
 
   const handleGeneratePoster = useCallback(() => {
     if (!record || posterGenerating) return
@@ -206,11 +230,12 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
       })
   }, [record, posterGenerating, isProUser, ownerNickname, ownerAvatar, ownerInviteCode, calorieCompare])
 
-  const handleSharePosterImage = useCallback(() => {
+  const handleSharePosterToMoments = useCallback(() => {
     if (!posterImageUrl) return
-    // @ts-ignore
+    // @ts-ignore needShowEntrance
     Taro.showShareImageMenu({
       path: posterImageUrl,
+      needShowEntrance: false,
       fail: (err: { errMsg?: string }) => {
         console.error('showShareImageMenu fail', err)
         Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
@@ -220,25 +245,13 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
 
   const handleSavePoster = useCallback(() => {
     if (!posterImageUrl) return
-    Taro.saveImageToPhotosAlbum({
-      filePath: posterImageUrl,
-      success: () => {
+    void savePosterToPhotosAlbum(posterImageUrl, {
+      onSuccess: () => {
         Taro.showToast({ title: '已保存到相册', icon: 'success' })
         onClose()
       },
-      fail: (err) => {
-        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
-          Taro.showModal({
-            title: '提示',
-            content: '需要您授权保存图片到相册',
-            confirmText: '去设置',
-            success: (r) => {
-              if (r.confirm) Taro.openSetting()
-            }
-          })
-        } else {
-          Taro.showToast({ title: '保存失败', icon: 'none' })
-        }
+      onToast: (message) => {
+        Taro.showToast({ title: message, icon: 'none' })
       }
     })
   }, [posterImageUrl, onClose])
@@ -275,11 +288,23 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
               </View>
             </View>
             <View className='poster-modal-bottom-bar'>
-              <View className='poster-share-channel' onClick={handleSharePosterImage}>
+              <Button
+                className='poster-share-channel poster-share-channel--btn'
+                openType='share'
+                plain
+                hoverClass='poster-share-channel--hover'
+                disabled={!posterImageUrl}
+              >
                 <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
                   <Text className='iconfont icon-wechat poster-share-channel-glyph' />
                 </View>
-                <Text className='poster-share-channel-label'>微信</Text>
+                <Text className='poster-share-channel-label'>微信好友</Text>
+              </Button>
+              <View className='poster-share-channel' onClick={handleSharePosterToMoments}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-moments'>
+                  <Text className='iconfont icon-fenxiang poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>朋友圈</Text>
               </View>
               <View className='poster-share-channel' onClick={handleSavePoster}>
                 <View className='poster-share-channel-icon poster-share-channel-icon-save'>
