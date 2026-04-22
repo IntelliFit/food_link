@@ -6,6 +6,10 @@
 
 ## 2026-04-22
 
+- 🗃️ db: 迁移脚本支持在目标库已有业务表且启用 `--skip-existing` 时自动跳过 schema 重导，避免补跑时再次撞到已存在的函数/触发器 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
+- 🗃️ db: 迁移脚本补上 JSON/JSONB 值适配，自动把 `dict/list` 包装为 PostgreSQL JSON 参数，避免 `weapp_user` 等基础表因 `can't adapt type 'dict'` 失败 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
+- 🗃️ db: 迁移脚本补充 Supabase 兼容层，自动处理 `public` 重复 schema、`auth.uid()`、`extensions.uuid_generate_v4()` 与 `auth.users` 外键占位，降低导入到纯 PostgreSQL 的阻塞 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
+- 🗃️ db: 新增 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`，支持通过 `pg_dump/psql` 迁移 schema（含函数、触发器、注释）并用 Python 分批迁移数据，提供 `--dry-run` 与 `--skip-existing` `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
 - 🔧 refactor: 新上传的 COS 对象 key 改为按年月日分层；食物图使用 `YYYY/MM/DD/uuid`，头像与体检报告使用 `user_id/YYYY/MM/DD/uuid`，历史数据保持兼容不迁移 `backend/database.py`
 - 🔒 security: 固化 `health-reports` 为代码级私有桶，不再依赖环境变量开关，避免线上误配置导致报告图被公网暴露 `backend/cos_storage.py`
 - 🔧 chore: 新增统一 COS 存储适配层并将后端上传/删除切到腾讯云 COS，公开桶统一返回 CDN 地址，`health-reports` 改为私有 key + 签名访问 `backend/cos_storage.py` `backend/database.py` `backend/main.py` `backend/worker.py`
