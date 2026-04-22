@@ -5,6 +5,8 @@ import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type Membership
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import './index.scss'
 
 const MEALS = [
@@ -31,6 +33,7 @@ const ACTIVITY_TIMINGS = [
 ]
 
 function RecordTextPage() {
+  const { scheme } = useAppColorScheme()
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
@@ -57,11 +60,16 @@ function RecordTextPage() {
 
   useDidShow(() => {
     refreshMembership()
+    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
   })
 
   useEffect(() => {
     refreshMembership()
   }, [])
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
+  }, [scheme])
 
   const commonFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 

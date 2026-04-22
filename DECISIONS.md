@@ -1,5 +1,21 @@
 # DECISIONS
 
+- `2026-04-23`: 黑色主题下的微信原生导航栏与右上角胶囊不应再按页面逐个补丁式处理；正式口径改为在 `withAuth` 中统一监听当前主题，并在页面显示/主题变化时调用 `Taro.setNavigationBarColor`，让首页/分析/圈子/我的及分包页尽量同步切到深色导航外观。
+- `2026-04-23`: 对仍使用微信系统导航栏的分包页，深色主题不能只改页面内容区；`record-manual`、`record-text`、`analyze`、`analyze-history` 等页进入时还应按当前主题调用 `Taro.setNavigationBarColor`，否则顶部导航栏会继续停留在浅色口径。
+- `2026-04-23`: 图片分析 / 文字记录链路的深色主题不能只停留在页面根卡片层；`analyze-loading` 的全屏占位与错误态、`result` 的头图占位/餐次弹层/二次纠错抽屉/底部操作区、`result-text` 与 `record-text` 的 hero/控制区/禁用态也要统一在 `src/styles/fl-color-scheme-dark.scss` 里补 dark-only 覆盖。
+
+- `2026-04-23`: 深色主题下“页面卡片”和“弹层/抽屉/底部操作区”采用不同口径。普通信息卡片可使用低透明面板，但首页编辑目标、今日餐食操作弹层、记录编辑弹层及类似 modal/sheet 必须保持高不透明暗底，避免黑色主背景下内容漂浮、对比不足。
+
+- `2026-04-23`: 深色主题在黑色主背景下的正式口径改为“透明面板”而不是厚重深绿实底。首页、统计、圈子、我的、弹层与记录详情等通用卡片优先使用低透明度浅色面板变量，保留轻边框与文字对比，不再大面积使用 `rgb(26 34 32 / 88~98%)` 这类实心暗底。
+
+- `2026-04-23`: 深色主题适配不能只覆盖 Tab 根页；分析、结果、健康档案、公共库、好友、定位、手动记录、文本记录、会员、菜谱等分包页也应统一通过 `src/styles/fl-color-scheme-dark.scss` 提供 dark-only 覆盖，避免直接改浅色源样式而误伤亮色主题。
+- `2026-04-23`: 「我的」链路下的子页面也统一纳入深色主题覆盖范围，至少包含 `profile-settings`、`health-profile*`、`privacy-settings`、`about/agreement/privacy`、`friends`、`pro-membership`、`exercise-record`、`login`；这些页面优先在 `src/styles/fl-color-scheme-dark.scss` 中做 dark-only 适配，而不是改原浅色 SCSS。
+- `2026-04-23`: 好友管理链路的深色主题范围不只 `friends` 列表页，还应覆盖 `interaction-notifications` 与 `interaction-feed-detail`，统一在 `src/styles/fl-color-scheme-dark.scss` 中补充 dark-only 样式，保证消息列表和单条互动详情在黑色主背景下同样可读。
+- `2026-04-23`: 首页“编辑目标”和首页菜单类弹层在深色主题下应直接使用与首页主背景同系的实体暗底渐变，不能只把外层容器调深而保留内部半透明卡片，否则会继续产生“透明发飘”的视觉问题。
+
+- `2026-04-23`: 本地启动联调环境时，微信开发者工具仍以本项目专用自动化目标为准，使用 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`，并以 `mrc` 连通结果作为有效启动确认。
+- `2026-04-23`: 若微信开发者工具提示 `dist/app.json` 缺失，不优先怀疑 `project.config.json`；先检查 `dist/` 是否只有空壳文件，再前台执行一次 `npm run build:weapp -- --no-check` 触发首轮完整产物生成，并用 `mrc where --port 9420` 确认已恢复到业务页。
+
 - `2026-04-13`: 首页核心数据（卡路里/餐食/运动/保质期）采用“本地快照优先 + 云端静默覆盖”口径。按日期缓存最近 60 条，页面与切日先渲染本地，再后台请求；云端结果与本地不一致时才回写覆盖。
 
 - `2026-04-13`: 首页分享链路回退到“无称号开关”的固定流程。分享弹层不再提供“显示今日称号”切换，海报生成不再依赖称号可见性状态。

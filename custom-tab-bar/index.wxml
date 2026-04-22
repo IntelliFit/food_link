@@ -1,4 +1,4 @@
-<view class="custom-tab-bar {{hidden ? 'hidden' : ''}}">
+<view class="custom-tab-bar {{hidden ? 'hidden' : ''}} {{colorScheme === 'dark' ? 'custom-tab-bar--dark' : ''}}">
   <view 
     wx:for="{{tabList}}" 
     wx:key="index"

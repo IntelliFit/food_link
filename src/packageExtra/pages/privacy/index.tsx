@@ -1,8 +1,10 @@
 import { View, Text, ScrollView } from '@tarojs/components'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
 export default function PrivacyPage() {
     return (
+        <FlPageThemeRoot>
         <ScrollView scrollY className='document-page'>
             <View className='document-content'>
                 <Text className='title'>隐私政策</Text>
@@ -56,5 +58,6 @@ export default function PrivacyPage() {
                 </View>
             </View>
         </ScrollView>
+        </FlPageThemeRoot>
     )
 }

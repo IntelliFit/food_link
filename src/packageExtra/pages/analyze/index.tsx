@@ -22,6 +22,8 @@ import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
@@ -188,6 +190,7 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
 }
 
 function AnalyzePage() {
+  const { scheme } = useAppColorScheme()
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
@@ -248,6 +251,7 @@ function AnalyzePage() {
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
   useDidShow(() => {
+    applyThemeNavigationBar(scheme)
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
     }
@@ -315,6 +319,10 @@ function AnalyzePage() {
     }
     initStoredImagePath()
   }, [])
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
 
   const handleReferencePresetSelect = (value: string) => {
     setReferencePreset(value)

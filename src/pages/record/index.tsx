@@ -1,4 +1,4 @@
-import { View, Text, Camera, Image } from '@tarojs/components'
+import { View, Text, Camera, Image, Button } from '@tarojs/components'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
@@ -8,10 +8,45 @@ import {
 } from '../../utils/api'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { pickImageAndOpenAnalyze } from '../../utils/weapp-open-analyze-image'
 
 import './index.scss'
 
-type CameraAuthStatus = 'pending' | 'authorized' | 'denied'
+type CameraAuthStatus = 'authorized' | 'denied'
+
+/** 与 `Button openType=agreePrivacyAuthorization` 的 id 一致，供 onNeedPrivacyAuthorization 的 resolve 校验 */
+const RECORD_CAMERA_PRIVACY_BTN_ID = 'record-camera-privacy-agree'
+
+type PrivacyUiState = 'checking' | 'need' | 'ok'
+
+/**
+ * 仅当错误信息明确像「系统/微信拒绝摄像头」时才进拦截页。
+ * 隐私未同意走 privacy 门禁；切勿把泛化的 operateCamera:fail 一律当权限（真机常因占用/前后台/组件未就绪等失败）。
+ */
+function isLikelyCameraAuthDeniedMessage(msg: string): boolean {
+  const raw = msg || ''
+  const m = raw.toLowerCase()
+  if (m.includes('privacy') && (m.includes('not authorized') || m.includes('unauthorized'))) return false
+  if (m.includes('auth deny') || m.includes('auth denied')) return true
+  if (m.includes('no permission')) return true
+  if (raw.includes('用户拒绝') || raw.includes('用户不允许')) return true
+  if (raw.includes('不允许使用摄像头')) return true
+  if (raw.includes('请在小程序设置中打开') || raw.includes('前往设置')) return true
+  if (m.includes('operatecamera') && m.includes('fail')) {
+    return (
+      m.includes('auth') ||
+      m.includes('deny') ||
+      m.includes('denied') ||
+      m.includes('permission') ||
+      m.includes('not authorized') ||
+      m.includes('system deny') ||
+      raw.includes('未授权') ||
+      raw.includes('无权限') ||
+      (raw.includes('系统') && raw.includes('拒绝'))
+    )
+  }
+  return false
+}
 
 function showFoodAnalysisQuotaModal(ms: MembershipStatus) {
   if (typeof ms.points_balance === 'number') {
@@ -53,45 +88,53 @@ function isFoodAnalysisBlocked(ms: MembershipStatus | null): boolean {
 
 function RecordPage() {
   // 相机相关状态
-  const [cameraAuth, setCameraAuth] = useState<CameraAuthStatus>('pending')
+  const [cameraAuth, setCameraAuth] = useState<CameraAuthStatus>('authorized')
   const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off')
   const [devicePosition, setDevicePosition] = useState<'front' | 'back'>('back')
   const [isCapturing, setIsCapturing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [scanning, setScanning] = useState(true)
-  
+  /** 变更后强制重挂 <Camera>，配合从设置返回、非权限类偶发错误恢复 */
+  const [cameraInstanceKey, setCameraInstanceKey] = useState(0)
+  /** 正式版：隐私指引未同意时 Camera 会失败；先门禁再挂载组件 */
+  const [privacyUi, setPrivacyUi] = useState<PrivacyUiState>(() =>
+    Taro.getEnv() === Taro.ENV_TYPE.WEAPP ? 'checking' : 'ok'
+  )
+  const privacyResolveRef = useRef<
+    ((o: { event: 'exposureAuthorization' | 'agree' | 'disagree'; buttonId?: string }) => void) | null
+  >(null)
+
   const cameraContextRef = useRef<Taro.CameraContext | null>(null)
 
-  /**
-   * 相机权限：仅当用户在小程序内「明确拒绝过」camera（authSetting 为 false）时拦截。
-   * 不再主动调用 wx.authorize(scope.camera)：该接口易在未真正拒绝时失败，导致一进页就误判为需去设置。
-   * 首次或未授权时由 <Camera> 拉起系统授权；用户拒绝时由 onError 处理。
-   */
-  const checkCameraAuth = useCallback(async () => {
-    try {
-      const { authSetting } = await Taro.getSetting()
-      if (authSetting['scope.camera'] === false) {
-        setCameraAuth('denied')
-      } else {
-        setCameraAuth('authorized')
-      }
-    } catch {
-      setCameraAuth('authorized')
-    }
-  }, [])
-
   useDidShow(() => {
-    checkCameraAuth()
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
     }
     setScanning(true)
-    // 自定义 tabBar 时勿调用 hideTabBar/showTabBar，否则会与原生 tabBar 叠成双导航栏；见 custom-tab-bar/updateHidden
+
+    if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
+      Taro.getPrivacySetting({
+        success: (res) => {
+          setPrivacyUi(res.needAuthorization ? 'need' : 'ok')
+        },
+        fail: () => setPrivacyUi('ok')
+      })
+    } else {
+      setPrivacyUi('ok')
+    }
   })
 
   useEffect(() => {
-    cameraContextRef.current = Taro.createCameraContext()
+    if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) return
+    Taro.onNeedPrivacyAuthorization((resolve) => {
+      privacyResolveRef.current = resolve
+      setPrivacyUi('need')
+    })
   }, [])
+
+  useEffect(() => {
+    cameraContextRef.current = Taro.createCameraContext()
+  }, [cameraInstanceKey])
 
   useShareAppMessage(() => ({
     title: '食探 - 记录每一餐，健康看得见',
@@ -178,24 +221,89 @@ function RecordPage() {
     })
   }, [membershipStatus])
 
-  // 官方文档：binderror 在用户不允许使用摄像头时触发
-  const handleCameraError = useCallback((e: any) => {
+  const handleCameraError = useCallback((e: { detail?: { errMsg?: string } }) => {
     console.error('相机错误:', e)
-    setCameraAuth('denied')
+    const msg = String(e?.detail?.errMsg ?? '')
+    const low = msg.toLowerCase()
+    if (low.includes('privacy') && (low.includes('not authorized') || low.includes('unauthorized'))) {
+      setPrivacyUi('need')
+      return
+    }
+    if (isLikelyCameraAuthDeniedMessage(msg)) {
+      setCameraAuth('denied')
+      return
+    }
+    Taro.showToast({ title: '相机暂时不可用，请重试', icon: 'none' })
+    setCameraInstanceKey((k) => k + 1)
   }, [])
 
-  // 打开设置页
+  const handlePrivacyAgreed = useCallback(() => {
+    setPrivacyUi('ok')
+    const finish = privacyResolveRef.current
+    privacyResolveRef.current = null
+    if (finish) {
+      finish({ event: 'agree', buttonId: RECORD_CAMERA_PRIVACY_BTN_ID })
+    }
+    setCameraInstanceKey((k) => k + 1)
+  }, [])
+
+  const handlePrivacyDecline = useCallback(() => {
+    const finish = privacyResolveRef.current
+    privacyResolveRef.current = null
+    if (finish) finish({ event: 'disagree' })
+    void Taro.switchTab({ url: '/pages/index/index' })
+  }, [])
+
   const openSettings = useCallback(() => {
     Taro.openSetting({
-      success: (res) => {
-        if (res.authSetting['scope.camera']) {
-          setCameraAuth('authorized')
-        } else {
-          void checkCameraAuth()
-        }
+      // 仅用 success + getSetting 时，部分机型授权已开但 scope.camera 仍为 false，会永久卡在拦截页
+      complete: () => {
+        setCameraAuth('authorized')
+        setCameraInstanceKey((k) => k + 1)
       }
     })
-  }, [checkCameraAuth])
+  }, [])
+
+  if (privacyUi === 'checking' && Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
+    return (
+      <View className='record-page camera-privacy-checking'>
+        <View className='loading-spinner-md' />
+      </View>
+    )
+  }
+
+  if (privacyUi === 'need' && Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
+    return (
+      <View className='record-page camera-privacy-gate'>
+        <View className='privacy-gate-content'>
+          <Text className='iconfont icon-xiangji privacy-gate-icon' />
+          <Text className='privacy-gate-title'>使用相机前请同意隐私保护指引</Text>
+          <Text className='privacy-gate-desc'>
+            这与微信设置里「摄像头」开关不是同一项：请先点下方「同意并使用相机」。若仅去系统设置打开摄像头，本页仍可能无法启动相机。
+          </Text>
+          <Button
+            className='privacy-gate-agree-btn'
+            id={RECORD_CAMERA_PRIVACY_BTN_ID}
+            openType='agreePrivacyAuthorization'
+            onAgreePrivacyAuthorization={handlePrivacyAgreed}
+          >
+            同意并使用相机
+          </Button>
+          <View
+            className='privacy-gate-link'
+            onClick={() => {
+              Taro.openPrivacyContract({})
+            }}
+          >
+            <Text>查看《用户隐私保护指引》全文</Text>
+          </View>
+          <View className='privacy-gate-link privacy-gate-link--muted' onClick={handlePrivacyDecline}>
+            <Text>暂不使用，返回首页</Text>
+          </View>
+        </View>
+      </View>
+    )
+  }
 
   // 权限拒绝页面
   if (cameraAuth === 'denied') {
@@ -204,9 +312,14 @@ function RecordPage() {
         <View className='denied-content'>
           <Text className='iconfont icon-jiesuo denied-icon' />
           <Text className='denied-title'>需要相机权限</Text>
-          <Text className='denied-desc'>请在设置中开启相机权限，以便拍照识别食物</Text>
-          <View className='denied-btn' onClick={openSettings}>
-            <Text>去设置</Text>
+          <Text className='denied-desc'>
+            若小程序设置里摄像头已开仍无法使用，请先返回确认已在相机页完成「隐私保护指引」同意。也可点「改用系统相机」绕过本页组件。
+          </Text>
+          <View className='denied-btn' onClick={() => void pickImageAndOpenAnalyze(['camera'])}>
+            <Text>改用系统相机</Text>
+          </View>
+          <View className='denied-btn denied-btn--secondary' onClick={openSettings}>
+            <Text>打开权限设置</Text>
           </View>
         </View>
       </View>
@@ -217,6 +330,7 @@ function RecordPage() {
     <View className='record-page camera-mode'>
       {/* 全屏相机 */}
       <Camera
+        key={cameraInstanceKey}
         className='camera-fullscreen'
         devicePosition={devicePosition}
         flash={flashMode}

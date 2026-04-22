@@ -16,6 +16,7 @@ import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { HOME_DASHBOARD_LOCAL_CACHE_KEY } from '../../../utils/home-dashboard-local-cache'
 import { mapCalendarDateToApi } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -377,6 +378,7 @@ export default function ExerciseRecordPage() {
   const listEmpty = displayRows.length === 0
 
   return (
+    <FlPageThemeRoot>
     <View className='exercise-record-page'>
       <View className='header-stats'>
         <View className='stats-card'>
@@ -528,5 +530,6 @@ export default function ExerciseRecordPage() {
         </View>
       </View>
     </View>
+    </FlPageThemeRoot>
   )
 }

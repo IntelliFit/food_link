@@ -11,6 +11,7 @@ import {
 } from '../../../utils/api'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../../utils/food-expiry-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
 import './index.scss'
 
@@ -162,6 +163,7 @@ export default function ExpiryPage() {
   )
 
   return (
+    <FlPageThemeRoot>
     <View className='expiry-page'>
       <ScrollView scrollY className='expiry-scroll'>
         <View className='expiry-hero'>
@@ -240,5 +242,6 @@ export default function ExpiryPage() {
         )}
       </ScrollView>
     </View>
+    </FlPageThemeRoot>
   )
 }

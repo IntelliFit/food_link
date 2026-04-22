@@ -1,8 +1,10 @@
 import { View, Text, ScrollView } from '@tarojs/components'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
 export default function AgreementPage() {
     return (
+        <FlPageThemeRoot>
         <ScrollView scrollY className='agreement-page'>
             <View className='document-content'>
                 <Text className='title'>用户服务协议</Text>
@@ -50,5 +52,6 @@ export default function AgreementPage() {
                 </View>
             </View>
         </ScrollView>
+        </FlPageThemeRoot>
     )
 }

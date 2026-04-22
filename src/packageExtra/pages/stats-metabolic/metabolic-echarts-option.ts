@@ -9,6 +9,8 @@ export interface MetabolicSimSeriesInput {
   absorbPerMin: Float64Array
   outPerMin: Float64Array
   refOutPerMin: Float64Array
+  /** 每分钟示意脂肪增量（g），用于累计曲线（急性缓冲池满后的 P-ratio 模型） */
+  fatDeltaGramsPerMin: Float64Array
 }
 
 const MINUTES_PER_DAY = 1440
@@ -39,16 +41,14 @@ function formatMinuteOfDay(m: number): string {
 export function buildMetabolicFluxChartOption(
   sim: MetabolicSimSeriesInput,
   nowMinute: number,
-  mealMinutesOfDay: number[],
   sampleStepMin: number,
 ): EChartsCoreOption {
   const absorbS = sampleSeries(sim.absorbPerMin, sampleStepMin)
   const outS = sampleSeries(sim.outPerMin, sampleStepMin)
   const refS = sampleSeries(sim.refOutPerMin, sampleStepMin)
-  const n = absorbS.length
 
   let yMax = 0.0001
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < absorbS.length; i++) {
     yMax = Math.max(yMax, absorbS[i], outS[i], refS[i])
   }
   yMax *= 1.12
@@ -67,25 +67,44 @@ export function buildMetabolicFluxChartOption(
   const outPts = toPoints(outS)
   const refPts = toPoints(refS)
 
+  const cumFatByMinute = new Float64Array(MINUTES_PER_DAY)
+  let fatRun = 0
+  for (let t = 0; t < MINUTES_PER_DAY; t++) {
+    fatRun += sim.fatDeltaGramsPerMin[t] ?? 0
+    cumFatByMinute[t] = fatRun
+  }
+  const fatCumPts: [number, number][] = absorbPts.map(([min]) => {
+    const m = Math.min(MINUTES_PER_DAY - 1, Math.round(min))
+    return [min, Math.round(cumFatByMinute[m] * 1000) / 1000]
+  })
+  let fatYMax = 0.0001
+  for (let i = 0; i < fatCumPts.length; i++) {
+    fatYMax = Math.max(fatYMax, fatCumPts[i][1])
+  }
+  fatYMax *= 1.18
+  fatYMax = Math.max(fatYMax, 0.02)
+
   const clampedNow = Math.max(0, Math.min(MINUTES_PER_DAY - 1, nowMinute))
 
-  const mealMarkData = mealMinutesOfDay.map((m) => ({
-    xAxis: Math.max(0, Math.min(MINUTES_PER_DAY - 1, m)),
-    lineStyle: {
-      color: 'rgba(240, 152, 92, 0.95)',
-      width: 1.5,
-      type: 'dashed' as const,
-    },
-  }))
+  /** 与首页主色同系，饱和度适中便于读图 */
+  const C_ABS_LINE = '#5cb896'
+  const C_ABS_FILL = 'rgba(92, 184, 150, 0.22)'
+  const C_OUT_LINE = '#5c9ed4'
+  const C_OUT_FILL = 'rgba(92, 158, 212, 0.2)'
+  const C_REF_LINE = 'rgba(100, 116, 139, 0.62)'
+  const C_FAT_LINE = '#e57373'
+  const C_FAT_FILL = 'rgba(229, 115, 115, 0.2)'
+  const C_NOW_LINE = 'rgba(92, 184, 150, 0.55)'
+  const C_FAT_AXIS = '#c45c5c'
 
   return {
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'transparent',
     animation: false,
     grid: {
-      left: 46,
-      right: 14,
-      top: 20,
-      bottom: 26,
+      left: 36,
+      right: 34,
+      top: 18,
+      bottom: 24,
       containLabel: false,
     },
     tooltip: {
@@ -97,7 +116,13 @@ export function buildMetabolicFluxChartOption(
         if (!arr?.length) return ''
         const minute = arr[0].data[0]
         const head = `${formatMinuteOfDay(minute)}`
-        const lines = arr.map((p) => `${p.marker}${p.seriesName}: ${Math.round(p.data[1] * 1000) / 1000} kcal/分`)
+        const lines = arr.map((p) => {
+          const v = Math.round(p.data[1] * 1000) / 1000
+          if (p.seriesName === '累计脂肪淤积') {
+            return `${p.marker}${p.seriesName}: ${v} g（示意累计）`
+          }
+          return `${p.marker}${p.seriesName}: ${v} kcal/分`
+        })
         return [head, ...lines].join('\n')
       },
     },
@@ -115,27 +140,44 @@ export function buildMetabolicFluxChartOption(
       },
       splitLine: { lineStyle: { color: 'rgba(15, 23, 42, 0.06)' } },
     },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      max: yMax,
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: {
-        color: '#64748b',
-        fontSize: 10,
-        formatter: (v: string | number): string => `${Number(v).toFixed(2)}`,
+    yAxis: [
+      {
+        type: 'value',
+        min: 0,
+        max: yMax,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: '#64748b',
+          fontSize: 10,
+          formatter: (v: string | number): string => `${Number(v).toFixed(2)}`,
+        },
+        splitLine: { lineStyle: { color: 'rgba(15, 23, 42, 0.06)' } },
       },
-      splitLine: { lineStyle: { color: 'rgba(15, 23, 42, 0.06)' } },
-    },
+      {
+        type: 'value',
+        min: 0,
+        max: fatYMax,
+        position: 'right',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: C_FAT_AXIS,
+          fontSize: 10,
+          formatter: (v: string | number): string => `${Number(v).toFixed(2)}`,
+        },
+        splitLine: { show: false },
+      },
+    ],
     series: [
       {
         name: '参考消耗',
         type: 'line',
+        yAxisIndex: 0,
         smooth: 0.35,
         symbol: 'none',
         lineStyle: {
-          color: 'rgba(100, 116, 139, 0.75)',
+          color: C_REF_LINE,
           width: 1.25,
           type: 'dashed',
         },
@@ -145,20 +187,22 @@ export function buildMetabolicFluxChartOption(
       {
         name: '吸收',
         type: 'line',
+        yAxisIndex: 0,
         smooth: 0.35,
         symbol: 'none',
-        lineStyle: { color: 'rgb(92, 184, 150)', width: 2 },
-        areaStyle: { color: 'rgba(92, 184, 150, 0.24)' },
+        lineStyle: { color: C_ABS_LINE, width: 2 },
+        areaStyle: { color: C_ABS_FILL },
         data: absorbPts,
         z: 2,
       },
       {
         name: '实际消耗',
         type: 'line',
+        yAxisIndex: 0,
         smooth: 0.35,
         symbol: 'none',
-        lineStyle: { color: 'rgb(92, 158, 212)', width: 2 },
-        areaStyle: { color: 'rgba(92, 158, 212, 0.2)' },
+        lineStyle: { color: C_OUT_LINE, width: 2 },
+        areaStyle: { color: C_OUT_FILL },
         data: outPts,
         z: 3,
         markLine: {
@@ -167,11 +211,21 @@ export function buildMetabolicFluxChartOption(
           data: [
             {
               xAxis: clampedNow,
-              lineStyle: { color: 'rgba(92, 184, 150, 0.45)', width: 1.25, type: 'solid' },
+              lineStyle: { color: C_NOW_LINE, width: 1.25, type: 'solid' },
             },
-            ...mealMarkData,
           ],
         },
+      },
+      {
+        name: '累计脂肪淤积',
+        type: 'line',
+        yAxisIndex: 1,
+        smooth: 0.35,
+        symbol: 'none',
+        lineStyle: { color: C_FAT_LINE, width: 2 },
+        areaStyle: { color: C_FAT_FILL },
+        data: fatCumPts,
+        z: 4,
       },
     ],
   }

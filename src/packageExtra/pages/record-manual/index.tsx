@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Input, Image } from '@tarojs/components'
 import { useState, useEffect, useMemo } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
   saveFoodRecord,
@@ -15,6 +15,8 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import './index.scss'
 
 const MEALS = [
@@ -115,6 +117,7 @@ function buildNutrientsFromWeight(
 }
 
 function RecordManualPage() {
+  const { scheme } = useAppColorScheme()
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
@@ -138,6 +141,14 @@ function RecordManualPage() {
     }
     loadBrowseData()
   }, [])
+
+  useDidShow(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
+  })
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
+  }, [scheme])
 
   const loadBrowseData = async () => {
     if (browseData) return

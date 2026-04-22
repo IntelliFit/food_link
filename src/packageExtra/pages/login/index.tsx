@@ -14,6 +14,7 @@ import {
     requestFriendByInviteCode
 } from '../../../utils/api'
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
 import './index.scss'
 
@@ -265,6 +266,7 @@ export default function LoginPage() {
     }
 
     return (
+        <FlPageThemeRoot>
         <View className='login-page'>
             <View className='login-header'>
                 <Image src={APP_LOGO_URL} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
@@ -398,5 +400,6 @@ export default function LoginPage() {
                 </View>
             )}
         </View>
+        </FlPageThemeRoot>
     )
 }

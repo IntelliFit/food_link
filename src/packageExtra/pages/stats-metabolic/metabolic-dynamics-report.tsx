@@ -1,6 +1,5 @@
 /**
- * 当日代谢：分钟级模拟算法 + Apache ECharts 5 曲线（独立模块；视觉对齐首页浅色卡片）
- * 图表库：https://echarts.apache.org
+ * 当日代谢：分钟级示意模型 + 首屏三指标 + ECharts 功率/脂肪累计曲线
  */
 import { View, Text, Canvas } from '@tarojs/components'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
@@ -37,27 +36,43 @@ installWxZrenderTextMeasure()
 const MINUTES_PER_DAY = 1440
 const SAMPLE_STEP_MIN = 6
 
-/**
- * 急性缓冲池（示意，非生理糖原全量）。
- * 若使用 900→1600 kcal 全身糖原模型：单餐分钟级盈余会先长期填池，脂肪淤积需「池满后仍每分钟有盈余」才出现，
- * 在只吃一餐、全天 TDEE 仍高时几乎恒为 0。缩小池容量后，餐后吸收峰更易体现「相对当时消耗」的示意淤积。
- */
-const ACUTE_BUFFER_MAX_KCAL = 200
-const ACUTE_BUFFER_START_KCAL = 55
-const CANVAS_HEIGHT_RPX = 360
+/** 当日吸收功率曲线峰值（kcal/分） */
+function maxAbsorbKcalPerMin(absorbPerMin: Float64Array): number {
+  let peak = 0
+  for (let t = 0; t < absorbPerMin.length; t++) {
+    const v = absorbPerMin[t] ?? 0
+    if (v > peak) peak = v
+  }
+  return peak
+}
+const CANVAS_HEIGHT_RPX_CARD = 360
+const CANVAS_HEIGHT_RPX_PAGE = 440
 
-/** 与统计页卡片左右边距（32rpx）+ 图形容器边距（24rpx）对齐，得到可靠像素宽，避免 2D Canvas 查询宽高为 0 */
-function computeMetabolicCanvasPx(): { w: number; h: number } {
+/** 与页面边距对齐得到 Canvas 像素宽高（子页图表区左右出血，宽度按全屏计） */
+function computeMetabolicCanvasPx(layout: 'card' | 'page'): { w: number; h: number } {
   try {
     const win = Taro.getSystemInfoSync().windowWidth || 375
-    const horizontalInsetRpx = (32 + 24) * 2
+    /** page：与 `stats-metabolic` 出血容器一致，近似占满屏宽；card：统计卡内边距 */
+    /** page：与 `stats-metabolic` 页左右各 24rpx 内边距一致，避免画布宽于容器 */
+    const horizontalInsetRpx = layout === 'page' ? 24 * 2 : (32 + 24) * 2
+    const hRpx = layout === 'page' ? CANVAS_HEIGHT_RPX_PAGE : CANVAS_HEIGHT_RPX_CARD
     const w = Math.max(200, Math.floor(win - (horizontalInsetRpx * win) / 750))
-    const h = Math.max(160, Math.floor((CANVAS_HEIGHT_RPX * win) / 750))
+    const h = Math.max(160, Math.floor((hRpx * win) / 750))
     return { w, h }
   } catch {
     return { w: 300, h: 200 }
   }
 }
+
+/**
+ * 急性缓冲池（示意，非生理糖原全量）。
+ * 仅「池满后的剩余盈余」才 100% 计入脂肪时，若全天 TDEE 偏高或餐后赤字把池又抽空，缓冲池可能始终达不到上限，
+ * 累计脂肪会长期为 0。因此配合 ACUTE_SURPLUS_DIRECT_FAT_FRAC：一小部分净盈余按示意直接走 P-ratio，便于读图；其余仍先入池再溢出。
+ */
+const ACUTE_BUFFER_MAX_KCAL = 120
+const ACUTE_BUFFER_START_KCAL = 40
+/** 每分钟净盈余（吸收−消耗）中，示意性直接进入脂肪估算的比例（0–1），其余先入急性缓冲池 */
+const ACUTE_SURPLUS_DIRECT_FAT_FRAC = 0.18
 
 /** 餐次事件（分钟级模拟输入） */
 interface MealEvent {
@@ -94,6 +109,8 @@ export interface MetabolicSimResult {
 export interface MetabolicDynamicsReportProps {
   /** 报告日 YYYY-MM-DD，默认本地当天 */
   reportDate?: string
+  /** 预留：统计页内嵌与独立子页版式 */
+  layout?: 'card' | 'page'
 }
 
 /** 中国时区自然日 YYYY-MM-DD（与后端 `record_time` 落日一致） */
@@ -347,14 +364,20 @@ export function runMetabolicSimulation(params: {
     const delta = intake - out
     if (delta > 0) {
       acuteSurplusIntegralKcal += delta
+      const directFatKcal = delta * ACUTE_SURPLUS_DIRECT_FAT_FRAC * physiology.pRatio
+      let gMinute = directFatKcal / 9
+      fatGrams += gMinute
+
+      const toBuffer = delta * (1 - ACUTE_SURPLUS_DIRECT_FAT_FRAC)
       const room = Math.max(0, ACUTE_BUFFER_MAX_KCAL - acuteBuffer)
-      const fill = Math.min(delta, room)
+      const fill = Math.min(toBuffer, room)
       acuteBuffer += fill
-      const remainder = delta - fill
-      const fatKcal = remainder * physiology.pRatio
-      const g = fatKcal / 9
-      fatGrams += g
-      fatDeltaGramsPerMin[t] = g
+      const remainder = toBuffer - fill
+      const spillFatKcal = remainder * physiology.pRatio
+      const gSpill = spillFatKcal / 9
+      fatGrams += gSpill
+      gMinute += gSpill
+      fatDeltaGramsPerMin[t] = gMinute
     } else {
       const need = -delta
       const take = Math.min(need, acuteBuffer)
@@ -389,7 +412,6 @@ const CANVAS_ID = 'metabolicFluxCanvas'
 const METABOLIC_PHYS_BACKDROP_Z = 200000
 const METABOLIC_PHYS_PANEL_Z = 200010
 
-/** 微信小程序：自定义组件内节点需跨组件选择器或 page.in，否则 node 一直为空 */
 function createCanvasSelectorQuery(): ReturnType<typeof Taro.createSelectorQuery> {
   const base = Taro.createSelectorQuery()
   const page = Taro.getCurrentInstance()?.page
@@ -403,9 +425,22 @@ function createCanvasSelectorQuery(): ReturnType<typeof Taro.createSelectorQuery
   return base
 }
 
+interface WxCanvasQueryRow {
+  node?: HTMLCanvasElement & { getContext: (t: '2d') => CanvasRenderingContext2D | null }
+  width?: number
+  height?: number
+}
+
 function pickCanvasNode(res: unknown): (HTMLCanvasElement & { getContext: (t: '2d') => CanvasRenderingContext2D | null }) | null {
-  const raw = res as { node?: HTMLCanvasElement & { getContext: (t: '2d') => CanvasRenderingContext2D | null } } | undefined
+  const raw = res as WxCanvasQueryRow | undefined
   return raw?.node ?? null
+}
+
+/** 布局后的 CSS 像素宽高；无 size 字段时回退 */
+function readCanvasLayoutPx(row: WxCanvasQueryRow | undefined, fbW: number, fbH: number): { w: number; h: number } {
+  const w = typeof row?.width === 'number' && row.width > 2 ? Math.floor(row.width) : fbW
+  const h = typeof row?.height === 'number' && row.height > 2 ? Math.floor(row.height) : fbH
+  return { w, h }
 }
 
 function formatGenderLabel(g: string | null | undefined): string {
@@ -453,7 +488,7 @@ function MetabolicPhysiologyPopup({
       />
       <View className='metabolic-phys-popup' onClick={(e) => e.stopPropagation()}>
         <Text className='metabolic-phys-popup__title'>模拟所用基础数据</Text>
-        <Text className='metabolic-phys-popup__hint'>与当日曲线计算一致；BMR 为档案基础代谢，TDEE 含活动系数。</Text>
+        <Text className='metabolic-phys-popup__hint'>与当日示意模型一致；BMR 为档案基础代谢，TDEE 含活动系数。</Text>
         <View className='metabolic-phys-popup__row'>
           <Text className='metabolic-phys-popup__label'>性别</Text>
           <Text className='metabolic-phys-popup__value'>{formatGenderLabel(user.gender)}</Text>
@@ -495,19 +530,27 @@ function MetabolicPhysiologyPopup({
 interface MetabolicReportHeadProps {
   showPhysBtn?: boolean
   onOpenPhys?: () => void
+  /** 独立子页展示左上角返回（无历史栈时回分析 Tab） */
+  onBack?: () => void
 }
 
-function MetabolicReportHead({ showPhysBtn, onOpenPhys }: MetabolicReportHeadProps): ReactElement {
+function MetabolicReportHead({ showPhysBtn, onOpenPhys, onBack }: MetabolicReportHeadProps): ReactElement {
   return (
     <View className='metabolic-report__head'>
       <View className='metabolic-report__head-row'>
+        {onBack ? (
+          <View className='metabolic-report__back-btn' onClick={() => onBack()}>
+            <Text className='iconfont icon-right-arrow metabolic-report__back-arrow' />
+          </View>
+        ) : null}
         <View className='metabolic-report__title-row'>
           <Text className='iconfont icon-huore metabolic-report__title-icon' />
           <Text className='metabolic-report__title'>当日代谢</Text>
         </View>
         {showPhysBtn && onOpenPhys ? (
           <View className='metabolic-report__phys-btn' onClick={() => onOpenPhys()}>
-            <Text className='metabolic-report__phys-btn-text'>基础</Text>
+            <Text className='iconfont icon-user metabolic-report__phys-btn-icon' />
+            <Text className='metabolic-report__phys-btn-text'>用户基础数据</Text>
           </View>
         ) : null}
       </View>
@@ -515,7 +558,7 @@ function MetabolicReportHead({ showPhysBtn, onOpenPhys }: MetabolicReportHeadPro
   )
 }
 
-export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportProps) {
+export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: MetabolicDynamicsReportProps) {
   /** 与后端按中国日切分的记录一致；未传时按东八区当天 */
   const dayYmd = useMemo(() => reportDate || chinaWallYmd(), [reportDate])
   const [apiUser, setApiUser] = useState<UserInfo | null>(null)
@@ -525,13 +568,14 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
   const [physSheetOpen, setPhysSheetOpen] = useState(false)
   const [phase, setPhase] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading')
   const [sim, setSim] = useState<MetabolicSimResult | null>(null)
-  const [canvasPx, setCanvasPx] = useState<{ w: number; h: number }>(() => computeMetabolicCanvasPx())
-  const [digestPct, setDigestPct] = useState(0)
-  const [burnKcalPerMin, setBurnKcalPerMin] = useState(0)
+  const [canvasPx, setCanvasPx] = useState<{ w: number; h: number }>(() => computeMetabolicCanvasPx(layout))
+  /** 餐后相对代谢的净盈余累计（kcal，示意） */
+  const [summaryAcuteSurplusKcal, setSummaryAcuteSurplusKcal] = useState(0)
+  /** 进食引起的吸收功率峰值（kcal/分，示意） */
+  const [summaryPeakAbsorbKcalPerMin, setSummaryPeakAbsorbKcalPerMin] = useState(0)
 
   const simRef = useRef<MetabolicSimResult | null>(null)
   simRef.current = sim
-  const mealMinutesRef = useRef<number[]>([])
   const loadedForDayRef = useRef<string | null>(null)
   const chartRef = useRef<ECharts | null>(null)
 
@@ -554,11 +598,17 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
     [effectiveUser],
   )
 
-  /** 与 `runMetabolicSimulation` 使用的 `resolvePhysiology` 一致，供「基础」弹层展示 */
+  /** 与 `runMetabolicSimulation` 使用的 `resolvePhysiology` 一致，供「用户基础数据」弹层展示 */
   const physiologyForSim = useMemo((): PhysiologyResolved | null => {
     if (!effectiveUser || !isMetabolicProfileComplete(effectiveUser)) return null
     return resolvePhysiology(effectiveUser)
   }, [effectiveUser])
+
+  const handlePageBack = useCallback((): void => {
+    void Taro.navigateBack().catch(() => {
+      void Taro.switchTab({ url: '/pages/stats/index' })
+    })
+  }, [])
 
   const physiologyPopupEl =
     physiologyForSim && effectiveUser ? (
@@ -619,7 +669,6 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
       setPhase('loading')
       setSim(null)
     }
-    const nMin = nowMinuteForDay()
     try {
       const [foodRes, exRes] = await Promise.all([
         getFoodRecordList(dayYmd),
@@ -627,7 +676,6 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
       ])
       const phy = resolvePhysiology(effectiveUser)
       const meals = foodRecordsToMeals(foodRes.records || [], dayYmd)
-      mealMinutesRef.current = [...meals.map((m) => m.tMin)].sort((a, b) => a - b)
       if (meals.length === 0) {
         setSim(null)
         setPhase('empty')
@@ -643,13 +691,8 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
       })
       setSim(result)
 
-      let absorbedSoFar = 0
-      let dayTotalAbsorb = 0
-      for (let t = 0; t < MINUTES_PER_DAY; t++) dayTotalAbsorb += result.absorbPerMin[t]
-      for (let t = 0; t <= nMin; t++) absorbedSoFar += result.absorbPerMin[t]
-      const pct = dayTotalAbsorb > 0 ? Math.round((absorbedSoFar / dayTotalAbsorb) * 100) : 0
-      setDigestPct(Math.max(0, Math.min(100, pct)))
-      setBurnKcalPerMin(Math.round(result.outPerMin[nMin] * 10) / 10)
+      setSummaryAcuteSurplusKcal(Math.round(result.acuteSurplusIntegralKcal))
+      setSummaryPeakAbsorbKcalPerMin(Math.round(maxAbsorbKcalPerMin(result.absorbPerMin) * 10) / 10)
 
       setPhase('ready')
       loadedForDayRef.current = dayYmd
@@ -673,8 +716,8 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
   }, [profileReady, effectiveUser, loadAll])
 
   useLayoutEffect(() => {
-    setCanvasPx(computeMetabolicCanvasPx())
-  }, [])
+    setCanvasPx(computeMetabolicCanvasPx(layout))
+  }, [layout])
 
   const canvasPxRef = useRef(canvasPx)
   canvasPxRef.current = canvasPx
@@ -682,10 +725,15 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
   const redraw = useCallback(() => {
     const s = simRef.current
     if (!s) return
-    const { w, h } = canvasPxRef.current
-    if (w < 8 || h < 8) return
+    const fb = canvasPxRef.current
+    if (fb.w < 8 || fb.h < 8) return
 
-    const doDraw = (canvas: HTMLCanvasElement & { getContext: (t: '2d') => CanvasRenderingContext2D | null }): void => {
+    const doDraw = (
+      canvas: HTMLCanvasElement & { getContext: (t: '2d') => CanvasRenderingContext2D | null },
+      w: number,
+      h: number,
+    ): void => {
+      if (w < 8 || h < 8) return
       const dpr = Taro.getSystemInfoSync().pixelRatio || 2
       patchWxCanvasNodeForEcharts(canvas, w, h)
       let inst = chartRef.current
@@ -700,7 +748,16 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
         inst.resize({ width: w, height: h, devicePixelRatio: dpr })
       }
       inst.setOption(
-        buildMetabolicFluxChartOption(s, nowMinuteForDay(), mealMinutesRef.current, SAMPLE_STEP_MIN),
+        buildMetabolicFluxChartOption(
+          {
+            absorbPerMin: s.absorbPerMin,
+            outPerMin: s.outPerMin,
+            refOutPerMin: s.refOutPerMin,
+            fatDeltaGramsPerMin: s.fatDeltaGramsPerMin,
+          },
+          nowMinuteForDay(),
+          SAMPLE_STEP_MIN,
+        ),
         { notMerge: true },
       )
     }
@@ -708,11 +765,13 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
     const paint = (selector: string, fallback?: () => void): void => {
       createCanvasSelectorQuery()
         .select(selector)
-        .fields({ node: true })
+        .fields({ node: true, size: true })
         .exec((res) => {
-          const canvas = pickCanvasNode(res?.[0])
+          const row = res?.[0] as WxCanvasQueryRow | undefined
+          const canvas = pickCanvasNode(row)
+          const { w, h } = readCanvasLayoutPx(row, fb.w, fb.h)
           if (canvas) {
-            doDraw(canvas)
+            doDraw(canvas, w, h)
             return
           }
           fallback?.()
@@ -724,10 +783,12 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
         paint(`#${CANVAS_ID}`, () => {
           createCanvasSelectorQuery()
             .select(`>>> #${CANVAS_ID}`)
-            .fields({ node: true })
+            .fields({ node: true, size: true })
             .exec((res) => {
-              const canvas = pickCanvasNode(res?.[0])
-              if (canvas) doDraw(canvas)
+              const row = res?.[0] as WxCanvasQueryRow | undefined
+              const canvas = pickCanvasNode(row)
+              const { w, h } = readCanvasLayoutPx(row, fb.w, fb.h)
+              if (canvas) doDraw(canvas, w, h)
             })
         })
       })
@@ -745,7 +806,6 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
     }
   }, [phase, sim, redraw, canvasPx.w, canvasPx.h])
 
-  /** 微信原生 Canvas 会浮在普通 View 之上；打开「基础」时卸载图表并 dispose，关闭后再 redraw */
   useEffect(() => {
     if (physSheetOpen) {
       chartRef.current?.dispose()
@@ -764,10 +824,12 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
     }
   }, [])
 
+  const fatGramDayModel = sim ? Math.round(sim.fatGramsAccumulated * 100) / 100 : 0
+
   if (!profileReady) {
     return (
       <View className='metabolic-report'>
-        <MetabolicReportHead />
+        <MetabolicReportHead onBack={layout === 'page' ? handlePageBack : undefined} />
         <View className='metabolic-report__loading'>
           <View className='metabolic-report__spinner' />
         </View>
@@ -782,12 +844,13 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
   if (!profileComplete) {
     return (
       <View className='metabolic-report metabolic-report--gated'>
-        <MetabolicReportHead />
+        <MetabolicReportHead onBack={layout === 'page' ? handlePageBack : undefined} />
         <View className='metabolic-report__gate-body'>
           <View className='metabolic-report__ghost'>
-            <View className='metabolic-report__gauges'>
-              <View className='metabolic-report__gauge metabolic-report__gauge--ghost' />
-              <View className='metabolic-report__gauge metabolic-report__gauge--ghost' />
+            <View className='metabolic-report__summary-row metabolic-report__summary-row--ghost'>
+              <View className='metabolic-report__summary-cell metabolic-report__gauge--ghost' />
+              <View className='metabolic-report__summary-cell metabolic-report__gauge--ghost' />
+              <View className='metabolic-report__summary-cell metabolic-report__gauge--ghost' />
             </View>
             <View className='metabolic-report__canvas-wrap metabolic-report__canvas-wrap--ghost' />
             <View className='metabolic-report__legend-row metabolic-report__legend-row--ghost'>
@@ -823,6 +886,7 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
         <MetabolicReportHead
           showPhysBtn={!!physiologyForSim}
           onOpenPhys={() => setPhysSheetOpen(true)}
+          onBack={layout === 'page' ? handlePageBack : undefined}
         />
         <View className='metabolic-report__loading'>
           <View className='metabolic-report__spinner' />
@@ -838,6 +902,7 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
         <MetabolicReportHead
           showPhysBtn={!!physiologyForSim}
           onOpenPhys={() => setPhysSheetOpen(true)}
+          onBack={layout === 'page' ? handlePageBack : undefined}
         />
         <View className='metabolic-report__error'>
           <View className='metabolic-report__retry' onClick={() => void loadAll()}>
@@ -858,36 +923,68 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
       <MetabolicReportHead
         showPhysBtn={!!physiologyForSim}
         onOpenPhys={() => setPhysSheetOpen(true)}
+        onBack={layout === 'page' ? handlePageBack : undefined}
       />
 
-      <View className='metabolic-report__gauges'>
-        <View className='metabolic-report__gauge'>
-          <Text className='metabolic-report__gauge-label'>当日吸收进度</Text>
-          <Text className='metabolic-report__gauge-value'>{`${digestPct}%`}</Text>
+      <View className='metabolic-report__summary-row'>
+        <View className='metabolic-report__summary-cell'>
+          <View className='metabolic-report__summary-label-row'>
+            <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin metabolic-report__summary-label-icon' />
+            <Text className='metabolic-report__summary-label'>今日示意脂肪</Text>
+          </View>
+          <Text className='metabolic-report__summary-metric'>
+            {fatGramDayModel}
+            <Text className='metabolic-report__summary-metric-unit'> g</Text>
+          </Text>
         </View>
-        <View className='metabolic-report__gauge'>
-          <Text className='metabolic-report__gauge-label'>当前总消耗</Text>
-          <Text className='metabolic-report__gauge-value'>
-            {burnKcalPerMin}
-            <Text className='metabolic-report__gauge-unit'> kcal/分</Text>
+        <View className='metabolic-report__summary-cell'>
+          <View className='metabolic-report__summary-label-row'>
+            <Text className='iconfont icon-huore metabolic-report__summary-label-icon' />
+            <Text className='metabolic-report__summary-label'>餐后净盈余</Text>
+          </View>
+          <Text className='metabolic-report__summary-metric'>
+            {summaryAcuteSurplusKcal}
+            <Text className='metabolic-report__summary-metric-unit'> kcal</Text>
+          </Text>
+        </View>
+        <View className='metabolic-report__summary-cell'>
+          <View className='metabolic-report__summary-label-row'>
+            <Text className='iconfont icon-shiwu metabolic-report__summary-label-icon' />
+            <Text className='metabolic-report__summary-label'>吸收功率峰值</Text>
+          </View>
+          <Text className='metabolic-report__summary-metric'>
+            {summaryPeakAbsorbKcalPerMin}
+            <Text className='metabolic-report__summary-metric-unit'> kcal/分</Text>
           </Text>
         </View>
       </View>
 
-      <View className='metabolic-report__canvas-wrap'>
-        {!physSheetOpen ? (
-          <Canvas
-            type='2d'
-            id={CANVAS_ID}
-            className='metabolic-report__canvas'
-            style={{ width: `${canvasPx.w}px`, height: `${canvasPx.h}px` }}
-          />
-        ) : (
-          <View
-            className='metabolic-report__canvas-placeholder'
-            style={{ width: '100%', height: `${canvasPx.h}px` }}
-          />
-        )}
+      <View
+        className={`metabolic-report__canvas-wrap${layout === 'page' ? ' metabolic-report__canvas-wrap--page' : ''}`}
+        style={{
+          /* 微信 Canvas 2D 原生层易与上一块重叠：外层同时给死高度（px）+ rpx min-height 双保险 */
+          height: `${canvasPx.h}px`,
+          minHeight: `${canvasPx.h}px`,
+        }}
+      >
+        <View
+          className='metabolic-report__canvas-sizer'
+          style={{ width: `${canvasPx.w}px`, height: `${canvasPx.h}px` }}
+        >
+          {!physSheetOpen ? (
+            <Canvas
+              type='2d'
+              id={CANVAS_ID}
+              className='metabolic-report__canvas'
+              style={{ width: `${canvasPx.w}px`, height: `${canvasPx.h}px` }}
+            />
+          ) : (
+            <View
+              className='metabolic-report__canvas-placeholder'
+              style={{ width: '100%', height: `${canvasPx.h}px` }}
+            />
+          )}
+        </View>
       </View>
 
       <View className='metabolic-report__legend-row'>
@@ -897,14 +994,9 @@ export function MetabolicDynamicsReport({ reportDate }: MetabolicDynamicsReportP
         <Text className='metabolic-report__legend-txt'>消耗</Text>
         <View className='metabolic-report__legend-dot metabolic-report__legend-dot--ref' />
         <Text className='metabolic-report__legend-txt'>参考</Text>
-        <View className='metabolic-report__legend-dot metabolic-report__legend-dot--meal' />
-        <Text className='metabolic-report__legend-txt'>用餐</Text>
+        <View className='metabolic-report__legend-dot metabolic-report__legend-dot--fat' />
+        <Text className='metabolic-report__legend-txt'>脂肪累计</Text>
       </View>
-
-      <Text className='metabolic-report__footnote'>
-        曲线由 Apache ECharts 绘制。餐后吸收相对当时消耗，累计过剩约 {Math.round(sim.acuteSurplusIntegralKcal)}{' '}
-        kcal；示意淤积约 {Math.round(sim.fatGramsAccumulated * 100) / 100} g（非医疗结论）
-      </Text>
       {physiologyPopupEl}
     </View>
   )

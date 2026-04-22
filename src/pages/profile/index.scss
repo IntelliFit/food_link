@@ -1,13 +1,42 @@
 .profile-page {
   min-height: 100vh;
   position: relative;
+  box-sizing: border-box;
   background: linear-gradient(180deg,
-    rgb(0 188 125 / 12%) 0%,
-    rgb(0 188 125 / 5%) 20%,
-    #f8fafc 50%,
-    #f1f5f9 100%
+    rgb(92 184 150 / 8%) 0%,
+    rgb(92 184 150 / 3%) 40%,
+    #f0f3f6 80%,
+    #f0f3f6 100%
   );
-  padding: 24rpx 0 320rpx;
+  padding: 182rpx 0 320rpx;
+}
+
+/* 主题切换：绝对定位左上角（避让状态栏，与自定义顶栏留白协调） */
+.profile-page > .profile-theme-chip {
+  position: absolute;
+  left: 24rpx;
+  top: calc(env(safe-area-inset-top) + 96rpx);
+  z-index: 20;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 88%);
+  border: 1rpx solid rgb(92 184 150 / 22%);
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 15%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.profile-theme-chip:active {
+  opacity: 0.88;
+}
+
+.profile-theme-chip-icon {
+  font-size: 34rpx;
+  color: #1f2937;
+  line-height: 1;
 }
 
 // 通用白色卡片

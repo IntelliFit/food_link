@@ -1873,11 +1873,13 @@ function IndexPage() {
             sharerAvatarImage: avatarImg
           })
 
+          // JPG：真机存相册对 PNG/透明导出偶发失败；今日小结海报为实底
           Taro.canvasToTempFilePath({
             canvas: canvas as any,
             destWidth: POSTER_WIDTH * 2,
             destHeight: heightPx * 2,
-            fileType: 'png',
+            fileType: 'jpg',
+            quality: 0.95,
             success: (resp) => {
               Taro.hideLoading()
               setDailyPosterGenerating(false)

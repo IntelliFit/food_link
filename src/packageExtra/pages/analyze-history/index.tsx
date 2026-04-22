@@ -5,6 +5,8 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import { listAnalyzeTasks, deleteAnalysisTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
 const STATUS_MAP: Record<string, string> = {
   pending: '排队中',
@@ -284,6 +286,7 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
 }
 
 function AnalyzeHistoryPage() {
+  const { scheme } = useAppColorScheme()
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
   const loadSeqRef = useRef(0)
@@ -312,6 +315,7 @@ function AnalyzeHistoryPage() {
   }, [])
 
   useDidShow(() => {
+    applyThemeNavigationBar(scheme)
     void load()
   })
 

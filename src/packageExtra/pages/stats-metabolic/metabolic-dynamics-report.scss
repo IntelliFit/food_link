@@ -1,16 +1,20 @@
-/* 当日代谢：与首页/统计页一致的浅色卡片与主题色（#5cb896、#5c9ed4、#e57373） */
+/* 当日代谢：平铺在页面内，不再套一层大卡片（背景由 stats-metabolic 页承担） */
 .metabolic-report {
-  margin: 0 32rpx 24rpx;
-  border-radius: 24rpx;
-  overflow: hidden;
-  background: rgb(255 255 255 / 90%);
-  border: 1rpx solid rgb(92 184 150 / 20%);
-  box-shadow: 0 12rpx 40rpx rgb(92 184 150 / 10%);
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .metabolic-report__head {
-  padding: 28rpx 32rpx 8rpx;
+  padding: 28rpx 0 8rpx;
 }
 
 .metabolic-report__head-row {
@@ -18,7 +22,32 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
+  gap: 12rpx;
+}
+
+.metabolic-report__back-btn {
+  flex-shrink: 0;
+  width: 64rpx;
+  height: 64rpx;
+  margin-right: 4rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  background: rgb(255 255 255 / 88%);
+  border: 1rpx solid rgb(92 184 150 / 22%);
+  box-sizing: border-box;
+}
+
+.metabolic-report__back-btn:active {
+  opacity: 0.88;
+}
+
+.metabolic-report__back-arrow {
+  font-size: 32rpx;
+  color: #5cb896;
+  line-height: 1;
+  transform: scaleX(-1);
 }
 
 .metabolic-report__title-row {
@@ -32,16 +61,29 @@
 
 .metabolic-report__phys-btn {
   flex-shrink: 0;
-  padding: 8rpx 22rpx;
-  border-radius: 999rpx;
-  background: rgb(92 184 150 / 12%);
-  border: 1rpx solid rgb(92 184 150 / 28%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 22rpx;
+  border-radius: 9999rpx;
+  background: rgb(255 255 255 / 94%);
+  border: 1rpx solid rgb(92 184 150 / 32%);
+  box-shadow: 0 2rpx 10rpx rgb(92 184 150 / 10%);
+}
+
+.metabolic-report__phys-btn-icon {
+  font-size: 26rpx;
+  color: #5cb896;
+  line-height: 1;
 }
 
 .metabolic-report__phys-btn-text {
   font-size: 24rpx;
   font-weight: 600;
-  color: #5cb896;
+  color: #3d8f73;
+  line-height: 1.2;
+  max-width: 220rpx;
 }
 
 .metabolic-report__title-icon {
@@ -54,6 +96,80 @@
   font-size: 32rpx;
   font-weight: 600;
   color: #1f2937;
+}
+
+/* 首行三指标：脂肪（左，略宽）+ 盈余 + 峰值 */
+.metabolic-report__summary-row {
+  display: flex;
+  flex-direction: row;
+  gap: 16rpx;
+  padding: 8rpx 0 8rpx;
+  margin-bottom: 28rpx;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.metabolic-report__summary-row--ghost {
+  padding-top: 8rpx;
+}
+
+.metabolic-report__summary-row--ghost .metabolic-report__summary-cell {
+  min-height: 132rpx;
+  border-radius: 18rpx;
+}
+
+.metabolic-report__summary-cell {
+  flex: 1;
+  min-width: 0;
+  padding: 18rpx 12rpx;
+  border-radius: 18rpx;
+  background: rgb(248 250 252 / 92%);
+  border: 1rpx solid rgb(148 163 184 / 12%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.metabolic-report__summary-label-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
+  width: 100%;
+}
+
+.metabolic-report__summary-label-icon {
+  font-size: 26rpx;
+  line-height: 1;
+  flex-shrink: 0;
+  color: #5cb896;
+}
+
+.metabolic-report__summary-label {
+  font-size: 22rpx;
+  color: #6b7280;
+  line-height: 1.35;
+  font-weight: 600;
+  text-align: center;
+}
+
+.metabolic-report__summary-metric {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1f2937;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.metabolic-report__summary-metric-unit {
+  font-size: 22rpx;
+  font-weight: 500;
+  color: #6b7280;
 }
 
 .metabolic-report__gauges {
@@ -75,6 +191,29 @@
   justify-content: center;
 }
 
+/* 与图例一致：吸收=绿、消耗=蓝，提高底对比度（对齐统计页 Hero / 积分卡层次） */
+.metabolic-report__gauge--absorb {
+  background: linear-gradient(
+    155deg,
+    rgb(92 184 150 / 22%) 0%,
+    rgb(255 255 255 / 94%) 52%,
+    rgb(92 184 150 / 10%) 100%
+  );
+  border: 1rpx solid rgb(92 184 150 / 38%);
+  box-shadow: 0 6rpx 22rpx rgb(92 184 150 / 14%);
+}
+
+.metabolic-report__gauge--burn {
+  background: linear-gradient(
+    155deg,
+    rgb(92 158 212 / 24%) 0%,
+    rgb(255 255 255 / 94%) 52%,
+    rgb(92 158 212 / 12%) 100%
+  );
+  border: 1rpx solid rgb(92 158 212 / 42%);
+  box-shadow: 0 6rpx 22rpx rgb(92 158 212 / 16%);
+}
+
 .metabolic-report__gauge-label {
   display: block;
   font-size: 22rpx;
@@ -91,6 +230,10 @@
   text-align: center;
 }
 
+.metabolic-report__gauge-value--burn {
+  color: #4f8fc9;
+}
+
 .metabolic-report__gauge-unit {
   font-size: 24rpx;
   font-weight: 500;
@@ -99,7 +242,8 @@
 
 .metabolic-report__canvas-wrap {
   position: relative;
-  margin: 8rpx 24rpx 20rpx;
+  margin: 0 0 20rpx;
+  padding: 0;
   border-radius: 20rpx;
   overflow: hidden;
   background: rgb(248 250 252 / 90%);
@@ -107,7 +251,35 @@
   display: flex;
   flex-direction: row;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  /* 仅建立定位上下文；勿用 transform，部分微信基础库下会导致 type=2d 画布原生层贴顶与 DOM 脱节 */
+  position: relative;
+  z-index: 0;
+}
+
+/* 子页：不再用负 margin 拉宽（部分基础库下会触发与上方块的纵向叠层）；宽度随页面内边距 */
+.stats-metabolic-page--bleed .metabolic-report__canvas-wrap {
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: 8rpx;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 16rpx;
+}
+
+/* 与 `CANVAS_HEIGHT_RPX_PAGE` 对齐，防止首帧 px 未就绪时高度塌缩 */
+.metabolic-report__canvas-wrap--page {
+  min-height: 440rpx;
+}
+
+.metabolic-report__canvas-sizer {
+  position: relative;
+  flex-shrink: 0;
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
 }
 
 /* 弹层打开时不再挂载 Canvas，占位保持布局；见 metabolic-dynamics-report.tsx */
@@ -127,7 +299,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8rpx 20rpx;
-  padding: 8rpx 32rpx 4rpx;
+  padding: 8rpx 0 4rpx;
+  flex-shrink: 0;
 }
 
 .metabolic-report__legend-dot {
@@ -138,11 +311,11 @@
 }
 
 .metabolic-report__legend-dot--absorb {
-  background: rgb(92 184 150 / 70%);
+  background: rgb(92 184 150 / 88%);
 }
 
 .metabolic-report__legend-dot--burn {
-  background: rgb(92 158 212 / 95%);
+  background: rgb(92 158 212 / 90%);
 }
 
 .metabolic-report__legend-dot--silting {
@@ -155,16 +328,38 @@
   box-sizing: border-box;
 }
 
-.metabolic-report__legend-dot--meal {
-  border: 2rpx dashed #f0985c;
-  background: transparent;
-  box-sizing: border-box;
+.metabolic-report__legend-dot--fat {
+  background: rgb(229 115 115 / 90%);
 }
 
 .metabolic-report__legend-txt {
   font-size: 22rpx;
   color: #6b7280;
   margin-right: 4rpx;
+}
+
+.metabolic-report__fat-explainer {
+  margin: 4rpx 24rpx 12rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 16rpx;
+  background: rgb(254 242 242 / 55%);
+  border: 1rpx solid rgb(229 115 115 / 12%);
+  box-sizing: border-box;
+}
+
+.metabolic-report__fat-explainer-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #b91c1c;
+  margin-bottom: 10rpx;
+}
+
+.metabolic-report__fat-explainer-body {
+  display: block;
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 1.55;
 }
 
 .metabolic-report__footnote {
@@ -240,7 +435,7 @@
 
 .metabolic-report__canvas-wrap--ghost {
   min-height: 280rpx;
-  margin: 8rpx 24rpx 20rpx;
+  margin: 8rpx 0 20rpx;
   background: linear-gradient(
     165deg,
     rgb(92 184 150 / 14%) 0%,
@@ -250,7 +445,7 @@
 }
 
 .metabolic-report__legend-row--ghost {
-  padding: 8rpx 32rpx 20rpx;
+  padding: 8rpx 0 20rpx;
   gap: 16rpx;
 }
 

@@ -3,6 +3,7 @@ import Taro from '@tarojs/taro'
 import { Cell } from '@taroify/core'
 import '@taroify/core/cell/style'
 import '@taroify/icons/style'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
 export default function AboutPage() {
@@ -20,6 +21,7 @@ export default function AboutPage() {
     }
 
     return (
+        <FlPageThemeRoot>
         <View className='about-page'>
             <View className='header-section'>
                 <View className='logo-wrapper'>
@@ -55,5 +57,6 @@ export default function AboutPage() {
                 <Text className='copyright-text'>Copyright © 2026 Food Link. All Rights Reserved.</Text>
             </View>
         </View>
+        </FlPageThemeRoot>
     )
 }

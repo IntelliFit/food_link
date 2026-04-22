@@ -7,6 +7,7 @@ import { IconCamera, IconAlbum, IconText, IconEdit, IconHistory } from '../../..
 
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { pickImageAndOpenAnalyze } from '../../../utils/weapp-open-analyze-image'
 
 // 主要功能模式
 const MAIN_MODES = [
@@ -69,25 +70,11 @@ function RecordMenuPage() {
 
     switch (modeId) {
       case 'camera':
-        // 进入简化拍照模式
-        Taro.navigateTo({ url: '/pages/record/index?mode=simple' })
+        // 与首页一致：进入记录 Tab 全屏相机（tabBar 须 switchTab，不可 navigateTo）
+        Taro.switchTab({ url: '/pages/record/index' })
         break
       case 'album':
-        // 直接进入相册选择
-        Taro.chooseImage({
-          count: 1,
-          sizeType: ['compressed'],
-          sourceType: ['album'],
-          success: (res) => {
-            const imagePath = res.tempFilePaths[0]
-            Taro.setStorageSync('analyzeImagePath', imagePath)
-            Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
-          },
-          fail: (err) => {
-            if (err.errMsg?.includes('cancel')) return
-            Taro.showToast({ title: '选择图片失败', icon: 'none' })
-          }
-        })
+        void pickImageAndOpenAnalyze(['album'])
         break
       case 'text':
         Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })

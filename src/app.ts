@@ -1,8 +1,9 @@
 import './perf-polyfill'
-import { PropsWithChildren } from 'react'
+import { createElement, type PropsWithChildren } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
+import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
 
 import './app.scss'
 
@@ -49,8 +50,8 @@ function App({ children }: PropsWithChildren<any>) {
     })
   })
 
-  // children 是将要会渲染的页面
-  return children
+  // children 为当前页面；Provider 供全站主题与「我的」页切换
+  return createElement(AppColorSchemeProvider, null, children)
 }
 
 export default App

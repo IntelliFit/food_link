@@ -96,6 +96,10 @@ export default defineAppConfig({
     'scope.userLocation': {
       desc: '你的位置信息将用于分享食物时标记商家位置',
     },
+    /** 与记录页 <Camera> 组件配套，正式版授权说明（需在隐私指引中声明使用摄像头） */
+    'scope.camera': {
+      desc: '用于拍照识别食物、记录饮食',
+    },
     /** 保存海报等到相册时，授权弹窗用途说明（与隐私指引中的「保存到相册」声明配合） */
     'scope.writePhotosAlbum': {
       desc: '用于将生成的饮食海报保存到手机相册',

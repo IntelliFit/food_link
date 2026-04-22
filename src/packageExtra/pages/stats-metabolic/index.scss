@@ -1,3 +1,31 @@
+/* 与首页/分析 Tab 一致的绿白渐变底 + 自定义导航顶距；内容区左右留白，不在内层再叠一张大卡 */
 .stats-metabolic-page {
   min-height: 100vh;
+  box-sizing: border-box;
+  background: linear-gradient(
+    180deg,
+    rgb(92 184 150 / 8%) 0%,
+    rgb(92 184 150 / 3%) 40%,
+    #f0f3f6 80%,
+    #f0f3f6 100%
+  );
+  padding-top: 0;
+  /* 为固定底栏 + 安全区留白（与主 Tab 页一致） */
+  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
+}
+
+/* 原 padding-top:182rpx，改为块级占位，减轻 Canvas 原生层叠层错位 */
+.stats-metabolic-page__top-spacer {
+  width: 100%;
+  height: 182rpx;
+  flex-shrink: 0;
+}
+
+.stats-metabolic-page--bleed {
+  padding-left: 24rpx;
+  padding-right: 24rpx;
+}
+
+.stats-metabolic-page--bleed .metabolic-report__head {
+  padding-top: 20rpx;
 }

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
-import { getAccessToken, getMyMembership } from '../../../utils/api'
+import { getAccessToken } from '../../../utils/api'
+import { pickImageAndOpenAnalyze } from '../../../utils/weapp-open-analyze-image'
 import {
   IconCamera,
   IconAlbum,
@@ -95,69 +96,12 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
 
     switch (modeId) {
       case 'camera':
-        // record 为 tabBar 页，必须用 switchTab，navigateTo 会失败无反应
+        // 沉浸式全屏拍照仍走记录 Tab 的 <Camera>；chooseImage(camera) 在部分机型上等同「系统选图」体验
         Taro.switchTab({ url: '/pages/record/index' })
         break
-      case 'album': {
-        // 与 record 页「相册」一致：先校验今日次数，避免选图上传后 submit 才 429
-        if (!getAccessToken()) {
-          redirectToLogin()
-          break
-        }
-        void (async () => {
-          try {
-            const membershipStatus = await getMyMembership()
-            if (typeof membershipStatus.points_balance === 'number') {
-              if (membershipStatus.points_balance < 1) {
-                Taro.showModal({
-                  title: '积分不足',
-                  content: '标准分析需至少 1 积分，请先充值。',
-                  confirmText: '去充值',
-                  cancelText: '取消',
-                  success: (r) => {
-                    if (r.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-                  }
-                })
-                return
-              }
-            } else if (membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
-              const isPro = membershipStatus.is_pro
-              Taro.showModal({
-                title: '今日次数已用完',
-                content: isPro
-                  ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-                  : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-                confirmText: isPro ? '知道了' : '去开通',
-                cancelText: '取消',
-                showCancel: !isPro,
-                success: (r) => {
-                  if (!isPro && r.confirm) {
-                    Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-                  }
-                }
-              })
-              return
-            }
-          } catch {
-            // 会员接口失败时仍允许选图，由分析提交接口提示
-          }
-          Taro.chooseImage({
-            count: 1,
-            sizeType: ['compressed'],
-            sourceType: ['album'],
-            success: (res) => {
-              const imagePath = res.tempFilePaths[0]
-              Taro.setStorageSync('analyzeImagePath', imagePath)
-              Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
-            },
-            fail: (err) => {
-              if (err.errMsg?.includes('cancel')) return
-              Taro.showToast({ title: '选择图片失败', icon: 'none' })
-            }
-          })
-        })()
+      case 'album':
+        void pickImageAndOpenAnalyze(['album'])
         break
-      }
       case 'text':
         Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })
         break

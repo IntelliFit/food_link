@@ -1,0 +1,2557 @@
+/**
+ * 深色主题：仅作用于 `.fl-page-theme-root--dark` 包裹下的页面，不影响默认浅色。
+ * 以绿系暗色为基调，与品牌色 #5cb896 协调。
+ */
+
+$fl-dark-surface: #1a2220;
+$fl-dark-surface2: #232e2b;
+$fl-dark-border: rgb(92 184 150 / 28%);
+$fl-dark-text: #e8ece9;
+$fl-dark-text2: #9ca3a8;
+$fl-dark-accent: #7dd3b0;
+$fl-dark-panel-bg: rgb(255 255 255 / 4%);
+$fl-dark-panel-bg-strong: rgb(255 255 255 / 6%);
+$fl-dark-panel-bg-soft: rgb(255 255 255 / 3%);
+$fl-dark-input-bg: rgb(255 255 255 / 7%);
+$fl-dark-ghost-bg: rgb(255 255 255 / 9%);
+$fl-dark-warning-bg: rgb(244 114 114 / 12%);
+$fl-dark-modal-bg: rgb(20 24 23 / 96%);
+$fl-dark-modal-bg-soft: rgb(28 34 32 / 98%);
+$fl-dark-home-solid-bg: linear-gradient(
+  180deg,
+  #1a2822 0%,
+  rgb(18 24 22) 58%,
+  #0f1312 100%
+);
+/* 骨架屏 shimmer：低对比深绿灰，避免浅色渐变刺眼 */
+$fl-dark-sk-a: rgb(38 46 44);
+$fl-dark-sk-b: rgb(56 66 62);
+$fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $fl-dark-sk-a 75%);
+
+.fl-page-theme-root--dark {
+  background: linear-gradient(
+    180deg,
+    #1a2822 0%,
+    rgb(18 24 22) 42%,
+    #0e1110 100%
+  );
+  color: $fl-dark-text;
+}
+
+/* 各 Tab 页根节点原渐变改为透明，透出主题壳 */
+.fl-page-theme-root--dark .home-page,
+.fl-page-theme-root--dark .stats-page,
+.fl-page-theme-root--dark .community-page,
+.fl-page-theme-root--dark .profile-page {
+  background: transparent !important;
+}
+
+/* ---------- 首页 ---------- */
+.fl-page-theme-root--dark .greeting-title,
+.fl-page-theme-root--dark .greeting-title-icon {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .greeting-subtitle {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .home-login-banner {
+  background: $fl-dark-panel-bg-strong !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .home-login-banner-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .main-card,
+.fl-page-theme-root--dark .combined-card,
+.fl-page-theme-root--dark .macro-card,
+.fl-page-theme-root--dark .water-card,
+.fl-page-theme-root--dark .exercise-card,
+.fl-page-theme-root--dark .meal-section,
+.fl-page-theme-root--dark .quick-actions {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .card-label,
+.fl-page-theme-root--dark .card-value,
+.fl-page-theme-root--dark .macro-label,
+.fl-page-theme-root--dark .macro-num {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .card-sub,
+.fl-page-theme-root--dark .text-secondary,
+.fl-page-theme-root--dark .macro-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .date-day-name {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .date-day-circle {
+  background: $fl-dark-surface2 !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: none !important;
+}
+
+/* 选中周：胶囊高亮；有记录/超标未选中时用实色，避免半透明发灰 */
+.fl-page-theme-root--dark .date-item.is-selected .date-day-circle {
+}
+
+.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-recorded {
+  background: #4a9d7d !important;
+  border-color: rgb(92 184 150 / 45%) !important;
+}
+
+.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-recorded .date-num-text,
+.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-over .date-num-text {
+  color: #fff !important;
+}
+
+.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-over {
+  background: #c45a5a !important;
+  border-color: rgb(229 115 115 / 45%) !important;
+}
+
+/* 未选中日期：空圈数字需浅色，避免与深底融为一体 */
+.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-empty .date-num-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .macro-card-horizontal {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.fl-page-theme-root--dark .macro-card-horizontal.is-warning {
+  background: $fl-dark-warning-bg !important;
+  border-color: rgb(229 115 115 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .macro-label-horizontal,
+.fl-page-theme-root--dark .macro-target-value,
+.fl-page-theme-root--dark .macro-divider {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .macro-target-total,
+.fl-page-theme-root--dark .macro-target-unit,
+.fl-page-theme-root--dark .macro-target-hint {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .macro-progress-bar-bg,
+.fl-page-theme-root--dark .progress-bar-bg,
+.fl-page-theme-root--dark .body-status-progress-bg {
+  background: rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .macros-divider {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    $fl-dark-border 20%,
+    $fl-dark-border 80%,
+    transparent 100%
+  ) !important;
+}
+
+.fl-page-theme-root--dark .body-status-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .body-status-label,
+.fl-page-theme-root--dark .body-status-title {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .body-status-value,
+.fl-page-theme-root--dark .body-status-unit {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .body-status-hint,
+.fl-page-theme-root--dark .body-status-progress-text,
+.fl-page-theme-root--dark .body-status-empty {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .target-edit-btn {
+  background: $fl-dark-ghost-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .target-edit-icon,
+.fl-page-theme-root--dark .target-edit-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .section-title,
+.fl-page-theme-root--dark .meals-title,
+.fl-page-theme-root--dark .expiry-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-item:not(.is-warning) {
+  background: $fl-dark-panel-bg !important;
+  border-color: transparent !important;
+}
+
+.fl-page-theme-root--dark .meal-media-wrap {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .meal-icon-wrap {
+  background: linear-gradient(135deg, rgb(32 42 38) 0%, rgb(28 36 34) 100%) !important;
+}
+
+.fl-page-theme-root--dark .expiry-skeleton-item,
+.fl-page-theme-root--dark .meal-skeleton-item {
+  background: $fl-dark-panel-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .expiry-skeleton-thumb,
+.fl-page-theme-root--dark .meal-skeleton-thumb,
+.fl-page-theme-root--dark .expiry-skeleton-top .home-line-title,
+.fl-page-theme-root--dark .expiry-skeleton-top .home-line-tag,
+.fl-page-theme-root--dark .expiry-skeleton-mid .home-line-foot-l,
+.fl-page-theme-root--dark .meal-skeleton-top .home-line-title,
+.fl-page-theme-root--dark .meal-skeleton-top .home-line-cal,
+.fl-page-theme-root--dark .meal-skeleton-foot .home-line-foot-l,
+.fl-page-theme-root--dark .meal-skeleton-foot .home-line-foot-r,
+.fl-page-theme-root--dark .home-skeleton-bar {
+  background: $fl-dark-sk-grad !important;
+  background-size: 200% 100% !important;
+}
+
+/* 空态插图：压暗，避免浅色插画刺眼 */
+.fl-page-theme-root--dark .meals-empty image,
+.fl-page-theme-root--dark .meals-empty .taroify-empty__image,
+.fl-page-theme-root--dark .meals-empty .taroify-empty__image-wrap {
+  opacity: 0.55 !important;
+  filter: brightness(0.55) !important;
+}
+
+.fl-page-theme-root--dark .meals-empty .taroify-empty__description {
+  color: $fl-dark-text2 !important;
+}
+
+/* 首页：快到期食物（单条白底卡片 → 深色） */
+.fl-page-theme-root--dark .expiry-item {
+  background: $fl-dark-panel-bg !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .expiry-media-wrap {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .expiry-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .expiry-time-pill {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .expiry-time-pill-text,
+.fl-page-theme-root--dark .expiry-meta-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .expiry-empty-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .expiry-empty-desc {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .profile-theme-chip {
+  background: $fl-dark-panel-bg-strong !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .profile-theme-chip-icon {
+  color: $fl-dark-accent !important;
+}
+
+/* ---------- 我的 ---------- */
+.fl-page-theme-root--dark .profile-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 30%);
+}
+
+.fl-page-theme-root--dark .user-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .user-subtitle,
+.fl-page-theme-root--dark .list-title,
+.fl-page-theme-root--dark .card-validity,
+.fl-page-theme-root--dark .logout-text,
+.fl-page-theme-root--dark .login-text,
+.fl-page-theme-root--dark .profile-version,
+.fl-page-theme-root--dark .onboarding-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .user-avatar-wrapper {
+  background: $fl-dark-surface2 !important;
+}
+
+.fl-page-theme-root--dark .member-card--free {
+  background: linear-gradient(145deg, rgb(255 255 255 / 8%) 0%, rgb(255 255 255 / 4%) 100%) !important;
+  color: $fl-dark-text !important;
+  border: 1rpx solid $fl-dark-border;
+}
+
+.fl-page-theme-root--dark .member-card--free .card-title,
+.fl-page-theme-root--dark .member-card--free .points-balance {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .list-item {
+  border-bottom-color: rgb(92 184 150 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .list-item:last-child {
+  border-bottom: none;
+}
+
+.fl-page-theme-root--dark .logout-card,
+.fl-page-theme-root--dark .login-card {
+  background: $fl-dark-panel-bg !important;
+}
+
+/* ---------- 分析 Tab ---------- */
+.fl-page-theme-root--dark .stats-guest-card,
+.fl-page-theme-root--dark .stats-guest-title,
+.fl-page-theme-root--dark .stats-guest-desc {
+  background: $fl-dark-panel-bg !important;
+  color: $fl-dark-text !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .stats-guest-desc {
+  color: $fl-dark-text2 !important;
+}
+
+/* 勿覆盖 .hero-card：保留绿/橙渐变大 Hero */
+.fl-page-theme-root--dark .stat-card,
+.fl-page-theme-root--dark .stats-section-card {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .hero-card .hero-title,
+.fl-page-theme-root--dark .hero-card .hero-value,
+.fl-page-theme-root--dark .stat-card .stat-label,
+.fl-page-theme-root--dark .stat-card .stat-value {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .stat-card .stat-sub,
+.fl-page-theme-root--dark .hero-card .hero-sub {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .stats-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .segmented-control {
+  background: $fl-dark-panel-bg-soft !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 25%) !important;
+}
+
+.fl-page-theme-root--dark .segment-item {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .segment-item.active {
+  background: $fl-dark-ghost-bg !important;
+  color: $fl-dark-accent !important;
+  box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .tabs-loading-text {
+  color: $fl-dark-text2 !important;
+}
+
+/* 分析 Tab 白底模块 → 深色表面 */
+.fl-page-theme-root--dark .stats-card:not(.hero-card) {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 32%) !important;
+}
+
+.fl-page-theme-root--dark .stats-card:not(.hero-card) .card-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .stats-card:not(.hero-card) .card-subtitle {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .hero-card .hero-badge {
+  background: rgb(0 0 0 / 22%) !important;
+  border: 1rpx solid rgb(255 255 255 / 14%) !important;
+  box-shadow:
+    0 4rpx 14rpx rgb(0 0 0 / 25%),
+    inset 0 1rpx 0 rgb(255 255 255 / 8%) !important;
+}
+
+.fl-page-theme-root--dark .hero-card.deficit-mode .hero-badge-label,
+.fl-page-theme-root--dark .hero-card.deficit-mode .hero-badge-icon {
+  color: #d1fae5 !important;
+}
+
+.fl-page-theme-root--dark .hero-card.surplus-mode .hero-badge-label,
+.fl-page-theme-root--dark .hero-card.surplus-mode .hero-badge-icon {
+  color: #ffedd5 !important;
+}
+
+.fl-page-theme-root--dark .hero-metabolic-row {
+  background: rgb(0 0 0 / 22%) !important;
+  border: 1rpx solid rgb(255 255 255 / 14%) !important;
+  box-shadow:
+    0 4rpx 14rpx rgb(0 0 0 / 25%),
+    inset 0 1rpx 0 rgb(255 255 255 / 8%) !important;
+}
+
+.fl-page-theme-root--dark .hero-card.deficit-mode .hero-metabolic-row__title {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .hero-card.surplus-mode .hero-metabolic-row__title {
+  color: #fdba74 !important;
+}
+
+.fl-page-theme-root--dark .hero-card.deficit-mode .hero-metabolic-row__sub {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .hero-card.surplus-mode .hero-metabolic-row__sub {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .hero-metabolic-row__arrow {
+  color: $fl-dark-text2 !important;
+  background: rgb(255 255 255 / 5%) !important;
+  border-left-color: rgb(255 255 255 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .streak-icon {
+  background: rgb(45 32 32 / 80%) !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .streak-title,
+.fl-page-theme-root--dark .streak-suffix {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .streak-num {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .streak-badge {
+  background: rgb(45 32 32 / 75%) !important;
+  color: #fca5a5 !important;
+}
+
+.fl-page-theme-root--dark .heatmap-cell,
+.fl-page-theme-root--dark .heatmap-cell.is-empty {
+  background: rgb(30 38 36) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .heatmap-cell.is-empty .heatmap-cell-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .chart-switch-label,
+.fl-page-theme-root--dark .bar-calorie-text,
+.fl-page-theme-root--dark .bar-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .bar-wrapper {
+  background: rgb(0 0 0 / 25%) !important;
+}
+
+.fl-page-theme-root--dark .chart-empty-state .empty-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .macro-name {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .macro-detail {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .progress-track {
+  background: rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .meal-gauge-item {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .meal-gauge-label {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-gauge-percent,
+.fl-page-theme-root--dark .meal-gauge-cal {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analysis-card {
+  background: linear-gradient(135deg, rgb(32 44 52 / 90%) 0%, rgb(26 34 32 / 95%) 100%) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .analysis-card .card-title {
+  color: #9ec5e8 !important;
+}
+
+.fl-page-theme-root--dark .analysis-card .card-subtitle {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analysis-action-btn {
+  background: rgb(40 56 68 / 80%) !important;
+  border-color: rgb(120 165 200 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .analysis-action-btn-text {
+  color: #b8d4f0 !important;
+}
+
+/* 分析页日期条：与首页一致的空圈字色 */
+.fl-page-theme-root--dark .stats-page .date-item:not(.is-selected) .date-day-circle.is-empty .date-num-text {
+  color: $fl-dark-text2 !important;
+}
+
+/* 仅空圈铺底；有记录/超标沿用全局实色规则 */
+.fl-page-theme-root--dark .stats-page .date-item:not(.is-selected) .date-day-circle.is-empty {
+  background: $fl-dark-surface2 !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: none !important;
+}
+
+/* ---------- 圈子 ---------- */
+.fl-page-theme-root--dark .community-scroll-content {
+  background: transparent;
+}
+
+.fl-page-theme-root--dark .friends-quick-bar,
+.fl-page-theme-root--dark .feed-filter-panel,
+.fl-page-theme-root--dark .feed-row-card {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .friends-quick-cell-label,
+.fl-page-theme-root--dark .feed-section-title,
+.fl-page-theme-root--dark .section-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .feed-search-input {
+  color: $fl-dark-text !important;
+  background: $fl-dark-input-bg !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-label,
+.fl-page-theme-root--dark .feed-filter-summary {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-search-wrap {
+  border-color: $fl-dark-border !important;
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .ranking-banner {
+  background: linear-gradient(
+    145deg,
+    rgb(32 52 44) 0%,
+    rgb(38 58 48) 35%,
+    rgb(28 44 38) 70%,
+    rgb(22 36 32) 100%
+  ) !important;
+  border-color: $fl-dark-border !important;
+  box-shadow:
+    0 10rpx 32rpx rgb(0 0 0 / 35%),
+    inset 0 1rpx 0 rgb(255 255 255 / 6%) !important;
+}
+
+.fl-page-theme-root--dark .ranking-preview-sk-dot {
+  background: rgb(255 255 255 / 14%) !important;
+}
+
+.fl-page-theme-root--dark .skeleton-avatar,
+.fl-page-theme-root--dark .skeleton-line,
+.fl-page-theme-root--dark .skeleton-image,
+.fl-page-theme-root--dark .skeleton-meta-pill,
+.fl-page-theme-root--dark .skeleton-meta-wide,
+.fl-page-theme-root--dark .skeleton-action {
+  background: $fl-dark-sk-grad !important;
+  background-size: 200% 100% !important;
+}
+
+.fl-page-theme-root--dark .skeleton-feed-actions {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .feed-empty {
+  background: $fl-dark-panel-bg !important;
+}
+
+.fl-page-theme-root--dark .feed-empty-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-calorie {
+  background: linear-gradient(
+    to right,
+    rgb(45 72 60) 0%,
+    rgb(38 62 52) 100%
+  ) !important;
+  color: #c8f5e4 !important;
+  box-shadow: 0 4rpx 14rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .feed-macros {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .feed-macros-text {
+  color: $fl-dark-text2 !important;
+}
+
+/* 动态正文与操作区（原 #333 / #f0f0f0 分割线） */
+.fl-page-theme-root--dark .feed-content {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .feed-actions {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .action-icon {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .action-icon.liked {
+  color: #f87171 !important;
+}
+
+.fl-page-theme-root--dark .action-count {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .share-btn {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-tag-plain {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .post-time {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .user-name {
+  color: #9bb8e8 !important;
+}
+
+.fl-page-theme-root--dark .feed-card {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .feed-comments {
+  background: $fl-dark-panel-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .comment-avatar {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .comment-content-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .comment-author {
+  color: #8ab4e8 !important;
+}
+
+.fl-page-theme-root--dark .comment-reply-arrow,
+.fl-page-theme-root--dark .comment-reply-target {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .comment-status-badge {
+  color: $fl-dark-text2 !important;
+  background: rgb(0 0 0 / 22%) !important;
+}
+
+.fl-page-theme-root--dark .feed-inline-comment {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .feed-inline-comment-input {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .feed-tag:not(.highlight) {
+  background: $fl-dark-panel-bg-soft !important;
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .feed-tag.highlight {
+  background: linear-gradient(135deg, rgb(35 52 44) 0%, rgb(32 48 42) 100%) !important;
+  color: #a7f3d0 !important;
+}
+
+.fl-page-theme-root--dark .comment-bar-fixed {
+  background: $fl-dark-panel-bg-strong !important;
+  border-top-color: $fl-dark-border !important;
+  box-shadow: 0 -8rpx 28rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .comment-bar-input {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .comment-bar-send[disabled] {
+  background: $fl-dark-ghost-bg !important;
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .comment-bottom-bar {
+  background: $fl-dark-panel-bg-strong !important;
+  border-top-color: $fl-dark-border !important;
+  box-shadow: 0 -8rpx 28rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .comment-bottom-input {
+  background: $fl-dark-input-bg !important;
+  color: $fl-dark-text !important;
+  caret-color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .comment-bottom-placeholder {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .comment-bottom-send.disabled:not(.is-submitting) {
+  background: $fl-dark-ghost-bg !important;
+}
+
+/* ---------- 首页：今日餐食（深底上的字与胶囊） ---------- */
+.fl-page-theme-root--dark .meal-desc {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-calorie {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-calorie-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .meal-macro-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .meal-type-target {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .meal-time-pill {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .meal-time-pill-text {
+  color: $fl-dark-text2 !important;
+}
+
+/* ---------- 首页：编辑目标 / 喝水 / 体重等底卡弹层 ---------- */
+.fl-page-theme-root--dark .target-modal-content,
+.fl-page-theme-root--dark .record-menu-content {
+  background: $fl-dark-home-solid-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 45%) !important;
+}
+
+.fl-page-theme-root--dark .target-modal-title,
+.fl-page-theme-root--dark .record-menu-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .target-modal-desc,
+.fl-page-theme-root--dark .record-menu-subtitle {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .target-form-item {
+  background: rgb(30 38 36 / 96%) !important;
+  border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .target-form-label {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .target-adjust-btn {
+  background: $fl-dark-ghost-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .target-adjust-btn:active {
+  background: rgb(255 255 255 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .target-adjust-btn-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .target-input-wrap {
+  background: rgb(24 31 29 / 98%) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .target-input {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .target-input-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .target-relation-hint {
+  background: rgb(125 211 176 / 10%) !important;
+  border-color: rgb(92 184 150 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .target-relation-hint-title,
+.fl-page-theme-root--dark .target-relation-hint-value.aligned {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .target-relation-hint-value.adjusting {
+  color: #fbbf24 !important;
+}
+
+.fl-page-theme-root--dark .target-relation-hint-value.pending {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .modal-footer-stack,
+.fl-page-theme-root--dark .modal-actions-fixed {
+  background: $fl-dark-home-solid-bg !important;
+}
+
+.fl-page-theme-root--dark .modal-actions-fixed {
+  background: linear-gradient(
+    180deg,
+    rgb(0 0 0 / 0%) 0%,
+    rgb(20 26 24 / 94%) 18%,
+    rgb(15 19 18 / 100%) 100%
+  ) !important;
+}
+
+.fl-page-theme-root--dark .target-modal-btn.secondary {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .target-modal-btn-text.secondary {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .body-form-hint {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .water-modal-quick-item {
+  background: rgb(158 197 232 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .water-modal-quick-item:active {
+  background: rgb(158 197 232 / 16%) !important;
+}
+
+.fl-page-theme-root--dark .water-modal-quick-value {
+  color: #7eb8e8 !important;
+}
+
+.fl-page-theme-root--dark .water-modal-quick-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .water-reset-btn {
+  background: $fl-dark-ghost-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .water-reset-btn-text {
+  color: $fl-dark-text2 !important;
+}
+
+/* 记录菜单 v2 */
+.fl-page-theme-root--dark .record-menu-handle-bar {
+  background: rgb(80 90 88) !important;
+}
+
+.fl-page-theme-root--dark .record-menu-grid-card {
+  background: rgb(28 36 34 / 98%) !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 20rpx rgb(0 0 0 / 18%) !important;
+}
+
+.fl-page-theme-root--dark .record-menu-grid-icon-wrap {
+  background: rgb(255 255 255 / 8%) !important;
+}
+
+.fl-page-theme-root--dark .record-menu-grid-sublabel {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-menu-list-v2 {
+  background: rgb(26 33 31 / 98%) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-menu-list-item-v2 {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-menu-list-label-v2 {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-trigger {
+  background: rgb(28 36 34 / 98%) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-trigger-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-trigger-sub,
+.fl-page-theme-root--dark .record-menu-dev-url-label,
+.fl-page-theme-root--dark .record-menu-dev-url-hint {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-url-input {
+  background: rgb(24 31 29 / 98%) !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-item {
+  background: rgb(26 33 31 / 98%) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-item-label {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-item-desc {
+  color: $fl-dark-text2 !important;
+}
+
+/* ---------- 分包：记录详情（识别/保存后进入） ---------- */
+.fl-page-theme-root--dark .record-detail-root,
+.fl-page-theme-root--dark .record-detail-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .detail-header {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .meal-badge .meal-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-badge .meal-time {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .meal-badge .meal-icon {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .total-calorie .unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .detail-image {
+  background: $fl-dark-panel-bg !important;
+}
+
+.fl-page-theme-root--dark .detail-image.detail-image--logo {
+  background: radial-gradient(
+    circle at top,
+    rgb(40 52 48) 0%,
+    rgb(28 38 34) 100%
+  ) !important;
+}
+
+.fl-page-theme-root--dark .detail-image-icon-wrap {
+  background: $fl-dark-ghost-bg !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .detail-image-placeholder-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .context-tag.goal-tag {
+  background: linear-gradient(135deg, rgb(32 48 42) 0%, rgb(28 44 38) 100%) !important;
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .context-tag.timing-tag {
+  background: linear-gradient(135deg, rgb(32 44 58) 0%, rgb(28 38 48) 100%) !important;
+  color: #9ec5e8 !important;
+}
+
+.fl-page-theme-root--dark .detail-desc,
+.fl-page-theme-root--dark .detail-insight {
+  color: $fl-dark-text2 !important;
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .detail-desc .label,
+.fl-page-theme-root--dark .detail-insight .label {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .detail-desc > text:last-child,
+.fl-page-theme-root--dark .detail-insight > text:last-child {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-list-title {
+  color: $fl-dark-text !important;
+  border-top-color: $fl-dark-border !important;
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-item {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-info .food-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .food-info .food-meta,
+.fl-page-theme-root--dark .food-info .food-nutrients-detail .nutrient-item {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .nutrition-summary-section {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .summary-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .summary-item .summary-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .summary-item .summary-value {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .summary-item .summary-value.highlight {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .summary-item .summary-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .friend-invite-card {
+  border-top-color: $fl-dark-border !important;
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .empty-tip {
+  color: $fl-dark-text2 !important;
+}
+
+/* 记录详情内编辑弹层 */
+.fl-page-theme-root--dark .edit-modal-content {
+  background: $fl-dark-modal-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .edit-modal-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .edit-modal-body {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .edit-food-card {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .edit-modal-header {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .edit-modal-close {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .edit-modal-close::before,
+.fl-page-theme-root--dark .edit-modal-close::after {
+  background: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .edit-meta-card,
+.fl-page-theme-root--dark .edit-food-card,
+.fl-page-theme-root--dark .state-option,
+.fl-page-theme-root--dark .meal-option {
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .meal-option,
+.fl-page-theme-root--dark .state-option {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .meal-option.active,
+.fl-page-theme-root--dark .state-option.active {
+  background: rgb(125 211 176 / 12%) !important;
+  border-color: rgb(125 211 176 / 32%) !important;
+  box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .meal-label,
+.fl-page-theme-root--dark .state-label,
+.fl-page-theme-root--dark .edit-food-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .edit-food-name-btn {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .edit-food-name-btn .iconfont {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .edit-food-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .edit-section-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .intake-adjuster {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .adjust-btn:active {
+  background: rgb(255 255 255 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .adjust-btn.minus {
+  border-right-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .adjust-btn.plus {
+  border-left-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .intake-input {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .intake-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .nutrient-chip {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .nutrient-chip-label,
+.fl-page-theme-root--dark .nutrient-chip-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .nutrient-chip-value {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .edit-cancel-btn {
+  background: $fl-dark-ghost-bg !important;
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .edit-modal-footer {
+  border-top-color: $fl-dark-border !important;
+}
+
+/* ---------- 分包：当天饮食记录 ---------- */
+.fl-page-theme-root--dark .day-record-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .day-record-date-line {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .summary-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 30%) !important;
+}
+
+.fl-page-theme-root--dark .summary-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .summary-value {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .day-record-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 10rpx 28rpx rgb(0 0 0 / 32%) !important;
+}
+
+.fl-page-theme-root--dark .day-record-card-header {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .day-record-card-thumb {
+  background: $fl-dark-panel-bg-soft !important;
+  box-shadow: inset 0 0 0 1rpx $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .day-record-card-thumb.is-placeholder {
+  background: linear-gradient(180deg, rgb(32 40 38) 0%, rgb(26 32 30) 100%) !important;
+}
+
+.fl-page-theme-root--dark .day-record-card-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .day-record-card-time,
+.fl-page-theme-root--dark .day-record-card-preview-tip {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .day-record-card-calorie {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .day-record-food-item {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .day-record-food-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .day-record-food-amount {
+  color: $fl-dark-text2 !important;
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .day-record-food-calorie {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .day-record-empty-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .day-record-empty-desc {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .day-record-empty-icon {
+  color: rgb(120 130 128) !important;
+}
+
+/* ---------- 分包：当日代谢等 ---------- */
+.fl-page-theme-root--dark .stats-metabolic-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__title,
+.fl-page-theme-root--dark .metabolic-report__summary-label,
+.fl-page-theme-root--dark .metabolic-report__summary-metric {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__summary-cell,
+.fl-page-theme-root--dark .metabolic-report__canvas-wrap {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__legend-txt {
+  color: $fl-dark-text2 !important;
+}
+
+/* ---------- 记录页（非相机全屏） ---------- */
+.fl-page-theme-root--dark .record-page.camera-privacy-gate,
+.fl-page-theme-root--dark .record-page.camera-privacy-checking,
+.fl-page-theme-root--dark .record-page.camera-denied {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .privacy-gate-title,
+.fl-page-theme-root--dark .privacy-gate-desc,
+.fl-page-theme-root--dark .denied-title,
+.fl-page-theme-root--dark .denied-desc {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .privacy-gate-agree-btn,
+.fl-page-theme-root--dark .denied-btn {
+  background: $fl-dark-ghost-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  color: $fl-dark-accent !important;
+}
+
+/* 相机全屏保持纯黑，不覆盖 */
+
+/* ---------- 登录 / 静态页 ---------- */
+.fl-page-theme-root--dark .login-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .login-page .app-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .login-page .app-slogan,
+.fl-page-theme-root--dark .login-page .agreement-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .about-page,
+.fl-page-theme-root--dark .agreement-page,
+.fl-page-theme-root--dark .document-page,
+.fl-page-theme-root--dark .profile-settings-page,
+.fl-page-theme-root--dark .expiry-page,
+.fl-page-theme-root--dark .expiry-edit-page,
+.fl-page-theme-root--dark .exercise-record-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .about-page .app-name,
+.fl-page-theme-root--dark .about-page .card-title,
+.fl-page-theme-root--dark .document-content .title,
+.fl-page-theme-root--dark .document-content .section-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .document-content .paragraph,
+.fl-page-theme-root--dark .document-content .update-time {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .about-page .card-text,
+.fl-page-theme-root--dark .about-page .card {
+  color: $fl-dark-text2 !important;
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border;
+}
+
+.fl-page-theme-root--dark .profile-settings-page .settings-card,
+.fl-page-theme-root--dark .expiry-item-card,
+.fl-page-theme-root--dark .expiry-summary-card,
+.fl-page-theme-root--dark .expiry-edit-panel {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+/* ---------- 全局 loading 文案色（若露出） ---------- */
+.fl-page-theme-root--dark .loading-text-primary {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .loading-spinner-dark,
+.fl-page-theme-root--dark .loading-spinner-md,
+.fl-page-theme-root--dark .loading-spinner-lg {
+  border-color: rgb(92 184 150 / 25%) !important;
+  border-top-color: $fl-dark-accent !important;
+}
+
+/* ---------- 分包补充：分析 / 结果 / 档案 / 公共库 / 朋友等页面 ---------- */
+.fl-page-theme-root--dark .analyze-page,
+.fl-page-theme-root--dark .analyze-history-page,
+.fl-page-theme-root--dark .result-page,
+.fl-page-theme-root--dark .result-text-page,
+.fl-page-theme-root--dark .health-profile-page,
+.fl-page-theme-root--dark .health-profile-view-page,
+.fl-page-theme-root--dark .health-profile-edit-page,
+.fl-page-theme-root--dark .food-library-page,
+.fl-page-theme-root--dark .food-detail-page,
+.fl-page-theme-root--dark .share-page,
+.fl-page-theme-root--dark .friends-page,
+.fl-page-theme-root--dark .interaction-notifications-page,
+.fl-page-theme-root--dark .privacy-settings-page,
+.fl-page-theme-root--dark .location-search-page,
+.fl-page-theme-root--dark .record-manual-page,
+.fl-page-theme-root--dark .record-text-page,
+.fl-page-theme-root--dark .membership-page,
+.fl-page-theme-root--dark .recipes-page,
+.fl-page-theme-root--dark .recipe-edit-page {
+  background: transparent !important;
+  color: $fl-dark-text;
+}
+
+.fl-page-theme-root--dark .analyze-page .mode-banner,
+.fl-page-theme-root--dark .analyze-page .image-preview-section,
+.fl-page-theme-root--dark .analyze-page .details-section,
+.fl-page-theme-root--dark .analyze-page .confirm-section,
+.fl-page-theme-root--dark .analyze-page .precision-session-tip,
+.fl-page-theme-root--dark .analyze-page .precision-reference-field,
+.fl-page-theme-root--dark .analyze-history-page .task-card,
+.fl-page-theme-root--dark .result-page .recognition-status-card,
+.fl-page-theme-root--dark .result-page .followup-question-card,
+.fl-page-theme-root--dark .result-page .nutrition-overview-card,
+.fl-page-theme-root--dark .result-page .model-switch-card,
+.fl-page-theme-root--dark .result-page .insight-card,
+.fl-page-theme-root--dark .result-page .ingredient-card,
+.fl-page-theme-root--dark .result-page .summary-card,
+.fl-page-theme-root--dark .result-text-page .hero-section,
+.fl-page-theme-root--dark .result-text-page .nutrition-overview-card,
+.fl-page-theme-root--dark .result-text-page .insight-card,
+.fl-page-theme-root--dark .result-text-page .ingredient-card,
+.fl-page-theme-root--dark .result-text-page .meal-selector-card,
+.fl-page-theme-root--dark .health-profile-page .card.step-card,
+.fl-page-theme-root--dark .health-profile-page .report-result-block,
+.fl-page-theme-root--dark .health-profile-page .benefit-item,
+.fl-page-theme-root--dark .health-profile-view-page .block,
+.fl-page-theme-root--dark .health-profile-edit-page .form-card,
+.fl-page-theme-root--dark .food-library-page .food-card,
+.fl-page-theme-root--dark .food-library-page .pick-mode-tip,
+.fl-page-theme-root--dark .food-library-page .login-tip,
+.fl-page-theme-root--dark .food-detail-page .info-card,
+.fl-page-theme-root--dark .food-detail-page .merchant-card,
+.fl-page-theme-root--dark .food-detail-page .tags-card,
+.fl-page-theme-root--dark .food-detail-page .notes-card,
+.fl-page-theme-root--dark .food-detail-page .comments-card,
+.fl-page-theme-root--dark .food-detail-page .comment-modal-content,
+.fl-page-theme-root--dark .share-page .quick-upload-tip,
+.fl-page-theme-root--dark .share-page .nutrition-summary,
+.fl-page-theme-root--dark .share-page .form-item,
+.fl-page-theme-root--dark .share-page .quick-tag,
+.fl-page-theme-root--dark .share-page .selected-tag,
+.fl-page-theme-root--dark .share-page .location-btn,
+.fl-page-theme-root--dark .share-page .record-modal-content,
+.fl-page-theme-root--dark .share-page .record-item,
+.fl-page-theme-root--dark .share-page .source-option,
+.fl-page-theme-root--dark .friends-page .card,
+.fl-page-theme-root--dark .friends-page .search-bar,
+.fl-page-theme-root--dark .interaction-notifications-page .notification-card,
+.fl-page-theme-root--dark .privacy-settings-page .settings-card,
+.fl-page-theme-root--dark .privacy-settings-page .setting-card,
+.fl-page-theme-root--dark .privacy-settings-page .danger-zone,
+.fl-page-theme-root--dark .location-search-page .panel,
+.fl-page-theme-root--dark .location-search-page .selected-address-card,
+.fl-page-theme-root--dark .location-search-page .result-item,
+.fl-page-theme-root--dark .record-manual-page .workspace-card,
+.fl-page-theme-root--dark .record-manual-page .selected-section,
+.fl-page-theme-root--dark .record-manual-page .config-card,
+.fl-page-theme-root--dark .record-manual-page .section-block,
+.fl-page-theme-root--dark .record-manual-page .food-list,
+.fl-page-theme-root--dark .record-manual-page .selected-item,
+.fl-page-theme-root--dark .record-manual-page .food-item,
+.fl-page-theme-root--dark .record-text-page .input-card,
+.fl-page-theme-root--dark .record-text-page .bottom-bar,
+.fl-page-theme-root--dark .membership-page .features-row,
+.fl-page-theme-root--dark .membership-page .plan-card,
+.fl-page-theme-root--dark .membership-page .status-card,
+.fl-page-theme-root--dark .recipes-page .recipe-card,
+.fl-page-theme-root--dark .recipe-edit-page .form-card,
+.fl-page-theme-root--dark .recipe-edit-page .empty-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .meal-selector-card,
+.fl-page-theme-root--dark .food-detail-page .comment-modal-content,
+.fl-page-theme-root--dark .share-page .record-modal-content {
+  background: $fl-dark-modal-bg-soft !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .mode-title,
+.fl-page-theme-root--dark .analyze-page .section-title,
+.fl-page-theme-root--dark .analyze-page .meal-label,
+.fl-page-theme-root--dark .analyze-page .state-label,
+.fl-page-theme-root--dark .analyze-history-page .task-card,
+.fl-page-theme-root--dark .result-page .card-title,
+.fl-page-theme-root--dark .result-page .recognition-status-title,
+.fl-page-theme-root--dark .result-page .followup-question-title,
+.fl-page-theme-root--dark .result-page .section-title,
+.fl-page-theme-root--dark .result-page .ingredient-name,
+.fl-page-theme-root--dark .result-text-page .hero-title,
+.fl-page-theme-root--dark .result-text-page .card-title,
+.fl-page-theme-root--dark .result-text-page .section-title,
+.fl-page-theme-root--dark .result-text-page .ingredient-name,
+.fl-page-theme-root--dark .health-profile-page .step-card-title,
+.fl-page-theme-root--dark .health-profile-page .upload-title,
+.fl-page-theme-root--dark .health-profile-page .benefit-title,
+.fl-page-theme-root--dark .health-profile-view-page .block-title,
+.fl-page-theme-root--dark .food-library-page .pick-mode-title,
+.fl-page-theme-root--dark .food-library-page .food-title,
+.fl-page-theme-root--dark .food-detail-page .info-title,
+.fl-page-theme-root--dark .food-detail-page .card-title,
+.fl-page-theme-root--dark .share-page .section-title,
+.fl-page-theme-root--dark .share-page .form-label,
+.fl-page-theme-root--dark .friends-page .name,
+.fl-page-theme-root--dark .interaction-notifications-page .notifications-title,
+.fl-page-theme-root--dark .interaction-notifications-page .notification-title,
+.fl-page-theme-root--dark .location-search-page .result-section-title,
+.fl-page-theme-root--dark .location-search-page .result-name,
+.fl-page-theme-root--dark .record-manual-page .workspace-title,
+.fl-page-theme-root--dark .record-manual-page .section-title,
+.fl-page-theme-root--dark .record-manual-page .section-block-title,
+.fl-page-theme-root--dark .record-manual-page .meal-item .meal-name,
+.fl-page-theme-root--dark .record-manual-page .food-name,
+.fl-page-theme-root--dark .record-manual-page .item-name,
+.fl-page-theme-root--dark .record-text-page .section-title,
+.fl-page-theme-root--dark .membership-page .hero-title,
+.fl-page-theme-root--dark .membership-page .plan-name,
+.fl-page-theme-root--dark .recipes-page .recipe-name,
+.fl-page-theme-root--dark .recipe-edit-page .section-title,
+.fl-page-theme-root--dark .recipe-edit-page .label,
+.fl-page-theme-root--dark .recipe-edit-page .empty-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .mode-sub,
+.fl-page-theme-root--dark .analyze-page .mode-tip-text,
+.fl-page-theme-root--dark .analyze-page .section-hint,
+.fl-page-theme-root--dark .analyze-page .placeholder-sub,
+.fl-page-theme-root--dark .analyze-page .precision-session-tip-text,
+.fl-page-theme-root--dark .analyze-page .precision-reference-label,
+.fl-page-theme-root--dark .analyze-history-page .empty,
+.fl-page-theme-root--dark .result-page .recognition-status-desc,
+.fl-page-theme-root--dark .result-page .recognition-guidance-text,
+.fl-page-theme-root--dark .result-page .followup-question-desc,
+.fl-page-theme-root--dark .result-page .followup-question-text,
+.fl-page-theme-root--dark .result-page .insight-content,
+.fl-page-theme-root--dark .result-page .section-count,
+.fl-page-theme-root--dark .result-text-page .weight-text,
+.fl-page-theme-root--dark .result-text-page .insight-content,
+.fl-page-theme-root--dark .result-text-page .empty-hint,
+.fl-page-theme-root--dark .health-profile-page .progress-text,
+.fl-page-theme-root--dark .health-profile-page .skip-hint,
+.fl-page-theme-root--dark .health-profile-page .save-hint,
+.fl-page-theme-root--dark .health-profile-page .benefit-text,
+.fl-page-theme-root--dark .health-profile-view-page .label,
+.fl-page-theme-root--dark .food-library-page .pick-mode-subtitle,
+.fl-page-theme-root--dark .food-library-page .description-text,
+.fl-page-theme-root--dark .food-library-page .merchant-name,
+.fl-page-theme-root--dark .food-library-page .location-text,
+.fl-page-theme-root--dark .food-library-page .author-name,
+.fl-page-theme-root--dark .food-library-page .loading-text,
+.fl-page-theme-root--dark .food-detail-page .info-description,
+.fl-page-theme-root--dark .food-detail-page .info-insight,
+.fl-page-theme-root--dark .food-detail-page .merchant-text,
+.fl-page-theme-root--dark .food-detail-page .notes-content,
+.fl-page-theme-root--dark .food-detail-page .comment-time,
+.fl-page-theme-root--dark .share-page .quick-upload-subtitle,
+.fl-page-theme-root--dark .share-page .nutrition-label,
+.fl-page-theme-root--dark .share-page .city-placeholder,
+.fl-page-theme-root--dark .share-page .location-text,
+.fl-page-theme-root--dark .share-page .record-meta,
+.fl-page-theme-root--dark .friends-page .name-sub,
+.fl-page-theme-root--dark .friends-page .time,
+.fl-page-theme-root--dark .friends-page .empty-desc,
+.fl-page-theme-root--dark .interaction-notifications-page .notifications-subtitle,
+.fl-page-theme-root--dark .interaction-notifications-page .notification-content,
+.fl-page-theme-root--dark .interaction-notifications-page .notification-time,
+.fl-page-theme-root--dark .location-search-page .selected-address-label,
+.fl-page-theme-root--dark .location-search-page .selected-address-text,
+.fl-page-theme-root--dark .location-search-page .result-address,
+.fl-page-theme-root--dark .record-manual-page .workspace-subtitle,
+.fl-page-theme-root--dark .record-manual-page .library-subtitle,
+.fl-page-theme-root--dark .record-manual-page .section-block-subtitle,
+.fl-page-theme-root--dark .record-manual-page .food-hint,
+.fl-page-theme-root--dark .record-manual-page .food-sub,
+.fl-page-theme-root--dark .record-manual-page .item-cal,
+.fl-page-theme-root--dark .record-manual-page .weight-unit,
+.fl-page-theme-root--dark .record-manual-page .total-calories .unit,
+.fl-page-theme-root--dark .record-manual-page .bottom-summary-subtext,
+.fl-page-theme-root--dark .record-text-page .char-count,
+.fl-page-theme-root--dark .membership-page .hero-subtitle,
+.fl-page-theme-root--dark .membership-page .plan-desc,
+.fl-page-theme-root--dark .membership-page .renew-tip-text,
+.fl-page-theme-root--dark .recipes-page .recipe-desc,
+.fl-page-theme-root--dark .recipes-page .empty-hint,
+.fl-page-theme-root--dark .recipe-edit-page .summary-label,
+.fl-page-theme-root--dark .recipe-edit-page .summary-text,
+.fl-page-theme-root--dark .recipe-edit-page .empty-desc {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .input-wrapper,
+.fl-page-theme-root--dark .analyze-page .details-input,
+.fl-page-theme-root--dark .analyze-page .precision-reference-input,
+.fl-page-theme-root--dark .result-text-page .weight-display,
+.fl-page-theme-root--dark .result-text-page .tag-input,
+.fl-page-theme-root--dark .food-library-page .search-input,
+.fl-page-theme-root--dark .food-detail-page .comment-input,
+.fl-page-theme-root--dark .share-page .form-input,
+.fl-page-theme-root--dark .share-page .form-textarea,
+.fl-page-theme-root--dark .share-page .tag-input,
+.fl-page-theme-root--dark .location-search-page .search-input,
+.fl-page-theme-root--dark .record-manual-page .search-bar,
+.fl-page-theme-root--dark .record-manual-page .search-input,
+.fl-page-theme-root--dark .record-manual-page .weight-input,
+.fl-page-theme-root--dark .record-text-page .input-card,
+.fl-page-theme-root--dark .record-text-page .food-textarea,
+.fl-page-theme-root--dark .record-text-page .amount-textarea,
+.fl-page-theme-root--dark .recipe-edit-page .input,
+.fl-page-theme-root--dark .recipe-edit-page .textarea {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .input-placeholder,
+.fl-page-theme-root--dark .analyze-page .placeholder-text,
+.fl-page-theme-root--dark .record-text-page .textarea-placeholder,
+.fl-page-theme-root--dark .recipe-edit-page .input::placeholder,
+.fl-page-theme-root--dark .recipe-edit-page .textarea::placeholder {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .meal-option,
+.fl-page-theme-root--dark .analyze-page .state-option,
+.fl-page-theme-root--dark .result-text-page .adjust-btn,
+.fl-page-theme-root--dark .result-text-page .secondary-btn,
+.fl-page-theme-root--dark .health-profile-page .option-card,
+.fl-page-theme-root--dark .health-profile-page .picker-card,
+.fl-page-theme-root--dark .health-profile-page .quick-num,
+.fl-page-theme-root--dark .health-profile-page .report-upload-btn,
+.fl-page-theme-root--dark .food-library-page .filter-tag,
+.fl-page-theme-root--dark .food-library-page .sort-item,
+.fl-page-theme-root--dark .food-library-page .empty-btn,
+.fl-page-theme-root--dark .food-library-page .login-tip-btn,
+.fl-page-theme-root--dark .food-detail-page .action-btn,
+.fl-page-theme-root--dark .share-page .switch-btn,
+.fl-page-theme-root--dark .share-page .quick-tag,
+.fl-page-theme-root--dark .share-page .add-tag-btn,
+.fl-page-theme-root--dark .friends-page .plain-btn,
+.fl-page-theme-root--dark .friends-page .danger-btn,
+.fl-page-theme-root--dark .interaction-notifications-page .mark-read-btn,
+.fl-page-theme-root--dark .location-search-page .search-btn,
+.fl-page-theme-root--dark .location-search-page .btn-use,
+.fl-page-theme-root--dark .record-manual-page .filter-chip,
+.fl-page-theme-root--dark .record-manual-page .serving-chip,
+.fl-page-theme-root--dark .record-manual-page .quick-adjust-chip,
+.fl-page-theme-root--dark .record-manual-page .option-item,
+.fl-page-theme-root--dark .record-manual-page .add-btn,
+.fl-page-theme-root--dark .record-manual-page .source-badge,
+.fl-page-theme-root--dark .record-manual-page .total-item,
+.fl-page-theme-root--dark .record-manual-page .workspace-calories,
+.fl-page-theme-root--dark .membership-page .hero-back-row,
+.fl-page-theme-root--dark .recipe-edit-page .option,
+.fl-page-theme-root--dark .recipe-edit-page .danger-btn {
+  background: $fl-dark-ghost-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .meal-option.active,
+.fl-page-theme-root--dark .analyze-page .state-option.active,
+.fl-page-theme-root--dark .health-profile-page .option-card.active,
+.fl-page-theme-root--dark .health-profile-page .quick-num.active,
+.fl-page-theme-root--dark .food-library-page .filter-tag.active,
+.fl-page-theme-root--dark .food-library-page .sort-item.active,
+.fl-page-theme-root--dark .share-page .switch-btn.active,
+.fl-page-theme-root--dark .share-page .source-option.active,
+.fl-page-theme-root--dark .record-manual-page .meal-item.active,
+.fl-page-theme-root--dark .record-manual-page .filter-chip.active,
+.fl-page-theme-root--dark .record-manual-page .serving-chip.active,
+.fl-page-theme-root--dark .record-manual-page .option-item.active,
+.fl-page-theme-root--dark .record-text-page .meal-item.active,
+.fl-page-theme-root--dark .record-text-page .option-item.active,
+.fl-page-theme-root--dark .recipe-edit-page .option.active {
+  background: rgb(125 211 176 / 12%) !important;
+  border-color: rgb(125 211 176 / 32%) !important;
+  color: $fl-dark-accent !important;
+  box-shadow: 0 6rpx 16rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .health-profile-page .card-input,
+.fl-page-theme-root--dark .health-profile-page .card-textarea,
+.fl-page-theme-root--dark .health-profile-page .custom-input-wrap,
+.fl-page-theme-root--dark .record-manual-page .food-cover-placeholder,
+.fl-page-theme-root--dark .record-manual-page .selected-thumb-placeholder,
+.fl-page-theme-root--dark .record-manual-page .remove-btn,
+.fl-page-theme-root--dark .result-text-page .macro-editor-item,
+.fl-page-theme-root--dark .share-page .source-tag-chip,
+.fl-page-theme-root--dark .share-page .city-display,
+.fl-page-theme-root--dark .food-detail-page .image-placeholder,
+.fl-page-theme-root--dark .food-library-page .food-image-placeholder,
+.fl-page-theme-root--dark .record-manual-page .food-cover-placeholder,
+.fl-page-theme-root--dark .record-manual-page .selected-thumb-placeholder,
+.fl-page-theme-root--dark .location-search-page .map-mask,
+.fl-page-theme-root--dark .result-text-page .empty-state,
+.fl-page-theme-root--dark .friends-page .empty-state,
+.fl-page-theme-root--dark .interaction-notifications-page .notifications-empty {
+  background: $fl-dark-panel-bg-soft !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-detail-page .bottom-bar,
+.fl-page-theme-root--dark .share-page .submit-bar,
+.fl-page-theme-root--dark .record-text-page .bottom-bar,
+.fl-page-theme-root--dark .recipe-edit-page .action-bar,
+.fl-page-theme-root--dark .health-profile-page .bottom-nav {
+  background: linear-gradient(
+    180deg,
+    rgb(0 0 0 / 0%) 0%,
+    rgb(20 24 23 / 88%) 20%,
+    rgb(20 24 23 / 98%) 100%
+  ) !important;
+}
+
+.fl-page-theme-root--dark .result-page .execution-mode-tag,
+.fl-page-theme-root--dark .result-page .recognition-chip,
+.fl-page-theme-root--dark .result-page .insight-tag,
+.fl-page-theme-root--dark .result-text-page .macro-editor-chip,
+.fl-page-theme-root--dark .food-library-page .food-tag,
+.fl-page-theme-root--dark .food-detail-page .tag-item,
+.fl-page-theme-root--dark .friends-page .status,
+.fl-page-theme-root--dark .membership-page .col-label-badge,
+.fl-page-theme-root--dark .recipes-page .tag {
+  background: rgb(125 211 176 / 10%) !important;
+  color: $fl-dark-accent !important;
+  border-color: rgb(125 211 176 / 26%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .macro-bar,
+.fl-page-theme-root--dark .result-text-page .macro-bar,
+.fl-page-theme-root--dark .analyze-page .quota-bar,
+.fl-page-theme-root--dark .record-text-page .record-text-quota-bar {
+  background: rgb(0 0 0 / 26%) !important;
+}
+
+/* ---------- 分析 loading / 结果页深色细节补充 ---------- */
+.fl-page-theme-root--dark .analyze-loading-page-v3 {
+  background: #000 !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page,
+.fl-page-theme-root--dark .analyze-loading-page .violated-wrap,
+.fl-page-theme-root--dark .analyze-loading-page .error-wrap {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page .violated-icon-wrap {
+  background: rgb(127 29 29 / 32%) !important;
+  border: 1rpx solid rgb(248 113 113 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page .violated-title,
+.fl-page-theme-root--dark .analyze-loading-page .error-msg {
+  color: #fecaca !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page .violated-reason,
+.fl-page-theme-root--dark .analyze-loading-page .violated-hint,
+.fl-page-theme-root--dark .analyze-loading-page .ai-notice {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page-v3 .content-layer {
+  background:
+    linear-gradient(180deg, rgb(2 6 23 / 18%) 0%, rgb(2 6 23 / 44%) 100%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page-v3 .fullscreen-bg-fallback,
+.fl-page-theme-root--dark .analyze-loading-page-v3 .fullscreen-bg-text-record,
+.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-placeholder-v3,
+.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-placeholder-text-record {
+  background:
+    linear-gradient(135deg, rgb(10 18 16 / 96%) 0%, rgb(17 28 25 / 92%) 55%, rgb(10 14 13 / 96%) 100%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page-v3 .text-record-icon-wrap,
+.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-text-record-icon-wrap {
+  background: rgb(255 255 255 / 8%) !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 12rpx 30rpx rgb(0 0 0 / 32%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page-v3 .text-record-placeholder-label,
+.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-text-record-label,
+.fl-page-theme-root--dark .analyze-loading-page-v3 .brand-footer {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page-v3 .btn-leave-v3 {
+  background: rgb(255 255 255 / 8%) !important;
+  border-color: rgb(255 255 255 / 18%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-loading-page-v3 .btn-exit-debug-v3 {
+  background: rgb(127 29 29 / 22%) !important;
+  border-color: rgb(248 113 113 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .content-container,
+.fl-page-theme-root--dark .result-text-page .content-container {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .result-page .scanner-hero-section,
+.fl-page-theme-root--dark .result-page .scanner-hero-inner {
+  background: #020617 !important;
+}
+
+.fl-page-theme-root--dark .result-page .scanner-hero-placeholder,
+.fl-page-theme-root--dark .result-text-page .hero-section {
+  background:
+    linear-gradient(135deg, rgb(10 18 16 / 98%) 0%, rgb(20 31 28 / 94%) 50%, rgb(9 13 12 / 98%) 100%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .scanner-hero-placeholder::before,
+.fl-page-theme-root--dark .result-text-page .hero-section::before {
+  opacity: 0.08 !important;
+}
+
+.fl-page-theme-root--dark .result-page .placeholder-icon-wrap,
+.fl-page-theme-root--dark .result-text-page .hero-icon-wrapper {
+  background: rgb(255 255 255 / 10%) !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 12rpx 30rpx rgb(0 0 0 / 30%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .placeholder-icon,
+.fl-page-theme-root--dark .result-text-page .hero-icon-wrapper .iconfont {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .result-page .placeholder-text,
+.fl-page-theme-root--dark .result-text-page .hero-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .hero-overlay {
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0%) 0%, rgb(11 15 14 / 100%) 100%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .execution-mode-tag.standard {
+  background: rgb(255 255 255 / 6%) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .result-page .execution-mode-tag-text,
+.fl-page-theme-root--dark .result-page .execution-mode-default-link,
+.fl-page-theme-root--dark .result-page .image-counter .counter-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .result-page .summary-card,
+.fl-page-theme-root--dark .result-page .recognition-status-card.outcome-ok,
+.fl-page-theme-root--dark .result-page .recognition-status-card.outcome-soft_reject,
+.fl-page-theme-root--dark .result-page .recognition-status-card.outcome-hard_reject,
+.fl-page-theme-root--dark .result-page .precision-continue-card,
+.fl-page-theme-root--dark .result-page .precision-continue-card .precision-reference-card,
+.fl-page-theme-root--dark .result-page .precision-continue-card .detected-items-card,
+.fl-page-theme-root--dark .result-page .precision-continue-card .split-strategy-card,
+.fl-page-theme-root--dark .result-page .precision-continue-card .uncertainty-card {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .result-page .correction-entry,
+.fl-page-theme-root--dark .result-page .library-upload-entry,
+.fl-page-theme-root--dark .result-text-page .total-weight-badge,
+.fl-page-theme-root--dark .result-text-page .insight-item,
+.fl-page-theme-root--dark .result-text-page .ingredient-controls,
+.fl-page-theme-root--dark .result-text-page .weight-adjuster,
+.fl-page-theme-root--dark .result-text-page .edit-icon-wrapper {
+  background: $fl-dark-panel-bg-soft !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .result-page .correction-entry .correction-text,
+.fl-page-theme-root--dark .result-page .correction-entry .correction-arrow,
+.fl-page-theme-root--dark .result-page .library-upload-text,
+.fl-page-theme-root--dark .result-page .library-upload-arrow,
+.fl-page-theme-root--dark .result-text-page .insight-label,
+.fl-page-theme-root--dark .result-text-page .ratio-display {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .hero-title,
+.fl-page-theme-root--dark .result-text-page .calories-value,
+.fl-page-theme-root--dark .result-text-page .calories-unit,
+.fl-page-theme-root--dark .result-text-page .macro-value,
+.fl-page-theme-root--dark .result-text-page .ingredient-name,
+.fl-page-theme-root--dark .result-text-page .weight-display {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .calories-label,
+.fl-page-theme-root--dark .result-text-page .weight-text,
+.fl-page-theme-root--dark .result-text-page .macro-editor-item-label,
+.fl-page-theme-root--dark .result-text-page .control-label,
+.fl-page-theme-root--dark .result-text-page .cal-unit,
+.fl-page-theme-root--dark .result-text-page .empty-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .insight-item.highlight,
+.fl-page-theme-root--dark .result-text-page .macro-editor-item.protein .macro-editor-chip {
+  background: rgb(16 185 129 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .insight-item.intro {
+  background: rgb(255 255 255 / 6%) !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .insight-item.ratio,
+.fl-page-theme-root--dark .result-text-page .macro-editor-item.fat .macro-editor-chip {
+  background: rgb(249 115 22 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .insight-item.absorption,
+.fl-page-theme-root--dark .result-text-page .macro-editor-item.carbs .macro-editor-chip {
+  background: rgb(59 130 246 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .result-text-page .ingredient-main,
+.fl-page-theme-root--dark .result-page .ingredient-main {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .result-page .footer-actions,
+.fl-page-theme-root--dark .result-text-page .footer-actions,
+.fl-page-theme-root--dark .result-page .drawer-header,
+.fl-page-theme-root--dark .result-page .drawer-footer,
+.fl-page-theme-root--dark .result-page .correction-drawer-content {
+  background: $fl-dark-modal-bg-soft !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .result-page .drawer-header,
+.fl-page-theme-root--dark .result-page .drawer-footer,
+.fl-page-theme-root--dark .result-text-page .footer-actions {
+  box-shadow: 0 12rpx 40rpx rgb(0 0 0 / 34%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .meal-selector-card,
+.fl-page-theme-root--dark .result-page .correction-row,
+.fl-page-theme-root--dark .result-page .additional-context-wrapper,
+.fl-page-theme-root--dark .result-page .weight-input-wrapper,
+.fl-page-theme-root--dark .result-text-page .meal-selector-card {
+  background: $fl-dark-modal-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 12rpx 36rpx rgb(0 0 0 / 32%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .selector-title,
+.fl-page-theme-root--dark .result-page .drawer-title,
+.fl-page-theme-root--dark .result-page .context-label text,
+.fl-page-theme-root--dark .result-page .meal-option-item .option-label,
+.fl-page-theme-root--dark .result-page .correction-input,
+.fl-page-theme-root--dark .result-page .weight-unit,
+.fl-page-theme-root--dark .result-text-page .selector-title,
+.fl-page-theme-root--dark .result-text-page .meal-option-item .option-label {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .result-page .meal-option-item,
+.fl-page-theme-root--dark .result-page .selector-actions .cancel-btn,
+.fl-page-theme-root--dark .result-page .drawer-close,
+.fl-page-theme-root--dark .result-page .correction-input,
+.fl-page-theme-root--dark .result-page .weight-input-wrapper,
+.fl-page-theme-root--dark .result-page .context-textarea,
+.fl-page-theme-root--dark .result-page .add-correction-btn,
+.fl-page-theme-root--dark .result-text-page .meal-option-item,
+.fl-page-theme-root--dark .result-text-page .selector-actions .cancel-btn {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .result-page .meal-option-item .option-icon,
+.fl-page-theme-root--dark .result-page .correction-index,
+.fl-page-theme-root--dark .result-page .context-textarea::placeholder,
+.fl-page-theme-root--dark .result-page .correction-input::placeholder,
+.fl-page-theme-root--dark .result-text-page .meal-option-item .option-icon,
+.fl-page-theme-root--dark .result-text-page .empty-icon {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .result-page .meal-option-item.active,
+.fl-page-theme-root--dark .result-text-page .meal-option-item.active {
+  background: rgb(125 211 176 / 12%) !important;
+  border-color: rgb(125 211 176 / 32%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .correction-remove {
+  background: rgb(127 29 29 / 22%) !important;
+}
+
+.fl-page-theme-root--dark .result-page .correction-remove .correction-remove-icon {
+  color: #fca5a5 !important;
+}
+
+.fl-page-theme-root--dark .result-page .meal-selector-overlay,
+.fl-page-theme-root--dark .result-page .correction-drawer-overlay,
+.fl-page-theme-root--dark .result-text-page .meal-selector-overlay {
+  background: rgb(0 0 0 / 74%) !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .record-text-quota-bar {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .record-text-quota-bar-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .record-text-quota-bar--exhausted {
+  background: rgb(127 29 29 / 22%) !important;
+  border-color: rgb(248 113 113 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .record-text-quota-bar--exhausted .record-text-quota-bar-text {
+  color: #fca5a5 !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .quick-tags .tag-item {
+  background: rgb(125 211 176 / 10%) !important;
+  border-color: rgb(125 211 176 / 26%) !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .quick-tags .tag-item text,
+.fl-page-theme-root--dark .record-text-page .tags-label,
+.fl-page-theme-root--dark .record-text-page .meal-item .meal-name,
+.fl-page-theme-root--dark .record-text-page .option-item text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .meal-item,
+.fl-page-theme-root--dark .record-text-page .option-item,
+.fl-page-theme-root--dark .record-text-page .submit-btn.disabled {
+  background: $fl-dark-panel-bg-soft !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .food-textarea,
+.fl-page-theme-root--dark .record-text-page .amount-textarea {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .meal-item .meal-icon {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-text-page .submit-btn.disabled text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .content-scroll,
+.fl-page-theme-root--dark .analyze-history-page .list {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .food-item,
+.fl-page-theme-root--dark .record-manual-page .selected-item {
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .food-item,
+.fl-page-theme-root--dark .record-manual-page .selected-item,
+.fl-page-theme-root--dark .record-manual-page .food-list {
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .food-item {
+  background: transparent !important;
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .food-cover-image,
+.fl-page-theme-root--dark .record-manual-page .selected-thumb-image {
+  background: rgb(255 255 255 / 5%) !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .source-badge.public_library {
+  background: rgb(59 130 246 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .source-badge.public_library text {
+  color: #93c5fd !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .source-badge.nutrition_library {
+  background: rgb(16 185 129 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .source-badge.nutrition_library text,
+.fl-page-theme-root--dark .record-manual-page .add-btn text,
+.fl-page-theme-root--dark .record-manual-page .quick-adjust-chip text,
+.fl-page-theme-root--dark .record-manual-page .total-item .value,
+.fl-page-theme-root--dark .record-manual-page .workspace-calories-value,
+.fl-page-theme-root--dark .record-manual-page .total-calories text:first-child {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .total-item .label,
+.fl-page-theme-root--dark .record-manual-page .workspace-calories-unit,
+.fl-page-theme-root--dark .record-manual-page .source-badge text,
+.fl-page-theme-root--dark .record-manual-page .filter-chip text,
+.fl-page-theme-root--dark .record-manual-page .serving-chip text,
+.fl-page-theme-root--dark .record-manual-page .option-item text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .bottom-bar {
+  background: linear-gradient(
+    180deg,
+    rgb(0 0 0 / 0%) 0%,
+    rgb(20 24 23 / 88%) 20%,
+    rgb(20 24 23 / 98%) 100%
+  ) !important;
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .bottom-summary-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .record-manual-page .save-btn.loading {
+  opacity: 0.78 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page,
+.fl-page-theme-root--dark .analyze-history-page {
+  background: #111716 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .quota-bar,
+.fl-page-theme-root--dark .analyze-page .mode-banner,
+.fl-page-theme-root--dark .analyze-page .image-preview-section,
+.fl-page-theme-root--dark .analyze-page .meal-section,
+.fl-page-theme-root--dark .analyze-page .state-section,
+.fl-page-theme-root--dark .analyze-page .details-section,
+.fl-page-theme-root--dark .analyze-history-page .task-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .mode-banner.standard,
+.fl-page-theme-root--dark .analyze-page .mode-banner.strict {
+  background: $fl-dark-panel-bg !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .mode-desc,
+.fl-page-theme-root--dark .analyze-page .mode-tip-text,
+.fl-page-theme-root--dark .analyze-page .quota-bar-text,
+.fl-page-theme-root--dark .analyze-page .multiview-compact-hint,
+.fl-page-theme-root--dark .analyze-history-page .time,
+.fl-page-theme-root--dark .analyze-history-page .empty-text,
+.fl-page-theme-root--dark .analyze-history-page .loading-wrap {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .mode-switch-item,
+.fl-page-theme-root--dark .analyze-page .multiview-compact,
+.fl-page-theme-root--dark .analyze-page .input-wrapper,
+.fl-page-theme-root--dark .analyze-page .grid-item,
+.fl-page-theme-root--dark .analyze-history-page .status-badge {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .grid-item.add-btn {
+  background: rgb(255 255 255 / 3%) !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .multiview-compact {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .multiview-compact-title,
+.fl-page-theme-root--dark .analyze-page .placeholder-text,
+.fl-page-theme-root--dark .analyze-history-page .calories {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .placeholder-sub,
+.fl-page-theme-root--dark .analyze-page .add-text,
+.fl-page-theme-root--dark .analyze-page .add-icon,
+.fl-page-theme-root--dark .analyze-page .input-placeholder,
+.fl-page-theme-root--dark .analyze-page .multiview-compact-title,
+.fl-page-theme-root--dark .analyze-page .mode-switch-item,
+.fl-page-theme-root--dark .analyze-history-page .arrow {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .details-input {
+  background: transparent !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .voice-btn {
+  background: $fl-dark-ghost-bg !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .confirm-section {
+  background: linear-gradient(
+    180deg,
+    rgb(0 0 0 / 0%) 0%,
+    rgb(20 24 23 / 82%) 26%,
+    rgb(17 23 22 / 98%) 100%
+  ) !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .history-link {
+  background: rgb(255 255 255 / 4%) !important;
+  border: 1rpx solid $fl-dark-border !important;
+  border-radius: 999rpx !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .history-link-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .swipeable-card-wrapper {
+  border-radius: 20rpx !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .task-card:active {
+  background: $fl-dark-panel-bg-strong !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .task-card.task-card-violated,
+.fl-page-theme-root--dark .analyze-history-page .task-card .thumb-violated {
+  background: rgb(127 29 29 / 18%) !important;
+  border-color: rgb(248 113 113 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .task-card .thumb,
+.fl-page-theme-root--dark .analyze-history-page .task-card .thumb-placeholder {
+  background: $fl-dark-panel-bg-soft !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .status-badge.status-done,
+.fl-page-theme-root--dark .analyze-history-page .mode-tag.strict,
+.fl-page-theme-root--dark .analyze-history-page .recognition-tag.recognition-ok {
+  background: rgb(16 185 129 / 12%) !important;
+  border-color: rgb(16 185 129 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .status-badge.status-processing {
+  background: rgb(59 130 246 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .status-badge.status-pending,
+.fl-page-theme-root--dark .analyze-history-page .status-badge.status-timed_out,
+.fl-page-theme-root--dark .analyze-history-page .recognition-tag.recognition-soft_reject {
+  background: rgb(245 158 11 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .status-badge.status-failed,
+.fl-page-theme-root--dark .analyze-history-page .status-badge.status-violated,
+.fl-page-theme-root--dark .analyze-history-page .recognition-tag.recognition-hard_reject {
+  background: rgb(127 29 29 / 18%) !important;
+}
+
+/* ---------- 我的页子路由补充 ---------- */
+.fl-page-theme-root--dark .profile-settings-page .settings-section-title,
+.fl-page-theme-root--dark .profile-settings-page .form-label,
+.fl-page-theme-root--dark .health-profile-view-page .value,
+.fl-page-theme-root--dark .health-profile-view-page .btn-secondary .btn-text,
+.fl-page-theme-root--dark .health-profile-edit-page .section-title,
+.fl-page-theme-root--dark .health-profile-edit-page .form-label,
+.fl-page-theme-root--dark .health-profile-edit-page .choice-text,
+.fl-page-theme-root--dark .health-profile-edit-page .option-label,
+.fl-page-theme-root--dark .health-profile-edit-page .tag-text,
+.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__title,
+.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__right-icon,
+.fl-page-theme-root--dark .login-page .agreement-link,
+.fl-page-theme-root--dark .profile-form-title,
+.fl-page-theme-root--dark .phone-bind-title,
+.fl-page-theme-root--dark .exercise-record-page .stats-value,
+.fl-page-theme-root--dark .exercise-record-page .empty-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .profile-settings-page .avatar-placeholder-text,
+.fl-page-theme-root--dark .about-page .app-version,
+.fl-page-theme-root--dark .about-page .cell-value,
+.fl-page-theme-root--dark .health-profile-edit-page .loading-text,
+.fl-page-theme-root--dark .health-profile-edit-page .option-desc,
+.fl-page-theme-root--dark .privacy-settings-page .loading-container,
+.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__brief,
+.fl-page-theme-root--dark .login-page .skip-login-btn,
+.fl-page-theme-root--dark .login-page .wx-phone-auth-btn,
+.fl-page-theme-root--dark .profile-form-desc,
+.fl-page-theme-root--dark .phone-bind-desc,
+.fl-page-theme-root--dark .exercise-record-page .stats-label,
+.fl-page-theme-root--dark .exercise-record-page .stats-unit,
+.fl-page-theme-root--dark .exercise-record-page .empty-desc,
+.fl-page-theme-root--dark .exercise-record-page .quick-examples-title {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .profile-settings-page .avatar-choose-wrapper,
+.fl-page-theme-root--dark .about-page .header-section,
+.fl-page-theme-root--dark .about-page .content-section .cell-group,
+.fl-page-theme-root--dark .agreement-page .document-content,
+.fl-page-theme-root--dark .document-page .document-content,
+.fl-page-theme-root--dark .health-profile-edit-page .section,
+.fl-page-theme-root--dark .privacy-settings-page .setting-group,
+.fl-page-theme-root--dark .profile-form-content,
+.fl-page-theme-root--dark .exercise-record-page .stats-card,
+.fl-page-theme-root--dark .exercise-record-page .record-card,
+.fl-page-theme-root--dark .exercise-record-page .example-tag,
+.fl-page-theme-root--dark .exercise-record-page .input-bar,
+.fl-page-theme-root--dark .exercise-record-page .preset-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .profile-form-content {
+  background: $fl-dark-modal-bg-soft !important;
+  box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 45%) !important;
+}
+
+.fl-page-theme-root--dark .profile-settings-page .nickname-input,
+.fl-page-theme-root--dark .health-profile-edit-page .custom-input-wrap,
+.fl-page-theme-root--dark .health-profile-edit-page .custom-input,
+.fl-page-theme-root--dark .health-profile-edit-page input,
+.fl-page-theme-root--dark .health-profile-edit-page textarea,
+.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .profile-settings-page .nickname-input::placeholder,
+.fl-page-theme-root--dark .health-profile-edit-page input::placeholder,
+.fl-page-theme-root--dark .health-profile-edit-page textarea::placeholder {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .health-profile-edit-page .choice-btn,
+.fl-page-theme-root--dark .health-profile-edit-page .option-card,
+.fl-page-theme-root--dark .health-profile-edit-page .tag-btn,
+.fl-page-theme-root--dark .health-profile-edit-page .quick-num,
+.fl-page-theme-root--dark .health-profile-view-page .btn-secondary,
+.fl-page-theme-root--dark .profile-form-cancel,
+.fl-page-theme-root--dark .phone-bind-secondary {
+  background: $fl-dark-ghost-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .health-profile-edit-page .choice-btn.active,
+.fl-page-theme-root--dark .health-profile-edit-page .option-card.active,
+.fl-page-theme-root--dark .health-profile-edit-page .tag-btn.active,
+.fl-page-theme-root--dark .health-profile-edit-page .quick-num.active {
+  background: rgb(125 211 176 / 12%) !important;
+  border-color: rgb(125 211 176 / 32%) !important;
+  box-shadow: 0 6rpx 16rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .health-profile-page .progress-wrap,
+.fl-page-theme-root--dark .health-profile-edit-page .scroll-wrap,
+.fl-page-theme-root--dark .exercise-record-page .header-stats {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .health-profile-view-page .row,
+.fl-page-theme-root--dark .health-profile-edit-page .section-title,
+.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell::after {
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .health-profile-view-page .indicator-item,
+.fl-page-theme-root--dark .exercise-record-page .empty-icon-wrap {
+  background: $fl-dark-panel-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .login-page .agreement-checkbox {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .exercise-record-page .stats-count {
+  background: rgb(249 115 22 / 12%) !important;
+  color: #fdba74 !important;
+}
+
+/* ---------- 好友管理链路补充 ---------- */
+.fl-page-theme-root--dark .interaction-feed-detail-page {
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .friends-page .refresh-btn,
+.fl-page-theme-root--dark .friends-page .tabs,
+.fl-page-theme-root--dark .friends-page .search-input-wrapper,
+.fl-page-theme-root--dark .interaction-notifications-page .notifications-header {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .friends-page .tab-item,
+.fl-page-theme-root--dark .friends-page .search-input,
+.fl-page-theme-root--dark .interaction-notifications-page .notifications-title,
+.fl-page-theme-root--dark .interaction-feed-detail-page .feed-content,
+.fl-page-theme-root--dark .interaction-feed-detail-page .comment-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .friends-page .search-input::placeholder,
+.fl-page-theme-root--dark .friends-page .refresh-btn,
+.fl-page-theme-root--dark .friends-page .search-clear,
+.fl-page-theme-root--dark .interaction-notifications-page .notifications-subtitle,
+.fl-page-theme-root--dark .interaction-feed-detail-empty-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .friends-page .search-clear {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .friends-page .icon-btn {
+  background: $fl-dark-panel-bg-soft !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .friends-page .icon-btn.reject-btn {
+  border-color: rgb(239 68 68 / 40%) !important;
+}
+
+.fl-page-theme-root--dark .friends-page .icon-btn.accept-btn {
+  border-color: rgb(92 184 150 / 40%) !important;
+}
+
+.fl-page-theme-root--dark .friends-page .avatar-wrapper .avatar,
+.fl-page-theme-root--dark .interaction-notifications-page .notification-avatar {
+  background: linear-gradient(135deg, rgb(255 255 255 / 8%) 0%, rgb(255 255 255 / 4%) 100%) !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .friends-page .avatar-wrapper .online-indicator {
+  border-color: rgb(18 24 22) !important;
+}
+
+.fl-page-theme-root--dark .friends-page .actions {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .friends-page .plain-btn {
+  background: $fl-dark-ghost-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .friends-page .danger-btn {
+  background: rgb(239 68 68 / 10%) !important;
+  border-color: rgb(239 68 68 / 22%) !important;
+  color: #fda4af !important;
+}
+
+.fl-page-theme-root--dark .friends-page .empty-icon,
+.fl-page-theme-root--dark .interaction-feed-detail-page .feed-comment-item.is-target-comment {
+  background: $fl-dark-panel-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .friends-page .loading-spinner,
+.fl-page-theme-root--dark .interaction-feed-detail-loading-spinner {
+  border-color: rgb(92 184 150 / 20%) !important;
+  border-top-color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .interaction-notifications-page .mark-read-btn.disabled {
+  background: $fl-dark-ghost-bg !important;
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .interaction-notifications-page .notification-card.unread {
+  border-color: rgb(92 184 150 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .interaction-notifications-page .notification-avatar-placeholder {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .interaction-feed-detail-page .interaction-feed-detail-loading,
+.fl-page-theme-root--dark .interaction-feed-detail-page .interaction-feed-detail-empty {
+  color: $fl-dark-text2 !important;
+}

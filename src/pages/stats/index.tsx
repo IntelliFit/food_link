@@ -1,6 +1,7 @@
 import { View, Text, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
+import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
 import { Switch } from '@taroify/core'
 import {
   getStatsSummary,
@@ -37,15 +38,24 @@ const MEAL_ICONS = {
   snack: IconSnack
 } as const
 
-/** 与首页低饱和风格一致：主餐用时间轴绿 #5cb896，加餐用柔和紫（对齐首页加餐色并降饱和） */
-const MEAL_ICON_COLORS: Record<string, string> = {
+/** 餐次结构配色：仅分早餐 / 午餐 / 晚餐三色；各时段加餐与对应主餐同色（与首页主色、蓝、橙一致） */
+const MEAL_STRUCTURE_COLORS = {
   breakfast: '#5cb896',
-  morning_snack: '#9b87c0',
-  lunch: '#5cb896',
-  afternoon_snack: '#9b87c0',
-  dinner: '#5cb896',
-  evening_snack: '#9b87c0',
-  snack: '#9b87c0'
+  lunch: '#5c9ed4',
+  dinner: '#f0985c',
+} as const
+
+function mealStructureAccent(mealKey: string): string {
+  if (mealKey === 'breakfast' || mealKey === 'morning_snack') {
+    return MEAL_STRUCTURE_COLORS.breakfast
+  }
+  if (mealKey === 'lunch' || mealKey === 'afternoon_snack' || mealKey === 'snack') {
+    return MEAL_STRUCTURE_COLORS.lunch
+  }
+  if (mealKey === 'dinner' || mealKey === 'evening_snack') {
+    return MEAL_STRUCTURE_COLORS.dinner
+  }
+  return MEAL_STRUCTURE_COLORS.breakfast
 }
 
 function formatLocalDate(date: Date = new Date()): string {
@@ -142,13 +152,32 @@ function getStoredBodyMetrics(): StoredBodyMetrics {
   return normalizeStoredBodyMetrics(null)
 }
 
+function hasAuthToken(): boolean {
+  try {
+    return Boolean(Taro.getStorageSync('access_token'))
+  } catch {
+    return false
+  }
+}
+
 function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
-  const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<StatsSummary | null>(null)
+  const rangeRef = useRef(range)
+  rangeRef.current = range
+
+  /** 静默联网刷新中（已有缓存展示时）：左上角微型 spinner，不占文档流 */
+  const [dataSyncing, setDataSyncing] = useState(false)
+  const [loading, setLoading] = useState(() => {
+    if (!hasAuthToken()) return false
+    return readStatsPageCache('week') === null
+  })
+  const [data, setData] = useState<StatsSummary | null>(() => {
+    if (!hasAuthToken()) return null
+    return readStatsPageCache('week')
+  })
   const [error, setError] = useState<string | null>(null)
   /** 未登录：可进入分析 Tab 浏览引导，不拉取需登录接口 */
-  const [guestBrowse, setGuestBrowse] = useState(false)
+  const [guestBrowse, setGuestBrowse] = useState(() => !hasAuthToken())
   const [aiDisplayText, setAiDisplayText] = useState('')
   const typingTimerRef = useRef<any>(null)
   const [isTyping, setIsTyping] = useState(false)
@@ -156,23 +185,38 @@ function StatsPage() {
   const [insightError, setInsightError] = useState<string | null>(null)
   const [showCalories, setShowCalories] = useState(false)
 
-  const fetchStats = useCallback(async (r: 'week' | 'month') => {
-    setLoading(true)
-    setError(null)
+  const fetchIdRef = useRef(0)
+  const statsFirstShowRef = useRef(true)
+
+  /**
+   * 拉取分析页聚合数据；silent=true 时不顶掉界面（已有缓存时后台刷新并写盘）
+   */
+  const refreshFromNetwork = useCallback(async (r: 'week' | 'month', silent: boolean) => {
+    const token = Taro.getStorageSync('access_token')
+    if (!token) {
+      setGuestBrowse(true)
+      setData(null)
+      setLoading(false)
+      return
+    }
+
+    setGuestBrowse(false)
+    const reqId = ++fetchIdRef.current
+
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    } else {
+      setDataSyncing(true)
+    }
+
     try {
-      const token = Taro.getStorageSync('access_token')
-      if (!token) {
-        setGuestBrowse(true)
-        setData(null)
-        setLoading(false)
-        return
-      }
-      setGuestBrowse(false)
-      // 并行获取统计数据和体重/喝水数据
       const [statsRes, bodyMetricsRes] = await Promise.all([
         getStatsSummary(r),
         getBodyMetricsSummary(r).catch(() => null),
       ])
+
+      if (reqId !== fetchIdRef.current) return
 
       const cloudWeightEntries = Array.isArray(bodyMetricsRes?.weight_entries)
         ? bodyMetricsRes.weight_entries.filter(
@@ -252,20 +296,54 @@ function StatsPage() {
       }
 
       setData(statsRes)
+      writeStatsPageCache(r, statsRes)
+      setError(null)
     } catch (e: unknown) {
-      console.error('[stats] fetchStats failed:', e)
-      setError((e as Error)?.message || '获取统计失败')
+      if (reqId !== fetchIdRef.current) return
+      console.error('[stats] refreshFromNetwork failed:', e)
+      const cached = readStatsPageCache(r)
+      if (cached) {
+        setData(cached)
+        setError(null)
+      } else if (!silent) {
+        setError((e as Error)?.message || '获取统计失败')
+      }
     } finally {
-      setLoading(false)
+      if (reqId !== fetchIdRef.current) return
+      if (!silent) {
+        setLoading(false)
+      } else {
+        setDataSyncing(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    fetchStats(range)
-  }, [range, fetchStats])
+    if (!hasAuthToken()) {
+      setGuestBrowse(true)
+      setLoading(false)
+      return
+    }
+    setGuestBrowse(false)
+    const cached = readStatsPageCache(range)
+    if (cached) {
+      setData(cached)
+      setError(null)
+      setLoading(false)
+    } else {
+      setLoading(true)
+      setData(null)
+    }
+    void refreshFromNetwork(range, Boolean(cached))
+  }, [range, refreshFromNetwork])
 
   useDidShow(() => {
-    fetchStats(range)
+    if (statsFirstShowRef.current) {
+      statsFirstShowRef.current = false
+      return
+    }
+    if (!hasAuthToken()) return
+    void refreshFromNetwork(rangeRef.current, true)
   })
 
   const handleGenerateInsight = useCallback(async () => {
@@ -280,12 +358,14 @@ function StatsPage() {
 
       setData(prev => {
         if (!prev) return prev
-        return {
+        const next: StatsSummary = {
           ...prev,
           analysis_summary: full,
           analysis_summary_generated_date: formatLocalDate(),
-          analysis_summary_needs_refresh: false
+          analysis_summary_needs_refresh: false,
         }
+        writeStatsPageCache(range, next)
+        return next
       })
 
       try {
@@ -395,7 +475,7 @@ function StatsPage() {
         <View className='error-wrap'>
           <Text className='iconfont icon-jiesuo error-icon' />
           <Text className='error-text'>{error}</Text>
-          <View className='btn-primary' onClick={() => fetchStats(range)}>
+          <View className='btn-primary' onClick={() => void refreshFromNetwork(range, false)}>
             <Text className='btn-text'>重试</Text>
           </View>
         </View>
@@ -472,6 +552,11 @@ function StatsPage() {
 
   return (
     <View className='stats-page'>
+      {dataSyncing ? (
+        <View className='stats-page__data-sync'>
+          <View className='stats-page__data-sync-spinner' />
+        </View>
+      ) : null}
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         {/* 页面头部已移除 - 标题和描述不再需要 */}
 
@@ -568,7 +653,7 @@ function StatsPage() {
             <Text className='hero-title'>平均每日{isSurplus ? '盈余' : '缺口'}</Text>
             <View className='hero-badge'>
               <Text className={`iconfont ${isSurplus ? 'icon-huore' : 'icon-good'} hero-badge-icon`} />
-              <Text>{isSurplus ? '热量超标' : '保持良好'}</Text>
+              <Text className='hero-badge-label'>{isSurplus ? '热量超标' : '保持良好'}</Text>
             </View>
           </View>
 
@@ -588,6 +673,22 @@ function StatsPage() {
               <Text className='hero-sub-value'>{tdee}</Text>
             </View>
           </View>
+
+          {!guestBrowse ? (
+            <View
+              className='hero-metabolic-row'
+              onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/stats-metabolic/index') })}
+            >
+              <View className='hero-metabolic-row__left'>
+                <Text className='iconfont icon-huore hero-metabolic-row__icon' />
+                <View className='hero-metabolic-row__copy'>
+                  <Text className='hero-metabolic-row__title'>当日代谢动态</Text>
+                  <Text className='hero-metabolic-row__sub'>本日示意脂肪、吸收进度与消耗一览</Text>
+                </View>
+              </View>
+              <Text className='hero-metabolic-row__arrow'>›</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* 连续记录天数 - Streak Card */}
@@ -714,7 +815,7 @@ function StatsPage() {
               const cal = byMeal[key]
               const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
               const MealIcon = MEAL_ICONS[key]
-              const color = MEAL_ICON_COLORS[key]
+              const color = mealStructureAccent(key)
               const radius = 43
               const circumference = 2 * Math.PI * radius
               const progress = Math.min(pct / 100, 1)
@@ -824,21 +925,6 @@ function StatsPage() {
             </View>
           </View>
         </View>
-
-        {!guestBrowse ? (
-          <View
-            className='stats-card metabolic-entry-card'
-            onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/stats-metabolic/index') })}
-          >
-            <View className='card-header'>
-              <View className='card-header-copy'>
-                <Text className='card-title'>当日代谢动态</Text>
-                <Text className='card-subtitle'>分钟级吸收/消耗模拟与曲线（完整图表在子页打开）</Text>
-              </View>
-              <Text className='metabolic-entry-card__arrow'>›</Text>
-            </View>
-          </View>
-        ) : null}
 
         {/* 分析报告 */}
         <View className='stats-card analysis-card'>

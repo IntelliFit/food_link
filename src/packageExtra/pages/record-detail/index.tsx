@@ -415,7 +415,9 @@ function RecordDetailPage() {
     return (
       <View className='record-detail-root'>
         <View className='record-detail-below-nav record-detail-loading-placeholder'>
-          <View className='empty-tip'>{loading ? <View className='loading-spinner' /> : '记录不存在'}</View>
+          <View className='empty-tip'>
+            {loading ? <View className='loading-spinner-md' /> : '记录不存在'}
+          </View>
         </View>
       </View>
     )
@@ -628,9 +630,8 @@ function RecordDetailPage() {
               canvas: canvas as any,
               destWidth: POSTER_WIDTH * 2,
               destHeight: dynamicHeight * 2,
-              fileType: 'png',
-              /** 保留圆角外透明像素（Canvas 2D，基础库 ≥2.32.0） */
-              transparent: true,
+              fileType: 'jpg',
+              quality: 0.95,
               success: (resp) => {
                 Taro.hideLoading()
                 setPosterGenerating(false)

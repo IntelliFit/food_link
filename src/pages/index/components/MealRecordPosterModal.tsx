@@ -202,12 +202,13 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
               isPro: isProUser,
             })
 
+            // JPG + 不透明：部分机型对 PNG/透明通道 saveImageToPhotosAlbum 不稳定；海报本身有底色
             Taro.canvasToTempFilePath({
               canvas: canvas as any,
               destWidth: POSTER_WIDTH * 2,
               destHeight: dynamicHeight * 2,
-              fileType: 'png',
-              transparent: true,
+              fileType: 'jpg',
+              quality: 0.95,
               success: (resp) => {
                 Taro.hideLoading()
                 setPosterGenerating(false)

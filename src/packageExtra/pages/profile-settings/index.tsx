@@ -2,6 +2,7 @@ import { View, Text, Image, Button, Input } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { updateUserInfo, uploadUserAvatar, imageToBase64 } from '../../../utils/api'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
 export default function ProfileSettingsPage() {
@@ -80,6 +81,7 @@ export default function ProfileSettingsPage() {
   }
 
   return (
+    <FlPageThemeRoot>
     <View className='profile-settings-page'>
       <View className='settings-card'>
         <View className='avatar-section'>
@@ -118,5 +120,6 @@ export default function ProfileSettingsPage() {
         保存
       </Button>
     </View>
+    </FlPageThemeRoot>
   )
 }

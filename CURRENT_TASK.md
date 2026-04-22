@@ -1,5 +1,188 @@
 # CURRENT_TASK
 
+- Task: 统一黑色主题下的微信原生导航栏 / 胶囊样式，并微调统计页“当日代谢动态”按钮底色
+- Status: done（已把导航栏换色上提到 `withAuth`，覆盖首页/分析/圈子/我的及分包页；统计页 `hero-metabolic-row` dark 背景已对齐 `保持良好` 徽标口径；已 `npm run dev:restart`）
+- Scope:
+  - `src/utils/withAuth.tsx`
+    - 接入 `useAppColorScheme`
+    - 在 `useDidShow`、初次加载和主题变化时统一调用 `applyThemeNavigationBar(scheme)`
+    - 目标：让首页/分析/圈子/我的、识别中、识别记录详情、好友管理等仍使用微信原生导航/右上角胶囊的页面，在 dark 下统一切换为深色背景 + 白色前景
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `hero-metabolic-row` dark 背景改为与 `hero-badge` 同系的半透明深色面板
+    - `hero-metabolic-row__arrow` 的背景和分隔线同步调暗
+- Verification:
+  - `npm run dev:restart` 完成
+  - `mrc logs error 30 --port 9420` 返回 `0`
+  - `mrc relaunch /pages/stats/index --port 9420` 成功，当前页面为 `pages/stats/index`
+  - `mrc relaunch /packageExtra/pages/friends/index --port 9420` 本轮被拉回 `pages/stats/index`，未拿到好友管理停留态截图
+
+- Task: 继续修正手动记录 / 文字记录 / 图片分析 / 分析历史的黑色主题细节
+- Status: done（已补手动记录内部白卡与标签、文字记录输入框嵌套底色、图片分析透明背景与底部区域、分析历史卡片与页面底色，并为上述 4 页补运行时导航栏换色；已 `npm run dev:restart`）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `record-manual`：补 `food-list`、`selected-item`、`food-item`、`source-badge`、`add-btn`、`weight-input`、`workspace-calories`、`bottom-bar` 等 dark 覆盖
+    - `record-text`：`food-textarea` / `amount-textarea` 改为 dark 下透明内层，去掉输入框内部重复嵌套底色
+    - `analyze`：补页面根背景、模式卡、图片区、多视角条、`input-wrapper`、`confirm-section`、`history-link` 的 dark 覆盖
+    - `analyze-history`：补页面根背景、任务卡、thumb、状态 badge、空态/加载态文案的 dark 覆盖
+  - `src/utils/theme-navigation-bar.ts`
+    - 新增运行时导航栏换色工具
+  - `src/packageExtra/pages/record-manual/index.tsx`
+  - `src/packageExtra/pages/record-text/index.tsx`
+  - `src/packageExtra/pages/analyze/index.tsx`
+  - `src/packageExtra/pages/analyze-history/index.tsx`
+    - 页面显示时按当前主题调用 `Taro.setNavigationBarColor`
+- Verification:
+  - `npm run dev:restart` 完成
+  - `mrc where --port 9420` 成功显示 `packageExtra/pages/record-manual/index`
+  - `mrc relaunch /packageExtra/pages/record-manual/index --port 9420` 成功
+  - `mrc logs error 40 --port 9420` 返回 `0`
+  - 阻塞：
+    - `mrc screenshot ./manual-record-dark-fix-check.png --port 9420` 本轮仍挂起，未拿到 PNG
+    - `mrc relaunch /packageExtra/pages/record-text/index --port 9420`
+    - `mrc relaunch /packageExtra/pages/analyze/index --port 9420`
+    - `mrc relaunch /packageExtra/pages/analyze-history/index --port 9420`
+    - 上述 3 个分包页本轮均被拉回 `pages/index/index`，未完成对应页面的自动化停留态验证
+
+- Task: 补齐图片分析 / 文字记录 / loading / 分析结果链路的黑色主题适配
+- Status: done（已在 `src/styles/fl-color-scheme-dark.scss` 补 `analyze-loading`、`result`、`result-text`、`record-text` 等页面缺失的 dark-only 局部样式；已执行 `npm run dev:restart`；`mrc logs error 20 --port 9420` 返回 0，但 `mrc relaunch / exists / screenshot` 本轮连上后长时间不返回，未拿到运行时截图证据）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `analyze-loading`：补全全屏背景、文字记录占位、content overlay、错误/违规态、离开按钮的 dark 覆盖
+    - `result`：补全头图无图占位、执行模式条、餐次弹层、公共库入口、二次纠错抽屉、底部操作区等 dark 覆盖
+    - `result-text`：补全 hero、概览卡、洞察块、配料卡控制区、底部按钮和餐次弹层的 dark 覆盖
+    - `record-text`：补全 quota bar、快捷标签、餐次/目标选项、禁用提交态的 dark 覆盖
+- Verification:
+  - `npm run dev:restart` 完成
+  - `mrc logs error 20 --port 9420` 返回 `0`
+  - 已尝试：
+    - `mrc relaunch pages/profile/index --port 9420`
+    - `mrc click .profile-theme-chip --port 9420`
+    - `mrc relaunch packageExtra/pages/record-text/index --port 9420`
+    - `mrc exists .record-text-page --port 9420`
+    - `mrc screenshot ./record-text-dark-check.png --port 9420`
+  - 阻塞：上述 `mrc relaunch / click / exists / screenshot` 均在“连接成功”后长时间不返回；本轮无法完成截图与页面停留态自动化确认
+  - 构建补充：`npm run build:weapp -- --no-check` 本轮未在终端内及时返回结果，未拿到明确 success 文案
+
+- Task: 修正首页“编辑目标”和首页菜单弹层仍显透明的问题
+- Status: done（已将 `target-modal-content`、`record-menu-content` 及内部表单/卡片从透明面板改为首页同系实体暗底；已 `npm run dev:restart` 并重新执行首页运行时点击检查）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 新增 `$fl-dark-home-solid-bg`
+    - 首页 `target-modal-content`、`record-menu-content`、`modal-actions-fixed` 改为与首页主背景同系的实体暗底渐变
+    - `target-form-item`、`target-input-wrap`
+    - `record-menu-grid-card`、`record-menu-list-v2`、`record-menu-dev-trigger`、`record-menu-dev-url-input`、`record-menu-dev-item`
+- Verification:
+  - `npm run dev:restart` 完成
+  - `mrc where --port 9420` 返回 `pages/index/index`
+  - `mrc click .target-edit-btn --port 9420` 成功
+  - `mrc click .meal-item --port 9420` 成功
+  - `mrc logs error 20 --port 9420` 返回 `0`
+  - 自动化本轮未稳定拿到弹层停留态截图
+
+- Task: 补齐好友管理链路的黑色主题支持
+- Status: done（已补 `friends` 页面，以及链路相关的 `interaction-notifications`、`interaction-feed-detail` dark-only 样式；已 `npm run dev:restart` 并用 `mrc` 串行重启验证页面，错误日志为 0）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `friends`：刷新按钮、tab 胶囊、搜索栏、图标按钮、头像区、操作按钮、空态、loading spinner 补齐深色适配
+    - `interaction-notifications`：头部卡片、未读态、按钮禁用态、头像占位、文字层级补齐 dark 样式
+    - `interaction-feed-detail`：页面根背景、空态/loading、目标评论高亮样式补齐 dark 模式
+- Verification:
+  - `npm run dev:restart` 完成
+  - `mrc relaunch` 串行抽检通过：
+    - `packageExtra/pages/friends/index`
+    - `packageExtra/pages/interaction-notifications/index`
+    - `packageExtra/pages/interaction-feed-detail/index`
+  - `mrc logs error 40 --port 9420` 返回 `0`
+  - `mrc screenshot` 本机环境仍挂起，未拿到 PNG
+
+- Task: 继续补齐「我的」页子路由黑色主题适配
+- Status: done（本轮重点补 `profile-settings`、`health-profile*`、`privacy-settings`、`about/agreement/privacy`、`friends`、`pro-membership`、`exercise-record`、`login` 等页的 dark-only 样式细节；已 `npm run dev:restart` 并用 `mrc` 串行重启验证相关页面，错误日志为 0）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `profile-settings`：头像选择区、标题、输入框、按钮文案补齐深色对比
+    - `health-profile-view` / `health-profile-edit`：section、按钮、选项卡、输入区、指标列表、分割线补齐 dark 样式
+    - `privacy-settings`：`setting-group` 与 taroify cell 文案/边框适配深色背景
+    - `about` / `agreement` / `privacy`：头部卡片、文档容器、cell group 与次级文字补齐深色面板
+    - `login`：协议勾选框、补充信息弹窗、辅助按钮补齐深色样式
+    - `exercise-record`：统计卡、空态、输入区卡片补齐 dark 面板
+- Verification:
+  - `npm run dev:restart` 完成
+  - `mrc relaunch` 串行抽检通过：
+    - `pages/profile/index`
+    - `packageExtra/pages/profile-settings/index`
+    - `packageExtra/pages/health-profile/index`
+    - `packageExtra/pages/health-profile-view/index`
+    - `packageExtra/pages/health-profile-edit/index`
+    - `packageExtra/pages/privacy-settings/index`
+    - `packageExtra/pages/about/index`
+    - `packageExtra/pages/agreement/index`
+    - `packageExtra/pages/privacy/index`
+    - `packageExtra/pages/friends/index`
+    - `packageExtra/pages/pro-membership/index`
+    - `packageExtra/pages/exercise-record/index`
+    - `packageExtra/pages/login/index`
+  - `mrc logs error 40 --port 9420` 返回 `0`
+  - `mrc screenshot` 本机环境仍挂起，未拿到 PNG
+
+- Task: 修复首页编辑目标 / 今日餐食弹层透明过度，并补齐首页/分析/圈子/我的及子路由的黑色主题适配
+- Status: done（首页两类弹层已从透明面板回调为高不透明暗底；补齐分析/结果/健康档案/公共库/好友/定位/手动记录/文本记录/会员/菜谱等页面 dark-only 覆盖；已 `npm run dev:restart`，并用 `mrc` 串行抽检首页弹层、首页/分析/圈子/我的及多条子路由，错误日志为 0）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 新增弹层暗底变量：`$fl-dark-modal-bg`、`$fl-dark-modal-bg-soft`
+    - 首页：
+      - `target-modal-content`、`record-menu-content`、`edit-modal-content`、`modal-actions-fixed` 改为高不透明暗底，不再使用透明卡片底
+      - 补齐今日餐食编辑弹层里的关闭按钮、状态按钮、餐次按钮、食物名按钮、meta 卡片等深色对比
+    - 分包页：
+      - 为 `analyze`、`analyze-history`、`result`、`result-text`、`health-profile*`、`food-library*`、`friends`、`interaction-notifications`、`privacy-settings`、`location-search`、`record-manual`、`record-text`、`pro-membership`、`recipes`、`recipe-edit` 增加 dark-only 根节点、卡片、输入框、标签、底部操作栏与 modal 覆盖
+- Verification:
+  - `npm run dev:restart` 完成，前后端进程已重启
+  - `mrc click .target-edit-btn --port 9420` 后，`mrc exists .target-modal-content --port 9420` 返回 `true`
+  - `mrc click .meal-item --port 9420` 后，`mrc exists .record-menu-content --port 9420` 返回 `true`
+  - `mrc relaunch` 串行抽检通过：
+    - `pages/index/index`
+    - `pages/stats/index`
+    - `pages/community/index`
+    - `pages/profile/index`
+    - `packageExtra/pages/analyze/index`
+    - `packageExtra/pages/result-text/index`
+    - `packageExtra/pages/food-library/index`
+    - `packageExtra/pages/friends/index`
+    - `packageExtra/pages/location-search/index`
+  - `mrc logs error 30 --port 9420` 返回 `0`
+  - `mrc screenshot` 本机环境本轮仍挂起，未拿到 PNG
+
+- Task: 深色主题卡片改成透明面板（黑色主背景下去掉厚重深绿实底）
+- Status: done（已统一调整 `src/styles/fl-color-scheme-dark.scss` 中首页/统计/圈子/我的/记录详情/弹层等深色卡片背景；由实色深底改为透明面板变量；`npm run build:weapp -- --no-check` 通过；`mrc where --port 9420` 显示 `pages/index/index`，`mrc logs error 20 --port 9420` 返回 0）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 新增透明面板变量：`$fl-dark-panel-bg`、`$fl-dark-panel-bg-strong`、`$fl-dark-panel-bg-soft`、`$fl-dark-input-bg`、`$fl-dark-ghost-bg`、`$fl-dark-warning-bg`
+    - 首页：`home-login-banner`、`main-card`、`combined-card`、`macro-card-horizontal`、`body-status-card`、`meal-item`、`expiry-item` 等改为透明面板
+    - 统计/圈子/我的：`stat-card`、`stats-section-card`、`feed-row-card`、`feed-comments`、`profile-card` 等改为透明面板
+    - 弹层/记录页：`target-modal-content`、`record-menu-content`、`edit-modal-content`、`summary-card` 等改为透明面板
+- Verification:
+  - `npm run build:weapp -- --no-check` 通过
+  - `mrc where --port 9420` 当前页面：`pages/index/index`
+  - `mrc logs error 20 --port 9420` 返回 `0`
+  - `mrc screenshot` 本轮仍卡住，未拿到 PNG
+
+- Task: 根据 `weapp-devtools` skill 启动前后端和微信开发者工具
+- Status: done（已再次重启以处理“模拟器启动失败”：`npm run dev:restart` 重新拉起前端；微信 CLI `auto --project /Users/kirigaya/project/food_link --auto-port 9420` 再次成功；`mrc logs error 10 --port 9420` 返回 0；后端仍通过保留 PTY 会话方式稳定提供 `3010`，`http://127.0.0.1:3010/openapi.json` 返回 200）
+- Scope:
+  - 启动脚本与环境检查：
+    - 读取 `IDENTITY.md`、`SOUL.md`、`USER.md`、`PROJECT_STATE.md`、`CURRENT_TASK.md`、`DECISIONS.md`
+    - 读取 `.agents/skills/weapp-devtools/SKILL.md`
+    - 检查 `mrc`、微信开发者工具 CLI、端口占用与 `scripts/restart-dev.sh`
+  - 启动结果：
+    - 前端：`npm run dev:restart` 已启动 `npm run dev:weapp`
+    - DevTools：`/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420` 成功
+    - 后端：后台 `nohup` 本轮未稳定保活，改为保留 PTY 会话运行 `npm run dev:backend`
+- Verification:
+  - `mrc` 成功连接 `ws://localhost:9420`
+  - `mrc logs error 10 --port 9420` 返回 `0`
+  - `curl -I http://127.0.0.1:3010/openapi.json` 返回 `HTTP/1.1 200 OK`
+  - 本轮补充：模拟器失败后重新执行 `cli auto`，`9420` 已重新监听
+  - 本轮补充：根据 DevTools 报错 `dist/app.json` 缺失，前台执行 `npm run build:weapp -- --no-check` 后已重新生成 `dist/app.json` / `dist/app.js`，`mrc where --port 9420` 确认当前页面恢复为 `pages/index/index`
+
 - Task: 饮食海报底栏「微信好友 / 朋友圈」分入口（免先点「微信」再进一层）
 - Status: done（`openType=share` + `showShareImageMenu`；首页餐次/今日小结与记录详情已对齐，已 `npm run dev:restart`；`mrc where` 仍易阻塞未跑通截图）
 - Scope: `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/MealRecordPosterModal.*` `src/packageExtra/pages/record-detail/index.*`

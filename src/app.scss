@@ -23,7 +23,13 @@ page {
   min-height: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
-  background-color: #f0f3f6;
+  background: linear-gradient(
+    180deg,
+    rgb(92 184 150 / 8%) 0%,
+    rgb(92 184 150 / 3%) 40%,
+    #f0f3f6 80%,
+    #f0f3f6 100%
+  );
   font-family: 'Source Han Sans SC', 'SourceHanSansSC-Regular', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -130,4 +136,6 @@ page > view {
     transform: rotate(360deg);
   }
 }
+
+@import './styles/fl-color-scheme-dark.scss';
 
