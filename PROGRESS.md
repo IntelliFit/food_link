@@ -6,6 +6,7 @@
 
 ## 2026-04-22
 
+- 🔒 security: 存储引用兼容逻辑改为仅对可信的 Supabase/COS/CDN 来源提取 key 并重建当前 CDN/签名地址；公开桶旧 URL 会统一收口到现网 CDN，私有桶拒绝为未知外链生成可信访问地址 `backend/cos_storage.py`
 - 🗃️ db: 迁移脚本支持在目标库已有业务表且启用 `--skip-existing` 时自动跳过 schema 重导，避免补跑时再次撞到已存在的函数/触发器 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
 - 🗃️ db: 迁移脚本补上 JSON/JSONB 值适配，自动把 `dict/list` 包装为 PostgreSQL JSON 参数，避免 `weapp_user` 等基础表因 `can't adapt type 'dict'` 失败 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
 - 🗃️ db: 迁移脚本补充 Supabase 兼容层，自动处理 `public` 重复 schema、`auth.uid()`、`extensions.uuid_generate_v4()` 与 `auth.users` 外键占位，降低导入到纯 PostgreSQL 的阻塞 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`

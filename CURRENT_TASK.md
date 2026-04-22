@@ -6,6 +6,7 @@
   - `backend/cos_storage.py`
     - 新增统一 COS 适配层：分桶配置、公开 CDN URL 生成、私有签名 URL、旧 Supabase URL / 新 CDN URL / 原始 key 统一解析
     - `health-reports` 私有访问已写死到代码，不再依赖环境变量开关
+    - 兼容口径继续收紧：若数据库里还是完整 URL，会先校验是否属于可信的 Supabase/COS/CDN 来源，再提取 key 并重建为当前 CDN/签名 URL；未知外链不会被私有桶当作可信资源签名
   - `backend/database.py`
     - 上传食物图、头像、体检报告改为走 COS
     - 删除图片改为从 URL/key 解析对象 key 后删除 COS 对象

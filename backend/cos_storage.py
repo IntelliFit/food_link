@@ -112,6 +112,34 @@ def _base_url_from_env(bucket_alias: str) -> str:
     return (os.getenv(env_name or "") or "").strip().rstrip("/")
 
 
+def _host_from_url(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        return (urlparse(value).netloc or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _trusted_supabase_host() -> str:
+    return _host_from_url((os.getenv("SUPABASE_URL") or "").strip())
+
+
+def _trusted_bucket_hosts(bucket_alias: str) -> set[str]:
+    hosts = set()
+    base_url = _base_url_from_env(bucket_alias)
+    if base_url:
+        hosts.add(_host_from_url(base_url))
+    try:
+        hosts.add(_host_from_url(_cos_origin_base_url(bucket_alias)))
+    except Exception:
+        pass
+    supabase_host = _trusted_supabase_host()
+    if supabase_host:
+        hosts.add(supabase_host)
+    return {host for host in hosts if host}
+
+
 def _cos_origin_base_url(bucket_alias: str) -> str:
     bucket = configured_bucket_name(bucket_alias)
     region = (os.getenv("COS_REGION") or "").strip()
@@ -234,43 +262,51 @@ def resolve_object_key(value: Optional[str], bucket_alias: str) -> str:
 
     parsed = urlparse(raw)
     path = unquote(parsed.path or "")
+    netloc = (parsed.netloc or "").strip().lower()
     bucket_name = configured_bucket_name(bucket_alias)
+    trusted_hosts = _trusted_bucket_hosts(bucket_alias)
 
     supabase_public_prefix = f"/storage/v1/object/public/{bucket_alias}/"
     supabase_private_prefix = f"/storage/v1/object/{bucket_alias}/"
-    if supabase_public_prefix in path:
+    if (netloc == _trusted_supabase_host() or netloc.endswith(".supabase.co")) and supabase_public_prefix in path:
         return path.split(supabase_public_prefix, 1)[1].lstrip("/")
-    if supabase_private_prefix in path:
+    if (netloc == _trusted_supabase_host() or netloc.endswith(".supabase.co")) and supabase_private_prefix in path:
         return path.split(supabase_private_prefix, 1)[1].lstrip("/")
 
     base_url = _base_url_from_env(bucket_alias)
     if base_url and raw.startswith(f"{base_url}/"):
         return raw.split(f"{base_url}/", 1)[1].split("?", 1)[0].lstrip("/")
 
-    if path.startswith(f"/{bucket_alias}/"):
+    if netloc in trusted_hosts and path.startswith(f"/{bucket_alias}/"):
         return path.split(f"/{bucket_alias}/", 1)[1].lstrip("/")
-    if path.startswith(f"/{bucket_name}/"):
+    if netloc in trusted_hosts and path.startswith(f"/{bucket_name}/"):
         return path.split(f"/{bucket_name}/", 1)[1].lstrip("/")
 
-    netloc = (parsed.netloc or "").lower()
-    if f"{bucket_name}.cos." in netloc or netloc.endswith(".myqcloud.com"):
+    if f"{bucket_name}.cos." in netloc:
         return path.lstrip("/")
 
-    return path.split("?", 1)[0].lstrip("/")
+    if netloc in trusted_hosts:
+        return path.split("?", 1)[0].lstrip("/")
+
+    return ""
 
 
 def resolve_reference_url(bucket_alias: str, value: Optional[str], expires: int = 3600) -> str:
     raw = str(value or "").strip()
     if not raw:
         return ""
-    if "://" in raw:
-        if bucket_alias == HEALTH_REPORTS_BUCKET and (
-            f"/storage/v1/object/public/{bucket_alias}/" in raw or _base_url_from_env(bucket_alias) and raw.startswith(_base_url_from_env(bucket_alias))
-        ):
-            key = resolve_object_key(raw, bucket_alias)
-            return build_private_signed_url(bucket_alias, key, expires=expires) if key else raw
-        return raw
-    return build_access_url(bucket_alias, raw, expires=expires)
+    if "://" not in raw:
+        return build_access_url(bucket_alias, raw, expires=expires)
+
+    key = resolve_object_key(raw, bucket_alias)
+    if key:
+        return build_access_url(bucket_alias, key, expires=expires)
+
+    # 未识别为当前项目可控存储来源时，公开桶保持兼容返回原链接；
+    # 私有桶则拒绝把任意外链当成可信资源，避免错误签名或绕过访问控制。
+    if is_private_bucket(bucket_alias):
+        return ""
+    return raw
 
 
 def upload_and_build_access(
