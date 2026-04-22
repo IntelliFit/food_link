@@ -1,7 +1,7 @@
 # CURRENT_TASK
 
 - Task: 切换对象存储到腾讯云 COS/CDN（公开桶 CDN + 私有 health-reports）
-- Status: code done，pending end-to-end verification
+- Status: code done；已补目标 PostgreSQL 历史 URL -> key 清洗脚本，pending end-to-end verification 与正式 apply
 - Scope:
   - `backend/cos_storage.py`
     - 新增统一 COS 适配层：分桶配置、公开 CDN URL 生成、私有签名 URL、旧 Supabase URL / 新 CDN URL / 原始 key 统一解析
@@ -17,6 +17,11 @@
     - 新增私有报告签名访问接口 `/api/user/health-profile/report-access-url`
   - `backend/worker.py`
     - health_report 异步任务执行前按私有 key 生成临时签名 URL，再传给 OCR 模型
+  - `backend/scripts/normalize_storage_keys_in_postgresql.py`
+    - 仅连接 `POSTGRESQL_*` 指向的目标 PostgreSQL，默认 dry-run
+    - 处理 `weapp_user.avatar`、`user_food_records.*`、`analysis_tasks.*`、`user_health_documents.image_url`、`public_food_library.*`、`user_recipes.image_path`
+    - 只把可信存储来源的完整 URL 归一成 key；已是 key 的值跳过，支持重复运行
+    - 内置安全保护：目标库若疑似 Supabase，则直接拒绝执行
   - `backend/image_compressor.py` `backend/compress_food_images.py` `backend/cleanup_orphans.py` `backend/check_storage.py` `backend/check_avatars.py`
     - 统一切到 COS，并兼容旧 Supabase URL 的 key 解析
   - `src/pages/login/index.tsx` `src/pages/about/index.tsx`
@@ -31,6 +36,10 @@
     - 公开/私有桶配置可解析
     - 旧 Supabase URL、新 CDN URL、原始 key 都可解析出对象 key
     - 私有 `health-reports` 可生成签名 URL
+  - 历史数据清洗 dry-run 已通过（目标 PostgreSQL）：
+    - 总扫描约 `18603` 行
+    - 预计更新约 `12039` 行 / `12885` 个值
+    - 预计存在 `15` 个未识别外链，需 apply 前再决定是否保留原值
   - 待你在线上补做真实联调：新上传食物图/头像/报告、后台 OCR、旧图展示、海报加载、删除任务清理
 
 - Task: 修复首页日期热图颜色丢失 + 本地 storage 自动补齐 7 天
