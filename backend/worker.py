@@ -64,7 +64,7 @@ from database import (
 )
 from metabolic import get_age_from_birthday
 from image_compressor import compress_task_images
-from cos_storage import HEALTH_REPORTS_BUCKET, resolve_reference_url
+from cos_storage import FOOD_IMAGES_BUCKET, HEALTH_REPORTS_BUCKET, resolve_reference_url
 
 ACTIVITY_LEVEL_LABELS = {
     "sedentary": "久坐",
@@ -125,6 +125,20 @@ STRICT_REASON_BY_TAG = {
     "cook_method_unclear": "当前烹饪方式不够明确，营养估算可信度有限。",
     "weight_uncertain": "当前重量仍存在不确定性，结果不建议直接用于精准执行。",
 }
+
+
+def _resolve_image_refs_for_model(bucket_name: str, refs: Any, *, expires: int = 3600) -> List[str]:
+    if not refs:
+        return []
+    candidates = list(refs) if isinstance(refs, (list, tuple)) else [refs]
+    resolved: List[str] = []
+    for ref in candidates:
+        if not ref:
+            continue
+        image_url = resolve_reference_url(bucket_name, ref, expires=expires)
+        if image_url:
+            resolved.append(image_url)
+    return resolved
 
 
 def _precision_task_type(base_task_type: str) -> str:
@@ -923,8 +937,9 @@ def _run_precision_plan_sync(task: Dict[str, Any]) -> Dict[str, Any]:
     reference_objects = latest_inputs.get("reference_objects") or session.get("reference_objects") or []
     previous_rounds = list_precision_session_rounds_sync(session_id)
     if source_type == "image":
-        image_urls = task.get("image_paths") or latest_inputs.get("image_urls") or []
-        image_url = task.get("image_url") or latest_inputs.get("image_url")
+        image_urls = _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, task.get("image_paths")) or _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, latest_inputs.get("image_urls"))
+        resolved_single = _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, task.get("image_url") or latest_inputs.get("image_url"))
+        image_url = resolved_single[0] if resolved_single else None
         raw_input = additional_context or "图片输入"
         prompt = _build_precision_plan_prompt(
             source_type=source_type,
@@ -970,8 +985,9 @@ def _run_precision_item_estimate_sync(task: Dict[str, Any]) -> Dict[str, Any]:
     additional_context = str(payload.get("additionalContext") or "")
     reference_objects = payload.get("reference_objects") or []
     if source_type == "image":
-        image_urls = task.get("image_paths") or payload.get("image_urls") or []
-        image_url = task.get("image_url") or payload.get("image_url")
+        image_urls = _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, task.get("image_paths")) or _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, payload.get("image_urls"))
+        resolved_single = _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, task.get("image_url") or payload.get("image_url"))
+        image_url = resolved_single[0] if resolved_single else None
         prompt = _build_precision_item_estimate_prompt(
             source_type=source_type,
             item_name=item_name,
@@ -1470,10 +1486,11 @@ def run_content_moderation_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
             # 图片审核：使用视觉模型
             image_urls = []
             image_paths = task.get("image_paths")
+            bucket_name = HEALTH_REPORTS_BUCKET if task_type == "health_report" else FOOD_IMAGES_BUCKET
             if image_paths and isinstance(image_paths, list) and len(image_paths) > 0:
-                image_urls = image_paths
+                image_urls = _resolve_image_refs_for_model(bucket_name, image_paths)
             elif task.get("image_url"):
-                image_urls = [task["image_url"]]
+                image_urls = _resolve_image_refs_for_model(bucket_name, task["image_url"])
             if not image_urls:
                 return None  # 没有图片，跳过审核
 
@@ -1835,9 +1852,9 @@ def run_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     image_paths = task.get("image_paths")
     target_image_urls = []
     if image_paths and isinstance(image_paths, list) and len(image_paths) > 0:
-        target_image_urls = image_paths
+        target_image_urls = _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, image_paths)
     elif image_url:
-        target_image_urls = [image_url]
+        target_image_urls = _resolve_image_refs_for_model(FOOD_IMAGES_BUCKET, image_url)
     if not target_image_urls:
         raise ValueError("任务缺少图片")
     payload = task.get("payload") or {}

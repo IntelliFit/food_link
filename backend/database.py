@@ -16,6 +16,7 @@ from cos_storage import (
     HEALTH_REPORTS_BUCKET,
     USER_AVATARS_BUCKET,
     delete_object,
+    resolve_reference_url,
     resolve_object_key,
     upload_and_build_access,
 )
@@ -41,6 +42,156 @@ def _current_storage_date_prefix() -> str:
 def _build_bucket_key(*parts: str) -> str:
     clean_parts = [str(part or "").strip("/") for part in parts if str(part or "").strip("/")]
     return "/".join(clean_parts)
+
+
+def _normalize_storage_key(bucket_name: str, value: Any) -> Any:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    return resolve_object_key(text, bucket_name) or text
+
+
+def _normalize_storage_key_list(bucket_name: str, values: Any) -> List[str]:
+    if not values:
+        return []
+    if isinstance(values, (list, tuple)):
+        candidates = list(values)
+    else:
+        candidates = [values]
+    normalized: List[str] = []
+    for item in candidates:
+        key = _normalize_storage_key(bucket_name, item)
+        if isinstance(key, str) and key.strip():
+            normalized.append(key)
+    return normalized
+
+
+def _resolve_storage_ref(bucket_name: str, value: Any, *, expires: int = 3600) -> Any:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return ""
+    return resolve_reference_url(bucket_name, text, expires=expires) or text
+
+
+def _resolve_storage_ref_list(bucket_name: str, values: Any, *, expires: int = 3600) -> List[str]:
+    if not values:
+        return []
+    if isinstance(values, (list, tuple)):
+        candidates = list(values)
+    else:
+        candidates = [values]
+    resolved: List[str] = []
+    for item in candidates:
+        url = _resolve_storage_ref(bucket_name, item, expires=expires)
+        if isinstance(url, str) and url.strip():
+            resolved.append(url)
+    return resolved
+
+
+def _analysis_task_bucket_name(task_or_type: Any) -> str:
+    if isinstance(task_or_type, dict):
+        task_type = str(task_or_type.get("task_type") or "").strip().lower()
+    else:
+        task_type = str(task_or_type or "").strip().lower()
+    return HEALTH_REPORTS_BUCKET if task_type == "health_report" else FOOD_ANALYZE_BUCKET
+
+
+def _present_user_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return row
+    out = dict(row)
+    if "avatar" in out:
+        out["avatar"] = _resolve_storage_ref(USER_AVATARS_BUCKET, out.get("avatar"))
+    return out
+
+
+def _prepare_user_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(data)
+    if "avatar" in out:
+        out["avatar"] = _normalize_storage_key(USER_AVATARS_BUCKET, out.get("avatar"))
+    return out
+
+
+def _present_food_record_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return row
+    out = dict(row)
+    if "image_path" in out:
+        out["image_path"] = _resolve_storage_ref(FOOD_ANALYZE_BUCKET, out.get("image_path"))
+    if "image_paths" in out and out.get("image_paths") is not None:
+        out["image_paths"] = _resolve_storage_ref_list(FOOD_ANALYZE_BUCKET, out.get("image_paths"))
+    return out
+
+
+def _prepare_food_record_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(data)
+    if "image_path" in out:
+        out["image_path"] = _normalize_storage_key(FOOD_ANALYZE_BUCKET, out.get("image_path"))
+    if "image_paths" in out:
+        out["image_paths"] = _normalize_storage_key_list(FOOD_ANALYZE_BUCKET, out.get("image_paths"))
+    return out
+
+
+def _present_health_document_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return row
+    out = dict(row)
+    if "image_url" in out:
+        out["image_url"] = _resolve_storage_ref(HEALTH_REPORTS_BUCKET, out.get("image_url"))
+    return out
+
+
+def _prepare_health_document_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(data)
+    if "image_url" in out:
+        out["image_url"] = _normalize_storage_key(HEALTH_REPORTS_BUCKET, out.get("image_url"))
+    return out
+
+
+def _present_analysis_task_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return row
+    out = dict(row)
+    bucket_name = _analysis_task_bucket_name(out)
+    if "image_url" in out:
+        out["image_url"] = _resolve_storage_ref(bucket_name, out.get("image_url"))
+    if "image_paths" in out and out.get("image_paths") is not None:
+        out["image_paths"] = _resolve_storage_ref_list(bucket_name, out.get("image_paths"))
+    return out
+
+
+def _prepare_analysis_task_write_data(task_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(data)
+    bucket_name = _analysis_task_bucket_name(task_type)
+    if "image_url" in out:
+        out["image_url"] = _normalize_storage_key(bucket_name, out.get("image_url"))
+    if "image_paths" in out:
+        out["image_paths"] = _normalize_storage_key_list(bucket_name, out.get("image_paths"))
+    return out
+
+
+def _present_public_library_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    return _present_food_record_row(row)
+
+
+def _prepare_public_library_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    return _prepare_food_record_write_data(data)
+
+
+def _present_recipe_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    return _present_food_record_row(row)
+
+
+def _prepare_recipe_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    return _prepare_food_record_write_data(data)
 
 
 def get_supabase_client():
@@ -100,7 +251,7 @@ async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
             .execute()
         
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_user_row(result.data[0])
         return None
     except Exception as e:
         print(f"[get_user_by_openid] 错误: {e}")
@@ -127,7 +278,7 @@ async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
             .execute()
         
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_user_row(result.data[0])
         return None
     except Exception as e:
         print(f"[get_user_by_id] 错误: {e}")
@@ -141,7 +292,7 @@ def get_user_by_id_sync(user_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = supabase.table("weapp_user").select("*").eq("id", user_id).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_user_row(result.data[0])
         return None
     except Exception as e:
         print(f"[get_user_by_id_sync] 错误: {e}")
@@ -165,19 +316,20 @@ async def create_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
     supabase = get_supabase_client()
     
     try:
+        prepared_user_data = _prepare_user_write_data(user_data)
         result = supabase.table("weapp_user")\
-            .insert(user_data)\
+            .insert(prepared_user_data)\
             .execute()
         
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_user_row(result.data[0])
         raise Exception("创建用户失败：返回数据为空")
     except Exception as e:
         print(f"[create_user] 错误: {e}")
         # 如果是唯一约束冲突，尝试查询已存在的用户
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
-            if "openid" in user_data:
-                existing_user = await get_user_by_openid(user_data["openid"])
+            if "openid" in prepared_user_data:
+                existing_user = await get_user_by_openid(prepared_user_data["openid"])
                 if existing_user:
                     return existing_user
         raise
@@ -201,13 +353,14 @@ async def update_user(user_id: str, update_data: Dict[str, Any]) -> Dict[str, An
     supabase = get_supabase_client()
 
     try:
+        prepared_update_data = _prepare_user_write_data(update_data)
         result = supabase.table("weapp_user")\
-            .update(update_data)\
+            .update(prepared_update_data)\
             .eq("id", user_id)\
             .execute()
 
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_user_row(result.data[0])
         raise Exception("更新用户失败：返回数据为空")
     except Exception as e:
         print(f"[update_user] 错误: {e}")
@@ -220,9 +373,10 @@ def update_user_sync(user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("weapp_user").update(update_data).eq("id", user_id).execute()
+        prepared_update_data = _prepare_user_write_data(update_data)
+        result = supabase.table("weapp_user").update(prepared_update_data).eq("id", user_id).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_user_row(result.data[0])
         raise Exception("更新用户失败：返回数据为空")
     except Exception as e:
         print(f"[update_user_sync] 错误: {e}")
@@ -279,16 +433,16 @@ async def insert_health_document(
     check_supabase_configured()
     supabase = get_supabase_client()
 
-    row = {
+    row = _prepare_health_document_write_data({
         "user_id": user_id,
         "document_type": document_type,
         "image_url": image_url,
         "extracted_content": extracted_content or {},
-    }
+    })
     try:
         result = supabase.table("user_health_documents").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_health_document_row(result.data[0])
         raise Exception("插入健康报告记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_health_document] 错误: {e}")
@@ -304,16 +458,16 @@ def insert_health_document_sync(
     """同步版：插入健康报告记录，供 Worker 子进程使用。"""
     check_supabase_configured()
     supabase = get_supabase_client()
-    row = {
+    row = _prepare_health_document_write_data({
         "user_id": user_id,
         "document_type": document_type,
         "image_url": image_url,
         "extracted_content": extracted_content or {},
-    }
+    })
     try:
         result = supabase.table("user_health_documents").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_health_document_row(result.data[0])
         raise Exception("插入健康报告记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_health_document_sync] 错误: {e}")
@@ -363,7 +517,7 @@ async def insert_food_record(
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    row = {
+    row = _prepare_food_record_write_data({
         "user_id": user_id,
         "meal_type": meal_type,
         "image_path": image_path,
@@ -375,9 +529,9 @@ async def insert_food_record(
         "total_carbs": total_carbs,
         "total_fat": total_fat,
         "total_weight_grams": total_weight_grams,
-    }
+    })
     if image_paths:
-        row["image_paths"] = image_paths
+        row["image_paths"] = _normalize_storage_key_list(FOOD_ANALYZE_BUCKET, image_paths)
     if diet_goal is not None:
         row["diet_goal"] = diet_goal
 
@@ -394,7 +548,7 @@ async def insert_food_record(
     try:
         result = supabase.table("user_food_records").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_food_record_row(result.data[0])
         raise Exception("插入饮食记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_food_record] 错误: {e}")
@@ -458,7 +612,7 @@ async def list_food_records(
             q = q.gte("record_time", start_ts).lt("record_time", end_ts)
         q = q.order("record_time", desc=True).limit(limit)
         result = q.execute()
-        return list(result.data or [])
+        return [_present_food_record_row(row) for row in (result.data or [])]
     except Exception as e:
         print(f"[list_food_records] 错误: {e}")
         raise
@@ -483,7 +637,7 @@ async def list_food_records_by_range(
         end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         q = supabase.table("user_food_records").select("*").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=False)
         result = q.execute()
-        return list(result.data or [])
+        return [_present_food_record_row(row) for row in (result.data or [])]
     except Exception as e:
         print(f"[list_food_records_by_range] 错误: {e}")
         raise
@@ -925,24 +1079,24 @@ def create_analysis_task_sync(
     if image_urls and len(image_urls) > 0 and not image_url:
         image_url = image_urls[0]
         
-    row = {
+    row = _prepare_analysis_task_write_data(task_type, {
         "user_id": user_id,
         "task_type": task_type,
         "status": "pending",
         "payload": payload or {},
-    }
+    })
     # 根据任务类型添加对应字段
     if image_url:
-        row["image_url"] = image_url
+        row["image_url"] = _normalize_storage_key(_analysis_task_bucket_name(task_type), image_url)
     if image_urls:
-         row["image_paths"] = image_urls  # 复用 image_paths 字段存 urls JSON
+         row["image_paths"] = _normalize_storage_key_list(_analysis_task_bucket_name(task_type), image_urls)  # 复用 image_paths 字段存 urls JSON
     if text_input:
         row["text_input"] = text_input
     
     try:
         result = supabase.table("analysis_tasks").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_analysis_task_row(result.data[0])
         raise Exception("创建分析任务失败：返回数据为空")
     except Exception as e:
         print(f"[create_analysis_task_sync] 错误: {e}")
@@ -1118,7 +1272,7 @@ async def update_analysis_task_result(
         }
         res = supabase.table("analysis_tasks").update(data).eq("id", task_id).execute()
         if res.data and len(res.data) > 0:
-            return res.data[0]
+            return _present_analysis_task_row(res.data[0])
         # 如果更新失败（如 ID 不存在），这里可能需要抛错或返回 None
         # Supabase update 如果没匹配到行，data 为空列表
         raise Exception("更新任务失败：任务不存在或无权限")
@@ -1135,7 +1289,7 @@ def get_analysis_task_by_id_sync(task_id: str) -> Optional[Dict[str, Any]]:
         print(f"[get_analysis_task_by_id_sync] Querying task_id: {task_id}")
         r = supabase.table("analysis_tasks").select("*").eq("id", task_id).limit(1).execute()
         if r.data and len(r.data) > 0:
-            return r.data[0]
+            return _present_analysis_task_row(r.data[0])
         return None
     except Exception as e:
         print(f"[get_analysis_task_by_id_sync] 错误: {e}")
@@ -1154,7 +1308,7 @@ async def get_analysis_tasks_by_ids(task_ids: List[str]) -> Dict[str, Dict[str, 
         for row in (r.data or []):
             tid = row.get("id")
             if tid:
-                out[tid] = row
+                out[tid] = _present_analysis_task_row(row)
         return out
     except Exception as e:
         print(f"[get_analysis_tasks_by_ids] 错误: {e}")
@@ -1177,7 +1331,7 @@ def list_analysis_tasks_by_user_sync(
         if status:
             q = q.eq("status", status)
         r = q.execute()
-        return list(r.data or [])
+        return [_present_analysis_task_row(row) for row in (r.data or [])]
     except Exception as e:
         print(f"[list_analysis_tasks_by_user_sync] 错误: {e}")
         raise
@@ -1914,7 +2068,7 @@ async def search_users(
             result = q.execute()
         else:
             return []
-        users = list(result.data or [])
+        users = [_present_user_row(u) for u in (result.data or [])]
         if not users:
             return []
         friend_ids = await get_friend_ids(current_user_id)
@@ -1973,7 +2127,7 @@ async def get_friend_requests_received(to_user_id: str) -> List[Dict[str, Any]]:
             return []
         from_ids = [r["from_user_id"] for r in rows]
         users_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", from_ids).execute()
-        users_map = {u["id"]: u for u in (users_result.data or [])}
+        users_map = {u["id"]: _present_user_row(u) for u in (users_result.data or [])}
         out = []
         for r in rows:
             u = users_map.get(r["from_user_id"], {})
@@ -2050,7 +2204,7 @@ async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
     check_supabase_configured()
     supabase = get_supabase_client()
     result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", unique_friend_ids).execute()
-    return list(result.data or [])
+    return [_present_user_row(row) for row in (result.data or [])]
 
 
 async def delete_friend_pair(user_id: str, friend_id: str) -> Dict[str, int]:
@@ -2113,7 +2267,7 @@ async def get_friend_requests_overview(user_id: str) -> Dict[str, List[Dict[str,
                 .in_("id", list(counterpart_ids))
                 .execute()
             )
-            users_map = {u["id"]: u for u in (users_result.data or [])}
+            users_map = {u["id"]: _present_user_row(u) for u in (users_result.data or [])}
 
         received = []
         for row in received_rows:
@@ -2258,7 +2412,7 @@ def _normalize_feed_comment_row(
         "content": row.get("content") or "",
         "created_at": row.get("created_at"),
         "nickname": author.get("nickname") or "用户",
-        "avatar": author.get("avatar") or "",
+        "avatar": _resolve_storage_ref(USER_AVATARS_BUCKET, author.get("avatar")) or "",
     }
 
 
@@ -2360,7 +2514,7 @@ def _query_feed_comments_bundle_sync(
             .in_("id", list(user_ids))
             .execute()
         )
-        user_map = {u["id"]: u for u in (users.data or [])}
+        user_map = {u["id"]: _present_user_row(u) for u in (users.data or [])}
 
     return _build_feed_comment_bundle(all_comments, user_map, comments_limit)
 
@@ -2618,7 +2772,7 @@ async def list_friends_feed_records(
         # 获取作者信息（仅查询结果中涉及的用户）
         involved_user_ids = list(set(r["user_id"] for r in rec_list))
         authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
-        author_map = {a["id"]: a for a in (authors.data or [])}
+        author_map = {a["id"]: _present_user_row(a) for a in (authors.data or [])}
         
         # 批量获取评论（如果需要）
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
@@ -2641,7 +2795,7 @@ async def list_friends_feed_records(
             author = author_map.get(r["user_id"], {})
             like_info = likes_map.get(r["id"], {"count": 0, "liked": False})
             item = {
-                "record": r,
+                "record": _present_food_record_row(r),
                 "author": {
                     "id": author.get("id"),
                     "nickname": author.get("nickname") or "用户",
@@ -2723,7 +2877,7 @@ async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dic
             .in_("id", author_ids)
             .execute()
         )
-        profile_map = {u["id"]: u for u in (users_result.data or [])}
+        profile_map = {u["id"]: _present_user_row(u) for u in (users_result.data or [])}
 
         items = []
         for uid in author_ids:
@@ -2825,7 +2979,7 @@ async def list_public_feed_records(
 
         involved_user_ids = list(set(r["user_id"] for r in rec_list))
         authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
-        author_map = {a["id"]: a for a in (authors.data or [])}
+        author_map = {a["id"]: _present_user_row(a) for a in (authors.data or [])}
 
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
         if include_comments:
@@ -2847,7 +3001,7 @@ async def list_public_feed_records(
             author = author_map.get(r["user_id"], {})
             like_info = likes_map.get(r["id"], {"count": 0, "liked": False})
             item: Dict[str, Any] = {
-                "record": r,
+                "record": _present_food_record_row(r),
                 "author": {
                     "id": author.get("id"),
                     "nickname": author.get("nickname") or "用户",
@@ -3072,9 +3226,9 @@ async def create_public_food_library_item(
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    paths = image_paths if image_paths else ([image_path] if image_path else [])
+    paths = _normalize_storage_key_list(FOOD_ANALYZE_BUCKET, image_paths if image_paths else ([image_path] if image_path else []))
     first_path = paths[0] if paths else image_path
-    row = {
+    row = _prepare_public_library_write_data({
         "user_id": user_id,
         "image_path": first_path,
         "image_paths": paths,
@@ -3100,11 +3254,11 @@ async def create_public_food_library_item(
         "district": district or "",
         "status": "pending",  # 初始状态设为 pending
         "published_at": None, # 审核通过后再更新发帖时间
-    }
+    })
     try:
         result = supabase.table("public_food_library").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_public_library_row(result.data[0])
         raise Exception("创建公共食物库条目失败：返回数据为空")
     except Exception as e:
         print(f"[create_public_food_library_item] 错误: {e}")
@@ -3228,7 +3382,7 @@ async def list_public_food_library(
         else:
             q = q.range(offset, offset + limit - 1)
         result = q.execute()
-        items = list(result.data or [])
+        items = [_present_public_library_row(item) for item in (result.data or [])]
 
         if custom_rank:
             items.sort(
@@ -3254,7 +3408,7 @@ async def get_public_food_library_item(item_id: str) -> Optional[Dict[str, Any]]
     try:
         result = supabase.table("public_food_library").select("*").eq("id", item_id).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_public_library_row(result.data[0])
         return None
     except Exception as e:
         print(f"[get_public_food_library_item] 错误: {e}")
@@ -3267,7 +3421,7 @@ async def list_my_public_food_library(user_id: str, limit: int = 50) -> List[Dic
     supabase = get_supabase_client()
     try:
         result = supabase.table("public_food_library").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
-        return list(result.data or [])
+        return [_present_public_library_row(item) for item in (result.data or [])]
     except Exception as e:
         print(f"[list_my_public_food_library] 错误: {e}")
         raise
@@ -3383,7 +3537,7 @@ async def list_collected_public_food_library(user_id: str, limit: int = 50) -> L
             .eq("status", "published")
             .execute()
         )
-        items_by_id = {it["id"]: it for it in (result.data or [])}
+        items_by_id = {it["id"]: _present_public_library_row(it) for it in (result.data or [])}
         # 按收藏顺序返回，已删除或未发布的条目跳过
         out = []
         for iid in item_ids_ordered:
@@ -3458,7 +3612,7 @@ async def list_public_food_library_comments(item_id: str, limit: int = 50) -> Li
             return []
         user_ids = list({r["user_id"] for r in rows})
         users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", user_ids).execute()
-        user_map = {u["id"]: u for u in (users.data or [])}
+        user_map = {u["id"]: _present_user_row(u) for u in (users.data or [])}
         out = []
         for r in rows:
             u = user_map.get(r["user_id"], {})
@@ -3485,7 +3639,7 @@ async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = supabase.table("user_food_records").select("*").eq("id", record_id).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_food_record_row(result.data[0])
         return None
     except Exception as e:
         print(f"[get_food_record_by_id] 错误: {e}")
@@ -3499,7 +3653,7 @@ def get_food_record_by_id_sync(record_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = supabase.table("user_food_records").select("*").eq("id", record_id).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_food_record_row(result.data[0])
         return None
     except Exception as e:
         print(f"[get_food_record_by_id_sync] 错误: {e}")
@@ -3692,7 +3846,7 @@ async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> 
         actor_map: Dict[str, Dict[str, Any]] = {}
         if actor_ids:
             users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", actor_ids).execute()
-            actor_map = {u["id"]: u for u in (users.data or [])}
+            actor_map = {u["id"]: _present_user_row(u) for u in (users.data or [])}
         out = []
         for row in rows:
             actor = actor_map.get(row.get("actor_user_id"), {})
@@ -3763,15 +3917,16 @@ async def update_food_record(user_id: str, record_id: str, data: Dict[str, Any])
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        prepared_data = _prepare_food_record_write_data(data)
         result = (
             supabase.table("user_food_records")
-            .update(data)
+            .update(prepared_data)
             .eq("id", record_id)
             .eq("user_id", user_id)
             .execute()
         )
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_food_record_row(result.data[0])
         return None
     except Exception as e:
         print(f"[update_food_record] 错误: {e}")
@@ -4081,7 +4236,7 @@ async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, An
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        recipe_data = {
+        recipe_data = _prepare_recipe_write_data({
             "user_id": user_id,
             "recipe_name": data.get("recipe_name"),
             "description": data.get("description"),
@@ -4095,9 +4250,9 @@ async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, An
             "tags": data.get("tags", []),
             "meal_type": data.get("meal_type"),
             "is_favorite": data.get("is_favorite", False),
-        }
+        })
         result = supabase.table("user_recipes").insert(recipe_data).execute()
-        return result.data[0] if result.data else {}
+        return _present_recipe_row(result.data[0]) if result.data else {}
     except Exception as e:
         print(f"[create_user_recipe] 错误: {e}")
         raise
@@ -4114,7 +4269,7 @@ async def list_user_recipes(user_id: str, meal_type: Optional[str] = None, is_fa
         if is_favorite is not None:
             query = query.eq("is_favorite", is_favorite)
         result = query.order("created_at", desc=True).execute()
-        return result.data or []
+        return [_present_recipe_row(row) for row in (result.data or [])]
     except Exception as e:
         print(f"[list_user_recipes] 错误: {e}")
         raise
@@ -4127,7 +4282,7 @@ async def get_user_recipe(recipe_id: str, user_id: str) -> Optional[Dict[str, An
     try:
         result = supabase.table("user_recipes").select("*").eq("id", recipe_id).eq("user_id", user_id).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            return _present_recipe_row(result.data[0])
         return None
     except Exception as e:
         print(f"[get_user_recipe] 错误: {e}")
@@ -4139,8 +4294,9 @@ async def update_user_recipe(recipe_id: str, user_id: str, data: Dict[str, Any])
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("user_recipes").update(data).eq("id", recipe_id).eq("user_id", user_id).execute()
-        return result.data[0] if result.data else {}
+        prepared_data = _prepare_recipe_write_data(data)
+        result = supabase.table("user_recipes").update(prepared_data).eq("id", recipe_id).eq("user_id", user_id).execute()
+        return _present_recipe_row(result.data[0]) if result.data else {}
     except Exception as e:
         print(f"[update_user_recipe] 错误: {e}")
         raise
@@ -4645,8 +4801,8 @@ def _build_manual_public_food_result(
         "total_carbs": _safe_manual_food_number(row.get("total_carbs")),
         "total_fat": _safe_manual_food_number(row.get("total_fat")),
         "items": items_raw,
-        "image_path": row.get("image_path"),
-        "image_paths": row.get("image_paths"),
+        "image_path": _resolve_storage_ref(FOOD_ANALYZE_BUCKET, row.get("image_path")),
+        "image_paths": _resolve_storage_ref_list(FOOD_ANALYZE_BUCKET, row.get("image_paths")),
         "portion_label": "1份",
         "source_label": "公共库",
         "like_count": int(row.get("like_count") or 0),
