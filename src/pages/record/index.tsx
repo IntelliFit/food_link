@@ -6,6 +6,11 @@ import {
   getMyMembership,
   type MembershipStatus,
 } from '../../utils/api'
+import {
+  getFoodAnalysisBlockedActionText,
+  getFoodAnalysisCreditBlockMessage,
+  isFoodAnalysisCreditExhausted,
+} from '../../utils/membership'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 
 import './index.scss'
@@ -82,18 +87,18 @@ function RecordPage() {
       return
     }
 
-    if (membershipStatus && membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
-      const isPro = membershipStatus.is_pro
+    if (isFoodAnalysisCreditExhausted(membershipStatus)) {
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
+      const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
+      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
-        title: '今日次数已用完',
-        content: isPro
-          ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-          : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-        confirmText: isPro ? '知道了' : '去开通',
+        title: '积分不足',
+        content,
+        confirmText: showUpgrade ? confirmText : '知道了',
         cancelText: '取消',
-        showCancel: !isPro,
+        showCancel: showUpgrade,
         success: (res) => {
-          if (!isPro && res.confirm) {
+          if (showUpgrade && res.confirm) {
             Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }
         }
@@ -135,18 +140,18 @@ function RecordPage() {
       return
     }
 
-    if (membershipStatus && membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
-      const isPro = membershipStatus.is_pro
+    if (isFoodAnalysisCreditExhausted(membershipStatus)) {
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
+      const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
+      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
-        title: '今日次数已用完',
-        content: isPro
-          ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-          : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-        confirmText: isPro ? '知道了' : '去开通',
+        title: '积分不足',
+        content,
+        confirmText: showUpgrade ? confirmText : '知道了',
         cancelText: '取消',
-        showCancel: !isPro,
+        showCancel: showUpgrade,
         success: (res) => {
-          if (!isPro && res.confirm) {
+          if (showUpgrade && res.confirm) {
             Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }
         }

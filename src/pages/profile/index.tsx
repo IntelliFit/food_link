@@ -25,6 +25,11 @@ import {
   MembershipStatus,
   FoodExpiryDashboard
 } from '../../utils/api'
+import {
+  getCurrentMembershipTier,
+  getMembershipTierLabel,
+  getMembershipTierShortLabel,
+} from '../../utils/membership'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -227,7 +232,11 @@ function ProfilePage() {
       id: 6,
       icon: <ShieldOutlined size='20' />,
       title: '食探会员',
-      desc: membershipStatus?.is_pro ? '会员已开通' : '每日30次 · 会员100次',
+      desc: membershipStatus?.is_pro
+        ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+        : membershipStatus?.trial_active
+          ? `试用中 · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+          : '3 档会员 · 每日积分领取',
       path: '/pages/pro-membership/index'
     }
   ]
@@ -414,81 +423,76 @@ function ProfilePage() {
           className={`profile-card member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
           onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
         >
-          {membershipStatus?.is_pro ? (
-            <>
-              <View className='card-header'>
-                <View>
-                  <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
-                  <View className='card-title-row'>
+          {(() => {
+            const cMax = membershipStatus?.daily_credits_max ?? 0
+            const cUsed = membershipStatus?.daily_credits_used ?? 0
+            const cRemain = membershipStatus?.daily_credits_remaining ?? 0
+            const progressPct = cMax > 0 ? Math.min((cUsed / cMax) * 100, 100) : 0
+            const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
+            const currentTier = getCurrentMembershipTier(membershipStatus)
+            if (membershipStatus?.is_pro) {
+              return (
+                <>
+                  <View className='card-header'>
+                    <View>
+                      <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
+                      <View className='card-title-row'>
+                        <Text className='card-title'>食探会员</Text>
+                        <Text className='card-pro-badge'>{getMembershipTierShortLabel(currentTier)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View className='card-body'>
+                    <View className='progress-info'>
+                      <Text className='progress-text'>今日已用 {cUsed}/{cMax}</Text>
+                      {cMax > 0 && (
+                        <View className='progress-bar'>
+                          <View className='progress-inner' style={{ width: `${progressPct}%` }} />
+                        </View>
+                      )}
+                    </View>
+                    <Text className='card-tip'>
+                      {cMax > 0
+                        ? `剩余 ${cRemain} 积分 · 次日清零${currentTier === 'light' ? ' · 轻度版不含精准模式' : ''}`
+                        : '会员权益已激活'}
+                    </Text>
+                  </View>
+                </>
+              )
+            }
+            return (
+              <>
+                <View className='card-header'>
+                  <View>
+                    <Text className='card-validity'>
+                      {isTrial ? `试用到期 ${formatExpiry(membershipStatus?.trial_expires_at)}` : `注册时间 ${registerDate}`}
+                    </Text>
                     <Text className='card-title'>食探会员</Text>
-                    <Text className='card-pro-badge'>PRO</Text>
+                  </View>
+                  <View className='card-upgrade-btn'>
+                    <Text className='card-upgrade-text'>{isTrial ? '立即升级' : '立即开通'}</Text>
                   </View>
                 </View>
-              </View>
-              <View className='card-body'>
-                <View className='progress-info'>
-                  {membershipStatus.daily_limit != null ? (
-                    <>
-                      <Text className='progress-text'>今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit} 次</Text>
+                <View className='card-body'>
+                  <View className='progress-info'>
+                    <Text className='progress-text'>
+                      {isTrial ? `试用已用 ${cUsed}/${cMax}` : '未开通 · 开通后每日发放积分'}
+                    </Text>
+                    {isTrial && cMax > 0 && (
                       <View className='progress-bar'>
-                        <View
-                          className='progress-inner'
-                          style={{
-                            width: `${Math.min(((membershipStatus.daily_used ?? 0) / membershipStatus.daily_limit) * 100, 100)}%`
-                          }}
-                        />
+                        <View className='progress-inner' style={{ width: `${progressPct}%` }} />
                       </View>
-                    </>
-                  ) : (
-                    <Text className='progress-text'>今日拍照分析 {membershipStatus.daily_used ?? 0} 次</Text>
-                  )}
+                    )}
+                  </View>
+                  <Text className='card-tip'>
+                    {isTrial
+                      ? `剩余 ${cRemain} 积分 · 次日清零`
+                      : '轻度 8 · 标准 20 · 进阶 40 积分 / 日'}
+                  </Text>
                 </View>
-                <Text className='card-tip'>
-                  {membershipStatus.daily_limit != null
-                    ? `剩余 ${membershipStatus.daily_remaining ?? 0} 次 · 精准模式已解锁`
-                    : '当前不限次 · 精准模式已解锁'}
-                </Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View className='card-header'>
-                <View>
-                  <Text className='card-validity'>注册时间 {registerDate}</Text>
-                  <Text className='card-title'>食探会员</Text>
-                </View>
-                <View className='card-upgrade-btn'>
-                  <Text className='card-upgrade-text'>立即开通</Text>
-                </View>
-              </View>
-              <View className='card-body'>
-                <View className='progress-info'>
-                  {membershipStatus?.daily_limit != null ? (
-                    <>
-                      <Text className='progress-text'>
-                        今日拍照 {membershipStatus.daily_used ?? 0}/{membershipStatus.daily_limit} 次
-                      </Text>
-                      <View className='progress-bar'>
-                        <View
-                          className='progress-inner'
-                          style={{
-                            width: `${Math.min(((membershipStatus.daily_used ?? 0) / membershipStatus.daily_limit) * 100, 100)}%`
-                          }}
-                        />
-                      </View>
-                    </>
-                  ) : (
-                    <Text className='progress-text'>今日拍照分析 {membershipStatus?.daily_used ?? 0} 次</Text>
-                  )}
-                </View>
-                <Text className='card-tip'>
-                  {membershipStatus?.daily_limit != null
-                    ? `剩余 ${membershipStatus?.daily_remaining ?? 0} 次 · 开通会员每日最高100次`
-                    : '当前不限次 · 开通会员享专属权益'}
-                </Text>
-              </View>
-            </>
-          )}
+              </>
+            )
+          })()}
           <View className='card-bg-icon'>
             <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
           </View>

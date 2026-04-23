@@ -4358,8 +4358,19 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
 _FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA = ("food", "food_text", "food_debug", "food_text_debug")
 
 
+def _is_exercise_fallback_task_payload(payload: Any) -> bool:
+    """判断 analysis_tasks.payload 是否是“运动记录回退投递到 food_text* 队列”的任务。"""
+    return isinstance(payload, dict) and bool(payload.get("exercise"))
+
+
 async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
-    """统计用户今日（中国时区）的食物分析次数：analysis_tasks 表中上述 task_type 的创建条数（拍照与文字分析均计入）。"""
+    """统计用户今日（中国时区）的食物分析次数。
+
+    只统计真实食物分析任务：
+    - 计入：food / food_text / food_debug / food_text_debug
+    - 排除：因数据库尚未支持 task_type=exercise，而回退投递到 food_text* 的运动任务
+      （其 payload.exercise=true，积分应按运动记录 1 分计算，不能再额外算成食物分析 2 分）
+    """
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
@@ -4370,14 +4381,19 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
         day_end_excl = f"{next_date.strftime('%Y-%m-%d')}T00:00:00+08:00"
 
         result = supabase.table("analysis_tasks")\
-            .select("id")\
+            .select("id, payload")\
             .eq("user_id", user_id)\
             .in_("task_type", list(_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA))\
             .gte("created_at", day_start)\
             .lt("created_at", day_end_excl)\
             .execute()
 
-        count = len(result.data) if result.data else 0
+        rows = result.data or []
+        count = sum(
+            1
+            for row in rows
+            if not _is_exercise_fallback_task_payload((row or {}).get("payload"))
+        )
         print(f"[get_today_food_analysis_count] user={user_id} date={china_date_str} count={count}")
         return count
     except Exception as e:
@@ -4386,18 +4402,140 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
 
 
 async def list_active_membership_plans() -> List[Dict[str, Any]]:
-    """获取所有启用中的会员套餐配置。"""
+    """获取所有启用中的会员套餐配置。按 sort_order, created_at 升序返回。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
         result = supabase.table("membership_plan_config")\
             .select("*")\
             .eq("is_active", True)\
+            .order("sort_order", desc=False)\
             .order("created_at", desc=False)\
             .execute()
         return result.data or []
     except Exception as e:
         print(f"[list_active_membership_plans] 错误: {e}")
+        raise
+
+
+async def get_today_exercise_log_count(user_id: str, china_date_str: str) -> int:
+    """统计用户今日（中国时区 YYYY-MM-DD）的运动记录条数。用于积分消耗计算。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_exercise_logs")\
+            .select("id")\
+            .eq("user_id", user_id)\
+            .eq("recorded_on", china_date_str)\
+            .execute()
+        count = len(result.data) if result.data else 0
+        return count
+    except Exception as e:
+        err_s = str(e)
+        if (
+            "PGRST205" in err_s
+            or "Could not find the table" in err_s
+            or ("user_exercise_logs" in err_s and "relation" in err_s.lower())
+        ):
+            return 0
+        print(f"[get_today_exercise_log_count] 错误: {e}")
+        return 0
+
+
+async def list_test_backend_datasets() -> List[Dict[str, Any]]:
+    """列出测试后台可复用测试集。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("test_backend_datasets").select("*").order("created_at", desc=True).execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_test_backend_datasets] 错误: {e}")
+        raise
+
+
+async def get_test_backend_dataset(dataset_id: str) -> Optional[Dict[str, Any]]:
+    """读取单个测试集。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("test_backend_datasets").select("*").eq("id", dataset_id).limit(1).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_test_backend_dataset] 错误: {e}")
+        raise
+
+
+async def create_test_backend_dataset(data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建测试集记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "id": data.get("id") or str(uuid.uuid4()),
+        "name": data.get("name"),
+        "description": data.get("description") or "",
+        "source_type": data.get("source_type") or "local_import",
+        "source_ref": data.get("source_ref") or "",
+        "cover_image_url": data.get("cover_image_url"),
+        "item_count": int(data.get("item_count") or 0),
+        "labeled_count": int(data.get("labeled_count") or 0),
+        "unlabeled_count": int(data.get("unlabeled_count") or 0),
+        "metadata": data.get("metadata") or {},
+    }
+    try:
+        result = supabase.table("test_backend_datasets").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建测试集失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_test_backend_dataset] 错误: {e}")
+        raise
+
+
+async def insert_test_backend_dataset_items(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """批量插入测试集图片项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    if not rows:
+        return []
+    safe_rows = []
+    for row in rows:
+        safe_rows.append({
+            "id": row.get("id") or str(uuid.uuid4()),
+            "dataset_id": row.get("dataset_id"),
+            "filename": row.get("filename"),
+            "image_url": row.get("image_url"),
+            "label_mode": row.get("label_mode") or "total",
+            "true_weight": float(row.get("true_weight") or 0),
+            "expected_items": row.get("expected_items") or [],
+            "sort_order": int(row.get("sort_order") or 0),
+            "metadata": row.get("metadata") or {},
+        })
+    try:
+        result = supabase.table("test_backend_dataset_items").insert(safe_rows).execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[insert_test_backend_dataset_items] 错误: {e}")
+        raise
+
+
+async def list_test_backend_dataset_items(dataset_id: str) -> List[Dict[str, Any]]:
+    """读取测试集下的全部图片项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("test_backend_dataset_items")
+            .select("*")
+            .eq("dataset_id", dataset_id)
+            .order("sort_order", desc=False)
+            .execute()
+        )
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_test_backend_dataset_items] 错误: {e}")
         raise
 
 

@@ -8,9 +8,16 @@ import {
   getExerciseLogs,
   deleteExerciseLog,
   getAnalyzeTask,
+  getMyMembership,
   type ExerciseLogItem,
-  type ExerciseTaskResultPayload
+  type ExerciseTaskResultPayload,
+  type MembershipStatus,
 } from '../../utils/api'
+import {
+  getExerciseLogBlockedActionText,
+  getExerciseLogCreditBlockMessage,
+  isExerciseLogCreditExhausted,
+} from '../../utils/membership'
 import { formatDateKey } from '../index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../utils/home-events'
 import './index.scss'
@@ -95,6 +102,7 @@ export default function ExerciseRecordPage() {
   const [records, setRecords] = useState<ExerciseRecord[]>([])
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const pollingTaskIdsRef = useRef<Set<string>>(new Set())
 
   const loadTodayRecords = useCallback(async (): Promise<void> => {
@@ -227,6 +235,9 @@ export default function ExerciseRecordPage() {
 
   useDidShow(() => {
     void loadTodayRecords()
+    if (getAccessToken()) {
+      getMyMembership().then(setMembershipStatus).catch(() => {})
+    }
     try {
       const raw = Taro.getStorageSync(EXERCISE_PENDING_TASKS_KEY)
       if (!raw || typeof raw !== 'string') return
@@ -262,11 +273,51 @@ export default function ExerciseRecordPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
+    if (isExerciseLogCreditExhausted(membershipStatus)) {
+      const content = getExerciseLogCreditBlockMessage(membershipStatus)
+      const confirmText = getExerciseLogBlockedActionText(membershipStatus)
+      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
+      Taro.showModal({
+        title: '积分不足',
+        content,
+        showCancel: showUpgrade,
+        confirmText: showUpgrade ? confirmText : '知道了',
+        cancelText: '取消',
+        success: (res) => {
+          if (showUpgrade && res.confirm) {
+            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }
+        }
+      })
+      return
+    }
     if (submitting) return
 
     setSubmitting(true)
     Taro.showLoading({ title: '提交中...', mask: true })
     try {
+      const membership = await getMyMembership().catch(() => null)
+      if (membership) {
+        setMembershipStatus(membership)
+        if (isExerciseLogCreditExhausted(membership)) {
+          const content = getExerciseLogCreditBlockMessage(membership)
+          const confirmText = getExerciseLogBlockedActionText(membership)
+          const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
+          Taro.showModal({
+            title: '积分不足',
+            content,
+            showCancel: showUpgrade,
+            confirmText: showUpgrade ? confirmText : '知道了',
+            cancelText: '取消',
+            success: (res) => {
+              if (showUpgrade && res.confirm) {
+                Taro.navigateTo({ url: '/pages/pro-membership/index' })
+              }
+            }
+          })
+          return
+        }
+      }
       const { task_id: taskId } = await createExerciseLog({ exercise_desc: content })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
@@ -279,7 +330,28 @@ export default function ExerciseRecordPage() {
     } catch (e) {
       console.error('[exercise-record] send', e)
       const msg = e instanceof Error ? e.message : '提交失败'
-      Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
+      const isQuota =
+        msg.includes('积分不足') ||
+        msg.includes('明日再试') ||
+        msg.includes('开通会员') ||
+        msg.includes('升级更高套餐')
+      if (isQuota) {
+        const suggestUpgrade = msg.includes('开通') || msg.includes('升级')
+        Taro.showModal({
+          title: '积分不足',
+          content: msg,
+          showCancel: suggestUpgrade,
+          confirmText: suggestUpgrade ? getExerciseLogBlockedActionText(membershipStatus) : '知道了',
+          cancelText: '取消',
+          success: (res) => {
+            if (suggestUpgrade && res.confirm) {
+              Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            }
+          }
+        })
+      } else {
+        Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
+      }
     } finally {
       Taro.hideLoading()
       setSubmitting(false)

@@ -1,5 +1,227 @@
 # CURRENT_TASK
 
+- Task: 禁止代理默认自动启动本地后端 / 避免抢占 3010
+- Status: done（已把项目规则改成“默认不自动运行”；`npm run dev:backend` 也已增加端口占用预检查，端口已占用时直接退出，不再先起 worker 再报 bind 错）
+- Scope:
+  - `scripts/run-backend.cjs`
+    - 启动前先检查 `PORT`（默认 `3010`）是否已被占用
+    - 若端口被占用，直接打印明确提示并退出
+    - 不再出现“先启动一堆 worker，最后 uvicorn 才报 10048”的低效行为
+  - `scripts/stop-backend.cjs`
+    - 新增一键停止脚本：优先尝试 `backend/backend.pid`，再兜底清理占用 `3010` 的进程
+    - `package.json` 已新增 `npm run stop:backend`
+  - `AGENTS.md`
+    - 项目规则已改为：默认不要替用户自动启动或重启本地前后端
+    - 只有用户明确要求“你来启动/重启/运行”时才允许代理动本地常驻进程
+- Notes:
+  - 用户明确要求：AI 永远不要自动运行；本地前后端统一由用户自己手动启动和关闭
+  - 已手动清理掉占用 `3010` 的残留 `python.exe backend\\run_backend.py`
+
+- Task: 食物测试后台支持“可复用测试集”而不是每次重新上传 ZIP
+- Status: in_progress（代码已接入后端 API + 后台页面入口；按用户最新要求，本轮不做本地运行验证）
+- Scope:
+  - 目标口径：
+    - 后台批量测试不再只依赖“临时上传 ZIP -> 当前浏览器内批次”
+    - 增加“可复用测试集”能力：可从服务器本机目录导入一个标准测试集，持久化到云端，之后在后台列表中反复载入为新批次
+    - ZIP 仍保留为兼容导入格式，但不再作为长期复用的主工作流
+    - 未标注样本既然在导入时已忽略，后台列表中的样本数也必须只显示“可测样本数”，不能再显示源目录总图数（例如 `33/37`）
+  - 已完成代码：
+    - `backend/sql/add_test_backend_datasets.sql`
+      - 新增 `test_backend_datasets`、`test_backend_dataset_items` 两张表
+    - `backend/database.py`
+      - 新增测试集增删查相关方法：`list/get/create/insert_items/list_items`
+    - `backend/main.py`
+      - 新增本地目录扫描：`_scan_test_backend_local_dataset_dir(...)`
+      - 新增测试集转批次：`_build_test_backend_batch_from_dataset(...)`
+      - 新增接口：
+        - `GET /api/test-backend/datasets`
+        - `POST /api/test-backend/datasets/import-local`
+        - `POST /api/test-backend/datasets/{dataset_id}/prepare`
+    - `backend/static/test_backend/index.html`
+      - 批量测试页新增“可复用测试集”区域、导入按钮、测试集表格
+    - `backend/static/test_backend/app.js`
+      - 新增 `loadTestDatasets / renderDatasetsTable / importLocalDataset / prepareSavedDatasetBatch`
+  - 本轮暂不做的事：
+    - 不处理本地 `3010` 旧进程替换
+    - 不做本地页面验证、接口联调、端口排查
+- Blocked / Next:
+  - 需要把 `backend/sql/add_test_backend_datasets.sql` 执行到 Supabase
+  - 导入完成后，建议把 `D:\创业\healthymax\food_test_sanitized_20260424` 注册成首个长期复用测试集
+  - Latest:
+  - `food_test_20260424` 已成功导入为可复用测试集，ID=`46ccb0ef-0fa2-484a-b06e-595f0c05120f`
+  - 已从该测试集生成 pending 批次，批次 ID=`80bc6b6a92fe1b687430698c`
+  - 已修正展示与存储口径：该测试集现在显示 `itemCount=33`、`unlabeledCount=0`，不再显示 `33/37`
+  - 已新增第二个小型测试集 `food_test_20260424_mini10`，从 33 张已标注样本中按固定随机种子 `20260424` 抽取 10 张
+  - 小型测试集目录：`D:\创业\healthymax\food_test_sanitized_20260424_mini10`
+  - 小型测试集 ID：`c4b74960-d83a-4f05-a2d4-babfeb7886d3`
+  - 已从小型测试集生成 pending 批次，批次 ID=`894ecc623c4fd89068fcfdfb`
+  - 测试后台模型选项已收口为两个 Gemini 具体型号：`gemini-3-flash-preview`、`gemini-3.1-flash-lite-preview`
+  - 用户最新要求：测试后台做 prompt 实验时，暂时不要再走 `backend/worker.py` 主链路默认 prompt；分析体验 / 批量测试 / 可复用测试集批次应优先读取 `model_prompts` 中当前激活的 `gemini` 提示词
+  - 已完成代码切换：`backend/main.py::_run_test_backend_provider_analysis(...)` 现优先读取 `get_active_prompt("gemini")`，只有当激活提示词为空时才回退 `backend/worker.py::_build_food_prompt`
+  - `backend/static/test_backend/index.html` 文案已同步改为“当前实验链路优先使用提示词管理中的 Gemini 激活提示词”，避免继续误导为 worker 动态 prompt
+- Notes:
+  - 用户已明确：本轮不需要本地运行验证，只要把代码写好即可
+  - 本轮改的是后端静态测试后台，不涉及微信小程序页面
+
+- Task: 本地 `food_test` 脱敏数据集整理并上传测试后台
+- Status: done（已基于 `D:\创业\healthymax\food_test` 生成无标签文件名的新数据集目录；图片统一改为匿名 `sample_XXXX`，标签独立写入 `labels.txt`；已上传到本地测试后台 pending 批次）
+- Scope:
+  - 数据集整理：
+    - 原目录未改动：`D:\创业\healthymax\food_test`
+    - 新脱敏目录：`D:\创业\healthymax\food_test_sanitized_20260424`
+    - 上传 ZIP：`D:\创业\healthymax\food_test_sanitized_20260424_upload.zip`
+    - 私有映射表（不放进上传包）：`D:\创业\healthymax\food_test_sanitized_20260424_private_mapping.csv`
+  - 标签口径：
+    - 总样本 `37` 张，其中已标注 `33` 张、未标注 `4` 张
+    - 总重量样本写入 `labels.txt` 的 `total` 格式：`sample_0001.png 134g`
+    - 用户提供细分标签的 `4` 张工作餐样本写入 `items` 格式，逐项食物与克重已拆开记录
+    - 当前未标注样本（脱敏后文件名）记录在 `unlabeled_samples.txt`：`sample_0006.png`、`sample_0011.jpg`、`sample_0032.jpg`、`sample_0033.jpg`
+    - 用户最新确认：未标注样本目前直接忽略，不再作为本轮待补任务处理
+  - 上传结果：
+    - 本地测试后台 `POST /api/test-backend/batch/prepare` 已成功接收脱敏 ZIP
+    - 批次号：`6536d31ee0ec7103d7ea3ad1`
+    - 当前状态：`pending`
+    - 可处理样本数：`33`
+    - 跳过未标注样本数：`4`
+- Verification:
+  - 数据集脱敏复制完成，原目录未改动
+  - ZIP 体积约 `35.76 MB`，低于测试后台 `50 MB` 限制
+  - `sample_0014.png`、`sample_0015.png`、`sample_0016.png`、`sample_0017.png` 已在后台返回 `labelMode=items`
+  - 其余带总重量标签样本在后台返回 `labelMode=total`
+- Notes:
+  - 本轮只做“上传准备”，没有启动批量分析，避免直接消耗上游模型额度
+  - 这是本地数据集整理与后台上传，不涉及微信小程序页面，因此未使用 `weapp-devtools`
+
+- Task: 食物识别测试后台改造（多模型对比 + 每食物标准标签）
+- Status: done（一期已落地：后台单图/批量均支持 Qwen/Gemini 同时测试；标准标签正式支持两种模式：整餐总重量 total、每种食物克重 items；批量 ZIP `labels.txt` 可混用两种格式）
+- Scope:
+  - 后端：
+    - `backend/test_backend/utils.py`：新增两类标签解析、BOM 兼容、JSON/inline/旧格式兼容；`calculate_item_weight_evaluation` 支持 total 模式只算整餐总偏差、items 模式计算逐项匹配/偏差
+    - `backend/main.py`：`/api/test-backend/analyze` 与 `/api/test-backend/batch/*` 新增 `models`、`execution_mode`、`expected_items_json`；同一输入可并发跑 `qwen/gemini`
+    - 测试后台模型调用改为复用 `backend/worker.py::_build_food_prompt` 生成主链路动态 prompt，不再用 `model_prompts` 旧提示词做评测
+    - 批量任务结果新增 `labelMode`、`expectedItems`、`modelResults`、逐项匹配/缺失/额外识别/总重量偏差
+  - 后台页面：
+    - `backend/static/test_backend/index.html|app.js|style.css`：新增模型勾选、standard/strict 模式选择、单图标准标签输入、批量标准测试集格式说明、多模型结果摘要；详情弹窗会按 total/items 模式展示不同评测口径
+    - 提示词管理页新增说明：`model_prompts` 不直接影响当前主链路测试
+  - 标准测试集说明：
+    - 新增 `backend/test_backend/fixtures/README.md`，约定 ZIP + `labels.txt` 两种格式：总重量 `图片名 500g` / `图片名 | 总重量=500g`；逐项 `图片名 | 食物=克重; 食物=克重`
+- Verification:
+  - `python -m py_compile backend/main.py backend/test_backend/utils.py backend/test_backend/batch_processor.py backend/test_backend/single_processor.py` 通过
+  - `node --check backend/static/test_backend/app.js` 通过
+  - 纯函数样例验证：`labels.txt` 的 total/items 两种格式解析通过；total 模式不再被误判为“缺少总重量食物”，items 模式逐项偏差计算通过
+  - 已重启本地后端，`3010` 端口由新 server 监听
+  - `GET http://127.0.0.1:3010/test-backend/login` 返回 200
+  - 登录后调用 `/api/test-backend/batch/prepare` 上传测试 ZIP，成功返回 `labelMode=total/items`、`expectedItems` 与 pending 批次
+- Notes:
+  - `npm run dev:restart` 在当前 Windows/WSL 环境因 `scripts/restart-dev.sh` CRLF/`pipefail` 兼容问题失败；已改用 PowerShell 精确重启 3010 后端
+  - 本轮改的是后端静态测试后台，不是微信小程序页面，因此未使用 `weapp-devtools` 做小程序 UI 截图
+  - 真实模型分析接口未用假图片触发，以避免浪费上游模型额度；已验证到登录、静态资源和批量解析层
+
+
+- Task: 定价策略整改 —— 三档 × 三周期 + 每日积分 + 新用户试用
+- Status: in_progress（一期：数据库 / 后端 / 前端价格矩阵与积分展示已落地；邀请奖励 / 分享奖励 / 自动续费 留待后续阶段）
+- Scope:
+  - 数据库：
+    - 新增 `backend/sql/add_tiered_membership_pricing.sql`：`membership_plan_config` 新增 `tier / period / daily_credits / original_amount / sort_order`；`user_pro_memberships` 新增 `daily_credits` 快照
+    - 更新 `backend/database/membership_plan_config_seed.sql`：停用旧 `pro_monthly`，插入 9 档（light / standard / advanced × monthly / quarterly / yearly），带 `daily_credits`、`original_amount`、`sort_order`
+  - 后端：
+    - `backend/database.py`：`list_active_membership_plans` 按 `sort_order` 排序；新增 `get_today_exercise_log_count`
+    - `backend/database.py`：修正积分试算口径，`get_today_food_analysis_count` 现会排除 `payload.exercise=true` 的 exercise fallback 任务，避免运动记录被误算成 `食物分析 2 分 + 运动 1 分 = 3 分`
+    - `backend/main.py`：
+      - `MembershipPlanResponse` 扩展 `tier / period / daily_credits / original_amount / savings / sort_order`
+      - `MembershipStatusResponse` 扩展 `daily_credits_max/used/remaining / credits_reset_at / trial_active / trial_expires_at`
+      - 新增 `_credits_reset_time_iso / _is_user_in_trial / _compute_daily_credits_status`；积分消耗口径：食物分析 2 / 运动记录 1
+      - 新用户 3 天试用（按 `weapp_user.created_at` 判定），试用期每日 8 积分、不累计
+      - `/api/membership/plans` 返回扩展字段并计算 `savings`
+      - `/api/membership/me` 合并积分状态与试用信息
+      - `/api/payment/wechat/notify/membership` 成功回调时把所选套餐 `daily_credits` 快照写入 `user_pro_memberships`
+      - `2026-04-24` 继续收口：`/api/analyze`、`/api/analyze/submit`、`/api/analyze-text`、`/api/analyze-text/submit`、`/api/precision-sessions/{session_id}/continue` 已统一接入 `_validate_food_analysis_access(...)`
+        - 食物分析积分不足时统一返回 `402`
+        - 精准模式权限统一改为“仅 standard / advanced 可用”；light 会员若显式请求 strict，会收到“去升级”的 402，而不是继续放行
+        - 若用户档案默认还是 `strict`，但当前套餐已无权使用，后端会自动降回 `standard`，避免老状态穿透
+      - `2026-04-24` 继续收口：`/api/exercise-logs` 已接入运动积分校验；运动记录需 `1` 积分/次，积分不足时同样返回 `402`
+  - 前端：
+    - `src/utils/api.ts`：补 `MembershipTier / MembershipPeriod / MembershipPlan / MembershipStatus` 新字段
+    - `src/pages/pro-membership/index.tsx + index.scss`：完整重做
+      - Hero 区展示「今日剩余积分」或试用态胶囊
+      - 3 档卡片 + 3 周期 tab；tab 上显示「立省¥」标签
+      - 选中套餐大价格卡：折后单价、≈每月、立省标签
+      - 三档能力对比表 / 积分消耗说明 / 当前状态（生效中 / 试用中 / 未开通）
+    - `src/pages/profile/index.tsx`：「我的」会员卡从「今日拍照 x/y」改为「今日积分 x/y」；非会员区分「试用中」与「未开通」；服务入口「食探会员」描述同步为积分口径
+    - `src/pages/analyze/index.tsx + index.scss`：精准模式入口继续收口为档位判断而非 `is_pro` 一刀切；轻度版点击精准时提示“去升级”，并把会员页默认定位到标准版同周期；顶部提示条改为积分口径与升级提示
+    - `src/pages/pro-membership/index.tsx + index.scss`：积分展示改成「今日已用 / 今日剩余」双语义；当前套餐在档位卡与周期 tab 上增加标识；套餐差异表只保留真实已上线差异（每日积分、精准模式、适合频率）
+    - `src/pages/profile/index.tsx`：会员卡与服务入口文案统一改为「已用 x/y + 剩余 z」，会员徽标改为当前档位（轻度/标准/进阶）
+    - `src/utils/execution-mode.ts`、`src/pages/health-profile/index.tsx`、`src/pages/health-profile-edit/index.tsx`：精准模式权限判断继续统一到“standard / advanced 付费会员才可用”；轻度版不再因为 `is_pro=true` 被误判成可选 strict，档案页保存/编辑时也会提示“去升级”而不是“去开通会员”
+    - `backend/database/membership_plan_config_seed.sql`：套餐 seed 描述收口为真实已上线能力，移除轻度版“精准识别”和未上线能力的暗示性描述
+    - `2026-04-24` 继续收口：`src/pages/analyze/index.tsx`、`src/pages/record-text/index.tsx`、`src/pages/record/index.tsx`、`src/pages/index/components/RecordMenu.tsx` 不再看旧 `daily_limit / daily_remaining`
+      - 统一改为基于 `/api/membership/me` 的 `daily_credits_max / used / remaining`
+      - 本地预检查与按钮禁用统一用“食物分析需 2 积分/次”
+      - 超额提示统一从“今日次数已用完”改为“积分不足”，并根据当前状态给出“去开通 / 去升级”
+    - `2026-04-24` 继续收口：`src/pages/exercise-record/index.tsx` 已接入会员状态读取与运动积分预检查；当剩余积分 `< 1` 时，运动提交前会直接弹“积分不足”，不再继续创建任务
+- Verification:
+  - `ReadLints` 检查新改动文件无新增报错
+  - 当前尚未执行 `npm run dev:weapp` 重编译与微信开发者工具运行态截图
+- Blocked / 待执行：
+  - 2026-04-24 代码复核新增状态：
+    - 当前本地 `dev` 工作区并非最新：已 `git fetch origin dev`，结果显示本地 `HEAD=14b5bea` 相比 `origin/dev=185be02` 落后 `54` 个提交，且当前工作树存在大量未提交改动，不能直接安全 `pull`
+    - `backend/database/membership_plan_config_seed.sql` 中的脏文本已修掉；当前文件仅做 seed 更新、不改 schema，可在已迁移库上重复执行
+    - `/api/dev/toggle-test-membership` 已改为“当前登录用户 + 指定/默认有效套餐”，不再写死测试用户和 `pro_monthly`；会员页 `[DEV]` 区块也会按当前选中的套餐做模拟开通
+  - 线上数据库执行 `backend/sql/add_tiered_membership_pricing.sql` 与 `backend/database/membership_plan_config_seed.sql`（seed 为 `ON CONFLICT (code) DO UPDATE`，可多次执行）
+  - 本机重启前后端跑一遍：套餐列表、`/api/membership/me`、付款通知写入 `daily_credits`
+  - 微信开发者工具跑一遍运行态验证（tier/period 切换、价格、积分胶囊、profile 展示）
+  - 2026-04-24 用户最新要求：运行与验证由用户自行执行；代理本轮后续只继续改代码，不再主动启动项目或执行运行态验证
+  - 2026-04-24 继续收口：会员购买页对轻度版会员增加显式升级提示与“去看标准版”入口；健康档案的执行模式选择也已和会员档位对齐，避免轻度版继续保存成 `strict`
+  - 2026-04-24 继续收口：积分 enforcement 已从“仅展示”推进到“后端真拦截 + 前端预拦截”
+    - 食物分析：`2` 积分/次
+    - 运动记录：`1` 积分/次
+    - 用户后续自测时，积分不足应直接在提交前被挡住，后端兜底返回 `402`
+- 后续阶段（本轮未做，需继续）：
+  - 积分“真扣减”仍是按“已发生行为计数”试算，而非提交时原子扣库存；当前已能拦截超额继续分析，但尚未实现单独的积分流水表与并发扣减
+  - 邀请好友奖励 / 分享奖励 机制
+  - 微信支付自动续费（包月 / 包季 / 包年）
+  - 「pending」支付记录清理：现 `user_membership_payments.pending` 长期堆积的问题尚未并入本轮整改
+  - Next 文档：`memory/2026-04-21.md` 本轮交接
+
+- Task: 输出对外版《食探（智健食探）商业计划书》精简 PDF
+- Status: done（已将原始草稿收敛为更精简、更适合外部沟通的版本，弱化“尚未正式付费验证”的内部表达；首次 ReportLab CID 字体版在浏览器中显示为空白/乱码，已返工为 PIL + NotoSansSC 图片页封装 PDF，并用预览 PNG 抽查确认中文可读）
+- Deliverables:
+  - 文案源文件：`docs/食探-商业计划书-精简版.md`
+  - PDF 成品：`docs/shitan-business-plan-brief.pdf`
+  - 中文文件名副本：`docs/食探-商业计划书-精简版.pdf`
+  - 生成脚本：`scripts/generate_shitan_bp_pdf.py`
+  - 预览图目录：`docs/business_plan_preview/`
+- Notes:
+  - 对外品牌表达统一为：`食探（智健食探）`
+  - 文案保留真实数据支撑，但不再把早期自愿付费样本作为核心卖点
+  - 内容已按用户要求压缩为“抓核心痛点、不过长”的精简版，适合先发人看
+  - 当前 PDF 为图片页格式，优点是微信/浏览器/PDF 查看器中文显示更稳；缺点是正文不可复制检索，可编辑文本仍以 Markdown 文件为准
+  - 本轮未做小程序前端改动，因此未触发 `weapp-devtools` 运行态验证
+
+- Task: 将《食探（智健食探）商业计划书》改为更紧凑的 Word/docx 版本
+- Status: done（用户反馈 PDF 内容太少、排版不够紧密；已改为可编辑 Word 文档，并按用户最新方案更新为“三档订阅 + 每日积分清零”：轻度/标准/进阶，保留精简外部口径但信息密度更高）
+- Deliverables:
+  - Word 文档：`docs/食探（智健食探）商业计划书.docx`
+  - 生成脚本：`scripts/generate_shitan_bp_docx.py`
+- Verification:
+  - 使用 `python-docx` 读取校验通过：`42` 个段落、`14` 张表格
+  - 校验关键字：`轻度版 / 标准版 / 进阶版 / 免费 3 天` 均已写入文档
+  - 本轮仍未做小程序前端改动，因此未触发 `weapp-devtools` 运行态验证
+
+- Task: 基于 Supabase 聚合数据评估 `food_link` 在中国的商业化与盈利可能
+- Status: done（已做匿名聚合分析，未读取/披露个人明细；结论是“有主需求和早期付费苗头，但当前不适合押社区，应先做 AI 饮食记录 + 体重管理订阅/积分验证”）
+- Key data points:
+  - Supabase 当前聚合：`weapp_user=622`，近 30 天活跃用户约 `270`，近 30 天分析任务 `3408`，近 30 天饮食记录 `2278`
+  - 主链路使用：分析任务用户 `394`，饮食记录用户 `256`；完成分析后有饮食记录的用户约 `66.1%`
+  - 留存粗算：D1 exact `21.1%`，D7 后 7 日窗口 `17.1%`，D30 后 7 日窗口 `12.9%`
+  - 商业化：会员支付记录 `45`，其中 `paid=4`、`pending=41`；唯一付费用户 `3`，已付金额合计约 `20.81`
+  - 社区/公共库：公共食物库 `41` 条、发布者 `20`、评论 `2`、收藏 `4`，暂不足以支撑社区型商业化
+- Recommended next step:
+  - 用户倾向重新回到“订阅制度”作为主商业模型；当前建议调整为“订阅会员对外主卖 + 后台额度/加量包控制 AI 成本”，不要把积分作为用户侧核心心智
+  - 不要继续以免费高额度拍照作为默认卖点
+  - 将盈利叙事从“AI 拍照次数”升级为“体重管理闭环：饮食记录、趋势洞察、执行计划、复盘提醒”
+  - 保持手动记录永久免费，AI 分析/精准模式/周报复盘作为消耗积分或会员权益
+  - 增加支付失败/取消原因与会员页曝光漏斗埋点，定位 `pending` 大量堆积的原因
+
 - Task: 微信审核「先浏览后登录」整改
 - Status: done（Tab 可进、首页/分析引导、操作点统一跳转登录页并带 redirect；已 `npm run build:weapp`）
 - Scope: `src/pages/index|stats|profile|record|community|record-menu`、`src/pages/login/index.tsx`、`src/pages/index/components/RecordMenu.tsx`
@@ -1477,6 +1699,7 @@
       - 深蹲 15 分钟
       - 拉伸 10 分钟
       做 UTF-8 本地复测，已成功返回总计 `518 kcal`，不再直接报错
+    - 按用户要求，运动热量估算模型已改为在 `backend/exercise_llm.py` 内直接写死 `google/gemini-3.1-flash-lite-preview`，并撤回了 `backend/.env` 中新增的模型环境变量
 - Next step:
   - 统一执行数据库 SQL：
     - `backend/sql/migrate_exercise_logs_and_task_type.sql`（若线上还未执行）

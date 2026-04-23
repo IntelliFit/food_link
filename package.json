@@ -13,6 +13,7 @@
     "prepare": "husky",
     "new": "taro new",
     "dev:backend": "node scripts/run-backend.cjs",
+    "stop:backend": "node scripts/stop-backend.cjs",
     "dev:restart": "bash scripts/restart-dev.sh",
     "test": "jest",
     "test:watch": "jest --watch",

@@ -529,12 +529,27 @@ export interface UserInfo {
   public_records?: boolean
 }
 
+export type MembershipTier = 'light' | 'standard' | 'advanced'
+export type MembershipPeriod = 'monthly' | 'quarterly' | 'yearly'
+
 export interface MembershipPlan {
   code: string
   name: string
   amount: number
   duration_months: number
   description?: string | null
+  /** 档位，null 表示旧套餐（如 pro_monthly），不参与新矩阵 */
+  tier?: MembershipTier | null
+  /** 周期，null 表示旧套餐 */
+  period?: MembershipPeriod | null
+  /** 套餐每日可用积分 */
+  daily_credits?: number
+  /** 对照价（原价），用于"立省 xx 元"。null 表示无对照 */
+  original_amount?: number | null
+  /** 立省金额 = original_amount - amount，后端算好，null 表示不展示 */
+  savings?: number | null
+  /** 排序权重 */
+  sort_order?: number
 }
 
 export interface MembershipStatus {
@@ -545,9 +560,20 @@ export interface MembershipStatus {
   current_period_start?: string | null
   expires_at?: string | null
   last_paid_at?: string | null
+  /** 旧拍照日限，当前关闭，可能为 null */
   daily_limit: number | null
   daily_used: number | null
   daily_remaining: number | null
+  /** 新积分体系（2026-04-21 起） */
+  daily_credits_max?: number
+  daily_credits_used?: number
+  daily_credits_remaining?: number
+  /** 次日 00:00+08:00 的 ISO 字符串，用于倒计时 */
+  credits_reset_at?: string | null
+  /** 是否在新用户 3 天免费试用期内 */
+  trial_active?: boolean
+  /** 试用期截止时间（UTC ISO） */
+  trial_expires_at?: string | null
 }
 
 export interface MembershipPlansResponse {
@@ -2166,19 +2192,38 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
 // TODO: [TEST] 以下测试函数在正式上线前必须删除
 // ============================================================
 /**
- * [TEST ONLY] 切换测试账号会员状态（active ⇌ expired）
+ * [TEST ONLY] 切换当前登录账号会员状态（active ⇌ expired）
  * TODO: [TEST] 正式上线前删除此函数。
  */
-export async function toggleTestMembership(): Promise<{ ok: boolean; is_pro: boolean; status: string }> {
+export async function toggleTestMembership(planCode?: string): Promise<{
+  ok: boolean
+  is_pro: boolean
+  status: string
+  expires_at?: string | null
+  plan_code?: string | null
+  plan_name?: string | null
+  daily_credits?: number
+}> {
   try {
     const response = await authenticatedRequest('/api/dev/toggle-test-membership', {
-      method: 'POST'
+      method: 'POST',
+      data: {
+        plan_code: planCode || undefined
+      }
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '切换失败'
       throw new Error(errorMsg)
     }
-    return response.data as { ok: boolean; is_pro: boolean; status: string }
+    return response.data as {
+      ok: boolean
+      is_pro: boolean
+      status: string
+      expires_at?: string | null
+      plan_code?: string | null
+      plan_name?: string | null
+      daily_credits?: number
+    }
   } catch (error: any) {
     console.error('切换测试会员状态失败:', error)
     throw new Error(error.message || '切换失败')

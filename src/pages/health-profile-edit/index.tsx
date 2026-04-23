@@ -14,7 +14,10 @@ import {
   type ExecutionMode,
   type MembershipStatus,
 } from '../../utils/api'
-import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../utils/execution-mode'
+import {
+  canUseStrictModeForMembership,
+  getStrictModeUpgradeDialog,
+} from '../../utils/execution-mode'
 import { withAuth } from '../../utils/withAuth'
 
 import './index.scss'
@@ -59,7 +62,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。需开通食探会员。' },
+  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。标准版及以上可用。' },
   { value: 'standard', title: '标准模式', desc: '记录更便捷，但估算误差会更大。' }
 ]
 
@@ -87,6 +90,13 @@ function HealthProfileEditPage() {
 
   const [healthNotes, setHealthNotes] = useState<string>('')
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const strictModeAvailable = canUseStrictModeForMembership(membershipStatus)
+
+  useEffect(() => {
+    if (membershipStatus && executionMode === 'strict' && !strictModeAvailable) {
+      setExecutionMode('standard')
+    }
+  }, [membershipStatus, executionMode, strictModeAvailable])
 
   const loadProfile = async () => {
     try {
@@ -443,18 +453,19 @@ function HealthProfileEditPage() {
                   className={`option-card ${executionMode === opt.value ? 'active' : ''}`}
                   onClick={() => {
                     if (opt.value === 'strict') {
-                      if (membershipStatus?.is_pro) {
+                      if (strictModeAvailable) {
                         setExecutionMode('strict')
                         return
                       }
+                      const dialog = getStrictModeUpgradeDialog(membershipStatus, 'profile_execution_mode')
                       Taro.showModal({
                         title: '解锁精准模式',
-                        content: '精准模式需要开通食探会员才能使用，是否前往开通？若取消则保持当前模式。',
-                        confirmText: '去开通',
+                        content: `${dialog.content}\n若取消则保持当前模式。`,
+                        confirmText: dialog.confirmText,
                         cancelText: '取消',
                         success: (res) => {
                           if (res.confirm) {
-                            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                            Taro.navigateTo({ url: dialog.url })
                           }
                         }
                       })
