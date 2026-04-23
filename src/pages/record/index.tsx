@@ -324,7 +324,7 @@ function RecordPage() {
           <Text className='iconfont icon-jiesuo denied-icon' />
           <Text className='denied-title'>需要相机权限</Text>
           <Text className='denied-desc'>
-            若小程序设置里摄像头已开仍无法使用，请先返回确认已在相机页完成「隐私保护指引」同意。也可点「改用系统相机」绕过本页组件。
+            若小程序设置里摄像头已开仍无法使用，请先返回确认已在相机页完成「隐私保护指引」同意。也可点「改用系统相机」绕过，或直接点击下方「从相册选择」上传图片完成分析。
           </Text>
           <View className='denied-btn' onClick={() => void pickImageAndOpenAnalyze(['camera'])}>
             <Text>改用系统相机</Text>

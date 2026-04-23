@@ -82,7 +82,7 @@ export async function pickImageAndOpenAnalyze(sourceType: Array<'album' | 'camer
       if (cameraAuthLike) {
         Taro.showModal({
           title: '需要相机权限',
-          content: '请在微信小程序设置中允许使用摄像头；若已开启仍失败，可先使用「相册上传」。',
+          content: '请在微信小程序设置中允许使用摄像头；若已开启仍失败，可返回首页点击「相册上传」完成图片分析。',
           confirmText: '去设置',
           cancelText: '取消',
           success: (r) => {
