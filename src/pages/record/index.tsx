@@ -33,6 +33,17 @@ function isLikelyCameraAuthDeniedMessage(msg: string): boolean {
   if (raw.includes('不允许使用摄像头')) return true
   if (raw.includes('请在小程序设置中打开') || raw.includes('前往设置')) return true
   if (m.includes('operatecamera') && m.includes('fail')) {
+    // 先排除明确的非权限类错误（相机被占用、硬件未就绪、超时等）
+    const nonAuthLike =
+      m.includes('not available') ||
+      m.includes('unavailable') ||
+      m.includes('in use') ||
+      m.includes('busy') ||
+      m.includes('timeout') ||
+      m.includes('interrupted') ||
+      m.includes('device') ||
+      m.includes('hardware')
+    if (nonAuthLike) return false
     return (
       m.includes('auth') ||
       m.includes('deny') ||
@@ -320,6 +331,10 @@ function RecordPage() {
           </View>
           <View className='denied-btn denied-btn--secondary' onClick={openSettings}>
             <Text>打开权限设置</Text>
+          </View>
+          <View className='denied-btn denied-btn--tertiary' onClick={() => void pickImageAndOpenAnalyze(['album'])}>
+            <Text className='iconfont icon-picture' />
+            <Text>从相册选择</Text>
           </View>
         </View>
       </View>

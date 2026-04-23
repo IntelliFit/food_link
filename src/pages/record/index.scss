@@ -430,4 +430,25 @@ camera {
       color: rgba(255, 255, 255, 0.92);
     }
   }
+
+  .denied-btn--tertiary {
+    margin-top: 0;
+    background: transparent;
+    border: 2rpx solid rgba(255, 255, 255, 0.2);
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12rpx;
+
+    text {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 28rpx;
+      font-weight: 500;
+    }
+
+    &:active {
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+  }
 }
