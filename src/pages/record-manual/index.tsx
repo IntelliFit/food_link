@@ -11,6 +11,7 @@ import {
   type Nutrients,
 } from '../../utils/api'
 import { withAuth } from '../../utils/withAuth'
+import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
 import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import './index.scss'
 
@@ -402,7 +403,12 @@ function RecordManualPage() {
         total_fat: Math.round(totalNutrients.fat * 10) / 10,
         total_weight_grams: totalWeight,
       })
-      
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+      } catch {
+        /* ignore */
+      }
+
       Taro.showToast({ title: '记录成功', icon: 'success' })
       setTimeout(() => {
         const today = formatDateKey(new Date())

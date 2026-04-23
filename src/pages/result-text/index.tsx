@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord } from '../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
+import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
 
 import './index.scss'
 
@@ -273,6 +274,11 @@ function ResultTextPage() {
       }
       // @ts-ignore
       const saveResult = await saveFoodRecord(payload)
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+      } catch {
+        /* ignore */
+      }
 
       if (saveOnly) {
         Taro.showToast({ title: '记录成功', icon: 'success' })

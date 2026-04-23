@@ -1,6 +1,6 @@
 import { withAuth } from '../../utils/withAuth'
 import { View, Text, Image, Button, Input } from '@tarojs/components'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
 import {
   friendCancelSentRequest,
@@ -135,7 +135,10 @@ const SearchEmptyIcon = ({ size = 80, color = '#00bc7d' }: { size?: number; colo
 )
 
 function FriendsPage() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('friends')
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    router.params?.tab === 'received' ? 'received' : 'friends'
+  )
   const [loading, setLoading] = useState(false)
   const [friends, setFriends] = useState<FriendListItem[]>([])
   const [received, setReceived] = useState<FriendRequestOverviewItem[]>([])
@@ -175,6 +178,10 @@ function FriendsPage() {
   }
 
   useDidShow(() => {
+    const tab = Taro.getCurrentInstance()?.router?.params?.tab
+    if (tab === 'received') {
+      setActiveTab('received')
+    }
     loadData()
   })
 

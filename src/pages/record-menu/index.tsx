@@ -1,6 +1,6 @@
 import { View, Text, Image } from '@tarojs/components'
 import { useCallback, useEffect } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro from '@tarojs/taro'
 import { getAccessToken } from '../../utils/api'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { IconCamera, IconAlbum, IconText, IconEdit, IconHistory } from '../../components/iconfont'
@@ -51,10 +51,7 @@ const OTHER_MODES = [
 ]
 
 function RecordMenuPage() {
-  // 页面显示时隐藏底部 tabBar
-  useDidShow(() => {
-    Taro.hideTabBar({ animation: true }).catch(() => {})
-  })
+  // 底栏显隐由 custom-tab-bar/updateHidden 根据路径处理（勿 hideTabBar，易与原生 tabBar 叠成双栏）
 
   // 检查登录状态
   const checkAuth = useCallback(() => {

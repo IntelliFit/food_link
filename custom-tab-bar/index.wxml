@@ -9,12 +9,26 @@
     bindtap="switchTab"
   >
     <view class="icon-wrapper">
-      <block wx:if="{{item.id === 'stats'}}">
-        <view class="stats-icon {{selectedIndex === index ? 'active' : ''}}"></view>
+      <block wx:if="{{item.id === 'home'}}">
+        <text class="iconfont icon-shouye tab-icon"></text>
+      </block>
+      <block wx:elif="{{item.id === 'stats'}}">
+        <text class="iconfont icon-weibiaoti1 tab-icon"></text>
+      </block>
+      <block wx:elif="{{item.id === 'community'}}">
+        <text class="iconfont icon-quanzi tab-icon"></text>
+      </block>
+      <block wx:elif="{{item.id === 'profile'}}">
+        <text class="iconfont icon-user tab-icon"></text>
+      </block>
+      <block wx:elif="{{item.isCenter}}">
+        <view class="center-icon-wrapper">
+          <text class="iconfont icon-kcal center-icon"></text>
+        </view>
       </block>
       <block wx:else>
         <image 
-          class="tab-icon {{item.isCenter ? 'center' : ''}}" 
+          class="tab-icon" 
           src="{{selectedIndex === index ? item.selectedIconPath : item.iconPath}}"
           mode="aspectFit"
         />

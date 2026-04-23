@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Slider } from '@tarojs/components'
+import { View, Text, Input, Image, Slider, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -10,23 +10,42 @@ import {
   getStoredDashboardTargets,
   getBodyMetricsSummary,
   getExerciseLogs,
+  getUnlimitedQRCode,
+  getFriendInviteProfile,
+  getSharedFoodRecord,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
   mapCalendarDateToApi,
   resolveHomeMealPrimaryRecordId,
   type DashboardTargets,
+  type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
+  type HomeMealRecordEntry,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
-  type HomeFoodExpirySummary
+  type HomeFoodExpirySummary,
+  type FoodRecord,
+  getCachedMealFullRecord
 } from '../../utils/api'
-import { IconCamera, IconText, IconProtein, IconCarbs, IconFat, IconBreakfast, IconLunch, IconDinner, IconSnack, IconTrendingUp, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
+import {
+  drawDailySummaryPoster,
+  computeDailySummaryPosterHeight,
+  DAILY_SUMMARY_POSTER_MAX_HEIGHT,
+  POSTER_WIDTH,
+  type DailySummaryPosterInput
+} from '../../utils/poster'
+import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
+import { IconCamera, IconText, IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
 import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
-import { HOME_DASHBOARD_REFRESH_EVENT } from '../../utils/home-events'
+import {
+  HOME_DASHBOARD_REFRESH_EVENT,
+  HOME_INTAKE_DATA_CHANGED_EVENT,
+  HOME_DASHBOARD_CACHE_TTL_MS
+} from '../../utils/home-events'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -44,7 +63,90 @@ import {
 } from './utils/constants'
 import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu } from './components'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal } from './components'
+
+/** 微信操作面板单行不宜过长，总长度含「 · 」分隔符一并限制 */
+const HOME_MEAL_PICKER_LINE_MAX_CHARS = 34
+
+function truncatePickerText(text: string, maxLen: number): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  if (t.length <= maxLen) return t
+  if (maxLen <= 1) return '…'
+  return `${t.slice(0, maxLen - 1)}…`
+}
+
+/** 首页同一餐多条记录时，操作面板单行：名称（可截断）· 时间（不展示热量） */
+function formatHomeMealPickerEntry(entry: HomeMealRecordEntry): string {
+  let timePart = ''
+  if (entry.record_time) {
+    try {
+      const d = new Date(entry.record_time)
+      if (!Number.isNaN(d.getTime())) {
+        const h = d.getHours()
+        const m = d.getMinutes()
+        timePart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const timeSuffix = timePart ? ` · ${timePart}` : ''
+
+  const rawTitle = (entry.title || '').trim()
+  if (!rawTitle) {
+    return timePart || '饮食记录'
+  }
+  if (!timePart) {
+    return truncatePickerText(rawTitle, HOME_MEAL_PICKER_LINE_MAX_CHARS)
+  }
+
+  const maxTitle = Math.max(4, HOME_MEAL_PICKER_LINE_MAX_CHARS - timeSuffix.length)
+  const titleShort = truncatePickerText(rawTitle, maxTitle)
+  const line = `${titleShort}${timeSuffix}`
+  if (line.length <= HOME_MEAL_PICKER_LINE_MAX_CHARS) return line
+  return truncatePickerText(line, HOME_MEAL_PICKER_LINE_MAX_CHARS)
+}
+
+const HOME_MEAL_ACTION_SHEET_MAX = 6
+const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache_v4'
+const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 60
+
+interface HomeDashboardLocalSnapshot {
+  date: string
+  updatedAt: number
+  intakeData: HomeIntakeData
+  meals: HomeMealItem[]
+  expirySummary: HomeFoodExpirySummary
+  exerciseBurnedKcal: number
+  achievement: HomeAchievement
+}
+
+/** 与记录详情页海报一致：邀请码用于小程序码 scene */
+function getInviteCodeFromUserId(userId: string): string {
+  const raw = (userId || '').replace(/-/g, '').toLowerCase()
+  return raw.length >= 8 ? raw.slice(0, 8) : ''
+}
+
+/** 海报顶栏：月日一行 */
+function formatPosterDatePrimary(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+    return dateKey
+  }
+  const [_y, m, d] = parts
+  return `${m}月${d}日`
+}
+
+/** 海报顶栏：星期一行 */
+function formatPosterWeekdayLabel(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+    return ''
+  }
+  const [y, m, d] = parts
+  const dt = new Date(y, m - 1, d)
+  return `周${SHORT_DAY_NAMES[dt.getDay()] ?? '—'}`
+}
 
 // 与后端/统计周对齐：真实日历为 2026 时，仅在与「可能带错年」的接口字段比对时做归一
 function normalizeTo2025(dateStr: string): string {
@@ -77,6 +179,88 @@ const DEFAULT_EXPIRY_SUMMARY: HomeFoodExpirySummary = {
   soonCount: 0,
   overdueCount: 0,
   items: []
+}
+
+function getStoredHomeDashboardSnapshots(): HomeDashboardLocalSnapshot[] {
+  try {
+    const raw = Taro.getStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY) as unknown
+    if (!Array.isArray(raw)) return []
+    const valid = raw
+      .filter((item): item is HomeDashboardLocalSnapshot => {
+        if (!item || typeof item !== 'object') return false
+        const date = (item as { date?: unknown }).date
+        if (typeof date !== 'string' || date.length === 0) return false
+        // meals 为可选数组；protein/carbs/fat/description 在 HomeMealItem 中均为可选字段，
+        // 旧缓存缺少这些字段是合法的，不应因此过滤掉整条快照
+        return true
+      })
+      .map((item) => ({
+        ...item,
+        meals: stripMealFullRecords(item.meals || [])
+      }))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
+    return valid
+  } catch {
+    return []
+  }
+}
+
+function getStoredHomeDashboardSnapshotByDate(date: string): HomeDashboardLocalSnapshot | null {
+  const normalizedDate = mapCalendarDateToApi(date) || date
+  const snapshots = getStoredHomeDashboardSnapshots()
+  return snapshots.find((item) => item.date === normalizedDate) || null
+}
+
+function stripMealFullRecords(meals: HomeMealItem[]): HomeMealItem[] {
+  return meals.map(meal => ({
+    ...meal,
+    meal_record_entries: meal.meal_record_entries?.map(entry => {
+      const { full_record, ...rest } = entry as HomeMealRecordEntry & { full_record?: unknown }
+      return rest
+    }) || null
+  }))
+}
+
+function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot): void {
+  const cleanedSnapshot = {
+    ...snapshot,
+    meals: stripMealFullRecords(snapshot.meals || [])
+  }
+  const current = getStoredHomeDashboardSnapshots().filter((item) => item.date !== cleanedSnapshot.date)
+  const next = [cleanedSnapshot, ...current]
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
+  try {
+    Taro.setStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY, next)
+  } catch {
+    // ignore
+  }
+}
+
+function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {
+  const today = new Date()
+  const cells: WeekHeatmapCell[] = []
+  for (let offset = -3; offset <= 3; offset++) {
+    const date = new Date(today)
+    date.setDate(today.getDate() + offset)
+    const dateKey = formatDateKey(date)
+    const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
+    const calories = snap ? snap.intakeData.current : 0
+    const target = snap ? snap.intakeData.target : 2000
+    const hasRecord = calories > 0
+    cells.push({
+      date: dateKey,
+      dayName: SHORT_DAY_NAMES[date.getDay()],
+      dayNum: String(date.getDate()),
+      calories,
+      target,
+      intakeRatio: hasRecord ? calories / target : 0,
+      state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
+      isToday: offset === 0
+    })
+  }
+  return cells
 }
 
 function parseCompleteNumber(value: string): number | null {
@@ -413,15 +597,15 @@ function getExpiryTagClass(urgency: FoodExpiryItem['urgency_level']): string {
   return 'normal'
 }
 
-// 餐次对应的 iconfont 图标及颜色
+// 餐次对应的 iconfont 图标及颜色（与分析页保持一致）
 const MEAL_ICON_CONFIG = {
-  breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐' },
-  morning_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
-  lunch: { Icon: IconLunch, color: '#00bc7d', bgColor: '#ecfdf5', label: '午餐' },
-  afternoon_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
-  dinner: { Icon: IconDinner, color: '#00bc7d', bgColor: '#ecfdf5', label: '晚餐' },
-  evening_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐' },
-  snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '零食' }
+  breakfast: { Icon: IconBreakfast, color: '#00bc7d', bgColor: '#ecfdf5', label: '早餐', iconClass: 'icon-zaocan1' },
+  morning_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐', iconClass: 'icon-lingshi' },
+  lunch: { Icon: IconLunch, color: '#00bc7d', bgColor: '#ecfdf5', label: '午餐', iconClass: 'icon-wucan' },
+  afternoon_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐', iconClass: 'icon-lingshi' },
+  dinner: { Icon: IconDinner, color: '#00bc7d', bgColor: '#ecfdf5', label: '晚餐', iconClass: 'icon-wancan' },
+  evening_snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '加餐', iconClass: 'icon-lingshi' },
+  snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '零食', iconClass: 'icon-lingshi' }
 } as const
 
 const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
@@ -437,30 +621,32 @@ const MACRO_CONFIGS: Array<{
   subLabel: string
   color: string
   unit: string
-  Icon: typeof IconProtein
+  iconClass: string
 }> = [
-  { key: 'protein', label: '蛋白质', subLabel: '剩余', color: '#3b82f6', unit: 'g', Icon: IconProtein },
-  { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#eab308', unit: 'g', Icon: IconCarbs },
-  { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f97316', unit: 'g', Icon: IconFat }
+  { key: 'protein', label: '蛋白质', subLabel: '剩余', color: '#5c9ed4', unit: 'g', iconClass: 'icon-danbaizhi' },
+  { key: 'carbs', label: '碳水', subLabel: '剩余', color: '#d4ac52', unit: 'g', iconClass: 'icon-tanshui-dabiao' },
+  { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f0985c', unit: 'g', iconClass: 'icon-zhifangyouheruhuazhifangzhipin' }
 ]
 
 function IndexPage() {
-  const [intakeData, setIntakeData] = useState<HomeIntakeData>(DEFAULT_INTAKE)
-  const [meals, setMeals] = useState<HomeMealItem[]>([])
-  const [expirySummary, setExpirySummary] = useState<HomeFoodExpirySummary>(DEFAULT_EXPIRY_SUMMARY)
-  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(createWeekHeatmapCells())
-  const [loading, setLoading] = useState(true)
+  const initialSelectedDate = formatDateKey(new Date())
+  const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialSelectedDate)
+  const [intakeData, setIntakeData] = useState<HomeIntakeData>(initialLocalSnapshot?.intakeData || DEFAULT_INTAKE)
+  const [meals, setMeals] = useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
+  const [expirySummary, setExpirySummary] = useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
+  const [loading, setLoading] = useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   
-  const [selectedDate, setSelectedDate] = useState(formatDateKey(new Date()))
+  const [selectedDate, setSelectedDate] = useState(initialSelectedDate)
 
   // 体重/喝水状态
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetricsStorage>(getStoredBodyMetrics())
   /** 首页「运动」卡片：当日消耗千卡（与 dashboard 同步） */
-  const [exerciseBurnedKcal, setExerciseBurnedKcal] = useState(0)
+  const [exerciseBurnedKcal, setExerciseBurnedKcal] = useState(initialLocalSnapshot?.exerciseBurnedKcal || 0)
   const [showWeightEditor, setShowWeightEditor] = useState(false)
   const [weightInput, setWeightInput] = useState('')
   const [savingWeight, setSavingWeight] = useState(false)
@@ -472,27 +658,58 @@ function IndexPage() {
   const waterBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 快速切换日期时忽略非最新一次 dashboard 的响应（微信小程序无 AbortController，无法掐断请求） */
   const loadDashboardSeqRef = useRef(0)
+  /** 切日同步专用的 seq ref，避免与 loadDashboard 共用导致竞态丢弃 */
+  const syncDashboardSeqRef = useRef(0)
+  /** 防止并发重复请求：同日期 dashboard 正在加载中时跳过新调用 */
+  const loadDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
+  /** 防止并发重复请求：切日同步专用的 pending ref */
+  const syncDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
+  /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
+  const homeLastLoadRef = useRef<{ date: string; ts: number } | null>(null)
+  /** 为 true 时下次「今日」展示必须重拉（饮食/运动/保质期等变更） */
+  const homeDataStaleRef = useRef(true)
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
 
+  /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
+  const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
+  const [dailyPosterGenerating, setDailyPosterGenerating] = useState(false)
+  const [dailyPosterImageUrl, setDailyPosterImageUrl] = useState<string | null>(null)
+  const [showDailyPosterModal, setShowDailyPosterModal] = useState(false)
+
+  // 餐食卡片操作状态
+  const [mealActionSheetVisible, setMealActionSheetVisible] = useState(false)
+  const [mealActionRecordId, setMealActionRecordId] = useState<string | null>(null)
+  const [mealActionRecord, setMealActionRecord] = useState<FoodRecord | null>(null)
+  const [showRecordEditModal, setShowRecordEditModal] = useState(false)
+  const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
+
   // 加载指定日期的首页数据
-  const loadDashboard = useCallback(async (targetDate?: string) => {
-    const seq = ++loadDashboardSeqRef.current
-    /** 无参调用（如保质期事件、保存目标后刷新）必须与日历选中日期一致，否则会拉到「后端默认今天」覆盖当前选中日期的数据 */
+  const loadDashboard = useCallback(async (targetDate?: string, silent = false) => {
     const resolvedDate =
       targetDate !== undefined && targetDate !== ''
         ? targetDate
         : (selectedDateRef.current || formatDateKey(new Date()))
 
-    console.log('[DEBUG] loadDashboard 被调用, targetDate:', targetDate, 'resolvedDate:', resolvedDate, 'seq:', seq)
-    console.log('[DEBUG] getAccessToken:', getAccessToken() ? '有token' : '无token')
+    // 若同日期请求已在进行中，跳过本次调用（解决 useDidShow 多次触发导致的大量重复请求）
+    if (
+      loadDashboardPendingRef.current &&
+      loadDashboardPendingRef.current.date === resolvedDate
+    ) {
+      return
+    }
+    const seq = ++loadDashboardSeqRef.current
+    loadDashboardPendingRef.current = { date: resolvedDate, seq }
+    /** 无参调用（如保质期事件、保存目标后刷新）必须与日历选中日期一致，否则会拉到「后端默认今天」覆盖当前选中日期的数据 */
+    // resolvedDate 已在上方计算
+
     if (!getAccessToken()) {
-      console.log('[DEBUG] 无token，返回默认值')
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(0)
+      setHomeAchievement({ streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
       setWeekHeatmapCells(createWeekHeatmapCells())
       setLoading(false)
@@ -500,9 +717,10 @@ function IndexPage() {
       return
     }
 
-    setLoading(true)
+    if (!silent) {
+      setLoading(true)
+    }
     try {
-      console.log('[DEBUG] 请求 API, date:', resolvedDate)
       const exerciseLogParams = { date: resolvedDate }
       const [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
         getHomeDashboard(resolvedDate),
@@ -513,48 +731,134 @@ function IndexPage() {
       if (seq !== loadDashboardSeqRef.current) {
         return
       }
-      console.log('[DEBUG] API 返回:', res)
-      console.log('[DEBUG] intakeData.current:', res.intakeData?.current)
-      console.log('[DEBUG] intakeData.macros:', res.intakeData?.macros)
       const intake = res.intakeData
-      console.log('[DEBUG] 处理后的 intake:', intake)
-      
-      console.log('[DEBUG] 设置 intakeData:', intake)
       setIntakeData(intake)
-      console.log('[DEBUG] 设置 meals:', res.meals)
       setMeals(res.meals || [])
-      
-      // 构建7天热力图数据 - 始终以今天为中心（不随点击滚动）
+      setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
+      setExerciseBurnedKcal(nextExerciseKcal)
+      const nextAchievement = res.achievement ?? { streak_days: 0, green_days: 0 }
+      setHomeAchievement(nextAchievement)
+      setTargetForm(createTargetForm(intake))
+
+      // 1. 先保存到本地 storage
+      const normalizedDate = mapCalendarDateToApi(resolvedDate) || resolvedDate
+      const nextSnapshot: HomeDashboardLocalSnapshot = {
+        date: normalizedDate,
+        updatedAt: Date.now(),
+        intakeData: intake,
+        meals: res.meals || [],
+        expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+        exerciseBurnedKcal: nextExerciseKcal,
+        achievement: nextAchievement
+      }
+      const currentSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
+      if (!currentSnapshot || JSON.stringify({
+        intakeData: currentSnapshot.intakeData,
+        meals: currentSnapshot.meals,
+        expirySummary: currentSnapshot.expirySummary,
+        exerciseBurnedKcal: currentSnapshot.exerciseBurnedKcal,
+        achievement: currentSnapshot.achievement
+      }) !== JSON.stringify({
+        intakeData: nextSnapshot.intakeData,
+        meals: nextSnapshot.meals,
+        expirySummary: nextSnapshot.expirySummary,
+        exerciseBurnedKcal: nextSnapshot.exerciseBurnedKcal,
+        achievement: nextSnapshot.achievement
+      })) {
+        saveHomeDashboardSnapshot(nextSnapshot)
+      } else {
+        saveHomeDashboardSnapshot({ ...currentSnapshot, updatedAt: Date.now() })
+      }
+
+      // 2. 再从 storage 优先、stats 回退构建7天热力图并更新 UI
       const today = new Date()
-      console.log('[DEBUG] 构建热力图, 中心日期(今天):', formatDateKey(today))
       const nextWeekHeatmapCells: WeekHeatmapCell[] = []
       for (let offset = -3; offset <= 3; offset++) {
         const date = new Date(today)
         date.setDate(today.getDate() + offset)
         const dateKey = formatDateKey(date)
+        const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
         const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
-        const hasRecord = dayData && dayData.calories > 0
-        const calories = dayData?.calories || 0
-        const target = stats.tdee || 2000
-        const intakeRatio = hasRecord ? calories / target : 0
-        
+        const calories = snap ? snap.intakeData.current : (dayData?.calories || 0)
+        const target = snap ? snap.intakeData.target : (stats.tdee || 2000)
+        const hasRecord = calories > 0
         nextWeekHeatmapCells.push({
           date: dateKey,
           dayName: SHORT_DAY_NAMES[date.getDay()],
           dayNum: String(date.getDate()),
           calories,
           target,
-          intakeRatio,
+          intakeRatio: hasRecord ? calories / target : 0,
           state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
           isToday: offset === 0
         })
       }
-      setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-      setExerciseBurnedKcal(
-        mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
-      )
       setWeekHeatmapCells(nextWeekHeatmapCells)
-      setTargetForm(createTargetForm(intake))
+
+      homeLastLoadRef.current = { date: resolvedDate, ts: Date.now() }
+      homeDataStaleRef.current = false
+
+      // 若本地缓存不足 7 天，后台异步补齐近 7 天数据
+      void (async () => {
+        try {
+          const snapshots = getStoredHomeDashboardSnapshots()
+          if (snapshots.length >= 7) return
+          const today = new Date()
+          const missingDates: string[] = []
+          // 用 Array.from + forEach 替代 for 循环，规避 Terser 对带闭包 for 循环的已知优化 bug
+          Array.from({ length: 7 }).forEach((_, idx) => {
+            const offset = idx - 6
+            const d = new Date(today)
+            d.setDate(today.getDate() + offset)
+            const dateKey = formatDateKey(d)
+            if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
+              missingDates.push(dateKey)
+            }
+          })
+          if (missingDates.length === 0) return
+          console.log('[dashboard-backfill] missing dates:', missingDates)
+          const results = await Promise.all(
+            missingDates.map(async (date) => {
+              try {
+                const dayRes = await getHomeDashboard(date)
+                const normDate = mapCalendarDateToApi(date) || date
+                return {
+                  date: normDate,
+                  updatedAt: Date.now(),
+                  intakeData: dayRes.intakeData,
+                  meals: dayRes.meals || [],
+                  expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+                  exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
+                  achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
+                } as HomeDashboardLocalSnapshot
+              } catch (err) {
+                console.error('[dashboard-backfill] fetch failed for', date, err)
+                return null
+              }
+            })
+          )
+          results.forEach((snapshot) => {
+            if (snapshot) saveHomeDashboardSnapshot(snapshot)
+          })
+          // 完成后从缓存刷新热图 UI
+          setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+          // 若当前选中日期已补齐，同步刷新首页数据
+          const currentDate = selectedDateRef.current || formatDateKey(new Date())
+          const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
+          if (refreshed) {
+            setIntakeData(refreshed.intakeData)
+            setMeals(refreshed.meals || [])
+            setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+            setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
+            setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
+            setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
+          }
+          console.log('[dashboard-backfill] done')
+        } catch (err) {
+          console.error('[dashboard-backfill] unhandled error', err)
+        }
+      })()
 
       // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
       if (bodyMetricsRes) {
@@ -575,20 +879,34 @@ function IndexPage() {
         })
       }
 
-      console.log('[DEBUG] 所有数据设置完成')
     } catch (error) {
       if (seq !== loadDashboardSeqRef.current) {
         return
       }
-      console.error('[DEBUG] API 调用失败:', error)
+      console.error('首页 dashboard 加载失败:', error)
       Taro.showToast({ title: '加载失败: ' + (error as Error).message, icon: 'none', duration: 3000 })
-      setIntakeData(DEFAULT_INTAKE)
-      setMeals([])
-      setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
-      setExerciseBurnedKcal(0)
-      setWeekHeatmapCells(createWeekHeatmapCells())
-      setTargetForm(createTargetForm(DEFAULT_INTAKE))
+      const localFallback = getStoredHomeDashboardSnapshotByDate(resolvedDate)
+      if (localFallback) {
+        setIntakeData(localFallback.intakeData)
+        setMeals(localFallback.meals || [])
+        setExpirySummary(localFallback.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+        setExerciseBurnedKcal(localFallback.exerciseBurnedKcal || 0)
+        setHomeAchievement(localFallback.achievement || { streak_days: 0, green_days: 0 })
+        setTargetForm(createTargetForm(localFallback.intakeData || DEFAULT_INTAKE))
+        setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+      } else {
+        setIntakeData(DEFAULT_INTAKE)
+        setMeals([])
+        setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+        setExerciseBurnedKcal(0)
+        setHomeAchievement({ streak_days: 0, green_days: 0 })
+        setWeekHeatmapCells(createWeekHeatmapCells())
+        setTargetForm(createTargetForm(DEFAULT_INTAKE))
+      }
     } finally {
+      if (loadDashboardPendingRef.current?.seq === seq) {
+        loadDashboardPendingRef.current = null
+      }
       if (seq === loadDashboardSeqRef.current) {
         setLoading(false)
         setIsSwitchingDate(false)
@@ -604,7 +922,6 @@ function IndexPage() {
   Taro.useDidShow(() => {
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
-    console.log('[DEBUG] useDidShow, selectedDate:', currentSelected, 'today:', today, 'skip:', skipNextRefreshRef.current)
 
     // 检查是否需要显示记录菜单（从底部导航栏中间按钮点击）
     const shouldShowRecordMenu = Taro.getStorageSync('showRecordMenuModal')
@@ -614,38 +931,41 @@ function IndexPage() {
     }
 
     if (skipNextRefreshRef.current) {
-      console.log('[DEBUG] 跳过本次刷新')
       skipNextRefreshRef.current = false
       return
     }
 
-    if (currentSelected === today || !currentSelected) {
-      console.log('[DEBUG] 刷新今天数据')
-      loadDashboard(today)
-    } else {
-      console.log('[DEBUG] 当前显示非今天，不自动刷新')
+    // 数据变脏（饮食/运动/保质期变更）时，无论当前选中哪天都应刷新
+    const shouldRefresh = (currentSelected === today || !currentSelected) || homeDataStaleRef.current
+    if (!shouldRefresh) {
+      return
     }
-  })
 
-  /**
-   * 挂载后补拉一次 dashboard（含运动消耗）。
-   * 部分环境下仅依赖 useDidShow 会晚于首屏或时序异常，导致运动千卡一直为 0。
-   */
-  useEffect(() => {
-    const today = formatDateKey(new Date())
     if (!getAccessToken()) {
       return
     }
-    if (skipNextRefreshRef.current) {
-      skipNextRefreshRef.current = false
+    const targetDate = currentSelected || today
+    const last = homeLastLoadRef.current
+    const canCache =
+      !homeDataStaleRef.current &&
+      last !== null &&
+      last.date === targetDate &&
+      Date.now() - last.ts < HOME_DASHBOARD_CACHE_TTL_MS
+    if (canCache) {
       return
     }
-    const cur = selectedDateRef.current
-    if (cur === today || !cur) {
-      void loadDashboard(today)
+    const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
+    if (localSnapshot) {
+      setIntakeData(localSnapshot.intakeData)
+      setMeals(localSnapshot.meals || [])
+      setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
+      setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
+      setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
+      setLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅首屏补拉，避免与 loadDashboard 依赖链重复触发
-  }, [])
+    void loadDashboard(targetDate, Boolean(localSnapshot))
+  })
 
   useShareAppMessage(() => ({
     title: '食探 - AI 智能饮食记录',
@@ -661,6 +981,13 @@ function IndexPage() {
       withShareTicket: true,
       menus: ['shareAppMessage', 'shareTimeline']
     })
+    // 清理旧版本缓存，避免脏数据干扰
+    try {
+      Taro.removeStorageSync('home_dashboard_local_cache_v1')
+      Taro.removeStorageSync('home_dashboard_local_cache_v2')
+    } catch {
+      /* ignore */
+    }
   }, [])
 
   useEffect(() => () => {
@@ -669,30 +996,44 @@ function IndexPage() {
     }
   }, [])
 
+  /** 「今日小结」预览：自定义 tabBar 通过 storage 隐藏底栏（见 custom-tab-bar/updateHidden） */
   useEffect(() => {
-    const refreshHome = () => {
-      loadDashboard()
-    }
-    Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
-    return () => {
-      Taro.eventCenter.off(FOOD_EXPIRY_CHANGED_EVENT, refreshHome)
-    }
-  }, [loadDashboard])
-
-  /** 记运动落库后通知：仅在看「今天」时重拉 dashboard，与 exerciseBurnedKcal 对齐 */
-  useEffect(() => {
-    const onExerciseRefresh = (): void => {
-      const today = formatDateKey(new Date())
-      const currentSelected = selectedDateRef.current
-      if (currentSelected === today || !currentSelected) {
-        loadDashboard(today)
+    if (showDailyPosterModal) {
+      try {
+        Taro.setStorageSync('home_poster_modal_visible', '1')
+      } catch {
+        /* ignore */
+      }
+    } else {
+      try {
+        Taro.removeStorageSync('home_poster_modal_visible')
+      } catch {
+        /* ignore */
       }
     }
-    Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, onExerciseRefresh)
     return () => {
-      Taro.eventCenter.off(HOME_DASHBOARD_REFRESH_EVENT, onExerciseRefresh)
+      try {
+        Taro.removeStorageSync('home_poster_modal_visible')
+      } catch {
+        /* ignore */
+      }
     }
-  }, [loadDashboard])
+  }, [showDailyPosterModal])
+
+  /** 饮食/运动/保质期等变更：仅标记脏数据，回到首页或由 useDidShow 再拉，避免重复请求 */
+  useEffect(() => {
+    const markHomeStale = (): void => {
+      homeDataStaleRef.current = true
+    }
+    Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
+    Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
+    Taro.eventCenter.on(HOME_INTAKE_DATA_CHANGED_EVENT, markHomeStale)
+    return () => {
+      Taro.eventCenter.off(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
+      Taro.eventCenter.off(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
+      Taro.eventCenter.off(HOME_INTAKE_DATA_CHANGED_EVENT, markHomeStale)
+    }
+  }, [])
 
   // 监听记录菜单标记变化（解决首页直接点击绿色按钮无响应问题）
   useEffect(() => {
@@ -815,55 +1156,37 @@ function IndexPage() {
   }
 
   const handleSaveTargets = async () => {
-    let payload: DashboardTargets
-    
-    // 根据当前模式计算payload
-    if (targetMode === 'simple') {
-      // 普通模式：从档位计算实际克数
-      const protein = getGramsFromLevel('protein', simpleTarget.proteinLevel)
-      const carbs = getGramsFromLevel('carbs', simpleTarget.carbsLevel)
-      const fat = getGramsFromLevel('fat', simpleTarget.fatLevel)
-      const calories = calculateCaloriesFromLevels(simpleTarget)
-      
-      payload = {
-        calorie_target: calories,
-        protein_target: protein,
-        carbs_target: carbs,
-        fat_target: fat
-      }
-    } else {
-      // 精确模式：使用表单输入值
-      payload = {
-        calorie_target: Number(targetForm.calorieTarget),
-        protein_target: Number(targetForm.proteinTarget),
-        carbs_target: Number(targetForm.carbsTarget),
-        fat_target: Number(targetForm.fatTarget)
-      }
-      
-      if (Object.values(payload).some((value) => !Number.isFinite(value))) {
-        Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
-        return
-      }
+    // 「编辑今日目标」弹层仅支持数字表单（与 TargetEditor 一致）
+    let payload: DashboardTargets = {
+      calorie_target: Number(targetForm.calorieTarget),
+      protein_target: Number(targetForm.proteinTarget),
+      carbs_target: Number(targetForm.carbsTarget),
+      fat_target: Number(targetForm.fatTarget)
+    }
 
-      if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
-        Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
-        return
-      }
+    if (Object.values(payload).some((value) => !Number.isFinite(value))) {
+      Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
+      return
+    }
 
-      if (payload.protein_target < 0 || payload.protein_target > 500) {
-        Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
-        return
-      }
+    if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
+      Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
+      return
+    }
 
-      if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
-        Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
-        return
-      }
+    if (payload.protein_target < 0 || payload.protein_target > 500) {
+      Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
+      return
+    }
 
-      if (payload.fat_target < 0 || payload.fat_target > 300) {
-        Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
-        return
-      }
+    if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
+      Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
+      return
+    }
+
+    if (payload.fat_target < 0 || payload.fat_target > 300) {
+      Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
+      return
     }
 
     const normalized = alignPayloadWithCalorieTarget(payload)
@@ -924,23 +1247,94 @@ function IndexPage() {
     Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
   }, [selectedDate])
 
-  /** 今日餐食单条 → 该餐最新一条识别记录详情（生成分享海报）；缩略图点击仍为预览图片 */
+  /** 今日餐食单条 → 弹出记录操作菜单（多条同餐时先选记录） */
   const openMealRecordDetail = useCallback((meal: HomeMealItem) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
     }
-    const rid = resolveHomeMealPrimaryRecordId(meal)
-    if (!rid) {
-      const raw = selectedDateRef.current || formatDateKey(new Date())
-      const d = mapCalendarDateToApi(raw) || raw
-      Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+
+    const openActionSheet = (recordId: string) => {
+      setMealActionRecordId(recordId)
+      setMealActionSheetVisible(true)
+    }
+
+    const entries = Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()) : []
+    if (entries.length === 0) {
+      const rid = resolveHomeMealPrimaryRecordId(meal)
+      if (!rid) {
+        const raw = selectedDateRef.current || formatDateKey(new Date())
+        const d = mapCalendarDateToApi(raw) || raw
+        Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+        return
+      }
+      openActionSheet(rid)
       return
     }
-    Taro.navigateTo({
-      url: `/pages/record-detail/index?id=${encodeURIComponent(rid)}&ui=home`
+    if (entries.length === 1) {
+      openActionSheet(entries[0].id)
+      return
+    }
+    const slice = entries.slice(0, HOME_MEAL_ACTION_SHEET_MAX)
+    const itemList = slice.map((e) => formatHomeMealPickerEntry(e))
+    Taro.showActionSheet({
+      itemList,
+      alertText: meal.name || '选择记录',
+      success: (res) => {
+        const idx = res.tapIndex
+        if (idx < 0 || idx >= slice.length) return
+        const picked = slice[idx]
+        openActionSheet(picked.id)
+      },
+      fail: () => {}
     })
   }, [])
+
+  const handleMealEdit = async () => {
+    if (!mealActionRecordId) return
+    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
+    if (cachedRecord) {
+      setMealActionRecord(cachedRecord)
+      setShowRecordEditModal(true)
+      return
+    }
+    Taro.showLoading({ title: '加载中...', mask: true })
+    try {
+      const res = await getSharedFoodRecord(mealActionRecordId)
+      setMealActionRecord(res.record)
+      setShowRecordEditModal(true)
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
+  const handleMealPoster = async () => {
+    if (!mealActionRecordId) return
+    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
+    if (cachedRecord) {
+      setMealActionRecord(cachedRecord)
+      setShowRecordPosterModal(true)
+      return
+    }
+    Taro.showLoading({ title: '加载中...', mask: true })
+    try {
+      const res = await getSharedFoodRecord(mealActionRecordId)
+      setMealActionRecord(res.record)
+      setShowRecordPosterModal(true)
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
+  const handleRecordEditSuccess = () => {
+    setShowRecordEditModal(false)
+    const raw = selectedDateRef.current || formatDateKey(new Date())
+    syncDashboardForDate(raw)
+  }
 
   const openFoodExpiryList = () => {
     if (!getAccessToken()) {
@@ -963,27 +1357,103 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: '/pages/exercise-record/index' })
+    const date = selectedDateRef.current || formatDateKey(new Date())
+    Taro.navigateTo({ url: `/pages/exercise-record/index?date=${encodeURIComponent(date)}` })
   }
+
+  // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
+  const syncDashboardForDate = useCallback(async (date: string) => {
+    // 若同日期请求已在进行中，跳过本次调用
+    if (
+      syncDashboardPendingRef.current &&
+      syncDashboardPendingRef.current.date === date
+    ) {
+      return
+    }
+    const seq = ++syncDashboardSeqRef.current
+    syncDashboardPendingRef.current = { date, seq }
+    if (!getAccessToken()) {
+      syncDashboardPendingRef.current = null
+      return
+    }
+    try {
+      const [res, exerciseLogsRes] = await Promise.all([
+        getHomeDashboard(date),
+        getExerciseLogs({ date }).catch(() => null)
+      ])
+      if (seq !== syncDashboardSeqRef.current) return
+      const intake = res.intakeData
+      const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
+      const nextAchievement = res.achievement ?? { streak_days: 0, green_days: 0 }
+      setIntakeData(intake)
+      setMeals(res.meals || [])
+      setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(nextExerciseKcal)
+      setHomeAchievement(nextAchievement)
+      setTargetForm(createTargetForm(intake))
+      const normalizedDate = mapCalendarDateToApi(date) || date
+      saveHomeDashboardSnapshot({
+        date: normalizedDate,
+        updatedAt: Date.now(),
+        intakeData: intake,
+        meals: res.meals || [],
+        expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+        exerciseBurnedKcal: nextExerciseKcal,
+        achievement: nextAchievement
+      })
+      // 同步更新该日期在周热图中的颜色
+      setWeekHeatmapCells(prev => prev.map(cell => {
+        if (cell.date !== date) return cell
+        const calories = intake.current
+        const target = intake.target
+        const hasRecord = calories > 0
+        return {
+          ...cell,
+          calories,
+          target,
+          intakeRatio: hasRecord ? calories / target : 0,
+          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit'
+        }
+      }))
+      homeLastLoadRef.current = { date, ts: Date.now() }
+      homeDataStaleRef.current = false
+    } catch (err) {
+      // 静默失败，不打扰用户；本地缓存已保证基本可用性
+    } finally {
+      if (syncDashboardPendingRef.current?.seq === seq) {
+        syncDashboardPendingRef.current = null
+      }
+    }
+  }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
   const handleDateSelect = (date: string) => {
     console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
     setSelectedDate(date)
-    // 立即进入日期切换状态，显示加载中并归零数字
-    setIsSwitchingDate(true)
-    // 先清空当前数据，让数字归零
-    setIntakeData((prev) => ({
-      ...prev,
-      current: 0,
-      progress: 0,
-      macros: {
-        protein: { ...prev.macros.protein, current: 0 },
-        carbs: { ...prev.macros.carbs, current: 0 },
-        fat: { ...prev.macros.fat, current: 0 },
-      },
-    }))
-    loadDashboard(date)
+    // 1. 无条件从本地缓存读取并立刻渲染
+    const localSnapshot = getStoredHomeDashboardSnapshotByDate(date)
+    if (localSnapshot) {
+      console.log('[DEBUG] 命中本地缓存:', date)
+      setIntakeData(localSnapshot.intakeData)
+      setMeals(localSnapshot.meals || [])
+      setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
+      setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
+      setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
+    } else {
+      console.log('[DEBUG] 未命中本地缓存, 清空为默认态:', date)
+      setIntakeData(DEFAULT_INTAKE)
+      setMeals([])
+      setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(0)
+      setHomeAchievement({ streak_days: 0, green_days: 0 })
+      setTargetForm(createTargetForm(DEFAULT_INTAKE))
+    }
+    // 2. 结束 loading，确保用户立刻看到内容（或默认空态）
+    setLoading(false)
+    setIsSwitchingDate(false)
+    // 3. 后台异步同步该日数据
+    void syncDashboardForDate(date)
   }
 
   // 体重/喝水相关回调函数
@@ -1232,12 +1702,264 @@ function IndexPage() {
   const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
   const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey)
 
+  const handleShareDailyPosterImage = useCallback(() => {
+    if (!dailyPosterImageUrl) return
+    // @ts-ignore Taro 类型可能未收录 showShareImageMenu
+    Taro.showShareImageMenu({
+      path: dailyPosterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        console.error('showShareImageMenu fail', err)
+        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+      }
+    })
+  }, [dailyPosterImageUrl])
+
+  const handleSaveDailyPoster = useCallback(() => {
+    if (!dailyPosterImageUrl) return
+    Taro.saveImageToPhotosAlbum({
+      filePath: dailyPosterImageUrl,
+      success: () => {
+        Taro.showToast({ title: '已保存到相册', icon: 'success' })
+        setShowDailyPosterModal(false)
+      },
+      fail: (err) => {
+        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
+          Taro.showModal({
+            title: '提示',
+            content: '需要您授权保存图片到相册',
+            confirmText: '去设置',
+            success: (r) => {
+              if (r.confirm) Taro.openSetting()
+            }
+          })
+        } else {
+          Taro.showToast({ title: '保存失败', icon: 'none' })
+        }
+      }
+    })
+  }, [dailyPosterImageUrl])
+
+  const handleShareDailySummary = useCallback(() => {
+    if (!getAccessToken()) {
+      redirectToLogin()
+      return
+    }
+    if (loading || isSwitchingDate) {
+      Taro.showToast({ title: '数据加载中，请稍候', icon: 'none' })
+      return
+    }
+    if (dailyPosterGenerating) return
+
+    setDailyPosterGenerating(true)
+    Taro.showLoading({ title: '生成分享图...' })
+
+    const query = Taro.createSelectorQuery()
+    query
+      .select('#homeDailyPosterCanvas')
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        if (!res?.[0]?.node) {
+          Taro.hideLoading()
+          setDailyPosterGenerating(false)
+          Taro.showToast({ title: '画布未就绪，请重试', icon: 'none' })
+          return
+        }
+        const canvas = res[0].node as HTMLCanvasElement & {
+          createImage?: () => {
+            src: string
+            onload: () => void
+            onerror: (err?: unknown) => void
+            width: number
+            height: number
+          }
+        }
+        const dpr = 2
+
+        const loadImage = async (src: string): Promise<{ width: number; height: number } | null> => {
+          if (!src || !canvas.createImage) return null
+
+          let localSrc: string
+          try {
+            localSrc = await resolveCanvasImageSrc(src)
+          } catch (e) {
+            console.error('resolveCanvasImageSrc fail', src, e)
+            return null
+          }
+
+          return new Promise<{ width: number; height: number } | null>((resolve) => {
+            const img = canvas.createImage!()
+            img.onload = () => resolve(img)
+            img.onerror = (e) => {
+              console.error('Load image fail', localSrc, e)
+              resolve(null)
+            }
+            img.src = localSrc
+          })
+        }
+
+        const loadQRImage = async (inviteCode: string) => {
+          const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
+          const isDevelopmentEnv =
+            typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
+          const envCandidates: Array<'develop' | 'trial' | 'release'> = isDevelopmentEnv
+            ? ['develop', 'trial', 'release']
+            : ['release', 'trial', 'develop']
+
+          for (const envVersion of envCandidates) {
+            try {
+              const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
+              const img = await loadImage(base64)
+              if (img) return img
+            } catch (e) {
+              console.warn(`QR code load failed for env=${envVersion}`, e)
+            }
+          }
+          return null
+        }
+
+        const run = async (): Promise<void> => {
+          let inviteCode = ''
+          let sharerNickname = ''
+          let avatarUrl = ''
+          try {
+            const uid = Taro.getStorageSync('user_id') as string
+            if (uid) {
+              const profile = await getFriendInviteProfile(uid)
+              sharerNickname = profile.nickname || ''
+              avatarUrl = profile.avatar || ''
+              inviteCode = profile.invite_code || getInviteCodeFromUserId(uid)
+            }
+          } catch {
+            /* 无头像昵称仍可出图 */
+          }
+
+          const [qrImg, avatarImg] = await Promise.all([loadQRImage(inviteCode), loadImage(avatarUrl || '')])
+
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            Taro.hideLoading()
+            setDailyPosterGenerating(false)
+            Taro.showToast({ title: '画布不可用', icon: 'none' })
+            return
+          }
+
+          const totalCurrent = normalizeDisplayNumber(intakeData.current)
+          const totalTarget = normalizeDisplayNumber(intakeData.target)
+          const waterProg = clampVisualProgress(
+            calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
+          )
+
+          const posterData: DailySummaryPosterInput = {
+            dateLabelPrimary: formatPosterDatePrimary(selectedDate),
+            dateLabelSecondary: formatPosterWeekdayLabel(selectedDate),
+            posterDateKey: selectedDate,
+            intakeCurrent: totalCurrent,
+            intakeTarget: totalTarget,
+            streakDays: Math.max(0, Math.floor(homeAchievement.streak_days)),
+            greenDays: Math.max(0, Math.floor(homeAchievement.green_days)),
+            macros: {
+              protein: {
+                current: normalizeDisplayNumber(intakeData.macros.protein.current),
+                target: normalizeDisplayNumber(intakeData.macros.protein.target)
+              },
+              carbs: {
+                current: normalizeDisplayNumber(intakeData.macros.carbs.current),
+                target: normalizeDisplayNumber(intakeData.macros.carbs.target)
+              },
+              fat: {
+                current: normalizeDisplayNumber(intakeData.macros.fat.current),
+                target: normalizeDisplayNumber(intakeData.macros.fat.target)
+              }
+            },
+            waterProgressPct: waterProg,
+            waterCurrentMl: todayWater.total,
+            waterGoalMl: bodyMetrics.waterGoalMl,
+            exerciseKcal: Math.round(exerciseBurnedKcal)
+          }
+
+          const heightPx = computeDailySummaryPosterHeight(posterData)
+
+          canvas.width = POSTER_WIDTH * dpr
+          canvas.height = heightPx * dpr
+
+          // 预加载 iconfont，供 Canvas 绘制底部统计图标使用
+          try {
+            const fontLoader = (canvas as any).loadFontFace
+              ? (canvas as any).loadFontFace({
+                  family: 'iconfont',
+                  source: 'url("/assets/iconfont/iconfont.ttf")',
+                })
+              : Taro.loadFontFace({
+                  family: 'iconfont',
+                  source: 'url("/assets/iconfont/iconfont.ttf")',
+                  global: true,
+                })
+            await fontLoader
+            await new Promise((r) => setTimeout(r, 300))
+          } catch {
+            // ignore font load errors
+          }
+
+          // 字体加载后重新获取 context，确保 canvas 能使用新字体
+          const posterCtx = canvas.getContext('2d')
+          if (posterCtx) {
+            posterCtx.scale(dpr, dpr)
+          }
+
+          drawDailySummaryPoster(posterCtx || ctx, {
+            width: POSTER_WIDTH,
+            height: heightPx,
+            data: posterData,
+            qrCodeImage: qrImg,
+            sharerNickname,
+            sharerAvatarImage: avatarImg
+          })
+
+          Taro.canvasToTempFilePath({
+            canvas: canvas as any,
+            destWidth: POSTER_WIDTH * 2,
+            destHeight: heightPx * 2,
+            fileType: 'png',
+            success: (resp) => {
+              Taro.hideLoading()
+              setDailyPosterGenerating(false)
+              setDailyPosterImageUrl(resp.tempFilePath)
+              setShowDailyPosterModal(true)
+            },
+            fail: (err) => {
+              Taro.hideLoading()
+              setDailyPosterGenerating(false)
+              Taro.showToast({ title: '生成失败', icon: 'none' })
+              console.error('canvasToTempFilePath fail', err)
+            }
+          })
+        }
+
+        void run().catch((e) => {
+          Taro.hideLoading()
+          setDailyPosterGenerating(false)
+          Taro.showToast({ title: '生成失败', icon: 'none' })
+          console.error('daily summary poster', e)
+        })
+      })
+  }, [
+    loading,
+    isSwitchingDate,
+    dailyPosterGenerating,
+    intakeData,
+    selectedDate,
+    todayWater,
+    bodyMetrics.waterGoalMl,
+    exerciseBurnedKcal,
+    homeAchievement
+  ])
+
   return (
     <View className='home-page'>
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}
-        <GreetingSection />
+        <GreetingSection onSharePress={handleShareDailySummary} />
 
         {!getAccessToken() && (
           <View
@@ -1300,6 +2022,7 @@ function IndexPage() {
                 </View>
               )}
               <View className='target-edit-btn' onClick={openTargetEditor}>
+                <Text className='iconfont icon-target target-edit-icon' />
                 <Text className='target-edit-text'>编辑目标</Text>
               </View>
             </View>
@@ -1316,7 +2039,7 @@ function IndexPage() {
 
           {/* 三大营养素 - 合并到热量卡片内，左右布局 */}
           <View className='macros-section-horizontal'>
-            {MACRO_CONFIGS.map(({ key, label, color, unit, Icon }) => {
+            {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
               const macro = intakeData.macros[key]
               const targetValue = macro?.target || 0
               const currentRaw = normalizeDisplayNumber(macro?.current)
@@ -1346,47 +2069,32 @@ function IndexPage() {
                 <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
                   {/* 左侧：超标时顶部极简超出量；名称 + 目标总量 */}
                   <View className='macro-left-content'>
-                    {macroExcessG != null && macroExcessG > 0 && (
-                      <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}g</Text>
-                    )}
+                    <View className='macro-excess-slot'>
+                      {macroExcessG != null && macroExcessG > 0 && (
+                        <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}g</Text>
+                      )}
+                    </View>
                     <View className='macro-title-row'>
+                      <Text className={`iconfont ${iconClass}`} style={{ color, marginRight: '6rpx', fontSize: '26rpx' }} />
                       <Text className='macro-label-horizontal'>{label}</Text>
                     </View>
                     <View className='macro-value-row'>
-                      <Text className='macro-target-value'>
-                        {formatDisplayNumber(targetValue)}
+                      <Text className='macro-current-value-inline' style={{ color: intakeTextColor }}>
+                        {formatDisplayNumber(intakeAnimNum)}
                       </Text>
-                      <Text className='macro-target-unit'>g</Text>
+                      <Text className='macro-target-total'>
+                        / {formatDisplayNumber(targetValue)}g
+                      </Text>
                     </View>
-                  </View>
-
-                  {/* 右侧：仪表盘 */}
-                  <View className='macro-gauge-box-horizontal'>
-                    <View className='macro-gauge-horizontal'>
+                    {/* 进度条 */}
+                    <View className='macro-progress-bar-bg'>
                       <View
-                        className='macro-ring-bg-horizontal'
+                        className='macro-progress-bar-fill'
                         style={{
-                          backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><circle cx='60' cy='60' r='48' fill='none' stroke='#f0f0f0' stroke-width='14'/><circle cx='60' cy='60' r='48' fill='none' stroke='${ringStrokeColor}' stroke-width='14' stroke-linecap='round' stroke-dasharray='${2 * Math.PI * 48}' stroke-dashoffset='${2 * Math.PI * 48 * (1 - ringAnimPct / 100)}'/></svg>`
-                          )}")`,
-                          backgroundSize: '100% 100%'
+                          width: `${dashboardBusy ? 0 : Math.min(100, ringAnimPct)}%`,
+                          backgroundColor: ringStrokeColor
                         }}
                       />
-                      <View className='macro-gauge-center-horizontal'>
-                        {dashboardBusy ? (
-                          <View className='loading-dots-inline'>
-                            <View className='loading-dot' />
-                            <View className='loading-dot' />
-                            <View className='loading-dot' />
-                          </View>
-                        ) : (
-                          <View className='macro-gauge-text-wrap'>
-                            <Text className='macro-intake-value' style={{ color: intakeTextColor }}>
-                              {formatDisplayNumber(intakeAnimNum)}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
                     </View>
                   </View>
                 </View>
@@ -1401,6 +2109,7 @@ function IndexPage() {
           <View className='body-status-card weight-card' onClick={openWeightEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
+                <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
                 <Text className='body-status-title'>体重</Text>
               </View>
             </View>
@@ -1435,6 +2144,7 @@ function IndexPage() {
           <View className='body-status-card water-card' onClick={openWaterEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
+                <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
                 <Text className='body-status-title'>喝水</Text>
               </View>
             </View>
@@ -1451,23 +2161,16 @@ function IndexPage() {
                 </>
               )}
             </View>
-            <View className='body-status-progress-wrap'>
-              <View className='body-status-progress-bg'>
-                <View 
-                  className='body-status-progress-fill water'
-                  style={{ width: `${dashboardBusy ? 0 : clampVisualProgress(animatedWaterProgress)}%` }}
-                />
-              </View>
-              <Text className='body-status-progress-text'>
-                {dashboardBusy ? '-- 加载中' : `${Math.round(animatedWaterProgress)}% / ${bodyMetrics.waterGoalMl}ml`}
-              </Text>
-            </View>
+            <Text className='body-status-hint'>
+              {dashboardBusy ? '记录喝水，保持水分' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+            </Text>
           </View>
 
           {/* 运动卡片 */}
           <View className='body-status-card exercise-card' onClick={openExerciseRecord}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
+                <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
                 <Text className='body-status-title'>运动</Text>
               </View>
             </View>
@@ -1495,9 +2198,12 @@ function IndexPage() {
         {/* 今日餐食区域 */}
         <View className='meals-section'>
           <View className='section-header'>
-            <Text className='meals-title'>今日餐食</Text>
+            <View className='meals-title-wrap'>
+              <Text className='iconfont icon-canciguanli meals-title-icon' />
+              <Text className='meals-title'>今日餐食</Text>
+            </View>
             <View className='view-all-btn' onClick={handleViewAllMeals}>
-              <Text className='view-all-text'>查看全部</Text>
+              <Text className='iconfont icon-right-arrow view-all-arrow' />
             </View>
           </View>
           
@@ -1539,7 +2245,7 @@ function IndexPage() {
             ) : (
               meals.map((meal, index) => {
                 const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
-                const { Icon, color, bgColor, label } = config
+                const { Icon, color, bgColor, label, iconClass } = config
                 const isSnackMeal = SNACK_MEAL_TYPES.has(meal.type)
                 const mealCalorie = normalizeDisplayNumber(meal.calorie)
                 const mealTarget = normalizeDisplayNumber(meal.target)
@@ -1549,10 +2255,8 @@ function IndexPage() {
                   : (meal.image_path ? [meal.image_path] : [])
                 const previewImage = mealImageUrls[0] || ''
                 const hasRealImage = mealImageUrls.length > 0
-                const targetText = isSnackMeal
-                  ? `参考 ${formatDisplayNumber(mealTarget)} kcal`
-                  : `目标 ${formatDisplayNumber(mealTarget)} kcal`
-                
+
+
                 return (
                   <View
                     key={`${meal.type}-${index}`}
@@ -1584,47 +2288,57 @@ function IndexPage() {
                       )}
                     </View>
                     <View className='meal-content'>
-                      <View className='meal-main'>
-                        <View className='meal-header-block'>
-                          <View className='meal-title-left'>
-                            <Text className='meal-name'>{meal.name || label}</Text>
-                            {isSnackMeal && (
-                              <Text className='meal-snack-hint'>参考</Text>
-                            )}
+                      {/* 第一行：描述 + 时间胶囊 */}
+                      <View className='meal-header-block'>
+                        <Text className='meal-desc' numberOfLines={1}>
+                          {meal.description || meal.meal_record_entries?.map((e) => e.title).filter(Boolean).join('、') || meal.name || label}
+                        </Text>
+                        {meal.time ? (
+                          <View className='meal-time-pill'>
+                            <Text className='meal-time-pill-text'>{meal.time}</Text>
                           </View>
-                          <View className='meal-header-right'>
-                            <Text className='meal-calorie'>
-                              {formatDisplayNumber(mealCalorie)}
-                              <Text className='meal-calorie-unit'> kcal</Text>
-                            </Text>
-                            {meal.time ? (
-                              <Text className='meal-time-inline'>{meal.time}</Text>
-                            ) : null}
-                          </View>
-                        </View>
+                        ) : null}
                       </View>
-                      <View className='meal-progress-wrap'>
-                        <View className='meal-progress-bar-bg'>
-                          <View
-                            className={`meal-progress-bar-fill ${mealProgress > 100 ? 'is-warning' : ''}`}
-                            style={{
-                              width: `${clampVisualProgress(mealProgress)}%`,
-                              backgroundColor: mealProgress > 100 ? MEAL_PROGRESS_COLOR_WARNING : MEAL_PROGRESS_COLOR_NORMAL
-                            }}
+                      {/* 第二行：🔥 卡路里 + 餐次目标 */}
+                      <View className='meal-calorie-row'>
+                        <View className='meal-calorie-wrap'>
+                          <Text className='iconfont icon-huore' style={{ color: '#f0985c', fontSize: '24rpx', marginRight: '4rpx' }} />
+                          <Text className='meal-calorie'>
+                            {formatDisplayNumber(mealCalorie)}
+                            <Text className='meal-calorie-unit'> kcal</Text>
+                          </Text>
+                        </View>
+                        <View className='meal-calorie-extra'>
+                          <Text
+                            className={`iconfont ${iconClass} meal-type-icon-inline`}
+                            style={{ color }}
                           />
+                          <Text className='meal-type-target'>
+                            {label} {formatDisplayNumber(mealTarget)} kcal
+                          </Text>
                         </View>
                       </View>
-                      <View className='meal-progress-foot'>
-                        <Text className='meal-progress-text'>{targetText}</Text>
-                        <Text className={`meal-progress-percent ${mealProgress > 100 ? 'is-over' : ''}`}>{formatProgressText(mealProgress)}</Text>
+                      {/* 第三行：三大营养素 */}
+                      <View className='meal-macros-row'>
+                        {typeof meal.protein === 'number' && (
+                          <View className='meal-macro-pill'>
+                            <Text className='iconfont icon-danbaizhi' style={{ color: '#5c9ed4', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='meal-macro-text'>{formatDisplayNumber(meal.protein)}g</Text>
+                          </View>
+                        )}
+                        {typeof meal.carbs === 'number' && (
+                          <View className='meal-macro-pill'>
+                            <Text className='iconfont icon-tanshui-dabiao' style={{ color: '#dcac52', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='meal-macro-text'>{formatDisplayNumber(meal.carbs)}g</Text>
+                          </View>
+                        )}
+                        {typeof meal.fat === 'number' && (
+                          <View className='meal-macro-pill'>
+                            <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin' style={{ color: '#f0985c', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='meal-macro-text'>{formatDisplayNumber(meal.fat)}g</Text>
+                          </View>
+                        )}
                       </View>
-                      {meal.tags?.length > 0 && (
-                        <View className='meal-tags'>
-                          {meal.tags.map((tag) => (
-                            <Text key={tag} className='meal-tag'>{tag}</Text>
-                          ))}
-                        </View>
-                      )}
                     </View>
                   </View>
                 )
@@ -1637,9 +2351,12 @@ function IndexPage() {
         {showFoodExpiryBlock && (
           <View className='expiry-section'>
             <View className='section-header'>
-              <Text className='expiry-title'>食物保质期</Text>
+              <View className='meals-title-wrap'>
+                <Text className='iconfont icon-kefulan meals-title-icon' />
+                <Text className='meals-title expiry-title'>食物保质期</Text>
+              </View>
               <View className='view-all-btn' onClick={openFoodExpiryList}>
-                <Text className='view-all-text'>查看全部</Text>
+                <Text className='iconfont icon-right-arrow view-all-arrow' />
               </View>
             </View>
 
@@ -1648,11 +2365,16 @@ function IndexPage() {
                 <View className='expiry-skeleton'>
                   {[1, 2, 3].map((i) => (
                     <View key={i} className='expiry-skeleton-item'>
-                      <View className='expiry-skeleton-row'>
-                        <View className='home-line-wide' />
-                        <View className='home-line-tag' />
+                      <View className='expiry-skeleton-thumb' />
+                      <View className='expiry-skeleton-body'>
+                        <View className='expiry-skeleton-top'>
+                          <View className='home-line-title' />
+                          <View className='home-line-tag' />
+                        </View>
+                        <View className='expiry-skeleton-mid'>
+                          <View className='home-line-foot-l' />
+                        </View>
                       </View>
-                      <View className='home-line-narrow' />
                     </View>
                   ))}
                 </View>
@@ -1666,23 +2388,45 @@ function IndexPage() {
               ) : (
                 <>
                   <View className='expiry-list'>
-                    {expirySummary.items.map((item) => (
-                      <View
-                        key={item.id}
-                        className='expiry-item'
-                        onClick={() => openFoodExpiryEdit(item.id)}
-                      >
-                        <View className='expiry-item-main'>
-                          <Text className='expiry-item-name'>{item.food_name}</Text>
-                          <Text className={`expiry-item-tag ${getExpiryTagClass(item.urgency_level)}`}>
-                            {getExpiryUrgencyText(item)}
-                          </Text>
+                    {expirySummary.items.map((item) => {
+                      const isUrgent = item.urgency_level === 'overdue' || item.urgency_level === 'today'
+                      const iconClass = isUrgent ? 'icon-guoqi1' : 'icon-kefulan'
+                      const iconColor =
+                        item.urgency_level === 'overdue' ? '#dc2626'
+                        : item.urgency_level === 'today' ? '#ea580c'
+                        : item.urgency_level === 'soon' ? '#d97706'
+                        : '#6b7280'
+                      const bgColor =
+                        item.urgency_level === 'overdue' ? '#fee2e2'
+                        : item.urgency_level === 'today' ? '#ffedd5'
+                        : item.urgency_level === 'soon' ? '#fef3c7'
+                        : '#f3f4f6'
+
+                      return (
+                        <View
+                          key={item.id}
+                          className='expiry-item'
+                          onClick={() => openFoodExpiryEdit(item.id)}
+                        >
+                          <View className='expiry-media-wrap'>
+                            <View className='expiry-icon-wrap' style={{ backgroundColor: bgColor }}>
+                              <Text className={`iconfont ${iconClass}`} style={{ color: iconColor, fontSize: '52rpx' }} />
+                            </View>
+                          </View>
+                          <View className='expiry-content'>
+                            <View className='expiry-header-block'>
+                              <Text className='expiry-name' numberOfLines={1}>{item.food_name}</Text>
+                              <View className='expiry-time-pill'>
+                                <Text className='expiry-time-pill-text'>{getExpiryUrgencyText(item)}</Text>
+                              </View>
+                            </View>
+                            <View className='expiry-meta-row'>
+                              <Text className='expiry-meta-text'>{formatExpiryMeta(item) || '点击编辑'}</Text>
+                            </View>
+                          </View>
                         </View>
-                        <Text className='expiry-item-meta'>
-                          {formatExpiryMeta(item) || '点击编辑'}
-                        </Text>
-                      </View>
-                    ))}
+                      )
+                    })}
                   </View>
                 </>
               )}
@@ -1800,7 +2544,7 @@ function IndexPage() {
                   className='water-quick-btn'
                   onClick={() => addWaterAmount(amount)}
                 >
-                  <IconWaterDrop size={16} color='#3b82f6' />
+                  <IconWaterDrop size={16} color='#5c9ed4' />
                   <Text className='water-quick-btn-text'>+{amount}ml</Text>
                 </View>
               ))}
@@ -1854,6 +2598,80 @@ function IndexPage() {
 
       {/* 记录菜单弹窗 */}
       <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} />
+
+      <View className='poster-canvas-wrap'>
+        <Canvas
+          type='2d'
+          id='homeDailyPosterCanvas'
+          className='poster-canvas'
+          style={{ width: `${POSTER_WIDTH}px`, height: `${DAILY_SUMMARY_POSTER_MAX_HEIGHT}px` }}
+        />
+      </View>
+
+      {showDailyPosterModal && dailyPosterImageUrl && (
+        <View className='poster-modal poster-modal--sheet' catchMove>
+          <View className='poster-modal-shell' catchMove>
+            <View className='poster-modal-topbar poster-modal-topbar--light poster-modal-topbar--title-only'>
+              <Text className='poster-modal-title poster-modal-title--light'>分享今日卡片</Text>
+            </View>
+            <View className='poster-modal-dark-body'>
+              <View
+                className='poster-modal-inline-back'
+                onClick={() => setShowDailyPosterModal(false)}
+              >
+                {/* 与记录详情海报弹层相同的 × 关闭（poster-modal-close-x） */}
+                <View className='poster-modal-close poster-modal-inline-close-hit'>
+                  <Text className='poster-modal-close-x'>×</Text>
+                </View>
+              </View>
+              <View className='poster-scroll-area'>
+                <View className='poster-modal-scroll-inner'>
+                  <View className='poster-modal-card-wrap'>
+                    <Image src={dailyPosterImageUrl} mode='widthFix' className='poster-modal-image' />
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View className='poster-modal-bottom-bar'>
+              <View className='poster-share-channel' onClick={handleShareDailyPosterImage}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
+                  <Text className='iconfont icon-wechat poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>微信</Text>
+              </View>
+              <View className='poster-share-channel' onClick={handleSaveDailyPoster}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-save'>
+                  <Text className='iconfont icon-download poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>保存图片</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 餐食卡片操作菜单 */}
+      <MealActionSheet
+        visible={mealActionSheetVisible}
+        onClose={() => setMealActionSheetVisible(false)}
+        onEdit={handleMealEdit}
+        onPoster={handleMealPoster}
+      />
+
+      {/* 餐食记录编辑弹窗 */}
+      <MealRecordEditModal
+        visible={showRecordEditModal}
+        record={mealActionRecord}
+        onClose={() => setShowRecordEditModal(false)}
+        onSuccess={handleRecordEditSuccess}
+      />
+
+      {/* 餐食记录海报弹窗 */}
+      <MealRecordPosterModal
+        visible={showRecordPosterModal}
+        record={mealActionRecord}
+        onClose={() => setShowRecordPosterModal(false)}
+      />
     </View>
   )
 }

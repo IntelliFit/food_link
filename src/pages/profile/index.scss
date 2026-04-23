@@ -169,40 +169,35 @@
     }
   }
 
-  // 免费会员 - 清新活力绿色
+  // 免费会员 - 对齐首页低饱和度绿色
   &.member-card--free {
-    background: linear-gradient(145deg, #10b981 0%, #00bc7d 30%, #00a86b 70%, #059669 100%);
+    background: linear-gradient(145deg, #5cb896 0%, #7bc4a8 30%, #5cb896 70%, #4a9e7d 100%);
     box-shadow: 
-      0 12rpx 40rpx rgb(0 188 125 / 28%),
+      0 12rpx 40rpx rgb(92 184 150 / 28%),
       inset 0 1rpx 0 rgba(255,255,255,0.15);
     border: 1rpx solid rgba(255,255,255,0.1);
 
     .card-title {
-      color: #fff;
+      color: #ffffff;
       font-weight: 700;
       letter-spacing: 1rpx;
-      text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+      text-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.2);
     }
 
     .card-validity {
-      color: rgba(255, 255, 255, 0.75);
+      color: rgba(255, 255, 255, 0.9);
       font-size: 22rpx;
       font-weight: 400;
+      text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.12);
     }
 
-    .progress-text {
-      color: rgba(255, 255, 255, 0.9);
-      display: block;
-      margin-bottom: 12rpx;
-      font-size: 24rpx;
-      font-weight: 500;
-      text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+    .points-balance {
+      color: #ffffff;
+      text-shadow: 0 3rpx 10rpx rgba(0, 0, 0, 0.22);
     }
 
-    .card-tip {
-      color: rgba(255, 255, 255, 0.8);
-      font-size: 22rpx;
-      text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+    .points-balance-unit {
+      color: rgba(255, 255, 255, 0.88);
     }
 
     .progress-bar {
@@ -229,7 +224,7 @@
     }
 
     .card-upgrade-text {
-      color: #00a86b;
+      color: #5cb896;
       font-weight: 600;
     }
   }
@@ -239,7 +234,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 36rpx;
+  margin-bottom: 18rpx;
   position: relative;
   z-index: 1;
 
@@ -296,6 +291,30 @@
   position: relative;
   z-index: 1;
 
+  .points-balance-skeleton {
+    width: 180rpx;
+    height: 64rpx;
+    border-radius: 12rpx;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.25) 0%,
+      rgba(255, 255, 255, 0.45) 50%,
+      rgba(255, 255, 255, 0.25) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.6s infinite linear;
+    margin-top: 4rpx;
+  }
+
+  @keyframes skeleton-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
   .progress-info {
     margin-bottom: 20rpx;
   }
@@ -303,6 +322,25 @@
   .progress-text {
     margin-bottom: 10rpx;
     display: block;
+  }
+
+  .points-balance {
+    font-size: 64rpx;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1.1;
+    text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.18);
+    letter-spacing: -1rpx;
+    display: block;
+  }
+
+  .points-balance-unit {
+    font-size: 24rpx;
+    color: rgba(255, 255, 255, 0.82);
+    font-weight: 500;
+    margin-top: 8rpx;
+    display: block;
+    text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.08);
   }
 
   .progress-bar {
@@ -461,7 +499,7 @@
 .login-text {
   font-size: 30rpx;
   font-weight: 500;
-  color: #00bc7d;
+  color: #5cb896;
 }
 
 .logout-text {

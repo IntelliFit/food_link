@@ -1,6 +1,6 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../utils/withAuth'
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { listAnalyzeTasks, deleteAnalysisTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../utils/api'
 import './index.scss'
@@ -52,9 +52,39 @@ const getTotalCalories = (task: AnalysisTask): number => {
 }
 
 const pickSourceTaskType = (task: AnalysisTask): 'food' | 'food_text' => {
-  if (task.task_type === 'food_text') return 'food_text'
+  const tt = task.task_type || ''
+  if (tt === 'food_text' || tt.startsWith('food_text')) return 'food_text'
   const payload = task.payload as Record<string, unknown> | undefined
   return payload?.source_type === 'text' ? 'food_text' : 'food'
+}
+
+/** 识别历史页展示的任务类型（与后端 analysis_tasks.task_type 一致，含 debug 队列后缀） */
+function isAnalyzeHistoryTaskType(taskType: string | undefined): boolean {
+  if (!taskType) return false
+  if (taskType === 'exercise' || taskType.startsWith('exercise')) return false
+  if (taskType === 'health_report') return false
+  if (taskType === 'public_food_library_text') return false
+  if (taskType === 'food' || taskType.startsWith('food_')) return true
+  if (taskType === 'food_text' || taskType.startsWith('food_text')) return true
+  if (taskType.startsWith('precision_')) return true
+  return false
+}
+
+/** 避免真机上某次 request 长时间不返回导致 Promise.all 永不结束、loading 卡死 */
+function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: () => T): Promise<T> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(onTimeout()), ms)
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      () => {
+        clearTimeout(t)
+        resolve(onTimeout())
+      }
+    )
+  })
 }
 
 function formatTime(iso: string): { text: string; isToday: boolean } {
@@ -255,35 +285,33 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
 function AnalyzeHistoryPage() {
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
+  const loadSeqRef = useRef(0)
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current
     setLoading(true)
     try {
-      // 获取图片分析和文字分析任务
-      const [foodRes, textRes, precisionPlanRes, precisionAggregateRes] = await Promise.all([
-        listAnalyzeTasks({ task_type: 'food' }).catch(() => ({ tasks: [] })),
-        listAnalyzeTasks({ task_type: 'food_text' }).catch(() => ({ tasks: [] })),
-        listAnalyzeTasks({ task_type: 'precision_plan' }).catch(() => ({ tasks: [] })),
-        listAnalyzeTasks({ task_type: 'precision_aggregate' }).catch(() => ({ tasks: [] })),
-      ])
-      const allTasks = [
-        ...(foodRes.tasks || []),
-        ...(textRes.tasks || []),
-        ...(precisionPlanRes.tasks || []),
-        ...(precisionAggregateRes.tasks || []),
-      ]
-      // 按创建时间倒序排列
+      // 单次拉取再前端筛选：避免 Promise.all 四路并行时一路挂起导致整页永远 loading（真机偶发）
+      const res = await withTimeout(
+        listAnalyzeTasks({ limit: 120 }).catch(() => ({ tasks: [] as AnalysisTask[] })),
+        22000,
+        () => ({ tasks: [] as AnalysisTask[] })
+      )
+      const allTasks = (res.tasks || []).filter((t) => isAnalyzeHistoryTaskType(t.task_type))
       allTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      if (seq !== loadSeqRef.current) return
       setTasks(allTasks)
     } catch (e: any) {
+      if (seq !== loadSeqRef.current) return
+      console.error('[analyze-history] load failed', e)
       Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current) setLoading(false)
     }
-  }
+  }, [])
 
   useDidShow(() => {
-    load()
+    void load()
   })
 
   const handleDelete = async (taskId: string) => {
@@ -370,8 +398,9 @@ function AnalyzeHistoryPage() {
     }
     if (task.status === 'pending' || task.status === 'processing') {
       const mode = pickExecutionMode(task)
-      const isTextTask = task.task_type === 'food_text'
-      const isExercise = task.task_type === 'exercise'
+      const tt = task.task_type || ''
+      const isTextTask = tt === 'food_text' || tt.startsWith('food_text')
+      const isExercise = tt === 'exercise' || tt.startsWith('exercise')
       // 与 analyze-loading 一致：图片任务回填预览图；文字任务清图避免沿用旧照片
       if (!isTextTask && !isExercise) {
         if (task.image_paths && task.image_paths.length > 0) {

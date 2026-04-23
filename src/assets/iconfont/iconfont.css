@@ -1,9 +1,9 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5122763 */
-  src: url('iconfont.woff2?t=1775763423677') format('woff2'),
-       url('iconfont.woff?t=1775763423677') format('woff'),
-       url('iconfont.ttf?t=1775763423677') format('truetype'),
-       url('iconfont.svg?t=1775763423677#iconfont') format('svg');
+  src: url('iconfont.woff2?t=1776278410417') format('woff2'),
+       url('iconfont.woff?t=1776278410417') format('woff'),
+       url('iconfont.ttf?t=1776278410417') format('truetype'),
+       url('iconfont.svg?t=1776278410417#iconfont') format('svg');
 }
 
 .iconfont {
@@ -12,6 +12,90 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-kcal:before {
+  content: "\e831";
+}
+
+.icon-zhongwu:before {
+  content: "\e82f";
+}
+
+.icon-zaoshang:before {
+  content: "\e718";
+}
+
+.icon-wanshang:before {
+  content: "\e607";
+}
+
+.icon-user:before {
+  content: "\e7ae";
+}
+
+.icon-weibiaoti1:before {
+  content: "\e625";
+}
+
+.icon-quanzi:before {
+  content: "\ee17";
+}
+
+.icon-shouye:before {
+  content: "\e606";
+}
+
+.icon-edit:before {
+  content: "\e7e1";
+}
+
+.icon-target:before {
+  content: "\e852";
+}
+
+.icon-all:before {
+  content: "\e755";
+}
+
+.icon-right-arrow:before {
+  content: "\e62f";
+}
+
+.icon-kefulan:before {
+  content: "\e62e";
+}
+
+.icon-guoqi1:before {
+  content: "\e605";
+}
+
+.icon-dumbbell:before {
+  content: "\e70d";
+}
+
+.icon-drink:before {
+  content: "\e645";
+}
+
+.icon-meat:before {
+  content: "\e99a";
+}
+
+.icon-egg:before {
+  content: "\e603";
+}
+
+.icon-rice:before {
+  content: "\e62d";
+}
+
+.icon-weight-scale:before {
+  content: "\eb6a";
+}
+
+.icon-share:before {
+  content: "\e86e";
 }
 
 .icon-download:before {
@@ -122,20 +206,8 @@
   content: "\e71f";
 }
 
-.icon-wanshang-qing:before {
-  content: "\e670";
-}
-
-.icon-zaoshang:before {
-  content: "\e65d";
-}
-
 .icon-zaocan:before {
   content: "\e617";
-}
-
-.icon-zaoshang1:before {
-  content: "\e64c";
 }
 
 .icon-zaocan1:before {

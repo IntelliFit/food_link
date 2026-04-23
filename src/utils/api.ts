@@ -257,6 +257,17 @@ export interface HomeIntakeData {
   }
 }
 
+/** 首页同一餐次下的单条饮食记录摘要（用于多选跳转） */
+export interface HomeMealRecordEntry {
+  id: string
+  record_time?: string
+  total_calories?: number
+  /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
+  title?: string
+  /** 完整记录数据，用于首页直接编辑而无需二次请求 */
+  full_record?: FoodRecord
+}
+
 /** 首页今日餐食单条 */
 export interface HomeMealItem {
   type: string
@@ -272,6 +283,14 @@ export interface HomeMealItem {
   primary_record_id?: string | null
   /** 部分网关/序列化可能为 camelCase，与 primary_record_id 等价 */
   primaryRecordId?: string | null
+  /** 该餐次下全部记录（新→旧，与 primary 一致）；多条时首页需供用户选择 */
+  meal_record_entries?: HomeMealRecordEntry[] | null
+  /** 该餐次宏量营养素聚合（g） */
+  protein?: number
+  carbs?: number
+  fat?: number
+  /** 该餐次食物描述（由多条记录标题拼接） */
+  description?: string
 }
 
 /** 解析首页餐食卡片对应的记录 id（兼容 snake_case / camelCase） */
@@ -288,8 +307,12 @@ export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<strin
 
 function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const row = raw as HomeMealItem
+  const entries = Array.isArray(row.meal_record_entries)
+    ? row.meal_record_entries.filter((e) => e && String(e.id || '').trim() !== '')
+    : []
   return {
     ...row,
+    meal_record_entries: entries.length > 0 ? entries : row.meal_record_entries,
     primary_record_id: resolveHomeMealPrimaryRecordId(row as Record<string, unknown>),
   }
 }
@@ -320,6 +343,12 @@ export interface HomeFoodExpirySummary {
   items: HomeFoodExpiryItem[]
 }
 
+/** 首页成就：连续打卡与历史「全绿」达标天数（与仪表盘目标一致） */
+export interface HomeAchievement {
+  streak_days: number
+  green_days: number
+}
+
 /** 首页仪表盘接口返回 */
 export interface HomeDashboard {
   intakeData: HomeIntakeData
@@ -327,6 +356,7 @@ export interface HomeDashboard {
   expirySummary?: HomeFoodExpirySummary
   /** 当日运动消耗汇总（千卡），来自 user_exercise_logs */
   exerciseBurnedKcal?: number
+  achievement?: HomeAchievement
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -482,6 +512,8 @@ export interface LoginRequest {
 export interface LoginRequestParams {
   code: string
   phoneCode?: string
+  /** 注册时填写邀请人码，双方各得积分（后端校验） */
+  inviteCode?: string
 }
 
 // 登录响应接口
@@ -644,6 +676,20 @@ export interface CreateMembershipPaymentResponse {
   order_no: string
   plan_code: string
   amount: number
+  pay_params: {
+    timeStamp: string
+    nonceStr: string
+    package: string
+    signType: 'RSA'
+    paySign: string
+  }
+}
+
+/** 积分充值下单（微信支付 JSAPI），回调到账后增加积分 */
+export interface CreatePointsRechargeResponse {
+  order_no: string
+  amount_yuan: number
+  points_to_add: number
   pay_params: {
     timeStamp: string
     nonceStr: string
@@ -1204,7 +1250,12 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
  * 拍照识别完成后确认记录：选择餐次后保存到服务器
  * @param payload 餐次 + 识别结果与营养汇总
  */
-export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ id: string; message: string }> {
+export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{
+  id: string
+  message: string
+  /** 与 source_task_id 对应的记录已存在，未重复写入（好友动态不重复） */
+  already_saved?: boolean
+}> {
   const res = await authenticatedRequest('/api/food-record/save', {
     method: 'POST',
     data: payload,
@@ -1214,7 +1265,11 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ 
     const msg = (res.data as any)?.detail || '保存记录失败'
     throw new Error(msg)
   }
-  return res.data as { id: string; message: string }
+  return res.data as {
+    id: string
+    message: string
+    already_saved?: boolean
+  }
 }
 
 // ---------- 异步分析任务（提交后 Worker 执行，可稍后在分析历史查看） ----------
@@ -1394,12 +1449,13 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
 }
 
 /** 查询当前用户的分析任务列表 */
-export async function listAnalyzeTasks(params?: { task_type?: string; status?: string }): Promise<{ tasks: AnalysisTask[] }> {
+export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
   const q = new URLSearchParams()
   if (params?.task_type) q.set('task_type', params.task_type)
   if (params?.status) q.set('status', params.status)
+  if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
   const url = `/api/analyze/tasks${q.toString() ? '?' + q.toString() : ''}`
-  const res = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  const res = await authenticatedRequest(url, { method: 'GET', timeout: 20000 })
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取任务列表失败'
     throw new Error(msg)
@@ -1480,6 +1536,53 @@ export async function getFoodRecordList(date?: string): Promise<{ records: FoodR
   return res.data as { records: FoodRecord[] }
 }
 
+/** 分享海报「较昨同餐」对比（服务端按中国自然日计算；仅本人；403 不触发重登） */
+export interface PosterCalorieCompareResponse {
+  has_baseline: boolean
+  baseline_kcal: number
+  delta_kcal: number
+  current_kcal: number
+  /** 当前餐次在仪表盘目标下的计划热量（与首页三餐分配/加餐参考一致） */
+  meal_plan_kcal: number
+}
+
+export async function getPosterCalorieCompare(recordId: string): Promise<PosterCalorieCompareResponse | null> {
+  const token = getAccessToken()
+  if (!token) return null
+  const res = await Taro.request({
+    url: `${API_BASE_URL}/api/food-record/${encodeURIComponent(recordId)}/poster-calorie-compare`,
+    method: 'GET',
+    header: withNgrokBypassHeaders({
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    }),
+    timeout: 10000,
+  })
+  if (res.statusCode === 200) return res.data as PosterCalorieCompareResponse
+  return null
+}
+
+/** 餐次记录完整数据缓存（由 getHomeDashboard 填充，供首页直接编辑使用） */
+const mealFullRecordCache: Record<string, FoodRecord> = {}
+
+export function getCachedMealFullRecord(recordId: string): FoodRecord | undefined {
+  return mealFullRecordCache[recordId]
+}
+
+function stripMealFullRecordsFromDashboard(data: HomeDashboard): HomeDashboard {
+  const meals = (data.meals || []).map((meal) => {
+    const entries = (meal.meal_record_entries || []).map((entry) => {
+      if ((entry as any).full_record) {
+        mealFullRecordCache[entry.id] = (entry as any).full_record as FoodRecord
+      }
+      const { full_record, ...rest } = entry as any
+      return rest
+    })
+    return { ...meal, meal_record_entries: entries.length > 0 ? entries : meal.meal_record_entries }
+  })
+  return { ...data, meals }
+}
+
 /**
  * 获取单条饮食记录详情（通过 ID，从数据库获取最新数据）
  */
@@ -1504,6 +1607,8 @@ export interface UpdateFoodRecordRequest {
   total_carbs?: number
   total_fat?: number
   total_weight_grams?: number
+  diet_goal?: DietGoal
+  activity_timing?: ActivityTiming
 }
 
 /**
@@ -1620,7 +1725,7 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   }
   const data = res.data as HomeDashboard
   const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
-  return { ...data, meals }
+  return stripMealFullRecordsFromDashboard({ ...data, meals })
 }
 
 /**
@@ -1703,7 +1808,7 @@ export async function updateDashboardTargets(data: DashboardTargets): Promise<Da
 export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSummary> {
   const res = await authenticatedRequest(
     `/api/stats/summary?range=${encodeURIComponent(range)}`,
-    { method: 'GET', timeout: 10000 }
+    { method: 'GET', timeout: 30000 }
   )
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取统计失败'
@@ -1715,7 +1820,7 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
 export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
   const res = await authenticatedRequest(
     `/api/body-metrics/summary?range=${encodeURIComponent(range)}`,
-    { method: 'GET', timeout: 10000 }
+    { method: 'GET', timeout: 30000 }
   )
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取身体指标失败'
@@ -1955,7 +2060,7 @@ export async function authenticatedRequest(
  * @param phoneCode 获取手机号的 code（可选）
  * @returns Promise<LoginResponse> 登录结果
  */
-export async function login(code: string, phoneCode?: string): Promise<LoginResponse> {
+export async function login(code: string, phoneCode?: string, inviteCode?: string): Promise<LoginResponse> {
   try {
     const requestData: LoginRequestParams = {
       code: code
@@ -1963,6 +2068,9 @@ export async function login(code: string, phoneCode?: string): Promise<LoginResp
 
     if (phoneCode) {
       requestData.phoneCode = phoneCode
+    }
+    if (inviteCode?.trim()) {
+      requestData.inviteCode = inviteCode.trim()
     }
 
     const response = await Taro.request({
@@ -2062,7 +2170,8 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
 export async function getMyMembership(): Promise<MembershipStatus> {
   try {
     const response = await authenticatedRequest('/api/membership/me', {
-      method: 'GET'
+      method: 'GET',
+      timeout: 15000
     })
 
     if (response.statusCode !== 200) {
@@ -2188,9 +2297,6 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
   }
 }
 
-// ============================================================
-// TODO: [TEST] 以下测试函数在正式上线前必须删除
-// ============================================================
 /**
  * [TEST ONLY] 切换当前登录账号会员状态（active ⇌ expired）
  * TODO: [TEST] 正式上线前删除此函数。
@@ -2229,8 +2335,6 @@ export async function toggleTestMembership(planCode?: string): Promise<{
     throw new Error(error.message || '切换失败')
   }
 }
-// TODO: [TEST] 测试函数结束
-// ============================================================
 
 /**
  * 更新用户信息
@@ -2945,6 +3049,19 @@ export async function communityPostComment(
   return response.data as { comment: FeedCommentItem }
 }
 
+/** 删除圈子评论（本人或动态作者；子回复一并删除） */
+export async function communityDeleteComment(
+  recordId: string,
+  commentId: string
+): Promise<{ deleted: number }> {
+  const response = await authenticatedRequest(
+    `/api/community/feed/${encodeURIComponent(recordId)}/comments/${encodeURIComponent(commentId)}`,
+    { method: 'DELETE' }
+  )
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
+  return response.data as { deleted: number }
+}
+
 /** 获取我最近的圈子评论审核任务 */
 export async function communityGetCommentTasks(limit: number = 50): Promise<{ list: CommunityCommentTask[] }> {
   const response = await authenticatedRequest(`/api/community/comment-tasks?limit=${limit}`, { method: 'GET' })
@@ -3362,6 +3479,8 @@ export async function getExerciseLogs(params?: { date?: string; start_date?: str
   if (params?.date) queryParams.set('date', mapCalendarDateToApi(params.date) ?? params.date)
   if (params?.start_date) queryParams.set('start_date', params.start_date)
   if (params?.end_date) queryParams.set('end_date', params.end_date)
+  // 禁用微信小程序 GET 请求缓存
+  queryParams.set('_t', String(Date.now()))
 
   const url = `/api/exercise-logs${queryParams.toString() ? '?' + queryParams.toString() : ''}`
   const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })

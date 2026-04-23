@@ -1200,6 +1200,21 @@ transitiontransition
     box-shadow: 0 8rpx 20rpx rgb(245 158 11 / 22%);
   }
 
+  /** 已写入饮食记录：仅查看详情，不重复保存/发动态 */
+  &.is-committed {
+    background: #ecfdf5;
+    border: 2rpx solid #00bc7d;
+    box-shadow: none;
+
+    &:active {
+      background: #d1fae5;
+    }
+
+    .btn-text {
+      color: #059669;
+    }
+  }
+
   .btn-text {
     font-size: 32rpx;
     font-weight: 600;

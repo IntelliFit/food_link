@@ -8,14 +8,16 @@ import {
   getFriendInviteProfile,
   acceptFriendInvite,
   updateFoodRecord,
-  getFoodRecordList,
+  getPosterCalorieCompare,
   getMyMembership,
   type FoodRecord,
   type Nutrients
 } from '../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../utils/poster'
+import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
 import { withAuth } from '../../utils/withAuth'
+import CustomNavBar, { getNavBarHeight } from '../../components/CustomNavBar'
 
 import './index.scss'
 
@@ -109,20 +111,28 @@ function getInviteCodeFromUserId(userId: string): string {
 }
 
 type PosterCalorieCompare = {
+  mealPlanKcal: number
+  hasBaseline: boolean
   deltaKcal: number
   baselineKcal: number
 }
 
-function toDateKey(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function normalizeMealType(mealType?: string): string {
-  if (!mealType) return ''
-  return mealType === 'snack' ? 'afternoon_snack' : mealType
+/** 拉取海报胶囊数据：计划热量 + 可选「较昨」；无昨日同餐时仍返回计划用于右侧三点 */
+async function fetchPosterCalorieCompareForRecord(record: FoodRecord): Promise<PosterCalorieCompare | null> {
+  if (!getAccessToken() || !record.id) return null
+  try {
+    const data = await getPosterCalorieCompare(record.id)
+    if (!data) return null
+    return {
+      mealPlanKcal: Number.isFinite(data.meal_plan_kcal) ? data.meal_plan_kcal : 0,
+      hasBaseline: !!data.has_baseline,
+      deltaKcal: Number.isFinite(data.delta_kcal) ? data.delta_kcal : 0,
+      baselineKcal: Number.isFinite(data.baseline_kcal) ? data.baseline_kcal : 0,
+    }
+  } catch (error) {
+    console.warn('[poster] poster-calorie-compare failed', error)
+    return null
+  }
 }
 
 function RecordDetailPage() {
@@ -141,42 +151,6 @@ function RecordDetailPage() {
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
   const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
   const [inviteLoading, setInviteLoading] = React.useState(false)
-  const [posterCalorieCompare, setPosterCalorieCompare] = React.useState<PosterCalorieCompare | null>(null)
-
-  const loadPosterCalorieCompare = useCallback(async (currentRecord: FoodRecord) => {
-    if (!getAccessToken()) {
-      setPosterCalorieCompare(null)
-      return
-    }
-    try {
-      const recordDate = new Date(currentRecord.record_time)
-      if (Number.isNaN(recordDate.getTime())) {
-        setPosterCalorieCompare(null)
-        return
-      }
-      const yesterday = new Date(recordDate)
-      yesterday.setDate(recordDate.getDate() - 1)
-      const yesterdayKey = toDateKey(yesterday)
-      const { records } = await getFoodRecordList(yesterdayKey)
-      const targetMealType = normalizeMealType(currentRecord.meal_type)
-      const yesterdaySameMeal = (records || []).find(
-        (item) => normalizeMealType(item.meal_type) === targetMealType
-      )
-      if (!yesterdaySameMeal) {
-        setPosterCalorieCompare(null)
-        return
-      }
-      const currentCalories = Math.round(currentRecord.total_calories ?? 0)
-      const baselineCalories = Math.round(yesterdaySameMeal.total_calories ?? 0)
-      setPosterCalorieCompare({
-        deltaKcal: currentCalories - baselineCalories,
-        baselineKcal: baselineCalories
-      })
-    } catch (error) {
-      console.warn('[poster] load yesterday same-meal compare failed', error)
-      setPosterCalorieCompare(null)
-    }
-  }, [])
 
   useEffect(() => {
     // 加载会员状态（用于海报样式判断）
@@ -195,7 +169,6 @@ function RecordDetailPage() {
           const res = await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
-          loadPosterCalorieCompare(fetchedRecord)
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
             setOwnerNickname(inviterProfile.nickname || '')
@@ -224,7 +197,6 @@ function RecordDetailPage() {
           const stored = Taro.getStorageSync('recordDetail')
           if (stored) {
             setRecord(stored as FoodRecord)
-            loadPosterCalorieCompare(stored as FoodRecord)
             Taro.removeStorageSync('recordDetail')
             setLoading(false)
           } else {
@@ -239,7 +211,19 @@ function RecordDetailPage() {
     }
 
     loadRecord()
-  }, [loadPosterCalorieCompare, router.params?.id])
+  }, [router.params?.id])
+
+  // 从首页餐食卡片跳转且带 autoPoster=1 时，自动触发生成海报
+  const autoPosterTriggeredRef = React.useRef(false)
+  useEffect(() => {
+    if (record && router.params?.autoPoster === '1' && !autoPosterTriggeredRef.current) {
+      autoPosterTriggeredRef.current = true
+      const timer = setTimeout(() => {
+        handleGeneratePoster()
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [record, router.params?.autoPoster])
 
   const shareRecordId = record?.id || router.params?.id || ''
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
@@ -412,6 +396,9 @@ function RecordDetailPage() {
   }, [editItems])
 
   /** 分享海报为图片（须在 loading/record 提前 return 之前声明，避免 Hooks 数量不一致） */
+  /** 与系统导航栏同高的占位，配合 navigationStyle: custom */
+  const navBarTotalHeightPx = React.useMemo(() => getNavBarHeight(), [])
+
   const handleSharePosterImage = useCallback(() => {
     if (!posterImageUrl) return
     // showShareImageMenu：微信基础库 2.14.3+，弹出转发图片菜单（非小程序卡片）
@@ -427,8 +414,20 @@ function RecordDetailPage() {
 
   if (loading || !record) {
     return (
-      <View className='record-detail-page'>
-        <View className='empty-tip'>{loading ? <View className='loading-spinner' /> : '记录不存在'}</View>
+      <View className='record-detail-root'>
+        <CustomNavBar
+          title='识别记录详情'
+          showBack
+          background='#ffffff'
+          color='#111827'
+          className='record-detail-fixed-nav'
+        />
+        <View
+          className='record-detail-below-nav record-detail-loading-placeholder'
+          style={{ paddingTop: `${navBarTotalHeightPx}px` }}
+        >
+          <View className='empty-tip'>{loading ? <View className='loading-spinner' /> : '记录不存在'}</View>
+        </View>
       </View>
     )
   }
@@ -555,15 +554,12 @@ function RecordDetailPage() {
         const loadImage = async (src: string): Promise<{ width: number; height: number } | null> => {
           if (!src || !canvas.createImage) return null
 
-          let localSrc = src
-          if (/^https?:\/\//.test(src)) {
-            try {
-              const info = await Taro.getImageInfo({ src })
-              localSrc = info.path
-            } catch (e) {
-              console.error('Download image fail', src, e)
-              return null
-            }
+          let localSrc: string
+          try {
+            localSrc = await resolveCanvasImageSrc(src)
+          } catch (e) {
+            console.error('resolveCanvasImageSrc fail', src, e)
+            return null
           }
 
           return new Promise<{ width: number; height: number } | null>((resolve) => {
@@ -603,8 +599,9 @@ function RecordDetailPage() {
         Promise.all([
           loadImage(record.image_path || ''),
           loadQRImage(),
-          loadImage(ownerAvatar || '')
-        ]).then(([mainImg, qrImg, avatarImg]) => {
+          loadImage(ownerAvatar || ''),
+          fetchPosterCalorieCompareForRecord(record)
+        ]).then(([mainImg, qrImg, avatarImg, calorieCompare]) => {
           try {
             const ctx = canvas.getContext('2d')
             if (!ctx) {
@@ -614,7 +611,13 @@ function RecordDetailPage() {
               return
             }
 
-            const dynamicHeight = computePosterHeight(ctx, record, POSTER_WIDTH, isProUser)
+            const dynamicHeight = computePosterHeight(
+              ctx,
+              record,
+              POSTER_WIDTH,
+              isProUser,
+              calorieCompare || undefined
+            )
             canvas.width = POSTER_WIDTH * dpr
             canvas.height = dynamicHeight * dpr
             ctx.scale(dpr, dpr)
@@ -624,10 +627,7 @@ function RecordDetailPage() {
               width: POSTER_WIDTH,
               height: dynamicHeight,
               record,
-              calorieCompare: posterCalorieCompare ? {
-                deltaKcal: posterCalorieCompare.deltaKcal,
-                baselineKcal: posterCalorieCompare.baselineKcal
-              } : undefined,
+              calorieCompare: calorieCompare || undefined,
               image: mainImg,
               qrCodeImage: qrImg,
               sharerNickname: ownerNickname,
@@ -691,7 +691,20 @@ function RecordDetailPage() {
   }
 
   return (
-    <ScrollView className='record-detail-page' scrollY>
+    <View className='record-detail-root'>
+      <CustomNavBar
+        title='识别记录详情'
+        showBack
+        background='#ffffff'
+        color='#111827'
+        className='record-detail-fixed-nav'
+      />
+      {/*
+        海报预览/离屏 Canvas 勿放在 ScrollView 内：真机上 fixed 全屏层会相对滚动容器错位；
+        与首页「今日小结」分享层结构一致（根节点下独立一层）
+      */}
+      <View className='record-detail-below-nav' style={{ paddingTop: `${navBarTotalHeightPx}px` }}>
+      <ScrollView className='record-detail-page' scrollY>
       <View className='record-detail-body'>
         <View className='detail-header'>
           <View className='meal-badge'>
@@ -927,6 +940,8 @@ function RecordDetailPage() {
           </View>
         </View>
       </View>
+      </ScrollView>
+      </View>
 
       <View className='poster-canvas-wrap'>
         <Canvas type='2d' id='recordPosterCanvas' className='poster-canvas' style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }} />
@@ -1038,19 +1053,22 @@ function RecordDetailPage() {
       {/* 海报预览弹窗 */}
       {
         showPosterModal && posterImageUrl && (
-          <View className='poster-modal' catchMove>
+          <View className='poster-modal poster-modal--sheet' catchMove>
             <View className='poster-modal-shell' catchMove>
-              <View className='poster-modal-topbar'>
-                <View className='poster-modal-close' onClick={() => setShowPosterModal(false)}>
-                  <Text className='poster-modal-close-x'>×</Text>
-                </View>
-                <Text className='poster-modal-title'>分享</Text>
-                <View className='poster-modal-topbar-placeholder' />
+              <View className='poster-modal-topbar poster-modal-topbar--light poster-modal-topbar--title-only'>
+                <Text className='poster-modal-title poster-modal-title--light'>分享今日卡片</Text>
               </View>
-              <View className='poster-scroll-area'>
-                <View className='poster-modal-scroll-inner'>
-                  <View className='poster-modal-card-wrap'>
-                    <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
+              <View className='poster-modal-dark-body'>
+                <View className='poster-modal-inline-back' onClick={() => setShowPosterModal(false)}>
+                  <View className='poster-modal-close poster-modal-inline-close-hit'>
+                    <Text className='poster-modal-close-x'>×</Text>
+                  </View>
+                </View>
+                <View className='poster-scroll-area'>
+                  <View className='poster-modal-scroll-inner'>
+                    <View className='poster-modal-card-wrap'>
+                      <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
+                    </View>
                   </View>
                 </View>
               </View>
@@ -1072,7 +1090,7 @@ function RecordDetailPage() {
           </View>
         )
       }
-    </ScrollView>
+    </View>
   )
 }
 

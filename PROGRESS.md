@@ -4,6 +4,81 @@
 
 ---
 
+## 2026-04-13
+
+- ⚡ perf: 首页仪表盘改为“本地快照优先 + 云端静默同步”：新增按日期缓存（最近60条），页面与切日优先秒开本地数据；云端返回后仅在差异时覆盖本地缓存，降低刷新白屏与加载等待 `src/pages/index/index.tsx`
+- 🔧 refactor: 首页分享弹层移除“显示今日称号”开关与称号切换逻辑，恢复固定海报生成流程（不再携带称号可见性状态） `src/pages/index/index.tsx` `src/pages/index/index.scss`
+- 🎨 style: 今日小结圆内百分比数字与 `%` 字体改回思源宋体，保留分离绘制与 baseline 对齐布局 `src/utils/poster.ts`
+- 🐛 fix: 修复今日小结圆内数值排版偏移：`已摄入` 文案恢复居中；百分比数字与 `%` 改为思源黑体并按同一 baseline 对齐绘制 `src/utils/poster.ts`
+- 🐛 fix: 修复微信开发者工具 `WXSS 编译错误 + writeFile storage limit`：移除全局 `@font-face` 本地 OTF 注入，避免 `app-origin.wxss` 体积异常膨胀导致编译与写入失败 `src/app.scss`
+- 🎨 style: 圈子动态卡片正文文字加粗，提升用户动态内容可读性与信息权重 `src/pages/community/index.scss`
+- 🎨 style: 全局默认字体切换为思源黑体：在 `app.scss` 注册 `@font-face` 并统一覆盖页面及常用基础组件字体族，保证全站文案风格一致 `src/app.scss`
+- 🐛 fix: 修复今日小结圆内百分比分离绘制后的布局错位：恢复原稳定布局与字号测量策略，仅保留百分号小号分离与换色样式 `src/utils/poster.ts`
+- 🎨 style: 今日小结海报底栏视觉优化：用户头像尺寸上调，且“今日小结”与“扫码登录可一键成为好友”两行文案间距增大，底部信息层级更清晰 `src/utils/poster.ts`
+- 🎨 style: 今日小结中心百分比改为“数字 + %”分离绘制：数字进一步加粗，百分号大幅缩小并改色，与数字底线对齐后整体下移居中，强化核心数值层级 `src/utils/poster.ts`
+- 🎨 style: 首页分享弹层“显示今日称号”改为默认关闭；今日小结默认双标题态下将“坚持目标 X 天”下移并压缩其到圆球间距，修正标题区视觉留白 `src/pages/index/index.tsx` `src/utils/poster.ts`
+- 🎨 style: 下载并接入思源字体，首页分享卡片（今日小结海报）绘制字体统一切换为思源宋体，提升分享图文案风格一致性 `src/assets/fonts/SourceHanSerifSC-Regular.otf` `src/assets/fonts/SourceHanSansSC-Regular.otf` `src/utils/poster.ts`
+- 🎨 style: 调整首页分享卡片默认双标题（今日总结/坚持目标）的行间距，新增独立间距常量提升两行视觉呼吸感 `src/utils/poster.ts`
+- 🎨 style: 继续强化称号展示：放大“你的今日美食品味为”和称号字号，并收紧称号区到中心圆的垂直间距，减少留白浪费 `src/utils/poster.ts`
+- 🎨 style: 称号展示再强化：开启称号时隐藏“今日总结”；“你的今日美食品味为”与称号字体继续放大，并去掉称号两侧「」符号 `src/utils/poster.ts`
+- 🎨 style: 修正称号文案位置理解偏差：开启称号时将“你的今日美食品味为 / 「称号」”放到顶部标题区（替换“坚持目标 X 天”区域），并从圆内移除该文案；圆内仅保留日期胶囊与核心数值 `src/utils/poster.ts`
+- 🎨 style: 首页海报圆圈上方文案区改为“你的今日美食品味为 / 「称号」”，称号使用更鲜艳主题色并放大；当关闭称号显示时自动回退为原日期胶囊样式 `src/utils/poster.ts`
+- 🎨 style: 单动态详情页评论输入交互与圈子动态统一：去掉取消按钮，仅保留同款 `icon-send` 发送按钮；点击页面其它区域自动收起输入框 `src/pages/interaction-feed-detail/index.tsx` `src/pages/interaction-feed-detail/index.scss`
+- 🐛 fix: 互动消息单动态页补强生命周期与参数兜底，避免守卫导致 `useLoad` 丢参后长时间 loading；改为页面内鉴权重定向、兼容 `recordId/record_id/id`，并为详情请求增加超时兜底 `src/pages/interaction-feed-detail/index.tsx`
+- 🎨 style: 今日小结头部主标题改为称号本身（替换“今日总结”并沿用其主色）；提升圆内日期与百分比对比度（深色日期胶囊 + 白字描边）以解决 57% 与日期看不清问题 `src/utils/poster.ts`
+- 🐛 fix: 互动消息单动态页修复“长期加载中”：缺少 `recordId` 时立即结束加载并提示；兼容 `record_id` 参数读取；移除顶部标题简介；加载态改为 spinner 动画 `src/pages/interaction-feed-detail/index.tsx` `src/pages/interaction-feed-detail/index.scss`
+- 📝 docs: 更新代理规范，前端加载态禁止显示“加载中”文字，统一用动画表达 `AGENTS.md`
+- 🎨 style: 分享弹层“显示今日称号”开关上边距提升到 `120rpx`；今日小结中心圆新增同色描边与按进度波浪液位填充（如 57% 仅填充到底部 57%）`src/pages/index/index.scss` `src/utils/poster.ts`
+- 🎨 style: 今日小结称号文案去掉“今日称号”前缀并放大，位置与日期互换：称号上移到原日期区域、日期下移到热量圆上半区且不显示年份，强化仪式感展示 `src/utils/poster.ts`
+- ✨ feat: 互动消息点击改为进入独立页面 `interaction-feed-detail`，单页只展示被点击动态并保留点赞/评论结构与交互，不再回圈子页滚动定位 `src/pages/interaction-notifications/index.tsx` `src/pages/interaction-feed-detail/index.tsx` `src/pages/interaction-feed-detail/index.scss` `src/pages/interaction-feed-detail/index.config.ts` `src/app.config.ts`
+- 🎨 style: 今日小结海报称号改为绝对定位到中央热量圆上半区；分享弹层“显示今日称号”开关增加上边距，修复顶部遮挡 `src/utils/poster.ts` `src/pages/index/index.scss`
+- ✨ feat: 首页分享新增「称号系统」独立模块，按当日热量/宏量/喝水/运动/打卡数据生成称号（如顶级吃货、素食主义者、减肥专家、蛋白质女王、美食博主）`src/utils/daily-honor-title.ts` `src/pages/index/index.tsx`
+- 🎨 style: 首页问候区右上角分享按钮改为 `iconfont icon-share`；分享弹层新增「显示今日称号」开关（默认开启），切换后自动重新生成海报 `src/pages/index/components/GreetingSection.tsx` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/utils/poster.ts`
+- 🎨 style: 圈子「好友动态/饮食动态」标题字号上调，并将搜索框下方筛选漏斗图标改为 `iconfont icon-filter-filling`，修复图标不渲染 `src/pages/community/index.tsx` `src/pages/community/index.scss`
+- 🐛 fix: 互动消息点击目标动态时，优先 `navigateBack` 回圈子页（无上级页再 `switchTab`），减少“很久才跳转/不跳转”体感问题 `src/pages/interaction-notifications/index.tsx`
+
+## 2026-04-11
+
+- 🎨 style: 识别记录详情改为 `navigationStyle: custom` + `CustomNavBar`，避免系统导航栏叠在分享全屏层上，与首页「分享今日卡片」白底顶栏 + 黑底关布局一致 `src/pages/record-detail/index.config.ts` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🎨 style: 记录详情海报预览层移出 `ScrollView` 至页面根（与首页分享层一致），顶栏标题与首页同为「分享今日卡片」；修复真机 fixed 全屏相对滚动容器错位 `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🐛 fix: 「分析历史」改为单次 `listAnalyzeTasks` + 前端筛选，并加 22s 超时与请求序号，避免真机四路 `Promise.all` 一路挂起导致永远 loading `src/pages/analyze-history/index.tsx` `src/utils/api.ts`
+- 🐛 fix: 自定义 tabBar 下移除 `hideTabBar`/`showTabBar`，避免与原生文字 tabBar 叠成双导航；记录菜单页改由 `custom-tab-bar` 路径隐藏 `src/pages/record/index.tsx` `src/pages/community/index.tsx` `src/pages/record-menu/index.tsx` `custom-tab-bar/index.js`
+- 🎨 style: 分享弹层白底顶栏居中标题；黑底区关闭为记录详情同款 `poster-modal-close` + `poster-modal-close-x`（×）；底栏仅微信+保存 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/record-detail/index.tsx` `src/pages/record-detail/index.scss`
+- 🐛 fix: 首页「编辑今日目标」保存时移除未定义 `targetMode` 的残留分支，统一用 `targetForm` 提交 `src/pages/index/index.tsx`
+- 📝 docs: `AGENTS.md` 增加「发布新版本」流程；「我的」页底部版本号经 `__APP_VERSION__` 与 `package.json` 同步 `AGENTS.md` `config/index.ts` `types/build-constants.d.ts` `src/pages/profile/index.tsx` `tests/setupTests.ts`
+- 🔧 chore: 发布软件包版本 **2.0.14**（`package.json` / `package-lock.json`）`package.json` `package-lock.json`
+- 🎨 style: 今日小结顶栏改为「今日总结」「坚持目标」双行大字，下去掉连续天数；日期含年置于圆角条小字 `src/utils/poster.ts`
+- 🎨 style: 今日小结圆与五竖条总宽改为卡片 65%，竖条间隙 22；五色进度条按主色 #8B9E44 三角色相与邻近色重配 `src/utils/poster.ts`
+- ⚡ perf: 首页去掉 useDidShow 与首屏 useEffect 重复拉 dashboard；今日数据 TTL 缓存 + 脏标记，饮食保存/删除/运动/保质期事件再拉；减少 `dashboard/summary/exercise-logs` 重复请求 `src/pages/index/index.tsx` `src/utils/home-events.ts` `src/pages/result/index.tsx` `src/pages/record-manual/index.tsx` `src/pages/day-record/index.tsx`
+- 🎨 style: 今日小结顶栏仿参考图双行双色「今日」「总结」+ 短日期；连续/坚持目标并排双胶囊；圆内百分比用 Arial Black/Impact 900 字重 `src/utils/poster.ts`
+- 🎨 style: 今日小结顶栏「今日总结」+ 短日期 9 Apr；圆内百分比绝对居中、下方「已摄入」行；百分比用系统半粗体；宏量标签 15px；画布高度略减 `src/utils/poster.ts`
+- 🎨 style: 今日小结顶栏改为英文艺术标题 TODAY'S / SUMMARY + 英文日期行；圆内百分比与 kcal 加间距；宏量标签 12px 加粗、竖条间隙 17 `src/utils/poster.ts` `src/pages/index/index.tsx`
+- 🎨 style: 今日小结五竖条加高、条宽收窄、间隙 13；轨道 `#EAEAE0`、进度用 clip 防溢出；圆内百分比按直径约 64% 宽自适应加粗字号 `src/utils/poster.ts`
+- 🎨 style: 今日小结布局按黄金分割（φ）微调：Fibonacci 级垂直留白、圆–竖条间距 21、竖条间隙 φ⁻¹·8、圆内字按 R 比例、头像与昵称间距 8φ `src/utils/poster.ts`
+- 🎨 style: 今日小结中央圆直径与五竖条总宽均为卡片宽 75%，竖条组水平居中 `src/utils/poster.ts`
+- 🎨 style: 今日小结五竖条均分加宽、轨道与填充双端圆角；圆内底 `#8B9E44`、百分比与摄入 `#EAEAE0`、副文仅摄入 kcal；二维码缩小、头像与文案按行高居中对齐 `src/utils/poster.ts`
+- 🎨 style: 今日小结海报改版为参考图布局：去顶栏标题；顶区两行日期；`#E5C68D` 成就胶囊在圆环上；中央圆内热量完成比与摄入；下排五竖条（蛋白/碳水/脂肪/喝水/运动）自下而上；底栏不变 `src/utils/poster.ts` `src/pages/index/index.tsx`
+- 🎨 style: 今日小结分享预览黑底居中；连续/坚持目标用 `#E5C68D` 胶囊，「坚持目标」文案；三卡仿首页 body-status（新底色+喝水进度条）；热量条与宏量、宏量与三卡加间距 `src/utils/poster.ts` `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/record-detail/index.scss`
+- 🎨 style: 今日小结海报紧凑重排：整卡统一米白纯色无顶区渐变；「剩余可摄入」右上显示连续+全绿；体重/喝水/运动为三枚水感圆角卡；底栏昵称与二维码贴画布底；高度随 `posterData` 计算 `src/utils/poster.ts` `src/pages/index/index.tsx`
+- 🐛 fix: 今日小结分享预览隐藏自定义底栏（`home_poster_modal_visible` + `custom-tab-bar`）；Canvas 二维码/头像 data URL 先落盘再 `createImage`；海报底改为米白色；记录详情海报同步图片加载 `src/pages/index/index.tsx` `custom-tab-bar/index.js` `src/utils/weapp-canvas-image.ts` `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- ✨ feat: 首页问候区右上角生成「今日小结」分享图（Canvas 与单条海报同源、无食物图），含摄入/宏量/体重喝水运动与连续记录·全绿天数；非今日选中日显示「饮食小结」；`achievement` 来自 dashboard `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/GreetingSection.tsx` `src/utils/poster.ts`
+- 🎨 style: 首页同餐多选操作面板仅名称 + 时间（无热量）、单行截断；`meal_record_entries.title` 仍由后端提供 `src/pages/index/index.tsx`
+- ✨ feat: 首页「今日餐食」同餐多条记录时弹出操作面板选择再进详情；仪表盘返回 `meal_record_entries` `backend/main.py` `src/utils/api.ts` `src/pages/index/index.tsx`
+- ✨ feat: 分析结果页保存后记住会话，返回结果页主按钮改为「查看结果」（浅绿描边），仅跳转详情不重复保存/发动态；`analyze_committed_session` `src/pages/result/index.tsx` `src/pages/result/index.scss`
+- ✨ feat: 圈子评论长按删除（仿微信）：本人或动态作者可删，级联子回复；`DELETE /api/community/feed/{record_id}/comments/{comment_id}` `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/community/index.tsx`
+- 🐛 fix: 圈子页每次显示时轻量同步 `friendGetRequests`，待处理为 0 时好友管理角标消失（避免 5 分钟缓存未刷新）`src/pages/community/index.tsx`
+- ✨ feat: 圈子「好友管理」待处理申请角标绝对定位右上角（不占流）；点击进入好友页默认「收到的请求」`src/pages/community/index.tsx` `src/pages/community/index.scss` `src/pages/friends/index.tsx`
+- 🔧 chore: pytest 启用 pytest-timeout（默认 120s/例、仅计函数体）+ conftest 收集时补打标记；Jest 配置 `testTimeout: 120000` `backend/pytest.ini` `backend/requirements.txt` `backend/tests/conftest.py` `jest.config.cjs`
+- 🐛 fix: 同一识别任务重复保存饮食记录导致好友动态重复：`/api/food-record/save` 按 `source_task_id` 幂等返回已有记录；可选 DB 唯一索引 `backend/database/migrations/20260411_user_food_records_unique_source_task.sql` `backend/database.py` `backend/main.py` `src/utils/api.ts` `src/pages/result/index.tsx`
+- 🐛 fix: 海报热量行右侧胶囊在无昨日同餐时仍显示（仅计划达成三点）；「较昨 ±」仅在有昨日基线时出现 `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- ✨ feat: 海报「较昨」胶囊右侧三点改为本餐热量相对该餐仪表盘计划目标的达成度（≥33%/66%/100% 各亮一格）；接口返回 `meal_plan_kcal` `backend/main.py` `src/utils/api.ts` `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- 🎨 style: 海报「较昨」无昨日同餐时不显示占位；有对比时胶囊与热量同行、内容区右对齐 `src/utils/poster.ts` `src/pages/record-detail/index.tsx`
+- 🎨 style: 分享海报热量行数字与 `kcal` 改为 alphabetic baseline 对齐；较昨胶囊背景 `#E5C68D`，与数字行同列右侧并微调垂直对齐 `src/utils/poster.ts`
+- ✨ feat: 新增 `GET /api/food-record/{id}/poster-calorie-compare`（服务端中国自然日 + 餐次归一化）；海报对比改走该接口；有昨日同餐基线时才绘制「较昨」胶囊 `backend/main.py` `src/utils/api.ts` `src/pages/record-detail/index.tsx` `src/utils/poster.ts`
+- 🐛 fix: 分享海报「较昨同餐」仍不显示：昨日日期与后端中国自然日不一致 → 新增 `getChinaCalendarDateKey` / `addCalendarDaysYmd`；所有者 `user_id` 大小写归一化比对 `src/utils/china-date.ts` `src/pages/record-detail/index.tsx`
+- 🎨 style: 较昨胶囊紧贴 `kcal` 右侧、浅金卡其底+描边、右侧三点等级；有对比时热量区增高避免裁切 `src/utils/poster.ts`
+- 🐛 fix: 分享海报「较昨同餐 + 三点强度」在快速点生成时丢失：改为与头图/二维码并行请求昨日同餐对比；仅记录所有者拉取；昨日同餐多条记录合并热量 `src/pages/record-detail/index.tsx`
+
 ## 2026-04-10
 
 - ✨ feat: 符合审核「先浏览后登录」：Tab 五页未登录可进入；首页增加登录引导条；需登录操作统一 `redirectToLogin`；分析页未登录展示说明+去登录；登录完成回跳补全 `stats` Tab `src/pages/index/*`、`src/pages/stats/*`、`src/pages/profile/index.tsx`、`src/pages/record/index.tsx`、`src/pages/community/index.tsx`、`src/pages/record-menu/index.tsx`、`src/pages/login/index.tsx`

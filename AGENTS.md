@@ -49,6 +49,12 @@
 - 倾向于直接编辑、具体验证和简短的状态更新。
 - 除非在运行时中检查过或明确说明未验证，否则不要声称前端行为是正确的。
 
+### 加载态规范
+
+- 前端页面的加载态不显示“加载中”文字（包括“加载中...”“数据加载中”等文案）。
+- 统一使用可视化 loading 动画（spinner/skeleton/shimmer 等）表达加载状态。
+- 若确需文本提示，应只在错误态或空态出现，不用于纯加载中状态。
+
 ## 开发工作流程
 
 ### 运行开发服务器
@@ -73,6 +79,14 @@
 - **无需**为纯文档、仅单测断言、仅格式化等改动反复重启。
 - 推荐一键：`npm run dev:restart`（调用 `scripts/restart-dev.sh`：先结束残留的 `run_backend.py` 与 `taro build --type weapp`，再以 `nohup` 后台启动 `dev:backend` 与 `dev:weapp`，日志写入项目根目录 `backend-dev.log`、`weapp-dev.log`）。
 - 若用户已在其它终端手动跑 watch，可先与其确认再 `pkill`，避免误关无关进程。
+
+### 发布新版本（含「我的」页版本号）
+
+当用户**明确要发布新版本**并给出**版本号**（如 `2.0.15`）时，代理须完成与版本相关的全部同步，避免「我的」页底部仍显示旧号：
+
+1. **以 `package.json` 的 `version` 为唯一来源**：使用 `npm version <x.y.z> --no-git-tag-version`（或等价地同时更新 `package.json` 与 `package-lock.json` 根级 `version`）。
+2. **「我的」页底部文案**：`src/pages/profile/index.tsx` 中版本展示由构建常量 `__APP_VERSION__` 注入（在 `config/index.ts` 的 `defineConstants` 中从根目录 `package.json` 读取）。**只要第 1 步已正确 bump，无需再手改该页硬编码字符串**；若历史上曾写死版本号，应改为使用 `__APP_VERSION__` 以保持与发布版本一致。
+3. 按项目惯例更新 `PROGRESS.md`、执行提交与推送；若用户还要求打 tag、上传小程序体验版等，按其说明继续。
 
 ### 提交前清理
 

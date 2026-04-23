@@ -10,6 +10,7 @@ import {
   mapCalendarDateToApi,
   type FoodRecord,
 } from '../../utils/api'
+import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
 
 import './index.scss'
 
@@ -186,6 +187,11 @@ function DayRecordPage() {
             if (!modalRes.confirm) return
             try {
               await deleteFoodRecord(recordId)
+              try {
+                Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+              } catch {
+                /* ignore */
+              }
               Taro.showToast({ title: '已删除', icon: 'success' })
               loadDayRecords()
             } catch (err: any) {

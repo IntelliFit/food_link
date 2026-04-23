@@ -20,6 +20,11 @@ function getRecordDateInfo(recordTime: string) {
   } catch { return { day: '--', month: '--' } }
 }
 
+function normalizeDisplayNumber(value: unknown): number {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
 export const POSTER_WIDTH  = 375
 export const POSTER_HEIGHT = 812
 
@@ -48,22 +53,40 @@ const INNER_PAD = 20
 /** 与 drawRecordPoster 中 cy 推进一致，用于紧凑动态高度 */
 const LAYOUT_IMG_BOTTOM_GAP = 28
 const LAYOUT_CAL_BLOCK = 54
+/** 有「较昨」胶囊且可能换行时，热量区需略增高，避免裁切 */
+const LAYOUT_CAL_BLOCK_WITH_COMPARE = 82
 const LAYOUT_MACRO_BLOCK = 44
 const LAYOUT_BAR_EXTRA = 24
 const LAYOUT_DIVIDER_AFTER = 20
 const LAYOUT_ITEM_ROW = 42
 const LAYOUT_OVERFLOW_EXTRA = 24
 /** 食物列表最后一行与 footer（头像/二维码区）之间的垂直间距（px） */
-const LAYOUT_FOOTER_GAP_AFTER_LIST = 22
+const LAYOUT_FOOTER_GAP_AFTER_LIST = 45
 /** footer 锚点（头像顶边）到画布底：含二维码与底边距，与绘制一致 */
 const LAYOUT_FOOTER_ANCHOR_TAIL = 84
+
+/** 海报热量行右侧胶囊：计划达成三点始终可画；「较昨」仅在有昨日同餐基线时展示 */
+export interface PosterCalorieCompareInput {
+  /** 该餐次计划热量（首页仪表盘分配），用于三点达成度 */
+  mealPlanKcal: number
+  hasBaseline: boolean
+  deltaKcal: number
+  baselineKcal: number
+}
+
+function shouldShowPosterCalorieChip(c?: PosterCalorieCompareInput): boolean {
+  if (!c || !Number.isFinite(c.mealPlanKcal)) return false
+  /** 有计划目标时展示达成点；无计划但有昨日对比时仍展示「较昨」条 */
+  return c.mealPlanKcal > 0 || c.hasBaseline
+}
 
 /** 高度计算（与 drawRecordPoster 同步；不再强制定高 812，按餐食项数压缩空白） */
 export function computePosterHeight(
   _ctx: CanvasRenderingContext2D,
   record: FoodRecord,
   _width: number = POSTER_WIDTH,
-  _isPro: boolean = false
+  _isPro: boolean = false,
+  calorieCompare?: PosterCalorieCompareInput
 ): number {
   const p = Math.round(record.total_protein ?? 0)
   const c = Math.round(record.total_carbs ?? 0)
@@ -72,8 +95,10 @@ export function computePosterHeight(
   const maxItems = 4
   const n = items.length
 
+  const hasCompare = shouldShowPosterCalorieChip(calorieCompare)
+
   let cy = IMG_H + LAYOUT_IMG_BOTTOM_GAP
-  cy += LAYOUT_CAL_BLOCK
+  cy += hasCompare ? LAYOUT_CAL_BLOCK_WITH_COMPARE : LAYOUT_CAL_BLOCK
   cy += LAYOUT_MACRO_BLOCK
   if (p + c + f > 0) cy += LAYOUT_BAR_EXTRA
   cy += LAYOUT_DIVIDER_AFTER
@@ -88,15 +113,25 @@ export interface PosterDrawOptions {
   width: number
   height: number
   record: FoodRecord
-  calorieCompare?: {
-    deltaKcal: number
-    baselineKcal: number
-  }
+  calorieCompare?: PosterCalorieCompareInput
   image: { width: number; height: number } | null
   qrCodeImage?: { width: number; height: number } | null
   sharerNickname?: string
   sharerAvatarImage?: { width: number; height: number } | null
   isPro?: boolean
+}
+
+/**
+ * 本餐热量相对该餐计划目标的达成度：33% / 66% / 100% 各点亮一格（共 3 格）。
+ * 计划为 0 或无效时不点亮。
+ */
+function mealPlanAchievementLevel(currentKcal: number, mealPlanKcal: number): number {
+  if (!Number.isFinite(mealPlanKcal) || mealPlanKcal <= 0 || !Number.isFinite(currentKcal)) return 0
+  const ratio = currentKcal / mealPlanKcal
+  if (ratio >= 1) return 3
+  if (ratio >= 0.66) return 2
+  if (ratio >= 0.33) return 1
+  return 0
 }
 
 function drawRoundedRect(
@@ -218,56 +253,86 @@ export function drawRecordPoster(
   const cx = cardX + INNER_PAD
   let cy = cardTop + IMG_H + LAYOUT_IMG_BOTTOM_GAP
 
-  // 热量：左上角大数字（无"总摄入"标签）
+  // 热量：数字与「 kcal」共用 alphabetic baseline 下沿对齐；胶囊条同一行靠右（紧跟 kcal 或换行）
+  const calBaselineY = cy + 38
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
+  ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_INK
   ctx.font = 'bold 44px sans-serif'
   const calStr = cal.toLocaleString('en-US')
-  ctx.fillText(calStr, cx, cy)
+  ctx.fillText(calStr, cx, calBaselineY)
   const calStrW = ctx.measureText(calStr).width
   ctx.fillStyle = TEXT_MUTED
   ctx.font = '600 14px sans-serif'
-  ctx.fillText(' kcal', cx + calStrW, cy + 18)
-  if (calorieCompare && Number.isFinite(calorieCompare.deltaKcal) && Number.isFinite(calorieCompare.baselineKcal)) {
-    const absDelta = Math.abs(Math.round(calorieCompare.deltaKcal))
-    const prefix = calorieCompare.deltaKcal > 0 ? '+' : calorieCompare.deltaKcal < 0 ? '-' : '±'
-    const chipText = `较昨 ${prefix}${absDelta}`
-    const chipH = 30
-    const chipW = 168
-    const chipX = cx + contentW - chipW
-    const chipY = cy + 10
-    const level = absDelta >= 250 ? 3 : absDelta >= 120 ? 2 : absDelta >= 40 ? 1 : 0
+  const kcalSuffix = ' kcal'
+  ctx.fillText(kcalSuffix, cx + calStrW, calBaselineY)
+  const kcalSuffixW = ctx.measureText(kcalSuffix).width
+
+  if (shouldShowPosterCalorieChip(calorieCompare)) {
+    const cc = calorieCompare!
+    const absDelta = Math.abs(Math.round(cc.deltaKcal))
+    const prefix = cc.deltaKcal > 0 ? '+' : cc.deltaKcal < 0 ? '-' : '±'
+    const chipText = cc.hasBaseline ? `较昨 ${prefix}${absDelta}` : ''
+    /** 三点：本餐热量相对该餐计划目标的 33% / 66% / 100% 档位 */
+    const level = mealPlanAchievementLevel(cal, cc.mealPlanKcal)
+
+    const chipH = 32
+    const padL = chipText ? 12 : 10
+    const padR = 10
+    const dotGap = 7
+    const dotR = 4.5
+    const dotsBandW = dotGap * 2 + dotR * 2 * 3
 
     ctx.save()
-    drawRoundedRect(ctx, chipX, chipY, chipW, chipH, chipH / 2)
-    ctx.fillStyle = '#e8cd93'
-    ctx.fill()
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = '#111827'
-    ctx.font = '700 12px sans-serif'
-    ctx.fillText(chipText, chipX + 12, chipY + chipH / 2 + 0.5)
+    ctx.font = '800 13px sans-serif'
+    const textW = chipText ? ctx.measureText(chipText).width : 0
+    const chipW = Math.ceil(padL + textW + padR + dotsBandW + (chipText ? 10 : 6))
+    /** 同一行最右侧（内容区内右对齐） */
+    let chipX = cx + contentW - chipW
+    let chipY = calBaselineY - chipH / 2 - 14
+    const kcalBlockRight = cx + calStrW + kcalSuffixW
+    const minGap = 8
+    if (kcalBlockRight + minGap > chipX) {
+      chipY = calBaselineY + 14
+    }
 
-    const iconBaseX = chipX + chipW - 58
+    /** 胶囊条背景色（产品指定）+ 深色字 + 右侧三点等级 */
+    const CHIP_BG = '#E5C68D'
+    const CHIP_STROKE = 'rgba(17, 24, 39, 0.12)'
+    drawRoundedRect(ctx, chipX, chipY, chipW, chipH, chipH / 2)
+    ctx.fillStyle = CHIP_BG
+    ctx.fill()
+    ctx.strokeStyle = CHIP_STROKE
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.fillStyle = '#111827'
+    ctx.font = '800 13px sans-serif'
+    if (chipText) {
+      ctx.fillText(chipText, chipX + padL, chipY + chipH / 2 + 0.5)
+    }
+
+    const dotsLeft = chipX + chipW - padR - dotsBandW
     const iconCenterY = chipY + chipH / 2
     for (let i = 0; i < 3; i++) {
-      const iconX = iconBaseX + i * 18
+      const iconX = dotsLeft + dotR + i * (dotR * 2 + dotGap)
       ctx.beginPath()
-      ctx.arc(iconX, iconCenterY, 6.5, 0, Math.PI * 2)
+      ctx.arc(iconX, iconCenterY, dotR, 0, Math.PI * 2)
       ctx.strokeStyle = '#111827'
-      ctx.lineWidth = 1.3
+      ctx.lineWidth = 1.35
       ctx.stroke()
       if (i < level) {
         ctx.beginPath()
-        ctx.arc(iconX, iconCenterY, 2.8, 0, Math.PI * 2)
+        ctx.arc(iconX, iconCenterY, dotR - 2.2, 0, Math.PI * 2)
         ctx.fillStyle = '#111827'
         ctx.fill()
       }
     }
     ctx.restore()
   }
-  cy += LAYOUT_CAL_BLOCK
+  cy += shouldShowPosterCalorieChip(calorieCompare) ? LAYOUT_CAL_BLOCK_WITH_COMPARE : LAYOUT_CAL_BLOCK
 
   // 宏量营养：蛋白质左对齐，脂肪右对齐，数值字体减小
   const macroY = cy
@@ -445,6 +510,483 @@ export function drawRecordPoster(
     ctx.fill()
     ctx.fillStyle = TEXT_MUTED
     ctx.font = '10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('去记录', qrX + qrSize / 2, qrY + qrSize / 2)
+  }
+}
+
+/** 首页「今日小结」分享图：参考图布局（日期 + 成就胶囊 + 热量圆环 + 五竖条） */
+export interface DailySummaryPosterInput {
+  /** 如「4月11日」（兼容旧逻辑，顶栏已改英文时可不展示） */
+  dateLabelPrimary: string
+  /** 如「周六」 */
+  dateLabelSecondary: string
+  /** YYYY-MM-DD，顶栏英文星期与日期；建议传入 */
+  posterDateKey?: string
+  intakeCurrent: number
+  intakeTarget: number
+  streakDays: number
+  /** 展示为「坚持目标 X 天」 */
+  greenDays: number
+  macros: {
+    protein: { current: number; target: number }
+    carbs: { current: number; target: number }
+    fat: { current: number; target: number }
+  }
+  /** 喝水完成度 0–100+（与首页一致） */
+  waterProgressPct: number
+  /** 喝水当前量（ml）与目标量，用于海报标签数值展示 */
+  waterCurrentMl?: number
+  waterGoalMl?: number
+  /** 当日运动消耗千卡 */
+  exerciseKcal: number
+  /** 运动竖条满刻度（千卡），默认 500 */
+  exerciseGoalKcal?: number
+  /** 当日称号（可选） */
+  honorTitle?: string
+}
+
+/** 今日小结布局常量（与 drawDailySummaryPoster 同步） */
+const DAILY_BG = '#F0F5E8'
+/** 顶栏大字标题：参考图 ECO/FOOD 双色块（今日总结 / 坚持目标） */
+const DAILY_TITLE_LINE1 = '#C4D65C'
+const DAILY_TITLE_LINE2 = '#2F6B7A'
+/** 中央热量圆：柔和浅绿 */
+const DAILY_RING_FILL = '#B8D6A8'
+const DAILY_RING_INNER_TEXT = '#EAEAE0'
+/**
+ * 五竖条填充色：清新明亮系，与参考图薄荷绿/黄绿/深青整体协调。
+ */
+const BAR_COLORS = {
+  protein: '#6CA0B0',
+  carbs: '#B8D060',
+  fat: '#D8B070',
+  water: '#70B8A0',
+  exercise: '#A090B0'
+} as const
+const DEFAULT_EXERCISE_GOAL_KCAL = 500
+/** 五竖条轨道高度（拉长条身；与 compute 同步） */
+const VBAR_TRACK_H = 104
+/** 标签区加高，容纳数值行+标签行（与下方字号同步） */
+const VBAR_LABEL_H = 46
+/** 顶栏：两行同字号大字 + 标题与日期圆角条间距 + 日期条高度（与 draw 一致） */
+const DAILY_HEADER_TITLE_LINE1_H = 44
+const DAILY_HEADER_TITLE_LINE2_H = 44
+/** 默认双标题（今日总结 / 坚持目标）之间的垂直间距 */
+const DAILY_HEADER_TITLE_LINE_GAP = 10
+/** 默认态下将“坚持目标”整体下移，拉开与第一行间距 */
+const DAILY_HEADER_DEFAULT_LINE2_OFFSET = 18
+const DAILY_HEADER_TITLE_TO_DATE_GAP = 12
+const DAILY_HEADER_DATE_PILL_H = 30
+/** 竖条轨道底色（与 LINE 区分时可单独调） */
+const DAILY_VBAR_TRACK_BG = '#EAEAE0'
+/** 底栏二维码边长（缩小后需与 compute 中 footerReserve 同步） */
+const DAILY_QR_SIZE = 54
+/** 中央圆直径、五竖条总宽度 = 卡片宽度 W 的该比例（与 compute 中 POSTER_WIDTH 一致） */
+const DAILY_MAIN_BLOCK_W_RATIO = 0.65
+/** 黄金分割比 φ（1.618…），用于主区块间距与竖条间隙 */
+const DAILY_PHI = (1 + Math.sqrt(5)) / 2
+const DAILY_INV_PHI = 1 / DAILY_PHI
+
+/** 今日小结布局度量（绘制与高度计算共用，垂直节奏为 Fibonacci 级：8/13/21） */
+function getDailyLayoutMetrics(W: number): {
+  topPad: number
+  gapAfterDate: number
+  gapAfterCircle: number
+  vbarLabelGap: number
+  gapBeforeFooter: number
+  footerTopPad: number
+  bottomPad: number
+  circleD: number
+  barsTotalW: number
+  barGap: number
+} {
+  const circleD = W * DAILY_MAIN_BLOCK_W_RATIO
+  const barsTotalW = W * DAILY_MAIN_BLOCK_W_RATIO
+  const g13 = Math.round(8 * DAILY_PHI) // 13，φ·8
+  const g21 = Math.round(g13 * DAILY_PHI) // 21，主区块间「呼吸」留白
+  /** 竖条水平间隙：加大以在 65% 总宽内进一步缩窄单条宽度 */
+  const barGap = 30
+  return {
+    topPad: g13,
+    gapAfterDate: g13,
+    gapAfterCircle: g21,
+    vbarLabelGap: 10,
+    gapBeforeFooter: g13,
+    footerTopPad: g13,
+    bottomPad: g13,
+    circleD,
+    barsTotalW,
+    barGap
+  }
+}
+
+const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DAILY_SUMMARY_SANS_FAMILY = '"Source Han Sans SC", "SourceHanSansSC-Regular", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif'
+
+/** 顶栏日期文本：日 + 月缩写（不显示年份），如 11 Apr */
+function formatDailyPosterDatePillEn(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return ''
+  const [, mo, d] = parts
+  const mon = EN_MONTHS[mo - 1] ?? ''
+  return `${d} ${mon}`
+}
+
+/**
+ * 圆内百分比：粗黑展示数字体（参考海报风，接近 Montserrat/Arial Black）
+ * 与 measureDailyRingPctFontSize 必须一致
+ */
+function dailyRingPctFont(px: number): string {
+  return `900 ${px}px ${DAILY_SUMMARY_SANS_FAMILY}`
+}
+
+/** 竖条：目标为 0 时不约束，按 0% */
+function ratioPct(current: number, target: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(target) || target <= 0) return 0
+  return (current / target) * 100
+}
+
+/**
+ * 今日小结画布高度（圆环 + 五竖条 + 底栏）
+ */
+export function computeDailySummaryPosterHeight(_d?: DailySummaryPosterInput): number {
+  const m = getDailyLayoutMetrics(POSTER_WIDTH)
+  const vBarRow = VBAR_TRACK_H + VBAR_LABEL_H + m.vbarLabelGap
+  const footerReserve = m.footerTopPad + DAILY_QR_SIZE
+
+  const contentBottom =
+    m.topPad +
+    DAILY_HEADER_TITLE_LINE1_H +
+    DAILY_HEADER_TITLE_LINE_GAP +
+    DAILY_HEADER_TITLE_LINE2_H +
+    DAILY_HEADER_TITLE_TO_DATE_GAP +
+    DAILY_HEADER_DATE_PILL_H +
+    m.gapAfterDate +
+    m.circleD +
+    m.gapAfterCircle +
+    vBarRow
+  return Math.ceil(contentBottom + m.gapBeforeFooter + footerReserve + m.bottomPad)
+}
+
+/** 画布占位最大高度（离屏 Canvas 初始 style，实际导出以 compute 为准；顶栏双行标题后略增） */
+export const DAILY_SUMMARY_POSTER_MAX_HEIGHT = 740
+
+/**
+ * 圆内百分比字号：参考图二约占圆直径 60%～65% 宽，取最大不溢出字号
+ */
+function measureDailyRingPctFontSize(ctx: CanvasRenderingContext2D, pctStr: string, circleD: number): number {
+  const maxW = circleD * 0.64
+  let lo = 28
+  let hi = 160
+  let best = 28
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2)
+    ctx.font = dailyRingPctFont(mid)
+    const tw = ctx.measureText(pctStr).width
+    if (tw <= maxW) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return Math.max(32, best)
+}
+
+/** 竖向进度条：轨道为胶囊形；填充在轨道 path 内 clip，避免底部圆角溢出 */
+function drawDailyVerticalBar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  yTop: number,
+  w: number,
+  trackH: number,
+  pctRaw: number,
+  fillColor: string
+): void {
+  const pct = Math.min(100, Math.max(0, pctRaw))
+  const rTrack = w / 2
+  drawRoundedRect(ctx, x, yTop, w, trackH, rTrack)
+  ctx.fillStyle = DAILY_VBAR_TRACK_BG
+  ctx.fill()
+
+  const fillH = (trackH * pct) / 100
+  if (fillH <= 0) return
+
+  ctx.save()
+  drawRoundedRect(ctx, x, yTop, w, trackH, rTrack)
+  ctx.clip()
+  const yFill = yTop + trackH - fillH
+  ctx.fillStyle = fillColor
+  ctx.fillRect(x, yFill, w, fillH)
+  ctx.restore()
+}
+
+export function drawDailySummaryPoster(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    width: number
+    height: number
+    data: DailySummaryPosterInput
+    qrCodeImage?: { width: number; height: number } | null
+    sharerNickname?: string
+    sharerAvatarImage?: { width: number; height: number } | null
+  }
+): void {
+  const { width: W, height: _H, data: d, qrCodeImage, sharerNickname, sharerAvatarImage } = options
+  const cx = INNER_PAD
+  const contentW = W - INNER_PAD * 2
+  const cX = W / 2
+  const m = getDailyLayoutMetrics(W)
+
+  ctx.fillStyle = DAILY_BG
+  ctx.fillRect(0, 0, W, _H)
+
+  let cy = m.topPad
+
+  /** 顶部：默认「今日总结 + 坚持目标」；开启称号时替换第二行为“你的今日美食品味为 / 「称号」” */
+  const honorTitle = String(d.honorTitle || '').trim()
+  const hasHonorBanner = honorTitle.length > 0
+  const titleFont = `bold 38px ${DAILY_SUMMARY_SANS_FAMILY}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  if (hasHonorBanner) {
+    ctx.fillStyle = '#64748b'
+    ctx.font = `600 28px ${DAILY_SUMMARY_SANS_FAMILY}`
+    ctx.fillText('你的今日美食品味为', cX, cy + 4)
+    cy += 44
+
+    ctx.fillStyle = DAILY_TITLE_LINE1
+    ctx.font = `700 50px ${DAILY_SUMMARY_SANS_FAMILY}`
+    ctx.fillText(honorTitle, cX, cy)
+    cy += 56 + Math.max(4, DAILY_HEADER_TITLE_TO_DATE_GAP - 8)
+  } else {
+    const line2Y = m.topPad + DAILY_HEADER_TITLE_LINE1_H + DAILY_HEADER_TITLE_LINE_GAP + DAILY_HEADER_DEFAULT_LINE2_OFFSET
+    const summaryCenterY = m.topPad + (line2Y - m.topPad) / 2
+
+    ctx.fillStyle = DAILY_TITLE_LINE1
+    ctx.font = titleFont
+    ctx.textBaseline = 'middle'
+    ctx.fillText('今日总结', cX, summaryCenterY)
+
+    ctx.textBaseline = 'top'
+    ctx.fillStyle = DAILY_TITLE_LINE2
+    ctx.font = titleFont
+    ctx.fillText(`坚持目标 ${d.greenDays} 天`, cX, line2Y)
+    cy = line2Y + DAILY_HEADER_TITLE_LINE2_H + DAILY_HEADER_TITLE_TO_DATE_GAP
+  }
+
+  /** 日期胶囊：移到坚持目标下方 */
+  const dateText = d.posterDateKey
+    ? formatDailyPosterDatePillEn(d.posterDateKey)
+    : `${d.dateLabelPrimary} ${d.dateLabelSecondary}`.trim()
+  const circleD = m.circleD
+  if (dateText) {
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `600 14px ${DAILY_SUMMARY_SANS_FAMILY}`
+    const padX = 12
+    const titleMeasureW = ctx.measureText(dateText).width + padX * 2
+    const pillW = Math.min(circleD - 20, titleMeasureW)
+    const pillH = 28
+    const pillX = cX - pillW / 2
+    const pillY = cy + pillH / 2
+    drawRoundedRect(ctx, pillX, pillY - pillH / 2, pillW, pillH, 14)
+    ctx.fillStyle = '#2F6B7A'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillText(dateText, cX, pillY + 0.5)
+    cy += pillH
+  }
+
+  cy += m.gapAfterDate
+
+  /** 中央大圆：同色描边 + 波浪液位进度填充 */
+  const R = circleD / 2
+  const circleCy = cy + R
+  const tgt = d.intakeTarget > 0 ? d.intakeTarget : 1
+  const calPct = tgt > 0 ? (d.intakeCurrent / tgt) * 100 : 0
+  const liquidPct = Math.min(100, Math.max(0, calPct))
+  const liquidRatio = liquidPct / 100
+
+  // 实心大圆
+  ctx.beginPath()
+  ctx.arc(cX, circleCy, R, 0, Math.PI * 2)
+  ctx.fillStyle = DAILY_RING_FILL
+  ctx.fill()
+
+  // 同色描边
+  ctx.beginPath()
+  ctx.arc(cX, circleCy, R - 1, 0, Math.PI * 2)
+  ctx.strokeStyle = DAILY_RING_FILL
+  ctx.lineWidth = 4
+  ctx.stroke()
+
+  const calPctRound = Math.round(calPct)
+  const pctNumberStr = `${calPctRound}`
+  const pctMeasureStr = `${calPctRound}%`
+  const pctFs = measureDailyRingPctFontSize(ctx, pctMeasureStr, circleD)
+  const pctSignFs = Math.max(16, Math.min(30, Math.round(pctFs * 0.42)))
+  const kcalFs = Math.max(10, Math.min(14, Math.round(pctFs * 0.22)))
+  const kcalStr = `已摄入 ${Math.round(d.intakeCurrent)} kcal`
+
+  // 圆内文字：百分比用主题色，已摄入深灰且更小
+  const pctNumFill = DAILY_TITLE_LINE2
+  const pctSignFill = DAILY_TITLE_LINE2
+  const kcalFill = '#1f2937'
+
+  ctx.font = dailyRingPctFont(pctFs)
+  ctx.textAlign = 'left'
+  const pctNumW = ctx.measureText(pctNumberStr).width
+  ctx.font = `700 ${pctSignFs}px ${DAILY_SUMMARY_SANS_FAMILY}`
+  const pctSignW = ctx.measureText('%').width
+  const pctGap = Math.max(2, Math.round(pctFs * 0.04))
+  const ringGapAfterPct = Math.max(10, Math.round(pctFs * 0.1))
+
+  // 百分比 + 已摄入 整体在圆内严格垂直居中
+  const totalRingTextH = pctFs + ringGapAfterPct + kcalFs
+  const pctCenterY = circleCy - totalRingTextH / 2 + pctFs / 2
+  const kcalCenterY = circleCy + totalRingTextH / 2 - kcalFs / 2
+
+  const totalPctW = pctNumW + pctGap + pctSignW
+  const pctStartX = cX - totalPctW / 2
+
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = pctNumFill
+  ctx.font = dailyRingPctFont(pctFs)
+  ctx.textAlign = 'left'
+  ctx.fillText(pctNumberStr, pctStartX, pctCenterY)
+
+  ctx.fillStyle = pctSignFill
+  ctx.font = `700 ${pctSignFs}px ${DAILY_SUMMARY_SANS_FAMILY}`
+  ctx.fillText('%', pctStartX + pctNumW + pctGap, pctCenterY)
+
+  ctx.fillStyle = kcalFill
+  ctx.font = `600 ${kcalFs}px ${DAILY_SUMMARY_SANS_FAMILY}`
+  ctx.textAlign = 'center'
+  ctx.fillText(kcalStr, cX, kcalCenterY)
+
+  cy = circleCy + R + m.gapAfterCircle
+
+  /** 五竖条：均分 contentW，蛋白质、碳水、脂肪、喝水、运动（自下而上） */
+  const pt = Math.min(100, ratioPct(d.macros.protein.current, d.macros.protein.target))
+  const ct = Math.min(100, ratioPct(d.macros.carbs.current, d.macros.carbs.target))
+  const ft = Math.min(100, ratioPct(d.macros.fat.current, d.macros.fat.target))
+  const wt = Math.min(100, Math.max(0, d.waterProgressPct))
+  const exGoal =
+    d.exerciseGoalKcal != null && d.exerciseGoalKcal > 0 ? d.exerciseGoalKcal : DEFAULT_EXERCISE_GOAL_KCAL
+  const exPct = Math.min(100, (d.exerciseKcal / Math.max(1, exGoal)) * 100)
+
+  const labels = ['蛋白质', '碳水', '脂肪', '喝水', '运动']
+  const pcts = [pt, ct, ft, wt, exPct]
+  const colors: string[] = [
+    BAR_COLORS.protein,
+    BAR_COLORS.carbs,
+    BAR_COLORS.fat,
+    BAR_COLORS.water,
+    BAR_COLORS.exercise
+  ]
+
+  /** 五竖条总宽 = 卡片宽 75%，整组水平居中；间隙取 φ 相关比例 */
+  const barsTotalW = m.barsTotalW
+  const barGap = m.barGap
+  const barW = (barsTotalW - barGap * 4) / 5
+  let bx = cX - barsTotalW / 2
+  const barTopY = cy
+
+  const valY = barTopY + VBAR_TRACK_H + 4
+  const lblY = barTopY + VBAR_TRACK_H + 32
+  const labelValues = [
+    `${Math.round(normalizeDisplayNumber(d.macros.protein.current))}/${Math.round(normalizeDisplayNumber(d.macros.protein.target))}g`,
+    `${Math.round(normalizeDisplayNumber(d.macros.carbs.current))}/${Math.round(normalizeDisplayNumber(d.macros.carbs.target))}g`,
+    `${Math.round(normalizeDisplayNumber(d.macros.fat.current))}/${Math.round(normalizeDisplayNumber(d.macros.fat.target))}g`,
+    [`${Math.round(d.waterCurrentMl || 0)}/${Math.round(d.waterGoalMl || 2000)}`, 'ml'],
+    [`${Math.round(d.exerciseKcal)}/${Math.round(exGoal)}`, 'kcal']
+  ] as (string | string[])[]
+  const hasValue = [
+    d.macros.protein.current > 0,
+    d.macros.carbs.current > 0,
+    d.macros.fat.current > 0,
+    (d.waterCurrentMl || 0) > 0,
+    d.exerciseKcal > 0
+  ]
+
+  for (let i = 0; i < 5; i++) {
+    drawDailyVerticalBar(ctx, bx, barTopY, barW, VBAR_TRACK_H, pcts[i], colors[i])
+    if (hasValue[i]) {
+      ctx.fillStyle = '#374151'
+      ctx.font = `500 11px ${DAILY_SUMMARY_SANS_FAMILY}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      const val = labelValues[i]
+      if (Array.isArray(val)) {
+        ctx.fillText(val[0], bx + barW / 2, valY)
+        ctx.fillText(val[1], bx + barW / 2, valY + 12)
+      } else {
+        ctx.fillText(val, bx + barW / 2, valY)
+      }
+    }
+    ctx.fillStyle = '#1f2937'
+    ctx.font = `600 15px ${DAILY_SUMMARY_SANS_FAMILY}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(labels[i], bx + barW / 2, lblY)
+    bx += barW + barGap
+  }
+
+  /** 底栏：头像与文案垂直居中对齐；二维码缩小 */
+  const bottomPad = m.bottomPad
+  const qrSize = DAILY_QR_SIZE
+  const qrY = _H - bottomPad - qrSize
+  const qrMidY = qrY + qrSize / 2
+  const avatarSz = 38
+  const titleX = sharerAvatarImage ? cx + avatarSz + Math.round(8 * DAILY_PHI) : cx
+
+  if (sharerAvatarImage) {
+    const avatarY = qrMidY - avatarSz / 2
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx + avatarSz / 2, qrMidY, avatarSz / 2, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.drawImage(sharerAvatarImage as CanvasImageSource, cx, avatarY, avatarSz, avatarSz)
+    ctx.restore()
+  }
+
+  ctx.textAlign = 'left'
+  ctx.fillStyle = '#2F6B7A'
+  ctx.font = `bold 14px ${DAILY_SUMMARY_SANS_FAMILY}`
+  const displayName = (sharerNickname || '').trim()
+  const nameText = displayName ? `${displayName} 的今日小结` : '食探 · 今日小结'
+  ctx.font = `bold 14px ${DAILY_SUMMARY_SANS_FAMILY}`
+  ctx.textBaseline = 'middle'
+  ctx.fillText(nameText, titleX, qrMidY - 11)
+
+  ctx.fillStyle = '#6A9A8A'
+  ctx.font = `11px ${DAILY_SUMMARY_SANS_FAMILY}`
+  ctx.fillText('扫码登录食探，可一键成为好友', titleX, qrMidY + 13)
+
+  const qrX = cx + contentW - qrSize
+  if (qrCodeImage) {
+    ctx.save()
+    drawRoundedRect(ctx, qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, 8)
+    ctx.strokeStyle = '#d4d4d4'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+    ctx.drawImage(qrCodeImage as CanvasImageSource, qrX, qrY, qrSize, qrSize)
+  } else {
+    drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 8)
+    ctx.strokeStyle = LINE
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.15)'
+    ctx.fill()
+    ctx.fillStyle = TEXT_MUTED
+    ctx.font = `10px ${DAILY_SUMMARY_SANS_FAMILY}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText('去记录', qrX + qrSize / 2, qrY + qrSize / 2)

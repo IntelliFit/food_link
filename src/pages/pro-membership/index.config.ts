@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: 'Pro会员订阅'
+  navigationBarTitleText: '积分充值'
 })

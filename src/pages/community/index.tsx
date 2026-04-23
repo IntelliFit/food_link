@@ -7,7 +7,6 @@ import {
   friendSearch,
   friendSendRequest,
   friendGetRequests,
-  friendRespondRequest,
   friendGetList,
   friendCleanupDuplicates,
   communityGetFeed,
@@ -19,6 +18,7 @@ import {
   communityGetCommentTasks,
   communityGetNotifications,
   communityPostComment,
+  communityDeleteComment,
   communityGetCheckinLeaderboard,
   communityHideFeed,
   type FriendSearchUser,
@@ -109,6 +109,26 @@ function FeedSearchGlyph() {
       </svg>
     </View>
   )
+}
+
+/** 当前列表中某条评论及其所有子回复的 id（用于删除） */
+function buildCommentSubtreeIds(comments: FeedCommentItem[], rootId: string): Set<string> {
+  const toRemove = new Set<string>()
+  const stack = [rootId]
+  while (stack.length) {
+    const id = stack.pop()!
+    if (toRemove.has(id)) continue
+    toRemove.add(id)
+    for (const c of comments) {
+      if (String(c.parent_comment_id || '') === id) stack.push(c.id)
+    }
+  }
+  return toRemove
+}
+
+function removeCommentSubtreeFromList(comments: FeedCommentItem[], rootId: string): FeedCommentItem[] {
+  const toRemove = buildCommentSubtreeIds(comments, rootId)
+  return comments.filter((c) => !toRemove.has(c.id))
 }
 
 
@@ -235,7 +255,6 @@ function CommunityPage() {
   const [loadingFeed, setLoadingFeed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
-  const [showRequests, setShowRequests] = useState(false)
 
   // 首次加载标志（用于判断是否显示骨架屏）
   const [isFirstLoad, setIsFirstLoad] = useState(true)
@@ -252,6 +271,8 @@ function CommunityPage() {
   const [commentInFlightCount, setCommentInFlightCount] = useState(0)
   /** 短锁：与签名防抖一起防止连点 */
   const commentTapLockRef = useRef(false)
+  /** 长按评论后忽略紧随其后的 tap，避免误触打开回复框 */
+  const commentLongPressIgnoreRef = useRef(false)
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
   const lastCommentSubmitRef = useRef<{ signature: string; timestamp: number }>({
@@ -566,6 +587,25 @@ function CommunityPage() {
   }, [saveToCache])
 
   /**
+   * 仅同步「收到的待处理好友申请」列表（轻量），每次进入圈子页调用，
+   * 避免好友页处理完后仍沿用 5 分钟缓存导致角标不消失。
+   */
+  const syncPendingFriendRequests = useCallback(async () => {
+    if (!getAccessToken()) {
+      setRequests([])
+      return
+    }
+    try {
+      const reqRes = await friendGetRequests()
+      const requestsList = reqRes.list || []
+      setRequests(requestsList)
+      saveToCache(undefined, undefined, requestsList)
+    } catch (e) {
+      console.error('同步好友申请失败:', e)
+    }
+  }, [saveToCache])
+
+  /**
    * 刷新 Feed（静默或显示 loading）
    * @param silent 是否静默刷新（不显示 loading）
    * @param force 是否强制刷新（忽略时间间隔）
@@ -740,10 +780,12 @@ function CommunityPage() {
     if (token) {
       loadCheckinPreview(true)
       loadInteractionNotificationsBadge()
+      void syncPendingFriendRequests()
     } else {
       setLbPreviewTop([])
       setLbPreviewMyRank(null)
       setUnreadNotificationCount(0)
+      setRequests([])
     }
 
     const now = Date.now()
@@ -836,23 +878,6 @@ function CommunityPage() {
       Taro.showToast({ title: (e as Error).message || '发送失败', icon: 'none' })
     } finally {
       setSendingId(null)
-    }
-  }
-
-  const handleRespondRequest = async (requestId: string, accept: boolean) => {
-    try {
-      await friendRespondRequest(requestId, accept ? 'accept' : 'reject')
-      Taro.showToast({ title: accept ? '已添加好友' : '已拒绝', icon: 'success' })
-      setRequests(prev => prev.filter(r => r.id !== requestId))
-      if (accept) {
-        // 清除缓存，强制刷新
-        clearCache()
-        loadFriendsAndRequests(false)
-        refreshFeed(false, true)
-        loadCheckinPreview(true)
-      }
-    } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
     }
   }
 
@@ -978,18 +1003,16 @@ function CommunityPage() {
     setReplyTargetComment(null)
   }
 
-  /** 评论输入展开时隐藏底部 tab（含自定义 tabBar：见 `community_comment_bar_visible`） */
+  /** 仅写 storage，由 custom-tab-bar 轮询 updateHidden 隐藏底栏；勿调 showTabBar/hideTabBar（自定义 tabBar 下易双导航栏） */
   useEffect(() => {
     if (expandedCommentRecordId) {
       try {
         Taro.setStorageSync('community_comment_bar_visible', '1')
       } catch (_) {}
-      Taro.hideTabBar({ animation: true }).catch(() => {})
     } else {
       try {
         Taro.removeStorageSync('community_comment_bar_visible')
       } catch (_) {}
-      Taro.showTabBar({ animation: true }).catch(() => {})
     }
   }, [expandedCommentRecordId])
 
@@ -998,7 +1021,6 @@ function CommunityPage() {
       try {
         Taro.removeStorageSync('community_comment_bar_visible')
       } catch (_) {}
-      Taro.showTabBar({ animation: true }).catch(() => {})
     }
   }, [])
 
@@ -1151,6 +1173,103 @@ function CommunityPage() {
       Taro.showToast({ title: (e as Error).message || '获取评论失败', icon: 'none' })
     }
   }
+
+  const removeTempCommentFromStorage = useCallback((recordId: string, comment: FeedCommentItem) => {
+    const key = getTempCommentsKey(recordId)
+    try {
+      const raw = Taro.getStorageSync(key)
+      const cachedTemp: Array<{ task_id: string; comment: FeedCommentItem; timestamp: number }> = Array.isArray(raw) ? raw : []
+      const filtered = cachedTemp.filter((entry) => entry?.comment?.id !== comment.id)
+      if (filtered.length > 0) {
+        Taro.setStorageSync(key, filtered)
+      } else {
+        Taro.removeStorageSync(key)
+      }
+    } catch (e) {
+      console.error('更新临时评论缓存失败:', e)
+    }
+  }, [getTempCommentsKey])
+
+  const handleRemoveCommentLocally = useCallback(
+    (recordId: string, comment: FeedCommentItem) => {
+      setFeedList((prev) => {
+        const target = prev.find((i) => i.record.id === recordId)
+        const comments = target?.comments || []
+        const subtreeIds = buildCommentSubtreeIds(comments, comment.id)
+        const nextComments = removeCommentSubtreeFromList(comments, comment.id)
+        const removedCount = comments.length - nextComments.length
+        const next = prev.map((it) => {
+          if (it.record.id !== recordId) return it
+          return {
+            ...it,
+            comments: nextComments,
+            comment_count: Math.max(0, (it.comment_count || 0) - removedCount)
+          }
+        })
+        saveToCache(next)
+        queueMicrotask(() => {
+          setReplyTargetComment((rt) => {
+            if (!rt) return null
+            if (expandedCommentRecordId !== recordId) return rt
+            if (subtreeIds.has(rt.id)) return null
+            return rt
+          })
+        })
+        return next
+      })
+    },
+    [saveToCache, expandedCommentRecordId]
+  )
+
+  const handleCommentLongPress = useCallback(
+    (recordId: string, feedItem: CommunityFeedItem, comment: FeedCommentItem) => {
+      commentLongPressIgnoreRef.current = true
+      setTimeout(() => {
+        commentLongPressIgnoreRef.current = false
+      }, 420)
+      if (!getAccessToken()) {
+        Taro.showToast({ title: '请先登录', icon: 'none' })
+        return
+      }
+      const myUid = String(Taro.getStorageSync('user_id') || '')
+      const canDelete = (Boolean(myUid) && comment.user_id === myUid) || Boolean(feedItem.is_mine)
+      if (!canDelete) {
+        return
+      }
+      void Taro.showModal({
+        title: '删除评论',
+        content: '删除后无法恢复',
+        confirmText: '删除',
+        cancelText: '取消'
+      }).then((res) => {
+        if (!res.confirm) return
+        if (comment._is_pending || comment.id.startsWith('pending_')) {
+          handleRemoveCommentLocally(recordId, comment)
+          Taro.showToast({ title: '已删除', icon: 'success' })
+          return
+        }
+        if (comment._is_temp) {
+          removeTempCommentFromStorage(recordId, comment)
+          handleRemoveCommentLocally(recordId, comment)
+          Taro.showToast({ title: '已删除', icon: 'success' })
+          return
+        }
+        Taro.showLoading({ title: '删除中...', mask: true })
+        void communityDeleteComment(recordId, comment.id)
+          .then(() => {
+            handleRemoveCommentLocally(recordId, comment)
+            Taro.showToast({ title: '已删除', icon: 'success' })
+          })
+          .catch((e: Error) => {
+            Taro.showToast({ title: e.message || '删除失败', icon: 'none' })
+          })
+          .finally(() => {
+            Taro.hideLoading()
+          })
+      })
+    },
+    [handleRemoveCommentLocally, removeTempCommentFromStorage]
+  )
 
   const handleOpenNotifications = () => {
     if (!getAccessToken()) {
@@ -1329,16 +1448,9 @@ function CommunityPage() {
               if (expandedCommentRecordId) closeCommentModal()
             }}
           >
-            {/* 快捷入口：无标题、无整块白底；三键等分 + 可选好友请求条 */}
+            {/* 快捷入口：三键等分；有待处理申请时在「好友管理」右上角绝对定位角标（不占流），点击进入「收到的请求」 */}
             {loggedIn && (
               <View className='friends-quick-bar' onClick={(e) => e.stopPropagation()}>
-                {requests.length > 0 ? (
-                  <View className='friends-requests-banner' onClick={() => setShowRequests(true)}>
-                    <Text className='friends-requests-banner-label'>好友请求</Text>
-                    <Text className='friends-requests-banner-count'>{requests.length}</Text>
-                    <Text className='friends-requests-banner-chevron'>›</Text>
-                  </View>
-                ) : null}
                 <View className='friends-quick-grid'>
                   <View className='friends-quick-cell' onClick={handleOpenNotifications}>
                     <Text className='friends-quick-cell-icon iconfont icon-pinglun' />
@@ -1353,10 +1465,21 @@ function CommunityPage() {
                   </View>
                   <View
                     className='friends-quick-cell'
-                    onClick={() => Taro.navigateTo({ url: '/pages/friends/index' })}
+                    onClick={() => {
+                      const url =
+                        requests.length > 0 ? '/pages/friends/index?tab=received' : '/pages/friends/index'
+                      Taro.navigateTo({ url })
+                    }}
                   >
                     <Text className='friends-quick-cell-icon iconfont icon-duoren' />
                     <Text className='friends-quick-cell-label'>好友管理</Text>
+                    {requests.length > 0 ? (
+                      <View className='friends-quick-cell-badge'>
+                        <Text className='friends-quick-cell-badge-text'>
+                          {requests.length > 99 ? '99+' : String(requests.length)}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                   <View className='friends-quick-cell' onClick={() => setShowAddFriend(true)}>
                     <Text className='friends-quick-cell-icon iconfont icon-zengji' />
@@ -1452,7 +1575,7 @@ function CommunityPage() {
             {/* 饮食动态 */}
             <View className='feed-section'>
               <View className='section-header feed-section-header'>
-                <Text className='section-title'>{loggedIn ? '好友动态' : '饮食动态'}</Text>
+                <Text className='section-title feed-section-title'>{loggedIn ? '好友动态' : '饮食动态'}</Text>
                 {loggedIn ? (
                   <Text
                     className='feed-section-link'
@@ -1466,35 +1589,34 @@ function CommunityPage() {
                 ) : null}
               </View>
               <View className='feed-filter-panel' onClick={(e) => e.stopPropagation()}>
-                <View className='feed-search-wrap'>
-                  <View className='feed-search-icon-wrap'>
-                    <FeedSearchGlyph />
+                <View className='feed-filter-top-row'>
+                  <View className='feed-search-wrap'>
+                    <View className='feed-search-icon-wrap'>
+                      <FeedSearchGlyph />
+                    </View>
+                    <Input
+                      className='feed-search-input'
+                      placeholder='搜索动态内容或用户...'
+                      placeholderClass='feed-search-placeholder'
+                      value={feedSearchKeyword}
+                      onInput={(e) => setFeedSearchKeyword(e.detail.value)}
+                      confirmType='search'
+                    />
+                    {feedSearchKeyword ? (
+                      <Text className='feed-search-clear' onClick={() => setFeedSearchKeyword('')}>清除</Text>
+                    ) : null}
                   </View>
-                  <Input
-                    className='feed-search-input'
-                    placeholder='搜索动态内容或用户...'
-                    placeholderClass='feed-search-placeholder'
-                    value={feedSearchKeyword}
-                    onInput={(e) => setFeedSearchKeyword(e.detail.value)}
-                    confirmType='search'
-                  />
-                  {feedSearchKeyword ? (
-                    <Text className='feed-search-clear' onClick={() => setFeedSearchKeyword('')}>清除</Text>
-                  ) : null}
-                </View>
-                <View className='feed-filter-trigger-row'>
                   <View
-                    className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''} ${feedFilterIconActive ? 'is-active' : ''}`}
+                    className='feed-filter-trigger-combined'
                     onClick={() => setFeedFilterExpanded((v) => !v)}
                   >
-                    <Text className='iconfont icon-filter' />
+                    <View
+                      className={`feed-filter-funnel-btn ${feedFilterExpanded ? 'is-open' : ''} ${feedFilterIconActive ? 'is-active' : ''}`}
+                    >
+                      <Text className='iconfont icon-filter-filling' />
+                    </View>
+                    <Text className='feed-filter-summary'>更多筛选</Text>
                   </View>
-                  <Text
-                    className='feed-filter-summary'
-                    onClick={() => setFeedFilterExpanded((v) => !v)}
-                  >
-                    {feedFilterSummary}
-                  </Text>
                 </View>
                 {feedFilterExpanded ? (
                   <View className='feed-filter-expanded'>
@@ -1627,15 +1749,15 @@ function CommunityPage() {
                           <View className='feed-card-main-col'>
                             <View className='feed-card-name-block'>
                               <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
-                              <Text className='post-time'>
-                                {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
-                              </Text>
-                            </View>
-                            {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
-                              <View className='feed-tags'>
-                                <Text className='feed-tag'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
+                              <View className='feed-sub-meta-row'>
+                                <Text className='post-time'>
+                                  {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
+                                </Text>
+                                {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
+                                  <Text className='feed-tag-plain'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
+                                ) : null}
                               </View>
-                            ) : null}
+                            </View>
                             {item.record.description &&
                               (item.record.image_path ? (
                                 <Text className='feed-content'>{item.record.description}</Text>
@@ -1727,7 +1849,18 @@ function CommunityPage() {
                                   <View
                                     key={c.id}
                                     className={`feed-comment-item ${c._is_temp ? 'is-temp' : ''} ${c._is_pending ? 'is-pending' : ''} ${c.reply_to_user_id ? 'is-reply' : ''}`}
-                                    onClick={() => openCommentModal(item.record.id, c)}
+                                    onLongPress={(e) => {
+                                      e.stopPropagation()
+                                      handleCommentLongPress(rid, item, c)
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (commentLongPressIgnoreRef.current) {
+                                        commentLongPressIgnoreRef.current = false
+                                        return
+                                      }
+                                      openCommentModal(item.record.id, c)
+                                    }}
                                   >
                                     <View className='comment-avatar'>
                                       {c.avatar ? (
@@ -1925,34 +2058,6 @@ function CommunityPage() {
               ))}
             </ScrollView>
             <Button className='modal-close-btn' onClick={() => setShowAddFriend(false)}>关闭</Button>
-          </View>
-        </View>
-      )}
-
-      {/* 收到的请求弹窗 */}
-      {showRequests && (
-        <View className='modal-mask' onClick={() => setShowRequests(false)}>
-          <View className='modal-box requests-modal' onClick={e => e.stopPropagation()}>
-            <Text className='modal-title'>好友请求</Text>
-            <ScrollView className='requests-list' scrollY>
-              {requests.map((r) => (
-                <View key={r.id} className='request-item'>
-                  <View className='request-avatar'>
-                    {r.from_avatar ? (
-                      <Image src={r.from_avatar} mode='aspectFill' className='request-avatar-img' />
-                    ) : (
-                      <Text>👤</Text>
-                    )}
-                  </View>
-                  <Text className='request-name'>{r.from_nickname}</Text>
-                  <View className='request-actions'>
-                    <Button size='mini' className='request-reject' onClick={() => handleRespondRequest(r.id, false)}>拒绝</Button>
-                    <Button size='mini' className='request-accept' onClick={() => handleRespondRequest(r.id, true)}>接受</Button>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-            <Button className='modal-close-btn' onClick={() => setShowRequests(false)}>关闭</Button>
           </View>
         </View>
       )}

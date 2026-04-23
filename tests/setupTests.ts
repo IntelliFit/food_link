@@ -1,4 +1,12 @@
 import '@testing-library/jest-dom';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// Jest 不经 Taro 构建，补全与 config defineConstants 一致的常量
+const pkgVersion = JSON.parse(
+  readFileSync(join(process.cwd(), 'package.json'), 'utf-8')
+).version as string;
+(globalThis as unknown as { __APP_VERSION__: string }).__APP_VERSION__ = pkgVersion;
 
 // Mock Taro API
 global.wx = {

@@ -1,8 +1,18 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
 import devConfig from './dev'
 import prodConfig from './prod'
+
+/** 与 package.json 的 version 一致，供「我的」页底部等展示 */
+function readPackageVersion(): string {
+  const pkgPath = join(process.cwd(), 'package.json')
+  return JSON.parse(readFileSync(pkgPath, 'utf-8')).version as string
+}
+
+const packageVersion = readPackageVersion()
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
@@ -33,6 +43,8 @@ export default defineConfig<'vite'>(async (merge) => {
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
       /** 仅 development 构建为 true；上传/体验版等走 production 构建为 false，用于隐藏调试 UI 与调试保存分支 */
       __ENABLE_DEV_DEBUG_UI__: JSON.stringify(process.env.NODE_ENV === 'development'),
+      /** 与 package.json version 同步，发布新版本时随 npm version 一并更新 */
+      __APP_VERSION__: JSON.stringify(packageVersion),
     },
     copy: {
       patterns: [
@@ -47,6 +59,10 @@ export default defineConfig<'vite'>(async (merge) => {
         {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
+        },
+        {
+          from: 'src/assets/iconfont',
+          to: 'assets/iconfont'
         },
 
       ],
@@ -71,6 +87,25 @@ export default defineConfig<'vite'>(async (merge) => {
             },
           ],
         }),
+        // fix: 覆盖 Taro 默认的 es6 target，避免 async/await 被编译为 generator
+        // 内联辅助函数与局部变量名冲突，导致真机偶发 "c is not a function"
+        {
+          name: 'taro-fix-target',
+          configResolved(config) {
+            config.build.target = 'es2018'
+          }
+        },
+        // debug: 开发构建时关闭压缩、保留 sourcemap，便于真机调试定位完整错误栈
+        {
+          name: 'taro-debug-build',
+          configResolved(config) {
+            if (process.env.NODE_ENV === 'development') {
+              config.build.minify = false
+              config.build.sourcemap = true
+              config.build.cssMinify = false
+            }
+          }
+        }
       ],
     },
     mini: {

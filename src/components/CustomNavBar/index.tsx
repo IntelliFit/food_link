@@ -65,7 +65,7 @@ export default function CustomNavBar({
             >
                 {showBack && (
                     <View className='custom-nav-bar__back' onClick={handleBack}>
-                        <Text className='custom-nav-bar__back-icon' style={{ color }}>←</Text>
+                        <Text className='custom-nav-bar__back-icon' style={{ color }}>&#8249;</Text>
                     </View>
                 )}
                 <Text className='custom-nav-bar__title' style={{ color }}>
