@@ -17,6 +17,7 @@ import '../../assets/iconfont/iconfont.css'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -161,6 +162,7 @@ function hasAuthToken(): boolean {
 }
 
 function StatsPage() {
+  const { scheme } = useAppColorScheme()
   const [range, setRange] = useState<'week' | 'month'>('week')
   const rangeRef = useRef(range)
   rangeRef.current = range
@@ -816,6 +818,7 @@ function StatsPage() {
               const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
               const MealIcon = MEAL_ICONS[key]
               const color = mealStructureAccent(key)
+              const trackColor = scheme === 'dark' ? '#2f353a' : '#f0f0f0'
               const radius = 43
               const circumference = 2 * Math.PI * radius
               const progress = Math.min(pct / 100, 1)
@@ -836,7 +839,7 @@ function StatsPage() {
                         className='meal-gauge-ring'
                         style={{
                           backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='${radius}' fill='none' stroke='#f0f0f0' stroke-width='12'/><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${circumference}' stroke-dashoffset='${circumference * (1 - progress)}'/></svg>`
+                            `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${trackColor}' stroke-width='12'/><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${circumference}' stroke-dashoffset='${circumference * (1 - progress)}'/></svg>`
                           )}")`,
                           backgroundSize: '100% 100%'
                         }}

@@ -102,13 +102,41 @@ export async function resolveImagePathForAlbumSave(src: string): Promise<string>
         })
       })
       if (savedFilePath) return savedFilePath
-    } catch (err) {
+    } catch (err: any) {
+      const errMsg = String(err?.errMsg || err?.message || err || '')
+      // USER_DATA_PATH 已满或 tmp 路径无读取权限时，fallback 到规范化路径
+      // 但必须先验证临时路径仍可读，避免返回已失效的路径
+      if (
+        errMsg.includes('exceeded the maximum size') ||
+        errMsg.includes('permission denied')
+      ) {
+        const fallbackPath = normalized || raw
+        try {
+          const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fallbackPath })
+          if (info.size > 0) {
+            console.warn('[resolveImagePathForAlbumSave] saveFile skipped due to storage/perm limit, fallback to normalized tmp path', tempFilePath)
+            return fallbackPath
+          }
+        } catch {
+          // fallback 路径已失效，不能返回，继续尝试下一个 candidate
+        }
+      }
+      // no such file → 源临时路径已失效，继续尝试下一个 candidate
       console.warn('[resolveImagePathForAlbumSave] saveFile failed, try next', tempFilePath, err)
     }
   }
 
   console.warn('[resolveImagePathForAlbumSave] all saveFile failed, fallback path', { raw, normalized, candidates })
-  return normalized || raw
+  const fallback = normalized || raw
+  if (fallback) {
+    try {
+      const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fallback })
+      if (info.size > 0) return fallback
+    } catch {
+      // fallback 路径已失效
+    }
+  }
+  return ''
 }
 
 const isAuthError = (err: WeappSaveImageErr): boolean => {
@@ -223,8 +251,15 @@ export async function savePosterToPhotosAlbum(filePath: string, handlers: SavePo
         /* ignore */
       }
     }
-    if (!readable) {
+    // 对 canvasToTempFilePath 等生成的临时路径，getFileInfo 可能因路径格式/权限返回 false
+    // 若已确认不可读且不是临时路径特征，直接阻断；若是临时路径但已明确不可读，也重新解析一次
+    const isTmpLike = isTempImagePath(resolved) || isTempImagePath(pathIn)
+    if (!readable && !isTmpLike) {
       handlers.onToast('图片未就绪或已失效，请重新打开海报后再保存')
+      return
+    }
+    if (!readable && isTmpLike && !resolved) {
+      handlers.onToast('图片已失效，请重新生成海报后再保存')
       return
     }
   }
@@ -271,7 +306,7 @@ export async function savePosterToPhotosAlbum(filePath: string, handlers: SavePo
       return
     }
     try {
-      const again = await resolveImagePathForAlbumSave(resolved || pathIn)
+      const again = await resolveImagePathForAlbumSave(pathIn)
       if (again && again !== resolved) {
         await runSave(again)
         handlers.onSuccess()

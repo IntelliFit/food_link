@@ -109,6 +109,7 @@
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "lint-staged": "^16.1.2",
+    "miniprogram-automator": "^0.12.1",
     "postcss": "^8.5.6",
     "react-refresh": "^0.14.0",
     "sass": "^1.75.0",

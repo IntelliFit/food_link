@@ -96,10 +96,6 @@ export function mergeUserWithLocalProfile(api: UserInfo, local: LocalMinMetaboli
   }
 }
 
-function pad2(n: number): string {
-  return `${Math.floor(n)}`.padStart(2, '0')
-}
-
 function parseAge(birthday: string): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(birthday.trim())
   if (!m) return 30

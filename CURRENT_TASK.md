@@ -1,5 +1,78 @@
 # CURRENT_TASK
 
+- Task: 当日代谢页用“转脂占比曲线”替换“脂肪累积量”
+- Status: done（已移除首屏“脂肪累计克数”口径，改为基于代谢动力学模型计算的“吸收转脂占比”和红色“转脂占峰值吸收”曲线；已重启前后端并恢复 `3010`）
+- Scope:
+  - `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx`
+    - 模型输出由 `fatDeltaGramsPerMin / fatGramsAccumulated` 改为 `fatStorageKcalPerMin / fatStoragePctOfPeakAbsorbPerMin / fatStorageShareOfAbsorbedPct`
+    - 首屏摘要第一项改为 `吸收转脂占比 %`
+    - 图例由 `脂肪累计` 改为 `转脂占峰值吸收`
+    - 新增红线口径说明，不再展示脂肪累计克数
+  - `src/packageExtra/pages/stats-metabolic/metabolic-echarts-option.ts`
+    - 红色曲线右轴从 `g` 改为 `%`
+    - tooltip 改为显示转脂占峰值吸收百分比
+  - `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 为转脂摘要图标和说明块补红色口径样式
+- Verification:
+  - `npm run dev:restart` 完成
+  - 额外前台启动 `node scripts/run-backend.cjs` 后，`curl -I http://127.0.0.1:3010/openapi.json` 返回 `HTTP/1.1 200 OK`
+  - `mrc logs error 20 --port 9420` 返回 `0`
+  - 阻塞：
+    - `mrc relaunch /packageExtra/pages/stats-metabolic/index --port 9420` 本轮连接成功后长时间无返回
+    - `mrc where --port 9420`、`mrc screenshot ./stats-metabolic-fat-ratio-check.png --port 9420` 本轮也未稳定返回，未拿到页面停留态和 PNG 证据
+
+- Task: 积分充值页补齐黑色主题，并把充值按钮改成亮绿色白字
+- Status: done（已补积分充值页余额卡/充值卡/邀请码卡/输入区/规则弹层的 dark-only 样式；`微信支付充值` 按钮在 dark 下已改成和卡路里主按钮同系的亮绿色底 + 白字；已重启前后端并恢复 `3010`）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 为 `membership-page` 新增 `points-balance-card`、`recharge-card`、`invite-card`、`points-rules-card`、`recharge-preset`、`recharge-input-row`、`rules-modal-*` 等 dark-only 覆盖
+    - `subscribe-btn` 在 dark 下强制使用亮绿色渐变底、白字、无描边
+  - 运行环境
+    - 执行 `npm run dev:restart`
+    - 额外前台启动 `node scripts/run-backend.cjs`，确认 `uvicorn` 实际监听 `3010`
+- Verification:
+  - `mrc relaunch /packageExtra/pages/pro-membership/index --port 9420` 成功
+  - `mrc logs error 30 --port 9420` 返回 `0`
+  - `curl -I http://127.0.0.1:3010/openapi.json` 返回 `HTTP/1.1 200 OK`
+  - 阻塞：
+    - `mrc screenshot ./pro-membership-dark-check.png --port 9420` 返回 `fail to capture screenshot`，本轮未拿到 PNG 证据
+
+- Task: 统计页与我的页 dark CTA 统一成深墨绿色，并恢复本地后端 `3010`
+- Status: done（已把统计页 `保持良好`、`当日代谢动态` 与我的页 `充值` 按钮改成同一深墨绿色暗面板；已重启前后端并确认 `3010` 恢复）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `hero-badge`、`hero-metabolic-row`、`hero-metabolic-row__arrow` 改为与页面背景同系的深墨绿色 dark 面板
+    - `member-card--free .card-upgrade-btn` 改为同系深墨绿色 dark 面板，按钮文字保持浅绿色强调
+  - 运行环境
+    - 执行 `npm run dev:restart`
+    - 额外前台启动 `node scripts/run-backend.cjs`，确认 `uvicorn` 实际监听 `3010`
+- Verification:
+  - `mrc switchTab /pages/profile/index --port 9420` 成功
+  - `mrc switchTab /pages/stats/index --port 9420` 成功
+  - `mrc logs error 30 --port 9420` 返回 `0`
+  - `curl -I http://127.0.0.1:3010/openapi.json` 返回 `HTTP/1.1 200 OK`
+  - 阻塞：
+    - `mrc screenshot ./stats-profile-dark-deep-ink-check.png --port 9420` 本轮仍未稳定返回，未拿到 PNG 证据
+
+- Task: 统计页“餐次结构 / 体重与喝水 / AI 营养洞察”补齐黑色主题
+- Status: done（已让餐次圆环轨道按当前主题切换为深色轨道，并补齐体重/喝水卡片与 AI 营养洞察文案的 dark-only 对比；已 `npm run dev:restart`）
+- Scope:
+  - `src/pages/stats/index.tsx`
+    - 接入 `useAppColorScheme`
+    - 餐次结构圆环轨道由固定浅灰改为按主题切换：light `#f0f0f0` / dark `#2f353a`
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `body-metric-panel` / `water-panel` 改为深色实体面板
+    - `weight-chip`、`water-trend-bar-wrap`、相关标题/副文案统一补深色对比
+    - `analysis-status`、`analysis-content`、`analysis-loading-text`、`analysis-empty-text`、`ai-disclaimer-text`、`analysis-error` 补齐 dark-only 字色与底色
+- Verification:
+  - `npm run dev:restart` 完成
+  - `mrc where --port 9420` 返回 `pages/stats/index`
+  - `mrc switchTab /pages/profile/index --port 9420` 后再切回 `pages/stats/index` 成功
+  - `mrc logs error 30 --port 9420` 返回 `0`
+  - 阻塞：
+    - `mrc screenshot ./stats-dark-theme-check.png --port 9420` 返回 `fail to capture screenshot`，本轮未拿到 PNG 证据
+
 - Task: 统一黑色主题下的微信原生导航栏 / 胶囊样式，并微调统计页“当日代谢动态”按钮底色
 - Status: done（已把导航栏换色上提到 `withAuth`，覆盖首页/分析/圈子/我的及分包页；统计页 `hero-metabolic-row` dark 背景已对齐 `保持良好` 徽标口径；已 `npm run dev:restart`）
 - Scope:

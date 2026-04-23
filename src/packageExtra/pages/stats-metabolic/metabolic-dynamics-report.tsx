@@ -1,5 +1,5 @@
 /**
- * 当日代谢：分钟级示意模型 + 首屏三指标 + ECharts 功率/脂肪累计曲线
+ * 当日代谢：分钟级示意模型 + 首屏三指标 + ECharts 功率/转脂占比曲线
  */
 import { View, Text, Canvas } from '@tarojs/components'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
@@ -12,9 +12,9 @@ import type { ECharts } from 'echarts/core'
 import { buildMetabolicFluxChartOption } from './metabolic-echarts-option'
 import { patchWxCanvasNodeForEcharts } from './metabolic-echarts-wx-polyfill'
 import { installWxZrenderTextMeasure } from './metabolic-echarts-wx-zrender-platform'
-import { Backdrop, Popup } from '@taroify/core'
-import '@taroify/core/backdrop/style'
+import { Popup } from '@taroify/core'
 import '@taroify/core/popup/style'
+import { useAppColorSchemeOptional } from '../../../components/AppColorSchemeContext'
 import {
   getExerciseDailyCalories,
   getFoodRecordList,
@@ -99,8 +99,10 @@ export interface MetabolicSimResult {
   absorbPerMin: Float64Array
   outPerMin: Float64Array
   refOutPerMin: Float64Array
-  fatDeltaGramsPerMin: Float64Array
-  fatGramsAccumulated: number
+  fatStorageKcalPerMin: Float64Array
+  fatStoragePctOfPeakAbsorbPerMin: Float64Array
+  fatStorageShareOfAbsorbedPct: number
+  fatStoragePeakPctOfAbsorb: number
   /** 各分钟 max(0, 吸收−消耗) 之和，表征餐后相对当时代谢功率的「过剩」累计（kcal，示意） */
   acuteSurplusIntegralKcal: number
   proteinAbsorbPerMin: Float64Array
@@ -338,7 +340,7 @@ export function runMetabolicSimulation(params: {
 
   const exPer = buildExercisePerMinute(exerciseDayKcal)
   const bmrBasePerMin = physiology.bmrMifflin / MINUTES_PER_DAY
-  const tdeeBasePerMin = physiology.tdeeKcal / MINUTES_PER_DAY
+  void physiology.tdeeKcal // tdeeBasePerMin 留作调试用
   const refBmrPerMin = physiology.refBmrMifflin / MINUTES_PER_DAY
 
   const outPerMin = new Float64Array(MINUTES_PER_DAY)
@@ -353,9 +355,9 @@ export function runMetabolicSimulation(params: {
     refOutPerMin[t] = refBmrPerMin * 1.2 * circ
   }
 
-  const fatDeltaGramsPerMin = new Float64Array(MINUTES_PER_DAY)
+  const fatStorageKcalPerMin = new Float64Array(MINUTES_PER_DAY)
   let acuteBuffer = ACUTE_BUFFER_START_KCAL
-  let fatGrams = 0
+  let fatStorageKcal = 0
   let acuteSurplusIntegralKcal = 0
 
   for (let t = 0; t < MINUTES_PER_DAY; t++) {
@@ -365,8 +367,8 @@ export function runMetabolicSimulation(params: {
     if (delta > 0) {
       acuteSurplusIntegralKcal += delta
       const directFatKcal = delta * ACUTE_SURPLUS_DIRECT_FAT_FRAC * physiology.pRatio
-      let gMinute = directFatKcal / 9
-      fatGrams += gMinute
+      let fatStorageKcalMinute = directFatKcal
+      fatStorageKcal += directFatKcal
 
       const toBuffer = delta * (1 - ACUTE_SURPLUS_DIRECT_FAT_FRAC)
       const room = Math.max(0, ACUTE_BUFFER_MAX_KCAL - acuteBuffer)
@@ -374,10 +376,9 @@ export function runMetabolicSimulation(params: {
       acuteBuffer += fill
       const remainder = toBuffer - fill
       const spillFatKcal = remainder * physiology.pRatio
-      const gSpill = spillFatKcal / 9
-      fatGrams += gSpill
-      gMinute += gSpill
-      fatDeltaGramsPerMin[t] = gMinute
+      fatStorageKcal += spillFatKcal
+      fatStorageKcalMinute += spillFatKcal
+      fatStorageKcalPerMin[t] = fatStorageKcalMinute
     } else {
       const need = -delta
       const take = Math.min(need, acuteBuffer)
@@ -385,12 +386,26 @@ export function runMetabolicSimulation(params: {
     }
   }
 
+  let totalAbsorbedKcal = 0
+  for (let t = 0; t < MINUTES_PER_DAY; t++) totalAbsorbedKcal += absorbPerMin[t] ?? 0
+  const peakAbsorbKcalPerMin = maxAbsorbKcalPerMin(absorbPerMin)
+  const fatStoragePctOfPeakAbsorbPerMin = new Float64Array(MINUTES_PER_DAY)
+  let fatStoragePeakPctOfAbsorb = 0
+  for (let t = 0; t < MINUTES_PER_DAY; t++) {
+    const pct = peakAbsorbKcalPerMin > 0 ? (fatStorageKcalPerMin[t] / peakAbsorbKcalPerMin) * 100 : 0
+    fatStoragePctOfPeakAbsorbPerMin[t] = pct
+    if (pct > fatStoragePeakPctOfAbsorb) fatStoragePeakPctOfAbsorb = pct
+  }
+  const fatStorageShareOfAbsorbedPct = totalAbsorbedKcal > 0 ? (fatStorageKcal / totalAbsorbedKcal) * 100 : 0
+
   return {
     absorbPerMin,
     outPerMin,
     refOutPerMin,
-    fatDeltaGramsPerMin,
-    fatGramsAccumulated: fatGrams,
+    fatStorageKcalPerMin,
+    fatStoragePctOfPeakAbsorbPerMin,
+    fatStorageShareOfAbsorbedPct,
+    fatStoragePeakPctOfAbsorb,
     acuteSurplusIntegralKcal,
     proteinAbsorbPerMin,
   }
@@ -409,7 +424,6 @@ function yieldToMain(): Promise<void> {
 const CANVAS_ID = 'metabolicFluxCanvas'
 
 /** 须高于 `custom-tab-bar`（z-index:999）及页面内浮层；面板略高于遮罩 */
-const METABOLIC_PHYS_BACKDROP_Z = 200000
 const METABOLIC_PHYS_PANEL_Z = 200010
 
 function createCanvasSelectorQuery(): ReturnType<typeof Taro.createSelectorQuery> {
@@ -478,14 +492,6 @@ function MetabolicPhysiologyPopup({
       className='metabolic-phys-popup__portal'
       style={{ zIndex: METABOLIC_PHYS_PANEL_Z }}
     >
-      <Backdrop
-        className='metabolic-phys-popup__backdrop'
-        open={open}
-        closeable
-        lock
-        style={{ zIndex: METABOLIC_PHYS_BACKDROP_Z }}
-        onClose={() => onClose()}
-      />
       <View className='metabolic-phys-popup' onClick={(e) => e.stopPropagation()}>
         <Text className='metabolic-phys-popup__title'>模拟所用基础数据</Text>
         <Text className='metabolic-phys-popup__hint'>与当日示意模型一致；BMR 为档案基础代谢，TDEE 含活动系数。</Text>
@@ -559,6 +565,8 @@ function MetabolicReportHead({ showPhysBtn, onOpenPhys, onBack }: MetabolicRepor
 }
 
 export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: MetabolicDynamicsReportProps) {
+  const colorSchemeCtx = useAppColorSchemeOptional()
+  const isDark = (colorSchemeCtx?.scheme ?? 'light') === 'dark'
   /** 与后端按中国日切分的记录一致；未传时按东八区当天 */
   const dayYmd = useMemo(() => reportDate || chinaWallYmd(), [reportDate])
   const [apiUser, setApiUser] = useState<UserInfo | null>(null)
@@ -573,6 +581,8 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
   const [summaryAcuteSurplusKcal, setSummaryAcuteSurplusKcal] = useState(0)
   /** 进食引起的吸收功率峰值（kcal/分，示意） */
   const [summaryPeakAbsorbKcalPerMin, setSummaryPeakAbsorbKcalPerMin] = useState(0)
+  /** 当日转脂能量占总吸收能量的比例（%） */
+  const [summaryFatStorageSharePct, setSummaryFatStorageSharePct] = useState(0)
 
   const simRef = useRef<MetabolicSimResult | null>(null)
   simRef.current = sim
@@ -693,6 +703,7 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
 
       setSummaryAcuteSurplusKcal(Math.round(result.acuteSurplusIntegralKcal))
       setSummaryPeakAbsorbKcalPerMin(Math.round(maxAbsorbKcalPerMin(result.absorbPerMin) * 10) / 10)
+      setSummaryFatStorageSharePct(Math.round(result.fatStorageShareOfAbsorbedPct * 10) / 10)
 
       setPhase('ready')
       loadedForDayRef.current = dayYmd
@@ -745,7 +756,7 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
         })
         chartRef.current = inst
       } else {
-        inst.resize({ width: w, height: h, devicePixelRatio: dpr })
+        inst.resize({ width: w, height: h })
       }
       inst.setOption(
         buildMetabolicFluxChartOption(
@@ -753,10 +764,11 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
             absorbPerMin: s.absorbPerMin,
             outPerMin: s.outPerMin,
             refOutPerMin: s.refOutPerMin,
-            fatDeltaGramsPerMin: s.fatDeltaGramsPerMin,
+            fatStoragePctOfPeakAbsorbPerMin: s.fatStoragePctOfPeakAbsorbPerMin,
           },
           nowMinuteForDay(),
           SAMPLE_STEP_MIN,
+          isDark,
         ),
         { notMerge: true },
       )
@@ -798,7 +810,7 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
     requestAnimationFrame(run)
     setTimeout(run, 80)
     setTimeout(run, 320)
-  }, [nowMinuteForDay])
+  }, [nowMinuteForDay, isDark])
 
   useEffect(() => {
     if (phase === 'ready' && sim) {
@@ -817,14 +829,21 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
     }
   }, [physSheetOpen, phase, sim, redraw])
 
+  // 主题切换时重绘图表
+  useEffect(() => {
+    if (phase === 'ready' && sim) {
+      chartRef.current?.dispose()
+      chartRef.current = null
+      redraw()
+    }
+  }, [isDark, phase, sim, redraw])
+
   useEffect(() => {
     return () => {
       chartRef.current?.dispose()
       chartRef.current = null
     }
   }, [])
-
-  const fatGramDayModel = sim ? Math.round(sim.fatGramsAccumulated * 100) / 100 : 0
 
   if (!profileReady) {
     return (
@@ -926,15 +945,15 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
         onBack={layout === 'page' ? handlePageBack : undefined}
       />
 
-      <View className='metabolic-report__summary-row'>
-        <View className='metabolic-report__summary-cell'>
-          <View className='metabolic-report__summary-label-row'>
-            <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin metabolic-report__summary-label-icon' />
-            <Text className='metabolic-report__summary-label'>今日示意脂肪</Text>
+        <View className='metabolic-report__summary-row'>
+          <View className='metabolic-report__summary-cell'>
+            <View className='metabolic-report__summary-label-row'>
+            <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin metabolic-report__summary-label-icon metabolic-report__summary-label-icon--fat' />
+            <Text className='metabolic-report__summary-label'>吸收转脂占比</Text>
           </View>
           <Text className='metabolic-report__summary-metric'>
-            {fatGramDayModel}
-            <Text className='metabolic-report__summary-metric-unit'> g</Text>
+            {summaryFatStorageSharePct}
+            <Text className='metabolic-report__summary-metric-unit'> %</Text>
           </Text>
         </View>
         <View className='metabolic-report__summary-cell'>
@@ -995,7 +1014,19 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
         <View className='metabolic-report__legend-dot metabolic-report__legend-dot--ref' />
         <Text className='metabolic-report__legend-txt'>参考</Text>
         <View className='metabolic-report__legend-dot metabolic-report__legend-dot--fat' />
-        <Text className='metabolic-report__legend-txt'>脂肪累计</Text>
+        <Text className='metabolic-report__legend-txt'>转脂占峰值吸收</Text>
+      </View>
+      <View className='metabolic-report__fat-explainer'>
+        <Text className='metabolic-report__fat-explainer-title'>红线口径</Text>
+        <Text className='metabolic-report__fat-explainer-body'>
+          红线表示每分钟被模型判定为转向脂肪堆积的能量，占“当天吸收峰值”的百分比；不再直接显示脂肪累计克数。
+        </Text>
+      </View>
+      <View className='metabolic-report__disclaimer'>
+        <Text className='iconfont icon-tishi metabolic-report__disclaimer-icon' />
+        <Text className='metabolic-report__disclaimer-text'>
+          实验性质，仅供参考，无医学指导作用
+        </Text>
       </View>
       {physiologyPopupEl}
     </View>

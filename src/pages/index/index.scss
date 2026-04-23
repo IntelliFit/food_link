@@ -2146,6 +2146,30 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   animation: spin 0.8s linear infinite;
 }
 
+/* 首页：缓存先展示时，后台联网同步的微型指示器（fixed，不挤占布局） */
+.home-page__data-sync {
+  position: fixed;
+  left: 28rpx;
+  /* 与微信默认胶囊按钮同一水平线 */
+  top: 130rpx;
+  z-index: 200;
+  pointer-events: none;
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-page__data-sync-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  border: 3rpx solid rgb(92 184 150 / 22%);
+  border-top-color: #5cb896;
+  animation: spin 0.75s linear infinite;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

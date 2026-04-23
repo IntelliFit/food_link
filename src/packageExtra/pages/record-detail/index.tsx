@@ -1058,7 +1058,7 @@ function RecordDetailPage() {
                 </Button>
                 <View className='poster-share-channel' onClick={handleSharePosterToMoments}>
                   <View className='poster-share-channel-icon poster-share-channel-icon-moments'>
-                    <Text className='iconfont icon-fenxiang poster-share-channel-glyph' />
+                    <Text className='iconfont icon-pengyouquan poster-share-channel-glyph' />
                   </View>
                   <Text className='poster-share-channel-label'>朋友圈</Text>
                 </View>

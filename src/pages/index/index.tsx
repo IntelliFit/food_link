@@ -570,6 +570,8 @@ function IndexPage() {
   const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
   const [loading, setLoading] = useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
+  /** 后台静默同步中：左上角微型 spinner，不占文档流 */
+  const [dataSyncing, setDataSyncing] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
@@ -677,6 +679,8 @@ function IndexPage() {
 
     if (!silent) {
       setLoading(true)
+    } else {
+      setDataSyncing(true)
     }
     try {
       const exerciseLogParams = { date: resolvedDate }
@@ -868,6 +872,7 @@ function IndexPage() {
       if (seq === loadDashboardSeqRef.current) {
         setLoading(false)
         setIsSwitchingDate(false)
+        setDataSyncing(false)
       }
     }
   }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading, setIsSwitchingDate])
@@ -928,14 +933,23 @@ function IndexPage() {
   useShareAppMessage(() => {
     if (showRecordPosterModalRef.current && mealPosterShareForAppMessageRef.current?.imageUrl) {
       const m = mealPosterShareForAppMessageRef.current
-      return { title: m.title, path: m.path, imageUrl: m.imageUrl }
+      const img = m.imageUrl
+      // 若 imageUrl 是 canvasToTempFilePath 生成的本地临时路径，部分基础库/真机分享时无法识别
+      // fallback 到记录原图（网络地址），确保分享卡片能正常显示自定义封面
+      const isLocalTmp = /^wxfile:\/\/tmp\//i.test(img) || /^https?:\/\/tmp\//i.test(img)
+      const shareImageUrl = isLocalTmp && mealActionRecord?.image_path ? mealActionRecord.image_path : img
+      return { title: m.title, path: m.path, imageUrl: shareImageUrl }
     }
     if (showDailyPosterModalRef.current && dailyPosterShareForAppMessageRef.current?.imageUrl) {
       const d = dailyPosterShareForAppMessageRef.current
+      const img = d.imageUrl
+      const isLocalTmp = /^wxfile:\/\/tmp\//i.test(img) || /^https?:\/\/tmp\//i.test(img)
+      // 每日小结海报无对应记录原图，本地路径在支持的基础库下可用；不支持的会自动用小程序默认封面
+      const shareImageUrl = isLocalTmp ? undefined : img
       return {
         title: '今日饮食小结',
         path: '/pages/index/index',
-        imageUrl: d.imageUrl
+        imageUrl: shareImageUrl
       }
     }
     return { title: '食探 - AI 智能饮食记录', path: '/pages/index/index' }
@@ -1345,6 +1359,7 @@ function IndexPage() {
       syncDashboardPendingRef.current = null
       return
     }
+    setDataSyncing(true)
     try {
       const [res, exerciseLogsRes] = await Promise.all([
         getHomeDashboard(date),
@@ -1392,6 +1407,7 @@ function IndexPage() {
       if (syncDashboardPendingRef.current?.seq === seq) {
         syncDashboardPendingRef.current = null
       }
+      setDataSyncing(false)
     }
   }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
@@ -1916,6 +1932,12 @@ function IndexPage() {
 
   return (
     <View className='home-page'>
+      {/* 后台静默同步中：左上角微型 spinner */}
+      {dataSyncing ? (
+        <View className='home-page__data-sync'>
+          <View className='home-page__data-sync-spinner' />
+        </View>
+      ) : null}
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}

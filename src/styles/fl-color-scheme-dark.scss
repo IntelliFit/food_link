@@ -409,11 +409,11 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .hero-card .hero-badge {
-  background: rgb(0 0 0 / 22%) !important;
-  border: 1rpx solid rgb(255 255 255 / 14%) !important;
+  background: rgb(20 30 27 / 96%) !important;
+  border: 1rpx solid rgb(92 184 150 / 14%) !important;
   box-shadow:
     0 4rpx 14rpx rgb(0 0 0 / 25%),
-    inset 0 1rpx 0 rgb(255 255 255 / 8%) !important;
+    inset 0 1rpx 0 rgb(255 255 255 / 4%) !important;
 }
 
 .fl-page-theme-root--dark .hero-card.deficit-mode .hero-badge-label,
@@ -427,11 +427,11 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .hero-metabolic-row {
-  background: rgb(0 0 0 / 22%) !important;
-  border: 1rpx solid rgb(255 255 255 / 14%) !important;
+  background: rgb(20 30 27 / 96%) !important;
+  border: 1rpx solid rgb(92 184 150 / 14%) !important;
   box-shadow:
     0 4rpx 14rpx rgb(0 0 0 / 25%),
-    inset 0 1rpx 0 rgb(255 255 255 / 8%) !important;
+    inset 0 1rpx 0 rgb(255 255 255 / 4%) !important;
 }
 
 .fl-page-theme-root--dark .hero-card.deficit-mode .hero-metabolic-row__title {
@@ -452,8 +452,20 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .hero-metabolic-row__arrow {
   color: $fl-dark-text2 !important;
-  background: rgb(255 255 255 / 5%) !important;
-  border-left-color: rgb(255 255 255 / 10%) !important;
+  background: rgb(20 30 27 / 96%) !important;
+  border-left-color: rgb(92 184 150 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .member-card--free .card-upgrade-btn {
+  background: rgb(20 30 27 / 96%) !important;
+  border: 1rpx solid rgb(92 184 150 / 14%) !important;
+  box-shadow:
+    0 4rpx 14rpx rgb(0 0 0 / 25%),
+    inset 0 1rpx 0 rgb(255 255 255 / 4%) !important;
+}
+
+.fl-page-theme-root--dark .member-card--free .card-upgrade-text {
+  color: $fl-dark-accent !important;
 }
 
 .fl-page-theme-root--dark .streak-icon {
@@ -523,6 +535,71 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .meal-gauge-percent,
 .fl-page-theme-root--dark .meal-gauge-cal {
   color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-gauge-icon-wrap {
+  background: rgb(255 255 255 / 6%) !important;
+}
+
+.fl-page-theme-root--dark .body-metric-panel,
+.fl-page-theme-root--dark .body-metric-panel.water-panel {
+  background:
+    linear-gradient(180deg, rgb(24 28 31 / 96%) 0%, rgb(18 22 25 / 94%) 100%),
+    linear-gradient(135deg, rgb(92 184 150 / 8%) 0%, rgb(92 158 212 / 8%) 100%) !important;
+  border-color: $fl-dark-border !important;
+  box-shadow:
+    inset 0 1rpx 0 rgb(255 255 255 / 4%),
+    0 10rpx 28rpx rgb(0 0 0 / 24%) !important;
+}
+
+.fl-page-theme-root--dark .body-metric-title,
+.fl-page-theme-root--dark .body-metric-main,
+.fl-page-theme-root--dark .weight-chip-value {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .body-metric-empty,
+.fl-page-theme-root--dark .body-metric-sub,
+.fl-page-theme-root--dark .weight-chip-date,
+.fl-page-theme-root--dark .water-trend-label,
+.fl-page-theme-root--dark .water-metric-note {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .weight-chip {
+  background: rgb(255 255 255 / 5%) !important;
+  border: 1rpx solid rgb(255 255 255 / 6%) !important;
+}
+
+.fl-page-theme-root--dark .water-trend-bar-wrap {
+  background: rgb(255 255 255 / 5%) !important;
+  border: 1rpx solid rgb(255 255 255 / 6%) !important;
+}
+
+.fl-page-theme-root--dark .analysis-status {
+  background: rgb(255 255 255 / 5%) !important;
+  border-color: rgb(120 165 200 / 18%) !important;
+}
+
+.fl-page-theme-root--dark .analysis-status.warning {
+  background: rgb(240 152 92 / 14%) !important;
+  border-color: rgb(240 152 92 / 24%) !important;
+}
+
+.fl-page-theme-root--dark .analysis-status-text,
+.fl-page-theme-root--dark .analysis-content,
+.fl-page-theme-root--dark .analysis-loading-text,
+.fl-page-theme-root--dark .analysis-empty-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .ai-disclaimer-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analysis-error {
+  background: rgb(120 40 40 / 18%) !important;
+  border-color: rgb(245 120 120 / 18%) !important;
 }
 
 .fl-page-theme-root--dark .analysis-card {
@@ -1342,6 +1419,175 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-text2 !important;
 }
 
+.fl-page-theme-root--dark .metabolic-report__summary-label-icon--fat,
+.fl-page-theme-root--dark .metabolic-report__fat-explainer-title {
+  color: #fca5a5 !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__legend-dot--fat {
+  background: rgb(248 113 113 / 92%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__fat-explainer {
+  background: rgb(120 40 40 / 14%) !important;
+  border-color: rgb(248 113 113 / 16%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__fat-explainer-body {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__summary-metric-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__summary-label-icon:not(.metabolic-report__summary-label-icon--fat) {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__title-icon {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__phys-btn {
+  background: $fl-dark-panel-bg-strong !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__phys-btn-text {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__back-btn {
+  background: $fl-dark-panel-bg-strong !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__back-arrow {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__disclaimer {
+  background: rgb(92 184 150 / 10%) !important;
+  border-color: rgb(92 184 150 / 25%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__disclaimer-icon,
+.fl-page-theme-root--dark .metabolic-report__disclaimer-text {
+  color: $fl-dark-accent !important;
+}
+
+/* 基础数据弹层 */
+.fl-page-theme-root--dark .metabolic-phys-popup__portal.taroify-popup {
+  background: $fl-dark-modal-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .metabolic-phys-popup {
+  background: $fl-dark-modal-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .metabolic-phys-popup__title,
+.fl-page-theme-root--dark .metabolic-phys-popup__value {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .metabolic-phys-popup__hint,
+.fl-page-theme-root--dark .metabolic-phys-popup__label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .metabolic-phys-popup__row {
+  border-bottom-color: rgb(92 184 150 / 15%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-phys-popup__close {
+  background: linear-gradient(90deg, #4a9d7d 0%, #6cc9a8 100%) !important;
+}
+
+/* 档案表单弹层 */
+.fl-page-theme-root--dark .metabolic-profile-sheet {
+  background: $fl-dark-modal-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__title,
+.fl-page-theme-root--dark .metabolic-profile-sheet__label,
+.fl-page-theme-root--dark .metabolic-profile-sheet__gender-text,
+.fl-page-theme-root--dark .metabolic-profile-sheet__input {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__desc,
+.fl-page-theme-root--dark .metabolic-profile-sheet__hint,
+.fl-page-theme-root--dark .metabolic-profile-sheet__bmr-preview-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__input {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__gender-btn {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__gender-btn--on {
+  border-color: $fl-dark-accent !important;
+  background: rgb(92 184 150 / 14%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__gender-btn--on .metabolic-profile-sheet__gender-text {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__bmr-preview {
+  background: rgb(92 184 150 / 10%) !important;
+  border-color: rgb(92 184 150 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__btn--ghost {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__btn--ghost-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .metabolic-profile-sheet__btn--primary {
+  background: linear-gradient(90deg, #4a9d7d 0%, #6cc9a8 100%) !important;
+}
+
+/* 档案未完善门控状态 */
+.fl-page-theme-root--dark .metabolic-report__gate-mask {
+  background: rgb(20 24 23 / 80%) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__gate-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__gate-desc {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__gate-cta {
+  color: $fl-dark-accent !important;
+  background: rgb(92 184 150 / 14%) !important;
+  border-color: rgb(92 184 150 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__spinner {
+  border-color: rgb(92 184 150 / 12%) !important;
+  border-top-color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .metabolic-report__retry {
+  background: linear-gradient(90deg, #4a9d7d 0%, #6cc9a8 100%) !important;
+}
+
 /* ---------- 记录页（非相机全屏） ---------- */
 .fl-page-theme-root--dark .record-page.camera-privacy-gate,
 .fl-page-theme-root--dark .record-page.camera-privacy-checking,
@@ -1778,6 +2024,93 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   background: rgb(125 211 176 / 10%) !important;
   color: $fl-dark-accent !important;
   border-color: rgb(125 211 176 / 26%) !important;
+}
+
+.fl-page-theme-root--dark .membership-page .points-balance-card,
+.fl-page-theme-root--dark .membership-page .recharge-card,
+.fl-page-theme-root--dark .membership-page .invite-card,
+.fl-page-theme-root--dark .membership-page .points-rules-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .membership-page .points-balance-label,
+.fl-page-theme-root--dark .membership-page .recharge-title,
+.fl-page-theme-root--dark .membership-page .rules-modal-title,
+.fl-page-theme-root--dark .membership-page .recharge-input-prefix,
+.fl-page-theme-root--dark .membership-page .invite-code {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .membership-page .points-balance-help-text,
+.fl-page-theme-root--dark .membership-page .points-rule-item,
+.fl-page-theme-root--dark .membership-page .points-rules-line,
+.fl-page-theme-root--dark .membership-page .invite-label-hint,
+.fl-page-theme-root--dark .membership-page .rules-modal-line,
+.fl-page-theme-root--dark .membership-page .rules-modal-close-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .membership-page .points-balance-help-icon {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .membership-page .points-balance-value,
+.fl-page-theme-root--dark .membership-page .recharge-preview,
+.fl-page-theme-root--dark .membership-page .invite-label {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .membership-page .recharge-preset,
+.fl-page-theme-root--dark .membership-page .recharge-input-row,
+.fl-page-theme-root--dark .membership-page .rules-modal-close-btn {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .membership-page .recharge-preset--active {
+  background: rgb(125 211 176 / 12%) !important;
+  border-color: rgb(125 211 176 / 32%) !important;
+  box-shadow: 0 6rpx 16rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .membership-page .recharge-preset-text,
+.fl-page-theme-root--dark .membership-page .recharge-input {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .membership-page .invite-copy-btn {
+  background: rgb(255 255 255 / 10%) !important;
+  border: 1rpx solid $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .membership-page .rules-modal-mask {
+  background: rgb(0 0 0 / 62%) !important;
+}
+
+.fl-page-theme-root--dark .membership-page .rules-modal-content {
+  background: $fl-dark-modal-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 42%) !important;
+}
+
+.fl-page-theme-root--dark .membership-page .rules-modal-handle-bar,
+.fl-page-theme-root--dark .membership-page .rules-modal-divider {
+  background: rgb(255 255 255 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .membership-page .subscribe-btn {
+  background: linear-gradient(135deg, #5cb896 0%, #7bc4a8 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 8rpx 24rpx rgb(92 184 150 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .membership-page .subscribe-btn::after {
+  border: none !important;
 }
 
 .fl-page-theme-root--dark .result-page .macro-bar,
