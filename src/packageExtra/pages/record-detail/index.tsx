@@ -1044,23 +1044,11 @@ function RecordDetailPage() {
                 </View>
               </View>
               <View className='poster-modal-bottom-bar'>
-                <Button
-                  className='poster-share-channel poster-share-channel--btn'
-                  openType='share'
-                  plain
-                  hoverClass='poster-share-channel--hover'
-                  disabled={!posterImageUrl}
-                >
+                <View className='poster-share-channel' onClick={handleSharePosterToMoments}>
                   <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
                     <Text className='iconfont icon-wechat poster-share-channel-glyph' />
                   </View>
-                  <Text className='poster-share-channel-label'>微信好友</Text>
-                </Button>
-                <View className='poster-share-channel' onClick={handleSharePosterToMoments}>
-                  <View className='poster-share-channel-icon poster-share-channel-icon-moments'>
-                    <Text className='iconfont icon-pengyouquan poster-share-channel-glyph' />
-                  </View>
-                  <Text className='poster-share-channel-label'>朋友圈</Text>
+                  <Text className='poster-share-channel-label'>微信</Text>
                 </View>
                 <View className='poster-share-channel' onClick={handleSavePoster}>
                   <View className='poster-share-channel-icon poster-share-channel-icon-save'>

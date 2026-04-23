@@ -104,17 +104,23 @@ export async function resolveImagePathForAlbumSave(src: string): Promise<string>
       if (savedFilePath) return savedFilePath
     } catch (err: any) {
       const errMsg = String(err?.errMsg || err?.message || err || '')
-      // USER_DATA_PATH 已满或 tmp 路径无读取权限时，fallback 到规范化路径
+      // USER_DATA_PATH 已满 → 临时文件本身有效，只是没空间复制到持久目录
+      // 直接返回原始路径即可，saveImageToPhotosAlbum 通常可直接使用 http://tmp/... 路径
+      if (errMsg.includes('exceeded the maximum size')) {
+        const fallbackPath = raw || normalized
+        if (fallbackPath) {
+          console.warn('[resolveImagePathForAlbumSave] saveFile skipped due to storage limit, fallback to raw tmp path', fallbackPath)
+          return fallbackPath
+        }
+      }
+      // tmp 路径无读取权限时，fallback 到规范化路径
       // 但必须先验证临时路径仍可读，避免返回已失效的路径
-      if (
-        errMsg.includes('exceeded the maximum size') ||
-        errMsg.includes('permission denied')
-      ) {
+      if (errMsg.includes('permission denied')) {
         const fallbackPath = normalized || raw
         try {
           const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fallbackPath })
           if (info.size > 0) {
-            console.warn('[resolveImagePathForAlbumSave] saveFile skipped due to storage/perm limit, fallback to normalized tmp path', tempFilePath)
+            console.warn('[resolveImagePathForAlbumSave] saveFile skipped due to perm limit, fallback to normalized tmp path', fallbackPath)
             return fallbackPath
           }
         } catch {
