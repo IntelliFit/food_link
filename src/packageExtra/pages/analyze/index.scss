@@ -217,6 +217,10 @@
 
     /* Initial padding-bottom: 100% from .grid-item is kept, ensuring 1:1 */
   }
+
+  &--multiview {
+    border: 2rpx solid #00bc7d;
+  }
 }
 
 /* Re-implementing grid item content positioning */

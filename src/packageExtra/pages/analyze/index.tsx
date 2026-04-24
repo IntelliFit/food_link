@@ -249,8 +249,8 @@ function AnalyzePage() {
   const handleMultiViewSwitchChange = (e: { detail?: { value?: boolean } }) => {
     const nextValue = e.detail?.value === true
     if (!nextValue && imagePaths.length > 1) {
-      showMultiViewRequiredModal()
-      return
+      // 关闭多视角时自动只保留第一张图片
+      setImagePaths([imagePaths[0]])
     }
     setIsMultiView(nextValue)
   }
@@ -677,18 +677,14 @@ function AnalyzePage() {
         {imagePaths.length > 0 ? (
           <View className='image-grid'>
             {imagePaths.map((path, index) => (
-              <View key={index} className='grid-item'>
+              <View key={index} className={`grid-item ${isMultiView ? 'grid-item--multiview' : ''}`}>
                 <Image
                   src={path}
                   mode='aspectFill'
                   className='grid-image'
                   onClick={() => handlePreviewImage(path)}
                 />
-                {index === 0 && imagePaths.length > 1 && (
-                  <View className='image-batch-badge'>
-                    <Text className='image-batch-badge-text'>共 {imagePaths.length} 张</Text>
-                  </View>
-                )}
+
                 <View className='remove-btn' onClick={(e) => {
                   e.stopPropagation()
                   handleRemoveImage(index)
