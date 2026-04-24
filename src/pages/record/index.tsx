@@ -1,406 +1,515 @@
-import { View, Text, Camera, Image, Button } from '@tarojs/components'
-import { useState, useEffect, useRef, useCallback } from 'react'
-import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
-import {
-  getAccessToken,
-  getMyMembership,
-  type MembershipStatus,
-} from '../../utils/api'
-import { withAuth, redirectToLogin } from '../../utils/withAuth'
-import { extraPkgUrl } from '../../utils/subpackage-extra'
-import { pickImageAndOpenAnalyze } from '../../utils/weapp-open-analyze-image'
+import { View, Text, Image, Input } from '@tarojs/components'
+import { useState } from 'react'
+import Taro from '@tarojs/taro'
 
 import './index.scss'
 
-type CameraAuthStatus = 'authorized' | 'denied'
+export default function RecordPage() {
+  const [activeMethod, setActiveMethod] = useState('photo')
+  const [foodText, setFoodText] = useState('')
+  const [foodAmount, setFoodAmount] = useState('')
+  const [selectedMeal, setSelectedMeal] = useState('breakfast')
+  const [selectedTime, setSelectedTime] = useState('')
 
-/** 与 `Button openType=agreePrivacyAuthorization` 的 id 一致，供 onNeedPrivacyAuthorization 的 resolve 校验 */
-const RECORD_CAMERA_PRIVACY_BTN_ID = 'record-camera-privacy-agree'
+  const recordMethods = [
+    { id: 'photo', icon: '📷', text: '拍照识别', iconClass: 'photo-icon' },
+    { id: 'text', icon: '✏️', text: '文字记录', iconClass: 'text-icon' },
+    { id: 'history', icon: '📋', text: '历史记录', iconClass: 'history-icon' }
+  ]
 
-type PrivacyUiState = 'checking' | 'need' | 'ok'
-
-/**
- * 仅当错误信息明确像「系统/微信拒绝摄像头」时才进拦截页。
- * 隐私未同意走 privacy 门禁；切勿把泛化的 operateCamera:fail 一律当权限（真机常因占用/前后台/组件未就绪等失败）。
- */
-function isLikelyCameraAuthDeniedMessage(msg: string): boolean {
-  const raw = msg || ''
-  const m = raw.toLowerCase()
-  if (m.includes('privacy') && (m.includes('not authorized') || m.includes('unauthorized'))) return false
-  if (m.includes('auth deny') || m.includes('auth denied')) return true
-  if (m.includes('no permission')) return true
-  if (raw.includes('用户拒绝') || raw.includes('用户不允许')) return true
-  if (raw.includes('不允许使用摄像头')) return true
-  if (raw.includes('请在小程序设置中打开') || raw.includes('前往设置')) return true
-  if (m.includes('operatecamera') && m.includes('fail')) {
-    // 先排除明确的非权限类错误（相机被占用、硬件未就绪、超时等）
-    const nonAuthLike =
-      m.includes('not available') ||
-      m.includes('unavailable') ||
-      m.includes('in use') ||
-      m.includes('busy') ||
-      m.includes('timeout') ||
-      m.includes('interrupted') ||
-      m.includes('device') ||
-      m.includes('hardware')
-    if (nonAuthLike) return false
-    return (
-      m.includes('auth') ||
-      m.includes('deny') ||
-      m.includes('denied') ||
-      m.includes('permission') ||
-      m.includes('not authorized') ||
-      m.includes('system deny') ||
-      raw.includes('未授权') ||
-      raw.includes('无权限') ||
-      (raw.includes('系统') && raw.includes('拒绝'))
-    )
+  const handleMethodClick = (methodId: string) => {
+    setActiveMethod(methodId)
   }
-  return false
-}
 
-function showFoodAnalysisQuotaModal(ms: MembershipStatus) {
-  if (typeof ms.points_balance === 'number') {
-    Taro.showModal({
-      title: '积分不足',
-      content: '标准分析需至少 1 积分，请先充值。',
-      confirmText: '去充值',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-      }
-    })
-    return
-  }
-  const isPro = ms.is_pro
-  Taro.showModal({
-    title: '今日次数已用完',
-    content: isPro
-      ? `今日 ${ms.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-      : `免费版每日限 ${ms.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-    confirmText: isPro ? '知道了' : '去开通',
-    cancelText: '取消',
-    showCancel: !isPro,
-    success: (res) => {
-      if (!isPro && res.confirm) {
-        Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-      }
-    }
-  })
-}
-
-function isFoodAnalysisBlocked(ms: MembershipStatus | null): boolean {
-  if (!ms) return false
-  if (typeof ms.points_balance === 'number') {
-    return ms.points_balance < 1
-  }
-  return ms.daily_remaining !== null && ms.daily_remaining <= 0
-}
-
-function RecordPage() {
-  // 相机相关状态
-  const [cameraAuth, setCameraAuth] = useState<CameraAuthStatus>('authorized')
-  const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off')
-  const [devicePosition, setDevicePosition] = useState<'front' | 'back'>('back')
-  const [isCapturing, setIsCapturing] = useState(false)
-  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
-  const [scanning, setScanning] = useState(true)
-  /** 变更后强制重挂 <Camera>，配合从设置返回、非权限类偶发错误恢复 */
-  const [cameraInstanceKey, setCameraInstanceKey] = useState(0)
-  /** 正式版：隐私指引未同意时 Camera 会失败；先门禁再挂载组件 */
-  const [privacyUi, setPrivacyUi] = useState<PrivacyUiState>(() =>
-    Taro.getEnv() === Taro.ENV_TYPE.WEAPP ? 'checking' : 'ok'
-  )
-  const privacyResolveRef = useRef<
-    ((o: { event: 'exposureAuthorization' | 'agree' | 'disagree'; buttonId?: string }) => void) | null
-  >(null)
-
-  const cameraContextRef = useRef<Taro.CameraContext | null>(null)
-
-  useDidShow(() => {
-    if (getAccessToken()) {
-      getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
-    }
-    setScanning(true)
-
-    if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
-      Taro.getPrivacySetting({
-        success: (res) => {
-          setPrivacyUi(res.needAuthorization ? 'need' : 'ok')
-        },
-        fail: () => setPrivacyUi('ok')
-      })
-    } else {
-      setPrivacyUi('ok')
-    }
-  })
-
-  useEffect(() => {
-    if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) return
-    Taro.onNeedPrivacyAuthorization((resolve) => {
-      privacyResolveRef.current = resolve
-      setPrivacyUi('need')
-    })
-  }, [])
-
-  useEffect(() => {
-    cameraContextRef.current = Taro.createCameraContext()
-  }, [cameraInstanceKey])
-
-  useShareAppMessage(() => ({
-    title: '食探 - 记录每一餐，健康看得见',
-    path: '/pages/record/index'
-  }))
-
-  useShareTimeline(() => ({
-    title: '食探 - 记录每一餐，健康看得见'
-  }))
-
-  useEffect(() => {
-    Taro.showShareMenu({
-      withShareTicket: true,
-      // @ts-ignore
-      menus: ['shareAppMessage', 'shareTimeline']
-    })
-  }, [])
-
-  // 拍照处理
-  const handleTakePhoto = useCallback(async () => {
-    if (!getAccessToken()) {
-      redirectToLogin()
-      return
-    }
-
-    if (membershipStatus && isFoodAnalysisBlocked(membershipStatus)) {
-      showFoodAnalysisQuotaModal(membershipStatus)
-      return
-    }
-
-    if (isCapturing || !cameraContextRef.current) return
-
-    setIsCapturing(true)
-    Taro.vibrateShort({ type: 'light' }).catch(() => {})
-
-    try {
-      const { tempImagePath } = await cameraContextRef.current.takePhoto({
-        quality: 'high'
-      })
-      
-      Taro.setStorageSync('analyzeImagePath', tempImagePath)
-      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
-    } catch (err) {
-      console.error('拍照失败:', err)
-      Taro.showToast({ title: '拍照失败', icon: 'none' })
-    } finally {
-      setIsCapturing(false)
-    }
-  }, [isCapturing, membershipStatus])
-
-  // 返回上一页
-  const handleGoBack = useCallback(() => {
-    Taro.navigateBack({ delta: 1 }).catch(() => {
-      Taro.switchTab({ url: '/pages/index/index' })
-    })
-  }, [])
-
-  // 从相册选择
-  const handleChooseFromAlbum = useCallback(() => {
-    if (!getAccessToken()) {
-      redirectToLogin()
-      return
-    }
-
-    if (membershipStatus && isFoodAnalysisBlocked(membershipStatus)) {
-      showFoodAnalysisQuotaModal(membershipStatus)
-      return
-    }
-
+  const handleChooseImage = () => {
     Taro.chooseImage({
       count: 1,
-      sizeType: ['compressed'],
-      sourceType: ['album'],
+      sizeType: ['original', 'compressed'],
+      sourceType: ['album', 'camera'],
       success: (res) => {
         const imagePath = res.tempFilePaths[0]
+        console.log('选择的图片:', res.tempFilePaths)
+        // 将图片路径存储到全局数据中
         Taro.setStorageSync('analyzeImagePath', imagePath)
-        Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
+        // 直接跳转到分析页面
+        Taro.navigateTo({
+          url: '/pages/analyze/index'
+        })
       },
       fail: (err) => {
-        if (err.errMsg.indexOf('cancel') > -1) return
         console.error('选择图片失败:', err)
-        Taro.showToast({ title: '选择图片失败', icon: 'none' })
+        Taro.showToast({
+          title: '选择图片失败',
+          icon: 'none'
+        })
       }
     })
-  }, [membershipStatus])
+  }
 
-  const handleCameraError = useCallback((e: { detail?: { errMsg?: string } }) => {
-    console.error('相机错误:', e)
-    const msg = String(e?.detail?.errMsg ?? '')
-    const low = msg.toLowerCase()
-    if (low.includes('privacy') && (low.includes('not authorized') || low.includes('unauthorized'))) {
-      setPrivacyUi('need')
+
+  const meals = [
+    { id: 'breakfast', name: '早餐', icon: '🌅', color: '#ff6900' },
+    { id: 'lunch', name: '午餐', icon: '☀️', color: '#00c950' },
+    { id: 'dinner', name: '晚餐', icon: '🌙', color: '#2b7fff' },
+    { id: 'snack', name: '加餐', icon: '🍎', color: '#ad46ff' }
+  ]
+
+  const commonFoods = [
+    '米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包',
+    '蔬菜', '水果', '鱼', '牛肉', '豆腐', '酸奶', '坚果', '更多'
+  ]
+
+  const handleMealSelect = (mealId: string) => {
+    setSelectedMeal(mealId)
+  }
+
+  const handleCommonFoodClick = (food: string) => {
+    if (food === '更多') {
+      // 可以打开更多食物选择
       return
     }
-    if (isLikelyCameraAuthDeniedMessage(msg)) {
-      setCameraAuth('denied')
+    setFoodText(food)
+  }
+
+  const handleTimeSelect = () => {
+    const now = new Date()
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    
+    // 如果没有选择时间，默认使用当前时间
+    if (!selectedTime) {
+      setSelectedTime(currentTime)
+    } else {
+      // 可以打开时间选择器
+      Taro.showActionSheet({
+        itemList: ['使用当前时间', '手动输入'],
+        success: (res) => {
+          if (res.tapIndex === 0) {
+            setSelectedTime(currentTime)
+          }
+        }
+      })
+    }
+  }
+
+  const handleSubmitFood = () => {
+    if (!foodText.trim()) {
+      Taro.showToast({
+        title: '请输入食物名称',
+        icon: 'none'
+      })
       return
     }
-    Taro.showToast({ title: '相机暂时不可用，请重试', icon: 'none' })
-    setCameraInstanceKey((k) => k + 1)
-  }, [])
-
-  const handlePrivacyAgreed = useCallback(() => {
-    setPrivacyUi('ok')
-    const finish = privacyResolveRef.current
-    privacyResolveRef.current = null
-    if (finish) {
-      finish({ event: 'agree', buttonId: RECORD_CAMERA_PRIVACY_BTN_ID })
+    
+    const now = new Date()
+    const defaultTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    
+    const foodData = {
+      name: foodText,
+      amount: foodAmount || '1份',
+      meal: selectedMeal,
+      time: selectedTime || defaultTime
     }
-    setCameraInstanceKey((k) => k + 1)
-  }, [])
+    
+    console.log('添加食物:', foodData)
+    Taro.showToast({
+      title: '添加成功',
+      icon: 'success'
+    })
+    
+    // 重置表单
+    setFoodText('')
+    setFoodAmount('')
+    setSelectedTime('')
+  }
 
-  const handlePrivacyDecline = useCallback(() => {
-    const finish = privacyResolveRef.current
-    privacyResolveRef.current = null
-    if (finish) finish({ event: 'disagree' })
-    void Taro.switchTab({ url: '/pages/index/index' })
-  }, [])
+  // 历史记录数据
+  const getTodayDate = () => {
+    return new Date().toISOString().split('T')[0]
+  }
+  
+  const [selectedDate, setSelectedDate] = useState(getTodayDate())
+  
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const month = date.getMonth() + 1
+    const day = date.getDate()
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六']
+    const weekday = weekdays[date.getDay()]
+    const today = new Date()
+    const isToday = dateStr === today.toISOString().split('T')[0]
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const isYesterday = dateStr === yesterday.toISOString().split('T')[0]
+    
+    if (isToday) {
+      return `${month}月${day}日 今天`
+    } else if (isYesterday) {
+      return `${month}月${day}日 昨天`
+    }
+    return `${month}月${day}日 周${weekday}`
+  }
+  
+  const getYesterdayDate = () => {
+    const date = new Date()
+    date.setDate(date.getDate() - 1)
+    return date.toISOString().split('T')[0]
+  }
+  
+  const allHistoryRecords = [
+    {
+      id: 1,
+      date: getTodayDate(),
+      meals: [
+        {
+          id: 1,
+          mealType: 'breakfast',
+          mealName: '早餐',
+          time: '08:30',
+          foods: [
+            { name: '鸡蛋', amount: '2个', calorie: 140 },
+            { name: '全麦面包', amount: '2片', calorie: 160 },
+            { name: '牛奶', amount: '200ml', calorie: 120 }
+          ],
+          totalCalorie: 420
+        },
+        {
+          id: 2,
+          mealType: 'lunch',
+          mealName: '午餐',
+          time: '12:15',
+          foods: [
+            { name: '米饭', amount: '1碗', calorie: 200 },
+            { name: '鸡胸肉', amount: '150g', calorie: 250 },
+            { name: '青菜', amount: '200g', calorie: 50 }
+          ],
+          totalCalorie: 500
+        },
+        {
+          id: 3,
+          mealType: 'dinner',
+          mealName: '晚餐',
+          time: '18:30',
+          foods: [
+            { name: '面条', amount: '1碗', calorie: 300 },
+            { name: '牛肉', amount: '100g', calorie: 200 },
+            { name: '蔬菜沙拉', amount: '150g', calorie: 60 }
+          ],
+          totalCalorie: 560
+        }
+      ],
+      totalCalorie: 1480
+    },
+    {
+      id: 2,
+      date: getYesterdayDate(),
+      meals: [
+        {
+          id: 4,
+          mealType: 'breakfast',
+          mealName: '早餐',
+          time: '08:00',
+          foods: [
+            { name: '燕麦粥', amount: '1碗', calorie: 150 },
+            { name: '香蕉', amount: '1根', calorie: 90 }
+          ],
+          totalCalorie: 240
+        },
+        {
+          id: 5,
+          mealType: 'lunch',
+          mealName: '午餐',
+          time: '12:30',
+          foods: [
+            { name: '米饭', amount: '1碗', calorie: 200 },
+            { name: '鱼', amount: '150g', calorie: 180 },
+            { name: '豆腐', amount: '100g', calorie: 80 }
+          ],
+          totalCalorie: 460
+        }
+      ],
+      totalCalorie: 700
+    }
+  ]
 
-  const openSettings = useCallback(() => {
-    Taro.openSetting({
-      // 仅用 success + getSetting 时，部分机型授权已开但 scope.camera 仍为 false，会永久卡在拦截页
-      complete: () => {
-        setCameraAuth('authorized')
-        setCameraInstanceKey((k) => k + 1)
+  // 根据选中日期筛选记录
+  const currentDateRecords = allHistoryRecords.find(record => record.date === selectedDate)
+  const historyRecords = currentDateRecords ? [currentDateRecords] : []
+
+  const handleEditRecord = (recordId: number) => {
+    console.log('编辑记录:', recordId)
+    // 可以跳转到编辑页面
+  }
+
+  const handleDeleteRecord = (recordId: number) => {
+    Taro.showModal({
+      title: '确认删除',
+      content: '确定要删除这条记录吗？',
+      success: (res) => {
+        if (res.confirm) {
+          console.log('删除记录:', recordId)
+          Taro.showToast({
+            title: '删除成功',
+            icon: 'success'
+          })
+        }
       }
     })
-  }, [])
-
-  if (privacyUi === 'checking' && Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
-    return (
-      <View className='record-page camera-privacy-checking'>
-        <View className='loading-spinner-md' />
-      </View>
-    )
   }
 
-  if (privacyUi === 'need' && Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
-    return (
-      <View className='record-page camera-privacy-gate'>
-        <View className='privacy-gate-content'>
-          <Text className='iconfont icon-xiangji privacy-gate-icon' />
-          <Text className='privacy-gate-title'>使用相机前请同意隐私保护指引</Text>
-          <Text className='privacy-gate-desc'>
-            这与微信设置里「摄像头」开关不是同一项：请先点下方「同意并使用相机」。若仅去系统设置打开摄像头，本页仍可能无法启动相机。
-          </Text>
-          <Button
-            className='privacy-gate-agree-btn'
-            id={RECORD_CAMERA_PRIVACY_BTN_ID}
-            openType='agreePrivacyAuthorization'
-            onAgreePrivacyAuthorization={handlePrivacyAgreed}
-          >
-            同意并使用相机
-          </Button>
-          <View
-            className='privacy-gate-link'
-            onClick={() => {
-              Taro.openPrivacyContract({})
-            }}
-          >
-            <Text>查看《用户隐私保护指引》全文</Text>
-          </View>
-          <View className='privacy-gate-link privacy-gate-link--muted' onClick={handlePrivacyDecline}>
-            <Text>暂不使用，返回首页</Text>
-          </View>
-        </View>
-      </View>
-    )
-  }
-
-  // 权限拒绝页面
-  if (cameraAuth === 'denied') {
-    return (
-      <View className='record-page camera-denied'>
-        <View className='denied-content'>
-          <Text className='iconfont icon-jiesuo denied-icon' />
-          <Text className='denied-title'>需要相机权限</Text>
-          <Text className='denied-desc'>
-            若小程序设置里摄像头已开仍无法使用，请先返回确认已在相机页完成「隐私保护指引」同意。也可点「改用系统相机」绕过，或直接点击下方「从相册选择」上传图片完成分析。
-          </Text>
-          <View className='denied-btn' onClick={() => void pickImageAndOpenAnalyze(['camera'])}>
-            <Text>改用系统相机</Text>
-          </View>
-          <View className='denied-btn denied-btn--secondary' onClick={openSettings}>
-            <Text>打开权限设置</Text>
-          </View>
-          <View className='denied-btn denied-btn--tertiary' onClick={() => void pickImageAndOpenAnalyze(['album'])}>
-            <Text className='iconfont icon-picture' />
-            <Text>从相册选择</Text>
-          </View>
-        </View>
-      </View>
-    )
-  }
+  const tips = [
+    '拍照时请确保食物清晰可见，光线充足',
+    '尽量将食物放在白色或浅色背景上',
+    '一次可以识别多种食物，建议分开摆放',
+    '识别结果可以手动调整和补充'
+  ]
 
   return (
-    <View className='record-page camera-mode'>
-      {/* 全屏相机 */}
-      <Camera
-        key={cameraInstanceKey}
-        className='camera-fullscreen'
-        devicePosition={devicePosition}
-        flash={flashMode}
-        resolution='high'
-        frameSize='large'
-        onError={handleCameraError}
-      />
-
-      {/* 顶部控制栏：仅保留返回 */}
-      <View className='top-control-bar'>
-        <View className='top-btn back-btn' onClick={handleGoBack}>
-          <Text className='back-arrow'>&#8249;</Text>
-        </View>
+    <View className='record-page'>
+      {/* 页面头部 */}
+      <View className='page-header'>
+        <Text className='page-title'>记录饮食</Text>
+        <Text className='page-subtitle'>记录您的每一餐，让健康管理更简单</Text>
       </View>
 
-      {/* 中间扫描框区域 */}
-      <View className='scanner-container'>
-        <View className='scanner-frame'>
-          {/* 四角圆弧形括号 - 主题色绿色 */}
-          <View className='corner corner-tl' />
-          <View className='corner corner-tr' />
-          <View className='corner corner-bl' />
-          <View className='corner corner-br' />
-          
-          {/* 扫描线动画 - 绿色 */}
-          {scanning && <View className='scan-line' />}
-        </View>
+      {/* 记录方式选择 */}
+      <View className='record-methods'>
+        {recordMethods.map((method) => (
+          <View
+            key={method.id}
+            className={`method-card ${activeMethod === method.id ? 'active' : ''}`}
+            onClick={() => handleMethodClick(method.id)}
+          >
+            <View className={`method-icon ${method.iconClass}`}>
+              <Text>{method.icon}</Text>
+            </View>
+            <Text className='method-text'>{method.text}</Text>
+          </View>
+        ))}
       </View>
 
-      {/* 底部控制区域 */}
-      <View className='bottom-controls'>
-        {/* 相册按钮 - 左侧 */}
-        <View className='side-btn placeholder'>
-        </View>
+      {/* AI拍照识别区域 */}
+      {activeMethod === 'photo' && (
+        <View className='ai-recognition-section'>
+          <View>
+            <Text className='ai-title'>AI 拍照识别</Text>
+            <Text className='ai-subtitle'>拍下您的食物，AI 帮您分析营养成分</Text>
+          </View>
 
-        {/* 拍照按钮 */}
-        <View className={`capture-btn-wrapper ${isCapturing ? 'capturing' : ''}`} onClick={handleTakePhoto}>
-          <View className='capture-btn-outer'>
-            <View className='capture-btn-inner'>
-              <Text className='iconfont icon-xiangji capture-icon' />
+          <View className='upload-area' onClick={handleChooseImage}>
+            <View className='upload-icon'>
+              <Image
+                src='/assets/page_icons/Take pictures-2.png'
+                mode='aspectFit'
+                className='upload-icon-image'
+              />
+            </View>
+            <Text className='upload-text'>点击上传食物照片</Text>
+            <Text className='upload-hint'>支持 JPG、PNG 格式，最大 10MB</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Tips卡片 - 只在拍照识别页面显示 */}
+      {activeMethod === 'photo' && (
+        <View className='tips-section'>
+          <View className='tips-header'>
+            <View className='tips-badge'>
+              <Text className='tips-badge-text'>Tips</Text>
+            </View>
+            <Text className='tips-title'>拍照识别技巧</Text>
+          </View>
+          <View className='tips-list'>
+            {tips.map((tip, index) => (
+              <View key={index} className='tip-item'>
+                <Text className='tip-dot'>•</Text>
+                <Text className='tip-text'>{tip}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* 文字记录区域 */}
+      {activeMethod === 'text' && (
+        <View className='text-record-section'>
+          {/* 餐次选择 */}
+          <View className='meal-selector'>
+            {meals.map((meal) => (
+              <View
+                key={meal.id}
+                className={`meal-option ${selectedMeal === meal.id ? 'active' : ''}`}
+                onClick={() => handleMealSelect(meal.id)}
+                style={{ borderColor: selectedMeal === meal.id ? meal.color : '#e5e7eb' }}
+              >
+                <Text className='meal-icon'>{meal.icon}</Text>
+                <Text className='meal-name'>{meal.name}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* 常用食物快速选择 */}
+          <View className='common-foods-section'>
+            <Text className='section-label'>常用食物</Text>
+            <View className='common-foods-grid'>
+              {commonFoods.map((food, index) => (
+                <View
+                  key={index}
+                  className='common-food-item'
+                  onClick={() => handleCommonFoodClick(food)}
+                >
+                  <Text className='common-food-text'>{food}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* 输入卡片 */}
+          <View className='text-input-card'>
+            <Text className='input-label'>食物名称</Text>
+            <Input
+              className='food-name-input'
+              placeholder='例如：一碗米饭、一个苹果'
+              placeholderClass='input-placeholder'
+              value={foodText}
+              onInput={(e) => setFoodText(e.detail.value)}
+              maxlength={50}
+            />
+
+            <View className='input-row'>
+              <View className='input-group'>
+                <Text className='input-label-small'>数量</Text>
+                <Input
+                  className='amount-input'
+                  placeholder='例如：1碗、200g'
+                  placeholderClass='input-placeholder'
+                  value={foodAmount}
+                  onInput={(e) => setFoodAmount(e.detail.value)}
+                  maxlength={20}
+                />
+              </View>
+              <View className='input-group'>
+                <Text className='input-label-small'>时间</Text>
+                <View className='time-picker' onClick={handleTimeSelect}>
+                  <Text className={selectedTime ? 'time-text' : 'time-placeholder'}>
+                    {selectedTime || '选择时间'}
+                  </Text>
+                  <Text className='time-icon'>🕐</Text>
+                </View>
+              </View>
+            </View>
+
+            <View className='action-buttons'>
+              <View className='action-btn primary-btn' onClick={handleSubmitFood}>
+                <Text className='btn-text'>确认添加</Text>
+              </View>
             </View>
           </View>
         </View>
+      )}
 
-        {/* 相册按钮 - 右侧 */}
-        <View className='album-btn' onClick={handleChooseFromAlbum}>
-          <Image
-            className='album-icon-img'
-            src='data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAyNCAxMDI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik04NTMuMzMzMzMzIDk2YzQwLjUzMzMzMyAwIDc0LjY2NjY2NyAzNC4xMzMzMzMgNzQuNjY2NjY3IDc0LjY2NjY2N3Y2ODIuNjY2NjY2YzAgNDAuNTMzMzMzLTM0LjEzMzMzMyA3NC42NjY2NjctNzQuNjY2NjY3IDc0LjY2NjY2N0gxNzAuNjY2NjY3Yy00MC41MzMzMzMgMC03NC42NjY2NjctMzQuMTMzMzMzLTc0LjY2NjY2Ny03NC42NjY2NjdWMTcwLjY2NjY2N2MwLTQwLjUzMzMzMyAzNC4xMzMzMzMtNzQuNjY2NjY3IDc0LjY2NjY2Ny03NC42NjY2NjdoNjgyLjY2NjY2NnpNNzQ2LjY2NjY2NyA0NjkuMzMzMzMzYy0xMC42NjY2NjctMTIuOC0zMi0xNC45MzMzMzMtNDQuOC0yLjEzMzMzM0wzMjAgODA4LjUzMzMzM2wtMi4xMzMzMzMgMi4xMzMzMzRjLTE5LjIgMTkuMi00LjI2NjY2NyA1My4zMzMzMzMgMjMuNDY2NjY2IDUzLjMzMzMzM2g0OTIuOGMxNy4wNjY2NjctMi4xMzMzMzMgMjkuODY2NjY3LTE0LjkzMzMzMyAyOS44NjY2NjctMzJ2LTE5Ni4yNjY2NjdjMC02LjQtMi4xMzMzMzMtMTAuNjY2NjY3LTYuNC0xNC45MzMzMzNsLTEwOC44LTE0OS4zMzMzMzMtMi4xMzMzMzMtMi4xMzMzMzR6IG0tMzk0LjY2NjY2Ny0yMDIuNjY2NjY2Yy00Ni45MzMzMzMgMC04NS4zMzMzMzMgMzguNC04NS4zMzMzMzMgODUuMzMzMzMzczM4LjQgODUuMzMzMzMzIDg1LjMzMzMzMyA4NS4zMzMzMzMgODUuMzMzMzMzLTM4LjQgODUuMzMzMzMzLTg1LjMzMzMzMy0zOC40LTg1LjMzMzMzMy04NS4zMzMzMzMtODUuMzMzMzMzeiIgZmlsbD0iI2ZmZmZmZiI+PC9wYXRoPjwvc3ZnPg=='
-            mode='aspectFit'
-          />
+      {/* 历史记录区域 */}
+      {activeMethod === 'history' && (
+        <View className='history-section'>
+          {/* 日期选择 */}
+          <View className='date-selector'>
+            <View className='date-card'>
+              <Text className='date-label'>选择日期</Text>
+              <View className='date-display' onClick={() => {
+                // 切换日期：今天、昨天、前天
+                const today = new Date()
+                const todayStr = today.toISOString().split('T')[0]
+                const yesterday = new Date(today)
+                yesterday.setDate(yesterday.getDate() - 1)
+                const yesterdayStr = yesterday.toISOString().split('T')[0]
+                const dayBefore = new Date(today)
+                dayBefore.setDate(dayBefore.getDate() - 2)
+                const dayBeforeStr = dayBefore.toISOString().split('T')[0]
+                
+                Taro.showActionSheet({
+                  itemList: [
+                    formatDate(todayStr),
+                    formatDate(yesterdayStr),
+                    formatDate(dayBeforeStr)
+                  ],
+                  success: (res) => {
+                    if (res.tapIndex === 0) {
+                      setSelectedDate(todayStr)
+                    } else if (res.tapIndex === 1) {
+                      setSelectedDate(yesterdayStr)
+                    } else if (res.tapIndex === 2) {
+                      setSelectedDate(dayBeforeStr)
+                    }
+                  }
+                })
+              }}>
+                <Text className='date-text'>{formatDate(selectedDate)}</Text>
+                <Text className='date-icon'>📅</Text>
+              </View>
+            </View>
+            <View className='date-stats'>
+              <View className='stat-item'>
+                <Text className='stat-label'>总摄入</Text>
+                <Text className='stat-value'>{historyRecords[0]?.totalCalorie || 0} kcal</Text>
+              </View>
+              <View className='stat-item'>
+                <Text className='stat-label'>目标</Text>
+                <Text className='stat-value'>2000 kcal</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 记录列表 */}
+          {historyRecords.length > 0 && historyRecords[0].meals.length > 0 ? (
+            <View className='history-list'>
+              {historyRecords[0].meals.map((meal) => (
+                <View key={meal.id} className='history-meal-card'>
+                  <View className='meal-card-header'>
+                    <View className='meal-header-left'>
+                      <View className={`meal-type-icon ${meal.mealType}-icon`}>
+                        <Text>{meal.mealType === 'breakfast' ? '🌅' : meal.mealType === 'lunch' ? '☀️' : meal.mealType === 'dinner' ? '🌙' : '🍎'}</Text>
+                      </View>
+                      <View className='meal-header-info'>
+                        <Text className='meal-card-name'>{meal.mealName}</Text>
+                        <Text className='meal-card-time'>{meal.time}</Text>
+                      </View>
+                    </View>
+                    <View className='meal-header-right'>
+                      <Text className='meal-calorie'>{meal.totalCalorie} kcal</Text>
+                      <View className='meal-actions'>
+                        <View className='action-icon' onClick={() => handleEditRecord(meal.id)}>
+                          <Text>✏️</Text>
+                        </View>
+                        <View className='action-icon' onClick={() => handleDeleteRecord(meal.id)}>
+                          <Text>🗑️</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                  <View className='food-list'>
+                    {meal.foods.map((food, index) => (
+                      <View key={index} className='food-item'>
+                        <View className='food-info'>
+                          <Text className='food-name'>{food.name}</Text>
+                          <Text className='food-amount'>{food.amount}</Text>
+                        </View>
+                        <Text className='food-calorie'>{food.calorie} kcal</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View className='empty-state'>
+              <Text className='empty-icon'>📝</Text>
+              <Text className='empty-text'>暂无记录</Text>
+              <Text className='empty-hint'>开始记录您的饮食吧</Text>
+            </View>
+          )}
         </View>
-      </View>
+      )}
     </View>
   )
 }
 
-export default withAuth(RecordPage, { public: true })
+
