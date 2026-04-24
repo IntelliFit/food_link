@@ -21,6 +21,17 @@ const MEAL_OPTIONS = [
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
+const toSelectableMealType = (value: unknown): SelectableMealType | undefined => {
+  if (value === 'snack') return 'afternoon_snack'
+  const hit = MEAL_OPTIONS.find((o) => o.value === value)
+  return hit?.value
+}
+
+const getSavedSelectableMealType = (): SelectableMealType | undefined => {
+  const savedMealType = Taro.getStorageSync('analyzeMealType')
+  return toSelectableMealType(savedMealType)
+}
+
 const MEAL_ICONS = {
   breakfast: 'icon-zaocan',
   morning_snack: 'icon-lingshi',

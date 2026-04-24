@@ -4,10 +4,13 @@ import { redirectToLogin } from './withAuth'
 import { extraPkgUrl } from './subpackage-extra'
 
 function showFoodAnalysisQuotaModalLikeRecordMenu(ms: Awaited<ReturnType<typeof getMyMembership>>): void {
-  if (typeof ms.points_balance === 'number') {
+  const creditBalance = typeof ms.daily_credits_remaining === 'number'
+    ? ms.daily_credits_remaining
+    : ms.points_balance
+  if (typeof creditBalance === 'number') {
     Taro.showModal({
       title: '积分不足',
-      content: '标准分析需至少 1 积分，请先充值。',
+      content: '食物分析需至少 2 积分，请先充值或升级。',
       confirmText: '去充值',
       cancelText: '取消',
       success: (r) => {
@@ -43,8 +46,11 @@ export async function pickImageAndOpenAnalyze(sourceType: Array<'album' | 'camer
   }
   try {
     const membershipStatus = await getMyMembership()
-    if (typeof membershipStatus.points_balance === 'number') {
-      if (membershipStatus.points_balance < 1) {
+    const creditBalance = typeof membershipStatus.daily_credits_remaining === 'number'
+      ? membershipStatus.daily_credits_remaining
+      : membershipStatus.points_balance
+    if (typeof creditBalance === 'number') {
+      if (creditBalance < 2) {
         showFoodAnalysisQuotaModalLikeRecordMenu(membershipStatus)
         return
       }

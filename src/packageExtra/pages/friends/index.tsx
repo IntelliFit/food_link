@@ -65,24 +65,6 @@ const CloseIcon = ({ size = 24, color = '#64748b' }: { size?: number; color?: st
   </View>
 )
 
-// 勾选图标组件
-const CheckIcon = ({ size = 28, color = '#fff' }: { size?: number; color?: string }) => (
-  <View className='svg-icon' style={{ width: `${size}rpx`, height: `${size}rpx` }}>
-    <svg viewBox='0 0 24 24' fill='none' style={{ width: '100%', height: '100%' }}>
-      <path d='M5 12l5 5L20 7' stroke={color} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' />
-    </svg>
-  </View>
-)
-
-// 叉号图标组件
-const CrossIcon = ({ size = 24, color = '#fff' }: { size?: number; color?: string }) => (
-  <View className='svg-icon' style={{ width: `${size}rpx`, height: `${size}rpx` }}>
-    <svg viewBox='0 0 24 24' fill='none' style={{ width: '100%', height: '100%' }}>
-      <path d='M18 6L6 18M6 6l12 12' stroke={color} strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round' />
-    </svg>
-  </View>
-)
-
 // 刷新图标组件
 const RefreshIcon = ({ size = 24, color = '#00bc7d' }: { size?: number; color?: string }) => (
   <View className='svg-icon' style={{ width: `${size}rpx`, height: `${size}rpx` }}>
@@ -228,12 +210,9 @@ function FriendsPage() {
           ))
           // 添加到好友列表
           const newFriend: FriendListItem = {
-            id: acceptedRequest.counterpart_id,
-            user_id: '', // 当前用户ID，后端会处理
-            friend_id: acceptedRequest.counterpart_id,
+            id: acceptedRequest.counterpart_user_id,
             nickname: acceptedRequest.counterpart_nickname || '用户',
             avatar: acceptedRequest.counterpart_avatar || '',
-            created_at: new Date().toISOString()
           }
           setFriends(prev => [newFriend, ...prev])
         }
@@ -277,7 +256,13 @@ function FriendsPage() {
   }
 
   const renderEmptyState = (type: 'friends' | 'received' | 'sent') => {
-    const configs = {
+    const configs: Record<'friends' | 'received' | 'sent', {
+      icon: JSX.Element
+      title: string
+      desc: string
+      action?: string
+      onAction?: () => void
+    }> = {
       friends: {
         icon: <FriendsIcon size={120} color='#00bc7d' />,
         title: '还没有好友',

@@ -281,6 +281,7 @@ export interface HomeMealItem {
   tags: string[]
   image_path?: string | null
   image_paths?: string[] | null
+  images?: string[] | null
   /** 该餐次内最新一条饮食记录 id，用于跳转记录详情/生成分享海报 */
   primary_record_id?: string | null
   /** 部分网关/序列化可能为 camelCase，与 primary_record_id 等价 */
@@ -297,7 +298,7 @@ export interface HomeMealItem {
 
 /** 解析首页餐食卡片对应的记录 id（兼容 snake_case / camelCase） */
 export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<string, unknown>): string | null {
-  const m = meal as Record<string, unknown>
+  const m = meal as unknown as Record<string, unknown>
   const candidates = [m.primary_record_id, m.primaryRecordId]
   for (const v of candidates) {
     if (v != null && String(v).trim() !== '') {
@@ -312,10 +313,17 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const entries = Array.isArray(row.meal_record_entries)
     ? row.meal_record_entries.filter((e) => e && String(e.id || '').trim() !== '')
     : []
+  const images = Array.isArray(row.image_paths)
+    ? row.image_paths.filter(Boolean)
+    : Array.isArray(row.images)
+      ? row.images.filter(Boolean)
+      : null
   return {
     ...row,
+    images,
+    image_paths: images,
     meal_record_entries: entries.length > 0 ? entries : row.meal_record_entries,
-    primary_record_id: resolveHomeMealPrimaryRecordId(row as Record<string, unknown>),
+    primary_record_id: resolveHomeMealPrimaryRecordId(row as unknown as Record<string, unknown>),
   }
 }
 
@@ -608,6 +616,7 @@ export interface MembershipStatus {
   trial_active?: boolean
   /** 试用期截止时间（UTC ISO） */
   trial_expires_at?: string | null
+  points_balance?: number | null
 }
 
 export interface MembershipPlansResponse {
@@ -1309,7 +1318,7 @@ export interface AnalysisTask {
   image_url?: string | null  // 图片分析时有值，文字分析时为空
   image_paths?: string[] | null // 多图分析时有值
   text_input?: string | null  // 文字分析时有值，图片分析时为空
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated'
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out'
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string

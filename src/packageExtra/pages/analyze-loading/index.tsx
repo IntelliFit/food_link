@@ -336,7 +336,7 @@ function AnalyzeLoadingPage() {
           Taro.setStorageSync('analyzeTaskType', effectiveTaskType)
         }
         if (task.status === 'done' && task.result) {
-          const exResult = task.result as ExerciseTaskResultPayload | undefined
+          const exResult = task.result as unknown as ExerciseTaskResultPayload | undefined
           if (exResult?.exercise_log) {
             setStatus('done')
             if (timeoutTimerRef.current) {

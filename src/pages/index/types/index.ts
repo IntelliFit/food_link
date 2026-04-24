@@ -44,6 +44,12 @@ export interface MacroTargets {
   fat: number
 }
 
+export interface SimpleTargetState {
+  proteinLevel: number
+  carbsLevel: number
+  fatLevel: number
+}
+
 // 目标编辑组件Props（简化版 - 仅精确模式）
 export interface TargetEditorProps {
   visible: boolean

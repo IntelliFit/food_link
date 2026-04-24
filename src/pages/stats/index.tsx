@@ -115,7 +115,7 @@ function normalizeStoredBodyMetrics(raw: unknown): StoredBodyMetrics {
         if (!date || !Number.isFinite(value)) return null
         return { date, value, recorded_at: recordedAt }
       })
-      .filter((item): item is { date: string; value: number; recorded_at?: string } => Boolean(item))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
     : []
 
   const waterByDate: StoredBodyMetrics['waterByDate'] = {}
@@ -725,7 +725,7 @@ function StatsPage() {
               <Switch
                 className='chart-switch'
                 checked={showCalories}
-                onChange={(v) => setShowCalories(Boolean(typeof v === 'object' ? v.detail?.value : v))}
+                onChange={(v: any) => setShowCalories(Boolean(typeof v === 'object' ? v?.detail?.value : v))}
                 style={{ '--switch-checked-background-color': '#5cb896' } as CSSProperties}
               />
             </View>

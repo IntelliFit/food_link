@@ -652,7 +652,7 @@ function RecordDetailPage() {
       })
   }
 
-  const handleSavePoster = useCallback(() => {
+  const handleSavePoster = () => {
     if (!posterImageUrl) return
     Taro.saveImageToPhotosAlbum({
       filePath: posterImageUrl,
@@ -675,7 +675,7 @@ function RecordDetailPage() {
         }
       }
     })
-  }, [posterImageUrl])
+  }
 
   return (
     <View className='record-detail-root'>

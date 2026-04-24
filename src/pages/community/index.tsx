@@ -784,7 +784,6 @@ function CommunityPage() {
       void syncPendingFriendRequests()
     } else {
       setLbPreviewTop([])
-      setLbPreviewMyRank(null)
       setUnreadNotificationCount(0)
       setRequests([])
     }

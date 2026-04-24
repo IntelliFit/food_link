@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Slider, Canvas, Button as TaroButton } from '@tarojs/components'
+import { View, Text, Input, Image, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -7,7 +7,6 @@ import {
   getStatsSummary,
   getAccessToken,
   updateDashboardTargets,
-  getStoredDashboardTargets,
   getBodyMetricsSummary,
   getExerciseLogs,
   getUnlimitedQRCode,
@@ -39,8 +38,7 @@ import {
 } from '../../utils/poster'
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
 
-import { IconCamera, IconText, IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
-import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
+import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconWaterDrop } from '../../components/iconfont'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 import {
   HOME_DASHBOARD_REFRESH_EVENT,
@@ -66,11 +64,10 @@ import {
   WEIGHT_HISTORY_LIMIT,
   QUICK_WATER_AMOUNTS,
   WATER_GOAL_DEFAULT,
-  DAY_NAMES,
   SHORT_DAY_NAMES,
   HOME_WARNING_RED
 } from './utils/constants'
-import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
+import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
 
@@ -523,7 +520,7 @@ function formatExpiryMeta(item: HomeFoodExpiryItem): string {
     .join(' · ')
 }
 
-function getExpiryTagClass(urgency: FoodExpiryItem['urgency_level']): string {
+function getExpiryTagClass(urgency: HomeFoodExpiryItem['urgency_level']): string {
   if (urgency === 'overdue') return 'overdue'
   if (urgency === 'today') return 'today'
   if (urgency === 'soon') return 'soon'
@@ -963,7 +960,7 @@ function IndexPage() {
     Taro.showShareMenu({
       withShareTicket: true,
       menus: ['shareAppMessage', 'shareTimeline']
-    })
+    } as any)
     // 清理旧版本缓存，避免脏数据干扰
     try {
       Taro.removeStorageSync('home_dashboard_local_cache_v1')

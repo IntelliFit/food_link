@@ -1,7 +1,6 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { withAuth } from '../../../utils/withAuth'
 import {
   communityGetComments,
   communityGetFeedContext,
@@ -12,8 +11,8 @@ import {
   type FeedCommentItem
 } from '../../../utils/api'
 import { getAccessToken } from '../../../utils/api'
-import { redirectToLogin } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { withAuth, redirectToLogin } from '../../../utils/withAuth'
 
 import './index.scss'
 

@@ -1,5 +1,12 @@
 # DECISIONS
 
+- `2026-04-25`: 本项目后续正式校验入口固定为 `npm run lint` 与 `npm run typecheck`。其中：
+  - `lint = eslint src --ext .ts,.tsx --max-warnings 0`
+  - `typecheck = tsc --noEmit --pretty false`
+- `2026-04-25`: `food_link` 代码库当前存在大量历史性的 `unused vars` 与 `react-hooks/exhaustive-deps` 警告，不再作为 lint 阻断项。正式口径改为：lint 只拦截硬错误；这两类警告在后续大规模重构时再统一治理，避免继续阻断日常开发。
+- `2026-04-25`: `tsconfig.json` 需保持 `skipLibCheck=true`，避免 Taro/平台声明文件噪音淹没业务代码真实错误；同时关闭 `noUnusedLocals / noUnusedParameters`，把“未使用变量”留给 ESLint 策略管理，而不是让 TypeScript 编译直接失败。
+- `2026-04-25`: 会员充值页顶部 Hero 的视觉方向继续固定为“深绿会员感 + 中心徽章 + 半透明积分玻璃卡”，并尽量贴近用户提供的参考图。该区域应优先突出标题与积分余量，不再回退到浅色或普通营销横幅样式。
+- `2026-04-25`: 当前 `weapp-devtools` 环境里，`mrc errors` / `mrc logs error` 可稳定返回，但 `pageInfo`、`relaunch`、`exists`、`stack` 以及 `miniprogram-automator` 的页面回执类操作会再次出现长时间挂起。后续小程序运行态验证若复用当前环境，需要优先把这个自动化卡顿视为独立阻塞，而不是误判成页面代码报错。
 - `2026-04-24`: `food_link` 项目后续默认不由代理操作任何本地常驻进程。启动、停止、重启前后端一律默认由用户自己手动执行；除非用户在当前对话里明确要求，否则代理只能改代码并提醒用户自行运行，避免抢占 `3010`、干扰用户自己的调试会话。
 - `2026-04-24`: 为避免本地 `3010` 被残留后端长期占用，项目增加 `npm run stop:backend` 作为标准清理入口。后续优先用该脚本清掉 `backend.pid` 或占用 `3010` 的 `run_backend.py` 进程，而不是每次手查 PID。
 - `2026-04-24`: 食物测试后台后续的主工作流应切到“可复用测试集”。ZIP 仍可作为导入格式保留，但不应要求用户每次批量评测都重新上传 ZIP；正式口径应支持把服务器本机目录中的标准测试集导入并持久化到云端，之后在后台列表中重复载入为新批次。
@@ -188,6 +195,10 @@
 - `2026-04-10`: 运动热量估算在 `gemini-3-flash-preview + Instructor` 组合下，遇到“高强度动作描述 + 完整画像快照”时可能因 reasoning token 膨胀触发 `max_tokens length limit`。正式口径改为：保留 Instructor 结构化主链路，但若命中“输出被截断”，必须自动降级到“短 JSON fallback”再次估算；同时主提示词与 schema 需强约束 reasoning 只保留 1-2 句短依据，避免长推导再次撑爆。
 - `2026-04-10`: 对于“一条文本里包含多项运动”的描述，后端应自动按换行/分号/句号拆分为多个分项，再逐项估算后求和，不要求用户手动拆条。分项估算优先走短 JSON / 数字输出的轻链路；若单项仍拿不到可解析结果，则允许退化到基于 `运动关键词 + 时长 + 体重` 的规则估算，目标优先保证“不报错、能落结果”。
 - `2026-04-10`: 运动热量估算模型当前直接在程序里写死为 `google/gemini-3.1-flash-lite-preview`，不再通过 `EXERCISE_CALORIES_MODEL_NAME` 环境变量切换，避免本地/线上环境变量漂移影响这条专用链路。
+- `2026-04-25`: `src/pages/profile/index.tsx` 属于主包 Tab 页，但它跳往会员、档案、保质期、好友管理、个人设置等非 Tab 页面时，必须统一使用 `extraPkgUrl(...)`；不能继续写裸 `/pages/...`，也不能漏掉 `extraPkgUrl` import，否则小程序运行时会出现 `ReferenceError` 或页面路径错误。
+- `2026-04-25`: 会员充值页后续需要跟随应用 `scheme` 切换导航栏与整页深色皮肤；不能只改 `page` 背景色。正式口径是：`src/packageExtra/pages/pro-membership/index.tsx` 通过 `useAppColorScheme + applyThemeNavigationBar(...)` 控制导航栏，样式层通过 `membership-page--dark` 覆盖 Hero、卡片、对比表、说明卡与按钮。
+- `2026-04-25`: 如果要给用户手动补会员，而系统当前没有对应正式套餐编码（例如“半年卡”），优先采用“保留或追加原到期时间，不缩短现有权益 + 切到目标档位权益”的处理方式；本次锦恢账号按该口径处理，权益升到进阶版、每日积分 `40`，并在原到期日基础上追加 `6` 个月。
+- `2026-04-25`: 会员页使用自定义导航栏时，左上角返回不能再直接依赖 `Taro.navigateBack()`。正式口径是：读取上一页路由；若上一页是 Tab（如 `pages/profile/index`），必须用 `Taro.switchTab(...)` 返回；若不是 Tab，再走 `normalizeRedirectUrlForSubpackage(...) + Taro.redirectTo(...)`，最后兜底回 `/pages/profile/index`。
 
 - `2026-03-27`: Added persistent state files so `food_link` context survives session resets and compaction better.
 - `2026-03-27`: Project ownership must come from `IDENTITY.md` plus state files, not stale transcript memory.

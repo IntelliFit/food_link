@@ -1,6 +1,6 @@
 import { type HomeIntakeData } from '../../../utils/api'
-import { type TargetFormState, type SimpleTargetState, type WeekHeatmapCell, type WeekHeatmapState } from '../types'
-import { DEFAULT_INTAKE, LEVEL_TO_GRAMS, SHORT_DAY_NAMES } from './constants'
+import { type TargetFormState, type SimpleTargetState, type WeekHeatmapCell, type WeekHeatmapState } from '../types/index'
+import { LEVEL_TO_GRAMS, SHORT_DAY_NAMES } from './constants'
 
 // 根据档位计算克数
 export function getGramsFromLevel(type: 'protein' | 'carbs' | 'fat', level: number): number {

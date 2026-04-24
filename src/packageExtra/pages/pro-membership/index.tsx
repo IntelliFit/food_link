@@ -2,7 +2,8 @@ import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { ShieldOutlined } from '@taroify/icons'
 import '@taroify/icons/style'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import CustomNavBar from '../../../components/CustomNavBar'
 import {
   createMembershipPayment,
   getAccessToken,
@@ -21,6 +22,9 @@ import {
   getMembershipTierLabel,
   isPrecisionSupportedTier,
 } from '../../../utils/membership'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
@@ -54,6 +58,18 @@ const PERIODS: Array<{ key: MembershipPeriod; label: string; unit: string }> = [
   { key: 'yearly',    label: '年卡', unit: '/年' },
 ]
 
+const TIER_ICONS: Record<MembershipTier, string> = {
+  light: '✦',
+  standard: '★',
+  advanced: '♛',
+}
+
+const PERIOD_WATERMARKS: Record<MembershipPeriod, string> = {
+  monthly: '30',
+  quarterly: '90',
+  yearly: '365',
+}
+
 const normalizeTierParam = (value: unknown): MembershipTier | null => {
   return value === 'light' || value === 'standard' || value === 'advanced'
     ? value
@@ -74,6 +90,7 @@ const TIER_FEATURES: Array<{ label: string; values: Record<MembershipTier, strin
 ]
 
 function ProMembershipPage() {
+  const { scheme } = useAppColorScheme()
   const [plans, setPlans] = useState<MembershipPlan[]>([])
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [loading, setLoading] = useState(false)
@@ -81,10 +98,35 @@ function ProMembershipPage() {
   const [selectedTier, setSelectedTier] = useState<MembershipTier>('standard')
   const [selectedPeriod, setSelectedPeriod] = useState<MembershipPeriod>('yearly')
 
+  const handleBack = useCallback(() => {
+    const pages = Taro.getCurrentPages()
+    if (pages.length > 1) {
+      const previous = pages[pages.length - 2]
+      const previousRoute = `/${previous.route || ''}`
+      const previousOptions = previous.options || {}
+      const query = Object.keys(previousOptions)
+        .map(key => `${key}=${encodeURIComponent(previousOptions[key])}`)
+        .join('&')
+      if (MAIN_TAB_ROUTES.has(previousRoute)) {
+        Taro.switchTab({ url: previousRoute })
+        return
+      }
+      const targetUrl = normalizeRedirectUrlForSubpackage(
+        `${previousRoute}${query ? `?${query}` : ''}`
+      )
+      Taro.redirectTo({
+        url: targetUrl,
+        fail: () => Taro.switchTab({ url: '/pages/profile/index' })
+      })
+      return
+    }
+    Taro.switchTab({ url: '/pages/profile/index' })
+  }, [])
+
   const loadData = useCallback(async () => {
     const token = getAccessToken()
     if (!token) {
-      Taro.redirectTo({ url: '/pages/login/index' })
+      Taro.redirectTo({ url: extraPkgUrl('/pages/login/index') })
       return
     }
 
@@ -123,7 +165,12 @@ function ProMembershipPage() {
 
   useDidShow(() => {
     loadData()
+    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4', darkBackground: '#101716' })
   })
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4', darkBackground: '#101716' })
+  }, [scheme])
 
   const selectedPlan = useMemo<MembershipPlan | null>(() => {
     if (!plans.length) return null
@@ -151,7 +198,7 @@ function ProMembershipPage() {
   const handleSubscribe = async () => {
     const token = getAccessToken()
     if (!token) {
-      Taro.redirectTo({ url: '/pages/login/index' })
+      Taro.redirectTo({ url: extraPkgUrl('/pages/login/index') })
       return
     }
     if (!selectedPlan || loading) return
@@ -235,6 +282,11 @@ function ProMembershipPage() {
     return (selectedPlan.amount / selectedPlan.duration_months).toFixed(1)
   }, [selectedPlan])
 
+  const originalAmountDisplay = useMemo<string | null>(() => {
+    if (!selectedPlan?.original_amount || selectedPlan.original_amount <= selectedPlan.amount) return null
+    return selectedPlan.original_amount.toFixed(2)
+  }, [selectedPlan])
+
   const actionButtonText = useMemo(() => {
     if (!selectedPlan) return '加载中...'
     const price = `¥${selectedPlan.amount.toFixed(2)}`
@@ -273,35 +325,63 @@ function ProMembershipPage() {
   // ============================================================
 
   return (
-    <View className='membership-page'>
+    <View className={`membership-page ${scheme === 'dark' ? 'membership-page--dark' : ''}`}>
+      <CustomNavBar
+        title='积分充值'
+        showBack
+        onBack={handleBack}
+        color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
+        background={scheme === 'dark' ? '#101716' : '#f0fdf4'}
+        className='membership-page__nav'
+      />
       {/* 顶部 Hero */}
       <View className='hero-section'>
-        <View className='hero-icon-wrap'>
-          <ShieldOutlined className='hero-icon-svg' />
-        </View>
-        <Text className='hero-title'>食探会员</Text>
-        <Text className='hero-subtitle'>按使用强度选套餐，轻度版不含精准模式</Text>
-
-        {/* 积分胶囊 */}
-        {!pageLoading && membership && (
-          <View className='hero-credits'>
-            {(isPro || isTrial) ? (
-              <>
-                <Text className='hero-credits-label'>{isTrial ? '🎁 试用期 · 今日已用积分' : '今日已用积分'}</Text>
-                <Text className='hero-credits-value'>
-                  {creditsUsed}
-                  <Text className='hero-credits-total'> / {creditsMax}</Text>
-                </Text>
-                <Text className='hero-credits-tip'>剩余 {creditsRemaining} 积分 · 次日清零</Text>
-              </>
-            ) : (
-              <>
-                <Text className='hero-credits-label'>选择适合你的套餐</Text>
-                <Text className='hero-credits-tip'>开通后每日按套餐发放积分，当天有效不累计</Text>
-              </>
-            )}
+        <View className='hero-orb hero-orb--right' />
+        <View className='hero-orb hero-orb--left' />
+        <View className='hero-curve hero-curve--left' />
+        <View className='hero-curve hero-curve--right' />
+        <View className='hero-inner'>
+          <View className='hero-spark hero-spark--left'>✦</View>
+          <View className='hero-spark hero-spark--right'>✦</View>
+          <View className='hero-emblem-row'>
+            <Text className='hero-laurel hero-laurel--left'>❦</Text>
+            <View className='hero-icon-shell'>
+              <View className='hero-icon-halo' />
+              <View className='hero-icon-wrap'>
+              <ShieldOutlined className='hero-icon-svg' />
+              </View>
+            </View>
+            <Text className='hero-laurel hero-laurel--right'>❦</Text>
           </View>
-        )}
+          <View className='hero-copy'>
+            <Text className='hero-title'>食探会员</Text>
+            <Text className='hero-subtitle'>按使用强度选套餐，轻度版不含精准模式</Text>
+          </View>
+
+          {!pageLoading && membership && (
+            <View className={`hero-credits ${(isPro || isTrial) ? 'hero-credits--active' : 'hero-credits--idle'}`}>
+              {(isPro || isTrial) ? (
+                <>
+                  <Text className='hero-credits-label'>{isTrial ? '试用期 · 今日已用积分' : '今日已用积分'}</Text>
+                  <View className='hero-credits-value-row'>
+                    <Text className='hero-credits-value'>{creditsUsed}</Text>
+                    <Text className='hero-credits-total'>/ {creditsMax}</Text>
+                  </View>
+                  <View className='hero-credits-pill'>
+                    <Text className='hero-credits-tip'>剩余 {creditsRemaining} 积分 · 次日清零</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text className='hero-credits-label'>选择适合你的套餐</Text>
+                  <View className='hero-credits-pill'>
+                    <Text className='hero-credits-tip'>开通后每日按套餐发放积分，当天有效不累计</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+        </View>
       </View>
 
       {showPrecisionUpgradeNotice && (
@@ -338,7 +418,10 @@ function ProMembershipPage() {
                 ) : t.key === 'advanced' ? (
                   <View className='tier-card-badge tier-card-badge--suggested'>高配</View>
                 ) : null}
-                <Text className='tier-card-name'>{t.name}</Text>
+                <View className='tier-card-head'>
+                  <Text className={`tier-card-icon tier-card-icon--${t.key}`}>{TIER_ICONS[t.key]}</Text>
+                  <Text className='tier-card-name'>{t.name}</Text>
+                </View>
                 <Text className='tier-card-credits'>{t.credits}</Text>
                 <Text className='tier-card-credits-unit'>积分 / 日</Text>
                 <Text className='tier-card-summary'>{t.summary}</Text>
@@ -352,6 +435,7 @@ function ProMembershipPage() {
       <View className='period-section'>
         <View className='section-title'>
           <Text className='section-title-text'>选择周期</Text>
+          <Text className='section-title-hint'>{isPro ? '随时可升级档位' : '长期订阅更划算'}</Text>
         </View>
         <View className='period-tabs'>
           {PERIODS.map(p => {
@@ -374,14 +458,22 @@ function ProMembershipPage() {
                 className={`period-tab ${active ? 'period-tab--active' : ''}`}
                 onClick={() => setSelectedPeriod(p.key)}
               >
+                {p.key === 'yearly' && saveTxt && (
+                  <Text className='period-tab-recommend'>推荐</Text>
+                )}
                 <Text className='period-tab-label'>{p.label}</Text>
                 {planForPeriod && (
-                  <Text className='period-tab-price'>¥{planForPeriod.amount.toFixed(2)}</Text>
+                  <View className='period-tab-price-row'>
+                    <Text className='period-tab-price-symbol'>¥</Text>
+                    <Text className='period-tab-price'>{planForPeriod.amount.toFixed(2)}</Text>
+                    <Text className='period-tab-price-unit'>{p.unit}</Text>
+                  </View>
                 )}
                 {isPro && currentPlanPeriod === p.key && (
                   <Text className='period-tab-current'>当前周期</Text>
                 )}
                 {saveTxt && <Text className='period-tab-save'>{saveTxt}</Text>}
+                <Text className='period-tab-watermark'>{PERIOD_WATERMARKS[p.key]}</Text>
               </View>
             )
           })}
@@ -412,6 +504,9 @@ function ProMembershipPage() {
           <Text className='plan-period'>
             {PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}
           </Text>
+          {originalAmountDisplay && (
+            <Text className='plan-original-price'>原价 ¥{originalAmountDisplay}{PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}</Text>
+          )}
         </View>
       </View>
 

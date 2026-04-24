@@ -38,8 +38,8 @@ export async function resolveImagePathForAlbumSave(src: string): Promise<string>
 
   if (!shouldTryPersist) {
     try {
-      const info = await Taro.getFileSystemManager().getFileInfo({ filePath: raw })
-      if (info.size > 0 && !raw.startsWith(userDataPath)) {
+      const info = await Taro.getFileSystemManager().getFileInfo({ filePath: raw }) as unknown as { size?: number }
+      if ((info.size ?? 0) > 0 && !raw.startsWith(userDataPath)) {
         // 非用户目录下的有效本地文件仍复制一份，规避部分机型对「非持久路径」存相册失败
         const ext = (raw.match(/\.(jpg|jpeg|png|webp)(?:\?.*)?$/i)?.[0] || '.jpg').replace(/\?.*$/, '')
         const targetPath = `${userDataPath}/poster_album_${Date.now()}_${Math.floor(Math.random() * 1000000)}${ext}`
@@ -118,8 +118,8 @@ export async function resolveImagePathForAlbumSave(src: string): Promise<string>
       if (errMsg.includes('permission denied')) {
         const fallbackPath = normalized || raw
         try {
-          const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fallbackPath })
-          if (info.size > 0) {
+          const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fallbackPath }) as unknown as { size?: number }
+          if ((info.size ?? 0) > 0) {
             console.warn('[resolveImagePathForAlbumSave] saveFile skipped due to perm limit, fallback to normalized tmp path', fallbackPath)
             return fallbackPath
           }
@@ -136,8 +136,8 @@ export async function resolveImagePathForAlbumSave(src: string): Promise<string>
   const fallback = normalized || raw
   if (fallback) {
     try {
-      const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fallback })
-      if (info.size > 0) return fallback
+      const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fallback }) as unknown as { size?: number }
+      if ((info.size ?? 0) > 0) return fallback
     } catch {
       // fallback 路径已失效
     }
@@ -168,7 +168,7 @@ async function assertNonEmptyLocalFile(filePath: string): Promise<boolean> {
   const fp = (filePath || '').trim()
   if (!fp) return false
   try {
-    const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fp })
+    const info = await Taro.getFileSystemManager().getFileInfo({ filePath: fp }) as unknown as { size?: number }
     return typeof info.size === 'number' && info.size > 0
   } catch {
     return false

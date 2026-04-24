@@ -30,6 +30,7 @@ import {
   getMembershipTierLabel,
   getMembershipTierShortLabel,
 } from '../../utils/membership'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -159,7 +160,7 @@ function ProfilePage() {
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
           if (!completed) {
-            Taro.redirectTo({ url: '/pages/health-profile/index' })
+            Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
             return
           }
           // 同步到 storage
@@ -260,20 +261,20 @@ function ProfilePage() {
     // 健康档案：未完成则去填写，已完成则去查看
     if (service.id === 0) {
       if (!onboardingCompleted) {
-        Taro.navigateTo({ url: '/pages/health-profile/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
       } else {
-        Taro.navigateTo({ url: '/pages/health-profile-view/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
       }
       return
     }
     // 我的食谱
     if (service.id === 1) {
-      Taro.navigateTo({ url: '/pages/recipes/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })
       return
     }
     // 食物管理
     if (service.id === 2) {
-      Taro.navigateTo({ url: '/pages/expiry/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
       return
     }
     // 饮食记录（整合日历图和数据统计）
@@ -306,7 +307,7 @@ function ProfilePage() {
   const handleSettingClick = (setting: any) => {
     // 关于我们
     if (setting.id === 5) {
-      Taro.navigateTo({ url: '/pages/about/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/about/index') })
       return
     }
 
@@ -316,12 +317,12 @@ function ProfilePage() {
     }
     // 好友管理
     if (setting.id === 2) {
-      Taro.navigateTo({ url: '/pages/friends/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/friends/index') })
       return
     }
     // 隐私设置
     if (setting.id === 3) {
-      Taro.navigateTo({ url: '/pages/privacy-settings/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/privacy-settings/index') })
       return
     }
 
@@ -336,7 +337,7 @@ function ProfilePage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: '/pages/profile-settings/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/profile-settings/index') })
   }
 
   // 处理去登录
@@ -505,7 +506,7 @@ function ProfilePage() {
       {isLoggedIn && !onboardingCompleted && (
         <View
           className='profile-card onboarding-card'
-          onClick={() => Taro.navigateTo({ url: '/pages/health-profile/index' })}
+          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
         >
           <Text className='onboarding-text'>📋 完善健康档案，获取个性化饮食建议</Text>
           <Text className='onboarding-arrow'>{'>'}</Text>

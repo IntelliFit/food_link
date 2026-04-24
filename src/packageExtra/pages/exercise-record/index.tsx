@@ -429,7 +429,7 @@ export default function ExerciseRecordPage() {
               <IconExercise size={80} color='#d1d5db' />
             </View>
             <Text className='empty-title'>还没有运动记录</Text>
-            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如："跑步30分钟" 或 "游泳1小时"</Text>
+            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如：&quot;跑步30分钟&quot; 或 &quot;游泳1小时&quot;</Text>
           </View>
         ) : (
           <View className='records-list'>

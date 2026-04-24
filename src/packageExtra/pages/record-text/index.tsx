@@ -1,7 +1,7 @@
 import { View, Text, Textarea, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type MembershipStatus } from '../../../utils/api'
+import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type CanonicalMealType, type MembershipStatus } from '../../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import {
   getFoodAnalysisBlockedActionText,
@@ -13,7 +13,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
-const MEALS = [
+const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
   { id: 'breakfast', name: '早餐', icon: 'icon-zaocan' },
   { id: 'morning_snack', name: '早加餐', icon: 'icon-lingshi' },
   { id: 'lunch', name: '午餐', icon: 'icon-wucan' },

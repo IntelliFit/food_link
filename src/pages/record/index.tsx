@@ -442,7 +442,8 @@ export default function RecordPage() {
                     }
                   }
                 })
-              }}>
+              }}
+              >
                 <Text className='date-text'>{formatDate(selectedDate)}</Text>
                 <Text className='date-icon'>📅</Text>
               </View>

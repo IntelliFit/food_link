@@ -6,6 +6,7 @@ import {
   saveFoodRecord,
   browseManualFood,
   searchManualFood,
+  type CanonicalMealType,
   type ManualFoodBrowseResult,
   type ManualFoodSearchResult,
   type Nutrients,
@@ -19,7 +20,7 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import './index.scss'
 
-const MEALS = [
+const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
   { id: 'breakfast', name: '早餐', icon: 'icon-zaocan' },
   { id: 'morning_snack', name: '早加餐', icon: 'icon-lingshi' },
   { id: 'lunch', name: '午餐', icon: 'icon-wucan' },
@@ -119,7 +120,7 @@ function buildNutrientsFromWeight(
 function RecordManualPage() {
   const { scheme } = useAppColorScheme()
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
-  const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
+  const [selectedMeal, setSelectedMeal] = useState<CanonicalMealType>(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
   const [searchText, setSearchText] = useState('')
@@ -134,8 +135,11 @@ function RecordManualPage() {
 
   useEffect(() => {
     const storedMeal = Taro.getStorageSync('analyzeMealType')
-    if (typeof storedMeal === 'string' && MEALS.some((meal) => meal.id === storedMeal)) {
-      setSelectedMeal(storedMeal)
+    const matchedMeal = typeof storedMeal === 'string'
+      ? MEALS.find((meal) => meal.id === storedMeal)
+      : undefined
+    if (matchedMeal) {
+      setSelectedMeal(matchedMeal.id)
     } else {
       setSelectedMeal(inferDefaultMealTypeFromLocalTime())
     }

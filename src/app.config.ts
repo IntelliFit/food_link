@@ -47,6 +47,7 @@ const extraSubpackagePages = [
 ]
 
 export default defineAppConfig({
+  darkmode: true,
   pages: mainPages,
   subpackages: [
     {
