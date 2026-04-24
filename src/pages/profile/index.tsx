@@ -233,11 +233,13 @@ function ProfilePage() {
       icon: <ShieldOutlined size='20' />,
       title: '食探会员',
       desc: membershipStatus?.is_pro
-        ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+        ? (membershipStatus?.daily_credits_max ?? 0) > 0
+          ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+          : `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 不限次数`
         : membershipStatus?.trial_active
           ? `试用中 · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
           : '3 档会员 · 每日积分领取',
-      path: '/pages/pro-membership/index'
+      path: extraPkgUrl('/pages/pro-membership/index')
     }
   ]
 
@@ -421,7 +423,7 @@ function ProfilePage() {
       {isLoggedIn && (
         <View
           className={`profile-card member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
-          onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
+          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })}
         >
           {(() => {
             const cMax = membershipStatus?.daily_credits_max ?? 0
@@ -444,7 +446,7 @@ function ProfilePage() {
                   </View>
                   <View className='card-body'>
                     <View className='progress-info'>
-                      <Text className='progress-text'>今日已用 {cUsed}/{cMax}</Text>
+                      <Text className='progress-text'>{cMax > 0 ? `今日已用 ${cUsed}/${cMax}` : '不限次数'}</Text>
                       {cMax > 0 && (
                         <View className='progress-bar'>
                           <View className='progress-inner' style={{ width: `${progressPct}%` }} />

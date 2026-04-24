@@ -10,6 +10,7 @@ import {
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
 import { withAuth } from '../../../utils/withAuth'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
 const MEALS = [
@@ -88,7 +89,7 @@ function RecordTextPage() {
         cancelText: '取消',
         success: (res) => {
           if (showUpgrade && res.confirm) {
-            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }
         }
       })
@@ -111,7 +112,7 @@ function RecordTextPage() {
           showCancel: showUpgrade,
           success: (res) => {
             if (showUpgrade && res.confirm) {
-              Taro.navigateTo({ url: '/pages/pro-membership/index' })
+              Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
             }
           }
         })
@@ -169,7 +170,7 @@ function RecordTextPage() {
           cancelText: '取消',
           showCancel: suggestPro,
           success: (res) => {
-            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            if (suggestPro && res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }
         })
       } else {
@@ -187,7 +188,7 @@ function RecordTextPage() {
           className={`record-text-quota-bar ${isQuotaExhausted ? 'record-text-quota-bar--exhausted' : ''}`}
           onClick={() => {
             if (isQuotaExhausted) return
-            if (!membershipStatus.is_pro) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            if (!membershipStatus.is_pro) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }}
         >
           <Text className='record-text-quota-bar-text'>

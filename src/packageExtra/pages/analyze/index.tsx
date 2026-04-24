@@ -549,7 +549,7 @@ function AnalyzePage() {
           cancelText: '取消',
           showCancel: suggestPro,
           success: (res) => {
-            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            if (suggestPro && res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }
         })
       } else {
@@ -578,7 +578,7 @@ function AnalyzePage() {
         cancelText: '取消',
         success: (res) => {
           if (showUpgrade && res.confirm) {
-            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }
         }
       })

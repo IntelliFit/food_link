@@ -6,6 +6,7 @@ import {
   getMembershipTierLabel,
   isPrecisionSupportedTier,
 } from './membership'
+import { extraPkgUrl } from './subpackage-extra'
 
 export const STRICT_MODE_ENABLED = true
 
@@ -25,7 +26,7 @@ export const getStrictModeUpgradeUrl = (
   source = 'precision_upgrade',
 ): string => {
   const targetPeriod = getCurrentMembershipPeriod(membershipStatus) || 'monthly'
-  return `/pages/pro-membership/index?target_tier=standard&target_period=${targetPeriod}&source=${source}`
+  return `${extraPkgUrl('/pages/pro-membership/index')}?target_tier=standard&target_period=${targetPeriod}&source=${source}`
 }
 
 export const getStrictModeUpgradeDialog = (

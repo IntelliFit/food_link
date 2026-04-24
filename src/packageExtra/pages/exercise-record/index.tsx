@@ -18,6 +18,7 @@ import {
   getExerciseLogCreditBlockMessage,
   isExerciseLogCreditExhausted,
 } from '../../../utils/membership'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import './index.scss'
@@ -285,7 +286,7 @@ export default function ExerciseRecordPage() {
         cancelText: '取消',
         success: (res) => {
           if (showUpgrade && res.confirm) {
-            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }
         }
       })
@@ -311,7 +312,7 @@ export default function ExerciseRecordPage() {
             cancelText: '取消',
             success: (res) => {
               if (showUpgrade && res.confirm) {
-                Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
               }
             }
           })
@@ -345,7 +346,7 @@ export default function ExerciseRecordPage() {
           cancelText: '取消',
           success: (res) => {
             if (suggestUpgrade && res.confirm) {
-              Taro.navigateTo({ url: '/pages/pro-membership/index' })
+              Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
             }
           }
         })
