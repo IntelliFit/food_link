@@ -25,7 +25,7 @@ export default function RecordPage() {
     Taro.chooseImage({
       count: 1,
       sizeType: ['original', 'compressed'],
-      sourceType: ['album', 'camera'],
+      sourceType: ['camera'],
       success: (res) => {
         const imagePath = res.tempFilePaths[0]
         console.log('选择的图片:', res.tempFilePaths)
