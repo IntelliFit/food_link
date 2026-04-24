@@ -210,6 +210,7 @@
   border-radius: 16rpx;
   overflow: hidden;
   background: #f3f4f6;
+  border: 2rpx solid transparent;
 
   &.add-btn {
     border: 2rpx dashed #d1d5db;
@@ -219,7 +220,7 @@
   }
 
   &--multiview {
-    border: 2rpx solid #00bc7d;
+    border-color: #00bc7d;
   }
 }
 

@@ -248,10 +248,6 @@ function AnalyzePage() {
   /** 多视角开关：纯 View 实现，避免任意 Switch 组件在分包内触发 react 未定义 */
   const handleMultiViewSwitchChange = (e: { detail?: { value?: boolean } }) => {
     const nextValue = e.detail?.value === true
-    if (!nextValue && imagePaths.length > 1) {
-      // 关闭多视角时自动只保留第一张图片
-      setImagePaths([imagePaths[0]])
-    }
     setIsMultiView(nextValue)
   }
 
