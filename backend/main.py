@@ -2188,6 +2188,7 @@ async def analyze_food(
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
         state_hint = ""
+        state_parts: List[str] = []
         if request.diet_goal or request.activity_timing:
             diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
             activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
@@ -2198,6 +2199,7 @@ async def analyze_food(
                 state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
+        meal_name = ""
         if request.meal_type:
             meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
@@ -2686,7 +2688,7 @@ async def analyze_batch(
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
-            task_type="food_batch",
+            task_type="food",
             image_url=request.image_urls[0] if request.image_urls else None,
             image_urls=request.image_urls,
             payload=payload,
@@ -3182,6 +3184,7 @@ async def analyze_food_compare(
         goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
     
     state_hint = ""
+    state_parts: List[str] = []
     if request.diet_goal or request.activity_timing:
         diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
         activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
@@ -3195,6 +3198,7 @@ async def analyze_food_compare(
     remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
     
     meal_hint = ""
+    meal_name = ""
     if request.meal_type:
         meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
         meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
