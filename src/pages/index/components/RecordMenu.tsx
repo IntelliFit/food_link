@@ -99,9 +99,6 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
 
     switch (modeId) {
       case 'camera':
-        // record 为 tabBar 页，必须用 switchTab，navigateTo 会失败无反应
-        Taro.switchTab({ url: '/pages/record/index' })
-        break
       case 'album': {
         // 与 record 页「相册」一致：先校验今日次数，避免选图上传后 submit 才 429
         if (!getAccessToken()) {
@@ -135,7 +132,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           Taro.chooseImage({
             count: 1,
             sizeType: ['compressed'],
-            sourceType: ['album'],
+            sourceType: modeId === 'camera' ? ['album', 'camera'] : ['album'],
             success: (res) => {
               const imagePath = res.tempFilePaths[0]
               Taro.setStorageSync('analyzeImagePath', imagePath)
