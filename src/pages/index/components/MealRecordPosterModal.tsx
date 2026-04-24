@@ -1,4 +1,4 @@
-import { View, Text, Image, Canvas, Button } from '@tarojs/components'
+import { View, Text, Image, Canvas } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -11,7 +11,6 @@ import {
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
-import { savePosterToPhotosAlbum } from '../../../utils/weapp-save-image-album'
 
 import './MealRecordPosterModal.scss'
 
@@ -231,12 +230,11 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
       })
   }, [record, posterGenerating, isProUser, ownerNickname, ownerAvatar, ownerInviteCode, calorieCompare])
 
-  const handleSharePosterToMoments = useCallback(() => {
+  const handleSharePosterImage = useCallback(() => {
     if (!posterImageUrl) return
-    // @ts-ignore needShowEntrance
+    // @ts-ignore
     Taro.showShareImageMenu({
       path: posterImageUrl,
-      needShowEntrance: false,
       fail: (err: { errMsg?: string }) => {
         console.error('showShareImageMenu fail', err)
         Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
@@ -246,13 +244,25 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
 
   const handleSavePoster = useCallback(() => {
     if (!posterImageUrl) return
-    void savePosterToPhotosAlbum(posterImageUrl, {
-      onSuccess: () => {
+    Taro.saveImageToPhotosAlbum({
+      filePath: posterImageUrl,
+      success: () => {
         Taro.showToast({ title: '已保存到相册', icon: 'success' })
         onClose()
       },
-      onToast: (message) => {
-        Taro.showToast({ title: message, icon: 'none' })
+      fail: (err) => {
+        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
+          Taro.showModal({
+            title: '提示',
+            content: '需要您授权保存图片到相册',
+            confirmText: '去设置',
+            success: (r) => {
+              if (r.confirm) Taro.openSetting()
+            }
+          })
+        } else {
+          Taro.showToast({ title: '保存失败', icon: 'none' })
+        }
       }
     })
   }, [posterImageUrl, onClose])
@@ -294,23 +304,11 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
               </View>
             </View>
             <View className='poster-modal-bottom-bar'>
-              <Button
-                className='poster-share-channel poster-share-channel--btn'
-                openType='share'
-                plain
-                hoverClass='poster-share-channel--hover'
-                disabled={!posterImageUrl}
-              >
+              <View className='poster-share-channel' onClick={handleSharePosterImage}>
                 <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
                   <Text className='iconfont icon-wechat poster-share-channel-glyph' />
                 </View>
-                <Text className='poster-share-channel-label'>微信好友</Text>
-              </Button>
-              <View className='poster-share-channel' onClick={handleSharePosterToMoments}>
-                <View className='poster-share-channel-icon poster-share-channel-icon-moments'>
-                  <Text className='iconfont icon-pengyouquan poster-share-channel-glyph' />
-                </View>
-                <Text className='poster-share-channel-label'>朋友圈</Text>
+                <Text className='poster-share-channel-label'>微信</Text>
               </View>
               <View className='poster-share-channel' onClick={handleSavePoster}>
                 <View className='poster-share-channel-icon poster-share-channel-icon-save'>
