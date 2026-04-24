@@ -14,9 +14,11 @@ import {
   type ExecutionMode,
   type MembershipStatus,
 } from '../../../utils/api'
-import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../../utils/execution-mode'
+import {
+  canUseStrictModeForMembership,
+  getStrictModeUpgradeDialog,
+} from '../../../utils/execution-mode'
 import { withAuth } from '../../../utils/withAuth'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -60,7 +62,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。需开通食探会员。' },
+  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。标准版及以上可用。' },
   { value: 'standard', title: '标准模式', desc: '记录更快，但估算波动更大，适合先建立习惯。' }
 ]
 
@@ -91,6 +93,13 @@ function HealthProfilePage() {
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([]) // 被选中的自定义病史
 
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
+  const strictModeAvailable = canUseStrictModeForMembership(membershipStatus)
+
+  useEffect(() => {
+    if (membershipStatus && executionMode === 'strict' && !strictModeAvailable) {
+      setExecutionMode('standard')
+    }
+  }, [membershipStatus, executionMode, strictModeAvailable])
 
   const loadProfile = async () => {
     try {
@@ -290,19 +299,17 @@ function HealthProfilePage() {
       return
     }
 
-    const canStrict =
-      typeof membershipStatus?.points_balance === 'number'
-        ? (membershipStatus.points_balance as number) >= 2
-        : Boolean(membershipStatus?.is_pro)
-    if (effectiveMode === 'strict' && !canStrict) {
+    // 精准模式需要会员：填写完档案后提示
+    if (effectiveMode === 'strict' && !strictModeAvailable) {
+      const dialog = getStrictModeUpgradeDialog(membershipStatus, 'profile_execution_mode')
       const { confirm } = await Taro.showModal({
-        title: '积分不足',
-        content: '精准模式每次消耗 2 积分，当前积分不足。是否前往充值？\n若取消则自动以标准模式保存。',
-        confirmText: '去充值',
+        title: '解锁精准模式',
+        content: `${dialog.content}\n若取消则自动切换至标准模式保存。`,
+        confirmText: dialog.confirmText,
         cancelText: '标准模式保存',
       })
       if (confirm) {
-        Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+        Taro.navigateTo({ url: dialog.url })
         return
       }
       effectiveMode = 'standard'
@@ -544,6 +551,21 @@ function HealthProfilePage() {
                   className={`option-card with-desc ${executionMode === mode.value ? 'active' : ''}`}
                   onClick={() => {
                     if (mode.value === 'strict') {
+                      if (!strictModeAvailable) {
+                        const dialog = getStrictModeUpgradeDialog(membershipStatus, 'profile_execution_mode')
+                        Taro.showModal({
+                          title: '解锁精准模式',
+                          content: `${dialog.content}\n若取消则保持当前模式。`,
+                          confirmText: dialog.confirmText,
+                          cancelText: '取消',
+                          success: (res) => {
+                            if (res.confirm) {
+                              Taro.navigateTo({ url: dialog.url })
+                            }
+                          }
+                        })
+                        return
+                      }
                       setExecutionMode('strict')
                       setExecutionModeTouched(true)
                       return

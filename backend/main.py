@@ -35,14 +35,18 @@ from dotenv import load_dotenv
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from test_backend.utils import calculate_deviation
+from test_backend.utils import (
+    calculate_deviation,
+    calculate_item_weight_evaluation,
+    normalize_expected_items,
+    parse_labels_file,
+    is_valid_image_file,
+)
 from exercise_llm import ExerciseLlmError, estimate_exercise_calories_sync
 
 # OfoxAI API（OpenAI 兼容格式，用于调用 Gemini 模型）
 OFOXAI_BASE_URL = "https://api.ofox.ai/v1"
-# 积分制上线后默认关闭「每日次数」限次（由积分扣减代替）；需要旧逻辑时可设 FOOD_ANALYSIS_DAILY_LIMIT_ENABLED=1
-FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
-POINTS_SYSTEM_ENABLED = os.getenv("POINTS_SYSTEM_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+FOOD_ANALYSIS_DAILY_LIMIT_ENABLED = os.getenv("FOOD_ANALYSIS_DAILY_LIMIT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 # 拍照/文字分析每日上限（限次开启时生效）
 FOOD_ANALYSIS_DAILY_LIMIT_NON_PRO = 30
 FOOD_ANALYSIS_DAILY_LIMIT_PRO = 100
@@ -54,7 +58,6 @@ from database import (
     get_user_by_id,
     insert_health_document,
     insert_food_record,
-    get_food_record_by_user_and_source_task,
     update_food_record,
     create_analysis_task_sync,
     get_analysis_task_by_id_sync,
@@ -116,7 +119,6 @@ from database import (
     add_public_food_library_comment_sync,
     get_food_record_by_id_sync,
     get_feed_comment_by_id_sync,
-    delete_feed_comment_tree_sync,
     # 公共食物库
     create_public_food_library_item,
     list_public_food_library,
@@ -162,7 +164,13 @@ from database import (
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
     get_today_food_analysis_count,
+    get_today_exercise_log_count,
     get_latest_user_weight_record,
+    list_test_backend_datasets,
+    get_test_backend_dataset,
+    create_test_backend_dataset,
+    insert_test_backend_dataset_items,
+    list_test_backend_dataset_items,
     search_manual_food,
     log_unresolved_food,
     browse_manual_food_library,
@@ -175,16 +183,6 @@ from database import (
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
-from user_points import (
-    POINTS_EXERCISE,
-    YUAN_TO_POINTS,
-    add_user_points,
-    create_new_user_with_points,
-    ensure_registration_invite_code,
-    food_dispatch_cost,
-    get_user_points_balance,
-    try_deduct_user_points,
-)
 
 # 从 .env 文件加载环境变量
 BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -201,30 +199,6 @@ VALID_MODE_SET_BY = {"system", "user_manual", "coach_manual"}
 def _get_china_today_str() -> str:
     """返回中国时区的今天日期字符串。"""
     return datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-
-
-async def _require_points_food_dispatch(user_id: str, execution_mode: Optional[str], reason: str) -> None:
-    """标准分析 1 分、精准 2 分（与 is_pro 无关）。"""
-    if not POINTS_SYSTEM_ENABLED:
-        return
-    cost = food_dispatch_cost(execution_mode)
-    ok, bal = await try_deduct_user_points(user_id, cost, reason)
-    if not ok:
-        raise HTTPException(
-            status_code=400,
-            detail=f"积分不足（当前 {float(bal):.1f}，本操作需要 {float(cost):.1f}）",
-        )
-
-
-async def _require_points_amount(user_id: str, amount: Decimal, reason: str) -> None:
-    if not POINTS_SYSTEM_ENABLED:
-        return
-    ok, bal = await try_deduct_user_points(user_id, amount, reason)
-    if not ok:
-        raise HTTPException(
-            status_code=400,
-            detail=f"积分不足（当前 {float(bal):.1f}，本操作需要 {float(amount):.1f}）",
-        )
 
 
 def _format_china_time_hhmm(value: Any) -> str:
@@ -310,41 +284,6 @@ def _build_dashboard_meal_targets(calorie_target: float) -> Dict[str, float]:
         targets[snack_meal_type] = SNACK_MEAL_TARGET_REFERENCE
 
     return targets
-
-
-def _meal_entry_title_from_record(rec: Dict[str, Any]) -> str:
-    """
-    首页「今日餐食」同餐多选：展示分析结果中的餐食标题（描述首行，否则取首条食物名称）。
-    """
-    desc = (rec.get("description") or "").strip()
-    if desc:
-        first_line = desc.splitlines()[0].strip()
-        if first_line:
-            return first_line[:120]
-    items = rec.get("items")
-    if isinstance(items, list) and len(items) > 0:
-        first = items[0]
-        if isinstance(first, dict):
-            name = (first.get("name") or "").strip()
-            if name:
-                return name[:120]
-    return ""
-
-
-def _sum_macro_from_record_items(record: dict, macro_key: str) -> float:
-    """当顶层 total_protein/carbs/fat 缺失或为 0 时，从 items 明细中兜底计算该宏量营养素。"""
-    items = record.get("items")
-    if not isinstance(items, list):
-        return 0.0
-    total = 0.0
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        ratio = float(item.get("ratio", 100)) / 100.0
-        nutrients = item.get("nutrients") or {}
-        val = float(nutrients.get(macro_key) or 0) * ratio
-        total += val
-    return total
 
 
 def _normalize_execution_mode(value: Optional[str], default: str = DEFAULT_EXECUTION_MODE) -> str:
@@ -568,66 +507,12 @@ def _load_pem_value(value_or_path: Optional[str], env_name: str) -> str:
     raise HTTPException(status_code=500, detail=f"{env_name} 配置无效，既不是 PEM 内容也不是可读文件路径")
 
 
-def _normalize_wechat_merchant_serial_no(raw: str) -> str:
-    """商户 API 证书序列号：去空格、统一大写，避免复制时混入空格导致签名错误。"""
-    return (raw or "").strip().replace(" ", "").upper()
-
-
-async def _wechat_pay_jsapi_create_order(config: Dict[str, str], request_payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    微信支付 V3：JSAPI/小程序下单 POST /v3/pay/transactions/jsapi。
-    请求体与 Authorization 签名必须使用同一字节序列（UTF-8）。
-    """
-    canonical_url = "/v3/pay/transactions/jsapi"
-    request_body = json.dumps(request_payload, ensure_ascii=False, separators=(",", ":"))
-    authorization = _build_wechatpay_authorization(
-        mchid=config["mchid"],
-        serial_no=config["serial_no"],
-        private_key_pem=config["private_key"],
-        method="POST",
-        canonical_url=canonical_url,
-        body=request_body,
-    )
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.post(
-            f"https://api.mch.weixin.qq.com{canonical_url}",
-            content=request_body.encode("utf-8"),
-            headers={
-                "Authorization": authorization,
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "User-Agent": "food-link/1.0",
-            },
-        )
-
-    if response.status_code not in (200, 201):
-        try:
-            error_data = response.json()
-            code = error_data.get("code")
-            error_msg = error_data.get("message") or error_data.get("detail") or response.text
-        except Exception:
-            code = None
-            error_msg = response.text
-        hint = ""
-        err_s = str(error_msg)
-        if "签名" in err_s or code in ("SIGN_ERROR", "INVALID_REQUEST", "SIGNATURE_ERROR"):
-            hint = (
-                " 排查：1) WECHAT_PAY_SERIAL_NO 必须填写「商户API证书」序列号（与 apiclient_key.pem 为同一套，"
-                "不是平台证书序列号）；2) 私钥为 apiclient_key.pem 完整内容；3) 服务器时间准确。"
-                " 可用 openssl x509 -in apiclient_cert.pem -noout -serial 核对序列号。"
-            )
-        raise HTTPException(status_code=502, detail=f"微信下单失败：{error_msg}{hint}")
-
-    return response.json()
-
-
 def _get_wechat_pay_config() -> Dict[str, str]:
     """读取微信支付配置。"""
     appid = os.getenv("APPID", "").strip()
     mchid = os.getenv("WECHAT_PAY_MCHID", "").strip()
     notify_url = os.getenv("WECHAT_PAY_NOTIFY_URL", "").strip()
-    # 须与「商户API证书」一致（非平台证书）；建议大写十六进制、无空格（与商户平台展示一致）
-    serial_no = _normalize_wechat_merchant_serial_no(os.getenv("WECHAT_PAY_SERIAL_NO", ""))
+    serial_no = os.getenv("WECHAT_PAY_SERIAL_NO", "").strip()
     api_v3_key = os.getenv("WECHAT_PAY_API_V3_KEY", "").strip()
     private_key = _load_pem_value(
         os.getenv("WECHAT_PAY_PRIVATE_KEY") or os.getenv("WECHAT_PAY_PRIVATE_KEY_PATH"),
@@ -1111,11 +996,9 @@ async def _build_body_metrics_summary(
     now = datetime.now(CHINA_TZ)
     extended_start = (now - timedelta(days=730)).date().isoformat()
     extended_end = now.date().isoformat()
-    weight_rows, water_logs, settings = await asyncio.gather(
-        list_user_weight_records(user_id=user_id, start_date=extended_start, end_date=extended_end),
-        list_user_water_logs(user_id=user_id, start_date=extended_start, end_date=extended_end),
-        get_user_body_metric_settings(user_id)
-    )
+    weight_rows = await list_user_weight_records(user_id=user_id, start_date=extended_start, end_date=extended_end)
+    water_logs = await list_user_water_logs(user_id=user_id, start_date=extended_start, end_date=extended_end)
+    settings = await get_user_body_metric_settings(user_id)
 
     weight_entries = _aggregate_weight_daily(weight_rows)
     latest_weight = weight_entries[-1] if weight_entries else None
@@ -1237,6 +1120,263 @@ def _get_food_analysis_daily_limit(is_pro: bool) -> Optional[int]:
     if not FOOD_ANALYSIS_DAILY_LIMIT_ENABLED:
         return None
     return FOOD_ANALYSIS_DAILY_LIMIT_PRO if is_pro else FOOD_ANALYSIS_DAILY_LIMIT_NON_PRO
+
+
+# ============================================================
+# 食探会员 · 积分体系（2026-04-21 上线）
+# ------------------------------------------------------------
+# 积分消耗：
+#   - 食物分析（拍照/文字/精准）：2 积分/次
+#   - 运动记录：1 积分/次
+# 积分发放：
+#   - 付费套餐：每日按套餐 daily_credits 发放，当天清零
+#   - 新用户试用：注册起 3 天内每日 8 积分（当天清零）
+# 邀请/分享奖励：phase 2 落库
+# ============================================================
+
+CREDIT_COST_PER_FOOD_ANALYSIS = 2
+CREDIT_COST_PER_EXERCISE_LOG = 1
+
+TRIAL_DAYS = 3
+TRIAL_DAILY_CREDITS = 8
+
+LEGACY_PRECISION_ENABLED_PLAN_CODES = {"pro_monthly"}
+
+
+def _credits_reset_time_iso() -> str:
+    """返回当日中国时区 24:00（= 次日 00:00+08:00）ISO 字符串，供前端倒计时。"""
+    now_cn = datetime.now(CHINA_TZ)
+    tomorrow_cn = (now_cn + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return tomorrow_cn.isoformat()
+
+
+def _is_user_in_trial(user_row: Optional[Dict[str, Any]]) -> tuple[bool, Optional[datetime]]:
+    """判定用户是否在 3 天免费试用期内。基于 weapp_user.created_at 推断。
+    返回 (is_active, trial_expires_utc)。"""
+    if not user_row:
+        return False, None
+    created_raw = user_row.get("created_at")
+    created_at = _parse_datetime(created_raw)
+    if not created_at:
+        return False, None
+    trial_end = created_at + timedelta(days=TRIAL_DAYS)
+    return (datetime.now(timezone.utc) < trial_end), trial_end
+
+
+async def _compute_daily_credits_status(
+    user_id: str,
+    is_pro: bool,
+    membership: Optional[Dict[str, Any]],
+    user_row: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """计算某用户今日积分概况。
+    优先级：付费会员 > 免费试用 > 0。
+    """
+    # 1) 当日最大积分
+    daily_max = 0
+    trial_active = False
+    trial_expires_at: Optional[datetime] = None
+    if is_pro and membership:
+        daily_max = int(membership.get("daily_credits") or 0)
+        # 若老会员无 daily_credits 快照，回落到套餐配置
+        if daily_max <= 0:
+            plan_code = membership.get("current_plan_code")
+            if plan_code:
+                plan = await get_membership_plan_by_code(plan_code)
+                if plan:
+                    daily_max = int(plan.get("daily_credits") or 0)
+    if daily_max <= 0 and not is_pro:
+        trial_active, trial_expires_at = _is_user_in_trial(user_row)
+        if trial_active:
+            daily_max = TRIAL_DAILY_CREDITS
+
+    # 2) 今日已消耗积分（基于行为计数）
+    today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+    food_count = await get_today_food_analysis_count(user_id, today_str)
+    exercise_count = await get_today_exercise_log_count(user_id, today_str)
+    used = food_count * CREDIT_COST_PER_FOOD_ANALYSIS + exercise_count * CREDIT_COST_PER_EXERCISE_LOG
+    remaining = max(daily_max - used, 0)
+
+    return {
+        "daily_credits_max": daily_max,
+        "daily_credits_used": min(used, daily_max) if daily_max > 0 else used,
+        "daily_credits_remaining": remaining,
+        "credits_reset_at": _credits_reset_time_iso(),
+        "trial_active": trial_active,
+        "trial_expires_at": _build_json_datetime(trial_expires_at) if trial_expires_at else None,
+    }
+
+
+def _get_membership_tier_from_plan_code(plan_code: Optional[str]) -> Optional[str]:
+    code = str(plan_code or "").strip()
+    if not code:
+        return None
+    if code.startswith("light_"):
+        return "light"
+    if code.startswith("standard_"):
+        return "standard"
+    if code.startswith("advanced_"):
+        return "advanced"
+    if code in LEGACY_PRECISION_ENABLED_PLAN_CODES:
+        return "standard"
+    return None
+
+
+def _is_precision_supported_tier(tier: Optional[str]) -> bool:
+    return tier in {"standard", "advanced"}
+
+
+async def _resolve_membership_tier(membership: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not membership:
+        return None
+    plan_code = membership.get("current_plan_code")
+    tier = _get_membership_tier_from_plan_code(plan_code)
+    if tier:
+        return tier
+    if plan_code:
+        plan = await get_membership_plan_by_code(str(plan_code))
+        plan_tier = str((plan or {}).get("tier") or "").strip()
+        return plan_tier or None
+    return None
+
+
+async def _can_use_precision_mode(
+    membership: Optional[Dict[str, Any]],
+    membership_resp: Optional[Dict[str, Any]] = None,
+) -> bool:
+    resolved_membership = membership or None
+    resolved_resp = membership_resp or _format_membership_response(resolved_membership)
+    if not resolved_resp.get("is_pro"):
+        return False
+    tier = await _resolve_membership_tier(resolved_membership)
+    if tier is None and resolved_resp.get("is_pro"):
+        # 老会员套餐无法识别档位时，默认按 legacy Pro 处理，避免误伤历史用户。
+        return True
+    return _is_precision_supported_tier(tier)
+
+
+async def _raise_if_food_analysis_credits_insufficient(
+    user_id: str,
+    user_row: Optional[Dict[str, Any]] = None,
+    membership: Optional[Dict[str, Any]] = None,
+    membership_resp: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    resolved_membership = membership
+    if resolved_membership is None:
+        resolved_membership = await _get_effective_membership(user_id)
+    resolved_resp = membership_resp or _format_membership_response(resolved_membership)
+    resolved_user = user_row or await get_user_by_id(user_id)
+    credits_info = await _compute_daily_credits_status(
+        user_id=user_id,
+        is_pro=bool(resolved_resp.get("is_pro")),
+        membership=resolved_membership,
+        user_row=resolved_user,
+    )
+    remaining = int(credits_info.get("daily_credits_remaining") or 0)
+    daily_max = int(credits_info.get("daily_credits_max") or 0)
+    used = int(credits_info.get("daily_credits_used") or 0)
+    if remaining >= CREDIT_COST_PER_FOOD_ANALYSIS:
+        return credits_info
+
+    if resolved_resp.get("is_pro"):
+        detail = (
+            f"今日积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
+            f"食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请明日再试，或升级更高套餐。"
+        )
+    elif credits_info.get("trial_active"):
+        detail = (
+            f"试用积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
+            f"食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请明日再试，或开通会员继续。"
+        )
+    elif daily_max > 0:
+        detail = (
+            f"当前积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
+            f"食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请明日再试，或开通会员继续。"
+        )
+    else:
+        detail = f"当前暂无可用积分，食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请开通会员后继续。"
+
+    raise HTTPException(status_code=402, detail=detail)
+
+
+async def _raise_if_exercise_credits_insufficient(
+    user_id: str,
+    user_row: Optional[Dict[str, Any]] = None,
+    membership: Optional[Dict[str, Any]] = None,
+    membership_resp: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    resolved_membership = membership
+    if resolved_membership is None:
+        resolved_membership = await _get_effective_membership(user_id)
+    resolved_resp = membership_resp or _format_membership_response(resolved_membership)
+    resolved_user = user_row or await get_user_by_id(user_id)
+    credits_info = await _compute_daily_credits_status(
+        user_id=user_id,
+        is_pro=bool(resolved_resp.get("is_pro")),
+        membership=resolved_membership,
+        user_row=resolved_user,
+    )
+    remaining = int(credits_info.get("daily_credits_remaining") or 0)
+    daily_max = int(credits_info.get("daily_credits_max") or 0)
+    used = int(credits_info.get("daily_credits_used") or 0)
+    if remaining >= CREDIT_COST_PER_EXERCISE_LOG:
+        return credits_info
+
+    if resolved_resp.get("is_pro"):
+        detail = (
+            f"今日积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
+            f"运动记录需 {CREDIT_COST_PER_EXERCISE_LOG} 积分/次。请明日再试，或升级更高套餐。"
+        )
+    elif credits_info.get("trial_active"):
+        detail = (
+            f"试用积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
+            f"运动记录需 {CREDIT_COST_PER_EXERCISE_LOG} 积分/次。请明日再试，或开通会员继续。"
+        )
+    elif daily_max > 0:
+        detail = (
+            f"当前积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
+            f"运动记录需 {CREDIT_COST_PER_EXERCISE_LOG} 积分/次。请明日再试，或开通会员继续。"
+        )
+    else:
+        detail = f"当前暂无可用积分，运动记录需 {CREDIT_COST_PER_EXERCISE_LOG} 积分/次。请开通会员后继续。"
+
+    raise HTTPException(status_code=402, detail=detail)
+
+
+async def _validate_food_analysis_access(
+    user_id: str,
+    effective_mode: str,
+    *,
+    strict_requested: bool = False,
+    user_row: Optional[Dict[str, Any]] = None,
+    membership: Optional[Dict[str, Any]] = None,
+    membership_resp: Optional[Dict[str, Any]] = None,
+) -> tuple[Optional[Dict[str, Any]], Dict[str, Any], Optional[Dict[str, Any]], str]:
+    resolved_user = user_row or await get_user_by_id(user_id)
+    resolved_membership = membership
+    if resolved_membership is None:
+        resolved_membership = await _get_effective_membership(user_id)
+    resolved_resp = membership_resp or _format_membership_response(resolved_membership)
+
+    await _raise_if_food_analysis_credits_insufficient(
+        user_id=user_id,
+        user_row=resolved_user,
+        membership=resolved_membership,
+        membership_resp=resolved_resp,
+    )
+
+    resolved_mode = effective_mode
+    if resolved_mode == "strict":
+        can_use_precision = await _can_use_precision_mode(resolved_membership, resolved_resp)
+        if strict_requested and not can_use_precision:
+            tier = await _resolve_membership_tier(resolved_membership)
+            if resolved_resp.get("is_pro") and tier == "light":
+                raise HTTPException(status_code=402, detail="当前轻度版不含精准模式，请升级到标准版或进阶版后再试。")
+            raise HTTPException(status_code=402, detail="精准模式仅对标准版和进阶版开放，请升级或开通后再试。")
+        if not can_use_precision:
+            resolved_mode = "standard"
+
+    return resolved_user, resolved_resp, resolved_membership, resolved_mode
 
 
 def _get_private_key(private_key_pem: str):
@@ -1767,7 +1907,6 @@ def _strip_standard_mode_extras(
 class LoginRequest(BaseModel):
     code: str = Field(..., description="微信小程序登录凭证 code")
     phoneCode: Optional[str] = Field(default=None, description="获取手机号的 code（可选）")
-    inviteCode: Optional[str] = Field(default=None, description="注册时填写的邀请码（可选，新老用户各 +20 积分）")
 
 
 class LoginResponse(BaseModel):
@@ -1790,6 +1929,13 @@ class MembershipPlanResponse(BaseModel):
     amount: float
     duration_months: int
     description: Optional[str] = None
+    # 新定价体系字段（2026-04-21）
+    tier: Optional[str] = None              # light | standard | advanced
+    period: Optional[str] = None            # monthly | quarterly | yearly
+    daily_credits: int = 0                  # 对应套餐每日积分
+    original_amount: Optional[float] = None # 对照价（无则为 null）
+    savings: Optional[float] = None         # = original_amount - amount，用于"立省 xx"
+    sort_order: int = 0
 
 
 class MembershipStatusResponse(BaseModel):
@@ -1800,13 +1946,17 @@ class MembershipStatusResponse(BaseModel):
     current_period_start: Optional[str] = None
     expires_at: Optional[str] = None
     last_paid_at: Optional[str] = None
+    # 兼容旧的拍照日限（当前关闭，保留字段避免前端崩）
     daily_limit: Optional[int] = None
     daily_used: Optional[int] = None
     daily_remaining: Optional[int] = None
-    # 积分制（替代会员权限区分的主展示字段）
-    points_balance: Optional[float] = None
-    invite_code: Optional[str] = None
-    points_per_yuan: Optional[float] = None
+    # 新积分体系字段（2026-04-21）
+    daily_credits_max: int = 0              # 每日可用积分上限
+    daily_credits_used: int = 0             # 今日已消耗积分
+    daily_credits_remaining: int = 0        # 今日剩余积分
+    credits_reset_at: Optional[str] = None  # 次日 00:00+08:00
+    trial_active: bool = False              # 是否在免费试用期
+    trial_expires_at: Optional[str] = None  # 试用截止（UTC）
 
 
 class MembershipPlansListResponse(BaseModel):
@@ -1814,7 +1964,7 @@ class MembershipPlansListResponse(BaseModel):
 
 
 class CreateMembershipPaymentRequest(BaseModel):
-    plan_code: str = Field(..., description="会员套餐编码，如 pro_monthly")
+    plan_code: str = Field(..., description="会员套餐编码，如 standard_monthly")
 
 
 class PaymentParamsResponse(BaseModel):
@@ -1829,17 +1979,6 @@ class CreateMembershipPaymentResponse(BaseModel):
     order_no: str
     plan_code: str
     amount: float
-    pay_params: PaymentParamsResponse
-
-
-class CreatePointsRechargeRequest(BaseModel):
-    amount_yuan: float = Field(..., gt=0, le=50000, description="充值金额（元），1 元兑换积分见 points_per_yuan")
-
-
-class CreatePointsRechargeResponse(BaseModel):
-    order_no: str
-    amount_yuan: float
-    points_to_add: float
     pay_params: PaymentParamsResponse
 
 
@@ -2049,7 +2188,6 @@ async def analyze_food(
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
         state_hint = ""
-        state_parts: List[str] = []
         if request.diet_goal or request.activity_timing:
             diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
             activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
@@ -2089,25 +2227,18 @@ async def analyze_food(
         if execution_mode is None:
             execution_mode = _normalize_execution_mode(None)
 
-        # 已登录：旧版每日限次 / Pro 精准；积分制下由单次请求前扣积分（同步分析在下方扣）
-        if user_info and not POINTS_SYSTEM_ENABLED:
+        # 配额检查（已登录用户）
+        if user_info:
             membership = await _get_effective_membership(user_info["user_id"])
             membership_resp = _format_membership_response(membership)
-            is_pro_sync = membership_resp["is_pro"]
-            quota_limit_sync = _get_food_analysis_daily_limit(is_pro_sync)
-            if quota_limit_sync is not None:
-                today_str_sync = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-                daily_used_sync = await get_today_food_analysis_count(user_info["user_id"], today_str_sync)
-                if daily_used_sync >= quota_limit_sync:
-                    raise HTTPException(
-                        status_code=429,
-                        detail=f"今日拍照次数已达上限（{quota_limit_sync}次），{'请明日再试' if is_pro_sync else '请明日再试，或开通食探会员解锁精准模式'}"
-                    )
-            if execution_mode == "strict" and not is_pro_sync:
-                execution_mode = "standard"
-
-        if user_info and POINTS_SYSTEM_ENABLED:
-            await _require_points_food_dispatch(user_info["user_id"], execution_mode, "food_analyze_sync")
+            _, _, _, execution_mode = await _validate_food_analysis_access(
+                user_id=user_info["user_id"],
+                effective_mode=execution_mode,
+                strict_requested=(requested_mode == "strict"),
+                user_row=user,
+                membership=membership,
+                membership_resp=membership_resp,
+            )
 
         mode_hint = _build_execution_mode_hint(execution_mode)
         compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
@@ -2354,22 +2485,16 @@ async def analyze_submit(
     user = await get_user_by_id(user_info["user_id"])
     profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
     effective_mode = requested_mode or profile_mode
-
-    if not POINTS_SYSTEM_ENABLED:
-        membership = await _get_effective_membership(user_info["user_id"])
-        membership_resp = _format_membership_response(membership)
-        is_pro = membership_resp["is_pro"]
-        quota_limit = _get_food_analysis_daily_limit(is_pro)
-        if quota_limit is not None:
-            today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-            daily_used = await get_today_food_analysis_count(user_info["user_id"], today_str)
-            if daily_used >= quota_limit:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"今日拍照次数已达上限（{quota_limit}次），{'请明日再试' if is_pro else '请明日再试，或开通食探会员解锁精准模式'}"
-                )
-        if effective_mode == "strict" and not is_pro:
-            effective_mode = "standard"
+    membership = await _get_effective_membership(user_info["user_id"])
+    membership_resp = _format_membership_response(membership)
+    _, _, _, effective_mode = await _validate_food_analysis_access(
+        user_id=user_info["user_id"],
+        effective_mode=effective_mode,
+        strict_requested=(requested_mode == "strict" or bool(body.precision_session_id)),
+        user_row=user,
+        membership=membership,
+        membership_resp=membership_resp,
+    )
 
     payload = {
         "meal_type": body.meal_type,
@@ -2469,7 +2594,6 @@ async def analyze_submit(
                 "round_index": current_round_index,
             },
         )
-        await _require_points_food_dispatch(user_info["user_id"], "strict", "food_image_precision_plan")
         precision_task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -2502,7 +2626,6 @@ async def analyze_submit(
         },
     )
     try:
-        await _require_points_food_dispatch(user_info["user_id"], effective_mode, "food_image_analysis")
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -2873,8 +2996,20 @@ async def analyze_food_text(
                 state_hint = f" 用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性建议。"
         remain_hint = f" 当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示。" if request.remaining_calories is not None else ""
         profile_block = ""
+        execution_mode = _normalize_execution_mode(None)
         if user_info:
             user = await get_user_by_id(user_info["user_id"])
+            membership = await _get_effective_membership(user_info["user_id"])
+            membership_resp = _format_membership_response(membership)
+            execution_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
+            _, _, _, execution_mode = await _validate_food_analysis_access(
+                user_id=user_info["user_id"],
+                effective_mode=execution_mode,
+                strict_requested=False,
+                user_row=user,
+                membership=membership,
+                membership_resp=membership_resp,
+            )
             if user:
                 profile_block = _format_health_profile_for_analysis(user)
                 if profile_block:
@@ -3030,6 +3165,16 @@ async def analyze_text_submit(
     user = await get_user_by_id(user_info["user_id"])
     profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
     effective_mode = requested_mode or profile_mode
+    membership = await _get_effective_membership(user_info["user_id"])
+    membership_resp = _format_membership_response(membership)
+    _, _, _, effective_mode = await _validate_food_analysis_access(
+        user_id=user_info["user_id"],
+        effective_mode=effective_mode,
+        strict_requested=(requested_mode == "strict" or bool(body.precision_session_id)),
+        user_row=user,
+        membership=membership,
+        membership_resp=membership_resp,
+    )
 
     payload = {
         "meal_type": body.meal_type,
@@ -3126,7 +3271,6 @@ async def analyze_text_submit(
                 "round_index": current_round_index,
             },
         )
-        await _require_points_food_dispatch(user_info["user_id"], "strict", "food_text_precision_plan")
         precision_task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -3158,7 +3302,6 @@ async def analyze_text_submit(
     )
 
     try:
-        await _require_points_food_dispatch(user_info["user_id"], effective_mode, "food_text_analysis")
         task = await asyncio.to_thread(
             create_analysis_task_sync,
             user_id=user_info["user_id"],
@@ -3204,6 +3347,18 @@ async def continue_precision_session(
         raise HTTPException(status_code=400, detail="精准模式会话类型与当前提交不一致")
     if session.get("status") not in PRECISION_SESSION_ACTIVE_STATUSES:
         raise HTTPException(status_code=400, detail="该精准模式会话已结束，无法继续")
+
+    user = await get_user_by_id(user_info["user_id"])
+    membership = await _get_effective_membership(user_info["user_id"])
+    membership_resp = _format_membership_response(membership)
+    await _validate_food_analysis_access(
+        user_id=user_info["user_id"],
+        effective_mode="strict",
+        strict_requested=True,
+        user_row=user,
+        membership=membership,
+        membership_resp=membership_resp,
+    )
 
     reference_objects = _serialize_reference_objects(body.reference_objects)
     latest_inputs = {
@@ -3281,7 +3436,6 @@ async def continue_precision_session(
         None,
     )
     try:
-        await _require_points_food_dispatch(user_info["user_id"], "strict", "precision_session_continue")
         task = await asyncio.to_thread(create_analysis_task_sync, **task_kwargs)
         await asyncio.to_thread(
             update_precision_session_sync,
@@ -3822,21 +3976,29 @@ async def _get_effective_membership(user_id: str) -> Optional[Dict[str, Any]]:
 
 @app.get("/api/membership/plans", response_model=MembershipPlansListResponse)
 async def get_membership_plans():
-    """获取启用中的会员套餐。"""
+    """获取启用中的会员套餐（3 档 × 3 周期 矩阵）。"""
     try:
         plans = await list_active_membership_plans()
-        return {
-            "list": [
-                {
-                    "code": plan["code"],
-                    "name": plan["name"],
-                    "amount": float(plan.get("amount") or 0),
-                    "duration_months": int(plan.get("duration_months") or 1),
-                    "description": plan.get("description"),
-                }
-                for plan in plans
-            ]
-        }
+        result_list = []
+        for plan in plans:
+            amount = float(plan.get("amount") or 0)
+            original_raw = plan.get("original_amount")
+            original = float(original_raw) if original_raw is not None else None
+            savings = round(original - amount, 2) if (original is not None and original > amount) else None
+            result_list.append({
+                "code": plan["code"],
+                "name": plan["name"],
+                "amount": amount,
+                "duration_months": int(plan.get("duration_months") or 1),
+                "description": plan.get("description"),
+                "tier": plan.get("tier"),
+                "period": plan.get("period"),
+                "daily_credits": int(plan.get("daily_credits") or 0),
+                "original_amount": original,
+                "savings": savings,
+                "sort_order": int(plan.get("sort_order") or 0),
+            })
+        return {"list": result_list}
     except Exception as e:
         print(f"[get_membership_plans] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取会员套餐失败: {str(e)}")
@@ -3846,42 +4008,150 @@ async def get_membership_plans():
 async def get_my_membership(
     user_info: dict = Depends(get_current_user_info)
 ):
-    """获取当前用户状态：积分制下以 points_balance / invite_code 为主；会员字段保留兼容旧客户端。"""
+    """获取当前登录用户的 Pro 会员状态（含今日配额与积分）。"""
     try:
-        membership = await _get_effective_membership(user_info["user_id"])
+        user_id = user_info["user_id"]
+        membership = await _get_effective_membership(user_id)
+        user_row = await get_user_by_id(user_id)
         result = _format_membership_response(membership)
-        uid = user_info["user_id"]
-        if POINTS_SYSTEM_ENABLED:
-            result["is_pro"] = False
-            try:
-                icode = await ensure_registration_invite_code(uid)
-            except Exception:
-                icode = None
-            bal = await get_user_points_balance(uid)
-            result["points_balance"] = float(bal)
-            result["invite_code"] = icode
-            result["points_per_yuan"] = float(YUAN_TO_POINTS)
-            result["daily_limit"] = None
-            result["daily_used"] = None
-            result["daily_remaining"] = None
-            return result
         is_pro = result["is_pro"]
+
+        # --- 旧拍照日限兼容（当前关闭） ---
         daily_limit = _get_food_analysis_daily_limit(is_pro)
         today_str = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-        daily_used_count = await get_today_food_analysis_count(uid, today_str)
+        daily_used_count = await get_today_food_analysis_count(user_id, today_str)
         if daily_limit is None:
             result["daily_limit"] = None
             result["daily_used"] = daily_used_count
             result["daily_remaining"] = None
-            return result
-        daily_used = min(daily_used_count, daily_limit)
-        result["daily_limit"] = daily_limit
-        result["daily_used"] = daily_used
-        result["daily_remaining"] = max(daily_limit - daily_used, 0)
+        else:
+            daily_used = min(daily_used_count, daily_limit)
+            result["daily_limit"] = daily_limit
+            result["daily_used"] = daily_used
+            result["daily_remaining"] = max(daily_limit - daily_used, 0)
+
+        # --- 新积分体系 ---
+        credits_info = await _compute_daily_credits_status(
+            user_id=user_id,
+            is_pro=is_pro,
+            membership=membership,
+            user_row=user_row,
+        )
+        result.update(credits_info)
         return result
     except Exception as e:
         print(f"[get_my_membership] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取会员状态失败: {str(e)}")
+
+
+# ============================================================
+# TODO: [TEST] 以下测试接口在正式上线前必须删除
+# ============================================================
+class ToggleTestMembershipRequest(BaseModel):
+    plan_code: Optional[str] = Field(
+        default=None,
+        description="测试开通时使用的套餐编码；为空则默认 standard_monthly",
+    )
+
+
+TEST_MEMBERSHIP_DEFAULT_PLAN_CODE = "standard_monthly"
+
+@app.post("/api/dev/toggle-test-membership")
+async def toggle_test_membership(
+    body: ToggleTestMembershipRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    [TEST ONLY] 切换当前登录用户的会员状态。
+    active → expired；其他状态 → 用指定/默认套餐开通。
+    TODO: [TEST] 正式上线前删除此接口。
+    """
+    try:
+        user_id = user_info["user_id"]
+        membership = await get_user_pro_membership(user_id)
+        now = datetime.now(timezone.utc)
+
+        if membership:
+            expires_at = _parse_datetime(membership.get("expires_at"))
+            is_currently_active = (
+                membership.get("status") == "active"
+                and expires_at is not None
+                and expires_at > now
+            )
+            if is_currently_active:
+                updated = await save_user_pro_membership(
+                    user_id,
+                    {
+                        "status": "expired",
+                        "expires_at": (now - timedelta(seconds=1)).isoformat(),
+                        "updated_at": now.isoformat(),
+                    }
+                )
+                new_is_pro = False
+                activated_plan = None
+            else:
+                requested_plan_code = (body.plan_code or TEST_MEMBERSHIP_DEFAULT_PLAN_CODE).strip()
+                plan = await get_membership_plan_by_code(requested_plan_code)
+                if not plan or not plan.get("is_active"):
+                    raise HTTPException(status_code=404, detail="测试套餐不存在或未启用")
+                daily_credits = int(plan.get("daily_credits") or 0)
+                first_activated_at = membership.get("first_activated_at") or now.isoformat()
+                updated = await save_user_pro_membership(
+                    user_id,
+                    {
+                        "status": "active",
+                        "current_plan_code": plan["code"],
+                        "first_activated_at": first_activated_at,
+                        "current_period_start": now.isoformat(),
+                        "expires_at": _add_months(now, int(plan.get("duration_months") or 1)).isoformat(),
+                        "last_paid_at": now.isoformat(),
+                        "daily_credits": daily_credits,
+                        "updated_at": now.isoformat(),
+                    }
+                )
+                new_is_pro = True
+                activated_plan = plan
+        else:
+            requested_plan_code = (body.plan_code or TEST_MEMBERSHIP_DEFAULT_PLAN_CODE).strip()
+            plan = await get_membership_plan_by_code(requested_plan_code)
+            if not plan or not plan.get("is_active"):
+                raise HTTPException(status_code=404, detail="测试套餐不存在或未启用")
+            daily_credits = int(plan.get("daily_credits") or 0)
+            updated = await save_user_pro_membership(
+                user_id,
+                {
+                    "user_id": user_id,
+                    "status": "active",
+                    "current_plan_code": plan["code"],
+                    "first_activated_at": now.isoformat(),
+                    "current_period_start": now.isoformat(),
+                    "expires_at": _add_months(now, int(plan.get("duration_months") or 1)).isoformat(),
+                    "last_paid_at": now.isoformat(),
+                    "daily_credits": daily_credits,
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                }
+            )
+            new_is_pro = True
+            activated_plan = plan
+
+        return {
+            "ok": True,
+            "is_pro": new_is_pro,
+            "status": updated.get("status"),
+            "expires_at": updated.get("expires_at"),
+            "plan_code": activated_plan.get("code") if activated_plan else updated.get("current_plan_code"),
+            "plan_name": activated_plan.get("name") if activated_plan else None,
+            "daily_credits": int(updated.get("daily_credits") or 0),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[toggle_test_membership] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"切换会员状态失败: {str(e)}")
+# ============================================================
+# TODO: [TEST] 测试接口结束
+# ============================================================
 
 
 @app.post("/api/membership/pay/create", response_model=CreateMembershipPaymentResponse)
@@ -3906,6 +4176,7 @@ async def create_membership_payment(
         amount = _to_decimal_amount(plan.get("amount") or "0")
         duration_months = int(plan.get("duration_months") or 1)
         order_no = _generate_membership_order_no()
+        canonical_url = "/v3/pay/transactions/jsapi"
         request_payload = {
             "appid": config["appid"],
             "mchid": config["mchid"],
@@ -3920,7 +4191,37 @@ async def create_membership_payment(
                 "openid": openid,
             },
         }
-        response_data = await _wechat_pay_jsapi_create_order(config, request_payload)
+        request_body = json.dumps(request_payload, ensure_ascii=False, separators=(",", ":"))
+        authorization = _build_wechatpay_authorization(
+            mchid=config["mchid"],
+            serial_no=config["serial_no"],
+            private_key_pem=config["private_key"],
+            method="POST",
+            canonical_url=canonical_url,
+            body=request_body,
+        )
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"https://api.mch.weixin.qq.com{canonical_url}",
+                content=request_body.encode("utf-8"),
+                headers={
+                    "Authorization": authorization,
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "food-link/1.0",
+                },
+            )
+
+        if response.status_code not in (200, 201):
+            try:
+                error_data = response.json()
+                error_msg = error_data.get("message") or error_data.get("detail") or response.text
+            except Exception:
+                error_msg = response.text
+            raise HTTPException(status_code=502, detail=f"微信下单失败: {error_msg}")
+
+        response_data = response.json()
         prepay_id = (response_data.get("prepay_id") or "").strip()
         if not prepay_id:
             raise HTTPException(status_code=502, detail="微信下单失败：未返回 prepay_id")
@@ -3963,90 +4264,6 @@ async def create_membership_payment(
     except Exception as e:
         print(f"[create_membership_payment] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"创建会员支付失败: {str(e)}")
-
-
-@app.post("/api/points/recharge/create", response_model=CreatePointsRechargeResponse)
-async def create_points_recharge_payment(
-    body: CreatePointsRechargeRequest,
-    user_info: dict = Depends(get_current_user_info),
-):
-    """微信 JSAPI 下单：按充值金额（元）兑换积分（默认 1 元 = 20 积分，见环境变量 POINTS_YUAN_TO_POINTS）。"""
-    try:
-        config = _get_wechat_pay_config()
-        user = await get_user_by_id(user_info["user_id"])
-        if not user:
-            raise HTTPException(status_code=404, detail="用户不存在")
-        openid = (user.get("openid") or "").strip()
-        if not openid:
-            raise HTTPException(status_code=400, detail="当前用户缺少 openid，无法发起微信支付")
-
-        amount = Decimal(str(body.amount_yuan)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        if amount < Decimal("0.01"):
-            raise HTTPException(status_code=400, detail="充值金额过小")
-        points_to_add = (amount * YUAN_TO_POINTS).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        order_no = _generate_membership_order_no()
-        pts_int = int(round(float(points_to_add)))
-        request_payload = {
-            "appid": config["appid"],
-            "mchid": config["mchid"],
-            "description": f"食探积分充值{pts_int}积分",
-            "out_trade_no": order_no,
-            "notify_url": config["notify_url"],
-            "amount": {
-                "total": _amount_to_fen(amount),
-                "currency": "CNY",
-            },
-            "payer": {
-                "openid": openid,
-            },
-        }
-        response_data = await _wechat_pay_jsapi_create_order(config, request_payload)
-        prepay_id = (response_data.get("prepay_id") or "").strip()
-        if not prepay_id:
-            raise HTTPException(status_code=502, detail="微信下单失败：未返回 prepay_id")
-
-        await create_pro_membership_payment_record(
-            {
-                "user_id": user_info["user_id"],
-                "plan_code": "points_recharge",
-                "order_no": order_no,
-                "amount": float(amount),
-                "currency": "CNY",
-                # 0 = 非订阅（积分充值）；需 DB 允许 duration_months>=0，见 backend/sql/migrate_pro_membership_payment_duration_months_allow_zero.sql
-                "duration_months": 0,
-                "pay_channel": "wechat_mini_program",
-                "trade_type": "JSAPI",
-                "status": "pending",
-                "wx_openid": openid,
-                "wx_prepay_id": prepay_id,
-                "extra": {
-                    "kind": "points_recharge",
-                    "points_to_add": float(points_to_add),
-                    "yuan": float(amount),
-                    "create_order_payload": request_payload,
-                    "wechat_create_order_response": response_data,
-                },
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-
-        pay_params = _build_mini_program_pay_params(
-            appid=config["appid"],
-            prepay_id=prepay_id,
-            private_key_pem=config["private_key"],
-        )
-
-        return {
-            "order_no": order_no,
-            "amount_yuan": float(amount),
-            "points_to_add": float(points_to_add),
-            "pay_params": pay_params,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[create_points_recharge_payment] 错误: {e}")
-        raise HTTPException(status_code=500, detail=f"创建积分充值订单失败: {str(e)}")
 
 
 @app.post("/api/payment/wechat/notify/membership")
@@ -4117,26 +4334,6 @@ async def wechat_membership_notify(request: Request):
         }
     )
 
-    if (payment_record.get("plan_code") or "").strip() == "points_recharge":
-        extra = payment_record.get("extra") or {}
-        if isinstance(extra, str):
-            try:
-                extra = json.loads(extra)
-            except Exception:
-                extra = {}
-        pts = Decimal(str(extra.get("points_to_add") or 0))
-        if pts > 0:
-            try:
-                await add_user_points(
-                    payment_record["user_id"],
-                    pts,
-                    "points_recharge_wechat",
-                    {"order_no": order_no, "yuan": extra.get("yuan")},
-                )
-            except Exception as pe:
-                print(f"[wechat_membership_notify] points recharge grant failed: {pe}")
-        return JSONResponse(content={"code": "SUCCESS", "message": "成功"})
-
     membership = await get_user_pro_membership(payment_record["user_id"])
     existing_expires_at = _parse_datetime(membership.get("expires_at")) if membership else None
     existing_first_activated_at = _parse_datetime(membership.get("first_activated_at")) if membership else None
@@ -4152,6 +4349,10 @@ async def wechat_membership_notify(request: Request):
         expires_at = _add_months(paid_at, duration_months)
         first_activated_at = existing_first_activated_at or paid_at
 
+    # 取新套餐的每日积分，作为 user_pro_memberships.daily_credits 快照
+    plan_for_credits = await get_membership_plan_by_code(payment_record.get("plan_code") or "")
+    plan_daily_credits = int((plan_for_credits or {}).get("daily_credits") or 0)
+
     await save_user_pro_membership(
         payment_record["user_id"],
         {
@@ -4162,6 +4363,7 @@ async def wechat_membership_notify(request: Request):
             "expires_at": _build_json_datetime(expires_at),
             "last_paid_at": paid_at.isoformat(),
             "auto_renew": False,
+            "daily_credits": plan_daily_credits,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -4822,16 +5024,6 @@ class SaveFoodRecordRequest(BaseModel):
     source_task_id: Optional[str] = Field(default=None, description="来源识别任务 ID（从 analysis_tasks 保存而来时传入）")
 
 
-def _is_duplicate_key_error(exc: BaseException) -> bool:
-    """Postgres / Supabase 唯一约束冲突（部署 uq_user_food_user_source_task 后并发插入也会命中）。"""
-    msg = str(exc).lower()
-    if "23505" in msg:
-        return True
-    if "duplicate key" in msg or "unique constraint" in msg:
-        return True
-    return False
-
-
 @app.post("/api/food-record/save")
 async def save_food_record(
     body: SaveFoodRecordRequest,
@@ -4839,7 +5031,6 @@ async def save_food_record(
 ):
     """
     拍照识别完成后确认记录：支持早/午/晚三餐 + 早/午/晚加餐。
-    同一识别任务（source_task_id）仅生成一条记录，避免好友动态重复。
     """
     user_id = user_info["user_id"]
     if body.meal_type not in VALID_MEAL_TYPES:
@@ -4871,55 +5062,32 @@ async def save_food_record(
         for item in body.items
     ]
     try:
-        stid = (body.source_task_id or "").strip() or None
-        if stid:
-            existing = await get_food_record_by_user_and_source_task(user_id, stid)
-            if existing and existing.get("id"):
-                return {
-                    "id": existing["id"],
-                    "message": "记录已存在",
-                    "already_saved": True,
-                }
-        try:
-            row = await insert_food_record(
-                user_id=user_id,
-                meal_type=normalized_meal_type,
-                image_path=body.image_path,
-                description=body.description or "",
-                insight=body.insight or "",
-                items=items_payload,
-                total_calories=body.total_calories,
-                total_protein=body.total_protein,
-                total_carbs=body.total_carbs,
-                total_fat=body.total_fat,
-                total_weight_grams=body.total_weight_grams,
-                diet_goal=body.diet_goal,
-                activity_timing=body.activity_timing,
-                pfc_ratio_comment=body.pfc_ratio_comment,
-                absorption_notes=body.absorption_notes,
-                context_advice=body.context_advice,
-                source_task_id=stid,
-            )
-        except Exception as insert_err:
-            if stid and _is_duplicate_key_error(insert_err):
-                existing = await get_food_record_by_user_and_source_task(user_id, stid)
-                if existing and existing.get("id"):
-                    return {
-                        "id": existing["id"],
-                        "message": "记录已存在",
-                        "already_saved": True,
-                    }
-            print(f"[save_food_record] 错误: {insert_err}")
-            raise HTTPException(status_code=500, detail="保存记录失败") from insert_err
+        row = await insert_food_record(
+            user_id=user_id,
+            meal_type=normalized_meal_type,
+            image_path=body.image_path,
+            description=body.description or "",
+            insight=body.insight or "",
+            items=items_payload,
+            total_calories=body.total_calories,
+            total_protein=body.total_protein,
+            total_carbs=body.total_carbs,
+            total_fat=body.total_fat,
+            total_weight_grams=body.total_weight_grams,
+            diet_goal=body.diet_goal,
+            activity_timing=body.activity_timing,
+            pfc_ratio_comment=body.pfc_ratio_comment,
+            absorption_notes=body.absorption_notes,
+            context_advice=body.context_advice,
+            source_task_id=body.source_task_id,
+        )
         # 后台预刷新 AI 营养洞察（周/月），不阻塞本次保存
         try:
             asyncio.create_task(_refresh_stats_insight_for_user(user_id))
         except Exception as bg_err:
             print(f"[save_food_record] 启动后台刷新 AI 洞察失败: {bg_err}")
 
-        return {"id": row.get("id"), "message": "记录成功", "already_saved": False}
-    except HTTPException:
-        raise
+        return {"id": row.get("id"), "message": "记录成功"}
     except Exception as e:
         print(f"[save_food_record] 错误: {e}")
         raise HTTPException(status_code=500, detail="保存记录失败")
@@ -4992,86 +5160,6 @@ async def get_food_record_detail(
         raise HTTPException(status_code=500, detail="获取记录详情失败")
 
 
-def _record_time_to_china_date_str(record_time: Any) -> str:
-    """将记录时间转为上海时区自然日 YYYY-MM-DD（与 list_food_records 一致）。"""
-    if record_time is None:
-        return ""
-    try:
-        if isinstance(record_time, datetime):
-            dt = record_time
-        else:
-            s = str(record_time).strip()
-            if not s:
-                return ""
-            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(CHINA_TZ).date().isoformat()
-    except Exception:
-        return ""
-
-
-def _china_yesterday_ymd(ymd: str) -> str:
-    if not ymd:
-        return ""
-    d = datetime.strptime(ymd, "%Y-%m-%d").date()
-    return (d - timedelta(days=1)).isoformat()
-
-
-@app.get("/api/food-record/{record_id}/poster-calorie-compare")
-async def get_poster_calorie_compare(
-    record_id: str,
-    user_info: dict = Depends(get_current_user_info),
-):
-    """
-    分享海报热量行数据：含该餐计划热量 meal_plan_kcal（仪表盘分配）与可选「较昨同餐」对比。
-    昨日同餐按中国自然日 + 餐次归一化，与 /api/food-record/list 一致；无昨日记录时 has_baseline=false。
-    仅记录本人可调用。
-    """
-    user_id = user_info["user_id"]
-    try:
-        record = await get_food_record_by_id(record_id)
-        if not record:
-            raise HTTPException(status_code=404, detail="记录不存在")
-        if str(record.get("user_id")) != str(user_id):
-            raise HTTPException(status_code=403, detail="仅记录本人可获取对比")
-
-        record_day = _record_time_to_china_date_str(record.get("record_time"))
-        if not record_day:
-            raise HTTPException(status_code=400, detail="记录时间无效")
-
-        yday = _china_yesterday_ymd(record_day)
-        records = await list_food_records(user_id=user_id, date=yday, limit=100)
-        target = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
-        same_meal: List[Dict[str, Any]] = []
-        for r in records:
-            if _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time")) == target:
-                same_meal.append(r)
-
-        baseline = sum(float(x.get("total_calories") or 0) for x in same_meal)
-        has_baseline = len(same_meal) > 0
-        current = float(record.get("total_calories") or 0)
-        delta = round(current - baseline)
-
-        owner = await get_user_by_id(user_id)
-        dash = _get_dashboard_targets(owner) if owner else {"calorie_target": 2000.0}
-        meal_targets = _build_dashboard_meal_targets(float(dash["calorie_target"]))
-        meal_plan_kcal = round(float(meal_targets.get(target, 0) or 0), 1)
-
-        return {
-            "has_baseline": has_baseline,
-            "baseline_kcal": round(baseline),
-            "delta_kcal": delta,
-            "current_kcal": round(current),
-            "meal_plan_kcal": meal_plan_kcal,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[get_poster_calorie_compare] 错误: {e}")
-        raise HTTPException(status_code=500, detail="获取海报热量对比失败")
-
-
 class UpdateFoodRecordRequest(BaseModel):
     meal_type: Optional[str] = Field(default=None, description="餐次")
     items: Optional[List[FoodRecordItem]] = Field(default=None, description="食物项列表")
@@ -5080,8 +5168,6 @@ class UpdateFoodRecordRequest(BaseModel):
     total_carbs: Optional[float] = Field(default=None, description="总碳水 g")
     total_fat: Optional[float] = Field(default=None, description="总脂肪 g")
     total_weight_grams: Optional[int] = Field(default=None, description="总重量 g")
-    diet_goal: Optional[str] = Field(default=None, description="饮食目标")
-    activity_timing: Optional[str] = Field(default=None, description="运动时机")
 
 
 @app.put("/api/food-record/{record_id}")
@@ -5125,10 +5211,6 @@ async def update_food_record_endpoint(
         data["total_fat"] = body.total_fat
     if body.total_weight_grams is not None:
         data["total_weight_grams"] = body.total_weight_grams
-    if body.diet_goal is not None:
-        data["diet_goal"] = body.diet_goal
-    if body.activity_timing is not None:
-        data["activity_timing"] = body.activity_timing
     if not data:
         raise HTTPException(status_code=400, detail="没有需要更新的字段")
     try:
@@ -5722,60 +5804,6 @@ async def update_dashboard_targets(
         raise HTTPException(status_code=500, detail="更新首页目标失败")
 
 
-async def _count_green_days(user_id: str, lookback_days: int = 365) -> int:
-    """
-    统计「全绿达标」天数（近 lookback_days 天）：当日有饮食记录且
-    总热量与三大宏量均不超过当前仪表盘目标（目标为 0 的项不约束）。
-    """
-    try:
-        user = await get_user_by_id(user_id)
-        if not user:
-            return 0
-        targets = _get_dashboard_targets(user)
-        cal_t = float(targets["calorie_target"])
-        p_t = float(targets["protein_target"])
-        c_t = float(targets["carbs_target"])
-        f_t = float(targets["fat_target"])
-
-        today = datetime.now(CHINA_TZ).date()
-        start = today - timedelta(days=lookback_days)
-        records = await list_food_records_by_range(
-            user_id=user_id,
-            start_date=start.isoformat(),
-            end_date=today.isoformat(),
-        )
-        by_day: Dict[str, List[dict]] = {}
-        for r in records:
-            rt = r.get("record_time")
-            if not rt:
-                continue
-            try:
-                dt = datetime.fromisoformat(str(rt).replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                day_key = dt.astimezone(CHINA_TZ).date().isoformat()
-            except Exception:
-                continue
-            by_day.setdefault(day_key, []).append(r)
-
-        green = 0
-        for rows in by_day.values():
-            tc = sum(float(x.get("total_calories") or 0) for x in rows)
-            tp = sum(float(x.get("total_protein") or 0) for x in rows)
-            tc2 = sum(float(x.get("total_carbs") or 0) for x in rows)
-            tf = sum(float(x.get("total_fat") or 0) for x in rows)
-            ok_cal = cal_t <= 0 or tc <= cal_t
-            ok_p = p_t <= 0 or tp <= p_t
-            ok_c = c_t <= 0 or tc2 <= c_t
-            ok_f = f_t <= 0 or tf <= f_t
-            if ok_cal and ok_p and ok_c and ok_f:
-                green += 1
-        return green
-    except Exception as e:
-        print(f"[_count_green_days] 错误: {e}")
-        return 0
-
-
 @app.get("/api/home/dashboard")
 async def get_home_dashboard(
     date: Optional[str] = None,
@@ -5866,37 +5894,19 @@ async def get_home_dashboard(
                     continue
                 seen_image_urls.add(image_url)
                 meal_image_urls.append(image_url)
-        # 取该餐次最早一条记录的时间作为展示时间（items 与 records 同序：最新在前）
+        # 取该餐次最早一条记录的时间作为展示时间
         times = [x.get("record_time") for x in items if x.get("record_time")]
         time_str = "00:00"
         if times:
             time_str = _format_china_time_hhmm(times[0])
-        # list_food_records 按 record_time 倒序；同餐次内首条为该餐最新一条
-        meal_record_entries: List[Dict[str, Any]] = []
-        for rec in items:
-            rid = rec.get("id")
-            if rid is None or str(rid).strip() == "":
-                continue
-            meal_record_entries.append({
-                "id": str(rid),
-                "record_time": rec.get("record_time"),
-                "total_calories": round(float(rec.get("total_calories") or 0), 1),
-                "title": _meal_entry_title_from_record(rec),
-                "full_record": rec,
-            })
-        primary_record_id = meal_record_entries[0]["id"] if meal_record_entries else None
-        meal_protein = sum(float(x.get("total_protein") or 0) for x in items)
-        if meal_protein == 0:
-            meal_protein = sum(_sum_macro_from_record_items(x, "protein") for x in items)
-        meal_carbs = sum(float(x.get("total_carbs") or 0) for x in items)
-        if meal_carbs == 0:
-            meal_carbs = sum(_sum_macro_from_record_items(x, "carbs") for x in items)
-        meal_fat = sum(float(x.get("total_fat") or 0) for x in items)
-        if meal_fat == 0:
-            meal_fat = sum(_sum_macro_from_record_items(x, "fat") for x in items)
-        # 拼接该餐次所有记录的标题作为描述
-        titles = [e["title"] for e in meal_record_entries if e.get("title")]
-        meal_description = "、".join(titles) if titles else ""
+        # list_food_records 按 record_time 倒序；按餐聚合时同餐次内首条即该餐最新一条，供首页跳转记录详情/生成海报
+        primary_record_id = None
+        if items:
+            for rec in items:
+                rid = rec.get("id")
+                if rid is not None and str(rid).strip() != "":
+                    primary_record_id = str(rid)
+                    break
         meals_out.append({
             "type": meal_type,
             "name": MEAL_NAMES.get(meal_type, meal_type),
@@ -5908,27 +5918,15 @@ async def get_home_dashboard(
             "image_path": meal_image_urls[0] if meal_image_urls else None,
             "image_paths": meal_image_urls,
             "primary_record_id": primary_record_id,
-            "meal_record_entries": meal_record_entries,
-            "protein": round(meal_protein, 1),
-            "carbs": round(meal_carbs, 1),
-            "fat": round(meal_fat, 1),
-            "description": meal_description,
         })
 
     exercise_burned = await get_exercise_calories_by_date(user_id, target_date)
-
-    streak_days = await get_streak_days(user_id)
-    green_days = await _count_green_days(user_id)
 
     return {
         "intakeData": intake_data,
         "meals": meals_out,
         "expirySummary": _build_food_expiry_summary(expiry_items),
         "exerciseBurnedKcal": round(float(exercise_burned), 1),
-        "achievement": {
-            "streak_days": streak_days,
-            "green_days": green_days,
-        },
     }
 
 
@@ -6054,37 +6052,23 @@ async def get_stats_summary(
     today = end_date
     print(f"[get_stats_summary] Range: {range}, Start: {start_date}, End: {end_date}, User: {user_id}")
     try:
-        user_task = get_user_by_id(user_id)
-        records_task = list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
-        streak_task = get_streak_days(user_id)
-        body_metrics_task = _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
-
-        user, records, streak_days, body_metrics_summary = await asyncio.gather(
-            user_task, records_task, streak_task, body_metrics_task,
-            return_exceptions=True
-        )
-
-        if isinstance(user, Exception):
-            raise user
+        user = await get_user_by_id(user_id)
         tdee = (user.get("tdee") and float(user["tdee"])) or 2000
-
-        if isinstance(records, Exception):
-            raise records
+        records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
         print(f"[get_stats_summary] Records found: {len(records)}")
         if records:
             print(f"[get_stats_summary] First record time: {records[0].get('record_time')} type: {type(records[0].get('record_time'))}")
-
-        if isinstance(streak_days, Exception):
-            raise streak_days
-
-        if isinstance(body_metrics_summary, Exception):
-            print(f"[get_stats_summary] 身体指标降级为空摘要: {body_metrics_summary}")
-            body_metrics_summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)
-        else:
-            print(f"[get_stats_summary] body_metrics_summary: {body_metrics_summary}")
+        streak_days = await get_streak_days(user_id)
     except Exception as e:
         print(f"[get_stats_summary] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取统计失败")
+
+    try:
+        body_metrics_summary = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+        print(f"[get_stats_summary] body_metrics_summary: {body_metrics_summary}")
+    except Exception as body_metrics_error:
+        print(f"[get_stats_summary] 身体指标降级为空摘要: {body_metrics_error}")
+        body_metrics_summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)
 
     total_cal = sum(float(r.get("total_calories") or 0) for r in records)
     total_protein = sum(float(r.get("total_protein") or 0) for r in records)
@@ -7168,28 +7152,6 @@ async def api_community_comment_post(
         raise HTTPException(status_code=500, detail="发表失败")
 
 
-@app.delete("/api/community/feed/{record_id}/comments/{comment_id}")
-async def api_community_comment_delete(
-    record_id: str,
-    comment_id: str,
-    user_info: dict = Depends(get_current_user_info),
-):
-    """删除圈子评论：仅评论者本人或该条动态（饮食记录）作者，子回复一并删除。"""
-    await _ensure_feed_record_interactable(user_info["user_id"], record_id)
-    try:
-        deleted = delete_feed_comment_tree_sync(
-            user_info["user_id"], record_id, comment_id
-        )
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="无权删除该评论")
-    except Exception as e:
-        print(f"[api/community/feed/comment/delete] 错误: {e}")
-        raise HTTPException(status_code=500, detail="删除失败")
-    if deleted == 0:
-        raise HTTPException(status_code=404, detail="评论不存在或已删除")
-    return {"deleted": deleted}
-
-
 @app.get("/api/community/comment-tasks")
 async def api_community_comment_tasks(
     limit: int = 50,
@@ -7957,7 +7919,7 @@ async def login(request: LoginRequest):
             
             print(f"[api/login] 用户已存在，user_id: {user_id}, openid: {openid}")
         else:
-            # 新用户：初始积分 + 邀请码；可选邀请奖励
+            # 新用户，创建记录
             print(f"[api/login] 创建新用户，openid: {openid}")
             user_data = {
                 "openid": openid,
@@ -7966,8 +7928,8 @@ async def login(request: LoginRequest):
                 "nickname": "",
                 "telephone": pure_phone_number
             }
-            invite_raw = (request.inviteCode or "").strip() or None
-            user = await create_new_user_with_points(user_data, invite_code_from_client=invite_raw)
+            
+            user = await create_user(user_data)
             user_id = user["id"]
             print(f"[api/login] 新用户创建成功，user_id: {user_id}")
         
@@ -8204,6 +8166,12 @@ TEST_BACKEND_PASSWORD = "123456"
 
 # 有效的会话 token 集合（内存存储，重启后失效）
 _valid_session_tokens = set()
+TEST_BACKEND_MODEL_FLASH = "gemini-3-flash-preview"
+TEST_BACKEND_MODEL_FLASH_LITE = "gemini-3.1-flash-lite-preview"
+TEST_BACKEND_SUPPORTED_MODELS = {
+    TEST_BACKEND_MODEL_FLASH,
+    TEST_BACKEND_MODEL_FLASH_LITE,
+}
 
 
 def _generate_session_token() -> str:
@@ -8227,6 +8195,12 @@ async def require_test_backend_auth(test_backend_token: str = Cookie(None)):
 class TestBackendLoginRequest(BaseModel):
     username: str
     password: str
+
+
+class TestBackendLocalDatasetImportRequest(BaseModel):
+    name: str
+    source_dir: str
+    description: Optional[str] = ""
 
 
 @app.post("/api/test-backend/login")
@@ -8285,64 +8259,376 @@ def _get_test_processors():
     )
 
 
-async def _run_test_backend_single_model_analysis(
-    image_bytes: bytes,
+def _serialize_test_backend_dataset(dataset: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": dataset.get("id"),
+        "name": dataset.get("name"),
+        "description": dataset.get("description") or "",
+        "sourceType": dataset.get("source_type") or "local_import",
+        "sourceRef": dataset.get("source_ref") or "",
+        "coverImageUrl": dataset.get("cover_image_url"),
+        "itemCount": int(dataset.get("item_count") or 0),
+        "labeledCount": int(dataset.get("labeled_count") or 0),
+        "unlabeledCount": int(dataset.get("unlabeled_count") or 0),
+        "metadata": dataset.get("metadata") or {},
+        "createdAt": dataset.get("created_at"),
+        "updatedAt": dataset.get("updated_at"),
+    }
+
+
+def _scan_test_backend_local_dataset_dir(source_dir: str) -> Dict[str, Any]:
+    if not source_dir:
+        raise HTTPException(status_code=400, detail="source_dir 不能为空")
+    if not os.path.isdir(source_dir):
+        raise HTTPException(status_code=400, detail="source_dir 不存在或不是目录")
+
+    images: Dict[str, bytes] = {}
+    labels: Dict[str, Dict[str, Any]] = {}
+    label_path = os.path.join(source_dir, "labels.txt")
+    if os.path.exists(label_path):
+        try:
+            with open(label_path, "r", encoding="utf-8") as f:
+                labels = parse_labels_file(f.read())
+        except UnicodeDecodeError:
+            with open(label_path, "r", encoding="gbk") as f:
+                labels = parse_labels_file(f.read())
+
+    for entry in sorted(os.listdir(source_dir)):
+        full_path = os.path.join(source_dir, entry)
+        if not os.path.isfile(full_path):
+            continue
+        if entry.lower() == "labels.txt" or entry.lower().endswith(".txt"):
+            continue
+        if not is_valid_image_file(entry):
+            continue
+        with open(full_path, "rb") as f:
+            images[entry] = f.read()
+
+    items = []
+    skipped = []
+    for index, filename in enumerate(sorted(images.keys()), 1):
+        label = labels.get(filename)
+        if not label:
+            skipped.append(filename)
+            continue
+        true_weight = float(label.get("trueWeight") or 0)
+        expected_items = label.get("expectedItems") or []
+        label_mode = label.get("labelMode") or _infer_test_backend_label_mode(expected_items) or "total"
+        items.append({
+            "filename": filename,
+            "imageBytes": images[filename],
+            "trueWeight": true_weight,
+            "labelMode": label_mode,
+            "expectedItems": expected_items,
+            "sortOrder": index,
+        })
+
+    return {
+        "sourceDir": source_dir,
+        "imageCount": len(images),
+        "labeledCount": len(items),
+        "unlabeledCount": len(skipped),
+        "items": items,
+        "skipped": skipped,
+    }
+
+
+def _build_test_backend_batch_from_dataset(dataset: Dict[str, Any], dataset_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    items = []
+    for row in dataset_items:
+        items.append({
+            "filename": row.get("filename"),
+            "trueWeight": float(row.get("true_weight") or 0),
+            "labelMode": row.get("label_mode") or "total",
+            "expectedItems": row.get("expected_items") or [],
+            "imageUrl": row.get("image_url"),
+            "status": "pending",
+            "estimatedWeight": None,
+            "deviation": None,
+            "modelResults": [],
+            "description": None,
+            "insight": None,
+            "pfc_ratio_comment": None,
+            "absorption_notes": None,
+            "context_advice": None,
+            "items": None,
+            "error": None,
+        })
+
+    batch_id = secrets.token_hex(12)
+    return {
+        "batch_id": batch_id,
+        "status": "pending",
+        "notes": "",
+        "is_multi_view": False,
+        "execution_mode": "standard",
+        "models": [TEST_BACKEND_MODEL_FLASH],
+        "datasetId": dataset.get("id"),
+        "datasetName": dataset.get("name"),
+        "items": items,
+        "summary": {
+            "total": len(items),
+            "pending": len(items),
+            "skipped": (dataset.get("metadata") or {}).get("skipped") or [],
+        },
+    }
+
+
+def _parse_test_backend_models(raw_models: Optional[str]) -> List[str]:
+    """Parse comma-separated concrete model names for the test backend."""
+    models = [
+        item.strip().lower()
+        for item in str(raw_models or "").split(",")
+        if item.strip()
+    ]
+    if not models:
+        current = (os.getenv("GEMINI_MODEL_NAME") or TEST_BACKEND_MODEL_FLASH).strip().lower()
+        models = [current if current in TEST_BACKEND_SUPPORTED_MODELS else TEST_BACKEND_MODEL_FLASH]
+    invalid = [item for item in models if item not in TEST_BACKEND_SUPPORTED_MODELS]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"不支持的模型: {', '.join(invalid)}")
+    deduped: List[str] = []
+    for model in models:
+        if model not in deduped:
+            deduped.append(model)
+    return deduped
+
+
+def _parse_expected_items_input(raw_value: Optional[str], reference_weight: Optional[float] = None) -> List[Dict[str, Any]]:
+    """Parse single-image per-food labels from JSON or inline text."""
+    text = (raw_value or "").strip()
+    if not text:
+        return normalize_expected_items(None, fallback_total=reference_weight)
+    try:
+        if text[0] in "[{":
+            payload = json.loads(text)
+            if isinstance(payload, dict):
+                if isinstance(payload.get("items"), list):
+                    return normalize_expected_items(payload.get("items"), fallback_total=reference_weight)
+                return normalize_expected_items(payload, fallback_total=reference_weight)
+            return normalize_expected_items(payload, fallback_total=reference_weight)
+        from test_backend.utils import _parse_items_inline
+        return normalize_expected_items(_parse_items_inline(text), fallback_total=reference_weight)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"标准标签格式错误: {e}")
+
+
+def _infer_test_backend_label_mode(expected_items: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    if not expected_items:
+        return None
+    return calculate_item_weight_evaluation([], expected_items).get("mode") or "items"
+
+
+async def _upload_test_backend_images(images: List[UploadFile]) -> tuple[List[str], List[bytes], str]:
+    valid_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    image_urls: List[str] = []
+    image_bytes_list: List[bytes] = []
+    first_name = images[0].filename or "uploaded_image.jpg"
+
+    for image in images:
+        if image.content_type not in valid_types:
+            raise HTTPException(status_code=400, detail="请上传有效的图片文件（jpg, png, gif, webp）")
+        image_bytes = await image.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="存在空图片文件，请重新上传")
+        if len(image_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="单张图片大小超过限制（最大 10MB）")
+        image_bytes_list.append(image_bytes)
+        mime_type = mimetypes.guess_type(image.filename or first_name)[0] or image.content_type or "image/jpeg"
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        data_uri = f"data:{mime_type};base64,{image_base64}"
+        try:
+            image_urls.append(await asyncio.to_thread(upload_food_analyze_image, data_uri))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"上传图片失败: {str(e)}")
+
+    return image_urls, image_bytes_list, first_name
+
+
+async def _run_test_backend_provider_analysis(
+    image_urls: List[str],
     filename: str,
+    provider: str,
     notes: str = "",
     is_multi_view: bool = False,
-    reference_weight: Optional[float] = None,
+    execution_mode: str = "standard",
+    expected_items: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """测试后台单模型分析的共享实现。"""
-    mime_type = mimetypes.guess_type(filename)[0] or "image/jpeg"
-    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-    data_uri = f"data:{mime_type};base64,{image_base64}"
-
-    try:
-        image_url = await asyncio.to_thread(upload_food_analyze_image, data_uri)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"上传图片失败: {str(e)}")
-
+    """Run one selected Gemini model for the test backend."""
+    provider = provider.strip().lower()
+    if provider not in TEST_BACKEND_SUPPORTED_MODELS:
+        raise RuntimeError(f"不支持的模型: {provider}")
     task = {
         "task_type": "food",
-        "image_url": image_url,
-        "image_paths": [image_url],
+        "image_url": image_urls[0] if image_urls else None,
+        "image_paths": image_urls,
         "payload": {
             "additionalContext": (notes or "").strip(),
             "is_multi_view": is_multi_view,
+            "execution_mode": _normalize_execution_mode(execution_mode),
         },
     }
 
     try:
-        from worker import run_food_analysis_sync
-
-        print("[food_analysis] MODERATION_SKIPPED task_id=sync-direct type=image", flush=True)
-        result = await asyncio.to_thread(run_food_analysis_sync, task)
-    except HTTPException:
-        raise
+        from worker import (
+            _build_food_prompt as worker_build_food_prompt,
+            _derive_recognition_fields as worker_derive_recognition_fields,
+            _normalize_analysis_response_payload as worker_normalize_analysis_response_payload,
+            _parse_analysis_result_items as worker_parse_analysis_result_items,
+            _strip_standard_mode_extra_fields as worker_strip_standard_mode_extra_fields,
+            OFOX_BASE_URL as WORKER_OFOX_BASE_URL,
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"加载主链路分析模块失败: {str(e)}")
 
-    provider = os.getenv("LLM_PROVIDER", "qwen").lower()
-    model_name = GEMINI_MODEL_NAME if provider == "gemini" else "qwen-vl-max"
-    estimated_weight = round(sum(float((item or {}).get("estimatedWeightGrams") or 0) for item in (result.get("items") or [])), 1)
-    deviation = None
-    if reference_weight is not None and reference_weight >= 0:
-        deviation = calculate_deviation(estimated_weight, reference_weight)
+    async def _resolve_test_backend_prompt() -> Tuple[str, str, Optional[Dict[str, Any]]]:
+        active_prompt = await get_active_prompt("gemini")
+        prompt_content = str((active_prompt or {}).get("prompt_content") or "").strip()
+        if prompt_content:
+            context_lines: List[str] = []
+            if is_multi_view:
+                context_lines.append("补充说明：提供的是同一份食物的不同视角，请综合所有图片判断，不要当成多份食物。")
+            if (notes or "").strip():
+                context_lines.append(f"补充说明：{(notes or '').strip()}")
+            if context_lines:
+                prompt_content = prompt_content + "\n\n" + "\n".join(context_lines)
+            return prompt_content, "model_prompts.active(gemini)", active_prompt
 
+        prompt_content = worker_build_food_prompt(task, "")
+        return prompt_content, "backend/worker.py::_build_food_prompt(fallback)", None
+
+    api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+    if not api_key:
+        raise RuntimeError("缺少 OFOXAI_API_KEY 环境变量")
+    api_url = f"{WORKER_OFOX_BASE_URL}/chat/completions"
+    model_name = provider
+
+    prompt, prompt_source, active_prompt = await _resolve_test_backend_prompt()
+    content_parts = [{"type": "text", "text": prompt}]
+    for url in image_urls:
+        content_parts.append({"type": "image_url", "image_url": {"url": url}})
+
+    parsed = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                response = await client.post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_name,
+                        "messages": [{"role": "user", "content": content_parts}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.7,
+                    },
+                )
+            if not response.is_success:
+                err = response.json() if response.content else {}
+                msg = err.get("error", {}).get("message") or f"API 错误: {response.status_code}"
+                if attempt < 2:
+                    await asyncio.sleep(1)
+                    continue
+                raise RuntimeError(msg)
+            data = response.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content")
+            if not content:
+                if attempt < 2:
+                    await asyncio.sleep(1)
+                    continue
+                raise RuntimeError("AI 返回了空响应")
+            json_str = re.sub(r"```json", "", content)
+            json_str = re.sub(r"```", "", json_str).strip()
+            parsed = worker_normalize_analysis_response_payload(json.loads(json_str))
+            break
+        except Exception:
+            if attempt >= 2:
+                raise
+            await asyncio.sleep(1)
+
+    if parsed is None:
+        raise RuntimeError("AI 返回解析失败")
+
+    parsed_items = worker_parse_analysis_result_items(parsed)
+    result = {
+        "description": str(parsed.get("description", "无法获取描述")),
+        "insight": str(parsed.get("insight", "保持健康饮食！")),
+        "items": parsed_items,
+        "pfc_ratio_comment": (parsed.get("pfc_ratio_comment") or "").strip() or None,
+        "absorption_notes": (parsed.get("absorption_notes") or "").strip() or None,
+        "context_advice": (parsed.get("context_advice") or "").strip() or None,
+    }
+    result = worker_strip_standard_mode_extra_fields(result, _normalize_execution_mode(execution_mode))
+    if _normalize_execution_mode(execution_mode) == "strict":
+        result.update(worker_derive_recognition_fields(parsed or {}, parsed_items, "strict"))
+
+    evaluation = calculate_item_weight_evaluation(result.get("items") or [], expected_items or [])
     return {
+        "success": True,
+        "provider": "gemini",
+        "model": model_name,
         "data": result,
         "meta": {
-            "provider": provider,
+            "provider": "gemini",
             "model": model_name,
-            "image_count": 1,
-            "image_urls": [image_url],
+            "image_count": len(image_urls),
+            "image_urls": image_urls,
             "is_multi_view": is_multi_view,
+            "execution_mode": _normalize_execution_mode(execution_mode),
             "notes": (notes or "").strip(),
-            "reference_weight": reference_weight,
-            "estimated_weight": estimated_weight,
-            "deviation": deviation,
+            "estimated_weight": evaluation.get("estimatedTotalWeight"),
+            "reference_weight": evaluation.get("trueTotalWeight") or None,
+            "deviation": evaluation.get("totalDeviation"),
+            "prompt_source": prompt_source,
+            "active_prompt_id": (active_prompt or {}).get("id"),
+            "active_prompt_name": (active_prompt or {}).get("prompt_name"),
         },
+        "evaluation": evaluation,
     }
+
+
+async def _run_test_backend_multi_model_analysis(
+    image_urls: List[str],
+    filename: str,
+    models: List[str],
+    notes: str = "",
+    is_multi_view: bool = False,
+    execution_mode: str = "standard",
+    expected_items: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    async def run_one(provider: str) -> Dict[str, Any]:
+        try:
+            return await _run_test_backend_provider_analysis(
+                image_urls=image_urls,
+                filename=filename,
+                provider=provider,
+                notes=notes,
+                is_multi_view=is_multi_view,
+                execution_mode=execution_mode,
+                expected_items=expected_items,
+            )
+        except Exception as e:
+            return {
+                "success": False,
+                "provider": "gemini",
+                "model": provider,
+                "data": None,
+                "meta": {
+                    "provider": "gemini",
+                    "model": provider,
+                    "image_count": len(image_urls),
+                    "is_multi_view": is_multi_view,
+                    "execution_mode": _normalize_execution_mode(execution_mode),
+                    "notes": (notes or "").strip(),
+                    "prompt_source": "model_prompts.active(gemini)",
+                },
+                "evaluation": calculate_item_weight_evaluation([], expected_items or []),
+                "error": str(e),
+            }
+
+    return await asyncio.gather(*(run_one(model) for model in models))
 
 
 def _build_test_backend_batch_progress(batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -8367,15 +8653,20 @@ def _serialize_test_backend_batch(batch: Dict[str, Any]) -> Dict[str, Any]:
         "success": True,
         "batch_id": batch["batch_id"],
         "status": batch["status"],
+        "datasetId": batch.get("datasetId"),
+        "datasetName": batch.get("datasetName"),
         "summary": batch["summary"],
         "progress": _build_test_backend_batch_progress(batch),
         "items": [
             {
                 "filename": item["filename"],
                 "trueWeight": item["trueWeight"],
+                "labelMode": item.get("labelMode") or _infer_test_backend_label_mode(item.get("expectedItems")),
+                "expectedItems": item.get("expectedItems") or [],
                 "status": item["status"],
                 "estimatedWeight": item.get("estimatedWeight"),
                 "deviation": item.get("deviation"),
+                "modelResults": item.get("modelResults") or [],
                 "description": item.get("description"),
                 "insight": item.get("insight"),
                 "pfc_ratio_comment": item.get("pfc_ratio_comment"),
@@ -8398,27 +8689,36 @@ async def _process_test_backend_batch(batch_id: str) -> None:
     for item in batch["items"]:
         item["status"] = "processing"
         try:
-            image_bytes = base64.b64decode(item.pop("imageBytesB64"))
-            analysis = await _run_test_backend_single_model_analysis(
-                image_bytes=image_bytes,
+            image_url = item.get("imageUrl")
+            if not image_url:
+                image_bytes = base64.b64decode(item.pop("imageBytesB64"))
+                mime_type = mimetypes.guess_type(item["filename"])[0] or "image/jpeg"
+                data_uri = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+                image_url = await asyncio.to_thread(upload_food_analyze_image, data_uri)
+            model_results = await _run_test_backend_multi_model_analysis(
+                image_urls=[image_url],
                 filename=item["filename"],
+                models=batch.get("models") or ["qwen"],
                 notes=batch.get("notes", ""),
                 is_multi_view=batch.get("is_multi_view", False),
-                reference_weight=item["trueWeight"],
+                execution_mode=batch.get("execution_mode", "standard"),
+                expected_items=item.get("expectedItems") or [],
             )
-            result = analysis["data"]
-            meta = analysis["meta"]
+            first_success = next((result for result in model_results if result.get("success")), None)
+            result = (first_success or {}).get("data") or {}
+            meta = (first_success or {}).get("meta") or {}
             item.update({
-                "status": "done",
+                "status": "done" if first_success else "failed",
                 "estimatedWeight": meta.get("estimated_weight"),
                 "deviation": meta.get("deviation"),
+                "modelResults": model_results,
                 "description": result.get("description"),
                 "insight": result.get("insight"),
                 "pfc_ratio_comment": result.get("pfc_ratio_comment"),
                 "absorption_notes": result.get("absorption_notes"),
                 "context_advice": result.get("context_advice"),
                 "items": result.get("items"),
-                "error": None,
+                "error": None if first_success else "所有模型均分析失败",
             })
         except Exception as e:
             error_message = e.detail if isinstance(e, HTTPException) else str(e)
@@ -8435,6 +8735,9 @@ async def test_backend_analyze(
     images: List[UploadFile] = File(...),
     notes: Optional[str] = Form(default=""),
     reference_weight: Optional[float] = Form(default=None),
+    expected_items_json: Optional[str] = Form(default=""),
+    models: Optional[str] = Form(default=""),
+    execution_mode: Optional[str] = Form(default="standard"),
     is_multi_view: bool = Form(default=False),
     _auth: None = Depends(require_test_backend_auth),
 ):
@@ -8450,42 +8753,140 @@ async def test_backend_analyze(
     if len(images) > 1 and not is_multi_view:
         raise HTTPException(status_code=400, detail="多张图片分析请开启多视角辅助模式")
 
-    valid_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
-    merged_bytes = None
-    merged_name = images[0].filename or "uploaded_image.jpg"
-
-    for index, image in enumerate(images):
-        if image.content_type not in valid_types:
-            raise HTTPException(status_code=400, detail="请上传有效的图片文件（jpg, png, gif, webp）")
-        image_bytes = await image.read()
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail="存在空图片文件，请重新上传")
-        if len(image_bytes) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="单张图片大小超过限制（最大 10MB）")
-        if index == 0:
-            merged_bytes = image_bytes
+    selected_models = _parse_test_backend_models(models)
+    mode = _parse_execution_mode_or_raise(execution_mode) or "standard"
+    expected_items = _parse_expected_items_input(expected_items_json, reference_weight=reference_weight)
+    image_urls, _image_bytes, first_name = await _upload_test_backend_images(images)
 
     try:
-        analysis = await _run_test_backend_single_model_analysis(
-            image_bytes=merged_bytes,
-            filename=merged_name,
+        model_results = await _run_test_backend_multi_model_analysis(
+            image_urls=image_urls,
+            filename=first_name,
+            models=selected_models,
             notes=notes or "",
             is_multi_view=is_multi_view,
-            reference_weight=reference_weight,
+            execution_mode=mode,
+            expected_items=expected_items,
         )
+        first_success = next((item for item in model_results if item.get("success")), None)
         return {
             "success": True,
-            "data": analysis["data"],
-            "meta": {
-                **analysis["meta"],
+            "data": (first_success or {}).get("data"),
+            "meta": (first_success or {}).get("meta") or {
                 "image_count": len(images),
+                "execution_mode": mode,
+                "prompt_source": "model_prompts.active(gemini)",
             },
+            "models": model_results,
+            "labelMode": _infer_test_backend_label_mode(expected_items),
+            "expectedItems": expected_items,
         }
     except HTTPException:
         raise
     except Exception as e:
         print(f"[test-backend/analyze] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"分析失败: {str(e)}")
+
+
+@app.get("/api/test-backend/datasets")
+async def test_backend_list_datasets(
+    _auth: None = Depends(require_test_backend_auth),
+):
+    """列出可复用测试集。"""
+    try:
+        rows = await list_test_backend_datasets()
+        return {"success": True, "data": [_serialize_test_backend_dataset(row) for row in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取测试集失败: {str(e)}")
+
+
+@app.post("/api/test-backend/datasets/import-local")
+async def test_backend_import_local_dataset(
+    body: TestBackendLocalDatasetImportRequest,
+    _auth: None = Depends(require_test_backend_auth),
+):
+    """从服务器本机目录导入一个可复用测试集并持久化到云端。"""
+    dataset_name = (body.name or "").strip()
+    if not dataset_name:
+        raise HTTPException(status_code=400, detail="测试集名称不能为空")
+
+    scan_result = _scan_test_backend_local_dataset_dir((body.source_dir or "").strip())
+    items = scan_result["items"]
+    if not items:
+        raise HTTPException(status_code=400, detail="该目录下没有可导入的已标注样本")
+
+    uploaded_items = []
+    for item in items:
+        extension = os.path.splitext(item["filename"])[1] or ".jpg"
+        mime_type = mimetypes.guess_type(item["filename"])[0] or "image/jpeg"
+        image_url = await asyncio.to_thread(
+            upload_food_analyze_image_bytes,
+            item["imageBytes"],
+            extension,
+            mime_type,
+        )
+        uploaded_items.append({
+            "filename": item["filename"],
+            "imageUrl": image_url,
+            "trueWeight": item["trueWeight"],
+            "labelMode": item["labelMode"],
+            "expectedItems": item["expectedItems"],
+            "sortOrder": item["sortOrder"],
+        })
+
+    dataset = await create_test_backend_dataset({
+        "name": dataset_name,
+        "description": (body.description or "").strip(),
+        "source_type": "local_import",
+        "source_ref": scan_result["sourceDir"],
+        "cover_image_url": uploaded_items[0]["imageUrl"] if uploaded_items else None,
+        "item_count": scan_result["labeledCount"],
+        "labeled_count": scan_result["labeledCount"],
+        "unlabeled_count": 0,
+        "metadata": {
+            "skipped": scan_result["skipped"],
+        },
+    })
+
+    await insert_test_backend_dataset_items([
+        {
+            "dataset_id": dataset["id"],
+            "filename": item["filename"],
+            "image_url": item["imageUrl"],
+            "label_mode": item["labelMode"],
+            "true_weight": item["trueWeight"],
+            "expected_items": item["expectedItems"],
+            "sort_order": item["sortOrder"],
+        }
+        for item in uploaded_items
+    ])
+
+    return {
+        "success": True,
+        "dataset": _serialize_test_backend_dataset(dataset),
+        "summary": {
+            "imported": len(uploaded_items),
+            "skipped": scan_result["skipped"],
+        },
+    }
+
+
+@app.post("/api/test-backend/datasets/{dataset_id}/prepare")
+async def test_backend_prepare_dataset_batch(
+    dataset_id: str,
+    _auth: None = Depends(require_test_backend_auth),
+):
+    """从已保存测试集创建一个新的批次。"""
+    dataset = await get_test_backend_dataset(dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail="测试集不存在")
+    dataset_items = await list_test_backend_dataset_items(dataset_id)
+    if not dataset_items:
+        raise HTTPException(status_code=400, detail="测试集内没有可处理样本")
+
+    batch = _build_test_backend_batch_from_dataset(dataset, dataset_items)
+    _test_backend_batches[batch["batch_id"]] = batch
+    return _serialize_test_backend_batch(batch)
 
 
 @app.post("/api/test-backend/batch/prepare")
@@ -8514,18 +8915,24 @@ async def test_backend_batch_prepare(
 
     items = []
     skipped = []
-    for filename, true_weight in labels.items():
+    for filename, label in labels.items():
         image_bytes = images.get(filename)
         if not image_bytes:
             skipped.append(filename)
             continue
+        true_weight = float(label.get("trueWeight") or 0) if isinstance(label, dict) else float(label or 0)
+        expected_items = label.get("expectedItems") if isinstance(label, dict) else normalize_expected_items(None, true_weight)
+        label_mode = label.get("labelMode") if isinstance(label, dict) else _infer_test_backend_label_mode(expected_items)
         items.append({
             "filename": filename,
             "trueWeight": true_weight,
+            "labelMode": label_mode,
+            "expectedItems": expected_items,
             "status": "pending",
             "imageBytesB64": base64.b64encode(image_bytes).decode("utf-8"),
             "estimatedWeight": None,
             "deviation": None,
+            "modelResults": [],
             "description": None,
             "insight": None,
             "pfc_ratio_comment": None,
@@ -8547,6 +8954,8 @@ async def test_backend_batch_prepare(
         "status": "pending",
         "notes": "",
         "is_multi_view": False,
+        "execution_mode": "standard",
+        "models": [TEST_BACKEND_MODEL_FLASH],
         "items": items,
         "summary": {
             "total": len(items),
@@ -8563,6 +8972,8 @@ async def test_backend_batch_start(
     batch_id: str = Form(...),
     notes: Optional[str] = Form(default=""),
     is_multi_view: bool = Form(default=False),
+    models: Optional[str] = Form(default=""),
+    execution_mode: Optional[str] = Form(default="standard"),
     _auth: None = Depends(require_test_backend_auth),
 ):
     """启动测试后台批量任务。"""
@@ -8576,6 +8987,8 @@ async def test_backend_batch_start(
 
     batch["notes"] = (notes or "").strip()
     batch["is_multi_view"] = is_multi_view
+    batch["models"] = _parse_test_backend_models(models)
+    batch["execution_mode"] = _parse_execution_mode_or_raise(execution_mode) or "standard"
     batch["status"] = "running"
     asyncio.create_task(_process_test_backend_batch(batch_id))
     return _serialize_test_backend_batch(batch)
@@ -8929,9 +9342,16 @@ async def create_exercise_log(
     if len(desc) > 200:
         raise HTTPException(status_code=422, detail="运动描述过长")
 
-    await _require_points_amount(user_id, POINTS_EXERCISE, "exercise_log_async")
-
     recorded_on = _parse_date_string(date, "date") or datetime.now(CHINA_TZ).date().isoformat()
+    user = await get_user_by_id(user_id)
+    membership = await _get_effective_membership(user_id)
+    membership_resp = _format_membership_response(membership)
+    await _raise_if_exercise_credits_insufficient(
+        user_id=user_id,
+        user_row=user,
+        membership=membership,
+        membership_resp=membership_resp,
+    )
     profile_snapshot = await _build_exercise_profile_snapshot(user_id)
     task_payload = {"recorded_on": recorded_on}
     if profile_snapshot:
@@ -9016,7 +9436,7 @@ async def estimate_exercise_calories(
     user_info: dict = Depends(get_current_user_info),
 ):
     """仅调用大模型估算千卡（不落库），与 Worker 共用 exercise_llm。"""
-    await _require_points_amount(user_info["user_id"], POINTS_EXERCISE, "exercise_estimate_calories")
+    _ = user_info
     try:
         profile_snapshot = await _build_exercise_profile_snapshot(user_info["user_id"])
         calories, ai_raw, reasoning = await _estimate_exercise_calories_llm(

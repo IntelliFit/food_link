@@ -1,56 +1,119 @@
-import { View, Text, Button, Input } from '@tarojs/components'
+import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { Arrow, QuestionOutlined } from '@taroify/icons'
+import { ShieldOutlined } from '@taroify/icons'
 import '@taroify/icons/style'
 import { useCallback, useMemo, useState } from 'react'
 import {
-  createPointsRechargePayment,
+  createMembershipPayment,
   getAccessToken,
+  getMembershipPlans,
   getMyMembership,
+  MembershipPeriod,
+  MembershipPlan,
   MembershipStatus,
+  MembershipTier,
+  toggleTestMembership,
 } from '../../../utils/api'
+import {
+  compareMembershipTier,
+  getCurrentMembershipPeriod,
+  getCurrentMembershipTier,
+  getMembershipTierLabel,
+  isPrecisionSupportedTier,
+} from '../../../utils/membership'
 
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
+
+function formatExpiry(value?: string | null): string {
+  if (!value) return '--'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '--'
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-/** 仅保留数字，且不允许小数点；去掉前导零（保留单个 0） */
-function sanitizeIntegerYuanInput(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
-  if (!digits) return ''
-  const n = parseInt(digits, 10)
-  if (!Number.isFinite(n)) return ''
-  return String(n)
+const TIERS: Array<{
+  key: MembershipTier
+  name: string
+  short: string
+  credits: number
+  summary: string
+  precision: boolean
+  scene: string
+}> = [
+  { key: 'light',    name: '轻度版',   short: '轻度', credits: 8,  summary: '适合轻量记录，不含精准模式', precision: false, scene: '轻量记录' },
+  { key: 'standard', name: '标准版',   short: '标准', credits: 20, summary: '含精准模式，适合日常使用', precision: true, scene: '日常使用' },
+  { key: 'advanced', name: '进阶版',   short: '进阶', credits: 40, summary: '含精准模式，适合高频使用', precision: true, scene: '高频使用' },
+]
+
+const PERIODS: Array<{ key: MembershipPeriod; label: string; unit: string }> = [
+  { key: 'monthly',   label: '月卡', unit: '/月' },
+  { key: 'quarterly', label: '季卡', unit: '/季' },
+  { key: 'yearly',    label: '年卡', unit: '/年' },
+]
+
+const normalizeTierParam = (value: unknown): MembershipTier | null => {
+  return value === 'light' || value === 'standard' || value === 'advanced'
+    ? value
+    : null
 }
 
+const normalizePeriodParam = (value: unknown): MembershipPeriod | null => {
+  return value === 'monthly' || value === 'quarterly' || value === 'yearly'
+    ? value
+    : null
+}
+
+// 当前已上线、且真实存在的差异
+const TIER_FEATURES: Array<{ label: string; values: Record<MembershipTier, string> }> = [
+  { label: '每日积分',  values: { light: '8 积分',  standard: '20 积分', advanced: '40 积分' } },
+  { label: '精准模式',  values: { light: '不支持', standard: '支持',   advanced: '支持' } },
+  { label: '适合频率',  values: { light: '轻量记录', standard: '日常使用', advanced: '高频使用' } },
+]
+
 function ProMembershipPage() {
+  const [plans, setPlans] = useState<MembershipPlan[]>([])
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(false)
-  const [rechargeYuan, setRechargeYuan] = useState('5')
-  const [showRulesModal, setShowRulesModal] = useState(false)
-
-  const pointsPerYuan = membership?.points_per_yuan ?? 20
-
-  const rechargePreview = useMemo(() => {
-    const y = parseInt(rechargeYuan || '0', 10)
-    if (!Number.isFinite(y) || y <= 0) return { yuan: 0, points: 0 }
-    return { yuan: y, points: Math.round(y * Number(pointsPerYuan)) }
-  }, [rechargeYuan, pointsPerYuan])
+  const [selectedTier, setSelectedTier] = useState<MembershipTier>('standard')
+  const [selectedPeriod, setSelectedPeriod] = useState<MembershipPeriod>('yearly')
 
   const loadData = useCallback(async () => {
     const token = getAccessToken()
     if (!token) {
-      Taro.redirectTo({ url: extraPkgUrl('/pages/login/index') })
+      Taro.redirectTo({ url: '/pages/login/index' })
       return
     }
 
     setPageLoading(true)
     try {
-      const currentMembership = await getMyMembership()
+      const params = Taro.getCurrentInstance().router?.params
+      const targetTier = normalizeTierParam(params?.target_tier)
+      const targetPeriod = normalizePeriodParam(params?.target_period)
+      const [planList, currentMembership] = await Promise.all([
+        getMembershipPlans(),
+        getMyMembership()
+      ])
+      setPlans(planList)
       setMembership(currentMembership)
+      if (targetTier) {
+        setSelectedTier(targetTier)
+      }
+      if (targetPeriod) {
+        setSelectedPeriod(targetPeriod)
+      }
+      if (!targetTier || !targetPeriod) {
+        // 若当前已经付费，默认定位到用户的 tier / period
+        const currentCode = currentMembership.current_plan_code
+        if (currentCode && currentMembership.is_pro) {
+          const plan = planList.find(p => p.code === currentCode)
+          if (!targetTier && plan?.tier) setSelectedTier(plan.tier)
+          if (!targetPeriod && plan?.period) setSelectedPeriod(plan.period)
+        }
+      }
     } catch (error: any) {
       Taro.showToast({ title: error.message || '加载失败', icon: 'none' })
     } finally {
@@ -62,41 +125,50 @@ function ProMembershipPage() {
     loadData()
   })
 
-  const pollPointsIncreased = async (before: number) => {
-    for (let i = 0; i < 10; i++) {
+  const selectedPlan = useMemo<MembershipPlan | null>(() => {
+    if (!plans.length) return null
+    return plans.find(p => p.tier === selectedTier && p.period === selectedPeriod) || null
+  }, [plans, selectedTier, selectedPeriod])
+
+  const monthlyPlanForTier = useMemo<MembershipPlan | null>(() => {
+    return plans.find(p => p.tier === selectedTier && p.period === 'monthly') || null
+  }, [plans, selectedTier])
+
+  const pollMembershipStatus = async () => {
+    for (let i = 0; i < 8; i++) {
       await wait(1000)
       try {
         const latest = await getMyMembership()
         setMembership(latest)
-        if (typeof latest.points_balance === 'number' && latest.points_balance > before) {
-          return true
-        }
+        if (latest.is_pro || latest.status === 'active') return true
       } catch (err) {
-        console.error('轮询积分失败:', err)
+        console.error('轮询会员状态失败:', err)
       }
     }
     return false
   }
 
-  const handlePointsRecharge = async () => {
-    if (!membership || typeof membership.points_balance !== 'number' || loading) return
-    const y = rechargePreview.yuan
-    if (y < 1) {
-      Taro.showToast({ title: '请输入至少 1 元的整数金额', icon: 'none' })
+  const handleSubscribe = async () => {
+    const token = getAccessToken()
+    if (!token) {
+      Taro.redirectTo({ url: '/pages/login/index' })
       return
     }
-    const before = membership.points_balance
+    if (!selectedPlan || loading) return
+
+    const confirmContent = `订阅 ${selectedPlan.name}，¥${selectedPlan.amount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
+
     const modalRes = await Taro.showModal({
-      title: '确认充值',
-      content: `支付 ¥${y} 元，预计到账 ${rechargePreview.points} 积分（以支付成功为准）。`,
-      confirmText: '去支付',
-      confirmColor: '#5cb896'
+      title: '订阅确认',
+      content: confirmContent,
+      confirmText: '确认支付',
+      confirmColor: '#00bc7d'
     })
     if (!modalRes.confirm) return
 
     setLoading(true)
     try {
-      const payOrder = await createPointsRechargePayment(y)
+      const payOrder = await createMembershipPayment(selectedPlan.code)
       await Taro.requestPayment({
         timeStamp: payOrder.pay_params.timeStamp,
         nonceStr: payOrder.pay_params.nonceStr,
@@ -104,18 +176,14 @@ function ProMembershipPage() {
         signType: payOrder.pay_params.signType,
         paySign: payOrder.pay_params.paySign
       })
-      Taro.showToast({ title: '支付已提交，正在确认到账', icon: 'none', duration: 2000 })
-      const ok = await pollPointsIncreased(before)
-      const latest = await getMyMembership().catch(() => null)
-      if (latest) setMembership(latest)
-      if (ok) {
-        Taro.showToast({ title: '充值成功', icon: 'success' })
-      } else {
-        Taro.showModal({
-          title: '到账可能有延迟',
-          content: '若积分未更新，请稍后下拉刷新「我的」页或重新进入本页。',
-          showCancel: false
-        })
+      Taro.showToast({ title: '支付已提交，正在确认', icon: 'none', duration: 1800 })
+      const confirmed = await pollMembershipStatus()
+      if (!confirmed) {
+        const latest = await getMyMembership()
+        setMembership(latest)
+      }
+      if (membership?.is_pro || confirmed) {
+        Taro.showToast({ title: '开通成功！', icon: 'success' })
       }
     } catch (error: any) {
       const message = error?.errMsg || error?.message || ''
@@ -129,114 +197,355 @@ function ProMembershipPage() {
     }
   }
 
-  const copyInviteCode = () => {
-    const code = membership?.invite_code
-    if (!code) {
-      Taro.showToast({ title: '暂无邀请码', icon: 'none' })
+  const isPro = membership?.is_pro ?? false
+  const isTrial = !isPro && !!membership?.trial_active
+  const creditsMax = membership?.daily_credits_max ?? 0
+  const creditsUsed = membership?.daily_credits_used ?? 0
+  const creditsRemaining = membership?.daily_credits_remaining ?? 0
+  const currentPlanCode = membership?.current_plan_code ?? null
+  const currentPlanTier = getCurrentMembershipTier(membership)
+  const currentPlanPeriod = getCurrentMembershipPeriod(membership)
+  const selectedTierMeta = TIERS.find(t => t.key === selectedTier) || null
+  const isCurrentSelectedPlan = Boolean(isPro && selectedPlan && currentPlanCode === selectedPlan.code)
+  const showPrecisionUpgradeNotice = Boolean(isPro && currentPlanTier === 'light')
+  const routeSource = String(Taro.getCurrentInstance().router?.params?.source || '').trim()
+  const showRouteUpgradeNotice = routeSource === 'precision_upgrade' && showPrecisionUpgradeNotice
+  const upgradeNoticeText = showPrecisionUpgradeNotice
+    ? showRouteUpgradeNotice
+      ? '你当前是轻度版，精准模式需要升级到标准版或进阶版。已帮你定位到可升级套餐。'
+      : '你当前是轻度版，当前不含精准模式。若想使用精准模式，可升级到标准版或进阶版。'
+    : ''
+
+  // 立省金额：取所选 plan 的 savings（后端已计算）；若无 savings 则按月卡 × duration 对比
+  const savingsAmount = useMemo<number | null>(() => {
+    if (!selectedPlan) return null
+    if (selectedPlan.savings != null && selectedPlan.savings > 0) {
+      return selectedPlan.savings
+    }
+    if (selectedPeriod !== 'monthly' && monthlyPlanForTier) {
+      const original = monthlyPlanForTier.amount * selectedPlan.duration_months
+      const diff = original - selectedPlan.amount
+      return diff > 0 ? Number(diff.toFixed(2)) : null
+    }
+    return null
+  }, [selectedPlan, selectedPeriod, monthlyPlanForTier])
+
+  const perMonthDisplay = useMemo<string | null>(() => {
+    if (!selectedPlan || selectedPlan.duration_months <= 1) return null
+    return (selectedPlan.amount / selectedPlan.duration_months).toFixed(1)
+  }, [selectedPlan])
+
+  const actionButtonText = useMemo(() => {
+    if (!selectedPlan) return '加载中...'
+    const price = `¥${selectedPlan.amount.toFixed(2)}`
+    if (!isPro) return `立即开通 · ${price}`
+    if (isCurrentSelectedPlan) return `续费当前套餐 · ${price}`
+    const tierCompare = compareMembershipTier(selectedTier, currentPlanTier)
+    if (tierCompare > 0) return `升级到${getMembershipTierLabel(selectedTier)} · ${price}`
+    if (tierCompare < 0) return `切换到${selectedPlan.name} · ${price}`
+    return `切换周期 · ${price}`
+  }, [selectedPlan, isPro, isCurrentSelectedPlan, selectedTier, currentPlanTier])
+
+  // ============================================================
+  // TODO: [TEST] 以下测试逻辑在正式上线前必须删除
+  const [testLoading, setTestLoading] = useState(false)
+
+  const handleToggleTestMembership = async () => {
+    if (!selectedPlan && !isPro) {
+      Taro.showToast({ title: '套餐加载中，请稍后重试', icon: 'none' })
       return
     }
-    Taro.setClipboardData({
-      data: code,
-      success: () => Taro.showToast({ title: '已复制邀请码', icon: 'none' })
-    })
+    setTestLoading(true)
+    try {
+      const result = await toggleTestMembership(selectedPlan?.code)
+      const label = result.is_pro
+        ? `✅ 已为当前账号开通 ${result.plan_name || selectedPlan?.name || '会员'}`
+        : '⛔ 已关闭当前账号会员'
+      Taro.showToast({ title: label, icon: 'none', duration: 2000 })
+      await loadData()
+    } catch (error: any) {
+      Taro.showToast({ title: error.message || '切换失败', icon: 'none' })
+    } finally {
+      setTestLoading(false)
+    }
   }
-
-  const balanceKnown = membership && typeof membership.points_balance === 'number'
-  const balanceText =
-    pageLoading && !balanceKnown ? '…' : balanceKnown ? membership!.points_balance!.toFixed(1) : '—'
+  // TODO: [TEST] 测试逻辑结束
+  // ============================================================
 
   return (
-    <View className='membership-page membership-page--points'>
+    <View className='membership-page'>
+      {/* 顶部 Hero */}
       <View className='hero-section'>
-        <Text className='hero-title'>积分账户</Text>
-        <Text className='hero-subtitle'>按次计费，充值后立即增加可用积分</Text>
-      </View>
-
-      <View className='points-balance-card'>
-        <View className='points-balance-label-row'>
-          <Text className='points-balance-label'>当前余额</Text>
-          <View className='points-balance-help' onClick={() => setShowRulesModal(true)}>
-            <QuestionOutlined className='points-balance-help-icon' />
-            <Text className='points-balance-help-text'>积分计费规则</Text>
-          </View>
+        <View className='hero-icon-wrap'>
+          <ShieldOutlined className='hero-icon-svg' />
         </View>
-        <Text className='points-balance-value'>{balanceText}</Text>
+        <Text className='hero-title'>食探会员</Text>
+        <Text className='hero-subtitle'>按使用强度选套餐，轻度版不含精准模式</Text>
+
+        {/* 积分胶囊 */}
+        {!pageLoading && membership && (
+          <View className='hero-credits'>
+            {(isPro || isTrial) ? (
+              <>
+                <Text className='hero-credits-label'>{isTrial ? '🎁 试用期 · 今日已用积分' : '今日已用积分'}</Text>
+                <Text className='hero-credits-value'>
+                  {creditsUsed}
+                  <Text className='hero-credits-total'> / {creditsMax}</Text>
+                </Text>
+                <Text className='hero-credits-tip'>剩余 {creditsRemaining} 积分 · 次日清零</Text>
+              </>
+            ) : (
+              <>
+                <Text className='hero-credits-label'>选择适合你的套餐</Text>
+                <Text className='hero-credits-tip'>开通后每日按套餐发放积分，当天有效不累计</Text>
+              </>
+            )}
+          </View>
+        )}
       </View>
 
-      <View className='recharge-card'>
-        <Text className='recharge-title'>充值金额（元，整数）</Text>
-        <View className='recharge-presets'>
-          {['1', '5', '10', '20'].map(amt => (
-            <View
-              key={amt}
-              className={`recharge-preset ${rechargeYuan === amt ? 'recharge-preset--active' : ''}`}
-              onClick={() => setRechargeYuan(amt)}
+      {showPrecisionUpgradeNotice && (
+        <View className='upgrade-notice'>
+          <View className='upgrade-notice-main'>
+            <Text className='upgrade-notice-text'>{upgradeNoticeText}</Text>
+            <Text
+              className='upgrade-notice-action'
+              onClick={() => setSelectedTier('standard')}
             >
-              <Text className='recharge-preset-text'>¥{amt}</Text>
-            </View>
-          ))}
-        </View>
-        <View className='recharge-input-row'>
-          <Text className='recharge-input-prefix'>¥</Text>
-          <Input
-            className='recharge-input'
-            type='digit'
-            placeholder='输入整数元'
-            value={rechargeYuan}
-            onInput={e => setRechargeYuan(sanitizeIntegerYuanInput(e.detail.value))}
-          />
-        </View>
-        <Text className='recharge-preview'>
-          预计获得约 {rechargePreview.points} 积分
-        </Text>
-        <Button
-          className='subscribe-btn'
-          loading={loading}
-          disabled={loading || pageLoading || !balanceKnown}
-          onClick={handlePointsRecharge}
-        >
-          微信支付充值
-        </Button>
-        <Text className='subscribe-hint'>到账可能有数秒延迟，以微信支付结果为准</Text>
-      </View>
-
-      <View className='invite-card'>
-        <View className='invite-row'>
-          <View className='invite-text-wrap'>
-            <Text className='invite-label'>我的邀请码</Text>
-            <Text className='invite-code'>{membership?.invite_code || '—'}</Text>
-            <Text className='invite-label-hint'>分享邀请码，好友注册双方各 +20 积分</Text>
-          </View>
-          <Button className='invite-copy-btn' size='mini' onClick={copyInviteCode}>
-            复制
-          </Button>
-        </View>
-      </View>
-
-      {showRulesModal && (
-        <View className='rules-modal' catchMove>
-          <View className='rules-modal-mask' onClick={() => setShowRulesModal(false)} />
-          <View className='rules-modal-content'>
-            <View className='rules-modal-handle-bar' />
-            <View className='rules-modal-header'>
-              <Text className='rules-modal-title'>积分计费规则</Text>
-            </View>
-            <View className='rules-modal-body'>
-              <Text className='rules-modal-line'>1分/次 · 标准分析</Text>
-              <Text className='rules-modal-line'>2分/次 · 精准模式</Text>
-              <Text className='rules-modal-line'>0.5分/次 · 运动估算</Text>
-              <View className='rules-modal-divider' />
-              <Text className='rules-modal-line'>新用户注册赠送 100 积分</Text>
-              <Text className='rules-modal-line'>充值 1 元 = {pointsPerYuan} 积分（按整数元充值，按该比例兑换）</Text>
-            </View>
-            <View className='rules-modal-footer'>
-              <View className='rules-modal-close-btn' onClick={() => setShowRulesModal(false)}>
-                <Text className='rules-modal-close-text'>知道了</Text>
-              </View>
-            </View>
+              去看标准版
+            </Text>
           </View>
         </View>
       )}
+
+      {/* 档位选择：3 列卡片 */}
+      <View className='tier-section'>
+        <View className='section-title'>
+          <Text className='section-title-text'>选择档位</Text>
+          <Text className='section-title-hint'>积分当天有效，次日清零</Text>
+        </View>
+        <View className='tier-grid'>
+          {TIERS.map(t => {
+            const active = t.key === selectedTier
+            return (
+              <View
+                key={t.key}
+                className={`tier-card ${active ? 'tier-card--active' : ''} tier-card--${t.key}`}
+                onClick={() => setSelectedTier(t.key)}
+              >
+                {isPro && currentPlanTier === t.key ? (
+                  <View className='tier-card-badge tier-card-badge--current'>当前</View>
+                ) : t.key === 'advanced' ? (
+                  <View className='tier-card-badge tier-card-badge--suggested'>高配</View>
+                ) : null}
+                <Text className='tier-card-name'>{t.name}</Text>
+                <Text className='tier-card-credits'>{t.credits}</Text>
+                <Text className='tier-card-credits-unit'>积分 / 日</Text>
+                <Text className='tier-card-summary'>{t.summary}</Text>
+              </View>
+            )
+          })}
+        </View>
+      </View>
+
+      {/* 周期选择：3 tabs */}
+      <View className='period-section'>
+        <View className='section-title'>
+          <Text className='section-title-text'>选择周期</Text>
+        </View>
+        <View className='period-tabs'>
+          {PERIODS.map(p => {
+            const active = p.key === selectedPeriod
+            const planForPeriod = plans.find(x => x.tier === selectedTier && x.period === p.key)
+            // 立省：优先用 savings 字段
+            let saveTxt: string | null = null
+            if (planForPeriod?.savings && planForPeriod.savings > 0) {
+              saveTxt = `立省¥${planForPeriod.savings.toFixed(0)}`
+            } else if (p.key !== 'monthly') {
+              const monthly = plans.find(x => x.tier === selectedTier && x.period === 'monthly')
+              if (monthly && planForPeriod) {
+                const diff = monthly.amount * planForPeriod.duration_months - planForPeriod.amount
+                if (diff > 0) saveTxt = `立省¥${diff.toFixed(0)}`
+              }
+            }
+            return (
+              <View
+                key={p.key}
+                className={`period-tab ${active ? 'period-tab--active' : ''}`}
+                onClick={() => setSelectedPeriod(p.key)}
+              >
+                <Text className='period-tab-label'>{p.label}</Text>
+                {planForPeriod && (
+                  <Text className='period-tab-price'>¥{planForPeriod.amount.toFixed(2)}</Text>
+                )}
+                {isPro && currentPlanPeriod === p.key && (
+                  <Text className='period-tab-current'>当前周期</Text>
+                )}
+                {saveTxt && <Text className='period-tab-save'>{saveTxt}</Text>}
+              </View>
+            )
+          })}
+        </View>
+      </View>
+
+      {/* 已选套餐价格卡 */}
+      <View className='plan-card'>
+        <View className='plan-card-left'>
+          <Text className='plan-name'>{selectedPlan?.name || '食探会员'}</Text>
+          <Text className='plan-desc'>
+            {selectedTierMeta?.summary || selectedPlan?.description || '每日积分发放，当天有效次日清零'}
+          </Text>
+          {perMonthDisplay && (
+            <Text className='plan-permonth'>≈ ¥{perMonthDisplay} / 月</Text>
+          )}
+          {savingsAmount && (
+            <View className='plan-save-tag'>
+              <Text className='plan-save-tag-text'>立省 ¥{savingsAmount.toFixed(0)}</Text>
+            </View>
+          )}
+        </View>
+        <View className='plan-card-right'>
+          <Text className='plan-price'>
+            <Text className='plan-price-symbol'>¥</Text>
+            {pageLoading ? '--' : (selectedPlan?.amount?.toFixed(2) ?? '--')}
+          </Text>
+          <Text className='plan-period'>
+            {PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}
+          </Text>
+        </View>
+      </View>
+
+      {/* 三档对比表 */}
+      <View className='features-section'>
+        <View className='features-header'>
+          {TIERS.map(t => (
+            <View
+              key={t.key}
+              className={`features-col-head ${t.key === selectedTier ? 'features-col-head--active' : ''}`}
+            >
+              <Text className='features-col-head-name'>{t.short}</Text>
+            </View>
+          ))}
+        </View>
+        {TIER_FEATURES.map((f, i) => (
+          <View key={i} className='features-row'>
+            <View className='features-row-label'>
+              <Text className='features-row-label-text'>{f.label}</Text>
+            </View>
+            {TIERS.map(t => (
+              <View
+                key={t.key}
+                className={`features-col-cell ${t.key === selectedTier ? 'features-col-cell--active' : ''}`}
+              >
+                <Text className='features-cell-text'>{f.values[t.key]}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+      <Text className='features-footnote'>
+        当前对比表只展示已真实上线的差异；后续新能力上线后再补充说明。
+      </Text>
+
+      {/* 积分说明 */}
+      <View className='credits-hint-card'>
+        <Text className='credits-hint-title'>💡 积分消耗</Text>
+        <Text className='credits-hint-item'>· 运动记录：1 积分 / 次</Text>
+        <Text className='credits-hint-item'>· 基础记录 / 基础分析：2 积分 / 次</Text>
+        <Text className='credits-hint-item credits-hint-item--muted'>积分每日发放，当天有效不累计</Text>
+      </View>
+
+      {/* 当前状态 */}
+      {!pageLoading && membership && (
+        <View className='status-card'>
+          <View className='status-row'>
+            <Text className='status-label'>当前状态</Text>
+            <Text className={`status-value ${isPro ? 'status-value--active' : ''}`}>
+              {isPro ? '会员有效' : isTrial ? '试用中' : '未开通'}
+            </Text>
+          </View>
+          {isPro && (
+            <>
+              <View className='status-row'>
+                <Text className='status-label'>当前套餐</Text>
+                <Text className='status-value'>
+                  {plans.find(p => p.code === membership.current_plan_code)?.name || membership.current_plan_code || '--'}
+                </Text>
+              </View>
+              <View className='status-row'>
+                <Text className='status-label'>到期时间</Text>
+                <Text className='status-value'>{formatExpiry(membership.expires_at)}</Text>
+              </View>
+              <View className='status-row'>
+                <Text className='status-label'>精准模式</Text>
+                <Text className='status-value'>
+                  {isPrecisionSupportedTier(currentPlanTier) ? '已解锁' : '当前套餐不含，升级标准版/进阶版可解锁'}
+                </Text>
+              </View>
+            </>
+          )}
+          {isTrial && (
+            <View className='status-row'>
+              <Text className='status-label'>试用截止</Text>
+              <Text className='status-value'>{formatExpiry(membership.trial_expires_at)}</Text>
+            </View>
+          )}
+          <View className='status-row'>
+            <Text className='status-label'>今日已用积分</Text>
+            <Text className='status-value status-value--active'>
+              {creditsMax > 0 ? `${creditsUsed} / ${creditsMax}` : '—'}
+            </Text>
+          </View>
+          <View className='status-row'>
+            <Text className='status-label'>今日剩余积分</Text>
+            <Text className='status-value status-value--active'>
+              {creditsMax > 0 ? `${creditsRemaining}` : '—'}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* 订阅按钮 */}
+      <View className='action-section'>
+        {isPro ? (
+          <View className='renew-tip'>
+            <Text className='renew-tip-text'>会员生效中，可升档或续费</Text>
+          </View>
+        ) : null}
+        <Button
+          className={`subscribe-btn ${isPro ? 'subscribe-btn--renew' : ''}`}
+          loading={loading}
+          disabled={loading || !selectedPlan || pageLoading}
+          onClick={handleSubscribe}
+        >
+          {pageLoading
+            ? <View className='btn-spinner' />
+            : actionButtonText
+          }
+        </Button>
+        <Text className='subscribe-hint'>到期后不自动续费 · 支持微信支付</Text>
+      </View>
+
+      {/* ============================================================ */}
+      {/* TODO: [TEST] 以下测试区块在正式上线前必须删除 */}
+      <View className='test-section'>
+        <Text className='test-section-label'>
+          [DEV] 测试工具 · 当前账号状态：{isPro ? '会员' : isTrial ? '试用' : '未开通'}
+        </Text>
+        <Text className='test-section-label'>
+          [DEV] 当前模拟套餐：{selectedPlan?.name || '加载中'} · {selectedPlan?.daily_credits ?? 0} 积分 / 日
+        </Text>
+        <Button
+          className='test-toggle-btn'
+          loading={testLoading}
+          disabled={testLoading || pageLoading}
+          onClick={handleToggleTestMembership}
+        >
+          {isPro ? '切换为→ 非会员' : `切换为→ ${selectedPlan?.name || '会员'}`}
+        </Button>
+      </View>
+      {/* TODO: [TEST] 测试区块结束 */}
+      {/* ============================================================ */}
     </View>
   )
 }

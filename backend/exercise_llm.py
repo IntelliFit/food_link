@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 OFOXAI_BASE_URL = os.getenv("OFOXAI_BASE_URL", "https://api.ofox.ai/v1")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+EXERCISE_MODEL_NAME = "google/gemini-3.1-flash-lite-preview"
 ACTIVITY_LEVEL_LABELS = {
     "sedentary": "久坐",
     "light": "轻度活动",
@@ -444,7 +445,7 @@ def estimate_exercise_calories_sync(
     if not api_key:
         raise ExerciseLlmError("AI 服务未配置", 503)
 
-    model_name = os.getenv("EXERCISE_CALORIES_MODEL_NAME", GEMINI_MODEL_NAME)
+    model_name = EXERCISE_MODEL_NAME
     compact_desc = _compact_exercise_desc(desc)
     prompt_desc = compact_desc or desc
     user_prompt = f"用户运动描述：{prompt_desc}"

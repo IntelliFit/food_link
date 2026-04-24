@@ -17,13 +17,22 @@ import {
   MembershipStatus
 } from '../../../utils/api'
 import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
-import { normalizeAvailableExecutionMode } from '../../../utils/execution-mode'
+import {
+  canUseStrictModeForMembership,
+  getStrictModeLockedHint,
+  getStrictModeUpgradeUrl,
+  normalizeAvailableExecutionMode,
+  promptStrictModeUpgrade,
+} from '../../../utils/execution-mode'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import {
+  getFoodAnalysisBlockedActionText,
+  getFoodAnalysisCreditBlockMessage,
+  getMembershipCreditSummary,
+  isFoodAnalysisCreditExhausted,
+} from '../../../utils/membership'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
-import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
@@ -190,7 +199,6 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
 }
 
 function AnalyzePage() {
-  const { scheme } = useAppColorScheme()
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
@@ -211,9 +219,11 @@ function AnalyzePage() {
   const imagePathsRef = useRef<string[]>([])
   imagePathsRef.current = imagePaths
 
-  const normalizeExecutionMode = (value: unknown): ExecutionMode => {
-    return value === 'strict' ? 'strict' : 'standard'
-  }
+  const canUseStrictMode = canUseStrictModeForMembership(membershipStatus)
+  const { hasInfo: hasCreditsInfo, max: creditsMax, used: creditsUsed, remaining: creditsRemaining } =
+    getMembershipCreditSummary(membershipStatus)
+  const precisionUpgradeUrl = getStrictModeUpgradeUrl(membershipStatus)
+  const precisionUpgradeHint = canUseStrictMode ? '' : getStrictModeLockedHint(membershipStatus)
 
   const showMultiViewRequiredModal = () => {
     Taro.showModal({
@@ -224,16 +234,14 @@ function AnalyzePage() {
     })
   }
 
-  const pointsMode = Boolean(membershipStatus && typeof membershipStatus.points_balance === 'number')
-  /** 积分制：不足 1 分无法发起标准分析；旧版日限：daily_remaining<=0 */
-  const isQuotaExhausted = Boolean(
-    membershipStatus &&
-      (pointsMode
-        ? (membershipStatus.points_balance as number) < 1
-        : membershipStatus.daily_limit != null &&
-          membershipStatus.daily_remaining !== null &&
-          membershipStatus.daily_remaining <= 0)
-  )
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus)
+
+  useEffect(() => {
+    if (!membershipStatus) return
+    if (executionMode === 'strict' && !canUseStrictMode && !precisionSessionId) {
+      setExecutionMode('standard')
+    }
+  }, [membershipStatus, executionMode, canUseStrictMode, precisionSessionId])
 
   /** 多视角开关：纯 View 实现，避免任意 Switch 组件在分包内触发 react 未定义 */
   const handleMultiViewSwitchChange = (e: { detail?: { value?: boolean } }) => {
@@ -251,7 +259,6 @@ function AnalyzePage() {
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
   useDidShow(() => {
-    applyThemeNavigationBar(scheme)
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
     }
@@ -283,7 +290,7 @@ function AnalyzePage() {
             Taro.setStorageSync('dietGoal', profile.diet_goal)
           }
           if (!nextSessionId && profile.execution_mode) {
-            setExecutionMode(normalizeExecutionMode(profile.execution_mode))
+            setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
           }
           // 加载会员状态和配额
           try {
@@ -319,10 +326,6 @@ function AnalyzePage() {
     }
     initStoredImagePath()
   }, [])
-
-  useEffect(() => {
-    applyThemeNavigationBar(scheme)
-  }, [scheme])
 
   const handleReferencePresetSelect = (value: string) => {
     setReferencePreset(value)
@@ -394,31 +397,17 @@ function AnalyzePage() {
   }
 
   const handleDefaultModeEdit = () => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-edit/index') })
+    Taro.navigateTo({ url: '/pages/health-profile-edit/index' })
   }
 
   const handleStrictModeTap = () => {
-    const canStrict =
-      typeof membershipStatus?.points_balance === 'number'
-        ? membershipStatus.points_balance >= 2
-        : Boolean(membershipStatus?.is_pro)
-    if (canStrict) {
+    if (canUseStrictMode) {
       setExecutionMode('strict')
       return
     }
-    Taro.showModal({
-      title: '积分不足',
-      content:
-        typeof membershipStatus?.points_balance === 'number'
-          ? '精准模式每次消耗 2 积分，当前积分不足。请先充值或改用标准模式（1 积分/次）。'
-          : '精准模式需要至少 2 积分/次，请先充值或改用标准模式。',
-      confirmText: '去充值',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-        }
-      }
+    promptStrictModeUpgrade({
+      membershipStatus,
+      source: 'precision_upgrade',
     })
   }
 
@@ -511,7 +500,7 @@ function AnalyzePage() {
       setIsAnalyzing(false)
       const q = `task_id=${encodeURIComponent(task_id)}&execution_mode=${encodeURIComponent(executionMode)}&task_type=food`
       Taro.redirectTo({
-        url: `${extraPkgUrl('/pages/analyze-loading/index')}?${q}`
+        url: `/pages/analyze-loading/index?${q}`
       })
     } catch (error: any) {
       Taro.hideLoading()
@@ -519,21 +508,24 @@ function AnalyzePage() {
       const statusCode = (error as { statusCode?: number })?.statusCode
       const errMsg = error?.message || '分析失败，请重试'
       const isQuotaExhausted =
+        statusCode === 402 ||
         statusCode === 429 ||
         errMsg.includes('上限') ||
         errMsg.includes('已达上限') ||
         errMsg.includes('次数已达') ||
-        errMsg.includes('明日再试')
+        errMsg.includes('明日再试') ||
+        errMsg.includes('积分不足')
       if (isQuotaExhausted) {
-        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员')
+        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员') || errMsg.includes('升级')
+        const confirmText = suggestPro ? getFoodAnalysisBlockedActionText(membershipStatus) : '知道了'
         Taro.showModal({
-          title: '今日次数已用完',
+          title: '积分不足',
           content: errMsg,
-          confirmText: suggestPro ? '去开通会员' : '知道了',
+          confirmText,
           cancelText: '取消',
           showCancel: suggestPro,
           success: (res) => {
-            if (suggestPro && res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }
         })
       } else {
@@ -551,11 +543,20 @@ function AnalyzePage() {
   const handleAnalyzePress = () => {
     if (isAnalyzing) return
     if (isQuotaExhausted) {
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
+      const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
+      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
-        title: '今日次数已用完',
-        content: '今日拍照/文字分析次数已达上限，请明日再试。',
-        showCancel: false,
-        confirmText: '知道了'
+        title: '积分不足',
+        content,
+        showCancel: showUpgrade,
+        confirmText: showUpgrade ? confirmText : '知道了',
+        cancelText: '取消',
+        success: (res) => {
+          if (showUpgrade && res.confirm) {
+            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }
+        }
       })
       return
     }
@@ -587,38 +588,18 @@ function AnalyzePage() {
       {/* 今日配额提示条 */}
       {membershipStatus && (
         <View
-          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${
-            pointsMode
-              ? !isQuotaExhausted && (membershipStatus.points_balance as number) < 2
-                ? 'quota-bar--warn'
-                : ''
-              : membershipStatus.is_pro
-                ? 'quota-bar--pro'
-                : !isQuotaExhausted && (membershipStatus.daily_remaining ?? 0) <= 1
-                  ? 'quota-bar--warn'
-                  : ''
-          }`}
+          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${membershipStatus.is_pro ? 'quota-bar--pro' : ''} ${!isQuotaExhausted && hasCreditsInfo && creditsRemaining <= 2 ? 'quota-bar--warn' : ''}`}
           onClick={() => {
             if (isQuotaExhausted) return
-            if (pointsMode) {
-              Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-              return
-            }
-            if (!membershipStatus.is_pro) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+            if (!canUseStrictMode) Taro.navigateTo({ url: precisionUpgradeUrl })
           }}
         >
           <Text className='quota-bar-text'>
-            {pointsMode
-              ? isQuotaExhausted
-                ? '积分不足，无法发起分析（标准需 1 分），请先充值'
-                : `积分余额 ${(membershipStatus.points_balance as number).toFixed(1)} · 标准 1 / 精准 2 / 运动 0.5${
-                    (membershipStatus.points_balance as number) < 2 ? '  →充值后可用精准' : ''
-                  }`
-              : isQuotaExhausted
-                ? '今日拍照/文字分析次数已用尽，请明日再试'
-                : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
-                    !membershipStatus.is_pro ? '  →开通会员解锁精准模式' : ''
-                  }`}
+            {isQuotaExhausted
+              ? getFoodAnalysisCreditBlockMessage(membershipStatus)
+              : hasCreditsInfo
+                ? `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+                : `今日积分信息加载中${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`}
           </Text>
         </View>
       )}
@@ -635,10 +616,10 @@ function AnalyzePage() {
 
         <View className='mode-switch-row'>
           <View
-            className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''}`}
+            className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
             onClick={handleStrictModeTap}
           >
-            精准
+            {membershipStatus?.is_pro && !canUseStrictMode ? '精准（需升级）' : '精准'}
           </View>
           <View
             className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
@@ -647,6 +628,10 @@ function AnalyzePage() {
             标准
           </View>
         </View>
+
+        {!!precisionUpgradeHint && executionMode !== 'strict' && (
+          <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
+        )}
 
         <Text className='mode-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
         <View className='mode-tips'>
@@ -909,7 +894,7 @@ function AnalyzePage() {
           ) : (
             <Text className='confirm-btn-text'>
               {isQuotaExhausted
-                ? '今日分析次数已用完'
+                ? '积分不足，暂不可分析'
                 : imagePaths.length === 0
                   ? '请先拍照或选图'
                   : `分析 ${imagePaths.length} 张图片`}
@@ -919,7 +904,7 @@ function AnalyzePage() {
 
         <View
           className='history-link'
-          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })}
+          onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
         >
           <Text className='history-link-text'>查看分析历史</Text>
         </View>

@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react'
 import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
-import { getAccessToken } from '../../../utils/api'
-import { pickImageAndOpenAnalyze } from '../../../utils/weapp-open-analyze-image'
+import { getAccessToken, getMyMembership } from '../../../utils/api'
+import {
+  getFoodAnalysisBlockedActionText,
+  getFoodAnalysisCreditBlockMessage,
+  isFoodAnalysisCreditExhausted,
+} from '../../../utils/membership'
 import {
   IconCamera,
   IconAlbum,
@@ -20,7 +24,6 @@ import {
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
 interface RecordMenuProps {
   visible: boolean
@@ -60,7 +63,7 @@ const GRID_FEATURES: Array<{
   {
     id: 'manual',
     label: '手动输入',
-    color: '#6b9ac4',
+    color: '#3b82f6',
     bgColor: '#eff6ff',
     Icon: IconEdit,
   },
@@ -96,24 +99,68 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
 
     switch (modeId) {
       case 'camera':
-        // 沉浸式全屏拍照仍走记录 Tab 的 <Camera>；chooseImage(camera) 在部分机型上等同「系统选图」体验
+        // record 为 tabBar 页，必须用 switchTab，navigateTo 会失败无反应
         Taro.switchTab({ url: '/pages/record/index' })
         break
-      case 'album':
-        void pickImageAndOpenAnalyze(['album'])
+      case 'album': {
+        // 与 record 页「相册」一致：先校验今日次数，避免选图上传后 submit 才 429
+        if (!getAccessToken()) {
+          redirectToLogin()
+          break
+        }
+        void (async () => {
+          try {
+            const membershipStatus = await getMyMembership()
+            if (isFoodAnalysisCreditExhausted(membershipStatus)) {
+              const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
+              const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
+              const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus.is_pro
+              Taro.showModal({
+                title: '积分不足',
+                content,
+                confirmText: showUpgrade ? confirmText : '知道了',
+                cancelText: '取消',
+                showCancel: showUpgrade,
+                success: (r) => {
+                  if (showUpgrade && r.confirm) {
+                    Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                  }
+                }
+              })
+              return
+            }
+          } catch {
+            // 会员接口失败时仍允许选图，由分析提交接口提示
+          }
+          Taro.chooseImage({
+            count: 1,
+            sizeType: ['compressed'],
+            sourceType: ['album'],
+            success: (res) => {
+              const imagePath = res.tempFilePaths[0]
+              Taro.setStorageSync('analyzeImagePath', imagePath)
+              Taro.navigateTo({ url: '/pages/analyze/index' })
+            },
+            fail: (err) => {
+              if (err.errMsg?.includes('cancel')) return
+              Taro.showToast({ title: '选择图片失败', icon: 'none' })
+            }
+          })
+        })()
         break
+      }
       case 'text':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })
+        Taro.navigateTo({ url: '/pages/record-text/index' })
         break
       case 'manual':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/record-manual/index') })
+        Taro.navigateTo({ url: '/pages/record-manual/index' })
         break
     }
   }
 
   const handleHistoryClick = () => {
     onClose()
-    Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+    Taro.navigateTo({ url: '/pages/analyze-history/index' })
   }
 
   const runDevTool = (fn: () => void) => {

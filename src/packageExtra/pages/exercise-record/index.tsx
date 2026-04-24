@@ -8,15 +8,18 @@ import {
   getExerciseLogs,
   deleteExerciseLog,
   getAnalyzeTask,
+  getMyMembership,
   type ExerciseLogItem,
-  type ExerciseTaskResultPayload
+  type ExerciseTaskResultPayload,
+  type MembershipStatus,
 } from '../../../utils/api'
+import {
+  getExerciseLogBlockedActionText,
+  getExerciseLogCreditBlockMessage,
+  isExerciseLogCreditExhausted,
+} from '../../../utils/membership'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
-import { HOME_DASHBOARD_LOCAL_CACHE_KEY } from '../../../utils/home-dashboard-local-cache'
-import { mapCalendarDateToApi } from '../../../utils/api'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -94,65 +97,25 @@ type DisplayRow =
   | { key: string; kind: 'server'; record: ExerciseRecord }
   | { key: string; kind: 'pending'; item: PendingExerciseCard }
 
-function getRouterDate(): string {
-  const params = Taro.getCurrentInstance().router?.params || {}
-  const dateParam = params.date
-  if (typeof dateParam === 'string' && dateParam.length > 0) return dateParam
-  return formatDateKey(new Date())
-}
-
-function formatDateLabel(dateStr: string): string {
-  const today = formatDateKey(new Date())
-  if (dateStr === today) return '今日'
-  const parts = dateStr.split('-').map(Number)
-  if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
-    return `${parts[1]}月${parts[2]}日`
-  }
-  return dateStr
-}
-
-function patchHomeDashboardCache(
-  date: string,
-  patch: { exerciseBurnedKcal: number }
-): void {
-  try {
-    const raw = Taro.getStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY) as unknown
-    if (!Array.isArray(raw)) return
-    const norm = mapCalendarDateToApi(date) || date
-    const idx = raw.findIndex((item: { date?: string }) => item.date === date || item.date === norm)
-    if (idx === -1) return
-    raw[idx] = { ...raw[idx], ...patch, updatedAt: Date.now() }
-    Taro.setStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY, raw)
-  } catch {
-    // ignore
-  }
-}
-
 export default function ExerciseRecordPage() {
-  const [targetDate, setTargetDate] = useState<string>(getRouterDate)
   const [inputValue, setInputValue] = useState('')
   const [records, setRecords] = useState<ExerciseRecord[]>([])
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
-  const [loadingLogs, setLoadingLogs] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const pollingTaskIdsRef = useRef<Set<string>>(new Set())
 
-  const loadRecordsForDate = useCallback(async (date: string): Promise<ExerciseRecord[]> => {
+  const loadTodayRecords = useCallback(async (): Promise<void> => {
     if (!getAccessToken()) {
       setRecords([])
-      return []
+      return
     }
-    setLoadingLogs(true)
     try {
-      const { logs } = await getExerciseLogs({ date })
-      const mapped = logs.map(mapLogToRecord)
-      setRecords(mapped)
-      return mapped
+      const today = formatDateKey(new Date())
+      const { logs } = await getExerciseLogs({ date: today })
+      setRecords(logs.map(mapLogToRecord))
     } catch (e) {
       console.error('[exercise-record] load logs', e)
-      return []
-    } finally {
-      setLoadingLogs(false)
     }
   }, [])
 
@@ -214,9 +177,7 @@ export default function ExerciseRecordPage() {
           if (task.status === 'done' && payload) {
             setPendingItems((prev) => prev.filter((p) => p.clientId !== clientId))
             setInputValue('')
-            const updatedRecords = await loadRecordsForDate(targetDate)
-            const newTotal = updatedRecords.reduce((sum, r) => sum + r.calories, 0)
-            patchHomeDashboardCache(targetDate, { exerciseBurnedKcal: newTotal })
+            await loadTodayRecords()
             Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
             Taro.showToast({
               title: `已记录 ${payload.estimated_calories} kcal`,
@@ -258,15 +219,13 @@ export default function ExerciseRecordPage() {
         pollingTaskIdsRef.current.delete(taskId)
       }
     },
-    [loadRecordsForDate, targetDate]
+    [loadTodayRecords]
   )
 
   useEffect(() => {
-    const date = getRouterDate()
-    setTargetDate(date)
-    void loadRecordsForDate(date)
+    void loadTodayRecords()
     loadPendingFromStorage()
-  }, [loadPendingFromStorage, loadRecordsForDate])
+  }, [loadPendingFromStorage])
 
   useEffect(() => {
     pendingItems.filter((p) => p.status === 'pending').forEach((p) => {
@@ -275,9 +234,10 @@ export default function ExerciseRecordPage() {
   }, [pendingItems, pollForTask])
 
   useDidShow(() => {
-    const date = getRouterDate()
-    setTargetDate(date)
-    void loadRecordsForDate(date)
+    void loadTodayRecords()
+    if (getAccessToken()) {
+      getMyMembership().then(setMembershipStatus).catch(() => {})
+    }
     try {
       const raw = Taro.getStorageSync(EXERCISE_PENDING_TASKS_KEY)
       if (!raw || typeof raw !== 'string') return
@@ -310,7 +270,25 @@ export default function ExerciseRecordPage() {
       return
     }
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/login/index') })
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    if (isExerciseLogCreditExhausted(membershipStatus)) {
+      const content = getExerciseLogCreditBlockMessage(membershipStatus)
+      const confirmText = getExerciseLogBlockedActionText(membershipStatus)
+      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
+      Taro.showModal({
+        title: '积分不足',
+        content,
+        showCancel: showUpgrade,
+        confirmText: showUpgrade ? confirmText : '知道了',
+        cancelText: '取消',
+        success: (res) => {
+          if (showUpgrade && res.confirm) {
+            Taro.navigateTo({ url: '/pages/pro-membership/index' })
+          }
+        }
+      })
       return
     }
     if (submitting) return
@@ -318,6 +296,28 @@ export default function ExerciseRecordPage() {
     setSubmitting(true)
     Taro.showLoading({ title: '提交中...', mask: true })
     try {
+      const membership = await getMyMembership().catch(() => null)
+      if (membership) {
+        setMembershipStatus(membership)
+        if (isExerciseLogCreditExhausted(membership)) {
+          const content = getExerciseLogCreditBlockMessage(membership)
+          const confirmText = getExerciseLogBlockedActionText(membership)
+          const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
+          Taro.showModal({
+            title: '积分不足',
+            content,
+            showCancel: showUpgrade,
+            confirmText: showUpgrade ? confirmText : '知道了',
+            cancelText: '取消',
+            success: (res) => {
+              if (showUpgrade && res.confirm) {
+                Taro.navigateTo({ url: '/pages/pro-membership/index' })
+              }
+            }
+          })
+          return
+        }
+      }
       const { task_id: taskId } = await createExerciseLog({ exercise_desc: content })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
@@ -330,7 +330,28 @@ export default function ExerciseRecordPage() {
     } catch (e) {
       console.error('[exercise-record] send', e)
       const msg = e instanceof Error ? e.message : '提交失败'
-      Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
+      const isQuota =
+        msg.includes('积分不足') ||
+        msg.includes('明日再试') ||
+        msg.includes('开通会员') ||
+        msg.includes('升级更高套餐')
+      if (isQuota) {
+        const suggestUpgrade = msg.includes('开通') || msg.includes('升级')
+        Taro.showModal({
+          title: '积分不足',
+          content: msg,
+          showCancel: suggestUpgrade,
+          confirmText: suggestUpgrade ? getExerciseLogBlockedActionText(membershipStatus) : '知道了',
+          cancelText: '取消',
+          success: (res) => {
+            if (suggestUpgrade && res.confirm) {
+              Taro.navigateTo({ url: '/pages/pro-membership/index' })
+            }
+          }
+        })
+      } else {
+        Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
+      }
     } finally {
       Taro.hideLoading()
       setSubmitting(false)
@@ -344,16 +365,13 @@ export default function ExerciseRecordPage() {
       success: async (res) => {
         if (!res.confirm) return
         if (!getAccessToken()) {
-          Taro.navigateTo({ url: extraPkgUrl('/pages/login/index') })
+          Taro.navigateTo({ url: '/pages/login/index' })
           return
         }
         Taro.showLoading({ title: '删除中...', mask: true })
         try {
           await deleteExerciseLog(id)
-          const newRecords = records.filter((r) => r.id !== id)
-          const newTotal = newRecords.reduce((sum, r) => sum + r.calories, 0)
-          setRecords(newRecords)
-          patchHomeDashboardCache(targetDate, { exerciseBurnedKcal: newTotal })
+          setRecords((prev) => prev.filter((r) => r.id !== id))
           Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
           Taro.showToast({ title: '已删除', icon: 'success' })
         } catch (e) {
@@ -378,7 +396,6 @@ export default function ExerciseRecordPage() {
   const listEmpty = displayRows.length === 0
 
   return (
-    <FlPageThemeRoot>
     <View className='exercise-record-page'>
       <View className='header-stats'>
         <View className='stats-card'>
@@ -387,7 +404,7 @@ export default function ExerciseRecordPage() {
             <View className='exercise-header-stats-icon' />
           </View>
           <View className='stats-info'>
-            <Text className='stats-label'>{formatDateLabel(targetDate)}消耗</Text>
+            <Text className='stats-label'>今日消耗</Text>
             <View className='stats-value-wrap'>
               <Text className='stats-value'>{totalCalories}</Text>
               <Text className='stats-unit'>kcal</Text>
@@ -405,17 +422,13 @@ export default function ExerciseRecordPage() {
         enhanced
         showScrollbar={false}
       >
-        {loadingLogs ? (
-          <View className='exercise-logs-loading'>
-            <View className='loading-spinner-md' />
-          </View>
-        ) : listEmpty ? (
+        {listEmpty ? (
           <View className='empty-state'>
             <View className='empty-icon-wrap'>
               <IconExercise size={80} color='#d1d5db' />
             </View>
             <Text className='empty-title'>还没有运动记录</Text>
-            <Text className='empty-desc'>在下方输入{targetDate === formatDateKey(new Date()) ? '今天' : '这天'}做了什么运动{'\n'}例如："跑步30分钟" 或 "游泳1小时"</Text>
+            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如："跑步30分钟" 或 "游泳1小时"</Text>
           </View>
         ) : (
           <View className='records-list'>
@@ -530,6 +543,5 @@ export default function ExerciseRecordPage() {
         </View>
       </View>
     </View>
-    </FlPageThemeRoot>
   )
 }

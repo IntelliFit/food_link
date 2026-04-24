@@ -8,6 +8,7 @@ let currentBatchId = null;
 let currentBatchStatus = null;
 let batchPollTimer = null;
 let currentBatchItems = [];
+let testDatasets = [];
 
 // 提示词管理状态
 let currentModelType = 'qwen';
@@ -25,6 +26,10 @@ const elements = {
     previewGrid: document.getElementById('preview-grid'),
     notesInput: document.getElementById('notes-input'),
     referenceWeightInput: document.getElementById('reference-weight-input'),
+    expectedItemsInput: document.getElementById('expected-items-input'),
+    modelGeminiFlash: document.getElementById('model-gemini-flash'),
+    modelGeminiFlashLite: document.getElementById('model-gemini-flash-lite'),
+    executionModeSelect: document.getElementById('execution-mode-select'),
     isMultiView: document.getElementById('is-multi-view'),
     analyzeBtn: document.getElementById('analyze-btn'),
 
@@ -52,6 +57,9 @@ Object.assign(elements, {
     clearBatchBtn: document.getElementById('clear-batch-btn'),
     batchNotesInput: document.getElementById('batch-notes-input'),
     batchIsMultiView: document.getElementById('batch-is-multi-view'),
+    batchModelGeminiFlash: document.getElementById('batch-model-gemini-flash'),
+    batchModelGeminiFlashLite: document.getElementById('batch-model-gemini-flash-lite'),
+    batchExecutionModeSelect: document.getElementById('batch-execution-mode-select'),
     prepareBatchBtn: document.getElementById('prepare-batch-btn'),
     startBatchBtn: document.getElementById('start-batch-btn'),
     batchSummaryCard: document.getElementById('batch-summary-card'),
@@ -65,6 +73,12 @@ Object.assign(elements, {
     batchDetailTitle: document.getElementById('batch-detail-title'),
     batchDetailBody: document.getElementById('batch-detail-body'),
     batchDetailClose: document.getElementById('batch-detail-close'),
+    datasetsBody: document.getElementById('datasets-body'),
+    reloadDatasetsBtn: document.getElementById('reload-datasets-btn'),
+    datasetNameInput: document.getElementById('dataset-name-input'),
+    datasetSourceDirInput: document.getElementById('dataset-source-dir-input'),
+    datasetDescriptionInput: document.getElementById('dataset-description-input'),
+    importDatasetBtn: document.getElementById('import-dataset-btn'),
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -95,6 +109,9 @@ function initTabs() {
             btn.classList.add('active');
             document.getElementById(`${tabId}-panel`).classList.add('active');
 
+            if (tabId === 'batch') {
+                loadTestDatasets();
+            }
             if (tabId === 'prompts') {
                 loadPrompts();
             }
@@ -180,11 +197,14 @@ function initBatchPanel() {
     elements.prepareBatchBtn?.addEventListener('click', prepareBatchZip);
     elements.startBatchBtn?.addEventListener('click', startBatchProcessing);
     elements.batchDetailClose?.addEventListener('click', closeBatchDetail);
+    elements.reloadDatasetsBtn?.addEventListener('click', loadTestDatasets);
+    elements.importDatasetBtn?.addEventListener('click', importLocalDataset);
     elements.batchDetailModal?.addEventListener('click', (e) => {
         if (e.target === elements.batchDetailModal) {
             closeBatchDetail();
         }
     });
+    loadTestDatasets();
 }
 
 function setBatchFile(file) {
@@ -217,6 +237,103 @@ function resetBatchState() {
     elements.batchItemsBody.innerHTML = '';
     currentBatchItems = [];
 }
+
+async function loadTestDatasets() {
+    if (!elements.datasetsBody) return;
+    elements.datasetsBody.innerHTML = '<tr><td colspan="5" class="empty-row">正在加载测试集...</td></tr>';
+    try {
+        const response = await authFetch('/api/test-backend/datasets');
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || '获取测试集失败');
+        }
+        testDatasets = Array.isArray(result.data) ? result.data : [];
+        renderDatasetsTable();
+    } catch (error) {
+        elements.datasetsBody.innerHTML = `<tr><td colspan="5" class="empty-row">${escapeHtml(error.message || '获取测试集失败')}</td></tr>`;
+    }
+}
+
+function renderDatasetsTable() {
+    if (!elements.datasetsBody) return;
+    if (!testDatasets.length) {
+        elements.datasetsBody.innerHTML = '<tr><td colspan="5" class="empty-row">还没有可复用测试集</td></tr>';
+        return;
+    }
+    elements.datasetsBody.innerHTML = testDatasets.map((dataset) => `
+        <tr>
+            <td>
+                <div><strong>${escapeHtml(dataset.name || '-')}</strong></div>
+                <div class="field-hint">${escapeHtml(dataset.description || '')}</div>
+            </td>
+            <td>${dataset.itemCount || dataset.labeledCount || 0}</td>
+            <td>${escapeHtml(dataset.sourceRef || '-')}</td>
+            <td>${formatDateTime(dataset.createdAt)}</td>
+            <td><button type="button" class="detail-btn" onclick="prepareSavedDatasetBatch('${escapeHtml(String(dataset.id || ''))}')">载入批次</button></td>
+        </tr>
+    `).join('');
+}
+
+async function importLocalDataset() {
+    const name = elements.datasetNameInput?.value?.trim() || '';
+    const sourceDir = elements.datasetSourceDirInput?.value?.trim() || '';
+    const description = elements.datasetDescriptionInput?.value?.trim() || '';
+    if (!name || !sourceDir) {
+        alert('请填写测试集名称和本机目录');
+        return;
+    }
+    try {
+        showLoading();
+        const response = await authFetch('/api/test-backend/datasets/import-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name,
+                source_dir: sourceDir,
+                description,
+            }),
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || '导入测试集失败');
+        }
+        await loadTestDatasets();
+        if (result.dataset?.id) {
+            await prepareSavedDatasetBatch(result.dataset.id);
+        }
+    } catch (error) {
+        alert('导入测试集失败: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function prepareSavedDatasetBatch(datasetId) {
+    if (!datasetId) return;
+    try {
+        showLoading();
+        const response = await authFetch(`/api/test-backend/datasets/${datasetId}/prepare`, {
+            method: 'POST',
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || '载入测试集失败');
+        }
+        currentBatchId = result.batch_id;
+        currentBatchStatus = result.status;
+        batchFile = null;
+        elements.batchFileCard.style.display = 'flex';
+        elements.batchFileName.textContent = result.datasetName || '已载入测试集';
+        elements.batchFileMeta.textContent = `来自可复用测试集 · ${result.summary?.total || 0} 项待处理`;
+        renderBatchStatus(result);
+        elements.startBatchBtn.disabled = false;
+    } catch (error) {
+        alert('载入测试集失败: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+window.prepareSavedDatasetBatch = prepareSavedDatasetBatch;
 
 function addFiles(files) {
     const imageFiles = files.filter((file) => !file.type || file.type.startsWith('image/'));
@@ -283,16 +400,33 @@ function updateAnalyzeBtn() {
         : `分析 ${selectedFiles.length} 张图片`;
 }
 
+function getSelectedAnalyzeModels() {
+    const models = [];
+    if (elements.modelGeminiFlash?.checked) models.push('gemini-3-flash-preview');
+    if (elements.modelGeminiFlashLite?.checked) models.push('gemini-3.1-flash-lite-preview');
+    return models.length ? models : ['gemini-3-flash-preview'];
+}
+
+function getSelectedBatchModels() {
+    const models = [];
+    if (elements.batchModelGeminiFlash?.checked) models.push('gemini-3-flash-preview');
+    if (elements.batchModelGeminiFlashLite?.checked) models.push('gemini-3.1-flash-lite-preview');
+    return models.length ? models : ['gemini-3-flash-preview'];
+}
+
 async function startAnalyze() {
     if (selectedFiles.length === 0) return;
 
     const formData = new FormData();
     selectedFiles.forEach((file) => formData.append('images', file));
     formData.append('notes', elements.notesInput.value.trim());
-    const referenceWeight = elements.referenceWeightInput.value.trim();
+    const referenceWeight = elements.referenceWeightInput?.value?.trim?.() || '';
     if (referenceWeight) {
         formData.append('reference_weight', referenceWeight);
     }
+    formData.append('expected_items_json', elements.expectedItemsInput?.value?.trim() || '');
+    formData.append('models', getSelectedAnalyzeModels().join(','));
+    formData.append('execution_mode', elements.executionModeSelect?.value || 'standard');
     formData.append('is_multi_view', String(elements.isMultiView.checked));
 
     try {
@@ -310,7 +444,7 @@ async function startAnalyze() {
             throw new Error(result.message || '分析失败');
         }
 
-        renderAnalyzeResult(result.data, result.meta);
+        renderAnalyzeResult(result);
     } catch (error) {
         alert('分析失败: ' + error.message);
     } finally {
@@ -360,6 +494,8 @@ async function startBatchProcessing() {
     formData.append('batch_id', currentBatchId);
     formData.append('notes', elements.batchNotesInput.value.trim());
     formData.append('is_multi_view', String(elements.batchIsMultiView.checked));
+    formData.append('models', getSelectedBatchModels().join(','));
+    formData.append('execution_mode', elements.batchExecutionModeSelect?.value || 'standard');
 
     try {
         const response = await authFetch('/api/test-backend/batch/start', {
@@ -449,10 +585,10 @@ function renderBatchStatus(payload) {
     elements.batchItemsBody.innerHTML = currentBatchItems.map((item, index) => `
         <tr>
             <td>${escapeHtml(item.filename)}</td>
-            <td>${formatNumber(item.trueWeight)}</td>
+            <td>${renderExpectedItemsInline(item.expectedItems, item.trueWeight, item.labelMode)}</td>
             <td>${renderBatchStatusTag(item.status)}</td>
-            <td>${item.estimatedWeight != null ? formatNumber(item.estimatedWeight) : '-'}</td>
-            <td>${item.deviation != null ? item.deviation + '%' : '-'}</td>
+            <td>${renderModelResultsSummary(item.modelResults)}</td>
+            <td>${renderDeviationBadge(item.deviation)}</td>
             <td>${escapeHtml(item.error || item.description || item.insight || '-')}</td>
             <td><button type="button" class="detail-btn" ${item.status === 'pending' ? 'disabled' : ''} onclick="showBatchDetail(${index})">查看详情</button></td>
         </tr>
@@ -469,17 +605,100 @@ function renderBatchStatusTag(status) {
     return `<span class="batch-status-tag ${status}">${labelMap[status] || status}</span>`;
 }
 
+function renderExpectedItemsInline(expectedItems, totalWeight, labelMode) {
+    const items = Array.isArray(expectedItems) ? expectedItems : [];
+    const mode = labelMode || (items.length === 1 && ['总重量', '总重', 'total', 'totalweight', 'total_weight'].includes(String(items[0]?.name || '').replace(/[\s_-]+/g, '').toLowerCase()) ? 'total' : 'items');
+    if (mode === 'total') {
+        const weight = items[0]?.trueWeightGrams ?? totalWeight;
+        return weight != null ? `<span class="mini-chip total">总重量 ${formatNumber(weight)}g</span>` : '-';
+    }
+    if (!items.length) {
+        return totalWeight != null ? `${formatNumber(totalWeight)}g` : '-';
+    }
+    return items.map((item) => {
+        const name = escapeHtml(item.name || '食物');
+        return `<span class="mini-chip">${name} ${formatNumber(item.trueWeightGrams)}g</span>`;
+    }).join('');
+}
+
+function renderDeviationBadge(value) {
+    if (value == null) return '-';
+    const cls = value >= 30 ? 'bad' : value >= 10 ? 'medium' : 'good';
+    return `<span class="deviation ${cls}">${value}%</span>`;
+}
+
+function renderModelResultsSummary(modelResults) {
+    const results = Array.isArray(modelResults) ? modelResults : [];
+    if (!results.length) return '-';
+    return results.map((result) => {
+        const provider = escapeHtml(result.provider || 'model');
+        if (!result.success) {
+            return `<span class="model-pill failed">${provider}: 失败</span>`;
+        }
+        const evaluation = result.evaluation || {};
+        const deviation = evaluation.totalDeviation;
+        const deviationText = deviation != null ? `${deviation}%` : '-';
+        return `<span class="model-pill">${provider}: ${formatNumber(evaluation.estimatedTotalWeight)}g / ${deviationText}</span>`;
+    }).join('');
+}
+
+function renderModelEvaluationDetail(result) {
+    const evaluation = result.evaluation || {};
+    if (result.success && evaluation.mode === 'total') {
+        return `
+            <div class="model-detail-block">
+                <h4>${escapeHtml(result.provider || 'model')} · ${escapeHtml(result.model || '-')}</h4>
+                <div class="detail-item"><span class="label">标签模式</span><span class="value">整餐总重量</span></div>
+                <div class="detail-item"><span class="label">标准总重量</span><span class="value">${formatNumber(evaluation.trueTotalWeight)}g</span></div>
+                <div class="detail-item"><span class="label">估算总重量</span><span class="value">${formatNumber(evaluation.estimatedTotalWeight)}g</span></div>
+                <div class="detail-item"><span class="label">总偏差</span><span class="value">${evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-'}</span></div>
+                <p class="field-hint">总重量样本只评估整餐总偏差，不做逐项食物匹配。</p>
+            </div>
+        `;
+    }
+    const matches = evaluation.itemMatches || [];
+    const rows = matches.map((item) => `
+        <tr>
+            <td>${escapeHtml(item.expectedName || '-')}</td>
+            <td>${formatNumber(item.trueWeightGrams)}</td>
+            <td>${escapeHtml(item.predictedName || '未匹配')}</td>
+            <td>${item.estimatedWeightGrams != null ? formatNumber(item.estimatedWeightGrams) : '-'}</td>
+            <td>${item.deviation != null ? renderDeviationBadge(item.deviation) : '-'}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="5" class="empty-row">未填写逐项标准标签</td></tr>';
+    const extras = (evaluation.extraItems || []).map((item) => `${escapeHtml(item.name)} ${formatNumber(item.estimatedWeightGrams)}g`).join('、') || '-';
+    return `
+        <div class="model-detail-block">
+            <h4>${escapeHtml(result.provider || 'model')} · ${escapeHtml(result.model || '-')}</h4>
+            ${result.success ? `
+                <div class="detail-item"><span class="label">标准总重量</span><span class="value">${formatNumber(evaluation.trueTotalWeight)}g</span></div>
+                <div class="detail-item"><span class="label">估算总重量</span><span class="value">${formatNumber(evaluation.estimatedTotalWeight)}g</span></div>
+                <div class="detail-item"><span class="label">总偏差</span><span class="value">${evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-'}</span></div>
+                <div class="results-table-wrapper mini">
+                    <table class="results-table">
+                        <thead><tr><th>标准食物</th><th>标准g</th><th>匹配结果</th><th>估算g</th><th>偏差</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <p class="field-hint">额外识别：${extras}</p>
+            ` : `<p style="color:#c62828;">${escapeHtml(result.error || '分析失败')}</p>`}
+        </div>
+    `;
+}
+
 function showBatchDetail(index) {
     const item = currentBatchItems[index];
     if (!item) return;
 
     elements.batchDetailTitle.textContent = `${item.filename} - 识别详情`;
 
-    if (item.error) {
+    const modelDetails = (item.modelResults || []).map(renderModelEvaluationDetail).join('');
+
+    if (item.error && !modelDetails) {
         elements.batchDetailBody.innerHTML = `
             <div class="detail-section">
                 <h4>基础信息</h4>
-                <div class="detail-item"><span class="label">真实重量</span><span class="value">${formatNumber(item.trueWeight)}g</span></div>
+                <div class="detail-item"><span class="label">标准标签</span><span class="value">${renderExpectedItemsInline(item.expectedItems, item.trueWeight, item.labelMode)}</span></div>
                 <div class="detail-item"><span class="label">状态</span><span class="value">失败</span></div>
             </div>
             <div class="detail-section">
@@ -498,9 +717,13 @@ function showBatchDetail(index) {
         elements.batchDetailBody.innerHTML = `
             <div class="detail-section">
                 <h4>基础信息</h4>
-                <div class="detail-item"><span class="label">真实重量</span><span class="value">${formatNumber(item.trueWeight)}g</span></div>
+                <div class="detail-item"><span class="label">标准标签</span><span class="value">${renderExpectedItemsInline(item.expectedItems, item.trueWeight, item.labelMode)}</span></div>
                 <div class="detail-item"><span class="label">估算重量</span><span class="value">${item.estimatedWeight != null ? formatNumber(item.estimatedWeight) + 'g' : '-'}</span></div>
                 <div class="detail-item"><span class="label">偏差</span><span class="value">${item.deviation != null ? item.deviation + '%' : '-'}</span></div>
+            </div>
+            <div class="detail-section">
+                <h4>多模型逐项评测</h4>
+                ${modelDetails || '<p>暂无模型结果</p>'}
             </div>
             <div class="detail-section">
                 <h4>餐食描述</h4>
@@ -537,7 +760,11 @@ function closeBatchDetail() {
     elements.batchDetailModal?.classList.remove('active');
 }
 
-function renderAnalyzeResult(result, meta) {
+function renderAnalyzeResult(payload) {
+    const modelResults = Array.isArray(payload.models) ? payload.models : [];
+    const firstSuccess = modelResults.find((item) => item.success) || null;
+    const result = payload.data || firstSuccess?.data || {};
+    const meta = payload.meta || firstSuccess?.meta || {};
     const items = result.items || [];
     const totals = items.reduce((acc, item) => {
         const nutrients = item.nutrients || {};
@@ -545,6 +772,17 @@ function renderAnalyzeResult(result, meta) {
         acc.totalCalories += Number(nutrients.calories || 0);
         return acc;
     }, { totalWeight: 0, totalCalories: 0 });
+
+    const modelStatCards = modelResults.map((modelResult) => {
+        const evaluation = modelResult.evaluation || {};
+        const valueClass = evaluation.totalDeviation == null ? '' : (evaluation.totalDeviation >= 30 ? 'bad' : evaluation.totalDeviation >= 10 ? 'medium' : 'good');
+        return `
+            <div class="stat-card">
+                <div class="label">${escapeHtml(modelResult.provider || 'model')} 总偏差</div>
+                <div class="value ${modelResult.success ? valueClass : 'bad'}">${modelResult.success ? (evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-') : '失败'}</div>
+            </div>
+        `;
+    }).join('');
 
     elements.summaryGrid.innerHTML = `
         <div class="stat-card">
@@ -564,18 +802,23 @@ function renderAnalyzeResult(result, meta) {
             <div class="value">${totals.totalCalories.toFixed(1)} kcal</div>
         </div>
         <div class="stat-card">
-            <div class="label">参考克数</div>
+            <div class="label">标准总重量</div>
             <div class="value">${meta?.reference_weight != null ? formatNumber(meta.reference_weight) + 'g' : '-'}</div>
         </div>
         <div class="stat-card">
             <div class="label">偏差</div>
             <div class="value ${meta?.deviation == null ? '' : (meta.deviation >= 30 ? 'bad' : meta.deviation >= 10 ? 'medium' : 'good')}">${meta?.deviation != null ? meta.deviation + '%' : '-'}</div>
         </div>
+        ${modelStatCards}
     `;
 
-    elements.resultBadges.innerHTML = `
-        <span class="result-badge">${escapeHtml(meta?.provider || 'unknown')}</span>
-        <span class="result-badge">${escapeHtml(meta?.model || '-')}</span>
+    elements.resultBadges.innerHTML = (modelResults.map((modelResult) => {
+        const evaluation = modelResult.evaluation || {};
+        const text = modelResult.success
+            ? `${modelResult.provider}: ${formatNumber(evaluation.estimatedTotalWeight)}g / ${evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-'}`
+            : `${modelResult.provider}: 失败`;
+        return `<span class="result-badge ${modelResult.success ? 'success' : ''}">${escapeHtml(text)}</span>`;
+    }).join('')) + `
         ${meta?.is_multi_view ? '<span class="result-badge success">多视角</span>' : ''}
     `;
 
@@ -585,6 +828,17 @@ function renderAnalyzeResult(result, meta) {
     elements.resultPfc.textContent = result.pfc_ratio_comment || '-';
     elements.resultAbsorption.textContent = result.absorption_notes || '-';
     elements.resultContext.textContent = result.context_advice || '-';
+
+    if (!firstSuccess && modelResults.length) {
+        elements.foodItemsBody.innerHTML = `
+            <tr>
+                <td colspan="8" class="empty-row">${escapeHtml(modelResults.map((item) => `${item.provider}: ${item.error || '失败'}`).join('；'))}</td>
+            </tr>
+        `;
+        elements.analysisResult.style.display = 'block';
+        elements.analysisResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
 
     elements.foodItemsBody.innerHTML = items.map((item) => {
         const nutrients = item.nutrients || {};
@@ -619,6 +873,10 @@ function formatFileSize(size) {
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDateTime(dateStr) {
+    return formatDate(dateStr);
 }
 
 window.showAddPromptModal = showAddPromptModal;

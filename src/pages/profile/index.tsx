@@ -25,11 +25,14 @@ import {
   MembershipStatus,
   FoodExpiryDashboard
 } from '../../utils/api'
+import {
+  getCurrentMembershipTier,
+  getMembershipTierLabel,
+  getMembershipTierShortLabel,
+} from '../../utils/membership'
 
 import './index.scss'
-import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
-import { extraPkgUrl } from '../../utils/subpackage-extra'
 
 interface UserInfo {
   avatar: string
@@ -48,6 +51,13 @@ function formatRegisterDate(value: string | undefined | null): string {
   return `${y}-${m}-${day}`
 }
 
+function formatExpiry(value?: string | null): string {
+  if (!value) return '--'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '--'
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
   if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
   if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
@@ -58,8 +68,6 @@ function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string 
 }
 
 function ProfilePage() {
-  const { scheme, toggleScheme } = useAppColorScheme()
-
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
@@ -85,9 +93,6 @@ function ProfilePage() {
   
   // 好友请求数量
   const [friendRequestCount, setFriendRequestCount] = useState(0)
-
-  // 积分说明展开状态
-  const [showPointsTip, setShowPointsTip] = useState(false)
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -154,7 +159,7 @@ function ProfilePage() {
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
           if (!completed) {
-            Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
+            Taro.redirectTo({ url: '/pages/health-profile/index' })
             return
           }
           // 同步到 storage
@@ -201,14 +206,14 @@ function ProfilePage() {
       icon: <NotesOutlined size='20' />,
       title: '收藏餐食',
       desc: '常吃的食物组合，一键记录',
-      path: extraPkgUrl('/pages/recipes/index')
+      path: '/pages/recipes/index'
     },
     {
       id: 2,
       icon: <CalendarOutlined size='20' />,
       title: '食物保质期',
       desc: formatExpiryPreviewText(expiryDashboard),
-      path: extraPkgUrl('/pages/expiry/index'),
+      path: '/pages/expiry/index',
       badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
     },
     {
@@ -226,14 +231,13 @@ function ProfilePage() {
     {
       id: 6,
       icon: <ShieldOutlined size='20' />,
-      title: '积分充值',
-      desc:
-        typeof membershipStatus?.points_balance === 'number'
-          ? `积分 ${membershipStatus.points_balance.toFixed(1)} · 充值与说明`
-          : membershipStatus === null
-            ? '充值与积分说明'
-            : '进入查看充值与积分说明',
-      path: extraPkgUrl('/pages/pro-membership/index')
+      title: '食探会员',
+      desc: membershipStatus?.is_pro
+        ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+        : membershipStatus?.trial_active
+          ? `试用中 · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+          : '3 档会员 · 每日积分领取',
+      path: '/pages/pro-membership/index'
     }
   ]
 
@@ -254,20 +258,20 @@ function ProfilePage() {
     // 健康档案：未完成则去填写，已完成则去查看
     if (service.id === 0) {
       if (!onboardingCompleted) {
-        Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+        Taro.navigateTo({ url: '/pages/health-profile/index' })
       } else {
-        Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
+        Taro.navigateTo({ url: '/pages/health-profile-view/index' })
       }
       return
     }
     // 我的食谱
     if (service.id === 1) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })
+      Taro.navigateTo({ url: '/pages/recipes/index' })
       return
     }
     // 食物管理
     if (service.id === 2) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
+      Taro.navigateTo({ url: '/pages/expiry/index' })
       return
     }
     // 饮食记录（整合日历图和数据统计）
@@ -282,7 +286,7 @@ function ProfilePage() {
         content: '「附近美食」功能正在紧锣密鼓地开发中，即将上线，敬请期待！',
         showCancel: false,
         confirmText: '好的',
-        confirmColor: '#5cb896'
+        confirmColor: '#00bc7d'
       })
       return
     }
@@ -300,7 +304,7 @@ function ProfilePage() {
   const handleSettingClick = (setting: any) => {
     // 关于我们
     if (setting.id === 5) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/about/index') })
+      Taro.navigateTo({ url: '/pages/about/index' })
       return
     }
 
@@ -310,12 +314,12 @@ function ProfilePage() {
     }
     // 好友管理
     if (setting.id === 2) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/friends/index') })
+      Taro.navigateTo({ url: '/pages/friends/index' })
       return
     }
     // 隐私设置
     if (setting.id === 3) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/privacy-settings/index') })
+      Taro.navigateTo({ url: '/pages/privacy-settings/index' })
       return
     }
 
@@ -330,7 +334,7 @@ function ProfilePage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: extraPkgUrl('/pages/profile-settings/index') })
+    Taro.navigateTo({ url: '/pages/profile-settings/index' })
   }
 
   // 处理去登录
@@ -368,12 +372,12 @@ function ProfilePage() {
 
   const getServiceColor = (id: number) => {
     const colors: Record<number, string> = {
-      0: '#5cb896', // 健康档案 - 绿
+      0: '#10b981', // 健康档案 - 绿
       1: '#f59e0b', // 收藏餐食 - 橙
       2: '#8b5cf6', // 食物管理 - 紫
       3: '#3b82f6', // 饮食记录 - 蓝
       5: '#ef4444', // 附近美食 - 红
-      6: '#5cb896'  // 积分充值入口 - 绿
+      6: '#f59e0b'  // 食探会员 - 金
     }
     return colors[id] || '#6b7280'
   }
@@ -381,7 +385,7 @@ function ProfilePage() {
   const getSettingColor = (id: number) => {
     const colors: Record<number, string> = {
       2: '#3b82f6', // 好友管理 - 蓝
-      3: '#5cb896', // 隐私设置 - 绿
+      3: '#10b981', // 隐私设置 - 绿
       5: '#8b5cf6'  // 关于我们 - 紫
     }
     return colors[id] || '#6b7280'
@@ -389,13 +393,6 @@ function ProfilePage() {
 
   return (
     <View className='profile-page'>
-      {/* 日间 / 夜间主题：左上角悬浮，与首页问候区同款 icon */}
-      <View className='profile-theme-chip' onClick={toggleScheme}>
-        <Text
-          className={`iconfont ${scheme === 'dark' ? 'icon-wanshang' : 'icon-zaoshang'} profile-theme-chip-icon`}
-        />
-      </View>
-
       {/* 顶部用户信息卡片（微信风格） */}
       <View className='profile-card user-card' onClick={isLoggedIn ? handleSettings : handleGoLogin}>
         <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
@@ -420,34 +417,82 @@ function ProfilePage() {
         <Arrow size={20} color='#c8c9cc' className='user-arrow' />
       </View>
 
-      {/* 积分账户卡片（仅登录后展示，不再展示旧版会员订阅 UI） */}
+      {/* 会员卡片（仅登录后展示） */}
       {isLoggedIn && (
         <View
-          className='profile-card member-card member-card--free'
-          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })}
+          className={`profile-card member-card ${membershipStatus?.is_pro ? 'member-card--pro' : 'member-card--free'}`}
+          onClick={() => Taro.navigateTo({ url: '/pages/pro-membership/index' })}
         >
-          <View className='card-header'>
-            <View>
-              <Text className='card-validity'>注册时间 {registerDate}</Text>
-              <Text className='card-title'>剩余积分</Text>
-            </View>
-            <View className='card-upgrade-btn'>
-              <Text className='card-upgrade-text'>充值</Text>
-            </View>
-          </View>
-          <View className='card-body'>
-            {membershipStatus === null ? (
-              <View className='points-balance-skeleton' />
-            ) : typeof membershipStatus.points_balance === 'number' ? (
+          {(() => {
+            const cMax = membershipStatus?.daily_credits_max ?? 0
+            const cUsed = membershipStatus?.daily_credits_used ?? 0
+            const cRemain = membershipStatus?.daily_credits_remaining ?? 0
+            const progressPct = cMax > 0 ? Math.min((cUsed / cMax) * 100, 100) : 0
+            const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
+            const currentTier = getCurrentMembershipTier(membershipStatus)
+            if (membershipStatus?.is_pro) {
+              return (
+                <>
+                  <View className='card-header'>
+                    <View>
+                      <Text className='card-validity'>到期 {formatExpiry(membershipStatus.expires_at)}</Text>
+                      <View className='card-title-row'>
+                        <Text className='card-title'>食探会员</Text>
+                        <Text className='card-pro-badge'>{getMembershipTierShortLabel(currentTier)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View className='card-body'>
+                    <View className='progress-info'>
+                      <Text className='progress-text'>今日已用 {cUsed}/{cMax}</Text>
+                      {cMax > 0 && (
+                        <View className='progress-bar'>
+                          <View className='progress-inner' style={{ width: `${progressPct}%` }} />
+                        </View>
+                      )}
+                    </View>
+                    <Text className='card-tip'>
+                      {cMax > 0
+                        ? `剩余 ${cRemain} 积分 · 次日清零${currentTier === 'light' ? ' · 轻度版不含精准模式' : ''}`
+                        : '会员权益已激活'}
+                    </Text>
+                  </View>
+                </>
+              )
+            }
+            return (
               <>
-                <Text className='points-balance'>
-                  {membershipStatus.points_balance.toFixed(1)}
-                </Text>
+                <View className='card-header'>
+                  <View>
+                    <Text className='card-validity'>
+                      {isTrial ? `试用到期 ${formatExpiry(membershipStatus?.trial_expires_at)}` : `注册时间 ${registerDate}`}
+                    </Text>
+                    <Text className='card-title'>食探会员</Text>
+                  </View>
+                  <View className='card-upgrade-btn'>
+                    <Text className='card-upgrade-text'>{isTrial ? '立即升级' : '立即开通'}</Text>
+                  </View>
+                </View>
+                <View className='card-body'>
+                  <View className='progress-info'>
+                    <Text className='progress-text'>
+                      {isTrial ? `试用已用 ${cUsed}/${cMax}` : '未开通 · 开通后每日发放积分'}
+                    </Text>
+                    {isTrial && cMax > 0 && (
+                      <View className='progress-bar'>
+                        <View className='progress-inner' style={{ width: `${progressPct}%` }} />
+                      </View>
+                    )}
+                  </View>
+                  <Text className='card-tip'>
+                    {isTrial
+                      ? `剩余 ${cRemain} 积分 · 次日清零`
+                      : '轻度 8 · 标准 20 · 进阶 40 积分 / 日'}
+                  </Text>
+                </View>
               </>
-            ) : (
-              <Text className='points-balance'>点击查看积分说明与充值</Text>
-            )}
-          </View>
+            )
+          })()}
           <View className='card-bg-icon'>
             <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
           </View>
@@ -458,7 +503,7 @@ function ProfilePage() {
       {isLoggedIn && !onboardingCompleted && (
         <View
           className='profile-card onboarding-card'
-          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
+          onClick={() => Taro.navigateTo({ url: '/pages/health-profile/index' })}
         >
           <Text className='onboarding-text'>📋 完善健康档案，获取个性化饮食建议</Text>
           <Text className='onboarding-arrow'>{'>'}</Text>
@@ -514,7 +559,7 @@ function ProfilePage() {
       )}
 
       <View className='profile-version'>
-        <Text>版本号 v{__APP_VERSION__}</Text>
+        <Text>版本号 v2.0.7</Text>
       </View>
 
 

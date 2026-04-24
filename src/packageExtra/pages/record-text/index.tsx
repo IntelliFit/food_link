@@ -3,10 +3,13 @@ import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type MembershipStatus } from '../../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import {
+  getFoodAnalysisBlockedActionText,
+  getFoodAnalysisCreditBlockMessage,
+  getMembershipCreditSummary,
+  isFoodAnalysisCreditExhausted,
+} from '../../../utils/membership'
 import { withAuth } from '../../../utils/withAuth'
-import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
-import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import './index.scss'
 
 const MEALS = [
@@ -33,7 +36,6 @@ const ACTIVITY_TIMINGS = [
 ]
 
 function RecordTextPage() {
-  const { scheme } = useAppColorScheme()
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
@@ -41,16 +43,10 @@ function RecordTextPage() {
   const [activityTiming, setActivityTiming] = useState('none')
   const [loading, setLoading] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const { hasInfo: hasCreditsInfo, max: creditsMax, used: creditsUsed, remaining: creditsRemaining } =
+    getMembershipCreditSummary(membershipStatus)
 
-  const pointsMode = Boolean(membershipStatus && typeof membershipStatus.points_balance === 'number')
-  const isQuotaExhausted = Boolean(
-    membershipStatus &&
-      (pointsMode
-        ? (membershipStatus.points_balance as number) < 1
-        : membershipStatus.daily_limit != null &&
-          membershipStatus.daily_remaining !== null &&
-          membershipStatus.daily_remaining <= 0)
-  )
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus)
 
   const refreshMembership = () => {
     if (getAccessToken()) {
@@ -60,16 +56,11 @@ function RecordTextPage() {
 
   useDidShow(() => {
     refreshMembership()
-    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
   })
 
   useEffect(() => {
     refreshMembership()
   }, [])
-
-  useEffect(() => {
-    applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
-  }, [scheme])
 
   const commonFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 
@@ -81,62 +72,46 @@ function RecordTextPage() {
     }
 
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/login/index') })
+      Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
 
     if (isQuotaExhausted) {
-      if (pointsMode) {
-        Taro.showModal({
-          title: '积分不足',
-          content: '标准分析需至少 1 积分，请先充值。',
-          confirmText: '去充值',
-          cancelText: '取消',
-          success: (res) => {
-            if (res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
+      const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
+      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
+      Taro.showModal({
+        title: '积分不足',
+        content,
+        showCancel: showUpgrade,
+        confirmText: showUpgrade ? confirmText : '知道了',
+        cancelText: '取消',
+        success: (res) => {
+          if (showUpgrade && res.confirm) {
+            Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }
-        })
-      } else {
-        Taro.showModal({
-          title: '今日次数已用完',
-          content: '今日拍照/文字分析次数已达上限，请明日再试。',
-          showCancel: false,
-          confirmText: '知道了'
-        })
-      }
+        }
+      })
       return
     }
 
     // 配额兜底（与按钮禁用一致，防止并发）
     try {
       const membership = await getMyMembership()
-      if (typeof membership.points_balance === 'number') {
-        if (membership.points_balance < 1) {
-          Taro.showModal({
-            title: '积分不足',
-            content: '标准分析需至少 1 积分，请先充值。',
-            confirmText: '去充值',
-            cancelText: '取消',
-            success: (res) => {
-              if (res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-            }
-          })
-          return
-        }
-      } else if (membership.daily_remaining !== null && membership.daily_remaining <= 0) {
-        const isPro = membership.is_pro
-        const limit = membership.daily_limit ?? 30
+      setMembershipStatus(membership)
+      if (isFoodAnalysisCreditExhausted(membership)) {
+        const content = getFoodAnalysisCreditBlockMessage(membership)
+        const confirmText = getFoodAnalysisBlockedActionText(membership)
+        const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
         Taro.showModal({
-          title: '今日次数已用完',
-          content: isPro
-            ? `今日 ${limit} 次分析已用完，请明日再试。`
-            : `免费版每日限 ${limit} 次，开通食探会员可享更高额度与精准模式等功能。`,
-          confirmText: isPro ? '知道了' : '去开通',
+          title: '积分不足',
+          content,
+          confirmText: showUpgrade ? confirmText : '知道了',
           cancelText: '取消',
-          showCancel: !isPro,
+          showCancel: showUpgrade,
           success: (res) => {
-            if (!isPro && res.confirm) {
-              Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+            if (showUpgrade && res.confirm) {
+              Taro.navigateTo({ url: '/pages/pro-membership/index' })
             }
           }
         })
@@ -171,35 +146,30 @@ function RecordTextPage() {
       })
       Taro.hideLoading()
       Taro.navigateTo({
-        url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${task_id}&task_type=food_text`
+        url: `/pages/analyze-loading/index?task_id=${task_id}&task_type=food_text`
       })
     } catch (e: any) {
       Taro.hideLoading()
       const statusCode = (e as { statusCode?: number })?.statusCode
       const errMsg = e?.message || '提交任务失败'
-      const isPointsShort = statusCode === 400 && errMsg.includes('积分')
       const isQuota =
-        isPointsShort ||
+        statusCode === 402 ||
         statusCode === 429 ||
         errMsg.includes('上限') ||
         errMsg.includes('已达上限') ||
         errMsg.includes('次数已达') ||
-        errMsg.includes('明日再试')
+        errMsg.includes('明日再试') ||
+        errMsg.includes('积分不足')
       if (isQuota) {
-        const suggestRecharge = isPointsShort || errMsg.includes('积分')
-        const suggestPro = !suggestRecharge && (errMsg.includes('开通') || errMsg.includes('会员'))
+        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员') || errMsg.includes('升级')
         Taro.showModal({
-          title: suggestRecharge ? '积分不足' : '今日次数已用完',
+          title: '积分不足',
           content: errMsg,
-          confirmText: suggestRecharge ? '去充值' : suggestPro ? '去开通会员' : '知道了',
+          confirmText: suggestPro ? getFoodAnalysisBlockedActionText(membershipStatus) : '知道了',
           cancelText: '取消',
-          showCancel: suggestRecharge || suggestPro,
+          showCancel: suggestPro,
           success: (res) => {
-            if (res.confirm) {
-              if (suggestRecharge || suggestPro) {
-                Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-              }
-            }
+            if (suggestPro && res.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }
         })
       } else {
@@ -217,21 +187,15 @@ function RecordTextPage() {
           className={`record-text-quota-bar ${isQuotaExhausted ? 'record-text-quota-bar--exhausted' : ''}`}
           onClick={() => {
             if (isQuotaExhausted) return
-            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+            if (!membershipStatus.is_pro) Taro.navigateTo({ url: '/pages/pro-membership/index' })
           }}
         >
           <Text className='record-text-quota-bar-text'>
-            {pointsMode
-              ? isQuotaExhausted
-                ? '积分不足，无法发起分析（标准需 1 分），请先充值'
-                : `积分余额 ${(membershipStatus.points_balance as number).toFixed(1)} · 标准 1 / 精准 2 / 运动 0.5${
-                    (membershipStatus.points_balance as number) < 2 ? '  →充值后可用精准' : ''
-                  }`
-              : isQuotaExhausted
-                ? '今日拍照/文字分析次数已用尽，请明日再试'
-                : `今日剩余 ${membershipStatus.daily_remaining ?? '--'}/${membershipStatus.daily_limit ?? '--'} 次${
-                    !membershipStatus.is_pro ? '  →开通会员享更高额度' : ''
-                  }`}
+            {isQuotaExhausted
+              ? getFoodAnalysisCreditBlockMessage(membershipStatus)
+              : hasCreditsInfo
+                ? `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${!membershipStatus.is_pro ? '  →开通会员享更高额度' : ''}`
+                : `今日积分信息加载中${!membershipStatus.is_pro ? '  →开通会员享更高额度' : ''}`}
           </Text>
         </View>
       )}
@@ -343,7 +307,7 @@ function RecordTextPage() {
           className={`submit-btn ${!foodText.trim() || loading || isQuotaExhausted ? 'disabled' : ''}`}
           onClick={handleSubmit}
         >
-          <Text>{loading ? '分析中...' : isQuotaExhausted ? '今日次数已用完' : '开始智能分析'}</Text>
+          <Text>{loading ? '分析中...' : isQuotaExhausted ? '积分不足，暂不可分析' : '开始智能分析'}</Text>
         </View>
       </View>
     </View>

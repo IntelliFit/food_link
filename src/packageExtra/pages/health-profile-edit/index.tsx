@@ -14,9 +14,11 @@ import {
   type ExecutionMode,
   type MembershipStatus,
 } from '../../../utils/api'
-import { normalizeAvailableExecutionMode, notifyStrictModeUnavailable } from '../../../utils/execution-mode'
+import {
+  canUseStrictModeForMembership,
+  getStrictModeUpgradeDialog,
+} from '../../../utils/execution-mode'
 import { withAuth } from '../../../utils/withAuth'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -60,7 +62,7 @@ const GOAL_OPTIONS = [
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。需开通食探会员。' },
+  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。标准版及以上可用。' },
   { value: 'standard', title: '标准模式', desc: '记录更便捷，但估算误差会更大。' }
 ]
 
@@ -88,6 +90,13 @@ function HealthProfileEditPage() {
 
   const [healthNotes, setHealthNotes] = useState<string>('')
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const strictModeAvailable = canUseStrictModeForMembership(membershipStatus)
+
+  useEffect(() => {
+    if (membershipStatus && executionMode === 'strict' && !strictModeAvailable) {
+      setExecutionMode('standard')
+    }
+  }, [membershipStatus, executionMode, strictModeAvailable])
 
   const loadProfile = async () => {
     try {
@@ -273,7 +282,7 @@ function HealthProfileEditPage() {
       }
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setTimeout(() => {
-        Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
+        Taro.redirectTo({ url: '/pages/health-profile-view/index' })
       }, 1500)
     } catch (e: any) {
       Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
@@ -303,7 +312,7 @@ function HealthProfileEditPage() {
       content: '将前往答题页面重新填写健康档案，当前编辑内容将不会保存。确定继续吗？',
       success: (res) => {
         if (res.confirm) {
-          Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
+          Taro.redirectTo({ url: '/pages/health-profile/index' })
         }
       }
     })
@@ -444,22 +453,19 @@ function HealthProfileEditPage() {
                   className={`option-card ${executionMode === opt.value ? 'active' : ''}`}
                   onClick={() => {
                     if (opt.value === 'strict') {
-                      const canStrict =
-                        typeof membershipStatus?.points_balance === 'number'
-                          ? membershipStatus.points_balance >= 2
-                          : Boolean(membershipStatus?.is_pro)
-                      if (canStrict) {
+                      if (strictModeAvailable) {
                         setExecutionMode('strict')
                         return
                       }
+                      const dialog = getStrictModeUpgradeDialog(membershipStatus, 'profile_execution_mode')
                       Taro.showModal({
-                        title: '积分不足',
-                        content: '精准模式每次消耗 2 积分，当前积分不足。是否前往充值？',
-                        confirmText: '去充值',
+                        title: '解锁精准模式',
+                        content: `${dialog.content}\n若取消则保持当前模式。`,
+                        confirmText: dialog.confirmText,
                         cancelText: '取消',
                         success: (res) => {
                           if (res.confirm) {
-                            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+                            Taro.navigateTo({ url: dialog.url })
                           }
                         }
                       })

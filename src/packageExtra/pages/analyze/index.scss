@@ -83,9 +83,23 @@
     box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 14%);
   }
 
+  &.locked {
+    color: #9a3412;
+    background: #fff7ed;
+    border-color: #fdba74;
+  }
+
   &:active {
     transform: scale(0.98);
   }
+}
+
+.mode-upgrade-note {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 22rpx;
+  color: #b45309;
+  line-height: 1.5;
 }
 
 .mode-desc {
