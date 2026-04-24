@@ -132,7 +132,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           Taro.chooseImage({
             count: 1,
             sizeType: ['compressed'],
-            sourceType: modeId === 'camera' ? ['album', 'camera'] : ['album'],
+            sourceType: modeId === 'camera' ? ['camera'] : ['album'],
             success: (res) => {
               const imagePath = res.tempFilePaths[0]
               Taro.setStorageSync('analyzeImagePath', imagePath)
