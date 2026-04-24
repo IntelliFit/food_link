@@ -18,7 +18,6 @@ export function MealActionSheet({ visible, onClose, onEdit, onPoster }: MealActi
         <View className='record-menu-grid-v2'>
           <View
             className='record-menu-grid-card'
-            style={{ backgroundColor: '#eff6ff' }}
             onClick={() => { onClose(); onEdit() }}
           >
             <View className='record-menu-grid-icon-wrap'>
@@ -33,7 +32,6 @@ export function MealActionSheet({ visible, onClose, onEdit, onPoster }: MealActi
 
           <View
             className='record-menu-grid-card'
-            style={{ backgroundColor: '#ecfdf5' }}
             onClick={() => { onClose(); onPoster() }}
           >
             <View className='record-menu-grid-icon-wrap'>

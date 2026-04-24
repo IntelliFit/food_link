@@ -1,6 +1,7 @@
 import { View, Text, Image, Input } from '@tarojs/components'
 import { useState } from 'react'
 import Taro from '@tarojs/taro'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
 
 import './index.scss'
 
@@ -33,7 +34,7 @@ export default function RecordPage() {
         Taro.setStorageSync('analyzeImagePath', imagePath)
         // 直接跳转到分析页面
         Taro.navigateTo({
-          url: '/pages/analyze/index'
+          url: extraPkgUrl('/pages/analyze/index')
         })
       },
       fail: (err) => {

@@ -3,6 +3,7 @@ import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
 import { getAccessToken, getMyMembership } from '../../../utils/api'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   getFoodAnalysisBlockedActionText,
   getFoodAnalysisCreditBlockMessage,
@@ -35,7 +36,6 @@ const GRID_FEATURES: Array<{
   id: string
   label: string
   color: string
-  bgColor: string
   Icon: typeof IconCamera
   isNew?: boolean
 }> = [
@@ -43,28 +43,24 @@ const GRID_FEATURES: Array<{
     id: 'camera',
     label: '拍照识别',
     color: '#e85d75',
-    bgColor: '#fef2f4',
     Icon: IconCamera,
   },
   {
     id: 'album',
     label: '相册上传',
     color: '#10b981',
-    bgColor: '#ecfdf5',
     Icon: IconAlbum,
   },
   {
     id: 'text',
     label: '文本输入',
     color: '#f59e0b',
-    bgColor: '#fffbeb',
     Icon: IconText,
   },
   {
     id: 'manual',
     label: '手动输入',
     color: '#3b82f6',
-    bgColor: '#eff6ff',
     Icon: IconEdit,
   },
 ]
@@ -120,7 +116,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                 showCancel: showUpgrade,
                 success: (r) => {
                   if (showUpgrade && r.confirm) {
-                    Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                    Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
                   }
                 }
               })
@@ -139,7 +135,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                 Taro.setStorageSync('analyzeImagePath', tempPaths[0])
                 Taro.setStorageSync('analyzeImagePaths', tempPaths)
               }
-              Taro.navigateTo({ url: '/pages/analyze/index' })
+              Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
             },
             fail: (err) => {
               if (err.errMsg?.includes('cancel')) return
@@ -150,17 +146,17 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         break
       }
       case 'text':
-        Taro.navigateTo({ url: '/pages/record-text/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })
         break
       case 'manual':
-        Taro.navigateTo({ url: '/pages/record-manual/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/record-manual/index') })
         break
     }
   }
 
   const handleHistoryClick = () => {
     onClose()
-    Taro.navigateTo({ url: '/pages/analyze-history/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
   }
 
   const runDevTool = (fn: () => void) => {
@@ -192,7 +188,6 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
               <View
                 key={feature.id}
                 className='record-menu-grid-card'
-                style={{ backgroundColor: feature.bgColor }}
                 onClick={() => handleGridClick(feature.id)}
               >
                 {feature.isNew && (

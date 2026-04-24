@@ -18,6 +18,7 @@ import {
   MembershipStatus
 } from '../../../utils/api'
 import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,
   getStrictModeLockedHint,
@@ -527,7 +528,7 @@ function AnalyzePage() {
       setIsAnalyzing(false)
       const q = `task_id=${encodeURIComponent(task_id)}&execution_mode=${encodeURIComponent(executionMode)}&task_type=food`
       Taro.redirectTo({
-        url: `/pages/analyze-loading/index?${q}`
+        url: `${extraPkgUrl('/pages/analyze-loading/index')}?${q}`
       })
     } catch (error: any) {
       Taro.hideLoading()
@@ -936,7 +937,7 @@ function AnalyzePage() {
 
         <View
           className='history-link'
-          onClick={() => Taro.navigateTo({ url: '/pages/analyze-history/index' })}
+          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })}
         >
           <Text className='history-link-text'>查看分析历史</Text>
         </View>
