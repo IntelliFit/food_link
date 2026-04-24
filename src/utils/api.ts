@@ -1345,6 +1345,56 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
   return { task_id: taskId, message }
 }
 
+/** 批量图片分析提交参数 */
+export interface AnalyzeBatchSubmitParams {
+  image_urls: string[]
+  meal_type?: MealType
+  timezone_offset_minutes?: number
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+  additionalContext?: string
+  modelName?: string
+  execution_mode?: ExecutionMode
+  reference_objects?: PrecisionReferenceObjectInput[]
+}
+
+/** 批量图片分析响应 */
+export interface AnalyzeBatchResponse {
+  task_id: string
+  image_count: number
+  result: AnalyzeResponse
+}
+
+/** 批量分析多张食物图片（每张单独识别，结果累加） */
+export async function submitAnalyzeBatch(body: AnalyzeBatchSubmitParams): Promise<AnalyzeBatchResponse> {
+  const payload: AnalyzeBatchSubmitParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
+  }
+  const res = await authenticatedRequest('/api/analyze/batch', {
+    method: 'POST',
+    data: payload,
+    timeout: 120000 // 批量分析可能耗时较长，120 秒超时
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '批量分析失败')
+  }
+  const data = normalizeTaroResponseJson(res.data)
+  if (!data?.task_id) {
+    console.error('[submitAnalyzeBatch] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return {
+    task_id: String(data.task_id).trim(),
+    image_count: Number(data.image_count) || 0,
+    result: data.result as AnalyzeResponse,
+  }
+}
+
 /** 文字分析提交参数 */
 export interface AnalyzeTextTaskSubmitParams {
   text: string

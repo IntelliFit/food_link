@@ -7,6 +7,7 @@ import {
   uploadAnalyzeImage,
   uploadAnalyzeImageFile,
   submitAnalyzeTask,
+  submitAnalyzeBatch,
   continuePrecisionSession,
   getAccessToken,
   MealType,
@@ -306,18 +307,24 @@ function AnalyzePage() {
     }
     initDietGoal()
 
-    // 2. 从本地存储获取图片路径 (用于拍照后的跳转)
+    // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
       try {
+        const storedPaths = Taro.getStorageSync('analyzeImagePaths')
         const storedPath = Taro.getStorageSync('analyzeImagePath')
-        if (storedPath) {
+        if (storedPaths && Array.isArray(storedPaths) && storedPaths.length > 0) {
+          const paths = storedPaths.map((p: string) => String(p || '').trim()).filter(Boolean)
+          const newPaths = await persistImagePathsImmediately(paths)
+          const finalPaths = newPaths.length > 0 ? newPaths : paths
+          setImagePaths(finalPaths)
+          Taro.setStorageSync('analyzeImagePaths', finalPaths)
+          Taro.removeStorageSync('analyzeImagePath')
+        } else if (storedPath) {
           const path = String(storedPath)
           const [stablePath] = await persistImagePathsImmediately([path])
           const finalPath = stablePath || path
           setImagePaths([finalPath])
-          // 与提交分析时写入的 analyzeImagePaths 一致，避免仅单 key 时多图逻辑异常
           Taro.setStorageSync('analyzeImagePaths', [finalPath])
-          // 清除存储，避免下次进入页面时误用
           Taro.removeStorageSync('analyzeImagePath')
         }
       } catch (error) {
@@ -357,17 +364,15 @@ function AnalyzePage() {
   }
 
   const handleChooseImage = async () => {
-    if (!isMultiView && imagePaths.length >= 1) {
-      showMultiViewRequiredModal()
+    const remain = 5 - imagePaths.length
+    if (remain <= 0) {
+      Taro.showToast({ title: '最多支持 5 张图片', icon: 'none' })
       return
     }
-
-    const remain = 3 - imagePaths.length
-    if (remain <= 0) return
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
       const res = await Taro.chooseImage({
-        count: isMultiView ? remain : 1,
+        count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
       })
@@ -420,8 +425,8 @@ function AnalyzePage() {
       Taro.showToast({ title: '请先选择图片', icon: 'none' })
       return
     }
-    if (!isMultiView && imagePaths.length > 1) {
-      showMultiViewRequiredModal()
+    if (imagePaths.length > 5) {
+      Taro.showToast({ title: '最多支持 5 张图片', icon: 'none' })
       return
     }
 
@@ -463,6 +468,38 @@ function AnalyzePage() {
         is_multi_view: isMultiView,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
       }
+
+      // 保存图片路径供后续页面使用
+      if (imagePaths.length > 0) {
+        Taro.setStorageSync('analyzeImagePath', imagePaths[0])
+        Taro.setStorageSync('analyzeImagePaths', imagePaths)
+      }
+      Taro.setStorageSync('analyzeMealType', mealType)
+      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+      Taro.setStorageSync('analyzeExecutionMode', executionMode)
+
+      // 多张图片：使用批量分析（同步接口，直接返回结果）
+      if (imagePaths.length > 1) {
+        Taro.showLoading({ title: '批量分析中...', mask: true })
+        const batchResponse = await submitAnalyzeBatch({
+          image_urls: imageUrls,
+          modelName: 'gemini',
+          execution_mode: executionMode,
+          ...commonPayload,
+        })
+        Taro.setStorageSync('analyzeTaskType', 'food')
+        Taro.setStorageSync('analyzeSourceTaskId', batchResponse.task_id)
+        Taro.setStorageSync('analyzeResult', JSON.stringify(batchResponse.result))
+        Taro.hideLoading()
+        setIsAnalyzing(false)
+        Taro.redirectTo({
+          url: extraPkgUrl('/pages/result/index')
+        })
+        return
+      }
+
+      // 单张图片：走原有异步任务流程
       const response = precisionSessionId
         ? await continuePrecisionSession(precisionSessionId, {
             source_type: 'image',
@@ -485,17 +522,7 @@ function AnalyzePage() {
       if (!task_id) {
         throw new Error('服务器未返回任务编号，请稍后重试')
       }
-      Taro.setStorageSync('analyzeMealType', mealType)
-      Taro.setStorageSync('analyzeDietGoal', dietGoal)
-      Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeTaskType', 'food')
-      Taro.setStorageSync('analyzeExecutionMode', executionMode)
-      // 进入 analyze 页时 initStoredImagePath 会 remove 掉 analyzeImage*，这里必须把当前预览图写回，
-      // analyze-loading 才能用本地路径做全屏背景与取景框前景（与文字链路的占位图区分）
-      if (imagePaths.length > 0) {
-        Taro.setStorageSync('analyzeImagePath', imagePaths[0])
-        Taro.setStorageSync('analyzeImagePaths', imagePaths)
-      }
       Taro.hideLoading()
       setIsAnalyzing(false)
       const q = `task_id=${encodeURIComponent(task_id)}&execution_mode=${encodeURIComponent(executionMode)}&task_type=food`
@@ -656,6 +683,11 @@ function AnalyzePage() {
                   className='grid-image'
                   onClick={() => handlePreviewImage(path)}
                 />
+                {index === 0 && imagePaths.length > 1 && (
+                  <View className='image-batch-badge'>
+                    <Text className='image-batch-badge-text'>共 {imagePaths.length} 张</Text>
+                  </View>
+                )}
                 <View className='remove-btn' onClick={(e) => {
                   e.stopPropagation()
                   handleRemoveImage(index)
@@ -665,7 +697,7 @@ function AnalyzePage() {
                 </View>
               </View>
             ))}
-            {imagePaths.length < 3 && (
+            {imagePaths.length < 5 && (
               <View className='grid-item add-btn' onClick={handleChooseImage}>
                 <Text className='add-icon'>+</Text>
                 <Text className='add-text'>添加</Text>
@@ -677,7 +709,7 @@ function AnalyzePage() {
             <View className='placeholder-content'>
               <Text className='iconfont icon-xiangji' style={{ fontSize: '64rpx', color: '#9ca3af', marginBottom: '16rpx' }} />
               <Text className='placeholder-text'>点击拍摄/上传食物</Text>
-              <Text className='placeholder-sub'>未开启多视角时仅支持 1 张，开启后最多 3 张</Text>
+              <Text className='placeholder-sub'>相册上传最多支持 5 张，多张将分别识别后累加结果</Text>
             </View>
           </View>
         )}

@@ -56,13 +56,17 @@ export async function pickImageAndOpenAnalyze(sourceType: Array<'album' | 'camer
     /* 会员接口失败时仍允许选图，由分析提交接口提示 */
   }
 
+  const isAlbumOnly = sourceType.length === 1 && sourceType[0] === 'album'
   Taro.chooseImage({
-    count: 1,
+    count: isAlbumOnly ? 5 : 1,
     sizeType: ['compressed'],
     sourceType,
     success: (res) => {
-      const imagePath = res.tempFilePaths[0]
-      Taro.setStorageSync('analyzeImagePath', imagePath)
+      const tempPaths = res.tempFilePaths || []
+      if (tempPaths.length > 0) {
+        Taro.setStorageSync('analyzeImagePath', tempPaths[0])
+        Taro.setStorageSync('analyzeImagePaths', tempPaths)
+      }
       Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
     },
     fail: (err) => {

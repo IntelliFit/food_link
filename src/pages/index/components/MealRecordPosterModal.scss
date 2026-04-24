@@ -170,6 +170,23 @@
   padding: 0;
 }
 
+.poster-batch-badge {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  background: rgb(0 188 125 / 90%);
+  border-radius: 12rpx;
+  padding: 6rpx 16rpx;
+  z-index: 10;
+
+  .poster-batch-badge-text {
+    font-size: 24rpx;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+}
+
 .poster-modal-bottom-bar {
   flex-shrink: 0;
   display: flex;

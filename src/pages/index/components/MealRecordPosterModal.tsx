@@ -284,6 +284,11 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
                 <View className='poster-modal-scroll-inner'>
                   <View className='poster-modal-card-wrap'>
                     <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
+                    {record?.image_paths && record.image_paths.length > 1 && (
+                      <View className='poster-batch-badge'>
+                        <Text className='poster-batch-badge-text'>共 {record.image_paths.length} 张</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>

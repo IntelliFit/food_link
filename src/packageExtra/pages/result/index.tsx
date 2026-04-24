@@ -1407,6 +1407,11 @@ function ResultPage() {
               <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
             </View>
           )}
+          {imagePaths.length > 1 && (
+            <View className='image-batch-badge result-batch-badge'>
+              <Text className='image-batch-badge-text'>共 {imagePaths.length} 张</Text>
+            </View>
+          )}
         </View>
       </View>
 

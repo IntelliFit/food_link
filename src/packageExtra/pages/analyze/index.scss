@@ -251,6 +251,23 @@
   color: #9ca3af;
 }
 
+.image-batch-badge {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  background: rgb(0 188 125 / 90%);
+  border-radius: 12rpx;
+  padding: 4rpx 12rpx;
+  z-index: 10;
+
+  .image-batch-badge-text {
+    font-size: 22rpx;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+}
+
 .remove-btn {
   position: absolute;
   top: 8rpx;

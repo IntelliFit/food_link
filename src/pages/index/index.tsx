@@ -2265,7 +2265,7 @@ function IndexPage() {
                       )}
                       {hasRealImage && mealImageUrls.length > 1 && (
                         <View className='meal-thumb-badge'>
-                          <Text className='meal-thumb-badge-text'>{mealImageUrls.length}张</Text>
+                          <Text className='meal-thumb-badge-text'>共 {mealImageUrls.length} 张</Text>
                         </View>
                       )}
                     </View>

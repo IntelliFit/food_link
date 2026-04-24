@@ -130,12 +130,15 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
           Taro.chooseImage({
-            count: 1,
+            count: modeId === 'album' ? 5 : 1,
             sizeType: ['compressed'],
             sourceType: modeId === 'camera' ? ['camera'] : ['album'],
             success: (res) => {
-              const imagePath = res.tempFilePaths[0]
-              Taro.setStorageSync('analyzeImagePath', imagePath)
+              const tempPaths = res.tempFilePaths || []
+              if (tempPaths.length > 0) {
+                Taro.setStorageSync('analyzeImagePath', tempPaths[0])
+                Taro.setStorageSync('analyzeImagePaths', tempPaths)
+              }
               Taro.navigateTo({ url: '/pages/analyze/index' })
             },
             fail: (err) => {

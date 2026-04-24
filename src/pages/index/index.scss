@@ -1219,11 +1219,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .meal-thumb-badge {
   position: absolute;
   right: 8rpx;
-  bottom: 8rpx;
+  top: 8rpx;
   min-width: 38rpx;
   padding: 4rpx 10rpx;
   border-radius: 9999rpx;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgb(0 188 125 / 90%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3188,6 +3188,23 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   border-radius: 0;
   margin: 0;
   padding: 0;
+}
+
+.poster-batch-badge {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  background: rgb(0 188 125 / 90%);
+  border-radius: 12rpx;
+  padding: 6rpx 16rpx;
+  z-index: 10;
+
+  .poster-batch-badge-text {
+    font-size: 24rpx;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.2;
+  }
 }
 
 .poster-modal-bottom-bar {
