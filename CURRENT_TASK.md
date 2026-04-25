@@ -1,5 +1,107 @@
 # CURRENT_TASK
 
+- Task: 修复当日代谢页图标漂移
+- Status: done（将该页 iconfont 收口为固定尺寸块级元素，避免文本基线导致返回箭头和指标图标漂移）
+- Scope:
+  - `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+    - `.metabolic-report__back-arrow`
+    - `.metabolic-report__phys-btn-icon`
+    - `.metabolic-report__title-icon`
+    - `.metabolic-report__summary-label-icon`
+    - 统一改为固定 `width/height + line-height + text-align + display:block`
+- Verification:
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/stats-metabolic/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc screenshot` 这轮仍未稳定产出截图文件，所以未拿到新的 UI 截图证据；本次以运行态页面连接和错误日志为主
+
+- Task: 修复分享卡片多图角标未出现在海报图片区右上角
+- Status: done（角标已内绘到海报顶图右上角；详情/分享接口也会补回多图 `image_paths`）
+- Scope:
+  - `src/utils/poster.ts`
+    - 海报绘制继续使用顶图右上角内绘 `共 N 张`
+  - `backend/main.py`
+    - 新增 `_hydrate_food_record_image_paths(...)`
+    - `/api/food-record/{record_id}` 与 `/api/food-record/share/{record_id}` 统一补全 `image_paths`
+    - 当记录本身没有多图字段、但有 `source_task_id` 时，从来源分析任务回填多图
+  - `backend/tests/integration/test_food_record_api.py`
+    - 新增分享详情补全多图测试，覆盖“记录缺少 `image_paths`，来源任务有多图”的场景
+- Verification:
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_record_api.py -q`：`11 passed`
+  - `python -m py_compile backend/main.py`：通过
+- Blocked / Notes:
+  - 当前本地运行中的后端若还没重启，仍会是旧逻辑；需要重新启动后才会在分享卡片里看到新角标
+
+- Task: 分享卡片多图角标改为画在海报图片区右上角
+- Status: done（“共 N 张”已内绘到海报图片区域，不再漂浮在预览弹层右上角）
+- Scope:
+  - `src/utils/poster.ts`
+    - `drawRecordPoster(...)` 新增多图计数角标绘制
+    - 角标位置固定在海报顶图右上角
+    - 背景改为更淡的浅绿色半透明底，文字改为深绿色
+  - `src/pages/index/components/MealRecordPosterModal.tsx`
+  - `src/packageExtra/pages/record-detail/index.tsx`
+    - 删除弹层外置的 `.poster-batch-badge`，避免和海报内角标重复、错位
+  - `src/pages/index/index.scss`
+  - `src/pages/index/components/MealRecordPosterModal.scss`
+  - `src/packageExtra/pages/record-detail/index.scss`
+    - 清理已失效的 `.poster-batch-badge` 样式
+- Verification:
+  - `npm run lint -- src/utils/poster.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/record-detail/index.tsx`：通过
+  - `mrc where --port 9420`：当前页为 `pages/index/index`
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 这轮没有直接拿到“分享弹层已打开后的新截图”，因为 DevTools 自动化当前只稳定支持页面级连接和日志读取；但海报绘制位置已经从根因上改成 canvas 内绘，首页和记录详情页会统一生效
+
+- Task: 首页今日餐食 warning 卡片与相关错误态做黑色主题适配
+- Status: done（`meal-item.is-warning`、warning/error 面板已切到稳定深色，不再在暗色下发灰）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 为首页今日餐食 warning 卡片补齐真实类名覆盖：
+      - `.meal-item.is-warning`
+      - `.meal-desc`
+      - `.meal-time-pill / .meal-time-pill-text`
+      - `.meal-type-target`
+      - `.meal-macro-text`
+      - `.meal-progress-percent`
+      - `.meal-thumb-badge`
+    - warning 卡片统一收口为深红底 + 深红描边，文字改为高对比浅红
+    - `.analysis-status` / `.analysis-status.warning` / `.analysis-error` 从半透明底改成稳定实色深底，避免黑色主题下发灰
+- Verification:
+  - `npm run lint -- src/pages/index/index.tsx src/packageExtra/pages/result/index.tsx src/utils/home-dashboard-local-cache.ts`：通过
+  - `mrc where --port 9420`：当前页为 `pages/index/index`
+  - `mrc exists .meal-item --port 9420`：存在
+  - `mrc click .meal-item --port 9420`：成功
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc screenshot` 这轮回执持续挂起，没能稳定产出截图文件；因此本次运行态验证以页面连接、元素存在、点击成功和错误日志为主
+
+- Task: 记录饮食后立即同步本地首页缓存，并刷新当天首页的今日餐食
+- Status: done（保存成功后会先写本地 dashboard 快照，再触发首页即时回填；云端仍异步回刷兜底）
+- Scope:
+  - `src/utils/home-dashboard-local-cache.ts`
+    - 新增 `applyOptimisticFoodRecordToHomeDashboardSnapshot(...)`
+    - 保存记录成功后，立即把今天的本地 dashboard 快照中的：
+      - `intakeData.current / macros`
+      - `meals`
+      - 对应餐次的 `meal_record_entries / primary_record_id / 图片 / 热量 / 宏量`
+      同步更新
+  - `src/packageExtra/pages/result/index.tsx`
+    - `saveFoodRecord(...)` 成功后，若不是 `already_saved`，先写本地 dashboard 快照
+    - 再触发 `HOME_INTAKE_DATA_CHANGED_EVENT`
+    - 最后继续异步 `refreshHomeDashboardLocalSnapshotFromCloud(...)` 作为服务端兜底同步
+  - `src/pages/index/index.tsx`
+    - 首页监听 `HOME_INTAKE_DATA_CHANGED_EVENT` 后，不再只标记 stale
+    - 若当前查看的是今天，先直接从本地 dashboard 快照回填 `intakeData / meals / achievement / weekHeatmap`
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/result/index.tsx src/pages/index/index.tsx src/utils/home-dashboard-local-cache.ts`：通过
+  - `python -m py_compile backend/main.py`：通过
+- Notes:
+  - 当前这次是“先本地乐观更新，再云端回刷校正”的双层策略
+  - 若服务端返回 `already_saved=true`，则不再额外叠加本地 intake，避免重复累计
+
 - Task: 修复分析结果页多图头图无法左右滑动的问题
 - Status: done（已修正头图层级，避免透明 `ScrollView` 覆盖 `Swiper` 触摸区域）
 - Scope:

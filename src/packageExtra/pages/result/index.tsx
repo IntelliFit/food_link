@@ -23,7 +23,10 @@ import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import {
+  applyOptimisticFoodRecordToHomeDashboardSnapshot,
+  refreshHomeDashboardLocalSnapshotFromCloud
+} from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -901,12 +904,16 @@ function ResultPage() {
         }
 
         const saveResult = await saveFoodRecord(payload)
+        const todayDateKey = formatDateKey(new Date())
+        if (!saveResult.already_saved) {
+          applyOptimisticFoodRecordToHomeDashboardSnapshot(todayDateKey, payload, saveResult.id)
+        }
         try {
-          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: todayDateKey })
         } catch {
           /* ignore */
         }
-        void refreshHomeDashboardLocalSnapshotFromCloud(formatDateKey(new Date()))
+        void refreshHomeDashboardLocalSnapshotFromCloud(todayDateKey)
         const tidForCommit = sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
         if (tidForCommit) {
           try {

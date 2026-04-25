@@ -44,9 +44,13 @@
 }
 
 .metabolic-report__back-arrow {
+  display: block;
+  width: 32rpx;
+  height: 32rpx;
   font-size: 32rpx;
   color: #5cb896;
-  line-height: 1;
+  line-height: 32rpx;
+  text-align: center;
   transform: scaleX(-1);
 }
 
@@ -73,9 +77,13 @@
 }
 
 .metabolic-report__phys-btn-icon {
+  display: block;
+  width: 26rpx;
+  height: 26rpx;
   font-size: 26rpx;
   color: #5cb896;
-  line-height: 1;
+  line-height: 26rpx;
+  text-align: center;
 }
 
 .metabolic-report__phys-btn-text {
@@ -87,9 +95,13 @@
 }
 
 .metabolic-report__title-icon {
+  display: block;
+  width: 36rpx;
+  height: 36rpx;
   font-size: 36rpx;
   color: #5cb896;
-  line-height: 1;
+  line-height: 36rpx;
+  text-align: center;
 }
 
 .metabolic-report__title {
@@ -144,8 +156,12 @@
 }
 
 .metabolic-report__summary-label-icon {
+  display: block;
+  width: 26rpx;
+  height: 26rpx;
   font-size: 26rpx;
-  line-height: 1;
+  line-height: 26rpx;
+  text-align: center;
   flex-shrink: 0;
   color: #5cb896;
 }

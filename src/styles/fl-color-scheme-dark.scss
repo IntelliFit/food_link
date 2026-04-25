@@ -205,12 +205,81 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   border-color: transparent !important;
 }
 
+.fl-page-theme-root--dark .meal-item.is-warning {
+  background: #2c1c1c !important;
+  border-color: #7a4444 !important;
+  box-shadow: none !important;
+}
+
 .fl-page-theme-root--dark .meal-media-wrap {
   background: $fl-dark-panel-bg-soft !important;
 }
 
+.fl-page-theme-root--dark .meal-item.is-warning .meal-media-wrap {
+  background: #3a2323 !important;
+}
+
 .fl-page-theme-root--dark .meal-icon-wrap {
   background: linear-gradient(135deg, rgb(32 42 38) 0%, rgb(28 36 34) 100%) !important;
+}
+
+.fl-page-theme-root--dark .meal-item.is-warning .meal-icon-wrap {
+  background: linear-gradient(135deg, #4a2d2d 0%, #352121 100%) !important;
+}
+
+.fl-page-theme-root--dark .meal-name,
+.fl-page-theme-root--dark .meal-desc,
+.fl-page-theme-root--dark .meal-time-inline,
+.fl-page-theme-root--dark .meal-time-pill-text,
+.fl-page-theme-root--dark .meal-progress-text,
+.fl-page-theme-root--dark .meal-progress-percent,
+.fl-page-theme-root--dark .meal-macro-text,
+.fl-page-theme-root--dark .meal-type-target {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .meal-item.is-warning .meal-name,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-desc,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-calorie,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-calorie-unit,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-time-inline,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-time-pill-text {
+  color: #ffe3e3 !important;
+}
+
+.fl-page-theme-root--dark .meal-item.is-warning .meal-type-target,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-progress-text,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-macro-text {
+  color: #efb3b3 !important;
+}
+
+.fl-page-theme-root--dark .meal-progress-percent.is-over,
+.fl-page-theme-root--dark .meal-item.is-warning .meal-progress-percent {
+  color: #ff8f8f !important;
+}
+
+.fl-page-theme-root--dark .meal-time-pill {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .meal-item.is-warning .meal-time-pill {
+  background: #442626 !important;
+}
+
+.fl-page-theme-root--dark .meal-progress-bar-bg {
+  background: rgb(255 255 255 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .meal-item.is-warning .meal-progress-bar-bg {
+  background: rgb(255 255 255 / 8%) !important;
+}
+
+.fl-page-theme-root--dark .meal-thumb-badge {
+  background: rgb(0 188 125 / 82%) !important;
+}
+
+.fl-page-theme-root--dark .meal-item.is-warning .meal-thumb-badge {
+  background: rgb(180 76 76 / 88%) !important;
 }
 
 .fl-page-theme-root--dark .expiry-skeleton-item,
@@ -577,13 +646,13 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .analysis-status {
-  background: rgb(255 255 255 / 5%) !important;
-  border-color: rgb(120 165 200 / 18%) !important;
+  background: #1e2725 !important;
+  border-color: #355248 !important;
 }
 
 .fl-page-theme-root--dark .analysis-status.warning {
-  background: rgb(240 152 92 / 14%) !important;
-  border-color: rgb(240 152 92 / 24%) !important;
+  background: #33241d !important;
+  border-color: #8c5d40 !important;
 }
 
 .fl-page-theme-root--dark .analysis-status-text,
@@ -598,8 +667,8 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .analysis-error {
-  background: rgb(120 40 40 / 18%) !important;
-  border-color: rgb(245 120 120 / 18%) !important;
+  background: #2c1c1c !important;
+  border-color: #7a4444 !important;
 }
 
 .fl-page-theme-root--dark .analysis-card {

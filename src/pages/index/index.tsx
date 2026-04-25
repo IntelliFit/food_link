@@ -1004,6 +1004,22 @@ function IndexPage() {
   useEffect(() => {
     const markHomeStale = (): void => {
       homeDataStaleRef.current = true
+      const today = formatDateKey(new Date())
+      const currentSelected = selectedDateRef.current || today
+      if (currentSelected !== today) {
+        return
+      }
+      const localSnapshot = getStoredHomeDashboardSnapshotByDate(today)
+      if (!localSnapshot) {
+        return
+      }
+      setIntakeData(localSnapshot.intakeData)
+      setMeals(localSnapshot.meals || [])
+      setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
+      setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
+      setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
+      setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
     }
     Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
     Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
