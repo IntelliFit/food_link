@@ -23,6 +23,11 @@ import { foodRecordFromSavePayload } from '../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import { withAuth } from '../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../utils/home-events'
+import {
+  applyOptimisticFoodRecordToHomeDashboardSnapshot,
+  refreshHomeDashboardLocalSnapshotFromCloud
+} from '../../utils/home-dashboard-local-cache'
+import { formatDateKey } from '../index/utils/helpers'
 
 import './index.scss'
 
@@ -876,11 +881,16 @@ function ResultPage() {
         }
 
         const saveResult = await saveFoodRecord(payload)
+        const todayDateKey = formatDateKey(new Date())
+        if (!saveResult.already_saved) {
+          applyOptimisticFoodRecordToHomeDashboardSnapshot(todayDateKey, payload, saveResult.id)
+        }
         try {
-          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: todayDateKey })
         } catch {
           /* ignore */
         }
+        void refreshHomeDashboardLocalSnapshotFromCloud(todayDateKey)
         const tidForCommit = sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
         if (tidForCommit) {
           try {

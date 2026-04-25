@@ -5135,6 +5135,36 @@ async def get_food_record_list(
         raise HTTPException(status_code=500, detail="获取记录失败")
 
 
+async def _hydrate_food_record_image_paths(record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """单条记录多图补全：优先保留已有 image_paths，缺失时从来源分析任务补回。"""
+    if not record:
+        return record
+
+    paths = record.get("image_paths")
+    if isinstance(paths, list) and len(paths) > 0:
+        return record
+
+    source_task_id = record.get("source_task_id")
+    if source_task_id:
+        try:
+            tasks_map = await get_analysis_tasks_by_ids([source_task_id])
+            task = tasks_map.get(source_task_id)
+            if task:
+                task_paths = task.get("image_paths")
+                if isinstance(task_paths, list) and len(task_paths) > 0:
+                    record["image_paths"] = list(task_paths)
+                    return record
+                if task.get("image_url"):
+                    record["image_paths"] = [task["image_url"]]
+                    return record
+        except Exception as hydrate_err:
+            print(f"[_hydrate_food_record_image_paths] 补全 image_paths 失败: {hydrate_err}")
+
+    if record.get("image_path"):
+        record["image_paths"] = [record["image_path"]]
+    return record
+
+
 @app.get("/api/food-record/{record_id}")
 async def get_food_record_detail(
     record_id: str,
@@ -5151,6 +5181,7 @@ async def get_food_record_detail(
         # 验证权限：记录必须属于当前用户
         if record.get("user_id") != user_id:
             raise HTTPException(status_code=403, detail="无权访问此记录")
+        record = await _hydrate_food_record_image_paths(record)
         record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
         return {"record": record}
     except HTTPException:
@@ -5736,6 +5767,7 @@ async def get_shared_food_record(record_id: str):
                 raise
             except Exception:
                 pass  # 查询用户失败时降级允许访问，避免阻断正常分享
+        record = await _hydrate_food_record_image_paths(record)
         record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
         return {"record": record}
     except HTTPException:

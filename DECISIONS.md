@@ -1,5 +1,41 @@
 # DECISIONS
 
+- `2026-04-26`: 当日代谢页这类使用 iconfont 的工具按钮和标题/摘要图标，不能继续依赖默认文本基线对齐。正式口径是：返回箭头、标题图标、顶部按钮图标和摘要卡图标统一使用固定宽高的块级元素，并显式设置对应的 `line-height` 与 `text-align`，否则在不同宿主/字体回退下很容易出现“图标在按钮里漂移”的问题。
+- `2026-04-26`: 分享海报上的多图角标能否显示，不只取决于前端 canvas 绘制，还取决于记录详情接口是否补回 `image_paths`。正式口径是：`/api/food-record/{id}` 和 `/api/food-record/share/{id}` 必须与列表口径一致，在记录缺少 `image_paths` 但存在 `source_task_id` 时，从来源分析任务补全多图；否则分享海报会误判成单图记录，导致右上角角标完全不出现。
+- `2026-04-26`: 分享餐食海报的多图计数角标不能继续作为预览弹层外层的绝对定位浮层来显示。正式口径是：`共 N 张` 必须直接绘制在海报图片区域右上角，这样导出的海报图片、首页分享弹层、记录详情分享弹层三者位置一致；角标底色使用更淡的浅绿色系，避免抢主图视觉。
+- `2026-04-26`: 首页“今日餐食”的超标 warning 卡片在黑色主题下不能只沿用浅色系红底。正式口径是：`meal-item.is-warning` 以及其时间胶囊、目标值、宏量、完成度、图片角标等子元素都要切到高对比深红系暗色样式；同时相关 `warning/error` 信息面板也应使用稳定实色深底，避免在暗色模式下出现半透明发灰的观感。
+- `2026-04-26`: 用户在分析结果页点击“记录”后，首页的“今日餐食”与今日摄入不能只依赖后端异步回刷。正式口径是：保存成功后必须立即把今天的本地 dashboard 快照同步更新，再通知首页优先吃本地快照回填 UI；随后再异步拉云端 dashboard 做最终校正。这样用户返回首页时能立刻看到新增的那餐和更新后的摄入值。
+- `2026-04-26`: 结果页顶部多图 `Swiper` 不能放在透明滚动层下面。正式口径是：即使页面主体使用全屏 `ScrollView` 覆盖布局，头图固定层也必须保持更高 `z-index`，让横向手势优先到 `Swiper`；否则会出现“界面显示有 1/N 计数，但左右滑没反应”的假多图状态。
+- `2026-04-26`: 食物分析页后续不再为“多图实物分析”保留同步直出结果的特例。正式口径是：无论单图还是多图，图片分析都统一先提交后台任务，再进入 `analyze-loading`；用户可直接离开当前页，完成后去分析历史或结果页查看，不再让多图请求把用户卡在分析页原地等待。
+- `2026-04-26`: 分析结果页的多图查看正式口径继续使用顶部 `Swiper` 左右切换，而不是把多图压成单张静态封面。多图结果至少保留两处反馈：头图左右滑动切换，以及右下角 `1/N` 计数；当 `imagePaths` 变化时，需要把当前索引纠正回合法范围，避免重进结果页时停在越界索引。
+- `2026-04-26`: 食物分析接口中的 `modelName` 不能再被直接当成单一 provider 的“裸模型名”透传。正式口径是：`qwen / qwen-vl-max` 走 DashScope 千问视觉链路；`gemini / gemini-*` 走 OfoxAI Gemini 链路。这个口径同时适用于 `/api/analyze` 和 `/api/analyze/batch`，否则前端传 `modelName: "gemini"` 时，多图 batch 会把 Gemini 错发到 DashScope，导致整批失败。
+- `2026-04-26`: 多图食物分析 `/api/analyze/batch` 的正式口径是“复用单张分析结果结构，而不是另起一套返回形状”。稳定字段至少要与单张 `AnalyzeResponse` 对齐：`description / insight / items / pfc_ratio_comment / absorption_notes / context_advice`，以及严格模式下的 `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / followupQuestions`。
+- `2026-04-26`: 批量食物分析不应对所有图片做无限并发直打模型。正式口径改为：批量识别最多并发 `3` 张，并对单张识别做有限重试；否则在 DashScope 限流或短时波动下，很容易把整批请求一起打成失败。
+- `2026-04-26`: 多图批量分析允许“部分成功”。正式口径是：只要至少有 1 张图成功，就应返回汇总结果并把失败图片下标写入任务 `payload.failed_indices`，不要因为其中 1 张失败就整批直接返回 500；只有全部图片都失败时，才返回“所有图片分析均失败，请稍后重试”。
+
+- `2026-04-25`: 小程序页面里凡是“底部 fixed/sticky 操作区”都不能只改外层页面背景，必须单独做暗色适配。正式口径是：像 `analyze-page .confirm-section` 这类固定底栏，需要同时覆盖容器本身、主按钮、禁用态、次级入口按钮和内部开关控件；否则黑色主题下会出现底栏发白、禁用按钮像浅色残留、开关控件跳出页面体系的问题。
+- `2026-04-25`: 对于明确指定到某个页面 SCSS 文件的暗色适配需求，不能只把规则写进全局 `src/styles/fl-color-scheme-dark.scss`。正式口径是：全局暗色文件负责统一兜底，但页面自己的 `index.scss` 也要能直接看到对应的 `.fl-page-theme-root--dark` 局部样式块，方便排查和后续维护。
+- `2026-04-25`: 暗色主题基础面板的正式口径改为“全部使用不透明深色底”，不再使用 `rgb(... / alpha)` 或 `rgba(...)` 透明面板变量。包括 `$fl-dark-panel-bg`、`$fl-dark-panel-bg-strong`、`$fl-dark-panel-bg-soft`、`$fl-dark-input-bg`、`$fl-dark-ghost-bg`、`$fl-dark-modal-bg` 等都应保持实色，否则在分析历史、分析结果这类有叠层和左滑操作的页面里，会出现下层内容透出、卡片发灰或像蒙了一层雾的视觉问题。
+- `2026-04-25`: 图片结果页在暗色主题下不能只做“整卡变深”。正式口径是：`result-page` 的 `execution-mode-row`、`total-weight-badge`、`insight-item` 及其不同语义变体（`intro/highlight/ratio/absorption/context`）都必须单独做深色收口；否则从分析历史页进入图片结果页时，会出现“整体是暗色，但 AI 分析部分仍像白卡浮在页面上”的割裂感。
+- `2026-04-25`: 暗色主题下，分析历史页 `.task-card` 不能复用半透明的 `$fl-dark-panel-bg`。正式口径是：该页卡片必须使用不透明深色背景，否则左滑露出的 `分享 / 删除` 操作区会从卡片底色透出来，造成“卡片内容被遮蔽但颜色还在漏”的错觉。
+- `2026-04-25`: 分析历史页不能继续依赖小程序原生导航栏的“当前栈决定显示返回/主页”逻辑。正式口径改为：该页使用 `navigationStyle: 'custom'` + `CustomNavBar`，并复用“上一页是 Tab 则 `switchTab`，否则 `redirectTo`，最后兜底回首页”的返回策略，避免在某些入口下左上角出现主页图标而不是返回箭头。
+- `2026-04-25`: 分析历史页的左滑操作区不应遮挡卡片主信息。正式口径是：`分享/删除` 只保留紧凑操作宽度，来源/状态/精准标签必须留在卡片主内容区可见范围内，不能放在一左滑就被盖住的最右列。
+- `2026-04-25`: 分析历史页的文字记录缩略图，不再使用通用图标占位。正式口径改为：若任务来源是 `food_text` 且无图片，则从 `text_input` 提取前 1-4 个字做文本头像封面；这样用户在历史列表里能直接辨认不同文字记录，而不是看到一排相同的占位图标。
+- `2026-04-25`: 分析历史页后续的卡片信息层级固定为“标题 / kcal / 来源说明 / 时间 + 右侧标签组”，不要再回退到只有热量和时间的扁平列表。历史页属于高频浏览入口，必须优先保证扫读效率。
+- `2026-04-25`: 文字记录链路在 `analyze-loading` 和 `result` 页的顶部无图占位区，正式口径改为“优先展示用户本次输入的原始文字”，数据源统一取 `analyzeTextInput`。不能继续固定写“文字记录，未提供实物照片”，否则用户在文字链路里看不到自己刚输入的内容。
+- `2026-04-25`: 分析结果页后续必须跟随应用 `scheme` 切换整页深色皮肤，不能只停留在导航栏或页面外层背景。正式口径是：`src/packageExtra/pages/result/index.tsx` 需接入 `useAppColorScheme + applyThemeNavigationBar(...)`，并通过 `.result-page--dark` 统一覆盖无图占位、营养概览卡、AI 分析卡、成分卡、底部固定栏、餐次弹窗和纠错抽屉，避免深色模式下出现大面积白卡漏光。
+- `2026-04-25`: `dev:weapp` 当前的 Sass 噪音治理口径固定为“两层收口”：
+  - 项目内自有 `.scss` 不再新增 `@import`，可迁移处优先改为 `@use` / `meta.load-css`
+  - Vite Sass 预处理统一开启 `quietDeps`，并静默 `legacy-js-api`、`import` 这两类依赖链 deprecation；否则 `npm run dev:weapp` 会被第三方 Sass warning 持续刷屏，掩盖真正的编译错误
+- `2026-04-25`: `src/assets/iconfont/iconfont.css` 的 `@font-face` 不再保留 `svg` 字体源。当前小程序构建链会对 `iconfont.svg?...#iconfont` 持续打印 “didn't resolve at build time” warning，而项目实际已由 `woff2 / woff / ttf` 覆盖运行需求。
+- `2026-04-25`: `src/packageExtra/pages/record-text/index.tsx` 的“开始智能分析”正式交互收口为“点击即提交”，不再额外弹“确认分析”二次确认框；提交成功后必须统一跳到 `${extraPkgUrl('/pages/analyze-loading/index')}?...`，不能再写裸 `/pages/analyze-loading/index`，否则分包页里会出现确认后停留原页无反应的问题。
+- `2026-04-25`: 本项目后续正式校验入口固定为 `npm run lint` 与 `npm run typecheck`。其中：
+  - `lint = eslint src --ext .ts,.tsx --max-warnings 0`
+  - `typecheck = tsc --noEmit --pretty false`
+- `2026-04-25`: `food_link` 代码库当前存在大量历史性的 `unused vars` 与 `react-hooks/exhaustive-deps` 警告，不再作为 lint 阻断项。正式口径改为：lint 只拦截硬错误；这两类警告在后续大规模重构时再统一治理，避免继续阻断日常开发。
+- `2026-04-25`: `tsconfig.json` 需保持 `skipLibCheck=true`，避免 Taro/平台声明文件噪音淹没业务代码真实错误；同时关闭 `noUnusedLocals / noUnusedParameters`，把“未使用变量”留给 ESLint 策略管理，而不是让 TypeScript 编译直接失败。
+- `2026-04-25`: 会员充值页顶部 Hero 的视觉方向继续固定为“深绿会员感 + 中心徽章 + 半透明积分玻璃卡”，并尽量贴近用户提供的参考图。该区域应优先突出标题与积分余量，不再回退到浅色或普通营销横幅样式。
+- `2026-04-25`: 当前 `weapp-devtools` 环境里，`mrc errors` / `mrc logs error` 可稳定返回，但 `pageInfo`、`relaunch`、`exists`、`stack` 以及 `miniprogram-automator` 的页面回执类操作会再次出现长时间挂起。后续小程序运行态验证若复用当前环境，需要优先把这个自动化卡顿视为独立阻塞，而不是误判成页面代码报错。
 - `2026-04-24`: `food_link` 项目后续默认不由代理操作任何本地常驻进程。启动、停止、重启前后端一律默认由用户自己手动执行；除非用户在当前对话里明确要求，否则代理只能改代码并提醒用户自行运行，避免抢占 `3010`、干扰用户自己的调试会话。
 - `2026-04-24`: 为避免本地 `3010` 被残留后端长期占用，项目增加 `npm run stop:backend` 作为标准清理入口。后续优先用该脚本清掉 `backend.pid` 或占用 `3010` 的 `run_backend.py` 进程，而不是每次手查 PID。
 - `2026-04-24`: 食物测试后台后续的主工作流应切到“可复用测试集”。ZIP 仍可作为导入格式保留，但不应要求用户每次批量评测都重新上传 ZIP；正式口径应支持把服务器本机目录中的标准测试集导入并持久化到云端，之后在后台列表中重复载入为新批次。
@@ -188,6 +224,10 @@
 - `2026-04-10`: 运动热量估算在 `gemini-3-flash-preview + Instructor` 组合下，遇到“高强度动作描述 + 完整画像快照”时可能因 reasoning token 膨胀触发 `max_tokens length limit`。正式口径改为：保留 Instructor 结构化主链路，但若命中“输出被截断”，必须自动降级到“短 JSON fallback”再次估算；同时主提示词与 schema 需强约束 reasoning 只保留 1-2 句短依据，避免长推导再次撑爆。
 - `2026-04-10`: 对于“一条文本里包含多项运动”的描述，后端应自动按换行/分号/句号拆分为多个分项，再逐项估算后求和，不要求用户手动拆条。分项估算优先走短 JSON / 数字输出的轻链路；若单项仍拿不到可解析结果，则允许退化到基于 `运动关键词 + 时长 + 体重` 的规则估算，目标优先保证“不报错、能落结果”。
 - `2026-04-10`: 运动热量估算模型当前直接在程序里写死为 `google/gemini-3.1-flash-lite-preview`，不再通过 `EXERCISE_CALORIES_MODEL_NAME` 环境变量切换，避免本地/线上环境变量漂移影响这条专用链路。
+- `2026-04-25`: `src/pages/profile/index.tsx` 属于主包 Tab 页，但它跳往会员、档案、保质期、好友管理、个人设置等非 Tab 页面时，必须统一使用 `extraPkgUrl(...)`；不能继续写裸 `/pages/...`，也不能漏掉 `extraPkgUrl` import，否则小程序运行时会出现 `ReferenceError` 或页面路径错误。
+- `2026-04-25`: 会员充值页后续需要跟随应用 `scheme` 切换导航栏与整页深色皮肤；不能只改 `page` 背景色。正式口径是：`src/packageExtra/pages/pro-membership/index.tsx` 通过 `useAppColorScheme + applyThemeNavigationBar(...)` 控制导航栏，样式层通过 `membership-page--dark` 覆盖 Hero、卡片、对比表、说明卡与按钮。
+- `2026-04-25`: 如果要给用户手动补会员，而系统当前没有对应正式套餐编码（例如“半年卡”），优先采用“保留或追加原到期时间，不缩短现有权益 + 切到目标档位权益”的处理方式；本次锦恢账号按该口径处理，权益升到进阶版、每日积分 `40`，并在原到期日基础上追加 `6` 个月。
+- `2026-04-25`: 会员页使用自定义导航栏时，左上角返回不能再直接依赖 `Taro.navigateBack()`。正式口径是：读取上一页路由；若上一页是 Tab（如 `pages/profile/index`），必须用 `Taro.switchTab(...)` 返回；若不是 Tab，再走 `normalizeRedirectUrlForSubpackage(...) + Taro.redirectTo(...)`，最后兜底回 `/pages/profile/index`。
 
 - `2026-03-27`: Added persistent state files so `food_link` context survives session resets and compaction better.
 - `2026-03-27`: Project ownership must come from `IDENTITY.md` plus state files, not stale transcript memory.

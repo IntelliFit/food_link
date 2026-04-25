@@ -4,6 +4,7 @@
 import pytest
 import pytest_asyncio
 import os
+import main
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-min-32-chars")
 
@@ -75,6 +76,57 @@ class TestFoodRecordCRUD:
         
         # 分享接口可能允许公开访问，也可能返回服务器错误
         assert response.status_code in [200, 400, 401, 403, 404, 422, 500]
+
+    async def test_get_record_share_hydrates_image_paths_from_source_task(self, async_client, monkeypatch):
+        """分享详情应补全来源分析任务里的多图 image_paths。"""
+
+        async def fake_get_food_record_by_id(record_id: str):
+            assert record_id == "test-record-id"
+            return {
+                "id": record_id,
+                "user_id": "user-1",
+                "meal_type": "dinner",
+                "image_path": "https://example.com/cover.jpg",
+                "image_paths": None,
+                "source_task_id": "task-1",
+                "items": [],
+                "total_calories": 100,
+                "total_protein": 10,
+                "total_carbs": 10,
+                "total_fat": 5,
+                "total_weight_grams": 100,
+                "record_time": "2026-04-26T10:00:00+08:00",
+                "created_at": "2026-04-26T10:00:00+08:00",
+            }
+
+        async def fake_get_user_by_id(user_id: str):
+            assert user_id == "user-1"
+            return {"id": user_id, "public_records": True}
+
+        async def fake_get_analysis_tasks_by_ids(task_ids):
+            assert task_ids == ["task-1"]
+            return {
+                "task-1": {
+                    "id": "task-1",
+                    "image_paths": [
+                        "https://example.com/1.jpg",
+                        "https://example.com/2.jpg",
+                    ]
+                }
+            }
+
+        monkeypatch.setattr(main, "get_food_record_by_id", fake_get_food_record_by_id)
+        monkeypatch.setattr(main, "get_user_by_id", fake_get_user_by_id)
+        monkeypatch.setattr(main, "get_analysis_tasks_by_ids", fake_get_analysis_tasks_by_ids)
+
+        response = await async_client.get("/api/food-record/share/test-record-id")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["record"]["image_paths"] == [
+            "https://example.com/1.jpg",
+            "https://example.com/2.jpg",
+        ]
 
 
 @pytest.mark.asyncio
