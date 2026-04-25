@@ -1,5 +1,22 @@
 # CURRENT_TASK
 
+- Task: 修复分析结果页多图头图无法左右滑动的问题
+- Status: done（已修正头图层级，避免透明 `ScrollView` 覆盖 `Swiper` 触摸区域）
+- Scope:
+  - `src/packageExtra/pages/result/index.scss`
+    - 将 `.scanner-hero-section` 的 `z-index` 从 `1` 提高到 `3`
+    - 给 `.scanner-hero-swiper` 显式补上 `pointer-events: auto`
+  - 根因判断：
+    - 结果页顶部图片区是固定层，但整页 `ScrollView` 透明覆盖在上面
+    - 视觉上能看到图片，实际横向手势先被滚动容器吃掉，导致 `Swiper` 看起来不能滑
+- Verification:
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/result/index`
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 `dev:weapp` 仍卡在 `transforming...`，DevTools 运行态没有稳定吃到最新构建产物
+  - 当前 `mrc` 版本的 `swipe` 不可用（`mp.swipe is not a function`），因此没法在自动化里直接录到“1/2 -> 2/2”的横向手势证据
+  - 这次修复基于页面结构与层级问题直接下手，属于高置信度修复
+
 - Task: 修复多图实物分析交互为“提交后台任务后进入 loading 页”，并确认结果页多图可滑动查看
 - Status: done（分析页多图已回到异步任务链路；结果页多图查看继续使用 Swiper，并补了索引稳态）
 - Scope:
