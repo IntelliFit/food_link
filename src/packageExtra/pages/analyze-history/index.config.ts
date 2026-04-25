@@ -1,3 +1,4 @@
 export default definePageConfig({
-  navigationBarTitleText: '分析历史'
+  navigationBarTitleText: '分析历史',
+  navigationStyle: 'custom'
 })

@@ -4,9 +4,10 @@ import { useState, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { listAnalyzeTasks, deleteAnalysisTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
 
 const STATUS_MAP: Record<string, string> = {
   pending: '排队中',
@@ -157,7 +158,7 @@ function formatTime(iso: string): { text: string; isToday: boolean } {
 }
 
 // 左滑操作按钮宽度
-const ACTION_BUTTON_WIDTH = 140 // rpx
+const ACTION_BUTTON_WIDTH = 108 // rpx
 
 interface SwipeableTaskCardProps {
   task: AnalysisTask
@@ -201,8 +202,7 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
 
   const handleTouchEnd = () => {
     if (!canSwipe) return
-    // 根据滑动距离判断是否展开或收起
-    if (offset < -maxOffset / 2) {
+    if (offset < -ACTION_BUTTON_WIDTH * 0.72) {
       setOffset(-maxOffset)
       setIsOpen(true)
     } else {
@@ -297,9 +297,7 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
               <Text className='calories'>{totalCalories > 0 ? `${Math.round(totalCalories)} kcal` : '--'}</Text>
               <Text className='meta'>{meta}</Text>
               <Text className='time'>{timeInfo.text}</Text>
-            </View>
-            <View className='right-content'>
-              <View className='tag-row-vertical'>
+              <View className='tag-row-inline'>
                 <View className={`source-badge source-${sourceType}`}>
                   <Text className='source-badge-text'>{sourceType === 'food_text' ? '文字' : '图片'}</Text>
                 </View>
@@ -318,14 +316,16 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
                 )}
               </View>
             </View>
+            <View className='right-content'>
+              {(task.status === 'done' || task.status === 'failed' || task.status === 'processing') && !task.is_violated && (
+                <Text className='arrow'>›</Text>
+              )}
+            </View>
           </View>
           {(task.status === 'violated' || task.is_violated) && task.violation_reason && (
             <Text className='violation-reason'>{task.violation_reason}</Text>
           )}
         </View>
-        {(task.status === 'done' || task.status === 'failed' || task.status === 'processing') && !task.is_violated && (
-          <Text className='arrow'>›</Text>
-        )}
       </View>
     </View>
   )
@@ -336,6 +336,32 @@ function AnalyzeHistoryPage() {
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
   const loadSeqRef = useRef(0)
+  const navBarHeight = getNavBarHeight()
+
+  const handleBack = useCallback(() => {
+    const pages = Taro.getCurrentPages()
+    if (pages.length > 1) {
+      const previous = pages[pages.length - 2]
+      const previousRoute = `/${previous.route || ''}`
+      const previousOptions = previous.options || {}
+      const query = Object.keys(previousOptions)
+        .map((key) => `${key}=${encodeURIComponent(previousOptions[key])}`)
+        .join('&')
+      if (MAIN_TAB_ROUTES.has(previousRoute)) {
+        Taro.switchTab({ url: previousRoute })
+        return
+      }
+      const targetUrl = normalizeRedirectUrlForSubpackage(
+        `${previousRoute}${query ? `?${query}` : ''}`
+      )
+      Taro.redirectTo({
+        url: targetUrl,
+        fail: () => Taro.switchTab({ url: '/pages/index/index' })
+      })
+      return
+    }
+    Taro.switchTab({ url: '/pages/index/index' })
+  }, [])
 
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current
@@ -477,7 +503,14 @@ function AnalyzeHistoryPage() {
 
   return (
     <View className={`analyze-history-page ${scheme === 'dark' ? 'analyze-history-page--dark' : ''}`}>
-      <ScrollView className='list' scrollY>
+      <CustomNavBar
+        title='分析历史'
+        showBack
+        onBack={handleBack}
+        color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
+        background={scheme === 'dark' ? '#101716' : '#f6faf8'}
+      />
+      <ScrollView className='list' scrollY style={{ height: `calc(100vh - ${navBarHeight}px)` }}>
         {loading ? (
           <View className='loading-wrap'><View className='loading-spinner-md' /></View>
         ) : tasks.length === 0 ? (

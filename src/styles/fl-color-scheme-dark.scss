@@ -5,18 +5,18 @@
 
 $fl-dark-surface: #1a2220;
 $fl-dark-surface2: #232e2b;
-$fl-dark-border: rgb(92 184 150 / 28%);
+$fl-dark-border: #3d5d51;
 $fl-dark-text: #e8ece9;
 $fl-dark-text2: #9ca3a8;
 $fl-dark-accent: #7dd3b0;
-$fl-dark-panel-bg: rgb(255 255 255 / 4%);
-$fl-dark-panel-bg-strong: rgb(255 255 255 / 6%);
-$fl-dark-panel-bg-soft: rgb(255 255 255 / 3%);
-$fl-dark-input-bg: rgb(255 255 255 / 7%);
-$fl-dark-ghost-bg: rgb(255 255 255 / 9%);
-$fl-dark-warning-bg: rgb(244 114 114 / 12%);
-$fl-dark-modal-bg: rgb(20 24 23 / 96%);
-$fl-dark-modal-bg-soft: rgb(28 34 32 / 98%);
+$fl-dark-panel-bg: #18211f;
+$fl-dark-panel-bg-strong: #1d2724;
+$fl-dark-panel-bg-soft: #141c1a;
+$fl-dark-input-bg: #222c29;
+$fl-dark-ghost-bg: #27322f;
+$fl-dark-warning-bg: #3a2020;
+$fl-dark-modal-bg: #141817;
+$fl-dark-modal-bg-soft: #1c2220;
 $fl-dark-home-solid-bg: linear-gradient(
   180deg,
   #1a2822 0%,
@@ -2252,6 +2252,8 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .result-page .correction-entry,
 .fl-page-theme-root--dark .result-page .library-upload-entry,
+.fl-page-theme-root--dark .result-page .total-weight-badge,
+.fl-page-theme-root--dark .result-page .insight-item,
 .fl-page-theme-root--dark .result-text-page .total-weight-badge,
 .fl-page-theme-root--dark .result-text-page .insight-item,
 .fl-page-theme-root--dark .result-text-page .ingredient-controls,
@@ -2266,9 +2268,31 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .result-page .correction-entry .correction-arrow,
 .fl-page-theme-root--dark .result-page .library-upload-text,
 .fl-page-theme-root--dark .result-page .library-upload-arrow,
+.fl-page-theme-root--dark .result-page .insight-label,
+.fl-page-theme-root--dark .result-page .ratio-display,
 .fl-page-theme-root--dark .result-text-page .insight-label,
 .fl-page-theme-root--dark .result-text-page .ratio-display {
   color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .result-page .insight-item.highlight {
+  background: #18332a !important;
+}
+
+.fl-page-theme-root--dark .result-page .insight-item.intro {
+  background: #202927 !important;
+}
+
+.fl-page-theme-root--dark .result-page .insight-item.ratio {
+  background: #33261d !important;
+}
+
+.fl-page-theme-root--dark .result-page .insight-item.absorption {
+  background: #2a2235 !important;
+}
+
+.fl-page-theme-root--dark .result-page .insight-item.context {
+  background: #17302d !important;
 }
 
 .fl-page-theme-root--dark .result-text-page .hero-title,
@@ -2291,21 +2315,21 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .result-text-page .insight-item.highlight,
 .fl-page-theme-root--dark .result-text-page .macro-editor-item.protein .macro-editor-chip {
-  background: rgb(16 185 129 / 10%) !important;
+  background: #18332a !important;
 }
 
 .fl-page-theme-root--dark .result-text-page .insight-item.intro {
-  background: rgb(255 255 255 / 6%) !important;
+  background: #202927 !important;
 }
 
 .fl-page-theme-root--dark .result-text-page .insight-item.ratio,
 .fl-page-theme-root--dark .result-text-page .macro-editor-item.fat .macro-editor-chip {
-  background: rgb(249 115 22 / 10%) !important;
+  background: #33261d !important;
 }
 
 .fl-page-theme-root--dark .result-text-page .insight-item.absorption,
 .fl-page-theme-root--dark .result-text-page .macro-editor-item.carbs .macro-editor-chip {
-  background: rgb(59 130 246 / 10%) !important;
+  background: #1f2c38 !important;
 }
 
 .fl-page-theme-root--dark .result-text-page .ingredient-main,
@@ -2532,9 +2556,14 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .analyze-page .image-preview-section,
 .fl-page-theme-root--dark .analyze-page .meal-section,
 .fl-page-theme-root--dark .analyze-page .state-section,
-.fl-page-theme-root--dark .analyze-page .details-section,
-.fl-page-theme-root--dark .analyze-history-page .task-card {
+.fl-page-theme-root--dark .analyze-page .details-section {
   background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-history-page .task-card {
+  background: #18211f !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
 }
@@ -2622,7 +2651,7 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .analyze-history-page .task-card:active {
-  background: $fl-dark-panel-bg-strong !important;
+  background: #1d2724 !important;
 }
 
 .fl-page-theme-root--dark .analyze-history-page .task-card.task-card-violated,

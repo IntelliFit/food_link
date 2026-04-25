@@ -1,5 +1,86 @@
 # CURRENT_TASK
 
+- Task: 统一暗色主题基础面板为不透明深色底
+- Status: done（暗色主题基础变量和结果页 insight 变体底色已改为实色，不再使用透明面板）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 将暗色主题基础变量中的半透明背景全部改为不透明深色：
+      - `$fl-dark-border`
+      - `$fl-dark-panel-bg`
+      - `$fl-dark-panel-bg-strong`
+      - `$fl-dark-panel-bg-soft`
+      - `$fl-dark-input-bg`
+      - `$fl-dark-ghost-bg`
+      - `$fl-dark-warning-bg`
+      - `$fl-dark-modal-bg`
+      - `$fl-dark-modal-bg-soft`
+    - 将 `result-page / result-text-page` 的 `insight-item` 语义变体（`highlight / intro / ratio / absorption / context`）改为对应的实色深底，避免黑色主题下继续透出下层内容
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 补强从分析历史页进入的图片结果页暗色主题效果
+- Status: done（图片结果页顶部模式区、营养卡和 AI 分析卡在暗色主题下已进一步压深，不再出现浅色白卡感）
+- Scope:
+  - `src/packageExtra/pages/result/index.scss`
+    - 深色模式下给 `execution-mode-row` 增加深色玻璃底
+    - `total-weight-badge` 改为更稳的浅灰徽章
+    - `insight-item` 及其 `intro/highlight/ratio/absorption/context` 变体全部重做深色底
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 补齐 `result-page` 分支对：
+      - `total-weight-badge`
+      - `insight-item`
+      - `insight-label`
+      - `ratio-display`
+      的暗色覆盖
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 修复分析历史页暗色主题下卡片背景半透明导致左滑操作区透出的回归
+- Status: done（全局暗色主题里历史页 `.task-card` 已改为纯深色实底）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 将 `.fl-page-theme-root--dark .analyze-history-page .task-card` 从共用 `$fl-dark-panel-bg` 半透明面板拆出来
+    - 改成不透明深色背景 `#18211f`
+    - `:active` 态改成 `#1d2724`
+    - 避免左滑时后方 `分享 / 删除` 区域从卡片底色中透出
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 分析历史页继续优化左滑操作区和返回按钮体验
+- Status: done（左滑按钮已缩窄且不再遮住关键信息；页面改成自定义导航栏箭头返回）
+- Scope:
+  - `src/packageExtra/pages/analyze-history/index.config.ts`
+    - 切到 `navigationStyle: 'custom'`
+  - `src/packageExtra/pages/analyze-history/index.tsx`
+    - 接入 `CustomNavBar`
+    - 返回逻辑改为和会员页一致：优先回上一页，上一页是 Tab 时 `switchTab`，否则 `redirectTo`
+    - 左滑按钮宽度从 `140rpx` 收到 `108rpx`
+    - 状态/来源/精准标签从卡片右侧移回主内容区，避免被左滑操作区遮挡
+  - `src/packageExtra/pages/analyze-history/index.scss`
+    - 左滑按钮字体和图标缩小
+    - 右侧区域只保留箭头
+    - 标签改成左侧 inline wrap 布局，提升扫读效率
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 DevTools 自动化会话里，`relaunch / where / exists` 这类页面回执这轮再次卡住，没能稳定拿到“自定义导航栏节点已存在”的最终回包
+  - 但构建产物已更新，且运行时错误日志为 `0`
+
 - Task: 分析历史页面 UI 收口，并优化文字记录类型的封面头像
 - Status: done（历史页已改成更清晰的卡片结构；文字记录封面改为文本前几字头像）
 - Scope:
