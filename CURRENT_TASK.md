@@ -1,5 +1,126 @@
 # CURRENT_TASK
 
+- Task: 恢复积分充值页 Hero 区“食探会员”文案，并将“选择档位”元素回退到上一版简洁样式
+- Status: done（Hero 标题说明已补回；档位区已从价格/能力点/CTA 卡片退回简洁积分档位卡）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - Hero 区恢复 `hero-copy / hero-title / hero-subtitle`
+    - 档位区移除横向 `ScrollView`
+    - 删除价格、能力点和底部 CTA 元素，回退为积分数 + 简述结构
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 恢复 Hero 文案样式
+    - 档位卡片恢复上一版三列简洁布局
+    - 清理本轮新增的价格行、能力点、CTA 和对应暗色覆盖
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc relaunch` 本轮仍在连接后等待回执中，尚未拿到新的页面截图
+
+- Task: 调整积分充值页“选择档位”UI，去掉参考图的紫色风格并改为应用自身绿色主题
+- Status: done（档位区已从拥挤三列改成横向卡片带，深浅色都回到品牌绿色体系）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 档位卡容器改为横向 `ScrollView`
+    - 保留三档信息，但让手机端按卡片带滑动浏览，不再硬挤三列
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 档位卡整体改回品牌绿系深色卡面
+    - 去掉紫色选中态、紫色徽章和紫色按钮
+    - 重做卡片间距、价格字号、摘要高度、能力点排版与 CTA 层级
+    - 修正 `.membership-page--dark` 下对档位卡的覆盖，避免暗色模式把新卡面重新洗灰
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js/.wxss` 已确认包含 `tier-scroll`、绿色 CTA 渐变和新的暗色卡面规则
+- Blocked / Notes:
+  - `mrc screenshot` 仍返回 `fail to capture screenshot`，这轮没有拿到新的会员页截图
+  - 当前自动化 `relaunch` 偶尔会跳回首页，但本轮最终 `where` 已确认在会员页
+
+- Task: 将「我的」页左上角主题切换图标替换为 `icon-zaoshang / icon-wanshang`
+- Status: done（主题切换入口仍保留在左上角，仅将图标资源从字符改为 iconfont）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - `.profile-theme-chip` 内的图标切换逻辑改为 iconfont 类名
+    - 暗色主题显示 `icon-zaoshang`
+    - 浅色主题显示 `icon-wanshang`
+- Verification:
+  - `rg -n "icon-zaoshang|icon-wanshang" src/pages/profile/index.tsx src/assets/iconfont/iconfont.css`：确认页面已接入对应 iconfont，图标资源存在
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc relaunch /pages/profile/index` 与 `mrc exists .profile-theme-chip` 这轮仍停在连接后无页面回执，DevTools 自动化会话依旧不稳定
+  - `npm run build:weapp` 当前停在 `transforming...`，所以这次前端验证以源码、资源存在性和运行时错误日志为主
+
+- Task: 将积分充值页“选择档位”改成参考图风格的定价卡 UI
+- Status: done（档位区已改为三张定价卡，包含徽章、标题、副标题、价格、能力点与底部 CTA）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 为三档卡片补充周期联动价格
+    - 新增每档能力点列表
+    - 新增底部 CTA 文案与“最受欢迎 / 当前套餐”徽章
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 档位卡整体改为深色定价卡风格
+    - 选中态改为更强的描边 + 浮起阴影
+    - 价格区、能力点列表、按钮区按参考图重构
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 已确认包含 `tier-card-price-row / tier-card-features / tier-card-cta / 最受欢迎`
+- Blocked / Notes:
+  - 这轮 `mrc relaunch` 回执不稳定，会员页自动化跳转最终落回了首页；因此没有拿到最新会员页截图，但构建产物与运行态错误日志都正常
+
+- Task: 去掉积分充值页 Hero 区的标题和说明文案
+- Status: done（已移除“食探会员”标题与“按使用强度选套餐...”说明文案）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 删除 `.hero-copy` 整块节点
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 删除 `.hero-copy / .hero-title / .hero-subtitle`
+    - 适度收紧 `hero-emblem-row` 底部间距，避免删文案后出现过大空白
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 已确认不再包含 `hero-title / hero-subtitle / hero-copy`
+
+- Task: 恢复「我的」页左上角主题切换入口
+- Status: done（样式未丢，实际是 JSX 节点在合并中被删；现已补回）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - 重新接入 `useAppColorScheme`
+    - 在页面左上角恢复 `.profile-theme-chip`
+    - 点击后调用 `toggleScheme()`
+    - 图标按当前主题切换：暗色显示 `☀`，浅色显示 `☾`
+- Verification:
+  - `npm run lint -- src/pages/profile/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `dist/pages/profile/index.js` 已包含 `useAppColorScheme / toggleScheme / profile-theme-chip`
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 DevTools 自动化会话对 `pages/profile/index` 的节点查询仍回报旧运行态，`.profile-theme-chip` 没查到；但最新构建产物已确认包含该节点，说明代码修复已生效，运行端需要重新吃到最新包
+
+- Task: 修复 main 分支 GitHub Actions 后端自动部署失败
+- Status: done（`Deploy Backend` 最新 run `24941017274` 已成功）
+- Scope:
+  - `.github/workflows/deploy-backend.yml`
+    - `actions/checkout` 升级到 `v5`
+    - 增加 `DEPLOY_PORT`、`DEPLOY_BRANCH`、`DEPLOY_SERVICE`
+    - 远端执行改为 `bash` 显式调用，避免服务器上的 `deploy_backend.sh` 缺少可执行权限时报 `exit code 126`
+    - 增加脚本查找/回退顺序：
+      - `./deploy_backend.sh`
+      - `./deploy/scripts/deploy_backend_v2.sh`
+      - `./deploy/scripts/deploy_backend.sh`
+- Verification:
+  - `gh run view 24940832898 --log-failed`：确认旧失败原因为 `zsh:1: permission denied: ./deploy_backend.sh`
+  - 推送 `main` 提交 `30427c6 fix(ci): harden backend deploy workflow`
+  - `gh run watch 24941017274`：最新 `Deploy Backend` 成功，`deploy in 23s`
+- Notes:
+  - 之前一次老失败 `24860907702` 另有 SSH 超时，但本轮修复后最新自动部署已成功完成
+
 - Task: 修复当日代谢页图标漂移
 - Status: done（将该页 iconfont 收口为固定尺寸块级元素，避免文本基线导致返回箭头和指标图标漂移）
 - Scope:

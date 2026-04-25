@@ -31,6 +31,7 @@ import {
   getMembershipTierShortLabel,
 } from '../../utils/membership'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -69,6 +70,7 @@ function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string 
 }
 
 function ProfilePage() {
+  const { scheme, toggleScheme } = useAppColorScheme()
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
@@ -396,6 +398,10 @@ function ProfilePage() {
 
   return (
     <View className='profile-page'>
+      <View className='profile-theme-chip' onClick={toggleScheme}>
+        <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-theme-chip-icon`} />
+      </View>
+
       {/* 顶部用户信息卡片（微信风格） */}
       <View className='profile-card user-card' onClick={isLoggedIn ? handleSettings : handleGoLogin}>
         <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
