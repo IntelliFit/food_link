@@ -47,6 +47,44 @@ const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
   return payloadMode === 'strict' ? 'strict' : 'standard'
 }
 
+const pickTextAvatar = (text: string | null | undefined): string => {
+  const normalized = String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[，。；：、,.!?！？\n\r\t]/g, ' ')
+    .trim()
+
+  if (!normalized) return '记录'
+  const compact = normalized.replace(/\s+/g, '')
+  return compact.slice(0, Math.min(4, compact.length))
+}
+
+const pickTaskHeadline = (task: AnalysisTask): string => {
+  if (task.status === 'violated' || task.is_violated) return '内容未通过审核'
+  const sourceType = pickSourceTaskType(task)
+  if (sourceType === 'food_text') {
+    const text = String(task.text_input || '').trim()
+    return text || '文字记录'
+  }
+  const result = task.result as AnalyzeResponse | undefined
+  const firstItem = result?.items?.[0]?.name?.trim()
+  if (firstItem) return firstItem
+  return task.status === 'done' ? '饮食分析结果' : '图片记录'
+}
+
+const pickTaskMeta = (task: AnalysisTask): string => {
+  const sourceType = pickSourceTaskType(task)
+  const result = task.result as AnalyzeResponse | undefined
+  if (task.status === 'violated' || task.is_violated) {
+    return task.violation_reason || '该记录因内容问题不可查看'
+  }
+  if (sourceType === 'food_text') {
+    const count = result?.items?.length || 0
+    return count > 0 ? `文字记录 · 识别出 ${count} 项食物` : '文字记录'
+  }
+  const count = result?.items?.length || 0
+  return count > 0 ? `图片记录 · 识别出 ${count} 项食物` : '图片记录'
+}
+
 // 获取总热量
 const getTotalCalories = (task: AnalysisTask): number => {
   if (!task.result) return 0
@@ -140,6 +178,11 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
   const canSwipe = task.status !== 'pending' // 排队中不能滑动，其他都可以
   const canShare = task.status === 'done' && task.result // 只有完成的才能分享
   const totalCalories = getTotalCalories(task)
+  const sourceType = pickSourceTaskType(task)
+  const headline = pickTaskHeadline(task)
+  const meta = pickTaskMeta(task)
+  const textAvatar = pickTextAvatar(task.text_input)
+  const timeInfo = formatTime(task.created_at)
 
   const handleTouchStart = (e: any) => {
     if (!canSwipe) return
@@ -237,6 +280,10 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
             </View>
           ) : task.image_url ? (
             <Image src={task.image_url} mode='aspectFill' />
+          ) : sourceType === 'food_text' ? (
+            <View className='thumb-placeholder thumb-placeholder--text'>
+              <Text className='text-avatar'>{textAvatar}</Text>
+            </View>
           ) : (
             <View className='thumb-placeholder'>
               <Text className='iconfont icon-xingzhuang-wenzi' style={{ fontSize: '48rpx', color: '#15803d' }} />
@@ -246,25 +293,24 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
         <View className='body'>
           <View className='main-row'>
             <View className='left-content'>
+              <Text className='headline'>{headline}</Text>
               <Text className='calories'>{totalCalories > 0 ? `${Math.round(totalCalories)} kcal` : '--'}</Text>
-              <Text className='time'>{(() => {
-                const timeInfo = formatTime(task.created_at)
-                return timeInfo.text
-              })()}</Text>
+              <Text className='meta'>{meta}</Text>
+              <Text className='time'>{timeInfo.text}</Text>
             </View>
             <View className='right-content'>
-              {/* 状态标签和模式标签放在同一行 */}
               <View className='tag-row-vertical'>
+                <View className={`source-badge source-${sourceType}`}>
+                  <Text className='source-badge-text'>{sourceType === 'food_text' ? '文字' : '图片'}</Text>
+                </View>
                 <View className={`status-badge status-${task.status}`}>
                   <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
                 </View>
-                {/* 只在精准模式下显示标签 */}
                 {mode === 'strict' && (
                   <View className='mode-tag strict'>
                     <Text className='mode-tag-text'>精准</Text>
                   </View>
                 )}
-                {/* 精准模式下显示识别结果 */}
                 {mode === 'strict' && task.status === 'done' && (
                   <View className={`recognition-tag recognition-${recognitionOutcome}`}>
                     <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
@@ -430,7 +476,7 @@ function AnalyzeHistoryPage() {
   }
 
   return (
-    <View className='analyze-history-page'>
+    <View className={`analyze-history-page ${scheme === 'dark' ? 'analyze-history-page--dark' : ''}`}>
       <ScrollView className='list' scrollY>
         {loading ? (
           <View className='loading-wrap'><View className='loading-spinner-md' /></View>

@@ -123,6 +123,12 @@
   font-weight: 500;
   text-align: center;
   padding: 0 40rpx;
+  line-height: 1.6;
+  max-width: 560rpx;
+  max-height: 196rpx;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 // 多图时在渐变之上显示张数
@@ -1828,4 +1834,264 @@ transitiontransition
 .state-label {
   font-size: 24rpx;
   color: #334155;
+}
+
+.result-page--dark {
+  background: #101716;
+
+  .scanner-hero-section {
+    background:
+      radial-gradient(circle at 50% 20%, rgba(95, 214, 154, 0.12) 0%, rgba(16, 23, 22, 0) 42%),
+      linear-gradient(180deg, #16211e 0%, #101716 100%);
+  }
+
+  .scanner-hero-placeholder {
+    background: linear-gradient(180deg, #111917 0%, #0d1412 100%);
+  }
+
+  .scanner-hero-gradient {
+    background: linear-gradient(
+      to top,
+      rgba(6, 10, 9, 0.92) 0%,
+      rgba(6, 10, 9, 0.48) 46%,
+      rgba(6, 10, 9, 0.08) 100%
+    );
+  }
+
+  .placeholder-icon-wrap {
+    background: rgba(48, 58, 55, 0.9);
+    border: 2rpx solid rgba(126, 220, 168, 0.18);
+    box-shadow: 0 18rpx 40rpx rgba(0, 0, 0, 0.22);
+  }
+
+  .placeholder-text {
+    color: rgba(238, 246, 241, 0.76);
+  }
+
+  .content-container {
+    background: #101716;
+    box-shadow: 0 -18rpx 48rpx rgba(0, 0, 0, 0.24);
+  }
+
+  .execution-mode-tag {
+    &.standard {
+      background: rgba(36, 45, 43, 0.96);
+      border-color: rgba(110, 231, 183, 0.22);
+    }
+
+    &.strict {
+      background: rgba(10, 35, 27, 0.96);
+      border-color: rgba(52, 211, 153, 0.28);
+    }
+  }
+
+  .execution-mode-tag-text,
+  .section-title,
+  .ingredient-name,
+  .selector-title,
+  .drawer-header .drawer-title,
+  .additional-context-wrapper .context-label text,
+  .weight-display,
+  .calories-value,
+  .calories-unit,
+  .card-title,
+  .followup-question-title,
+  .recognition-status-title {
+    color: #eff6f1;
+  }
+
+  .execution-mode-default-link,
+  .library-upload-text,
+  .library-upload-arrow,
+  .footer-correction-link-text,
+  .insight-label {
+    color: #71d69f;
+  }
+
+  .section-count,
+  .calories-label,
+  .weight-text,
+  .control-label,
+  .ingredient-macro-name,
+  .ingredient-cal-kcal-unit,
+  .followup-question-label,
+  .recognition-status-label,
+  .state-label,
+  .option-label {
+    color: rgba(214, 226, 220, 0.72);
+  }
+
+  .recognition-status-card,
+  .followup-question-card,
+  .precision-continue-card,
+  .nutrition-overview-card,
+  .insight-card,
+  .ingredient-card,
+  .meal-selector-card,
+  .correction-row,
+  .additional-context-wrapper {
+    background: linear-gradient(180deg, rgba(25, 34, 32, 0.98) 0%, rgba(21, 29, 27, 0.98) 100%);
+    border-color: rgba(111, 196, 149, 0.22);
+    box-shadow: 0 12rpx 36rpx rgba(0, 0, 0, 0.18);
+  }
+
+  .recognition-status-card.outcome-ok,
+  .followup-question-card,
+  .nutrition-overview-card,
+  .insight-card,
+  .precision-continue-card {
+    background: linear-gradient(180deg, rgba(25, 34, 32, 0.98) 0%, rgba(21, 29, 27, 0.98) 100%);
+  }
+
+  .recognition-status-card.outcome-soft_reject {
+    background: linear-gradient(180deg, rgba(46, 33, 16, 0.95) 0%, rgba(31, 25, 15, 0.96) 100%);
+    border-color: rgba(245, 158, 11, 0.28);
+  }
+
+  .recognition-status-card.outcome-hard_reject {
+    background: linear-gradient(180deg, rgba(52, 23, 23, 0.96) 0%, rgba(31, 18, 18, 0.98) 100%);
+    border-color: rgba(248, 113, 113, 0.25);
+  }
+
+  .recognition-chip {
+    background: rgba(240, 248, 243, 0.08);
+  }
+
+  .recognition-chip-text,
+  .recognition-status-desc,
+  .followup-question-desc,
+  .followup-question-text,
+  .recognition-guidance-text,
+  .insight-content,
+  .context-textarea,
+  .correction-inputs .correction-input,
+  .weight-unit,
+  .ingredient-cal-kcal-num,
+  .macro-value,
+  .ratio-display {
+    color: #e8f1ec;
+  }
+
+  .recognition-reason {
+    color: #fdba74;
+  }
+
+  .macro-bar,
+  .ingredient-main,
+  .drawer-header,
+  .drawer-footer,
+  .footer-actions,
+  .ingredient-controls,
+  .ingredient-nutrition-strip,
+  .weight-adjuster,
+  .meal-option-item,
+  .correction-inputs .correction-input,
+  .weight-input-wrapper,
+  .context-textarea {
+    background: rgba(32, 41, 39, 0.96);
+    border-color: rgba(120, 139, 130, 0.18);
+  }
+
+  .ingredient-main {
+    border-bottom-color: rgba(120, 139, 130, 0.14);
+  }
+
+  .ingredient-nutrition-strip {
+    border-bottom-color: rgba(120, 139, 130, 0.14);
+  }
+
+  .ingredient-summary-cell {
+    background: rgba(19, 26, 25, 0.96);
+    border-color: rgba(120, 139, 130, 0.15);
+  }
+
+  .correction-drawer-content {
+    background: #101716;
+    box-shadow: 0 -16rpx 44rpx rgba(0, 0, 0, 0.28);
+  }
+
+  .meal-option-item.active,
+  .state-option.active {
+    background: rgba(14, 50, 38, 0.94);
+    border-color: rgba(74, 222, 128, 0.34);
+    box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.16);
+  }
+
+  .state-option {
+    background: rgba(29, 39, 36, 0.96);
+    border-color: rgba(120, 139, 130, 0.18);
+  }
+
+  .option-icon,
+  .correction-index,
+  .edit-icon-wrapper .iconfont {
+    color: rgba(214, 226, 220, 0.56);
+  }
+
+  .edit-icon-wrapper {
+    background: rgba(37, 47, 45, 0.98);
+  }
+
+  .delete-icon-wrapper {
+    background: rgba(74, 29, 33, 0.88);
+  }
+
+  .delete-icon-wrapper:active,
+  .correction-remove:active {
+    background: rgba(109, 40, 48, 0.92);
+  }
+
+  .adjust-btn {
+    background: rgba(47, 57, 55, 0.96);
+    color: #dce8e2;
+
+    &:active {
+      background: rgba(61, 72, 69, 0.98);
+    }
+
+    &.plus {
+      background: rgba(18, 56, 41, 0.96);
+      color: #74dca5;
+
+      &:active {
+        background: rgba(24, 75, 53, 0.98);
+      }
+    }
+  }
+
+  .secondary-btn {
+    background: #edf2f7;
+
+    .btn-text {
+      color: #475569;
+    }
+  }
+
+  .footer-actions,
+  .drawer-header,
+  .drawer-footer {
+    background: rgba(18, 25, 24, 0.96);
+    box-shadow: 0 -12rpx 36rpx rgba(0, 0, 0, 0.24);
+  }
+
+  .footer-correction-link:active .footer-correction-link-text {
+    color: #8ce6b5;
+  }
+
+  .meal-selector-card,
+  .drawer-header,
+  .drawer-footer,
+  .additional-context-wrapper,
+  .correction-row {
+    border: 1rpx solid rgba(111, 196, 149, 0.14);
+  }
+
+  .selector-actions .cancel-btn {
+    background: rgba(35, 45, 43, 0.98);
+    color: rgba(232, 241, 236, 0.78);
+  }
+
+  .context-textarea::placeholder {
+    color: rgba(214, 226, 220, 0.4);
+  }
 }

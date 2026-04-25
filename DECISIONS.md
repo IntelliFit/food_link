@@ -1,5 +1,14 @@
 # DECISIONS
 
+- `2026-04-25`: 分析历史页的文字记录缩略图，不再使用通用图标占位。正式口径改为：若任务来源是 `food_text` 且无图片，则从 `text_input` 提取前 1-4 个字做文本头像封面；这样用户在历史列表里能直接辨认不同文字记录，而不是看到一排相同的占位图标。
+- `2026-04-25`: 分析历史页后续的卡片信息层级固定为“标题 / kcal / 来源说明 / 时间 + 右侧标签组”，不要再回退到只有热量和时间的扁平列表。历史页属于高频浏览入口，必须优先保证扫读效率。
+- `2026-04-25`: 文字记录链路在 `analyze-loading` 和 `result` 页的顶部无图占位区，正式口径改为“优先展示用户本次输入的原始文字”，数据源统一取 `analyzeTextInput`。不能继续固定写“文字记录，未提供实物照片”，否则用户在文字链路里看不到自己刚输入的内容。
+- `2026-04-25`: 分析结果页后续必须跟随应用 `scheme` 切换整页深色皮肤，不能只停留在导航栏或页面外层背景。正式口径是：`src/packageExtra/pages/result/index.tsx` 需接入 `useAppColorScheme + applyThemeNavigationBar(...)`，并通过 `.result-page--dark` 统一覆盖无图占位、营养概览卡、AI 分析卡、成分卡、底部固定栏、餐次弹窗和纠错抽屉，避免深色模式下出现大面积白卡漏光。
+- `2026-04-25`: `dev:weapp` 当前的 Sass 噪音治理口径固定为“两层收口”：
+  - 项目内自有 `.scss` 不再新增 `@import`，可迁移处优先改为 `@use` / `meta.load-css`
+  - Vite Sass 预处理统一开启 `quietDeps`，并静默 `legacy-js-api`、`import` 这两类依赖链 deprecation；否则 `npm run dev:weapp` 会被第三方 Sass warning 持续刷屏，掩盖真正的编译错误
+- `2026-04-25`: `src/assets/iconfont/iconfont.css` 的 `@font-face` 不再保留 `svg` 字体源。当前小程序构建链会对 `iconfont.svg?...#iconfont` 持续打印 “didn't resolve at build time” warning，而项目实际已由 `woff2 / woff / ttf` 覆盖运行需求。
+- `2026-04-25`: `src/packageExtra/pages/record-text/index.tsx` 的“开始智能分析”正式交互收口为“点击即提交”，不再额外弹“确认分析”二次确认框；提交成功后必须统一跳到 `${extraPkgUrl('/pages/analyze-loading/index')}?...`，不能再写裸 `/pages/analyze-loading/index`，否则分包页里会出现确认后停留原页无反应的问题。
 - `2026-04-25`: 本项目后续正式校验入口固定为 `npm run lint` 与 `npm run typecheck`。其中：
   - `lint = eslint src --ext .ts,.tsx --max-warnings 0`
   - `typecheck = tsc --noEmit --pretty false`

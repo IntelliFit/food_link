@@ -122,12 +122,6 @@ function RecordTextPage() {
       // 继续执行
     }
 
-    const { confirm } = await Taro.showModal({
-      title: '确认分析',
-      content: '确定根据当前描述开始计算营养分析吗？'
-    })
-    if (!confirm) return
-
     let inputText = trimmed
     if (foodAmount.trim()) inputText += `\n数量：${foodAmount.trim()}`
 
@@ -147,7 +141,7 @@ function RecordTextPage() {
       })
       Taro.hideLoading()
       Taro.navigateTo({
-        url: `/pages/analyze-loading/index?task_id=${task_id}&task_type=food_text`
+        url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${task_id}&task_type=food_text`
       })
     } catch (e: any) {
       Taro.hideLoading()

@@ -69,6 +69,11 @@
   text-align: center;
   padding: 0 48rpx;
   line-height: 1.5;
+  max-width: 540rpx;
+  max-height: 168rpx;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .frame-placeholder-text-record {
@@ -95,6 +100,14 @@
   font-size: 26rpx;
   color: #64748b;
   font-weight: 500;
+  line-height: 1.5;
+  max-width: 500rpx;
+  max-height: 156rpx;
+  overflow: hidden;
+  padding: 0 40rpx;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 // 底部渐隐，便于白字阅读，不覆盖整屏照片

@@ -178,6 +178,9 @@ function AnalyzeLoadingPage() {
   const [taskType, setTaskType] = useState<string>(() =>
     normalizeTaskType(Taro.getCurrentInstance().router?.params?.task_type)
   )
+  const [textRecordInput, setTextRecordInput] = useState<string>(() =>
+    String(Taro.getStorageSync('analyzeTextInput') || '').trim()
+  )
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [status, setStatus] = useState<'loading' | 'done' | 'failed' | 'violated'>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -221,12 +224,22 @@ function AnalyzeLoadingPage() {
     }
   }, [])
 
+  const syncTextRecordInputFromStorage = useCallback(() => {
+    try {
+      setTextRecordInput(String(Taro.getStorageSync('analyzeTextInput') || '').trim())
+    } catch {
+      setTextRecordInput('')
+    }
+  }, [])
+
   useEffect(() => {
     syncImagePathFromStorage()
-  }, [syncImagePathFromStorage])
+    syncTextRecordInputFromStorage()
+  }, [syncImagePathFromStorage, syncTextRecordInputFromStorage])
 
   useDidShow(() => {
     syncImagePathFromStorage()
+    syncTextRecordInputFromStorage()
     // 切后台再回前台：补一次任务拉取（与 setInterval 互补）
     void pollFnRef.current?.()
   })
@@ -398,6 +411,7 @@ function AnalyzeLoadingPage() {
             Taro.removeStorageSync('analyzeImagePath')
             Taro.removeStorageSync('analyzeImagePaths')
             Taro.setStorageSync('analyzeTextInput', task.text_input || '')
+            setTextRecordInput(String(task.text_input || '').trim())
             Taro.setStorageSync('analyzeTextAdditionalContext', (payload.additionalContext as string) || '')
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
             Taro.setStorageSync('analyzeCompareMode', false)
@@ -560,6 +574,7 @@ function AnalyzeLoadingPage() {
   }
 
   const isTextFoodTask = taskType === 'food_text'
+  const textRecordPreview = textRecordInput || '文字记录，未提供实物照片'
 
   return (
     <View className='analyze-loading-page-v3'>
@@ -570,7 +585,7 @@ function AnalyzeLoadingPage() {
             <View className='text-record-icon-wrap'>
               <Text className='iconfont icon-shiwu' style={{ fontSize: '120rpx', color: '#00bc7d' }} />
             </View>
-            <Text className='text-record-placeholder-label'>文字记录，未提供实物照片</Text>
+            <Text className='text-record-placeholder-label'>{textRecordPreview}</Text>
           </View>
         </View>
       ) : imagePath ? (
@@ -595,7 +610,7 @@ function AnalyzeLoadingPage() {
                 <View className='frame-text-record-icon-wrap'>
                   <Text className='iconfont icon-shiwu' style={{ fontSize: '64rpx', color: '#00bc7d' }} />
                 </View>
-                <Text className='frame-text-record-label'>文字记录</Text>
+                <Text className='frame-text-record-label'>{textRecordPreview}</Text>
               </View>
             ) : imagePath ? (
               <Image className='frame-image-v3' src={imagePath} mode='aspectFill' />

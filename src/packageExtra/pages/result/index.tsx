@@ -26,6 +26,8 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
 import './index.scss'
 
@@ -180,7 +182,9 @@ const normalizePrecisionStringList = (value: unknown): string[] => (
 
 
 function ResultPage() {
+  const { scheme } = useAppColorScheme()
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
+  const [textRecordInput, setTextRecordInput] = useState('')
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
@@ -258,6 +262,14 @@ function ResultPage() {
       }
     }
   }, [])
+
+  useDidShow(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
+  })
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
+  }, [scheme])
 
   /** 上滑进度 0~1：驱动头图高度与内层圆角 */
   const resultHeroShrinkT = useMemo(
@@ -386,8 +398,10 @@ function ResultPage() {
       const storedPath = Taro.getStorageSync('analyzeImagePath')
       const storedMode = Taro.getStorageSync('analyzeExecutionMode')
       const storedTaskType = normalizeTaskType(Taro.getStorageSync('analyzeTaskType'))
+      const storedTextInput = String(Taro.getStorageSync('analyzeTextInput') || '').trim()
       const storedPrecisionSessionId = String(Taro.getStorageSync('analyzePrecisionSessionId') || '').trim()
       setTaskType(storedTaskType)
+      setTextRecordInput(storedTextInput)
       setExecutionMode(normalizeExecutionMode(storedMode))
       setPrecisionSessionId(storedPrecisionSessionId)
 
@@ -1365,7 +1379,7 @@ function ResultPage() {
   }
 
   return (
-    <View className='result-page'>
+    <View className={`result-page ${scheme === 'dark' ? 'result-page--dark' : ''}`}>
       {/* 固定头图：不随列表平移；上滑时高度缩小，内层始终全宽无左右 margin */}
       <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
         <View
@@ -1398,7 +1412,7 @@ function ResultPage() {
               <View className='placeholder-icon-wrap'>
                 <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
               </View>
-              <Text className='placeholder-text'>文字记录，未提供实物照片</Text>
+              <Text className='placeholder-text'>{textRecordInput || '文字记录，未提供实物照片'}</Text>
             </View>
           )}
           <View className='scanner-hero-gradient' />

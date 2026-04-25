@@ -1,5 +1,118 @@
 # CURRENT_TASK
 
+- Task: 分析历史页面 UI 收口，并优化文字记录类型的封面头像
+- Status: done（历史页已改成更清晰的卡片结构；文字记录封面改为文本前几字头像）
+- Scope:
+  - `src/packageExtra/pages/analyze-history/index.tsx`
+    - 新增文字头像提取：从 `text_input` 里取前 1-4 个字作为封面
+    - 新增卡片主标题、记录类型说明、副文案
+    - 历史卡片右侧标签重排为：来源类型 / 状态 / 精准标签 / 精准结果
+    - 页面根节点接入 `analyze-history-page--dark`
+  - `src/packageExtra/pages/analyze-history/index.scss`
+    - 历史页背景改为更轻的层次渐变
+    - 卡片改为更圆、更有层次的玻璃卡
+    - 文字记录缩略图改为深绿文本头像封面
+    - 卡路里数字、标题、meta 文案和标签区层级重新梳理
+    - 新增 dark 覆盖，避免深色模式下仍像旧浅色列表
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc relaunch /packageExtra/pages/analyze-history/index --port 9420`：成功
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/analyze-history/index`
+  - `mrc exists .task-card --port 9420`：存在
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 文字记录在 loading 页和分析结果页顶部占位区回显用户原始输入
+- Status: done（文字链路现在优先展示 `analyzeTextInput`，不再固定显示“文字记录，未提供实物照片”）
+- Scope:
+  - `src/packageExtra/pages/analyze-loading/index.tsx`
+    - 新增 `textRecordInput` 状态
+    - 从 `analyzeTextInput` storage 同步文字记录输入
+    - loading 页全屏占位区与扫描框内占位文案都改为优先显示用户输入
+  - `src/packageExtra/pages/analyze-loading/index.scss`
+    - 文字回显区域增加多行显示、换行和截断保护，避免长文案撑坏布局
+  - `src/packageExtra/pages/result/index.tsx`
+    - 结果页顶部无图占位区改为优先显示用户输入
+  - `src/packageExtra/pages/result/index.scss`
+    - 顶部占位区文字增加多行展示和截断保护
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 分析结果页黑色主题适配收口
+- Status: done（结果页已接入 `scheme` 与导航栏深色同步；主要漏白卡片、底栏和弹层已统一做深色覆层）
+- Scope:
+  - `src/packageExtra/pages/result/index.tsx`
+    - 接入 `useAppColorScheme`
+    - `useDidShow/useEffect` 中调用 `applyThemeNavigationBar(...)`
+    - 页面根节点新增 `result-page--dark`
+  - `src/packageExtra/pages/result/index.scss`
+    - 新增 `.result-page--dark` 深色主题覆盖
+    - 收口区域包括：
+      - 顶部无图占位态与渐变蒙层
+      - 内容容器底色
+      - 模式标签 / 说明文案
+      - 营养概览卡
+      - AI 饮食分析卡
+      - 成分卡、营养条、重量与摄入控件
+      - 底部固定操作栏
+      - 餐次选择弹窗
+      - 二次纠错抽屉
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc relaunch /packageExtra/pages/result/index --port 9420`：成功
+  - `mrc exists .result-page --port 9420`：存在
+  - `mrc exists .nutrition-overview-card --port 9420`：存在
+  - `mrc exists .insight-card --port 9420`：存在
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 清理 `npm run dev:weapp` 当前仍会刷出的构建报错 / warning
+- Status: done（已修复真实 Sass 编译错误，并收敛 Sass / iconfont 构建噪音；`build:weapp -- --no-check` 已完整通过）
+- Scope:
+  - `config/index.ts`
+    - 给 Vite 的 `scss` / `sass` 预处理配置补上 `quietDeps`
+    - 静默 `legacy-js-api` 与 `import` deprecation 输出，避免依赖链 Sass warning 刷屏
+  - `src/app.scss`
+    - 不再在文件底部直接使用 `@use`
+    - 改为顶部 `@use 'sass:meta'`，底部用 `@include meta.load-css(...)` 安全加载深色主题样式
+  - `src/packageExtra/pages/interaction-feed-detail/index.scss`
+    - 社区样式复用从 `@import` 改为 `@use`
+  - `src/assets/iconfont/iconfont.css`
+    - 删除 `svg` 字体源，避免 `iconfont.svg` 在构建期持续报未解析 warning
+- Verification:
+  - `npm run build:weapp -- --no-check`：通过
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `mrc where --port 9420`：当前页为 `pages/index/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 文字记录页“开始智能分析”去掉确认弹窗，并修复提交后不跳转的问题
+- Status: done（已取消二次确认；文本分析提交成功后会直接进入分析加载页）
+- Scope:
+  - `src/packageExtra/pages/record-text/index.tsx`
+    - 删除“确认分析”弹窗，点击开始智能分析后直接提交任务
+    - 文本分析提交成功后的跳转从裸 `/pages/analyze-loading/index` 改成 `extraPkgUrl('/pages/analyze-loading/index')`
+    - 避免分包页内 `navigateTo` 到加载页时停留原页无反应
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/record-text/index`
+  - `mrc exists .tag-item --port 9420`：存在
+  - `mrc exists .meal-item --port 9420`：存在
+  - `mrc click .tag-item --port 9420`：成功
+  - `mrc click .meal-item --port 9420`：成功
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
 - Task: 清理 `dev:weapp` 对应的 lint / typecheck 报错并补齐正式校验脚本
 - Status: done（`lint`、`typecheck`、`build:weapp -- --no-check` 均已通过；微信开发者工具错误日志为 0）
 - Scope:

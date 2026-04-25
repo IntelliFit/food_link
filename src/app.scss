@@ -1,4 +1,6 @@
 // 全局样式
+@use 'sass:meta';
+
 @import './assets/iconfont/iconfont.css';
 
 /* 全局默认字体：思源黑体 */
@@ -146,5 +148,4 @@ page > view {
   }
 }
 
-@import './styles/fl-color-scheme-dark.scss';
-
+@include meta.load-css('./styles/fl-color-scheme-dark.scss');

@@ -2,8 +2,7 @@
   font-family: "iconfont"; /* Project id 5122763 */
   src: url('iconfont.woff2?t=1776890341731') format('woff2'),
        url('iconfont.woff?t=1776890341731') format('woff'),
-       url('iconfont.ttf?t=1776890341731') format('truetype'),
-       url('iconfont.svg?t=1776890341731#iconfont') format('svg');
+       url('iconfont.ttf?t=1776890341731') format('truetype');
 }
 
 .iconfont {
@@ -289,4 +288,3 @@
 .icon-xingzhuang-wenzi:before {
   content: "\eb99";
 }
-

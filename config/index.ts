@@ -99,6 +99,14 @@ export default defineConfig<'vite'>(async (merge) => {
         {
           name: 'taro-debug-build',
           configResolved(config) {
+            config.css ??= {}
+            config.css.preprocessorOptions ??= {}
+            const scssOptions = ((config.css.preprocessorOptions as Record<string, Record<string, unknown>>).scss ??= {})
+            scssOptions.quietDeps = true
+            scssOptions.silenceDeprecations = ['legacy-js-api', 'import']
+            const sassOptions = ((config.css.preprocessorOptions as Record<string, Record<string, unknown>>).sass ??= {})
+            sassOptions.quietDeps = true
+            sassOptions.silenceDeprecations = ['legacy-js-api', 'import']
             if (process.env.NODE_ENV === 'development') {
               config.build.minify = false
               config.build.sourcemap = true
