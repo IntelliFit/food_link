@@ -228,6 +228,14 @@ function ResultPage() {
   const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('7')
   const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
 
+  useEffect(() => {
+    if (imagePaths.length <= 1) {
+      setCurrentImageIndex(0)
+      return
+    }
+    setCurrentImageIndex(prev => (prev >= imagePaths.length ? 0 : prev))
+  }, [imagePaths])
+
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(

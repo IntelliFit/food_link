@@ -7,7 +7,6 @@ import {
   uploadAnalyzeImage,
   uploadAnalyzeImageFile,
   submitAnalyzeTask,
-  submitAnalyzeBatch,
   continuePrecisionSession,
   getAccessToken,
   MealType,
@@ -476,27 +475,8 @@ function AnalyzePage() {
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
 
-      // 多张图片：使用批量分析（同步接口，直接返回结果）
-      if (imagePaths.length > 1) {
-        Taro.showLoading({ title: '批量分析中...', mask: true })
-        const batchResponse = await submitAnalyzeBatch({
-          image_urls: imageUrls,
-          modelName: 'gemini',
-          execution_mode: executionMode,
-          ...commonPayload,
-        })
-        Taro.setStorageSync('analyzeTaskType', 'food')
-        Taro.setStorageSync('analyzeSourceTaskId', batchResponse.task_id)
-        Taro.setStorageSync('analyzeResult', JSON.stringify(batchResponse.result))
-        Taro.hideLoading()
-        setIsAnalyzing(false)
-        Taro.redirectTo({
-          url: extraPkgUrl('/pages/result/index')
-        })
-        return
-      }
-
-      // 单张图片：走原有异步任务流程
+      // 图片分析统一走异步任务流程：
+      // 多图也先进入 analyze-loading，由后台继续处理，用户可直接离开当前页。
       const response = precisionSessionId
         ? await continuePrecisionSession(precisionSessionId, {
             source_type: 'image',

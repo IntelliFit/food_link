@@ -1,5 +1,108 @@
 # CURRENT_TASK
 
+- Task: 修复多图实物分析交互为“提交后台任务后进入 loading 页”，并确认结果页多图可滑动查看
+- Status: done（分析页多图已回到异步任务链路；结果页多图查看继续使用 Swiper，并补了索引稳态）
+- Scope:
+  - `src/packageExtra/pages/analyze/index.tsx`
+    - 删除多图走同步 `/api/analyze/batch` 后直接跳结果页的特殊分支
+    - 统一改为与单图一致：提交异步图片分析任务后 `redirectTo(analyze-loading)`
+    - 保留 `analyzeImagePaths` / `analyzeImagePath` 的 storage 写入，让 loading 页和结果页都能拿到多图
+  - `src/packageExtra/pages/result/index.tsx`
+    - 保留现有多图 `Swiper` 头图交互
+    - 新增 `imagePaths` 变化时的 `currentImageIndex` 归位逻辑，避免多图/单图切换后索引越界
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/result/index.tsx`：通过
+  - `mrc where --port 9420`：DevTools 自动化连接成功
+  - `mrc relaunch /packageExtra/pages/result/index --port 9420`：成功
+  - `mrc exists .scanner-hero-swiper --port 9420`：存在
+  - `mrc exists .image-counter --port 9420`：存在
+  - `mrc relaunch /packageExtra/pages/analyze-loading/index?... --port 9420`：成功
+  - `mrc exists .btn-leave-v3 --port 9420`：存在
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 `npm run dev:weapp` 仍停在 `transforming...`，无法确认最新前端改动已被 watch 构建产物实时吃到
+  - 因此这轮运行态验证以现有 DevTools 会话里的页面结构验证为主；“多图提交后自动跳 loading 页”的最终端到端动作，代码路径已修正，但未在最新构建产物上完成一次真实点击提交流程复演
+
+- Task: 修复 `modelName=gemini` 时 `/api/analyze/batch` 全失败，并用用户给定 payload 复测成功
+- Status: done（Gemini provider 路由已补齐；用户原始 payload 已拿到 200）
+- Scope:
+  - `backend/main.py`
+    - 新增 `_resolve_food_vision_model_config(...)`，统一把：
+      - `qwen / qwen-vl-max` 解析到 DashScope
+      - `gemini / gemini-*` 解析到 OfoxAI Gemini
+    - `analyze_food(...)` 与 `analyze_batch(...)` 现在都会按 `modelName` 正确选择 provider
+    - `_analyze_single_image_for_batch(...)` 在 `gemini` 模式下直接走 `_analyze_with_gemini(...)`
+  - `backend/tests/integration/test_food_analysis_batch_api.py`
+    - 新增 `gemini` alias 测试，覆盖 `modelName: "gemini"` 时 batch 走 Gemini provider
+- Verification:
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`：`4 passed`
+  - `python -m py_compile backend/main.py`：通过
+  - 使用用户提供的原始 payload，通过 ASGI 接口层 + 真实 Gemini 调用复测：
+    - `status_code = 200`
+    - `image_count = 2`
+    - 返回了有效 `result.items`
+- Notes:
+  - 这次真实 payload 复测时，认证 / 积分 / 任务写库做了 mock，避免消耗真实账号积分；AI 分析调用本身是真实请求
+  - 本地 `3010` 后端已重启到修复后版本
+
+- Task: 修复多图食物分析 `/api/analyze/batch` 500，并让返回结果兼容单张分析结构
+- Status: done（批量接口已补齐重试、限并发、部分成功容错和单张兼容字段）
+- Scope:
+  - `backend/main.py`
+    - `update_analysis_task_result_sync` 补回主模块 import，避免批量成功路径写任务结果时报 `NameError`
+    - `_analyze_single_image_for_batch(...)` 增加 3 次重试和退避等待
+    - `analyze_batch(...)` 改为最多并发 `3` 张，避免多图同时打满模型接口
+    - `_merge_batch_results(...)` 现在会合并并保留与单张结果兼容的字段：
+      - `description / insight / items`
+      - `pfc_ratio_comment / absorption_notes / context_advice`
+      - `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / followupQuestions`
+    - 若部分图片失败，保留成功图片的汇总结果，并把失败下标写入任务 `payload.failed_indices`
+  - `backend/tests/integration/test_food_analysis_batch_api.py`
+    - 新增 3 个接口测试：
+      - 正常多图汇总时，返回 `result` 结构兼容单张分析
+      - 部分图片失败时，接口仍返回成功汇总
+      - 全部图片失败时，接口返回 `500` 和明确错误文案
+- Verification:
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`：`3 passed`
+  - `python -m py_compile backend/main.py`：通过
+- Notes:
+  - 这次没有跑真实 DashScope live 请求；当前验证口径是后端接口测试 + 语法检查
+
+- Task: 应用户要求启动本地前后端并打开微信开发者工具
+- Status: done（前端 watch 与 DevTools 自动化已拉起；后端最终已恢复到 `3010` 监听）
+- Scope:
+  - 执行 `npm run dev:restart`
+  - 执行 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+  - 因本轮 `dev:restart` 后 backend 未稳定驻留，额外执行一次 `npm run dev:backend` 并确认 `3010` 恢复监听
+- Verification:
+  - `lsof -iTCP:3010 -sTCP:LISTEN`：可见 Python 进程监听 `3010`
+  - `curl -I http://127.0.0.1:3010/`：返回 `HTTP/1.1 404 Not Found`（说明 HTTP 服务已起来）
+  - `lsof -iTCP:9420 -sTCP:LISTEN`：微信开发者工具自动化端口已监听
+  - `mrc errors 10 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc where --port 9420` 本轮可连上 DevTools，但页面信息回执持续挂起，暂未拿到当前页面路径
+  - 本轮后端当前依赖额外拉起的 PTY 会话驻留；如果后续终端会话结束，需要重新确认 `3010` 是否仍在监听
+
+- Task: 补齐分析页底部固定操作区的暗色主题适配
+- Status: done（暗色适配已明确写回页面本地 SCSS；`confirm-section`、确认按钮、历史入口和多视角开关已统一接入暗色底栏样式）
+- Scope:
+  - `src/packageExtra/pages/analyze/index.scss`
+    - 页面本地新增 `.fl-page-theme-root--dark` 下的暗色样式块
+    - 补齐 `confirm-section / confirm-btn / history-link / multiview-toggle / precision-session-tip`
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 将 `analyze-page .confirm-section` 从半透明渐变改为稳定深色底栏，并补上顶部分隔线与阴影
+    - 新增 `confirm-btn` 的暗色主题样式，包含正常态与 `disabled` 禁用态文字/底色
+    - 将 `history-link` 改成与暗色主题一致的 ghost button
+    - 新增 `multiview-toggle / multiview-toggle--on / multiview-toggle-knob` 的暗色适配
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+- Notes:
+  - 本轮用户指出“页面 SCSS 文件本身看起来没改”，已修正为同时在本地页面 SCSS 和全局暗色文件两处对齐
+  - `npm run build:weapp -- --no-check` 这轮 CLI 会话在 `transforming...` 后未及时返回完整输出，需后续再补一次稳定回包
+
 - Task: 统一暗色主题基础面板为不透明深色底
 - Status: done（暗色主题基础变量和结果页 insight 变体底色已改为实色，不再使用透明面板）
 - Scope:

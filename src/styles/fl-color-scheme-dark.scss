@@ -2628,22 +2628,51 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .analyze-page .confirm-section {
-  background: linear-gradient(
-    180deg,
-    rgb(0 0 0 / 0%) 0%,
-    rgb(20 24 23 / 82%) 26%,
-    rgb(17 23 22 / 98%) 100%
-  ) !important;
+  background: linear-gradient(180deg, #111716 0%, #111716 100%) !important;
+  border-top: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 -10rpx 24rpx rgb(0 0 0 / 22%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .confirm-btn {
+  background: linear-gradient(135deg, #3e8f73 0%, #2d7e72 100%) !important;
+  box-shadow: 0 12rpx 28rpx rgb(0 0 0 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .confirm-btn.disabled {
+  background: $fl-dark-ghost-bg !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .confirm-btn.disabled .confirm-btn-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .confirm-btn-text {
+  color: #f3fbf7 !important;
 }
 
 .fl-page-theme-root--dark .analyze-page .history-link {
-  background: rgb(255 255 255 / 4%) !important;
+  background: $fl-dark-ghost-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   border-radius: 999rpx !important;
 }
 
 .fl-page-theme-root--dark .analyze-page .history-link-text {
   color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .multiview-toggle {
+  background: #2d3634 !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .multiview-toggle--on {
+  background: #4a9d7d !important;
+}
+
+.fl-page-theme-root--dark .analyze-page .multiview-toggle-knob {
+  background: #edf5f1 !important;
+  box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 20%) !important;
 }
 
 .fl-page-theme-root--dark .analyze-history-page .swipeable-card-wrapper {

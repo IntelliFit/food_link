@@ -560,7 +560,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 0 32rpx 48rpx;
+  padding: 12rpx 32rpx 48rpx;
   background: linear-gradient(180deg, rgb(255 255 255 / 0%) 0%, rgb(255 255 255 / 95%) 40%, #f7f8fa 100%);
   z-index: 100;
   display: flex;
@@ -758,4 +758,67 @@
 
 .precision-reference-input {
   min-height: 72rpx;
+}
+
+.fl-page-theme-root--dark {
+  .analyze-page {
+    background: #111716;
+  }
+
+  .analyze-page .confirm-section {
+    background: linear-gradient(180deg, #111716 0%, #111716 100%);
+    border-top: 1rpx solid #3d5d51;
+    box-shadow: 0 -10rpx 24rpx rgb(0 0 0 / 22%);
+  }
+
+  .analyze-page .confirm-btn {
+    background: linear-gradient(135deg, #3e8f73 0%, #2d7e72 100%);
+    box-shadow: 0 12rpx 28rpx rgb(0 0 0 / 28%);
+  }
+
+  .analyze-page .confirm-btn.disabled {
+    background: #27322f;
+    box-shadow: none;
+    opacity: 1;
+  }
+
+  .analyze-page .confirm-btn.disabled .confirm-btn-text {
+    color: #9ca3a8;
+  }
+
+  .analyze-page .confirm-btn-text {
+    color: #f3fbf7;
+  }
+
+  .analyze-page .history-link {
+    background: #27322f;
+    border: 1rpx solid #3d5d51;
+    border-radius: 999rpx;
+  }
+
+  .analyze-page .history-link .history-link-text {
+    color: #e8ece9;
+  }
+
+  .analyze-page .multiview-toggle {
+    background: #2d3634;
+  }
+
+  .analyze-page .multiview-toggle--on {
+    background: #4a9d7d;
+  }
+
+  .analyze-page .multiview-toggle-knob {
+    background: #edf5f1;
+    box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 20%);
+  }
+
+  .analyze-page .precision-session-tip {
+    background: #18332a;
+    border-color: #3d5d51;
+  }
+
+  .analyze-page .precision-session-tip-text {
+    color: #7dd3b0;
+  }
 }

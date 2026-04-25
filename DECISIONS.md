@@ -1,5 +1,14 @@
 # DECISIONS
 
+- `2026-04-26`: 食物分析页后续不再为“多图实物分析”保留同步直出结果的特例。正式口径是：无论单图还是多图，图片分析都统一先提交后台任务，再进入 `analyze-loading`；用户可直接离开当前页，完成后去分析历史或结果页查看，不再让多图请求把用户卡在分析页原地等待。
+- `2026-04-26`: 分析结果页的多图查看正式口径继续使用顶部 `Swiper` 左右切换，而不是把多图压成单张静态封面。多图结果至少保留两处反馈：头图左右滑动切换，以及右下角 `1/N` 计数；当 `imagePaths` 变化时，需要把当前索引纠正回合法范围，避免重进结果页时停在越界索引。
+- `2026-04-26`: 食物分析接口中的 `modelName` 不能再被直接当成单一 provider 的“裸模型名”透传。正式口径是：`qwen / qwen-vl-max` 走 DashScope 千问视觉链路；`gemini / gemini-*` 走 OfoxAI Gemini 链路。这个口径同时适用于 `/api/analyze` 和 `/api/analyze/batch`，否则前端传 `modelName: "gemini"` 时，多图 batch 会把 Gemini 错发到 DashScope，导致整批失败。
+- `2026-04-26`: 多图食物分析 `/api/analyze/batch` 的正式口径是“复用单张分析结果结构，而不是另起一套返回形状”。稳定字段至少要与单张 `AnalyzeResponse` 对齐：`description / insight / items / pfc_ratio_comment / absorption_notes / context_advice`，以及严格模式下的 `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / followupQuestions`。
+- `2026-04-26`: 批量食物分析不应对所有图片做无限并发直打模型。正式口径改为：批量识别最多并发 `3` 张，并对单张识别做有限重试；否则在 DashScope 限流或短时波动下，很容易把整批请求一起打成失败。
+- `2026-04-26`: 多图批量分析允许“部分成功”。正式口径是：只要至少有 1 张图成功，就应返回汇总结果并把失败图片下标写入任务 `payload.failed_indices`，不要因为其中 1 张失败就整批直接返回 500；只有全部图片都失败时，才返回“所有图片分析均失败，请稍后重试”。
+
+- `2026-04-25`: 小程序页面里凡是“底部 fixed/sticky 操作区”都不能只改外层页面背景，必须单独做暗色适配。正式口径是：像 `analyze-page .confirm-section` 这类固定底栏，需要同时覆盖容器本身、主按钮、禁用态、次级入口按钮和内部开关控件；否则黑色主题下会出现底栏发白、禁用按钮像浅色残留、开关控件跳出页面体系的问题。
+- `2026-04-25`: 对于明确指定到某个页面 SCSS 文件的暗色适配需求，不能只把规则写进全局 `src/styles/fl-color-scheme-dark.scss`。正式口径是：全局暗色文件负责统一兜底，但页面自己的 `index.scss` 也要能直接看到对应的 `.fl-page-theme-root--dark` 局部样式块，方便排查和后续维护。
 - `2026-04-25`: 暗色主题基础面板的正式口径改为“全部使用不透明深色底”，不再使用 `rgb(... / alpha)` 或 `rgba(...)` 透明面板变量。包括 `$fl-dark-panel-bg`、`$fl-dark-panel-bg-strong`、`$fl-dark-panel-bg-soft`、`$fl-dark-input-bg`、`$fl-dark-ghost-bg`、`$fl-dark-modal-bg` 等都应保持实色，否则在分析历史、分析结果这类有叠层和左滑操作的页面里，会出现下层内容透出、卡片发灰或像蒙了一层雾的视觉问题。
 - `2026-04-25`: 图片结果页在暗色主题下不能只做“整卡变深”。正式口径是：`result-page` 的 `execution-mode-row`、`total-weight-badge`、`insight-item` 及其不同语义变体（`intro/highlight/ratio/absorption/context`）都必须单独做深色收口；否则从分析历史页进入图片结果页时，会出现“整体是暗色，但 AI 分析部分仍像白卡浮在页面上”的割裂感。
 - `2026-04-25`: 暗色主题下，分析历史页 `.task-card` 不能复用半透明的 `$fl-dark-panel-bg`。正式口径是：该页卡片必须使用不透明深色背景，否则左滑露出的 `分享 / 删除` 操作区会从卡片底色透出来，造成“卡片内容被遮蔽但颜色还在漏”的错觉。

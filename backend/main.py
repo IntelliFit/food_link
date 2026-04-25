@@ -151,6 +151,7 @@ from database import (
     update_user_recipe,
     delete_user_recipe,
     use_recipe_record,
+    update_analysis_task_result_sync,
     update_analysis_task_result,
     # 评论任务
     create_comment_task_sync,
@@ -1904,6 +1905,30 @@ def _strip_standard_mode_extras(
     return None, None
 
 
+def _resolve_food_vision_model_config(model_name: Optional[str]) -> Dict[str, str]:
+    raw = str(model_name or "").strip()
+    normalized = raw.lower()
+    if not raw or normalized in {"qwen", "qwen-vl", "qwen-vl-max"}:
+        return {
+            "provider": "qwen",
+            "model": "qwen-vl-max",
+        }
+    if normalized in {"gemini", "gemini-flash", "gemini-vision"}:
+        return {
+            "provider": "gemini",
+            "model": GEMINI_MODEL_NAME,
+        }
+    if normalized.startswith("gemini"):
+        return {
+            "provider": "gemini",
+            "model": raw,
+        }
+    return {
+        "provider": "qwen",
+        "model": raw,
+    }
+
+
 class LoginRequest(BaseModel):
     code: str = Field(..., description="微信小程序登录凭证 code")
     phoneCode: Optional[str] = Field(default=None, description="获取手机号的 code（可选）")
@@ -2174,8 +2199,9 @@ async def analyze_food(
     分析食物图片，返回营养成分和健康建议。使用 DashScope 千问 qwen-vl-max 模型。
     """
     try:
+        model_config = _resolve_food_vision_model_config(request.modelName)
         dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-        if not dashscope_key:
+        if model_config["provider"] == "qwen" and not dashscope_key:
             raise HTTPException(status_code=500, detail="缺少 DASHSCOPE_API_KEY 环境变量")
 
         if not request.base64Image and not request.image_url and not request.image_urls:
@@ -2257,54 +2283,67 @@ async def analyze_food(
             execution_mode=execution_mode,
         )
 
-        # 构建图片 content parts
+        model_config = _resolve_food_vision_model_config(request.modelName)
+
+        # 构建图片输入
         image_urls_for_api = []
         if request.image_urls:
             image_urls_for_api = request.image_urls
         elif request.image_url:
             image_urls_for_api = [request.image_url]
-        elif request.base64Image:
+        base64_image_for_api = None
+        if request.base64Image:
             image_data = request.base64Image.split(",")[1] if "," in request.base64Image else request.base64Image
-            image_urls_for_api = [f"data:image/jpeg;base64,{image_data}"]
+            base64_image_for_api = image_data
 
-        content_parts = [{"type": "text", "text": prompt}]
-        for url in image_urls_for_api:
-            content_parts.append({"type": "image_url", "image_url": {"url": url}})
-
-        base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-        api_url = f"{base_url}/chat/completions"
-
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            response = await client.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {dashscope_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "qwen-vl-max",
-                    "messages": [{"role": "user", "content": content_parts}],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.7,
-                },
+        if model_config["provider"] == "gemini":
+            parsed = await _analyze_with_gemini(
+                image_url=request.image_url if request.image_url else None,
+                image_urls=image_urls_for_api if request.image_urls else None,
+                base64_image=base64_image_for_api,
+                prompt=prompt,
+                model_name=model_config["model"],
             )
+            parsed = _normalize_analysis_response_payload(parsed)
+        else:
+            content_parts = [{"type": "text", "text": prompt}]
+            for url in image_urls_for_api:
+                content_parts.append({"type": "image_url", "image_url": {"url": url}})
 
-            if not response.is_success:
-                error_data = response.json() if response.content else {}
-                error_message = (
-                    error_data.get("error", {}).get("message")
-                    or f"DashScope API 错误: {response.status_code}"
+            base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+            api_url = f"{base_url}/chat/completions"
+
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                response = await client.post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {dashscope_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_config["model"],
+                        "messages": [{"role": "user", "content": content_parts}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.7,
+                    },
                 )
-                raise Exception(error_message)
 
-            data = response.json()
-            content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
-            if not content_str:
-                raise Exception("千问返回了空响应")
+                if not response.is_success:
+                    error_data = response.json() if response.content else {}
+                    error_message = (
+                        error_data.get("error", {}).get("message")
+                        or f"DashScope API 错误: {response.status_code}"
+                    )
+                    raise Exception(error_message)
 
-            json_str = re.sub(r"```json", "", content_str)
-            json_str = re.sub(r"```", "", json_str).strip()
-            parsed = _normalize_analysis_response_payload(json.loads(json_str))
+                data = response.json()
+                content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
+                if not content_str:
+                    raise Exception("千问返回了空响应")
+
+                json_str = re.sub(r"```json", "", content_str)
+                json_str = re.sub(r"```", "", json_str).strip()
+                parsed = _normalize_analysis_response_payload(json.loads(json_str))
 
         valid_items = _parse_food_item_responses(parsed)
 
@@ -2374,49 +2413,92 @@ async def _analyze_single_image_for_batch(
     image_url: str,
     prompt: str,
     model_name: str,
-    api_key: str,
+    api_key: Optional[str],
     base_url: str,
 ) -> Dict[str, Any]:
     """为批量分析调用 AI 分析单张图片"""
+    model_config = _resolve_food_vision_model_config(model_name)
+    if model_config["provider"] == "gemini":
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                parsed = await _analyze_with_gemini(
+                    image_url=image_url,
+                    prompt=prompt,
+                    model_name=model_config["model"],
+                )
+                return _normalize_analysis_response_payload(parsed)
+            except Exception as exc:
+                last_error = exc
+                if attempt < 2:
+                    await asyncio.sleep(0.6 * (attempt + 1))
+                    continue
+        raise RuntimeError(str(last_error) or "单张图片分析失败")
+
     api_url = f"{base_url}/chat/completions"
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model_name,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": image_url}},
+    last_error: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_config["model"],
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": prompt},
+                                    {"type": "image_url", "image_url": {"url": image_url}},
+                                ],
+                            }
                         ],
-                    }
-                ],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.7,
-            },
-        )
-        if not response.is_success:
-            error_data = response.json() if response.content else {}
-            error_message = (
-                error_data.get("error", {}).get("message")
-                or f"DashScope API 错误: {response.status_code}"
-            )
-            raise Exception(error_message)
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.7,
+                    },
+                )
+            if not response.is_success:
+                error_data = response.json() if response.content else {}
+                error_message = (
+                    error_data.get("error", {}).get("message")
+                    or f"DashScope API 错误: {response.status_code}"
+                )
+                raise RuntimeError(error_message)
 
-        data = response.json()
-        content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
-        if not content_str:
-            raise Exception("千问返回了空响应")
+            data = response.json()
+            content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
+            if not content_str:
+                raise RuntimeError("千问返回了空响应")
 
-        json_str = re.sub(r"```json", "", content_str)
-        json_str = re.sub(r"```", "", json_str).strip()
-        return _normalize_analysis_response_payload(json.loads(json_str))
+            json_str = re.sub(r"```json", "", content_str)
+            json_str = re.sub(r"```", "", json_str).strip()
+            return _normalize_analysis_response_payload(json.loads(json_str))
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                await asyncio.sleep(0.6 * (attempt + 1))
+                continue
+
+    raise RuntimeError(str(last_error) or "单张图片分析失败")
+
+
+def _merge_unique_text_lists(*values: Any) -> Optional[List[str]]:
+    seen = set()
+    merged: List[str] = []
+    for value in values:
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            text = str(item or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            merged.append(text)
+    return merged or None
 
 
 def _merge_batch_results(results: List[Dict[str, Any]], execution_mode: str) -> Dict[str, Any]:
@@ -2427,6 +2509,11 @@ def _merge_batch_results(results: List[Dict[str, Any]], execution_mode: str) -> 
     pfc_comments: List[str] = []
     absorption_list: List[str] = []
     context_list: List[str] = []
+    recognition_outcomes: List[str] = []
+    rejection_reasons: List[str] = []
+    allowed_categories: List[str] = []
+    retake_guidance_lists: List[List[str]] = []
+    followup_question_lists: List[List[str]] = []
 
     for parsed in results:
         parsed = _normalize_analysis_response_payload(parsed)
@@ -2453,6 +2540,26 @@ def _merge_batch_results(results: List[Dict[str, Any]], execution_mode: str) -> 
         context = parsed.get("context_advice")
         if context:
             context_list.append(str(context).strip())
+
+        recognition = str(parsed.get("recognitionOutcome", "")).strip()
+        if recognition:
+            recognition_outcomes.append(recognition)
+
+        rejection_reason = str(parsed.get("rejectionReason", "")).strip()
+        if rejection_reason:
+            rejection_reasons.append(rejection_reason)
+
+        allowed = str(parsed.get("allowedFoodCategory", "")).strip()
+        if allowed:
+            allowed_categories.append(allowed)
+
+        retake_guidance = parsed.get("retakeGuidance")
+        if isinstance(retake_guidance, list):
+            retake_guidance_lists.append(retake_guidance)
+
+        followup_questions = parsed.get("followupQuestions")
+        if isinstance(followup_questions, list):
+            followup_question_lists.append(followup_questions)
 
     # 累加营养值
     total_calories = 0.0
@@ -2508,11 +2615,38 @@ def _merge_batch_results(results: List[Dict[str, Any]], execution_mode: str) -> 
         "pfc_ratio_comment": pfc_comments[0] if pfc_comments else None,
         "absorption_notes": absorption_list[0] if absorption_list else None,
         "context_advice": " ".join(context_list) if context_list else None,
+        "recognitionOutcome": None,
+        "rejectionReason": rejection_reasons[0] if rejection_reasons else None,
+        "retakeGuidance": _merge_unique_text_lists(*retake_guidance_lists),
+        "allowedFoodCategory": None,
+        "followupQuestions": _merge_unique_text_lists(*followup_question_lists),
     }
+
+    if recognition_outcomes:
+        if "hard_reject" in recognition_outcomes:
+            merged["recognitionOutcome"] = "hard_reject"
+        elif "soft_reject" in recognition_outcomes:
+            merged["recognitionOutcome"] = "soft_reject"
+        else:
+            merged["recognitionOutcome"] = recognition_outcomes[0]
+
+    unique_categories = []
+    for category in allowed_categories:
+        if category not in unique_categories:
+            unique_categories.append(category)
+    if len(unique_categories) == 1:
+        merged["allowedFoodCategory"] = unique_categories[0]
+    elif len(unique_categories) > 1:
+        merged["allowedFoodCategory"] = "unknown"
 
     if execution_mode != "strict":
         merged["pfc_ratio_comment"] = None
         merged["absorption_notes"] = None
+        merged["recognitionOutcome"] = None
+        merged["rejectionReason"] = None
+        merged["retakeGuidance"] = None
+        merged["allowedFoodCategory"] = None
+        merged["followupQuestions"] = None
 
     return merged
 
@@ -2533,8 +2667,9 @@ async def analyze_batch(
         if len(request.image_urls) > 5:
             raise HTTPException(status_code=400, detail="最多支持 5 张图片")
 
+        model_config = _resolve_food_vision_model_config(request.modelName)
         dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-        if not dashscope_key:
+        if model_config["provider"] == "qwen" and not dashscope_key:
             raise HTTPException(status_code=500, detail="缺少 DASHSCOPE_API_KEY 环境变量")
 
         # 构建公共上下文（与单图分析一致）
@@ -2613,17 +2748,20 @@ async def analyze_batch(
 
         base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 
-        # 并发分析每张图片
+        # 控制并发，避免多图同时打满模型接口后整批失败
+        semaphore = asyncio.Semaphore(min(3, max(1, len(request.image_urls))))
+
         async def _analyze_one(index: int, image_url: str) -> Dict[str, Any]:
-            index_hint = f"\n\n【批量分析第 {index + 1}/{len(request.image_urls)} 张】请仅识别当前这张图片中的食物，不要与其他图片混淆。"
-            prompt = base_prompt + index_hint
-            return await _analyze_single_image_for_batch(
-                image_url=image_url,
-                prompt=prompt,
-                model_name=request.modelName or "qwen-vl-max",
-                api_key=dashscope_key,
-                base_url=base_url,
-            )
+            async with semaphore:
+                index_hint = f"\n\n【批量分析第 {index + 1}/{len(request.image_urls)} 张】请仅识别当前这张图片中的食物，不要与其他图片混淆。"
+                prompt = base_prompt + index_hint
+                return await _analyze_single_image_for_batch(
+                    image_url=image_url,
+                    prompt=prompt,
+                    model_name=model_config["model"],
+                    api_key=dashscope_key,
+                    base_url=base_url,
+                )
 
         results = await asyncio.gather(
             *[_analyze_one(i, url) for i, url in enumerate(request.image_urls)],
@@ -2668,6 +2806,11 @@ async def analyze_batch(
             pfc_ratio_comment=pfc_ratio_comment,
             absorption_notes=absorption_notes,
             context_advice=_opt_str(merged_raw.get("context_advice")),
+            recognitionOutcome=_opt_str(merged_raw.get("recognitionOutcome")),
+            rejectionReason=_opt_str(merged_raw.get("rejectionReason")),
+            retakeGuidance=merged_raw.get("retakeGuidance") if isinstance(merged_raw.get("retakeGuidance"), list) else None,
+            allowedFoodCategory=_opt_str(merged_raw.get("allowedFoodCategory")),
+            followupQuestions=merged_raw.get("followupQuestions") if isinstance(merged_raw.get("followupQuestions"), list) else None,
         )
 
         # 创建分析任务记录
