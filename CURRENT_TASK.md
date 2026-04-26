@@ -1,5 +1,39 @@
 # CURRENT_TASK
 
+- Task: 圈子搜索优先匹配好友昵称，再加载该好友动态
+- Status: done（前端搜索框输入后先从好友列表匹配昵称，点击好友后按 `author_id` 拉取该用户动态）
+- Scope:
+  - `backend/database.py` / `backend/main.py`
+    - `list_friends_feed_records` 与 `/api/community/feed` 新增 `author_id` 参数
+    - 传入 `author_id` 时只查询该用户（必须是好友或自己）
+  - `src/utils/api.ts`
+    - `communityGetFeed` 与 `CommunityFeedQueryParams` 新增 `author_id`
+    - `normalizeHomeMealItem` / `stripMealFullRecordsFromDashboard` 明确保留 `protein/carbs/fat`
+  - `src/pages/community/index.tsx`
+    - 新增 `feedSearchMatchedFriends` / `feedSearchAuthorId` 状态
+    - `useEffect` 监听 `feedSearchKeyword`，从 `friends` 中过滤昵称匹配项
+    - `handleSelectSearchFriend`：选中好友后设置 `author_id` 并刷新 feed
+    - `handleClearSearchAuthor`：清除筛选恢复全部 feed
+    - `buildFeedQueryParams` / `loadFeed` / `loadMoreFeed` 支持 `author_id`
+  - `src/pages/community/index.scss`
+    - `.feed-search-friends-panel` / `.feed-search-friend-item` 好友搜索结果样式
+    - `.feed-search-author-bar` 已选中作者标签栏样式
+  - `src/pages/index/index.tsx`
+    - `useDidShow` 检测旧缓存缺少 PFC 时强制标记脏数据并刷新
+  - `src/utils/home-dashboard-local-cache.ts`
+    - `stripMealFullRecords` 明确保留 `protein/carbs/fat`
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc exists .feed-search-friends-panel --port 9420`：输入 "alpa" 后存在 ✅
+  - `mrc exists .feed-search-friend-item --port 9420`：存在 ✅
+  - `mrc tap .feed-search-friend-item --port 9420`：点击成功 ✅
+  - `mrc exists .feed-search-author-bar --port 9420`：切换后存在 ✅
+  - `mrc logs error 10 --port 9420`：`0` 条错误 ✅
+- Blocked / Notes:
+  - 后端进程 `run_backend.py` (PID 17254) 为 00:08 启动的旧进程，未加载本次新增的 `author_id` 参数
+  - 需要用户手动重启后端（`pkill -f run_backend.py` 或在新终端重新启动）后，"加载该好友动态" 才能按 `author_id` 正确筛选
+  - 前端好友匹配与 UI 交互已验证正常
+
 - Task: 更新应用版本到 `2.0.17`，并让「我的」页底部版本号跟随构建常量显示
 - Status: done（`package.json` / `package-lock.json` 已 bump 到 `2.0.17`，「我的」页不再写死版本字符串）
 - Scope:

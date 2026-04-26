@@ -837,7 +837,8 @@ function CommunityPage() {
       return
     }
 
-    // 1. 立即从缓存加载
+    // 1. 立即从缓存加载（先标记跳过 useEffect 刷新，避免 loadFromCache 设置状态后触发重复请求）
+    skipNextFilterRefreshRef.current = true
     const hasCache = loadFromCache()
 
     // 2. 判断是否需要刷新 Feed
