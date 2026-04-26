@@ -2684,3 +2684,21 @@
   - `mrc errors 10 --port 9420`：`0`
 - Notes:
   - 提交记录：`885fb59`
+
+- Task: 修复公共食物库详情页评论区交互及后端数据一致性
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - Textarea 增加 `autoFocus` + `fixed` 属性，弹窗打开后自动聚焦
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - `.comment-input` 边框从 `transparent` 改为 `#e5e7eb`，提高输入框可见性
+  - `backend/database.py`
+    - 新增 `_update_public_food_library_comment_stats_sync()`：在插入评论后自动更新 `public_food_library` 表的 `comment_count` 和 `avg_rating`
+    - `list_public_food_library_comments()`：排序从 `created_at ASC` 改为 `DESC`，与前端乐观更新顺序一致
+- Verification:
+  - `python -m py_compile backend/database.py`：通过
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+- Notes:
+  - 后端评论接口此前已实现完整（POST / GET），但缺少主表统计字段的自动更新，导致列表页评论数/评分显示不准确
+  - 提交记录：`516d1ea`
