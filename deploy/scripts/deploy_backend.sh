@@ -1,22 +1,48 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="/www/wwwroot/food/food_link/backend"
-VENV_PYTHON="$PROJECT_DIR/venv/bin/python"
+PROJECT_DIR="$1"
+BRANCH="$2"
+SERVICE_NAME="$3"
+
+# 调试信息（部署日志中可见）
+echo "[deploy] 当前用户: $(whoami) (UID=$(id -u))"
+echo "[deploy] HOME: $HOME"
+
+# 修复 git safe.directory 权限问题（非 root 用户需要）
+if [ "$(id -u)" != "0" ]; then
+    export HOME="${HOME:-/home/$(whoami)}"
+    mkdir -p "$HOME"
+    git config --global --add safe.directory "$PROJECT_DIR" 2>/dev/null || true
+fi
+
+BACKEND_DIR="$PROJECT_DIR/backend"
+VENV_PYTHON="$BACKEND_DIR/venv/bin/python"
 
 cd "$PROJECT_DIR"
 
-# 拉取最新代码
-git fetch origin
-git reset --hard origin/main
+echo "[deploy] 部署分支: $BRANCH"
+echo "[deploy] 项目目录: $PROJECT_DIR"
+echo "[deploy] 服务名: $SERVICE_NAME"
 
-# 安装依赖（可选：如果依赖经常变）
+# 拉取最新代码
+echo "[deploy] 拉取最新代码..."
+git fetch origin
+git reset --hard "origin/$BRANCH"
+
+# 安装依赖
+cd "$BACKEND_DIR"
 if [ -f "requirements.txt" ]; then
-  $VENV_PYTHON -m pip install -r requirements.txt
+    echo "[deploy] 安装/更新 Python 依赖..."
+    $VENV_PYTHON -m pip install -q -r requirements.txt
 fi
 
-# 如有数据库迁移，在这里调用（举例）
-# $VENV_PYTHON run_migration.py
+# 重启服务（root 直接执行，非 root 用 sudo）
+echo "[deploy] 重启服务: $SERVICE_NAME"
+if [ "$(id -u)" = "0" ]; then
+    systemctl restart "${SERVICE_NAME}.service"
+else
+    sudo systemctl restart "${SERVICE_NAME}.service"
+fi
 
-# 重启 systemd 服务（下面第 5 步会创建）
-systemctl restart food-backend.service
+echo "[deploy] ✅ 部署完成"
