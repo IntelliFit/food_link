@@ -3376,6 +3376,21 @@ export async function postPublicFoodLibraryComment(
   return response.data as { comment: PublicFoodLibraryComment }
 }
 
+/** 提交公共食物库反馈 */
+export async function submitPublicFoodLibraryFeedback(
+  content: string,
+  libraryItemId?: string
+): Promise<{ id: string; message: string }> {
+  const response = await authenticatedRequest('/api/public-food-library/feedback', {
+    method: 'POST',
+    data: { content: content.trim(), ...(libraryItemId && { library_item_id: libraryItemId }) }
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '反馈提交失败')
+  }
+  return response.data as { id: string; message: string }
+}
+
 // ---------- 用户私人食谱 ----------
 
 /** 私人食谱接口 */

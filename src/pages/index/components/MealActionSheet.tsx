@@ -5,9 +5,10 @@ interface MealActionSheetProps {
   onClose: () => void
   onEdit: () => void
   onPoster: () => void
+  onDelete: () => void
 }
 
-export function MealActionSheet({ visible, onClose, onEdit, onPoster }: MealActionSheetProps) {
+export function MealActionSheet({ visible, onClose, onEdit, onPoster, onDelete }: MealActionSheetProps) {
   if (!visible) return null
 
   return (
@@ -46,8 +47,8 @@ export function MealActionSheet({ visible, onClose, onEdit, onPoster }: MealActi
         </View>
 
         <View className='record-menu-footer'>
-          <View className='record-menu-close-btn' onClick={onClose}>
-            <Text className='record-menu-close-text'>取消</Text>
+          <View className='record-menu-close-btn record-menu-delete-btn' onClick={() => { onClose(); onDelete() }}>
+            <Text className='record-menu-close-text record-menu-delete-text'>删除</Text>
           </View>
         </View>
       </View>

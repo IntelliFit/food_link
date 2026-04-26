@@ -6,6 +6,7 @@ import {
   NotesOutlined,
   ChartTrendingOutlined,
   LocationOutlined,
+  ShopOutlined,
   Bell,
   ShieldOutlined,
   InfoOutlined,
@@ -35,6 +36,8 @@ import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
+
+declare const __APP_VERSION__: string
 
 interface UserInfo {
   avatar: string
@@ -227,9 +230,10 @@ function ProfilePage() {
     },
     {
       id: 5,
-      icon: <LocationOutlined size='20' />,
-      title: '附近美食',
-      desc: '发现附近健康美食推荐'
+      icon: <ShopOutlined size='20' />,
+      title: '公共食物库',
+      desc: '浏览公共食物营养数据',
+      path: extraPkgUrl('/pages/food-library/index')
     },
     {
       id: 6,
@@ -284,15 +288,9 @@ function ProfilePage() {
       Taro.switchTab({ url: '/pages/stats/index' })
       return
     }
-    // 附近美食（开发中）
+    // 公共食物库
     if (service.id === 5) {
-      Taro.showModal({
-        title: '🍜 功能开发中',
-        content: '「附近美食」功能正在紧锣密鼓地开发中，即将上线，敬请期待！',
-        showCancel: false,
-        confirmText: '好的',
-        confirmColor: '#00bc7d'
-      })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/food-library/index') })
       return
     }
     const path = (service as { path?: string }).path
@@ -381,7 +379,7 @@ function ProfilePage() {
       1: '#f59e0b', // 收藏餐食 - 橙
       2: '#8b5cf6', // 食物管理 - 紫
       3: '#3b82f6', // 饮食记录 - 蓝
-      5: '#ef4444', // 附近美食 - 红
+      5: '#10b981', // 公共食物库 - 绿
       6: '#f59e0b'  // 食探会员 - 金
     }
     return colors[id] || '#6b7280'
@@ -568,7 +566,7 @@ function ProfilePage() {
       )}
 
       <View className='profile-version'>
-        <Text>版本号 v2.0.7</Text>
+        <Text>{`版本号 v${__APP_VERSION__}`}</Text>
       </View>
 
 

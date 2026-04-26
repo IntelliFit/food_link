@@ -12,6 +12,8 @@ import {
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../../utils/food-expiry-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
 import './index.scss'
 
@@ -34,6 +36,7 @@ function groupItems(items: FoodExpiryItem[]) {
 }
 
 export default function ExpiryPage() {
+  const scheme = useAppColorScheme()
   const [loading, setLoading] = useState(true)
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)
   const [items, setItems] = useState<FoodExpiryItem[]>([])
@@ -56,8 +59,13 @@ export default function ExpiryPage() {
   }, [])
 
   useDidShow(() => {
+    applyThemeNavigationBar(scheme)
     loadData()
   })
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
 
   const grouped = useMemo(() => groupItems(items), [items])
 

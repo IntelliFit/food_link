@@ -36,15 +36,6 @@ page {
     'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (prefers-color-scheme: dark) {
-    background: linear-gradient(
-      180deg,
-      #1a2822 0%,
-      rgb(18 24 22) 42%,
-      #0e1110 100%
-    );
-  }
 }
 
 /* Taro 页面根 view：与可视区域同宽，减少子树略窄时露出底层 */

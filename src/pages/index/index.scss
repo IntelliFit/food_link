@@ -2705,6 +2705,14 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   line-height: 40rpx;
 }
 
+.record-menu-delete-btn {
+  background: #fef2f2;
+}
+
+.record-menu-delete-text {
+  color: #ef4444;
+}
+
 /* ===== 新版记录菜单样式 - 仿参考图设计 ===== */
 .record-menu-handle-bar {
   width: 36rpx;

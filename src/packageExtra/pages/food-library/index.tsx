@@ -10,6 +10,7 @@ import {
   unlikePublicFoodLibraryItem,
   collectPublicFoodLibraryItem,
   uncollectPublicFoodLibraryItem,
+  submitPublicFoodLibraryFeedback,
   type PublicFoodLibraryItem
 } from '../../../utils/api'
 import { Star, StarOutlined } from '@taroify/icons'
@@ -17,6 +18,9 @@ import { Divider } from '@taroify/core'
 import '@taroify/core/divider/style'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
 // 缓存键名常量
 const CACHE_KEYS = {
@@ -32,6 +36,7 @@ type TabMode = 'all' | 'collections'
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
 
 function FoodLibraryPage() {
+  const { scheme } = useAppColorScheme()
   const router = useRouter()
   const fromRecord = router.params.from === 'record'
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
@@ -181,6 +186,7 @@ function FoodLibraryPage() {
 
   // 【核心优化】智能加载策略
   useDidShow(() => {
+    applyThemeNavigationBar(scheme)
     setLoggedIn(!!getAccessToken())
     if (!getAccessToken()) return
 
@@ -223,6 +229,10 @@ function FoodLibraryPage() {
       }
     }
   })
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
 
   // 筛选条件变化时刷新（仅全部列表）
   useEffect(() => {
@@ -347,6 +357,30 @@ function FoodLibraryPage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/food-library-share/index') })
   }
 
+  // 提交反馈
+  const handleFeedback = async () => {
+    const { confirm, content } = await Taro.showModal({
+      title: '提交反馈',
+      content: '',
+      editable: true,
+      placeholderText: '请描述您认为不准确的地方，我们会认真处理…',
+      confirmText: '提交',
+      cancelText: '取消',
+      confirmColor: '#00bc7d',
+    })
+    if (!confirm || !content || !content.trim()) return
+
+    Taro.showLoading({ title: '提交中...', mask: true })
+    try {
+      await submitPublicFoodLibraryFeedback(content.trim())
+      Taro.showToast({ title: '反馈已提交', icon: 'success' })
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '提交失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
   // 跳转登录
   const goLogin = () => {
     Taro.switchTab({ url: '/pages/profile/index' })
@@ -373,6 +407,7 @@ function FoodLibraryPage() {
   const isLoading = tabMode === 'all' ? loading : collectionLoading
 
   return (
+    <FlPageThemeRoot>
     <View className='food-library-page'>
       {fromRecord && (
         <View className='pick-mode-tip'>
@@ -417,13 +452,16 @@ function FoodLibraryPage() {
             </View>
           </View>
           <View className='search-row'>
-            <Input
-              className='search-input'
-              placeholder='搜索商家名称'
-              value={searchKeyword}
-              onInput={e => setSearchKeyword(e.detail.value)}
-              onConfirm={handleSearch}
-            />
+            <View className='search-input-wrap'>
+              <Text className='search-input-icon iconfont icon-sousuo' />
+              <Input
+                className='search-input'
+                placeholder='搜索商家名称或食物'
+                value={searchKeyword}
+                onInput={e => setSearchKeyword(e.detail.value)}
+                onConfirm={handleSearch}
+              />
+            </View>
             <Button className='search-btn' onClick={handleSearch}>搜索</Button>
           </View>
         </View>
@@ -432,23 +470,29 @@ function FoodLibraryPage() {
       {/* 排序区（仅全部时显示） */}
       {tabMode === 'all' && (
         <View className='sort-section'>
-          <View
-            className={`sort-item ${sortBy === 'latest' ? 'active' : ''}`}
-            onClick={() => setSortBy('latest')}
-          >
-            最新
+          <View className='sort-left'>
+            <View
+              className={`sort-item ${sortBy === 'latest' ? 'active' : ''}`}
+              onClick={() => setSortBy('latest')}
+            >
+              最新
+            </View>
+            <View
+              className={`sort-item ${sortBy === 'hot' ? 'active' : ''}`}
+              onClick={() => setSortBy('hot')}
+            >
+              最热
+            </View>
+            <View
+              className={`sort-item ${sortBy === 'rating' ? 'active' : ''}`}
+              onClick={() => setSortBy('rating')}
+            >
+              评分
+            </View>
           </View>
-          <View
-            className={`sort-item ${sortBy === 'hot' ? 'active' : ''}`}
-            onClick={() => setSortBy('hot')}
-          >
-            最热
-          </View>
-          <View
-            className={`sort-item ${sortBy === 'rating' ? 'active' : ''}`}
-            onClick={() => setSortBy('rating')}
-          >
-            评分
+          <View className='sort-filter-btn'>
+            <Text className='sort-filter-icon iconfont icon-shaixuan' />
+            <Text className='sort-filter-text'>筛选</Text>
           </View>
         </View>
       )}
@@ -471,11 +515,17 @@ function FoodLibraryPage() {
             <View className='skeleton-container'>
               {[1, 2, 3].map(i => (
                 <View key={i} className='skeleton-food-card'>
-                  <View className='skeleton-image' />
-                  <View className='skeleton-info'>
-                    <View className='skeleton-line' style={{ width: '60%', height: '32rpx', marginBottom: '16rpx' }} />
-                    <View className='skeleton-line' style={{ width: '100%', height: '24rpx', marginBottom: '12rpx' }} />
-                    <View className='skeleton-line' style={{ width: '80%', height: '24rpx' }} />
+                  <View className='skeleton-main'>
+                    <View className='skeleton-image' />
+                    <View className='skeleton-info'>
+                      <View className='skeleton-line' style={{ width: '70%', height: '32rpx', marginBottom: '16rpx' }} />
+                      <View className='skeleton-line' style={{ width: '90%', height: '24rpx', marginBottom: '12rpx' }} />
+                      <View className='skeleton-line' style={{ width: '40%', height: '28rpx', marginTop: 'auto' }} />
+                    </View>
+                  </View>
+                  <View className='skeleton-footer'>
+                    <View className='skeleton-line' style={{ width: '120rpx', height: '24rpx' }} />
+                    <View className='skeleton-line' style={{ width: '200rpx', height: '24rpx' }} />
                   </View>
                 </View>
               ))}
@@ -497,106 +547,90 @@ function FoodLibraryPage() {
               <View className='empty-btn' onClick={goShare}>去分享</View>
             </View>
           ) : (
-            displayList.map(item => (
+            displayList.map((item, index) => (
               <View
                 key={item.id}
                 className={`food-card ${fromRecord ? 'is-pick-mode' : ''}`}
                 onClick={() => (fromRecord ? pickForRecord(item) : goDetail(item.id))}
               >
-                <View className='food-image-wrap'>
-                  {item.image_path ? (
-                    <Image className='food-image' src={item.image_path} mode='aspectFill' />
-                  ) : (
-                    <View className='food-image-placeholder'>暂无图片</View>
-                  )}
-                  {item.suitable_for_fat_loss && (
-                    <View className='fat-loss-badge'>适合减脂</View>
-                  )}
-                </View>
-                <View className='food-info'>
-                  <View className='food-header'>
+                <View className='food-card-main'>
+                  <View className='food-image-wrap'>
+                    {item.image_path ? (
+                      <Image className='food-image' src={item.image_path} mode='aspectFill' />
+                    ) : (
+                      <View className='food-image-placeholder'>暂无图片</View>
+                    )}
+                    {sortBy === 'latest' && index === 0 && (
+                      <View className='card-badge-latest'>最新</View>
+                    )}
+                    {item.suitable_for_fat_loss && (
+                      <View className='fat-loss-badge'>适合减脂</View>
+                    )}
+                  </View>
+                  <View className='food-info'>
                     <Text className='food-title'>{item.food_name || item.description || '健康餐'}</Text>
+                    {item.description && item.food_name && (
+                      <Text className='description-text'>{item.description}</Text>
+                    )}
+                    {item.merchant_name && (
+                      <View className='food-merchant'>
+                        <Text className='merchant-icon iconfont icon-shiwu' />
+                        <Text className='merchant-name'>{item.merchant_name}</Text>
+                      </View>
+                    )}
                     <Text className='food-calories'>{item.total_calories.toFixed(0)} kcal</Text>
                   </View>
-                  {item.description && (
-                    <View className='food-description'>
-                      <Text className='description-text'>{item.description}</Text>
+                </View>
+                <View className='food-footer'>
+                  <View className='food-author'>
+                    {item.author?.avatar ? (
+                      <View className='author-avatar'>
+                        <Image className='author-avatar-img' src={item.author.avatar} />
+                      </View>
+                    ) : (
+                      <View className='author-avatar' />
+                    )}
+                    <Text className='author-name'>{item.author?.nickname || '用户'}</Text>
+                  </View>
+                  <View className='food-stats'>
+                    <View
+                      className='stat-item'
+                      onClick={e => { e.stopPropagation(); handleLike(item) }}
+                    >
+                      <Text className={`stat-icon iconfont icon-good ${item.liked ? 'liked' : ''}`} />
+                      <Text className='stat-count'>{item.like_count}</Text>
                     </View>
-                  )}
-                  {item.merchant_name && (
-                    <View className='food-merchant'>
-                      <Text className='merchant-icon iconfont icon-shiwu' />
-                      <Text className='merchant-name'>{item.merchant_name}</Text>
-                      {item.taste_rating && item.taste_rating > 0 && (
-                        <View className='taste-rating'>
-                          <Text className='rating-icon'>★</Text>
-                          <Text className='rating-text'>{item.taste_rating}</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                  {(item.merchant_address || item.province || item.city) && (
-                    <View className='food-location'>
-                      <Text className='location-icon iconfont icon-dizhi' />
-                      <Text className='location-text'>
-                        {item.merchant_address ||
-                          [item.province, item.city, item.district].filter(Boolean).join(' ')}
-                      </Text>
-                    </View>
-                  )}
-                  {item.user_tags && item.user_tags.length > 0 && (
-                    <View className='food-tags'>
-                      {item.user_tags.slice(0, 3).map((tag, idx) => (
-                        <Text key={idx} className='food-tag'>{tag}</Text>
-                      ))}
-                    </View>
-                  )}
-                  <View className='food-footer'>
-                    <View className='food-author'>
-                      {item.author?.avatar ? (
-                        <View className='author-avatar'>
-                          <Image className='author-avatar-img' src={item.author.avatar} />
-                        </View>
+                    <View
+                      className='stat-item'
+                      onClick={e => handleCollect(e, item)}
+                    >
+                      {item.collected ? (
+                        <Star size='16' style={{ color: '#fbbf24' }} />
                       ) : (
-                        <View className='author-avatar' />
+                        <StarOutlined size='16' color='#6b7280' />
                       )}
-                      <Text className='author-name'>{item.author?.nickname || '用户'}</Text>
+                      <Text className='stat-count'>{item.collection_count || 0}</Text>
                     </View>
-                    <View className='food-stats'>
-                      <View
-                        className='stat-item'
-                        onClick={e => { e.stopPropagation(); handleLike(item) }}
-                      >
-                        <Text className={`stat-icon iconfont icon-good ${item.liked ? 'liked' : ''}`} />
-                        <Text className='stat-count'>{item.like_count}</Text>
-                      </View>
-                      <View
-                        className='stat-item'
-                        onClick={e => handleCollect(e, item)}
-                      >
-                        {item.collected ? (
-                          <Star size='16' style={{ color: '#fbbf24' }} />
-                        ) : (
-                          <StarOutlined size='16' color='#6b7280' />
-                        )}
-                        <Text className='stat-count'>{item.collection_count || 0}</Text>
-                      </View>
+                    <View className='stat-item'>
+                      <Text className='stat-icon iconfont icon-pinglun' />
+                      <Text className='stat-count'>{item.comment_count}</Text>
+                    </View>
+                    {item.avg_rating > 0 && (
                       <View className='stat-item'>
-                        <Text className='stat-icon iconfont icon-pinglun' />
-                        <Text className='stat-count'>{item.comment_count}</Text>
+                        <Text className='stat-icon iconfont icon-shoucang-yishoucang' />
+                        <Text className='stat-count'>{item.avg_rating.toFixed(1)}</Text>
                       </View>
-                      {item.avg_rating > 0 && (
-                        <View className='stat-item'>
-                          <Text className='stat-icon iconfont icon-shoucang-yishoucang' />
-                          <Text className='stat-count'>{item.avg_rating.toFixed(1)}</Text>
-                        </View>
-                      )}
-                    </View>
+                    )}
                   </View>
                 </View>
               </View>
             ))
           )}
+          {/* 反馈入口 */}
+          <View className='feedback-bar'>
+            <Text className='feedback-hint'>结果如果不准确的话，可以</Text>
+            <Text className='feedback-link' onClick={handleFeedback}>点击向我们提交反馈</Text>
+          </View>
         </View>
       </ScrollView>
 
@@ -605,6 +639,7 @@ function FoodLibraryPage() {
         <Text className='fab-icon'>+</Text>
       </View>
     </View>
+    </FlPageThemeRoot>
   )
 }
 

@@ -1,5 +1,49 @@
 # CURRENT_TASK
 
+- Task: 更新应用版本到 `2.0.17`，并让「我的」页底部版本号跟随构建常量显示
+- Status: done（`package.json` / `package-lock.json` 已 bump 到 `2.0.17`，「我的」页不再写死版本字符串）
+- Scope:
+  - `package.json`
+  - `package-lock.json`
+    - 通过 `npm version 2.0.17 --no-git-tag-version` 统一更新版本
+  - `src/pages/profile/index.tsx`
+    - 底部版本号改为读取 `__APP_VERSION__`
+- Verification:
+  - `node -p "require('./package.json').version"`：`2.0.17`
+  - `node -p "require('./package-lock.json').version"`：`2.0.17`
+  - `npm run lint -- src/pages/profile/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+
+- Task: 修复系统黑色模式误影响白色主题小程序，导致页面出现“上半黑下半白”的混合态
+- Status: done（已关闭宿主自动深色并移除全局 `prefers-color-scheme` 背景切换）
+- Scope:
+  - `src/app.config.ts`
+    - 将 `darkmode` 从 `true` 改为 `false`
+  - `src/app.scss`
+    - 删除 `page` 上的 `@media (prefers-color-scheme: dark)` 背景覆盖
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/app.json`：已确认 `"darkmode": false`
+  - `dist/app-origin.wxss`：已确认不再包含全局 `prefers-color-scheme` 深色背景逻辑
+- Blocked / Notes:
+  - DevTools 自动化本轮页面连接正常，但无法直接模拟系统级深色模式切换，因此验证以配置产物和运行时错误日志为主
+
+- Task: 修复社区页搜索功能输入框在黑色主题下的颜色问题
+- Status: done（暗色模式下输入框本体已改回透明，避免在圆角搜索框内部出现一块单独的深色矩形）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `.feed-search-input` 的暗色背景由实底改为透明
+    - 新增 `.feed-search-placeholder` 的暗色文字色
+- Verification:
+  - `npm run lint -- src/pages/community/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/common.wxss` 已确认包含 `feed-search-input { background: transparent }` 和 `feed-search-placeholder` 暗色规则
+- Blocked / Notes:
+  - 微信开发者工具自动化本轮能连通，但切到 `pages/community/index` 的页面回执不稳定，`where` 多次跳回首页，因此没有拿到社区页新截图
+
 - Task: 恢复积分充值页 Hero 区“食探会员”文案，并将“选择档位”元素回退到上一版简洁样式
 - Status: done（Hero 标题说明已补回；档位区已从价格/能力点/CTA 卡片退回简洁积分档位卡）
 - Scope:

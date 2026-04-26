@@ -40,6 +40,7 @@ import { IconTrendingUp } from '../../components/iconfont'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { COMMUNITY_FEED_CHANGED_EVENT } from '../../utils/home-events'
 
 /** 同一条动态、同一回复目标、同一内容在短窗口内视为重复点击 */
 const COMMENT_SEND_DEBOUNCE_MS = 450
@@ -724,6 +725,22 @@ function CommunityPage() {
       menus: ['shareAppMessage', 'shareTimeline']
     })
   }, [])
+
+  // 监听外部事件：饮食记录被删除后强制刷新 Feed
+  useEffect(() => {
+    const handleFeedChanged = () => {
+      lastFeedRefreshTime.current = 0
+      clearCache()
+      setFeedList([])
+      setOffset(0)
+      setHasMore(true)
+      refreshFeed(false, true)
+    }
+    Taro.eventCenter.on(COMMUNITY_FEED_CHANGED_EVENT, handleFeedChanged)
+    return () => {
+      Taro.eventCenter.off(COMMUNITY_FEED_CHANGED_EVENT, handleFeedChanged)
+    }
+  }, [clearCache, refreshFeed])
 
   useEffect(() => {
     try {

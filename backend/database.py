@@ -3443,6 +3443,30 @@ def add_public_food_library_comment_sync(
         raise
 
 
+def add_public_food_library_feedback_sync(
+    user_id: str,
+    content: str,
+    library_item_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """提交公共食物库用户反馈（同步版本）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "content": content.strip(),
+    }
+    if library_item_id:
+        row["library_item_id"] = library_item_id
+    try:
+        result = supabase.table("public_food_library_feedback").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("提交反馈失败")
+    except Exception as e:
+        print(f"[add_public_food_library_feedback_sync] 错误: {e}")
+        raise
+
+
 async def list_public_food_library_comments(item_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """公共食物库条目的评论列表，含评论者 nickname、avatar"""
     check_supabase_configured()

@@ -117,6 +117,7 @@ from database import (
     create_feed_interaction_notification_sync,
     add_feed_comment_sync,
     add_public_food_library_comment_sync,
+    add_public_food_library_feedback_sync,
     get_food_record_by_id_sync,
     get_feed_comment_by_id_sync,
     # 公共食物库
@@ -6430,6 +6431,9 @@ async def get_home_dashboard(
             continue
         items = by_meal[meal_type]
         meal_cal = sum(float(x.get("total_calories") or 0) for x in items)
+        meal_protein = sum(float(x.get("total_protein") or 0) for x in items)
+        meal_carbs = sum(float(x.get("total_carbs") or 0) for x in items)
+        meal_fat = sum(float(x.get("total_fat") or 0) for x in items)
         meal_target = meal_targets.get(meal_type, 0.0)
         meal_progress = (meal_cal / meal_target * 100) if meal_target else 0
         meal_progress = round(meal_progress, 1)
@@ -6467,6 +6471,9 @@ async def get_home_dashboard(
             "name": MEAL_NAMES.get(meal_type, meal_type),
             "time": time_str,
             "calorie": round(meal_cal, 1),
+            "protein": round(meal_protein, 1),
+            "carbs": round(meal_carbs, 1),
+            "fat": round(meal_fat, 1),
             "target": meal_target,
             "progress": meal_progress,
             "tags": [SNACK_TARGET_TAG] if "snack" in meal_type else [],
@@ -8161,6 +8168,33 @@ async def api_public_food_library_comment_post(
     except Exception as e:
         print(f"[api/public-food-library/{item_id}/comments] 发表错误: {e}")
         raise HTTPException(status_code=500, detail="发表失败")
+
+
+@app.post("/api/public-food-library/feedback")
+async def api_public_food_library_feedback(
+    body: dict,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    提交公共食物库用户反馈。
+    body: { "content": "反馈内容", "library_item_id": "可选的食物条目ID" }
+    """
+    content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
+    if not content:
+        raise HTTPException(status_code=400, detail="反馈内容不能为空")
+    if len(content) > 1000:
+        raise HTTPException(status_code=400, detail="反馈内容不能超过 1000 字")
+    library_item_id = body.get("library_item_id")
+    try:
+        feedback = add_public_food_library_feedback_sync(
+            user_id=user_info["user_id"],
+            content=content,
+            library_item_id=library_item_id,
+        )
+        return {"id": feedback["id"], "message": "反馈提交成功"}
+    except Exception as e:
+        print(f"[api/public-food-library/feedback] 错误: {e}")
+        raise HTTPException(status_code=500, detail="反馈提交失败")
 
 
 async def get_access_token() -> str:

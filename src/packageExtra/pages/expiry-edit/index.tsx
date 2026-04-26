@@ -1,6 +1,6 @@
 import { View, Text, Input, Textarea, Picker, ScrollView } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Taro, { useRouter } from '@tarojs/taro'
+import Taro, { useRouter, useDidShow } from '@tarojs/taro'
 import {
   createManagedFoodExpiryItem,
   getManagedFoodExpiryItem,
@@ -14,6 +14,8 @@ import {
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../../utils/food-expiry-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
 import './index.scss'
 
@@ -68,6 +70,7 @@ export default function ExpiryEditPage() {
   const router = useRouter()
   const itemId = router.params?.id
   const isEdit = !!itemId
+  const scheme = useAppColorScheme()
 
   const [loading, setLoading] = useState(!!itemId)
   const [foodName, setFoodName] = useState('')
@@ -88,6 +91,14 @@ export default function ExpiryEditPage() {
   useEffect(() => {
     Taro.setNavigationBarTitle({ title: pageTitle })
   }, [pageTitle])
+
+  useDidShow(() => {
+    applyThemeNavigationBar(scheme)
+  })
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
 
   const hydrateForm = (item: FoodExpiryItem) => {
     setFoodName(item.food_name || '')

@@ -17,6 +17,7 @@ import {
   resetBodyWaterLogs,
   mapCalendarDateToApi,
   resolveHomeMealPrimaryRecordId,
+  deleteFoodRecord,
   type DashboardTargets,
   type HomeAchievement,
   type HomeIntakeData,
@@ -43,6 +44,7 @@ import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 import {
   HOME_DASHBOARD_REFRESH_EVENT,
   HOME_INTAKE_DATA_CHANGED_EVENT,
+  COMMUNITY_FEED_CHANGED_EVENT,
   HOME_DASHBOARD_CACHE_TTL_MS
 } from '../../utils/home-events'
 import {
@@ -1321,6 +1323,55 @@ function IndexPage() {
       setShowRecordPosterModal(true)
     } catch (e: any) {
       Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
+  const handleMealDelete = async () => {
+    if (!mealActionRecordId) return
+    const { confirm } = await Taro.showModal({
+      title: '确认删除',
+      content: '确定要删除这条饮食记录吗？删除后不可恢复。',
+      confirmText: '删除',
+      confirmColor: '#e53e3e',
+    })
+    if (!confirm) return
+
+    Taro.showLoading({ title: '删除中...', mask: true })
+    try {
+      await deleteFoodRecord(mealActionRecordId)
+
+      // 先从当前 meals 中移除被删记录，做乐观更新
+      let found = false
+      const updatedMeals = meals.map((meal) => {
+        const entries = meal.meal_record_entries || []
+        const idx = entries.findIndex((e) => e.id === mealActionRecordId)
+        if (idx === -1) return meal
+        found = true
+        const newEntries = entries.filter((_, i) => i !== idx)
+        if (newEntries.length === 0) return null
+        return { ...meal, meal_record_entries: newEntries }
+      }).filter(Boolean) as HomeMealItem[]
+
+      if (found) {
+        setMeals(updatedMeals)
+      }
+
+      // 重新从后端拉取当日 dashboard，确保能量、宏量等数据准确
+      const currentDate = selectedDateRef.current || formatDateKey(new Date())
+      await syncDashboardForDate(currentDate)
+
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+        Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+      } catch {
+        /* ignore */
+      }
+
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '删除失败', icon: 'none' })
     } finally {
       Taro.hideLoading()
     }
@@ -2662,6 +2713,7 @@ function IndexPage() {
         onClose={() => setMealActionSheetVisible(false)}
         onEdit={handleMealEdit}
         onPoster={handleMealPoster}
+        onDelete={handleMealDelete}
       />
 
       {/* 餐食记录编辑弹窗 */}

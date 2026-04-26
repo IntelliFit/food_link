@@ -47,7 +47,9 @@ const extraSubpackagePages = [
 ]
 
 export default defineAppConfig({
-  darkmode: true,
+  // 主题由应用内的 `AppColorSchemeContext` 手动控制，不能再让宿主按系统深色模式自动改色，
+  // 否则会出现“应用仍是浅色态，但原生页面背景先变黑”的半黑半白混合态。
+  darkmode: false,
   pages: mainPages,
   subpackages: [
     {
