@@ -100,6 +100,27 @@
 - 如需手动运行清理：`find . -maxdepth 1 -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" -type f -delete`
 
 
+## 部署
+
+### 生产服务器
+
+- **主机**: `coachlink.fit`
+- **SSH**: `ssh root@coachlink.fit`（本地已配置免密登录）
+- **项目路径**: `/www/wwwroot/food/food_link/`
+- **后端路径**: `/www/wwwroot/food/food_link/backend/`
+- **服务名**: `food-backend.service`
+- **Python 虚拟环境**: `/www/wwwroot/food/food_link/backend/venv/bin/python`
+
+### 手动后端部署命令
+
+```bash
+ssh root@coachlink.fit "cd /www/wwwroot/food/food_link && git fetch origin && git reset --hard origin/main && cd backend && ./venv/bin/python -m pip install -q -r requirements.txt && systemctl restart food-backend.service"
+```
+
+### 前端部署
+
+微信小程序前端**不通过此服务器部署**，需使用微信开发者工具上传。
+
 ## 图标更新
 
 当前项目使用iconfont作为图标系统。更新图标的命令为 python scripts/update-icon.py
