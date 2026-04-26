@@ -327,6 +327,10 @@ function CommunityPage() {
   const skipNextFilterRefreshRef = useRef(true)
   /** 避免 mergeFeedTempComments 在短时间内重复请求 comment-tasks */
   const commentTasksPromiseRef = useRef<Promise<Map<string, { status: string }>> | null>(null)
+  /** 防止 refreshFeed 并发执行导致重复请求骨架屏闪烁 */
+  const refreshFeedPendingRef = useRef(false)
+  /** 防止 useDidShow 在极短窗口内被触发两次（微信小程序 tab 切换偶发） */
+  const useDidShowTsRef = useRef(0)
 
   const loadCheckinPreview = useCallback(async (silent = true) => {
     if (!getAccessToken()) {
@@ -629,10 +633,14 @@ function CommunityPage() {
    * @param force 是否强制刷新（忽略时间间隔）
    */
   const refreshFeed = useCallback(async (silent = false, force = false) => {
+    if (refreshFeedPendingRef.current) {
+      return
+    }
     const now = Date.now()
     if (!force && now - lastFeedRefreshTime.current < CACHE_DURATION) {
       return
     }
+    refreshFeedPendingRef.current = true
 
     if (!silent) setLoadingFeed(true)
 
@@ -664,6 +672,7 @@ function CommunityPage() {
         Taro.showToast({ title: (e as Error).message || '刷新失败', icon: 'none' })
       }
     } finally {
+      refreshFeedPendingRef.current = false
       if (!silent) setLoadingFeed(false)
       setRefreshing(false)
       setShowSkeleton(false)
@@ -806,6 +815,12 @@ function CommunityPage() {
 
   // 每次页面显示时的智能加载策略（已登录 / 未登录均可）
   Taro.useDidShow(() => {
+    const didShowNow = Date.now()
+    if (didShowNow - useDidShowTsRef.current < 500) {
+      return
+    }
+    useDidShowTsRef.current = didShowNow
+
     const token = getAccessToken()
     setLoggedIn(!!token)
     setPriorityAuthorIds((prev) => {
