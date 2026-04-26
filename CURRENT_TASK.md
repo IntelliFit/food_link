@@ -1,5 +1,24 @@
 # CURRENT_TASK
 
+- Task: 对齐到最新 `main` 作为当前默认开发基线
+- Status: done（`2026-04-27` 已清理 7 个工作区噪音改动，并将本地 `main` 快进到 `eddf47b`）
+- Scope:
+  - 已恢复的工作区噪音文件：
+    - `PROGRESS.md`
+    - `backend/exercise_llm.py`
+    - `memory/2026-04-10.md`
+    - `src/pages/analyze-history/index.tsx`
+    - `src/pages/analyze/index.scss`
+    - `src/pages/result/index.scss`
+    - `src/pages/result/index.tsx`
+  - 这 7 个文件在恢复前的磁盘 `LastWriteTime` 均为 `2026-04-27 00:44:18`
+  - `git diff` 无正文差异，判断为一次性产生的换行符/编辑器噪音，而不是长期未提交的业务代码改动
+  - 已执行 `git pull --ff-only origin main`
+  - 当前本地 `main` = `origin/main` = `eddf47b`（`fix(home): 确保每餐蛋白质/脂肪/碳水被正确缓存，旧缓存缺失时自动刷新`）
+- Notes:
+  - 当前仍有 2 个未跟踪文件：`docs/微信支付委托代扣_自动续费_申请材料.md`、`memory/2026-04-27.md`
+  - 后续默认以最新 `main` 为工作基线，除非用户再明确要求切到其它分支
+
 - Task: 更新应用版本到 `2.0.17`，并让「我的」页底部版本号跟随构建常量显示
 - Status: done（`package.json` / `package-lock.json` 已 bump 到 `2.0.17`，「我的」页不再写死版本字符串）
 - Scope:
