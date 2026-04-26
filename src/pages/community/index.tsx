@@ -911,20 +911,15 @@ function CommunityPage() {
     setFeedSearchAuthorId(friend.id)
     setFeedSearchMatchedFriends([])
     setFeedSearchKeyword(friend.nickname || '')
-    setFeedList([])
-    setOffset(0)
-    setHasMore(true)
-    refreshFeed(false, true)
+    // 刷新交给 useEffect（依赖 refreshFeed → 依赖 feedSearchAuthorId）自动处理，
+    // 避免此处直接调用 refreshFeed 时 feedSearchAuthorId 尚未更新导致 author_id 为空
   }
 
   const handleClearSearchAuthor = () => {
     setFeedSearchAuthorId('')
     setFeedSearchKeyword('')
     setFeedSearchMatchedFriends([])
-    setFeedList([])
-    setOffset(0)
-    setHasMore(true)
-    refreshFeed(false, true)
+    // 同上：由 useEffect 统一处理刷新，避免重复请求和 author_id 未同步
   }
 
   const handleLike = async (item: CommunityFeedItem) => {
