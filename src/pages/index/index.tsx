@@ -907,6 +907,15 @@ function IndexPage() {
       return
     }
     const targetDate = currentSelected || today
+
+    // 若本地缓存的 meals 缺少蛋白质/脂肪/碳水，视为脏数据，强制走云端刷新
+    const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
+    if (localSnapshot && (localSnapshot.meals || []).some(
+      (meal) => typeof meal.protein !== 'number' || typeof meal.carbs !== 'number' || typeof meal.fat !== 'number'
+    )) {
+      homeDataStaleRef.current = true
+    }
+
     const last = homeLastLoadRef.current
     const canCache =
       !homeDataStaleRef.current &&
@@ -916,7 +925,6 @@ function IndexPage() {
     if (canCache) {
       return
     }
-    const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
     if (localSnapshot) {
       setIntakeData(localSnapshot.intakeData)
       setMeals(localSnapshot.meals || [])

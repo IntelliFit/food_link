@@ -324,6 +324,9 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
     image_paths: images,
     meal_record_entries: entries.length > 0 ? entries : row.meal_record_entries,
     primary_record_id: resolveHomeMealPrimaryRecordId(row as unknown as Record<string, unknown>),
+    protein: row.protein,
+    carbs: row.carbs,
+    fat: row.fat,
   }
 }
 
@@ -1639,7 +1642,13 @@ function stripMealFullRecordsFromDashboard(data: HomeDashboard): HomeDashboard {
       const { full_record, ...rest } = entry as any
       return rest
     })
-    return { ...meal, meal_record_entries: entries.length > 0 ? entries : meal.meal_record_entries }
+    return {
+      ...meal,
+      protein: meal.protein,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      meal_record_entries: entries.length > 0 ? entries : meal.meal_record_entries,
+    }
   })
   return { ...data, meals }
 }

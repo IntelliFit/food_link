@@ -85,6 +85,9 @@ function mergeExerciseKcalFromDashboardAndLogs(dashboardRaw: unknown, logsTotal:
 export function stripMealFullRecords(meals: HomeMealItem[]): HomeMealItem[] {
   return meals.map((meal) => ({
     ...meal,
+    protein: meal.protein,
+    carbs: meal.carbs,
+    fat: meal.fat,
     meal_record_entries:
       meal.meal_record_entries?.map((entry) => {
         const { full_record: _fr, ...rest } = entry as HomeMealRecordEntry & { full_record?: unknown }
