@@ -14,8 +14,6 @@ import {
   type PublicFoodLibraryItem
 } from '../../../utils/api'
 import { Star, StarOutlined } from '@taroify/icons'
-import { Divider } from '@taroify/core'
-import '@taroify/core/divider/style'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -580,7 +578,6 @@ function FoodLibraryPage() {
         onTouchEnd={onTouchEnd}
       >
         <View className='list-content'>
-          <Divider className='refresh-divider' />
           {tabMode === 'all' && showSkeleton ? (
             // 骨架屏
             <View className='skeleton-container'>

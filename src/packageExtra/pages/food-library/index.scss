@@ -180,7 +180,6 @@
 
 // 排序区域
 .sort-section {
-  background: #fff;
   padding: 16rpx 32rpx;
   display: flex;
   align-items: center;
@@ -294,14 +293,6 @@
 
 .list-content {
   padding: 24rpx 32rpx 200rpx;
-}
-
-// 顶部下拉刷新提示分割线（无背景）
-.food-library-page .refresh-divider {
-  margin: 24rpx 0 16rpx;
-  font-size: 24rpx;
-  color: #94a3b8;
-  background: none !important;
 }
 
 // 食物卡片
@@ -577,7 +568,9 @@
 // 加载状态
 .loading-state {
   padding: 48rpx;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .loading-text {
