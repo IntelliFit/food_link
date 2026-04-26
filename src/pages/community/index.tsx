@@ -325,6 +325,8 @@ function CommunityPage() {
   const pendingNotificationNavigationRef = useRef(false)
   const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextFilterRefreshRef = useRef(true)
+  /** 避免 mergeFeedTempComments 在短时间内重复请求 comment-tasks */
+  const commentTasksPromiseRef = useRef<Promise<Map<string, { status: string }>> | null>(null)
 
   const loadCheckinPreview = useCallback(async (silent = true) => {
     if (!getAccessToken()) {
@@ -493,8 +495,16 @@ function CommunityPage() {
     let taskMap = new Map<string, { status: string }>()
     if (includeTaskState) {
       try {
-        const res = await communityGetCommentTasks(100)
-        taskMap = new Map((res.list || []).map((task) => [task.id, { status: task.status }]))
+        // 如果已有正在进行的 comment-tasks 请求，复用该 Promise，避免重复请求
+        if (!commentTasksPromiseRef.current) {
+          commentTasksPromiseRef.current = communityGetCommentTasks(100).then((res) => {
+            const map = new Map((res.list || []).map((task) => [task.id, { status: task.status }]))
+            return map
+          }).finally(() => {
+            commentTasksPromiseRef.current = null
+          })
+        }
+        taskMap = await commentTasksPromiseRef.current
       } catch (e) {
         console.error('获取评论任务状态失败:', e)
       }
@@ -1009,7 +1019,7 @@ function CommunityPage() {
       setFeedSearchMatchedFriends([])
       if (feedSearchAuthorId) {
         setFeedSearchAuthorId('')
-        refreshFeed(false, true)
+        // 不直接调用 refreshFeed，由 useEffect（依赖 refreshFeed → 依赖 feedSearchAuthorId）统一处理
       }
       return
     }
