@@ -39,6 +39,8 @@ import { IconTrendingUp } from '../../components/iconfont'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { COMMUNITY_FEED_CHANGED_EVENT } from '../../utils/home-events'
 
 /** 同一条动态、同一回复目标、同一内容在短窗口内视为重复点击 */
 const COMMENT_SEND_DEBOUNCE_MS = 450
@@ -724,6 +726,22 @@ function CommunityPage() {
     })
   }, [])
 
+  // 监听外部事件：饮食记录被删除后强制刷新 Feed
+  useEffect(() => {
+    const handleFeedChanged = () => {
+      lastFeedRefreshTime.current = 0
+      clearCache()
+      setFeedList([])
+      setOffset(0)
+      setHasMore(true)
+      refreshFeed(false, true)
+    }
+    Taro.eventCenter.on(COMMUNITY_FEED_CHANGED_EVENT, handleFeedChanged)
+    return () => {
+      Taro.eventCenter.off(COMMUNITY_FEED_CHANGED_EVENT, handleFeedChanged)
+    }
+  }, [clearCache, refreshFeed])
+
   useEffect(() => {
     try {
       Taro.setStorageSync(CACHE_KEYS.FEED_FILTERS, JSON.stringify({
@@ -783,7 +801,6 @@ function CommunityPage() {
       void syncPendingFriendRequests()
     } else {
       setLbPreviewTop([])
-      setLbPreviewMyRank(null)
       setUnreadNotificationCount(0)
       setRequests([])
     }
@@ -938,7 +955,7 @@ function CommunityPage() {
     })
   }
 
-  /** 点击帖子图片/热量/营养进入识别记录详情（与首页「今日餐食」同入口：`ui=home` 样式一致） */
+  /** 点击帖子图片/热量/营养进入识别记录详情 */
   const handleViewDetail = (record: CommunityFeedItem['record']) => {
     if (!record.id) {
       Taro.showToast({ title: '记录 ID 缺失', icon: 'none' })
@@ -946,7 +963,7 @@ function CommunityPage() {
     }
     try {
       Taro.navigateTo({
-        url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}&ui=home`
+        url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}`
       })
     } catch (e) {
       Taro.showToast({ title: '打开详情失败', icon: 'none' })
@@ -958,7 +975,7 @@ function CommunityPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: '/pages/food-library/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/food-library/index') })
   }
 
   const filteredFeedList = feedSearchKeyword.trim()
@@ -1276,7 +1293,7 @@ function CommunityPage() {
       Taro.showToast({ title: '请先登录', icon: 'none' })
       return
     }
-    Taro.navigateTo({ url: '/pages/interaction-notifications/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/interaction-notifications/index') })
   }
 
   const submitComment = async () => {
@@ -1413,7 +1430,7 @@ function CommunityPage() {
       success: (res) => {
         const imagePath = res.tempFilePaths[0]
         Taro.setStorageSync('analyzeImagePath', imagePath)
-        Taro.navigateTo({ url: '/pages/analyze/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
       },
       fail: (err) => {
         if (err?.errMsg?.includes('cancel')) return
@@ -1467,7 +1484,7 @@ function CommunityPage() {
                     className='friends-quick-cell'
                     onClick={() => {
                       const url =
-                        requests.length > 0 ? '/pages/friends/index?tab=received' : '/pages/friends/index'
+                        requests.length > 0 ? `${extraPkgUrl('/pages/friends/index')}?tab=received` : extraPkgUrl('/pages/friends/index')
                       Taro.navigateTo({ url })
                     }}
                   >
@@ -1513,7 +1530,7 @@ function CommunityPage() {
                   redirectToLogin()
                   return
                 }
-                Taro.navigateTo({ url: '/pages/checkin-leaderboard/index' })
+                Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index') })
               }}
             >
               <View className='ranking-head'>

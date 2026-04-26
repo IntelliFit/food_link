@@ -185,13 +185,18 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .target-edit-btn {
-  background: $fl-dark-ghost-bg !important;
-  border-color: $fl-dark-border !important;
+  background: rgb(30 40 36 / 85%) !important;
+  box-shadow:
+    0 4rpx 16rpx rgb(0 0 0 / 25%),
+    inset 0 1rpx 0 rgb(255 255 255 / 8%) !important;
 }
 
-.fl-page-theme-root--dark .target-edit-icon,
+.fl-page-theme-root--dark .target-edit-icon {
+  color: $fl-dark-accent !important;
+}
+
 .fl-page-theme-root--dark .target-edit-text {
-  color: $fl-dark-text2 !important;
+  color: #7dd3b0 !important;
 }
 
 .fl-page-theme-root--dark .section-title,
@@ -725,12 +730,28 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .feed-search-input {
   color: $fl-dark-text !important;
-  background: $fl-dark-input-bg !important;
+  background: transparent !important;
+}
+
+.fl-page-theme-root--dark .feed-search-placeholder {
+  color: $fl-dark-text2 !important;
 }
 
 .fl-page-theme-root--dark .feed-filter-label,
 .fl-page-theme-root--dark .feed-filter-summary {
   color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-chip {
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-chip-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-chip.active .feed-filter-chip-text {
+  color: #fff !important;
 }
 
 .fl-page-theme-root--dark .feed-search-wrap {
@@ -839,8 +860,9 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .feed-comments {
-  background: $fl-dark-panel-bg-soft !important;
-  border: 1rpx solid $fl-dark-border !important;
+  background: transparent !important;
+  border: none !important;
+  padding-left: 24rpx !important;
 }
 
 .fl-page-theme-root--dark .comment-avatar {
@@ -966,6 +988,31 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .target-modal-desc,
 .fl-page-theme-root--dark .record-menu-subtitle {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-menu-close-btn {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .record-menu-close-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .record-menu-delete-btn {
+  background: rgb(239 68 68 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .record-menu-delete-text {
+  color: #f87171 !important;
+}
+
+.fl-page-theme-root--dark .record-menu-page .cancel-btn {
+  background: $fl-dark-ghost-bg !important;
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 25%) !important;
+}
+
+.fl-page-theme-root--dark .record-menu-page .cancel-text {
   color: $fl-dark-text2 !important;
 }
 
@@ -1731,6 +1778,42 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   border-color: $fl-dark-border !important;
 }
 
+.fl-page-theme-root--dark .expiry-edit-block {
+  background: $fl-dark-panel-bg-soft !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: none !important;
+}
+
+.fl-page-theme-root--dark .expiry-edit-label {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .expiry-input,
+.fl-page-theme-root--dark .expiry-picker,
+.fl-page-theme-root--dark .expiry-textarea {
+  background: $fl-dark-input-bg !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .expiry-preset-chip,
+.fl-page-theme-root--dark .expiry-choice-chip:not(.is-active) {
+  background: $fl-dark-ghost-bg !important;
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .expiry-clear-text {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .expiry-loading {
+  background: $fl-dark-panel-bg-soft !important;
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .expiry-submit-btn {
+  box-shadow: 0 12rpx 28rpx rgb(0 188 125 / 12%) !important;
+}
+
 /* ---------- 全局 loading 文案色（若露出） ---------- */
 .fl-page-theme-root--dark .loading-text-primary {
   color: $fl-dark-text2 !important;
@@ -2093,6 +2176,210 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   background: rgb(125 211 176 / 10%) !important;
   color: $fl-dark-accent !important;
   border-color: rgb(125 211 176 / 26%) !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .tab-section,
+.fl-page-theme-root--dark .food-library-page .filter-section,
+.fl-page-theme-root--dark .food-library-page .sort-section {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .skeleton-food-card {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 2rpx 16rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .food-image-wrap {
+  background: linear-gradient(135deg, #1a2e26 0%, #162520 100%) !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .food-footer {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .food-calories {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .stat-icon,
+.fl-page-theme-root--dark .food-library-page .stat-count {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .stat-icon.liked {
+  color: #f87171 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .refresh-divider {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .taste-rating {
+  background: rgba(245, 158, 11, 0.15) !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .merchant-icon,
+.fl-page-theme-root--dark .food-library-page .location-icon {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .author-avatar {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .login-tip-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .food-card.is-pick-mode {
+  border-color: rgba(125, 211, 176, 0.20) !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .tab-item {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .tab-item.active {
+  color: $fl-dark-accent !important;
+  border-bottom-color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .empty-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .feedback-hint {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .feedback-link {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .search-input-wrap {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .search-input-icon {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .sort-filter-btn {
+  background: $fl-dark-ghost-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .sort-filter-icon,
+.fl-page-theme-root--dark .food-library-page .sort-filter-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .merchant-name {
+  background: rgb(125 211 176 / 12%) !important;
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .merchant-icon {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-panel {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 30%) !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-option {
+  background: $fl-dark-ghost-bg !important;
+  color: $fl-dark-text !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-option.active {
+  background: rgb(125 211 176 / 12%) !important;
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-detail-page .correction-hint {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-detail-page .correction-link {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .tabs-container {
+  background: $fl-dark-panel-bg !important;
+  box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .tab-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .tab.active .tab-text {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .nutrition-summary {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .nutrition-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .nutrition-sub-value {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .nutrition-divider {
+  background: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .card-footer {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .recipe-image-wrapper {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .recipe-image-placeholder {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .favorite-badge {
+  background: rgb(30 38 36 / 90%) !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .recipe-stats .stats-icon,
+.fl-page-theme-root--dark .recipes-page .recipe-stats .stats-text,
+.fl-page-theme-root--dark .recipes-page .recipe-stats .stats-dot {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .action-btn.delete-btn {
+  background: rgb(239 68 68 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .action-btn.edit-btn {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .empty-icon {
+  color: rgb(100 120 112) !important;
+}
+
+.fl-page-theme-root--dark .recipes-page .empty-text {
+  color: $fl-dark-text2 !important;
 }
 
 .fl-page-theme-root--dark .membership-page .points-balance-card,
@@ -2986,10 +3273,14 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: #fda4af !important;
 }
 
-.fl-page-theme-root--dark .friends-page .empty-icon,
-.fl-page-theme-root--dark .interaction-feed-detail-page .feed-comment-item.is-target-comment {
+.fl-page-theme-root--dark .friends-page .empty-icon {
   background: $fl-dark-panel-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .interaction-feed-detail-page .feed-comment-item.is-target-comment {
+  background: transparent !important;
+  border: none !important;
 }
 
 .fl-page-theme-root--dark .friends-page .loading-spinner,

@@ -1,5 +1,170 @@
 # CURRENT_TASK
 
+- Task: 更新应用版本到 `2.0.17`，并让「我的」页底部版本号跟随构建常量显示
+- Status: done（`package.json` / `package-lock.json` 已 bump 到 `2.0.17`，「我的」页不再写死版本字符串）
+- Scope:
+  - `package.json`
+  - `package-lock.json`
+    - 通过 `npm version 2.0.17 --no-git-tag-version` 统一更新版本
+  - `src/pages/profile/index.tsx`
+    - 底部版本号改为读取 `__APP_VERSION__`
+- Verification:
+  - `node -p "require('./package.json').version"`：`2.0.17`
+  - `node -p "require('./package-lock.json').version"`：`2.0.17`
+  - `npm run lint -- src/pages/profile/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+
+- Task: 修复系统黑色模式误影响白色主题小程序，导致页面出现“上半黑下半白”的混合态
+- Status: done（已关闭宿主自动深色并移除全局 `prefers-color-scheme` 背景切换）
+- Scope:
+  - `src/app.config.ts`
+    - 将 `darkmode` 从 `true` 改为 `false`
+  - `src/app.scss`
+    - 删除 `page` 上的 `@media (prefers-color-scheme: dark)` 背景覆盖
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/app.json`：已确认 `"darkmode": false`
+  - `dist/app-origin.wxss`：已确认不再包含全局 `prefers-color-scheme` 深色背景逻辑
+- Blocked / Notes:
+  - DevTools 自动化本轮页面连接正常，但无法直接模拟系统级深色模式切换，因此验证以配置产物和运行时错误日志为主
+
+- Task: 修复社区页搜索功能输入框在黑色主题下的颜色问题
+- Status: done（暗色模式下输入框本体已改回透明，避免在圆角搜索框内部出现一块单独的深色矩形）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `.feed-search-input` 的暗色背景由实底改为透明
+    - 新增 `.feed-search-placeholder` 的暗色文字色
+- Verification:
+  - `npm run lint -- src/pages/community/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/common.wxss` 已确认包含 `feed-search-input { background: transparent }` 和 `feed-search-placeholder` 暗色规则
+- Blocked / Notes:
+  - 微信开发者工具自动化本轮能连通，但切到 `pages/community/index` 的页面回执不稳定，`where` 多次跳回首页，因此没有拿到社区页新截图
+
+- Task: 恢复积分充值页 Hero 区“食探会员”文案，并将“选择档位”元素回退到上一版简洁样式
+- Status: done（Hero 标题说明已补回；档位区已从价格/能力点/CTA 卡片退回简洁积分档位卡）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - Hero 区恢复 `hero-copy / hero-title / hero-subtitle`
+    - 档位区移除横向 `ScrollView`
+    - 删除价格、能力点和底部 CTA 元素，回退为积分数 + 简述结构
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 恢复 Hero 文案样式
+    - 档位卡片恢复上一版三列简洁布局
+    - 清理本轮新增的价格行、能力点、CTA 和对应暗色覆盖
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc relaunch` 本轮仍在连接后等待回执中，尚未拿到新的页面截图
+
+- Task: 调整积分充值页“选择档位”UI，去掉参考图的紫色风格并改为应用自身绿色主题
+- Status: done（档位区已从拥挤三列改成横向卡片带，深浅色都回到品牌绿色体系）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 档位卡容器改为横向 `ScrollView`
+    - 保留三档信息，但让手机端按卡片带滑动浏览，不再硬挤三列
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 档位卡整体改回品牌绿系深色卡面
+    - 去掉紫色选中态、紫色徽章和紫色按钮
+    - 重做卡片间距、价格字号、摘要高度、能力点排版与 CTA 层级
+    - 修正 `.membership-page--dark` 下对档位卡的覆盖，避免暗色模式把新卡面重新洗灰
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js/.wxss` 已确认包含 `tier-scroll`、绿色 CTA 渐变和新的暗色卡面规则
+- Blocked / Notes:
+  - `mrc screenshot` 仍返回 `fail to capture screenshot`，这轮没有拿到新的会员页截图
+  - 当前自动化 `relaunch` 偶尔会跳回首页，但本轮最终 `where` 已确认在会员页
+
+- Task: 将「我的」页左上角主题切换图标替换为 `icon-zaoshang / icon-wanshang`
+- Status: done（主题切换入口仍保留在左上角，仅将图标资源从字符改为 iconfont）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - `.profile-theme-chip` 内的图标切换逻辑改为 iconfont 类名
+    - 暗色主题显示 `icon-zaoshang`
+    - 浅色主题显示 `icon-wanshang`
+- Verification:
+  - `rg -n "icon-zaoshang|icon-wanshang" src/pages/profile/index.tsx src/assets/iconfont/iconfont.css`：确认页面已接入对应 iconfont，图标资源存在
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc relaunch /pages/profile/index` 与 `mrc exists .profile-theme-chip` 这轮仍停在连接后无页面回执，DevTools 自动化会话依旧不稳定
+  - `npm run build:weapp` 当前停在 `transforming...`，所以这次前端验证以源码、资源存在性和运行时错误日志为主
+
+- Task: 将积分充值页“选择档位”改成参考图风格的定价卡 UI
+- Status: done（档位区已改为三张定价卡，包含徽章、标题、副标题、价格、能力点与底部 CTA）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 为三档卡片补充周期联动价格
+    - 新增每档能力点列表
+    - 新增底部 CTA 文案与“最受欢迎 / 当前套餐”徽章
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 档位卡整体改为深色定价卡风格
+    - 选中态改为更强的描边 + 浮起阴影
+    - 价格区、能力点列表、按钮区按参考图重构
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 已确认包含 `tier-card-price-row / tier-card-features / tier-card-cta / 最受欢迎`
+- Blocked / Notes:
+  - 这轮 `mrc relaunch` 回执不稳定，会员页自动化跳转最终落回了首页；因此没有拿到最新会员页截图，但构建产物与运行态错误日志都正常
+
+- Task: 去掉积分充值页 Hero 区的标题和说明文案
+- Status: done（已移除“食探会员”标题与“按使用强度选套餐...”说明文案）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 删除 `.hero-copy` 整块节点
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 删除 `.hero-copy / .hero-title / .hero-subtitle`
+    - 适度收紧 `hero-emblem-row` 底部间距，避免删文案后出现过大空白
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 已确认不再包含 `hero-title / hero-subtitle / hero-copy`
+
+- Task: 恢复「我的」页左上角主题切换入口
+- Status: done（样式未丢，实际是 JSX 节点在合并中被删；现已补回）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - 重新接入 `useAppColorScheme`
+    - 在页面左上角恢复 `.profile-theme-chip`
+    - 点击后调用 `toggleScheme()`
+    - 图标按当前主题切换：暗色显示 `☀`，浅色显示 `☾`
+- Verification:
+  - `npm run lint -- src/pages/profile/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `dist/pages/profile/index.js` 已包含 `useAppColorScheme / toggleScheme / profile-theme-chip`
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 DevTools 自动化会话对 `pages/profile/index` 的节点查询仍回报旧运行态，`.profile-theme-chip` 没查到；但最新构建产物已确认包含该节点，说明代码修复已生效，运行端需要重新吃到最新包
+
+- Task: 修复 main 分支 GitHub Actions 后端自动部署失败
+- Status: done（`Deploy Backend` 最新 run `24941017274` 已成功）
+- Scope:
+  - `.github/workflows/deploy-backend.yml`
+    - `actions/checkout` 升级到 `v5`
+    - 增加 `DEPLOY_PORT`、`DEPLOY_BRANCH`、`DEPLOY_SERVICE`
+    - 远端执行改为 `bash` 显式调用，避免服务器上的 `deploy_backend.sh` 缺少可执行权限时报 `exit code 126`
+    - 增加脚本查找/回退顺序：
+      - `./deploy_backend.sh`
+      - `./deploy/scripts/deploy_backend_v2.sh`
+      - `./deploy/scripts/deploy_backend.sh`
+- Verification:
+  - `gh run view 24940832898 --log-failed`：确认旧失败原因为 `zsh:1: permission denied: ./deploy_backend.sh`
+  - 推送 `main` 提交 `30427c6 fix(ci): harden backend deploy workflow`
+  - `gh run watch 24941017274`：最新 `Deploy Backend` 成功，`deploy in 23s`
+- Notes:
+  - 之前一次老失败 `24860907702` 另有 SSH 超时，但本轮修复后最新自动部署已成功完成
+
 - Task: 修复当日代谢页图标漂移
 - Status: done（将该页 iconfont 收口为固定尺寸块级元素，避免文本基线导致返回箭头和指标图标漂移）
 - Scope:
@@ -2421,3 +2586,151 @@
   - 阻塞：
     - 本轮 `npm run dev:weapp` 启动后，长时间停留在 `transforming...`
     - 当前 `dist/` 仅见 `project.config.json`，未能在本轮等待窗口内拿到完整会员页产物与截图文件
+
+- Task: 公共食物库页面深度改版
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - Tab 布局改为 space-around + Swiper 左右滑动切换
+    - 筛选按钮增加 iconfont 图标（`icon-filter-filling`）
+    - 点击筛选按钮展开下拉浮层（绝对定位 + 阴影），选项：全部 / 适合减脂
+    - 列表页底部新增「结果如果不准确的话，可以点击向我们提交反馈」入口
+  - `src/packageExtra/pages/food-library/index.scss`
+    - 全部绿色统一为首页低饱和绿 `#5cb896`（替换原来的 `#00bc7d` / `#4a9e7f`）
+    - 卡片改为左图右文横向布局
+    - 筛选下拉浮层样式：absolute 定位、圆角、阴影
+    - sort-item active 下划线同步为 `#5cb896`
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - 底部操作栏下方新增「信息有误？点击修正」入口
+    - 点击后弹出修正内容输入框，提交到 `submitPublicFoodLibraryFeedback`（带 libraryItemId）
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - correction-bar 样式：fixed 定位、居中对齐
+    - correction-link 颜色为 `#5cb896`
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 新增 filter-dropdown-panel、filter-dropdown-option、correction-bar 暗色覆盖
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
+  - `mrc errors 20 --port 9420`：`0`
+- Notes:
+  - 微信开发者工具自动化 `mrc screenshot` 当前环境中偶发超时，本轮截图验证以列表页 + 筛选面板为主；详情页修正入口截图待后续补
+  - 提交记录：`189880b`
+
+- Task: 搜索/排序/筛选切换时清空列表并显示 spinner
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - 新增 `refreshList()` 函数：先 `setList([])` 清空列表 + `setLoading(true)` 显示 spinner + `clearCache()` 清除缓存，再请求数据
+    - `handleSearch` 搜索后直接调用 `refreshList`
+    - 排序点击（最新/最热/评分）设置状态后直接调用 `refreshList`
+    - 筛选点击（全部/适合减脂）设置状态 + 关闭面板后直接调用 `refreshList`
+    - `useEffect` 依赖从 `[sortBy, filterFatLoss, searchMerchant, loggedIn, tabMode]` 收敛为 `[loggedIn, tabMode]`，避免与用户主动操作重复触发加载
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
+  - `mrc tap .sort-filter-btn --port 9420`：点击成功
+  - `mrc tap .filter-dropdown-option --port 9420`：点击成功
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`296af07`
+
+- Task: 优化圈子社区接口性能（好友排名、互动消息、好友动态）
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `backend/database.py`
+    - `get_friend_ids`：合并两次查询为一次（`or_` 条件），减少一次网络往返；增加 5 分钟内存缓存
+    - `get_friend_circle_week_checkin_leaderboard`：去掉 while 循环分页，改为一次批量拉取；增加 5 分钟内存缓存（按周起始时间作为 key）
+    - `get_feed_likes_for_records`：合并两次查询为一次（同时获取 record_id + user_id，Python 中同时统计点赞数和当前用户是否点赞）
+    - `list_feed_interaction_notifications`：使用外键关联查询 `actor:weapp_user!actor_user_id(id, nickname, avatar)` 一次性获取通知 + 用户信息
+    - `count_unread_feed_interaction_notifications`：使用 `select("*", count="exact").limit(0)` 直接获取计数，避免传输行数据
+  - `backend/tests/benchmark_community_apis.py`
+    - 新增基准测试脚本，分别调用原始版本和优化版本函数，各跑 10 次取平均
+    - 每次测试前清除缓存，确保公平对比
+- Verification:
+  - `python -m py_compile backend/database.py`：通过
+  - `python tests/benchmark_community_apis.py`：运行成功，结果稳定
+- 优化前后速度差异（表格）：
+
+| 接口 | 优化前(ms) | 优化后(ms) | 节省(ms) | 提升幅度 |
+|------|-----------|-----------|---------|---------|
+| 好友排名 | 1523.33 | 1131.11 | 392.22 | 25.7% |
+| 点赞查询 | 716.70 | 362.17 | 354.52 | 49.5% |
+| 互动消息列表 | 739.08 | 384.67 | 354.41 | 48.0% |
+| 未读通知计数 | 380.48 | 392.23 | -11.76 | -3.1% |
+| **合计** | **3359.59** | **2270.18** | **1089.41** | **32.4%** |
+
+- Notes:
+  - 测试数据：好友排名测试用户有 110 个好友，一周内 114 条记录；互动消息测试用户有 90 条通知
+  - 未读通知计数提升不明显，原因是数据量小（90 条），网络往返时间主导，SQL 层面优化收益有限
+  - 三个核心接口（好友排名、点赞查询、互动消息列表）均有显著提速，合计提升约 1.1 秒
+  - 提交记录：`c688f33`
+
+- Task: 调整公共食物库反馈入口位置
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - 删除列表页底部 `feedback-bar`（"结果如果不准确的话，可以点击向我们提交反馈"）
+    - `handleFeedback` 函数保留（详情页修正弹窗仍在使用）
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - 将 `correction-bar` 从 `bottom-bar` 外部移入内部，放在 `comment-btn` 下方
+    - 新增 `comment-section` 容器包裹 `comment-btn` + `correction-bar`
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - 新增 `.comment-section`：flex 垂直布局，占满剩余空间
+    - `.correction-bar`：从 `position: fixed` 改为普通流布局，字号微调为 22rpx
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`885fb59`
+
+- Task: 修复公共食物库详情页评论区交互及后端数据一致性
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - Textarea 增加 `autoFocus` + `fixed` 属性，弹窗打开后自动聚焦
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - `.comment-input` 边框从 `transparent` 改为 `#e5e7eb`，提高输入框可见性
+  - `backend/database.py`
+    - 新增 `_update_public_food_library_comment_stats_sync()`：在插入评论后自动更新 `public_food_library` 表的 `comment_count` 和 `avg_rating`
+    - `list_public_food_library_comments()`：排序从 `created_at ASC` 改为 `DESC`，与前端乐观更新顺序一致
+- Verification:
+  - `python -m py_compile backend/database.py`：通过
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+- Notes:
+  - 后端评论接口此前已实现完整（POST / GET），但缺少主表统计字段的自动更新，导致列表页评论数/评分显示不准确
+  - 提交记录：`516d1ea`
+
+- Task: 首页编辑目标按钮改为 stats 页 hero-badge 风格
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/pages/index/index.scss`
+    - `.target-edit-btn`：背景从 `#f3f4f6` 灰色改为 `rgb(255 255 255 / 94%)` 白色半透明；去掉边框；增加 box-shadow 胶囊阴影
+    - `.target-edit-icon`：从 `#6b7280` 灰色改为 `#5cb896` 品牌绿
+    - `.target-edit-text`：从 `#6b7280` 灰色 `#6b7280` 改为 `#2f7f62` 深绿；字重从 400 改为 600
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `.target-edit-btn`：暗色下改为 `rgb(30 40 36 / 85%)` 深半透明底
+    - `.target-edit-icon`：暗色下改为 `$fl-dark-accent`
+    - `.target-edit-text`：暗色下改为 `#7dd3b0`
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`f2e908c`
+
+- Task: 我的页用户信息与会员状态先读本地缓存再异步更新
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - `loadUserInfo()` 重构为两步加载：
+      1. **零延迟读缓存**：先读取 `userInfo`、`membershipStatus`、`userRegisterTime` 本地缓存并立即 setState，用户立刻看到旧数据
+      2. **异步请求更新**：再发起 `getUserProfile` / `getMyMembership` / `getFoodExpiryDashboard` / `friendGetRequestsOverview` 请求，获取最新数据后更新状态并回写缓存
+    - 新增 `membershipStatus` 的 storage 缓存读写（JSON 序列化）
+    - 网络失败时，本地缓存已先行展示，不再出现白屏/空白
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+- Notes:
+  - 提交记录：`7cf0813`

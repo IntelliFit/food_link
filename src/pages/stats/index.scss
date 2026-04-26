@@ -1,11 +1,27 @@
+/* 与首页 `index.scss` 同源：时间轴绿 #5cb896、警示红 #e57373、页面渐变与三大营养素低饱和色 */
+$stats-primary: #5cb896;
+$stats-primary-deep: #4a9d7d;
+$stats-primary-light: #8dd3bf;
+$stats-warning: #e57373;
+$stats-warning-light: #f0b4b4;
+$stats-orange: #f0985c;
+$stats-orange-light: #f5c49a;
+$stats-macro-protein: #5c9ed4;
+$stats-macro-carbs: #d4ac52;
+$stats-macro-fat: #f0985c;
+$stats-blue-soft: #7aa9ce;
+
 .stats-page {
+  position: relative;
   min-height: 100vh;
   background: linear-gradient(180deg,
-    rgb(0 188 125 / 15%) 0%,
-    rgb(0 188 125 / 8%) 25%,
-    #EFF1F4 60%,
-    #EFF1F4 100%
+    rgb(92 184 150 / 8%) 0%,
+    rgb(92 184 150 / 3%) 40%,
+    #f0f3f6 80%,
+    #f0f3f6 100%
   );
+  /* 自定义导航后顶栏区域留白（状态栏 + 视觉呼吸区） */
+  padding-top: 182rpx;
   padding-bottom: 200rpx;
   box-sizing: border-box;
 
@@ -13,8 +29,32 @@
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 120rpx 48rpx 200rpx;
+    padding: 182rpx 48rpx 200rpx;
   }
+}
+
+/* 分析页：缓存先展示时，后台联网同步的微型指示器（fixed，不挤占布局） */
+.stats-page__data-sync {
+  position: fixed;
+  left: 28rpx;
+  /* 与微信默认胶囊按钮同一水平线 */
+  top: 130rpx;
+  z-index: 200;
+  pointer-events: none;
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stats-page__data-sync-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  border: 3rpx solid rgb(92 184 150 / 22%);
+  border-top-color: $stats-primary;
+  animation: loading-spin 0.75s linear infinite;
 }
 
 .stats-guest-card {
@@ -22,8 +62,8 @@
   padding: 40rpx 36rpx;
   background: rgb(255 255 255 / 90%);
   border-radius: 24rpx;
-  border: 1rpx solid rgb(0 188 125 / 18%);
-  box-shadow: 0 12rpx 40rpx rgb(0 188 125 / 10%);
+  border: 1rpx solid rgb(92 184 150 / 20%);
+  box-shadow: 0 12rpx 40rpx rgb(92 184 150 / 10%);
 }
 
 .stats-guest-title {
@@ -48,7 +88,7 @@
   justify-content: center;
   padding: 22rpx;
   border-radius: 999rpx;
-  background: linear-gradient(90deg, #00bc7d 0%, #00bba7 100%);
+  background: linear-gradient(90deg, $stats-primary 0%, $stats-primary-light 100%);
 }
 
 .stats-guest-btn-text {
@@ -122,18 +162,18 @@
       }
     }
     
-    // 有记录但未超过目标 - 绿色
+    // 有记录但未超过目标 - 与首页时间轴「有记录」同色（低饱和绿）
     &.is-recorded {
-      background: #00bc7d;
+      background: $stats-primary;
       
       .date-num-text {
         color: #fff;
       }
     }
     
-    // 超过目标 - 红色（与首页日期热力柔和红一致）
+    // 超过目标 - 与首页时间轴「超标」同色（柔和红）
     &.is-over {
-      background: #e57373;
+      background: $stats-warning;
       
       .date-num-text {
         color: #fff;
@@ -188,7 +228,7 @@
 
 .tabs-loading-icon {
   font-size: 28rpx;
-  color: #00bc7d;
+  color: $stats-primary;
   animation: spin 0.8s linear infinite;
 }
 
@@ -214,13 +254,13 @@
 
   &.active {
     background: #fff;
-    color: #00bc7d;
+    color: $stats-primary;
     font-weight: 600;
     box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 6%);
   }
 }
 
-// 通用卡片
+// 通用卡片（分析 Tab 内除 Hero 外的模块）
 .stats-card {
   margin: 0 32rpx 28rpx;
   background: rgb(255 255 255 / 92%);
@@ -246,12 +286,12 @@
 
 .chart-title-icon {
   font-size: 36rpx;
-  color: #00bc7d;
+  color: $stats-primary;
   line-height: 1;
 }
 
 .analysis-title-icon {
-  color: #2563eb;
+  color: $stats-macro-protein;
 }
 
 .card-title {
@@ -266,27 +306,33 @@
   font-weight: 400;
 }
 
-// Hero Card
-.hero-card {
-  padding: 40rpx;
+// Hero Card：绿/橙渐变大卡 + 白字（与「我的」积分卡层次区分；勿改成白底）
+.hero-card.stats-card {
+  padding: 40rpx 36rpx 38rpx;
   color: #fff;
   position: relative;
   overflow: hidden;
-  border: none;
+  backdrop-filter: none;
 
   &.deficit-mode {
-    background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
-    box-shadow: 0 12rpx 32rpx rgb(0 188 125 / 30%);
+    background: linear-gradient(145deg, #5cb896 0%, #7bc4a8 28%, #5cb896 52%, #459e7e 100%);
+    box-shadow:
+      0 14rpx 42rpx rgb(56 120 95 / 34%),
+      inset 0 1rpx 0 rgb(255 255 255 / 18%);
+    border: 1rpx solid rgb(255 255 255 / 14%);
   }
 
   &.surplus-mode {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    box-shadow: 0 12rpx 32rpx rgb(245 158 11 / 30%);
+    background: linear-gradient(145deg, #f5a84d 0%, #f0985c 32%, #ea8540 72%, #d97706 100%);
+    box-shadow:
+      0 14rpx 40rpx rgb(180 95 40 / 30%),
+      inset 0 1rpx 0 rgb(255 255 255 / 22%);
+    border: 1rpx solid rgb(255 255 255 / 16%);
   }
 
   .card-header,
   .card-title {
-    color: rgb(255 255 255 / 90%);
+    color: #fff;
   }
 }
 
@@ -294,55 +340,96 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
+  gap: 16rpx;
 }
 
 .hero-title {
-  font-size: 26rpx;
-  font-weight: 500;
-  opacity: 0.9;
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.5rpx;
+  line-height: 1.35;
+  text-shadow: 0 2rpx 12rpx rgb(0 0 0 / 18%);
 }
 
+/* 对齐积分卡「充值」：白底胶囊 + 主题色字 */
 .hero-badge {
-  font-size: 22rpx;
-  background: rgb(255 255 255 / 25%);
-  padding: 8rpx 18rpx;
-  border-radius: 100rpx;
+  flex-shrink: 0;
+  font-size: 24rpx;
   font-weight: 600;
+  padding: 12rpx 22rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 94%);
+  border: none;
+  box-shadow:
+    0 4rpx 16rpx rgb(0 0 0 / 12%),
+    inset 0 1rpx 0 rgb(255 255 255 / 55%);
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 8rpx;
 }
 
-.hero-badge-icon {
-  font-size: 26rpx;
-  opacity: 0.95;
+.hero-card.deficit-mode .hero-badge-icon {
+  font-size: 28rpx;
+  color: #5cb896;
+  opacity: 1;
+}
+
+.hero-card.surplus-mode .hero-badge-icon {
+  font-size: 28rpx;
+  color: #ea580c;
+  opacity: 1;
+}
+
+.hero-badge-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.hero-card.deficit-mode .hero-badge-label {
+  color: #2f7f62;
+}
+
+.hero-card.surplus-mode .hero-badge-label {
+  color: #b45309;
 }
 
 .hero-main-value {
   display: flex;
   align-items: baseline;
   gap: 12rpx;
-  margin-bottom: 40rpx;
+  margin-bottom: 32rpx;
 }
 
 .hero-number {
-  font-size: 72rpx;
+  font-size: 76rpx;
   font-weight: 800;
   line-height: 1;
+  color: #fff;
+  letter-spacing: -2rpx;
+  text-shadow: 0 4rpx 20rpx rgb(0 0 0 / 22%);
 }
 
 .hero-unit {
-  font-size: 28rpx;
-  opacity: 0.8;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: rgb(255 255 255 / 92%);
+  text-shadow: 0 2rpx 10rpx rgb(0 0 0 / 14%);
 }
 
 .hero-grid {
   display: flex;
   align-items: center;
-  background: rgb(0 0 0 / 10%);
-  border-radius: 20rpx;
-  padding: 24rpx;
+  background: rgb(0 0 0 / 14%);
+  border-radius: 22rpx;
+  padding: 26rpx 20rpx;
+  border: 1rpx solid rgb(255 255 255 / 14%);
+  box-shadow: inset 0 1rpx 4rpx rgb(0 0 0 / 8%);
 }
 
 .hero-item {
@@ -350,23 +437,120 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8rpx;
+  gap: 10rpx;
 }
 
 .hero-divider {
   width: 1rpx;
-  height: 48rpx;
-  background: rgb(255 255 255 / 20%);
+  height: 52rpx;
+  background: rgb(255 255 255 / 38%);
 }
 
 .hero-label {
   font-size: 22rpx;
-  opacity: 0.8;
+  font-weight: 500;
+  color: rgb(255 255 255 / 94%);
+  text-shadow: 0 1rpx 6rpx rgb(0 0 0 / 12%);
 }
 
 .hero-sub-value {
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2rpx 12rpx rgb(0 0 0 / 18%);
+}
+
+/* 当日代谢：白底整行 CTA，右侧分隔条 + 箭头，同积分卡质感 */
+.hero-metabolic-row {
+  margin-top: 24rpx;
+  padding: 0;
+  border-radius: 24rpx;
+  background: rgb(255 255 255 / 96%);
+  border: 1rpx solid rgb(255 255 255 / 70%);
+  box-shadow:
+    0 6rpx 22rpx rgb(0 0 0 / 10%),
+    inset 0 1rpx 0 rgb(255 255 255 / 90%);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  overflow: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+
+  &:active {
+    opacity: 0.92;
+    transform: scale(0.992);
+  }
+}
+
+.hero-metabolic-row__left {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 18rpx;
+  flex: 1;
+  min-width: 0;
+  padding: 22rpx 8rpx 22rpx 26rpx;
+}
+
+.hero-metabolic-row__icon {
+  font-size: 44rpx;
+  flex-shrink: 0;
+}
+
+.hero-card.deficit-mode .hero-metabolic-row__icon {
+  color: #5cb896;
+}
+
+.hero-card.surplus-mode .hero-metabolic-row__icon {
+  color: #ea580c;
+}
+
+.hero-metabolic-row__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.hero-metabolic-row__title {
+  font-size: 30rpx;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.hero-card.deficit-mode .hero-metabolic-row__title {
+  color: #246b52;
+}
+
+.hero-card.surplus-mode .hero-metabolic-row__title {
+  color: #9a3412;
+}
+
+.hero-metabolic-row__sub {
+  font-size: 22rpx;
+  line-height: 1.45;
+}
+
+.hero-card.deficit-mode .hero-metabolic-row__sub {
+  color: #4d6b60;
+}
+
+.hero-card.surplus-mode .hero-metabolic-row__sub {
+  color: #7c4a2e;
+}
+
+.hero-metabolic-row__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  padding: 0 22rpx;
+  font-size: 38rpx;
+  font-weight: 300;
+  color: #94a3b8;
+  background: rgb(0 0 0 / 3.5%);
+  border-left: 1rpx solid rgb(0 0 0 / 6%);
+  line-height: 1;
 }
 
 // Streak Card
@@ -390,7 +574,7 @@
 
 .streak-icon-font {
   font-size: 40rpx;
-  color: #e57373;
+  color: $stats-warning;
 }
 
 .streak-content {
@@ -423,7 +607,7 @@
 
 .streak-badge {
   font-size: 22rpx;
-  color: #e57373;
+  color: $stats-warning;
   background: #fef8f8;
   padding: 8rpx 20rpx;
   border-radius: 100rpx;
@@ -477,9 +661,9 @@
     }
   }
   
-  // 有记录未超标 - 绿色
+  // 有记录未超标 - 与首页时间轴同色
   &.is-recorded {
-    background: #00bc7d;
+    background: $stats-primary;
     
     .heatmap-cell-label {
       color: #fff;
@@ -491,9 +675,9 @@
     }
   }
   
-  // 超过目标 - 红色（与首页一致）
+  // 超过目标 - 与首页时间轴同色
   &.is-over {
-    background: #e57373;
+    background: $stats-warning;
     
     .heatmap-cell-label {
       color: #fff;
@@ -598,12 +782,12 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  background: linear-gradient(180deg, #00bc7d 0%, #00a86e 100%);
+  background: linear-gradient(180deg, $stats-primary-light 0%, $stats-primary 100%);
   border-radius: 100rpx;
   transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.over {
-    background: linear-gradient(180deg, #fca5a5 0%, #e57373 100%);
+    background: linear-gradient(180deg, $stats-warning-light 0%, $stats-warning 100%);
   }
 }
 
@@ -654,15 +838,15 @@
   line-height: 1;
 
   &.protein {
-    color: #3b82f6;
+    color: $stats-macro-protein;
   }
 
   &.carbs {
-    color: #00bc7d;
+    color: $stats-macro-carbs;
   }
 
   &.fat {
-    color: #f59e0b;
+    color: $stats-macro-fat;
   }
 }
 
@@ -690,15 +874,15 @@
   border-radius: 100rpx;
 
   &.protein {
-    background: #3b82f6;
+    background: $stats-macro-protein;
   }
 
   &.carbs {
-    background: #00bc7d;
+    background: $stats-macro-carbs;
   }
 
   &.fat {
-    background: #f59e0b;
+    background: $stats-macro-fat;
   }
 }
 
@@ -786,8 +970,8 @@
 
 // Analysis
 .analysis-card {
-  background: linear-gradient(135deg, #eff6ff 0%, #fff 100%);
-  border-color: rgb(59 130 246 / 10%);
+  background: linear-gradient(135deg, rgb(92 158 212 / 10%) 0%, #fff 100%);
+  border-color: rgb(92 158 212 / 14%);
 
   .card-header {
     justify-content: space-between;
@@ -795,11 +979,11 @@
   }
 
   .card-title {
-    color: #1d4ed8;
+    color: #3d6b94;
   }
 
   .card-subtitle {
-    color: rgb(29 78 216 / 60%);
+    color: rgb(61 107 148 / 62%);
   }
 }
 
@@ -807,8 +991,8 @@
   flex-shrink: 0;
   padding: 12rpx 22rpx;
   border-radius: 999rpx;
-  background: #dbeafe;
-  border: 1rpx solid rgb(37 99 235 / 12%);
+  background: rgb(92 158 212 / 14%);
+  border: 1rpx solid rgb(92 158 212 / 22%);
 
   &.disabled {
     opacity: 0.65;
@@ -818,7 +1002,7 @@
 .analysis-action-btn-text {
   font-size: 22rpx;
   line-height: 30rpx;
-  color: #1d4ed8;
+  color: #3d6b94;
   font-weight: 600;
 }
 
@@ -826,12 +1010,12 @@
   margin-bottom: 16rpx;
   padding: 16rpx 18rpx;
   border-radius: 18rpx;
-  background: rgb(219 234 254 / 72%);
-  border: 1rpx solid rgb(59 130 246 / 8%);
+  background: rgb(92 158 212 / 12%);
+  border: 1rpx solid rgb(92 158 212 / 10%);
 
   &.warning {
-    background: rgb(254 249 195 / 90%);
-    border-color: rgb(245 158 11 / 14%);
+    background: rgb(245 196 154 / 35%);
+    border-color: rgb(240 152 92 / 22%);
   }
 }
 
@@ -865,7 +1049,7 @@
 
 .analysis-loading-icon {
   font-size: 28rpx;
-  color: #1d4ed8;
+  color: $stats-macro-protein;
 }
 
 .analysis-loading-text {
@@ -890,8 +1074,8 @@
 .analysis-empty-action {
   padding: 18rpx 28rpx;
   border-radius: 999rpx;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 10rpx 24rpx rgb(37 99 235 / 18%);
+  background: linear-gradient(135deg, $stats-blue-soft 0%, $stats-macro-protein 100%);
+  box-shadow: 0 10rpx 24rpx rgb(92 158 212 / 22%);
 }
 
 .analysis-empty-action-text {
@@ -944,13 +1128,13 @@
 
 .btn-primary {
   margin-top: 40rpx;
-  background: linear-gradient(135deg, #00bc7d 0%, #00a36c 100%);
+  background: linear-gradient(135deg, $stats-primary 0%, $stats-primary-deep 100%);
   color: white;
   padding: 20rpx 56rpx;
   border-radius: 100rpx;
   font-size: 28rpx;
   font-weight: 600;
-  box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 25%);
+  box-shadow: 0 8rpx 20rpx rgb(92 184 150 / 24%);
 }
 
 .footer-placeholder {
@@ -968,14 +1152,14 @@
   border-radius: 28rpx;
   background:
     linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(244 247 251 / 92%) 100%),
-    linear-gradient(135deg, rgb(59 130 246 / 6%) 0%, rgb(16 185 129 / 4%) 100%);
+    linear-gradient(135deg, rgb(92 184 150 / 6%) 0%, rgb(92 158 212 / 5%) 100%);
   border: 1rpx solid rgb(148 163 184 / 12%);
 }
 
 .water-panel {
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(239 246 255 / 92%) 100%),
-    linear-gradient(135deg, rgb(59 130 246 / 8%) 0%, rgb(14 165 233 / 4%) 100%);
+    linear-gradient(180deg, rgb(255 255 255 / 96%) 0%, rgb(245 250 252 / 94%) 100%),
+    linear-gradient(135deg, rgb(92 158 212 / 8%) 0%, rgb(92 184 150 / 4%) 100%);
 }
 
 .body-metric-panel-header {
@@ -1074,8 +1258,8 @@
 .water-trend-bar {
   width: 100%;
   border-radius: 999rpx;
-  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
-  box-shadow: 0 8rpx 20rpx rgb(37 99 235 / 16%);
+  background: linear-gradient(180deg, $stats-blue-soft 0%, $stats-macro-protein 100%);
+  box-shadow: 0 8rpx 20rpx rgb(92 158 212 / 18%);
 }
 
 .water-trend-label {
@@ -1093,3 +1277,4 @@
   line-height: 32rpx;
   color: #64748b;
 }
+

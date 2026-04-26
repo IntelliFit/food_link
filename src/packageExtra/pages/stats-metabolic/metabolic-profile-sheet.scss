@@ -1,0 +1,132 @@
+.metabolic-profile-sheet {
+  padding: 28rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  border-radius: 28rpx 28rpx 0 0;
+  max-height: 85vh;
+  box-sizing: border-box;
+}
+
+.metabolic-profile-sheet__title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8rpx;
+}
+
+.metabolic-profile-sheet__desc {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 1.45;
+  margin-bottom: 28rpx;
+}
+
+.metabolic-profile-sheet__field {
+  margin-bottom: 24rpx;
+}
+
+.metabolic-profile-sheet__label {
+  display: block;
+  font-size: 26rpx;
+  color: #374151;
+  margin-bottom: 10rpx;
+}
+
+.metabolic-profile-sheet__input {
+  width: 100%;
+  height: 80rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+  color: #111827;
+  background: #f9fafb;
+  border-radius: 16rpx;
+  border: 1rpx solid rgb(148 163 184 / 25%);
+  box-sizing: border-box;
+}
+
+.metabolic-profile-sheet__gender-row {
+  display: flex;
+  flex-direction: row;
+  gap: 20rpx;
+}
+
+.metabolic-profile-sheet__gender-btn {
+  flex: 1;
+  padding: 22rpx;
+  text-align: center;
+  border-radius: 16rpx;
+  border: 2rpx solid rgb(148 163 184 / 35%);
+  background: #fff;
+}
+
+.metabolic-profile-sheet__gender-btn--on {
+  border-color: #5cb896;
+  background: rgb(92 184 150 / 10%);
+}
+
+.metabolic-profile-sheet__gender-text {
+  font-size: 28rpx;
+  color: #374151;
+}
+
+.metabolic-profile-sheet__gender-btn--on .metabolic-profile-sheet__gender-text {
+  color: #5cb896;
+  font-weight: 600;
+}
+
+.metabolic-profile-sheet__hint {
+  font-size: 22rpx;
+  color: #9ca3af;
+  margin-top: 8rpx;
+  line-height: 1.4;
+}
+
+.metabolic-profile-sheet__bmr-preview {
+  margin-top: 12rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 14rpx;
+  background: rgb(92 184 150 / 8%);
+  border: 1rpx solid rgb(92 184 150 / 18%);
+}
+
+.metabolic-profile-sheet__bmr-preview-text {
+  font-size: 24rpx;
+  color: #4b5563;
+  line-height: 1.45;
+}
+
+.metabolic-profile-sheet__actions {
+  margin-top: 32rpx;
+  display: flex;
+  flex-direction: row;
+  gap: 20rpx;
+}
+
+.metabolic-profile-sheet__btn {
+  flex: 1;
+  padding: 24rpx;
+  border-radius: 999rpx;
+  text-align: center;
+}
+
+.metabolic-profile-sheet__btn--ghost {
+  background: #f3f4f6;
+}
+
+.metabolic-profile-sheet__btn--ghost-text {
+  font-size: 28rpx;
+  color: #6b7280;
+}
+
+.metabolic-profile-sheet__btn--primary {
+  background: linear-gradient(90deg, #5cb896 0%, #8dd3bf 100%);
+}
+
+.metabolic-profile-sheet__btn--primary-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
+.metabolic-profile-sheet__btn--disabled {
+  opacity: 0.55;
+}

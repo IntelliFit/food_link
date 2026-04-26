@@ -1,5 +1,7 @@
 import Taro from '@tarojs/taro'
 
+import { extraPkgUrl } from './subpackage-extra'
+
 function readInjectedString(
   getter: () => string,
   fallback = ''
@@ -279,6 +281,7 @@ export interface HomeMealItem {
   tags: string[]
   image_path?: string | null
   image_paths?: string[] | null
+  images?: string[] | null
   /** 该餐次内最新一条饮食记录 id，用于跳转记录详情/生成分享海报 */
   primary_record_id?: string | null
   /** 部分网关/序列化可能为 camelCase，与 primary_record_id 等价 */
@@ -295,7 +298,7 @@ export interface HomeMealItem {
 
 /** 解析首页餐食卡片对应的记录 id（兼容 snake_case / camelCase） */
 export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<string, unknown>): string | null {
-  const m = meal as Record<string, unknown>
+  const m = meal as unknown as Record<string, unknown>
   const candidates = [m.primary_record_id, m.primaryRecordId]
   for (const v of candidates) {
     if (v != null && String(v).trim() !== '') {
@@ -310,10 +313,17 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const entries = Array.isArray(row.meal_record_entries)
     ? row.meal_record_entries.filter((e) => e && String(e.id || '').trim() !== '')
     : []
+  const images = Array.isArray(row.image_paths)
+    ? row.image_paths.filter(Boolean)
+    : Array.isArray(row.images)
+      ? row.images.filter(Boolean)
+      : null
   return {
     ...row,
+    images,
+    image_paths: images,
     meal_record_entries: entries.length > 0 ? entries : row.meal_record_entries,
-    primary_record_id: resolveHomeMealPrimaryRecordId(row as Record<string, unknown>),
+    primary_record_id: resolveHomeMealPrimaryRecordId(row as unknown as Record<string, unknown>),
   }
 }
 
@@ -606,6 +616,7 @@ export interface MembershipStatus {
   trial_active?: boolean
   /** 试用期截止时间（UTC ISO） */
   trial_expires_at?: string | null
+  points_balance?: number | null
 }
 
 export interface MembershipPlansResponse {
@@ -1307,7 +1318,7 @@ export interface AnalysisTask {
   image_url?: string | null  // 图片分析时有值，文字分析时为空
   image_paths?: string[] | null // 多图分析时有值
   text_input?: string | null  // 文字分析时有值，图片分析时为空
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated'
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out'
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
@@ -1341,6 +1352,56 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
     throw new Error('服务器未返回任务编号，请稍后重试')
   }
   return { task_id: taskId, message }
+}
+
+/** 批量图片分析提交参数 */
+export interface AnalyzeBatchSubmitParams {
+  image_urls: string[]
+  meal_type?: MealType
+  timezone_offset_minutes?: number
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+  additionalContext?: string
+  modelName?: string
+  execution_mode?: ExecutionMode
+  reference_objects?: PrecisionReferenceObjectInput[]
+}
+
+/** 批量图片分析响应 */
+export interface AnalyzeBatchResponse {
+  task_id: string
+  image_count: number
+  result: AnalyzeResponse
+}
+
+/** 批量分析多张食物图片（每张单独识别，结果累加） */
+export async function submitAnalyzeBatch(body: AnalyzeBatchSubmitParams): Promise<AnalyzeBatchResponse> {
+  const payload: AnalyzeBatchSubmitParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
+  }
+  const res = await authenticatedRequest('/api/analyze/batch', {
+    method: 'POST',
+    data: payload,
+    timeout: 120000 // 批量分析可能耗时较长，120 秒超时
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '批量分析失败')
+  }
+  const data = normalizeTaroResponseJson(res.data)
+  if (!data?.task_id) {
+    console.error('[submitAnalyzeBatch] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return {
+    task_id: String(data.task_id).trim(),
+    image_count: Number(data.image_count) || 0,
+    result: data.result as AnalyzeResponse,
+  }
 }
 
 /** 文字分析提交参数 */
@@ -1990,7 +2051,7 @@ export function clearAllStorage() {
 }
 
 /** 登录页路径，token 失效时统一跳转 */
-const LOGIN_PAGE_URL = '/pages/login/index'
+const LOGIN_PAGE_URL = extraPkgUrl('/pages/login/index')
 
 /**
  * 清除登录态并跳转登录页（token 失效或未登录时调用）
@@ -3313,6 +3374,21 @@ export async function postPublicFoodLibraryComment(
     throw new Error((response.data as any)?.detail || '发表失败')
   }
   return response.data as { comment: PublicFoodLibraryComment }
+}
+
+/** 提交公共食物库反馈 */
+export async function submitPublicFoodLibraryFeedback(
+  content: string,
+  libraryItemId?: string
+): Promise<{ id: string; message: string }> {
+  const response = await authenticatedRequest('/api/public-food-library/feedback', {
+    method: 'POST',
+    data: { content: content.trim(), ...(libraryItemId && { library_item_id: libraryItemId }) }
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '反馈提交失败')
+  }
+  return response.data as { id: string; message: string }
 }
 
 // ---------- 用户私人食谱 ----------

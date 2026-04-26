@@ -1,4 +1,6 @@
 // 全局样式
+@use 'sass:meta';
+
 @import './assets/iconfont/iconfont.css';
 
 /* 全局默认字体：思源黑体 */
@@ -23,7 +25,13 @@ page {
   min-height: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
-  background-color: #f0f3f6;
+  background: linear-gradient(
+    180deg,
+    rgb(92 184 150 / 8%) 0%,
+    rgb(92 184 150 / 3%) 40%,
+    #f0f3f6 80%,
+    #f0f3f6 100%
+  );
   font-family: 'Source Han Sans SC', 'SourceHanSansSC-Regular', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -131,3 +139,4 @@ page > view {
   }
 }
 
+@include meta.load-css('./styles/fl-color-scheme-dark.scss');

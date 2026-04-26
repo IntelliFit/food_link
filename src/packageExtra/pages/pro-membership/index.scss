@@ -1,0 +1,1169 @@
+.membership-page {
+  min-height: 100vh;
+  background: #f0fdf4;
+  padding-bottom: 80rpx;
+}
+
+.membership-page__nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  border-bottom: 1rpx solid rgb(255 255 255 / 6%);
+}
+
+// ==================== Hero ====================
+.hero-section {
+  background:
+    radial-gradient(circle at 50% 14%, rgb(148 255 189 / 20%) 0%, transparent 18%),
+    radial-gradient(circle at 92% 0%, rgb(255 255 255 / 9%) 0%, transparent 30%),
+    radial-gradient(circle at -8% 76%, rgb(120 231 180 / 10%) 0%, transparent 28%),
+    linear-gradient(180deg, #15342d 0%, #1b473b 34%, #235344 72%, #2e6650 100%);
+  padding: 44rpx 32rpx 84rpx;
+  border-bottom-left-radius: 52rpx;
+  border-bottom-right-radius: 52rpx;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 20rpx 44rpx rgb(16 33 27 / 34%);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgb(255 255 255 / 5%) 0%, transparent 45%);
+    pointer-events: none;
+  }
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-top: 6rpx;
+}
+
+.hero-orb {
+  position: absolute;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 6%);
+  pointer-events: none;
+  filter: blur(1rpx);
+
+  &--right {
+    top: -18rpx;
+    right: -86rpx;
+    width: 336rpx;
+    height: 336rpx;
+  }
+
+  &--left {
+    left: -130rpx;
+    bottom: -132rpx;
+    width: 330rpx;
+    height: 330rpx;
+    background: rgb(125 211 176 / 8%);
+  }
+}
+
+.hero-curve {
+  position: absolute;
+  border: 2rpx solid rgb(255 255 255 / 6%);
+  border-radius: 999rpx;
+  pointer-events: none;
+
+  &--left {
+    left: -202rpx;
+    top: 142rpx;
+    width: 362rpx;
+    height: 548rpx;
+  }
+
+  &--right {
+    right: -226rpx;
+    bottom: -82rpx;
+    width: 476rpx;
+    height: 246rpx;
+    transform: rotate(-16deg);
+  }
+}
+
+.hero-emblem-row {
+  display: flex;
+  align-items: center;
+  gap: 30rpx;
+  margin-bottom: 18rpx;
+}
+
+.hero-icon-shell {
+  position: relative;
+  width: 176rpx;
+  height: 176rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-icon-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgb(204 255 221 / 34%) 0%, rgb(177 240 198 / 16%) 42%, transparent 72%);
+  box-shadow:
+    0 0 0 2rpx rgb(198 255 214 / 12%),
+    0 0 0 18rpx rgb(138 255 187 / 4%),
+    0 0 44rpx rgb(144 255 186 / 18%);
+}
+
+.hero-icon-wrap {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgb(255 255 255 / 16%) 0%, rgb(255 255 255 / 9%) 100%);
+  border: 2rpx solid rgb(255 255 255 / 16%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  box-shadow:
+    inset 0 1rpx 0 rgb(255 255 255 / 10%),
+    0 10rpx 24rpx rgb(7 28 22 / 24%);
+}
+
+.hero-laurel {
+  font-size: 58rpx;
+  line-height: 1;
+  color: rgb(198 255 214 / 56%);
+  opacity: 0.94;
+
+  &--left {
+    transform: translateY(6rpx) rotate(-28deg);
+  }
+
+  &--right {
+    transform: translateY(6rpx) scaleX(-1) rotate(-28deg);
+  }
+}
+
+.hero-spark {
+  position: absolute;
+  top: 38rpx;
+  font-size: 20rpx;
+  color: rgb(205 255 220 / 34%);
+  line-height: 1;
+
+  &--left {
+    left: 222rpx;
+  }
+
+  &--right {
+    right: 216rpx;
+  }
+}
+
+.hero-icon-svg {
+  font-size: 52rpx !important;
+  color: #fff !important;
+}
+
+.hero-copy {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+  width: 100%;
+  margin-bottom: 34rpx;
+}
+
+.hero-title {
+  font-size: 72rpx;
+  font-weight: 800;
+  color: #f4f7f5;
+  letter-spacing: 4rpx;
+  margin-bottom: 16rpx;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 10rpx 28rpx rgb(0 0 0 / 20%);
+}
+
+.hero-subtitle {
+  font-size: 25rpx;
+  color: rgb(236 243 239 / 72%);
+  line-height: 1.8;
+  position: relative;
+  z-index: 1;
+  max-width: 560rpx;
+  margin: 0 auto;
+}
+
+.hero-credits {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18rpx;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 12%) 0%, rgb(255 255 255 / 7%) 100%);
+  border: 2rpx solid rgb(255 255 255 / 20%);
+  border-radius: 34rpx;
+  padding: 34rpx 40rpx 32rpx;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 684rpx;
+  min-height: 286rpx;
+  box-sizing: border-box;
+  box-shadow:
+    inset 0 1rpx 0 rgb(255 255 255 / 10%),
+    0 18rpx 38rpx rgb(11 31 24 / 18%);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgb(255 255 255 / 7%) 0%, transparent 42%);
+    pointer-events: none;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 36rpx;
+    right: 36rpx;
+    bottom: -28rpx;
+    height: 150rpx;
+    border-radius: 50%;
+    border: 2rpx solid rgb(255 255 255 / 5%);
+    transform: rotate(-6deg);
+    transform-origin: center;
+    pointer-events: none;
+  }
+}
+
+.hero-credits-label {
+  position: relative;
+  z-index: 1;
+  font-size: 23rpx;
+  color: rgb(236 243 239 / 78%);
+  letter-spacing: 1rpx;
+
+  &::before,
+  &::after {
+    content: '⌁';
+    color: rgb(208 255 221 / 34%);
+    margin: 0 14rpx;
+  }
+}
+
+.hero-credits-value-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18rpx;
+}
+
+.hero-credits-value {
+  font-size: 122rpx;
+  font-weight: 800;
+  line-height: 0.95;
+  color: #cbffd0;
+  text-shadow: 0 12rpx 28rpx rgb(120 255 164 / 10%);
+}
+
+.hero-credits-total {
+  font-size: 58rpx;
+  font-weight: 600;
+  line-height: 1.05;
+  color: rgb(236 243 239 / 76%);
+}
+
+.hero-credits-pill {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60rpx;
+  padding: 0 34rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(180deg, rgb(255 255 255 / 8%) 0%, rgb(255 255 255 / 4%) 100%);
+  border: 1rpx solid rgb(255 255 255 / 9%);
+  box-shadow:
+    inset 0 1rpx 0 rgb(255 255 255 / 7%),
+    0 10rpx 24rpx rgb(11 31 24 / 8%);
+}
+
+.hero-credits-tip {
+  font-size: 22rpx;
+  color: rgb(236 243 239 / 86%);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.hero-credits--idle {
+  min-height: 188rpx;
+  justify-content: center;
+
+  .hero-credits-pill {
+    max-width: 100%;
+    padding-left: 28rpx;
+    padding-right: 28rpx;
+  }
+
+  .hero-credits-tip {
+    white-space: normal;
+  }
+}
+
+.upgrade-notice {
+  margin: 24rpx 32rpx 0;
+  padding: 20rpx 24rpx;
+  border-radius: 20rpx;
+  background: #fff7ed;
+  border: 1rpx solid #fdba74;
+}
+
+.upgrade-notice-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.upgrade-notice-text {
+  flex: 1;
+  font-size: 24rpx;
+  color: #9a3412;
+  line-height: 1.6;
+  font-weight: 600;
+}
+
+.upgrade-notice-action {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: #c2410c;
+  font-weight: 700;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 70%);
+}
+
+// ==================== 通用 section 标题 ====================
+.section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 36rpx 32rpx 16rpx;
+}
+
+.section-title-text {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.section-title-hint {
+  font-size: 22rpx;
+  color: #9ca3af;
+}
+
+// ==================== 档位卡片 ====================
+.tier-section {
+  margin-top: 8rpx;
+}
+
+.tier-grid {
+  display: flex;
+  gap: 16rpx;
+  padding: 0 32rpx;
+}
+
+.tier-card {
+  flex: 1;
+  background: #fff;
+  border: 2rpx solid #e5e7eb;
+  border-radius: 26rpx;
+  padding: 28rpx 18rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  position: relative;
+  transition: all 0.2s ease;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgb(255 255 255 / 6%) 0%, transparent 35%);
+    pointer-events: none;
+  }
+
+  &--active {
+    border-color: #00bc7d;
+    background: linear-gradient(180deg, #ecfdf5 0%, #fff 70%);
+    box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 18%);
+  }
+}
+
+.tier-card-badge {
+  position: absolute;
+  top: -14rpx;
+  right: 12rpx;
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #78350f;
+  background: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%);
+  padding: 4rpx 14rpx;
+  border-radius: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgb(251 191 36 / 35%);
+
+  &--current {
+    color: #065f46;
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    box-shadow: 0 2rpx 8rpx rgb(16 185 129 / 20%);
+  }
+
+  &--suggested {
+    color: #78350f;
+    background: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%);
+  }
+}
+
+.tier-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 8rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.tier-card-icon {
+  font-size: 28rpx;
+  line-height: 1;
+  font-weight: 700;
+
+  &--light {
+    color: #7dd3b0;
+  }
+
+  &--standard {
+    color: #8de4be;
+  }
+
+  &--advanced {
+    color: #f6d36d;
+  }
+}
+
+.tier-card-name {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #374151;
+  position: relative;
+  z-index: 1;
+}
+
+.tier-card-credits {
+  font-size: 72rpx;
+  font-weight: 800;
+  color: #00bc7d;
+  line-height: 1;
+  margin-top: 6rpx;
+  letter-spacing: -2rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.tier-card-credits-unit {
+  font-size: 22rpx;
+  color: #6b7280;
+  position: relative;
+  z-index: 1;
+}
+
+.tier-card-summary {
+  margin-top: 12rpx;
+  font-size: 20rpx;
+  color: #6b7280;
+  line-height: 1.6;
+  text-align: center;
+  min-height: 64rpx;
+  position: relative;
+  z-index: 1;
+}
+
+// ==================== 周期 tabs ====================
+.period-tabs {
+  display: flex;
+  gap: 16rpx;
+  padding: 0 32rpx;
+}
+
+.period-tab {
+  flex: 1;
+  background: #fff;
+  border: 2rpx solid #e5e7eb;
+  border-radius: 22rpx;
+  padding: 26rpx 18rpx 18rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8rpx;
+  position: relative;
+  overflow: hidden;
+
+  &--active {
+    border-color: #00bc7d;
+    background: #ecfdf5;
+  }
+}
+
+.period-tab-label {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #111827;
+  position: relative;
+  z-index: 1;
+}
+
+.period-tab-recommend {
+  position: absolute;
+  top: -2rpx;
+  right: 18rpx;
+  font-size: 18rpx;
+  color: #7c5600;
+  background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+  padding: 8rpx 18rpx;
+  border-radius: 0 0 16rpx 16rpx;
+  font-weight: 700;
+  z-index: 2;
+}
+
+.period-tab-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.period-tab-price-symbol {
+  font-size: 24rpx;
+  color: #374151;
+  font-weight: 700;
+}
+
+.period-tab-price {
+  font-size: 30rpx;
+  color: #374151;
+  font-weight: 800;
+}
+
+.period-tab-price-unit {
+  font-size: 22rpx;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.period-tab-save {
+  font-size: 18rpx;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 2rpx 10rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid #fecaca;
+  margin-top: 2rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.period-tab-current {
+  font-size: 18rpx;
+  color: #047857;
+  background: #ecfdf5;
+  padding: 2rpx 10rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid #a7f3d0;
+  position: relative;
+  z-index: 1;
+}
+
+.period-tab-watermark {
+  position: absolute;
+  right: 16rpx;
+  bottom: 10rpx;
+  font-size: 76rpx;
+  font-weight: 800;
+  line-height: 1;
+  color: rgb(17 24 39 / 8%);
+  transform: rotate(-14deg);
+  pointer-events: none;
+}
+
+// ==================== 已选套餐价格卡 ====================
+.plan-card {
+  margin: 24rpx 32rpx 0;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 30rpx 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4rpx 20rpx rgb(0 100 60 / 8%);
+  border: 2rpx solid #d1fae5;
+  border-left: 5rpx solid #00bc7d;
+}
+
+.plan-card-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.plan-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.plan-desc {
+  font-size: 22rpx;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.plan-permonth {
+  font-size: 22rpx;
+  color: #047857;
+  font-weight: 600;
+  margin-top: 2rpx;
+}
+
+.plan-save-tag {
+  align-self: flex-start;
+  margin-top: 6rpx;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  padding: 4rpx 14rpx;
+  border-radius: 12rpx;
+}
+
+.plan-save-tag-text {
+  font-size: 20rpx;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.plan-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: baseline;
+  gap: 6rpx;
+  flex-shrink: 0;
+  margin-left: 20rpx;
+}
+
+.plan-price {
+  font-size: 56rpx;
+  font-weight: 800;
+  color: #00bc7d;
+}
+
+.plan-price-symbol {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #00bc7d;
+}
+
+.plan-period {
+  font-size: 22rpx;
+  color: #6b7280;
+}
+
+.plan-original-price {
+  font-size: 20rpx;
+  color: #9ca3af;
+  text-decoration: line-through;
+  align-self: flex-end;
+}
+
+// ==================== 三档对比表 ====================
+.features-section {
+  margin: 32rpx 32rpx 0;
+  background: #fff;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 20rpx rgb(0 100 60 / 8%);
+}
+
+.features-header {
+  display: flex;
+  background: #f6fdf9;
+  border-bottom: 1rpx solid #d1fae5;
+  padding-left: 140rpx;
+}
+
+.features-col-head {
+  flex: 1;
+  padding: 20rpx 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &--active {
+    background: rgb(0 188 125 / 10%);
+  }
+}
+
+.features-col-head-name {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #374151;
+}
+
+.features-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1rpx solid #f0f5f2;
+  min-height: 76rpx;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.features-row-label {
+  width: 140rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafcfb;
+}
+
+.features-row-label-text {
+  font-size: 24rpx;
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.features-col-cell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14rpx 8rpx;
+
+  &--active {
+    background: rgb(0 188 125 / 6%);
+  }
+}
+
+.features-cell-text {
+  font-size: 24rpx;
+  color: #064e3b;
+  text-align: center;
+}
+
+.features-footnote {
+  display: block;
+  margin: 16rpx 32rpx 0;
+  font-size: 22rpx;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+// ==================== 积分说明 ====================
+.credits-hint-card {
+  margin: 24rpx 32rpx 0;
+  background: #fffdf5;
+  border: 1rpx dashed #fde68a;
+  border-radius: 20rpx;
+  padding: 20rpx 28rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.credits-hint-title {
+  font-size: 24rpx;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.credits-hint-item {
+  font-size: 22rpx;
+  color: #78350f;
+  line-height: 1.6;
+
+  &--muted {
+    color: #a16207;
+    font-size: 20rpx;
+    margin-top: 2rpx;
+  }
+}
+
+// ==================== 状态卡 ====================
+.status-card {
+  margin: 24rpx 32rpx 0;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 24rpx 36rpx;
+  box-shadow: 0 4rpx 20rpx rgb(0 100 60 / 8%);
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid #f0f5f2;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.status-label {
+  font-size: 26rpx;
+  color: #6b7280;
+}
+
+.status-value {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #111827;
+  text-align: right;
+  max-width: 420rpx;
+  line-height: 1.5;
+
+  &--active {
+    color: #00bc7d;
+  }
+}
+
+// ==================== 操作区 ====================
+.action-section {
+  margin: 32rpx 32rpx 0;
+}
+
+.renew-tip {
+  text-align: center;
+  margin-bottom: 16rpx;
+}
+
+.renew-tip-text {
+  font-size: 22rpx;
+  color: #9ca3af;
+}
+
+.subscribe-btn {
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a86b 100%);
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 35%);
+
+  &--renew {
+    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+    box-shadow: 0 8rpx 24rpx rgb(4 120 87 / 30%);
+  }
+
+  &[disabled] {
+    opacity: 0.65;
+  }
+
+  .btn-spinner {
+    display: inline-block;
+    width: 32rpx;
+    height: 32rpx;
+    border: 3rpx solid rgb(255 255 255 / 30%);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: btn-spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8rpx;
+  }
+
+  @keyframes btn-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+
+.subscribe-hint {
+  display: block;
+  text-align: center;
+  font-size: 22rpx;
+  color: #9ca3af;
+  margin-top: 20rpx;
+}
+
+/* ============================================================ */
+
+/* TODO: [TEST] 以下测试样式在正式上线前必须删除 */
+.test-section {
+  margin: 48rpx 32rpx 0;
+  padding: 24rpx 32rpx;
+  background: #fffbe6;
+  border: 1rpx dashed #f59e0b;
+  border-radius: 20rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.test-section-label {
+  font-size: 22rpx;
+  color: #92400e;
+  text-align: center;
+}
+
+.test-toggle-btn {
+  width: 100%;
+  height: 80rpx;
+  line-height: 80rpx;
+  border-radius: 999rpx;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 600;
+  border: none;
+
+  &[disabled] {
+    opacity: 0.6;
+  }
+}
+
+/* TODO: [TEST] 测试样式结束 */
+
+/* ============================================================ */
+
+.membership-page--dark {
+  background:
+    radial-gradient(circle at top right, rgb(125 211 176 / 14%), transparent 24%),
+    radial-gradient(circle at top left, rgb(92 184 150 / 12%), transparent 22%),
+    linear-gradient(180deg, #131917 0%, #0f1413 42%, #0b0f0e 100%);
+
+  .hero-section {
+    background:
+      radial-gradient(circle at 50% 14%, rgb(148 255 189 / 16%) 0%, transparent 18%),
+      radial-gradient(circle at 92% 0%, rgb(255 255 255 / 8%) 0%, transparent 30%),
+      radial-gradient(circle at -8% 76%, rgb(120 231 180 / 10%) 0%, transparent 28%),
+      linear-gradient(180deg, #14241f 0%, #1c3a31 34%, #254f40 72%, #2b614b 100%);
+    box-shadow: 0 16rpx 40rpx rgb(0 0 0 / 38%);
+  }
+
+  .hero-orb--right {
+    background: rgb(255 255 255 / 10%);
+  }
+
+  .hero-orb--left {
+    background: rgb(125 211 176 / 12%);
+  }
+
+  .hero-curve {
+    border-color: rgb(255 255 255 / 7%);
+  }
+
+  .hero-icon-wrap,
+  .hero-credits {
+    background: linear-gradient(180deg, rgb(255 255 255 / 12%) 0%, rgb(255 255 255 / 6%) 100%);
+    border-color: rgb(255 255 255 / 18%);
+    box-shadow: inset 0 1rpx 0 rgb(255 255 255 / 8%);
+  }
+
+  .hero-credits-pill {
+    background: rgb(255 255 255 / 5%);
+    border-color: rgb(255 255 255 / 8%);
+  }
+
+  .upgrade-notice {
+    background: rgb(120 53 15 / 18%);
+    border-color: rgb(251 191 36 / 28%);
+    box-shadow: 0 10rpx 28rpx rgb(0 0 0 / 22%);
+  }
+
+  .upgrade-notice-text {
+    color: #fed7aa;
+  }
+
+  .upgrade-notice-action {
+    background: rgb(255 255 255 / 8%);
+    color: #fde68a;
+  }
+
+  .section-title-text {
+    color: #eef4f1;
+  }
+
+  .section-title-hint,
+  .features-footnote,
+  .renew-tip-text,
+  .subscribe-hint,
+  .status-label,
+  .plan-period {
+    color: #93a39b;
+  }
+
+  .period-tab,
+  .plan-card,
+  .features-section,
+  .credits-hint-card,
+  .status-card,
+  .test-section {
+    background: rgb(255 255 255 / 4%);
+    border-color: rgb(125 211 176 / 16%);
+    box-shadow: 0 14rpx 36rpx rgb(0 0 0 / 26%);
+  }
+
+  .tier-card,
+  .period-tab,
+  .plan-card,
+  .features-section,
+  .credits-hint-card,
+  .status-card,
+  .test-section {
+    background: rgb(255 255 255 / 4%);
+    border-color: rgb(125 211 176 / 16%);
+    box-shadow: 0 14rpx 36rpx rgb(0 0 0 / 26%);
+  }
+
+  .tier-card--active,
+  .period-tab--active {
+    background: linear-gradient(180deg, rgb(125 211 176 / 16%) 0%, rgb(255 255 255 / 6%) 100%);
+    border-color: rgb(125 211 176 / 58%);
+    box-shadow: 0 16rpx 32rpx rgb(0 0 0 / 30%);
+  }
+
+  .tier-card-name,
+  .period-tab-label,
+  .plan-name,
+  .features-col-head-name,
+  .features-row-label-text,
+  .status-value {
+    color: #edf6f0;
+  }
+
+  .tier-card-credits,
+  .plan-price,
+  .plan-price-symbol,
+  .plan-permonth,
+  .status-value--active,
+  .features-cell-text {
+    color: #7dd3b0;
+  }
+
+  .tier-card-credits-unit,
+  .tier-card-summary,
+  .period-tab-price,
+  .plan-desc {
+    color: #afbbb4;
+  }
+
+  .period-tab-save {
+    color: #fecaca;
+    background: rgb(127 29 29 / 22%);
+    border-color: rgb(248 113 113 / 28%);
+  }
+
+  .period-tab-recommend {
+    color: #7c5600;
+    box-shadow: 0 8rpx 18rpx rgb(0 0 0 / 18%);
+  }
+
+  .period-tab-price-symbol,
+  .period-tab-price-unit {
+    color: #b6c2bc;
+  }
+
+  .period-tab-current {
+    color: #a7f3d0;
+    background: rgb(6 95 70 / 22%);
+    border-color: rgb(52 211 153 / 28%);
+  }
+
+  .period-tab-watermark {
+    color: rgb(255 255 255 / 8%);
+  }
+
+  .plan-card {
+    border-left-color: #6ee7b7;
+  }
+
+  .plan-save-tag {
+    background: linear-gradient(135deg, #fde68a 0%, #fcd34d 100%);
+  }
+
+  .plan-original-price {
+    color: #7f8a85;
+  }
+
+  .features-header {
+    background: rgb(255 255 255 / 3%);
+    border-bottom-color: rgb(125 211 176 / 14%);
+  }
+
+  .features-col-head--active,
+  .features-col-cell--active {
+    background: rgb(125 211 176 / 10%);
+  }
+
+  .features-row {
+    border-bottom-color: rgb(255 255 255 / 6%);
+  }
+
+  .features-row-label {
+    background: rgb(255 255 255 / 2%);
+  }
+
+  .credits-hint-card {
+    background: linear-gradient(180deg, rgb(146 64 14 / 14%) 0%, rgb(255 255 255 / 4%) 100%);
+    border-color: rgb(251 191 36 / 22%);
+  }
+
+  .credits-hint-title {
+    color: #fde68a;
+  }
+
+  .credits-hint-item {
+    color: #f3ead2;
+
+    &--muted {
+      color: #cbbd96;
+    }
+  }
+
+  .status-row {
+    border-bottom-color: rgb(255 255 255 / 6%);
+  }
+
+  .subscribe-btn {
+    box-shadow: 0 16rpx 30rpx rgb(0 0 0 / 32%);
+  }
+
+  .test-section {
+    background: rgb(245 158 11 / 10%);
+    border-color: rgb(245 158 11 / 28%);
+  }
+
+  .test-section-label {
+    color: #fcd34d;
+  }
+}
