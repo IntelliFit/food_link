@@ -41,13 +41,4 @@ jobs:
             -i ~/.ssh/id_rsa \
             ${DEPLOY_USER}@${DEPLOY_HOST} \
             "set -e; cd ${DEPLOY_PATH} && \
-            if [ -f ./deploy_backend.sh ]; then \
-              bash ./deploy_backend.sh ${DEPLOY_PATH} ${DEPLOY_BRANCH} ${DEPLOY_SERVICE} || bash ./deploy_backend.sh; \
-            elif [ -f ./deploy/scripts/deploy_backend_v2.sh ]; then \
-              bash ./deploy/scripts/deploy_backend_v2.sh ${DEPLOY_PATH} ${DEPLOY_BRANCH} ${DEPLOY_SERVICE}; \
-            elif [ -f ./deploy/scripts/deploy_backend.sh ]; then \
-              bash ./deploy/scripts/deploy_backend.sh; \
-            else \
-              echo 'deploy script not found'; \
-              exit 1; \
-            fi"
+            bash ./deploy/scripts/deploy_backend.sh ${DEPLOY_PATH} ${DEPLOY_BRANCH} ${DEPLOY_SERVICE}"
