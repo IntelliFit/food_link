@@ -49,12 +49,15 @@ function FoodLibraryPage() {
   const [filterFatLoss, setFilterFatLoss] = useState<boolean | undefined>(undefined)
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchMerchant, setSearchMerchant] = useState('')
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
 
   // 性能优化相关状态
   const [refreshing, setRefreshing] = useState(false)
   const [isFirstLoad, setIsFirstLoad] = useState(true)
   const [showSkeleton, setShowSkeleton] = useState(false)
   const lastRefreshTime = useRef<number>(0)
+  const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
 
   /**
    * 从缓存加载数据
@@ -261,6 +264,24 @@ function FoodLibraryPage() {
     setSearchMerchant(searchKeyword.trim())
   }
 
+  // 左右滑动手势
+  const onTouchStart = (e: any) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+  const onTouchEnd = (e: any) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = e.changedTouches[0].clientY - touchStartY.current
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 80) {
+      if (dx < 0 && tabMode === 'all') {
+        setTabMode('collections')
+        loadCollectionList(true)
+      } else if (dx > 0 && tabMode === 'collections') {
+        setTabMode('all')
+      }
+    }
+  }
+
   // 点赞/取消（乐观更新）
   const handleLike = async (item: PublicFoodLibraryItem) => {
     // 1. 乐观更新：立即更新 UI
@@ -437,20 +458,6 @@ function FoodLibraryPage() {
       {/* 筛选区（仅全部时显示） */}
       {tabMode === 'all' && (
         <View className='filter-section'>
-          <View className='filter-row'>
-            <View
-              className={`filter-tag ${filterFatLoss === undefined ? 'active' : ''}`}
-              onClick={() => setFilterFatLoss(undefined)}
-            >
-              全部
-            </View>
-            <View
-              className={`filter-tag ${filterFatLoss === true ? 'active' : ''}`}
-              onClick={() => setFilterFatLoss(true)}
-            >
-              适合减脂
-            </View>
-          </View>
           <View className='search-row'>
             <View className='search-input-wrap'>
               <Text className='search-input-icon iconfont icon-sousuo' />
@@ -490,9 +497,32 @@ function FoodLibraryPage() {
               评分
             </View>
           </View>
-          <View className='sort-filter-btn'>
-            <Text className='sort-filter-icon iconfont icon-shaixuan' />
+          <View className='sort-filter-btn' onClick={() => setShowFilterPanel(v => !v)}>
+            <Text className='sort-filter-icon iconfont icon-filter-filling' />
             <Text className='sort-filter-text'>筛选</Text>
+          </View>
+        </View>
+      )}
+
+      {/* 筛选下拉面板 */}
+      {tabMode === 'all' && showFilterPanel && (
+        <View className='filter-dropdown-panel'>
+          <View className='filter-dropdown-row'>
+            <Text className='filter-dropdown-label'>类型</Text>
+            <View className='filter-dropdown-options'>
+              <View
+                className={`filter-dropdown-option ${filterFatLoss === undefined ? 'active' : ''}`}
+                onClick={() => setFilterFatLoss(undefined)}
+              >
+                全部
+              </View>
+              <View
+                className={`filter-dropdown-option ${filterFatLoss === true ? 'active' : ''}`}
+                onClick={() => setFilterFatLoss(true)}
+              >
+                适合减脂
+              </View>
+            </View>
           </View>
         </View>
       )}
@@ -507,6 +537,8 @@ function FoodLibraryPage() {
         refresherTriggered={refreshing}
         onRefresherRefresh={handleRefresherRefresh}
         refresherDefaultStyle='black'
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
       >
         <View className='list-content'>
           <Divider className='refresh-divider' />

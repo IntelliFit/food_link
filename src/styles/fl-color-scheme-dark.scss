@@ -2281,6 +2281,35 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-accent !important;
 }
 
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-panel {
+  background: $fl-dark-panel-bg !important;
+  border: 1rpx solid $fl-dark-border !important;
+  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 30%) !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-option {
+  background: $fl-dark-ghost-bg !important;
+  color: $fl-dark-text !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .filter-dropdown-option.active {
+  background: rgb(125 211 176 / 12%) !important;
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-detail-page .correction-hint {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .food-detail-page .correction-link {
+  color: $fl-dark-accent !important;
+}
+
 .fl-page-theme-root--dark .recipes-page .tabs-container {
   background: $fl-dark-panel-bg !important;
   box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 20%) !important;

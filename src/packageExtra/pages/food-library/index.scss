@@ -105,22 +105,25 @@
 // Tab：全部 / 收藏夹
 .tab-section {
   display: flex;
+  justify-content: space-around;
   background: #fff;
   padding: 24rpx 32rpx 0;
   border-bottom: 1rpx solid #e5e7eb;
 }
 
 .tab-item {
-  padding: 20rpx 32rpx;
+  padding: 20rpx 48rpx;
   font-size: 30rpx;
   font-weight: 500;
   color: #6b7280;
   margin-bottom: -1rpx;
   border-bottom: 4rpx solid transparent;
+  text-align: center;
+  flex: 1;
 
   &.active {
-    color: #00bc7d;
-    border-bottom-color: #00bc7d;
+    color: #5cb896;
+    border-bottom-color: #5cb896;
   }
 
   &:active {
@@ -133,30 +136,6 @@
   background: #fff;
   padding: 24rpx 32rpx;
   border-bottom: 1rpx solid #e5e7eb;
-}
-
-.filter-row {
-  display: flex;
-  gap: 16rpx;
-  flex-wrap: wrap;
-}
-
-.filter-tag {
-  padding: 12rpx 24rpx;
-  background: #f3f4f6;
-  border-radius: 20rpx;
-  font-size: 26rpx;
-  color: #364153;
-  transition: all 0.2s ease;
-
-  &.active {
-    background: #ecfdf5;
-    color: #096;
-  }
-
-  &:active {
-    transform: scale(0.95);
-  }
 }
 
 .search-row {
@@ -194,7 +173,7 @@
   height: 64rpx;
   line-height: 64rpx;
   font-size: 28rpx;
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   border-radius: 12rpx;
 }
@@ -207,6 +186,7 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1rpx solid #e5e7eb;
+  position: relative;
 }
 
 .sort-left {
@@ -221,7 +201,7 @@
   position: relative;
 
   &.active {
-    color: #096;
+    color: #5cb896;
     font-weight: 600;
 
     &::after {
@@ -231,7 +211,7 @@
       right: 0;
       bottom: -4rpx;
       height: 4rpx;
-      background: #096;
+      background: #5cb896;
       border-radius: 2rpx;
     }
   }
@@ -254,6 +234,56 @@
 .sort-filter-text {
   font-size: 26rpx;
   color: #6a7282;
+}
+
+// 筛选下拉面板
+.filter-dropdown-panel {
+  position: absolute;
+  right: 32rpx;
+  top: calc(100% + 8rpx);
+  background: #fff;
+  padding: 16rpx;
+  border-radius: 16rpx;
+  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 12%);
+  z-index: 50;
+  min-width: 240rpx;
+}
+
+.filter-dropdown-row {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+}
+
+.filter-dropdown-label {
+  font-size: 28rpx;
+  color: #6a7282;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.filter-dropdown-options {
+  display: flex;
+  gap: 16rpx;
+  flex-wrap: wrap;
+}
+
+.filter-dropdown-option {
+  padding: 12rpx 24rpx;
+  background: #f3f4f6;
+  border-radius: 20rpx;
+  font-size: 26rpx;
+  color: #364153;
+  transition: all 0.2s ease;
+
+  &.active {
+    background: #ecfdf5;
+    color: #5cb896;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 }
 
 // 列表区域
@@ -319,7 +349,7 @@
   position: absolute;
   top: 12rpx;
   left: 12rpx;
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   font-size: 20rpx;
   padding: 4rpx 12rpx;
@@ -331,7 +361,7 @@
   position: absolute;
   top: 12rpx;
   right: 12rpx;
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   font-size: 20rpx;
   padding: 4rpx 12rpx;
@@ -380,12 +410,12 @@
 
 .merchant-icon {
   font-size: 22rpx;
-  color: #00bc7d;
+  color: #5cb896;
 }
 
 .merchant-name {
   font-size: 22rpx;
-  color: #00bc7d;
+  color: #5cb896;
   background: #ecfdf5;
   padding: 4rpx 12rpx;
   border-radius: 8rpx;
@@ -396,7 +426,7 @@
   right: 0;
   bottom: 0;
   font-size: 28rpx;
-  color: #00bc7d;
+  color: #5cb896;
   font-weight: 600;
 }
 
@@ -536,7 +566,7 @@
 }
 
 .empty-btn {
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   font-size: 28rpx;
   border-radius: 12rpx;
@@ -562,7 +592,7 @@
   bottom: 120rpx;
   width: 112rpx;
   height: 112rpx;
-  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
+  background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -602,7 +632,7 @@
 
 .login-tip-btn {
   font-size: 28rpx;
-  color: #096;
+  color: #4a9e7f;
   background: #ecfdf5;
   border-radius: 12rpx;
   width: 200rpx;
@@ -622,7 +652,7 @@
 }
 
 .feedback-link {
-  color: #00bc7d;
+  color: #5cb896;
   text-decoration: underline;
   margin-left: 4rpx;
 

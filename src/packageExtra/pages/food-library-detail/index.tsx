@@ -8,6 +8,7 @@ import {
   unlikePublicFoodLibraryItem,
   getPublicFoodLibraryComments,
   postPublicFoodLibraryComment,
+  submitPublicFoodLibraryFeedback,
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment,
   collectPublicFoodLibraryItem,
@@ -128,6 +129,31 @@ function FoodLibraryDetailPage() {
       }
     } catch (e: any) {
       Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
+    }
+  }
+
+  // 提交修正
+  const handleCorrection = async () => {
+    if (!item) return
+    const { confirm, content } = await Taro.showModal({
+      title: '修正食物信息',
+      content: '',
+      editable: true,
+      placeholderText: '请说明您认为有误的地方（如食物名称、热量等）…',
+      confirmText: '提交',
+      cancelText: '取消',
+      confirmColor: '#5cb896',
+    })
+    if (!confirm || !content || !content.trim()) return
+
+    Taro.showLoading({ title: '提交中...', mask: true })
+    try {
+      await submitPublicFoodLibraryFeedback(content.trim(), item.id)
+      Taro.showToast({ title: '修正已提交', icon: 'success' })
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '提交失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
     }
   }
 
@@ -439,6 +465,12 @@ function FoodLibraryDetailPage() {
           <CommentOutlined size='20' />
           <Text className='action-text'>写评论</Text>
         </View>
+      </View>
+
+      {/* 修正入口 */}
+      <View className='correction-bar'>
+        <Text className='correction-hint'>信息有误？</Text>
+        <Text className='correction-link' onClick={handleCorrection}>点击修正</Text>
       </View>
 
       {/* 评论弹窗 */}
