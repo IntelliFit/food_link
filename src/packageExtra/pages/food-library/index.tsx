@@ -697,11 +697,6 @@ function FoodLibraryPage() {
               </View>
             ))
           )}
-          {/* 反馈入口 */}
-          <View className='feedback-bar'>
-            <Text className='feedback-hint'>结果如果不准确的话，可以</Text>
-            <Text className='feedback-link' onClick={handleFeedback}>点击向我们提交反馈</Text>
-          </View>
         </View>
       </ScrollView>
 

@@ -2634,3 +2634,34 @@
   - `mrc errors 10 --port 9420`：`0`
 - Notes:
   - 提交记录：`296af07`
+
+- Task: 优化圈子社区接口性能（好友排名、互动消息、好友动态）
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `backend/database.py`
+    - `get_friend_ids`：合并两次查询为一次（`or_` 条件），减少一次网络往返；增加 5 分钟内存缓存
+    - `get_friend_circle_week_checkin_leaderboard`：去掉 while 循环分页，改为一次批量拉取；增加 5 分钟内存缓存（按周起始时间作为 key）
+    - `get_feed_likes_for_records`：合并两次查询为一次（同时获取 record_id + user_id，Python 中同时统计点赞数和当前用户是否点赞）
+    - `list_feed_interaction_notifications`：使用外键关联查询 `actor:weapp_user!actor_user_id(id, nickname, avatar)` 一次性获取通知 + 用户信息
+    - `count_unread_feed_interaction_notifications`：使用 `select("*", count="exact").limit(0)` 直接获取计数，避免传输行数据
+  - `backend/tests/benchmark_community_apis.py`
+    - 新增基准测试脚本，分别调用原始版本和优化版本函数，各跑 10 次取平均
+    - 每次测试前清除缓存，确保公平对比
+- Verification:
+  - `python -m py_compile backend/database.py`：通过
+  - `python tests/benchmark_community_apis.py`：运行成功，结果稳定
+- 优化前后速度差异（表格）：
+
+| 接口 | 优化前(ms) | 优化后(ms) | 节省(ms) | 提升幅度 |
+|------|-----------|-----------|---------|---------|
+| 好友排名 | 1523.33 | 1131.11 | 392.22 | 25.7% |
+| 点赞查询 | 716.70 | 362.17 | 354.52 | 49.5% |
+| 互动消息列表 | 739.08 | 384.67 | 354.41 | 48.0% |
+| 未读通知计数 | 380.48 | 392.23 | -11.76 | -3.1% |
+| **合计** | **3359.59** | **2270.18** | **1089.41** | **32.4%** |
+
+- Notes:
+  - 测试数据：好友排名测试用户有 110 个好友，一周内 114 条记录；互动消息测试用户有 90 条通知
+  - 未读通知计数提升不明显，原因是数据量小（90 条），网络往返时间主导，SQL 层面优化收益有限
+  - 三个核心接口（好友排名、点赞查询、互动消息列表）均有显著提速，合计提升约 1.1 秒
+  - 提交记录：`c688f33`

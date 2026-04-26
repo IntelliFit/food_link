@@ -484,16 +484,19 @@
   font-weight: 600;
 }
 
+// 评论区容器（写评论按钮 + 修正入口）
+.comment-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
 // 修正入口
 .correction-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(118rpx + env(safe-area-inset-bottom));
   text-align: center;
-  padding: 12rpx 0;
-  font-size: 24rpx;
-  z-index: 99;
+  padding: 4rpx 0 0;
+  font-size: 22rpx;
   background: transparent;
 }
 
