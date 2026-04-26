@@ -169,6 +169,43 @@ function FoodLibraryPage() {
     }
   }, [sortBy, filterFatLoss, searchMerchant, saveToCache])
 
+  /**
+   * 用户主动刷新（搜索/排序/筛选切换时）
+   * 先清空列表 + 显示 loading spinner，再请求数据
+   */
+  const refreshList = useCallback(async (
+    params: {
+      sortBy: 'latest' | 'hot' | 'rating'
+      filterFatLoss?: boolean
+      searchMerchant?: string
+    }
+  ) => {
+    if (!getAccessToken()) return
+    setList([])
+    setLoading(true)
+    clearCache()
+    lastRefreshTime.current = 0
+    try {
+      const res = await getPublicFoodLibraryList({
+        sort_by: params.sortBy,
+        suitable_for_fat_loss: params.filterFatLoss,
+        merchant_name: params.searchMerchant || undefined,
+        limit: 50
+      })
+      const newList = res.list || []
+      setList(newList)
+      saveToCache(newList)
+      lastRefreshTime.current = Date.now()
+    } catch (e: any) {
+      console.error('加载公共食物库失败:', e)
+      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+      setShowSkeleton(false)
+    }
+  }, [clearCache, saveToCache])
+
   /** 加载收藏夹列表，force=true 时忽略缓存强制请求 */
   const loadCollectionList = useCallback(async (force = false) => {
     if (!getAccessToken()) return
@@ -237,13 +274,13 @@ function FoodLibraryPage() {
     applyThemeNavigationBar(scheme)
   }, [scheme])
 
-  // 筛选条件变化时刷新（仅全部列表）
+  // 仅登录态或 tab 切换时做初始化加载（sortBy/filterFatLoss/searchMerchant 的主动变更由点击函数直接处理）
   useEffect(() => {
     if (loggedIn && tabMode === 'all') {
       clearCache()
       loadList(false, true)
     }
-  }, [sortBy, filterFatLoss, searchMerchant, loggedIn, tabMode])
+  }, [loggedIn, tabMode])
 
   // 下拉刷新处理
   const handleRefresherRefresh = useCallback(() => {
@@ -261,7 +298,9 @@ function FoodLibraryPage() {
 
   // 搜索
   const handleSearch = () => {
-    setSearchMerchant(searchKeyword.trim())
+    const kw = searchKeyword.trim()
+    setSearchMerchant(kw)
+    refreshList({ sortBy, filterFatLoss, searchMerchant: kw })
   }
 
   // 左右滑动手势
@@ -480,19 +519,19 @@ function FoodLibraryPage() {
           <View className='sort-left'>
             <View
               className={`sort-item ${sortBy === 'latest' ? 'active' : ''}`}
-              onClick={() => setSortBy('latest')}
+              onClick={() => { setSortBy('latest'); refreshList({ sortBy: 'latest', filterFatLoss, searchMerchant }) }}
             >
               最新
             </View>
             <View
               className={`sort-item ${sortBy === 'hot' ? 'active' : ''}`}
-              onClick={() => setSortBy('hot')}
+              onClick={() => { setSortBy('hot'); refreshList({ sortBy: 'hot', filterFatLoss, searchMerchant }) }}
             >
               最热
             </View>
             <View
               className={`sort-item ${sortBy === 'rating' ? 'active' : ''}`}
-              onClick={() => setSortBy('rating')}
+              onClick={() => { setSortBy('rating'); refreshList({ sortBy: 'rating', filterFatLoss, searchMerchant }) }}
             >
               评分
             </View>
@@ -512,13 +551,13 @@ function FoodLibraryPage() {
             <View className='filter-dropdown-options'>
               <View
                 className={`filter-dropdown-option ${filterFatLoss === undefined ? 'active' : ''}`}
-                onClick={() => setFilterFatLoss(undefined)}
+                onClick={() => { setFilterFatLoss(undefined); setShowFilterPanel(false); refreshList({ sortBy, filterFatLoss: undefined, searchMerchant }) }}
               >
                 全部
               </View>
               <View
                 className={`filter-dropdown-option ${filterFatLoss === true ? 'active' : ''}`}
-                onClick={() => setFilterFatLoss(true)}
+                onClick={() => { setFilterFatLoss(true); setShowFilterPanel(false); refreshList({ sortBy, filterFatLoss: true, searchMerchant }) }}
               >
                 适合减脂
               </View>

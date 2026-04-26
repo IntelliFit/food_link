@@ -2586,3 +2586,32 @@
   - 阻塞：
     - 本轮 `npm run dev:weapp` 启动后，长时间停留在 `transforming...`
     - 当前 `dist/` 仅见 `project.config.json`，未能在本轮等待窗口内拿到完整会员页产物与截图文件
+
+- Task: 公共食物库页面深度改版
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - Tab 布局改为 space-around + Swiper 左右滑动切换
+    - 筛选按钮增加 iconfont 图标（`icon-filter-filling`）
+    - 点击筛选按钮展开下拉浮层（绝对定位 + 阴影），选项：全部 / 适合减脂
+    - 列表页底部新增「结果如果不准确的话，可以点击向我们提交反馈」入口
+  - `src/packageExtra/pages/food-library/index.scss`
+    - 全部绿色统一为首页低饱和绿 `#5cb896`（替换原来的 `#00bc7d` / `#4a9e7f`）
+    - 卡片改为左图右文横向布局
+    - 筛选下拉浮层样式：absolute 定位、圆角、阴影
+    - sort-item active 下划线同步为 `#5cb896`
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - 底部操作栏下方新增「信息有误？点击修正」入口
+    - 点击后弹出修正内容输入框，提交到 `submitPublicFoodLibraryFeedback`（带 libraryItemId）
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - correction-bar 样式：fixed 定位、居中对齐
+    - correction-link 颜色为 `#5cb896`
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 新增 filter-dropdown-panel、filter-dropdown-option、correction-bar 暗色覆盖
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
+  - `mrc errors 20 --port 9420`：`0`
+- Notes:
+  - 微信开发者工具自动化 `mrc screenshot` 当前环境中偶发超时，本轮截图验证以列表页 + 筛选面板为主；详情页修正入口截图待后续补
+  - 提交记录：`189880b`
