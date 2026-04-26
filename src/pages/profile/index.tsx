@@ -110,7 +110,24 @@ function ProfilePage() {
       const token = getAccessToken()
       if (token) {
         setIsLoggedIn(true)
-        // 从服务器获取最新用户信息
+
+        // 1. 先读本地缓存，零延迟展示旧数据
+        const storedUserInfo = Taro.getStorageSync('userInfo')
+        if (storedUserInfo) {
+          setUserInfo(storedUserInfo)
+        }
+        const storedRegisterTime = Taro.getStorageSync('userRegisterTime')
+        if (storedRegisterTime) {
+          setRegisterDate(formatRegisterDate(storedRegisterTime))
+        }
+        const storedMembership = Taro.getStorageSync('membershipStatus')
+        if (storedMembership) {
+          try {
+            setMembershipStatus(JSON.parse(storedMembership))
+          } catch (_) { /* ignore */ }
+        }
+
+        // 2. 异步请求网络，获取最新数据后更新
         try {
           const [apiUserInfo, membershipData, dashboardData, friendRequestsData] = await Promise.all([
             getUserProfile(),
@@ -127,7 +144,7 @@ function ProfilePage() {
               return null
             }),
           ])
-          
+
           // 计算待处理的好友请求数量
           if (friendRequestsData?.received) {
             const pendingCount = friendRequestsData.received.filter(r => r.status === 'pending').length
@@ -136,6 +153,7 @@ function ProfilePage() {
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
             setMembershipStatus(membershipData)
+            Taro.setStorageSync('membershipStatus', JSON.stringify(membershipData))
           }
           if (dashboardData !== null) {
             setExpiryDashboard(dashboardData as FoodExpiryDashboard)
@@ -151,12 +169,13 @@ function ProfilePage() {
             console.error('获取记录天数失败:', error)
           }
 
-          setUserInfo({
+          const nextUserInfo = {
             avatar: apiUserInfo.avatar || '',
             name: apiUserInfo.nickname || '用户昵称',
             meta: `已记录 ${days} 天`
-          })
-          const registerTime = apiUserInfo.create_time || Taro.getStorageSync('userRegisterTime') || ''
+          }
+          setUserInfo(nextUserInfo)
+          const registerTime = apiUserInfo.create_time || storedRegisterTime || ''
           if (apiUserInfo.create_time) {
             Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
           }
@@ -169,19 +188,10 @@ function ProfilePage() {
             return
           }
           // 同步到 storage
-          Taro.setStorageSync('userInfo', {
-            avatar: apiUserInfo.avatar || '',
-            name: apiUserInfo.nickname || '用户昵称',
-            meta: `已记录 ${days} 天`
-          })
+          Taro.setStorageSync('userInfo', nextUserInfo)
         } catch (error) {
           console.error('获取用户信息失败:', error)
-          // 如果获取失败，尝试从本地存储读取
-          const storedUserInfo = Taro.getStorageSync('userInfo')
-          if (storedUserInfo) {
-            setUserInfo(storedUserInfo)
-          }
-          setRegisterDate(formatRegisterDate(Taro.getStorageSync('userRegisterTime') || ''))
+          // 网络请求失败时，本地缓存已经在上面展示过了，无需额外处理
         }
       } else {
         setIsLoggedIn(false)

@@ -2702,3 +2702,20 @@
 - Notes:
   - 后端评论接口此前已实现完整（POST / GET），但缺少主表统计字段的自动更新，导致列表页评论数/评分显示不准确
   - 提交记录：`516d1ea`
+
+- Task: 首页编辑目标按钮改为 stats 页 hero-badge 风格
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/pages/index/index.scss`
+    - `.target-edit-btn`：背景从 `#f3f4f6` 灰色改为 `rgb(255 255 255 / 94%)` 白色半透明；去掉边框；增加 box-shadow 胶囊阴影
+    - `.target-edit-icon`：从 `#6b7280` 灰色改为 `#5cb896` 品牌绿
+    - `.target-edit-text`：从 `#6b7280` 灰色 `#6b7280` 改为 `#2f7f62` 深绿；字重从 400 改为 600
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `.target-edit-btn`：暗色下改为 `rgb(30 40 36 / 85%)` 深半透明底
+    - `.target-edit-icon`：暗色下改为 `$fl-dark-accent`
+    - `.target-edit-text`：暗色下改为 `#7dd3b0`
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`f2e908c`
