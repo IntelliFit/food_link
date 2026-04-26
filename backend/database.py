@@ -2590,6 +2590,7 @@ async def list_friends_feed_records(
         if target_id not in author_ids:
             return []
         author_ids = [target_id]
+        normalized_priority_ids: List[str] = []
     else:
         normalized_priority_ids = [
             aid for aid in list(dict.fromkeys([str(x).strip() for x in (priority_author_ids or []) if str(x).strip()]))
