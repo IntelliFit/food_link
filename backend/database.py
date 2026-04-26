@@ -2585,6 +2585,7 @@ async def list_friends_feed_records(
         author_ids = [user_id]
 
     # 若指定了 author_id，只查询该用户（必须是好友或自己）
+    normalized_priority_ids: List[str] = []
     if author_id and str(author_id).strip():
         target_id = str(author_id).strip()
         if target_id not in author_ids:
