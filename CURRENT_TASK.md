@@ -2665,3 +2665,22 @@
   - 未读通知计数提升不明显，原因是数据量小（90 条），网络往返时间主导，SQL 层面优化收益有限
   - 三个核心接口（好友排名、点赞查询、互动消息列表）均有显著提速，合计提升约 1.1 秒
   - 提交记录：`c688f33`
+
+- Task: 调整公共食物库反馈入口位置
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - 删除列表页底部 `feedback-bar`（"结果如果不准确的话，可以点击向我们提交反馈"）
+    - `handleFeedback` 函数保留（详情页修正弹窗仍在使用）
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - 将 `correction-bar` 从 `bottom-bar` 外部移入内部，放在 `comment-btn` 下方
+    - 新增 `comment-section` 容器包裹 `comment-btn` + `correction-bar`
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - 新增 `.comment-section`：flex 垂直布局，占满剩余空间
+    - `.correction-bar`：从 `position: fixed` 改为普通流布局，字号微调为 22rpx
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`885fb59`

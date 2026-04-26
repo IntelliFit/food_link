@@ -3575,13 +3575,36 @@ async def add_public_food_library_comment(
         raise
 
 
+def _update_public_food_library_comment_stats_sync(supabase, item_id: str):
+    """更新公共食物库条目的评论数和平均分（同步内部辅助函数）。"""
+    try:
+        # 拉取该条目的所有评论 rating，在 Python 中计算
+        result = (
+            supabase.table("public_food_library_comments")
+            .select("rating")
+            .eq("library_item_id", item_id)
+            .execute()
+        )
+        rows = list(result.data or [])
+        count = len(rows)
+        ratings = [r["rating"] for r in rows if r.get("rating") is not None]
+        avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+        supabase.table("public_food_library").update({
+            "comment_count": count,
+            "avg_rating": avg_rating,
+        }).eq("id", item_id).execute()
+    except Exception as e:
+        print(f"[_update_public_food_library_comment_stats_sync] 错误: {e}")
+
+
 def add_public_food_library_comment_sync(
     user_id: str,
     item_id: str,
     content: str,
     rating: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """发表公共食物库评论（同步版本，供 Worker 使用）"""
+    """发表公共食物库评论（同步版本，供 Worker 使用）
+    【优化】插入后自动更新主表 comment_count 和 avg_rating。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     row = {
@@ -3594,7 +3617,13 @@ def add_public_food_library_comment_sync(
     try:
         result = supabase.table("public_food_library_comments").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            comment = result.data[0]
+            # 异步更新主表统计（不阻塞返回）
+            try:
+                _update_public_food_library_comment_stats_sync(supabase, item_id)
+            except Exception:
+                pass
+            return comment
         raise Exception("发表评论失败")
     except Exception as e:
         print(f"[add_public_food_library_comment_sync] 错误: {e}")
@@ -3630,7 +3659,7 @@ async def list_public_food_library_comments(item_id: str, limit: int = 50) -> Li
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        result = supabase.table("public_food_library_comments").select("id, user_id, library_item_id, content, rating, created_at").eq("library_item_id", item_id).order("created_at", desc=False).limit(limit).execute()
+        result = supabase.table("public_food_library_comments").select("id, user_id, library_item_id, content, rating, created_at").eq("library_item_id", item_id).order("created_at", desc=True).limit(limit).execute()
         rows = list(result.data or [])
         if not rows:
             return []

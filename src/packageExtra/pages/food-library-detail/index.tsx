@@ -503,6 +503,8 @@ function FoodLibraryDetailPage() {
               value={commentContent}
               onInput={e => setCommentContent(e.detail.value)}
               maxlength={500}
+              autoFocus
+              fixed
             />
             <View className='submit-btn' onClick={handleSubmitComment}>
               {submitting ? <View className='btn-spinner' /> : '发表评论'}
