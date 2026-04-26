@@ -944,6 +944,51 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   background: $fl-dark-ghost-bg !important;
 }
 
+.fl-page-theme-root--dark .feed-search-friends-panel {
+  background: $fl-dark-panel-bg !important;
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .feed-search-friends-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .feed-search-friends-clear {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-search-friend-item {
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .feed-search-friend-avatar {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .feed-search-friend-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .feed-search-friend-arrow {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-search-author-bar {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .feed-search-author-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-search-author-name {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .feed-search-author-clear {
+  color: $fl-dark-text2 !important;
+}
+
 /* ---------- 首页：今日餐食（深底上的字与胶囊） ---------- */
 .fl-page-theme-root--dark .meal-desc {
   color: $fl-dark-text !important;
@@ -2081,7 +2126,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .health-profile-page .quick-num,
 .fl-page-theme-root--dark .health-profile-page .report-upload-btn,
 .fl-page-theme-root--dark .food-library-page .filter-tag,
-.fl-page-theme-root--dark .food-library-page .sort-item,
 .fl-page-theme-root--dark .food-library-page .empty-btn,
 .fl-page-theme-root--dark .food-library-page .login-tip-btn,
 .fl-page-theme-root--dark .food-detail-page .action-btn,
@@ -2114,7 +2158,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .health-profile-page .option-card.active,
 .fl-page-theme-root--dark .health-profile-page .quick-num.active,
 .fl-page-theme-root--dark .food-library-page .filter-tag.active,
-.fl-page-theme-root--dark .food-library-page .sort-item.active,
 .fl-page-theme-root--dark .share-page .switch-btn.active,
 .fl-page-theme-root--dark .share-page .source-option.active,
 .fl-page-theme-root--dark .record-manual-page .meal-item.active,
@@ -2179,9 +2222,12 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .food-library-page .tab-section,
-.fl-page-theme-root--dark .food-library-page .filter-section,
-.fl-page-theme-root--dark .food-library-page .sort-section {
+.fl-page-theme-root--dark .food-library-page .filter-section {
   background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .food-library-page .sort-section {
   border-color: $fl-dark-border !important;
 }
 
@@ -2210,10 +2256,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .food-library-page .stat-icon.liked {
   color: #f87171 !important;
-}
-
-.fl-page-theme-root--dark .food-library-page .refresh-divider {
-  color: $fl-dark-text2 !important;
 }
 
 .fl-page-theme-root--dark .food-library-page .taste-rating {
