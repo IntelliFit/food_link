@@ -2786,6 +2786,7 @@ export interface CommunityFeedQueryParams {
   sort_by?: CommunityFeedSortBy
   priority_author_ids?: string[]
   author_scope?: CommunityAuthorScope
+  author_id?: string
 }
 
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
@@ -3019,6 +3020,7 @@ export async function communityGetFeed(
   if (params?.priority_author_ids?.length) {
     q += `&priority_author_ids=${encodeURIComponent(params.priority_author_ids.join(','))}`
   }
+  if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
   const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }

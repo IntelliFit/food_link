@@ -958,6 +958,119 @@ $community-border-soft: rgb(92 184 150 / 18%);
   padding: 8rpx 4rpx;
 }
 
+/* 搜索框匹配到的好友结果面板 */
+.feed-search-friends-panel {
+  background: #fff;
+  border-radius: 16rpx;
+  margin: 0 24rpx 16rpx;
+  padding: 16rpx 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+}
+
+.feed-search-friends-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.feed-search-friends-title {
+  font-size: 26rpx;
+  color: #334155;
+  font-weight: 600;
+}
+
+.feed-search-friends-clear {
+  font-size: 24rpx;
+  color: #94a3b8;
+}
+
+.feed-search-friend-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.feed-search-friend-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f1f5f9;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feed-search-friend-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.feed-search-friend-avatar-placeholder {
+  font-size: 32rpx;
+}
+
+.feed-search-friend-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.feed-search-friend-name {
+  font-size: 28rpx;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.feed-search-friend-action {
+  font-size: 24rpx;
+  color: #5cb896;
+}
+
+.feed-search-friend-arrow {
+  font-size: 24rpx;
+  color: #cbd5e1;
+  flex-shrink: 0;
+}
+
+/* 已选中搜索作者的顶部标签栏 */
+.feed-search-author-bar {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin: 0 24rpx 16rpx;
+  padding: 12rpx 20rpx;
+  background: #ecfdf5;
+  border-radius: 12rpx;
+}
+
+.feed-search-author-label {
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.feed-search-author-name {
+  font-size: 26rpx;
+  color: #059669;
+  font-weight: 600;
+  flex: 1;
+}
+
+.feed-search-author-clear {
+  font-size: 24rpx;
+  color: #5cb896;
+  flex-shrink: 0;
+}
+
 .feed-filter-labeled-row {
   display: flex;
   align-items: center;
