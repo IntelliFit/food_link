@@ -2719,3 +2719,18 @@
   - `mrc errors 10 --port 9420`：`0`
 - Notes:
   - 提交记录：`f2e908c`
+
+- Task: 我的页用户信息与会员状态先读本地缓存再异步更新
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - `loadUserInfo()` 重构为两步加载：
+      1. **零延迟读缓存**：先读取 `userInfo`、`membershipStatus`、`userRegisterTime` 本地缓存并立即 setState，用户立刻看到旧数据
+      2. **异步请求更新**：再发起 `getUserProfile` / `getMyMembership` / `getFoodExpiryDashboard` / `friendGetRequestsOverview` 请求，获取最新数据后更新状态并回写缓存
+    - 新增 `membershipStatus` 的 storage 缓存读写（JSON 序列化）
+    - 网络失败时，本地缓存已先行展示，不再出现白屏/空白
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+- Notes:
+  - 提交记录：`7cf0813`
