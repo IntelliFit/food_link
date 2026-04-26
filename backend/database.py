@@ -26,6 +26,29 @@ USER_AVATARS_BUCKET = "user-avatars"
 # 延迟初始化 Supabase 客户端
 _supabase_client = None
 
+# ---- 社区接口内存缓存 ----
+# 好友排名缓存：key = "checkin_leaderboard:{user_id}:{week_start_iso}", TTL = 5 分钟
+_checkin_leaderboard_cache: Dict[str, Any] = {}
+
+# 好友ID列表缓存：key = "friend_ids:{user_id}", TTL = 5 分钟
+_friend_ids_cache: Dict[str, Any] = {}
+
+
+def _cache_get(cache_dict: Dict, key: str, ttl_seconds: int = 300):
+    """从内存缓存获取，若过期返回 None。"""
+    entry = cache_dict.get(key)
+    if entry is None:
+        return None
+    if datetime.now(timezone.utc).timestamp() - entry["ts"] > ttl_seconds:
+        cache_dict.pop(key, None)
+        return None
+    return entry["value"]
+
+
+def _cache_set(cache_dict: Dict, key: str, value: Any):
+    """写入内存缓存。"""
+    cache_dict[key] = {"value": value, "ts": datetime.now(timezone.utc).timestamp()}
+
 
 def get_supabase_client():
     """
@@ -1790,22 +1813,36 @@ def delete_image_from_storage(image_url: str, bucket_name: str = FOOD_ANALYZE_BU
 # ---------- 好友系统 ----------
 
 async def get_friend_ids(user_id: str) -> List[str]:
-    """获取用户的好友 ID 列表（双向：我→对方 与 对方→我，兼容仅存在单向历史数据的情况）"""
+    """获取用户的好友 ID 列表（双向：我→对方 与 对方→我，兼容仅存在单向历史数据的情况）
+    【优化】合并两次查询为一次，减少一次网络往返；增加 5 分钟内存缓存。"""
+    cache_key = f"friend_ids:{user_id}"
+    cached = _cache_get(_friend_ids_cache, cache_key, ttl_seconds=300)
+    if cached is not None:
+        return cached
+
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        # 优化：一次查询同时拿到双向关系，减少一次网络往返
+        r = (
+            supabase.table("user_friends")
+            .select("user_id, friend_id")
+            .or_(f"user_id.eq.{user_id},friend_id.eq.{user_id}")
+            .execute()
+        )
         out = set()
-        r1 = supabase.table("user_friends").select("friend_id").eq("user_id", user_id).execute()
-        for row in r1.data or []:
-            fid = row.get("friend_id")
-            if fid:
-                out.add(fid)
-        r2 = supabase.table("user_friends").select("user_id").eq("friend_id", user_id).execute()
-        for row in r2.data or []:
-            uid = row.get("user_id")
-            if uid:
-                out.add(uid)
-        return list(out)
+        for row in r.data or []:
+            if row.get("user_id") == user_id:
+                fid = row.get("friend_id")
+                if fid:
+                    out.add(fid)
+            elif row.get("friend_id") == user_id:
+                uid = row.get("user_id")
+                if uid:
+                    out.add(uid)
+        result = list(out)
+        _cache_set(_friend_ids_cache, cache_key, result)
+        return result
     except Exception as e:
         print(f"[get_friend_ids] 错误: {e}")
         raise
@@ -2668,18 +2705,31 @@ async def list_friends_feed_records(
         raise
 
 
-async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dict[str, Any]:
-    """
-    本周打卡排行榜：统计「自己 + 好友」在 user_food_records 中的记录条数。
-    自然周按北京时间：周一 00:00 至下周一 00:00（不含）。
-    """
-    friend_ids = await get_friend_ids(viewer_user_id)
+# ---- 原始版本（保留用于基准测试对比） ----
+async def _get_friend_circle_week_checkin_leaderboard_original(viewer_user_id: str) -> Dict[str, Any]:
+    """【原始版本】本周打卡排行榜：while循环分页拉取。内联原始 get_friend_ids 逻辑，避免受缓存影响。"""
+    # 内联原始 get_friend_ids 逻辑（无缓存）
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    friend_ids_set = set()
+    r1 = supabase.table("user_friends").select("friend_id").eq("user_id", viewer_user_id).execute()
+    for row in r1.data or []:
+        fid = row.get("friend_id")
+        if fid:
+            friend_ids_set.add(fid)
+    r2 = supabase.table("user_friends").select("user_id").eq("friend_id", viewer_user_id).execute()
+    for row in r2.data or []:
+        uid = row.get("user_id")
+        if uid:
+            friend_ids_set.add(uid)
+    friend_ids = list(friend_ids_set)
+
     author_ids = list(set(friend_ids) | {viewer_user_id})
     if not author_ids:
         author_ids = [viewer_user_id]
 
     now_cn = datetime.now(CHINA_TZ)
-    weekday = now_cn.weekday()  # Monday = 0
+    weekday = now_cn.weekday()
     week_start_cn = (now_cn - timedelta(days=weekday)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
@@ -2734,9 +2784,7 @@ async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dic
                 }
             )
 
-        items.sort(
-            key=lambda x: (-x["checkin_count"], x["nickname"] or ""),
-        )
+        items.sort(key=lambda x: (-x["checkin_count"], x["nickname"] or ""))
         for i, row in enumerate(items, start=1):
             row["rank"] = i
 
@@ -2748,6 +2796,92 @@ async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dic
             "week_end": week_end_inclusive,
             "list": items,
         }
+    except Exception as e:
+        print(f"[_get_friend_circle_week_checkin_leaderboard_original] 错误: {e}")
+        raise
+
+
+async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dict[str, Any]:
+    """
+    本周打卡排行榜：统计「自己 + 好友」在 user_food_records 中的记录条数。
+    自然周按北京时间：周一 00:00 至下周一 00:00（不含）。
+    【优化】去掉 while 循环分页，改为一次批量拉取 + Python 计数 + 5 分钟内存缓存。
+    """
+    friend_ids = await get_friend_ids(viewer_user_id)
+    author_ids = list(set(friend_ids) | {viewer_user_id})
+    if not author_ids:
+        author_ids = [viewer_user_id]
+
+    now_cn = datetime.now(CHINA_TZ)
+    weekday = now_cn.weekday()
+    week_start_cn = (now_cn - timedelta(days=weekday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week_end_cn = week_start_cn + timedelta(days=7)
+
+    start_ts = week_start_cn.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    end_ts = week_end_cn.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    # 缓存 key 包含用户 ID 和周起始时间，确保同一周内命中缓存
+    cache_key = f"checkin_leaderboard:{viewer_user_id}:{start_ts}"
+    cached = _cache_get(_checkin_leaderboard_cache, cache_key, ttl_seconds=300)
+    if cached is not None:
+        return cached
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 优化：一次查询拉取所有匹配记录，不再分页循环
+        records_result = (
+            supabase.table("user_food_records")
+            .select("user_id")
+            .in_("user_id", author_ids)
+            .gte("record_time", start_ts)
+            .lt("record_time", end_ts)
+            .execute()
+        )
+        rows = list(records_result.data or [])
+        counts: Counter = Counter()
+        for r in rows:
+            uid = r.get("user_id")
+            if uid:
+                counts[uid] += 1
+
+        users_result = (
+            supabase.table("weapp_user")
+            .select("id, nickname, avatar")
+            .in_("id", author_ids)
+            .execute()
+        )
+        profile_map = {u["id"]: u for u in (users_result.data or [])}
+
+        items = []
+        for uid in author_ids:
+            p = profile_map.get(uid, {})
+            items.append(
+                {
+                    "user_id": uid,
+                    "nickname": (p.get("nickname") or "用户") if p else "用户",
+                    "avatar": (p.get("avatar") or "") if p else "",
+                    "checkin_count": int(counts.get(uid, 0)),
+                    "is_me": uid == viewer_user_id,
+                }
+            )
+
+        items.sort(key=lambda x: (-x["checkin_count"], x["nickname"] or ""))
+        for i, row in enumerate(items, start=1):
+            row["rank"] = i
+
+        week_start_str = week_start_cn.strftime("%Y-%m-%d")
+        week_end_inclusive = (week_start_cn + timedelta(days=6)).strftime("%Y-%m-%d")
+
+        result = {
+            "week_start": week_start_str,
+            "week_end": week_end_inclusive,
+            "list": items,
+        }
+        _cache_set(_checkin_leaderboard_cache, cache_key, result)
+        return result
     except Exception as e:
         print(f"[get_friend_circle_week_checkin_leaderboard] 错误: {e}")
         raise
@@ -2899,8 +3033,8 @@ async def remove_feed_like(user_id: str, record_id: str) -> None:
         raise
 
 
-async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Optional[str]) -> Dict[str, Any]:
-    """批量查询点赞数及当前用户是否已点赞。返回 { record_id: { count, liked } }"""
+async def _get_feed_likes_for_records_original(record_ids: List[str], current_user_id: Optional[str]) -> Dict[str, Any]:
+    """【原始版本】批量查询点赞数及当前用户是否已点赞。两次查询。"""
     if not record_ids:
         return {}
     check_supabase_configured()
@@ -2916,6 +3050,30 @@ async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Opt
         if current_user_id:
             my = supabase.table("feed_likes").select("record_id").eq("user_id", current_user_id).in_("record_id", record_ids).execute()
             my_set = {m["record_id"] for m in (my.data or [])}
+        return {rid: {"count": count_map.get(rid, 0), "liked": rid in my_set} for rid in record_ids}
+    except Exception as e:
+        print(f"[_get_feed_likes_for_records_original] 错误: {e}")
+        raise
+
+
+async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Optional[str]) -> Dict[str, Any]:
+    """批量查询点赞数及当前用户是否已点赞。返回 { record_id: { count, liked } }
+    【优化】合并两次查询为一次，减少一次网络往返。"""
+    if not record_ids:
+        return {}
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 优化：一次查询同时获取 record_id 和 user_id，在 Python 中同时统计
+        r = supabase.table("feed_likes").select("record_id, user_id").in_("record_id", record_ids).execute()
+        rows = r.data or []
+        count_map: Dict[str, int] = {}
+        my_set: set = set()
+        for row in rows:
+            rid = row["record_id"]
+            count_map[rid] = count_map.get(rid, 0) + 1
+            if current_user_id and row.get("user_id") == current_user_id:
+                my_set.add(rid)
         return {rid: {"count": count_map.get(rid, 0), "liked": rid in my_set} for rid in record_ids}
     except Exception as e:
         print(f"[get_feed_likes_for_records] 错误: {e}")
@@ -3617,8 +3775,8 @@ def create_feed_interaction_notification_sync(
         raise
 
 
-async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-    """查询用户收到的圈子互动通知列表。"""
+async def _list_feed_interaction_notifications_original(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """【原始版本】查询用户收到的圈子互动通知列表。两次查询。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
@@ -3658,12 +3816,51 @@ async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> 
             })
         return out
     except Exception as e:
+        print(f"[_list_feed_interaction_notifications_original] 错误: {e}")
+        raise
+
+
+async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """查询用户收到的圈子互动通知列表。
+    【优化】使用外键关联查询一次性获取通知 + actor 用户信息，减少一次网络往返。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("feed_interaction_notifications")
+            .select("*, actor:weapp_user!actor_user_id(id, nickname, avatar)")
+            .eq("recipient_user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = list(result.data or [])
+        out = []
+        for row in rows:
+            actor = row.get("actor") or {}
+            out.append({
+                "id": row.get("id"),
+                "notification_type": row.get("notification_type"),
+                "record_id": row.get("record_id"),
+                "comment_id": row.get("comment_id"),
+                "parent_comment_id": row.get("parent_comment_id"),
+                "content_preview": row.get("content_preview") or "",
+                "is_read": bool(row.get("is_read")),
+                "created_at": row.get("created_at"),
+                "actor": {
+                    "id": actor.get("id"),
+                    "nickname": actor.get("nickname") or "系统",
+                    "avatar": actor.get("avatar") or "",
+                },
+            })
+        return out
+    except Exception as e:
         print(f"[list_feed_interaction_notifications] 错误: {e}")
         raise
 
 
-async def count_unread_feed_interaction_notifications(user_id: str) -> int:
-    """统计未读圈子互动通知数。"""
+async def _count_unread_feed_interaction_notifications_original(user_id: str) -> int:
+    """【原始版本】统计未读圈子互动通知数。拉取所有 id 再 len()。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
@@ -3675,6 +3872,26 @@ async def count_unread_feed_interaction_notifications(user_id: str) -> int:
             .execute()
         )
         return len(result.data or [])
+    except Exception as e:
+        print(f"[_count_unread_feed_interaction_notifications_original] 错误: {e}")
+        raise
+
+
+async def count_unread_feed_interaction_notifications(user_id: str) -> int:
+    """统计未读圈子互动通知数。
+    【优化】使用 count=exact + limit(0) 直接获取计数，避免传输任何行数据。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("feed_interaction_notifications")
+            .select("*", count="exact")
+            .eq("recipient_user_id", user_id)
+            .eq("is_read", False)
+            .limit(0)
+            .execute()
+        )
+        return result.count or 0
     except Exception as e:
         print(f"[count_unread_feed_interaction_notifications] 错误: {e}")
         raise

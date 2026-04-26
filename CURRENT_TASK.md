@@ -2615,3 +2615,22 @@
 - Notes:
   - 微信开发者工具自动化 `mrc screenshot` 当前环境中偶发超时，本轮截图验证以列表页 + 筛选面板为主；详情页修正入口截图待后续补
   - 提交记录：`189880b`
+
+- Task: 搜索/排序/筛选切换时清空列表并显示 spinner
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - 新增 `refreshList()` 函数：先 `setList([])` 清空列表 + `setLoading(true)` 显示 spinner + `clearCache()` 清除缓存，再请求数据
+    - `handleSearch` 搜索后直接调用 `refreshList`
+    - 排序点击（最新/最热/评分）设置状态后直接调用 `refreshList`
+    - 筛选点击（全部/适合减脂）设置状态 + 关闭面板后直接调用 `refreshList`
+    - `useEffect` 依赖从 `[sortBy, filterFatLoss, searchMerchant, loggedIn, tabMode]` 收敛为 `[loggedIn, tabMode]`，避免与用户主动操作重复触发加载
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
+  - `mrc tap .sort-filter-btn --port 9420`：点击成功
+  - `mrc tap .filter-dropdown-option --port 9420`：点击成功
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`296af07`
