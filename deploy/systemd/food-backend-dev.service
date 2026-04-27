@@ -1,0 +1,15 @@
+[Unit]
+Description=Food Link Backend (Dev)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/wwwroot/food/food_link-dev/backend
+Environment=PORT=3011
+ExecStart=/www/wwwroot/food/food_link-dev/backend/venv/bin/python run_backend.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

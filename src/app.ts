@@ -1,16 +1,18 @@
 import './perf-polyfill'
-import { PropsWithChildren } from 'react'
+import { createElement, type PropsWithChildren } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'
+import { extraPkgUrl } from './utils/subpackage-extra'
+import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
 
 import './app.scss'
 
-// 不需要登录的页面白名单
+// 不需要登录的页面白名单（与 getCurrentPageRoute 一致，含分包根路径）
 const PUBLIC_PAGES = new Set([
-  '/pages/login/index',
-  '/pages/agreement/index',
-  '/pages/privacy/index',
-  '/pages/about/index',
+  extraPkgUrl('/pages/login/index'),
+  extraPkgUrl('/pages/agreement/index'),
+  extraPkgUrl('/pages/privacy/index'),
+  extraPkgUrl('/pages/about/index'),
 ])
 
 function App({ children }: PropsWithChildren<any>) {
@@ -44,12 +46,12 @@ function App({ children }: PropsWithChildren<any>) {
 
     // 扫码未登录时先进入登录页，登录后会自动处理邀请码并建立好友关系
     Taro.navigateTo({
-      url: `/pages/login/index?invite_code=${encodeURIComponent(inviteCode)}&redirect=${encodeURIComponent('/pages/community/index')}`
+      url: `${extraPkgUrl('/pages/login/index')}?invite_code=${encodeURIComponent(inviteCode)}&redirect=${encodeURIComponent('/pages/community/index')}`,
     })
   })
 
-  // children 是将要会渲染的页面
-  return children
+  // children 为当前页面；Provider 供全站主题与「我的」页切换
+  return createElement(AppColorSchemeProvider, null, children)
 }
 
 export default App

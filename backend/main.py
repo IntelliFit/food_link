@@ -120,6 +120,7 @@ from database import (
     create_feed_interaction_notification_sync,
     add_feed_comment_sync,
     add_public_food_library_comment_sync,
+    add_public_food_library_feedback_sync,
     get_food_record_by_id_sync,
     get_feed_comment_by_id_sync,
     # 公共食物库
@@ -154,6 +155,7 @@ from database import (
     update_user_recipe,
     delete_user_recipe,
     use_recipe_record,
+    update_analysis_task_result_sync,
     update_analysis_task_result,
     # 评论任务
     create_comment_task_sync,
@@ -2040,6 +2042,30 @@ def _strip_standard_mode_extras(
     return None, None
 
 
+def _resolve_food_vision_model_config(model_name: Optional[str]) -> Dict[str, str]:
+    raw = str(model_name or "").strip()
+    normalized = raw.lower()
+    if not raw or normalized in {"qwen", "qwen-vl", "qwen-vl-max"}:
+        return {
+            "provider": "qwen",
+            "model": "qwen-vl-max",
+        }
+    if normalized in {"gemini", "gemini-flash", "gemini-vision"}:
+        return {
+            "provider": "gemini",
+            "model": GEMINI_MODEL_NAME,
+        }
+    if normalized.startswith("gemini"):
+        return {
+            "provider": "gemini",
+            "model": raw,
+        }
+    return {
+        "provider": "qwen",
+        "model": raw,
+    }
+
+
 class LoginRequest(BaseModel):
     code: str = Field(..., description="微信小程序登录凭证 code")
     phoneCode: Optional[str] = Field(default=None, description="获取手机号的 code（可选）")
@@ -2329,8 +2355,9 @@ async def analyze_food(
     分析食物图片，返回营养成分和健康建议。使用 DashScope 千问 qwen-vl-max 模型。
     """
     try:
+        model_config = _resolve_food_vision_model_config(request.modelName)
         dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-        if not dashscope_key:
+        if model_config["provider"] == "qwen" and not dashscope_key:
             raise HTTPException(status_code=500, detail="缺少 DASHSCOPE_API_KEY 环境变量")
 
         if not request.base64Image and not request.image_url and not request.image_urls:
@@ -2343,6 +2370,7 @@ async def analyze_food(
             goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
             goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
         state_hint = ""
+        state_parts: List[str] = []
         if request.diet_goal or request.activity_timing:
             diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
             activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
@@ -2353,6 +2381,7 @@ async def analyze_food(
                 state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
         remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
         meal_hint = ""
+        meal_name = ""
         if request.meal_type:
             meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
             meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
@@ -2418,54 +2447,67 @@ async def analyze_food(
             execution_mode=execution_mode,
         )
 
-        # 构建图片 content parts
+        model_config = _resolve_food_vision_model_config(request.modelName)
+
+        # 构建图片输入
         image_urls_for_api = []
         if request.image_urls:
             image_urls_for_api = request.image_urls
         elif request.image_url:
             image_urls_for_api = [request.image_url]
-        elif request.base64Image:
+        base64_image_for_api = None
+        if request.base64Image:
             image_data = request.base64Image.split(",")[1] if "," in request.base64Image else request.base64Image
-            image_urls_for_api = [f"data:image/jpeg;base64,{image_data}"]
+            base64_image_for_api = image_data
 
-        content_parts = [{"type": "text", "text": prompt}]
-        for url in image_urls_for_api:
-            content_parts.append({"type": "image_url", "image_url": {"url": url}})
-
-        base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-        api_url = f"{base_url}/chat/completions"
-
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            response = await client.post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {dashscope_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "qwen-vl-max",
-                    "messages": [{"role": "user", "content": content_parts}],
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.7,
-                },
+        if model_config["provider"] == "gemini":
+            parsed = await _analyze_with_gemini(
+                image_url=request.image_url if request.image_url else None,
+                image_urls=image_urls_for_api if request.image_urls else None,
+                base64_image=base64_image_for_api,
+                prompt=prompt,
+                model_name=model_config["model"],
             )
+            parsed = _normalize_analysis_response_payload(parsed)
+        else:
+            content_parts = [{"type": "text", "text": prompt}]
+            for url in image_urls_for_api:
+                content_parts.append({"type": "image_url", "image_url": {"url": url}})
 
-            if not response.is_success:
-                error_data = response.json() if response.content else {}
-                error_message = (
-                    error_data.get("error", {}).get("message")
-                    or f"DashScope API 错误: {response.status_code}"
+            base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+            api_url = f"{base_url}/chat/completions"
+
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                response = await client.post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {dashscope_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_config["model"],
+                        "messages": [{"role": "user", "content": content_parts}],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.7,
+                    },
                 )
-                raise Exception(error_message)
 
-            data = response.json()
-            content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
-            if not content_str:
-                raise Exception("千问返回了空响应")
+                if not response.is_success:
+                    error_data = response.json() if response.content else {}
+                    error_message = (
+                        error_data.get("error", {}).get("message")
+                        or f"DashScope API 错误: {response.status_code}"
+                    )
+                    raise Exception(error_message)
 
-            json_str = re.sub(r"```json", "", content_str)
-            json_str = re.sub(r"```", "", json_str).strip()
-            parsed = _normalize_analysis_response_payload(json.loads(json_str))
+                data = response.json()
+                content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
+                if not content_str:
+                    raise Exception("千问返回了空响应")
+
+                json_str = re.sub(r"```json", "", content_str)
+                json_str = re.sub(r"```", "", json_str).strip()
+                parsed = _normalize_analysis_response_payload(json.loads(json_str))
 
         valid_items = _parse_food_item_responses(parsed)
 
@@ -2506,6 +2548,484 @@ async def analyze_food(
         print(f"[api/analyze] error: {msg}")
         raise HTTPException(status_code=500, detail=msg)
 
+# ---------- 批量分析（多张不同食物分别识别，结果累加） ----------
+
+
+class AnalyzeBatchRequest(BaseModel):
+    """批量食物分析请求：每张图片单独识别，结果累加"""
+    image_urls: List[str] = Field(..., description="多图 URL 列表（2-5 张，每张为不同食物）")
+    meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
+    timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移")
+    diet_goal: Optional[str] = Field(default=None, description="饮食目标")
+    activity_timing: Optional[str] = Field(default=None, description="运动时机")
+    user_goal: Optional[str] = Field(default=None, description="用户目标")
+    remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算")
+    additionalContext: Optional[str] = Field(default=None, description="用户补充上下文")
+    modelName: Optional[str] = Field(default="qwen-vl-max", description="模型名称")
+    execution_mode: Optional[str] = Field(default=None, description="执行模式")
+    reference_objects: Optional[List[PrecisionReferenceObjectInput]] = Field(default=None, description="参考物列表")
+
+
+class AnalyzeBatchResponse(BaseModel):
+    """批量分析响应"""
+    task_id: str
+    image_count: int
+    result: AnalyzeResponse
+
+
+async def _analyze_single_image_for_batch(
+    image_url: str,
+    prompt: str,
+    model_name: str,
+    api_key: Optional[str],
+    base_url: str,
+) -> Dict[str, Any]:
+    """为批量分析调用 AI 分析单张图片"""
+    model_config = _resolve_food_vision_model_config(model_name)
+    if model_config["provider"] == "gemini":
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                parsed = await _analyze_with_gemini(
+                    image_url=image_url,
+                    prompt=prompt,
+                    model_name=model_config["model"],
+                )
+                return _normalize_analysis_response_payload(parsed)
+            except Exception as exc:
+                last_error = exc
+                if attempt < 2:
+                    await asyncio.sleep(0.6 * (attempt + 1))
+                    continue
+        raise RuntimeError(str(last_error) or "单张图片分析失败")
+
+    api_url = f"{base_url}/chat/completions"
+    last_error: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    api_url,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model_config["model"],
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": prompt},
+                                    {"type": "image_url", "image_url": {"url": image_url}},
+                                ],
+                            }
+                        ],
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0.7,
+                    },
+                )
+            if not response.is_success:
+                error_data = response.json() if response.content else {}
+                error_message = (
+                    error_data.get("error", {}).get("message")
+                    or f"DashScope API 错误: {response.status_code}"
+                )
+                raise RuntimeError(error_message)
+
+            data = response.json()
+            content_str = data.get("choices", [{}])[0].get("message", {}).get("content")
+            if not content_str:
+                raise RuntimeError("千问返回了空响应")
+
+            json_str = re.sub(r"```json", "", content_str)
+            json_str = re.sub(r"```", "", json_str).strip()
+            return _normalize_analysis_response_payload(json.loads(json_str))
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                await asyncio.sleep(0.6 * (attempt + 1))
+                continue
+
+    raise RuntimeError(str(last_error) or "单张图片分析失败")
+
+
+def _merge_unique_text_lists(*values: Any) -> Optional[List[str]]:
+    seen = set()
+    merged: List[str] = []
+    for value in values:
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            text = str(item or "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            merged.append(text)
+    return merged or None
+
+
+def _merge_batch_results(results: List[Dict[str, Any]], execution_mode: str) -> Dict[str, Any]:
+    """将多个单图分析结果累加为一份汇总结果"""
+    all_items: List[Dict[str, Any]] = []
+    descriptions: List[str] = []
+    insights: List[str] = []
+    pfc_comments: List[str] = []
+    absorption_list: List[str] = []
+    context_list: List[str] = []
+    recognition_outcomes: List[str] = []
+    rejection_reasons: List[str] = []
+    allowed_categories: List[str] = []
+    retake_guidance_lists: List[List[str]] = []
+    followup_question_lists: List[List[str]] = []
+
+    for parsed in results:
+        parsed = _normalize_analysis_response_payload(parsed)
+        items = parsed.get("items")
+        if isinstance(items, list):
+            all_items.extend(items)
+
+        desc = str(parsed.get("description", "")).strip()
+        if desc and desc != "无法获取描述":
+            descriptions.append(desc)
+
+        insight = str(parsed.get("insight", "")).strip()
+        if insight and insight != "保持健康饮食！":
+            insights.append(insight)
+
+        pfc = parsed.get("pfc_ratio_comment")
+        if pfc:
+            pfc_comments.append(str(pfc).strip())
+
+        absorption = parsed.get("absorption_notes")
+        if absorption:
+            absorption_list.append(str(absorption).strip())
+
+        context = parsed.get("context_advice")
+        if context:
+            context_list.append(str(context).strip())
+
+        recognition = str(parsed.get("recognitionOutcome", "")).strip()
+        if recognition:
+            recognition_outcomes.append(recognition)
+
+        rejection_reason = str(parsed.get("rejectionReason", "")).strip()
+        if rejection_reason:
+            rejection_reasons.append(rejection_reason)
+
+        allowed = str(parsed.get("allowedFoodCategory", "")).strip()
+        if allowed:
+            allowed_categories.append(allowed)
+
+        retake_guidance = parsed.get("retakeGuidance")
+        if isinstance(retake_guidance, list):
+            retake_guidance_lists.append(retake_guidance)
+
+        followup_questions = parsed.get("followupQuestions")
+        if isinstance(followup_questions, list):
+            followup_question_lists.append(followup_questions)
+
+    # 累加营养值
+    total_calories = 0.0
+    total_protein = 0.0
+    total_carbs = 0.0
+    total_fat = 0.0
+    total_fiber = 0.0
+    total_sugar = 0.0
+    total_weight = 0.0
+
+    for item in all_items:
+        if not isinstance(item, dict):
+            continue
+        nutrients = item.get("nutrients") or {}
+        w = float(item.get("estimatedWeightGrams", 0) or 0)
+        total_calories += float(nutrients.get("calories", 0) or 0)
+        total_protein += float(nutrients.get("protein", 0) or 0)
+        total_carbs += float(nutrients.get("carbs", 0) or 0)
+        total_fat += float(nutrients.get("fat", 0) or 0)
+        total_fiber += float(nutrients.get("fiber", 0) or 0)
+        total_sugar += float(nutrients.get("sugar", 0) or 0)
+        total_weight += w
+
+    # 重建归一化的 items
+    merged_items = []
+    for item in all_items:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "未知食物")).strip() or "未知食物"
+        weight = float(item.get("estimatedWeightGrams", 0) or 0)
+        nutrients = item.get("nutrients") or {}
+        merged_items.append(
+            {
+                "name": name,
+                "estimatedWeightGrams": weight,
+                "originalWeightGrams": weight,
+                "nutrients": {
+                    "calories": float(nutrients.get("calories", 0) or 0),
+                    "protein": float(nutrients.get("protein", 0) or 0),
+                    "carbs": float(nutrients.get("carbs", 0) or 0),
+                    "fat": float(nutrients.get("fat", 0) or 0),
+                    "fiber": float(nutrients.get("fiber", 0) or 0),
+                    "sugar": float(nutrients.get("sugar", 0) or 0),
+                },
+            }
+        )
+
+    merged = {
+        "description": f"本餐共识别 {len(results)} 张图片，包含 {len(merged_items)} 种食物。"
+        + (f" {descriptions[0]}" if descriptions else ""),
+        "insight": " ".join(insights) if insights else "保持健康饮食！",
+        "items": merged_items,
+        "pfc_ratio_comment": pfc_comments[0] if pfc_comments else None,
+        "absorption_notes": absorption_list[0] if absorption_list else None,
+        "context_advice": " ".join(context_list) if context_list else None,
+        "recognitionOutcome": None,
+        "rejectionReason": rejection_reasons[0] if rejection_reasons else None,
+        "retakeGuidance": _merge_unique_text_lists(*retake_guidance_lists),
+        "allowedFoodCategory": None,
+        "followupQuestions": _merge_unique_text_lists(*followup_question_lists),
+    }
+
+    if recognition_outcomes:
+        if "hard_reject" in recognition_outcomes:
+            merged["recognitionOutcome"] = "hard_reject"
+        elif "soft_reject" in recognition_outcomes:
+            merged["recognitionOutcome"] = "soft_reject"
+        else:
+            merged["recognitionOutcome"] = recognition_outcomes[0]
+
+    unique_categories = []
+    for category in allowed_categories:
+        if category not in unique_categories:
+            unique_categories.append(category)
+    if len(unique_categories) == 1:
+        merged["allowedFoodCategory"] = unique_categories[0]
+    elif len(unique_categories) > 1:
+        merged["allowedFoodCategory"] = "unknown"
+
+    if execution_mode != "strict":
+        merged["pfc_ratio_comment"] = None
+        merged["absorption_notes"] = None
+        merged["recognitionOutcome"] = None
+        merged["rejectionReason"] = None
+        merged["retakeGuidance"] = None
+        merged["allowedFoodCategory"] = None
+        merged["followupQuestions"] = None
+
+    return merged
+
+
+@app.post("/api/analyze/batch", response_model=AnalyzeBatchResponse)
+async def analyze_batch(
+    request: AnalyzeBatchRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    批量分析多张食物图片（每张单独识别，结果累加）。
+    最多支持 5 张图片，每张图片视为不同食物分别识别。
+    返回汇总后的分析结果和任务 ID。
+    """
+    try:
+        if not request.image_urls or len(request.image_urls) == 0:
+            raise HTTPException(status_code=400, detail="image_urls 不能为空")
+        if len(request.image_urls) > 5:
+            raise HTTPException(status_code=400, detail="最多支持 5 张图片")
+
+        model_config = _resolve_food_vision_model_config(request.modelName)
+        dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+        if model_config["provider"] == "qwen" and not dashscope_key:
+            raise HTTPException(status_code=500, detail="缺少 DASHSCOPE_API_KEY 环境变量")
+
+        # 构建公共上下文（与单图分析一致）
+        goal_hint = ""
+        if request.user_goal:
+            goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
+            goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
+        state_hint = ""
+        state_parts: List[str] = []
+        if request.diet_goal or request.activity_timing:
+            diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
+            activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
+            diet_text = diet_map.get(request.diet_goal, request.diet_goal) if request.diet_goal and request.diet_goal != "none" else ""
+            activity_text = activity_map.get(request.activity_timing, request.activity_timing) if request.activity_timing and request.activity_timing != "none" else ""
+            state_parts = [s for s in [diet_text, activity_text] if s]
+            if state_parts:
+                state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议（如补剂、搭配）。"
+        remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
+        meal_hint = ""
+        meal_name = ""
+        if request.meal_type:
+            meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
+            meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
+        requested_mode = _parse_execution_mode_or_raise(request.execution_mode) if request.execution_mode is not None else None
+        execution_mode = requested_mode
+        profile_block = ""
+        compact_tags_list: List[str] = []
+        if request.meal_type:
+            compact_tags_list.append(f"餐次:{meal_name}")
+        if state_parts:
+            compact_tags_list.append("状态:" + "/".join(state_parts))
+        if request.remaining_calories is not None:
+            compact_tags_list.append(f"剩余:{float(request.remaining_calories):g}kcal")
+        user = await get_user_by_id(user_info["user_id"])
+        profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
+        execution_mode = requested_mode or profile_mode
+        if user:
+            if execution_mode == "strict":
+                profile_block = _format_health_profile_for_analysis(user)
+                if profile_block:
+                    profile_block = "\n\n若以下存在「用户健康档案」，请结合档案在 insight、absorption_notes、context_advice 中给出更贴合该用户体质与健康状况的建议（如控糖、低嘌呤、过敏规避等）。\n\n" + profile_block
+            else:
+                profile_summary = _format_health_risk_summary_for_analysis(user)
+                if profile_summary:
+                    compact_tags_list.append(profile_summary)
+        if execution_mode is None:
+            execution_mode = _normalize_execution_mode(None)
+
+        # 配额检查（已登录用户）
+        membership = await _get_effective_membership(user_info["user_id"])
+        membership_resp = _format_membership_response(membership)
+        _, _, _, execution_mode = await _validate_food_analysis_access(
+            user_id=user_info["user_id"],
+            effective_mode=execution_mode,
+            strict_requested=(requested_mode == "strict"),
+            user_row=user,
+            membership=membership,
+            membership_resp=membership_resp,
+        )
+
+        mode_hint = _build_execution_mode_hint(execution_mode)
+        compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
+
+        # 批量分析的 prompt
+        base_prompt = _build_gemini_prompt(
+            additional_context=request.additionalContext or "",
+            goal_hint=goal_hint,
+            state_hint=state_hint,
+            remain_hint=remain_hint,
+            meal_hint=meal_hint,
+            profile_block=profile_block or "",
+            compact_tags=compact_tags,
+            mode_hint=mode_hint,
+            execution_mode=execution_mode,
+        )
+
+        base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+
+        # 控制并发，避免多图同时打满模型接口后整批失败
+        semaphore = asyncio.Semaphore(min(3, max(1, len(request.image_urls))))
+
+        async def _analyze_one(index: int, image_url: str) -> Dict[str, Any]:
+            async with semaphore:
+                index_hint = f"\n\n【批量分析第 {index + 1}/{len(request.image_urls)} 张】请仅识别当前这张图片中的食物，不要与其他图片混淆。"
+                prompt = base_prompt + index_hint
+                return await _analyze_single_image_for_batch(
+                    image_url=image_url,
+                    prompt=prompt,
+                    model_name=model_config["model"],
+                    api_key=dashscope_key,
+                    base_url=base_url,
+                )
+
+        results = await asyncio.gather(
+            *[_analyze_one(i, url) for i, url in enumerate(request.image_urls)],
+            return_exceptions=True,
+        )
+
+        # 检查是否有失败
+        failed_indices = []
+        successful_results: List[Dict[str, Any]] = []
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                failed_indices.append(i)
+                print(f"[analyze/batch] 第 {i + 1} 张图片分析失败: {res}")
+            else:
+                successful_results.append(res)
+
+        if not successful_results:
+            raise HTTPException(status_code=500, detail="所有图片分析均失败，请稍后重试")
+
+        # 累加结果
+        merged_raw = _merge_batch_results(successful_results, execution_mode)
+
+        # 解析为类型化的 items
+        valid_items = _parse_food_item_responses(merged_raw)
+
+        def _opt_str(v):
+            if v is None or v == "":
+                return None
+            s = str(v).strip()
+            return s if s else None
+
+        pfc_ratio_comment, absorption_notes = _strip_standard_mode_extras(
+            execution_mode,
+            _opt_str(merged_raw.get("pfc_ratio_comment")),
+            _opt_str(merged_raw.get("absorption_notes")),
+        )
+
+        result = AnalyzeResponse(
+            description=str(merged_raw.get("description", "无法获取描述")),
+            insight=str(merged_raw.get("insight", "保持健康饮食！")),
+            items=valid_items,
+            pfc_ratio_comment=pfc_ratio_comment,
+            absorption_notes=absorption_notes,
+            context_advice=_opt_str(merged_raw.get("context_advice")),
+            recognitionOutcome=_opt_str(merged_raw.get("recognitionOutcome")),
+            rejectionReason=_opt_str(merged_raw.get("rejectionReason")),
+            retakeGuidance=merged_raw.get("retakeGuidance") if isinstance(merged_raw.get("retakeGuidance"), list) else None,
+            allowedFoodCategory=_opt_str(merged_raw.get("allowedFoodCategory")),
+            followupQuestions=merged_raw.get("followupQuestions") if isinstance(merged_raw.get("followupQuestions"), list) else None,
+        )
+
+        # 创建分析任务记录
+        payload = {
+            "meal_type": request.meal_type,
+            "timezone_offset_minutes": request.timezone_offset_minutes,
+            "diet_goal": request.diet_goal,
+            "activity_timing": request.activity_timing,
+            "user_goal": request.user_goal,
+            "remaining_calories": request.remaining_calories,
+            "additionalContext": request.additionalContext,
+            "modelName": request.modelName,
+            "execution_mode": execution_mode,
+            "reference_objects": _serialize_reference_objects(request.reference_objects),
+            "batch_image_count": len(request.image_urls),
+            "failed_indices": failed_indices,
+        }
+        task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_info["user_id"],
+            task_type="food",
+            image_url=request.image_urls[0] if request.image_urls else None,
+            image_urls=request.image_urls,
+            payload=payload,
+        )
+
+        # 将汇总结果直接写入任务
+        await asyncio.to_thread(
+            update_analysis_task_result_sync,
+            task_id=task["id"],
+            status="done",
+            result=result.dict(),
+        )
+
+        return AnalyzeBatchResponse(
+            task_id=task["id"],
+            image_count=len(request.image_urls),
+            result=result,
+        )
+
+    except HTTPException:
+        raise
+    except httpx.TimeoutException:
+        print("[api/analyze/batch] error: DashScope 请求超时")
+        raise HTTPException(status_code=500, detail="AI 服务超时，请稍后重试")
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=500, detail=str(e) or "连接 AI 服务失败")
+    except Exception as e:
+        msg = str(e) or f"未知错误: {type(e).__name__}"
+        print(f"[api/analyze/batch] error: {msg}")
+        raise HTTPException(status_code=500, detail=msg)
 
 class UploadAnalyzeImageRequest(BaseModel):
     """食物分析前上传图片，返回 Supabase 公网 URL"""
@@ -2980,6 +3500,7 @@ async def analyze_food_compare(
         goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
     
     state_hint = ""
+    state_parts: List[str] = []
     if request.diet_goal or request.activity_timing:
         diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
         activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
@@ -2993,6 +3514,7 @@ async def analyze_food_compare(
     remain_hint = f"\n用户当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if request.remaining_calories is not None else ""
     
     meal_hint = ""
+    meal_name = ""
     if request.meal_type:
         meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes)
         meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议（如早餐适合碳水与蛋白搭配、晚餐宜清淡等）。"
@@ -5150,6 +5672,7 @@ async def manual_food_browse(
 class SaveFoodRecordRequest(BaseModel):
     meal_type: str = Field(..., description=MEAL_TYPE_DESCRIPTION)
     image_path: Optional[str] = Field(default=None, description="图片路径或 URL（可选）")
+    image_paths: Optional[List[str]] = Field(default=None, description="多图 URL 列表（可选）")
     description: Optional[str] = Field(default=None, description="AI 餐食描述")
     insight: Optional[str] = Field(default=None, description="AI 健康建议")
     items: List[FoodRecordItem] = Field(default_factory=list, description="食物项列表")
@@ -5208,6 +5731,7 @@ async def save_food_record(
             user_id=user_id,
             meal_type=normalized_meal_type,
             image_path=body.image_path,
+            image_paths=body.image_paths,
             description=body.description or "",
             insight=body.insight or "",
             items=items_payload,
@@ -5277,6 +5801,36 @@ async def get_food_record_list(
         raise HTTPException(status_code=500, detail="获取记录失败")
 
 
+async def _hydrate_food_record_image_paths(record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """单条记录多图补全：优先保留已有 image_paths，缺失时从来源分析任务补回。"""
+    if not record:
+        return record
+
+    paths = record.get("image_paths")
+    if isinstance(paths, list) and len(paths) > 0:
+        return record
+
+    source_task_id = record.get("source_task_id")
+    if source_task_id:
+        try:
+            tasks_map = await get_analysis_tasks_by_ids([source_task_id])
+            task = tasks_map.get(source_task_id)
+            if task:
+                task_paths = task.get("image_paths")
+                if isinstance(task_paths, list) and len(task_paths) > 0:
+                    record["image_paths"] = list(task_paths)
+                    return record
+                if task.get("image_url"):
+                    record["image_paths"] = [task["image_url"]]
+                    return record
+        except Exception as hydrate_err:
+            print(f"[_hydrate_food_record_image_paths] 补全 image_paths 失败: {hydrate_err}")
+
+    if record.get("image_path"):
+        record["image_paths"] = [record["image_path"]]
+    return record
+
+
 @app.get("/api/food-record/{record_id}")
 async def get_food_record_detail(
     record_id: str,
@@ -5293,6 +5847,7 @@ async def get_food_record_detail(
         # 验证权限：记录必须属于当前用户
         if record.get("user_id") != user_id:
             raise HTTPException(status_code=403, detail="无权访问此记录")
+        record = await _hydrate_food_record_image_paths(record)
         record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
         return {"record": record}
     except HTTPException:
@@ -5878,6 +6433,7 @@ async def get_shared_food_record(record_id: str):
                 raise
             except Exception:
                 pass  # 查询用户失败时降级允许访问，避免阻断正常分享
+        record = await _hydrate_food_record_image_paths(record)
         record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
         return {"record": record}
     except HTTPException:
@@ -6017,6 +6573,9 @@ async def get_home_dashboard(
             continue
         items = by_meal[meal_type]
         meal_cal = sum(float(x.get("total_calories") or 0) for x in items)
+        meal_protein = sum(float(x.get("total_protein") or 0) for x in items)
+        meal_carbs = sum(float(x.get("total_carbs") or 0) for x in items)
+        meal_fat = sum(float(x.get("total_fat") or 0) for x in items)
         meal_target = meal_targets.get(meal_type, 0.0)
         meal_progress = (meal_cal / meal_target * 100) if meal_target else 0
         meal_progress = round(meal_progress, 1)
@@ -6054,6 +6613,9 @@ async def get_home_dashboard(
             "name": MEAL_NAMES.get(meal_type, meal_type),
             "time": time_str,
             "calorie": round(meal_cal, 1),
+            "protein": round(meal_protein, 1),
+            "carbs": round(meal_carbs, 1),
+            "fat": round(meal_fat, 1),
             "target": meal_target,
             "progress": meal_progress,
             "tags": [SNACK_TARGET_TAG] if "snack" in meal_type else [],
@@ -6997,6 +7559,7 @@ async def api_community_feed(
     sort_by: str = "recommended",
     priority_author_ids: Optional[str] = None,
     author_scope: str = "all",
+    author_id: Optional[str] = None,
     user_info: dict = Depends(get_current_user_info),
 ):
     """
@@ -7026,6 +7589,7 @@ async def api_community_feed(
             sort_by=sort_by,
             priority_author_ids=[x.strip() for x in (priority_author_ids or "").split(",") if x.strip()],
             author_scope=author_scope,
+            author_id=author_id,
         )
         
         out = []
@@ -7757,6 +8321,33 @@ async def api_public_food_library_comment_post(
     except Exception as e:
         print(f"[api/public-food-library/{item_id}/comments] 发表错误: {e}")
         raise HTTPException(status_code=500, detail="发表失败")
+
+
+@app.post("/api/public-food-library/feedback")
+async def api_public_food_library_feedback(
+    body: dict,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """
+    提交公共食物库用户反馈。
+    body: { "content": "反馈内容", "library_item_id": "可选的食物条目ID" }
+    """
+    content = (body.get("content") or "").strip() if isinstance(body.get("content"), str) else ""
+    if not content:
+        raise HTTPException(status_code=400, detail="反馈内容不能为空")
+    if len(content) > 1000:
+        raise HTTPException(status_code=400, detail="反馈内容不能超过 1000 字")
+    library_item_id = body.get("library_item_id")
+    try:
+        feedback = add_public_food_library_feedback_sync(
+            user_id=user_info["user_id"],
+            content=content,
+            library_item_id=library_item_id,
+        )
+        return {"id": feedback["id"], "message": "反馈提交成功"}
+    except Exception as e:
+        print(f"[api/public-food-library/feedback] 错误: {e}")
+        raise HTTPException(status_code=500, detail="反馈提交失败")
 
 
 async def get_access_token() -> str:
@@ -8513,6 +9104,8 @@ def _build_test_backend_batch_from_dataset(dataset: Dict[str, Any], dataset_item
         "notes": "",
         "is_multi_view": False,
         "execution_mode": "standard",
+        "prompt_id": None,
+        "prompt_ids": [],
         "models": [TEST_BACKEND_MODEL_FLASH],
         "datasetId": dataset.get("id"),
         "datasetName": dataset.get("name"),
@@ -8550,6 +9143,32 @@ def _parse_test_backend_execution_mode(raw_mode: Optional[str]) -> str:
     if mode == "custom":
         return "custom"
     return _parse_execution_mode_or_raise(mode) or "standard"
+
+
+def _parse_test_backend_prompt_ids(
+    raw_prompt_ids: Optional[str],
+    raw_prompt_id: Optional[int] = None,
+) -> List[int]:
+    parsed_ids: List[int] = []
+    for item in str(raw_prompt_ids or "").split(","):
+        text = item.strip()
+        if not text:
+            continue
+        try:
+            prompt_id = int(text)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"非法 prompt_id: {text}")
+        if prompt_id <= 0:
+            raise HTTPException(status_code=400, detail=f"非法 prompt_id: {text}")
+        if prompt_id not in parsed_ids:
+            parsed_ids.append(prompt_id)
+    if raw_prompt_id is not None:
+        prompt_id = int(raw_prompt_id)
+        if prompt_id <= 0:
+            raise HTTPException(status_code=400, detail=f"非法 prompt_id: {prompt_id}")
+        if prompt_id not in parsed_ids:
+            parsed_ids.append(prompt_id)
+    return parsed_ids
 
 
 def _parse_expected_items_input(raw_value: Optional[str], reference_weight: Optional[float] = None) -> List[Dict[str, Any]]:
@@ -8779,9 +9398,30 @@ async def _run_test_backend_multi_model_analysis(
     is_multi_view: bool = False,
     execution_mode: str = "standard",
     prompt_id: Optional[int] = None,
+    prompt_ids: Optional[List[int]] = None,
     expected_items: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    async def run_one(provider: str) -> Dict[str, Any]:
+    custom_prompt_ids = [int(item) for item in (prompt_ids or []) if int(item) > 0]
+    if prompt_id and prompt_id not in custom_prompt_ids:
+        custom_prompt_ids.append(int(prompt_id))
+    run_prompt_ids: List[Optional[int]] = custom_prompt_ids if execution_mode == "custom" and custom_prompt_ids else [None]
+
+    async def _resolve_failure_prompt_meta(selected_prompt_id: Optional[int]) -> Dict[str, Any]:
+        if execution_mode != "custom":
+            return {}
+        if selected_prompt_id:
+            prompt_row = await get_prompt_by_id(selected_prompt_id)
+            return {
+                "prompt_id": selected_prompt_id,
+                "prompt_name": (prompt_row or {}).get("prompt_name"),
+            }
+        active_prompt = await get_active_prompt("gemini")
+        return {
+            "prompt_id": (active_prompt or {}).get("id"),
+            "prompt_name": (active_prompt or {}).get("prompt_name"),
+        }
+
+    async def run_one(provider: str, selected_prompt_id: Optional[int]) -> Dict[str, Any]:
         started_at = time.perf_counter()
         try:
             result = await _run_test_backend_provider_analysis(
@@ -8791,7 +9431,7 @@ async def _run_test_backend_multi_model_analysis(
                 notes=notes,
                 is_multi_view=is_multi_view,
                 execution_mode=execution_mode,
-                prompt_id=prompt_id,
+                prompt_id=selected_prompt_id,
                 expected_items=expected_items,
             )
             duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
@@ -8799,6 +9439,7 @@ async def _run_test_backend_multi_model_analysis(
             return result
         except Exception as e:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+            prompt_meta = await _resolve_failure_prompt_meta(selected_prompt_id)
             return {
                 "success": False,
                 "provider": "gemini",
@@ -8817,12 +9458,13 @@ async def _run_test_backend_multi_model_analysis(
                         else f"backend/worker.py::_build_food_prompt({_normalize_execution_mode(execution_mode)})"
                     ),
                     "response_duration_ms": duration_ms,
+                    **prompt_meta,
                 },
                 "evaluation": calculate_item_weight_evaluation([], expected_items or []),
                 "error": str(e),
             }
 
-    return await asyncio.gather(*(run_one(model) for model in models))
+    return await asyncio.gather(*(run_one(model, selected_prompt_id) for selected_prompt_id in run_prompt_ids for model in models))
 
 
 def _build_test_backend_batch_progress(batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -8849,6 +9491,17 @@ def _serialize_test_backend_batch(batch: Dict[str, Any]) -> Dict[str, Any]:
         "status": batch["status"],
         "datasetId": batch.get("datasetId"),
         "datasetName": batch.get("datasetName"),
+        "executionMode": batch.get("execution_mode", "standard"),
+        "models": batch.get("models") or [],
+        "promptId": batch.get("prompt_id"),
+        "promptIds": batch.get("prompt_ids") or ([] if batch.get("prompt_id") is None else [batch.get("prompt_id")]),
+        "promptNames": list(dict.fromkeys(
+            str((meta.get("prompt_name") or "")).strip()
+            for item in batch.get("items") or []
+            for result in (item.get("modelResults") or [])
+            for meta in [result.get("meta") or {}]
+            if str((meta.get("prompt_name") or "")).strip()
+        )),
         "summary": batch["summary"],
         "progress": _build_test_backend_batch_progress(batch),
         "items": [
@@ -8897,6 +9550,7 @@ async def _process_test_backend_batch(batch_id: str) -> None:
                 is_multi_view=batch.get("is_multi_view", False),
                 execution_mode=batch.get("execution_mode", "standard"),
                 prompt_id=batch.get("prompt_id"),
+                prompt_ids=batch.get("prompt_ids") or [],
                 expected_items=item.get("expectedItems") or [],
             )
             first_success = next((result for result in model_results if result.get("success")), None)
@@ -8934,6 +9588,7 @@ async def test_backend_analyze(
     models: Optional[str] = Form(default=""),
     execution_mode: Optional[str] = Form(default="standard"),
     prompt_id: Optional[int] = Form(default=None),
+    prompt_ids: Optional[str] = Form(default=""),
     is_multi_view: bool = Form(default=False),
     _auth: None = Depends(require_test_backend_auth),
 ):
@@ -8951,6 +9606,7 @@ async def test_backend_analyze(
 
     selected_models = _parse_test_backend_models(models)
     mode = _parse_test_backend_execution_mode(execution_mode)
+    selected_prompt_ids = _parse_test_backend_prompt_ids(prompt_ids, prompt_id)
     expected_items = _parse_expected_items_input(expected_items_json, reference_weight=reference_weight)
     image_urls, _image_bytes, first_name = await _upload_test_backend_images(images)
 
@@ -8963,6 +9619,7 @@ async def test_backend_analyze(
             is_multi_view=is_multi_view,
             execution_mode=mode,
             prompt_id=prompt_id,
+            prompt_ids=selected_prompt_ids,
             expected_items=expected_items,
         )
         first_success = next((item for item in model_results if item.get("success")), None)
@@ -8975,6 +9632,7 @@ async def test_backend_analyze(
                 "prompt_source": "model_prompts.active(gemini)",
             },
             "models": model_results,
+            "promptIds": selected_prompt_ids,
             "labelMode": _infer_test_backend_label_mode(expected_items),
             "expectedItems": expected_items,
         }
@@ -9153,6 +9811,7 @@ async def test_backend_batch_prepare(
         "is_multi_view": False,
         "execution_mode": "standard",
         "prompt_id": None,
+        "prompt_ids": [],
         "models": [TEST_BACKEND_MODEL_FLASH],
         "items": items,
         "summary": {
@@ -9173,6 +9832,7 @@ async def test_backend_batch_start(
     models: Optional[str] = Form(default=""),
     execution_mode: Optional[str] = Form(default="standard"),
     prompt_id: Optional[int] = Form(default=None),
+    prompt_ids: Optional[str] = Form(default=""),
     _auth: None = Depends(require_test_backend_auth),
 ):
     """启动测试后台批量任务。"""
@@ -9189,6 +9849,7 @@ async def test_backend_batch_start(
     batch["models"] = _parse_test_backend_models(models)
     batch["execution_mode"] = _parse_test_backend_execution_mode(execution_mode)
     batch["prompt_id"] = prompt_id
+    batch["prompt_ids"] = _parse_test_backend_prompt_ids(prompt_ids, prompt_id)
     batch["status"] = "running"
     asyncio.create_task(_process_test_backend_batch(batch_id))
     return _serialize_test_backend_batch(batch)

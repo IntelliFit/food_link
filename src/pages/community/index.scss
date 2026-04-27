@@ -1,15 +1,25 @@
 /* 页面根节点：高度由 JS 通过 getSystemInfoSync 设定固定像素值（避免 100vh 随键盘变化）；
    100vh 仅作兜底（JS 未就绪时）。flex 让 ScrollView 获得准确高度。 */
-// 微信朋友圈式页面底：浅灰全屏，白底动态块贴边无左右留白
-$moments-page-bg: #ededed;
-$moments-hairline: #e5e5e5;
+// 与首页 `.home-page` 一致：绿→白渐变底；列表区透明以透出渐变
+$community-gradient: linear-gradient(
+  180deg,
+  rgb(92 184 150 / 8%) 0%,
+  rgb(92 184 150 / 3%) 40%,
+  #f0f3f6 80%,
+  #f0f3f6 100%
+);
+$moments-page-bg: transparent;
+$moments-hairline: rgb(92 184 150 / 14%);
+$community-card-surface: rgb(255 255 255 / 52%);
+$community-border-soft: rgb(92 184 150 / 18%);
 
 .community-page {
   height: 100vh;
-  background: $moments-page-bg;
+  background: $community-gradient;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  padding-top: 182rpx;
 }
 
 // 图标字体在本页的统一样式
@@ -24,9 +34,6 @@ $moments-hairline: #e5e5e5;
     color: inherit;
   }
 }
-
-// 与首页模块一致：动态卡片白底 alpha 50%
-$community-feed-card-alpha: 50%;
 
 /* 滚动外层：flex 占满剩余空间，给 ScrollView 提供明确高度 */
 .community-scroll-wrap {
@@ -133,7 +140,7 @@ $community-feed-card-alpha: 50%;
 }
 
 .skeleton-feed-card {
-  background: #fff;
+  background: transparent;
   border-radius: 0;
   padding: 24rpx;
   margin-bottom: 0;
@@ -246,7 +253,7 @@ $community-feed-card-alpha: 50%;
 .login-tip {
   margin: 0;
   padding: 56rpx 24rpx;
-  background: #fff;
+  background: $community-card-surface;
   border-radius: 0;
   border-bottom: 1rpx solid $moments-hairline;
   text-align: center;
@@ -271,12 +278,12 @@ $community-feed-card-alpha: 50%;
   --button-default-height: 80rpx;
 }
 
-// 顶部快捷区：全宽白底条，下划线与朋友圈列表衔接
+// 顶部快捷区：透明底透出页面渐变；三入口为线框胶囊（对齐首页模块描边）
 .friends-quick-bar {
   padding: 20rpx 24rpx 24rpx;
   margin-bottom: 0;
   box-sizing: border-box;
-  background: #fff;
+  background: transparent;
   border-bottom: 1rpx solid $moments-hairline;
 }
 
@@ -295,17 +302,19 @@ $community-feed-card-alpha: 50%;
   align-items: center;
   justify-content: flex-start;
   gap: 12rpx;
-  padding: 28rpx 12rpx 24rpx;
-  border-radius: 12rpx;
-  background: #f7f7f7;
-  border: none;
-  box-shadow: none;
+  padding: 26rpx 12rpx 22rpx;
+  border-radius: 20rpx;
+  background: transparent;
+  border: 1rpx solid $community-border-soft;
+  box-shadow: 0 4rpx 18rpx rgb(92 184 150 / 8%);
   box-sizing: border-box;
   min-height: 0;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 
   &:active {
-    background: #efefef;
+    background: rgb(92 184 150 / 7%);
+    border-color: rgb(92 184 150 / 28%);
+    box-shadow: 0 2rpx 12rpx rgb(92 184 150 / 12%);
   }
 }
 
@@ -318,7 +327,7 @@ $community-feed-card-alpha: 50%;
 .friends-quick-cell-label {
   font-size: 24rpx;
   font-weight: 600;
-  color: #334155;
+  color: #6b7280;
   line-height: 34rpx;
   text-align: center;
 }
@@ -538,31 +547,60 @@ $community-feed-card-alpha: 50%;
   line-height: 32rpx;
 }
 
-// 本周打卡排行榜：对齐首页「统计入口」绿渐变卡片（圆角、留白、投影），非表情图标
-$home-primary-start: #5cb896;
-$home-primary-end: #8dd3bf;
-
+// 本周打卡排行榜：与「我的」页「剩余积分」member-card--free 同系渐变、描边、内高光与装饰光晕
 .ranking-banner {
+  position: relative;
+  overflow: hidden;
   margin: 16rpx 24rpx 16rpx;
-  padding: 28rpx 24rpx;
-  background: linear-gradient(135deg, $home-primary-start 0%, $home-primary-end 100%);
-  border-radius: 24rpx;
-  border: none;
+  padding: 36rpx 32rpx;
+  background: linear-gradient(145deg, #5cb896 0%, #7bc4a8 30%, #5cb896 70%, #4a9e7d 100%);
+  border-radius: 28rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 20rpx;
-  box-shadow: 0 8rpx 24rpx rgb(92 184 150 / 25%);
+  box-shadow:
+    0 12rpx 40rpx rgb(92 184 150 / 28%),
+    inset 0 1rpx 0 rgba(255, 255, 255, 0.15);
   box-sizing: border-box;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 
+  &::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 300rpx;
+    height: 300rpx;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: -10%;
+    width: 200rpx;
+    height: 200rpx;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
   &:active {
     transform: scale(0.995);
-    box-shadow: 0 4rpx 16rpx rgb(92 184 150 / 20%);
+    box-shadow:
+      0 8rpx 28rpx rgb(92 184 150 / 22%),
+      inset 0 1rpx 0 rgba(255, 255, 255, 0.12);
   }
 }
 
 .ranking-head {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   gap: 20rpx;
@@ -570,6 +608,8 @@ $home-primary-end: #8dd3bf;
 }
 
 .ranking-head-text {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -591,6 +631,8 @@ $home-primary-end: #8dd3bf;
 
 // 前三名直接铺在绿底上，无额外浅底容器
 .ranking-preview {
+  position: relative;
+  z-index: 1;
   width: 100%;
   margin: 0;
   padding: 0;
@@ -760,16 +802,19 @@ $home-primary-end: #8dd3bf;
 }
 
 .ranking-title {
-  font-size: 30rpx;
-  font-weight: 600;
+  font-size: 32rpx;
+  font-weight: 700;
   color: #fff;
-  line-height: 42rpx;
+  line-height: 44rpx;
+  letter-spacing: 1rpx;
+  text-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.2);
 }
 
 .ranking-subtitle {
   font-size: 24rpx;
-  color: rgb(255 255 255 / 80%);
+  color: rgba(255, 255, 255, 0.9);
   line-height: 34rpx;
+  text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.12);
 }
 
 // 好友动态：标题+筛选为全宽白底，列表区无左右边距
@@ -783,8 +828,8 @@ $home-primary-end: #8dd3bf;
   margin-bottom: 0;
   overflow: hidden;
   padding: 0 24rpx 16rpx;
-  background: #fff;
-  border-bottom: 1rpx solid $moments-hairline;
+  background: transparent;
+  border-bottom: 1rpx solid rgb(92 184 150 / 10%);
 }
 
 .feed-filter-top-row {
@@ -808,9 +853,9 @@ $home-primary-end: #8dd3bf;
   width: 56rpx;
   height: 56rpx;
   border-radius: 16rpx;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-  border: 1rpx solid #e2e8f0;
-  box-shadow: 0 2rpx 0 #e8edf3, 0 6rpx 14rpx rgb(15 23 42 / 5%);
+  background: transparent;
+  border: 1rpx solid $community-border-soft;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -852,7 +897,7 @@ $home-primary-end: #8dd3bf;
 .feed-filter-expanded {
   padding-top: 16rpx;
   margin-top: 12rpx;
-  border-top: 1rpx solid #f1f5f9;
+  border-top: 1rpx solid rgb(92 184 150 / 12%);
 }
 
 .feed-search-wrap {
@@ -862,16 +907,17 @@ $home-primary-end: #8dd3bf;
   margin-bottom: 0;
   padding: 0 16rpx;
   height: 64rpx;
-  background: #f1f5f9;
+  background: transparent;
   border-radius: 32rpx;
-  border: 1rpx solid #e2e8f0;
-  transition: border-color 0.2s ease;
+  border: 1rpx solid $community-border-soft;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   flex: 1;
   min-width: 0;
 
   &:focus-within {
-    border-color: #5cb896;
-    background: #f8fffe;
+    border-color: rgb(92 184 150 / 45%);
+    background: rgb(92 184 150 / 6%);
+    box-shadow: 0 0 0 2rpx rgb(92 184 150 / 12%);
   }
 }
 
@@ -910,6 +956,119 @@ $home-primary-end: #8dd3bf;
   font-size: 24rpx;
   color: #5cb896;
   padding: 8rpx 4rpx;
+}
+
+/* 搜索框匹配到的好友结果面板 */
+.feed-search-friends-panel {
+  background: #fff;
+  border-radius: 16rpx;
+  margin: 0 24rpx 16rpx;
+  padding: 16rpx 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+}
+
+.feed-search-friends-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+}
+
+.feed-search-friends-title {
+  font-size: 26rpx;
+  color: #334155;
+  font-weight: 600;
+}
+
+.feed-search-friends-clear {
+  font-size: 24rpx;
+  color: #94a3b8;
+}
+
+.feed-search-friend-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.feed-search-friend-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f1f5f9;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feed-search-friend-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.feed-search-friend-avatar-placeholder {
+  font-size: 32rpx;
+}
+
+.feed-search-friend-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.feed-search-friend-name {
+  font-size: 28rpx;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.feed-search-friend-action {
+  font-size: 24rpx;
+  color: #5cb896;
+}
+
+.feed-search-friend-arrow {
+  font-size: 24rpx;
+  color: #cbd5e1;
+  flex-shrink: 0;
+}
+
+/* 已选中搜索作者的顶部标签栏 */
+.feed-search-author-bar {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin: 0 24rpx 16rpx;
+  padding: 12rpx 20rpx;
+  background: #ecfdf5;
+  border-radius: 12rpx;
+}
+
+.feed-search-author-label {
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.feed-search-author-name {
+  font-size: 26rpx;
+  color: #059669;
+  font-weight: 600;
+  flex: 1;
+}
+
+.feed-search-author-clear {
+  font-size: 24rpx;
+  color: #5cb896;
+  flex-shrink: 0;
 }
 
 .feed-filter-labeled-row {
@@ -954,9 +1113,9 @@ $home-primary-end: #8dd3bf;
   min-height: 52rpx;
   padding: 0 22rpx;
   border-radius: 9999rpx;
-  background: #fff;
-  border: 1rpx solid #e2e8f0;
-  box-shadow: 0 2rpx 8rpx rgb(15 23 42 / 3%);
+  background: transparent;
+  border: 1rpx solid $community-border-soft;
+  box-shadow: none;
   transition: all 0.2s ease;
 
   &.active {
@@ -988,7 +1147,7 @@ $home-primary-end: #8dd3bf;
 .feed-section .section-header {
   margin-bottom: 0;
   padding: 20rpx 24rpx 12rpx;
-  background: #fff;
+  background: transparent;
 }
 
 .feed-list {
@@ -1013,11 +1172,11 @@ $home-primary-end: #8dd3bf;
 }
 
 .library-feed-card {
-  background: rgb(255 255 255 / #{$community-feed-card-alpha});
+  background: transparent;
   border-radius: 28rpx;
   padding: 24rpx;
-  box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 6%), 0 2rpx 12rpx rgb(92 184 150 / 4%);
-  border: 1rpx solid rgb(92 184 150 / 5%);
+  box-shadow: none;
+  border: 1rpx solid $community-border-soft;
   display: flex;
   align-items: stretch;
   gap: 20rpx;
@@ -1333,9 +1492,9 @@ $home-primary-end: #8dd3bf;
   font-weight: 600;
 }
 
-// 单条动态：全宽白底、无圆角与投影，条与条仅一条细线分隔（仿微信朋友圈）
+// 单条动态：无底，仅分隔线（透出页面渐变）
 .feed-card {
-  background: #fff;
+  background: transparent;
   border-radius: 0;
   padding: 35rpx 24rpx 35rpx;
   box-shadow: none;
@@ -1345,7 +1504,7 @@ $home-primary-end: #8dd3bf;
   transition: background 0.15s ease;
 
   &:active {
-    background: #fafafa;
+    background: rgb(92 184 150 / 5%);
   }
 
   &:last-child {
@@ -1673,7 +1832,6 @@ $comment-body-font-size: 28rpx;
 .feed-comments {
   margin-top: 10rpx;
   padding: 14rpx 14rpx 12rpx;
-  background: #f7f7f7;
   border-radius: 4rpx;
 }
 

@@ -1,6 +1,7 @@
 import { View, Text, Image, Canvas } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   getUnlimitedQRCode,
   getFriendInviteProfile,
@@ -18,13 +19,22 @@ function getInviteCodeFromUserId(userId: string): string {
   return raw.length >= 8 ? raw.slice(0, 8) : ''
 }
 
+/** 供首页 useShareAppMessage 在餐次海报打开时带上卡片图与详情 path */
+export interface MealPosterSharePayload {
+  imageUrl: string
+  path: string
+  title: string
+}
+
 interface MealRecordPosterModalProps {
   visible: boolean
   record: FoodRecord | null
   onClose: () => void
+  /** 海报可分享时同步上下文；关闭或无图时传 null */
+  onShareContextChange?: (ctx: MealPosterSharePayload | null) => void
 }
 
-export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPosterModalProps) {
+export function MealRecordPosterModal({ visible, record, onClose, onShareContextChange }: MealRecordPosterModalProps) {
   const [posterGenerating, setPosterGenerating] = useState(false)
   const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
   const [isProUser, setIsProUser] = useState(false)
@@ -80,6 +90,19 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
   }, [visible])
+
+  useEffect(() => {
+    if (!onShareContextChange) return
+    if (visible && posterImageUrl && record) {
+      const oid = record.user_id || ''
+      const ic = ownerInviteCode || getInviteCodeFromUserId(oid)
+      const path = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}${oid ? `&from_user_id=${encodeURIComponent(oid)}` : ''}${ic ? `&invite_code=${encodeURIComponent(ic)}` : ''}`
+      const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
+      onShareContextChange({ imageUrl: posterImageUrl, path, title })
+    } else {
+      onShareContextChange(null)
+    }
+  }, [visible, posterImageUrl, record, ownerInviteCode, ownerNickname, onShareContextChange])
 
   const handleGeneratePoster = useCallback(() => {
     if (!record || posterGenerating) return
@@ -178,12 +201,13 @@ export function MealRecordPosterModal({ visible, record, onClose }: MealRecordPo
               isPro: isProUser,
             })
 
+            // JPG + 不透明：部分机型对 PNG/透明通道 saveImageToPhotosAlbum 不稳定；海报本身有底色
             Taro.canvasToTempFilePath({
               canvas: canvas as any,
               destWidth: POSTER_WIDTH * 2,
               destHeight: dynamicHeight * 2,
-              fileType: 'png',
-              transparent: true,
+              fileType: 'jpg',
+              quality: 0.95,
               success: (resp) => {
                 Taro.hideLoading()
                 setPosterGenerating(false)

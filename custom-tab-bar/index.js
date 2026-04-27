@@ -1,7 +1,11 @@
+const APP_COLOR_SCHEME_KEY = 'fl_app_color_scheme'
+
 Component({
   data: {
     selectedIndex: 0,
     hidden: false,
+    /** 与 React 端 `fl_app_color_scheme` 同步，供深色底栏 */
+    colorScheme: 'light',
     tabList: [
       { 
         id: 'home',
@@ -45,9 +49,11 @@ Component({
     attached() {
       this.updateSelected()
       this.updateHidden()
+      this.updateColorScheme()
       this.data.timer = setInterval(() => {
         this.updateSelected()
         this.updateHidden()
+        this.updateColorScheme()
       }, 300)
     },
     
@@ -77,6 +83,18 @@ Component({
     },
     
     // 检查是否需要隐藏 tabBar（拍照页 / 圈子评论输入展开）
+    updateColorScheme() {
+      try {
+        const raw = wx.getStorageSync(APP_COLOR_SCHEME_KEY)
+        const next = raw === 'dark' ? 'dark' : 'light'
+        if (next !== this.data.colorScheme) {
+          this.setData({ colorScheme: next })
+        }
+      } catch (e) {
+        // ignore
+      }
+    },
+
     updateHidden() {
       try {
         const pages = getCurrentPages()
@@ -100,7 +118,7 @@ Component({
 
           const shouldHide =
             currentPath === '/pages/record/index' ||
-            currentPath === '/pages/record-menu/index' ||
+            currentPath === '/packageExtra/pages/record-menu/index' ||
             (currentPath === '/pages/community/index' && communityCommentOpen) ||
             (currentPath === '/pages/index/index' && homePosterModalOpen)
 

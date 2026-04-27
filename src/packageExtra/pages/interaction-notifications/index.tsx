@@ -1,0 +1,173 @@
+import { withAuth } from '../../../utils/withAuth'
+import { View, Text, Image, ScrollView } from '@tarojs/components'
+import { useCallback, useState } from 'react'
+import Taro from '@tarojs/taro'
+
+import {
+  communityGetNotifications,
+  communityMarkNotificationsRead,
+  type FeedInteractionNotification
+} from '../../../utils/api'
+
+import './index.scss'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
+
+function formatTimeLabel(timeStr: string): string {
+  if (!timeStr) return ''
+  try {
+    const date = new Date(timeStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    if (diff < 60 * 1000) return '刚刚'
+    if (diff < 60 * 60 * 1000) return `${Math.max(1, Math.floor(diff / (60 * 1000)))}分钟前`
+    if (diff < 24 * 60 * 60 * 1000) return `${Math.max(1, Math.floor(diff / (60 * 60 * 1000)))}小时前`
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+  } catch {
+    return timeStr
+  }
+}
+
+function getNotificationType(item: FeedInteractionNotification): string {
+  return String((item as { notification_type?: unknown }).notification_type || '').trim().toLowerCase()
+}
+
+function buildNotificationTitle(item: FeedInteractionNotification): string {
+  const notificationType = getNotificationType(item)
+  if (notificationType === 'like_received') {
+    return `${item.actor.nickname || '有人'}赞了你的动态`
+  }
+  if (notificationType === 'comment_received') {
+    return `${item.actor.nickname || '有人'}评论了你的动态`
+  }
+  if (notificationType === 'reply_received') {
+    return `${item.actor.nickname || '有人'}回复了你的评论`
+  }
+  if (notificationType === 'comment_rejected') {
+    return '你的评论未通过审核'
+  }
+  return '你收到一条互动消息'
+}
+
+function buildNotificationContent(item: FeedInteractionNotification): string {
+  const notificationType = getNotificationType(item)
+  if (notificationType === 'comment_rejected') {
+    return item.content_preview || '系统拦截了一条评论，点击查看详情'
+  }
+  return item.content_preview || '点击查看详情'
+}
+
+function InteractionNotificationsPage() {
+  const [loading, setLoading] = useState(true)
+  const [markingRead, setMarkingRead] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [list, setList] = useState<FeedInteractionNotification[]>([])
+
+  const loadNotifications = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await communityGetNotifications(100)
+      setList(res.list || [])
+      setUnreadCount(res.unread_count || 0)
+      if ((res.unread_count || 0) > 0) {
+        const readRes = await communityMarkNotificationsRead()
+        setUnreadCount(readRes.unread_count || 0)
+        setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
+      }
+    } catch (e) {
+      Taro.showToast({ title: (e as Error).message || '加载失败', icon: 'none' })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  Taro.useDidShow(() => {
+    loadNotifications()
+  })
+
+  const handleMarkAllRead = async () => {
+    if (markingRead || unreadCount <= 0) return
+    setMarkingRead(true)
+    try {
+      const res = await communityMarkNotificationsRead()
+      setUnreadCount(res.unread_count || 0)
+      setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
+      Taro.showToast({ title: '已全部标记已读', icon: 'success' })
+    } catch (e) {
+      Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
+    } finally {
+      setMarkingRead(false)
+    }
+  }
+
+  const handleOpenNotification = (item: FeedInteractionNotification) => {
+    if (!item.record_id) {
+      Taro.showToast({ title: '未找到对应动态', icon: 'none' })
+      return
+    }
+    const query = [
+      `recordId=${encodeURIComponent(item.record_id)}`,
+      `notificationType=${encodeURIComponent(item.notification_type || '')}`,
+      `commentId=${encodeURIComponent(item.comment_id || '')}`,
+      `parentCommentId=${encodeURIComponent(item.parent_comment_id || '')}`
+    ].join('&')
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
+  }
+
+  return (
+    <View className='interaction-notifications-page'>
+      <View className='notifications-header'>
+        <View>
+          <Text className='notifications-title'>互动消息</Text>
+          <Text className='notifications-subtitle'>点赞、评论、回复和审核结果都会显示在这里</Text>
+        </View>
+        <View
+          className={`mark-read-btn ${(markingRead || unreadCount <= 0) ? 'disabled' : ''}`}
+          onClick={handleMarkAllRead}
+        >
+          {markingRead ? <View className='btn-spinner' /> : <Text>全部已读</Text>}
+        </View>
+      </View>
+
+      {loading ? (
+        <View className='notifications-loading'>
+          <View className='loading-spinner-md' />
+        </View>
+      ) : list.length === 0 ? (
+        <View className='notifications-empty'>
+          <Text className='empty-title'>暂无互动消息</Text>
+          <Text className='empty-subtitle'>有人评论或回复你时，会出现在这里</Text>
+        </View>
+      ) : (
+        <ScrollView className='notifications-list' scrollY enhanced showScrollbar={false}>
+          {list.map((item) => (
+            <View
+              key={item.id}
+              className={`notification-card ${item.is_read ? '' : 'unread'}`}
+              onClick={() => handleOpenNotification(item)}
+            >
+              <View className='notification-avatar'>
+                {item.actor.avatar ? (
+                  <Image className='notification-avatar-img' src={item.actor.avatar} mode='aspectFill' />
+                ) : (
+                  <Text className='notification-avatar-placeholder'>信</Text>
+                )}
+              </View>
+              <View className='notification-main'>
+                <View className='notification-top'>
+                  <Text className='notification-title'>{buildNotificationTitle(item)}</Text>
+                  {!item.is_read ? <View className='notification-dot' /> : null}
+                </View>
+                <Text className='notification-content' numberOfLines={2}>
+                  {buildNotificationContent(item)}
+                </Text>
+                <Text className='notification-time'>{formatTimeLabel(item.created_at)}</Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  )
+}
+
+export default withAuth(InteractionNotificationsPage)

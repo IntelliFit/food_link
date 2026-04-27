@@ -6,6 +6,7 @@ import Taro from '@tarojs/taro'
 import { foodRecordFromAnalyzeResponse } from './dev-record-preview'
 import { buildRandomDebugAnalyzeResponse } from './dev-debug-mock'
 import { getDevDebugUiTestImagePaths } from './dev-debug-storage'
+import { extraPkgUrl } from './subpackage-extra'
 
 function applyPresetImagesToAnalyzeStorage(): void {
   const paths = getDevDebugUiTestImagePaths()
@@ -31,7 +32,7 @@ export function openDebugResultPageFromMenu(): void {
   Taro.setStorageSync('analyzeCompareMode', false)
   Taro.setStorageSync('analyzeExecutionMode', 'standard')
   Taro.setStorageSync('analyzeDebugPreview', '1')
-  Taro.navigateTo({ url: '/pages/result/index' })
+  Taro.navigateTo({ url: extraPkgUrl('/pages/result/index') })
 }
 
 /** 进入 analyze-loading 调试态；若有预置图则带入 loading 展示 */
@@ -40,7 +41,7 @@ export function openDebugAnalyzeLoadingFromMenu(): void {
   Taro.setStorageSync('analyzeTaskType', 'food')
   applyPresetImagesToAnalyzeStorage()
   Taro.navigateTo({
-    url: `/pages/analyze-loading/index?task_id=debug-task-${Date.now()}&execution_mode=standard&task_type=food`
+    url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=debug-task-${Date.now()}&execution_mode=standard&task_type=food`,
   })
 }
 
@@ -56,10 +57,10 @@ export function openDebugRecordDetailPosterFromMenu(): void {
     userId: uid,
   })
   Taro.setStorageSync('recordDetail', rec)
-  Taro.navigateTo({ url: '/pages/record-detail/index' })
+  Taro.navigateTo({ url: extraPkgUrl('/pages/record-detail/index') })
 }
 
 /** 进入拍照分析页（实拍流程，与菜单调试数据无关） */
 export function openAnalyzePageFromMenu(): void {
-  Taro.navigateTo({ url: '/pages/analyze/index' })
+  Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
 }

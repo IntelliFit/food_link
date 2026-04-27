@@ -1,21 +1,17 @@
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useCallback } from 'react'
+import { FlPageThemeRoot } from '../components/FlPageThemeRoot'
+import { useAppColorScheme } from '../components/AppColorSchemeContext'
 import { getAccessToken } from './api'
+import { extraPkgUrl } from './subpackage-extra'
+import { applyThemeNavigationBar } from './theme-navigation-bar'
 
-// 不需要登录的页面白名单
+// 不需要登录的页面白名单（含分包路径）
 const PUBLIC_PAGES = new Set([
-  '/pages/login/index',
-  '/pages/agreement/index',
-  '/pages/privacy/index',
-  '/pages/about/index',
-])
-
-// Tab 页面路径
-const TAB_PAGES = new Set([
-  '/pages/index/index',
-  '/pages/community/index',
-  '/pages/record/index',
-  '/pages/profile/index',
+  extraPkgUrl('/pages/login/index'),
+  extraPkgUrl('/pages/agreement/index'),
+  extraPkgUrl('/pages/privacy/index'),
+  extraPkgUrl('/pages/about/index'),
 ])
 
 /**
@@ -57,11 +53,12 @@ export function getCurrentPageRoute(): string {
  */
 export function redirectToLogin(redirectPath?: string) {
   const currentPath = redirectPath || getCurrentPagePath()
-  const loginUrl = `/pages/login/index?redirect=${encodeURIComponent(currentPath)}`
-  
+  const loginBase = extraPkgUrl('/pages/login/index')
+  const loginUrl = `${loginBase}?redirect=${encodeURIComponent(currentPath)}`
+
   // 检查当前页面是否已经是登录页，避免重复跳转
   const currentRoute = getCurrentPageRoute()
-  if (currentRoute === '/pages/login/index') {
+  if (currentRoute === loginBase) {
     return
   }
   
@@ -122,7 +119,11 @@ export function withAuth<P extends object>(
   }
 ): React.FC<P> {
   return function WithAuthComponent(props: P) {
-    const [isAuthenticated, setIsAuthenticated] = useState(options?.public || false)
+    const { scheme } = useAppColorScheme()
+    /** 已登录时首帧即渲染，避免分包页（如记录详情）短暂空白 */
+    const [isAuthenticated, setIsAuthenticated] = useState(
+      () => Boolean(options?.public) || checkIsLoggedIn()
+    )
 
     const doAuthCheck = useCallback(() => {
       // 如果是公共页面，直接通过
@@ -158,17 +159,27 @@ export function withAuth<P extends object>(
 
     // 页面显示时检查
     useDidShow(() => {
+      applyThemeNavigationBar(scheme)
       doAuthCheck()
     })
 
     // 首次加载时也检查
     useEffect(() => {
+      applyThemeNavigationBar(scheme)
       doAuthCheck()
     }, [])
 
+    useEffect(() => {
+      applyThemeNavigationBar(scheme)
+    }, [scheme])
+
     // 如果是公共页面或已登录，正常渲染
     if (options?.public || isAuthenticated) {
-      return <WrappedComponent {...props} />
+      return (
+        <FlPageThemeRoot>
+          <WrappedComponent {...props} />
+        </FlPageThemeRoot>
+      )
     }
 
     // 未登录且不是公共页面，返回空（页面已经跳转了）

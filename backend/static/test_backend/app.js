@@ -425,8 +425,8 @@ function getSelectedBatchModels() {
 }
 
 async function loadGeminiPromptOptions(preferredPromptId = null) {
-    const currentAnalyzeValue = elements.analyzePromptSelect?.value || '';
-    const currentBatchValue = elements.batchPromptSelect?.value || '';
+    const currentAnalyzeValue = getSelectedPromptIds(elements.analyzePromptSelect);
+    const currentBatchValue = getSelectedPromptIds(elements.batchPromptSelect);
     try {
         const response = await authFetch('/api/prompts?model_type=gemini');
         const result = await response.json();
@@ -435,8 +435,8 @@ async function loadGeminiPromptOptions(preferredPromptId = null) {
         }
         geminiPromptOptions = Array.isArray(result.data) ? result.data : [];
         renderGeminiPromptSelectors({
-            analyzeSelected: preferredPromptId != null ? String(preferredPromptId) : currentAnalyzeValue,
-            batchSelected: preferredPromptId != null ? String(preferredPromptId) : currentBatchValue,
+            analyzeSelected: preferredPromptId != null ? [String(preferredPromptId)] : currentAnalyzeValue,
+            batchSelected: preferredPromptId != null ? [String(preferredPromptId)] : currentBatchValue,
         });
     } catch (error) {
         console.error('加载 Gemini 提示词选项失败:', error);
@@ -463,33 +463,39 @@ function renderGeminiPromptSelectors({
         select.innerHTML = optionHtml;
     });
 
-    const resolvedAnalyze = resolvePromptSelectValue(analyzeSelected, activePrompt);
-    const resolvedBatch = resolvePromptSelectValue(batchSelected, activePrompt);
-    if (elements.analyzePromptSelect) elements.analyzePromptSelect.value = resolvedAnalyze;
-    if (elements.batchPromptSelect) elements.batchPromptSelect.value = resolvedBatch;
+    const resolvedAnalyze = resolvePromptSelectValues(analyzeSelected, activePrompt);
+    const resolvedBatch = resolvePromptSelectValues(batchSelected, activePrompt);
+    setPromptSelectValues(elements.analyzePromptSelect, resolvedAnalyze);
+    setPromptSelectValues(elements.batchPromptSelect, resolvedBatch);
     updatePromptSelectionHint(elements.analyzePromptSelect, elements.analyzePromptHint);
     updatePromptSelectionHint(elements.batchPromptSelect, elements.batchPromptHint);
     syncPromptSelectState('analyze');
     syncPromptSelectState('batch');
 }
 
-function resolvePromptSelectValue(candidateValue, activePrompt) {
-    const normalized = String(candidateValue || '').trim();
-    if (normalized && geminiPromptOptions.some((prompt) => String(prompt.id) === normalized)) {
-        return normalized;
+function resolvePromptSelectValues(candidateValue, activePrompt) {
+    const normalized = normalizePromptIdValues(candidateValue);
+    if (normalized.length) {
+        return normalized.filter((value) => geminiPromptOptions.some((prompt) => String(prompt.id) === value));
     }
     if (activePrompt?.id != null) {
-        return String(activePrompt.id);
+        return [String(activePrompt.id)];
     }
-    return geminiPromptOptions[0]?.id != null ? String(geminiPromptOptions[0].id) : '';
+    return geminiPromptOptions[0]?.id != null ? [String(geminiPromptOptions[0].id)] : [];
 }
 
 function updatePromptSelectionHint(selectElement, hintElement) {
     if (!hintElement) return;
-    const selectedPrompt = getSelectedPromptRecord(selectElement);
-    if (selectedPrompt) {
-        const activeText = selectedPrompt.is_active ? '，也是当前激活提示词' : '，仅本次测试使用';
-        hintElement.textContent = `当前选择：${selectedPrompt.prompt_name}${activeText}。`;
+    const selectedPrompts = getSelectedPromptRecords(selectElement);
+    if (selectedPrompts.length === 1) {
+        const activeText = selectedPrompts[0].is_active ? '，也是当前激活提示词' : '，仅本次测试使用';
+        hintElement.textContent = `当前选择：${selectedPrompts[0].prompt_name}${activeText}。`;
+        return;
+    }
+    if (selectedPrompts.length > 1) {
+        const activeCount = selectedPrompts.filter((prompt) => prompt.is_active).length;
+        const names = selectedPrompts.map((prompt) => prompt.prompt_name).join(' / ');
+        hintElement.textContent = `当前选择了 ${selectedPrompts.length} 个提示词${activeCount ? '（包含当前激活提示词）' : ''}：${names}。会按“模型 × 提示词”全部并跑。`;
         return;
     }
     hintElement.textContent = '当前无可选 Gemini 自定义提示词，将回退 worker 默认 prompt。';
@@ -514,16 +520,79 @@ function syncPromptSelectState(scope) {
 }
 
 function getSelectedPromptRecord(selectElement) {
-    const selectedId = String(selectElement?.value || '').trim();
-    if (!selectedId) return null;
-    return geminiPromptOptions.find((prompt) => String(prompt.id) === selectedId) || null;
+    return getSelectedPromptRecords(selectElement)[0] || null;
 }
 
-function getSelectedPromptId(selectElement) {
-    const value = String(selectElement?.value || '').trim();
-    if (!value) return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+function normalizePromptIdValues(values) {
+    const rawValues = Array.isArray(values)
+        ? values
+        : String(values || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+    const normalized = [];
+    rawValues.forEach((value) => {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed) && parsed > 0) {
+            const normalizedValue = String(parsed);
+            if (!normalized.includes(normalizedValue)) {
+                normalized.push(normalizedValue);
+            }
+        }
+    });
+    return normalized;
+}
+
+function getSelectedPromptIds(selectElement) {
+    const values = Array.from(selectElement?.selectedOptions || [])
+        .map((option) => String(option?.value || '').trim())
+        .filter(Boolean);
+    return normalizePromptIdValues(values).map((value) => Number(value));
+}
+
+function getSelectedPromptRecords(selectElement) {
+    const selectedIds = new Set(normalizePromptIdValues(getSelectedPromptIds(selectElement)));
+    if (!selectedIds.size) return [];
+    return geminiPromptOptions.filter((prompt) => selectedIds.has(String(prompt.id)));
+}
+
+function getPromptVariantLabel(meta = {}) {
+    if (String(meta?.execution_mode || '').trim().toLowerCase() !== 'custom') {
+        return '';
+    }
+    if (meta?.prompt_name) {
+        return String(meta.prompt_name).trim();
+    }
+    const promptSource = String(meta?.prompt_source || '').trim();
+    if (promptSource.includes('custom-fallback')) {
+        return 'worker 默认 prompt';
+    }
+    if (promptSource.includes('model_prompts.active')) {
+        return '当前激活提示词';
+    }
+    return 'custom';
+}
+
+function getModelRunDisplayLabel(modelResult) {
+    const baseLabel = String(modelResult?.model || modelResult?.provider || 'model').trim() || 'model';
+    const promptLabel = getPromptVariantLabel(modelResult?.meta || {});
+    return promptLabel ? `${baseLabel} · ${promptLabel}` : baseLabel;
+}
+
+function setPromptSelectValues(selectElement, values) {
+    if (!selectElement) return;
+    const selectedValues = normalizePromptIdValues(values);
+    Array.from(selectElement.options || []).forEach((option) => {
+        option.selected = selectedValues.includes(String(option.value || '').trim());
+    });
+}
+
+function setPromptSelectValues(selectElement, values) {
+    if (!selectElement) return;
+    const selectedValues = normalizePromptIdValues(values);
+    Array.from(selectElement.options || []).forEach((option) => {
+        option.selected = selectedValues.includes(String(option.value || '').trim());
+    });
 }
 
 async function startAnalyze() {
@@ -540,9 +609,12 @@ async function startAnalyze() {
     formData.append('models', getSelectedAnalyzeModels().join(','));
     const selectedMode = elements.executionModeSelect?.value || 'standard';
     formData.append('execution_mode', selectedMode);
-    const selectedPromptId = getSelectedPromptId(elements.analyzePromptSelect);
-    if (selectedMode === 'custom' && selectedPromptId) {
-        formData.append('prompt_id', String(selectedPromptId));
+    const selectedPromptIds = getSelectedPromptIds(elements.analyzePromptSelect);
+    if (selectedMode === 'custom' && selectedPromptIds.length) {
+        formData.append('prompt_ids', selectedPromptIds.join(','));
+        if (selectedPromptIds.length === 1) {
+            formData.append('prompt_id', String(selectedPromptIds[0]));
+        }
     }
     formData.append('is_multi_view', String(elements.isMultiView.checked));
 
@@ -614,9 +686,12 @@ async function startBatchProcessing() {
     formData.append('models', getSelectedBatchModels().join(','));
     const selectedMode = elements.batchExecutionModeSelect?.value || 'standard';
     formData.append('execution_mode', selectedMode);
-    const selectedPromptId = getSelectedPromptId(elements.batchPromptSelect);
-    if (selectedMode === 'custom' && selectedPromptId) {
-        formData.append('prompt_id', String(selectedPromptId));
+    const selectedPromptIds = getSelectedPromptIds(elements.batchPromptSelect);
+    if (selectedMode === 'custom' && selectedPromptIds.length) {
+        formData.append('prompt_ids', selectedPromptIds.join(','));
+        if (selectedPromptIds.length === 1) {
+            formData.append('prompt_id', String(selectedPromptIds[0]));
+        }
     }
 
     try {
@@ -672,7 +747,9 @@ function renderBatchStatus(payload) {
     const progress = payload.progress || {};
     const summary = payload.summary || {};
     const skipped = summary.skipped || [];
-    const batchMode = String(elements.batchExecutionModeSelect?.value || 'standard').trim().toLowerCase();
+    const batchMode = String(payload.executionMode || elements.batchExecutionModeSelect?.value || 'standard').trim().toLowerCase();
+    const batchPromptNames = Array.isArray(payload.promptNames) ? payload.promptNames.filter(Boolean) : [];
+    const batchPromptCount = batchPromptNames.length || (Array.isArray(payload.promptIds) ? payload.promptIds.filter(Boolean).length : 0);
     const modelAggregates = computeBatchModelAggregates(currentBatchItems);
     const modelSummaryCards = modelAggregates.map((aggregate) => {
         if (aggregate.itemsModeCount) {
@@ -729,7 +806,7 @@ function renderBatchStatus(payload) {
         <span class="result-badge">${payload.status}</span>
         <span class="result-badge">${escapeHtml(batchMode)}</span>
         ${elements.batchIsMultiView.checked ? '<span class="result-badge success">多视角</span>' : ''}
-        ${batchMode === 'custom' && getSelectedPromptRecord(elements.batchPromptSelect)?.prompt_name ? `<span class="result-badge">${escapeHtml(getSelectedPromptRecord(elements.batchPromptSelect).prompt_name)}</span>` : ''}
+        ${batchMode === 'custom' && batchPromptCount ? `<span class="result-badge">提示词 ${batchPromptCount} 个</span>` : ''}
         ${skipped.length ? `<span class="result-badge">跳过 ${skipped.length} 项</span>` : ''}
     `;
 
@@ -909,7 +986,7 @@ function computeBatchModelAggregates(items) {
     const modelMap = new Map();
     (Array.isArray(items) ? items : []).forEach((item) => {
         (item.modelResults || []).forEach((modelResult) => {
-            const label = modelResult.model || modelResult.provider || 'model';
+            const label = getModelRunDisplayLabel(modelResult);
             const entry = modelMap.get(label) || {
                 label,
                 successCount: 0,
@@ -972,7 +1049,7 @@ function renderModelResultsSummary(modelResults) {
     const results = Array.isArray(modelResults) ? modelResults : [];
     if (!results.length) return '-';
     return results.map((result) => {
-        const provider = escapeHtml(result.model || result.provider || 'model');
+        const provider = escapeHtml(getModelRunDisplayLabel(result));
         const durationText = formatDurationMs(result?.meta?.response_duration_ms);
         if (!result.success) {
             return `<span class="model-pill failed">${provider}: 失败 / ${durationText}</span>`;
@@ -987,7 +1064,7 @@ function renderModelResultsSummary(modelResults) {
 
 function renderModelEvaluationDetail(result) {
     const evaluation = result.evaluation || {};
-    const modelLabel = escapeHtml(result.model || result.provider || 'model');
+    const modelLabel = escapeHtml(getModelRunDisplayLabel(result));
     const recognizedSummary = buildRecognizedItemsSummary(result?.data?.items);
     if (!result.success) {
         return `
@@ -1068,11 +1145,9 @@ function renderAnalyzeModelCard(modelResult, sharedMeta = {}) {
     const result = modelResult?.data || {};
     const items = Array.isArray(result.items) ? result.items : [];
     const evaluation = modelResult?.evaluation || {};
-    const providerLabel = escapeHtml(modelResult?.model || modelResult?.provider || 'model');
+    const providerLabel = escapeHtml(getModelRunDisplayLabel(modelResult));
     const modeBadge = meta?.execution_mode ? `<span class="result-badge">${escapeHtml(meta.execution_mode)}</span>` : '';
-    const promptBadge = meta?.execution_mode === 'custom' && meta?.prompt_name
-        ? `<span class="result-badge">${escapeHtml(meta.prompt_name)}</span>`
-        : '';
+    const promptBadge = '';
     const primaryBenchmarkBadge = modelResult?.success
         ? (evaluation.mode === 'items'
             ? `<span class="result-badge success">综合分 ${formatPercent(evaluation.finalCompositeScorePercent)}</span>`
@@ -1185,6 +1260,7 @@ function renderAnalyzeResult(payload) {
     const items = result.items || [];
     const expectedItems = Array.isArray(payload?.expectedItems) ? payload.expectedItems : [];
     const labelMode = payload?.labelMode || (expectedItems.length ? 'items' : null);
+    const uniqueModelNames = new Set(modelResults.map((item) => String(item?.model || item?.provider || 'model').trim()).filter(Boolean));
     const bestModelResult = modelResults
         .filter((item) => item.success)
         .sort((a, b) => {
@@ -1204,7 +1280,7 @@ function renderAnalyzeResult(payload) {
         const valueClass = isItemsBenchmark
             ? (evaluation.finalCompositeScore >= 0.75 ? 'good' : evaluation.finalCompositeScore >= 0.5 ? 'medium' : 'bad')
             : (evaluation.totalDeviation == null ? '' : (evaluation.totalDeviation >= 30 ? 'bad' : evaluation.totalDeviation >= 10 ? 'medium' : 'good'));
-        const modelLabel = escapeHtml(modelResult.model || modelResult.provider || 'model');
+        const modelLabel = escapeHtml(getModelRunDisplayLabel(modelResult));
         return `
             <div class="stat-card">
                 <div class="label">${modelLabel} ${isItemsBenchmark ? '综合分' : '总重误差'}</div>
@@ -1223,7 +1299,7 @@ function renderAnalyzeResult(payload) {
             <div class="value">${meta?.image_count ?? selectedFiles.length}</div>
         </div>
         <div class="stat-card">
-            <div class="label">参与模型数</div>
+            <div class="label">参与结果数</div>
             <div class="value">${modelResults.length}</div>
         </div>
         <div class="stat-card">
@@ -1231,8 +1307,8 @@ function renderAnalyzeResult(payload) {
             <div class="value">${labelMode === 'total' ? '总重标签' : expectedItems.length ? '逐项标签' : '未填写'}</div>
         </div>
         <div class="stat-card">
-            <div class="label">${labelMode === 'items' ? '标准食物数' : '主展示模型'}</div>
-            <div class="value">${labelMode === 'items' ? expectedItems.length : escapeHtml(bestModelResult?.model || bestModelResult?.provider || '-')}</div>
+            <div class="label">${labelMode === 'items' ? '标准食物数' : '参与模型数'}</div>
+            <div class="value">${labelMode === 'items' ? expectedItems.length : uniqueModelNames.size}</div>
         </div>
         <div class="stat-card">
             <div class="label">标准总重量</div>
@@ -1240,7 +1316,7 @@ function renderAnalyzeResult(payload) {
         </div>
         <div class="stat-card">
             <div class="label">${bestModelResult?.evaluation?.mode === 'items' ? '最佳综合分模型' : '最低总重误差模型'}</div>
-            <div class="value">${escapeHtml(bestModelResult?.model || bestModelResult?.provider || '-')}</div>
+            <div class="value">${bestModelResult ? escapeHtml(getModelRunDisplayLabel(bestModelResult)) : '-'}</div>
         </div>
         ${modelStatCards}
     `;
