@@ -1,5 +1,24 @@
 # CURRENT_TASK
 
+- Task: 测试后台支持“多提示词同时测试”
+- Status: done（`custom` 模式已支持多选提示词；分析体验与批量测试都会按“模型 × 提示词”并跑）
+- Scope:
+  - `backend/static/test_backend/index.html`
+    - 分析体验、批量测试的自定义提示词选择器改为可多选
+    - 文案明确说明会按“所选模型 × 所选提示词”同时并跑
+  - `backend/static/test_backend/app.js`
+    - 前端提交参数新增 `prompt_ids`
+    - 结果卡、批量汇总、批量详情改为把“同模型不同提示词”拆开显示
+  - `backend/main.py`
+    - 新增 `prompt_ids` 解析
+    - 单图分析与批量任务都支持 `custom` 模式下按“模型 × 提示词”笛卡尔积执行
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+  - `node --check backend/static/test_backend/app.js` 通过
+- Notes:
+  - 本轮改的是后端静态测试后台，不涉及微信小程序页面
+  - 运行态页面验证仍需用户重启后端并刷新 `http://127.0.0.1:3010/test-backend`
+
 - Task: 对齐到最新 `main` 作为当前默认开发基线
 - Status: done（`2026-04-27` 已清理 7 个工作区噪音改动，并将本地 `main` 快进到 `eddf47b`）
 - Scope:

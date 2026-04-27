@@ -23,6 +23,10 @@
 - `2026-04-28`: 临时会员开通能力不能再让真实用户看到或触发。正式口径改为：前端会员页彻底移除 `[DEV]` 测试入口，后端 `/api/dev/toggle-test-membership` 测试路由直接删除，不再保留环境变量开关后门。
 
 - `2026-04-27`: 会员免费试用策略从“统一 3 天”升级为分层口径：按 `weapp_user` 注册顺序判定，前 `1000` 名注册用户享受 `30` 天免费试用，之后的新用户享受 `3` 天免费试用；两类试用均为每天 `8` 积分、当天清零、不累计。当前治理 SQL 直接使用实库字段 `create_time`，后端 `/api/membership/me` 继续作为唯一真源，并额外返回 `trial_days_total / trial_policy` 供前端展示。
+- `2026-04-28`: 测试后台 `custom` 模式的正式 prompt 实验口径继续升级为“多提示词并跑”：
+  - 分析体验与批量测试都允许同时选择多个 Gemini 自定义提示词
+  - 实际执行语义是“所选模型 × 所选提示词”的笛卡尔积，而不是只支持单个 `prompt_id`
+  - 结果展示、批量聚合与详情查看时，必须把“同模型不同提示词”视为不同实验结果拆开显示，不能再只按模型名聚合
 
 - `2026-04-28`: GitHub Actions 后端自动部署（原 `.github/workflows/deploy-backend.yml`）已停用。工作流内容保留为同目录下 `deploy-backend.yml.disabled`（非 `.yml` 扩展名，GitHub 不加载、不执行）；需恢复时将其重命名回 `deploy-backend.yml` 并核对 secrets 与部署脚本。
 - `2026-04-26`: 「我的」页底部版本号不能再写死。正式口径是：版本展示统一读取 `config/index.ts` 注入的 `__APP_VERSION__`，而实际版本号只从根目录 `package.json` / `package-lock.json` 通过 `npm version <x.y.z> --no-git-tag-version` 维护。
