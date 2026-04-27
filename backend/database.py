@@ -23,6 +23,12 @@ FOOD_ANALYZE_BUCKET = "food-images"
 # 用户头像存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
 USER_AVATARS_BUCKET = "user-avatars"
 
+# 会员奖励体系（2026-04-27）
+INVITE_REWARD_CREDITS_PER_DAY = 5
+INVITE_REWARD_DAYS = 3
+INVITE_REWARD_MONTHLY_LIMIT = 10
+SHARE_POSTER_REWARD_CREDITS = 1
+
 # 延迟初始化 Supabase 客户端
 _supabase_client = None
 
@@ -77,6 +83,17 @@ def check_supabase_configured():
         raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
 
 
+def _is_table_not_ready_error(err: Exception, table_names: List[str]) -> bool:
+    err_s = str(err)
+    lower = err_s.lower()
+    if "PGRST205" in err_s or "Could not find the table" in err_s:
+        return True
+    return any(
+        table in err_s and ("relation" in lower or "table" in lower or "schema cache" in lower)
+        for table in table_names
+    )
+
+
 def exercise_fallback_task_type() -> str:
     """
     当数据库尚未允许 task_type=exercise 时，用文字食物队列类型 + payload.exercise 投递。
@@ -85,6 +102,42 @@ def exercise_fallback_task_type() -> str:
     if str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}:
         return "food_text_debug"
     return "food_text"
+
+
+USER_REGISTRATION_TIME_FIELDS = (
+    "created_at",
+    "create_time",
+    "created_time",
+    "register_time",
+    "registered_at",
+    "updated_at",
+)
+
+
+def _parse_possible_datetime(value: Any) -> Optional[datetime]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def resolve_user_registration_datetime(user_row: Optional[Dict[str, Any]]) -> Optional[datetime]:
+    """兼容不同库里的注册时间字段名，解析用户注册时间。"""
+    if not isinstance(user_row, dict):
+        return None
+    for field in USER_REGISTRATION_TIME_FIELDS:
+        parsed = _parse_possible_datetime(user_row.get(field))
+        if parsed:
+            return parsed
+    return None
 
 
 async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
@@ -138,6 +191,31 @@ async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         print(f"[get_user_by_id] 错误: {e}")
+        raise
+
+
+async def is_user_in_first_membership_trial_batch(user_id: str, limit: int = 1000) -> bool:
+    """判断用户是否属于会员首批试用批次（按注册时间升序前 N 名）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.table("weapp_user")\
+            .select("*")\
+            .limit(limit)\
+            .execute()
+
+        rows = list(result.data or [])
+        rows.sort(
+            key=lambda row: (
+                resolve_user_registration_datetime(row) or datetime.max.replace(tzinfo=timezone.utc),
+                str(row.get("id") or ""),
+            )
+        )
+        rows = rows[:limit]
+        return any(str(row.get("id") or "") == user_id for row in rows)
+    except Exception as e:
+        print(f"[is_user_in_first_membership_trial_batch] 错误: {e}")
         raise
 
 
@@ -401,7 +479,12 @@ async def insert_food_record(
     try:
         result = supabase.table("user_food_records").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            created = result.data[0]
+            try:
+                activate_pending_invite_referral_on_first_valid_use_sync(user_id, "food_record")
+            except Exception as reward_err:
+                print(f"[insert_food_record] 邀请奖励激活失败（已忽略）: {reward_err}")
+            return created
         raise Exception("插入饮食记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_food_record] 错误: {e}")
@@ -2269,6 +2352,253 @@ async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[
         raise
     except Exception as e:
         print(f"[resolve_user_by_friend_invite_code] 错误: {e}")
+        raise
+
+
+async def create_invite_referral_binding(
+    inviter_user_id: str,
+    invitee_user_id: str,
+    invite_code: Optional[str] = None,
+    source_request_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """记录邀请关系，供后续“完成 1 次有效使用后发奖励”使用。"""
+    if not inviter_user_id or not invitee_user_id or inviter_user_id == invitee_user_id:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_invite_referrals")
+            .select("*")
+            .eq("invitee_user_id", invitee_user_id)
+            .limit(1)
+            .execute()
+        )
+        if existing.data and len(existing.data) > 0:
+            return existing.data[0]
+
+        row = {
+            "inviter_user_id": inviter_user_id,
+            "invitee_user_id": invitee_user_id,
+            "status": "pending_qualified",
+        }
+        if invite_code:
+            row["invite_code"] = str(invite_code).strip().lower()
+        if source_request_id:
+            row["source_request_id"] = source_request_id
+
+        result = supabase.table("user_invite_referrals").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals"]):
+            print(f"[create_invite_referral_binding] 奖励表未就绪，跳过: {e}")
+            return None
+        print(f"[create_invite_referral_binding] 错误: {e}")
+        raise
+
+
+def activate_pending_invite_referral_on_first_valid_use_sync(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    """当被邀请人完成首次有效使用后，激活双方连续 3 天的邀请奖励。"""
+    if not invitee_user_id:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_invite_referrals")
+            .select("*")
+            .eq("invitee_user_id", invitee_user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = list(existing.data or [])
+        if not rows:
+            return None
+        referral = rows[0]
+        if str(referral.get("status") or "") != "pending_qualified":
+            return referral
+
+        now_utc = datetime.now(timezone.utc)
+        today_cn = datetime.now(CHINA_TZ).date()
+        month_start = today_cn.replace(day=1)
+        if month_start.month == 12:
+            next_month_start = month_start.replace(year=month_start.year + 1, month=1)
+        else:
+            next_month_start = month_start.replace(month=month_start.month + 1)
+
+        inviter_user_id = str(referral.get("inviter_user_id") or "")
+        qualified_result = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("inviter_user_id", inviter_user_id)
+            .in_("status", ["reward_active", "reward_completed"])
+            .gte("reward_start_date", month_start.isoformat())
+            .lt("reward_start_date", next_month_start.isoformat())
+            .execute()
+        )
+        qualified_count = len(qualified_result.data or [])
+
+        if qualified_count >= max(int(monthly_limit or 0), 0):
+            update_data = {
+                "status": "reward_blocked",
+                "first_effective_action_at": now_utc.isoformat(),
+                "first_effective_action_type": effective_action,
+                "blocked_reason": "monthly_limit_reached",
+                "updated_at": now_utc.isoformat(),
+            }
+        else:
+            reward_end = today_cn + timedelta(days=INVITE_REWARD_DAYS - 1)
+            update_data = {
+                "status": "reward_active",
+                "first_effective_action_at": now_utc.isoformat(),
+                "first_effective_action_type": effective_action,
+                "reward_start_date": today_cn.isoformat(),
+                "reward_end_date": reward_end.isoformat(),
+                "blocked_reason": None,
+                "updated_at": now_utc.isoformat(),
+            }
+
+        updated = (
+            supabase.table("user_invite_referrals")
+            .update(update_data)
+            .eq("id", referral["id"])
+            .execute()
+        )
+        if updated.data and len(updated.data) > 0:
+            return updated.data[0]
+        return {**referral, **update_data}
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals"]):
+            print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 奖励表未就绪，跳过: {e}")
+            return None
+        print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 错误: {e}")
+        raise
+
+
+async def activate_pending_invite_referral_on_first_valid_use(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    return activate_pending_invite_referral_on_first_valid_use_sync(
+        invitee_user_id,
+        effective_action,
+        monthly_limit=monthly_limit,
+    )
+
+
+async def get_daily_membership_bonus_breakdown(user_id: str, china_date_str: str) -> Dict[str, int]:
+    """获取用户某天的额外奖励积分明细。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        inviter_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("inviter_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+        invitee_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("invitee_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+        share_rows = (
+            supabase.table("user_credit_bonus_events")
+            .select("credits")
+            .eq("user_id", user_id)
+            .eq("bonus_type", "share_poster")
+            .eq("bonus_date", china_date_str)
+            .execute()
+        )
+
+        invite_bonus_count = len(inviter_rows.data or []) + len(invitee_rows.data or [])
+        invite_bonus_credits = invite_bonus_count * INVITE_REWARD_CREDITS_PER_DAY
+        share_bonus_credits = sum(int(row.get("credits") or 0) for row in (share_rows.data or []))
+        return {
+            "invite_bonus_credits": invite_bonus_credits,
+            "share_bonus_credits": share_bonus_credits,
+            "daily_bonus_credits": invite_bonus_credits + share_bonus_credits,
+        }
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals", "user_credit_bonus_events"]):
+            print(f"[get_daily_membership_bonus_breakdown] 奖励表未就绪，返回 0: {e}")
+            return {
+                "invite_bonus_credits": 0,
+                "share_bonus_credits": 0,
+                "daily_bonus_credits": 0,
+            }
+        print(f"[get_daily_membership_bonus_breakdown] 错误: {e}")
+        raise
+
+
+async def claim_share_poster_bonus(
+    user_id: str,
+    china_date_str: str,
+    source_record_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """领取“生成分享海报”奖励。每天最多一次。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_credit_bonus_events")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("bonus_type", "share_poster")
+            .eq("bonus_date", china_date_str)
+            .limit(1)
+            .execute()
+        )
+        if existing.data and len(existing.data) > 0:
+            return {
+                "claimed": False,
+                "already_claimed": True,
+                "credits": 0,
+                "event": existing.data[0],
+            }
+
+        row = {
+            "user_id": user_id,
+            "bonus_type": "share_poster",
+            "bonus_date": china_date_str,
+            "credits": SHARE_POSTER_REWARD_CREDITS,
+            "meta": {"trigger": "record_detail_poster"},
+        }
+        if source_record_id:
+            row["source_record_id"] = source_record_id
+
+        result = supabase.table("user_credit_bonus_events").insert(row).execute()
+        event = (result.data or [None])[0]
+        return {
+            "claimed": bool(event),
+            "already_claimed": False,
+            "credits": SHARE_POSTER_REWARD_CREDITS if event else 0,
+            "event": event,
+        }
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_credit_bonus_events"]):
+            print(f"[claim_share_poster_bonus] 奖励表未就绪，跳过: {e}")
+            return {
+                "claimed": False,
+                "already_claimed": False,
+                "credits": 0,
+                "event": None,
+            }
+        print(f"[claim_share_poster_bonus] 错误: {e}")
         raise
 
 
@@ -4913,6 +5243,54 @@ async def create_pro_membership_payment_record(data: Dict[str, Any]) -> Dict[str
         raise
 
 
+async def bulk_update_pro_membership_payment_records(
+    filters: Dict[str, Any],
+    data: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """批量更新会员支付记录。仅用于 pending 清理等后台收口动作。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("pro_membership_payment_records").update(data)
+        for key, value in (filters or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)):
+                query = query.in_(key, list(value))
+            else:
+                query = query.eq(key, value)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[bulk_update_pro_membership_payment_records] 错误: {e}")
+        raise
+
+
+async def list_pro_membership_payment_records(
+    filters: Dict[str, Any],
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """按条件查询会员支付记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("pro_membership_payment_records").select("*")
+        for key, value in (filters or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)):
+                query = query.in_(key, list(value))
+            else:
+                query = query.eq(key, value)
+        if limit is not None and limit > 0:
+            query = query.limit(limit)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_pro_membership_payment_records] 错误: {e}")
+        raise
+
+
 async def get_pro_membership_payment_record_by_order_no(order_no: str) -> Optional[Dict[str, Any]]:
     """按平台订单号获取 Pro 会员支付记录。"""
     check_supabase_configured()
@@ -5478,7 +5856,12 @@ def create_user_exercise_log_sync(
             row["ai_reasoning"] = str(ai_reasoning).strip()[:4000]
         result = supabase.table("user_exercise_logs").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            created = result.data[0]
+            try:
+                activate_pending_invite_referral_on_first_valid_use_sync(user_id, "exercise_log")
+            except Exception as reward_err:
+                print(f"[create_user_exercise_log_sync] 邀请奖励激活失败（已忽略）: {reward_err}")
+            return created
         raise Exception("新增运动记录失败：返回数据为空")
     except Exception as e:
         print(f"[create_user_exercise_log_sync] 错误: {e}")

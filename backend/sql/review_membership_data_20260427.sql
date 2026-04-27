@@ -1,0 +1,9 @@
+-- 已弃用：Supabase SQL Editor 有 200 行限制，请改用以下拆分版审核脚本
+--
+-- 1. membership_governance_review_01_summary.sql
+-- 2. membership_governance_review_02_fake_memberships.sql
+-- 3. membership_governance_review_03_compensation_candidates.sql
+-- 4. membership_governance_review_04_pending_orders.sql
+--
+-- 若需先确认 weapp_user 的实际注册时间字段，请先执行：
+--   membership_governance_debug_weapp_user_columns.sql

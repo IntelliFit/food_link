@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>食物分析测试后台</title>
-    <link rel="stylesheet" href="/static/test_backend/style.css?v=20260424a">
+    <link rel="stylesheet" href="/static/test_backend/style.css?v=20260427a">
 </head>
 <body>
     <div class="container">
@@ -57,15 +57,24 @@
                         <label for="execution-mode-select">识别模式</label>
                         <select id="execution-mode-select">
                             <option value="standard" selected>standard 标准模式</option>
-                            <option value="strict">strict 精准模式</option>
+                            <option value="strict">strict 严格模式</option>
+                            <option value="custom">custom 自定义模式</option>
                         </select>
-                        <p class="field-hint">当前实验链路优先读取“提示词管理”里激活的 Gemini 提示词；standard/strict 先作为实验标签保留，不再切换 worker.py 的默认 prompt。</p>
+                        <p class="field-hint">`standard / strict` 继续走原有真实链路；只有 `custom` 才会改用提示词管理里的 Gemini 自定义提示词。</p>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="analyze-prompt-select">自定义模式提示词</label>
+                        <select id="analyze-prompt-select" multiple size="6">
+                            <option value="">当前激活提示词</option>
+                        </select>
+                        <p class="field-hint" id="analyze-prompt-hint">仅在 `custom` 模式下生效。可多选，会按“所选模型 × 所选提示词”同时并跑。</p>
                     </div>
 
                     <div class="form-group input-card">
                         <label for="expected-items-input">标准标签（选填）</label>
                         <textarea id="expected-items-input" class="notes-textarea compact" placeholder="总重量=500g 或 米饭=120g; 鸡胸肉=80g; 西兰花=60g"></textarea>
-                        <p class="field-hint">支持两种格式：只有整餐总重量时只评估总偏差；知道每种食物克重时会评估逐项偏差。</p>
+                        <p class="field-hint">支持两种格式：只有整餐总重量时只评估总重量误差；知道每种食物克重时，会先评估食物识别是否匹配，再评估匹配食物的重量误差。当前 benchmark 主视角只关注“食物名称 + 重量”。</p>
                     </div>
 
                     <div class="form-group checkbox-card">
@@ -91,61 +100,7 @@
                     <div class="summary-grid" id="summary-grid"></div>
                 </div>
 
-                <div class="result-card">
-                    <div class="result-header">
-                        <h3>AI 分析结果</h3>
-                        <div class="result-badges" id="result-badges"></div>
-                    </div>
-                    <div class="result-section">
-                        <h4>餐食描述</h4>
-                        <p id="result-description">-</p>
-                    </div>
-                    <div class="result-section">
-                        <h4>文字补充</h4>
-                        <p id="result-notes">-</p>
-                    </div>
-                    <div class="result-section">
-                        <h4>健康建议</h4>
-                        <p id="result-insight">-</p>
-                    </div>
-                    <div class="result-grid">
-                        <div class="result-section">
-                            <h4>PFC 比例评价</h4>
-                            <p id="result-pfc">-</p>
-                        </div>
-                        <div class="result-section">
-                            <h4>吸收率说明</h4>
-                            <p id="result-absorption">-</p>
-                        </div>
-                    </div>
-                    <div class="result-section">
-                        <h4>情境建议</h4>
-                        <p id="result-context">-</p>
-                    </div>
-                </div>
-
-                <div class="result-card">
-                    <div class="result-header">
-                        <h3>识别食物明细</h3>
-                    </div>
-                    <div class="results-table-wrapper">
-                        <table class="results-table">
-                            <thead>
-                                <tr>
-                                    <th>食物</th>
-                                    <th>重量 (g)</th>
-                                    <th>热量</th>
-                                    <th>蛋白质</th>
-                                    <th>碳水</th>
-                                    <th>脂肪</th>
-                                    <th>纤维</th>
-                                    <th>糖分</th>
-                                </tr>
-                            </thead>
-                            <tbody id="food-items-body"></tbody>
-                        </table>
-                    </div>
-                </div>
+                <div class="analyze-model-results" id="analyze-model-results"></div>
             </div>
         </div>
 
@@ -236,9 +191,18 @@
                         <label for="batch-execution-mode-select">批量识别模式</label>
                         <select id="batch-execution-mode-select">
                             <option value="standard" selected>standard 标准模式</option>
-                            <option value="strict">strict 精准模式</option>
+                            <option value="strict">strict 严格模式</option>
+                            <option value="custom">custom 自定义模式</option>
                         </select>
-                        <p class="field-hint">批量任务同样优先读取“提示词管理”里激活的 Gemini 提示词；standard/strict 暂时只作为实验标记。</p>
+                        <p class="field-hint">批量测试同样保留原 `standard / strict` 逻辑；只有 `custom` 才读取自定义提示词。</p>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="batch-prompt-select">批量自定义提示词</label>
+                        <select id="batch-prompt-select" multiple size="6">
+                            <option value="">当前激活提示词</option>
+                        </select>
+                        <p class="field-hint" id="batch-prompt-hint">仅在批量 `custom` 模式下生效。可多选，会按“所选模型 × 所选提示词”同时并跑。</p>
                     </div>
                 </div>
 
@@ -276,8 +240,8 @@
                                     <th>标准标签</th>
                                     <th>状态</th>
                                     <th>模型结果</th>
-                                    <th>总重量偏差</th>
-                                    <th>描述 / 错误</th>
+                                    <th>主展示模型总重误差</th>
+                                    <th>识别结果 / 错误</th>
                                     <th>详情</th>
                                 </tr>
                             </thead>
@@ -300,18 +264,14 @@
 
         <div class="tab-panel" id="prompts-panel">
             <div class="prompts-section">
-                <div class="model-tabs">
-                    <button class="model-tab active" data-model="qwen">千问模型</button>
-                    <button class="model-tab" data-model="gemini">Gemini 模型</button>
-                </div>
                 <div class="tips-card prompt-notice">
                     <h3>提示词说明</h3>
-                    <p>现在“分析体验 / 批量测试 / 可复用测试集批次”会优先读取 <code>model_prompts</code> 表里当前激活的 <code>gemini</code> 提示词，方便直接做 prompt 实验。只有当 Gemini 激活提示词为空时，才会回退到 <code>backend/worker.py::_build_food_prompt</code>。</p>
+                    <p>这里不再单独管理“用哪个模型”。测试后台实际跑哪个模型，只看“分析体验 / 批量测试”页面里的模型勾选。这里仅维护 <code>custom</code> 模式会使用的 Gemini 自定义提示词；如果没选或激活提示词为空，才会回退到 <code>backend/worker.py::_build_food_prompt</code>。如果你当前只想 benchmark “食物名称 + 重量”，自定义提示词直接只返回 <code>items[].name</code> 和 <code>items[].estimatedWeightGrams</code> 就可以。</p>
                 </div>
 
                 <div class="prompts-list-section">
                     <div class="prompts-header">
-                        <h3>提示词列表</h3>
+                        <h3>自定义提示词列表</h3>
                         <button class="add-prompt-btn" onclick="showAddPromptModal()">+ 新建提示词</button>
                     </div>
                     <div class="prompts-list" id="prompts-list"></div>
@@ -373,6 +333,6 @@
         </div>
     </div>
 
-    <script src="/static/test_backend/app.js?v=20260424a"></script>
+    <script src="/static/test_backend/app.js?v=20260428a"></script>
 </body>
 </html>

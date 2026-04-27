@@ -18,6 +18,129 @@
 - Notes:
   - 当前仍有 2 个未跟踪文件：`docs/微信支付委托代扣_自动续费_申请材料.md`、`memory/2026-04-27.md`
   - 后续默认以最新 `main` 为工作基线，除非用户再明确要求切到其它分支
+- Task: 食物分析提示词补充地理位置上下文
+- Status: done（已完成前后端主链路接入；运行态自动化验证受微信开发者工具 9420 端口未开启阻塞）
+- Scope:
+  - 前端：
+    - `src/utils/api.ts`
+      - 为图片分析、文字分析、继续精准模式统一补充 `province / city / district`
+      - 新增粗粒度位置缓存与静默解析：仅在小程序已授权 `scope.userLocation` 时调用定位 + 逆地理；未授权则直接跳过，不打断分析流程
+  - 后端：
+    - `backend/main.py`
+      - 图片同步分析、异步图片分析、异步文字分析、继续精准模式请求体均补充 `province / city / district`
+      - 精准会话 `latest_inputs` 也会持久化位置上下文，避免多轮继续时丢失
+    - `backend/worker.py`
+      - 图片与文字两条标准/精准 prompt 都已加入“位置”辅助提示
+      - 位置只作为弱提示，用于帮助理解地域菜名、口味与常见分量；若与图片/文字冲突，仍以图片/文字本身为准
+- Verification:
+  - `python -m py_compile backend/main.py backend/worker.py` 通过
+  - `npx prettier --check src/utils/api.ts` 返回仅代码风格提示，说明 TS 文件可被 parser 正常解析
+  - 按 `weapp-devtools` 尝试运行 `mrc where --port 9420` 与截图命令，均因开发者工具未开启 9420 自动化端口而失败
+- Notes:
+  - 本轮未新增分析页位置选择 UI，先采用“已有定位授权则静默带上粗粒度省市区”的最小侵入方案
+  - 当前不向模型透传原始经纬度，只透传 `province / city / district`
+
+- Task: 会员数据治理（筛假会员 / 补异常丢资格 / 清历史 pending）
+- Status: in_progress（已完成名单审核；当前改为“只取消 4 个指定假会员、不做补偿”，并已关闭前后端临时会员开通入口）
+- Scope:
+  - 数据库：
+    - 新增 `backend/sql/review_membership_data_20260427.sql`
+      - 汇总真实有效会员 / paid 用户 / 当前试用用户 / 假会员候选 / 补偿候选 / pending 概览
+      - 单独列出“假会员候选明细”“异常丢资格补偿候选明细”“超过 1 天的会员 pending 明细”
+    - 新增 `backend/sql/fix_membership_data_20260427.sql`
+      - 取消“当前 active、无 paid、且不在试用期”的假会员
+      - 仅对“最近一次 paid 理论上仍未到期却失去会员资格”的用户补 1 个月会员
+      - 将超过 `1` 天的历史会员 `pending` 改成 `expired`，且保留/追加订单 `extra`
+    - 因 Supabase SQL Editor 存在 `200` 行限制，已额外拆分为可直接执行的小脚本：
+      - `membership_governance_review_01_summary.sql`
+      - `membership_governance_review_02_fake_memberships.sql`
+      - `membership_governance_review_03_compensation_candidates.sql`
+      - `membership_governance_review_04_pending_orders.sql`
+      - `membership_governance_fix_01_cancel_fake_memberships.sql`
+      - `membership_governance_fix_02_compensate_existing_memberships.sql`
+      - `membership_governance_fix_03_compensate_missing_memberships.sql`
+      - `membership_governance_fix_04_expire_stale_pending.sql`
+      - `membership_governance_debug_weapp_user_columns.sql`（若注册时间字段名与预期不一致，先用它诊断）
+    - 新增 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
+      - 只取消用户明确确认的 4 个假会员：`凣凣尜尜 / 草！我要干俄挺 / kk / 条条`
+  - 文档：
+    - 新增 `docs/public-schema-字段明细版-2026-04-27.md`
+    - 更新 `docs/数据库实库Schema分析报告.md`，补充“字段明细版”入口，并注明 `weapp_user` 当前注册时间字段为 `create_time`
+- Notes:
+  - 本轮按“先审名单，再执行修复”的安全顺序推进
+  - 用户最新决定：本轮先不做补偿会员；`ikura` 暂不处理
+  - `points_recharge` 不在本轮清理范围内，不会被误伤
+  - `2026-04-27` 用户实际库中 `weapp_user.created_at` 不存在；治理 SQL 已按真实字段 `create_time` 收口，后端试用判定会优先识别 `create_time`
+  - 临时会员开通入口已关闭：前端会员页移除 `[DEV]` 测试区块；后端 `/api/dev/toggle-test-membership` 测试路由已删除
+
+- Task: 会员奖励体系（邀请好友 + 分享海报）
+- Status: in_progress（数据库迁移与前后端代码已落地；等待用户自行执行 SQL 与验证）
+- Scope:
+  - 数据库：
+    - 新增 `backend/sql/add_membership_reward_system.sql`
+      - `user_invite_referrals`：记录邀请关系、首次有效使用、奖励起止日期、月度封顶阻断状态
+      - `user_credit_bonus_events`：记录分享海报奖励，当前口径每日限 1 次
+  - 后端：
+    - `backend/database.py`
+      - 新增邀请关系绑定、首次有效使用激活奖励、每日奖励积分汇总、海报奖励领取
+      - `insert_food_record` / `create_user_exercise_log_sync` 在成功创建记录后会尝试激活邀请奖励，但失败不影响主链路
+    - `backend/main.py`
+      - `/api/friend/invite/accept` 在发起好友申请后同步写入邀请绑定
+      - `/api/membership/me` 新增 `daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits`
+      - 新增 `POST /api/membership/rewards/share-poster/claim`
+  - 前端：
+    - `src/utils/api.ts`
+      - 新增 `claimSharePosterReward`
+      - `MembershipStatus` 增加奖励积分拆分字段
+    - `src/pages/record-detail/index.tsx`
+      - 记录拥有者成功生成海报后自动领取当日 `+1` 积分奖励
+    - `src/pages/pro-membership/index.tsx`
+      - 页面新增邀请/海报奖励说明与奖励积分展示
+    - `src/pages/profile/index.tsx`
+      - “我的”页会员卡和服务入口可显示“奖励 +x”
+- Notes:
+  - 当前“有效使用”口径采用：成功保存 1 次饮食记录，或成功写入 1 条运动记录
+  - 当前月度防刷上限先按 `10` 个有效邀请 / 月实现，后续如产品定新值再改
+  - 本轮只改代码，不代用户运行
+
+- Task: 会员体系线上止血（关闭 dev 开通口 + 减少 pending 堆积）
+- Status: in_progress（已完成后端默认关停 dev 会员切换接口，并在创建新订单/支付成功后自动清理当前用户旧 pending；等待用户自行重启验证）
+- Scope:
+  - 后端：
+    - `backend/main.py`
+      - `/api/dev/toggle-test-membership` 现在默认返回 `404`，且已从 OpenAPI schema 隐藏；只有显式设置环境变量 `ENABLE_DEV_MEMBERSHIP_TOGGLE=1` 才能重新开启
+      - `POST /api/membership/pay/create` 在创建新订单前，会先把当前用户历史“会员类” `pending` 支付单改成 `expired`
+      - `POST /api/payment/wechat/notify/membership` 在某笔会员订单支付成功后，也会把该用户残留“会员类” `pending` 单改成 `expired`
+    - `backend/database.py`
+      - 新增 `list_pro_membership_payment_records(...)` 供 membership pending 精确清理复用
+- Notes:
+  - 这是后端止血，不依赖前端审核发版
+  - 当前清理是“按当前用户清理旧 membership pending”，不会误伤同表里的 `points_recharge`
+  - 清理时会保留原订单 `extra`，只追加 `expire_reason / expired_at / superseded_by_order_no`
+  - 这还不是全库历史垃圾一次性清扫
+
+- Task: 首批 1000 用户免费 1 个月试用策略
+- Status: in_progress（已完成后端试用策略分层与前端文案接入；等待用户自行重启后验证）
+- Scope:
+  - 后端：
+    - `backend/database.py`
+      - 新增 `is_user_in_first_membership_trial_batch(user_id, limit=1000)`，按 `weapp_user` 注册顺序判断是否属于最早 1000 名注册用户；注册时间字段自动识别
+    - `backend/main.py`
+      - 会员积分试用口径从“统一 3 天”升级为“前 1000 名 30 天，其余用户 3 天”
+      - 新增 `EARLY_USER_TRIAL_LIMIT / EARLY_USER_TRIAL_DAYS / REGULAR_USER_TRIAL_DAYS`
+      - 新增 `_resolve_user_trial_policy(...)`
+      - `/api/membership/me` 新增返回 `trial_days_total / trial_policy`
+  - 前端：
+    - `src/utils/api.ts`
+      - `MembershipStatus` 补充 `trial_days_total / trial_policy`
+    - `src/pages/pro-membership/index.tsx`
+      - 试用展示改为区分“首批用户免费 1 个月”与“新用户免费 3 天”
+    - `src/pages/profile/index.tsx`
+      - “食探会员”入口说明与会员卡试用文案同步改为按试用策略展示
+- Notes:
+  - 本轮只改代码，不代用户运行
+  - 当前实现按注册顺序前 1000 名判定；排序使用“自动识别到的注册时间字段”升序，时间相同再按 `id` 升序稳定打散
+  - 当前仍沿用“试用期每日 8 积分、当天清零”的积分规则
 - Task: 圈子搜索优先匹配好友昵称，再加载该好友动态
 - Status: done（前端搜索框输入后先从好友列表匹配昵称，点击好友后按 `author_id` 拉取该用户动态）
 - Scope:
@@ -775,7 +898,46 @@
   - 测试后台模型选项已收口为两个 Gemini 具体型号：`gemini-3-flash-preview`、`gemini-3.1-flash-lite-preview`
   - 用户最新要求：测试后台做 prompt 实验时，暂时不要再走 `backend/worker.py` 主链路默认 prompt；分析体验 / 批量测试 / 可复用测试集批次应优先读取 `model_prompts` 中当前激活的 `gemini` 提示词
   - 已完成代码切换：`backend/main.py::_run_test_backend_provider_analysis(...)` 现优先读取 `get_active_prompt("gemini")`，只有当激活提示词为空时才回退 `backend/worker.py::_build_food_prompt`
-  - `backend/static/test_backend/index.html` 文案已同步改为“当前实验链路优先使用提示词管理中的 Gemini 激活提示词”，避免继续误导为 worker 动态 prompt
+  - 已继续收口 UI 与接口：测试后台保留 `standard / strict` 两种原有模式，并新增 `custom` 自定义模式；只有 `custom` 才读取“提示词管理”里的 Gemini 自定义提示词，后端新增 `prompt_id` 透传，若未选择或提示词为空才回退 `backend/worker.py::_build_food_prompt`
+  - `backend/static/test_backend/index.html` 与 `backend/static/test_backend/app.js` 已改成“三模式并存”：分析体验与批量测试都保留模式选择；自定义提示词选择器仅在 `custom` 模式下生效；结果区会展示本次实际使用的模式与提示词名称
+  - 已继续清理“提示词管理”页心智：去掉页内单独的模型切换按钮；提示词管理只维护 `custom` 模式会使用的 Gemini 自定义提示词，实际跑哪个模型一律以“分析体验 / 批量测试”页面的模型勾选为准
+  - 已修正单图多模型结果展示：此前前端摘要区会列出多个模型，但“AI 分析结果 / 识别食物明细”只渲染第一个成功模型，导致看起来像只返回了一份结果；现在改为按模型分别展示完整结果卡，摘要区也显示具体模型名
+  - 已把测试后台评测口径升级为两阶段 benchmark：
+    - `backend/test_backend/utils.py` 现先做食物匹配，再算匹配食物重量误差，最后保留总重量误差
+    - 新增指标：`Food Precision / Recall / F1`、`matchedWeightMaeGrams`、`matchedWeightRelativeError`（按 `max(gt, 50g)` 归一化）、`matchedWeightScore`、`weightedFoodRecall`、`finalCompositeScore`
+    - `2026-04-27` 继续升级：`items` 模式的食物匹配评估器已切到 DeepSeek（`deepseek-v4-flash`）主判定；代码继续负责最终算分，不把总分交给模型黑箱
+    - 当前仍保留 deterministic matcher 作为兜底；当 `DEEPSEEK_API_KEY` 缺失或 API 异常时，会回退到本地规则匹配，并在结果里显式返回 `evaluatorSource / evaluatorError`
+  - 已把 benchmark 展示接到测试后台 UI：
+    - 单图分析卡与批量详情都会展示 `综合分 + Food F1 + 匹配食物 MAE + 匹配食物相对误差 + 总重量误差`
+    - 批量页顶部会按模型显示“平均综合分”或“平均总重误差”，便于直接做模型/提示词对比
+    - 结果区会额外显示“匹配评估器”：`DeepSeek evaluator / 本地规则兜底 / 总重直算`
+  - `2026-04-28` 已继续收口结果展示口径：
+    - 单图页顶部“分析摘要”不再展示歧义性的共享 `估算总重量 / 估算总热量`，改为只展示全局信息：图片数、参与模型数、标签模式、标准总重量、最佳综合分模型/最低总重误差模型
+    - 每个模型结果卡单独展示自己的 `估重 / 热量 / 回答时长`
+    - 批量页顶部摘要新增“各模型平均回答时长”，便于直接比较生产可用性
+  - `2026-04-28` 已继续收口为“只测食物名称 + 重量”的 benchmark 页面：
+    - 后端测试链路不再为缺失的 `description / insight` 强塞占位默认文案
+    - 单图与批量详情页移除描述、建议、PFC、吸收率、情境建议、热量等主展示内容
+    - 结果页与批量列表改为突出 `识别结果摘要 / 识别食物明细 / benchmark 指标 / 回答时长`
+    - 提示词管理说明补充：`custom` 模式提示词可以只返回 `items[].name + items[].estimatedWeightGrams`
+  - `2026-04-28` 已修正 benchmark 报告的一个关键呈现问题：
+    - 对于“模型识别到了某个候选，但 DeepSeek 判定它和标准标签不匹配”的情况，评测表不再直接写成“未识别”
+    - 现在会保留该候选识别结果和重量，并显示对应匹配类型（如 `识别成其他食物 / 名称过泛 / 未匹配`）
+    - 这样像 `炖冬瓜（含虾米少量） -> 白萝卜` 这类错误，会明确显示成“识别错了什么”，而不是看起来像模型完全没看到
+  - `2026-04-28` 已继续修正 DeepSeek evaluator 的“未匹配候选回填”：
+    - DeepSeek prompt 现在明确要求：对每个 `expected_item` 都返回一条 assignment；即使 `accepted=false`，也要尽量给出最像的 `predicted_index`
+    - 若 DeepSeek 仍漏掉 rejected candidate，本地兜底会用更宽松的“主体食材候选”规则回填展示候选（如去掉 `清炒 / 炖 / 红烧` 等做法前缀后再比较）
+    - 这类回填只用于报告展示，不会改变评分；`status / Food F1 / Precision / Recall` 仍按未匹配处理
+  - `2026-04-28` 已继续适配新的 item-only prompt 结构：
+    - DeepSeek evaluator 现在会读取并透传 `isMixedDish / count / confidence` 到匹配 prompt
+    - 对标签侧没有显式 `isMixedDish` 的项，会基于名称做保守启发式推断（如带 `含...`、括号辅料说明、明显混合菜词）
+    - DeepSeek prompt 已新增“混合菜匹配规则”：混合菜优先匹配混合菜，单食物不要轻易匹配成明显混合菜
+    - 当前 `confidence / count / totalEstimatedWeightGrams` 仅用于辅助匹配，不进入正式 benchmark 主评分
+  - `2026-04-28` 已修复本地脱敏测试集标签的一处 benchmark 口径问题：
+    - `D:\创业\healthymax\food_test_sanitized_20260424\labels.txt` 与 `...\food_test_sanitized_20260424_mini10\labels.txt` 中，原先很多“单食物 / 单菜品”样本只有总重量、没有标准食物名
+    - 现已把可明确识别为单食物的样本改成单项 `items` 标签，如 `德芙巧克力=14g`、`黑咖啡=245g`、`牛油拌饭=204g`
+    - 多食物总重、未知食物、空包装 `0g` 样本仍先保留 `total`，避免硬猜错误标签
+    - 私有映射表 `D:\创业\healthymax\food_test_sanitized_20260424_private_mapping.csv` 也已同步更新
 - Notes:
   - 用户已明确：本轮不需要本地运行验证，只要把代码写好即可
   - 本轮改的是后端静态测试后台，不涉及微信小程序页面
@@ -836,7 +998,7 @@
 
 
 - Task: 定价策略整改 —— 三档 × 三周期 + 每日积分 + 新用户试用
-- Status: in_progress（一期：数据库 / 后端 / 前端价格矩阵与积分展示已落地；邀请奖励 / 分享奖励 / 自动续费 留待后续阶段）
+- Status: in_progress（数据库 / 后端 / 前端价格矩阵与积分展示已落地；邀请奖励 / 分享奖励已二期接入；自动续费留待后续阶段）
 - Scope:
   - 数据库：
     - 新增 `backend/sql/add_tiered_membership_pricing.sql`：`membership_plan_config` 新增 `tier / period / daily_credits / original_amount / sort_order`；`user_pro_memberships` 新增 `daily_credits` 快照
@@ -846,12 +1008,14 @@
     - `backend/database.py`：修正积分试算口径，`get_today_food_analysis_count` 现会排除 `payload.exercise=true` 的 exercise fallback 任务，避免运动记录被误算成 `食物分析 2 分 + 运动 1 分 = 3 分`
     - `backend/main.py`：
       - `MembershipPlanResponse` 扩展 `tier / period / daily_credits / original_amount / savings / sort_order`
-      - `MembershipStatusResponse` 扩展 `daily_credits_max/used/remaining / credits_reset_at / trial_active / trial_expires_at`
+      - `MembershipStatusResponse` 扩展 `daily_credits_max/used/remaining / daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits / credits_reset_at / trial_active / trial_expires_at`
       - 新增 `_credits_reset_time_iso / _is_user_in_trial / _compute_daily_credits_status`；积分消耗口径：食物分析 2 / 运动记录 1
-      - 新用户 3 天试用（按 `weapp_user.created_at` 判定），试用期每日 8 积分、不累计
+      - 免费试用已升级为双层口径：前 `1000` 名注册用户 `30` 天试用，其余新用户 `3` 天试用；两类试用均按 `weapp_user` 注册顺序判定、每日 `8` 积分、不累计
       - `/api/membership/plans` 返回扩展字段并计算 `savings`
       - `/api/membership/me` 合并积分状态与试用信息
       - `/api/payment/wechat/notify/membership` 成功回调时把所选套餐 `daily_credits` 快照写入 `user_pro_memberships`
+      - 邀请奖励已接入：用户通过现有好友邀请码链路进入后，完成 1 次有效使用（当前口径：饮食记录或运动记录成功写入）即可让双方连续 3 天每天 `+5` 积分；当前月度上限先按 `10` 个有效邀请 / 月实现
+      - 分享海报奖励已接入：记录拥有者在详情页成功生成海报后，可自动领取当日 `+1` 积分（每日上限 1 次）
       - `2026-04-24` 继续收口：`/api/analyze`、`/api/analyze/submit`、`/api/analyze-text`、`/api/analyze-text/submit`、`/api/precision-sessions/{session_id}/continue` 已统一接入 `_validate_food_analysis_access(...)`
         - 食物分析积分不足时统一返回 `402`
         - 精准模式权限统一改为“仅 standard / advanced 可用”；light 会员若显式请求 strict，会收到“去升级”的 402，而不是继续放行
@@ -864,6 +1028,7 @@
       - 3 档卡片 + 3 周期 tab；tab 上显示「立省¥」标签
       - 选中套餐大价格卡：折后单价、≈每月、立省标签
       - 三档能力对比表 / 积分消耗说明 / 当前状态（生效中 / 试用中 / 未开通）
+      - 新增奖励机制说明与奖励积分展示（邀请好友 / 分享海报）
     - `src/pages/profile/index.tsx`：「我的」会员卡从「今日拍照 x/y」改为「今日积分 x/y」；非会员区分「试用中」与「未开通」；服务入口「食探会员」描述同步为积分口径
     - `src/pages/analyze/index.tsx + index.scss`：精准模式入口继续收口为档位判断而非 `is_pro` 一刀切；轻度版点击精准时提示“去升级”，并把会员页默认定位到标准版同周期；顶部提示条改为积分口径与升级提示
     - `src/pages/pro-membership/index.tsx + index.scss`：积分展示改成「今日已用 / 今日剩余」双语义；当前套餐在档位卡与周期 tab 上增加标识；套餐差异表只保留真实已上线差异（每日积分、精准模式、适合频率）
@@ -894,7 +1059,6 @@
     - 用户后续自测时，积分不足应直接在提交前被挡住，后端兜底返回 `402`
 - 后续阶段（本轮未做，需继续）：
   - 积分“真扣减”仍是按“已发生行为计数”试算，而非提交时原子扣库存；当前已能拦截超额继续分析，但尚未实现单独的积分流水表与并发扣减
-  - 邀请好友奖励 / 分享奖励 机制
   - 微信支付自动续费（包月 / 包季 / 包年）
   - 「pending」支付记录清理：现 `user_membership_payments.pending` 长期堆积的问题尚未并入本轮整改
   - Next 文档：`memory/2026-04-21.md` 本轮交接

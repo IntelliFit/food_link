@@ -463,6 +463,21 @@ def _meal_name_for_hint(meal_type: Optional[str], timezone_offset_minutes: Optio
     return "午加餐" if 11 <= hour < 17 else "晚加餐"
 
 
+def _build_location_hints(payload: Dict[str, Any]) -> tuple[str, str]:
+    parts: List[str] = []
+    for key in ("province", "city", "district"):
+        text = str(payload.get(key) or "").strip()
+        if text and text not in parts:
+            parts.append(text)
+    if not parts:
+        return "", ""
+    location_text = " ".join(parts)
+    return (
+        f"位置:{location_text}",
+        f"\n用户当前所在地区约为「{location_text}」，可把它作为辅助线索，用于理解可能的地域菜名、口味和常见分量；若与图片或文字描述冲突，始终以图片或文字描述本身为准。",
+    )
+
+
 def _normalize_text(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -623,10 +638,25 @@ def _parse_analysis_result_items(parsed: Dict[str, Any]) -> List[Dict[str, Any]]
         if not isinstance(nutrients, dict):
             nutrients = {}
         weight = float(raw_item.get("estimatedWeightGrams") or 0)
+        raw_count = raw_item.get("count")
+        try:
+            parsed_count = int(raw_count) if raw_count is not None and raw_count != "" else None
+        except (TypeError, ValueError):
+            parsed_count = None
+        raw_confidence = raw_item.get("confidence")
+        try:
+            parsed_confidence = float(raw_confidence) if raw_confidence is not None and raw_confidence != "" else None
+        except (TypeError, ValueError):
+            parsed_confidence = None
+        if parsed_confidence is not None:
+            parsed_confidence = min(max(parsed_confidence, 0.0), 1.0)
         items.append({
             "name": str(raw_item.get("name", "未知食物")),
             "estimatedWeightGrams": weight,
             "originalWeightGrams": weight,
+            "isMixedDish": bool(raw_item.get("isMixedDish")) if raw_item.get("isMixedDish") is not None else None,
+            "count": parsed_count if parsed_count is None or parsed_count >= 0 else None,
+            "confidence": round(parsed_confidence, 4) if parsed_confidence is not None else None,
             "nutrients": {
                 "calories": float(nutrients.get("calories") or 0),
                 "protein": float(nutrients.get("protein") or 0),
@@ -1639,6 +1669,7 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     meal_type = payload.get("meal_type")
     meal_name = _meal_name_for_hint(meal_type, payload.get("timezone_offset_minutes"))
     meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
+    location_tag, location_hint = _build_location_hints(payload)
 
     def _fmt_weight(value: Any) -> str:
         try:
@@ -1698,6 +1729,8 @@ def _build_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
                 compact_tags.append(f"剩余:{float(remaining):g}kcal")
             except Exception:
                 compact_tags.append(f"剩余:{remaining}kcal")
+        if location_tag:
+            compact_tags.append(location_tag)
         if profile_block:
             compact_tags.append(profile_block)
         compact_tag_block = ("\n".join(compact_tags) + "\n") if compact_tags else ""
@@ -1761,7 +1794,7 @@ JSON:
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（一两句话）。
-7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_block}
+7. context_advice: 结合用户状态、位置或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{location_hint}{profile_block}
 8. 请遵守以下执行模式约束：{mode_hint}
 9. 除了常规营养结果外，请额外做“精准模式判定”：
    - recognitionOutcome: 只能是 ok / soft_reject / hard_reject
@@ -2016,6 +2049,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
     meal_type = payload.get("meal_type")
     meal_name = _meal_name_for_hint(meal_type, payload.get("timezone_offset_minutes"))
     meal_hint = f" 用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
+    location_tag, location_hint = _build_location_hints(payload)
 
     previous_result = payload.get("previousResult") or {}
     previous_items = previous_result.get("items") or []
@@ -2071,6 +2105,8 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
                 compact_tags.append(f"剩余:{float(remaining):g}kcal")
             except Exception:
                 compact_tags.append(f"剩余:{remaining}kcal")
+        if location_tag:
+            compact_tags.append(location_tag)
         if profile_block:
             compact_tags.append(profile_block)
         compact_tag_block = ("\n".join(compact_tags) + "\n") if compact_tags else ""
@@ -2132,7 +2168,7 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 4. insight: 基于该餐营养成分的一句话健康建议。{meal_hint}
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
 6. absorption_notes: 食物组合或烹饪方式对吸收率、生物利用度的简要说明（一两句话）。
-7. context_advice: 结合用户状态或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{profile_hint}
+7. context_advice: 结合用户状态、位置或剩余热量的情境建议（若无则可为空字符串）。{state_hint}{remain_hint}{location_hint}{profile_hint}
 8. 请遵守以下执行模式约束：{mode_hint}
 9. 除了常规营养结果外，请额外做“精准模式判定”：
    - recognitionOutcome: 只能是 ok / soft_reject / hard_reject
