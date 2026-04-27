@@ -607,43 +607,6 @@
   margin-top: 20rpx;
 }
 
-/* ============================================================ */
-
-/* TODO: [TEST] 以下测试样式在正式上线前必须删除 */
-.test-section {
-  margin: 48rpx 32rpx 0;
-  padding: 24rpx 32rpx;
-  background: #fffbe6;
-  border: 1rpx dashed #f59e0b;
-  border-radius: 20rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20rpx;
-}
-
-.test-section-label {
-  font-size: 22rpx;
-  color: #92400e;
-  text-align: center;
-}
-
-.test-toggle-btn {
-  width: 100%;
-  height: 80rpx;
-  line-height: 80rpx;
-  border-radius: 999rpx;
-  background: #f59e0b;
-  color: #fff;
-  font-size: 28rpx;
-  font-weight: 600;
-  border: none;
-
-  &[disabled] {
-    opacity: 0.6;
-  }
-}
-
 /* TODO: [TEST] 测试样式结束 */
 
 /* ============================================================ */

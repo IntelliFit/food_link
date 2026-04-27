@@ -9,9 +9,10 @@ let currentBatchStatus = null;
 let batchPollTimer = null;
 let currentBatchItems = [];
 let testDatasets = [];
+let geminiPromptOptions = [];
 
 // 提示词管理状态
-let currentModelType = 'qwen';
+const currentModelType = 'gemini';
 let promptsList = [];
 let activePrompt = null;
 let originalActivePrompt = null;
@@ -30,19 +31,14 @@ const elements = {
     modelGeminiFlash: document.getElementById('model-gemini-flash'),
     modelGeminiFlashLite: document.getElementById('model-gemini-flash-lite'),
     executionModeSelect: document.getElementById('execution-mode-select'),
+    analyzePromptSelect: document.getElementById('analyze-prompt-select'),
+    analyzePromptHint: document.getElementById('analyze-prompt-hint'),
     isMultiView: document.getElementById('is-multi-view'),
     analyzeBtn: document.getElementById('analyze-btn'),
 
     analysisResult: document.getElementById('analysis-result'),
     summaryGrid: document.getElementById('summary-grid'),
-    resultBadges: document.getElementById('result-badges'),
-    resultDescription: document.getElementById('result-description'),
-    resultNotes: document.getElementById('result-notes'),
-    resultInsight: document.getElementById('result-insight'),
-    resultPfc: document.getElementById('result-pfc'),
-    resultAbsorption: document.getElementById('result-absorption'),
-    resultContext: document.getElementById('result-context'),
-    foodItemsBody: document.getElementById('food-items-body'),
+    analyzeModelResults: document.getElementById('analyze-model-results'),
 
     loadingOverlay: document.getElementById('loading-overlay')
 };
@@ -60,6 +56,8 @@ Object.assign(elements, {
     batchModelGeminiFlash: document.getElementById('batch-model-gemini-flash'),
     batchModelGeminiFlashLite: document.getElementById('batch-model-gemini-flash-lite'),
     batchExecutionModeSelect: document.getElementById('batch-execution-mode-select'),
+    batchPromptSelect: document.getElementById('batch-prompt-select'),
+    batchPromptHint: document.getElementById('batch-prompt-hint'),
     prepareBatchBtn: document.getElementById('prepare-batch-btn'),
     startBatchBtn: document.getElementById('start-batch-btn'),
     batchSummaryCard: document.getElementById('batch-summary-card'),
@@ -85,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initAnalyzePanel();
     initBatchPanel();
-    initPromptsManagement();
+    loadGeminiPromptOptions();
 });
 
 function chooseAnalyzeFiles() {
@@ -153,6 +151,12 @@ function initAnalyzePanel() {
         input.value = '';
     });
 
+    elements.analyzePromptSelect?.addEventListener('change', () => {
+        updatePromptSelectionHint(elements.analyzePromptSelect, elements.analyzePromptHint);
+    });
+    elements.executionModeSelect?.addEventListener('change', () => {
+        syncPromptSelectState('analyze');
+    });
     elements.analyzeBtn.addEventListener('click', startAnalyze);
     updateAnalyzeBtn();
 }
@@ -196,6 +200,12 @@ function initBatchPanel() {
     elements.clearBatchBtn?.addEventListener('click', resetBatchState);
     elements.prepareBatchBtn?.addEventListener('click', prepareBatchZip);
     elements.startBatchBtn?.addEventListener('click', startBatchProcessing);
+    elements.batchPromptSelect?.addEventListener('change', () => {
+        updatePromptSelectionHint(elements.batchPromptSelect, elements.batchPromptHint);
+    });
+    elements.batchExecutionModeSelect?.addEventListener('change', () => {
+        syncPromptSelectState('batch');
+    });
     elements.batchDetailClose?.addEventListener('click', closeBatchDetail);
     elements.reloadDatasetsBtn?.addEventListener('click', loadTestDatasets);
     elements.importDatasetBtn?.addEventListener('click', importLocalDataset);
@@ -414,6 +424,108 @@ function getSelectedBatchModels() {
     return models.length ? models : ['gemini-3-flash-preview'];
 }
 
+async function loadGeminiPromptOptions(preferredPromptId = null) {
+    const currentAnalyzeValue = elements.analyzePromptSelect?.value || '';
+    const currentBatchValue = elements.batchPromptSelect?.value || '';
+    try {
+        const response = await authFetch('/api/prompts?model_type=gemini');
+        const result = await response.json();
+        if (!result.success) {
+            throw new Error(result.detail || '加载 Gemini 提示词失败');
+        }
+        geminiPromptOptions = Array.isArray(result.data) ? result.data : [];
+        renderGeminiPromptSelectors({
+            analyzeSelected: preferredPromptId != null ? String(preferredPromptId) : currentAnalyzeValue,
+            batchSelected: preferredPromptId != null ? String(preferredPromptId) : currentBatchValue,
+        });
+    } catch (error) {
+        console.error('加载 Gemini 提示词选项失败:', error);
+        geminiPromptOptions = [];
+        renderGeminiPromptSelectors();
+    }
+}
+
+function renderGeminiPromptSelectors({
+    analyzeSelected = '',
+    batchSelected = '',
+} = {}) {
+    const activePrompt = geminiPromptOptions.find((prompt) => prompt.is_active) || null;
+    const optionHtml = geminiPromptOptions.length
+        ? geminiPromptOptions.map((prompt) => {
+            const promptId = String(prompt.id);
+            const activeTag = prompt.is_active ? '（当前激活）' : '';
+            return `<option value="${escapeHtml(promptId)}">${escapeHtml(prompt.prompt_name || `提示词 #${promptId}`)}${activeTag}</option>`;
+        }).join('')
+        : '<option value="">当前无 Gemini 自定义提示词，将回退默认 prompt</option>';
+
+    [elements.analyzePromptSelect, elements.batchPromptSelect].forEach((select) => {
+        if (!select) return;
+        select.innerHTML = optionHtml;
+    });
+
+    const resolvedAnalyze = resolvePromptSelectValue(analyzeSelected, activePrompt);
+    const resolvedBatch = resolvePromptSelectValue(batchSelected, activePrompt);
+    if (elements.analyzePromptSelect) elements.analyzePromptSelect.value = resolvedAnalyze;
+    if (elements.batchPromptSelect) elements.batchPromptSelect.value = resolvedBatch;
+    updatePromptSelectionHint(elements.analyzePromptSelect, elements.analyzePromptHint);
+    updatePromptSelectionHint(elements.batchPromptSelect, elements.batchPromptHint);
+    syncPromptSelectState('analyze');
+    syncPromptSelectState('batch');
+}
+
+function resolvePromptSelectValue(candidateValue, activePrompt) {
+    const normalized = String(candidateValue || '').trim();
+    if (normalized && geminiPromptOptions.some((prompt) => String(prompt.id) === normalized)) {
+        return normalized;
+    }
+    if (activePrompt?.id != null) {
+        return String(activePrompt.id);
+    }
+    return geminiPromptOptions[0]?.id != null ? String(geminiPromptOptions[0].id) : '';
+}
+
+function updatePromptSelectionHint(selectElement, hintElement) {
+    if (!hintElement) return;
+    const selectedPrompt = getSelectedPromptRecord(selectElement);
+    if (selectedPrompt) {
+        const activeText = selectedPrompt.is_active ? '，也是当前激活提示词' : '，仅本次测试使用';
+        hintElement.textContent = `当前选择：${selectedPrompt.prompt_name}${activeText}。`;
+        return;
+    }
+    hintElement.textContent = '当前无可选 Gemini 自定义提示词，将回退 worker 默认 prompt。';
+}
+
+function syncPromptSelectState(scope) {
+    const isAnalyze = scope === 'analyze';
+    const modeSelect = isAnalyze ? elements.executionModeSelect : elements.batchExecutionModeSelect;
+    const promptSelect = isAnalyze ? elements.analyzePromptSelect : elements.batchPromptSelect;
+    const hintElement = isAnalyze ? elements.analyzePromptHint : elements.batchPromptHint;
+    const mode = String(modeSelect?.value || 'standard').trim().toLowerCase();
+    const customEnabled = mode === 'custom';
+    if (promptSelect) {
+        promptSelect.disabled = !customEnabled;
+    }
+    if (!hintElement) return;
+    if (!customEnabled) {
+        hintElement.textContent = `当前为 ${mode} 模式，使用原有主链路 prompt；下方自定义提示词不会生效。`;
+        return;
+    }
+    updatePromptSelectionHint(promptSelect, hintElement);
+}
+
+function getSelectedPromptRecord(selectElement) {
+    const selectedId = String(selectElement?.value || '').trim();
+    if (!selectedId) return null;
+    return geminiPromptOptions.find((prompt) => String(prompt.id) === selectedId) || null;
+}
+
+function getSelectedPromptId(selectElement) {
+    const value = String(selectElement?.value || '').trim();
+    if (!value) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 async function startAnalyze() {
     if (selectedFiles.length === 0) return;
 
@@ -426,7 +538,12 @@ async function startAnalyze() {
     }
     formData.append('expected_items_json', elements.expectedItemsInput?.value?.trim() || '');
     formData.append('models', getSelectedAnalyzeModels().join(','));
-    formData.append('execution_mode', elements.executionModeSelect?.value || 'standard');
+    const selectedMode = elements.executionModeSelect?.value || 'standard';
+    formData.append('execution_mode', selectedMode);
+    const selectedPromptId = getSelectedPromptId(elements.analyzePromptSelect);
+    if (selectedMode === 'custom' && selectedPromptId) {
+        formData.append('prompt_id', String(selectedPromptId));
+    }
     formData.append('is_multi_view', String(elements.isMultiView.checked));
 
     try {
@@ -495,7 +612,12 @@ async function startBatchProcessing() {
     formData.append('notes', elements.batchNotesInput.value.trim());
     formData.append('is_multi_view', String(elements.batchIsMultiView.checked));
     formData.append('models', getSelectedBatchModels().join(','));
-    formData.append('execution_mode', elements.batchExecutionModeSelect?.value || 'standard');
+    const selectedMode = elements.batchExecutionModeSelect?.value || 'standard';
+    formData.append('execution_mode', selectedMode);
+    const selectedPromptId = getSelectedPromptId(elements.batchPromptSelect);
+    if (selectedMode === 'custom' && selectedPromptId) {
+        formData.append('prompt_id', String(selectedPromptId));
+    }
 
     try {
         const response = await authFetch('/api/test-backend/batch/start', {
@@ -550,6 +672,32 @@ function renderBatchStatus(payload) {
     const progress = payload.progress || {};
     const summary = payload.summary || {};
     const skipped = summary.skipped || [];
+    const batchMode = String(elements.batchExecutionModeSelect?.value || 'standard').trim().toLowerCase();
+    const modelAggregates = computeBatchModelAggregates(currentBatchItems);
+    const modelSummaryCards = modelAggregates.map((aggregate) => {
+        if (aggregate.itemsModeCount) {
+            return `
+                <div class="stat-card">
+                    <div class="label">${escapeHtml(aggregate.label)} 平均综合分</div>
+                    <div class="value ${aggregate.avgCompositeScore != null && aggregate.avgCompositeScore >= 0.75 ? 'good' : aggregate.avgCompositeScore != null && aggregate.avgCompositeScore >= 0.5 ? 'medium' : 'bad'}">${formatRatioPercent(aggregate.avgCompositeScore)}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">${escapeHtml(aggregate.label)} 平均回答时长</div>
+                    <div class="value">${formatDurationMs(aggregate.avgResponseDurationMs)}</div>
+                </div>
+            `;
+        }
+        return `
+            <div class="stat-card">
+                <div class="label">${escapeHtml(aggregate.label)} 平均总重误差</div>
+                <div class="value ${aggregate.avgTotalDeviation != null && aggregate.avgTotalDeviation < 10 ? 'good' : aggregate.avgTotalDeviation != null && aggregate.avgTotalDeviation < 30 ? 'medium' : 'bad'}">${formatPercent(aggregate.avgTotalDeviation)}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">${escapeHtml(aggregate.label)} 平均回答时长</div>
+                <div class="value">${formatDurationMs(aggregate.avgResponseDurationMs)}</div>
+            </div>
+        `;
+    }).join('');
 
     elements.batchSummaryCard.style.display = 'block';
     elements.batchListCard.style.display = 'block';
@@ -570,6 +718,7 @@ function renderBatchStatus(payload) {
             <div class="label">跳过</div>
             <div class="value">${skipped.length}</div>
         </div>
+        ${modelSummaryCards}
     `;
     elements.batchProgressFill.style.width = `${progress.percent || 0}%`;
     elements.batchProgressText.textContent = progress.current_file
@@ -578,7 +727,9 @@ function renderBatchStatus(payload) {
 
     elements.batchResultBadges.innerHTML = `
         <span class="result-badge">${payload.status}</span>
+        <span class="result-badge">${escapeHtml(batchMode)}</span>
         ${elements.batchIsMultiView.checked ? '<span class="result-badge success">多视角</span>' : ''}
+        ${batchMode === 'custom' && getSelectedPromptRecord(elements.batchPromptSelect)?.prompt_name ? `<span class="result-badge">${escapeHtml(getSelectedPromptRecord(elements.batchPromptSelect).prompt_name)}</span>` : ''}
         ${skipped.length ? `<span class="result-badge">跳过 ${skipped.length} 项</span>` : ''}
     `;
 
@@ -589,7 +740,7 @@ function renderBatchStatus(payload) {
             <td>${renderBatchStatusTag(item.status)}</td>
             <td>${renderModelResultsSummary(item.modelResults)}</td>
             <td>${renderDeviationBadge(item.deviation)}</td>
-            <td>${escapeHtml(item.error || item.description || item.insight || '-')}</td>
+            <td>${escapeHtml(item.error || buildRecognizedItemsSummary(item.items))}</td>
             <td><button type="button" class="detail-btn" ${item.status === 'pending' ? 'disabled' : ''} onclick="showBatchDetail(${index})">查看详情</button></td>
         </tr>
     `).join('');
@@ -621,67 +772,238 @@ function renderExpectedItemsInline(expectedItems, totalWeight, labelMode) {
     }).join('');
 }
 
+function buildRecognizedItemsSummary(items, maxCount = 4) {
+    const safeItems = Array.isArray(items) ? items : [];
+    const names = safeItems
+        .map((item) => String(item?.name || '').trim())
+        .filter(Boolean);
+    if (!names.length) return '-';
+    const visible = names.slice(0, maxCount);
+    return names.length > maxCount ? `${visible.join('、')} 等 ${names.length} 项` : visible.join('、');
+}
+
+function formatPercent(value, digits = 1) {
+    if (value == null || value === '') return '-';
+    const num = Number(value);
+    return Number.isFinite(num) ? `${num.toFixed(digits)}%` : '-';
+}
+
+function formatRatioPercent(value, digits = 1) {
+    if (value == null || value === '') return '-';
+    const num = Number(value);
+    return Number.isFinite(num) ? `${(num * 100).toFixed(digits)}%` : '-';
+}
+
+function formatNullableNumber(value, digits = 1) {
+    if (value == null || value === '') return '-';
+    const num = Number(value);
+    return Number.isFinite(num) ? num.toFixed(digits) : '-';
+}
+
+function formatDurationMs(value) {
+    if (value == null || value === '') return '-';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '-';
+    if (num < 1000) return `${num.toFixed(0)} ms`;
+    return `${(num / 1000).toFixed(2)} s`;
+}
+
+function renderMatchType(matchType) {
+    const labelMap = {
+        exact: '精确匹配',
+        synonym: '同义匹配',
+        contain: '同类包含',
+        close_equivalent: '近似等价',
+        fuzzy: '模糊匹配',
+        too_generic: '名称过泛',
+        wrong_food: '识别成其他食物',
+        missing: '未匹配',
+        none: '未匹配',
+    };
+    return labelMap[matchType] || matchType || '-';
+}
+
 function renderDeviationBadge(value) {
     if (value == null) return '-';
     const cls = value >= 30 ? 'bad' : value >= 10 ? 'medium' : 'good';
     return `<span class="deviation ${cls}">${value}%</span>`;
 }
 
+function renderEvaluationItemRows(evaluation) {
+    const matches = evaluation.itemMatches || [];
+    return matches.map((item) => `
+        <tr>
+            <td>${escapeHtml(item.expectedName || '-')}</td>
+            <td>${formatNumber(item.trueWeightGrams)}</td>
+            <td>${escapeHtml(item.predictedName || '未识别')}</td>
+            <td>${item.estimatedWeightGrams != null ? formatNumber(item.estimatedWeightGrams) : '-'}</td>
+            <td>${item.absoluteErrorGrams != null ? formatNullableNumber(item.absoluteErrorGrams, 1) : '-'}</td>
+            <td>${formatRatioPercent(item.clippedRelativeError)}</td>
+            <td>${renderMatchType(item.matchType)}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="7" class="empty-row">没有逐项评测数据</td></tr>';
+}
+
+function renderItemsBenchmarkContent(evaluation) {
+    const rows = renderEvaluationItemRows(evaluation);
+    const extras = (evaluation.extraItems || []).map((item) => `${escapeHtml(item.name)} ${formatNumber(item.estimatedWeightGrams)}g`).join('、') || '无';
+    const evaluatorSourceMap = {
+        deepseek: 'DeepSeek evaluator',
+        fallback_local: '本地规则兜底',
+        local_rule: '本地规则',
+        local_empty_side: '本地空集判定',
+        local_total_only: '总重直算',
+    };
+    const evaluatorLabel = evaluatorSourceMap[evaluation.evaluatorSource] || evaluation.evaluatorSource || '未知';
+    return `
+        <div class="detail-item"><span class="label">匹配评估器</span><span class="value">${escapeHtml(evaluatorLabel)}</span></div>
+        <div class="detail-item"><span class="label">综合分</span><span class="value">${formatPercent(evaluation.finalCompositeScorePercent)}</span></div>
+        <div class="detail-item"><span class="label">Food Precision</span><span class="value">${formatRatioPercent(evaluation.foodPrecision)}</span></div>
+        <div class="detail-item"><span class="label">Food Recall</span><span class="value">${formatRatioPercent(evaluation.foodRecall)}</span></div>
+        <div class="detail-item"><span class="label">Food F1</span><span class="value">${formatRatioPercent(evaluation.foodF1)}</span></div>
+        <div class="detail-item"><span class="label">加权召回</span><span class="value">${formatRatioPercent(evaluation.weightedFoodRecall)}</span></div>
+        <div class="detail-item"><span class="label">识别命中</span><span class="value">${evaluation.matchedCount ?? 0} / ${(evaluation.itemMatches || []).length}</span></div>
+        <div class="detail-item"><span class="label">缺失项</span><span class="value">${evaluation.falseNegativeCount ?? evaluation.missingCount ?? 0}</span></div>
+        <div class="detail-item"><span class="label">额外识别项</span><span class="value">${evaluation.falsePositiveCount ?? evaluation.extraCount ?? 0}</span></div>
+        <div class="detail-item"><span class="label">匹配食物 MAE</span><span class="value">${evaluation.matchedWeightMaeGrams != null ? `${formatNullableNumber(evaluation.matchedWeightMaeGrams, 1)}g` : '-'}</span></div>
+        <div class="detail-item"><span class="label">匹配食物相对误差</span><span class="value">${formatRatioPercent(evaluation.matchedWeightRelativeError)}</span></div>
+        <div class="detail-item"><span class="label">匹配食物得分</span><span class="value">${formatPercent(evaluation.matchedWeightScorePercent)}</span></div>
+        <div class="detail-item"><span class="label">总重量误差</span><span class="value">${formatPercent(evaluation.totalWeightRelativeErrorPercent ?? evaluation.totalDeviation)}</span></div>
+        <div class="results-table-wrapper mini">
+            <table class="results-table">
+                <thead><tr><th>标准食物</th><th>标准g</th><th>识别结果</th><th>估算g</th><th>绝对误差</th><th>归一化相对误差</th><th>匹配类型</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <p class="field-hint">额外识别：${extras}</p>
+        <p class="field-hint">相对误差按 |pred-gt| / max(gt, 50g) 计算，小重量食物不会被百分比异常放大。</p>
+        ${evaluation.evaluatorError ? `<p class="field-hint">DeepSeek 不可用时已自动回退：${escapeHtml(evaluation.evaluatorError)}</p>` : ''}
+    `;
+}
+
+function renderEvaluationBenchmarkBlock(evaluation, options = {}) {
+    const title = options.title || '标准标签评测';
+    if ((options.labelMode === 'total' || evaluation.mode === 'total')) {
+        return `
+            <div class="result-section">
+                <h4>${title}</h4>
+                <div class="detail-item"><span class="label">评测模式</span><span class="value">整餐总重量</span></div>
+                <div class="detail-item"><span class="label">标准总重量</span><span class="value">${formatNumber(evaluation.trueTotalWeight)}g</span></div>
+                <div class="detail-item"><span class="label">估算总重量</span><span class="value">${formatNumber(evaluation.estimatedTotalWeight)}g</span></div>
+                <div class="detail-item"><span class="label">总重量误差</span><span class="value">${formatPercent(evaluation.totalWeightRelativeErrorPercent ?? evaluation.totalDeviation)}</span></div>
+                <p class="field-hint">当前标签只提供了整餐总重量，所以这里不做逐项食物匹配。</p>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="result-section">
+            <h4>${title}</h4>
+            <div class="detail-item"><span class="label">评测模式</span><span class="value">食物识别 + 匹配食物重量 + 总重量</span></div>
+            ${renderItemsBenchmarkContent(evaluation)}
+        </div>
+    `;
+}
+
+function computeBatchModelAggregates(items) {
+    const modelMap = new Map();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+        (item.modelResults || []).forEach((modelResult) => {
+            const label = modelResult.model || modelResult.provider || 'model';
+            const entry = modelMap.get(label) || {
+                label,
+                successCount: 0,
+                failureCount: 0,
+                itemsModeCount: 0,
+                totalModeCount: 0,
+                compositeSum: 0,
+                foodF1Sum: 0,
+                matchedWeightErrorSum: 0,
+                totalDeviationSum: 0,
+                totalDeviationCount: 0,
+                responseDurationSum: 0,
+                responseDurationCount: 0,
+            };
+            if (modelResult.success) {
+                const evaluation = modelResult.evaluation || {};
+                entry.successCount += 1;
+                const durationMs = Number(modelResult?.meta?.response_duration_ms);
+                if (Number.isFinite(durationMs) && durationMs >= 0) {
+                    entry.responseDurationSum += durationMs;
+                    entry.responseDurationCount += 1;
+                }
+                if (evaluation.totalDeviation != null) {
+                    entry.totalDeviationSum += Number(evaluation.totalDeviation);
+                    entry.totalDeviationCount += 1;
+                }
+                if (evaluation.mode === 'items') {
+                    entry.itemsModeCount += 1;
+                    entry.compositeSum += Number(evaluation.finalCompositeScore || 0);
+                    entry.foodF1Sum += Number(evaluation.foodF1 || 0);
+                    entry.matchedWeightErrorSum += Number(evaluation.matchedWeightRelativeError || 0);
+                } else {
+                    entry.totalModeCount += 1;
+                }
+            } else {
+                entry.failureCount += 1;
+            }
+            modelMap.set(label, entry);
+        });
+    });
+
+    return Array.from(modelMap.values())
+        .map((entry) => ({
+            ...entry,
+            avgCompositeScore: entry.itemsModeCount ? entry.compositeSum / entry.itemsModeCount : null,
+            avgFoodF1: entry.itemsModeCount ? entry.foodF1Sum / entry.itemsModeCount : null,
+            avgMatchedWeightError: entry.itemsModeCount ? entry.matchedWeightErrorSum / entry.itemsModeCount : null,
+            avgTotalDeviation: entry.totalDeviationCount ? entry.totalDeviationSum / entry.totalDeviationCount : null,
+            avgResponseDurationMs: entry.responseDurationCount ? entry.responseDurationSum / entry.responseDurationCount : null,
+        }))
+        .sort((a, b) => {
+            const scoreA = a.avgCompositeScore ?? -1;
+            const scoreB = b.avgCompositeScore ?? -1;
+            if (scoreA !== scoreB) return scoreB - scoreA;
+            return (a.avgTotalDeviation ?? Number.POSITIVE_INFINITY) - (b.avgTotalDeviation ?? Number.POSITIVE_INFINITY);
+        });
+}
+
 function renderModelResultsSummary(modelResults) {
     const results = Array.isArray(modelResults) ? modelResults : [];
     if (!results.length) return '-';
     return results.map((result) => {
-        const provider = escapeHtml(result.provider || 'model');
+        const provider = escapeHtml(result.model || result.provider || 'model');
+        const durationText = formatDurationMs(result?.meta?.response_duration_ms);
         if (!result.success) {
-            return `<span class="model-pill failed">${provider}: 失败</span>`;
+            return `<span class="model-pill failed">${provider}: 失败 / ${durationText}</span>`;
         }
         const evaluation = result.evaluation || {};
-        const deviation = evaluation.totalDeviation;
-        const deviationText = deviation != null ? `${deviation}%` : '-';
-        return `<span class="model-pill">${provider}: ${formatNumber(evaluation.estimatedTotalWeight)}g / ${deviationText}</span>`;
+        if (evaluation.mode === 'items') {
+            return `<span class="model-pill">${provider}: 综合分 ${formatPercent(evaluation.finalCompositeScorePercent)} / ${durationText}</span>`;
+        }
+        return `<span class="model-pill">${provider}: 总重 ${formatPercent(evaluation.totalWeightRelativeErrorPercent ?? evaluation.totalDeviation)} / ${durationText}</span>`;
     }).join('');
 }
 
 function renderModelEvaluationDetail(result) {
     const evaluation = result.evaluation || {};
-    if (result.success && evaluation.mode === 'total') {
+    const modelLabel = escapeHtml(result.model || result.provider || 'model');
+    const recognizedSummary = buildRecognizedItemsSummary(result?.data?.items);
+    if (!result.success) {
         return `
             <div class="model-detail-block">
-                <h4>${escapeHtml(result.provider || 'model')} · ${escapeHtml(result.model || '-')}</h4>
-                <div class="detail-item"><span class="label">标签模式</span><span class="value">整餐总重量</span></div>
-                <div class="detail-item"><span class="label">标准总重量</span><span class="value">${formatNumber(evaluation.trueTotalWeight)}g</span></div>
-                <div class="detail-item"><span class="label">估算总重量</span><span class="value">${formatNumber(evaluation.estimatedTotalWeight)}g</span></div>
-                <div class="detail-item"><span class="label">总偏差</span><span class="value">${evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-'}</span></div>
-                <p class="field-hint">总重量样本只评估整餐总偏差，不做逐项食物匹配。</p>
+                <h4>${modelLabel}</h4>
+                <p style="color:#c62828;">${escapeHtml(result.error || '分析失败')}</p>
             </div>
         `;
     }
-    const matches = evaluation.itemMatches || [];
-    const rows = matches.map((item) => `
-        <tr>
-            <td>${escapeHtml(item.expectedName || '-')}</td>
-            <td>${formatNumber(item.trueWeightGrams)}</td>
-            <td>${escapeHtml(item.predictedName || '未匹配')}</td>
-            <td>${item.estimatedWeightGrams != null ? formatNumber(item.estimatedWeightGrams) : '-'}</td>
-            <td>${item.deviation != null ? renderDeviationBadge(item.deviation) : '-'}</td>
-        </tr>
-    `).join('') || '<tr><td colspan="5" class="empty-row">未填写逐项标准标签</td></tr>';
-    const extras = (evaluation.extraItems || []).map((item) => `${escapeHtml(item.name)} ${formatNumber(item.estimatedWeightGrams)}g`).join('、') || '-';
+
     return `
         <div class="model-detail-block">
-            <h4>${escapeHtml(result.provider || 'model')} · ${escapeHtml(result.model || '-')}</h4>
-            ${result.success ? `
-                <div class="detail-item"><span class="label">标准总重量</span><span class="value">${formatNumber(evaluation.trueTotalWeight)}g</span></div>
-                <div class="detail-item"><span class="label">估算总重量</span><span class="value">${formatNumber(evaluation.estimatedTotalWeight)}g</span></div>
-                <div class="detail-item"><span class="label">总偏差</span><span class="value">${evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-'}</span></div>
-                <div class="results-table-wrapper mini">
-                    <table class="results-table">
-                        <thead><tr><th>标准食物</th><th>标准g</th><th>匹配结果</th><th>估算g</th><th>偏差</th></tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>
-                <p class="field-hint">额外识别：${extras}</p>
-            ` : `<p style="color:#c62828;">${escapeHtml(result.error || '分析失败')}</p>`}
+            <h4>${modelLabel}</h4>
+            <div class="detail-item"><span class="label">回答时长</span><span class="value">${formatDurationMs(result?.meta?.response_duration_ms)}</span></div>
+            <div class="detail-item"><span class="label">识别结果摘要</span><span class="value">${escapeHtml(recognizedSummary)}</span></div>
+            ${renderEvaluationBenchmarkBlock(evaluation, { title: 'benchmark 详情' })}
         </div>
     `;
 }
@@ -710,7 +1032,7 @@ function showBatchDetail(index) {
         const foodItems = (item.items || []).map((food) => `
             <div class="food-item">
                 <div class="name">${escapeHtml(food.name || '-')}</div>
-                <div class="weight">${formatNumber(food.estimatedWeightGrams)}g | ${formatNumber(food.nutrients?.calories)} kcal</div>
+                <div class="weight">${formatNumber(food.estimatedWeightGrams)}g</div>
             </div>
         `).join('') || '<p>无识别明细</p>';
 
@@ -719,31 +1041,12 @@ function showBatchDetail(index) {
                 <h4>基础信息</h4>
                 <div class="detail-item"><span class="label">标准标签</span><span class="value">${renderExpectedItemsInline(item.expectedItems, item.trueWeight, item.labelMode)}</span></div>
                 <div class="detail-item"><span class="label">估算重量</span><span class="value">${item.estimatedWeight != null ? formatNumber(item.estimatedWeight) + 'g' : '-'}</span></div>
-                <div class="detail-item"><span class="label">偏差</span><span class="value">${item.deviation != null ? item.deviation + '%' : '-'}</span></div>
+                <div class="detail-item"><span class="label">主展示模型总重误差</span><span class="value">${formatPercent(item.deviation)}</span></div>
+                <div class="detail-item"><span class="label">主展示模型识别结果</span><span class="value">${escapeHtml(buildRecognizedItemsSummary(item.items))}</span></div>
             </div>
             <div class="detail-section">
                 <h4>多模型逐项评测</h4>
                 ${modelDetails || '<p>暂无模型结果</p>'}
-            </div>
-            <div class="detail-section">
-                <h4>餐食描述</h4>
-                <p>${escapeHtml(item.description || '-')}</p>
-            </div>
-            <div class="detail-section">
-                <h4>健康建议</h4>
-                <p>${escapeHtml(item.insight || '-')}</p>
-            </div>
-            <div class="detail-section">
-                <h4>PFC 比例评价</h4>
-                <p>${escapeHtml(item.pfc_ratio_comment || '-')}</p>
-            </div>
-            <div class="detail-section">
-                <h4>吸收率说明</h4>
-                <p>${escapeHtml(item.absorption_notes || '-')}</p>
-            </div>
-            <div class="detail-section">
-                <h4>情境建议</h4>
-                <p>${escapeHtml(item.context_advice || '-')}</p>
             </div>
             <div class="detail-section">
                 <h4>识别食物明细</h4>
@@ -760,26 +1063,156 @@ function closeBatchDetail() {
     elements.batchDetailModal?.classList.remove('active');
 }
 
+function renderAnalyzeModelCard(modelResult, sharedMeta = {}) {
+    const meta = modelResult?.meta || {};
+    const result = modelResult?.data || {};
+    const items = Array.isArray(result.items) ? result.items : [];
+    const evaluation = modelResult?.evaluation || {};
+    const providerLabel = escapeHtml(modelResult?.model || modelResult?.provider || 'model');
+    const modeBadge = meta?.execution_mode ? `<span class="result-badge">${escapeHtml(meta.execution_mode)}</span>` : '';
+    const promptBadge = meta?.execution_mode === 'custom' && meta?.prompt_name
+        ? `<span class="result-badge">${escapeHtml(meta.prompt_name)}</span>`
+        : '';
+    const primaryBenchmarkBadge = modelResult?.success
+        ? (evaluation.mode === 'items'
+            ? `<span class="result-badge success">综合分 ${formatPercent(evaluation.finalCompositeScorePercent)}</span>`
+            : `<span class="result-badge success">总重误差 ${formatPercent(evaluation.totalWeightRelativeErrorPercent ?? evaluation.totalDeviation)}</span>`)
+        : `<span class="result-badge">${escapeHtml(modelResult?.error || '失败')}</span>`;
+    const secondaryBenchmarkBadge = modelResult?.success && evaluation.mode === 'items'
+        ? `<span class="result-badge">Food F1 ${formatRatioPercent(evaluation.foodF1)}</span>`
+        : '';
+    const totalWeightBadge = modelResult?.success
+        ? `<span class="result-badge">估重 ${formatNumber(evaluation.estimatedTotalWeight)}g</span>`
+        : '';
+    const itemCountBadge = modelResult?.success
+        ? `<span class="result-badge">识别 ${items.length} 项</span>`
+        : '';
+    const durationBadge = meta?.response_duration_ms != null
+        ? `<span class="result-badge">耗时 ${formatDurationMs(meta.response_duration_ms)}</span>`
+        : '';
+
+    if (!modelResult?.success) {
+        return `
+            <div class="result-card analyze-model-card">
+                <div class="result-header">
+                    <div>
+                        <h3 class="analyze-model-name">${providerLabel}</h3>
+                        <div class="analyze-model-subtitle">该模型本次分析失败</div>
+                    </div>
+                    <div class="result-badges">${modeBadge}${promptBadge}${durationBadge}${primaryBenchmarkBadge}</div>
+                </div>
+                <div class="result-section">
+                    <h4>错误信息</h4>
+                    <p>${escapeHtml(modelResult?.error || '分析失败')}</p>
+                </div>
+            </div>
+        `;
+    }
+
+    const notesText = meta?.notes || sharedMeta?.notes || '-';
+    const evaluationSection = renderAnalyzeEvaluationSection(
+        modelResult,
+        sharedMeta?.labelMode,
+        sharedMeta?.expectedItems,
+    );
+    const foodRows = items.map((item) => {
+        return `
+            <tr>
+                <td>${escapeHtml(item.name || '-')}</td>
+                <td>${formatNumber(item.estimatedWeightGrams)}</td>
+            </tr>
+        `;
+    }).join('') || `
+        <tr>
+            <td colspan="2" class="empty-row">未识别到食物明细</td>
+        </tr>
+    `;
+
+    return `
+        <div class="result-card analyze-model-card">
+            <div class="result-header">
+                <div>
+                    <h3 class="analyze-model-name">${providerLabel}</h3>
+                    <div class="analyze-model-subtitle">当前测试页只关注食物识别和重量估算：先看 Food F1，再看匹配食物重量误差，最后补充看总重量误差。</div>
+                </div>
+                <div class="result-badges">${primaryBenchmarkBadge}${secondaryBenchmarkBadge}${totalWeightBadge}${itemCountBadge}${durationBadge}${modeBadge}${promptBadge}${meta?.is_multi_view ? '<span class="result-badge success">多视角</span>' : ''}</div>
+            </div>
+            <div class="result-section">
+                <h4>文字补充</h4>
+                <p>${escapeHtml(notesText)}</p>
+            </div>
+            ${evaluationSection}
+            <div class="result-section">
+                <h4>识别食物明细</h4>
+                <div class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>食物</th>
+                                <th>重量 (g)</th>
+                            </tr>
+                        </thead>
+                        <tbody>${foodRows}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderAnalyzeEvaluationSection(modelResult, labelMode, expectedItems) {
+    const evaluation = modelResult?.evaluation || {};
+    const hasExpectedItems = Array.isArray(expectedItems) && expectedItems.length > 0;
+    if (!hasExpectedItems) {
+        return `
+            <div class="result-section">
+                <h4>标准标签评测</h4>
+                <p>当前没有填写标准标签，所以这里只展示模型分析结果，不计算识别命中率和重量误差。</p>
+            </div>
+        `;
+    }
+    return renderEvaluationBenchmarkBlock(evaluation, {
+        title: '标准标签评测',
+        labelMode,
+    });
+}
+
 function renderAnalyzeResult(payload) {
     const modelResults = Array.isArray(payload.models) ? payload.models : [];
     const firstSuccess = modelResults.find((item) => item.success) || null;
     const result = payload.data || firstSuccess?.data || {};
     const meta = payload.meta || firstSuccess?.meta || {};
     const items = result.items || [];
-    const totals = items.reduce((acc, item) => {
-        const nutrients = item.nutrients || {};
-        acc.totalWeight += Number(item.estimatedWeightGrams || 0);
-        acc.totalCalories += Number(nutrients.calories || 0);
-        return acc;
-    }, { totalWeight: 0, totalCalories: 0 });
+    const expectedItems = Array.isArray(payload?.expectedItems) ? payload.expectedItems : [];
+    const labelMode = payload?.labelMode || (expectedItems.length ? 'items' : null);
+    const bestModelResult = modelResults
+        .filter((item) => item.success)
+        .sort((a, b) => {
+            const aEval = a.evaluation || {};
+            const bEval = b.evaluation || {};
+            const aScore = aEval.mode === 'items' && aEval.finalCompositeScore != null ? Number(aEval.finalCompositeScore) : null;
+            const bScore = bEval.mode === 'items' && bEval.finalCompositeScore != null ? Number(bEval.finalCompositeScore) : null;
+            if (aScore != null || bScore != null) {
+                return (bScore ?? -1) - (aScore ?? -1);
+            }
+            return Number(aEval.totalWeightRelativeError ?? aEval.totalDeviation ?? Infinity) - Number(bEval.totalWeightRelativeError ?? bEval.totalDeviation ?? Infinity);
+        })[0] || null;
 
     const modelStatCards = modelResults.map((modelResult) => {
         const evaluation = modelResult.evaluation || {};
-        const valueClass = evaluation.totalDeviation == null ? '' : (evaluation.totalDeviation >= 30 ? 'bad' : evaluation.totalDeviation >= 10 ? 'medium' : 'good');
+        const isItemsBenchmark = evaluation.mode === 'items' && evaluation.finalCompositeScore != null;
+        const valueClass = isItemsBenchmark
+            ? (evaluation.finalCompositeScore >= 0.75 ? 'good' : evaluation.finalCompositeScore >= 0.5 ? 'medium' : 'bad')
+            : (evaluation.totalDeviation == null ? '' : (evaluation.totalDeviation >= 30 ? 'bad' : evaluation.totalDeviation >= 10 ? 'medium' : 'good'));
+        const modelLabel = escapeHtml(modelResult.model || modelResult.provider || 'model');
         return `
             <div class="stat-card">
-                <div class="label">${escapeHtml(modelResult.provider || 'model')} 总偏差</div>
-                <div class="value ${modelResult.success ? valueClass : 'bad'}">${modelResult.success ? (evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-') : '失败'}</div>
+                <div class="label">${modelLabel} ${isItemsBenchmark ? '综合分' : '总重误差'}</div>
+                <div class="value ${modelResult.success ? valueClass : 'bad'}">${modelResult.success ? (isItemsBenchmark ? formatPercent(evaluation.finalCompositeScorePercent) : formatPercent(evaluation.totalDeviation)) : '失败'}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">${modelLabel} 回答时长</div>
+                <div class="value">${formatDurationMs(modelResult?.meta?.response_duration_ms)}</div>
             </div>
         `;
     }).join('');
@@ -790,75 +1223,44 @@ function renderAnalyzeResult(payload) {
             <div class="value">${meta?.image_count ?? selectedFiles.length}</div>
         </div>
         <div class="stat-card">
-            <div class="label">识别食物数</div>
-            <div class="value good">${items.length}</div>
+            <div class="label">参与模型数</div>
+            <div class="value">${modelResults.length}</div>
         </div>
         <div class="stat-card">
-            <div class="label">估算总重量</div>
-            <div class="value">${formatNumber(meta?.estimated_weight ?? totals.totalWeight)}g</div>
+            <div class="label">标签模式</div>
+            <div class="value">${labelMode === 'total' ? '总重标签' : expectedItems.length ? '逐项标签' : '未填写'}</div>
         </div>
         <div class="stat-card">
-            <div class="label">估算总热量</div>
-            <div class="value">${totals.totalCalories.toFixed(1)} kcal</div>
+            <div class="label">${labelMode === 'items' ? '标准食物数' : '主展示模型'}</div>
+            <div class="value">${labelMode === 'items' ? expectedItems.length : escapeHtml(bestModelResult?.model || bestModelResult?.provider || '-')}</div>
         </div>
         <div class="stat-card">
             <div class="label">标准总重量</div>
             <div class="value">${meta?.reference_weight != null ? formatNumber(meta.reference_weight) + 'g' : '-'}</div>
         </div>
         <div class="stat-card">
-            <div class="label">偏差</div>
-            <div class="value ${meta?.deviation == null ? '' : (meta.deviation >= 30 ? 'bad' : meta.deviation >= 10 ? 'medium' : 'good')}">${meta?.deviation != null ? meta.deviation + '%' : '-'}</div>
+            <div class="label">${bestModelResult?.evaluation?.mode === 'items' ? '最佳综合分模型' : '最低总重误差模型'}</div>
+            <div class="value">${escapeHtml(bestModelResult?.model || bestModelResult?.provider || '-')}</div>
         </div>
         ${modelStatCards}
     `;
 
-    elements.resultBadges.innerHTML = (modelResults.map((modelResult) => {
-        const evaluation = modelResult.evaluation || {};
-        const text = modelResult.success
-            ? `${modelResult.provider}: ${formatNumber(evaluation.estimatedTotalWeight)}g / ${evaluation.totalDeviation != null ? evaluation.totalDeviation + '%' : '-'}`
-            : `${modelResult.provider}: 失败`;
-        return `<span class="result-badge ${modelResult.success ? 'success' : ''}">${escapeHtml(text)}</span>`;
-    }).join('')) + `
-        ${meta?.is_multi_view ? '<span class="result-badge success">多视角</span>' : ''}
-    `;
-
-    elements.resultDescription.textContent = result.description || '-';
-    elements.resultNotes.textContent = meta?.notes || '-';
-    elements.resultInsight.textContent = result.insight || '-';
-    elements.resultPfc.textContent = result.pfc_ratio_comment || '-';
-    elements.resultAbsorption.textContent = result.absorption_notes || '-';
-    elements.resultContext.textContent = result.context_advice || '-';
-
     if (!firstSuccess && modelResults.length) {
-        elements.foodItemsBody.innerHTML = `
-            <tr>
-                <td colspan="8" class="empty-row">${escapeHtml(modelResults.map((item) => `${item.provider}: ${item.error || '失败'}`).join('；'))}</td>
-            </tr>
-        `;
+        elements.analyzeModelResults.innerHTML = modelResults.map((item) => renderAnalyzeModelCard(item, {
+            ...meta,
+            labelMode: payload?.labelMode,
+            expectedItems: payload?.expectedItems,
+        })).join('');
         elements.analysisResult.style.display = 'block';
         elements.analysisResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
     }
 
-    elements.foodItemsBody.innerHTML = items.map((item) => {
-        const nutrients = item.nutrients || {};
-        return `
-            <tr>
-                <td>${escapeHtml(item.name || '-')}</td>
-                <td>${formatNumber(item.estimatedWeightGrams)}</td>
-                <td>${formatNumber(nutrients.calories)}</td>
-                <td>${formatNumber(nutrients.protein)}</td>
-                <td>${formatNumber(nutrients.carbs)}</td>
-                <td>${formatNumber(nutrients.fat)}</td>
-                <td>${formatNumber(nutrients.fiber)}</td>
-                <td>${formatNumber(nutrients.sugar)}</td>
-            </tr>
-        `;
-    }).join('') || `
-        <tr>
-            <td colspan="8" class="empty-row">未识别到食物明细</td>
-        </tr>
-    `;
+    elements.analyzeModelResults.innerHTML = modelResults.map((item) => renderAnalyzeModelCard(item, {
+        ...meta,
+        labelMode: payload?.labelMode,
+        expectedItems: payload?.expectedItems,
+    })).join('');
 
     elements.analysisResult.style.display = 'block';
     elements.analysisResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -898,25 +1300,6 @@ function hideLoading() {
 
 // ========== 提示词管理 ==========
 
-function initPromptsManagement() {
-    document.querySelectorAll('.model-tab').forEach((tab) => {
-        tab.addEventListener('click', () => {
-            const modelType = tab.dataset.model;
-            if (modelType !== currentModelType) {
-                if (hasUnsavedChanges()) {
-                    const confirmed = confirm('当前有未保存的修改，切换模型将丢失修改。是否继续？');
-                    if (!confirmed) return;
-                }
-
-                currentModelType = modelType;
-                document.querySelectorAll('.model-tab').forEach((item) => item.classList.remove('active'));
-                tab.classList.add('active');
-                loadPrompts();
-            }
-        });
-    });
-}
-
 function hasUnsavedChanges() {
     if (!activePrompt || !originalActivePrompt) return false;
 
@@ -933,7 +1316,7 @@ async function loadPrompts() {
         const result = await response.json();
 
         if (result.success) {
-            promptsList = result.data;
+            promptsList = (result.data || []).filter((prompt) => String(prompt.model_type || '').toLowerCase() === 'gemini');
             renderPromptsList();
 
             const active = promptsList.find((prompt) => prompt.is_active);
@@ -942,6 +1325,7 @@ async function loadPrompts() {
             } else {
                 clearActivePromptEditor();
             }
+            loadGeminiPromptOptions(active?.id ?? null);
         }
     } catch (error) {
         console.error('加载提示词失败:', error);
@@ -1027,7 +1411,7 @@ async function saveActivePrompt() {
         if (result.success) {
             alert('保存成功');
             originalActivePrompt = { ...activePrompt, prompt_name: name, prompt_content: content };
-            loadPrompts();
+            await loadPrompts();
         } else {
             throw new Error(result.detail || '保存失败');
         }
@@ -1092,7 +1476,7 @@ async function createNewPrompt() {
         if (result.success) {
             alert('创建成功');
             closePromptModal();
-            loadPrompts();
+            await loadPrompts();
         } else {
             throw new Error(result.detail || '创建失败');
         }
@@ -1112,7 +1496,7 @@ async function activatePrompt(promptId) {
 
         const result = await response.json();
         if (result.success) {
-            loadPrompts();
+            await loadPrompts();
         } else {
             throw new Error(result.detail || '激活失败');
         }
@@ -1135,7 +1519,7 @@ async function deletePrompt(promptId) {
 
         const result = await response.json();
         if (result.success) {
-            loadPrompts();
+            await loadPrompts();
         } else {
             throw new Error(result.detail || '删除失败');
         }

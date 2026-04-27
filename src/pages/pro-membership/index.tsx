@@ -12,7 +12,6 @@ import {
   MembershipPlan,
   MembershipStatus,
   MembershipTier,
-  toggleTestMembership,
 } from '../../utils/api'
 import {
   compareMembershipTier,
@@ -199,9 +198,15 @@ function ProMembershipPage() {
 
   const isPro = membership?.is_pro ?? false
   const isTrial = !isPro && !!membership?.trial_active
+  const trialDaysTotal = membership?.trial_days_total ?? 0
+  const isEarlyTrial = isTrial && trialDaysTotal >= 30
   const creditsMax = membership?.daily_credits_max ?? 0
   const creditsUsed = membership?.daily_credits_used ?? 0
   const creditsRemaining = membership?.daily_credits_remaining ?? 0
+  const creditsBase = membership?.daily_credits_base ?? 0
+  const bonusCredits = membership?.daily_bonus_credits ?? 0
+  const inviteBonusCredits = membership?.invite_bonus_credits ?? 0
+  const shareBonusCredits = membership?.share_bonus_credits ?? 0
   const currentPlanCode = membership?.current_plan_code ?? null
   const currentPlanTier = getCurrentMembershipTier(membership)
   const currentPlanPeriod = getCurrentMembershipPeriod(membership)
@@ -246,32 +251,6 @@ function ProMembershipPage() {
     return `切换周期 · ${price}`
   }, [selectedPlan, isPro, isCurrentSelectedPlan, selectedTier, currentPlanTier])
 
-  // ============================================================
-  // TODO: [TEST] 以下测试逻辑在正式上线前必须删除
-  const [testLoading, setTestLoading] = useState(false)
-
-  const handleToggleTestMembership = async () => {
-    if (!selectedPlan && !isPro) {
-      Taro.showToast({ title: '套餐加载中，请稍后重试', icon: 'none' })
-      return
-    }
-    setTestLoading(true)
-    try {
-      const result = await toggleTestMembership(selectedPlan?.code)
-      const label = result.is_pro
-        ? `✅ 已为当前账号开通 ${result.plan_name || selectedPlan?.name || '会员'}`
-        : '⛔ 已关闭当前账号会员'
-      Taro.showToast({ title: label, icon: 'none', duration: 2000 })
-      await loadData()
-    } catch (error: any) {
-      Taro.showToast({ title: error.message || '切换失败', icon: 'none' })
-    } finally {
-      setTestLoading(false)
-    }
-  }
-  // TODO: [TEST] 测试逻辑结束
-  // ============================================================
-
   return (
     <View className='membership-page'>
       {/* 顶部 Hero */}
@@ -287,12 +266,18 @@ function ProMembershipPage() {
           <View className='hero-credits'>
             {(isPro || isTrial) ? (
               <>
-                <Text className='hero-credits-label'>{isTrial ? '🎁 试用期 · 今日已用积分' : '今日已用积分'}</Text>
+                <Text className='hero-credits-label'>
+                  {isTrial
+                    ? `🎁 ${isEarlyTrial ? '首批用户免费 1 个月' : '新用户免费试用'} · 今日已用积分`
+                    : '今日已用积分'}
+                </Text>
                 <Text className='hero-credits-value'>
                   {creditsUsed}
                   <Text className='hero-credits-total'> / {creditsMax}</Text>
                 </Text>
-                <Text className='hero-credits-tip'>剩余 {creditsRemaining} 积分 · 次日清零</Text>
+                <Text className='hero-credits-tip'>
+                  剩余 {creditsRemaining} 积分 · 次日清零{bonusCredits > 0 ? ` · 含奖励 +${bonusCredits}` : ''}
+                </Text>
               </>
             ) : (
               <>
@@ -453,6 +438,8 @@ function ProMembershipPage() {
         <Text className='credits-hint-item'>· 运动记录：1 积分 / 次</Text>
         <Text className='credits-hint-item'>· 基础记录 / 基础分析：2 积分 / 次</Text>
         <Text className='credits-hint-item credits-hint-item--muted'>积分每日发放，当天有效不累计</Text>
+        <Text className='credits-hint-item'>· 邀请好友：好友完成 1 次有效使用后，双方连续 3 天每天 +5 积分</Text>
+        <Text className='credits-hint-item'>· 生成分享海报：每日奖励 1 积分</Text>
       </View>
 
       {/* 当前状态 */}
@@ -485,10 +472,18 @@ function ProMembershipPage() {
             </>
           )}
           {isTrial && (
-            <View className='status-row'>
-              <Text className='status-label'>试用截止</Text>
-              <Text className='status-value'>{formatExpiry(membership.trial_expires_at)}</Text>
-            </View>
+            <>
+              <View className='status-row'>
+                <Text className='status-label'>试用权益</Text>
+                <Text className='status-value'>
+                  {trialDaysTotal >= 30 ? '首批用户免费 1 个月' : '新用户免费 3 天'}
+                </Text>
+              </View>
+              <View className='status-row'>
+                <Text className='status-label'>试用截止</Text>
+                <Text className='status-value'>{formatExpiry(membership.trial_expires_at)}</Text>
+              </View>
+            </>
           )}
           <View className='status-row'>
             <Text className='status-label'>今日已用积分</Text>
@@ -496,6 +491,20 @@ function ProMembershipPage() {
               {creditsMax > 0 ? `${creditsUsed} / ${creditsMax}` : '—'}
             </Text>
           </View>
+          <View className='status-row'>
+            <Text className='status-label'>基础 / 奖励积分</Text>
+            <Text className='status-value'>
+              {creditsMax > 0 ? `${creditsBase} / ${bonusCredits}` : '—'}
+            </Text>
+          </View>
+          {bonusCredits > 0 && (
+            <View className='status-row'>
+              <Text className='status-label'>奖励明细</Text>
+              <Text className='status-value'>
+                邀请 +{inviteBonusCredits} · 海报 +{shareBonusCredits}
+              </Text>
+            </View>
+          )}
           <View className='status-row'>
             <Text className='status-label'>今日剩余积分</Text>
             <Text className='status-value status-value--active'>
@@ -526,26 +535,6 @@ function ProMembershipPage() {
         <Text className='subscribe-hint'>到期后不自动续费 · 支持微信支付</Text>
       </View>
 
-      {/* ============================================================ */}
-      {/* TODO: [TEST] 以下测试区块在正式上线前必须删除 */}
-      <View className='test-section'>
-        <Text className='test-section-label'>
-          [DEV] 测试工具 · 当前账号状态：{isPro ? '会员' : isTrial ? '试用' : '未开通'}
-        </Text>
-        <Text className='test-section-label'>
-          [DEV] 当前模拟套餐：{selectedPlan?.name || '加载中'} · {selectedPlan?.daily_credits ?? 0} 积分 / 日
-        </Text>
-        <Button
-          className='test-toggle-btn'
-          loading={testLoading}
-          disabled={testLoading || pageLoading}
-          onClick={handleToggleTestMembership}
-        >
-          {isPro ? '切换为→ 非会员' : `切换为→ ${selectedPlan?.name || '会员'}`}
-        </Button>
-      </View>
-      {/* TODO: [TEST] 测试区块结束 */}
-      {/* ============================================================ */}
     </View>
   )
 }

@@ -233,9 +233,9 @@ function ProfilePage() {
       icon: <ShieldOutlined size='20' />,
       title: '食探会员',
       desc: membershipStatus?.is_pro
-        ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+        ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
         : membershipStatus?.trial_active
-          ? `试用中 · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}`
+          ? `${(membershipStatus?.trial_days_total ?? 0) >= 30 ? '首批免费月试用' : '免费 3 天试用'} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
           : '3 档会员 · 每日积分领取',
       path: '/pages/pro-membership/index'
     }
@@ -429,6 +429,7 @@ function ProfilePage() {
             const cRemain = membershipStatus?.daily_credits_remaining ?? 0
             const progressPct = cMax > 0 ? Math.min((cUsed / cMax) * 100, 100) : 0
             const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
+            const isEarlyTrial = isTrial && (membershipStatus?.trial_days_total ?? 0) >= 30
             const currentTier = getCurrentMembershipTier(membershipStatus)
             if (membershipStatus?.is_pro) {
               return (
@@ -453,7 +454,7 @@ function ProfilePage() {
                     </View>
                     <Text className='card-tip'>
                       {cMax > 0
-                        ? `剩余 ${cRemain} 积分 · 次日清零${currentTier === 'light' ? ' · 轻度版不含精准模式' : ''}`
+                        ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${currentTier === 'light' ? ' · 轻度版不含精准模式' : ''}`
                         : '会员权益已激活'}
                     </Text>
                   </View>
@@ -465,7 +466,9 @@ function ProfilePage() {
                 <View className='card-header'>
                   <View>
                     <Text className='card-validity'>
-                      {isTrial ? `试用到期 ${formatExpiry(membershipStatus?.trial_expires_at)}` : `注册时间 ${registerDate}`}
+                      {isTrial
+                        ? `${isEarlyTrial ? '首批免费月到期' : '试用到期'} ${formatExpiry(membershipStatus?.trial_expires_at)}`
+                        : `注册时间 ${registerDate}`}
                     </Text>
                     <Text className='card-title'>食探会员</Text>
                   </View>
@@ -476,7 +479,9 @@ function ProfilePage() {
                 <View className='card-body'>
                   <View className='progress-info'>
                     <Text className='progress-text'>
-                      {isTrial ? `试用已用 ${cUsed}/${cMax}` : '未开通 · 开通后每日发放积分'}
+                      {isTrial
+                        ? `${isEarlyTrial ? '首批免费月' : '免费试用'}已用 ${cUsed}/${cMax}`
+                        : '未开通 · 开通后每日发放积分'}
                     </Text>
                     {isTrial && cMax > 0 && (
                       <View className='progress-bar'>
@@ -486,7 +491,7 @@ function ProfilePage() {
                   </View>
                   <Text className='card-tip'>
                     {isTrial
-                      ? `剩余 ${cRemain} 积分 · 次日清零`
+                      ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${isEarlyTrial ? ' · 当前为首批用户免费月' : ''}`
                       : '轻度 8 · 标准 20 · 进阶 40 积分 / 日'}
                   </Text>
                 </View>
