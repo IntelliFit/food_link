@@ -1,3 +1,13 @@
+# =============================================================================
+# 已停用 / 归档：此文件是「Deploy Backend」workflow 的完整副本，便于日后恢复。
+#
+# GitHub 只会将 `.github/workflows/` 下扩展名为 `.yml` 或 `.yaml` 的文件作为 workflow
+# 加载；`*.yml.disabled` 不会触发任何运行。
+#
+# 若要重新启用：将本文件重命名为 `deploy-backend.yml` 后提交，并确认 secrets
+# 与 `deploy/scripts/deploy_backend.sh` 等部署路径仍适用。
+# =============================================================================
+
 name: Deploy Backend
 
 on:

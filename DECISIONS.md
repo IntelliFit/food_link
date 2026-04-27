@@ -1,5 +1,6 @@
 # DECISIONS
 
+- `2026-04-28`: GitHub Actions 后端自动部署（原 `.github/workflows/deploy-backend.yml`）已停用。工作流内容保留为同目录下 `deploy-backend.yml.disabled`（非 `.yml` 扩展名，GitHub 不加载、不执行）；需恢复时将其重命名回 `deploy-backend.yml` 并核对 secrets 与部署脚本。
 - `2026-04-26`: 「我的」页底部版本号不能再写死。正式口径是：版本展示统一读取 `config/index.ts` 注入的 `__APP_VERSION__`，而实际版本号只从根目录 `package.json` / `package-lock.json` 通过 `npm version <x.y.z> --no-git-tag-version` 维护。
 - `2026-04-26`: 当前应用主题切换完全由 `AppColorSchemeContext` 手动控制，不能再让微信宿主根据系统黑色模式自动改色。正式口径是：`app.config.ts` 里的 `darkmode` 保持 `false`，全局 `page` 也不能再挂 `prefers-color-scheme: dark` 媒体查询；否则会出现“应用仍是浅色态，但宿主底色先变黑”的半黑半白混合页面。
 - `2026-04-26`: 社区页顶部搜索框在暗色主题下，底色只能由外层 `.feed-search-wrap` 承担；`.feed-search-input` 本体必须保持透明，并单独覆盖占位符颜色。否则宿主会把输入框渲染成一块独立深色矩形，破坏整条圆角搜索框的一体感。
