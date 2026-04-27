@@ -43,7 +43,8 @@
     "dev:qq": "npm run build:qq -- --watch",
     "dev:jd": "npm run build:jd -- --watch",
     "dev:harmony-hybrid": "npm run build:harmony-hybrid -- --watch",
-    "iconfont": "iconfont-taro"
+    "iconfont": "iconfont-taro",
+    "push-docker-ccr": "node backend/scripts/push-docker-ccr.mjs"
   },
   "browserslist": {
     "development": [
