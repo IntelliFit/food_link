@@ -7408,6 +7408,7 @@ async def api_community_feed(
     sort_by: str = "recommended",
     priority_author_ids: Optional[str] = None,
     author_scope: str = "all",
+    author_id: Optional[str] = None,
     user_info: dict = Depends(get_current_user_info),
 ):
     """
@@ -7437,6 +7438,7 @@ async def api_community_feed(
             sort_by=sort_by,
             priority_author_ids=[x.strip() for x in (priority_author_ids or "").split(",") if x.strip()],
             author_scope=author_scope,
+            author_id=author_id,
         )
         
         out = []

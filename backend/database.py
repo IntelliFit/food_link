@@ -2563,6 +2563,7 @@ async def list_friends_feed_records(
     sort_by: str = "latest",
     priority_author_ids: Optional[List[str]] = None,
     author_scope: str = "all",
+    author_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     获取好友 + 自己的饮食记录（支持分页），用于圈子 Feed。
@@ -2583,14 +2584,22 @@ async def list_friends_feed_records(
     if not author_ids:
         author_ids = [user_id]
 
-    normalized_priority_ids = [
-        aid for aid in list(dict.fromkeys([str(x).strip() for x in (priority_author_ids or []) if str(x).strip()]))
-        if aid in author_ids
-    ]
-    if author_scope == "priority":
-        author_ids = normalized_priority_ids
-        if not author_ids:
+    # 若指定了 author_id，只查询该用户（必须是好友或自己）
+    if author_id and str(author_id).strip():
+        target_id = str(author_id).strip()
+        if target_id not in author_ids:
             return []
+        author_ids = [target_id]
+        normalized_priority_ids: List[str] = []
+    else:
+        normalized_priority_ids = [
+            aid for aid in list(dict.fromkeys([str(x).strip() for x in (priority_author_ids or []) if str(x).strip()]))
+            if aid in author_ids
+        ]
+        if author_scope == "priority":
+            author_ids = normalized_priority_ids
+            if not author_ids:
+                return []
     
     check_supabase_configured()
     supabase = get_supabase_client()

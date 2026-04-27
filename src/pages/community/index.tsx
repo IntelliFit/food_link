@@ -238,13 +238,15 @@ function buildFeedQueryParams(
   dietGoal: DietGoal | 'all',
   authorScope: CommunityAuthorScope,
   priorityAuthorIds: string[],
+  authorId?: string,
 ) {
   return {
     sort_by: sortBy,
     meal_type: mealType === 'all' ? undefined : mealType,
     diet_goal: dietGoal === 'all' ? undefined : dietGoal,
-    author_scope: authorScope,
-    priority_author_ids: authorScope === 'priority' ? priorityAuthorIds : undefined,
+    author_scope: authorId ? 'all' : authorScope,
+    priority_author_ids: authorId ? undefined : (authorScope === 'priority' ? priorityAuthorIds : undefined),
+    author_id: authorId || undefined,
   }
 }
 
@@ -316,9 +318,19 @@ function CommunityPage() {
   const [feedAuthorScope, setFeedAuthorScope] = useState<CommunityAuthorScope>('all')
   const [priorityAuthorIds, setPriorityAuthorIds] = useState<string[]>([])
   const [feedSearchKeyword, setFeedSearchKeyword] = useState('')
+  /** 搜索框输入后，从好友列表匹配到的昵称好友 */
+  const [feedSearchMatchedFriends, setFeedSearchMatchedFriends] = useState<FriendListItem[]>([])
+  /** 当前按特定作者筛选的动态（搜索好友后点击选中） */
+  const [feedSearchAuthorId, setFeedSearchAuthorId] = useState<string>('')
   const pendingNotificationNavigationRef = useRef(false)
   const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextFilterRefreshRef = useRef(true)
+  /** 避免 mergeFeedTempComments 在短时间内重复请求 comment-tasks */
+  const commentTasksPromiseRef = useRef<Promise<Map<string, { status: string }>> | null>(null)
+  /** 防止 refreshFeed 并发执行导致重复请求骨架屏闪烁 */
+  const refreshFeedPendingRef = useRef(false)
+  /** 防止 useDidShow 在极短窗口内被触发两次（微信小程序 tab 切换偶发） */
+  const useDidShowTsRef = useRef(0)
 
   const loadCheckinPreview = useCallback(async (silent = true) => {
     if (!getAccessToken()) {
@@ -487,8 +499,16 @@ function CommunityPage() {
     let taskMap = new Map<string, { status: string }>()
     if (includeTaskState) {
       try {
-        const res = await communityGetCommentTasks(100)
-        taskMap = new Map((res.list || []).map((task) => [task.id, { status: task.status }]))
+        // 如果已有正在进行的 comment-tasks 请求，复用该 Promise，避免重复请求
+        if (!commentTasksPromiseRef.current) {
+          commentTasksPromiseRef.current = communityGetCommentTasks(100).then((res) => {
+            const map = new Map((res.list || []).map((task) => [task.id, { status: task.status }]))
+            return map
+          }).finally(() => {
+            commentTasksPromiseRef.current = null
+          })
+        }
+        taskMap = await commentTasksPromiseRef.current
       } catch (e) {
         console.error('获取评论任务状态失败:', e)
       }
@@ -613,10 +633,14 @@ function CommunityPage() {
    * @param force 是否强制刷新（忽略时间间隔）
    */
   const refreshFeed = useCallback(async (silent = false, force = false) => {
+    if (refreshFeedPendingRef.current) {
+      return
+    }
     const now = Date.now()
     if (!force && now - lastFeedRefreshTime.current < CACHE_DURATION) {
       return
     }
+    refreshFeedPendingRef.current = true
 
     if (!silent) setLoadingFeed(true)
 
@@ -628,6 +652,7 @@ function CommunityPage() {
         feedDietGoal,
         token ? feedAuthorScope : 'all',
         priorityAuthorIds,
+        feedSearchAuthorId,
       )
       // 已登录：好友 Feed；未登录：公共 Feed
       const res = token
@@ -647,11 +672,12 @@ function CommunityPage() {
         Taro.showToast({ title: (e as Error).message || '刷新失败', icon: 'none' })
       }
     } finally {
+      refreshFeedPendingRef.current = false
       if (!silent) setLoadingFeed(false)
       setRefreshing(false)
       setShowSkeleton(false)
     }
-  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, mergeFeedTempComments, priorityAuthorIds, saveToCache])
+  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, mergeFeedTempComments, priorityAuthorIds, saveToCache])
 
   const loadMoreFeed = useCallback(async () => {
     if (!hasMore || loadingMore) return
@@ -664,6 +690,7 @@ function CommunityPage() {
         feedDietGoal,
         token ? feedAuthorScope : 'all',
         priorityAuthorIds,
+        feedSearchAuthorId,
       )
       const res = token
         ? await communityGetFeed(undefined, offset, PAGE_SIZE, true, 5, params)
@@ -678,7 +705,7 @@ function CommunityPage() {
     } finally {
       setLoadingMore(false)
     }
-  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, hasMore, loadingMore, mergeFeedTempComments, offset, priorityAuthorIds])
+  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, hasMore, loadingMore, mergeFeedTempComments, offset, priorityAuthorIds])
 
   // ScrollView 自带下拉刷新（页面级下拉被内部 ScrollView 接管，需用 refresher）
   const handleRefresherRefresh = useCallback(() => {
@@ -788,6 +815,12 @@ function CommunityPage() {
 
   // 每次页面显示时的智能加载策略（已登录 / 未登录均可）
   Taro.useDidShow(() => {
+    const didShowNow = Date.now()
+    if (didShowNow - useDidShowTsRef.current < 500) {
+      return
+    }
+    useDidShowTsRef.current = didShowNow
+
     const token = getAccessToken()
     setLoggedIn(!!token)
     setPriorityAuthorIds((prev) => {
@@ -829,7 +862,8 @@ function CommunityPage() {
       return
     }
 
-    // 1. 立即从缓存加载
+    // 1. 立即从缓存加载（先标记跳过 useEffect 刷新，避免 loadFromCache 设置状态后触发重复请求）
+    skipNextFilterRefreshRef.current = true
     const hasCache = loadFromCache()
 
     // 2. 判断是否需要刷新 Feed
@@ -896,6 +930,21 @@ function CommunityPage() {
     } finally {
       setSendingId(null)
     }
+  }
+
+  const handleSelectSearchFriend = (friend: FriendListItem) => {
+    setFeedSearchAuthorId(friend.id)
+    setFeedSearchMatchedFriends([])
+    setFeedSearchKeyword(friend.nickname || '')
+    // 刷新交给 useEffect（依赖 refreshFeed → 依赖 feedSearchAuthorId）自动处理，
+    // 避免此处直接调用 refreshFeed 时 feedSearchAuthorId 尚未更新导致 author_id 为空
+  }
+
+  const handleClearSearchAuthor = () => {
+    setFeedSearchAuthorId('')
+    setFeedSearchKeyword('')
+    setFeedSearchMatchedFriends([])
+    // 同上：由 useEffect 统一处理刷新，避免重复请求和 author_id 未同步
   }
 
   const handleLike = async (item: CommunityFeedItem) => {
@@ -978,14 +1027,31 @@ function CommunityPage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/food-library/index') })
   }
 
-  const filteredFeedList = feedSearchKeyword.trim()
-    ? feedList.filter((item) => {
-      const kw = feedSearchKeyword.trim().toLowerCase()
-      const desc = (item.record.description || '').toLowerCase()
-      const author = (item.author.nickname || '').toLowerCase()
-      return desc.includes(kw) || author.includes(kw)
-    })
-    : feedList
+  // 搜索框输入时，先从好友列表匹配昵称；点击好友后按 author_id 拉取该用户动态
+  useEffect(() => {
+    const kw = feedSearchKeyword.trim().toLowerCase()
+    if (!kw) {
+      setFeedSearchMatchedFriends([])
+      if (feedSearchAuthorId) {
+        setFeedSearchAuthorId('')
+        // 不直接调用 refreshFeed，由 useEffect（依赖 refreshFeed → 依赖 feedSearchAuthorId）统一处理
+      }
+      return
+    }
+    const matched = friends.filter((f) => (f.nickname || '').toLowerCase().includes(kw))
+    setFeedSearchMatchedFriends(matched)
+  }, [feedSearchKeyword, friends])
+
+  const filteredFeedList = feedSearchAuthorId
+    ? feedList
+    : (feedSearchKeyword.trim()
+      ? feedList.filter((item) => {
+        const kw = feedSearchKeyword.trim().toLowerCase()
+        const desc = (item.record.description || '').toLowerCase()
+        const author = (item.author.nickname || '').toLowerCase()
+        return desc.includes(kw) || author.includes(kw)
+      })
+      : feedList)
 
   const feedFilterSummary = useMemo(() => {
     const sortLabel = FEED_SORT_OPTIONS.find(o => o.value === feedSortBy)?.label ?? ''
@@ -1698,6 +1764,45 @@ function CommunityPage() {
                   </View>
                 ) : null}
               </View>
+              {/* 搜索框输入后匹配到的好友列表 */}
+              {feedSearchMatchedFriends.length > 0 && !feedSearchAuthorId && (
+                <View className='feed-search-friends-panel'>
+                  <View className='feed-search-friends-header'>
+                    <Text className='feed-search-friends-title'>匹配到的好友</Text>
+                    <Text className='feed-search-friends-clear' onClick={() => { setFeedSearchKeyword(''); setFeedSearchMatchedFriends([]); }}>清除</Text>
+                  </View>
+                  {feedSearchMatchedFriends.map((friend) => (
+                    <View
+                      key={friend.id}
+                      className='feed-search-friend-item'
+                      onClick={() => handleSelectSearchFriend(friend)}
+                    >
+                      <View className='feed-search-friend-avatar'>
+                        {friend.avatar ? (
+                          <Image src={friend.avatar} mode='aspectFill' className='feed-search-friend-avatar-img' />
+                        ) : (
+                          <Text className='feed-search-friend-avatar-placeholder'>👤</Text>
+                        )}
+                      </View>
+                      <View className='feed-search-friend-info'>
+                        <Text className='feed-search-friend-name'>{friend.nickname || '用户'}</Text>
+                        <Text className='feed-search-friend-action'>查看动态</Text>
+                      </View>
+                      <Text className='iconfont icon-right-arrow feed-search-friend-arrow' />
+                    </View>
+                  ))}
+                </View>
+              )}
+              {/* 已选中特定作者，显示顶部标签 */}
+              {feedSearchAuthorId && (
+                <View className='feed-search-author-bar'>
+                  <Text className='feed-search-author-label'>正在查看：</Text>
+                  <Text className='feed-search-author-name'>
+                    {friends.find((f) => f.id === feedSearchAuthorId)?.nickname || '该用户'}
+                  </Text>
+                  <Text className='feed-search-author-clear' onClick={handleClearSearchAuthor}>清除筛选</Text>
+                </View>
+              )}
               {(showSkeleton || (loadingFeed && feedList.length === 0)) ? (
                 <View className='skeleton-container' onClick={(e) => e.stopPropagation()}>
                   {[1, 2, 3].map(i => (
