@@ -3,7 +3,7 @@
 -- 扩展 weapp_user 表 + 健康报告 OCR 导入表
 --
 -- 【必须执行】保存健康档案接口依赖本脚本：
--- 1. 打开 Supabase Dashboard → SQL Editor
+-- 1. 打开你的 PostgreSQL 客户端
 -- 2. 新建查询，粘贴本文件全部内容并执行
 -- 3. 未执行时接口可能返回 200 但数据库不会写入新字段
 -- ============================================================
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS public.user_mode_switch_logs (
 
 CREATE INDEX IF NOT EXISTS idx_user_mode_switch_logs_user_id ON public.user_mode_switch_logs(user_id);
 
--- 3. 体检报告图片存储桶（在 Supabase Dashboard → Storage 中手动创建）
+-- 3. 体检报告图片存储桶（在腾讯云 COS 控制台中手动创建）
 -- 桶名：health-reports
 -- 权限：Public（允许公网读，供多模态模型通过 URL 识别）
 -- 路径示例：{user_id}/{uuid}.jpg

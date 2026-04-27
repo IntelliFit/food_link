@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
-from database import get_supabase_client
+from database import get_database_client
 
 
 BACKEND_ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -64,12 +64,12 @@ def build_signature(row: NotificationRow) -> Signature:
 
 
 def fetch_all_notifications(page_size: int) -> List[NotificationRow]:
-    supabase = get_supabase_client()
+    db = get_database_client()
     rows: List[NotificationRow] = []
     offset = 0
     while True:
         result = (
-            supabase.table("feed_interaction_notifications")
+            db.table("feed_interaction_notifications")
             .select("id, recipient_user_id, actor_user_id, record_id, comment_id, parent_comment_id, notification_type, content_preview, created_at")
             .order("created_at", desc=False)
             .range(offset, offset + page_size - 1)
@@ -148,12 +148,12 @@ def find_duplicate_notification_ids(rows: List[NotificationRow], window_seconds:
 def delete_notifications(notification_ids: List[str]) -> int:
     if not notification_ids:
         return 0
-    supabase = get_supabase_client()
+    db = get_database_client()
     deleted = 0
     batch_size = 100
     for index in range(0, len(notification_ids), batch_size):
         batch = notification_ids[index:index + batch_size]
-        supabase.table("feed_interaction_notifications").delete().in_("id", batch).execute()
+        db.table("feed_interaction_notifications").delete().in_("id", batch).execute()
         deleted += len(batch)
     return deleted
 

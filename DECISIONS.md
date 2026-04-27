@@ -1,6 +1,8 @@
 # DECISIONS
 
-- `2026-04-22`: 对象存储正式切换到腾讯云 COS。数据库仍保留 Supabase/Postgres；后端不再将图片写入 Supabase Storage。
+- `2026-04-22`: 后端数据库已正式硬切到直连 PostgreSQL。运行时代码、测试配置、seed/cleanup 脚本与当前文档统一改为 `POSTGRESQL_*` 口径，不再依赖 Supabase SDK 或 `SUPABASE_*` 运行配置。
+
+- `2026-04-22`: 对象存储正式切换到腾讯云 COS。数据库统一以目标 PostgreSQL 为唯一来源；后端不再向旧平台写入任何对象或业务数据。
 
 - `2026-04-22`: 存储访问口径拆分为“公开桶 + 私有桶”。`food-images`、`user-avatars`、`icon` 统一返回 CDN URL；`health-reports` 统一保存私有对象 key，通过后端生成短期签名 URL 访问，不再暴露永久公网地址。
 

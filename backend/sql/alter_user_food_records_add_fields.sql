@@ -3,7 +3,7 @@
 -- 用于存储完整的分析结果（建议、目标、上下文等）
 --
 -- 【执行方式】
--- 1. 打开 Supabase Dashboard -> SQL Editor
+-- 1. 打开 ?? PostgreSQL ????
 -- 2. 粘贴本脚本内容并运行
 -- ============================================================
 
@@ -71,5 +71,5 @@ BEGIN
     END IF;
 END $$;
 
--- 8. 刷新 schema 缓存（Supabase 可能需要）
+-- 8. 刷新 schema 缓存（PostgreSQL 可能需要）
 NOTIFY pgrst, 'reload config';

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 在本地通过直连 Postgres 执行 migrate_exercise_logs_and_task_type.sql。
-需要环境变量 SUPABASE_DB_URL 或 DATABASE_URL（Supabase 控制台 → Database → Connection string → URI）。
+需要环境变量 `DATABASE_URL`，或 `POSTGRESQL_*` 连接配置。
 用法：cd backend && . .venv/bin/activate && python scripts/apply_exercise_migration.py
 """
 from __future__ import annotations
@@ -22,11 +22,26 @@ BACKEND = Path(__file__).resolve().parent.parent
 load_dotenv(BACKEND / ".env")
 
 
+def build_database_url_from_env() -> str:
+    host = (os.getenv("POSTGRESQL_HOST") or "").strip()
+    port = (os.getenv("POSTGRESQL_PORT") or "5432").strip()
+    user = (os.getenv("POSTGRESQL_USER") or "").strip()
+    password = (os.getenv("POSTGRESQL_PASSWORD") or "").strip()
+    database = (os.getenv("POSTGRESQL_DATABASE") or "").strip()
+    sslmode = (os.getenv("POSTGRESQL_SSLMODE") or "").strip()
+    if not all([host, port, user, password, database]):
+        return ""
+    parts = [f"host={host}", f"port={port}", f"user={user}", f"password={password}", f"dbname={database}"]
+    if sslmode:
+        parts.append(f"sslmode={sslmode}")
+    return " ".join(parts)
+
+
 def main() -> int:
-    url = os.getenv("SUPABASE_DB_URL") or os.getenv("DATABASE_URL")
+    url = (os.getenv("DATABASE_URL") or "").strip() or build_database_url_from_env()
     if not url:
         print(
-            "未设置 SUPABASE_DB_URL。请在 backend/.env 中添加数据库连接串（仅用于迁移，勿提交到仓库）。",
+            "未设置 DATABASE_URL，且 POSTGRESQL_* 连接配置不完整。请在 backend/.env 中补齐数据库连接信息。",
             file=sys.stderr,
         )
         return 1

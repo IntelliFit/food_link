@@ -15,8 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 设置测试环境变量
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-min-32-chars")
-os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
-os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+os.environ.setdefault("POSTGRESQL_HOST", "127.0.0.1")
+os.environ.setdefault("POSTGRESQL_PORT", "5432")
+os.environ.setdefault("POSTGRESQL_USER", "test")
+os.environ.setdefault("POSTGRESQL_PASSWORD", "test")
+os.environ.setdefault("POSTGRESQL_DATABASE", "food_link_test")
 
 # 与 pytest.ini [pytest] timeout 一致；单条用例需更长时使用 @pytest.mark.timeout(N)
 DEFAULT_TEST_TIMEOUT_SECONDS = 120

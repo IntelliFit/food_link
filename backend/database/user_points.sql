@@ -1,4 +1,4 @@
--- 积分制：在 Supabase SQL 编辑器中执行（或 psql）
+-- 积分制：在 PostgreSQL SQL 编辑器中执行（或 psql）
 -- 1) weapp_user 扩展字段
 ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS points_balance NUMERIC(12, 2) DEFAULT 100;
 ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS registration_invite_code TEXT;

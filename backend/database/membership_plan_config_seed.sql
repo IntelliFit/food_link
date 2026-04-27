@@ -1,5 +1,5 @@
 -- 食探会员套餐数据初始化
--- 在 Supabase SQL Editor 中执行此文件
+-- 在 PostgreSQL ????/SQL ???? 中执行此文件
 
 INSERT INTO membership_plan_config (code, name, description, amount, duration_months, is_active)
 VALUES (

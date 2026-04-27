@@ -24,23 +24,42 @@ DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 - **位置**：`backend/main.py` 第 108-111 行
 - **说明**：如果不提供，会使用默认值
 
-### 3. Supabase URL
+### 3. PostgreSQL Host
 ```env
-SUPABASE_URL=https://xxxxx.supabase.co
+POSTGRESQL_HOST=127.0.0.1
 ```
-- **用途**：Supabase 数据库项目的 URL
-- **位置**：`backend/database.py` 第 21 行
-- **格式**：应该是 `https://项目ID.supabase.co` 的格式
+- **用途**：PostgreSQL 主机地址
+- **位置**：`backend/pg_client.py`
 
-### 4. Supabase Service Role Key
+### 4. PostgreSQL Port
 ```env
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+POSTGRESQL_PORT=5432
 ```
-- **用途**：Supabase 的 Service Role Key，用于后端直接访问数据库
-- **位置**：`backend/database.py` 第 22 行
-- **⚠️ 重要**：必须是 `service_role` key，不是 `anon` key
+- **用途**：PostgreSQL 端口
+- **位置**：`backend/pg_client.py`
 
-### 5. JWT Secret Key
+### 5. PostgreSQL User
+```env
+POSTGRESQL_USER=postgres
+```
+- **用途**：PostgreSQL 用户名
+- **位置**：`backend/pg_client.py`
+
+### 6. PostgreSQL Password
+```env
+POSTGRESQL_PASSWORD=your-password
+```
+- **用途**：PostgreSQL 密码
+- **位置**：`backend/pg_client.py`
+
+### 7. PostgreSQL Database
+```env
+POSTGRESQL_DATABASE=food_link
+```
+- **用途**：目标数据库名
+- **位置**：`backend/pg_client.py`
+
+### 8. JWT Secret Key
 ```env
 JWT_SECRET_KEY=your-very-secret-key-change-this-in-production-min-32-chars
 ```
@@ -48,7 +67,7 @@ JWT_SECRET_KEY=your-very-secret-key-change-this-in-production-min-32-chars
 - **位置**：`backend/auth.py` 第 10 行
 - **要求**：至少 32 字符
 
-### 6. 微信小程序 AppID
+### 9. 微信小程序 AppID
 ```env
 APPID=wx1234567890abcdef
 ```
@@ -56,7 +75,7 @@ APPID=wx1234567890abcdef
 - **位置**：`backend/main.py` 第 357、483 行
 - **格式**：通常以 `wx` 开头
 
-### 7. 微信小程序 AppSecret
+### 10. 微信小程序 AppSecret
 ```env
 SECRET=abcdef1234567890abcdef1234567890
 ```
@@ -75,9 +94,12 @@ SECRET=abcdef1234567890abcdef1234567890
 DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxx
 # DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选
 
-# Supabase 配置
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# PostgreSQL 配置
+POSTGRESQL_HOST=127.0.0.1
+POSTGRESQL_PORT=5432
+POSTGRESQL_USER=postgres
+POSTGRESQL_PASSWORD=your-password
+POSTGRESQL_DATABASE=food_link
 
 # JWT 配置
 JWT_SECRET_KEY=your-very-secret-key-change-this-in-production-min-32-chars
@@ -94,8 +116,11 @@ SECRET=abcdef1234567890abcdef1234567890
 获取到环境变量后，请确认：
 
 - [ ] `DASHSCOPE_API_KEY` 或 `API_KEY` 已配置
-- [ ] `SUPABASE_URL` 格式正确（以 `https://` 开头，以 `.supabase.co` 结尾）
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` 是 service_role key（不是 anon key）
+- [ ] `POSTGRESQL_HOST` 已配置
+- [ ] `POSTGRESQL_PORT` 已配置
+- [ ] `POSTGRESQL_USER` 已配置
+- [ ] `POSTGRESQL_PASSWORD` 已配置
+- [ ] `POSTGRESQL_DATABASE` 已配置
 - [ ] `JWT_SECRET_KEY` 至少 32 字符
 - [ ] `APPID` 格式正确（通常以 `wx` 开头）
 - [ ] `SECRET` 已配置（这是敏感信息）
@@ -122,10 +147,13 @@ SECRET=abcdef1234567890abcdef1234567890
 > 你好，我需要获取项目的环境变量配置来运行后端服务。请提供以下配置：
 > 
 > 1. DashScope API Key (`DASHSCOPE_API_KEY`)
-> 2. Supabase URL (`SUPABASE_URL`)
-> 3. Supabase Service Role Key (`SUPABASE_SERVICE_ROLE_KEY`)
-> 4. JWT Secret Key (`JWT_SECRET_KEY`)
-> 5. 微信小程序 AppID (`APPID`)
-> 6. 微信小程序 AppSecret (`SECRET`)
+> 2. PostgreSQL Host (`POSTGRESQL_HOST`)
+> 3. PostgreSQL Port (`POSTGRESQL_PORT`)
+> 4. PostgreSQL User (`POSTGRESQL_USER`)
+> 5. PostgreSQL Password (`POSTGRESQL_PASSWORD`)
+> 6. PostgreSQL Database (`POSTGRESQL_DATABASE`)
+> 7. JWT Secret Key (`JWT_SECRET_KEY`)
+> 8. 微信小程序 AppID (`APPID`)
+> 9. 微信小程序 AppSecret (`SECRET`)
 > 
 > 这些配置应该在你的 `backend/.env` 文件中。请通过安全的方式分享给我（比如公司内部密码管理工具或加密消息）。

@@ -1,4 +1,4 @@
--- 运动记录 + analysis_tasks.task_type 补充（在 Supabase SQL Editor 中整段执行）
+-- 运动记录 + analysis_tasks.task_type 补充（在 PostgreSQL ????/SQL ???? 中整段执行）
 -- 修复：1) public.user_exercise_logs 不存在导致 GET /api/exercise-logs 500
 --       2) task_type='exercise' 违反 analysis_tasks_task_type_check 导致 POST 失败
 

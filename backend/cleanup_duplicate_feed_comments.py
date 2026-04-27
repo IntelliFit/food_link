@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
-from database import get_supabase_client
+from database import get_database_client
 
 
 BACKEND_ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -69,12 +69,12 @@ def build_signature(row: CommentRow) -> Signature:
 
 
 def fetch_all_comments(page_size: int) -> List[CommentRow]:
-    supabase = get_supabase_client()
+    db = get_database_client()
     comments: List[CommentRow] = []
     offset = 0
     while True:
         result = (
-            supabase.table("feed_comments")
+            db.table("feed_comments")
             .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
             .order("created_at", desc=False)
             .range(offset, offset + page_size - 1)
@@ -150,12 +150,12 @@ def find_duplicate_comment_ids(comments: List[CommentRow], window_seconds: int) 
 def delete_comments(comment_ids: List[str]) -> int:
     if not comment_ids:
         return 0
-    supabase = get_supabase_client()
+    db = get_database_client()
     deleted = 0
     batch_size = 100
     for index in range(0, len(comment_ids), batch_size):
         batch = comment_ids[index:index + batch_size]
-        supabase.table("feed_comments").delete().in_("id", batch).execute()
+        db.table("feed_comments").delete().in_("id", batch).execute()
         deleted += len(batch)
     return deleted
 

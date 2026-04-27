@@ -3,7 +3,7 @@
 清洗自部署 PostgreSQL 中的历史存储字段，将完整 URL 收口为对象 key。
 
 设计目标：
-1. 只连接 POSTGRESQL_* 指向的目标 PostgreSQL，不读取或修改 Supabase 数据。
+1. 只连接 POSTGRESQL_* 指向的目标 PostgreSQL，不读取或修改旧源库数据。
 2. 默认 dry-run，仅打印计划；只有显式传入 --apply 才真正更新。
 3. 支持重复运行：已经是 key 的值会自动跳过，不会重复修改。
 4. 只处理当前项目已知的存储字段；若表或列不存在则安全跳过。
@@ -191,20 +191,11 @@ def target_runtime_from_env(env_file: Path) -> Dict[str, str]:
     }
 
 
-def assert_target_is_not_supabase(target_url: str) -> None:
+def assert_target_is_not_legacy_host(target_url: str) -> None:
     target_host = (urlparse(target_url).hostname or "").strip().lower()
-    if "supabase" in target_host:
-        raise RuntimeError("检测到目标库仍指向 Supabase，脚本已拒绝执行。请确认使用的是自部署 PostgreSQL。")
-
-    source_candidates = [
-        (os.getenv("SUPABASE_DB_URL") or "").strip(),
-        (os.getenv("DATABASE_URL") or "").strip(),
-        (os.getenv("SUPABASE_URL") or "").strip(),
-    ]
-    source_hosts = {(urlparse(url).hostname or "").strip().lower() for url in source_candidates if url}
-    source_hosts = {host for host in source_hosts if host}
-    if target_host and target_host in source_hosts:
-        raise RuntimeError("目标库 host 与 Supabase 源库相同，脚本已拒绝执行以避免误清洗 Supabase。")
+    legacy_markers = ("old-managed", "legacy-managed")
+    if any(marker in target_host for marker in legacy_markers):
+        raise RuntimeError("检测到目标库仍指向旧托管库域名，脚本已拒绝执行。请确认使用的是当前 PostgreSQL。")
 
 
 def connect_db(url: str) -> psycopg2.extensions.connection:
@@ -471,7 +462,7 @@ def print_plan(
     print(f"schema: {schema}")
     print(f"表范围: {', '.join(selected_tables) if selected_tables else '全部已知表'}")
     print(f"模式: {'APPLY' if apply else 'DRY-RUN'}")
-    print("说明: 仅使用 POSTGRESQL_* 目标库连接；脚本不会写 Supabase。")
+    print("说明: 仅使用 POSTGRESQL_* 目标库连接；脚本不会写旧源库。")
 
 
 def print_summary(summaries: Sequence[ColumnSummary], apply: bool) -> None:
@@ -511,7 +502,7 @@ def main() -> int:
     args = parse_args()
     env_file = Path(args.env_file)
     runtime = target_runtime_from_env(env_file)
-    assert_target_is_not_supabase(runtime["url"])
+    assert_target_is_not_legacy_host(runtime["url"])
 
     selected_tables = parse_table_list(args.tables)
     specs = [spec for spec in COLUMN_SPECS if not selected_tables or spec.table in selected_tables]

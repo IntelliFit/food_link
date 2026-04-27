@@ -2,7 +2,7 @@
 """
 为测试账号（手机号 18870666046）添加好友与食物记录测试数据。
 在 backend 目录下执行: python seed_test_data.py
-需已配置 .env 中的 SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY。
+需已配置 .env 中的 PostgreSQL 连接信息。
 """
 import os
 import sys
@@ -17,14 +17,15 @@ os.chdir(backend_dir)
 from dotenv import load_dotenv
 load_dotenv()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("错误: 请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY（在 backend/.env）")
+required_envs = ["POSTGRESQL_HOST", "POSTGRESQL_PORT", "POSTGRESQL_USER", "POSTGRESQL_PASSWORD", "POSTGRESQL_DATABASE"]
+missing = [key for key in required_envs if not os.getenv(key)]
+if missing:
+    print(f"错误: 请设置 PostgreSQL 环境变量: {', '.join(missing)}（在 backend/.env）")
     sys.exit(1)
 
-from supabase import create_client
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+from database import get_database_client
+
+db = get_database_client()
 
 TEST_PHONE = "18870666046"
 
@@ -103,7 +104,7 @@ FOOD_RECORDS = [
 
 def main():
     print("1. 查找测试账号 (telephone=18870666046)...")
-    r = supabase.table("weapp_user").select("id, nickname").eq("telephone", TEST_PHONE).execute()
+    r = db.table("weapp_user").select("id, nickname").eq("telephone", TEST_PHONE).execute()
     if not r.data or len(r.data) == 0:
         print("   未找到该手机号用户，请先用该手机号登录一次小程序后再运行本脚本。")
         sys.exit(1)
@@ -114,12 +115,12 @@ def main():
     print("2. 创建/获取测试好友用户...")
     friend_ids = []
     for seed in FRIEND_SEEDS:
-        existing = supabase.table("weapp_user").select("id").eq("openid", seed["openid"]).execute()
+        existing = db.table("weapp_user").select("id").eq("openid", seed["openid"]).execute()
         if existing.data and len(existing.data) > 0:
             fid = existing.data[0]["id"]
             print(f"   已存在: {seed['nickname']} id={fid}")
         else:
-            ins = supabase.table("weapp_user").insert({
+            ins = db.table("weapp_user").insert({
                 "openid": seed["openid"],
                 "nickname": seed["nickname"],
                 "avatar": seed.get("avatar") or "",
@@ -139,11 +140,11 @@ def main():
     print("3. 建立好友关系（双向）...")
     for fid in friend_ids:
         # 避免重复插入
-        ex1 = supabase.table("user_friends").select("id").eq("user_id", test_user_id).eq("friend_id", fid).execute()
+        ex1 = db.table("user_friends").select("id").eq("user_id", test_user_id).eq("friend_id", fid).execute()
         if ex1.data and len(ex1.data) > 0:
             print(f"   已是好友: {fid}")
             continue
-        supabase.table("user_friends").insert([
+        db.table("user_friends").insert([
             {"user_id": test_user_id, "friend_id": fid},
             {"user_id": fid, "friend_id": test_user_id},
         ]).execute()
@@ -173,7 +174,7 @@ def main():
     for i, rec in enumerate(FOOD_RECORDS):
         record_time = (today - timedelta(hours=len(FOOD_RECORDS) - i)).isoformat().replace("+00:00", "Z")
         row = build_record_row(test_user_id, rec, record_time, 350)
-        supabase.table("user_food_records").insert(row).execute()
+        db.table("user_food_records").insert(row).execute()
         print(f"   已插入: {rec['meal_type']} {rec['description'][:20]}... (含图与明细)")
 
     print("5. 为每位好友添加 2 条今日食物记录（圈子 Feed 用，含图片与明细）...")
@@ -181,17 +182,17 @@ def main():
         for rec in FOOD_RECORDS[:2]:
             record_time = (today - timedelta(hours=2)).isoformat().replace("+00:00", "Z")
             row = build_record_row(fid, rec, record_time, 300)
-            supabase.table("user_food_records").insert(row).execute()
+            db.table("user_food_records").insert(row).execute()
         print(f"   已为好友 {fid} 插入 2 条记录（含图与明细）")
 
     print("6. 模拟用户「小马哥」请求添加测试账号（我）为好友...")
     xiaomage_openid = "seed_xiaomage"
-    xiaomage = supabase.table("weapp_user").select("id").eq("openid", xiaomage_openid).execute()
+    xiaomage = db.table("weapp_user").select("id").eq("openid", xiaomage_openid).execute()
     if xiaomage.data and len(xiaomage.data) > 0:
         xiaomage_id = xiaomage.data[0]["id"]
         print(f"   已存在用户小马哥 id={xiaomage_id}")
     else:
-        ins = supabase.table("weapp_user").insert({
+        ins = db.table("weapp_user").insert({
             "openid": xiaomage_openid,
             "nickname": "小马哥",
             "avatar": "",
@@ -203,16 +204,16 @@ def main():
             print("   创建小马哥失败，跳过好友请求")
             xiaomage_id = None
     if xiaomage_id:
-        existing = supabase.table("friend_requests").select("id, status").eq("from_user_id", xiaomage_id).eq("to_user_id", test_user_id).execute()
+        existing = db.table("friend_requests").select("id, status").eq("from_user_id", xiaomage_id).eq("to_user_id", test_user_id).execute()
         if existing.data and len(existing.data) > 0:
             row = existing.data[0]
             if row.get("status") == "pending":
                 print("   小马哥已有一条待处理的好友请求，无需重复插入")
             else:
-                supabase.table("friend_requests").update({"status": "pending", "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", row["id"]).execute()
+                db.table("friend_requests").update({"status": "pending", "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", row["id"]).execute()
                 print("   已将该条请求重置为 pending")
         else:
-            supabase.table("friend_requests").insert({
+            db.table("friend_requests").insert({
                 "from_user_id": xiaomage_id,
                 "to_user_id": test_user_id,
                 "status": "pending",

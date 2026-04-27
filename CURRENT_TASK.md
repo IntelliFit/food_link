@@ -1,5 +1,27 @@
 # CURRENT_TASK
 
+- Task: PostgreSQL 硬切并清理旧数据库依赖
+- Status: code done；pending 最终全文扫描、最小验证与本地开发服务重启
+- Scope:
+  - `backend/pg_client.py`
+    - 新增轻量 PostgreSQL 查询兼容层，覆盖 `.table(...).select().eq()...execute()` 常用链式调用
+  - `backend/database.py`
+    - 全量切到 PostgreSQL 客户端，移除 Supabase SDK 依赖与命名口径
+  - `backend/main.py` `backend/user_points.py` `backend/worker.py`
+    - 清理运行时剩余的旧数据库调用与说明文案
+  - `backend/cleanup_duplicate_feed_comments.py` `backend/cleanup_duplicate_feed_notifications.py` `backend/cleanup_orphans.py`
+  - `backend/seed_test_data.py` `backend/seed_xiaomage_request.py` `backend/compress_food_images.py`
+    - 脚本与种子改为走 PostgreSQL / COS，不再依赖旧 REST / SDK
+  - `backend/tests/conftest.py` `backend/requirements.txt`
+    - 测试环境变量与依赖配置收口到 `POSTGRESQL_*`
+  - `backend/README.md` `backend/AUTH_README.md` `backend/sql/*` `backend/database/*.sql`
+    - 当前使用文档改为 PostgreSQL / COS 口径
+- Verification:
+  - `py_compile` 已通过：`backend/pg_client.py`、`backend/database.py`、`backend/main.py`、`backend/user_points.py`、`backend/worker.py`
+  - `py_compile` 已通过：`backend/cleanup_duplicate_feed_comments.py`、`backend/cleanup_duplicate_feed_notifications.py`、`backend/seed_test_data.py`、`backend/seed_xiaomage_request.py`、`backend/cleanup_orphans.py`、`backend/compress_food_images.py`、`backend/tests/conftest.py`、`backend/scripts/apply_exercise_migration.py`
+  - PostgreSQL smoke check 已通过：基础查询层可读取 `weapp_user`、`user_food_records`、`public_food_library`
+  - 待执行：全文残留扫描、最小 pytest/运行时验证、`npm run dev:restart`
+
 - Task: 切换对象存储到腾讯云 COS/CDN（公开桶 CDN + 私有 health-reports）
 - Status: code done；已补目标 PostgreSQL 历史 URL -> key 清洗脚本，pending end-to-end verification 与正式 apply
 - Scope:

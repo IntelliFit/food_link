@@ -1,5 +1,5 @@
 """
-异步分析任务 Worker：从 Supabase analysis_tasks 表抢占 pending 任务并执行。
+异步分析任务 Worker：从 PostgreSQL 的 analysis_tasks 表抢占 pending 任务并执行。
 支持 task_type=food（食物分析）、health_report（体检报告 OCR）。
 启动方式：由 run_backend.py 启动多个子进程。
 """
@@ -2982,7 +2982,7 @@ def run_food_expiry_notification_worker(worker_id: int, poll_interval: float = 2
 
 
 def _stringify_exception_for_task(e: BaseException) -> str:
-    """将 Supabase/PostgREST 等异常转成可存入 analysis_tasks.error_message 的短字符串。"""
+    """将数据库/网络等异常转成可存入 analysis_tasks.error_message 的短字符串。"""
     import json
 
     msg = getattr(e, "message", None)

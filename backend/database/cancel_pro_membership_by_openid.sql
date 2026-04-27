@@ -1,6 +1,6 @@
 -- 用法：
 -- 1. 将下面的 REPLACE_WITH_OPENID 替换为要测试的用户 openid
--- 2. 在 Supabase SQL Editor 中执行
+-- 2. 在 PostgreSQL ????/SQL ???? 中执行
 -- 作用：
 -- - 立即取消该用户的 Pro 会员资格
 -- - 不退款

@@ -337,7 +337,7 @@ function HealthProfilePage() {
     }
   }
 
-  /** 上传体检报告：仅上传到 Supabase 并展示，不解析；点击「保存健康档案」时在后台提交病历提取任务 */
+  /** 上传体检报告：仅上传到对象存储并展示，不解析；点击「保存健康档案」时在后台提交病历提取任务 */
   const handleReportUpload = async () => {
     try {
       const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })

@@ -10,9 +10,9 @@ from decimal import Decimal
 from typing import Any, Dict, Optional, Tuple
 
 from database import (
-    check_supabase_configured,
+    check_postgresql_configured,
     create_user,
-    get_supabase_client,
+    get_database_client,
     get_user_by_id,
     update_user,
 )
@@ -49,8 +49,8 @@ async def _insert_ledger(
     reason: str,
     meta: Optional[Dict[str, Any]] = None,
 ) -> None:
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    check_postgresql_configured()
+    db = get_database_client()
     row: Dict[str, Any] = {
         "user_id": user_id,
         "delta": float(delta),
@@ -59,7 +59,7 @@ async def _insert_ledger(
     }
     if meta is not None:
         row["meta"] = meta
-    supabase.table("user_points_ledger").insert(row).execute()
+    db.table("user_points_ledger").insert(row).execute()
 
 
 async def add_user_points(
@@ -124,7 +124,6 @@ def _is_retryable_invite_code_error(exc: BaseException) -> bool:
             "42703",  # undefined_column
             "schema cache",
             "permission denied",
-            "pgrst204",  # PostgREST empty / 资源问题
         )
     ):
         return False
@@ -143,7 +142,7 @@ async def ensure_registration_invite_code(user_id: str) -> str:
     existing = (user.get("registration_invite_code") or "").strip()
     if existing:
         return existing
-    check_supabase_configured()
+    check_postgresql_configured()
     max_attempts = 8
     for attempt in range(max_attempts):
         code = _random_invite_code()
@@ -164,10 +163,10 @@ async def get_user_by_registration_invite_code(code: str) -> Optional[Dict[str, 
     c = (code or "").strip().upper()
     if not c:
         return None
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    check_postgresql_configured()
+    db = get_database_client()
     try:
-        r = supabase.table("weapp_user").select("id, nickname, openid").eq("registration_invite_code", c).limit(1).execute()
+        r = db.table("weapp_user").select("id, nickname, openid").eq("registration_invite_code", c).limit(1).execute()
         if r.data:
             return r.data[0]
     except Exception as e:

@@ -1378,7 +1378,7 @@ class PrecisionReferenceObjectInput(BaseModel):
 class AnalyzeRequest(BaseModel):
     base64Image: Optional[str] = Field(None, description="Base64 编码的图片数据（与 image_url 二选一）")
     base64Image: Optional[str] = Field(None, description="Base64 编码的图片数据（与 image_url 二选一）")
-    image_url: Optional[str] = Field(None, description="Supabase 等公网图片 URL（与 base64Image 二选一，分析时用此 URL 获取图片）")
+    image_url: Optional[str] = Field(None, description="可访问的公网图片 URL（与 base64Image 二选一，分析时用此 URL 获取图片）")
     image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
     additionalContext: Optional[str] = Field(default="", description="用户补充的上下文信息")
     modelName: Optional[str] = Field(default="qwen-vl-max", description="使用的模型名称")
@@ -2215,7 +2215,7 @@ async def analyze_food(
 
 
 class UploadAnalyzeImageRequest(BaseModel):
-    """食物分析前上传图片，返回 Supabase 公网 URL"""
+    """食物分析前上传图片，返回可访问图片 URL"""
     base64Image: str = Field(..., description="Base64 编码的图片数据")
 
 
@@ -2234,7 +2234,7 @@ def _guess_upload_image_suffix(filename: Optional[str], content_type: Optional[s
 @app.post("/api/upload-analyze-image")
 async def upload_analyze_image(body: UploadAnalyzeImageRequest):
     """
-    食物分析前先上传图片到 Supabase，返回公网 URL。
+    食物分析前先上传图片到对象存储，返回可访问 URL。
     前端拿到 URL 后传给 /api/analyze 的 image_url，分析及标记样本时均使用该 URL。
     """
     if not body.base64Image:
@@ -2270,7 +2270,7 @@ async def upload_analyze_image(body: UploadAnalyzeImageRequest):
 @app.post("/api/upload-analyze-image-file")
 async def upload_analyze_image_file(file: UploadFile = File(...)):
     """
-    食物分析前上传单张图片文件，返回 Supabase 公网 URL。
+    食物分析前上传单张图片文件，返回可访问图片 URL。
     相比 base64 JSON 上传更省请求体，优先给小程序端使用。
     """
     if file is None:
@@ -2319,7 +2319,7 @@ async def upload_analyze_image_file(file: UploadFile = File(...)):
 
 class AnalyzeSubmitRequest(BaseModel):
     """提交食物分析任务：立即返回 task_id，结果由 Worker 写回后可从 /api/analyze/tasks 查询"""
-    image_url: Optional[str] = Field(None, description="Supabase 公网图片 URL（需先调 upload-analyze-image）")
+    image_url: Optional[str] = Field(None, description="可访问图片 URL（需先调 upload-analyze-image）")
     image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
     meal_type: Optional[str] = Field(default=None, description=MEAL_TYPE_DESCRIPTION)
     timezone_offset_minutes: Optional[int] = Field(default=None, description="客户端时区偏移（JS getTimezoneOffset，单位分钟）")
@@ -4407,7 +4407,7 @@ async def update_health_profile(
     if not update_dict:
         raise HTTPException(status_code=400, detail="没有要更新的字段")
 
-    # 确保 health_condition 为可序列化 dict（Supabase jsonb）
+    # 确保 health_condition 为可序列化 dict（PostgreSQL jsonb）
     if "health_condition" in update_dict and isinstance(update_dict["health_condition"], dict):
         update_dict["health_condition"] = dict(update_dict["health_condition"])
 
@@ -4434,10 +4434,10 @@ async def update_health_profile(
         print(
             f"[update_health_profile] 返回行 height={updated.get('height')}, bmr={updated.get('bmr')} | "
             f"验证查询 height={verify_height}, bmr={verify_bmr} | "
-            f"Supabase={os.getenv('SUPABASE_URL', '')[:50]}..."
+            f"PostgreSQL={os.getenv('POSTGRESQL_HOST', '')}:{os.getenv('POSTGRESQL_PORT', '')}/{os.getenv('POSTGRESQL_DATABASE', '')}"
         )
         if verify and verify_height is None and updated.get("height") is not None:
-            print("[update_health_profile] 警告: 更新返回有值但验证查询无值，可能未持久化或连接了不同项目，请核对 SUPABASE_URL 与 Dashboard 是否一致")
+            print("[update_health_profile] 警告: 更新返回有值但验证查询无值，可能未持久化或连接了错误的 PostgreSQL 实例，请核对 POSTGRESQL_* 配置")
         return {
             "height": updated.get("height"),
             "weight": updated.get("weight"),
@@ -4462,7 +4462,7 @@ async def update_health_profile(
         if "column" in err_msg and ("does not exist" in err_msg or "不存在" in err_msg):
             raise HTTPException(
                 status_code=500,
-                detail="数据库表未扩展健康档案字段。请在 Supabase SQL Editor 中执行 backend/database/user_health_profile.sql 迁移脚本。"
+                detail="数据库表未扩展健康档案字段。请在 PostgreSQL 中执行 backend/database/user_health_profile.sql 迁移脚本。"
             )
         raise HTTPException(status_code=500, detail=f"更新健康档案失败: {str(e)}")
 
@@ -4853,7 +4853,7 @@ class SaveFoodRecordRequest(BaseModel):
 
 
 def _is_duplicate_key_error(exc: BaseException) -> bool:
-    """Postgres / Supabase 唯一约束冲突（部署 uq_user_food_user_source_task 后并发插入也会命中）。"""
+    """PostgreSQL 唯一约束冲突（部署 uq_user_food_user_source_task 后并发插入也会命中）。"""
     msg = str(exc).lower()
     if "23505" in msg:
         return True
@@ -7429,10 +7429,8 @@ async def api_list_public_food_library(
         collections_map = await get_public_food_library_collections_for_items(item_ids, user_info["user_id"]) if item_ids else {}
         # 批量查询作者信息
         author_ids = list({it["user_id"] for it in items})
-        from database import get_supabase_client
-        supabase = get_supabase_client()
-        authors_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
-        author_map = {a["id"]: a for a in (authors_result.data or [])} if authors_result else {}
+        from database import get_basic_users_by_ids_sync
+        author_map = get_basic_users_by_ids_sync(author_ids)
         out = []
         for it in items:
             like_info = likes_map.get(it["id"], {"count": 0, "liked": False})
@@ -7480,10 +7478,8 @@ async def api_public_food_library_collections(
         likes_map = await get_public_food_library_likes_for_items(item_ids, user_info["user_id"]) if item_ids else {}
         collections_map = await get_public_food_library_collections_for_items(item_ids, user_info["user_id"]) if item_ids else {}
         author_ids = list({it["user_id"] for it in items})
-        from database import get_supabase_client
-        supabase = get_supabase_client()
-        authors_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
-        author_map = {a["id"]: a for a in (authors_result.data or [])} if authors_result else {}
+        from database import get_basic_users_by_ids_sync
+        author_map = get_basic_users_by_ids_sync(author_ids)
         out = []
         for it in items:
             like_info = likes_map.get(it["id"], {"count": 0, "liked": False})

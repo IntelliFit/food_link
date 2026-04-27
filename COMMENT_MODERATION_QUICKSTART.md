@@ -12,7 +12,7 @@
 
 ### 第 1 步：执行数据库 SQL（5分钟）
 
-在 Supabase SQL Editor 中按顺序执行：
+在 PostgreSQL 客户端/SQL 工具中按顺序执行：
 
 #### 1.1 创建评论任务表
 ```bash

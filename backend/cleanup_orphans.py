@@ -14,30 +14,14 @@ Usage:
 import argparse
 import json
 import os
-import sys
-import time
 from datetime import datetime, timezone
 from typing import List, Set
 
-import requests
 from dotenv import load_dotenv
 from cos_storage import FOOD_IMAGES_BUCKET, delete_object, list_objects, resolve_object_key
+from database import get_database_client
 
 load_dotenv("backend/.env")
-
-URL = os.getenv("SUPABASE_URL")
-KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-STORAGE_HEADERS = {
-    "apikey": KEY,
-    "Authorization": f"Bearer {KEY}",
-    "Content-Type": "application/json",
-}
-
-REST_HEADERS = {
-    "apikey": KEY,
-    "Authorization": f"Bearer {KEY}",
-}
 
 BUCKET = FOOD_IMAGES_BUCKET
 
@@ -46,47 +30,22 @@ def p(msg):
     print(msg, flush=True)
 
 
-def retry_get(url, headers=None, params=None, retries=3):
-    for i in range(retries):
-        try:
-            r = requests.get(url, headers=headers, params=params, timeout=30)
-            return r
-        except Exception:
-            if i < retries - 1:
-                time.sleep(2 ** i)
-            else:
-                raise
-
-
-def retry_post(url, headers=None, json_data=None, retries=3):
-    for i in range(retries):
-        try:
-            r = requests.post(url, headers=headers, json=json_data, timeout=30)
-            return r
-        except Exception:
-            if i < retries - 1:
-                time.sleep(2 ** i)
-            else:
-                raise
-
-
 # --- Step 1: Collect all referenced image filenames from database ---
 
 def paginated_query(table: str, select: str, limit=1000):
-    """Paginate through a PostgREST table using offset/limit."""
-    base = f"{URL}/rest/v1"
+    """通过 PostgreSQL 查询客户端按 offset/limit 分页读取表。"""
+    db = get_database_client()
+    columns = ",".join(part.strip() for part in select.split(",") if part.strip())
     all_rows = []
     offset = 0
     while True:
-        r = retry_get(
-            f"{base}/{table}",
-            headers=REST_HEADERS,
-            params={"select": select, "limit": str(limit), "offset": str(offset)},
+        result = (
+            db.table(table)
+            .select(columns)
+            .range(offset, offset + limit - 1)
+            .execute()
         )
-        if r.status_code != 200:
-            p(f"  WARN: {table} returned {r.status_code}: {r.text[:200]}")
-            break
-        rows = r.json()
+        rows = list(result.data or [])
         if not rows:
             break
         all_rows.extend(rows)

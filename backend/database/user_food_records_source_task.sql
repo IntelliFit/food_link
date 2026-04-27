@@ -1,7 +1,7 @@
 -- ============================================================
 -- 饮食记录表：关联来源任务（从哪条 analysis_tasks 识别结果保存而来）
 --
--- 【执行】在 Supabase SQL Editor 中执行（需先执行 analysis_tasks.sql）
+-- 【执行】在 PostgreSQL ????/SQL ???? 中执行（需先执行 analysis_tasks.sql）
 -- ============================================================
 
 ALTER TABLE public.user_food_records

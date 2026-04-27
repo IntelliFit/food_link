@@ -16,9 +16,12 @@
 # JWT 配置
 JWT_SECRET_KEY=your-very-secret-key-change-this-in-production-min-32-chars
 
-# Supabase 配置
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# PostgreSQL 配置
+POSTGRESQL_HOST=127.0.0.1
+POSTGRESQL_PORT=5432
+POSTGRESQL_USER=postgres
+POSTGRESQL_PASSWORD=your-password
+POSTGRESQL_DATABASE=food_link
 
 # 微信小程序配置
 APPID=your-wechat-appid
@@ -168,7 +171,7 @@ const response = await Taro.request({
 backend/
 ├── main.py          # 主应用文件，包含登录接口
 ├── auth.py          # JWT token 生成和验证
-├── database.py      # 数据库操作（Supabase）
+├── database.py      # 数据库操作（PostgreSQL）
 ├── middleware.py    # 鉴权中间件
 └── requirements.txt # 依赖包
 ```
@@ -176,7 +179,7 @@ backend/
 ## 注意事项
 
 1. **JWT_SECRET_KEY**: 生产环境必须使用强密钥（至少 32 字符）
-2. **Supabase Service Role Key**: 不要暴露给前端，仅在后端使用
+2. **数据库连接凭据**: 不要暴露给前端，仅在后端使用
 3. **Token 存储**: 前端应安全存储 token（小程序会自动加密）
 4. **HTTPS**: 生产环境必须使用 HTTPS
 

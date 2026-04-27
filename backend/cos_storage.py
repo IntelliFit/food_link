@@ -4,7 +4,7 @@
 职责：
 1. 统一 bucket / CDN / 私有访问配置
 2. 上传、下载、删除对象
-3. 兼容解析旧 Supabase URL、新 CDN URL、COS URL、原始 key
+3. 兼容解析当前 CDN URL、COS URL、原始 key
 4. 为私有 health-reports 生成短期签名访问地址
 """
 
@@ -121,10 +121,6 @@ def _host_from_url(value: str) -> str:
         return ""
 
 
-def _trusted_supabase_host() -> str:
-    return _host_from_url((os.getenv("SUPABASE_URL") or "").strip())
-
-
 def _trusted_bucket_hosts(bucket_alias: str) -> set[str]:
     hosts = set()
     base_url = _base_url_from_env(bucket_alias)
@@ -134,9 +130,6 @@ def _trusted_bucket_hosts(bucket_alias: str) -> set[str]:
         hosts.add(_host_from_url(_cos_origin_base_url(bucket_alias)))
     except Exception:
         pass
-    supabase_host = _trusted_supabase_host()
-    if supabase_host:
-        hosts.add(supabase_host)
     return {host for host in hosts if host}
 
 
@@ -265,13 +258,6 @@ def resolve_object_key(value: Optional[str], bucket_alias: str) -> str:
     netloc = (parsed.netloc or "").strip().lower()
     bucket_name = configured_bucket_name(bucket_alias)
     trusted_hosts = _trusted_bucket_hosts(bucket_alias)
-
-    supabase_public_prefix = f"/storage/v1/object/public/{bucket_alias}/"
-    supabase_private_prefix = f"/storage/v1/object/{bucket_alias}/"
-    if (netloc == _trusted_supabase_host() or netloc.endswith(".supabase.co")) and supabase_public_prefix in path:
-        return path.split(supabase_public_prefix, 1)[1].lstrip("/")
-    if (netloc == _trusted_supabase_host() or netloc.endswith(".supabase.co")) and supabase_private_prefix in path:
-        return path.split(supabase_private_prefix, 1)[1].lstrip("/")
 
     base_url = _base_url_from_env(bucket_alias)
     if base_url and raw.startswith(f"{base_url}/"):

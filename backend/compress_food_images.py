@@ -7,7 +7,6 @@
 - 保持对象 key 不变，避免数据库改链
 
 依赖:
-- requests
 - Pillow
 
 示例:
@@ -31,13 +30,11 @@ import io
 import json
 import os
 import sys
-import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-import requests
 from PIL import Image, ImageOps
 from cos_storage import (
     FOOD_IMAGES_BUCKET,
@@ -47,6 +44,7 @@ from cos_storage import (
     resolve_object_key,
     upload_bytes,
 )
+from database import get_database_client
 
 
 BUCKET_NAME = FOOD_IMAGES_BUCKET
@@ -85,48 +83,22 @@ def load_env(env_path: Path) -> Dict[str, str]:
     return values
 
 
-class SupabaseStorageClient:
-    def __init__(self, base_url: str, service_role_key: str) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.service_role_key = service_role_key
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "apikey": service_role_key,
-                "Authorization": f"Bearer {service_role_key}",
-            }
-        )
-
-    def _request_with_retry(self, method: str, url: str, **kwargs) -> requests.Response:
-        last_error: Optional[Exception] = None
-        for attempt in range(5):
-            try:
-                response = self.session.request(method, url, timeout=60, **kwargs)
-                response.raise_for_status()
-                return response
-            except Exception as exc:  # noqa: BLE001
-                last_error = exc
-                if attempt == 4:
-                    raise
-                time.sleep(1.5 * (attempt + 1))
-        assert last_error is not None
-        raise last_error
+class CosStorageClient:
+    def __init__(self) -> None:
+        self.db = get_database_client()
 
     def fetch_table_rows(self, table: str, select: str, page_size: int = 1000) -> List[dict]:
         rows: List[dict] = []
         offset = 0
+        columns = ",".join(part.strip() for part in select.split(",") if part.strip())
         while True:
-            headers = {
-                "Range-Unit": "items",
-                "Range": f"{offset}-{offset + page_size - 1}",
-            }
-            response = self._request_with_retry(
-                "GET",
-                f"{self.base_url}/rest/v1/{table}",
-                headers=headers,
-                params={"select": select},
+            result = (
+                self.db.table(table)
+                .select(columns)
+                .range(offset, offset + page_size - 1)
+                .execute()
             )
-            batch = response.json()
+            batch = list(result.data or [])
             rows.extend(batch)
             if len(batch) < page_size:
                 break
@@ -178,7 +150,7 @@ def flat_urls(value: object) -> List[str]:
     return []
 
 
-def collect_referenced_food_urls(client: SupabaseStorageClient) -> Tuple[Set[str], Set[str], Set[str]]:
+def collect_referenced_food_urls(client: CosStorageClient) -> Tuple[Set[str], Set[str], Set[str]]:
     records = client.fetch_table_rows(
         "user_food_records",
         "id,image_path,image_paths,source_task_id",
@@ -215,7 +187,7 @@ def collect_referenced_food_urls(client: SupabaseStorageClient) -> Tuple[Set[str
 
 def classify_scope(
     objects: Sequence[StorageObject],
-    client: SupabaseStorageClient,
+    client: CosStorageClient,
     scope: str,
 ) -> List[StorageObject]:
     record_urls, public_urls, analysis_urls = collect_referenced_food_urls(client)
@@ -326,7 +298,7 @@ def make_report_path(report_dir: Path) -> Path:
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="批量压缩 Supabase food-images")
+    parser = argparse.ArgumentParser(description="批量压缩 COS food-images")
     parser.add_argument("--env-file", default="backend/.env", help="环境变量文件路径")
     parser.add_argument(
         "--name",
@@ -363,13 +335,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     env = load_env(Path(args.env_file))
-    base_url = env.get("SUPABASE_URL", "").strip()
-    service_role_key = env.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-    if not base_url or not service_role_key:
-        print("缺少 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY", file=sys.stderr)
+    required_envs = ["POSTGRESQL_HOST", "POSTGRESQL_PORT", "POSTGRESQL_USER", "POSTGRESQL_PASSWORD", "POSTGRESQL_DATABASE"]
+    missing = [key for key in required_envs if not env.get(key, "").strip()]
+    if missing:
+        print(f"缺少 PostgreSQL 环境变量: {', '.join(missing)}", file=sys.stderr)
         return 1
 
-    client = SupabaseStorageClient(base_url, service_role_key)
+    client = CosStorageClient()
     all_objects = client.list_bucket_objects(BUCKET_NAME)
     target_objects = classify_scope(all_objects, client, args.scope)
 

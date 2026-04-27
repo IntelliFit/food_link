@@ -80,7 +80,7 @@ export interface PrecisionReferenceObjectInput {
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
 export interface AnalyzeRequest {
   base64Image?: string
-  /** Supabase 等公网图片 URL，分析时用此 URL 获取图片；标记样本/保存记录时也存此 URL */
+  /** 可访问的公网图片 URL，分析时用此 URL 获取图片；标记样本/保存记录时也存此 URL */
   image_url?: string
   /** 多图 URL 列表 */
   image_urls?: string[]
@@ -1070,7 +1070,7 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
 }
 
 /**
- * 食物分析前上传图片到 Supabase，返回公网 URL。
+ * 食物分析前上传图片到对象存储，返回可访问 URL。
  * 已登录时附带 Bearer，与异步分析任务一致；未登录的页面（如仅调试用）仍可上传。
  */
 export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUrl: string }> {

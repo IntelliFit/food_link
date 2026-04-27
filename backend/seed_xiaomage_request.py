@@ -15,14 +15,15 @@ os.chdir(backend_dir)
 from dotenv import load_dotenv
 load_dotenv()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("错误: 请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY（backend/.env）")
+required_envs = ["POSTGRESQL_HOST", "POSTGRESQL_PORT", "POSTGRESQL_USER", "POSTGRESQL_PASSWORD", "POSTGRESQL_DATABASE"]
+missing = [key for key in required_envs if not os.getenv(key)]
+if missing:
+    print(f"错误: 请设置 PostgreSQL 环境变量: {', '.join(missing)}（在 backend/.env）")
     sys.exit(1)
 
-from supabase import create_client
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+from database import get_database_client
+
+db = get_database_client()
 
 TEST_PHONE = "18870666046"
 XIAOMAGE_OPENID = "seed_xiaomage"
@@ -30,7 +31,7 @@ XIAOMAGE_OPENID = "seed_xiaomage"
 
 def main():
     print("1. 查找测试账号 (telephone=18870666046)...")
-    r = supabase.table("weapp_user").select("id, nickname").eq("telephone", TEST_PHONE).execute()
+    r = db.table("weapp_user").select("id, nickname").eq("telephone", TEST_PHONE).execute()
     if not r.data or len(r.data) == 0:
         print("   未找到该手机号用户，请先用该手机号登录一次小程序后再运行。")
         sys.exit(1)
@@ -38,12 +39,12 @@ def main():
     print(f"   找到: id={test_user_id}")
 
     print("2. 查找或创建用户「小马哥」...")
-    x = supabase.table("weapp_user").select("id").eq("openid", XIAOMAGE_OPENID).execute()
+    x = db.table("weapp_user").select("id").eq("openid", XIAOMAGE_OPENID).execute()
     if x.data and len(x.data) > 0:
         xiaomage_id = x.data[0]["id"]
         print(f"   已存在小马哥 id={xiaomage_id}")
     else:
-        ins = supabase.table("weapp_user").insert({
+        ins = db.table("weapp_user").insert({
             "openid": XIAOMAGE_OPENID,
             "nickname": "小马哥",
             "avatar": "",
@@ -56,19 +57,19 @@ def main():
             sys.exit(1)
 
     print("3. 插入好友请求：小马哥 -> 我 (pending)...")
-    existing = supabase.table("friend_requests").select("id, status").eq("from_user_id", xiaomage_id).eq("to_user_id", test_user_id).execute()
+    existing = db.table("friend_requests").select("id, status").eq("from_user_id", xiaomage_id).eq("to_user_id", test_user_id).execute()
     if existing.data and len(existing.data) > 0:
         row = existing.data[0]
         if row.get("status") == "pending":
             print("   已存在一条待处理请求，无需重复插入")
         else:
-            supabase.table("friend_requests").update({
+            db.table("friend_requests").update({
                 "status": "pending",
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", row["id"]).execute()
             print("   已将该条请求重置为 pending")
     else:
-        supabase.table("friend_requests").insert({
+        db.table("friend_requests").insert({
             "from_user_id": xiaomage_id,
             "to_user_id": test_user_id,
             "status": "pending",
