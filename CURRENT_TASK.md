@@ -1,5 +1,42 @@
 # CURRENT_TASK
 
+- Task: 测试后台支持“多提示词同时测试”
+- Status: done（`custom` 模式已支持多选提示词；分析体验与批量测试都会按“模型 × 提示词”并跑）
+- Scope:
+  - `backend/static/test_backend/index.html`
+    - 分析体验、批量测试的自定义提示词选择器改为可多选
+    - 文案明确说明会按“所选模型 × 所选提示词”同时并跑
+  - `backend/static/test_backend/app.js`
+    - 前端提交参数新增 `prompt_ids`
+    - 结果卡、批量汇总、批量详情改为把“同模型不同提示词”拆开显示
+  - `backend/main.py`
+    - 新增 `prompt_ids` 解析
+    - 单图分析与批量任务都支持 `custom` 模式下按“模型 × 提示词”笛卡尔积执行
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+  - `node --check backend/static/test_backend/app.js` 通过
+- Notes:
+  - 本轮改的是后端静态测试后台，不涉及微信小程序页面
+  - 运行态页面验证仍需用户重启后端并刷新 `http://127.0.0.1:3010/test-backend`
+
+- Task: 对齐到最新 `main` 作为当前默认开发基线
+- Status: done（`2026-04-27` 已清理 7 个工作区噪音改动，并将本地 `main` 快进到 `eddf47b`）
+- Scope:
+  - 已恢复的工作区噪音文件：
+    - `PROGRESS.md`
+    - `backend/exercise_llm.py`
+    - `memory/2026-04-10.md`
+    - `src/pages/analyze-history/index.tsx`
+    - `src/pages/analyze/index.scss`
+    - `src/pages/result/index.scss`
+    - `src/pages/result/index.tsx`
+  - 这 7 个文件在恢复前的磁盘 `LastWriteTime` 均为 `2026-04-27 00:44:18`
+  - `git diff` 无正文差异，判断为一次性产生的换行符/编辑器噪音，而不是长期未提交的业务代码改动
+  - 已执行 `git pull --ff-only origin main`
+  - 当前本地 `main` = `origin/main` = `eddf47b`（`fix(home): 确保每餐蛋白质/脂肪/碳水被正确缓存，旧缓存缺失时自动刷新`）
+- Notes:
+  - 当前仍有 2 个未跟踪文件：`docs/微信支付委托代扣_自动续费_申请材料.md`、`memory/2026-04-27.md`
+  - 后续默认以最新 `main` 为工作基线，除非用户再明确要求切到其它分支
 - Task: 食物分析提示词补充地理位置上下文
 - Status: done（已完成前后端主链路接入；运行态自动化验证受微信开发者工具 9420 端口未开启阻塞）
 - Scope:
