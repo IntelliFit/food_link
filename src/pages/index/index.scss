@@ -1284,6 +1284,21 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-variant-numeric: tabular-nums;
 }
 
+// 同一餐次多条记录的计数徽章
+.meal-count-badge {
+  flex-shrink: 0;
+  background: $primary-light;
+  border-radius: 9999rpx;
+  padding: 4rpx 14rpx;
+}
+
+.meal-count-badge-text {
+  font-size: 20rpx;
+  font-weight: 600;
+  color: $primary-color;
+  line-height: 28rpx;
+}
+
 // 第二行：🔥 卡路里
 .meal-calorie-row {
   display: flex;
@@ -2602,6 +2617,138 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   color: #6b7280;
   line-height: 36rpx;
   margin-top: 8rpx;
+}
+
+// ==================== 多记录选择面板 ====================
+
+.meal-records-dialog-content {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.meal-records-dialog-header {
+  margin-bottom: 20rpx;
+}
+
+.meal-records-dialog-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.meal-records-dialog-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 44rpx;
+}
+
+.meal-records-dialog-count {
+  font-size: 24rpx;
+  color: #9ca3af;
+  line-height: 36rpx;
+  margin-left: 4rpx;
+}
+
+// 记录列表容器
+.meal-record-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+// 单条记录行（复用 meal-item 布局）
+.meal-record-entry {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 20rpx;
+  background: rgb(248 250 252 / 80%);
+  border-radius: 16rpx;
+
+  &:active {
+    background: rgb(241 245 249 / 90%);
+  }
+}
+
+// 缩略图
+.meal-record-entry-thumb {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  &.is-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &.is-photo {
+    background: #f3f4f6;
+  }
+}
+
+.meal-record-entry-image {
+  width: 100%;
+  height: 100%;
+}
+
+.meal-record-entry-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// 内容区
+.meal-record-entry-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.meal-record-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10rpx;
+}
+
+.meal-record-entry-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: $text-primary;
+  line-height: 36rpx;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meal-record-entry-cal-row {
+  display: flex;
+  align-items: center;
+}
+
+.meal-record-entry-cal {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 36rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.meal-record-entry-macros {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
 }
 
 .record-menu-grid {

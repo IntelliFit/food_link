@@ -6466,6 +6466,35 @@ async def get_home_dashboard(
                 if rid is not None and str(rid).strip() != "":
                     primary_record_id = str(rid)
                     break
+        # 构建单条记录摘要，前端多记录面板展示用
+        meal_record_entries = []
+        for rec in items:
+            rid = rec.get("id")
+            if rid is None or str(rid).strip() == "":
+                continue
+            # title：优先取第一条食物名称，其次取 description 首行
+            record_title = ""
+            record_items = rec.get("items")
+            if isinstance(record_items, list) and len(record_items) > 0:
+                first_name = (record_items[0].get("name") or "").strip() if isinstance(record_items[0], dict) else ""
+                if first_name:
+                    record_title = first_name
+            if not record_title:
+                desc = (rec.get("description") or "").strip()
+                if desc:
+                    # 取首行（可能包含换行）
+                    first_line = desc.split("\n")[0].strip()
+                    if len(first_line) > 30:
+                        first_line = first_line[:30] + "…"
+                    record_title = first_line
+            meal_record_entries.append({
+                "id": str(rid),
+                "record_time": rec.get("record_time"),
+                "total_calories": float(rec.get("total_calories") or 0),
+                "title": record_title,
+                "full_record": rec,
+            })
+
         meals_out.append({
             "type": meal_type,
             "name": MEAL_NAMES.get(meal_type, meal_type),
@@ -6480,6 +6509,8 @@ async def get_home_dashboard(
             "image_path": meal_image_urls[0] if meal_image_urls else None,
             "image_paths": meal_image_urls,
             "primary_record_id": primary_record_id,
+            "description": "、".join([e["title"] for e in meal_record_entries if e["title"]]) or None,
+            "meal_record_entries": meal_record_entries,
         })
 
     exercise_burned = await get_exercise_calories_by_date(user_id, target_date)

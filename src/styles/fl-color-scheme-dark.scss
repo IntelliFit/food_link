@@ -3348,3 +3348,47 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .interaction-feed-detail-page .interaction-feed-detail-empty {
   color: $fl-dark-text2 !important;
 }
+
+// ==================== 多记录选择面板（MealRecordsDialog） ====================
+
+// 面板标题
+.fl-page-theme-root--dark .meal-records-dialog-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-records-dialog-count {
+  color: $fl-dark-text2 !important;
+}
+
+// 单条记录行
+.fl-page-theme-root--dark .meal-record-entry {
+  background: $fl-dark-panel-bg-soft !important;
+
+  &:active {
+    background: $fl-dark-ghost-bg !important;
+  }
+}
+
+// 记录缩略图（无图片时的 fallback icon 背景）
+.fl-page-theme-root--dark .meal-record-entry-thumb.is-photo {
+  background: $fl-dark-ghost-bg !important;
+}
+
+// 记录标题文本
+.fl-page-theme-root--dark .meal-record-entry-title {
+  color: $fl-dark-text !important;
+}
+
+// 记录卡路里数值
+.fl-page-theme-root--dark .meal-record-entry-cal {
+  color: $fl-dark-text !important;
+}
+
+// 餐食卡片上的计数徽章
+.fl-page-theme-root--dark .meal-count-badge {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .meal-count-badge-text {
+  color: $fl-dark-accent !important;
+}

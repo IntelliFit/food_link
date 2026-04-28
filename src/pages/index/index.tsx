@@ -22,7 +22,6 @@ import {
   type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
-  type HomeMealRecordEntry,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
@@ -71,51 +70,7 @@ import {
 } from './utils/constants'
 import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
-
-/** 微信操作面板单行不宜过长，总长度含「 · 」分隔符一并限制 */
-const HOME_MEAL_PICKER_LINE_MAX_CHARS = 34
-
-function truncatePickerText(text: string, maxLen: number): string {
-  const t = text.replace(/\s+/g, ' ').trim()
-  if (t.length <= maxLen) return t
-  if (maxLen <= 1) return '…'
-  return `${t.slice(0, maxLen - 1)}…`
-}
-
-/** 首页同一餐多条记录时，操作面板单行：名称（可截断）· 时间（不展示热量） */
-function formatHomeMealPickerEntry(entry: HomeMealRecordEntry): string {
-  let timePart = ''
-  if (entry.record_time) {
-    try {
-      const d = new Date(entry.record_time)
-      if (!Number.isNaN(d.getTime())) {
-        const h = d.getHours()
-        const m = d.getMinutes()
-        timePart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  const timeSuffix = timePart ? ` · ${timePart}` : ''
-
-  const rawTitle = (entry.title || '').trim()
-  if (!rawTitle) {
-    return timePart || '饮食记录'
-  }
-  if (!timePart) {
-    return truncatePickerText(rawTitle, HOME_MEAL_PICKER_LINE_MAX_CHARS)
-  }
-
-  const maxTitle = Math.max(4, HOME_MEAL_PICKER_LINE_MAX_CHARS - timeSuffix.length)
-  const titleShort = truncatePickerText(rawTitle, maxTitle)
-  const line = `${titleShort}${timeSuffix}`
-  if (line.length <= HOME_MEAL_PICKER_LINE_MAX_CHARS) return line
-  return truncatePickerText(line, HOME_MEAL_PICKER_LINE_MAX_CHARS)
-}
-
-const HOME_MEAL_ACTION_SHEET_MAX = 6
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
 
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
 function getInviteCodeFromUserId(userId: string): string {
@@ -618,6 +573,9 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = useState<FoodRecord | null>(null)
   const [showRecordEditModal, setShowRecordEditModal] = useState(false)
   const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
+  /** 同一餐次多条记录时的选择面板 */
+  const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = useState(false)
+  const [mealRecordsDialogMeal, setMealRecordsDialogMeal] = useState<HomeMealItem | null>(null)
 
   const showRecordPosterModalRef = useRef(false)
   const showDailyPosterModalRef = useRef(false)
@@ -1281,19 +1239,16 @@ function IndexPage() {
       openActionSheet(entries[0].id)
       return
     }
-    const slice = entries.slice(0, HOME_MEAL_ACTION_SHEET_MAX)
-    const itemList = slice.map((e) => formatHomeMealPickerEntry(e))
-    Taro.showActionSheet({
-      itemList,
-      alertText: meal.name || '选择记录',
-      success: (res) => {
-        const idx = res.tapIndex
-        if (idx < 0 || idx >= slice.length) return
-        const picked = slice[idx]
-        openActionSheet(picked.id)
-      },
-      fail: () => {}
-    })
+    // 多条记录 → 弹出自定义面板
+    setMealRecordsDialogMeal(meal)
+    setMealRecordsDialogVisible(true)
+  }, [])
+
+  /** 从多记录面板中选择一条 → 关闭面板 → 打开操作菜单 */
+  const handleSelectMealRecord = useCallback((recordId: string) => {
+    setMealRecordsDialogVisible(false)
+    setMealActionRecordId(recordId)
+    setMealActionSheetVisible(true)
   }, [])
 
   const handleMealEdit = async () => {
@@ -2358,6 +2313,17 @@ function IndexPage() {
                         <Text className='meal-desc' numberOfLines={1}>
                           {meal.description || meal.meal_record_entries?.map((e) => e.title).filter(Boolean).join('、') || meal.name || label}
                         </Text>
+                        {(() => {
+                          const entryCount = Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()).length : 0
+                          if (entryCount > 1) {
+                            return (
+                              <View className='meal-count-badge'>
+                                <Text className='meal-count-badge-text'>{entryCount}次</Text>
+                              </View>
+                            )
+                          }
+                          return null
+                        })()}
                         {meal.time ? (
                           <View className='meal-time-pill'>
                             <Text className='meal-time-pill-text'>{meal.time}</Text>
@@ -2714,6 +2680,14 @@ function IndexPage() {
           </View>
         </View>
       )}
+
+      {/* 同一餐次多条记录选择面板 */}
+      <MealRecordsDialog
+        visible={mealRecordsDialogVisible}
+        meal={mealRecordsDialogMeal}
+        onClose={() => setMealRecordsDialogVisible(false)}
+        onSelectRecord={handleSelectMealRecord}
+      />
 
       {/* 餐食卡片操作菜单 */}
       <MealActionSheet

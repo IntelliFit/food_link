@@ -21,10 +21,15 @@ import {
   getUserProfile,
   type FoodRecord,
   type UserInfo,
+  type HomeMealItem,
 } from '../../../utils/api'
+import {
+  getStoredHomeDashboardSnapshotByDate,
+} from '../../../utils/home-dashboard-local-cache'
 import {
   isMetabolicProfileComplete,
   loadLocalMetabolicProfile,
+  saveLocalMetabolicProfile,
   mergeUserWithLocalProfile,
   MetabolicProfileSheet,
 } from './metabolic-profile-sheet'
@@ -228,6 +233,94 @@ function foodRecordsToMeals(records: FoodRecord[], dayYmd: string): MealEvent[] 
     meals.push({ tMin, kcal, carbs, protein, fat })
   }
   return meals.sort((a, b) => a.tMin - b.tMin)
+}
+
+/** 从缓存 dashboard 快照构建 MealEvent[]，优先使用本地缓存避免网络请求 */
+function buildMealEventsFromDashboardCache(meals: HomeMealItem[], dayYmd: string): MealEvent[] {
+  const result: MealEvent[] = []
+
+  function parseHHmmToMinute(hhmm: string): number | null {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim())
+    if (!m) return null
+    const h = Number(m[1])
+    const min = Number(m[2])
+    if (h < 0 || h > 23 || min < 0 || min > 59) return null
+    return h * 60 + min
+  }
+
+  for (const meal of meals) {
+    if (!meal) continue
+    const entries = Array.isArray(meal.meal_record_entries)
+      ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim())
+      : []
+
+    const mealProtein = Math.max(0, meal.protein ?? 0)
+    const mealCarbs = Math.max(0, meal.carbs ?? 0)
+    const mealFat = Math.max(0, meal.fat ?? 0)
+    const mealKcal = Math.max(0, meal.calorie ?? 0)
+
+    if (entries.length === 0) {
+      // 无记录条目：用 meal.time (HH:mm) 作为时间
+      const tMin = meal.time ? parseHHmmToMinute(String(meal.time)) : null
+      if (tMin != null && mealKcal > 0) {
+        result.push({ tMin, kcal: mealKcal, carbs: mealCarbs, protein: mealProtein, fat: mealFat })
+      }
+      continue
+    }
+
+    if (entries.length === 1) {
+      // 单条记录：优先用 record_time，回退 meal.time
+      const entry = entries[0]
+      const wall = recordTimeToChinaYmdAndMinute(entry.record_time as unknown)
+      let tMin: number | null = null
+      if (wall && wall.ymd === dayYmd) {
+        tMin = wall.minuteOfDay
+      } else if (meal.time) {
+        tMin = parseHHmmToMinute(String(meal.time))
+      }
+      if (tMin != null && mealKcal > 0) {
+        result.push({ tMin, kcal: mealKcal, carbs: mealCarbs, protein: mealProtein, fat: mealFat })
+      }
+      continue
+    }
+
+    // 多条记录：按各自 total_calories 比例拆分宏量营养素
+    const validEntries = entries.filter((e) => (e.total_calories ?? 0) > 0)
+    const totalEntryKcal = validEntries.reduce((sum, e) => sum + (e.total_calories ?? 0), 0)
+
+    if (totalEntryKcal <= 0 || mealKcal <= 0) {
+      // 无法拆分：整餐当作一条
+      const tMin = meal.time ? parseHHmmToMinute(String(meal.time)) : null
+      if (tMin != null && mealKcal > 0) {
+        result.push({ tMin, kcal: mealKcal, carbs: mealCarbs, protein: mealProtein, fat: mealFat })
+      }
+      continue
+    }
+
+    for (const entry of validEntries) {
+      const wall = recordTimeToChinaYmdAndMinute(entry.record_time as unknown)
+      let tMin: number | null = null
+      if (wall && wall.ymd === dayYmd) {
+        tMin = wall.minuteOfDay
+      } else if (meal.time) {
+        tMin = parseHHmmToMinute(String(meal.time))
+      }
+      if (tMin == null) continue
+
+      const entryKcal = entry.total_calories ?? 0
+      const ratio = entryKcal / totalEntryKcal
+      const entryMealKcal = Math.round(mealKcal * ratio)
+      const entryProtein = Math.round(mealProtein * ratio * 10) / 10
+      const entryCarbs = Math.round(mealCarbs * ratio * 10) / 10
+      const entryFat = Math.round(mealFat * ratio * 10) / 10
+
+      if (entryMealKcal > 0) {
+        result.push({ tMin, kcal: entryMealKcal, carbs: entryCarbs, protein: entryProtein, fat: entryFat })
+      }
+    }
+  }
+
+  return result.sort((a, b) => a.tMin - b.tMin)
 }
 
 /** 昼夜节律：夜间 22:00–06:00 系数 0.9 */
@@ -637,13 +730,43 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
         setProfileReady(true)
         return
       }
+
+      // 优先使用本机缓存的代谢档案，避免每次进入都请求 /api/user/profile
+      const local = loadLocalMetabolicProfile()
+      if (local && local.height > 0 && local.weight > 0 && local.gender) {
+        const stub: UserInfo = {
+          id: '',
+          openid: '',
+          nickname: '',
+          avatar: '',
+          height: local.height,
+          weight: local.weight,
+          gender: local.gender,
+          birthday: local.birthday ?? null,
+          bmr: local.bmr ?? null,
+        }
+        setApiUser(stub)
+        setEffectiveUser(stub)
+        setProfileReady(true)
+        return
+      }
+
+      // 本地缓存缺失 → 回退网络请求，并缓存到本机
       try {
         const u = await getUserProfile()
         setApiUser(u)
-        setEffectiveUser(mergeUserWithLocalProfile(u, loadLocalMetabolicProfile()))
+        setEffectiveUser(mergeUserWithLocalProfile(u, local))
+        if (u.height && u.height > 0 && u.weight && u.weight > 0 && u.gender) {
+          saveLocalMetabolicProfile({
+            height: u.height,
+            weight: u.weight,
+            gender: u.gender,
+            birthday: u.birthday ?? undefined,
+            bmr: u.bmr ?? undefined,
+          })
+        }
       } catch (e) {
         console.error('MetabolicDynamicsReport profile load fail', e)
-        const local = loadLocalMetabolicProfile()
         if (local) {
           const stub: UserInfo = {
             id: '',
@@ -679,12 +802,45 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
       setPhase('loading')
       setSim(null)
     }
+
+    const phy = resolvePhysiology(effectiveUser)
+
+    // 优先从首页 dashboard 本地缓存构建餐食事件，避免重复网络请求
+    const cachedSnapshot = getStoredHomeDashboardSnapshotByDate(dayYmd)
+    const cachedMeals =
+      cachedSnapshot && Array.isArray(cachedSnapshot.meals) && cachedSnapshot.meals.length > 0
+        ? buildMealEventsFromDashboardCache(cachedSnapshot.meals, dayYmd)
+        : null
+    const cachedExerciseKcal =
+      cachedSnapshot && typeof cachedSnapshot.exerciseBurnedKcal === 'number'
+        ? Math.max(0, cachedSnapshot.exerciseBurnedKcal)
+        : -1
+
+    if (cachedMeals && cachedMeals.length > 0) {
+      // 缓存命中：直接运行模拟
+      const exerciseKcal = cachedExerciseKcal >= 0 ? cachedExerciseKcal : 0
+      const result = runMetabolicSimulation({
+        meals: cachedMeals,
+        physiology: phy,
+        exerciseDayKcal: exerciseKcal,
+      })
+      setSim(result)
+
+      setSummaryAcuteSurplusKcal(Math.round(result.acuteSurplusIntegralKcal))
+      setSummaryPeakAbsorbKcalPerMin(Math.round(maxAbsorbKcalPerMin(result.absorbPerMin) * 10) / 10)
+      setSummaryFatStorageSharePct(Math.round(result.fatStorageShareOfAbsorbedPct * 10) / 10)
+
+      setPhase('ready')
+      loadedForDayRef.current = dayYmd
+      return
+    }
+
+    // 缓存未命中：回退网络请求
     try {
       const [foodRes, exRes] = await Promise.all([
         getFoodRecordList(dayYmd),
         getExerciseDailyCalories(dayYmd).catch(() => ({ total_calories_burned: 0 })),
       ])
-      const phy = resolvePhysiology(effectiveUser)
       const meals = foodRecordsToMeals(foodRes.records || [], dayYmd)
       if (meals.length === 0) {
         setSim(null)
@@ -812,9 +968,24 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
     setTimeout(run, 320)
   }, [nowMinuteForDay, isDark])
 
+  // 首次图表绘制需要等页面布局稳定，避免 Canvas 原生层定位飘移
+  const initialDrawTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     if (phase === 'ready' && sim) {
-      redraw()
+      // 清除之前的定时器，确保只有最后一次生效
+      if (initialDrawTimerRef.current) {
+        clearTimeout(initialDrawTimerRef.current)
+      }
+      // 递进延迟：DOM 更新 → 布局稳定 → Canvas 原生层就位
+      initialDrawTimerRef.current = setTimeout(() => {
+        redraw()
+      }, 400)
+    }
+    return () => {
+      if (initialDrawTimerRef.current) {
+        clearTimeout(initialDrawTimerRef.current)
+      }
     }
   }, [phase, sim, redraw, canvasPx.w, canvasPx.h])
 
@@ -825,16 +996,24 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
       return
     }
     if (phase === 'ready' && sim) {
-      redraw()
+      // 弹层关闭后 Canvas 重新挂载，延迟等原生层就位
+      const timer = setTimeout(() => {
+        redraw()
+      }, 300)
+      return () => clearTimeout(timer)
     }
   }, [physSheetOpen, phase, sim, redraw])
 
   // 主题切换时重绘图表
   useEffect(() => {
     if (phase === 'ready' && sim) {
+      // dispose + 延迟重建，确保样式变量已切换
       chartRef.current?.dispose()
       chartRef.current = null
-      redraw()
+      const timer = setTimeout(() => {
+        redraw()
+      }, 200)
+      return () => clearTimeout(timer)
     }
   }, [isDark, phase, sim, redraw])
 
@@ -899,6 +1078,37 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
     )
   }
 
+  // 统一的画布容器（始终存在，确保 Canvas 原生层锚点稳定）
+  const canvasWrap = (
+    <View
+      className={`metabolic-report__canvas-wrap${layout === 'page' ? ' metabolic-report__canvas-wrap--page' : ''}`}
+      style={{
+        height: `${canvasPx.h}px`,
+        minHeight: `${canvasPx.h}px`,
+      }}
+    >
+      <View
+        className='metabolic-report__canvas-sizer'
+        style={{ width: `${canvasPx.w}px`, height: `${canvasPx.h}px` }}
+      >
+        {!physSheetOpen ? (
+          <Canvas
+            type='2d'
+            id={CANVAS_ID}
+            className='metabolic-report__canvas'
+            style={{ width: `${canvasPx.w}px`, height: `${canvasPx.h}px` }}
+          />
+        ) : (
+          <View
+            className='metabolic-report__canvas-placeholder'
+            style={{ width: '100%', height: `${canvasPx.h}px` }}
+          />
+        )}
+      </View>
+    </View>
+  )
+
+  // loading / error / empty 环境下仍然渲染画布容器，避免原生层首次挂载时飘移
   if (phase === 'loading' && !sim) {
     return (
       <View className='metabolic-report'>
@@ -910,6 +1120,7 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
         <View className='metabolic-report__loading'>
           <View className='metabolic-report__spinner' />
         </View>
+        {canvasWrap}
         {physiologyPopupEl}
       </View>
     )
@@ -928,13 +1139,24 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
             <Text className='metabolic-report__retry-text'>重试</Text>
           </View>
         </View>
+        {canvasWrap}
         {physiologyPopupEl}
       </View>
     )
   }
 
   if (!sim) {
-    return null
+    return (
+      <View className='metabolic-report'>
+        <MetabolicReportHead
+          showPhysBtn={!!physiologyForSim}
+          onOpenPhys={() => setPhysSheetOpen(true)}
+          onBack={layout === 'page' ? handlePageBack : undefined}
+        />
+        {canvasWrap}
+        {physiologyPopupEl}
+      </View>
+    )
   }
 
   return (
@@ -978,33 +1200,7 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
         </View>
       </View>
 
-      <View
-        className={`metabolic-report__canvas-wrap${layout === 'page' ? ' metabolic-report__canvas-wrap--page' : ''}`}
-        style={{
-          /* 微信 Canvas 2D 原生层易与上一块重叠：外层同时给死高度（px）+ rpx min-height 双保险 */
-          height: `${canvasPx.h}px`,
-          minHeight: `${canvasPx.h}px`,
-        }}
-      >
-        <View
-          className='metabolic-report__canvas-sizer'
-          style={{ width: `${canvasPx.w}px`, height: `${canvasPx.h}px` }}
-        >
-          {!physSheetOpen ? (
-            <Canvas
-              type='2d'
-              id={CANVAS_ID}
-              className='metabolic-report__canvas'
-              style={{ width: `${canvasPx.w}px`, height: `${canvasPx.h}px` }}
-            />
-          ) : (
-            <View
-              className='metabolic-report__canvas-placeholder'
-              style={{ width: '100%', height: `${canvasPx.h}px` }}
-            />
-          )}
-        </View>
-      </View>
+      {canvasWrap}
 
       <View className='metabolic-report__legend-row'>
         <View className='metabolic-report__legend-dot metabolic-report__legend-dot--absorb' />
