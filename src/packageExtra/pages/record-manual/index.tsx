@@ -46,9 +46,9 @@ const ACTIVITY_TIMINGS = [
 const SOURCE_FILTERS = [
   { value: 'all', label: '全部' },
   { value: 'recent', label: '最近常吃' },
-  { value: 'favorites', label: '收藏优先' },
-  { value: 'public_library', label: '公共库' },
-  { value: 'nutrition_library', label: '营养词典' },
+  { value: 'favorites', label: '收藏餐食' },
+  { value: 'public_library', label: '真实餐食' },
+  { value: 'nutrition_library', label: '标准食物' },
 ] as const
 
 type SourceFilter = (typeof SOURCE_FILTERS)[number]['value']
@@ -62,9 +62,9 @@ interface SelectedItem {
   weightInput: string
   defaultWeight: number
   portionLabel: string
-  baseNutrients: { calories: number; protein: number; carbs: number; fat: number }
-  nutrients: { calories: number; protein: number; carbs: number; fat: number }
-  nutrientsPer100g?: { calories: number; protein: number; carbs: number; fat: number }
+  baseNutrients: Nutrients
+  nutrients: Nutrients
+  nutrientsPer100g?: Nutrients
   imagePath?: string | null
   recommendReason?: string
   usageCount: number
@@ -105,6 +105,9 @@ function buildNutrientsFromWeight(
       protein: roundToSingle(item.nutrientsPer100g.protein * scale),
       carbs: roundToSingle(item.nutrientsPer100g.carbs * scale),
       fat: roundToSingle(item.nutrientsPer100g.fat * scale),
+      fiber: roundToSingle((item.nutrientsPer100g.fiber || 0) * scale),
+      sugar: roundToSingle((item.nutrientsPer100g.sugar || 0) * scale),
+      sodium_mg: roundToSingle((item.nutrientsPer100g.sodium_mg || 0) * scale),
     }
   }
 
@@ -114,6 +117,9 @@ function buildNutrientsFromWeight(
     protein: roundToSingle(item.baseNutrients.protein * ratio),
     carbs: roundToSingle(item.baseNutrients.carbs * ratio),
     fat: roundToSingle(item.baseNutrients.fat * ratio),
+    fiber: roundToSingle((item.baseNutrients.fiber || 0) * ratio),
+    sugar: roundToSingle((item.baseNutrients.sugar || 0) * ratio),
+    sodium_mg: roundToSingle((item.baseNutrients.sodium_mg || 0) * ratio),
   }
 }
 
@@ -218,7 +224,7 @@ function RecordManualPage() {
       {
         key: 'recent',
         title: '最近常吃',
-        subtitle: '优先帮你找回最近手动补录过的食物',
+        subtitle: '从标准食物库和真实餐食库里优先找回你最近常用的食物',
         items: browseData.recent_items || [],
       },
       sourceFilter === 'all' || sourceFilter === 'recent'
@@ -226,8 +232,8 @@ function RecordManualPage() {
     maybePush(
       {
         key: 'favorites',
-        title: '收藏优先',
-        subtitle: '复用你已经收藏过的公共库餐食',
+        title: '收藏餐食',
+        subtitle: '复用你已经收藏过的真实餐食',
         items: browseData.collected_public_library || [],
       },
       sourceFilter === 'all' || sourceFilter === 'favorites'
@@ -235,8 +241,8 @@ function RecordManualPage() {
     maybePush(
       {
         key: 'public_library',
-        title: '公共库推荐',
-        subtitle: '更适合直接补录整份餐食',
+        title: '真实餐食库',
+        subtitle: '适合直接补录整份饭、外卖或商家餐',
         items: browseData.public_library || [],
       },
       sourceFilter === 'all' || sourceFilter === 'public_library'
@@ -244,8 +250,8 @@ function RecordManualPage() {
     maybePush(
       {
         key: 'nutrition_library',
-        title: '标准营养词典',
-        subtitle: '适合单食材、按克重精调',
+        title: '标准食物库',
+        subtitle: '适合单食物、单原料，按克重精调营养',
         items: browseData.nutrition_library || [],
       },
       sourceFilter === 'all' || sourceFilter === 'nutrition_library'
@@ -264,6 +270,9 @@ function RecordManualPage() {
         protein: roundToSingle(item.total_protein),
         carbs: roundToSingle(item.total_carbs),
         fat: roundToSingle(item.total_fat),
+        fiber: roundToSingle(item.extra_nutrients?.fiber || item.nutrients_per_100g?.fiber || 0),
+        sugar: roundToSingle(item.extra_nutrients?.sugar || item.nutrients_per_100g?.sugar || 0),
+        sodium_mg: roundToSingle(item.extra_nutrients?.sodium_mg || item.nutrients_per_100g?.sodium_mg || 0),
       }
       if (index === -1) {
         return [
@@ -285,7 +294,7 @@ function RecordManualPage() {
             }, defaultWeight),
             nutrientsPer100g: item.nutrients_per_100g || undefined,
             imagePath: item.image_path || item.image_paths?.[0] || null,
-            recommendReason: item.recommend_reason,
+            recommendReason: item.nutrition_highlights?.join(' · ') || item.recommend_reason,
             usageCount: Number(item.usage_count || 0),
             collected: Boolean(item.collected),
           },
@@ -370,8 +379,11 @@ function RecordManualPage() {
         protein: acc.protein + item.nutrients.protein,
         carbs: acc.carbs + item.nutrients.carbs,
         fat: acc.fat + item.nutrients.fat,
+        fiber: acc.fiber + (item.nutrients.fiber || 0),
+        sugar: acc.sugar + (item.nutrients.sugar || 0),
+        sodium_mg: acc.sodium_mg + (item.nutrients.sodium_mg || 0),
       }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium_mg: 0 }
     )
   }, [selectedItems])
 
@@ -397,8 +409,9 @@ function RecordManualPage() {
           protein: item.nutrients.protein,
           carbs: item.nutrients.carbs,
           fat: item.nutrients.fat,
-          fiber: 0,
-          sugar: 0,
+          fiber: item.nutrients.fiber || 0,
+          sugar: item.nutrients.sugar || 0,
+          sodium_mg: item.nutrients.sodium_mg || 0,
         } as Nutrients,
         manual_source: item.source,
         manual_source_id: item.id,
@@ -467,7 +480,7 @@ function RecordManualPage() {
           <View className='food-name-row'>
             <Text className='food-name'>{item.title}</Text>
             <View className={`source-badge ${item.source}`}>
-              <Text>{item.source_label || (item.source === 'public_library' ? '公共库' : '营养词典')}</Text>
+              <Text>{item.source_label || (item.source === 'public_library' ? '真实餐食' : '标准食物')}</Text>
             </View>
           </View>
           <Text className='food-sub'>
@@ -475,8 +488,12 @@ function RecordManualPage() {
             {item.source === 'nutrition_library' ? ' / 100g' : ` / ${item.portion_label || '1份'}`}
             {item.subtitle ? ` · ${item.subtitle}` : ''}
           </Text>
-          {!!item.recommend_reason && (
-            <Text className='food-hint'>{item.recommend_reason}</Text>
+          {!!(item.nutrition_highlights?.length || item.recommend_reason) && (
+            <Text className='food-hint'>
+              {item.nutrition_highlights?.length
+                ? item.nutrition_highlights.join(' · ')
+                : item.recommend_reason}
+            </Text>
           )}
         </View>
         <View className={`add-btn ${selected ? 'active' : ''}`}>
@@ -499,7 +516,7 @@ function RecordManualPage() {
           <View className='workspace-header'>
             <View>
               <Text className='workspace-title'>单餐工作台</Text>
-              <Text className='workspace-subtitle'>先搜索，再批量加，最后统一调分量</Text>
+              <Text className='workspace-subtitle'>双库模式：标准食物库 + 真实餐食库</Text>
             </View>
             <View className='workspace-calories'>
               <Text className='workspace-calories-value'>{Math.round(totalNutrients.calories)}</Text>
@@ -525,7 +542,7 @@ function RecordManualPage() {
             <Text className='iconfont icon-sousuo search-icon' />
             <Input
               className='search-input'
-              placeholder='搜索食物、菜名、品牌'
+              placeholder='搜索标准食物、菜名、商家餐'
               value={searchText}
               onInput={(e) => setSearchText(e.detail.value)}
               confirmType='search'
@@ -665,14 +682,13 @@ function RecordManualPage() {
             <Text className='library-subtitle'>
               {normalizedQuery
                 ? `围绕“${normalizedQuery}”统一混排结果`
-                : '默认优先展示最近常吃、收藏公共库和推荐词典'}
+                : `当前以 ${browseData?.stats?.nutrition_food_count || 0} 条标准食物和 ${browseData?.stats?.public_food_count || 0} 条真实餐食为主库`}
             </Text>
           </View>
 
           {(browseLoading || searchLoading) ? (
             <View className='loading-state'>
               <View className='loading-spinner' />
-              <Text>{normalizedQuery ? '搜索中...' : '加载中...'}</Text>
             </View>
           ) : normalizedQuery ? (
             <View className='food-list'>

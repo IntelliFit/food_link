@@ -1,5 +1,5 @@
 import { View, Text, ScrollView } from '@tarojs/components'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getFoodExpiryDashboard,
@@ -217,7 +217,7 @@ export default function ExpiryPage() {
 
         {loading ? (
           <View className='expiry-empty'>
-            <Text>正在加载保质期数据...</Text>
+            <View className='expiry-loading-spinner' />
           </View>
         ) : items.length === 0 ? (
           <View className='expiry-empty'>

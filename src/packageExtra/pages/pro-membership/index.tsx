@@ -81,12 +81,11 @@ const normalizePeriodParam = (value: unknown): MembershipPeriod | null => {
     : null
 }
 
-// 当前已上线、且真实存在的差异
-const TIER_FEATURES: Array<{ label: string; values: Record<MembershipTier, string> }> = [
-  { label: '每日积分',  values: { light: '8 积分',  standard: '20 积分', advanced: '40 积分' } },
-  { label: '精准模式',  values: { light: '不支持', standard: '支持',   advanced: '支持' } },
-  { label: '适合频率',  values: { light: '轻量记录', standard: '日常使用', advanced: '高频使用' } },
-]
+const BASE_TIER_DAILY_CREDITS: Record<MembershipTier, number> = {
+  light: 8,
+  standard: 20,
+  advanced: 40,
+}
 
 function ProMembershipPage() {
   const { scheme } = useAppColorScheme()
@@ -247,6 +246,11 @@ function ProMembershipPage() {
   const isTrial = !isPro && !!membership?.trial_active
   const trialDaysTotal = membership?.trial_days_total ?? 0
   const isEarlyTrial = isTrial && trialDaysTotal >= 30
+  const earlyUserRank = membership?.early_user_rank ?? null
+  const earlyUserLimit = membership?.early_user_limit ?? 1000
+  const earlyUserEligible = !!membership?.early_user_paid_bonus_eligible
+  const paidBonusMultiplier = membership?.early_user_paid_bonus_multiplier ?? 1
+  const paidBonusActive = !!membership?.early_user_paid_bonus_active
   const creditsMax = membership?.daily_credits_max ?? 0
   const creditsUsed = membership?.daily_credits_used ?? 0
   const creditsRemaining = membership?.daily_credits_remaining ?? 0
@@ -258,6 +262,27 @@ function ProMembershipPage() {
   const currentPlanTier = getCurrentMembershipTier(membership)
   const currentPlanPeriod = getCurrentMembershipPeriod(membership)
   const selectedTierMeta = TIERS.find(t => t.key === selectedTier) || null
+  const tierCreditsDisplay = useMemo<Record<MembershipTier, number>>(() => {
+    const multiplier = earlyUserEligible ? Math.max(paidBonusMultiplier, 1) : 1
+    return {
+      light: BASE_TIER_DAILY_CREDITS.light * multiplier,
+      standard: BASE_TIER_DAILY_CREDITS.standard * multiplier,
+      advanced: BASE_TIER_DAILY_CREDITS.advanced * multiplier,
+    }
+  }, [earlyUserEligible, paidBonusMultiplier])
+  const tierFeatures = useMemo<Array<{ label: string; values: Record<MembershipTier, string> }>>(() => ([
+    {
+      label: '每日积分',
+      values: {
+        light: `${tierCreditsDisplay.light} 积分`,
+        standard: `${tierCreditsDisplay.standard} 积分`,
+        advanced: `${tierCreditsDisplay.advanced} 积分`,
+      },
+    },
+    { label: '精准模式', values: { light: '不支持', standard: '支持', advanced: '支持' } },
+    { label: '适合频率', values: { light: '轻量记录', standard: '日常使用', advanced: '高频使用' } },
+  ]), [tierCreditsDisplay])
+  const selectedTierCredits = selectedTierMeta ? tierCreditsDisplay[selectedTierMeta.key] : 0
   const isCurrentSelectedPlan = Boolean(isPro && selectedPlan && currentPlanCode === selectedPlan.code)
   const showPrecisionUpgradeNotice = Boolean(isPro && currentPlanTier === 'light')
   const routeSource = String(Taro.getCurrentInstance().router?.params?.source || '').trim()
@@ -332,10 +357,21 @@ function ProMembershipPage() {
             </View>
             <Text className='hero-laurel hero-laurel--right'>❦</Text>
           </View>
-          <View className='hero-copy'>
-            <Text className='hero-title'>食探会员</Text>
-            <Text className='hero-subtitle'>按使用强度选套餐，轻度版不含精准模式</Text>
+        <View className='hero-copy'>
+          <Text className='hero-title'>食探会员</Text>
+          <Text className='hero-subtitle'>
+            {earlyUserEligible
+              ? `你是首批第 ${earlyUserRank || '--'} / ${earlyUserLimit} 位用户，开通会员后每日积分翻倍`
+              : '按使用强度选套餐，轻度版不含精准模式'}
+          </Text>
+        </View>
+        {earlyUserEligible && (
+          <View className='hero-founder-badge'>
+            <Text className='hero-founder-badge-text'>
+              创始用户礼遇：会员积分 x{paidBonusMultiplier}
+            </Text>
           </View>
+        )}
 
           {!pageLoading && membership && (
             <View className={`hero-credits ${(isPro || isTrial) ? 'hero-credits--active' : 'hero-credits--idle'}`}>
@@ -344,7 +380,9 @@ function ProMembershipPage() {
                   <Text className='hero-credits-label'>
                     {isTrial
                       ? `🎁 ${isEarlyTrial ? '首批用户免费 1 个月' : '新用户免费试用'} · 今日已用积分`
-                      : '今日已用积分'}
+                      : paidBonusActive
+                        ? `🎁 创始会员积分 x${paidBonusMultiplier} · 今日已用积分`
+                        : '今日已用积分'}
                   </Text>
                   <View className='hero-credits-value-row'>
                     <Text className='hero-credits-value'>{creditsUsed}</Text>
@@ -352,7 +390,7 @@ function ProMembershipPage() {
                   </View>
                   <View className='hero-credits-pill'>
                     <Text className='hero-credits-tip'>
-                      剩余 {creditsRemaining} 积分 · 次日清零{bonusCredits > 0 ? ` · 含奖励 +${bonusCredits}` : ''}
+                      剩余 {creditsRemaining} 积分 · 次日清零{bonusCredits > 0 ? ` · 含奖励 +${bonusCredits}` : ''}{paidBonusActive ? ` · 创始翻倍 x${paidBonusMultiplier}` : ''}
                     </Text>
                   </View>
                 </>
@@ -360,7 +398,11 @@ function ProMembershipPage() {
                 <>
                   <Text className='hero-credits-label'>选择适合你的套餐</Text>
                   <View className='hero-credits-pill'>
-                    <Text className='hero-credits-tip'>开通后每日按套餐发放积分，当天有效不累计</Text>
+                    <Text className='hero-credits-tip'>
+                      {earlyUserEligible
+                        ? `你是首批第 ${earlyUserRank || '--'} 位用户，开通后每日按套餐积分 x${paidBonusMultiplier} 发放`
+                        : '开通后每日按套餐发放积分，当天有效不累计'}
+                    </Text>
                   </View>
                 </>
               )}
@@ -407,7 +449,7 @@ function ProMembershipPage() {
                   <Text className={`tier-card-icon tier-card-icon--${t.key}`}>{TIER_ICONS[t.key]}</Text>
                   <Text className='tier-card-name'>{t.name}</Text>
                 </View>
-                <Text className='tier-card-credits'>{t.credits}</Text>
+                <Text className='tier-card-credits'>{tierCreditsDisplay[t.key]}</Text>
                 <Text className='tier-card-credits-unit'>积分 / 日</Text>
                 <Text className='tier-card-summary'>{t.summary}</Text>
               </View>
@@ -470,7 +512,9 @@ function ProMembershipPage() {
         <View className='plan-card-left'>
           <Text className='plan-name'>{selectedPlan?.name || '食探会员'}</Text>
           <Text className='plan-desc'>
-            {selectedTierMeta?.summary || selectedPlan?.description || '每日积分发放，当天有效次日清零'}
+            {earlyUserEligible
+              ? `创始用户开通后每日 ${selectedTierCredits} 积分 · ${selectedTierMeta?.summary || selectedPlan?.description || '当天有效次日清零'}`
+              : (selectedTierMeta?.summary || selectedPlan?.description || '每日积分发放，当天有效次日清零')}
           </Text>
           {perMonthDisplay && (
             <Text className='plan-permonth'>≈ ¥{perMonthDisplay} / 月</Text>
@@ -507,7 +551,7 @@ function ProMembershipPage() {
             </View>
           ))}
         </View>
-        {TIER_FEATURES.map((f, i) => (
+        {tierFeatures.map((f, i) => (
           <View key={i} className='features-row'>
             <View className='features-row-label'>
               <Text className='features-row-label-text'>{f.label}</Text>
@@ -530,6 +574,7 @@ function ProMembershipPage() {
       {/* 积分说明 */}
       <View className='credits-hint-card'>
         <Text className='credits-hint-title'>💡 积分消耗</Text>
+        <Text className='credits-hint-item'>· 创始用户礼遇：前 1000 名注册用户开通会员后，每日套餐积分翻倍</Text>
         <Text className='credits-hint-item'>· 运动记录：1 积分 / 次</Text>
         <Text className='credits-hint-item'>· 基础记录 / 基础分析：2 积分 / 次</Text>
         <Text className='credits-hint-item credits-hint-item--muted'>积分每日发放，当天有效不累计</Text>
@@ -546,6 +591,20 @@ function ProMembershipPage() {
               {isPro ? '会员有效' : isTrial ? '试用中' : '未开通'}
             </Text>
           </View>
+          {earlyUserEligible && (
+            <>
+              <View className='status-row'>
+                <Text className='status-label'>创始用户编号</Text>
+                <Text className='status-value'>第 {earlyUserRank || '--'} / {earlyUserLimit} 位</Text>
+              </View>
+              <View className='status-row'>
+                <Text className='status-label'>创始礼遇</Text>
+                <Text className='status-value status-value--active'>
+                  付费会员积分 x{paidBonusMultiplier}{paidBonusActive ? '（已生效）' : '（开通后生效）'}
+                </Text>
+              </View>
+            </>
+          )}
           {isPro && (
             <>
               <View className='status-row'>
@@ -613,7 +672,9 @@ function ProMembershipPage() {
       <View className='action-section'>
         {isPro ? (
           <View className='renew-tip'>
-            <Text className='renew-tip-text'>会员生效中，可升档或续费</Text>
+            <Text className='renew-tip-text'>
+              {paidBonusActive ? `创始用户权益已生效，当前会员积分 x${paidBonusMultiplier}` : '会员生效中，可升档或续费'}
+            </Text>
           </View>
         ) : null}
         <Button

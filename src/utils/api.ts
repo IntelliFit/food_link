@@ -71,12 +71,31 @@ export interface PrecisionReferenceDimensions {
   height?: number
 }
 
+export type PrecisionReferencePresetKey =
+  | 'hand'
+  | 'campus_card'
+  | 'large_card'
+  | 'chopsticks'
+  | 'spoon'
+  | 'bank_card'
+  | 'custom'
+
 export interface PrecisionReferenceObjectInput {
   reference_type: 'preset' | 'custom'
   reference_name: string
   dimensions_mm?: PrecisionReferenceDimensions
   placement_note?: string
   applies_to_items?: string[]
+}
+
+export interface PrecisionReferencePresetConfig {
+  reference_name: string
+  dimensions_mm?: PrecisionReferenceDimensions
+}
+
+export interface PrecisionReferenceDefaults {
+  preferred_reference_key?: PrecisionReferencePresetKey
+  presets?: Partial<Record<PrecisionReferencePresetKey, PrecisionReferencePresetConfig>>
 }
 
 export interface AnalyzeGeoContext {
@@ -119,6 +138,7 @@ export interface Nutrients {
   fat: number
   fiber: number
   sugar: number
+  sodium_mg?: number
 }
 
 
@@ -778,6 +798,16 @@ export interface MembershipStatus {
   trial_days_total?: number
   /** 试用策略标识：early_first_1000 / regular_new_user */
   trial_policy?: 'early_first_1000' | 'regular_new_user' | null
+  /** 若属于首批用户，返回其注册序号（1-based） */
+  early_user_rank?: number | null
+  /** 创始用户活动总名额 */
+  early_user_limit?: number
+  /** 前 1000 名付费会员积分倍数 */
+  early_user_paid_bonus_multiplier?: number
+  /** 是否属于创始用户翻倍活动 */
+  early_user_paid_bonus_eligible?: boolean
+  /** 当前付费状态是否已按创始翻倍生效 */
+  early_user_paid_bonus_active?: boolean
   points_balance?: number | null
 }
 
@@ -842,6 +872,29 @@ export interface UpsertFoodExpiryItemRequest {
   status?: FoodExpiryStatus
 }
 
+export interface FoodExpiryRecognitionItem {
+  food_name: string
+  category?: string | null
+  storage_type?: FoodExpiryStorageType
+  quantity_note?: string | null
+  expire_date: string
+  opened_date?: string | null
+  note?: string | null
+  source_type?: FoodExpirySourceType
+  suggested_days?: number | null
+  expire_date_is_estimated?: boolean
+  confidence?: number | null
+  recognition_basis?: string | null
+  missing_fields?: string[]
+}
+
+export interface FoodExpiryRecognitionResponse {
+  task_id: string
+  credits_cost: number
+  items: FoodExpiryRecognitionItem[]
+  message: string
+}
+
 export interface FoodExpirySubscribeRequest {
   subscribe_status: string
   err_msg?: string
@@ -903,6 +956,7 @@ export interface HealthCondition {
   allergies?: string[]
   health_notes?: string
   report_extract?: ReportExtract | null
+  precision_reference_defaults?: PrecisionReferenceDefaults
   [key: string]: unknown
 }
 
@@ -947,6 +1001,8 @@ export interface HealthProfileUpdateRequest {
   mode_reason?: string
   /** 首页摄入目标，写入 health_condition.dashboard_targets（兼容未部署独立接口的生产环境） */
   dashboard_targets?: DashboardTargets
+  /** 精准模式默认参考物配置，写入 health_condition.precision_reference_defaults */
+  precision_reference_defaults?: PrecisionReferenceDefaults
 }
 
 // 更新用户信息请求接口
@@ -2480,6 +2536,24 @@ export async function createManagedFoodExpiryItem(data: UpsertFoodExpiryItemRequ
   return response.data as { message: string; item: FoodExpiryItem }
 }
 
+export async function recognizeManagedFoodExpiryItems(
+  imageUrls: string[],
+  additionalContext?: string,
+): Promise<FoodExpiryRecognitionResponse> {
+  const response = await authenticatedRequest('/api/expiry/recognize', {
+    method: 'POST',
+    data: {
+      image_urls: imageUrls,
+      additional_context: additionalContext || undefined,
+    },
+    timeout: 90000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '保质期识别失败')
+  }
+  return response.data as FoodExpiryRecognitionResponse
+}
+
 export async function getManagedFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
   const response = await authenticatedRequest(`/api/expiry/items/${id}`, {
     method: 'GET',
@@ -2779,6 +2853,14 @@ export interface ManualFoodSearchResult {
     protein: number
     carbs: number
     fat: number
+    fiber: number
+    sugar: number
+    sodium_mg?: number
+  }
+  extra_nutrients?: {
+    fiber: number
+    sugar: number
+    sodium_mg?: number
   }
   items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }> | null
   image_path?: string | null
@@ -2786,6 +2868,7 @@ export interface ManualFoodSearchResult {
   portion_label?: string
   source_label?: string
   recommend_reason?: string
+  nutrition_highlights?: string[]
   usage_count?: number
   collected?: boolean
   like_count?: number
@@ -2815,6 +2898,11 @@ export interface ManualFoodBrowseResult {
   collected_public_library: ManualFoodSearchResult[]
   public_library: ManualFoodSearchResult[]
   nutrition_library: ManualFoodSearchResult[]
+  stats?: {
+    nutrition_food_count: number
+    nutrition_alias_count: number
+    public_food_count: number
+  }
 }
 
 export async function browseManualFood(): Promise<ManualFoodBrowseResult> {

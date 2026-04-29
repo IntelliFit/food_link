@@ -169,7 +169,7 @@ from database import (
     list_pro_membership_payment_records,
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
-    is_user_in_first_membership_trial_batch,
+    get_first_membership_trial_batch_rank,
     get_daily_membership_bonus_breakdown,
     claim_share_poster_bonus,
     get_today_food_analysis_count,
@@ -258,6 +258,32 @@ VALID_MEAL_TYPES = set(MEAL_DISPLAY_ORDER) | {"snack"}
 EXPIRY_STORAGE_TYPES = {"room_temp", "refrigerated", "frozen"}
 EXPIRY_STATUS_TYPES = {"active", "consumed", "discarded"}
 EXPIRY_SOURCE_TYPES = {"manual", "ocr", "ai"}
+EXPIRY_RECOGNITION_CATEGORY_OPTIONS = (
+    "乳制品",
+    "水果",
+    "蔬菜",
+    "肉类",
+    "海鲜",
+    "蛋类",
+    "豆制品",
+    "熟食",
+    "剩菜",
+    "主食",
+    "面包",
+    "零食",
+    "饮料",
+    "冷冻食品",
+    "调味品",
+    "其他",
+)
+EXPIRY_RECOGNITION_MISSING_FIELDS = {
+    "food_name",
+    "category",
+    "storage_type",
+    "quantity_note",
+    "expire_date",
+    "note",
+}
 EXPIRY_SUBSCRIBE_ACCEPT_STATUSES = {"accept", "acceptwithalert", "acceptwithaudio"}
 EXPIRY_NOTIFICATION_TEMPLATE_ID = str(os.getenv("EXPIRY_SUBSCRIBE_TEMPLATE_ID") or "").strip()
 EXPIRY_NOTIFICATION_PAGE = "/pages/expiry/index"
@@ -757,6 +783,191 @@ def _normalize_food_expiry_item(row: Dict[str, Any], today_local: Optional[datet
     return item
 
 
+def _normalize_food_expiry_recognition_missing_fields(value: Any) -> List[str]:
+    fields = value if isinstance(value, list) else []
+    normalized: List[str] = []
+    for item in fields:
+        field = str(item or "").strip()
+        if not field or field not in EXPIRY_RECOGNITION_MISSING_FIELDS:
+            continue
+        if field not in normalized:
+            normalized.append(field)
+    return normalized
+
+
+def _normalize_food_expiry_recognition_item(
+    raw_item: Dict[str, Any],
+    *,
+    today_local: Optional[datetime] = None,
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(raw_item, dict):
+        return None
+
+    today = (today_local or datetime.now(CHINA_TZ)).date()
+    food_name = str(raw_item.get("food_name") or raw_item.get("name") or "").strip()
+    if not food_name:
+        return None
+
+    category = str(raw_item.get("category") or "").strip() or "其他"
+    if len(category) > 30:
+        category = category[:30].strip() or "其他"
+
+    storage_type = _normalize_expiry_storage_type(str(raw_item.get("storage_type") or "refrigerated"))
+    quantity_note = str(raw_item.get("quantity_note") or "").strip() or None
+    if quantity_note and len(quantity_note) > 40:
+        quantity_note = quantity_note[:40].strip() or None
+
+    suggested_days_raw = raw_item.get("suggested_days")
+    try:
+        suggested_days = int(suggested_days_raw) if suggested_days_raw is not None else None
+    except Exception:
+        suggested_days = None
+    if suggested_days is None:
+        suggested_days = 3
+    suggested_days = max(0, min(suggested_days, 365))
+
+    expire_date = _parse_date_string(str(raw_item.get("expire_date") or "").strip() or None, "expire_date")
+    if not expire_date:
+        expire_date = (today + timedelta(days=suggested_days)).strftime("%Y-%m-%d")
+
+    note = str(raw_item.get("note") or "").strip() or None
+    recognition_basis = str(raw_item.get("recognition_basis") or "").strip() or None
+    if recognition_basis and len(recognition_basis) > 120:
+        recognition_basis = recognition_basis[:120].strip() or None
+    if note and len(note) > 200:
+        note = note[:200].strip() or None
+    if not note and recognition_basis:
+        note = recognition_basis
+
+    confidence_raw = raw_item.get("confidence")
+    try:
+        confidence = float(confidence_raw) if confidence_raw is not None else None
+    except Exception:
+        confidence = None
+    if confidence is not None:
+        confidence = max(0.0, min(confidence, 1.0))
+
+    expire_date_is_estimated = bool(raw_item.get("expire_date_is_estimated"))
+    missing_fields = _normalize_food_expiry_recognition_missing_fields(raw_item.get("missing_fields"))
+
+    item = {
+        "food_name": food_name[:60].strip(),
+        "category": category,
+        "storage_type": storage_type,
+        "quantity_note": quantity_note,
+        "expire_date": expire_date,
+        "opened_date": None,
+        "note": note,
+        "source_type": "ai",
+        "status": "active",
+        "suggested_days": suggested_days,
+        "expire_date_is_estimated": expire_date_is_estimated,
+        "confidence": confidence,
+        "recognition_basis": recognition_basis,
+        "missing_fields": missing_fields,
+    }
+    return item
+
+
+def _build_food_expiry_recognition_prompt(
+    *,
+    today_str: str,
+    additional_context: str = "",
+) -> str:
+    context_block = additional_context.strip()
+    if context_block:
+        context_block = f"\n用户补充说明：{context_block}\n"
+    return f"""
+你是一个“食物保质期录入助手”。你的任务不是做营养分析，而是帮用户从图片里提取“适合录入保质期提醒”的结构化信息。
+
+今天日期：{today_str}
+{context_block}
+请根据图片识别多个食物，并输出适合前端表单预填的 JSON。
+
+要求：
+1. 支持一张图里出现多个食物，也支持多张图是同一批食物的不同角度。
+2. 如果多张图里是同一个食物的不同角度，只保留 1 条，不要重复输出。
+3. 尽量识别并填写：
+   - food_name：食物名
+   - category：只能从这些分类中选择最接近的一项：{", ".join(EXPIRY_RECOGNITION_CATEGORY_OPTIONS)}
+   - storage_type：只能为 room_temp / refrigerated / frozen
+   - quantity_note：如 2盒 / 半袋 / 3个，无法判断可留空
+   - expire_date：必须输出 YYYY-MM-DD
+   - note：给用户看的短备注，可写“AI 根据冷藏剩菜常见保存期预估，请确认”
+4. 如果包装上能清晰看到明确到期日/最佳赏味期，优先用图片中的明确日期，并将 expire_date_is_estimated 设为 false。
+5. 如果看不到明确日期，但能根据食物类型、储存方式、常见经验给出建议，请自行补充 suggested_days，并把 expire_date 设为“今天 + suggested_days”，同时将 expire_date_is_estimated 设为 true。
+6. 如果 quantity_note、日期、储存方式等识别不清，可以留空或保守猜测，但要在 missing_fields 中写出仍建议用户手动确认的字段。
+7. 只输出你相对有把握的食物；不要把背景里的无关物体当成食物。
+8. 最多输出 8 条食物。
+
+返回 JSON，格式严格如下：
+{{
+  "items": [
+    {{
+      "food_name": "纯牛奶",
+      "category": "乳制品",
+      "storage_type": "refrigerated",
+      "quantity_note": "2盒",
+      "expire_date": "{today_str}",
+      "expire_date_is_estimated": true,
+      "suggested_days": 3,
+      "note": "AI 根据常见冷藏乳制品保存期预估，请确认包装日期",
+      "recognition_basis": "识别到牛奶包装，但未看清明确到期日",
+      "confidence": 0.82,
+      "missing_fields": ["quantity_note"]
+    }}
+  ]
+}}
+
+只返回 JSON，不要输出额外解释。
+""".strip()
+
+
+def _recognize_food_expiry_from_images_sync(
+    image_urls: List[str],
+    *,
+    today_local: Optional[datetime] = None,
+    additional_context: str = "",
+) -> Dict[str, Any]:
+    if not image_urls:
+        raise RuntimeError("缺少图片")
+
+    from worker import _run_json_completion_sync
+
+    today = today_local or datetime.now(CHINA_TZ)
+    prompt = _build_food_expiry_recognition_prompt(
+        today_str=today.strftime("%Y-%m-%d"),
+        additional_context=additional_context,
+    )
+    content_parts: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
+    for url in image_urls:
+        content_parts.append({"type": "image_url", "image_url": {"url": url}})
+
+    parsed = _run_json_completion_sync(
+        source_type="image",
+        content=content_parts,
+        timeout_seconds=75.0,
+        temperature=0.2,
+    )
+    raw_items = parsed.get("items") if isinstance(parsed, dict) else None
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    items: List[Dict[str, Any]] = []
+    for raw_item in raw_items:
+        normalized = _normalize_food_expiry_recognition_item(raw_item, today_local=today)
+        if normalized:
+            items.append(normalized)
+
+    if not items:
+        raise RuntimeError("未识别到可用于保质期录入的食物，请换个角度拍清楚包装或食物主体后再试")
+
+    return {
+        "items": items,
+        "recognized_count": len(items),
+    }
+
+
 def _normalize_subscribe_status(value: Optional[str]) -> str:
     return str(value or "").strip()
 
@@ -1173,6 +1384,7 @@ TRIAL_DAILY_CREDITS = 8
 EARLY_USER_TRIAL_LIMIT = 1000
 EARLY_USER_TRIAL_DAYS = 30
 REGULAR_USER_TRIAL_DAYS = 3
+EARLY_USER_PAID_CREDITS_MULTIPLIER = 2
 INVITE_REWARD_CREDITS_PER_DAY = 5
 INVITE_REWARD_DAYS = 3
 INVITE_REWARD_MONTHLY_LIMIT = 10
@@ -1243,6 +1455,7 @@ async def _expire_pending_membership_orders_for_user(
 async def _resolve_user_trial_policy(
     user_id: str,
     user_row: Optional[Dict[str, Any]],
+    early_user_meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """解析用户免费试用策略与当前状态。"""
     if not user_row:
@@ -1262,7 +1475,8 @@ async def _resolve_user_trial_policy(
             "trial_policy": None,
         }
 
-    is_early_user = await is_user_in_first_membership_trial_batch(user_id, EARLY_USER_TRIAL_LIMIT)
+    meta = early_user_meta or await _resolve_early_user_membership_meta(user_id, user_row)
+    is_early_user = bool(meta.get("early_user_paid_bonus_eligible"))
     trial_days = EARLY_USER_TRIAL_DAYS if is_early_user else REGULAR_USER_TRIAL_DAYS
     trial_end = created_at + timedelta(days=trial_days)
     trial_policy = "early_first_1000" if is_early_user else "regular_new_user"
@@ -1271,6 +1485,32 @@ async def _resolve_user_trial_policy(
         "trial_expires_at": trial_end,
         "trial_days_total": trial_days,
         "trial_policy": trial_policy,
+    }
+
+
+async def _resolve_early_user_membership_meta(
+    user_id: str,
+    user_row: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """解析首批 1000 用户的创始编号与会员翻倍权益。"""
+    default_meta = {
+        "early_user_rank": None,
+        "early_user_limit": EARLY_USER_TRIAL_LIMIT,
+        "early_user_paid_bonus_multiplier": 1,
+        "early_user_paid_bonus_eligible": False,
+        "early_user_paid_bonus_active": False,
+    }
+    if not user_row or not resolve_user_registration_datetime(user_row):
+        return default_meta
+
+    rank = await get_first_membership_trial_batch_rank(user_id, EARLY_USER_TRIAL_LIMIT)
+    is_early_user = rank is not None
+    return {
+        "early_user_rank": rank,
+        "early_user_limit": EARLY_USER_TRIAL_LIMIT,
+        "early_user_paid_bonus_multiplier": EARLY_USER_PAID_CREDITS_MULTIPLIER if is_early_user else 1,
+        "early_user_paid_bonus_eligible": is_early_user,
+        "early_user_paid_bonus_active": False,
     }
 
 
@@ -1290,24 +1530,33 @@ async def _compute_daily_credits_status(
     trial_days_total = 0
     trial_policy: Optional[str] = None
     daily_credits_base = 0
+    early_user_meta = await _resolve_early_user_membership_meta(user_id, user_row)
+    early_multiplier = int(early_user_meta.get("early_user_paid_bonus_multiplier") or 1)
     if is_pro and membership:
-        daily_max = int(membership.get("daily_credits") or 0)
-        # 若老会员无 daily_credits 快照，回落到套餐配置
-        if daily_max <= 0:
-            plan_code = membership.get("current_plan_code")
-            if plan_code:
-                plan = await get_membership_plan_by_code(plan_code)
-                if plan:
-                    daily_max = int(plan.get("daily_credits") or 0)
+        membership_daily_credits = int(membership.get("daily_credits") or 0)
+        plan_daily_credits = 0
+        plan_code = membership.get("current_plan_code")
+        if plan_code:
+            plan = await get_membership_plan_by_code(plan_code)
+            if plan:
+                plan_daily_credits = int(plan.get("daily_credits") or 0)
+
+        daily_credits_base = membership_daily_credits or plan_daily_credits
+        if bool(early_user_meta.get("early_user_paid_bonus_eligible")) and early_multiplier > 1 and daily_credits_base > 0:
+            boosted_target = (plan_daily_credits * early_multiplier) if plan_daily_credits > 0 else (daily_credits_base * early_multiplier)
+            daily_credits_base = max(daily_credits_base, boosted_target)
+            early_user_meta["early_user_paid_bonus_active"] = True
+        daily_max = daily_credits_base
     if daily_max <= 0 and not is_pro:
-        trial_meta = await _resolve_user_trial_policy(user_id, user_row)
+        trial_meta = await _resolve_user_trial_policy(user_id, user_row, early_user_meta=early_user_meta)
         trial_active = bool(trial_meta.get("trial_active"))
         trial_expires_at = trial_meta.get("trial_expires_at")
         trial_days_total = int(trial_meta.get("trial_days_total") or 0)
         trial_policy = str(trial_meta.get("trial_policy") or "").strip() or None
         if trial_active:
             daily_max = TRIAL_DAILY_CREDITS
-    daily_credits_base = max(daily_max, 0)
+            daily_credits_base = TRIAL_DAILY_CREDITS
+    daily_credits_base = max(daily_credits_base or daily_max, 0)
 
     bonus_breakdown = await get_daily_membership_bonus_breakdown(
         user_id,
@@ -1338,6 +1587,11 @@ async def _compute_daily_credits_status(
         "trial_expires_at": _build_json_datetime(trial_expires_at) if trial_expires_at else None,
         "trial_days_total": trial_days_total,
         "trial_policy": trial_policy,
+        "early_user_rank": early_user_meta.get("early_user_rank"),
+        "early_user_limit": int(early_user_meta.get("early_user_limit") or EARLY_USER_TRIAL_LIMIT),
+        "early_user_paid_bonus_multiplier": early_multiplier,
+        "early_user_paid_bonus_eligible": bool(early_user_meta.get("early_user_paid_bonus_eligible")),
+        "early_user_paid_bonus_active": bool(early_user_meta.get("early_user_paid_bonus_active")),
     }
 
 
@@ -1646,6 +1900,65 @@ class PrecisionReferenceObjectInput(BaseModel):
     dimensions_mm: Optional[PrecisionReferenceDimensions] = Field(default=None, description="参考物尺寸（毫米）")
     placement_note: Optional[str] = Field(default=None, description="摆放说明")
     applies_to_items: Optional[List[str]] = Field(default=None, description="适用主体 item_key 列表")
+
+
+VALID_PRECISION_REFERENCE_PRESET_KEYS = {
+    "hand",
+    "campus_card",
+    "large_card",
+    "chopsticks",
+    "spoon",
+    "bank_card",
+    "custom",
+}
+
+
+class PrecisionReferencePresetConfig(BaseModel):
+    reference_name: str = Field(..., description="默认参考物名称")
+    dimensions_mm: Optional[PrecisionReferenceDimensions] = Field(default=None, description="默认参考物尺寸（毫米）")
+
+
+class PrecisionReferenceDefaults(BaseModel):
+    preferred_reference_key: Optional[str] = Field(default=None, description="默认参考物 key")
+    presets: Optional[Dict[str, PrecisionReferencePresetConfig]] = Field(default=None, description="按 key 保存的默认参考物配置")
+
+
+def _normalize_precision_reference_defaults(
+    defaults: Optional[PrecisionReferenceDefaults],
+) -> Optional[Dict[str, Any]]:
+    if defaults is None:
+        return None
+
+    preferred_reference_key = str(defaults.preferred_reference_key or "").strip().lower()
+    if preferred_reference_key and preferred_reference_key not in VALID_PRECISION_REFERENCE_PRESET_KEYS:
+        preferred_reference_key = ""
+
+    normalized_presets: Dict[str, Dict[str, Any]] = {}
+    for raw_key, preset in (defaults.presets or {}).items():
+        key = str(raw_key or "").strip().lower()
+        if key not in VALID_PRECISION_REFERENCE_PRESET_KEYS or preset is None:
+            continue
+        reference_name = str(preset.reference_name or "").strip()
+        if not reference_name:
+            continue
+        dims = preset.dimensions_mm.dict() if preset.dimensions_mm else {}
+        normalized_dims = {
+            axis: float(dims[axis])
+            for axis in ("length", "width", "height")
+            if dims.get(axis) is not None and float(dims[axis]) > 0
+        }
+        normalized_presets[key] = {
+            "reference_name": reference_name,
+            "dimensions_mm": normalized_dims or None,
+        }
+
+    if not preferred_reference_key and not normalized_presets:
+        return None
+
+    return {
+        "preferred_reference_key": preferred_reference_key or None,
+        "presets": normalized_presets or None,
+    }
 
 
 class AnalyzeRequest(BaseModel):
@@ -2125,6 +2438,11 @@ class MembershipStatusResponse(BaseModel):
     trial_expires_at: Optional[str] = None  # 试用截止（UTC）
     trial_days_total: int = 0              # 当前试用总天数：30 / 3 / 0
     trial_policy: Optional[str] = None     # early_first_1000 / regular_new_user
+    early_user_rank: Optional[int] = None  # 若属于前 1000 名，则返回其注册名次（1-based）
+    early_user_limit: int = 0              # 创始用户活动总名额
+    early_user_paid_bonus_multiplier: int = 1  # 前 1000 名付费会员积分倍数
+    early_user_paid_bonus_eligible: bool = False # 是否属于创始用户翻倍活动
+    early_user_paid_bonus_active: bool = False   # 当前付费权益是否已按创始翻倍生效
 
 
 class ClaimSharePosterRewardRequest(BaseModel):
@@ -4492,6 +4810,11 @@ class FoodExpiryItemUpsertRequest(BaseModel):
     status: Optional[str] = Field(default="active", description="状态: active / consumed / discarded")
 
 
+class FoodExpiryRecognitionRequest(BaseModel):
+    image_urls: List[str] = Field(..., min_length=1, max_length=5, description="待识别的食物图片 URL 列表")
+    additional_context: Optional[str] = Field(default=None, max_length=200, description="用户补充说明")
+
+
 class FoodExpiryStatusUpdateRequest(BaseModel):
     status: str = Field(..., description="状态: active / consumed / discarded")
 
@@ -4553,6 +4876,10 @@ class HealthProfileUpdateRequest(BaseModel):
     dashboard_targets: Optional[DashboardTargetsUpdateRequest] = Field(
         None,
         description="首页摄入目标（写入 health_condition.dashboard_targets，兼容未部署独立接口的旧服务）",
+    )
+    precision_reference_defaults: Optional[PrecisionReferenceDefaults] = Field(
+        None,
+        description="精准模式默认参考物配置（写入 health_condition.precision_reference_defaults）",
     )
     execution_mode: Optional[str] = Field(
         None,
@@ -5011,6 +5338,10 @@ async def wechat_membership_notify(request: Request):
     # 取新套餐的每日积分，作为 user_pro_memberships.daily_credits 快照
     plan_for_credits = await get_membership_plan_by_code(payment_record.get("plan_code") or "")
     plan_daily_credits = int((plan_for_credits or {}).get("daily_credits") or 0)
+    paid_user_row = await get_user_by_id(payment_record["user_id"])
+    early_user_meta = await _resolve_early_user_membership_meta(payment_record["user_id"], paid_user_row)
+    if bool(early_user_meta.get("early_user_paid_bonus_eligible")) and plan_daily_credits > 0:
+        plan_daily_credits *= int(early_user_meta.get("early_user_paid_bonus_multiplier") or 1)
 
     await save_user_pro_membership(
         payment_record["user_id"],
@@ -5237,6 +5568,14 @@ async def update_health_profile(
             "carbs_target": round(float(dt.carbs_target), 1),
             "fat_target": round(float(dt.fat_target), 1),
         }
+    if body.precision_reference_defaults is not None:
+        normalized_precision_reference_defaults = _normalize_precision_reference_defaults(
+            body.precision_reference_defaults
+        )
+        if normalized_precision_reference_defaults:
+            health_condition["precision_reference_defaults"] = normalized_precision_reference_defaults
+        else:
+            health_condition.pop("precision_reference_defaults", None)
     # 若有体检报告 OCR 结果，一并写入 user_health_documents（含 image_url 与识别结果）
     if body.report_extract:
         try:
@@ -5566,6 +5905,7 @@ class FoodRecordItemNutrients(BaseModel):
     fat: float = 0
     fiber: float = 0
     sugar: float = 0
+    sodium_mg: float = 0
 
 
 class FoodRecordItem(BaseModel):
@@ -5657,7 +5997,7 @@ async def manual_food_browse(
 ):
     """
     浏览食物数据库（无需登录）。
-    返回公共食物库和标准营养词典的全量数据，供前端可视化展示。
+    返回公共食物库和标准营养词典的浏览分组与库规模信息，供前端展示。
     """
     try:
         data = await browse_manual_food_library(
@@ -6181,6 +6521,93 @@ async def get_food_expiry_dashboard(
     except Exception as e:
         print(f"[get_food_expiry_dashboard] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取保质期摘要失败")
+
+
+@app.post("/api/expiry/recognize")
+async def recognize_food_expiry_items(
+    body: FoodExpiryRecognitionRequest,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """根据图片识别适合录入保质期的多个食物，并返回表单预填建议。"""
+    user_id = user_info["user_id"]
+    image_urls: List[str] = []
+    for raw_url in body.image_urls:
+        url = str(raw_url or "").strip()
+        if not url:
+            continue
+        if url not in image_urls:
+            image_urls.append(url)
+    if not image_urls:
+        raise HTTPException(status_code=400, detail="请至少提供 1 张图片")
+
+    additional_context = str(body.additional_context or "").strip()
+    user_row = await get_user_by_id(user_id)
+    membership = await _get_effective_membership(user_id)
+    membership_resp = _format_membership_response(membership)
+    await _raise_if_food_analysis_credits_insufficient(
+        user_id=user_id,
+        user_row=user_row,
+        membership=membership,
+        membership_resp=membership_resp,
+    )
+
+    task = None
+    try:
+        task = await asyncio.to_thread(
+            create_analysis_task_sync,
+            user_id=user_id,
+            task_type=_get_food_task_type("food"),
+            image_url=image_urls[0],
+            image_urls=image_urls,
+            payload={
+                "expiry_recognition": True,
+                "recognize_mode": "food_expiry",
+                "additional_context": additional_context or None,
+            },
+        )
+        await asyncio.to_thread(
+            update_analysis_task_result_sync,
+            task_id=task["id"],
+            status="processing",
+        )
+
+        recognized = await asyncio.to_thread(
+            _recognize_food_expiry_from_images_sync,
+            image_urls,
+            today_local=datetime.now(CHINA_TZ),
+            additional_context=additional_context,
+        )
+        result_payload = {
+            "recognize_mode": "food_expiry",
+            "items": recognized["items"],
+        }
+        await asyncio.to_thread(
+            update_analysis_task_result_sync,
+            task_id=task["id"],
+            status="done",
+            result=result_payload,
+        )
+        return {
+            "task_id": task["id"],
+            "credits_cost": CREDIT_COST_PER_FOOD_ANALYSIS,
+            "items": recognized["items"],
+            "message": f"已识别 {len(recognized['items'])} 项食物，可继续补充后保存",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        if task and task.get("id"):
+            try:
+                await asyncio.to_thread(
+                    update_analysis_task_result_sync,
+                    task_id=task["id"],
+                    status="failed",
+                    error_message=str(e)[:300],
+                )
+            except Exception:
+                pass
+        print(f"[recognize_food_expiry_items] 错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e) or "保质期识别失败")
 
 
 @app.get("/api/expiry/items")

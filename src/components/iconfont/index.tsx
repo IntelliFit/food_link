@@ -190,6 +190,16 @@ export const IconHistory = ({ size = 48, color = '#000000', className = '' }: Ic
   )
 }
 
+/** 收藏图标 */
+export const IconFavorite = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-shoucang-yishoucang ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
 /** 麦克风/语音输入图标 */
 export const IconMicrophone = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
   return (
