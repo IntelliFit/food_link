@@ -1,5 +1,37 @@
 # CURRENT_TASK
 
+- Task: 为数据库关键路径补充 Trace 埋点，定位“网络错误，稍后重试”
+- Status: done（已在 `backend/database.py` 关键函数补齐 trace event + exception 记录，并扩展到高频查询/统计路径）
+- Scope:
+  - `backend/database.py`
+    - 新增轻量 trace helper：`_safe_add_span_event`、`_record_db_exception`
+    - 在 `get_supabase_client` / `check_supabase_configured` 记录配置态与异常
+    - 在 `create_analysis_task_sync` 记录任务创建成功/失败事件
+    - 在 `claim_next_pending_task_sync` 记录 `empty/success/lost_race/error` 事件，并保留原有“网络错误，稍后重试”输出
+    - 扩展到高频 API 相关路径：
+      - `list_food_records` / `list_food_records_by_range`
+      - `get_cached_insight` / `get_latest_cached_insight` / `upsert_insight_cache`
+      - `get_analysis_task_by_id_sync` / `get_analysis_tasks_by_ids` / `list_analysis_tasks_by_user_sync`
+      - `get_today_food_analysis_count` / `get_today_exercise_log_count`
+- Verification:
+  - `python -m py_compile backend/database.py` 通过
+  - `ReadLints`（`backend/database.py`）无新增告警
+
+- Task: 在业务层补充 Trace 埋点（非数据库）
+- Status: done（`backend/main.py` 已补关键入口的业务事件与异常埋点）
+- Scope:
+  - 新增业务 trace helper：`_trace_add_event`、`_trace_record_error`
+  - 新增业务 tracer：`_biz_tracer = trace.get_tracer("food_link.backend.main")`
+  - 已补埋点入口：
+    - `/api/analyze/submit`
+    - `/api/analyze/tasks/{task_id}`
+    - `/api/food-record/save`
+    - `/api/food-record/list`
+    - `/api/food-record/{record_id}`
+- Verification:
+  - `python -m py_compile backend/main.py` 通过
+  - `ReadLints`（`backend/main.py`）无新增告警
+
 - Task: 后端接入 OpenTelemetry 并回传 Trace ID
 - Status: done（已接通 OTLP HTTP trace/logs 上报；响应头支持返回 `x-trace-id` / `traceparent`，并新增实例标识头）
 - Scope:

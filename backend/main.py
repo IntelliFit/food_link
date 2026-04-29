@@ -204,6 +204,7 @@ from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import Status, StatusCode
 from opentelemetry.trace import format_span_id, format_trace_id
 
 # 从 .env 文件加载环境变量
@@ -221,6 +222,7 @@ INSTANCE_ID = (
     or os.getenv("COMPUTERNAME", "").strip()
     or "unknown-instance"
 )
+_biz_tracer = trace.get_tracer("food_link.backend.main")
 
 
 def _normalize_otlp_http_endpoint(value: Optional[str], signal_path: str) -> str:
@@ -234,6 +236,34 @@ def _normalize_otlp_http_endpoint(value: Optional[str], signal_path: str) -> str
 
 def _build_traceparent(trace_id_hex: str, span_id_hex: str, sampled: bool) -> str:
     return f"00-{trace_id_hex}-{span_id_hex}-{'01' if sampled else '00'}"
+
+
+def _trace_add_event(name: str, attrs: Optional[Dict[str, Any]] = None) -> None:
+    span = trace.get_current_span()
+    span_context = span.get_span_context() if span else None
+    if not span_context or not span_context.is_valid:
+        return
+    safe_attrs = {k: v for k, v in (attrs or {}).items() if v is not None}
+    span.add_event(name, safe_attrs)
+
+
+def _trace_record_error(stage: str, err: Exception, **attrs: Any) -> None:
+    span = trace.get_current_span()
+    span_context = span.get_span_context() if span else None
+    err_type = type(err).__name__
+    err_msg = str(err)[:300]
+    _trace_add_event(
+        "biz.error",
+        {
+            "biz.stage": stage,
+            "error.type": err_type,
+            "error.message": err_msg,
+            **attrs,
+        },
+    )
+    if span_context and span_context.is_valid:
+        span.record_exception(err)
+        span.set_status(Status(StatusCode.ERROR, f"{stage}:{err_type}"))
 
 
 def _setup_otel_observability(target_app: FastAPI) -> None:
@@ -3587,10 +3617,24 @@ async def analyze_submit(
     提交食物分析任务（异步）。立即返回 task_id，Worker 子进程会在后台执行分析，
     完成后可通过 GET /api/analyze/tasks/{task_id} 或列表接口查看结果。
     """
-    if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
-        raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
-    if body.image_urls and len(body.image_urls) > 1 and not body.is_multi_view:
-        raise HTTPException(status_code=400, detail="上传多张图片前请先开启多视角模式")
+    with _biz_tracer.start_as_current_span("biz.analyze_submit"):
+        _trace_add_event(
+            "biz.submit.received",
+            {
+                "biz.user_id": user_info["user_id"],
+                "biz.has_image_url": bool(body.image_url and body.image_url.strip()),
+                "biz.image_urls.count": len(body.image_urls or []),
+                "biz.multi_view": bool(body.is_multi_view),
+                "biz.execution_mode.requested": body.execution_mode or "",
+                "biz.has_precision_session": bool(body.precision_session_id),
+            },
+        )
+        if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
+            _trace_add_event("biz.submit.invalid_input", {"biz.reason": "missing_image_url"})
+            raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
+        if body.image_urls and len(body.image_urls) > 1 and not body.is_multi_view:
+            _trace_add_event("biz.submit.invalid_input", {"biz.reason": "multi_images_without_multi_view"})
+            raise HTTPException(status_code=400, detail="上传多张图片前请先开启多视角模式")
 
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
     user = await get_user_by_id(user_info["user_id"])
@@ -3627,6 +3671,7 @@ async def analyze_submit(
     }
 
     if effective_mode == "strict" or body.precision_session_id:
+        _trace_add_event("biz.submit.strict_mode.enter", {"biz.execution_mode.effective": effective_mode})
         session = None
         source_type = "image"
         if body.precision_session_id:
@@ -3727,6 +3772,10 @@ async def analyze_submit(
                 "current_task_id": precision_task["id"],
             },
         )
+        _trace_add_event(
+            "biz.submit.strict_mode.task_created",
+            {"biz.task_id": precision_task["id"], "biz.session_id": current_session_id},
+        )
         return {
             "task_id": precision_task["id"],
             "message": "精准模式任务已提交，系统将先判断是否需要补充信息或拆分估计",
@@ -3761,12 +3810,14 @@ async def analyze_submit(
                 "payload": task.get("payload"),
             },
         )
+        _trace_add_event("biz.submit.task_created", {"biz.task_id": task["id"], "biz.task_type": task.get("task_type")})
         print(
             f"[food_analysis] MODERATION_SKIPPED_CONFIRMED task_id={task['id']} submit_type=image",
             flush=True,
         )
         return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
     except Exception as e:
+        _trace_record_error("analyze_submit", e, **{"biz.user_id": user_info["user_id"]})
         print(f"[analyze/submit] 错误: {e}")
         raise HTTPException(status_code=500, detail="提交任务失败")
 
@@ -3799,12 +3850,23 @@ async def get_analyze_task(
     user_info: dict = Depends(get_current_user_info),
 ):
     """查询单条任务详情（仅能查看本人任务）。"""
-    task = await asyncio.to_thread(get_analysis_task_by_id_sync, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-    if task.get("user_id") != user_info["user_id"]:
-        raise HTTPException(status_code=403, detail="无权查看该任务")
-    return task
+    with _biz_tracer.start_as_current_span("biz.get_analyze_task"):
+        _trace_add_event("biz.task_detail.requested", {"biz.task_id": task_id, "biz.user_id": user_info["user_id"]})
+        try:
+            task = await asyncio.to_thread(get_analysis_task_by_id_sync, task_id)
+            if not task:
+                _trace_add_event("biz.task_detail.not_found", {"biz.task_id": task_id})
+                raise HTTPException(status_code=404, detail="任务不存在")
+            if task.get("user_id") != user_info["user_id"]:
+                _trace_add_event("biz.task_detail.forbidden", {"biz.task_id": task_id})
+                raise HTTPException(status_code=403, detail="无权查看该任务")
+            _trace_add_event("biz.task_detail.success", {"biz.task_id": task_id, "biz.status": task.get("status") or ""})
+            return task
+        except HTTPException:
+            raise
+        except Exception as e:
+            _trace_record_error("get_analyze_task", e, **{"biz.task_id": task_id})
+            raise HTTPException(status_code=500, detail="查询任务详情失败")
 
 
 class UpdateAnalysisResultRequest(BaseModel):
@@ -6173,8 +6235,13 @@ async def save_food_record(
         }
         for item in body.items
     ]
-    try:
-        row = await insert_food_record(
+    with _biz_tracer.start_as_current_span("biz.save_food_record"):
+        _trace_add_event(
+            "biz.food_record.save.requested",
+            {"biz.user_id": user_id, "biz.meal_type": normalized_meal_type, "biz.items.count": len(body.items or [])},
+        )
+        try:
+            row = await insert_food_record(
             user_id=user_id,
             meal_type=normalized_meal_type,
             image_path=body.image_path,
@@ -6194,16 +6261,19 @@ async def save_food_record(
             context_advice=body.context_advice,
             source_task_id=body.source_task_id,
         )
-        # 后台预刷新 AI 营养洞察（周/月），不阻塞本次保存
-        try:
-            asyncio.create_task(_refresh_stats_insight_for_user(user_id))
-        except Exception as bg_err:
-            print(f"[save_food_record] 启动后台刷新 AI 洞察失败: {bg_err}")
+            # 后台预刷新 AI 营养洞察（周/月），不阻塞本次保存
+            try:
+                asyncio.create_task(_refresh_stats_insight_for_user(user_id))
+            except Exception as bg_err:
+                _trace_record_error("save_food_record.refresh_insight", bg_err, **{"biz.user_id": user_id})
+                print(f"[save_food_record] 启动后台刷新 AI 洞察失败: {bg_err}")
 
-        return {"id": row.get("id"), "message": "记录成功"}
-    except Exception as e:
-        print(f"[save_food_record] 错误: {e}")
-        raise HTTPException(status_code=500, detail="保存记录失败")
+            _trace_add_event("biz.food_record.save.success", {"biz.record_id": row.get("id")})
+            return {"id": row.get("id"), "message": "记录成功"}
+        except Exception as e:
+            _trace_record_error("save_food_record", e, **{"biz.user_id": user_id, "biz.meal_type": normalized_meal_type})
+            print(f"[save_food_record] 错误: {e}")
+            raise HTTPException(status_code=500, detail="保存记录失败")
 
 
 @app.get("/api/food-record/list")
@@ -6216,36 +6286,40 @@ async def get_food_record_list(
     若记录有 source_task_id 且无 image_paths，则从 analysis_tasks 补全 image_paths 供多图展示。
     """
     user_id = user_info["user_id"]
-    try:
-        records = await list_food_records(user_id=user_id, date=date, limit=100)
-        # 补全多图：有 source_task_id 且 record 无 image_paths 时从任务表拉取
-        task_ids = [
-            r["source_task_id"]
-            for r in records
-            if r.get("source_task_id")
-            and (not r.get("image_paths") or (isinstance(r.get("image_paths"), list) and len(r.get("image_paths") or []) == 0))
-        ]
-        if task_ids:
-            tasks_map = await get_analysis_tasks_by_ids(list(set(task_ids)))
+    with _biz_tracer.start_as_current_span("biz.get_food_record_list"):
+        _trace_add_event("biz.food_record.list.requested", {"biz.user_id": user_id, "biz.date": date or ""})
+        try:
+            records = await list_food_records(user_id=user_id, date=date, limit=100)
+            # 补全多图：有 source_task_id 且 record 无 image_paths 时从任务表拉取
+            task_ids = [
+                r["source_task_id"]
+                for r in records
+                if r.get("source_task_id")
+                and (not r.get("image_paths") or (isinstance(r.get("image_paths"), list) and len(r.get("image_paths") or []) == 0))
+            ]
+            if task_ids:
+                tasks_map = await get_analysis_tasks_by_ids(list(set(task_ids)))
+                for r in records:
+                    tid = r.get("source_task_id")
+                    if not tid or (r.get("image_paths") and isinstance(r.get("image_paths"), list) and len(r["image_paths"]) > 0):
+                        continue
+                    task = tasks_map.get(tid)
+                    if task:
+                        paths = task.get("image_paths")
+                        if paths and isinstance(paths, list) and len(paths) > 0:
+                            r["image_paths"] = list(paths)
+                        elif task.get("image_url"):
+                            r["image_paths"] = [task["image_url"]]
+                        elif r.get("image_path"):
+                            r["image_paths"] = [r["image_path"]]
             for r in records:
-                tid = r.get("source_task_id")
-                if not tid or (r.get("image_paths") and isinstance(r.get("image_paths"), list) and len(r["image_paths"]) > 0):
-                    continue
-                task = tasks_map.get(tid)
-                if task:
-                    paths = task.get("image_paths")
-                    if paths and isinstance(paths, list) and len(paths) > 0:
-                        r["image_paths"] = list(paths)
-                    elif task.get("image_url"):
-                        r["image_paths"] = [task["image_url"]]
-                    elif r.get("image_path"):
-                        r["image_paths"] = [r["image_path"]]
-        for r in records:
-            r["meal_type"] = _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time"))
-        return {"records": records}
-    except Exception as e:
-        print(f"[get_food_record_list] 错误: {e}")
-        raise HTTPException(status_code=500, detail="获取记录失败")
+                r["meal_type"] = _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time"))
+            _trace_add_event("biz.food_record.list.success", {"biz.records.count": len(records)})
+            return {"records": records}
+        except Exception as e:
+            _trace_record_error("get_food_record_list", e, **{"biz.user_id": user_id, "biz.date": date or ""})
+            print(f"[get_food_record_list] 错误: {e}")
+            raise HTTPException(status_code=500, detail="获取记录失败")
 
 
 async def _hydrate_food_record_image_paths(record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -6287,21 +6361,27 @@ async def get_food_record_detail(
     获取单条饮食记录详情。需验证记录属于当前用户。
     """
     user_id = user_info["user_id"]
-    try:
-        record = await get_food_record_by_id(record_id)
-        if not record:
-            raise HTTPException(status_code=404, detail="记录不存在")
-        # 验证权限：记录必须属于当前用户
-        if record.get("user_id") != user_id:
-            raise HTTPException(status_code=403, detail="无权访问此记录")
-        record = await _hydrate_food_record_image_paths(record)
-        record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
-        return {"record": record}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[get_food_record_detail] 错误: {e}")
-        raise HTTPException(status_code=500, detail="获取记录详情失败")
+    with _biz_tracer.start_as_current_span("biz.get_food_record_detail"):
+        _trace_add_event("biz.food_record.detail.requested", {"biz.user_id": user_id, "biz.record_id": record_id})
+        try:
+            record = await get_food_record_by_id(record_id)
+            if not record:
+                _trace_add_event("biz.food_record.detail.not_found", {"biz.record_id": record_id})
+                raise HTTPException(status_code=404, detail="记录不存在")
+            # 验证权限：记录必须属于当前用户
+            if record.get("user_id") != user_id:
+                _trace_add_event("biz.food_record.detail.forbidden", {"biz.record_id": record_id})
+                raise HTTPException(status_code=403, detail="无权访问此记录")
+            record = await _hydrate_food_record_image_paths(record)
+            record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
+            _trace_add_event("biz.food_record.detail.success", {"biz.record_id": record_id})
+            return {"record": record}
+        except HTTPException:
+            raise
+        except Exception as e:
+            _trace_record_error("get_food_record_detail", e, **{"biz.record_id": record_id, "biz.user_id": user_id})
+            print(f"[get_food_record_detail] 错误: {e}")
+            raise HTTPException(status_code=500, detail="获取记录详情失败")
 
 
 class UpdateFoodRecordRequest(BaseModel):
