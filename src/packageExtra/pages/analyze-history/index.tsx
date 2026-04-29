@@ -373,7 +373,11 @@ function AnalyzeHistoryPage() {
         22000,
         () => ({ tasks: [] as AnalysisTask[] })
       )
-      const allTasks = (res.tasks || []).filter((t) => isAnalyzeHistoryTaskType(t.task_type))
+        const allTasks = (res.tasks || []).filter((t) => {
+          const payload = (t.payload || {}) as Record<string, unknown>
+          if (payload.expiry_recognition) return false
+          return isAnalyzeHistoryTaskType(t.task_type)
+        })
       allTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       if (seq !== loadSeqRef.current) return
       setTasks(allTasks)

@@ -13,8 +13,13 @@ import {
   DietGoal,
   ActivityTiming,
   getHealthProfile,
+  updateHealthProfile,
   getMyMembership,
-  MembershipStatus
+  MembershipStatus,
+  PrecisionReferenceDefaults,
+  PrecisionReferenceDimensions,
+  PrecisionReferencePresetConfig,
+  PrecisionReferencePresetKey
 } from '../../../utils/api'
 import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -61,19 +66,81 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
   { value: 'none', label: '无', iconClass: 'icon-nothing' }
 ]
 
+type ReferencePresetValue = PrecisionReferencePresetKey
+
 const REFERENCE_PRESETS: Array<{
-  value: string
+  value: ReferencePresetValue
   label: string
-  dimensions: { length?: number; width?: number; height?: number }
+  dimensions: PrecisionReferenceDimensions
 }> = [
-  { value: 'chopsticks', label: '筷子', dimensions: { length: 240, width: 7, height: 7 } },
-  { value: 'spoon', label: '勺子', dimensions: { length: 170, width: 40, height: 15 } },
-  { value: 'bank_card', label: '银行卡', dimensions: { length: 85.6, width: 54, height: 0.8 } },
-  { value: 'can', label: '易拉罐', dimensions: { height: 122, width: 66, length: 66 } },
-  { value: 'bottle', label: '瓶装水', dimensions: { height: 210, width: 65, length: 65 } },
-  { value: 'plate', label: '常见餐盘', dimensions: { length: 220, width: 220, height: 25 } },
+  { value: 'hand', label: '手掌', dimensions: { length: 175, width: 85, height: 25 } },
+  { value: 'campus_card', label: '常规卡片', dimensions: { length: 85.6, width: 54, height: 0.8 } },
+  { value: 'large_card', label: '大卡片', dimensions: { length: 120, width: 76, height: 1 } },
   { value: 'custom', label: '自定义', dimensions: {} }
 ]
+
+const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
+
+const normalizePositiveReferenceDimension = (value: unknown): number | undefined => {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : undefined
+}
+
+const buildDefaultReferenceDefaults = (): PrecisionReferenceDefaults => ({
+  preferred_reference_key: DEFAULT_REFERENCE_PRESET,
+  presets: REFERENCE_PRESETS.reduce<Partial<Record<ReferencePresetValue, PrecisionReferencePresetConfig>>>((acc, preset) => {
+    if (preset.value === 'custom') return acc
+    acc[preset.value] = {
+      reference_name: preset.label,
+      dimensions_mm: { ...preset.dimensions },
+    }
+    return acc
+  }, {})
+})
+
+const normalizeReferencePresetConfig = (
+  preset: PrecisionReferencePresetConfig | Record<string, unknown> | undefined,
+  fallbackLabel: string,
+): PrecisionReferencePresetConfig => {
+  const raw = preset || {}
+  const dimensionsSource = (raw as PrecisionReferencePresetConfig).dimensions_mm || {}
+  const normalizedDimensions: PrecisionReferenceDimensions = {}
+  const length = normalizePositiveReferenceDimension(dimensionsSource.length)
+  const width = normalizePositiveReferenceDimension(dimensionsSource.width)
+  const height = normalizePositiveReferenceDimension(dimensionsSource.height)
+  if (length != null) normalizedDimensions.length = length
+  if (width != null) normalizedDimensions.width = width
+  if (height != null) normalizedDimensions.height = height
+  return {
+    reference_name: String((raw as PrecisionReferencePresetConfig).reference_name || fallbackLabel).trim() || fallbackLabel,
+    dimensions_mm: Object.keys(normalizedDimensions).length > 0 ? normalizedDimensions : undefined,
+  }
+}
+
+const normalizeReferenceDefaults = (value: unknown): PrecisionReferenceDefaults => {
+  const base = buildDefaultReferenceDefaults()
+  if (!value || typeof value !== 'object') return base
+  const raw = value as PrecisionReferenceDefaults
+  const mergedPresets: Partial<Record<ReferencePresetValue, PrecisionReferencePresetConfig>> = { ...(base.presets || {}) }
+  REFERENCE_PRESETS.forEach((preset) => {
+    const savedPreset = raw.presets?.[preset.value]
+    if (!savedPreset) {
+      if (preset.value === 'custom' && !mergedPresets.custom) {
+        mergedPresets.custom = { reference_name: preset.label, dimensions_mm: undefined }
+      }
+      return
+    }
+    mergedPresets[preset.value] = normalizeReferencePresetConfig(savedPreset, preset.label)
+  })
+  const preferred = raw.preferred_reference_key
+  const preferred_reference_key = REFERENCE_PRESETS.some(preset => preset.value === preferred)
+    ? preferred
+    : DEFAULT_REFERENCE_PRESET
+  return {
+    preferred_reference_key,
+    presets: mergedPresets,
+  }
+}
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; tips: string[] }> = {
   strict: {
@@ -210,11 +277,14 @@ function AnalyzePage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [precisionSessionId, setPrecisionSessionId] = useState('')
-  const [referencePreset, setReferencePreset] = useState('chopsticks')
-  const [referenceName, setReferenceName] = useState('筷子')
-  const [referenceLength, setReferenceLength] = useState('240')
-  const [referenceWidth, setReferenceWidth] = useState('7')
-  const [referenceHeight, setReferenceHeight] = useState('7')
+  const [savedReferenceDefaults, setSavedReferenceDefaults] = useState<PrecisionReferenceDefaults>(
+    () => buildDefaultReferenceDefaults()
+  )
+  const [referencePreset, setReferencePreset] = useState<ReferencePresetValue>(DEFAULT_REFERENCE_PRESET)
+  const [referenceName, setReferenceName] = useState('手掌')
+  const [referenceLength, setReferenceLength] = useState('175')
+  const [referenceWidth, setReferenceWidth] = useState('85')
+  const [referenceHeight, setReferenceHeight] = useState('25')
   const [referencePlacementNote, setReferencePlacementNote] = useState('')
 
   const imagePathsRef = useRef<string[]>([])
@@ -289,6 +359,9 @@ function AnalyzePage() {
           if (!nextSessionId && profile.execution_mode) {
             setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
           }
+          const referenceDefaults = normalizeReferenceDefaults(profile.health_condition?.precision_reference_defaults)
+          setSavedReferenceDefaults(referenceDefaults)
+          applyReferencePreset(referenceDefaults.preferred_reference_key || DEFAULT_REFERENCE_PRESET, referenceDefaults)
           // 加载会员状态和配额
           try {
             const ms = await getMyMembership()
@@ -330,30 +403,73 @@ function AnalyzePage() {
     initStoredImagePath()
   }, [])
 
-  const handleReferencePresetSelect = (value: string) => {
+  const getReferencePresetConfig = (
+    value: ReferencePresetValue,
+    defaults: PrecisionReferenceDefaults = savedReferenceDefaults,
+  ): PrecisionReferencePresetConfig => {
+    const presetMeta = REFERENCE_PRESETS.find(item => item.value === value)
+    const fallbackLabel = presetMeta?.label || '参考物'
+    const savedPreset = defaults.presets?.[value]
+    if (savedPreset) {
+      return normalizeReferencePresetConfig(savedPreset, fallbackLabel)
+    }
+    return {
+      reference_name: fallbackLabel,
+      dimensions_mm: presetMeta?.dimensions && Object.keys(presetMeta.dimensions).length > 0
+        ? { ...presetMeta.dimensions }
+        : undefined,
+    }
+  }
+
+  const applyReferencePreset = (
+    value: ReferencePresetValue,
+    defaults: PrecisionReferenceDefaults = savedReferenceDefaults,
+  ) => {
     setReferencePreset(value)
-    const target = REFERENCE_PRESETS.find(item => item.value === value)
-    if (!target) return
-    setReferenceName(target.label)
-    setReferenceLength(target.dimensions.length != null ? String(target.dimensions.length) : '')
-    setReferenceWidth(target.dimensions.width != null ? String(target.dimensions.width) : '')
-    setReferenceHeight(target.dimensions.height != null ? String(target.dimensions.height) : '')
+    const target = getReferencePresetConfig(value, defaults)
+    setReferenceName(target.reference_name)
+    setReferenceLength(target.dimensions_mm?.length != null ? String(target.dimensions_mm.length) : '')
+    setReferenceWidth(target.dimensions_mm?.width != null ? String(target.dimensions_mm.width) : '')
+    setReferenceHeight(target.dimensions_mm?.height != null ? String(target.dimensions_mm.height) : '')
+  }
+
+  const handleReferencePresetSelect = (value: ReferencePresetValue) => {
+    applyReferencePreset(value)
+  }
+
+  const buildNextReferenceDefaults = (): PrecisionReferenceDefaults => {
+    const currentPresetConfig = normalizeReferencePresetConfig({
+      reference_name: referenceName.trim() || getReferencePresetConfig(referencePreset).reference_name,
+      dimensions_mm: {
+        length: normalizePositiveReferenceDimension(referenceLength),
+        width: normalizePositiveReferenceDimension(referenceWidth),
+        height: normalizePositiveReferenceDimension(referenceHeight),
+      },
+    }, getReferencePresetConfig(referencePreset).reference_name)
+
+    return {
+      preferred_reference_key: referencePreset,
+      presets: {
+        ...(savedReferenceDefaults.presets || {}),
+        [referencePreset]: currentPresetConfig,
+      },
+    }
   }
 
   const buildReferenceObjects = (): PrecisionReferenceObjectInput[] => {
     if (executionMode !== 'strict') return []
     const name = referenceName.trim()
     if (!name) return []
-    const length = Number(referenceLength)
-    const width = Number(referenceWidth)
-    const height = Number(referenceHeight)
+    const length = normalizePositiveReferenceDimension(referenceLength)
+    const width = normalizePositiveReferenceDimension(referenceWidth)
+    const height = normalizePositiveReferenceDimension(referenceHeight)
     return [{
       reference_type: referencePreset === 'custom' ? 'custom' : 'preset',
       reference_name: name,
       dimensions_mm: {
-        ...(Number.isFinite(length) && length > 0 ? { length } : {}),
-        ...(Number.isFinite(width) && width > 0 ? { width } : {}),
-        ...(Number.isFinite(height) && height > 0 ? { height } : {}),
+        ...(length != null ? { length } : {}),
+        ...(width != null ? { width } : {}),
+        ...(height != null ? { height } : {}),
       },
       placement_note: referencePlacementNote.trim() || undefined,
     }]
@@ -454,6 +570,7 @@ function AnalyzePage() {
 
       const primaryImageUrl = imageUrls[0]
       const referenceObjects = buildReferenceObjects()
+      const nextReferenceDefaults = buildNextReferenceDefaults()
 
       Taro.showLoading({ title: '提交任务...', mask: true })
       const commonPayload = {
@@ -474,6 +591,12 @@ function AnalyzePage() {
       Taro.setStorageSync('analyzeDietGoal', dietGoal)
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
+      setSavedReferenceDefaults(nextReferenceDefaults)
+      updateHealthProfile({
+        precision_reference_defaults: nextReferenceDefaults,
+      }).catch((error) => {
+        console.warn('[analyze] 保存默认参考物失败', error)
+      })
 
       // 图片分析统一走异步任务流程：
       // 多图也先进入 analyze-loading，由后台继续处理，用户可直接离开当前页。
@@ -730,12 +853,12 @@ function AnalyzePage() {
 
       {executionMode === 'strict' && (
         <View className='details-section'>
-          <View className='section-header'>
-            <Text className='section-title'>参考物</Text>
-          </View>
-          <Text className='section-hint'>
-            精准模式下可录入一个参考物和尺寸，系统会在需要时把它当作比例尺参与估重。
-          </Text>
+        <View className='section-header'>
+          <Text className='section-title'>参考物</Text>
+        </View>
+        <Text className='section-hint'>
+          精准模式下可录入一个参考物和尺寸。默认会记住你常用的手掌或卡片大小，下次直接复用。
+        </Text>
 
           {precisionSessionId ? (
             <View className='precision-session-tip'>

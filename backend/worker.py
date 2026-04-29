@@ -878,7 +878,7 @@ def _build_precision_plan_prompt(
   "retakeInstructions": ["请补一张顶部图", "请把鸡腿和米饭分开拍"],
   "pendingRequirements": ["reference_object", "cook_method"],
   "referenceObjectNeeded": true,
-  "referenceObjectSuggestions": ["筷子", "银行卡", "易拉罐"],
+"referenceObjectSuggestions": ["手掌", "常规卡片", "大卡片"],
   "uncertaintyNotes": ["米饭厚度不清楚"],
   "rejectionReason": "当前主体遮挡严重",
   "description": "可继续精估" ,

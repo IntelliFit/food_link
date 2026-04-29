@@ -15,6 +15,7 @@ import {
   IconText,
   IconEdit,
   IconHistory,
+  IconFavorite,
   IconChevronRight,
   IconTrendingUp
 } from '../../../components/iconfont'
@@ -65,13 +66,22 @@ const GRID_FEATURES: Array<{
   },
 ]
 
-// 底部只有历史记录
-const HISTORY_ITEM = {
-  id: 'history',
-  label: '历史记录',
-  Icon: IconHistory,
-  color: '#6b7280',
-}
+const QUICK_ACCESS_ITEMS = [
+  {
+    id: 'favorites',
+    label: '我的收藏',
+    desc: '快速记录常吃餐食',
+    Icon: IconFavorite,
+    color: '#f59e0b',
+  },
+  {
+    id: 'history',
+    label: '历史记录',
+    desc: '查看以往识别记录',
+    Icon: IconHistory,
+    color: '#6b7280',
+  },
+] as const
 
 export function RecordMenu({ visible, onClose }: RecordMenuProps) {
   const [devToolsOpen, setDevToolsOpen] = useState(false)
@@ -154,9 +164,16 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
     }
   }
 
-  const handleHistoryClick = () => {
+  const handleQuickAccessClick = (modeId: string) => {
     onClose()
-    Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+    switch (modeId) {
+      case 'favorites':
+        Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })
+        break
+      case 'history':
+        Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+        break
+    }
   }
 
   const runDevTool = (fn: () => void) => {
@@ -208,22 +225,31 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           })}
         </View>
 
-        {/* 底部历史记录 */}
+        {/* 底部快捷入口 */}
         <View className='record-menu-list-v2'>
-          <View
-            className='record-menu-list-item-v2'
-            onClick={handleHistoryClick}
-          >
-            <View className='record-menu-list-left'>
-              <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${HISTORY_ITEM.color}15` }}>
-                <HISTORY_ITEM.Icon size={24} color={HISTORY_ITEM.color} />
+          {QUICK_ACCESS_ITEMS.map((item) => {
+            const IconComponent = item.Icon
+            return (
+              <View
+                key={item.id}
+                className='record-menu-list-item-v2'
+                onClick={() => handleQuickAccessClick(item.id)}
+              >
+                <View className='record-menu-list-left'>
+                  <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${item.color}15` }}>
+                    <IconComponent size={24} color={item.color} />
+                  </View>
+                  <View className='record-menu-list-texts'>
+                    <Text className='record-menu-list-label-v2'>{item.label}</Text>
+                    <Text className='record-menu-list-desc-v2'>{item.desc}</Text>
+                  </View>
+                </View>
+                <View className='record-menu-list-right'>
+                  <IconChevronRight size={16} color='#d1d5db' />
+                </View>
               </View>
-              <Text className='record-menu-list-label-v2'>{HISTORY_ITEM.label}</Text>
-            </View>
-            <View className='record-menu-list-right'>
-              <IconChevronRight size={16} color='#d1d5db' />
-            </View>
-          </View>
+            )
+          })}
 
           {__ENABLE_DEV_DEBUG_UI__ && (
             <View className='record-menu-dev-toolkit'>

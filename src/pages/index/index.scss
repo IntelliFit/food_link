@@ -2813,6 +2813,12 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   gap: 16rpx;
 }
 
+.record-menu-list-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
 .record-menu-list-icon-wrap {
   width: 48rpx;
   height: 48rpx;
@@ -2827,6 +2833,12 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   font-weight: 500;
   color: #1f2937;
   line-height: 42rpx;
+}
+
+.record-menu-list-desc-v2 {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #94a3b8;
 }
 
 .record-menu-list-right {

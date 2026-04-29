@@ -196,6 +196,12 @@ async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
 
 async def is_user_in_first_membership_trial_batch(user_id: str, limit: int = 1000) -> bool:
     """判断用户是否属于会员首批试用批次（按注册时间升序前 N 名）。"""
+    rank = await get_first_membership_trial_batch_rank(user_id, limit)
+    return rank is not None
+
+
+async def get_first_membership_trial_batch_rank(user_id: str, limit: int = 1000) -> Optional[int]:
+    """返回用户在首批会员创始用户中的名次（1-based）；若不在前 N 名则返回 None。"""
     check_supabase_configured()
     supabase = get_supabase_client()
 
@@ -213,9 +219,12 @@ async def is_user_in_first_membership_trial_batch(user_id: str, limit: int = 100
             )
         )
         rows = rows[:limit]
-        return any(str(row.get("id") or "") == user_id for row in rows)
+        for index, row in enumerate(rows, start=1):
+            if str(row.get("id") or "") == user_id:
+                return index
+        return None
     except Exception as e:
-        print(f"[is_user_in_first_membership_trial_batch] 错误: {e}")
+        print(f"[get_first_membership_trial_batch_rank] 错误: {e}")
         raise
 
 
@@ -5339,12 +5348,72 @@ def _safe_manual_food_number(value: Any) -> float:
         return 0.0
 
 
+def _build_manual_nutrient_payload(
+    *,
+    calories: float = 0.0,
+    protein: float = 0.0,
+    carbs: float = 0.0,
+    fat: float = 0.0,
+    fiber: float = 0.0,
+    sugar: float = 0.0,
+    sodium_mg: float = 0.0,
+) -> Dict[str, float]:
+    return {
+        "calories": round(_safe_manual_food_number(calories), 2),
+        "protein": round(_safe_manual_food_number(protein), 2),
+        "carbs": round(_safe_manual_food_number(carbs), 2),
+        "fat": round(_safe_manual_food_number(fat), 2),
+        "fiber": round(_safe_manual_food_number(fiber), 2),
+        "sugar": round(_safe_manual_food_number(sugar), 2),
+        "sodium_mg": round(_safe_manual_food_number(sodium_mg), 2),
+    }
+
+
+def _build_manual_food_highlights(nutrients: Dict[str, float]) -> List[str]:
+    highlights: List[str] = []
+    fiber = _safe_manual_food_number(nutrients.get("fiber"))
+    sugar = _safe_manual_food_number(nutrients.get("sugar"))
+    sodium_mg = _safe_manual_food_number(nutrients.get("sodium_mg"))
+    if fiber > 0:
+        highlights.append(f"纤维 {round(fiber, 1)}g")
+    if sugar > 0:
+        highlights.append(f"糖 {round(sugar, 1)}g")
+    if sodium_mg > 0:
+        highlights.append(f"钠 {round(sodium_mg)}mg")
+    return highlights[:3]
+
+
+def _sum_manual_public_item_extra_nutrients(items_raw: List[Dict[str, Any]]) -> Dict[str, float]:
+    fiber = 0.0
+    sugar = 0.0
+    sodium_mg = 0.0
+    for item in items_raw:
+        if not isinstance(item, dict):
+            continue
+        nutrients = item.get("nutrients") or {}
+        if not isinstance(nutrients, dict):
+            continue
+        fiber += _safe_manual_food_number(nutrients.get("fiber"))
+        sugar += _safe_manual_food_number(nutrients.get("sugar"))
+        sodium_mg += _safe_manual_food_number(
+            nutrients.get("sodium_mg")
+            or nutrients.get("sodiumMg")
+            or nutrients.get("sodium")
+        )
+    return _build_manual_nutrient_payload(
+        fiber=fiber,
+        sugar=sugar,
+        sodium_mg=sodium_mg,
+    )
+
+
 def _build_manual_public_food_result(
     row: Dict[str, Any],
     *,
     collected: bool = False,
 ) -> Dict[str, Any]:
     items_raw = row.get("items") or []
+    extra_nutrients = _sum_manual_public_item_extra_nutrients(items_raw)
     total_weight = sum(
         max(int((it or {}).get("weight") or (it or {}).get("estimatedWeightGrams") or 0), 0)
         for it in items_raw
@@ -5364,39 +5433,111 @@ def _build_manual_public_food_result(
         "image_path": row.get("image_path"),
         "image_paths": row.get("image_paths"),
         "portion_label": "1份",
-        "source_label": "公共库",
+        "source_label": "真实餐食",
         "like_count": int(row.get("like_count") or 0),
         "collection_count": int(row.get("collection_count") or 0),
         "collected": bool(collected),
+        "extra_nutrients": extra_nutrients,
+        "nutrition_highlights": _build_manual_food_highlights(extra_nutrients),
     }
 
 
 def _build_manual_nutrition_food_result(row: Dict[str, Any]) -> Dict[str, Any]:
+    nutrients_per_100g = _build_manual_nutrient_payload(
+        calories=row.get("kcal_per_100g"),
+        protein=row.get("protein_per_100g"),
+        carbs=row.get("carbs_per_100g"),
+        fat=row.get("fat_per_100g"),
+        fiber=row.get("fiber_per_100g"),
+        sugar=row.get("sugar_per_100g"),
+        sodium_mg=row.get("sodium_mg_per_100g"),
+    )
     return {
         "id": str(row["id"]),
         "source": "nutrition_library",
         "title": row.get("canonical_name") or "未知食物",
         "subtitle": "标准食物词典 · 每100g",
         "default_weight_grams": 100,
-        "total_calories": _safe_manual_food_number(row.get("kcal_per_100g")),
-        "total_protein": _safe_manual_food_number(row.get("protein_per_100g")),
-        "total_carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
-        "total_fat": _safe_manual_food_number(row.get("fat_per_100g")),
-        "nutrients_per_100g": {
-            "calories": _safe_manual_food_number(row.get("kcal_per_100g")),
-            "protein": _safe_manual_food_number(row.get("protein_per_100g")),
-            "carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
-            "fat": _safe_manual_food_number(row.get("fat_per_100g")),
-        },
+        "total_calories": nutrients_per_100g["calories"],
+        "total_protein": nutrients_per_100g["protein"],
+        "total_carbs": nutrients_per_100g["carbs"],
+        "total_fat": nutrients_per_100g["fat"],
+        "nutrients_per_100g": nutrients_per_100g,
         "items": None,
         "image_path": None,
         "image_paths": None,
         "portion_label": "100g",
-        "source_label": "营养词典",
+        "source_label": "标准食物",
         "collected": False,
         "like_count": 0,
         "collection_count": 0,
+        "extra_nutrients": {
+            "fiber": nutrients_per_100g["fiber"],
+            "sugar": nutrients_per_100g["sugar"],
+            "sodium_mg": nutrients_per_100g["sodium_mg"],
+        },
+        "nutrition_highlights": _build_manual_food_highlights(nutrients_per_100g),
     }
+
+
+_manual_food_stats_cache: Dict[str, Any] = {
+    "value": None,
+    "expires_at": None,
+}
+
+
+def _get_cached_manual_food_stats() -> Optional[Dict[str, int]]:
+    expires_at = _manual_food_stats_cache.get("expires_at")
+    if expires_at and isinstance(expires_at, datetime) and expires_at > datetime.now(timezone.utc):
+        cached = _manual_food_stats_cache.get("value")
+        if isinstance(cached, dict):
+            return cached
+    return None
+
+
+def _set_cached_manual_food_stats(value: Dict[str, int], ttl_seconds: int = 600) -> None:
+    _manual_food_stats_cache["value"] = value
+    _manual_food_stats_cache["expires_at"] = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+
+
+async def get_manual_food_library_stats() -> Dict[str, int]:
+    cached = _get_cached_manual_food_stats()
+    if cached:
+        return cached
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        nutrition_resp = supabase.table("food_nutrition_library") \
+            .select("id", count="exact") \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+        alias_resp = supabase.table("food_nutrition_aliases") \
+            .select("id", count="exact") \
+            .limit(1) \
+            .execute()
+        public_resp = supabase.table("public_food_library") \
+            .select("id", count="exact") \
+            .eq("status", "published") \
+            .limit(1) \
+            .execute()
+        stats = {
+            "nutrition_food_count": int(getattr(nutrition_resp, "count", 0) or 0),
+            "nutrition_alias_count": int(getattr(alias_resp, "count", 0) or 0),
+            "public_food_count": int(getattr(public_resp, "count", 0) or 0),
+        }
+        _set_cached_manual_food_stats(stats)
+        return stats
+    except Exception as e:
+        print(f"[get_manual_food_library_stats] 错误: {e}")
+        fallback = {
+            "nutrition_food_count": 0,
+            "nutrition_alias_count": 0,
+            "public_food_count": 0,
+        }
+        _set_cached_manual_food_stats(fallback, ttl_seconds=120)
+        return fallback
 
 
 def _compute_manual_food_match_score(
@@ -5661,7 +5802,7 @@ async def search_manual_food(
 
     try:
         fnl = supabase.table("food_nutrition_library")\
-            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
             .eq("is_active", True)\
             .ilike("canonical_name", f"%{q}%")\
             .limit(search_limit)\
@@ -5677,7 +5818,7 @@ async def search_manual_food(
         extra_rows = []
         if alias_food_ids:
             extra = supabase.table("food_nutrition_library")\
-                .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+                .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
                 .eq("is_active", True)\
                 .in_("id", alias_food_ids[:search_limit])\
                 .execute()
@@ -5739,7 +5880,7 @@ async def browse_manual_food_library(
 
     try:
         fnl = supabase.table("food_nutrition_library")\
-            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
             .eq("is_active", True)\
             .order("canonical_name")\
             .limit(160)\
@@ -5763,6 +5904,7 @@ async def browse_manual_food_library(
         "collected_public_library": collected_public_library[:8],
         "public_library": public_items[:18],
         "nutrition_library": nutrition_items[:36],
+        "stats": await get_manual_food_library_stats(),
     }
 
 

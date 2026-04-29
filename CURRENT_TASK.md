@@ -1,5 +1,216 @@
 # CURRENT_TASK
 
+- Task: 手动记录页面心智收口为“双库模式”
+- Status: done（前台展示正式收口为 `food_nutrition_library + public_food_library` 两类；静态校验通过；`weapp-devtools` 运行态验证仍受本机 `mrc.cmd` 权限阻塞）
+- Scope:
+  - 前端：
+    - `src/packageExtra/pages/record-manual/index.tsx`
+      - 顶部副标题改为“双库模式：标准食物库 + 真实餐食库”
+      - 搜索占位文案改为“搜索标准食物、菜名、商家餐”
+      - 筛选 chip 文案收口为：`全部 / 最近常吃 / 收藏餐食 / 真实餐食 / 标准食物`
+      - 默认浏览分组文案统一收口：
+        - `收藏优先 -> 收藏餐食`
+        - `公共库推荐 -> 真实餐食库`
+        - `标准营养词典 -> 标准食物库`
+      - 库说明文案不再强调 `aliases`，改为只强调两张主库：`标准食物 + 真实餐食`
+      - 结果卡来源徽标 fallback 也同步改为 `真实餐食 / 标准食物`
+  - 后端：
+    - `backend/database.py`
+      - 手动记录搜索结果里的 `source_label` 改为 `真实餐食 / 标准食物`
+- Product behavior:
+  - 前台只把 `food_nutrition_library` 视作标准食物主库，把 `public_food_library` 视作真实餐食补充库
+  - `food_nutrition_aliases` 继续只承担后台搜索召回角色，不再在页面文案里作为“可见库”出现
+  - `food_unresolved_logs` 继续只作为后台补词典日志，不进入手动记录展示层
+- Verification:
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\database.py backend\\main.py` 通过
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
+  - 已按项目要求尝试 `weapp-devtools`：
+    - `cmd /c where mrc` 可定位到 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
+    - 直接执行 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd where --port 9420` 当前返回 `Access is denied.`
+  - 因此本轮仍未能补运行态截图与页面交互验证
+- Notes:
+  - 这次是“展示层心智收口”，没有改动 alias 搜索召回逻辑本身
+
+- Task: 手动记录补强“标准营养库 + 大词典”利用率
+- Status: done（后端已确认当前实库存在 `11275` 条 `food_nutrition_library` 与 `9925` 条 `food_nutrition_aliases`；手动记录已接通更多营养字段与库规模提示；运行态自动化验证受 DevTools `9420` 端口未开启阻塞）
+- Scope:
+  - 数据现状核对：
+    - 通过 Supabase 当前 `rest/v1` 实查，确认“手动记录”相关食物表当前量级为：
+      - `food_nutrition_library = 11275`
+      - `food_nutrition_aliases = 9925`
+      - `public_food_library = 48`
+      - `food_unresolved_logs = 40`
+    - 结论：用户感知到的“大量食物数据”主要来自标准营养库与别名库，而不是公共库
+  - 后端：
+    - `backend/database.py`
+      - 手动记录搜索/浏览从营养库补充读取 `fiber_per_100g / sugar_per_100g / sodium_mg_per_100g`
+      - 公共库结果会从 `items[].nutrients` 汇总 `fiber / sugar / sodium`
+      - 新增手动记录食物库规模统计缓存，浏览接口返回 `nutrition_food_count / nutrition_alias_count / public_food_count`
+      - 搜索结果补充 `extra_nutrients / nutrition_highlights`
+    - `backend/main.py`
+      - `FoodRecordItemNutrients` 新增 `sodium_mg`
+      - 手动记录浏览接口说明更新为“返回浏览分组 + 库规模信息”
+  - 前端：
+    - `src/utils/api.ts`
+      - `Nutrients` 新增可选 `sodium_mg`
+      - 手动记录搜索结果类型补充 `fiber / sugar / sodium_mg`、`extra_nutrients`、`nutrition_highlights`
+      - 手动记录浏览结果新增 `stats`
+    - `src/packageExtra/pages/record-manual/index.tsx`
+      - 选中项营养计算不再只算热量/蛋白/碳水/脂肪，也会保留 `fiber / sugar / sodium_mg`
+      - 保存手动记录时不再把 `fiber / sugar` 强制写成 `0`，同时把 `sodium_mg` 一并写入 `items[].nutrients`
+      - 搜索/推荐卡片会优先展示 `纤维 / 糖 / 钠` 营养亮点
+      - 默认浏览文案会明确提示“已接入 11275 种标准食物、9925 个别名”
+      - 页面加载 spinner 已去掉“加载中/搜索中”文字，符合项目加载态规范
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - `node .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
+  - 当前返回 `Failed connecting to ws://localhost:9420`，说明微信开发者工具自动化端口未开启，因此未能补运行态截图与交互验证
+- Notes:
+  - 当前手动记录其实早已接了 `public_food_library + food_nutrition_library + food_nutrition_aliases + food_unresolved_logs` 四层，但过去前端感知较弱，且额外营养字段没有被真正带到记录保存链路
+  - 本轮没有改动“搜索排序主逻辑”，而是先优先补足“库规模可见性 + 额外营养字段真正落记录”这两层
+
+- Task: 保质期提醒新增“拍照识别预填”多食物录入能力
+- Status: done（前后端代码已落地；静态校验通过；`weapp-devtools` 运行态验证受本机 `mrc` shim 调用阻塞）
+- Scope:
+  - 后端：
+    - `backend/main.py`
+      - 新增 `POST /api/expiry/recognize`
+      - 复用现有视觉模型做“多食物保质期识别”，返回结构化预填字段
+      - 识别调用按现有食物分析口径计入 `2` 积分消耗，并以 `payload.expiry_recognition=true` 隐藏标记，避免混入普通分析历史
+  - 前端：
+    - `src/utils/api.ts`
+      - 新增 `recognizeManagedFoodExpiryItems(...)`
+      - 新增保质期 AI 识别响应类型
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - 新增“拍照识别预填”区：支持最多 `5` 张图
+      - 识别后生成多个待确认食物卡片
+      - 每个卡片沿用原有保质期表单结构，用户只需补齐缺失信息
+      - 支持“手动再加一项”，兼容 AI 识别 + 手动补录混合流
+      - 多条目保存后复用现有订阅消息能力，一次性为新条目登记提醒
+    - `src/packageExtra/pages/expiry-edit/index.scss`
+      - 新增 AI 上传区、图片网格、多卡片编辑态、spinner 等样式
+    - `src/packageExtra/pages/analyze-history/index.tsx`
+      - 过滤 `payload.expiry_recognition=true` 的隐藏记账任务，避免出现在普通分析历史
+- Product behavior:
+  - 一张图可识别多个食物，多张图也可一起识别
+  - 能识别出的字段自动预填；无法识别或低置信字段由用户继续补
+  - 若未识别到明确到期日，AI 可给“建议天数 + 默认到期日”，并在卡片中提示这是估计值
+- Verification:
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\expiry-edit\\index.tsx src\\packageExtra\\pages\\analyze-history\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\main.py` 通过
+  - 已按项目要求尝试 `weapp-devtools`：
+    - `cmd /c where mrc` 可定位到 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
+    - 但当前会话直接执行 `mrc` / `mrc.cmd` 仍受本机 shim 调用与权限问题阻塞，未能继续拿到 `9420` 端口页面信息与截图
+- Notes:
+  - 本轮未替用户启动 `npm run dev:weapp`；若本地未在 watch，需要用户手动重新编译后才能在微信开发者工具看到新交互
+  - 当前工作区存在与本任务无关的既有改动，未在本轮处理
+
+- Task: 精准模式参考物改为“默认手掌 + 用户级尺寸记忆”
+- Status: done（默认参考物、尺寸持久化、自定义参考物记忆已接通；运行态自动化验证受本机 `mrc` 调用阻塞）
+- Scope:
+  - 前端：
+    - `src/packageExtra/pages/result/index.tsx`
+      - 精准模式参考物默认值从“筷子”改为“手掌”
+      - 结果页会读取用户健康档案中的 `precision_reference_defaults`
+      - 当前选中的参考物名称与尺寸会在“继续精准估计”时自动保存为用户默认值，下次直接复用
+      - 参考物预设收口为 `手掌 / 常规卡片 / 大卡片 / 自定义`
+      - 保留并支持自定义参考物名称与尺寸
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 图片分析入口页的参考物预设也已同步收口为 `手掌 / 常规卡片 / 大卡片 / 自定义`
+      - 入口页会读取并回填用户默认参考物，不再固定落到“筷子”
+      - 点击开始分析时会自动把当前参考物配置写回用户默认值
+    - `src/utils/api.ts`
+      - 新增 `PrecisionReferenceDefaults / PrecisionReferencePresetConfig / PrecisionReferencePresetKey` 类型
+      - `HealthCondition / HealthProfileUpdateRequest` 增加 `precision_reference_defaults`
+  - 后端：
+    - `backend/main.py`
+      - 新增 `PrecisionReferenceDefaults` 相关 schema 与归一化逻辑
+      - `PUT /api/user/health-profile` 支持把默认参考物配置持久化到 `health_condition.precision_reference_defaults`
+    - `backend/worker.py`
+      - 精准模式 planner 的默认参考物建议从“筷子/银行卡/易拉罐”收口为“手掌/常规卡片/大卡片”
+- Verification:
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend/main.py backend/worker.py` 通过
+  - 目标文件定向 TypeScript 检查：`src/packageExtra/pages/result/index.tsx`、`src/utils/api.ts` 无新增报错
+  - 已按项目要求尝试 `weapp-devtools`：
+    - 已确认 `mrc` 安装路径存在：`C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd`
+    - 但当前会话直接调用该 shim 时出现权限/调用阻塞，未能继续完成 `where --port 9420` 与截图
+- Notes:
+  - 这次先采用“复用健康档案 JSON 存默认参考物”的轻量方案，没有新建独立数据表
+  - 当前是“每个预设参考物各自记住自己的尺寸”，并额外支持记住 1 个自定义参考物
+  - 摆放说明 `placement_note` 仍按单次会话输入，不做用户级默认持久化
+
+- Task: 修复“保质期提醒”页打开后正文空白
+- Status: done（已定位并修复页面运行时错误；自动化截图验证受 DevTools 9420 端口未开启阻塞）
+- Scope:
+  - `src/packageExtra/pages/expiry/index.tsx`
+    - 补上缺失的 `useEffect` 导入，修复页面首屏运行时白屏
+    - 将纯文字加载态改为可视化 spinner，符合项目加载态规范
+  - `src/packageExtra/pages/expiry/index.scss`
+    - 新增 `expiry-loading-spinner` 与旋转动画样式
+- Root cause:
+  - 页面组件内部调用了 `useEffect(...)`，但顶部只导入了 `useCallback / useMemo / useState`
+  - 小程序运行时进入页面后会直接命中 `useEffect is not defined`，表现为“导航栏正常、正文整页空白”
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/expiry/index.tsx` 通过
+  - 已确认 `dist/packageExtra/pages/expiry/index.js` 含 `taro.useEffect(...)` 与 `expiry-loading-spinner`
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
+  - 当前返回 `Failed connecting to ws://localhost:9420`，因此未能补运行态截图
+- Notes:
+  - 当前 `src/app.config.ts` 里仍保留无效的 `permission.scope.camera`，这次没有顺手改动，因为它不是本次白屏根因
+  - 若用户本地 `npm run dev:weapp` 正在 watch，源码保存后 `dist` 已同步更新；否则需要用户重新触发一次开发编译
+
+- Task: 调整分析历史页左滑“分享 / 删除”按钮对比度
+- Status: done（浅色主题下按钮底色已加深，文字与图标可读性已增强；运行态自动化截图受 DevTools 9420 端口未开启阻塞）
+- Scope:
+  - `src/packageExtra/pages/analyze-history/index.scss`
+    - 左滑操作按钮 `share / delete` 渐变底色改为更深的绿色 / 红色
+    - 图标字号从 `32rpx` 提到 `34rpx`
+    - 文字字号从 `22rpx` 提到 `24rpx`，字重从 `600` 提到 `700`
+    - 为图标和文字补充轻微阴影，提升浅底环境下的可读性
+    - disabled 分享按钮也同步改为更稳定的灰色渐变，避免发白
+- Verification:
+  - 已执行 `mrc where --port 9420`
+  - 当前返回 `Failed connecting to ws://localhost:9420`，说明微信开发者工具自动化端口未开启，未能补到运行态截图
+- Notes:
+  - 本轮只改了历史页左滑操作区的视觉对比度，没有调整交互宽度和删除/分享逻辑
+
+- Task: 修复“收藏餐食”后在列表中不易查看，并收口「我的收藏」页面定义
+- Status: done（已改成单一“我的收藏”心智，并把首页记录弹层入口前移到和历史记录同层；运行态自动化验证受微信开发者工具端口未开启阻塞）
+- Scope:
+  - `src/pages/index/components/RecordMenu.tsx`
+    - 首页记录弹层底部快捷入口从“仅历史记录”扩展为“我的收藏 + 历史记录”
+    - “我的收藏”文案强调“快速记录常吃餐食”，缩短它与记录动作之间的心智距离
+  - `src/components/iconfont/index.tsx`
+    - 新增 `IconFavorite`
+  - `src/pages/index/index.scss`
+    - 为弹层快捷入口补充标题 + 说明的双行排版
+  - `src/packageExtra/pages/result/index.tsx`
+    - 分析结果页点击“收藏餐食”时，创建食谱默认写入 `is_favorite: true`
+    - 收藏成功提示文案改为“可在我的收藏中快速复用记录”
+  - `src/packageExtra/pages/recipes/index.tsx`
+    - 页面收口为单列表“我的收藏”，不再保留“我的食谱 / 全部模板 / 已收藏”切换
+    - 列表拉取改为先取全部餐食模板，再由前端筛出 `is_favorite`，避免被后端 query 参数过滤差异卡空
+    - 空状态文案改为直接提示“分析结果页点击收藏后会显示在这里”
+    - 右下角 `+` 浮动按钮已删除，避免出现“点加号却提示先收藏”的反直觉交互
+  - `src/packageExtra/pages/recipes/index.config.ts`
+    - 页面标题改为“我的收藏”
+  - `src/pages/profile/index.tsx`
+    - 「我的」页服务入口标题改为“我的收藏”
+  - `src/packageExtra/pages/recipes/index.scss`
+    - 修复列表容器错误的高度写法，改为 `flex: 1 + min-height: 0`，避免内容被整体压没
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 配合新单列表头部收口浅色/深色样式
+- Verification:
+  - `npm run lint -- src/pages/index/components/RecordMenu.tsx src/components/iconfont/index.tsx` 通过
+  - `npm run lint -- src/packageExtra/pages/recipes/index.tsx src/pages/profile/index.tsx src/packageExtra/pages/result/index.tsx` 通过
+  - 已尝试 `weapp-devtools` 运行态验证：
+    - `mrc where --port 9420` 失败（未连接到已开启自动化的 DevTools）
+- Notes:
+  - 这次没有改后端接口，主要是修正“收藏动作默认没打星”和页面信息架构不清晰
+  - 用户这次反馈“明明收藏了却看不到”后，进一步定位到收藏页存在渲染层问题：`recipe-list` 容器接近 `height: 0`，会把空态和真实卡片一起压没
+  - 用户随后明确指出“我的收藏”入口离“记录”动作太远，因此首页记录弹层已补充直达收藏入口，作为快速复用记录链路的一部分
+  - 若用户稍后开启 DevTools 自动化端口，可继续补截图和切页交互验证
 - Task: 测试后台支持“多提示词同时测试”
 - Status: done（`custom` 模式已支持多选提示词；分析体验与批量测试都会按“模型 × 提示词”并跑）
 - Scope:
@@ -82,15 +293,24 @@
       - `membership_governance_debug_weapp_user_columns.sql`（若注册时间字段名与预期不一致，先用它诊断）
     - 新增 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
       - 只取消用户明确确认的 4 个假会员：`凣凣尜尜 / 草！我要干俄挺 / kk / 条条`
+    - 新增 `membership_governance_fix_20260429_expire_active_but_past_due.sql`
+      - 只收口“`expires_at` 已经过期，但 `status` 仍为 `active`”的脏状态会员
+    - 新增 `membership_governance_fix_20260429_reconcile_paid_memberships_except_xmj_jh.sql`
+      - 排除 `小马哥 / 锦恢` 不动
+      - 其余存在真实 `paid` 会员订单的用户，统一按最近一次 `paid` 订单回写 `current_plan_code / status / expires_at / last_paid_at / daily_credits`
+      - 目的是修正“明明只付了月卡，却在 `user_pro_memberships` 里错挂成年卡”的脏状态
   - 文档：
     - 新增 `docs/public-schema-字段明细版-2026-04-27.md`
     - 更新 `docs/数据库实库Schema分析报告.md`，补充“字段明细版”入口，并注明 `weapp_user` 当前注册时间字段为 `create_time`
 - Notes:
   - 本轮按“先审名单，再执行修复”的安全顺序推进
   - 用户最新决定：本轮先不做补偿会员；`ikura` 暂不处理
+  - `2026-04-29` 用户再次确认：当前实际要取消的仍然只有 `凣凣尜尜 / 草！我要干俄挺 / kk / 条条` 这 4 个，继续使用 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
   - `points_recharge` 不在本轮清理范围内，不会被误伤
   - `2026-04-27` 用户实际库中 `weapp_user.created_at` 不存在；治理 SQL 已按真实字段 `create_time` 收口，后端试用判定会优先识别 `create_time`
   - 临时会员开通入口已关闭：前端会员页移除 `[DEV]` 测试区块；后端 `/api/dev/toggle-test-membership` 测试路由已删除
+  - `2026-04-29` 用户最新收口：本轮除已取消的 4 个指定假会员外，只继续处理“过期但 `status` 未收口”的脏状态，不再扩大到其他 active 假会员
+  - `2026-04-29` 用户随后继续收口：除 `小马哥 / 锦恢` 外，其余会员状态按真实 paid 记录修正；因此像 `饭饭` 这种“只付了月卡但被挂成年卡”的记录，会被回写成月卡
 
 - Task: 会员奖励体系（邀请好友 + 分享海报）
 - Status: in_progress（数据库迁移与前后端代码已落地；等待用户自行执行 SQL 与验证）
@@ -139,27 +359,34 @@
   - 这还不是全库历史垃圾一次性清扫
 
 - Task: 首批 1000 用户免费 1 个月试用策略
-- Status: in_progress（已完成后端试用策略分层与前端文案接入；等待用户自行重启后验证）
+- Status: in_progress（已完成后端试用策略分层、创始用户付费积分翻倍与前端编号展示；等待用户自行重启后验证）
 - Scope:
   - 后端：
     - `backend/database.py`
       - 新增 `is_user_in_first_membership_trial_batch(user_id, limit=1000)`，按 `weapp_user` 注册顺序判断是否属于最早 1000 名注册用户；注册时间字段自动识别
+      - 新增 `get_first_membership_trial_batch_rank(user_id, limit=1000)`，返回用户在首批 1000 名中的注册序号（1-based）
     - `backend/main.py`
       - 会员积分试用口径从“统一 3 天”升级为“前 1000 名 30 天，其余用户 3 天”
       - 新增 `EARLY_USER_TRIAL_LIMIT / EARLY_USER_TRIAL_DAYS / REGULAR_USER_TRIAL_DAYS`
       - 新增 `_resolve_user_trial_policy(...)`
       - `/api/membership/me` 新增返回 `trial_days_total / trial_policy`
+      - 创始用户开通会员后，套餐基础积分按 `x2` 发放；`/api/membership/me` 额外返回 `early_user_rank / early_user_limit / early_user_paid_bonus_multiplier / early_user_paid_bonus_eligible / early_user_paid_bonus_active`
+      - 微信支付回调写入 `user_pro_memberships.daily_credits` 快照时，会对前 1000 名用户按翻倍后的积分落库
   - 前端：
     - `src/utils/api.ts`
-      - `MembershipStatus` 补充 `trial_days_total / trial_policy`
+      - `MembershipStatus` 补充 `trial_days_total / trial_policy` 与创始用户编号/翻倍字段
     - `src/pages/pro-membership/index.tsx`
       - 试用展示改为区分“首批用户免费 1 个月”与“新用户免费 3 天”
+      - 会员页显示“你是第 N / 1000 位用户”“创始用户礼遇：会员积分 x2”
+      - 对前 1000 名用户，档位卡/对比表/价格卡中的每日积分展示为翻倍后的 `16 / 40 / 80`
     - `src/pages/profile/index.tsx`
       - “食探会员”入口说明与会员卡试用文案同步改为按试用策略展示
+      - 若属于创始用户，个人页会员入口与会员卡会显示“创始第 N 位”“会员积分 x2”
 - Notes:
   - 本轮只改代码，不代用户运行
   - 当前实现按注册顺序前 1000 名判定；排序使用“自动识别到的注册时间字段”升序，时间相同再按 `id` 升序稳定打散
   - 当前仍沿用“试用期每日 8 积分、当天清零”的积分规则
+  - 创始用户的“付费积分翻倍”只放大会员套餐基础积分，不放大奖励积分（邀请/海报）与免费试用积分
 - Task: 圈子搜索优先匹配好友昵称，再加载该好友动态
 - Status: done（前端搜索框输入后先从好友列表匹配昵称，点击好友后按 `author_id` 拉取该用户动态）
 - Scope:
@@ -2969,3 +3196,46 @@
   - `npm run build:weapp`：通过
 - Notes:
   - 提交记录：`7cf0813`
+
+- Task: 重构底部导航「分析」页定位，探索从“营养统计看板”升级为“疾病风险可视化报告”
+- Status: in_progress（已落地第一版前端信息架构草案；运行态自动化验证受 DevTools 9420 端口未开启阻塞）
+- Scope:
+  - 当前目标页：`src/pages/stats/index.tsx`
+  - 用户希望弱化“泛营养报告 / 热量统计”心智，强化“疾病预防指数 / 健康寿命趋势 / 可逆转改善动作”表达
+  - 方向上优先评估以下风险维度是否适合作为 MVP：
+    - 高血压预防指数
+    - 糖尿病预防指数
+    - 心血管保护指数
+    - 结直肠癌饮食风险指数
+    - 体重管理友好度
+    - 健康寿命趋势分
+- Notes:
+  - 用户明确要求：不要把页面做成“治疗建议”或“医学诊断”，而应表述为“饮食相关风险趋势”
+  - 用户给出的核心定位是“从卡路里工具升级为疾病预防和健康寿命管理工具”
+  - 当前已实现的草案形态：
+    - 第一屏改为“疾病预防指数总分 + 4 张风险卡 + 最小改善动作 + AI 风险解读”
+    - 原有热力图、热量趋势、宏量占比、餐次结构、体重喝水、连续记录统一下沉为“支撑证据”
+    - 风险卡改为更小的双列卡片，点击后再展开详情
+    - 所有疾病卡当前默认折叠
+    - `AI 风险解读` 与各项证据模块改为折叠卡，避免页面默认展开过长
+    - 已删除“当前版本先基于……估计”这类开发者视角文案
+    - 4 个风险维度当前先用现有 `stats` 数据前端推导：高血压预防、糖尿病预防、心血管保护、体重管理友好度
+    - 新增“我的关注”管理卡，支持添加 / 移除疾病方向，并把当前选择持久化到本地 storage
+    - `我的关注` 本轮继续产品化收口：默认折叠时直接展示“已关注 X 项”，展开后按“已关注优先”的顺序管理疾病卡片
+    - 风险卡折叠态继续压缩为“标题 + 分数 + 一句很短的判断”，展开后再看依据、最小改善动作和预计提升
+    - 页面语气继续柔化：总分标题改为“饮食健康参考指数”，并补充“结果仅供参考”；“疾病方向”统一改成更委婉的“健康方向 / 友好度 / 长期状态趋势”
+  - 当前这版仍是前端原型，不是最终科学模型：
+    - 还没有接入钠、膳食纤维、加工肉、全谷物、含糖饮料等真实风险因子
+    - 分数与“预计提升”目前是基于热量、宏量比例、餐次分布、超标频率的前端启发式映射
+  - Verification:
+    - `npm run lint -- src/pages/stats/index.tsx` 通过
+    - `npx tsc --noEmit --pretty false` 仍被项目既有历史类型错误阻塞，未发现本次 `stats` 页新增报错
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
+    - 当前环境这轮返回 `Access is denied.`，此前同样尝试过 `Failed connecting to ws://localhost:9420`；两者都说明微信开发者工具自动化链路当前不可用，未能完成分析页截图与交互验证
+  - 下一步建议：
+    - 决定这版“风险感”是否是你想要的方向
+    - 再决定“我的关注”是否继续升级为独立设置页，还是维持页面内轻量管理
+    - 若方向成立，再补真实风险因子与证据卡片，避免长期停留在前端启发式打分
+  - 发布安排：
+    - `2026-04-29` 用户已明确要求先把当前工作区全部改动整体提交到远端
+    - 顺序为：先提交并推送 `dev`，再合并到 `main` 并推送，然后再回头复查线上会员页与支付问题
