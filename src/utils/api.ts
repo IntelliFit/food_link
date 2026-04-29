@@ -2453,26 +2453,46 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
   }
 }
 
+// 会员状态短缓存：避免短时间内（如菜单弹窗→点击）重复请求
+let _membershipCache: { data: MembershipStatus; expiresAt: number } | null = null
+let _membershipPending: Promise<MembershipStatus> | null = null
+const MEMBERSHIP_CACHE_TTL_MS = 30_000
+
 /**
- * 获取当前用户会员状态
+ * 获取当前用户会员状态（带 30s 缓存，复用 in-flight 请求）
  */
 export async function getMyMembership(): Promise<MembershipStatus> {
-  try {
-    const response = await authenticatedRequest('/api/membership/me', {
-      method: 'GET',
-      timeout: 15000
-    })
-
-    if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '获取会员状态失败'
-      throw new Error(errorMsg)
-    }
-
-    return response.data as MembershipStatus
-  } catch (error: any) {
-    console.error('获取会员状态失败:', error)
-    throw new Error(error.message || '获取会员状态失败')
+  if (_membershipCache && Date.now() < _membershipCache.expiresAt) {
+    return _membershipCache.data
   }
+  if (_membershipPending) {
+    return _membershipPending
+  }
+
+  _membershipPending = (async () => {
+    try {
+      const response = await authenticatedRequest('/api/membership/me', {
+        method: 'GET',
+        timeout: 15000
+      })
+
+      if (response.statusCode !== 200) {
+        const errorMsg = (response.data as any)?.detail || '获取会员状态失败'
+        throw new Error(errorMsg)
+      }
+
+      const data = response.data as MembershipStatus
+      _membershipCache = { data, expiresAt: Date.now() + MEMBERSHIP_CACHE_TTL_MS }
+      return data
+    } catch (error: any) {
+      console.error('获取会员状态失败:', error)
+      throw new Error(error.message || '获取会员状态失败')
+    } finally {
+      _membershipPending = null
+    }
+  })()
+
+  return _membershipPending
 }
 
 export async function claimSharePosterReward(recordId?: string): Promise<ClaimSharePosterRewardResponse> {

@@ -814,7 +814,7 @@ function AnalyzePage() {
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>开启后才可上传多张，并按同一食物的不同角度处理</Text>
+            <Text className='multiview-compact-hint'>将多张图片视为同一食物的不同角度，关闭则每张分别识别后累加</Text>
           </View>
           <View
             className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}

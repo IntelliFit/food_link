@@ -249,9 +249,9 @@ const normalizeFoodNameForCorrection = (value: unknown) => (
 
 /** 结果页头图：上滑时在区间内高度收缩；左右不留 margin（全宽铺满） */
 const RESULT_HERO_MAX_RPX = 700
-const RESULT_HERO_MIN_RPX = 200
+const RESULT_HERO_MIN_RPX = 240
 /** 纵向滑动多少 px 内完成收缩（与 scrollTop 同单位） */
-const RESULT_HERO_SHRINK_SCROLL_PX = 420
+const RESULT_HERO_SHRINK_SCROLL_PX = 350
 /** 初始圆角（rpx），随上滑收至 0 */
 const RESULT_HERO_INNER_RADIUS_MAX_RPX = 24
 

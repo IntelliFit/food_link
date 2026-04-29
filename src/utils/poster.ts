@@ -697,6 +697,385 @@ export function computeDailySummaryPosterHeight(_d?: DailySummaryPosterInput): n
 /** 画布占位最大高度（离屏 Canvas 初始 style，实际导出以 compute 为准；顶栏双行标题后略增） */
 export const DAILY_SUMMARY_POSTER_MAX_HEIGHT = 740
 
+// ---- 当日饮食记录海报 ----
+
+export interface DayRecordPosterMeal {
+  foodName: string     // 实际食物名，如"鸡胸肉沙拉"
+  mealType: string     // 餐次类型标签，如"午餐"
+  mealTime: string
+  imageUrl: string
+  hasImage: boolean
+  calorie: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
+export interface DayRecordPosterInput {
+  dateLabel: string
+  totalIntake: number
+  targetIntake: number
+  recordCount: number
+  totalProtein: number
+  totalCarbs: number
+  totalFat: number
+  deltaKcal?: number  // 较昨变化量，正数为增加
+  meals: DayRecordPosterMeal[]
+}
+
+const DR_BG_TOP = 'rgba(92, 184, 150, 0.08)'
+const DR_BG_MID = 'rgba(92, 184, 150, 0.03)'
+const DR_BG_BOTTOM = '#f0f3f6'
+const DR_CARD_BG = '#FFFFFF'
+const DR_TITLE = '#1a1a2e'
+const DR_MUTED = '#64748b'
+const DR_SUB = '#94a3b8'
+const DR_ACCENT = '#00bc7d'
+const DR_PROTEIN = '#3b82f6'
+const DR_CARBS = '#eab308'
+const DR_FAT = '#f97316'
+
+const DR_MEAL_IMG_SIZE = 60
+const DR_MEAL_ROW_H = 92
+const DR_MEAL_GAP = 8
+const DR_MEAL_INNER_PAD = 12
+
+function formatDRKcal(v: number): string {
+  return `${Math.round(v)}`
+}
+
+function formatDRMacro(v: number): string {
+  return `${Math.round(v)}g`
+}
+
+/** 截断文本以适应指定宽度 */
+function truncateDRText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  const ellipsis = '…'
+  if (ctx.measureText(text).width <= maxWidth) return text
+  let lo = 0, hi = text.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (ctx.measureText(text.slice(0, mid) + ellipsis).width <= maxWidth) lo = mid
+    else hi = mid - 1
+  }
+  return text.slice(0, lo) + ellipsis
+}
+
+export function computeDayRecordPosterHeight(mealCount: number): number {
+  const TOP = 32
+  const HEADER_ROW = 32   // date pill + energy dots row
+  const HEADER_GAP = 18
+  const INTAKE_ROW = 28
+  const INTAKE_GAP = 16
+  const MACRO_CARD_H = 64
+  const MACRO_GAP = 16
+  const HEADER = TOP + HEADER_ROW + HEADER_GAP + INTAKE_ROW + INTAKE_GAP + MACRO_CARD_H + MACRO_GAP
+  const MEALS = mealCount > 0
+    ? mealCount * DR_MEAL_ROW_H + (mealCount - 1) * DR_MEAL_GAP
+    : 40
+  const MEALS_GAP = 14
+  const FOOTER_RESERVE = 45 + 84
+  const BOTTOM = 16
+  return HEADER + MEALS_GAP + MEALS + FOOTER_RESERVE + BOTTOM
+}
+
+export function drawDayRecordPoster(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    width: number
+    height: number
+    data: DayRecordPosterInput
+    mealImages: Array<{ width: number; height: number } | null>
+    qrCodeImage?: { width: number; height: number } | null
+    sharerNickname?: string
+    sharerAvatarImage?: { width: number; height: number } | null
+  }
+): void {
+  const { width: W, height: H, data: d, mealImages, qrCodeImage, sharerNickname, sharerAvatarImage } = options
+  const PAD = 20
+  const contentW = W - PAD * 2
+  const cx = PAD
+
+  // 先填纯白底，再叠绿色渐变（避免 canvas 透明底层透出深色）
+  ctx.fillStyle = '#f8faf8'
+  ctx.fillRect(0, 0, W, H)
+  const grad = ctx.createLinearGradient(0, 0, 0, H * 0.75)
+  grad.addColorStop(0, 'rgba(92, 184, 150, 0.12)')
+  grad.addColorStop(0.5, 'rgba(92, 184, 150, 0.04)')
+  grad.addColorStop(1, '#f8faf8')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, W, H)
+
+  let cy = 32
+
+  // ---- 第一行：左侧日期胶囊 + 右侧能量等级 ----
+  const headerMidY = cy + 16
+
+  // 左侧：日期胶囊
+  const dateText = d.dateLabel
+  ctx.font = '600 13px sans-serif'
+  const dateW = ctx.measureText(dateText).width + 20
+  const dateH = 28
+  const dateX = PAD
+  const dateY = headerMidY - dateH / 2
+  drawRoundedRect(ctx, dateX, dateY, dateW, dateH, 14)
+  ctx.fillStyle = 'rgba(0, 188, 125, 0.12)'
+  ctx.fill()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = DR_ACCENT
+  ctx.font = '600 13px sans-serif'
+  ctx.fillText(dateText, dateX + dateW / 2, headerMidY)
+
+  // 右侧：能量等级 badge（较昨 delta + 三圆点，包在圆角矩形内）
+  const hasDelta = typeof d.deltaKcal === 'number' && Number.isFinite(d.deltaKcal)
+  const tgt = d.targetIntake > 0 ? d.targetIntake : 1
+  const ratio = d.totalIntake / tgt
+  const level = ratio >= 1 ? 3 : ratio >= 0.5 ? 2 : 1
+
+  const dotR = 5
+  const dotGap = 8
+  const dotsBandW = dotR * 2 * 3 + dotGap * 2  // 三个圆点的总宽
+
+  let badgeW: number
+  let deltaStr = ''
+  if (hasDelta) {
+    const absDelta = Math.abs(Math.round(d.deltaKcal!))
+    const prefix = d.deltaKcal! > 0 ? '+' : d.deltaKcal! < 0 ? '-' : ''
+    deltaStr = `较昨 ${prefix}${absDelta}`
+    ctx.font = '12px sans-serif'
+    const textW = ctx.measureText(deltaStr).width
+    badgeW = textW + 10 + dotsBandW + 24  // 文字 + 间距 + 圆点 + 水平内边距
+  } else {
+    badgeW = dotsBandW + 20  // 仅圆点 + 内边距
+  }
+
+  const badgeH = 28
+  const badgeX = W - PAD - badgeW
+  const badgeY = headerMidY - badgeH / 2
+
+  // 圆角矩形容器
+  drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 14)
+  ctx.fillStyle = 'rgba(0, 188, 125, 0.08)'
+  ctx.fill()
+
+  // 较昨文字
+  if (hasDelta) {
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = DR_SUB
+    ctx.font = '12px sans-serif'
+    ctx.fillText(deltaStr, badgeX + 12, headerMidY)
+  }
+
+  // 三个能量圆点（badge 内右侧）
+  const dotsBaseX = badgeX + badgeW - 12 - dotsBandW
+  for (let i = 0; i < 3; i++) {
+    const dx = dotsBaseX + i * (dotR * 2 + dotGap) + dotR
+    ctx.beginPath()
+    ctx.arc(dx, headerMidY, dotR, 0, Math.PI * 2)
+    ctx.fillStyle = i < level ? DR_ACCENT : 'rgba(0,188,125,0.18)'
+    ctx.fill()
+  }
+
+  cy += 32 + 18
+
+  // ---- 今日摄入：标签和数值同一基线对齐，数值不加粗 ----
+  const intakeVal = `${formatDRKcal(d.totalIntake)} / ${formatDRKcal(d.targetIntake)} kcal`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = DR_SUB
+  ctx.font = '14px sans-serif'
+  ctx.fillText('今日摄入', PAD, cy + 18)
+  const intakeLabelW = ctx.measureText('今日摄入').width + 10
+  ctx.fillStyle = DR_TITLE
+  ctx.font = '24px sans-serif'
+  ctx.fillText(intakeVal, PAD + intakeLabelW, cy + 20)
+  cy += 28 + 16
+
+  // 三张宏量小卡片（一行，无图标，文字加大）
+  const macroCardW = (contentW - 12) / 3
+  const macroCardH = 64
+  const macros = [
+    { label: '蛋白质', value: formatDRMacro(d.totalProtein), color: DR_PROTEIN, bg: 'rgba(59,130,246,0.08)' },
+    { label: '碳水', value: formatDRMacro(d.totalCarbs), color: DR_CARBS, bg: 'rgba(234,179,8,0.08)' },
+    { label: '脂肪', value: formatDRMacro(d.totalFat), color: DR_FAT, bg: 'rgba(249,115,22,0.08)' },
+  ]
+  macros.forEach((m, i) => {
+    const mx = PAD + (macroCardW + 6) * i
+    drawRoundedRect(ctx, mx, cy, macroCardW, macroCardH, 14)
+    ctx.fillStyle = m.bg
+    ctx.fill()
+    // 标签（居中）
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = DR_SUB
+    ctx.font = '13px sans-serif'
+    ctx.fillText(m.label, mx + macroCardW / 2, cy + 18)
+    // 数值（居中，品牌色）
+    ctx.fillStyle = m.color
+    ctx.font = 'bold 18px sans-serif'
+    ctx.fillText(m.value, mx + macroCardW / 2, cy + 42)
+  })
+  cy += macroCardH + 16
+
+  // 餐次列表
+  const mealImgSize = DR_MEAL_IMG_SIZE
+  const mealRowH = DR_MEAL_ROW_H
+  const textLeft = PAD + DR_MEAL_INNER_PAD + mealImgSize + 14
+
+  d.meals.forEach((meal, idx) => {
+    // 卡片背景
+    drawRoundedRect(ctx, PAD, cy, contentW, mealRowH, 14)
+    ctx.fillStyle = DR_CARD_BG
+    ctx.fill()
+
+    // 缩略图（垂直居中）
+    const imgX = PAD + DR_MEAL_INNER_PAD
+    const imgY = cy + (mealRowH - mealImgSize) / 2
+    const mealImg = mealImages[idx]
+    if (mealImg && mealImg.width > 0 && mealImg.height > 0) {
+      ctx.save()
+      ctx.beginPath()
+      drawRoundedRect(ctx, imgX, imgY, mealImgSize, mealImgSize, 10)
+      ctx.clip()
+      const scale = Math.max(mealImgSize / mealImg.width, mealImgSize / mealImg.height)
+      const dw = mealImg.width * scale
+      const dh = mealImg.height * scale
+      ctx.drawImage(
+        mealImg as CanvasImageSource,
+        0, 0, mealImg.width, mealImg.height,
+        imgX - (dw - mealImgSize) / 2,
+        imgY - (dh - mealImgSize) / 2,
+        dw, dh,
+      )
+      ctx.restore()
+    } else {
+      drawRoundedRect(ctx, imgX, imgY, mealImgSize, mealImgSize, 10)
+      ctx.fillStyle = '#e5e7eb'
+      ctx.fill()
+      ctx.fillStyle = '#9ca3af'
+      ctx.font = '26px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('🍽', imgX + mealImgSize / 2, imgY + mealImgSize / 2)
+    }
+
+    // 第一行：食物名（左）+ 餐次标签（右）
+    const row1Y = cy + 24
+    // 右侧餐次标签
+    const tagW = 48
+    const tagH = 22
+    const tagX = W - PAD - DR_MEAL_INNER_PAD - tagW
+    const tagY = row1Y - tagH / 2
+    drawRoundedRect(ctx, tagX, tagY, tagW, tagH, 11)
+    ctx.fillStyle = 'rgba(0,188,125,0.12)'
+    ctx.fill()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = DR_ACCENT
+    ctx.font = 'bold 11px sans-serif'
+    ctx.fillText(meal.mealType, tagX + tagW / 2, row1Y)
+
+    // 食物名
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = DR_TITLE
+    ctx.font = 'bold 14px sans-serif'
+    const maxNameW = tagX - textLeft - 8
+    const foodName = truncateDRText(ctx, meal.foodName || '未命名食物', maxNameW)
+    ctx.fillText(foodName, textLeft, row1Y)
+
+    // 第二行：时间 + 热量
+    const row2Y = cy + 48
+    ctx.textAlign = 'left'
+    ctx.fillStyle = DR_SUB
+    ctx.font = '11px sans-serif'
+    ctx.fillText(meal.mealTime, textLeft, row2Y)
+
+    ctx.textAlign = 'right'
+    ctx.fillStyle = DR_TITLE
+    ctx.font = 'bold 16px sans-serif'
+    ctx.fillText(`${formatDRKcal(meal.calorie)} kcal`, W - PAD - DR_MEAL_INNER_PAD, row2Y)
+
+    // 第三行：每餐宏量 P/C/F
+    const row3Y = cy + 72
+    const mealMacros = [
+      { label: '蛋白质', value: formatDRMacro(meal.protein), color: DR_PROTEIN },
+      { label: '碳水', value: formatDRMacro(meal.carbs), color: DR_CARBS },
+      { label: '脂肪', value: formatDRMacro(meal.fat), color: DR_FAT },
+    ]
+    let mx = textLeft
+    const macroGap = 16
+    mealMacros.forEach((m, j) => {
+      ctx.textAlign = 'left'
+      ctx.fillStyle = DR_SUB
+      ctx.font = '11px sans-serif'
+      const lw = ctx.measureText(m.label).width
+      ctx.fillText(m.label, mx, row3Y)
+      ctx.fillStyle = m.color
+      ctx.font = 'bold 12px sans-serif'
+      ctx.fillText(` ${m.value}`, mx + lw, row3Y)
+      if (j < 2) {
+        mx += lw + ctx.measureText(` ${m.value}`).width + macroGap
+      }
+    })
+
+    cy += mealRowH + DR_MEAL_GAP
+  })
+
+  // ---- Footer：完全复用 drawRecordPoster 的底部设计 ----
+  const footerY = cy + 45
+  const avatarSz = 36
+  const titleX = sharerAvatarImage ? cx + avatarSz + 12 : cx
+
+  if (sharerAvatarImage) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx + avatarSz / 2, footerY + avatarSz / 2, avatarSz / 2, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.drawImage(sharerAvatarImage as CanvasImageSource, cx, footerY, avatarSz, avatarSz)
+    ctx.restore()
+  }
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = TEXT_INK
+  ctx.font = 'bold 15px sans-serif'
+  const displayName = (sharerNickname || '').trim()
+  const nameText = displayName ? `${displayName} 的饮食分享` : '智健食探'
+  ctx.fillText(nameText, titleX, footerY + 16)
+
+  ctx.fillStyle = TEXT_SUB
+  ctx.font = '12px sans-serif'
+  ctx.fillText('扫码登录食探，可一键成为好友', titleX, footerY + 36)
+
+  const qrSize = 72
+  const qrX = cx + contentW - qrSize
+  const qrY = footerY - 4
+  if (qrCodeImage) {
+    ctx.save()
+    drawRoundedRect(ctx, qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, 8)
+    ctx.strokeStyle = '#d4d4d4'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+    ctx.drawImage(qrCodeImage as CanvasImageSource, qrX, qrY, qrSize, qrSize)
+  } else {
+    drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 8)
+    ctx.strokeStyle = LINE
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.15)'
+    ctx.fill()
+    ctx.fillStyle = TEXT_MUTED
+    ctx.font = '10px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('去记录', qrX + qrSize / 2, qrY + qrSize / 2)
+  }
+}
+
 /**
  * 圆内百分比字号：参考图二约占圆直径 60%～65% 宽，取最大不溢出字号
  */

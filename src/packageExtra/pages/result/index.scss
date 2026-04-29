@@ -26,6 +26,7 @@
 .result-scroll-inner {
   width: 100%;
   box-sizing: border-box;
+  transition: padding-top 0.05s linear;
 }
 
 // ========== 顶部食物图：全幅铺满 + 自下而上黑色渐变（无取景框/眼膜） ==========
@@ -34,11 +35,12 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 3;
+  z-index: 1;
   width: 100%;
   background: #0f172a;
   overflow: hidden;
   transform: translateZ(0);
+  will-change: height;
 }
 
 /* 头图内层始终全宽，禁止左右 margin（与上滑圆角动画无关） */
@@ -172,11 +174,11 @@
   }
 }
 
-// 内容容器 - 与头图叠层由 ScrollView 的 padding-top（头高−40rpx）保证；白卡盖住头图底部
+// 内容容器 - 白卡盖住头图底部，圆角与阴影压在图片上方
 .content-container {
   position: relative;
   padding: 32rpx 32rpx 500rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
-  z-index: 2;
+  z-index: 3;
   display: flex;
   flex-direction: column;
   gap: 32rpx;

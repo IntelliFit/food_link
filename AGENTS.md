@@ -117,6 +117,22 @@
 ssh root@coachlink.fit "cd /www/wwwroot/food/food_link && git fetch origin && git reset --hard origin/main && cd backend && ./venv/bin/python -m pip install -q -r requirements.txt && systemctl restart food-backend.service"
 ```
 
+### Docker 镜像推送（腾讯云 CCR）
+
+当后端有变更需要更新线上容器时，在本机构建并推送 Docker 镜像到腾讯云 CCR：
+
+```bash
+npm run push-docker-ccr
+```
+
+- 镜像路径：`ccr.ccs.tencentyun.com/littlehorse/foodlink`
+- 构建上下文：`backend/`（使用 `backend/Dockerfile`）
+- 分支与标签映射：
+  - `main` → `:latest`、`:main`、`:<7位 commit sha>`
+  - `dev` → `:dev`、`:<7位 commit sha>`
+  - 其他分支 → 脚本会提示先切换到 `main` 或 `dev`
+- 脚本位置：`backend/scripts/push-docker-ccr.mjs`
+
 ### 前端部署
 
 微信小程序前端**不通过此服务器部署**，需使用微信开发者工具上传。

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
-import { getAccessToken, getMyMembership } from '../../../utils/api'
+import { getAccessToken, getMyMembership, type MembershipStatus } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   getFoodAnalysisBlockedActionText,
@@ -87,15 +87,20 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
   const [devToolsOpen, setDevToolsOpen] = useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
   const [previewImageUrl, setPreviewImageUrl] = useState('')
+  /** 弹窗打开时预取会员状态，点击「相册上传」时直接使用缓存结果 */
+  const membershipPromiseRef = useRef<Promise<MembershipStatus | null> | null>(null)
 
   useEffect(() => {
     if (!visible) {
       setDevToolsOpen(false)
+      membershipPromiseRef.current = null
       return
     }
     if (__ENABLE_DEV_DEBUG_UI__) {
       setPreviewImageUrl(getDevDebugUiTestImageUrl())
     }
+    // 弹窗打开即预取会员状态，减少点击后的等待时间
+    membershipPromiseRef.current = getMyMembership().catch(() => null)
   }, [visible])
 
   if (!visible) return null
@@ -113,8 +118,9 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         }
         void (async () => {
           try {
-            const membershipStatus = await getMyMembership()
-            if (isFoodAnalysisCreditExhausted(membershipStatus)) {
+            // 优先使用弹窗打开时预取的结果，未命中则降级发起新请求
+            const membershipStatus = await (membershipPromiseRef.current ?? getMyMembership())
+            if (membershipStatus && isFoodAnalysisCreditExhausted(membershipStatus)) {
               const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
               const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
               const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus.is_pro
