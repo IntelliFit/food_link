@@ -32,7 +32,7 @@ export const POSTER_HEIGHT = 812
 const PAGE_BG = '#f5f5f5'
 /** 卡片背景 - 使用与首页一致的绿色到白色渐变 */
 const CARD_BG_START = 'rgba(0, 188, 125, 0.15)'
-const CARD_BG_MID = 'rgba(0, 188, 125, 0.08)'
+const CARD_BG_MID = 'rgba(92, 184, 150, 0.08)'
 const CARD_BG_END = '#EFF1F4'
 const TEXT_INK = '#0f172a'
 const TEXT_MUTED = '#64748b'
@@ -723,17 +723,14 @@ export interface DayRecordPosterInput {
   meals: DayRecordPosterMeal[]
 }
 
-const DR_BG_TOP = 'rgba(92, 184, 150, 0.08)'
-const DR_BG_MID = 'rgba(92, 184, 150, 0.03)'
-const DR_BG_BOTTOM = '#f0f3f6'
 const DR_CARD_BG = '#FFFFFF'
-const DR_TITLE = '#1a1a2e'
+const DR_TITLE = '#1f2937'
 const DR_MUTED = '#64748b'
 const DR_SUB = '#94a3b8'
-const DR_ACCENT = '#00bc7d'
-const DR_PROTEIN = '#3b82f6'
-const DR_CARBS = '#eab308'
-const DR_FAT = '#f97316'
+const DR_ACCENT = '#5cb896'
+const DR_PROTEIN = '#5c9ed4'
+const DR_CARBS = '#d4ac52'
+const DR_FAT = '#f0985c'
 
 const DR_MEAL_IMG_SIZE = 60
 const DR_MEAL_ROW_H = 92
@@ -817,7 +814,7 @@ export function drawDayRecordPoster(
   const dateX = PAD
   const dateY = headerMidY - dateH / 2
   drawRoundedRect(ctx, dateX, dateY, dateW, dateH, 14)
-  ctx.fillStyle = 'rgba(0, 188, 125, 0.12)'
+  ctx.fillStyle = 'rgba(92, 184, 150, 0.12)'
   ctx.fill()
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -854,7 +851,7 @@ export function drawDayRecordPoster(
 
   // 圆角矩形容器
   drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 14)
-  ctx.fillStyle = 'rgba(0, 188, 125, 0.08)'
+  ctx.fillStyle = 'rgba(92, 184, 150, 0.08)'
   ctx.fill()
 
   // 较昨文字
@@ -872,7 +869,7 @@ export function drawDayRecordPoster(
     const dx = dotsBaseX + i * (dotR * 2 + dotGap) + dotR
     ctx.beginPath()
     ctx.arc(dx, headerMidY, dotR, 0, Math.PI * 2)
-    ctx.fillStyle = i < level ? DR_ACCENT : 'rgba(0,188,125,0.18)'
+    ctx.fillStyle = i < level ? DR_ACCENT : 'rgba(92,184,150,0.18)'
     ctx.fill()
   }
 
@@ -895,9 +892,9 @@ export function drawDayRecordPoster(
   const macroCardW = (contentW - 12) / 3
   const macroCardH = 64
   const macros = [
-    { label: '蛋白质', value: formatDRMacro(d.totalProtein), color: DR_PROTEIN, bg: 'rgba(59,130,246,0.08)' },
-    { label: '碳水', value: formatDRMacro(d.totalCarbs), color: DR_CARBS, bg: 'rgba(234,179,8,0.08)' },
-    { label: '脂肪', value: formatDRMacro(d.totalFat), color: DR_FAT, bg: 'rgba(249,115,22,0.08)' },
+    { label: '蛋白质', value: formatDRMacro(d.totalProtein), color: DR_PROTEIN, bg: 'rgba(92,158,212,0.08)' },
+    { label: '碳水', value: formatDRMacro(d.totalCarbs), color: DR_CARBS, bg: 'rgba(212,172,82,0.08)' },
+    { label: '脂肪', value: formatDRMacro(d.totalFat), color: DR_FAT, bg: 'rgba(240,152,92,0.08)' },
   ]
   macros.forEach((m, i) => {
     const mx = PAD + (macroCardW + 6) * i
@@ -967,7 +964,7 @@ export function drawDayRecordPoster(
     const tagX = W - PAD - DR_MEAL_INNER_PAD - tagW
     const tagY = row1Y - tagH / 2
     drawRoundedRect(ctx, tagX, tagY, tagW, tagH, 11)
-    ctx.fillStyle = 'rgba(0,188,125,0.12)'
+    ctx.fillStyle = 'rgba(92,184,150,0.12)'
     ctx.fill()
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
