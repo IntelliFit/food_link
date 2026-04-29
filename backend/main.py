@@ -29,6 +29,7 @@ import base64
 import math
 import mimetypes
 import calendar
+import logging
 from datetime import timedelta, datetime, timezone, date
 from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
@@ -192,11 +193,105 @@ from database import (
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import format_span_id, format_trace_id
 
 # 从 .env 文件加载环境变量
 BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(BACKEND_ENV_PATH, override=True)
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+OTEL_ENABLED = os.getenv("OTEL_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+OTEL_LOGS_ENABLED = os.getenv("OTEL_LOGS_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "food-link-backend").strip() or "food-link-backend"
+
+
+def _normalize_otlp_http_endpoint(value: Optional[str], signal_path: str) -> str:
+    endpoint = (value or "").strip()
+    if not endpoint:
+        endpoint = "http://otel-collector.observability.svc.cluster.local:4318"
+    if endpoint.endswith(signal_path):
+        return endpoint
+    return endpoint.rstrip("/") + signal_path
+
+
+def _build_traceparent(trace_id_hex: str, span_id_hex: str, sampled: bool) -> str:
+    return f"00-{trace_id_hex}-{span_id_hex}-{'01' if sampled else '00'}"
+
+
+def _inject_trace_headers_into_asgi_message(span, _scope, message):
+    if message.get("type") != "http.response.start":
+        return
+    if span is None:
+        return
+    span_context = span.get_span_context()
+    if not span_context.is_valid:
+        return
+
+    headers = list(message.get("headers") or [])
+    filtered_headers = [
+        (k, v)
+        for k, v in headers
+        if k.lower() not in {b"x-trace-id", b"traceparent"}
+    ]
+    trace_id_hex = format_trace_id(span_context.trace_id)
+    span_id_hex = format_span_id(span_context.span_id)
+    filtered_headers.append((b"x-trace-id", trace_id_hex.encode("ascii")))
+    filtered_headers.append(
+        (
+            b"traceparent",
+            _build_traceparent(trace_id_hex, span_id_hex, span_context.trace_flags.sampled).encode("ascii"),
+        )
+    )
+    message["headers"] = filtered_headers
+
+
+def _setup_otel_observability(target_app: FastAPI) -> None:
+    if not OTEL_ENABLED:
+        return
+
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    traces_endpoint = _normalize_otlp_http_endpoint(
+        os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", otlp_endpoint),
+        "/v1/traces",
+    )
+    logs_endpoint = _normalize_otlp_http_endpoint(
+        os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", otlp_endpoint),
+        "/v1/logs",
+    )
+
+    resource = Resource.create({SERVICE_NAME: OTEL_SERVICE_NAME})
+    tracer_provider = TracerProvider(resource=resource)
+    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=traces_endpoint)))
+    trace.set_tracer_provider(tracer_provider)
+
+    FastAPIInstrumentor.instrument_app(
+        target_app,
+        tracer_provider=tracer_provider,
+        server_response_hook=_inject_trace_headers_into_asgi_message,
+    )
+    HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
+
+    if OTEL_LOGS_ENABLED:
+        logger_provider = LoggerProvider(resource=resource)
+        logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=logs_endpoint)))
+        LoggingInstrumentor().instrument(set_logging_format=True)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider))
+        root_logger.info(
+            "OpenTelemetry logs exporter enabled, endpoint=%s, service=%s",
+            logs_endpoint,
+            OTEL_SERVICE_NAME,
+        )
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
@@ -1881,6 +1976,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_setup_otel_observability(app)
 
 
 class Nutrients(BaseModel):
