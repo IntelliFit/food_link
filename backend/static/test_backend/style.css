@@ -437,6 +437,33 @@ header .subtitle {
     gap: 20px;
 }
 
+.analyze-model-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 20px;
+}
+
+.analyze-model-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.analyze-model-card .result-header {
+    margin-bottom: 0;
+}
+
+.analyze-model-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.analyze-model-subtitle {
+    font-size: 12px;
+    color: #667085;
+}
+
 .batch-actions {
     display: flex;
     gap: 12px;

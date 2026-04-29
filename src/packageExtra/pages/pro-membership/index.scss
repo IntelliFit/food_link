@@ -199,6 +199,28 @@
   margin: 0 auto;
 }
 
+.hero-founder-badge {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56rpx;
+  padding: 0 26rpx;
+  margin-bottom: 22rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, rgb(253 230 138 / 18%) 0%, rgb(251 191 36 / 16%) 100%);
+  border: 1rpx solid rgb(253 230 138 / 28%);
+  box-shadow: 0 8rpx 18rpx rgb(11 31 24 / 12%);
+}
+
+.hero-founder-badge-text {
+  font-size: 22rpx;
+  color: #fef3c7;
+  font-weight: 700;
+  letter-spacing: 0.5rpx;
+}
+
 .hero-credits {
   display: flex;
   flex-direction: column;

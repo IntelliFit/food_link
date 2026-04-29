@@ -4,6 +4,11 @@
 
 本报告基于 `food_link` 当前 Supabase 实库 `ocijuywmkalfmfxquzzf` 的真实 `public` schema 整理，不再仅依赖仓库内 SQL 推断。
 
+补充：
+
+- 若需要按业务域查看“表职责 + 字段明细”，请同时参考 [public-schema-字段明细版-2026-04-27](D:/files/food_link/docs/public-schema-字段明细版-2026-04-27.md)
+- `2026-04-27` 校正：当前用户主表 `weapp_user` 的注册时间字段在实库里是 `create_time`，不是旧假设里的 `created_at`
+
 本次核对方式：
 
 - 通过项目实际 `SUPABASE_URL` 读取 `rest/v1` 的 OpenAPI schema

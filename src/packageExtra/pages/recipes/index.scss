@@ -6,68 +6,36 @@
   flex-direction: column;
 }
 
-// 标签切换
-.tabs-container {
+.page-header {
   background: #fff;
-  padding: 0 40rpx;
+  padding: 28rpx 32rpx 24rpx;
   box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 3%);
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
-.tabs {
-  display: flex;
-  height: 88rpx;
+.page-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  transition: all 0.3s ease;
-  
-  .tab-text {
-    font-size: 30rpx;
-    color: #64748b;
-    font-weight: 500;
-    transition: all 0.3s ease;
-  }
-
-  .tab-indicator {
-    position: absolute;
-    bottom: 0;
-    width: 0;
-    height: 6rpx;
-    background: #00bc7d;
-    border-radius: 3rpx;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  &.active {
-    .tab-text {
-      color: #00bc7d;
-      font-weight: 600;
-      font-size: 32rpx;
-    }
-    
-    .tab-indicator {
-      width: 48rpx;
-    }
-  }
+.page-subtitle {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: #5b6b7f;
 }
 
 // 食谱列表
 .recipe-list {
-  height: 0; // 配合 flex: 1 滚动;
-  box-sizing: border-boxbox-sizing
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .recipes-grid {
-  padding: 24rpx 32rpx 160rpx; // 底部留白给 fab
+  padding: 24rpx 32rpx 48rpx;
   display: flex;
   flex-direction: column;
   gap: 24rpx;
@@ -358,40 +326,6 @@
   &:active {
     opacity: 0.8;
     transform: scale(0.95);
-  }
-}
-
-.delete-icon-rotate {
-  display: inline-block;
-  transform: rotate(45deg);
-}
-
-// 浮动创建按钮
-.create-btn {
-  position: fixed;
-  right: 40rpx;
-  bottom: 160rpx; // 避开 tabBar
-  width: 100rpx;
-  height: 100rpx;
-  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 30%);
-  z-index: 100;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  &:active {
-    transform: scale(0.9) rotate(90deg);
-  }
-
-  .create-icon {
-    font-size: 64rpx;
-    color: #fff;
-    font-weight: 300;
-    line-height: 1;
-    margin-top: -8rpx; // 微调垂直居中
   }
 }
 

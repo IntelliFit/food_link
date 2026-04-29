@@ -71,12 +71,41 @@ export interface PrecisionReferenceDimensions {
   height?: number
 }
 
+export type PrecisionReferencePresetKey =
+  | 'hand'
+  | 'campus_card'
+  | 'large_card'
+  | 'chopsticks'
+  | 'spoon'
+  | 'bank_card'
+  | 'custom'
+
 export interface PrecisionReferenceObjectInput {
   reference_type: 'preset' | 'custom'
   reference_name: string
   dimensions_mm?: PrecisionReferenceDimensions
   placement_note?: string
   applies_to_items?: string[]
+}
+
+export interface PrecisionReferencePresetConfig {
+  reference_name: string
+  dimensions_mm?: PrecisionReferenceDimensions
+}
+
+export interface PrecisionReferenceDefaults {
+  preferred_reference_key?: PrecisionReferencePresetKey
+  presets?: Partial<Record<PrecisionReferencePresetKey, PrecisionReferencePresetConfig>>
+}
+
+export interface AnalyzeGeoContext {
+  province?: string
+  city?: string
+  district?: string
+}
+
+type CachedAnalyzeGeoContext = AnalyzeGeoContext & {
+  expiresAt: number
 }
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
@@ -94,6 +123,9 @@ export interface AnalyzeRequest {
   remaining_calories?: number
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
 }
@@ -106,6 +138,7 @@ export interface Nutrients {
   fat: number
   fiber: number
   sugar: number
+  sodium_mg?: number
 }
 
 
@@ -142,6 +175,140 @@ export interface AnalyzeResponse {
   splitStrategy?: PrecisionSplitStrategy
   uncertaintyNotes?: string[]
   redirectTaskId?: string
+}
+
+const ANALYZE_LOCATION_CACHE_KEY = 'analyze_location_context_v1'
+const ANALYZE_LOCATION_CACHE_TTL_MS = 30 * 60 * 1000
+const MUNICIPALITY_NAMES = ['北京', '上海', '天津', '重庆']
+
+function normalizeAreaText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function readCachedAnalyzeGeoContext(): AnalyzeGeoContext | undefined {
+  try {
+    const raw = Taro.getStorageSync(ANALYZE_LOCATION_CACHE_KEY)
+    if (!raw || typeof raw !== 'object') return undefined
+    const cached = raw as Partial<CachedAnalyzeGeoContext>
+    if (!Number.isFinite(cached.expiresAt) || Number(cached.expiresAt) <= Date.now()) {
+      Taro.removeStorageSync(ANALYZE_LOCATION_CACHE_KEY)
+      return undefined
+    }
+    const province = normalizeAreaText(cached.province)
+    const city = normalizeAreaText(cached.city)
+    const district = normalizeAreaText(cached.district)
+    if (!province && !city && !district) return undefined
+    return { province, city, district }
+  } catch {
+    return undefined
+  }
+}
+
+function cacheAnalyzeGeoContext(context?: AnalyzeGeoContext): void {
+  if (!context) return
+  const province = normalizeAreaText(context.province)
+  const city = normalizeAreaText(context.city)
+  const district = normalizeAreaText(context.district)
+  if (!province && !city && !district) return
+  try {
+    const payload: CachedAnalyzeGeoContext = {
+      province,
+      city,
+      district,
+      expiresAt: Date.now() + ANALYZE_LOCATION_CACHE_TTL_MS,
+    }
+    Taro.setStorageSync(ANALYZE_LOCATION_CACHE_KEY, payload)
+  } catch {
+    // ignore cache failure
+  }
+}
+
+function parseAnalyzeGeoContext(address: string, promptCity = ''): AnalyzeGeoContext | undefined {
+  const addr = normalizeAreaText(address)
+  const cityPrompt = normalizeAreaText(promptCity)
+  if (!addr && !cityPrompt) return undefined
+
+  const provinceMatch = addr.match(/^(.+?[省市])/)
+  const cityMatch = addr.match(/^.+?[省](.+?市)/)
+  const districtMatch = addr.match(/[市省](.+?[区县市])/)
+  const province = normalizeAreaText(provinceMatch ? provinceMatch[1] : cityPrompt)
+  const isMunicipality = MUNICIPALITY_NAMES.some((name) => province.includes(name))
+  const city = isMunicipality ? '' : normalizeAreaText(cityMatch ? cityMatch[1] : '')
+  const district = normalizeAreaText(
+    districtMatch
+      ? districtMatch[1]
+      : (addr.match(/^(.+?[区县市])/) || [])[1]
+  )
+
+  if (!province && !city && !district) return undefined
+  return { province, city, district }
+}
+
+async function resolveAnalyzeGeoContext(): Promise<AnalyzeGeoContext | undefined> {
+  const cached = readCachedAnalyzeGeoContext()
+  if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+    return cached
+  }
+
+  try {
+    const setting = await Taro.getSetting()
+    if (!setting.authSetting?.['scope.userLocation']) {
+      return cached
+    }
+
+    const location = await Taro.getLocation({ type: 'wgs84' })
+    const reverse = await Taro.request({
+      url: `${API_BASE_URL}/api/location/reverse`,
+      method: 'POST',
+      header: withNgrokBypassHeaders({ 'Content-Type': 'application/json' }),
+      data: { lat: location.latitude, lon: location.longitude },
+      timeout: 8000,
+    })
+    if (reverse.statusCode !== 200 || !reverse.data) {
+      return cached
+    }
+
+    const data = reverse.data as Record<string, unknown>
+    const raw = data.address ?? data.formatted_address ?? data.result
+    let address = ''
+    if (typeof raw === 'string') {
+      address = raw
+    } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const record = raw as Record<string, unknown>
+      if (typeof record.formatted_address === 'string') address = record.formatted_address
+      else if (typeof record.address === 'string') address = record.address
+    }
+
+    const context = parseAnalyzeGeoContext(address)
+    if (context) {
+      cacheAnalyzeGeoContext(context)
+      return context
+    }
+  } catch {
+    return cached
+  }
+
+  return cached
+}
+
+async function enrichAnalyzePayloadWithGeoContext<T extends AnalyzeGeoContext & { timezone_offset_minutes?: number }>(
+  body: T
+): Promise<T> {
+  const payload = { ...body }
+  if (!Number.isFinite(payload.timezone_offset_minutes)) {
+    payload.timezone_offset_minutes = new Date().getTimezoneOffset()
+  }
+  if (payload.province || payload.city || payload.district) {
+    return payload
+  }
+  const geo = await resolveAnalyzeGeoContext()
+  if (!geo) return payload
+  return {
+    ...payload,
+    province: geo.province,
+    city: geo.city,
+    district: geo.district,
+  }
 }
 
 // ---------- 双模型对比分析接口 ----------
@@ -613,12 +780,44 @@ export interface MembershipStatus {
   daily_credits_max?: number
   daily_credits_used?: number
   daily_credits_remaining?: number
+  /** 基础积分（套餐/试用） */
+  daily_credits_base?: number
+  /** 今日额外奖励积分 */
+  daily_bonus_credits?: number
+  /** 今日邀请奖励积分 */
+  invite_bonus_credits?: number
+  /** 今日海报奖励积分 */
+  share_bonus_credits?: number
   /** 次日 00:00+08:00 的 ISO 字符串，用于倒计时 */
   credits_reset_at?: string | null
-  /** 是否在新用户 3 天免费试用期内 */
+  /** 是否在免费试用期内 */
   trial_active?: boolean
   /** 试用期截止时间（UTC ISO） */
   trial_expires_at?: string | null
+  /** 当前试用总天数：前 500 名为 60，501-1000 名为 30，其余新用户为 3 */
+  trial_days_total?: number
+  /** 试用策略标识：founding_top_500_bonus_month / early_first_1000 / regular_new_user */
+  trial_policy?: 'founding_top_500_bonus_month' | 'early_first_1000' | 'regular_new_user' | null
+  /** 若属于首批用户，返回其注册序号（1-based） */
+  early_user_rank?: number | null
+  /** 创始用户活动总名额 */
+  early_user_limit?: number
+  /** 前 1000 名付费会员积分倍数 */
+  early_user_paid_bonus_multiplier?: number
+  /** 是否属于创始用户翻倍活动 */
+  early_user_paid_bonus_eligible?: boolean
+  /** 当前付费状态是否已按创始翻倍生效 */
+  early_user_paid_bonus_active?: boolean
+  points_balance?: number | null
+}
+
+export interface ClaimSharePosterRewardResponse {
+  claimed: boolean
+  already_claimed: boolean
+  credits: number
+  daily_credits_max?: number
+  daily_credits_remaining?: number
+  message: string
   points_balance?: number | null
 }
 
@@ -671,6 +870,29 @@ export interface UpsertFoodExpiryItemRequest {
   note?: string
   source_type?: FoodExpirySourceType
   status?: FoodExpiryStatus
+}
+
+export interface FoodExpiryRecognitionItem {
+  food_name: string
+  category?: string | null
+  storage_type?: FoodExpiryStorageType
+  quantity_note?: string | null
+  expire_date: string
+  opened_date?: string | null
+  note?: string | null
+  source_type?: FoodExpirySourceType
+  suggested_days?: number | null
+  expire_date_is_estimated?: boolean
+  confidence?: number | null
+  recognition_basis?: string | null
+  missing_fields?: string[]
+}
+
+export interface FoodExpiryRecognitionResponse {
+  task_id: string
+  credits_cost: number
+  items: FoodExpiryRecognitionItem[]
+  message: string
 }
 
 export interface FoodExpirySubscribeRequest {
@@ -734,6 +956,7 @@ export interface HealthCondition {
   allergies?: string[]
   health_notes?: string
   report_extract?: ReportExtract | null
+  precision_reference_defaults?: PrecisionReferenceDefaults
   [key: string]: unknown
 }
 
@@ -778,6 +1001,8 @@ export interface HealthProfileUpdateRequest {
   mode_reason?: string
   /** 首页摄入目标，写入 health_condition.dashboard_targets（兼容未部署独立接口的生产环境） */
   dashboard_targets?: DashboardTargets
+  /** 精准模式默认参考物配置，写入 health_condition.precision_reference_defaults */
+  precision_reference_defaults?: PrecisionReferenceDefaults
 }
 
 // 更新用户信息请求接口
@@ -1293,6 +1518,9 @@ export interface AnalyzeTaskSubmitParams {
   image_urls?: string[]
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -1333,12 +1561,7 @@ export interface AnalysisTask {
 
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
-  const payload: AnalyzeTaskSubmitParams = {
-    ...body,
-    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
-      ? body.timezone_offset_minutes
-      : new Date().getTimezoneOffset()
-  }
+  const payload = await enrichAnalyzePayloadWithGeoContext(body)
   const res = await authenticatedRequest('/api/analyze/submit', {
     method: 'POST',
     data: payload,
@@ -1412,6 +1635,9 @@ export interface AnalyzeTextTaskSubmitParams {
   text: string
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -1433,12 +1659,7 @@ export interface AnalyzeTextTaskSubmitParams {
 
 /** 提交文字分析任务（异步） */
 export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
-  const payload: AnalyzeTextTaskSubmitParams = {
-    ...body,
-    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
-      ? body.timezone_offset_minutes
-      : new Date().getTimezoneOffset()
-  }
+  const payload = await enrichAnalyzePayloadWithGeoContext(body)
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
     data: payload,
@@ -1466,6 +1687,9 @@ export interface ContinuePrecisionSessionParams {
   additionalContext?: string
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -1478,12 +1702,7 @@ export async function continuePrecisionSession(
   sessionId: string,
   body: ContinuePrecisionSessionParams,
 ): Promise<{ task_id: string; message: string }> {
-  const payload: ContinuePrecisionSessionParams = {
-    ...body,
-    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
-      ? body.timezone_offset_minutes
-      : new Date().getTimezoneOffset(),
-  }
+  const payload = await enrichAnalyzePayloadWithGeoContext(body)
   const res = await authenticatedRequest(`/api/precision-sessions/${sessionId}/continue`, {
     method: 'POST',
     data: payload,
@@ -2256,6 +2475,27 @@ export async function getMyMembership(): Promise<MembershipStatus> {
   }
 }
 
+export async function claimSharePosterReward(recordId?: string): Promise<ClaimSharePosterRewardResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/rewards/share-poster/claim', {
+      method: 'POST',
+      data: {
+        record_id: recordId || undefined
+      }
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '领取海报奖励失败'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as ClaimSharePosterRewardResponse
+  } catch (error: any) {
+    console.error('领取海报奖励失败:', error)
+    throw new Error(error.message || '领取海报奖励失败')
+  }
+}
+
 export async function getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
   try {
     const response = await authenticatedRequest('/api/expiry/dashboard', {
@@ -2294,6 +2534,24 @@ export async function createManagedFoodExpiryItem(data: UpsertFoodExpiryItemRequ
     throw new Error((response.data as any)?.detail || '创建保质期条目失败')
   }
   return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function recognizeManagedFoodExpiryItems(
+  imageUrls: string[],
+  additionalContext?: string,
+): Promise<FoodExpiryRecognitionResponse> {
+  const response = await authenticatedRequest('/api/expiry/recognize', {
+    method: 'POST',
+    data: {
+      image_urls: imageUrls,
+      additional_context: additionalContext || undefined,
+    },
+    timeout: 90000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '保质期识别失败')
+  }
+  return response.data as FoodExpiryRecognitionResponse
 }
 
 export async function getManagedFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
@@ -2364,45 +2622,6 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
   } catch (error: any) {
     console.error('创建会员支付单失败:', error)
     throw new Error(error.message || '创建会员支付单失败')
-  }
-}
-
-/**
- * [TEST ONLY] 切换当前登录账号会员状态（active ⇌ expired）
- * TODO: [TEST] 正式上线前删除此函数。
- */
-export async function toggleTestMembership(planCode?: string): Promise<{
-  ok: boolean
-  is_pro: boolean
-  status: string
-  expires_at?: string | null
-  plan_code?: string | null
-  plan_name?: string | null
-  daily_credits?: number
-}> {
-  try {
-    const response = await authenticatedRequest('/api/dev/toggle-test-membership', {
-      method: 'POST',
-      data: {
-        plan_code: planCode || undefined
-      }
-    })
-    if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '切换失败'
-      throw new Error(errorMsg)
-    }
-    return response.data as {
-      ok: boolean
-      is_pro: boolean
-      status: string
-      expires_at?: string | null
-      plan_code?: string | null
-      plan_name?: string | null
-      daily_credits?: number
-    }
-  } catch (error: any) {
-    console.error('切换测试会员状态失败:', error)
-    throw new Error(error.message || '切换失败')
   }
 }
 
@@ -2634,6 +2853,14 @@ export interface ManualFoodSearchResult {
     protein: number
     carbs: number
     fat: number
+    fiber: number
+    sugar: number
+    sodium_mg?: number
+  }
+  extra_nutrients?: {
+    fiber: number
+    sugar: number
+    sodium_mg?: number
   }
   items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }> | null
   image_path?: string | null
@@ -2641,6 +2868,7 @@ export interface ManualFoodSearchResult {
   portion_label?: string
   source_label?: string
   recommend_reason?: string
+  nutrition_highlights?: string[]
   usage_count?: number
   collected?: boolean
   like_count?: number
@@ -2670,6 +2898,11 @@ export interface ManualFoodBrowseResult {
   collected_public_library: ManualFoodSearchResult[]
   public_library: ManualFoodSearchResult[]
   nutrition_library: ManualFoodSearchResult[]
+  stats?: {
+    nutrition_food_count: number
+    nutrition_alias_count: number
+    public_food_count: number
+  }
 }
 
 export async function browseManualFood(): Promise<ManualFoodBrowseResult> {

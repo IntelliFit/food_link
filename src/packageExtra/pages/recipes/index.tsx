@@ -1,5 +1,5 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getUserRecipes, deleteUserRecipe, applyUserRecipe, type UserRecipe, type FoodRecord } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
@@ -18,7 +18,6 @@ const MEAL_TYPE_NAMES: Record<string, string> = {
 }
 
 function RecipesPage() {
-  const [activeTab, setActiveTab] = useState<'all' | 'favorite'>('all')
   const [recipes, setRecipes] = useState<UserRecipe[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -26,9 +25,9 @@ function RecipesPage() {
   const loadRecipes = async () => {
     setLoading(true)
     try {
-      const params = activeTab === 'favorite' ? { is_favorite: true } : undefined
-      const { recipes: data } = await getUserRecipes(params)
-      setRecipes(data || [])
+      const { recipes: data } = await getUserRecipes()
+      const favoriteRecipes = (data || []).filter((recipe) => Boolean(recipe.is_favorite))
+      setRecipes(favoriteRecipes)
     } catch (e: any) {
       const msg = e.message || '加载失败'
       if (msg.includes('未登录') || msg.includes('认证')) {
@@ -45,10 +44,6 @@ function RecipesPage() {
   useDidShow(() => {
     loadRecipes()
   })
-
-  useEffect(() => {
-    loadRecipes()
-  }, [activeTab])
 
   /** 下拉刷新 */
   const handlePullDownRefresh = async () => {
@@ -128,9 +123,6 @@ function RecipesPage() {
     Taro.setStorageSync('recordDetail', record)
     Taro.navigateTo({ url: extraPkgUrl('/pages/record-detail/index') })
   }
-
-
-
   /** 删除食谱 */
   const handleDeleteRecipe = async (recipe: UserRecipe) => {
     const { confirm } = await Taro.showModal({
@@ -151,11 +143,6 @@ function RecipesPage() {
     }
   }
 
-  /** 创建新食谱 */
-  const handleCreateRecipe = () => {
-    Taro.showToast({ title: '请从识别结果页保存食谱', icon: 'none', duration: 2000 })
-  }
-
   /** 格式化营养数据 */
   const formatNutrition = (value: number) => {
     return Math.round(value * 10) / 10
@@ -163,27 +150,11 @@ function RecipesPage() {
 
   return (
     <View className='recipes-page'>
-      {/* 标签切换 */}
-      <View className='tabs-container'>
-        <View className='tabs'>
-          <View
-            className={`tab ${activeTab === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveTab('all')}
-          >
-            <Text className='tab-text'>全部食谱</Text>
-            <View className='tab-indicator' />
-          </View>
-          <View
-            className={`tab ${activeTab === 'favorite' ? 'active' : ''}`}
-            onClick={() => setActiveTab('favorite')}
-          >
-            <Text className='tab-text'>我的收藏</Text>
-            <View className='tab-indicator' />
-          </View>
-        </View>
+      <View className='page-header'>
+        <Text className='page-title'>我的收藏</Text>
+        <Text className='page-subtitle'>这里会显示你收藏过的餐食，方便之后快速记录。</Text>
       </View>
 
-      {/* 食谱列表 */}
       <ScrollView className='recipe-list' scrollY>
         {loading ? (
           <View className='empty-state'>
@@ -318,23 +289,13 @@ function RecipesPage() {
           </View>
         ) : (
           <View className='empty-state'>
-            <Text className={`iconfont ${activeTab === 'favorite' ? 'icon-shoucang-yishoucang' : 'icon-jishiben'} empty-icon`}></Text>
-            <Text className='empty-text'>
-              {activeTab === 'favorite' ? '暂无收藏的食谱' : '暂无食谱'}
-            </Text>
-            <Text className='empty-hint'>
-              从识别结果页保存食谱后，将显示在这里
-            </Text>
+            <Text className='iconfont icon-shoucang-yishoucang empty-icon'></Text>
+            <Text className='empty-text'>还没有收藏餐食</Text>
+            <Text className='empty-hint'>分析结果页点击“收藏餐食”后，会显示在这里</Text>
           </View>
         )}
-        {/* 底部占位 */}
         <View className='safe-area-bottom' />
       </ScrollView>
-
-      {/* 创建按钮 */}
-      <View className='create-btn' onClick={handleCreateRecipe}>
-        <Text className='create-icon'>+</Text>
-      </View>
     </View>
   )
 }

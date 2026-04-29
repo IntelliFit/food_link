@@ -239,6 +239,16 @@
   text-align: center;
 }
 
+.expiry-loading-spinner {
+  width: 56rpx;
+  height: 56rpx;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 6rpx solid rgb(0 188 125 / 16%);
+  border-top-color: #00bc7d;
+  animation: expiry-spin 0.9s linear infinite;
+}
+
 .expiry-empty-title {
   display: block;
   font-size: 32rpx;
@@ -252,4 +262,14 @@
   font-size: 24rpx;
   color: #61756d;
   line-height: 1.6;
+}
+
+@keyframes expiry-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }

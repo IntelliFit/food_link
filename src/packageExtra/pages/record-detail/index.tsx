@@ -10,6 +10,7 @@ import {
   updateFoodRecord,
   getPosterCalorieCompare,
   getMyMembership,
+  claimSharePosterReward,
   type FoodRecord,
   type Nutrients
 } from '../../../utils/api'
@@ -634,6 +635,20 @@ function RecordDetailPage() {
                 setPosterGenerating(false)
                 setPosterImageUrl(resp.tempFilePath)
                 setShowPosterModal(true)
+                if (isOwner && record?.id) {
+                  claimSharePosterReward(record.id)
+                    .then((rewardRes) => {
+                      if (rewardRes.claimed && rewardRes.credits > 0) {
+                        Taro.showToast({
+                          title: `海报奖励 +${rewardRes.credits} 积分`,
+                          icon: 'success'
+                        })
+                      }
+                    })
+                    .catch((rewardErr) => {
+                      console.warn('claimSharePosterReward failed', rewardErr)
+                    })
+                }
               },
               fail: (err) => {
                 Taro.hideLoading()

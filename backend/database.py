@@ -23,6 +23,12 @@ FOOD_ANALYZE_BUCKET = "food-images"
 # 用户头像存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
 USER_AVATARS_BUCKET = "user-avatars"
 
+# 会员奖励体系（2026-04-27）
+INVITE_REWARD_CREDITS_PER_DAY = 5
+INVITE_REWARD_DAYS = 3
+INVITE_REWARD_MONTHLY_LIMIT = 10
+SHARE_POSTER_REWARD_CREDITS = 1
+
 # 延迟初始化 Supabase 客户端
 _supabase_client = None
 
@@ -77,6 +83,17 @@ def check_supabase_configured():
         raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
 
 
+def _is_table_not_ready_error(err: Exception, table_names: List[str]) -> bool:
+    err_s = str(err)
+    lower = err_s.lower()
+    if "PGRST205" in err_s or "Could not find the table" in err_s:
+        return True
+    return any(
+        table in err_s and ("relation" in lower or "table" in lower or "schema cache" in lower)
+        for table in table_names
+    )
+
+
 def exercise_fallback_task_type() -> str:
     """
     当数据库尚未允许 task_type=exercise 时，用文字食物队列类型 + payload.exercise 投递。
@@ -85,6 +102,42 @@ def exercise_fallback_task_type() -> str:
     if str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}:
         return "food_text_debug"
     return "food_text"
+
+
+USER_REGISTRATION_TIME_FIELDS = (
+    "created_at",
+    "create_time",
+    "created_time",
+    "register_time",
+    "registered_at",
+    "updated_at",
+)
+
+
+def _parse_possible_datetime(value: Any) -> Optional[datetime]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def resolve_user_registration_datetime(user_row: Optional[Dict[str, Any]]) -> Optional[datetime]:
+    """兼容不同库里的注册时间字段名，解析用户注册时间。"""
+    if not isinstance(user_row, dict):
+        return None
+    for field in USER_REGISTRATION_TIME_FIELDS:
+        parsed = _parse_possible_datetime(user_row.get(field))
+        if parsed:
+            return parsed
+    return None
 
 
 async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
@@ -138,6 +191,40 @@ async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         print(f"[get_user_by_id] 错误: {e}")
+        raise
+
+
+async def is_user_in_first_membership_trial_batch(user_id: str, limit: int = 1000) -> bool:
+    """判断用户是否属于会员首批试用批次（按注册时间升序前 N 名）。"""
+    rank = await get_first_membership_trial_batch_rank(user_id, limit)
+    return rank is not None
+
+
+async def get_first_membership_trial_batch_rank(user_id: str, limit: int = 1000) -> Optional[int]:
+    """返回用户在首批会员创始用户中的名次（1-based）；若不在前 N 名则返回 None。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.table("weapp_user")\
+            .select("*")\
+            .limit(limit)\
+            .execute()
+
+        rows = list(result.data or [])
+        rows.sort(
+            key=lambda row: (
+                resolve_user_registration_datetime(row) or datetime.max.replace(tzinfo=timezone.utc),
+                str(row.get("id") or ""),
+            )
+        )
+        rows = rows[:limit]
+        for index, row in enumerate(rows, start=1):
+            if str(row.get("id") or "") == user_id:
+                return index
+        return None
+    except Exception as e:
+        print(f"[get_first_membership_trial_batch_rank] 错误: {e}")
         raise
 
 
@@ -401,7 +488,12 @@ async def insert_food_record(
     try:
         result = supabase.table("user_food_records").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            created = result.data[0]
+            try:
+                activate_pending_invite_referral_on_first_valid_use_sync(user_id, "food_record")
+            except Exception as reward_err:
+                print(f"[insert_food_record] 邀请奖励激活失败（已忽略）: {reward_err}")
+            return created
         raise Exception("插入饮食记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_food_record] 错误: {e}")
@@ -2269,6 +2361,253 @@ async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[
         raise
     except Exception as e:
         print(f"[resolve_user_by_friend_invite_code] 错误: {e}")
+        raise
+
+
+async def create_invite_referral_binding(
+    inviter_user_id: str,
+    invitee_user_id: str,
+    invite_code: Optional[str] = None,
+    source_request_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """记录邀请关系，供后续“完成 1 次有效使用后发奖励”使用。"""
+    if not inviter_user_id or not invitee_user_id or inviter_user_id == invitee_user_id:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_invite_referrals")
+            .select("*")
+            .eq("invitee_user_id", invitee_user_id)
+            .limit(1)
+            .execute()
+        )
+        if existing.data and len(existing.data) > 0:
+            return existing.data[0]
+
+        row = {
+            "inviter_user_id": inviter_user_id,
+            "invitee_user_id": invitee_user_id,
+            "status": "pending_qualified",
+        }
+        if invite_code:
+            row["invite_code"] = str(invite_code).strip().lower()
+        if source_request_id:
+            row["source_request_id"] = source_request_id
+
+        result = supabase.table("user_invite_referrals").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals"]):
+            print(f"[create_invite_referral_binding] 奖励表未就绪，跳过: {e}")
+            return None
+        print(f"[create_invite_referral_binding] 错误: {e}")
+        raise
+
+
+def activate_pending_invite_referral_on_first_valid_use_sync(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    """当被邀请人完成首次有效使用后，激活双方连续 3 天的邀请奖励。"""
+    if not invitee_user_id:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_invite_referrals")
+            .select("*")
+            .eq("invitee_user_id", invitee_user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = list(existing.data or [])
+        if not rows:
+            return None
+        referral = rows[0]
+        if str(referral.get("status") or "") != "pending_qualified":
+            return referral
+
+        now_utc = datetime.now(timezone.utc)
+        today_cn = datetime.now(CHINA_TZ).date()
+        month_start = today_cn.replace(day=1)
+        if month_start.month == 12:
+            next_month_start = month_start.replace(year=month_start.year + 1, month=1)
+        else:
+            next_month_start = month_start.replace(month=month_start.month + 1)
+
+        inviter_user_id = str(referral.get("inviter_user_id") or "")
+        qualified_result = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("inviter_user_id", inviter_user_id)
+            .in_("status", ["reward_active", "reward_completed"])
+            .gte("reward_start_date", month_start.isoformat())
+            .lt("reward_start_date", next_month_start.isoformat())
+            .execute()
+        )
+        qualified_count = len(qualified_result.data or [])
+
+        if qualified_count >= max(int(monthly_limit or 0), 0):
+            update_data = {
+                "status": "reward_blocked",
+                "first_effective_action_at": now_utc.isoformat(),
+                "first_effective_action_type": effective_action,
+                "blocked_reason": "monthly_limit_reached",
+                "updated_at": now_utc.isoformat(),
+            }
+        else:
+            reward_end = today_cn + timedelta(days=INVITE_REWARD_DAYS - 1)
+            update_data = {
+                "status": "reward_active",
+                "first_effective_action_at": now_utc.isoformat(),
+                "first_effective_action_type": effective_action,
+                "reward_start_date": today_cn.isoformat(),
+                "reward_end_date": reward_end.isoformat(),
+                "blocked_reason": None,
+                "updated_at": now_utc.isoformat(),
+            }
+
+        updated = (
+            supabase.table("user_invite_referrals")
+            .update(update_data)
+            .eq("id", referral["id"])
+            .execute()
+        )
+        if updated.data and len(updated.data) > 0:
+            return updated.data[0]
+        return {**referral, **update_data}
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals"]):
+            print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 奖励表未就绪，跳过: {e}")
+            return None
+        print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 错误: {e}")
+        raise
+
+
+async def activate_pending_invite_referral_on_first_valid_use(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    return activate_pending_invite_referral_on_first_valid_use_sync(
+        invitee_user_id,
+        effective_action,
+        monthly_limit=monthly_limit,
+    )
+
+
+async def get_daily_membership_bonus_breakdown(user_id: str, china_date_str: str) -> Dict[str, int]:
+    """获取用户某天的额外奖励积分明细。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        inviter_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("inviter_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+        invitee_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("invitee_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+        share_rows = (
+            supabase.table("user_credit_bonus_events")
+            .select("credits")
+            .eq("user_id", user_id)
+            .eq("bonus_type", "share_poster")
+            .eq("bonus_date", china_date_str)
+            .execute()
+        )
+
+        invite_bonus_count = len(inviter_rows.data or []) + len(invitee_rows.data or [])
+        invite_bonus_credits = invite_bonus_count * INVITE_REWARD_CREDITS_PER_DAY
+        share_bonus_credits = sum(int(row.get("credits") or 0) for row in (share_rows.data or []))
+        return {
+            "invite_bonus_credits": invite_bonus_credits,
+            "share_bonus_credits": share_bonus_credits,
+            "daily_bonus_credits": invite_bonus_credits + share_bonus_credits,
+        }
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals", "user_credit_bonus_events"]):
+            print(f"[get_daily_membership_bonus_breakdown] 奖励表未就绪，返回 0: {e}")
+            return {
+                "invite_bonus_credits": 0,
+                "share_bonus_credits": 0,
+                "daily_bonus_credits": 0,
+            }
+        print(f"[get_daily_membership_bonus_breakdown] 错误: {e}")
+        raise
+
+
+async def claim_share_poster_bonus(
+    user_id: str,
+    china_date_str: str,
+    source_record_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """领取“生成分享海报”奖励。每天最多一次。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_credit_bonus_events")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("bonus_type", "share_poster")
+            .eq("bonus_date", china_date_str)
+            .limit(1)
+            .execute()
+        )
+        if existing.data and len(existing.data) > 0:
+            return {
+                "claimed": False,
+                "already_claimed": True,
+                "credits": 0,
+                "event": existing.data[0],
+            }
+
+        row = {
+            "user_id": user_id,
+            "bonus_type": "share_poster",
+            "bonus_date": china_date_str,
+            "credits": SHARE_POSTER_REWARD_CREDITS,
+            "meta": {"trigger": "record_detail_poster"},
+        }
+        if source_record_id:
+            row["source_record_id"] = source_record_id
+
+        result = supabase.table("user_credit_bonus_events").insert(row).execute()
+        event = (result.data or [None])[0]
+        return {
+            "claimed": bool(event),
+            "already_claimed": False,
+            "credits": SHARE_POSTER_REWARD_CREDITS if event else 0,
+            "event": event,
+        }
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_credit_bonus_events"]):
+            print(f"[claim_share_poster_bonus] 奖励表未就绪，跳过: {e}")
+            return {
+                "claimed": False,
+                "already_claimed": False,
+                "credits": 0,
+                "event": None,
+            }
+        print(f"[claim_share_poster_bonus] 错误: {e}")
         raise
 
 
@@ -4913,6 +5252,54 @@ async def create_pro_membership_payment_record(data: Dict[str, Any]) -> Dict[str
         raise
 
 
+async def bulk_update_pro_membership_payment_records(
+    filters: Dict[str, Any],
+    data: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """批量更新会员支付记录。仅用于 pending 清理等后台收口动作。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("pro_membership_payment_records").update(data)
+        for key, value in (filters or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)):
+                query = query.in_(key, list(value))
+            else:
+                query = query.eq(key, value)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[bulk_update_pro_membership_payment_records] 错误: {e}")
+        raise
+
+
+async def list_pro_membership_payment_records(
+    filters: Dict[str, Any],
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """按条件查询会员支付记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("pro_membership_payment_records").select("*")
+        for key, value in (filters or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)):
+                query = query.in_(key, list(value))
+            else:
+                query = query.eq(key, value)
+        if limit is not None and limit > 0:
+            query = query.limit(limit)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_pro_membership_payment_records] 错误: {e}")
+        raise
+
+
 async def get_pro_membership_payment_record_by_order_no(order_no: str) -> Optional[Dict[str, Any]]:
     """按平台订单号获取 Pro 会员支付记录。"""
     check_supabase_configured()
@@ -4961,12 +5348,72 @@ def _safe_manual_food_number(value: Any) -> float:
         return 0.0
 
 
+def _build_manual_nutrient_payload(
+    *,
+    calories: float = 0.0,
+    protein: float = 0.0,
+    carbs: float = 0.0,
+    fat: float = 0.0,
+    fiber: float = 0.0,
+    sugar: float = 0.0,
+    sodium_mg: float = 0.0,
+) -> Dict[str, float]:
+    return {
+        "calories": round(_safe_manual_food_number(calories), 2),
+        "protein": round(_safe_manual_food_number(protein), 2),
+        "carbs": round(_safe_manual_food_number(carbs), 2),
+        "fat": round(_safe_manual_food_number(fat), 2),
+        "fiber": round(_safe_manual_food_number(fiber), 2),
+        "sugar": round(_safe_manual_food_number(sugar), 2),
+        "sodium_mg": round(_safe_manual_food_number(sodium_mg), 2),
+    }
+
+
+def _build_manual_food_highlights(nutrients: Dict[str, float]) -> List[str]:
+    highlights: List[str] = []
+    fiber = _safe_manual_food_number(nutrients.get("fiber"))
+    sugar = _safe_manual_food_number(nutrients.get("sugar"))
+    sodium_mg = _safe_manual_food_number(nutrients.get("sodium_mg"))
+    if fiber > 0:
+        highlights.append(f"纤维 {round(fiber, 1)}g")
+    if sugar > 0:
+        highlights.append(f"糖 {round(sugar, 1)}g")
+    if sodium_mg > 0:
+        highlights.append(f"钠 {round(sodium_mg)}mg")
+    return highlights[:3]
+
+
+def _sum_manual_public_item_extra_nutrients(items_raw: List[Dict[str, Any]]) -> Dict[str, float]:
+    fiber = 0.0
+    sugar = 0.0
+    sodium_mg = 0.0
+    for item in items_raw:
+        if not isinstance(item, dict):
+            continue
+        nutrients = item.get("nutrients") or {}
+        if not isinstance(nutrients, dict):
+            continue
+        fiber += _safe_manual_food_number(nutrients.get("fiber"))
+        sugar += _safe_manual_food_number(nutrients.get("sugar"))
+        sodium_mg += _safe_manual_food_number(
+            nutrients.get("sodium_mg")
+            or nutrients.get("sodiumMg")
+            or nutrients.get("sodium")
+        )
+    return _build_manual_nutrient_payload(
+        fiber=fiber,
+        sugar=sugar,
+        sodium_mg=sodium_mg,
+    )
+
+
 def _build_manual_public_food_result(
     row: Dict[str, Any],
     *,
     collected: bool = False,
 ) -> Dict[str, Any]:
     items_raw = row.get("items") or []
+    extra_nutrients = _sum_manual_public_item_extra_nutrients(items_raw)
     total_weight = sum(
         max(int((it or {}).get("weight") or (it or {}).get("estimatedWeightGrams") or 0), 0)
         for it in items_raw
@@ -4986,39 +5433,111 @@ def _build_manual_public_food_result(
         "image_path": row.get("image_path"),
         "image_paths": row.get("image_paths"),
         "portion_label": "1份",
-        "source_label": "公共库",
+        "source_label": "真实餐食",
         "like_count": int(row.get("like_count") or 0),
         "collection_count": int(row.get("collection_count") or 0),
         "collected": bool(collected),
+        "extra_nutrients": extra_nutrients,
+        "nutrition_highlights": _build_manual_food_highlights(extra_nutrients),
     }
 
 
 def _build_manual_nutrition_food_result(row: Dict[str, Any]) -> Dict[str, Any]:
+    nutrients_per_100g = _build_manual_nutrient_payload(
+        calories=row.get("kcal_per_100g"),
+        protein=row.get("protein_per_100g"),
+        carbs=row.get("carbs_per_100g"),
+        fat=row.get("fat_per_100g"),
+        fiber=row.get("fiber_per_100g"),
+        sugar=row.get("sugar_per_100g"),
+        sodium_mg=row.get("sodium_mg_per_100g"),
+    )
     return {
         "id": str(row["id"]),
         "source": "nutrition_library",
         "title": row.get("canonical_name") or "未知食物",
         "subtitle": "标准食物词典 · 每100g",
         "default_weight_grams": 100,
-        "total_calories": _safe_manual_food_number(row.get("kcal_per_100g")),
-        "total_protein": _safe_manual_food_number(row.get("protein_per_100g")),
-        "total_carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
-        "total_fat": _safe_manual_food_number(row.get("fat_per_100g")),
-        "nutrients_per_100g": {
-            "calories": _safe_manual_food_number(row.get("kcal_per_100g")),
-            "protein": _safe_manual_food_number(row.get("protein_per_100g")),
-            "carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
-            "fat": _safe_manual_food_number(row.get("fat_per_100g")),
-        },
+        "total_calories": nutrients_per_100g["calories"],
+        "total_protein": nutrients_per_100g["protein"],
+        "total_carbs": nutrients_per_100g["carbs"],
+        "total_fat": nutrients_per_100g["fat"],
+        "nutrients_per_100g": nutrients_per_100g,
         "items": None,
         "image_path": None,
         "image_paths": None,
         "portion_label": "100g",
-        "source_label": "营养词典",
+        "source_label": "标准食物",
         "collected": False,
         "like_count": 0,
         "collection_count": 0,
+        "extra_nutrients": {
+            "fiber": nutrients_per_100g["fiber"],
+            "sugar": nutrients_per_100g["sugar"],
+            "sodium_mg": nutrients_per_100g["sodium_mg"],
+        },
+        "nutrition_highlights": _build_manual_food_highlights(nutrients_per_100g),
     }
+
+
+_manual_food_stats_cache: Dict[str, Any] = {
+    "value": None,
+    "expires_at": None,
+}
+
+
+def _get_cached_manual_food_stats() -> Optional[Dict[str, int]]:
+    expires_at = _manual_food_stats_cache.get("expires_at")
+    if expires_at and isinstance(expires_at, datetime) and expires_at > datetime.now(timezone.utc):
+        cached = _manual_food_stats_cache.get("value")
+        if isinstance(cached, dict):
+            return cached
+    return None
+
+
+def _set_cached_manual_food_stats(value: Dict[str, int], ttl_seconds: int = 600) -> None:
+    _manual_food_stats_cache["value"] = value
+    _manual_food_stats_cache["expires_at"] = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+
+
+async def get_manual_food_library_stats() -> Dict[str, int]:
+    cached = _get_cached_manual_food_stats()
+    if cached:
+        return cached
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        nutrition_resp = supabase.table("food_nutrition_library") \
+            .select("id", count="exact") \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+        alias_resp = supabase.table("food_nutrition_aliases") \
+            .select("id", count="exact") \
+            .limit(1) \
+            .execute()
+        public_resp = supabase.table("public_food_library") \
+            .select("id", count="exact") \
+            .eq("status", "published") \
+            .limit(1) \
+            .execute()
+        stats = {
+            "nutrition_food_count": int(getattr(nutrition_resp, "count", 0) or 0),
+            "nutrition_alias_count": int(getattr(alias_resp, "count", 0) or 0),
+            "public_food_count": int(getattr(public_resp, "count", 0) or 0),
+        }
+        _set_cached_manual_food_stats(stats)
+        return stats
+    except Exception as e:
+        print(f"[get_manual_food_library_stats] 错误: {e}")
+        fallback = {
+            "nutrition_food_count": 0,
+            "nutrition_alias_count": 0,
+            "public_food_count": 0,
+        }
+        _set_cached_manual_food_stats(fallback, ttl_seconds=120)
+        return fallback
 
 
 def _compute_manual_food_match_score(
@@ -5283,7 +5802,7 @@ async def search_manual_food(
 
     try:
         fnl = supabase.table("food_nutrition_library")\
-            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
             .eq("is_active", True)\
             .ilike("canonical_name", f"%{q}%")\
             .limit(search_limit)\
@@ -5299,7 +5818,7 @@ async def search_manual_food(
         extra_rows = []
         if alias_food_ids:
             extra = supabase.table("food_nutrition_library")\
-                .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+                .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
                 .eq("is_active", True)\
                 .in_("id", alias_food_ids[:search_limit])\
                 .execute()
@@ -5361,7 +5880,7 @@ async def browse_manual_food_library(
 
     try:
         fnl = supabase.table("food_nutrition_library")\
-            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
             .eq("is_active", True)\
             .order("canonical_name")\
             .limit(160)\
@@ -5385,6 +5904,7 @@ async def browse_manual_food_library(
         "collected_public_library": collected_public_library[:8],
         "public_library": public_items[:18],
         "nutrition_library": nutrition_items[:36],
+        "stats": await get_manual_food_library_stats(),
     }
 
 
@@ -5478,7 +5998,12 @@ def create_user_exercise_log_sync(
             row["ai_reasoning"] = str(ai_reasoning).strip()[:4000]
         result = supabase.table("user_exercise_logs").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            created = result.data[0]
+            try:
+                activate_pending_invite_referral_on_first_valid_use_sync(user_id, "exercise_log")
+            except Exception as reward_err:
+                print(f"[create_user_exercise_log_sync] 邀请奖励激活失败（已忽略）: {reward_err}")
+            return created
         raise Exception("新增运动记录失败：返回数据为空")
     except Exception as e:
         print(f"[create_user_exercise_log_sync] 错误: {e}")

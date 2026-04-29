@@ -2357,17 +2357,17 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .tabs-container {
+.fl-page-theme-root--dark .recipes-page .page-header {
   background: $fl-dark-panel-bg !important;
   box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .tab-text {
-  color: $fl-dark-text2 !important;
+.fl-page-theme-root--dark .recipes-page .page-title {
+  color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .tab.active .tab-text {
-  color: $fl-dark-accent !important;
+.fl-page-theme-root--dark .recipes-page .page-subtitle {
+  color: $fl-dark-text2 !important;
 }
 
 .fl-page-theme-root--dark .recipes-page .nutrition-summary {
