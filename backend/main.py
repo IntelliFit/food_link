@@ -5649,10 +5649,10 @@ async def update_health_profile(
         print(
             f"[update_health_profile] 返回行 height={updated.get('height')}, bmr={updated.get('bmr')} | "
             f"验证查询 height={verify_height}, bmr={verify_bmr} | "
-            f"Supabase={os.getenv('SUPABASE_URL', '')[:50]}..."
+            f"PostgreSQL={os.getenv('POSTGRESQL_HOST', '')}:{os.getenv('POSTGRESQL_PORT', '')}/{os.getenv('POSTGRESQL_DATABASE', '')}"
         )
         if verify and verify_height is None and updated.get("height") is not None:
-            print("[update_health_profile] 警告: 更新返回有值但验证查询无值，可能未持久化或连接了不同项目，请核对 SUPABASE_URL 与 Dashboard 是否一致")
+            print("[update_health_profile] 警告: 更新返回有值但验证查询无值，可能未持久化或连接了不同数据库，请核对 POSTGRESQL_* 配置是否一致")
         return {
             "height": updated.get("height"),
             "weight": updated.get("weight"),
@@ -8521,9 +8521,9 @@ async def api_list_public_food_library(
         collections_map = await get_public_food_library_collections_for_items(item_ids, user_info["user_id"]) if item_ids else {}
         # 批量查询作者信息
         author_ids = list({it["user_id"] for it in items})
-        from database import get_supabase_client
-        supabase = get_supabase_client()
-        authors_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
+        from database import get_database_client
+        db = get_database_client()
+        authors_result = db.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
         author_map = {a["id"]: a for a in (authors_result.data or [])} if authors_result else {}
         out = []
         for it in items:
@@ -8572,9 +8572,9 @@ async def api_public_food_library_collections(
         likes_map = await get_public_food_library_likes_for_items(item_ids, user_info["user_id"]) if item_ids else {}
         collections_map = await get_public_food_library_collections_for_items(item_ids, user_info["user_id"]) if item_ids else {}
         author_ids = list({it["user_id"] for it in items})
-        from database import get_supabase_client
-        supabase = get_supabase_client()
-        authors_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
+        from database import get_database_client
+        db = get_database_client()
+        authors_result = db.table("weapp_user").select("id, nickname, avatar").in_("id", author_ids).execute() if author_ids else None
         author_map = {a["id"]: a for a in (authors_result.data or [])} if authors_result else {}
         out = []
         for it in items:

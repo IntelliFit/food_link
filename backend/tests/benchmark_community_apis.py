@@ -14,7 +14,7 @@ from typing import Callable, Any, Awaitable
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 从 backend/.env 读取真实的 Supabase 配置，避免 shell export 截断
+# 从 backend/.env 读取真实数据库配置，避免 shell export 截断
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _env_path = os.path.join(_backend_dir, ".env")
 if os.path.exists(_env_path):
@@ -25,19 +25,26 @@ if os.path.exists(_env_path):
                 k, v = line.split("=", 1)
                 k = k.strip()
                 v = v.strip().strip('"').strip("'")
-                if k in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "JWT_SECRET_KEY"):
+                if k in (
+                    "POSTGRESQL_HOST",
+                    "POSTGRESQL_PORT",
+                    "POSTGRESQL_USER",
+                    "POSTGRESQL_PASSWORD",
+                    "POSTGRESQL_DATABASE",
+                    "JWT_SECRET_KEY",
+                ):
                     os.environ.setdefault(k, v)
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-testing-only-min-32-chars")
-os.environ.setdefault("SUPABASE_URL", "https://ocijuywmkalfmfxquzzf.supabase.co")
-os.environ.setdefault(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "",
-)
+os.environ.setdefault("POSTGRESQL_HOST", "127.0.0.1")
+os.environ.setdefault("POSTGRESQL_PORT", "5432")
+os.environ.setdefault("POSTGRESQL_USER", "postgres")
+os.environ.setdefault("POSTGRESQL_PASSWORD", "")
+os.environ.setdefault("POSTGRESQL_DATABASE", "food_link")
 
 from database import (
-    get_supabase_client,
-    check_supabase_configured,
+    get_database_client,
+    check_postgresql_configured,
     get_friend_ids,
     _get_friend_circle_week_checkin_leaderboard_original,
     get_friend_circle_week_checkin_leaderboard,
@@ -52,8 +59,8 @@ from database import (
 )
 
 
-check_supabase_configured()
-supabase = get_supabase_client()
+check_postgresql_configured()
+db = get_database_client()
 
 # ---- 测试用户 ----
 # 好友最多的用户（好友排名测试）—— 有 220 个好友，能充分暴露分页循环瓶颈
@@ -138,7 +145,7 @@ async def main():
     print("\n[2/4] 点赞查询 get_feed_likes_for_records")
     # 找一批有点赞的 record_ids
     record_rows = (
-        supabase.table("user_food_records")
+        db.table("user_food_records")
         .select("id")
         .eq("user_id", RANK_USER_ID)
         .limit(20)
@@ -163,7 +170,7 @@ async def main():
     print("\n[3/4] 互动消息列表 list_feed_interaction_notifications")
     print(f"      测试用户: {NOTIF_USER_ID}")
     notif_rows = (
-        supabase.table("feed_interaction_notifications")
+        db.table("feed_interaction_notifications")
         .select("id")
         .eq("recipient_user_id", NOTIF_USER_ID)
         .execute()

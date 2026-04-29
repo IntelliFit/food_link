@@ -1,8 +1,7 @@
 """
 数据库操作模块
-使用 Supabase 进行数据操作
+使用 PostgreSQL + COS 进行数据操作
 """
-from supabase import create_client
 import os
 import base64
 import uuid
@@ -10,18 +9,22 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
+from pg_client import get_db_client, check_database_configured
+from cos_storage import (
+    FOOD_IMAGES_BUCKET,
+    HEALTH_REPORTS_BUCKET,
+    USER_AVATARS_BUCKET,
+    build_access_url,
+    delete_object,
+    resolve_object_key,
+    upload_bytes,
+)
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
 
-# 体检报告图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
-HEALTH_REPORTS_BUCKET = "health-reports"
-
-# 食物分析图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
-FOOD_ANALYZE_BUCKET = "food-images"
-
-# 用户头像存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
-USER_AVATARS_BUCKET = "user-avatars"
+# 食物分析图片存储桶名
+FOOD_ANALYZE_BUCKET = FOOD_IMAGES_BUCKET
 
 # 会员奖励体系（2026-04-27）
 INVITE_REWARD_CREDITS_PER_DAY = 5
@@ -29,8 +32,8 @@ INVITE_REWARD_DAYS = 3
 INVITE_REWARD_MONTHLY_LIMIT = 10
 SHARE_POSTER_REWARD_CREDITS = 1
 
-# 延迟初始化 Supabase 客户端
-_supabase_client = None
+# 延迟初始化数据库客户端
+_database_client = None
 
 # ---- 社区接口内存缓存 ----
 # 好友排名缓存：key = "checkin_leaderboard:{user_id}:{week_start_iso}", TTL = 5 分钟
@@ -58,29 +61,33 @@ def _cache_set(cache_dict: Dict, key: str, value: Any):
 
 def get_supabase_client():
     """
-    获取 Supabase 客户端（延迟初始化）
-    确保在 load_dotenv() 之后才初始化
+    兼容旧命名：返回 PostgreSQL 查询客户端（延迟初始化）。
     """
-    global _supabase_client
-    
-    if _supabase_client is None:
-        SUPABASE_URL = os.getenv("SUPABASE_URL")
-        SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        
-        if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-            _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-        else:
-            raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
-    
-    return _supabase_client
+    return get_database_client()
+
+
+def get_database_client():
+    """获取 PostgreSQL 查询客户端（延迟初始化）。"""
+    global _database_client
+    if _database_client is None:
+        _database_client = get_db_client()
+    return _database_client
 
 
 def check_supabase_configured():
-    """检查 Supabase 是否已配置"""
+    """兼容旧命名：检查 PostgreSQL 是否已配置。"""
     try:
-        get_supabase_client()
+        get_database_client()
     except Exception as e:
-        raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
+        raise Exception(f"PostgreSQL 未配置或连接失败: {e}")
+
+
+def check_postgresql_configured():
+    """检查 PostgreSQL 是否已配置。"""
+    try:
+        check_database_configured()
+    except Exception as e:
+        raise Exception(f"PostgreSQL 未配置或连接失败: {e}")
 
 
 def _is_table_not_ready_error(err: Exception, table_names: List[str]) -> bool:
@@ -1751,32 +1758,18 @@ def list_comment_tasks_by_user_sync(
 
 def upload_health_report_image(user_id: str, base64_image: str) -> str:
     """
-    将体检报告图片上传到 Supabase Storage，返回公网可访问的 URL。
+    将体检报告图片上传到 COS，返回可访问 URL。
     路径：health-reports/{user_id}/{uuid}.jpg
-    需先在 Supabase Dashboard → Storage 创建 bucket「health-reports」并设为 Public。
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    check_postgresql_configured()
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
     path = f"{user_id}/{uuid.uuid4().hex}.jpg"
-    supabase.storage.from_(HEALTH_REPORTS_BUCKET).upload(
-        path,
-        file_bytes,
-        {"content-type": "image/jpeg", "upsert": "true"},
-    )
-    # 公网 URL：https://xxx.supabase.co/storage/v1/object/public/health-reports/...
-    result = supabase.storage.from_(HEALTH_REPORTS_BUCKET).get_public_url(path)
-    if isinstance(result, dict):
-        return result.get("publicUrl") or result.get("public_url") or ""
-    if hasattr(result, "public_url"):
-        return getattr(result, "public_url", "")
-    if hasattr(result, "publicUrl"):
-        return getattr(result, "publicUrl", "")
-    return str(result)
+    upload_bytes(HEALTH_REPORTS_BUCKET, path, file_bytes, content_type="image/jpeg")
+    return build_access_url(HEALTH_REPORTS_BUCKET, path)
 
 
 def _resolve_public_storage_url(result: Any) -> str:
@@ -1795,11 +1788,10 @@ def upload_food_analyze_image_bytes(
     content_type: str = "image/jpeg",
 ) -> str:
     """
-    将食物分析图片字节上传到 Supabase Storage，返回公网可访问的 URL。
+    将食物分析图片字节上传到 COS，返回可访问 URL。
     路径：food-images/{uuid}.{ext}
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    check_postgresql_configured()
     if not file_bytes:
         raise ValueError("图片文件为空")
 
@@ -1813,28 +1805,14 @@ def upload_food_analyze_image_bytes(
     safe_content_type = (content_type or "image/jpeg").strip() or "image/jpeg"
 
     try:
-        supabase.storage.from_(FOOD_ANALYZE_BUCKET).upload(
-            path,
-            file_bytes,
-            {"content-type": safe_content_type, "upsert": "true"},
-        )
+        upload_bytes(FOOD_ANALYZE_BUCKET, path, file_bytes, content_type=safe_content_type)
     except Exception as e:
         error_msg = str(e) or f"上传失败: {type(e).__name__}"
-        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower() or "timeout" in error_msg.lower():
-            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
-        raise Exception(f"上传图片到 Supabase Storage 失败: {error_msg}")
+        if "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            raise ConnectionError(f"连接 COS 失败: {error_msg}")
+        raise Exception(f"上传图片到 COS 失败: {error_msg}")
 
-    try:
-        result = supabase.storage.from_(FOOD_ANALYZE_BUCKET).get_public_url(path)
-        url = _resolve_public_storage_url(result)
-        if not url:
-            raise ValueError("无法获取图片公网 URL")
-        return url
-    except Exception as e:
-        error_msg = str(e) or f"获取 URL 失败: {type(e).__name__}"
-        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower():
-            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
-        raise Exception(f"获取图片公网 URL 失败: {error_msg}")
+    return build_access_url(FOOD_ANALYZE_BUCKET, path)
 
 
 def upload_food_analyze_image(base64_image: str) -> str:
@@ -1853,52 +1831,31 @@ def upload_food_analyze_image(base64_image: str) -> str:
 
 def upload_user_avatar(user_id: str, base64_image: str) -> str:
     """
-    将用户头像上传到 Supabase Storage，返回公网可访问的 URL。
+    将用户头像上传到 COS，返回可访问 URL。
     路径：user-avatars/{user_id}/{uuid}.jpg
-    需先在 Supabase Dashboard → Storage 创建 bucket「user-avatars」并设为 Public。
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    check_postgresql_configured()
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
     path = f"{user_id}/{uuid.uuid4().hex}.jpg"
-    supabase.storage.from_(USER_AVATARS_BUCKET).upload(
-        path,
-        file_bytes,
-        {"content-type": "image/jpeg", "upsert": "true"},
-    )
-    result = supabase.storage.from_(USER_AVATARS_BUCKET).get_public_url(path)
-    if isinstance(result, dict):
-        return result.get("publicUrl") or result.get("public_url") or ""
-    if hasattr(result, "public_url"):
-        return getattr(result, "public_url", "")
-    if hasattr(result, "publicUrl"):
-        return getattr(result, "publicUrl", "")
-    return str(result)
+    upload_bytes(USER_AVATARS_BUCKET, path, file_bytes, content_type="image/jpeg")
+    return build_access_url(USER_AVATARS_BUCKET, path)
 
 def delete_image_from_storage(image_url: str, bucket_name: str = FOOD_ANALYZE_BUCKET) -> None:
     """
-    根据图片公网 URL 从 Supabase Storage 中删除指定图片。
-    如果 URL 含有类似 '/storage/v1/object/public/bucket_name/XXX.jpg'，则提取 XXX.jpg 作为 path 删除。
+    根据图片 URL/对象 key 从 COS 删除指定图片。
     """
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    check_postgresql_configured()
     try:
-        # 提取 path，例如 "https://..../food-images/1234.jpg" 提取出 "1234.jpg"
-        # 简单粗暴的方式：由于 bucket 为 bucket_name，可以找这个字符串之后的部分
-        if bucket_name in image_url:
-            parts = image_url.split(f"{bucket_name}/")
-            if len(parts) == 2:
-                path = parts[1].split("?")[0]  # 忽略 query string
-                supabase.storage.from_(bucket_name).remove([path])
-                print(f"[delete_image_from_storage] 删除成功: {path}")
-            else:
-                print(f"[delete_image_from_storage] URL 对应路径解析失败: {image_url}")
-        else:
-             print(f"[delete_image_from_storage] URL 中未找到 bucket_name: {image_url}")
+        key = resolve_object_key(image_url, bucket_name) or ""
+        if not key:
+            print(f"[delete_image_from_storage] URL 对应路径解析失败: {image_url}")
+            return
+        delete_object(bucket_name, key)
+        print(f"[delete_image_from_storage] 删除成功: {key}")
     except Exception as e:
         print(f"[delete_image_from_storage] 删除失败: {e}")
 

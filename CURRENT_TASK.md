@@ -1,5 +1,25 @@
 # CURRENT_TASK
 
+- Task: Supabase -> PostgreSQL/COS 迁移收口（后端主链路）
+- Status: in_progress（已完成第一轮关键收口：去除 `supabase` Python 依赖硬引用、补齐 `get_database_client/check_postgresql_configured` 导出、图片上传删除切到 `cos_storage`、`main.py` 公共库作者查询切到 PostgreSQL；仍需继续清理 `database.py/main.py` 中遗留 Supabase 文案与命名）
+- Scope:
+  - `backend/database.py`
+    - 客户端初始化改为 `pg_client.get_db_client()`
+    - 新增 `get_database_client()` 与 `check_postgresql_configured()`，并保留旧命名兼容
+    - `upload_health_report_image/upload_food_analyze_image_bytes/upload_user_avatar/delete_image_from_storage` 全量切到 COS 适配层
+  - `backend/main.py`
+    - 公共食物库列表/收藏列表里的作者批量查询已改为 `get_database_client().table(...)`
+    - `update_health_profile` 调试日志已从 `SUPABASE_URL` 改为 `POSTGRESQL_*`
+  - `backend/.env.example`
+    - 默认环境变量改为 `POSTGRESQL_* + COS_*`
+  - `backend/tests/benchmark_community_apis.py`
+    - 测试基线变量和客户端调用改为 PostgreSQL
+- Verification:
+  - `python -m py_compile backend/database.py backend/main.py backend/tests/benchmark_community_apis.py` 通过
+- Notes:
+  - 本轮目标优先确保“后端逻辑不再依赖 Supabase SDK 运行”
+  - 兼容函数名 `get_supabase_client/check_supabase_configured` 目前保留，内部已切换到 PostgreSQL，避免一次性改动过大引发回归
+
 - Task: 手动记录页面心智收口为“双库模式”
 - Status: done（前台展示正式收口为 `food_nutrition_library + public_food_library` 两类；静态校验通过；`weapp-devtools` 运行态验证仍受本机 `mrc.cmd` 权限阻塞）
 - Scope:

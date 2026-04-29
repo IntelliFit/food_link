@@ -1,5 +1,11 @@
 # DECISIONS
 
+- `2026-04-29`: Supabase -> PostgreSQL/COS 迁移收口的当前稳定策略是“先兼容导出、再逐步改名”：
+  - `backend/database.py` 对外继续保留 `get_supabase_client/check_supabase_configured` 旧函数名，避免一次性改动全仓调用点引发回归
+  - 旧函数内部必须已经切换到 PostgreSQL 客户端，不得再依赖 `supabase` Python SDK
+  - 新增并优先使用 `get_database_client/check_postgresql_configured` 作为后续统一入口
+  - 所有图片上传/删除逻辑以 `cos_storage` 为唯一存储适配层，不再直接调用 Supabase Storage SDK
+
 - `2026-04-29`: 手动记录前台展示的正式心智继续收口为“双库模式”，不要把辅助表也讲成用户可见数据库。当前稳定规则是：
   - 前台可见的主库只有两类：
     - `food_nutrition_library`：标准食物库
