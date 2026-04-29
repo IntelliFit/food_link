@@ -16,11 +16,13 @@ const packageVersion = readPackageVersion()
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
+  console.log('process.env.TARO_APP_API_BASE_URL', process.env.TARO_APP_API_BASE_URL)
   const apiBaseUrl =
     process.env.TARO_APP_API_BASE_URL ||
     (process.env.NODE_ENV === 'development'
       ? 'http://127.0.0.1:3010'
       : 'https://healthymax.cn')
+  console.log('apiBaseUrl', apiBaseUrl) 
   const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
 
   const baseConfig: UserConfigExport<'vite'> = {

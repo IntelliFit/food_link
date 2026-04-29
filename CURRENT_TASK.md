@@ -1,5 +1,43 @@
 # CURRENT_TASK
 
+- Task: 前端开发构建环境变量优先级收口（`dev:weapp` 优先 `.env.development`）
+- Status: done（已移除 `dev:weapp` 对 `TARO_APP_API_BASE_URL` 的硬编码覆盖）
+- Scope:
+  - `package.json`
+    - `dev:weapp` 从 `cross-env NODE_ENV=development TARO_APP_API_BASE_URL=http://127.0.0.1:3010 ...`
+      改为 `cross-env NODE_ENV=development ...`
+    - 现行为：优先读取 `.env.development` 的 `TARO_APP_API_BASE_URL`，未提供时再由 `config/index.ts` 回退到 `http://127.0.0.1:3010`
+- Verification:
+  - 逻辑校验：`config/index.ts` 已保留 `process.env.TARO_APP_API_BASE_URL || development fallback` 的兜底分支
+
+- Task: Supabase -> PostgreSQL/COS 迁移一键化脚本加固（缺表/重复冲突防抖）
+- Status: in_progress（已完成核心脚本加固与正式补跑；数据库迁移失败表已清零，待对象存储迁移完成后总收口）
+- Scope:
+  - `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
+    - 新增 `--fail-on-missing-target-table` 开关；默认策略改为“目标缺表自动跳过并记录”，不再整次失败
+    - `--skip-existing` 冲突策略升级为“多候选唯一键（优先业务唯一键，且仅选择可立即校验的唯一索引）”，避免仅用主键导致的去重漏拦截与 deferrable 约束报错
+    - 迁移计划输出新增“目标缺表 -> 自动跳过/失败”显式提示
+  - `backend/scripts/migrate_one_click.py`（新增）
+    - 一键串行执行：数据库迁移 -> 可选奖励表 SQL -> 对象存储迁移
+    - 默认支持 `--skip-existing`，可 `--dry-run`、`--db-only`、`--storage-only`
+    - 支持透传 `--fail-on-missing-target-table`，保证新环境也可按需切严格模式
+- Verification:
+  - `python -m py_compile backend/scripts/migrate_supabase_postgres_to_postgresql.py backend/scripts/migrate_one_click.py` 通过
+  - `python backend/scripts/migrate_supabase_postgres_to_postgresql.py --env-file backend/.env --skip-existing --dry-run`：失败表数 `0`
+  - `python backend/scripts/migrate_one_click.py --env-file backend/.env --dry-run --db-only`：执行通过
+  - `python backend/scripts/migrate_one_click.py --env-file backend/.env --db-only --skip-existing`：执行通过，失败表数 `0`，`test_backend_datasets` 与 `test_backend_dataset_items` 已补齐并完成迁移
+- Notes:
+  - 一键脚本现会在数据库迁移前自动执行：
+    - `backend/sql/add_test_backend_datasets.sql`
+    - `backend/sql/add_membership_reward_system.sql`
+  - 存储迁移后台任务已完成：源对象 `6168`、成功上传 `6168`、失败 `0`、跳过 `0`（exit code `0`）
+  - 修复 `backend/pg_client.py` 偶发连接断开导致的 `/api/user/profile` 500：
+    - 连接已关闭时不再执行 `rollback()/commit()`，避免二次抛出 `InterfaceError: connection already closed`
+    - 释放连接到池前若已关闭则 `putconn(close=True)`，避免坏连接回池复用
+  - 修复 `packageExtra/pages/day-record` 历史图片 500：
+    - `backend/main.py` 的首页/日记录聚合返回里，`image_path/image_paths` 统一经 `resolve_reference_url(FOOD_IMAGES_BUCKET, ...)` 归一化
+    - 兼容历史只存 key（如 `2026/04/22/xxx.png`）的记录，避免小程序将其当作相对路径请求 `__pageframe__/...` 导致 500
+
 - Task: Supabase -> PostgreSQL/COS 迁移收口（后端主链路）
 - Status: in_progress（已完成第一轮关键收口：去除 `supabase` Python 依赖硬引用、补齐 `get_database_client/check_postgresql_configured` 导出、图片上传删除切到 `cos_storage`、`main.py` 公共库作者查询切到 PostgreSQL；仍需继续清理 `database.py/main.py` 中遗留 Supabase 文案与命名）
 - Scope:
@@ -19,6 +57,7 @@
 - Notes:
   - 本轮目标优先确保“后端逻辑不再依赖 Supabase SDK 运行”
   - 兼容函数名 `get_supabase_client/check_supabase_configured` 目前保留，内部已切换到 PostgreSQL，避免一次性改动过大引发回归
+  - 用户触发复跑迁移时发现当前 `backend/.env` 缺失源端 `SUPABASE_DB_URL/DATABASE_URL/SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY`，导致历史迁移脚本无法直接重跑；已先在目标 PostgreSQL 执行 `backend/sql/add_membership_reward_system.sql` 修复 `user_invite_referrals` 缺表问题
 
 - Task: 手动记录页面心智收口为“双库模式”
 - Status: done（前台展示正式收口为 `food_nutrition_library + public_food_library` 两类；静态校验通过；`weapp-devtools` 运行态验证仍受本机 `mrc.cmd` 权限阻塞）

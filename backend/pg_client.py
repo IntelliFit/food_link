@@ -82,6 +82,12 @@ class PostgresClient:
         return self._pool.getconn()
 
     def release_connection(self, conn) -> None:
+        if conn is None:
+            return
+        # 连接已被服务端断开时，不能直接放回池里，否则后续请求会反复拿到坏连接。
+        if getattr(conn, "closed", 1):
+            self._pool.putconn(conn, close=True)
+            return
         self._pool.putconn(conn)
 
     def get_column_types(self, table: str) -> Dict[str, str]:
@@ -236,12 +242,15 @@ class TableQuery:
         try:
             result = self._execute_with_connection(conn)
             if self._operation in {"insert", "update", "delete", "upsert"}:
-                conn.commit()
-            else:
+                if not conn.closed:
+                    conn.commit()
+            elif not conn.closed:
                 conn.rollback()
             return result
         except Exception:
-            conn.rollback()
+            # 若连接已被数据库侧关闭，rollback 会抛 InterfaceError 并掩盖原始异常。
+            if not conn.closed:
+                conn.rollback()
             raise
         finally:
             self.client.release_connection(conn)

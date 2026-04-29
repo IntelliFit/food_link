@@ -32,6 +32,7 @@ import calendar
 from datetime import timedelta, datetime, timezone, date
 from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
+from cos_storage import FOOD_IMAGES_BUCKET, resolve_reference_url
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -6146,6 +6147,7 @@ async def get_food_record_list(
                         r["image_paths"] = [r["image_path"]]
         for r in records:
             r["meal_type"] = _normalize_meal_type(r.get("meal_type"), record_time=r.get("record_time"))
+            _normalize_food_record_image_urls(r)
         return {"records": records}
     except Exception as e:
         print(f"[get_food_record_list] 错误: {e}")
@@ -6182,6 +6184,34 @@ async def _hydrate_food_record_image_paths(record: Optional[Dict[str, Any]]) -> 
     return record
 
 
+def _normalize_food_record_image_urls(record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """把记录中的 image_path/image_paths 统一归一化为可访问 URL。"""
+    if not record:
+        return record
+
+    candidates: List[str] = []
+    raw_paths = record.get("image_paths")
+    if isinstance(raw_paths, list):
+        candidates.extend([item.strip() for item in raw_paths if isinstance(item, str) and item.strip()])
+    raw_single = record.get("image_path")
+    if not candidates and isinstance(raw_single, str) and raw_single.strip():
+        candidates.append(raw_single.strip())
+
+    normalized: List[str] = []
+    seen = set()
+    for item in candidates:
+        url = resolve_reference_url(FOOD_IMAGES_BUCKET, item)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        normalized.append(url)
+
+    if normalized:
+        record["image_paths"] = normalized
+        record["image_path"] = normalized[0]
+    return record
+
+
 @app.get("/api/food-record/{record_id}")
 async def get_food_record_detail(
     record_id: str,
@@ -6199,6 +6229,7 @@ async def get_food_record_detail(
         if record.get("user_id") != user_id:
             raise HTTPException(status_code=403, detail="无权访问此记录")
         record = await _hydrate_food_record_image_paths(record)
+        record = _normalize_food_record_image_urls(record)
         record["meal_type"] = _normalize_meal_type(record.get("meal_type"), record_time=record.get("record_time"))
         return {"record": record}
     except HTTPException:
@@ -7029,6 +7060,9 @@ async def get_home_dashboard(
                 if not isinstance(image_url, str):
                     continue
                 image_url = image_url.strip()
+                if not image_url:
+                    continue
+                image_url = resolve_reference_url(FOOD_IMAGES_BUCKET, image_url)
                 if not image_url or image_url in seen_image_urls:
                     continue
                 seen_image_urls.add(image_url)

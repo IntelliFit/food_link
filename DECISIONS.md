@@ -1,5 +1,14 @@
 # DECISIONS
 
+- `2026-04-29`: 小程序本地开发构建环境变量口径收口为“`dev:weapp` 优先读 `.env.development`，不在 npm script 里硬编码覆盖 `TARO_APP_API_BASE_URL`”：
+  - `package.json` 的 `dev:weapp` 只保留 `NODE_ENV=development`
+  - 环境变量优先级变为：shell 显式传入 > `.env.development` > `config/index.ts` 的 development fallback (`http://127.0.0.1:3010`)
+
+- `2026-04-29`: 数据迁移脚本的稳定口径升级为“默认可重跑、默认不中断”：
+  - `backend/scripts/migrate_supabase_postgres_to_postgresql.py` 在 `--skip-existing` 下改为“多候选唯一键”策略：优先使用业务唯一键，且只选择 `indimmediate=true` 的可立即校验唯一索引，避免仅用主键导致的去重漏拦截与 deferrable 约束报错
+  - 对目标库缺失的表，默认“跳过并记录”而不是整次失败；如需严格阻断可显式加 `--fail-on-missing-target-table`
+  - 新增 `backend/scripts/migrate_one_click.py` 作为标准入口：测试集/会员奖励 bootstrap SQL -> 数据库迁移 -> 存储迁移，支持 `--dry-run` 先验
+
 - `2026-04-29`: Supabase -> PostgreSQL/COS 迁移收口的当前稳定策略是“先兼容导出、再逐步改名”：
   - `backend/database.py` 对外继续保留 `get_supabase_client/check_supabase_configured` 旧函数名，避免一次性改动全仓调用点引发回归
   - 旧函数内部必须已经切换到 PostgreSQL 客户端，不得再依赖 `supabase` Python SDK
