@@ -1,5 +1,7 @@
 import Taro from '@tarojs/taro'
 
+import { extraPkgUrl } from './subpackage-extra'
+
 function readInjectedString(
   getter: () => string,
   fallback = ''
@@ -69,12 +71,41 @@ export interface PrecisionReferenceDimensions {
   height?: number
 }
 
+export type PrecisionReferencePresetKey =
+  | 'hand'
+  | 'campus_card'
+  | 'large_card'
+  | 'chopsticks'
+  | 'spoon'
+  | 'bank_card'
+  | 'custom'
+
 export interface PrecisionReferenceObjectInput {
   reference_type: 'preset' | 'custom'
   reference_name: string
   dimensions_mm?: PrecisionReferenceDimensions
   placement_note?: string
   applies_to_items?: string[]
+}
+
+export interface PrecisionReferencePresetConfig {
+  reference_name: string
+  dimensions_mm?: PrecisionReferenceDimensions
+}
+
+export interface PrecisionReferenceDefaults {
+  preferred_reference_key?: PrecisionReferencePresetKey
+  presets?: Partial<Record<PrecisionReferencePresetKey, PrecisionReferencePresetConfig>>
+}
+
+export interface AnalyzeGeoContext {
+  province?: string
+  city?: string
+  district?: string
+}
+
+type CachedAnalyzeGeoContext = AnalyzeGeoContext & {
+  expiresAt: number
 }
 
 // 分析请求接口（base64Image 与 image_url 二选一，推荐先上传拿 image_url）
@@ -92,6 +123,9 @@ export interface AnalyzeRequest {
   remaining_calories?: number
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
 }
@@ -104,6 +138,7 @@ export interface Nutrients {
   fat: number
   fiber: number
   sugar: number
+  sodium_mg?: number
 }
 
 
@@ -140,6 +175,140 @@ export interface AnalyzeResponse {
   splitStrategy?: PrecisionSplitStrategy
   uncertaintyNotes?: string[]
   redirectTaskId?: string
+}
+
+const ANALYZE_LOCATION_CACHE_KEY = 'analyze_location_context_v1'
+const ANALYZE_LOCATION_CACHE_TTL_MS = 30 * 60 * 1000
+const MUNICIPALITY_NAMES = ['北京', '上海', '天津', '重庆']
+
+function normalizeAreaText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function readCachedAnalyzeGeoContext(): AnalyzeGeoContext | undefined {
+  try {
+    const raw = Taro.getStorageSync(ANALYZE_LOCATION_CACHE_KEY)
+    if (!raw || typeof raw !== 'object') return undefined
+    const cached = raw as Partial<CachedAnalyzeGeoContext>
+    if (!Number.isFinite(cached.expiresAt) || Number(cached.expiresAt) <= Date.now()) {
+      Taro.removeStorageSync(ANALYZE_LOCATION_CACHE_KEY)
+      return undefined
+    }
+    const province = normalizeAreaText(cached.province)
+    const city = normalizeAreaText(cached.city)
+    const district = normalizeAreaText(cached.district)
+    if (!province && !city && !district) return undefined
+    return { province, city, district }
+  } catch {
+    return undefined
+  }
+}
+
+function cacheAnalyzeGeoContext(context?: AnalyzeGeoContext): void {
+  if (!context) return
+  const province = normalizeAreaText(context.province)
+  const city = normalizeAreaText(context.city)
+  const district = normalizeAreaText(context.district)
+  if (!province && !city && !district) return
+  try {
+    const payload: CachedAnalyzeGeoContext = {
+      province,
+      city,
+      district,
+      expiresAt: Date.now() + ANALYZE_LOCATION_CACHE_TTL_MS,
+    }
+    Taro.setStorageSync(ANALYZE_LOCATION_CACHE_KEY, payload)
+  } catch {
+    // ignore cache failure
+  }
+}
+
+function parseAnalyzeGeoContext(address: string, promptCity = ''): AnalyzeGeoContext | undefined {
+  const addr = normalizeAreaText(address)
+  const cityPrompt = normalizeAreaText(promptCity)
+  if (!addr && !cityPrompt) return undefined
+
+  const provinceMatch = addr.match(/^(.+?[省市])/)
+  const cityMatch = addr.match(/^.+?[省](.+?市)/)
+  const districtMatch = addr.match(/[市省](.+?[区县市])/)
+  const province = normalizeAreaText(provinceMatch ? provinceMatch[1] : cityPrompt)
+  const isMunicipality = MUNICIPALITY_NAMES.some((name) => province.includes(name))
+  const city = isMunicipality ? '' : normalizeAreaText(cityMatch ? cityMatch[1] : '')
+  const district = normalizeAreaText(
+    districtMatch
+      ? districtMatch[1]
+      : (addr.match(/^(.+?[区县市])/) || [])[1]
+  )
+
+  if (!province && !city && !district) return undefined
+  return { province, city, district }
+}
+
+async function resolveAnalyzeGeoContext(): Promise<AnalyzeGeoContext | undefined> {
+  const cached = readCachedAnalyzeGeoContext()
+  if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+    return cached
+  }
+
+  try {
+    const setting = await Taro.getSetting()
+    if (!setting.authSetting?.['scope.userLocation']) {
+      return cached
+    }
+
+    const location = await Taro.getLocation({ type: 'wgs84' })
+    const reverse = await Taro.request({
+      url: `${API_BASE_URL}/api/location/reverse`,
+      method: 'POST',
+      header: withNgrokBypassHeaders({ 'Content-Type': 'application/json' }),
+      data: { lat: location.latitude, lon: location.longitude },
+      timeout: 8000,
+    })
+    if (reverse.statusCode !== 200 || !reverse.data) {
+      return cached
+    }
+
+    const data = reverse.data as Record<string, unknown>
+    const raw = data.address ?? data.formatted_address ?? data.result
+    let address = ''
+    if (typeof raw === 'string') {
+      address = raw
+    } else if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const record = raw as Record<string, unknown>
+      if (typeof record.formatted_address === 'string') address = record.formatted_address
+      else if (typeof record.address === 'string') address = record.address
+    }
+
+    const context = parseAnalyzeGeoContext(address)
+    if (context) {
+      cacheAnalyzeGeoContext(context)
+      return context
+    }
+  } catch {
+    return cached
+  }
+
+  return cached
+}
+
+async function enrichAnalyzePayloadWithGeoContext<T extends AnalyzeGeoContext & { timezone_offset_minutes?: number }>(
+  body: T
+): Promise<T> {
+  const payload = { ...body }
+  if (!Number.isFinite(payload.timezone_offset_minutes)) {
+    payload.timezone_offset_minutes = new Date().getTimezoneOffset()
+  }
+  if (payload.province || payload.city || payload.district) {
+    return payload
+  }
+  const geo = await resolveAnalyzeGeoContext()
+  if (!geo) return payload
+  return {
+    ...payload,
+    province: geo.province,
+    city: geo.city,
+    district: geo.district,
+  }
 }
 
 // ---------- 双模型对比分析接口 ----------
@@ -264,6 +433,8 @@ export interface HomeMealRecordEntry {
   total_calories?: number
   /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
   title?: string
+  /** 完整记录数据，用于首页直接编辑而无需二次请求 */
+  full_record?: FoodRecord
 }
 
 /** 首页今日餐食单条 */
@@ -277,6 +448,7 @@ export interface HomeMealItem {
   tags: string[]
   image_path?: string | null
   image_paths?: string[] | null
+  images?: string[] | null
   /** 该餐次内最新一条饮食记录 id，用于跳转记录详情/生成分享海报 */
   primary_record_id?: string | null
   /** 部分网关/序列化可能为 camelCase，与 primary_record_id 等价 */
@@ -293,7 +465,7 @@ export interface HomeMealItem {
 
 /** 解析首页餐食卡片对应的记录 id（兼容 snake_case / camelCase） */
 export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<string, unknown>): string | null {
-  const m = meal as Record<string, unknown>
+  const m = meal as unknown as Record<string, unknown>
   const candidates = [m.primary_record_id, m.primaryRecordId]
   for (const v of candidates) {
     if (v != null && String(v).trim() !== '') {
@@ -308,10 +480,20 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const entries = Array.isArray(row.meal_record_entries)
     ? row.meal_record_entries.filter((e) => e && String(e.id || '').trim() !== '')
     : []
+  const images = Array.isArray(row.image_paths)
+    ? row.image_paths.filter(Boolean)
+    : Array.isArray(row.images)
+      ? row.images.filter(Boolean)
+      : null
   return {
     ...row,
+    images,
+    image_paths: images,
     meal_record_entries: entries.length > 0 ? entries : row.meal_record_entries,
-    primary_record_id: resolveHomeMealPrimaryRecordId(row as Record<string, unknown>),
+    primary_record_id: resolveHomeMealPrimaryRecordId(row as unknown as Record<string, unknown>),
+    protein: row.protein,
+    carbs: row.carbs,
+    fat: row.fat,
   }
 }
 
@@ -559,12 +741,27 @@ export interface UserInfo {
   public_records?: boolean
 }
 
+export type MembershipTier = 'light' | 'standard' | 'advanced'
+export type MembershipPeriod = 'monthly' | 'quarterly' | 'yearly'
+
 export interface MembershipPlan {
   code: string
   name: string
   amount: number
   duration_months: number
   description?: string | null
+  /** 档位，null 表示旧套餐（如 pro_monthly），不参与新矩阵 */
+  tier?: MembershipTier | null
+  /** 周期，null 表示旧套餐 */
+  period?: MembershipPeriod | null
+  /** 套餐每日可用积分 */
+  daily_credits?: number
+  /** 对照价（原价），用于"立省 xx 元"。null 表示无对照 */
+  original_amount?: number | null
+  /** 立省金额 = original_amount - amount，后端算好，null 表示不展示 */
+  savings?: number | null
+  /** 排序权重 */
+  sort_order?: number
 }
 
 export interface MembershipStatus {
@@ -575,15 +772,53 @@ export interface MembershipStatus {
   current_period_start?: string | null
   expires_at?: string | null
   last_paid_at?: string | null
+  /** 旧拍照日限，当前关闭，可能为 null */
   daily_limit: number | null
   daily_used: number | null
   daily_remaining: number | null
-  /** 积分制：当前余额 */
+  /** 新积分体系（2026-04-21 起） */
+  daily_credits_max?: number
+  daily_credits_used?: number
+  daily_credits_remaining?: number
+  /** 基础积分（套餐/试用） */
+  daily_credits_base?: number
+  /** 今日额外奖励积分 */
+  daily_bonus_credits?: number
+  /** 今日邀请奖励积分 */
+  invite_bonus_credits?: number
+  /** 今日海报奖励积分 */
+  share_bonus_credits?: number
+  /** 次日 00:00+08:00 的 ISO 字符串，用于倒计时 */
+  credits_reset_at?: string | null
+  /** 是否在免费试用期内 */
+  trial_active?: boolean
+  /** 试用期截止时间（UTC ISO） */
+  trial_expires_at?: string | null
+  /** 当前试用总天数：前 500 名为 60，501-1000 名为 30，其余新用户为 3 */
+  trial_days_total?: number
+  /** 试用策略标识：founding_top_500_bonus_month / early_first_1000 / regular_new_user */
+  trial_policy?: 'founding_top_500_bonus_month' | 'early_first_1000' | 'regular_new_user' | null
+  /** 若属于首批用户，返回其注册序号（1-based） */
+  early_user_rank?: number | null
+  /** 创始用户活动总名额 */
+  early_user_limit?: number
+  /** 前 1000 名付费会员积分倍数 */
+  early_user_paid_bonus_multiplier?: number
+  /** 是否属于创始用户翻倍活动 */
+  early_user_paid_bonus_eligible?: boolean
+  /** 当前付费状态是否已按创始翻倍生效 */
+  early_user_paid_bonus_active?: boolean
   points_balance?: number | null
-  /** 自己的注册邀请码（分享用） */
-  invite_code?: string | null
-  /** 每 1 元充值可兑换积分（与后端 POINTS_YUAN_TO_POINTS 一致） */
-  points_per_yuan?: number | null
+}
+
+export interface ClaimSharePosterRewardResponse {
+  claimed: boolean
+  already_claimed: boolean
+  credits: number
+  daily_credits_max?: number
+  daily_credits_remaining?: number
+  message: string
+  points_balance?: number | null
 }
 
 export interface MembershipPlansResponse {
@@ -635,6 +870,29 @@ export interface UpsertFoodExpiryItemRequest {
   note?: string
   source_type?: FoodExpirySourceType
   status?: FoodExpiryStatus
+}
+
+export interface FoodExpiryRecognitionItem {
+  food_name: string
+  category?: string | null
+  storage_type?: FoodExpiryStorageType
+  quantity_note?: string | null
+  expire_date: string
+  opened_date?: string | null
+  note?: string | null
+  source_type?: FoodExpirySourceType
+  suggested_days?: number | null
+  expire_date_is_estimated?: boolean
+  confidence?: number | null
+  recognition_basis?: string | null
+  missing_fields?: string[]
+}
+
+export interface FoodExpiryRecognitionResponse {
+  task_id: string
+  credits_cost: number
+  items: FoodExpiryRecognitionItem[]
+  message: string
 }
 
 export interface FoodExpirySubscribeRequest {
@@ -698,6 +956,7 @@ export interface HealthCondition {
   allergies?: string[]
   health_notes?: string
   report_extract?: ReportExtract | null
+  precision_reference_defaults?: PrecisionReferenceDefaults
   [key: string]: unknown
 }
 
@@ -742,6 +1001,8 @@ export interface HealthProfileUpdateRequest {
   mode_reason?: string
   /** 首页摄入目标，写入 health_condition.dashboard_targets（兼容未部署独立接口的生产环境） */
   dashboard_targets?: DashboardTargets
+  /** 精准模式默认参考物配置，写入 health_condition.precision_reference_defaults */
+  precision_reference_defaults?: PrecisionReferenceDefaults
 }
 
 // 更新用户信息请求接口
@@ -1257,6 +1518,9 @@ export interface AnalyzeTaskSubmitParams {
   image_urls?: string[]
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -1285,7 +1549,7 @@ export interface AnalysisTask {
   image_url?: string | null  // 图片分析时有值，文字分析时为空
   image_paths?: string[] | null // 多图分析时有值
   text_input?: string | null  // 文字分析时有值，图片分析时为空
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated'
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out'
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
@@ -1297,12 +1561,7 @@ export interface AnalysisTask {
 
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
-  const payload: AnalyzeTaskSubmitParams = {
-    ...body,
-    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
-      ? body.timezone_offset_minutes
-      : new Date().getTimezoneOffset()
-  }
+  const payload = await enrichAnalyzePayloadWithGeoContext(body)
   const res = await authenticatedRequest('/api/analyze/submit', {
     method: 'POST',
     data: payload,
@@ -1321,11 +1580,64 @@ export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<
   return { task_id: taskId, message }
 }
 
+/** 批量图片分析提交参数 */
+export interface AnalyzeBatchSubmitParams {
+  image_urls: string[]
+  meal_type?: MealType
+  timezone_offset_minutes?: number
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+  additionalContext?: string
+  modelName?: string
+  execution_mode?: ExecutionMode
+  reference_objects?: PrecisionReferenceObjectInput[]
+}
+
+/** 批量图片分析响应 */
+export interface AnalyzeBatchResponse {
+  task_id: string
+  image_count: number
+  result: AnalyzeResponse
+}
+
+/** 批量分析多张食物图片（每张单独识别，结果累加） */
+export async function submitAnalyzeBatch(body: AnalyzeBatchSubmitParams): Promise<AnalyzeBatchResponse> {
+  const payload: AnalyzeBatchSubmitParams = {
+    ...body,
+    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
+      ? body.timezone_offset_minutes
+      : new Date().getTimezoneOffset()
+  }
+  const res = await authenticatedRequest('/api/analyze/batch', {
+    method: 'POST',
+    data: payload,
+    timeout: 120000 // 批量分析可能耗时较长，120 秒超时
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '批量分析失败')
+  }
+  const data = normalizeTaroResponseJson(res.data)
+  if (!data?.task_id) {
+    console.error('[submitAnalyzeBatch] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return {
+    task_id: String(data.task_id).trim(),
+    image_count: Number(data.image_count) || 0,
+    result: data.result as AnalyzeResponse,
+  }
+}
+
 /** 文字分析提交参数 */
 export interface AnalyzeTextTaskSubmitParams {
   text: string
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -1347,12 +1659,7 @@ export interface AnalyzeTextTaskSubmitParams {
 
 /** 提交文字分析任务（异步） */
 export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
-  const payload: AnalyzeTextTaskSubmitParams = {
-    ...body,
-    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
-      ? body.timezone_offset_minutes
-      : new Date().getTimezoneOffset()
-  }
+  const payload = await enrichAnalyzePayloadWithGeoContext(body)
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
     data: payload,
@@ -1380,6 +1687,9 @@ export interface ContinuePrecisionSessionParams {
   additionalContext?: string
   meal_type?: MealType
   timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
   diet_goal?: string
   activity_timing?: string
   user_goal?: string
@@ -1392,12 +1702,7 @@ export async function continuePrecisionSession(
   sessionId: string,
   body: ContinuePrecisionSessionParams,
 ): Promise<{ task_id: string; message: string }> {
-  const payload: ContinuePrecisionSessionParams = {
-    ...body,
-    timezone_offset_minutes: Number.isFinite(body.timezone_offset_minutes)
-      ? body.timezone_offset_minutes
-      : new Date().getTimezoneOffset(),
-  }
+  const payload = await enrichAnalyzePayloadWithGeoContext(body)
   const res = await authenticatedRequest(`/api/precision-sessions/${sessionId}/continue`, {
     method: 'POST',
     data: payload,
@@ -1540,6 +1845,33 @@ export async function getPosterCalorieCompare(recordId: string): Promise<PosterC
   return null
 }
 
+/** 餐次记录完整数据缓存（由 getHomeDashboard 填充，供首页直接编辑使用） */
+const mealFullRecordCache: Record<string, FoodRecord> = {}
+
+export function getCachedMealFullRecord(recordId: string): FoodRecord | undefined {
+  return mealFullRecordCache[recordId]
+}
+
+function stripMealFullRecordsFromDashboard(data: HomeDashboard): HomeDashboard {
+  const meals = (data.meals || []).map((meal) => {
+    const entries = (meal.meal_record_entries || []).map((entry) => {
+      if ((entry as any).full_record) {
+        mealFullRecordCache[entry.id] = (entry as any).full_record as FoodRecord
+      }
+      const { full_record, ...rest } = entry as any
+      return rest
+    })
+    return {
+      ...meal,
+      protein: meal.protein,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      meal_record_entries: entries.length > 0 ? entries : meal.meal_record_entries,
+    }
+  })
+  return { ...data, meals }
+}
+
 /**
  * 获取单条饮食记录详情（通过 ID，从数据库获取最新数据）
  */
@@ -1564,6 +1896,8 @@ export interface UpdateFoodRecordRequest {
   total_carbs?: number
   total_fat?: number
   total_weight_grams?: number
+  diet_goal?: DietGoal
+  activity_timing?: ActivityTiming
 }
 
 /**
@@ -1680,7 +2014,7 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   }
   const data = res.data as HomeDashboard
   const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
-  return { ...data, meals }
+  return stripMealFullRecordsFromDashboard({ ...data, meals })
 }
 
 /**
@@ -1945,7 +2279,7 @@ export function clearAllStorage() {
 }
 
 /** 登录页路径，token 失效时统一跳转 */
-const LOGIN_PAGE_URL = '/pages/login/index'
+const LOGIN_PAGE_URL = extraPkgUrl('/pages/login/index')
 
 /**
  * 清除登录态并跳转登录页（token 失效或未登录时调用）
@@ -2141,6 +2475,27 @@ export async function getMyMembership(): Promise<MembershipStatus> {
   }
 }
 
+export async function claimSharePosterReward(recordId?: string): Promise<ClaimSharePosterRewardResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/rewards/share-poster/claim', {
+      method: 'POST',
+      data: {
+        record_id: recordId || undefined
+      }
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '领取海报奖励失败'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as ClaimSharePosterRewardResponse
+  } catch (error: any) {
+    console.error('领取海报奖励失败:', error)
+    throw new Error(error.message || '领取海报奖励失败')
+  }
+}
+
 export async function getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
   try {
     const response = await authenticatedRequest('/api/expiry/dashboard', {
@@ -2179,6 +2534,24 @@ export async function createManagedFoodExpiryItem(data: UpsertFoodExpiryItemRequ
     throw new Error((response.data as any)?.detail || '创建保质期条目失败')
   }
   return response.data as { message: string; item: FoodExpiryItem }
+}
+
+export async function recognizeManagedFoodExpiryItems(
+  imageUrls: string[],
+  additionalContext?: string,
+): Promise<FoodExpiryRecognitionResponse> {
+  const response = await authenticatedRequest('/api/expiry/recognize', {
+    method: 'POST',
+    data: {
+      image_urls: imageUrls,
+      additional_context: additionalContext || undefined,
+    },
+    timeout: 90000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '保质期识别失败')
+  }
+  return response.data as FoodExpiryRecognitionResponse
 }
 
 export async function getManagedFoodExpiryItem(id: string): Promise<{ item: FoodExpiryItem }> {
@@ -2250,21 +2623,6 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
     console.error('创建会员支付单失败:', error)
     throw new Error(error.message || '创建会员支付单失败')
   }
-}
-
-/**
- * 创建积分充值支付单（1 元兑换积分数以服务端 points_per_yuan 为准）
- */
-export async function createPointsRechargePayment(amountYuan: number): Promise<CreatePointsRechargeResponse> {
-  const response = await authenticatedRequest('/api/points/recharge/create', {
-    method: 'POST',
-    data: { amount_yuan: amountYuan }
-  })
-  if (response.statusCode !== 200) {
-    const errorMsg = (response.data as any)?.detail || '创建积分充值订单失败'
-    throw new Error(errorMsg)
-  }
-  return response.data as CreatePointsRechargeResponse
 }
 
 /**
@@ -2513,6 +2871,14 @@ export interface ManualFoodSearchResult {
     protein: number
     carbs: number
     fat: number
+    fiber: number
+    sugar: number
+    sodium_mg?: number
+  }
+  extra_nutrients?: {
+    fiber: number
+    sugar: number
+    sodium_mg?: number
   }
   items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }> | null
   image_path?: string | null
@@ -2520,6 +2886,7 @@ export interface ManualFoodSearchResult {
   portion_label?: string
   source_label?: string
   recommend_reason?: string
+  nutrition_highlights?: string[]
   usage_count?: number
   collected?: boolean
   like_count?: number
@@ -2549,6 +2916,11 @@ export interface ManualFoodBrowseResult {
   collected_public_library: ManualFoodSearchResult[]
   public_library: ManualFoodSearchResult[]
   nutrition_library: ManualFoodSearchResult[]
+  stats?: {
+    nutrition_food_count: number
+    nutrition_alias_count: number
+    public_food_count: number
+  }
 }
 
 export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
@@ -2665,6 +3037,7 @@ export interface CommunityFeedQueryParams {
   sort_by?: CommunityFeedSortBy
   priority_author_ids?: string[]
   author_scope?: CommunityAuthorScope
+  author_id?: string
 }
 
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
@@ -2898,6 +3271,7 @@ export async function communityGetFeed(
   if (params?.priority_author_ids?.length) {
     q += `&priority_author_ids=${encodeURIComponent(params.priority_author_ids.join(','))}`
   }
+  if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
   const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
@@ -3262,6 +3636,21 @@ export async function postPublicFoodLibraryComment(
     throw new Error((response.data as any)?.detail || '发表失败')
   }
   return response.data as { comment: PublicFoodLibraryComment }
+}
+
+/** 提交公共食物库反馈 */
+export async function submitPublicFoodLibraryFeedback(
+  content: string,
+  libraryItemId?: string
+): Promise<{ id: string; message: string }> {
+  const response = await authenticatedRequest('/api/public-food-library/feedback', {
+    method: 'POST',
+    data: { content: content.trim(), ...(libraryItemId && { library_item_id: libraryItemId }) }
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '反馈提交失败')
+  }
+  return response.data as { id: string; message: string }
 }
 
 // ---------- 用户私人食谱 ----------

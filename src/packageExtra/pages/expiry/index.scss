@@ -1,0 +1,275 @@
+.expiry-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #e7faf3 0%, #f4f7f6 24%, #f6f8fa 100%);
+}
+
+.expiry-scroll {
+  height: 100vh;
+}
+
+.expiry-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 36rpx 32rpx 16rpx;
+}
+
+.expiry-hero-kicker {
+  display: block;
+  font-size: 24rpx;
+  color: #5b7b71;
+  margin-bottom: 10rpx;
+}
+
+.expiry-hero-title {
+  display: block;
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #16332a;
+}
+
+.expiry-hero-add {
+  min-width: 120rpx;
+  padding: 18rpx 0;
+  text-align: center;
+  border-radius: 999rpx;
+  background: #00bc7d;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 600;
+  box-shadow: 0 12rpx 28rpx rgb(0 188 125 / 24%);
+}
+
+.expiry-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20rpx;
+  padding: 0 32rpx;
+}
+
+.expiry-summary-card,
+.expiry-preview-panel,
+.expiry-item-card,
+.expiry-empty {
+  background: rgb(255 255 255 / 94%);
+  border-radius: 28rpx;
+  box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);
+}
+
+.expiry-summary-card {
+  padding: 28rpx;
+}
+
+.expiry-summary-value {
+  display: block;
+  font-size: 52rpx;
+  font-weight: 700;
+  color: #16332a;
+}
+
+.expiry-summary-label {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #61756d;
+}
+
+.expiry-preview-panel {
+  margin: 24rpx 32rpx 0;
+  padding: 28rpx;
+}
+
+.expiry-preview-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding-top: 20rpx;
+}
+
+.expiry-preview-row + .expiry-preview-row {
+  border-top: 1rpx solid #eef2f1;
+  margin-top: 20rpx;
+}
+
+.expiry-preview-name {
+  flex: 1;
+  font-size: 28rpx;
+  color: #16332a;
+  font-weight: 600;
+}
+
+.expiry-preview-hint {
+  font-size: 24rpx;
+  color: #ff7a00;
+}
+
+.expiry-section {
+  padding: 28rpx 32rpx 0;
+}
+
+.expiry-section-title {
+  display: block;
+  font-size: 28rpx;
+  color: #314740;
+  font-weight: 600;
+  margin-bottom: 20rpx;
+}
+
+.expiry-item-card {
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.expiry-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.expiry-item-title-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.expiry-item-title {
+  font-size: 32rpx;
+  color: #16332a;
+  font-weight: 700;
+}
+
+.expiry-item-category {
+  padding: 6rpx 16rpx;
+  border-radius: 999rpx;
+  background: #eef8f4;
+  font-size: 22rpx;
+  color: #4f6b62;
+}
+
+.expiry-item-badge {
+  flex-shrink: 0;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.expiry-item-badge--expired {
+  background: #ffe7e7;
+  color: #d9485f;
+}
+
+.expiry-item-badge--today {
+  background: #fff2df;
+  color: #ff7a00;
+}
+
+.expiry-item-badge--soon {
+  background: #fff7db;
+  color: #b7791f;
+}
+
+.expiry-item-badge--fresh,
+.expiry-item-badge--consumed,
+.expiry-item-badge--discarded {
+  background: #ecfdf5;
+  color: #15803d;
+}
+
+.expiry-item-badge--discarded {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.expiry-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18rpx;
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  color: #61756d;
+}
+
+.expiry-item-hint {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  color: #16332a;
+  font-weight: 600;
+}
+
+.expiry-item-note {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #61756d;
+  line-height: 1.5;
+}
+
+.expiry-item-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.expiry-action {
+  flex: 1;
+  padding: 18rpx 0;
+  border-radius: 18rpx;
+  text-align: center;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.expiry-action--ghost {
+  background: #f3f7f5;
+  color: #314740;
+}
+
+.expiry-action--primary {
+  background: #00bc7d;
+  color: #fff;
+}
+
+.expiry-empty {
+  margin: 28rpx 32rpx 0;
+  padding: 48rpx 32rpx;
+  text-align: center;
+}
+
+.expiry-loading-spinner {
+  width: 56rpx;
+  height: 56rpx;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 6rpx solid rgb(0 188 125 / 16%);
+  border-top-color: #00bc7d;
+  animation: expiry-spin 0.9s linear infinite;
+}
+
+.expiry-empty-title {
+  display: block;
+  font-size: 32rpx;
+  color: #16332a;
+  font-weight: 700;
+}
+
+.expiry-empty-desc {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  color: #61756d;
+  line-height: 1.6;
+}
+
+@keyframes expiry-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

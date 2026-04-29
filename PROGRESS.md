@@ -6,18 +6,60 @@
 
 ## 2026-04-22
 
-- 🗃️ db: 后端数据库访问已从 Supabase SDK 硬切为直连 PostgreSQL，运行时、seed/cleanup 脚本、测试配置与当前文档口径同步收口，旧迁移脚本已移除 `backend/pg_client.py` `backend/database.py` `backend/main.py` `backend/user_points.py` `backend/worker.py` `backend/requirements.txt`
-- 🗃️ db: 新增 PostgreSQL 历史存储字段清洗脚本，默认 dry-run，仅连接 `POSTGRESQL_*` 目标库，把可信来源的完整 URL 归一为对象 key，支持重复运行不重复修改 `backend/scripts/normalize_storage_keys_in_postgresql.py`
-- 🔒 security: 存储引用兼容逻辑改为仅对可信的 Supabase/COS/CDN 来源提取 key 并重建当前 CDN/签名地址；公开桶旧 URL 会统一收口到现网 CDN，私有桶拒绝为未知外链生成可信访问地址 `backend/cos_storage.py`
-- 🗃️ db: 迁移脚本支持在目标库已有业务表且启用 `--skip-existing` 时自动跳过 schema 重导，避免补跑时再次撞到已存在的函数/触发器 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
-- 🗃️ db: 迁移脚本补上 JSON/JSONB 值适配，自动把 `dict/list` 包装为 PostgreSQL JSON 参数，避免 `weapp_user` 等基础表因 `can't adapt type 'dict'` 失败 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
-- 🗃️ db: 迁移脚本补充 Supabase 兼容层，自动处理 `public` 重复 schema、`auth.uid()`、`extensions.uuid_generate_v4()` 与 `auth.users` 外键占位，降低导入到纯 PostgreSQL 的阻塞 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
-- 🗃️ db: 新增 `backend/scripts/migrate_supabase_postgres_to_postgresql.py`，支持通过 `pg_dump/psql` 迁移 schema（含函数、触发器、注释）并用 Python 分批迁移数据，提供 `--dry-run` 与 `--skip-existing` `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
-- 🔧 refactor: 新上传的 COS 对象 key 改为按年月日分层；食物图使用 `YYYY/MM/DD/uuid`，头像与体检报告使用 `user_id/YYYY/MM/DD/uuid`，历史数据保持兼容不迁移 `backend/database.py`
-- 🔒 security: 固化 `health-reports` 为代码级私有桶，不再依赖环境变量开关，避免线上误配置导致报告图被公网暴露 `backend/cos_storage.py`
-- 🔧 chore: 新增统一 COS 存储适配层并将后端上传/删除切到腾讯云 COS，公开桶统一返回 CDN 地址，`health-reports` 改为私有 key + 签名访问 `backend/cos_storage.py` `backend/database.py` `backend/main.py` `backend/worker.py`
-- 🔧 refactor: 压缩、孤儿清理、存储巡检脚本改为兼容 COS 与旧 Supabase URL，避免迁移后脚本仍按旧路径规则工作 `backend/image_compressor.py` `backend/compress_food_images.py` `backend/cleanup_orphans.py` `backend/check_storage.py` `backend/check_avatars.py`
-- 🐛 fix: 登录页/关于页应用 Logo 改为腾讯云 icon CDN；健康档案上传报告改为保存私有 `storageKey` 并提交后台 OCR，避免使用会过期的临时预览链接 `src/pages/login/index.tsx` `src/pages/about/index.tsx` `src/utils/api.ts` `src/pages/health-profile/index.tsx` `src/pages/health-profile-edit/index.tsx`
+- 🐛 fix: `withAuth` 已登录时首帧即渲染，避免分包记录详情等短暂白屏；记录详情加载态改用 `loading-spinner-md` 在浅底可见 `src/utils/withAuth.tsx` `src/packageExtra/pages/record-detail/index.tsx`
+- 🎨 style: 深色模式补充今日餐食卡字色与时间胶囊、编辑目标/喝水/记录菜单底卡、记录详情与编辑弹层、当天饮食记录页 `src/styles/fl-color-scheme-dark.scss`
+- 🎨 style: 深色模式补充首页「快到期食物」列表卡与空态字色；圈子动态正文、卡片底部分割线、点赞/评论/分享与副文案字色 `src/styles/fl-color-scheme-dark.scss`
+- 🎨 style: 深色主题补全首页/分析/圈子：宏量与体重卡片、进度条轨道、骨架屏 shimmer、餐食空态图、日期条有记录态；分析 Tab 分段器/白底卡/代谢入口/连续记录/热力格/图表轨/餐次仪表盘/蓝系分析卡；圈子排行榜降饱和、动态骨架、热量与营养素标签、评论区与底栏输入；修复 Hero 渐变被误盖灰底 `src/styles/fl-color-scheme-dark.scss`
+- 🎨 style: 「我的」深浅色切换按钮改为左上角绝对定位（避让安全区）`src/pages/profile/index.tsx` `index.scss`
+- ✨ feat: 全站浅色/深色主题（`fl_app_color_scheme` 持久化）；`withAuth` 与登录/协议/保质期等页包裹 `FlPageThemeRoot`；「我的」顶栏圆形按钮切换 icon-zaoshang/icon-wanshang；自定义 tabBar 读存储同步深色底 `custom-tab-bar/*` `src/utils/app-color-scheme.ts` `src/components/AppColorSchemeContext.tsx` `FlPageThemeRoot.tsx` `src/app.ts` `src/app.scss` `src/styles/fl-color-scheme-dark.scss` `src/utils/withAuth.tsx` `src/pages/profile/*`
+- 🐛 fix: 拍照识别误报「需开相机权限」：收紧 `<Camera>` onError 与 `chooseImage` 失败文案判定，避免泛化 `operateCamera:fail`；隐私门禁/拒绝页补充与「设置里摄像头」区别说明 `src/pages/record/index.tsx` `src/utils/weapp-open-analyze-image.ts`
+- 🐛 fix: 海报存相册前校验本地文件可读并重试 `resolveImagePathForAlbumSave`，收紧相册类 `permission` 与隐私失败区分 `src/utils/weapp-save-image-album.ts`
+- 🐛 fix: 「当日代谢」ECharts 画布错位：去掉图表容器 `transform`、子页顶栏改为占位块替代根节点 `padding-top`，Canvas 查询带 `size: true` 用布局宽高驱动 `resize` `src/packageExtra/pages/stats-metabolic/index.tsx` `index.scss` `metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss`
+- 🔧 chore: `scripts/restart-dev.sh` 在拉起后端前循环释放占用 3010 的进程，避免 `address already in use` 导致新后端秒退、端口不可用
+- 🐛 fix: 「当日代谢」图表区去掉左右负 margin、画布宽度与页边距对齐；外层与内层 sizer 双固定高度（px+rpx）+ 去除多余 padding，减轻 Canvas 2D 与指标卡重叠 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss`
+- 🎨 style: 「当日代谢」首行三指标卡统一白灰底+灰边、图标+标题+数字结构，去掉底部说明小字 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss`
+- 🐛 fix: 「当日代谢」图表容器增加与 Canvas 同高的 `min-height` + 纵向 flex 布局与间距，避免小程序原生层与上方指标区视觉重叠 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss`
+- ✨ feat: 「当日代谢」子页左上角返回；「用户基础数据」改为无渐变线框按钮；首屏指标改为餐后净盈余+吸收功率峰值+说明小字；图表/图例提高饱和度 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss` `metabolic-echarts-option.ts`
+- 🎨 style: 圈子「好友动态」筛选区与动态行去除白底（透出渐变）；「本周打卡」卡片对齐「我的」剩余积分卡渐变/描边/光晕；骨架行透明底 `src/pages/community/index.scss`
+- 🔧 chore: 重启本机后端 `npm run dev:backend`（`backend-dev.log`）
+- 🎨 style: 圈子 Tab 页面底改为与首页一致的绿→白渐变；顶部三快捷入口去灰底、改为主题色线框+轻投影；动态列表/筛选条半透明白底+绿系分割线；全局 `page` 默认同系渐变 `src/pages/community/index.scss` `src/app.scss`
+- ✨ feat: 分析 Tab「餐次结构」按早/午/晚三色区分（加餐跟主餐同色）；缓存优先展示 + 静默联网刷新时左上角 fixed 微型 spinner，不挤占布局 `src/pages/stats/index.tsx` `src/pages/stats/index.scss`
+- 🎨 style: 「当日代谢」图表区左右出血加宽 Canvas；ECharts 配色降饱和（对齐首页绿/蓝/柔红系）；首格标题改为「今日示意脂肪」`src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss` `metabolic-echarts-option.ts`
+- 🎨 style: 「当日代谢」去掉用餐图例与用餐刻度线；首行文案口语化；去掉摘要小字与页底免责；三指标与「用户基础数据」按钮增加 iconfont；右上角按钮对齐首页绿渐变胶囊 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss` `metabolic-echarts-option.ts`
+- ✨ feat: 「当日代谢」子页 `usingComponents` 挂载 `/custom-tab-bar`，底部 Tab 与主包一致；页底增加安全区留白 `src/packageExtra/pages/stats-metabolic/index.config.ts` `index.tsx` `index.scss`
+- ✨ feat: 「当日代谢」恢复 ECharts 曲线 + 图例；去掉内层大卡平铺进子页；页左右 24rpx 留白 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss` `index.scss`
+- 🎨 style: 分析 Tab「平均每日盈缺」Hero 恢复绿/橙渐变大卡+白字，与「我的」积分白卡区分；其余统计卡恢复 92% 白底 `src/pages/stats/index.scss`
+- ✨ feat: 「当日代谢」去掉 ECharts 曲线，首行展示本日示意脂肪（模型全日 g）+ 吸收进度 + 消耗；页/卡改为首页绿白渐变与半透明白卡 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `metabolic-dynamics-report.scss` `index.scss` `index.config.ts`
+- 🎨 style: 圈子/我的：自定义导航 + 顶距 182rpx；「我的」页背景与首页绿白渐变一致 `src/pages/community/index.config.ts` `index.scss` `src/pages/profile/index.config.ts` `index.scss`
+- ✨ feat: 分析 Tab 自定义顶栏（去掉系统「饮食记录」导航条）、页面上边距留白 182rpx；统计聚合数据本机缓存 + 再次进入静默联网刷新 `src/pages/stats/index.config.ts` `src/pages/stats/index.scss` `src/pages/stats/index.tsx` `src/utils/stats-page-cache.ts`
+- 📝 docs: 「当日代谢」底部脚注去掉「曲线由 ECharts 绘制」技术说明 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx`
+- 🎨 style: 「当日代谢」吸收/消耗两块仪表盘改为绿/蓝渐变底与描边阴影；子页 bleed 不再压成 6% 淡底 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss` `metabolic-dynamics-report.tsx` `stats-metabolic/index.scss`
+- 🔧 refactor: 代谢示意模型：缩小急性缓冲池 + 净盈余 18% 按 P-ratio 直接计入脂肪，避免池未满时累计脂肪恒为 0；说明文案同步 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx`
+- 🎨 style: 分析 Tab 平均盈缺 Hero：加深渐变/描边/阴影与数字对比度；状态与「当日代谢」入口改为白胶囊 CTA（对齐「我的」积分卡充值样式）`src/pages/stats/index.scss` `src/pages/stats/index.tsx`
+- 🎨 style: 统计页「当日代谢动态」入口并入平均每日盈缺 Hero 卡；代谢子页去外层卡片壳、加宽加高画布；ECharts 增加右轴「累计脂肪淤积」曲线与读图说明 `src/pages/stats/index.tsx` `src/pages/stats/index.scss` `src/packageExtra/pages/stats-metabolic/index.tsx` `src/packageExtra/pages/stats-metabolic/index.scss` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss` `src/packageExtra/pages/stats-metabolic/metabolic-echarts-option.ts`
+- 🐛 fix: 沉浸式相机正式版合规：`getPrivacySetting` 门禁 + `agreePrivacyAuthorization` 按钮 + `onNeedPrivacyAuthorization` resolve；收窄 `Camera` onError 误判；`app.config` 补充 `scope.camera` 说明 `src/pages/record/index.tsx` `src/pages/record/index.scss` `src/app.config.ts`
+- 🐛 fix: 「拍照识别」恢复进入记录 Tab 全屏 `<Camera>`，避免 `chooseImage` 在部分机型呈现系统选图而非直开镜头 `src/pages/index/components/RecordMenu.tsx` `src/packageExtra/pages/record-menu/index.tsx`
+- 🐛 fix: 首页/记录详情餐食海报「保存失败」：保存前申请 `writePhotosAlbum`、临时路径二次 `saveFile` 落盘与失败重试；Canvas 导出改为 JPG；区分授权/隐私/文件错误 `src/utils/weapp-save-image-album.ts` `src/pages/index/index.tsx` `src/pages/index/components/MealRecordPosterModal.tsx` `src/packageExtra/pages/record-detail/index.tsx`
+- 🐛 fix: 拍照识别权限误报：首页与分包记录菜单「拍照识别」改为 `chooseImage` 系统相机直达分析页；抽取 `pickImageAndOpenAnalyze`；记录 tab 沉浸式页去掉仅凭 `getSetting.scope.camera===false` 拦截、收窄 `Camera` onError、设置返回后强制重挂组件并提供「改用系统相机」`src/utils/weapp-open-analyze-image.ts` `src/pages/index/components/RecordMenu.tsx` `src/packageExtra/pages/record-menu/index.tsx` `src/pages/record/index.tsx` `src/pages/record/index.scss`
+- 🔧 chore: 发布小程序版本 `2.0.15`（`package.json` / `package-lock.json`；「我的」页 `__APP_VERSION__` 随构建注入）
+- 🐛 fix: 正式版保存海报到相册失败：临时路径在真机/正式包上需归一化并 `saveFile` 到用户目录；区分隐私未声明（errno 1025 等）与授权失败；`app.config` 补充 `scope.writePhotosAlbum` 用途说明 `src/utils/weapp-save-image-album.ts` `src/app.config.ts` `src/packageExtra/pages/record-detail/index.tsx` `src/pages/index/index.tsx` `src/pages/index/components/MealRecordPosterModal.tsx`
+- ✨ feat: 饮食海报底栏拆成「微信好友」（openType=share 直出会话）与「朋友圈」（showShareImageMenu）；首页今日小结/餐次海报与记录详情页一致，并联动首页 useShareAppMessage 携带海报图 `src/pages/index/index.tsx` `src/pages/index/index.scss` `src/pages/index/components/MealRecordPosterModal.tsx` `src/packageExtra/pages/record-detail/index.tsx`
+- ⚡ perf: 缓解主包超 2MB（80051）：Tab 五页留主包，其余页面迁入 `packageExtra` 分包；跳转统一 `extraPkgUrl`；「当日代谢」迁入分包页 `stats-metabolic`；Vite 将 echarts/zrender 打到 `dist/packageExtra/echarts-vendor.js` `src/app.config.ts` `src/utils/subpackage-extra.ts` `config/index.ts` `custom-tab-bar/index.js` `src/packageExtra/pages/**` 与主包内相关 `navigateTo` 页面
+- 🐛 fix: 「基础」弹层：`100vw` + `box-sizing` 约束宽度；打开时卸载 Canvas 并 `dispose` ECharts，避免原生层盖住弹层内容 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+- 🐛 fix: 小程序无可用 `document.createElement('canvas').getContext`，对 ZRender `setPlatformAPI` 覆盖 `measureText` 为纯 JS 估宽，修复 `canvas.getContext is not a function` `src/packageExtra/pages/stats-metabolic/metabolic-echarts-wx-zrender-platform.ts` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx`
+- 🐛 fix: ECharts 在微信小程序 Canvas 节点上补 `addEventListener` / `removeEventListener` / `getBoundingClientRect`，修复 `addEventListener is not a function` `src/packageExtra/pages/stats-metabolic/metabolic-echarts-wx-polyfill.ts` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx`
+- 🔧 refactor: 「当日代谢」曲线改为 Apache ECharts 5 按需引入（Line/MarkLine/Grid/Tooltip + Canvas 渲染），配置抽离 `src/packageExtra/pages/stats-metabolic/metabolic-echarts-option.ts`；移除手写 Canvas 路径绘制 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `package.json`
+- 🎨 style: 「基础」数据弹层提高 z-index（200000+）并自定义全屏 Backdrop，盖住自定义 tabBar；弹层打开时隐藏 Canvas 避免原生层穿透 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+- ✨ feat: 「当日代谢」图表改为平滑曲线：实线轮廓 + 轮廓下半透明填充（吸收绿/消耗蓝）；参考 BMR 为平滑虚线；卡片头「基础」按钮底部弹层展示与 `resolvePhysiology` 一致的性别/身高/体重/年龄/BMR/TDEE/PAL `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+- ✨ feat: 「当日代谢」档案门禁：身高/体重/性别/BMR 未完备时强模糊占位 + 点击打开底部表单，同步云端或本机缓存后再拉取模拟；模拟消耗基数优先用档案 BMR `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss` `src/packageExtra/pages/stats-metabolic/metabolic-profile-sheet.tsx`
+- 🔧 refactor: 「当日代谢」糖原缓冲改为示意性急性小池（200/55 kcal），避免单餐时脂肪淤积恒为 0；输出 `acuteSurplusIntegralKcal` 与脚注双指标 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx`
+- 🐛 fix: 「当日代谢」Canvas 使用 `page.in` + 跨组件 `>>>` 选择器取 node；`record_time` 按 `Asia/Shanghai` 解析以匹配凌晨餐次；补充用餐竖线、图例与仪表盘标签 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+- 🐛 fix: 「当日代谢」仅展示当天并去掉 7 日条；Canvas 2D 改为显式 px 宽高 + nextTick/rAF/延迟重绘，避免查询宽高为 0 导致空白 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+- 🎨 style: 「当日代谢」模块改首页浅色卡片风（白底绿边、图表浅底与 #5cb896/#5c9ed4/#e57373），去掉说明文案与弹层，区块移至 AI 营养洞察上方 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss` `src/pages/stats/index.tsx`
+- ✨ feat: 统计页「当日代谢流」模块：Kevin Hall 精简分钟级模拟（吸收核/昼夜节律/TEF/运动分摊/糖原+P-ratio 脂肪淤积）、Canvas 2D 双轴示意曲线与近 7 日淤积条，独立文件接入 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss` `src/pages/stats/index.tsx`
+- 🎨 style: 「饮食记录分析」统计页配色对齐首页低饱和：时间轴/月历绿 #5cb896、红 #e57373；页背景与热量缺口卡、摄入柱、营养素与餐次、喝水趋势等统一柔和色 `src/pages/stats/index.scss` `src/pages/stats/index.tsx`
+- 🎨 style: 「识别记录详情」导航与「当天饮食记录」一致：微信默认导航栏（`navigationBarTitleText` + 继承 app 白底黑字），去掉自定义顶栏；撤回 `CustomNavBar` 的 `onBack` 与 `--light` `src/pages/record-detail/*` `src/components/CustomNavBar/*`
+- 🐛 fix: 拍照/文字/手动保存饮食记录后立即请求当日 dashboard 并写入 `home_dashboard_local_cache_v4`，回首页本地快照即时含新摄入与餐次；快照读写抽至 `src/utils/home-dashboard-local-cache.ts`，运动页补丁缓存键对齐 v4 `src/pages/exercise-record/index.tsx`
 
 ## 2026-04-13
 

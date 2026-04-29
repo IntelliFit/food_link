@@ -14,8 +14,3 @@ Pillow>=10.0.0
 websockets>=13.0,<16
 # 注：Gemini 模型通过 OfoxAI 的 OpenAI 兼容接口调用，无需额外 SDK
 # psycopg2-binary：仅 scripts/apply_exercise_migration.py 直连 Postgres 执行 SQL 迁移时需要
-
-# 测试（本地 / CI：npm run test:backend）
-pytest>=8.0.0
-pytest-asyncio>=0.24.0
-pytest-timeout>=2.3.0

@@ -70,9 +70,12 @@
 
 或普通 `npm run build:weapp`（Taro 生产构建默认走 `config/index.ts` 中的 `https://healthymax.cn`）。**不要**用 `dev:weapp` 的产物去真机扫码。
 
-### 代码修改后重启前后端（代理必须执行）
+### 代码修改后重启前后端（默认由用户自行执行）
 
-- 在完成**会影响运行结果**的修改后（例如 `backend/` Python、`src/` 前端业务与配置），在回合结束前**应主动重启**开发中的前后端，避免仍跑旧进程。
+- 默认不要替用户自动启动、停止、重启、常驻任何本地前后端进程。
+- 本项目的本地开发服务器统一由用户自己手动启动和关闭；代理只负责改代码、提示需要重启，不负责代为运行。
+- 即使完成了会影响运行结果的修改（例如 `backend/` Python、`src/` 前端业务与配置），也不要擅自抢占 `3010`、watch 进程或清理用户当前会话。
+- 只有当用户在当前对话里明确要求“你来启动 / 你来停止 / 你来重启 / 你来运行”时，代理才可以操作本地常驻进程。
 - **无需**为纯文档、仅单测断言、仅格式化等改动反复重启。
 - 推荐一键：`npm run dev:restart`（调用 `scripts/restart-dev.sh`：先结束残留的 `run_backend.py` 与 `taro build --type weapp`，再以 `nohup` 后台启动 `dev:backend` 与 `dev:weapp`，日志写入项目根目录 `backend-dev.log`、`weapp-dev.log`）。
 - 若用户已在其它终端手动跑 watch，可先与其确认再 `pkill`，避免误关无关进程。
@@ -96,6 +99,27 @@
 - Hook 位置：`.husky/pre-commit`
 - 如需手动运行清理：`find . -maxdepth 1 -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" -type f -delete`
 
+
+## 部署
+
+### 生产服务器
+
+- **主机**: `coachlink.fit`
+- **SSH**: `ssh root@coachlink.fit`（本地已配置免密登录）
+- **项目路径**: `/www/wwwroot/food/food_link/`
+- **后端路径**: `/www/wwwroot/food/food_link/backend/`
+- **服务名**: `food-backend.service`
+- **Python 虚拟环境**: `/www/wwwroot/food/food_link/backend/venv/bin/python`
+
+### 手动后端部署命令
+
+```bash
+ssh root@coachlink.fit "cd /www/wwwroot/food/food_link && git fetch origin && git reset --hard origin/main && cd backend && ./venv/bin/python -m pip install -q -r requirements.txt && systemctl restart food-backend.service"
+```
+
+### 前端部署
+
+微信小程序前端**不通过此服务器部署**，需使用微信开发者工具上传。
 
 ## 图标更新
 

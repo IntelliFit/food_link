@@ -1,7 +1,8 @@
 """
 数据库操作模块
-使用 PostgreSQL 进行数据库操作，对象存储走腾讯云 COS。
+使用 Supabase 进行数据操作
 """
+from supabase import create_client
 import os
 import base64
 import uuid
@@ -10,199 +11,87 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
 
-from cos_storage import (
-    FOOD_IMAGES_BUCKET,
-    HEALTH_REPORTS_BUCKET,
-    USER_AVATARS_BUCKET,
-    delete_object,
-    resolve_reference_url,
-    resolve_object_key,
-    upload_and_build_access,
-)
-from pg_client import check_database_configured, get_db_client
-
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
 
-# 食物分析图片存储桶名
-FOOD_ANALYZE_BUCKET = FOOD_IMAGES_BUCKET
+# 体检报告图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
+HEALTH_REPORTS_BUCKET = "health-reports"
 
-def _current_storage_date_prefix() -> str:
+# 食物分析图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
+FOOD_ANALYZE_BUCKET = "food-images"
+
+# 用户头像存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
+USER_AVATARS_BUCKET = "user-avatars"
+
+# 会员奖励体系（2026-04-27）
+INVITE_REWARD_CREDITS_PER_DAY = 5
+INVITE_REWARD_DAYS = 3
+INVITE_REWARD_MONTHLY_LIMIT = 10
+SHARE_POSTER_REWARD_CREDITS = 1
+
+# 延迟初始化 Supabase 客户端
+_supabase_client = None
+
+# ---- 社区接口内存缓存 ----
+# 好友排名缓存：key = "checkin_leaderboard:{user_id}:{week_start_iso}", TTL = 5 分钟
+_checkin_leaderboard_cache: Dict[str, Any] = {}
+
+# 好友ID列表缓存：key = "friend_ids:{user_id}", TTL = 5 分钟
+_friend_ids_cache: Dict[str, Any] = {}
+
+
+def _cache_get(cache_dict: Dict, key: str, ttl_seconds: int = 300):
+    """从内存缓存获取，若过期返回 None。"""
+    entry = cache_dict.get(key)
+    if entry is None:
+        return None
+    if datetime.now(timezone.utc).timestamp() - entry["ts"] > ttl_seconds:
+        cache_dict.pop(key, None)
+        return None
+    return entry["value"]
+
+
+def _cache_set(cache_dict: Dict, key: str, value: Any):
+    """写入内存缓存。"""
+    cache_dict[key] = {"value": value, "ts": datetime.now(timezone.utc).timestamp()}
+
+
+def get_supabase_client():
     """
-    统一使用中国自然日为对象 key 分层，避免新上传文件继续平铺在桶根目录。
-    目录格式：YYYY/MM/DD
+    获取 Supabase 客户端（延迟初始化）
+    确保在 load_dotenv() 之后才初始化
     """
-    return datetime.now(CHINA_TZ).strftime("%Y/%m/%d")
+    global _supabase_client
+    
+    if _supabase_client is None:
+        SUPABASE_URL = os.getenv("SUPABASE_URL")
+        SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        
+        if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+            _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        else:
+            raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
+    
+    return _supabase_client
 
 
-def _build_bucket_key(*parts: str) -> str:
-    clean_parts = [str(part or "").strip("/") for part in parts if str(part or "").strip("/")]
-    return "/".join(clean_parts)
-
-
-def _normalize_storage_key(bucket_name: str, value: Any) -> Any:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        return value
-    text = value.strip()
-    if not text:
-        return None
-    return resolve_object_key(text, bucket_name) or text
-
-
-def _normalize_storage_key_list(bucket_name: str, values: Any) -> List[str]:
-    if not values:
-        return []
-    if isinstance(values, (list, tuple)):
-        candidates = list(values)
-    else:
-        candidates = [values]
-    normalized: List[str] = []
-    for item in candidates:
-        key = _normalize_storage_key(bucket_name, item)
-        if isinstance(key, str) and key.strip():
-            normalized.append(key)
-    return normalized
-
-
-def _resolve_storage_ref(bucket_name: str, value: Any, *, expires: int = 3600) -> Any:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        return value
-    text = value.strip()
-    if not text:
-        return ""
-    return resolve_reference_url(bucket_name, text, expires=expires) or text
-
-
-def _resolve_storage_ref_list(bucket_name: str, values: Any, *, expires: int = 3600) -> List[str]:
-    if not values:
-        return []
-    if isinstance(values, (list, tuple)):
-        candidates = list(values)
-    else:
-        candidates = [values]
-    resolved: List[str] = []
-    for item in candidates:
-        url = _resolve_storage_ref(bucket_name, item, expires=expires)
-        if isinstance(url, str) and url.strip():
-            resolved.append(url)
-    return resolved
-
-
-def _analysis_task_bucket_name(task_or_type: Any) -> str:
-    if isinstance(task_or_type, dict):
-        task_type = str(task_or_type.get("task_type") or "").strip().lower()
-    else:
-        task_type = str(task_or_type or "").strip().lower()
-    return HEALTH_REPORTS_BUCKET if task_type == "health_report" else FOOD_ANALYZE_BUCKET
-
-
-def _present_user_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not row:
-        return row
-    out = dict(row)
-    if "avatar" in out:
-        out["avatar"] = _resolve_storage_ref(USER_AVATARS_BUCKET, out.get("avatar"))
-    return out
-
-
-def _prepare_user_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(data)
-    if "avatar" in out:
-        out["avatar"] = _normalize_storage_key(USER_AVATARS_BUCKET, out.get("avatar"))
-    return out
-
-
-def _present_food_record_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not row:
-        return row
-    out = dict(row)
-    if "image_path" in out:
-        out["image_path"] = _resolve_storage_ref(FOOD_ANALYZE_BUCKET, out.get("image_path"))
-    if "image_paths" in out and out.get("image_paths") is not None:
-        out["image_paths"] = _resolve_storage_ref_list(FOOD_ANALYZE_BUCKET, out.get("image_paths"))
-    return out
-
-
-def _prepare_food_record_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(data)
-    if "image_path" in out:
-        out["image_path"] = _normalize_storage_key(FOOD_ANALYZE_BUCKET, out.get("image_path"))
-    if "image_paths" in out:
-        out["image_paths"] = _normalize_storage_key_list(FOOD_ANALYZE_BUCKET, out.get("image_paths"))
-    return out
-
-
-def _present_health_document_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not row:
-        return row
-    out = dict(row)
-    if "image_url" in out:
-        out["image_url"] = _resolve_storage_ref(HEALTH_REPORTS_BUCKET, out.get("image_url"))
-    return out
-
-
-def _prepare_health_document_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(data)
-    if "image_url" in out:
-        out["image_url"] = _normalize_storage_key(HEALTH_REPORTS_BUCKET, out.get("image_url"))
-    return out
-
-
-def _present_analysis_task_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not row:
-        return row
-    out = dict(row)
-    bucket_name = _analysis_task_bucket_name(out)
-    if "image_url" in out:
-        out["image_url"] = _resolve_storage_ref(bucket_name, out.get("image_url"))
-    if "image_paths" in out and out.get("image_paths") is not None:
-        out["image_paths"] = _resolve_storage_ref_list(bucket_name, out.get("image_paths"))
-    return out
-
-
-def _prepare_analysis_task_write_data(task_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(data)
-    bucket_name = _analysis_task_bucket_name(task_type)
-    if "image_url" in out:
-        out["image_url"] = _normalize_storage_key(bucket_name, out.get("image_url"))
-    if "image_paths" in out:
-        out["image_paths"] = _normalize_storage_key_list(bucket_name, out.get("image_paths"))
-    return out
-
-
-def _present_public_library_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    return _present_food_record_row(row)
-
-
-def _prepare_public_library_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    return _prepare_food_record_write_data(data)
-
-
-def _present_recipe_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    return _present_food_record_row(row)
-
-
-def _prepare_recipe_write_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    return _prepare_food_record_write_data(data)
-
-
-def get_database_client():
-    """获取 PostgreSQL 查询客户端。"""
-    return get_db_client()
-
-
-def check_postgresql_configured():
-    """检查 PostgreSQL 是否已配置。"""
+def check_supabase_configured():
+    """检查 Supabase 是否已配置"""
     try:
-        check_database_configured()
+        get_supabase_client()
     except Exception as e:
-        raise Exception(
-            "PostgreSQL 未配置，请设置 POSTGRESQL_HOST、POSTGRESQL_PORT、POSTGRESQL_USER、POSTGRESQL_PASSWORD、POSTGRESQL_DATABASE 环境变量"
-        ) from e
+        raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
+
+
+def _is_table_not_ready_error(err: Exception, table_names: List[str]) -> bool:
+    err_s = str(err)
+    lower = err_s.lower()
+    if "PGRST205" in err_s or "Could not find the table" in err_s:
+        return True
+    return any(
+        table in err_s and ("relation" in lower or "table" in lower or "schema cache" in lower)
+        for table in table_names
+    )
 
 
 def exercise_fallback_task_type() -> str:
@@ -215,6 +104,42 @@ def exercise_fallback_task_type() -> str:
     return "food_text"
 
 
+USER_REGISTRATION_TIME_FIELDS = (
+    "created_at",
+    "create_time",
+    "created_time",
+    "register_time",
+    "registered_at",
+    "updated_at",
+)
+
+
+def _parse_possible_datetime(value: Any) -> Optional[datetime]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def resolve_user_registration_datetime(user_row: Optional[Dict[str, Any]]) -> Optional[datetime]:
+    """兼容不同库里的注册时间字段名，解析用户注册时间。"""
+    if not isinstance(user_row, dict):
+        return None
+    for field in USER_REGISTRATION_TIME_FIELDS:
+        parsed = _parse_possible_datetime(user_row.get(field))
+        if parsed:
+            return parsed
+    return None
+
+
 async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
     """
     通过 openid 查询用户
@@ -225,17 +150,17 @@ async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
     Returns:
         用户信息字典，如果不存在则返回 None
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     
     try:
-        result = db.table("weapp_user")\
+        result = supabase.table("weapp_user")\
             .select("*")\
             .eq("openid", openid)\
             .execute()
         
         if result.data and len(result.data) > 0:
-            return _present_user_row(result.data[0])
+            return result.data[0]
         return None
     except Exception as e:
         print(f"[get_user_by_openid] 错误: {e}")
@@ -252,49 +177,68 @@ async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         用户信息字典，如果不存在则返回 None
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     
     try:
-        result = db.table("weapp_user")\
+        result = supabase.table("weapp_user")\
             .select("*")\
             .eq("id", user_id)\
             .execute()
         
         if result.data and len(result.data) > 0:
-            return _present_user_row(result.data[0])
+            return result.data[0]
         return None
     except Exception as e:
         print(f"[get_user_by_id] 错误: {e}")
         raise
 
 
-def get_user_by_id_sync(user_id: str) -> Optional[Dict[str, Any]]:
-    """同步版：通过 user_id 查询用户，供 Worker 子进程使用。"""
-    check_postgresql_configured()
-    db = get_database_client()
+async def is_user_in_first_membership_trial_batch(user_id: str, limit: int = 1000) -> bool:
+    """判断用户是否属于会员首批试用批次（按注册时间升序前 N 名）。"""
+    rank = await get_first_membership_trial_batch_rank(user_id, limit)
+    return rank is not None
+
+
+async def get_first_membership_trial_batch_rank(user_id: str, limit: int = 1000) -> Optional[int]:
+    """返回用户在首批会员创始用户中的名次（1-based）；若不在前 N 名则返回 None。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
     try:
-        result = db.table("weapp_user").select("*").eq("id", user_id).execute()
-        if result.data and len(result.data) > 0:
-            return _present_user_row(result.data[0])
+        result = supabase.table("weapp_user")\
+            .select("*")\
+            .limit(limit)\
+            .execute()
+
+        rows = list(result.data or [])
+        rows.sort(
+            key=lambda row: (
+                resolve_user_registration_datetime(row) or datetime.max.replace(tzinfo=timezone.utc),
+                str(row.get("id") or ""),
+            )
+        )
+        rows = rows[:limit]
+        for index, row in enumerate(rows, start=1):
+            if str(row.get("id") or "") == user_id:
+                return index
         return None
     except Exception as e:
-        print(f"[get_user_by_id_sync] 错误: {e}")
+        print(f"[get_first_membership_trial_batch_rank] 错误: {e}")
         raise
 
 
-def get_basic_users_by_ids_sync(user_ids: List[str]) -> Dict[str, Dict[str, Any]]:
-    """批量读取用户基础公开信息，返回以用户 ID 为键的映射。"""
-    ids = [str(user_id).strip() for user_id in (user_ids or []) if str(user_id).strip()]
-    if not ids:
-        return {}
-    check_postgresql_configured()
-    db = get_database_client()
+def get_user_by_id_sync(user_id: str) -> Optional[Dict[str, Any]]:
+    """同步版：通过 user_id 查询用户，供 Worker 子进程使用。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("weapp_user").select("id, nickname, avatar").in_("id", ids).execute()
-        return {row["id"]: _present_user_row(row) for row in (result.data or [])}
+        result = supabase.table("weapp_user").select("*").eq("id", user_id).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
     except Exception as e:
-        print(f"[get_basic_users_by_ids_sync] 错误: {e}")
+        print(f"[get_user_by_id_sync] 错误: {e}")
         raise
 
 
@@ -311,24 +255,23 @@ async def create_user(user_data: Dict[str, Any]) -> Dict[str, Any]:
     Raises:
         Exception: 如果创建失败
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     
     try:
-        prepared_user_data = _prepare_user_write_data(user_data)
-        result = db.table("weapp_user")\
-            .insert(prepared_user_data)\
+        result = supabase.table("weapp_user")\
+            .insert(user_data)\
             .execute()
         
         if result.data and len(result.data) > 0:
-            return _present_user_row(result.data[0])
+            return result.data[0]
         raise Exception("创建用户失败：返回数据为空")
     except Exception as e:
         print(f"[create_user] 错误: {e}")
         # 如果是唯一约束冲突，尝试查询已存在的用户
         if "duplicate" in str(e).lower() or "unique" in str(e).lower():
-            if "openid" in prepared_user_data:
-                existing_user = await get_user_by_openid(prepared_user_data["openid"])
+            if "openid" in user_data:
+                existing_user = await get_user_by_openid(user_data["openid"])
                 if existing_user:
                     return existing_user
         raise
@@ -348,18 +291,17 @@ async def update_user(user_id: str, update_data: Dict[str, Any]) -> Dict[str, An
     Raises:
         Exception: 如果更新失败
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
 
     try:
-        prepared_update_data = _prepare_user_write_data(update_data)
-        result = db.table("weapp_user")\
-            .update(prepared_update_data)\
+        result = supabase.table("weapp_user")\
+            .update(update_data)\
             .eq("id", user_id)\
             .execute()
 
         if result.data and len(result.data) > 0:
-            return _present_user_row(result.data[0])
+            return result.data[0]
         raise Exception("更新用户失败：返回数据为空")
     except Exception as e:
         print(f"[update_user] 错误: {e}")
@@ -369,13 +311,12 @@ async def update_user(user_id: str, update_data: Dict[str, Any]) -> Dict[str, An
 
 def update_user_sync(user_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
     """同步版：更新用户信息，供 Worker 子进程使用。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        prepared_update_data = _prepare_user_write_data(update_data)
-        result = db.table("weapp_user").update(prepared_update_data).eq("id", user_id).execute()
+        result = supabase.table("weapp_user").update(update_data).eq("id", user_id).execute()
         if result.data and len(result.data) > 0:
-            return _present_user_row(result.data[0])
+            return result.data[0]
         raise Exception("更新用户失败：返回数据为空")
     except Exception as e:
         print(f"[update_user_sync] 错误: {e}")
@@ -392,8 +333,8 @@ def insert_user_mode_switch_log_sync(
     """
     写入用户执行模式切换日志（同步版，供 API 通过 asyncio.to_thread 调用）。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "user_id": user_id,
         "from_mode": from_mode,
@@ -402,7 +343,7 @@ def insert_user_mode_switch_log_sync(
         "reason_code": reason_code,
     }
     try:
-        result = db.table("user_mode_switch_logs").insert(row).execute()
+        result = supabase.table("user_mode_switch_logs").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("插入模式切换日志失败：返回数据为空")
@@ -429,19 +370,19 @@ async def insert_health_document(
     Returns:
         插入的记录字典
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
 
-    row = _prepare_health_document_write_data({
+    row = {
         "user_id": user_id,
         "document_type": document_type,
         "image_url": image_url,
         "extracted_content": extracted_content or {},
-    })
+    }
     try:
-        result = db.table("user_health_documents").insert(row).execute()
+        result = supabase.table("user_health_documents").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return _present_health_document_row(result.data[0])
+            return result.data[0]
         raise Exception("插入健康报告记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_health_document] 错误: {e}")
@@ -455,18 +396,18 @@ def insert_health_document_sync(
     extracted_content: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """同步版：插入健康报告记录，供 Worker 子进程使用。"""
-    check_postgresql_configured()
-    db = get_database_client()
-    row = _prepare_health_document_write_data({
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
         "user_id": user_id,
         "document_type": document_type,
         "image_url": image_url,
         "extracted_content": extracted_content or {},
-    })
+    }
     try:
-        result = db.table("user_health_documents").insert(row).execute()
+        result = supabase.table("user_health_documents").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return _present_health_document_row(result.data[0])
+            return result.data[0]
         raise Exception("插入健康报告记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_health_document_sync] 错误: {e}")
@@ -514,9 +455,9 @@ async def insert_food_record(
     Returns:
         插入的记录字典
     """
-    check_postgresql_configured()
-    db = get_database_client()
-    row = _prepare_food_record_write_data({
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
         "user_id": user_id,
         "meal_type": meal_type,
         "image_path": image_path,
@@ -528,9 +469,9 @@ async def insert_food_record(
         "total_carbs": total_carbs,
         "total_fat": total_fat,
         "total_weight_grams": total_weight_grams,
-    })
+    }
     if image_paths:
-        row["image_paths"] = _normalize_storage_key_list(FOOD_ANALYZE_BUCKET, image_paths)
+        row["image_paths"] = image_paths
     if diet_goal is not None:
         row["diet_goal"] = diet_goal
 
@@ -545,41 +486,17 @@ async def insert_food_record(
     if source_task_id is not None:
         row["source_task_id"] = source_task_id
     try:
-        result = db.table("user_food_records").insert(row).execute()
+        result = supabase.table("user_food_records").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return _present_food_record_row(result.data[0])
+            created = result.data[0]
+            try:
+                activate_pending_invite_referral_on_first_valid_use_sync(user_id, "food_record")
+            except Exception as reward_err:
+                print(f"[insert_food_record] 邀请奖励激活失败（已忽略）: {reward_err}")
+            return created
         raise Exception("插入饮食记录失败：返回数据为空")
     except Exception as e:
         print(f"[insert_food_record] 错误: {e}")
-        raise
-
-
-async def get_food_record_by_user_and_source_task(
-    user_id: str,
-    source_task_id: str,
-) -> Optional[Dict[str, Any]]:
-    """
-    同一用户从同一识别任务只能对应一条饮食记录，用于幂等保存，避免好友动态重复出现。
-    """
-    tid = (source_task_id or "").strip()
-    if not tid:
-        return None
-    check_postgresql_configured()
-    db = get_database_client()
-    try:
-        result = (
-            db.table("user_food_records")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("source_task_id", tid)
-            .order("record_time", desc=True)
-            .limit(1)
-            .execute()
-        )
-        rows = list(result.data or [])
-        return rows[0] if rows else None
-    except Exception as e:
-        print(f"[get_food_record_by_user_and_source_task] 错误: {e}")
         raise
 
 
@@ -599,10 +516,10 @@ async def list_food_records(
     Returns:
         记录列表，按 record_time 倒序（最新的记录排在前面）
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        q = db.table("user_food_records").select("*").eq("user_id", user_id)
+        q = supabase.table("user_food_records").select("*").eq("user_id", user_id)
         if date:
             start_local = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
             end_local = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
@@ -611,7 +528,7 @@ async def list_food_records(
             q = q.gte("record_time", start_ts).lt("record_time", end_ts)
         q = q.order("record_time", desc=True).limit(limit)
         result = q.execute()
-        return [_present_food_record_row(row) for row in (result.data or [])]
+        return list(result.data or [])
     except Exception as e:
         print(f"[list_food_records] 错误: {e}")
         raise
@@ -626,17 +543,17 @@ async def list_food_records_by_range(
     查询用户在日期范围内的饮食记录（用于数据统计）。
     start_date/end_date: YYYY-MM-DD（按中国时区自然日，含首含尾）。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 将中国区自然日转换为 UTC 时间范围
         start_local = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
         end_local = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
         start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-        q = db.table("user_food_records").select("*").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=False)
+        q = supabase.table("user_food_records").select("*").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=False)
         result = q.execute()
-        return [_present_food_record_row(row) for row in (result.data or [])]
+        return list(result.data or [])
     except Exception as e:
         print(f"[list_food_records_by_range] 错误: {e}")
         raise
@@ -647,8 +564,8 @@ async def get_streak_days(user_id: str) -> int:
     计算连续记录天数（从今天起往前，有记录的连续天数）。
     某天至少有 1 条饮食记录即算「有记录」。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 使用中国时区的自然日计算连续天数
         today = datetime.now(CHINA_TZ).date()
@@ -660,7 +577,7 @@ async def get_streak_days(user_id: str) -> int:
             end_local = datetime.combine(d + timedelta(days=1), datetime.min.time()).replace(tzinfo=CHINA_TZ)
             start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
             end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-            r = db.table("user_food_records").select("id").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).limit(1).execute()
+            r = supabase.table("user_food_records").select("id").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).limit(1).execute()
             if not r.data or len(r.data) == 0:
                 break
             streak += 1
@@ -677,11 +594,11 @@ async def get_cached_insight(user_id: str, range_type: str, generated_date: str)
     generated_date: YYYY-MM-DD
     返回 { data_fingerprint, insight_text } 或 None
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("ai_stats_insights")
+            supabase.table("ai_stats_insights")
             .select("generated_date, data_fingerprint, insight_text")
             .eq("user_id", user_id)
             .eq("range_type", range_type)
@@ -702,11 +619,11 @@ async def get_latest_cached_insight(user_id: str, range_type: str) -> Optional[D
     查询某个统计范围最近一次生成的 AI 营养洞察缓存。
     返回 { generated_date, data_fingerprint, insight_text } 或 None
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("ai_stats_insights")
+            supabase.table("ai_stats_insights")
             .select("generated_date, data_fingerprint, insight_text")
             .eq("user_id", user_id)
             .eq("range_type", range_type)
@@ -733,8 +650,8 @@ async def upsert_insight_cache(
     写入或更新 AI 营养洞察缓存。
     利用 (user_id, range_type, generated_date) 唯一约束做 upsert。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         row = {
             "user_id": user_id,
@@ -751,7 +668,7 @@ async def upsert_insight_cache(
         except Exception:
             safe_row = row
 
-        db.table("ai_stats_insights").upsert(
+        supabase.table("ai_stats_insights").upsert(
             safe_row,
             on_conflict="user_id,range_type,generated_date",
         ).execute()
@@ -767,11 +684,11 @@ async def list_user_weight_records(
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """读取用户体重记录（按记录日和创建时间升序）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         query = (
-            db.table("user_weight_records")
+            supabase.table("user_weight_records")
             .select("*")
             .eq("user_id", user_id)
         )
@@ -791,11 +708,11 @@ async def list_user_weight_records(
 
 async def get_latest_user_weight_record(user_id: str) -> Optional[Dict[str, Any]]:
     """读取用户最近一次体重记录（按 recorded_on/created_at 倒序）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("user_weight_records")
+            supabase.table("user_weight_records")
             .select("*")
             .eq("user_id", user_id)
             .order("recorded_on", desc=True)
@@ -814,11 +731,11 @@ async def get_latest_user_weight_record(user_id: str) -> Optional[Dict[str, Any]
 
 def get_latest_user_weight_record_sync(user_id: str) -> Optional[Dict[str, Any]]:
     """同步版：读取用户最近一次体重记录，供 Worker 使用。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("user_weight_records")
+            supabase.table("user_weight_records")
             .select("*")
             .eq("user_id", user_id)
             .order("recorded_on", desc=True)
@@ -845,8 +762,8 @@ async def create_user_weight_record(
     recorded_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     """新增一条体重记录；若携带 client_record_id，则按该客户端记录 ID 幂等写入。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         now_iso = datetime.now(timezone.utc).isoformat()
         created_at = recorded_at or now_iso
@@ -864,7 +781,7 @@ async def create_user_weight_record(
             row["client_record_id"] = client_record_id
             try:
                 result = (
-                    db.table("user_weight_records")
+                    supabase.table("user_weight_records")
                     .upsert(row, on_conflict="user_id,client_record_id")
                     .execute()
                 )
@@ -872,9 +789,9 @@ async def create_user_weight_record(
                 print(f"[create_user_weight_record] client_record_id upsert 回退普通 insert: {upsert_error}")
                 fallback_row = dict(row)
                 fallback_row.pop("client_record_id", None)
-                result = db.table("user_weight_records").insert(fallback_row).execute()
+                result = supabase.table("user_weight_records").insert(fallback_row).execute()
         else:
-            result = db.table("user_weight_records").insert(row).execute()
+            result = supabase.table("user_weight_records").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("写入体重记录失败：返回数据为空")
@@ -911,11 +828,11 @@ async def list_user_water_logs(
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """读取用户喝水日志（按时间升序）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         query = (
-            db.table("user_water_logs")
+            supabase.table("user_water_logs")
             .select("*")
             .eq("user_id", user_id)
         )
@@ -940,8 +857,8 @@ async def create_user_water_log(
     source_type: str = "manual",
 ) -> Dict[str, Any]:
     """新增一条喝水日志。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         day = recorded_on or datetime.now(CHINA_TZ).date().isoformat()
         row = {
@@ -950,7 +867,7 @@ async def create_user_water_log(
             "recorded_on": day,
             "source_type": source_type or "manual",
         }
-        result = db.table("user_water_logs").insert(row).execute()
+        result = supabase.table("user_water_logs").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("新增喝水日志失败：返回数据为空")
@@ -961,11 +878,11 @@ async def create_user_water_log(
 
 async def delete_user_water_logs_by_date(user_id: str, recorded_on: str) -> int:
     """删除指定日期的喝水日志。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("user_water_logs")
+            supabase.table("user_water_logs")
             .delete()
             .eq("user_id", user_id)
             .eq("recorded_on", recorded_on)
@@ -979,11 +896,11 @@ async def delete_user_water_logs_by_date(user_id: str, recorded_on: str) -> int:
 
 async def get_user_body_metric_settings(user_id: str) -> Optional[Dict[str, Any]]:
     """读取用户身体指标设置。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("user_body_metric_settings")
+            supabase.table("user_body_metric_settings")
             .select("*")
             .eq("user_id", user_id)
             .limit(1)
@@ -999,8 +916,8 @@ async def get_user_body_metric_settings(user_id: str) -> Optional[Dict[str, Any]
 
 async def upsert_user_body_metric_settings(user_id: str, water_goal_ml: int) -> Dict[str, Any]:
     """写入用户喝水目标。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         row = {
             "user_id": user_id,
@@ -1008,7 +925,7 @@ async def upsert_user_body_metric_settings(user_id: str, water_goal_ml: int) -> 
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         result = (
-            db.table("user_body_metric_settings")
+            supabase.table("user_body_metric_settings")
             .upsert(row, on_conflict="user_id")
             .execute()
         )
@@ -1031,8 +948,8 @@ async def insert_critical_samples(
         user_id: 用户 ID (UUID)
         items: 样本列表，每项含 image_path(可选), food_name, ai_weight, user_weight, deviation_percent
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     if not items:
         return
     rows = []
@@ -1049,7 +966,7 @@ async def insert_critical_samples(
         row["image_path"] = path_val if path_val is not None and str(path_val).strip() else None
         rows.append(row)
     try:
-        db.table("critical_samples_weapp").insert(rows).execute()
+        supabase.table("critical_samples_weapp").insert(rows).execute()
     except Exception as e:
         print(f"[insert_critical_samples] 错误: {e}")
         raise
@@ -1071,31 +988,31 @@ def create_analysis_task_sync(
     - image_urls: 多图分析时传入（新版）
     - text_input: 文字分析时必填
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     
     # 兼容逻辑：若传了 image_urls 但没传 image_url，取第一个作为 image_url
     if image_urls and len(image_urls) > 0 and not image_url:
         image_url = image_urls[0]
         
-    row = _prepare_analysis_task_write_data(task_type, {
+    row = {
         "user_id": user_id,
         "task_type": task_type,
         "status": "pending",
         "payload": payload or {},
-    })
+    }
     # 根据任务类型添加对应字段
     if image_url:
-        row["image_url"] = _normalize_storage_key(_analysis_task_bucket_name(task_type), image_url)
+        row["image_url"] = image_url
     if image_urls:
-         row["image_paths"] = _normalize_storage_key_list(_analysis_task_bucket_name(task_type), image_urls)  # 复用 image_paths 字段存 urls JSON
+         row["image_paths"] = image_urls  # 复用 image_paths 字段存 urls JSON
     if text_input:
         row["text_input"] = text_input
     
     try:
-        result = db.table("analysis_tasks").insert(row).execute()
+        result = supabase.table("analysis_tasks").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return _present_analysis_task_row(result.data[0])
+            return result.data[0]
         raise Exception("创建分析任务失败：返回数据为空")
     except Exception as e:
         print(f"[create_analysis_task_sync] 错误: {e}")
@@ -1107,12 +1024,12 @@ def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
     原子抢占一条 pending 任务，将其置为 processing 并返回。
     供 Worker 子进程调用，多进程下通过「先查后更新 where status=pending」避免重复处理。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 取一条 pending
         r = (
-            db.table("analysis_tasks")
+            supabase.table("analysis_tasks")
             .select("*")
             .eq("status", "pending")
             .eq("task_type", task_type)
@@ -1126,7 +1043,7 @@ def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
         task_id = rows[0]["id"]
         # 仅当仍为 pending 时更新为 processing，避免多 Worker 重复抢
         up = (
-            db.table("analysis_tasks")
+            supabase.table("analysis_tasks")
             .update({"status": "processing", "updated_at": datetime.now(timezone.utc).isoformat()})
             .eq("id", task_id)
             .eq("status", "pending")
@@ -1155,12 +1072,12 @@ def update_analysis_task_result_sync(
     Returns:
         bool: 是否成功更新
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     
     try:
         # 先检查任务是否存在且不是 cancelled 状态
-        check = db.table("analysis_tasks").select("status").eq("id", task_id).execute()
+        check = supabase.table("analysis_tasks").select("status").eq("id", task_id).execute()
         if not check.data or len(check.data) == 0:
             print(f"[update_analysis_task_result_sync] 任务 {task_id} 不存在，跳过更新")
             return False
@@ -1176,7 +1093,7 @@ def update_analysis_task_result_sync(
         if error_message is not None:
             row["error_message"] = error_message
         
-        db.table("analysis_tasks").update(row).eq("id", task_id).execute()
+        supabase.table("analysis_tasks").update(row).eq("id", task_id).execute()
         return True
     except Exception as e:
         print(f"[update_analysis_task_result_sync] 错误: {e}")
@@ -1185,8 +1102,8 @@ def update_analysis_task_result_sync(
 
 def mark_task_violated_sync(task_id: str, violation_reason: str) -> None:
     """将分析任务标记为违规：status='violated', is_violated=True, 记录违规原因。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "status": "violated",
         "is_violated": True,
@@ -1194,7 +1111,7 @@ def mark_task_violated_sync(task_id: str, violation_reason: str) -> None:
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        db.table("analysis_tasks").update(row).eq("id", task_id).execute()
+        supabase.table("analysis_tasks").update(row).eq("id", task_id).execute()
     except Exception as e:
         print(f"[mark_task_violated_sync] 错误: {e}")
         raise
@@ -1202,10 +1119,10 @@ def mark_task_violated_sync(task_id: str, violation_reason: str) -> None:
 
 def get_user_openid_by_id_sync(user_id: str) -> Optional[str]:
     """通过 user_id 查询用户 openid，用于违规记录关联。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("weapp_user").select("openid").eq("id", user_id).limit(1).execute()
+        result = supabase.table("weapp_user").select("openid").eq("id", user_id).limit(1).execute()
         if result.data and len(result.data) > 0:
             return result.data[0].get("openid")
         return None
@@ -1225,8 +1142,8 @@ def create_violation_record_sync(
     moderation_result: AI 审核返回结果，包含 category 和 reason
     violation_type: 违规来源类型，默认 'food_analysis'
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     user_id = task.get("user_id", "")
     # 获取用户 openid
     user_openid = get_user_openid_by_id_sync(user_id) or ""
@@ -1248,7 +1165,7 @@ def create_violation_record_sync(
         "text_content": task.get("text_input"),
     }
     try:
-        db.table("content_violations").insert(row).execute()
+        supabase.table("content_violations").insert(row).execute()
     except Exception as e:
         print(f"[create_violation_record_sync] 错误: {e}")
         raise
@@ -1262,18 +1179,18 @@ async def update_analysis_task_result(
     更新分析任务结果（异步）。
     用于用户手动修正分析结果（如修改食物名称）后回写数据库。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         data = {
             "result": result,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
-        res = db.table("analysis_tasks").update(data).eq("id", task_id).execute()
+        res = supabase.table("analysis_tasks").update(data).eq("id", task_id).execute()
         if res.data and len(res.data) > 0:
-            return _present_analysis_task_row(res.data[0])
+            return res.data[0]
         # 如果更新失败（如 ID 不存在），这里可能需要抛错或返回 None
-        # PostgreSQL update 如果没匹配到行，data 为空列表
+        # Supabase update 如果没匹配到行，data 为空列表
         raise Exception("更新任务失败：任务不存在或无权限")
     except Exception as e:
         print(f"[update_analysis_task_result] 错误: {e}")
@@ -1282,13 +1199,13 @@ async def update_analysis_task_result(
 
 def get_analysis_task_by_id_sync(task_id: str) -> Optional[Dict[str, Any]]:
     """按 ID 查询单条任务。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         print(f"[get_analysis_task_by_id_sync] Querying task_id: {task_id}")
-        r = db.table("analysis_tasks").select("*").eq("id", task_id).limit(1).execute()
+        r = supabase.table("analysis_tasks").select("*").eq("id", task_id).limit(1).execute()
         if r.data and len(r.data) > 0:
-            return _present_analysis_task_row(r.data[0])
+            return r.data[0]
         return None
     except Exception as e:
         print(f"[get_analysis_task_by_id_sync] 错误: {e}")
@@ -1299,15 +1216,15 @@ async def get_analysis_tasks_by_ids(task_ids: List[str]) -> Dict[str, Dict[str, 
     """按 ID 列表批量查询分析任务，返回 task_id -> task 字典。用于给记录列表补全 image_paths。"""
     if not task_ids:
         return {}
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        r = db.table("analysis_tasks").select("id, image_paths, image_url").in_("id", task_ids).execute()
+        r = supabase.table("analysis_tasks").select("id, image_paths, image_url").in_("id", task_ids).execute()
         out = {}
         for row in (r.data or []):
             tid = row.get("id")
             if tid:
-                out[tid] = _present_analysis_task_row(row)
+                out[tid] = row
         return out
     except Exception as e:
         print(f"[get_analysis_tasks_by_ids] 错误: {e}")
@@ -1321,16 +1238,16 @@ def list_analysis_tasks_by_user_sync(
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """按用户查询任务列表，支持按 task_type、status 筛选。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        q = db.table("analysis_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
+        q = supabase.table("analysis_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
         if task_type:
             q = q.eq("task_type", task_type)
         if status:
             q = q.eq("status", status)
         r = q.execute()
-        return [_present_analysis_task_row(row) for row in (r.data or [])]
+        return list(r.data or [])
     except Exception as e:
         print(f"[list_analysis_tasks_by_user_sync] 错误: {e}")
         raise
@@ -1356,8 +1273,8 @@ def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: boo
             "message": str
         }
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     
     result = {
         "deleted": False,
@@ -1368,7 +1285,7 @@ def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: boo
     
     try:
         # 先查询任务确认归属和状态，同时获取图片信息
-        r = db.table("analysis_tasks").select(
+        r = supabase.table("analysis_tasks").select(
             "id, status, image_url, image_paths, task_type"
         ).eq("id", task_id).eq("user_id", user_id).execute()
         
@@ -1384,7 +1301,7 @@ def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: boo
                 raise Exception("进行中的任务无法删除")
             
             # 更新状态为 cancelled，这样 worker 会跳过这个任务
-            db.table("analysis_tasks").update({
+            supabase.table("analysis_tasks").update({
                 "status": "cancelled",
                 "error_message": "用户主动取消任务",
                 "updated_at": datetime.now(timezone.utc).isoformat()
@@ -1431,7 +1348,7 @@ def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: boo
                     print(f"[delete_analysis_task_sync] 删除图片失败 {image_url}: {img_e}")
         
         # 执行删除任务记录
-        db.table("analysis_tasks").delete().eq("id", task_id).eq("user_id", user_id).execute()
+        supabase.table("analysis_tasks").delete().eq("id", task_id).eq("user_id", user_id).execute()
         result["deleted"] = True
         
         if result["cancelled"]:
@@ -1452,14 +1369,14 @@ def mark_timed_out_tasks_sync(timeout_minutes: int = 5) -> int:
     将超时的 pending/processing 任务标记为 timed_out。
     返回被标记的任务数量。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 计算超时时间点
         cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
         
         # 更新超时任务
-        result = db.table("analysis_tasks").update({
+        result = supabase.table("analysis_tasks").update({
             "status": "timed_out",
             "error_message": "分析超时，请重试",
             "updated_at": datetime.now(timezone.utc).isoformat()
@@ -1484,8 +1401,8 @@ def create_precision_session_sync(
     reference_objects: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """创建精准模式会话。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "user_id": user_id,
         "source_type": source_type,
@@ -1497,7 +1414,7 @@ def create_precision_session_sync(
         "reference_objects": reference_objects or [],
     }
     try:
-        result = db.table("precision_sessions").insert(row).execute()
+        result = supabase.table("precision_sessions").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("创建精准模式会话失败：返回数据为空")
@@ -1508,11 +1425,11 @@ def create_precision_session_sync(
 
 def get_precision_session_by_id_sync(session_id: str) -> Optional[Dict[str, Any]]:
     """按 ID 查询精准模式会话。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("precision_sessions")
+            supabase.table("precision_sessions")
             .select("*")
             .eq("id", session_id)
             .limit(1)
@@ -1528,13 +1445,13 @@ def get_precision_session_by_id_sync(session_id: str) -> Optional[Dict[str, Any]
 
 def update_precision_session_sync(session_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
     """更新精准模式会话并返回最新记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = dict(updates or {})
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         result = (
-            db.table("precision_sessions")
+            supabase.table("precision_sessions")
             .update(row)
             .eq("id", session_id)
             .execute()
@@ -1555,8 +1472,8 @@ def create_precision_session_round_sync(
     planner_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """写入精准模式会话轮次记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "session_id": session_id,
         "round_index": round_index,
@@ -1566,7 +1483,7 @@ def create_precision_session_round_sync(
     if planner_result is not None:
         row["planner_result"] = planner_result
     try:
-        result = db.table("precision_session_rounds").insert(row).execute()
+        result = supabase.table("precision_session_rounds").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("创建精准模式轮次记录失败：返回数据为空")
@@ -1577,11 +1494,11 @@ def create_precision_session_round_sync(
 
 def list_precision_session_rounds_sync(session_id: str) -> List[Dict[str, Any]]:
     """查询精准模式会话的所有轮次。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("precision_session_rounds")
+            supabase.table("precision_session_rounds")
             .select("*")
             .eq("session_id", session_id)
             .order("round_index")
@@ -1604,8 +1521,8 @@ def create_precision_item_estimate_sync(
     source_task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """创建单个精准模式子项估计记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "session_id": session_id,
         "round_index": round_index,
@@ -1618,7 +1535,7 @@ def create_precision_item_estimate_sync(
     if source_task_id:
         row["source_task_id"] = source_task_id
     try:
-        result = db.table("precision_item_estimates").insert(row).execute()
+        result = supabase.table("precision_item_estimates").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("创建精准模式子项估计失败：返回数据为空")
@@ -1632,11 +1549,11 @@ def list_precision_item_estimates_sync(
     round_index: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """查询精准模式子项估计列表。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         query = (
-            db.table("precision_item_estimates")
+            supabase.table("precision_item_estimates")
             .select("*")
             .eq("session_id", session_id)
             .order("round_index")
@@ -1653,11 +1570,11 @@ def list_precision_item_estimates_sync(
 
 def get_precision_item_estimate_by_source_task_sync(source_task_id: str) -> Optional[Dict[str, Any]]:
     """按 source_task_id 查询精准模式子项估计记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("precision_item_estimates")
+            supabase.table("precision_item_estimates")
             .select("*")
             .eq("source_task_id", source_task_id)
             .limit(1)
@@ -1673,13 +1590,13 @@ def get_precision_item_estimate_by_source_task_sync(source_task_id: str) -> Opti
 
 def update_precision_item_estimate_sync(estimate_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
     """更新精准模式子项估计并返回最新记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = dict(updates or {})
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         result = (
-            db.table("precision_item_estimates")
+            supabase.table("precision_item_estimates")
             .update(row)
             .eq("id", estimate_id)
             .execute()
@@ -1707,8 +1624,8 @@ def create_comment_task_sync(
     comment_type: 'feed' 或 'public_food_library'
     target_id: record_id 或 library_item_id
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "user_id": user_id,
         "comment_type": comment_type,
@@ -1721,7 +1638,7 @@ def create_comment_task_sync(
     if extra:
         row["extra"] = extra
     try:
-        result = db.table("comment_tasks").insert(row).execute()
+        result = supabase.table("comment_tasks").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("创建评论任务失败")
@@ -1735,12 +1652,12 @@ def claim_next_pending_comment_task_sync(comment_type: Optional[str] = None) -> 
     原子抢占一条 pending 评论任务，将其置为 processing 并返回。
     comment_type: 可选，筛选特定类型的任务
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 取一条 pending 任务
         q = (
-            db.table("comment_tasks")
+            supabase.table("comment_tasks")
             .select("*")
             .eq("status", "pending")
             .order("created_at")
@@ -1755,7 +1672,7 @@ def claim_next_pending_comment_task_sync(comment_type: Optional[str] = None) -> 
         task_id = rows[0]["id"]
         # 仅当仍为 pending 时更新为 processing，避免多 Worker 重复抢
         up = (
-            db.table("comment_tasks")
+            supabase.table("comment_tasks")
             .update({"status": "processing", "updated_at": datetime.now(timezone.utc).isoformat()})
             .eq("id", task_id)
             .eq("status", "pending")
@@ -1779,15 +1696,15 @@ def update_comment_task_result_sync(
     error_message: Optional[str] = None,
 ) -> None:
     """更新评论任务结果（done / failed）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}
     if result is not None:
         row["result"] = result
     if error_message is not None:
         row["error_message"] = error_message
     try:
-        db.table("comment_tasks").update(row).eq("id", task_id).execute()
+        supabase.table("comment_tasks").update(row).eq("id", task_id).execute()
     except Exception as e:
         print(f"[update_comment_task_result_sync] 错误: {e}")
         raise
@@ -1795,8 +1712,8 @@ def update_comment_task_result_sync(
 
 def mark_comment_task_violated_sync(task_id: str, violation_reason: str) -> None:
     """将评论任务标记为违规：status='violated', is_violated=True, 记录违规原因。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "status": "violated",
         "is_violated": True,
@@ -1804,7 +1721,7 @@ def mark_comment_task_violated_sync(task_id: str, violation_reason: str) -> None
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        db.table("comment_tasks").update(row).eq("id", task_id).execute()
+        supabase.table("comment_tasks").update(row).eq("id", task_id).execute()
     except Exception as e:
         print(f"[mark_comment_task_violated_sync] 错误: {e}")
         raise
@@ -1817,10 +1734,10 @@ def list_comment_tasks_by_user_sync(
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """按用户查询评论任务列表，支持按 comment_type、status 筛选。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        q = db.table("comment_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
+        q = supabase.table("comment_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
         if comment_type:
             q = q.eq("comment_type", comment_type)
         if status:
@@ -1832,29 +1749,44 @@ def list_comment_tasks_by_user_sync(
         raise
 
 
-def upload_health_report_image(user_id: str, base64_image: str) -> Dict[str, str]:
+def upload_health_report_image(user_id: str, base64_image: str) -> str:
     """
-    将体检报告图片上传到 COS。
-    路径：health-reports/{user_id}/YYYY/MM/DD/{uuid}.jpg
-    返回短期预览 URL 与内部存储 key。
+    将体检报告图片上传到 Supabase Storage，返回公网可访问的 URL。
+    路径：health-reports/{user_id}/{uuid}.jpg
+    需先在 Supabase Dashboard → Storage 创建 bucket「health-reports」并设为 Public。
     """
+    check_supabase_configured()
+    supabase = get_supabase_client()
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
-    path = _build_bucket_key(user_id, _current_storage_date_prefix(), f"{uuid.uuid4().hex}.jpg")
-    uploaded = upload_and_build_access(
-        HEALTH_REPORTS_BUCKET,
+    path = f"{user_id}/{uuid.uuid4().hex}.jpg"
+    supabase.storage.from_(HEALTH_REPORTS_BUCKET).upload(
         path,
         file_bytes,
-        content_type="image/jpeg",
-        expires=3600,
+        {"content-type": "image/jpeg", "upsert": "true"},
     )
-    return {
-        "storageKey": uploaded["key"],
-        "imageUrl": uploaded["url"],
-    }
+    # 公网 URL：https://xxx.supabase.co/storage/v1/object/public/health-reports/...
+    result = supabase.storage.from_(HEALTH_REPORTS_BUCKET).get_public_url(path)
+    if isinstance(result, dict):
+        return result.get("publicUrl") or result.get("public_url") or ""
+    if hasattr(result, "public_url"):
+        return getattr(result, "public_url", "")
+    if hasattr(result, "publicUrl"):
+        return getattr(result, "publicUrl", "")
+    return str(result)
+
+
+def _resolve_public_storage_url(result: Any) -> str:
+    if isinstance(result, dict):
+        return (result.get("publicUrl") or result.get("public_url") or "").strip()
+    if hasattr(result, "public_url"):
+        return str(getattr(result, "public_url", "") or "").strip()
+    if hasattr(result, "publicUrl"):
+        return str(getattr(result, "publicUrl", "") or "").strip()
+    return str(result or "").strip()
 
 
 def upload_food_analyze_image_bytes(
@@ -1863,9 +1795,11 @@ def upload_food_analyze_image_bytes(
     content_type: str = "image/jpeg",
 ) -> str:
     """
-    将食物分析图片字节上传到 COS，返回公网可访问的 URL。
-    路径：food-images/YYYY/MM/DD/{uuid}.{ext}
+    将食物分析图片字节上传到 Supabase Storage，返回公网可访问的 URL。
+    路径：food-images/{uuid}.{ext}
     """
+    check_supabase_configured()
+    supabase = get_supabase_client()
     if not file_bytes:
         raise ValueError("图片文件为空")
 
@@ -1875,32 +1809,39 @@ def upload_food_analyze_image_bytes(
     if not re.fullmatch(r"\.[a-z0-9]{1,8}", safe_ext):
         safe_ext = ".jpg"
 
-    path = _build_bucket_key(_current_storage_date_prefix(), f"{uuid.uuid4().hex}{safe_ext}")
+    path = f"{uuid.uuid4().hex}{safe_ext}"
     safe_content_type = (content_type or "image/jpeg").strip() or "image/jpeg"
 
     try:
-        uploaded = upload_and_build_access(
-            FOOD_ANALYZE_BUCKET,
+        supabase.storage.from_(FOOD_ANALYZE_BUCKET).upload(
             path,
             file_bytes,
-            content_type=safe_content_type,
+            {"content-type": safe_content_type, "upsert": "true"},
         )
     except Exception as e:
         error_msg = str(e) or f"上传失败: {type(e).__name__}"
         if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower() or "timeout" in error_msg.lower():
-            raise ConnectionError(f"连接 COS 失败: {error_msg}")
-        raise Exception(f"上传图片到 COS 失败: {error_msg}")
+            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
+        raise Exception(f"上传图片到 Supabase Storage 失败: {error_msg}")
 
-    url = str(uploaded.get("url") or "").strip()
-    if not url:
-        raise ValueError("无法获取图片公网 URL")
-    return url
+    try:
+        result = supabase.storage.from_(FOOD_ANALYZE_BUCKET).get_public_url(path)
+        url = _resolve_public_storage_url(result)
+        if not url:
+            raise ValueError("无法获取图片公网 URL")
+        return url
+    except Exception as e:
+        error_msg = str(e) or f"获取 URL 失败: {type(e).__name__}"
+        if "SSL" in error_msg or "EOF" in error_msg or "connection" in error_msg.lower():
+            raise ConnectionError(f"连接 Supabase Storage 失败: {error_msg}")
+        raise Exception(f"获取图片公网 URL 失败: {error_msg}")
 
 
 def upload_food_analyze_image(base64_image: str) -> str:
     """
-    将食物分析图片上传到 COS，返回公网可访问的 URL。
-    路径：food-images/YYYY/MM/DD/{uuid}.jpg
+    将食物分析图片上传到 Supabase Storage，返回公网可访问的 URL。
+    路径：food-images/{uuid}.jpg
+    需先在 Supabase Dashboard → Storage 创建 bucket「food-images」并设为 Public。
     """
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
@@ -1912,57 +1853,88 @@ def upload_food_analyze_image(base64_image: str) -> str:
 
 def upload_user_avatar(user_id: str, base64_image: str) -> str:
     """
-    将用户头像上传到 COS，返回公网可访问的 URL。
-    路径：user-avatars/{user_id}/YYYY/MM/DD/{uuid}.jpg
+    将用户头像上传到 Supabase Storage，返回公网可访问的 URL。
+    路径：user-avatars/{user_id}/{uuid}.jpg
+    需先在 Supabase Dashboard → Storage 创建 bucket「user-avatars」并设为 Public。
     """
+    check_supabase_configured()
+    supabase = get_supabase_client()
     raw = base64_image.split(",")[1] if "," in base64_image else base64_image
     try:
         file_bytes = base64.b64decode(raw)
     except Exception as e:
         raise ValueError(f"base64 解码失败: {e}")
-    path = _build_bucket_key(user_id, _current_storage_date_prefix(), f"{uuid.uuid4().hex}.jpg")
-    uploaded = upload_and_build_access(
-        USER_AVATARS_BUCKET,
+    path = f"{user_id}/{uuid.uuid4().hex}.jpg"
+    supabase.storage.from_(USER_AVATARS_BUCKET).upload(
         path,
         file_bytes,
-        content_type="image/jpeg",
+        {"content-type": "image/jpeg", "upsert": "true"},
     )
-    return uploaded["url"]
+    result = supabase.storage.from_(USER_AVATARS_BUCKET).get_public_url(path)
+    if isinstance(result, dict):
+        return result.get("publicUrl") or result.get("public_url") or ""
+    if hasattr(result, "public_url"):
+        return getattr(result, "public_url", "")
+    if hasattr(result, "publicUrl"):
+        return getattr(result, "publicUrl", "")
+    return str(result)
 
 def delete_image_from_storage(image_url: str, bucket_name: str = FOOD_ANALYZE_BUCKET) -> None:
     """
-    根据图片 URL / 原始 key 从 COS 中删除指定图片。
-    兼容旧 PostgreSQL URL、新 CDN URL、COS URL 与原始 key。
+    根据图片公网 URL 从 Supabase Storage 中删除指定图片。
+    如果 URL 含有类似 '/storage/v1/object/public/bucket_name/XXX.jpg'，则提取 XXX.jpg 作为 path 删除。
     """
-    object_key = resolve_object_key(image_url, bucket_name)
-    if not object_key:
-        print(f"[delete_image_from_storage] URL 对应路径解析失败: {image_url}")
-        return
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        delete_object(bucket_name, object_key)
-        print(f"[delete_image_from_storage] 删除成功: {object_key}")
+        # 提取 path，例如 "https://..../food-images/1234.jpg" 提取出 "1234.jpg"
+        # 简单粗暴的方式：由于 bucket 为 bucket_name，可以找这个字符串之后的部分
+        if bucket_name in image_url:
+            parts = image_url.split(f"{bucket_name}/")
+            if len(parts) == 2:
+                path = parts[1].split("?")[0]  # 忽略 query string
+                supabase.storage.from_(bucket_name).remove([path])
+                print(f"[delete_image_from_storage] 删除成功: {path}")
+            else:
+                print(f"[delete_image_from_storage] URL 对应路径解析失败: {image_url}")
+        else:
+             print(f"[delete_image_from_storage] URL 中未找到 bucket_name: {image_url}")
     except Exception as e:
         print(f"[delete_image_from_storage] 删除失败: {e}")
 
 # ---------- 好友系统 ----------
 
 async def get_friend_ids(user_id: str) -> List[str]:
-    """获取用户的好友 ID 列表（双向：我→对方 与 对方→我，兼容仅存在单向历史数据的情况）"""
-    check_postgresql_configured()
-    db = get_database_client()
+    """获取用户的好友 ID 列表（双向：我→对方 与 对方→我，兼容仅存在单向历史数据的情况）
+    【优化】合并两次查询为一次，减少一次网络往返；增加 5 分钟内存缓存。"""
+    cache_key = f"friend_ids:{user_id}"
+    cached = _cache_get(_friend_ids_cache, cache_key, ttl_seconds=300)
+    if cached is not None:
+        return cached
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
+        # 优化：一次查询同时拿到双向关系，减少一次网络往返
+        r = (
+            supabase.table("user_friends")
+            .select("user_id, friend_id")
+            .or_(f"user_id.eq.{user_id},friend_id.eq.{user_id}")
+            .execute()
+        )
         out = set()
-        r1 = db.table("user_friends").select("friend_id").eq("user_id", user_id).execute()
-        for row in r1.data or []:
-            fid = row.get("friend_id")
-            if fid:
-                out.add(fid)
-        r2 = db.table("user_friends").select("user_id").eq("friend_id", user_id).execute()
-        for row in r2.data or []:
-            uid = row.get("user_id")
-            if uid:
-                out.add(uid)
-        return list(out)
+        for row in r.data or []:
+            if row.get("user_id") == user_id:
+                fid = row.get("friend_id")
+                if fid:
+                    out.add(fid)
+            elif row.get("friend_id") == user_id:
+                uid = row.get("user_id")
+                if uid:
+                    out.add(uid)
+        result = list(out)
+        _cache_set(_friend_ids_cache, cache_key, result)
+        return result
     except Exception as e:
         print(f"[get_friend_ids] 错误: {e}")
         raise
@@ -1970,13 +1942,13 @@ async def get_friend_ids(user_id: str) -> List[str]:
 
 async def is_friend(user_id: str, friend_id: str) -> bool:
     """判断两人是否为好友"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        r1 = db.table("user_friends").select("id").eq("user_id", user_id).eq("friend_id", friend_id).limit(1).execute()
+        r1 = supabase.table("user_friends").select("id").eq("user_id", user_id).eq("friend_id", friend_id).limit(1).execute()
         if r1.data and len(r1.data) > 0:
             return True
-        r2 = db.table("user_friends").select("id").eq("user_id", friend_id).eq("friend_id", user_id).limit(1).execute()
+        r2 = supabase.table("user_friends").select("id").eq("user_id", friend_id).eq("friend_id", user_id).limit(1).execute()
         return bool(r2.data and len(r2.data) > 0)
     except Exception as e:
         print(f"[is_friend] 错误: {e}")
@@ -1985,12 +1957,12 @@ async def is_friend(user_id: str, friend_id: str) -> bool:
 
 async def add_friend_pair(user_id: str, friend_id: str) -> None:
     """建立双向好友关系（插入两条记录），如果已存在则跳过"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 先检查是否已存在好友关系，避免重复插入
-        existing1 = db.table("user_friends").select("id").eq("user_id", user_id).eq("friend_id", friend_id).execute()
-        existing2 = db.table("user_friends").select("id").eq("user_id", friend_id).eq("friend_id", user_id).execute()
+        existing1 = supabase.table("user_friends").select("id").eq("user_id", user_id).eq("friend_id", friend_id).execute()
+        existing2 = supabase.table("user_friends").select("id").eq("user_id", friend_id).eq("friend_id", user_id).execute()
         
         records_to_insert = []
         if not existing1.data or len(existing1.data) == 0:
@@ -1999,7 +1971,7 @@ async def add_friend_pair(user_id: str, friend_id: str) -> None:
             records_to_insert.append({"user_id": friend_id, "friend_id": user_id})
         
         if records_to_insert:
-            db.table("user_friends").insert(records_to_insert).execute()
+            supabase.table("user_friends").insert(records_to_insert).execute()
     except Exception as e:
         # 忽略唯一约束冲突错误
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
@@ -2012,19 +1984,19 @@ async def remove_friend_pair(user_id: str, friend_id: str) -> None:
     """移除双向好友关系（删除两条 user_friends 记录）。"""
     if user_id == friend_id:
         raise ValueError("不能移除自己")
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         if not await is_friend(user_id, friend_id):
             raise ValueError("你们还不是好友")
 
         # 删除双向好友关系（兼容历史单向/重复数据）
-        db.table("user_friends").delete().eq("user_id", user_id).eq("friend_id", friend_id).execute()
-        db.table("user_friends").delete().eq("user_id", friend_id).eq("friend_id", user_id).execute()
+        supabase.table("user_friends").delete().eq("user_id", user_id).eq("friend_id", friend_id).execute()
+        supabase.table("user_friends").delete().eq("user_id", friend_id).eq("friend_id", user_id).execute()
 
         # 清理双方之间可能残留的 pending 请求
-        db.table("friend_requests").delete().eq("from_user_id", user_id).eq("to_user_id", friend_id).eq("status", "pending").execute()
-        db.table("friend_requests").delete().eq("from_user_id", friend_id).eq("to_user_id", user_id).eq("status", "pending").execute()
+        supabase.table("friend_requests").delete().eq("from_user_id", user_id).eq("to_user_id", friend_id).eq("status", "pending").execute()
+        supabase.table("friend_requests").delete().eq("from_user_id", friend_id).eq("to_user_id", user_id).eq("status", "pending").execute()
     except ValueError:
         raise
     except Exception as e:
@@ -2034,10 +2006,10 @@ async def remove_friend_pair(user_id: str, friend_id: str) -> None:
 
 async def get_pending_request_to_user_ids(from_user_id: str) -> List[str]:
     """获取 from_user_id 已发出的、状态为 pending 的 to_user_id 列表"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("friend_requests").select("to_user_id").eq("from_user_id", from_user_id).eq("status", "pending").execute()
+        result = supabase.table("friend_requests").select("to_user_id").eq("from_user_id", from_user_id).eq("status", "pending").execute()
         return [r["to_user_id"] for r in (result.data or [])]
     except Exception as e:
         print(f"[get_pending_request_to_user_ids] 错误: {e}")
@@ -2056,18 +2028,18 @@ async def search_users(
     - is_friend: 是否已是好友
     - is_pending: 是否已发送待处理请求
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         if telephone:
-            q = db.table("weapp_user").select("id, nickname, avatar").eq("telephone", telephone.strip()).neq("id", current_user_id).limit(1)
+            q = supabase.table("weapp_user").select("id, nickname, avatar").eq("telephone", telephone.strip()).neq("id", current_user_id).limit(1)
             result = q.execute()
         elif nickname and nickname.strip():
-            q = db.table("weapp_user").select("id, nickname, avatar").ilike("nickname", f"%{nickname.strip()}%").neq("id", current_user_id).limit(limit)
+            q = supabase.table("weapp_user").select("id, nickname, avatar").ilike("nickname", f"%{nickname.strip()}%").neq("id", current_user_id).limit(limit)
             result = q.execute()
         else:
             return []
-        users = [_present_user_row(u) for u in (result.data or [])]
+        users = list(result.data or [])
         if not users:
             return []
         friend_ids = await get_friend_ids(current_user_id)
@@ -2090,17 +2062,17 @@ async def send_friend_request(from_user_id: str, to_user_id: str) -> Dict[str, A
         raise ValueError("不能添加自己为好友")
     if await is_friend(from_user_id, to_user_id):
         raise ValueError("你们已是好友")
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        existing = db.table("friend_requests").select("*").eq("from_user_id", from_user_id).eq("to_user_id", to_user_id).execute()
+        existing = supabase.table("friend_requests").select("*").eq("from_user_id", from_user_id).eq("to_user_id", to_user_id).execute()
         if existing.data and len(existing.data) > 0:
             row = existing.data[0]
             if row.get("status") == "pending":
                 return row
-            db.table("friend_requests").update({"status": "pending", "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", row["id"]).execute()
+            supabase.table("friend_requests").update({"status": "pending", "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", row["id"]).execute()
             return {**row, "status": "pending"}
-        result = db.table("friend_requests").insert({
+        result = supabase.table("friend_requests").insert({
             "from_user_id": from_user_id,
             "to_user_id": to_user_id,
             "status": "pending",
@@ -2117,16 +2089,16 @@ async def send_friend_request(from_user_id: str, to_user_id: str) -> Dict[str, A
 
 async def get_friend_requests_received(to_user_id: str) -> List[Dict[str, Any]]:
     """获取收到的待处理好友请求列表"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("friend_requests").select("id, from_user_id, to_user_id, status, created_at").eq("to_user_id", to_user_id).eq("status", "pending").order("created_at", desc=True).execute()
+        result = supabase.table("friend_requests").select("id, from_user_id, to_user_id, status, created_at").eq("to_user_id", to_user_id).eq("status", "pending").order("created_at", desc=True).execute()
         rows = list(result.data or [])
         if not rows:
             return []
         from_ids = [r["from_user_id"] for r in rows]
-        users_result = db.table("weapp_user").select("id, nickname, avatar").in_("id", from_ids).execute()
-        users_map = {u["id"]: _present_user_row(u) for u in (users_result.data or [])}
+        users_result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", from_ids).execute()
+        users_map = {u["id"]: u for u in (users_result.data or [])}
         out = []
         for r in rows:
             u = users_map.get(r["from_user_id"], {})
@@ -2147,17 +2119,17 @@ async def get_friend_requests_received(to_user_id: str) -> List[Dict[str, Any]]:
 
 async def respond_friend_request(request_id: str, to_user_id: str, accept: bool) -> None:
     """处理好友请求：接受则建立双向好友关系"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        req = db.table("friend_requests").select("*").eq("id", request_id).eq("to_user_id", to_user_id).single().execute()
+        req = supabase.table("friend_requests").select("*").eq("id", request_id).eq("to_user_id", to_user_id).single().execute()
         if not req.data:
             raise ValueError("请求不存在或无权操作")
         row = req.data
         if row.get("status") != "pending":
             raise ValueError("该请求已处理")
         status = "accepted" if accept else "rejected"
-        db.table("friend_requests").update({"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", request_id).execute()
+        supabase.table("friend_requests").update({"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", request_id).execute()
         if accept:
             await add_friend_pair(row["to_user_id"], row["from_user_id"])
     except ValueError:
@@ -2169,11 +2141,11 @@ async def respond_friend_request(request_id: str, to_user_id: str, accept: bool)
 
 async def cancel_sent_friend_request(request_id: str, from_user_id: str) -> None:
     """撤销当前用户发出的、仍为 pending 的好友请求（删除该条记录）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         req = (
-            db.table("friend_requests")
+            supabase.table("friend_requests")
             .select("*")
             .eq("id", request_id)
             .eq("from_user_id", from_user_id)
@@ -2185,7 +2157,7 @@ async def cancel_sent_friend_request(request_id: str, from_user_id: str) -> None
         row = req.data
         if row.get("status") != "pending":
             raise ValueError("只能撤销待对方处理的请求")
-        db.table("friend_requests").delete().eq("id", request_id).execute()
+        supabase.table("friend_requests").delete().eq("id", request_id).execute()
     except ValueError:
         raise
     except Exception as e:
@@ -2200,21 +2172,21 @@ async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
         return []
     # 去重 friend_ids
     unique_friend_ids = list(set(friend_ids))
-    check_postgresql_configured()
-    db = get_database_client()
-    result = db.table("weapp_user").select("id, nickname, avatar").in_("id", unique_friend_ids).execute()
-    return [_present_user_row(row) for row in (result.data or [])]
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", unique_friend_ids).execute()
+    return list(result.data or [])
 
 
 async def delete_friend_pair(user_id: str, friend_id: str) -> Dict[str, int]:
     """删除双向好友关系，返回删除条数。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         deleted = 0
-        r1 = db.table("user_friends").delete().eq("user_id", user_id).eq("friend_id", friend_id).execute()
+        r1 = supabase.table("user_friends").delete().eq("user_id", user_id).eq("friend_id", friend_id).execute()
         deleted += len(r1.data or [])
-        r2 = db.table("user_friends").delete().eq("user_id", friend_id).eq("friend_id", user_id).execute()
+        r2 = supabase.table("user_friends").delete().eq("user_id", friend_id).eq("friend_id", user_id).execute()
         deleted += len(r2.data or [])
         return {"deleted": deleted}
     except Exception as e:
@@ -2228,18 +2200,18 @@ async def get_friend_requests_overview(user_id: str) -> Dict[str, List[Dict[str,
     - received: 我收到的请求（pending/accepted/rejected）
     - sent: 我发出的请求（pending/accepted/rejected）
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         received_result = (
-            db.table("friend_requests")
+            supabase.table("friend_requests")
             .select("id, from_user_id, to_user_id, status, created_at, updated_at")
             .eq("to_user_id", user_id)
             .order("created_at", desc=True)
             .execute()
         )
         sent_result = (
-            db.table("friend_requests")
+            supabase.table("friend_requests")
             .select("id, from_user_id, to_user_id, status, created_at, updated_at")
             .eq("from_user_id", user_id)
             .order("created_at", desc=True)
@@ -2261,12 +2233,12 @@ async def get_friend_requests_overview(user_id: str) -> Dict[str, List[Dict[str,
         users_map: Dict[str, Dict[str, Any]] = {}
         if counterpart_ids:
             users_result = (
-                db.table("weapp_user")
+                supabase.table("weapp_user")
                 .select("id, nickname, avatar")
                 .in_("id", list(counterpart_ids))
                 .execute()
             )
-            users_map = {u["id"]: _present_user_row(u) for u in (users_result.data or [])}
+            users_map = {u["id"]: u for u in (users_result.data or [])}
 
         received = []
         for row in received_rows:
@@ -2308,11 +2280,11 @@ async def get_friend_requests_overview(user_id: str) -> Dict[str, List[Dict[str,
 
 async def cleanup_duplicate_friends(user_id: str) -> Dict[str, Any]:
     """清理用户的重复好友记录，只保留每个好友的第一条记录"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 获取该用户的所有好友记录
-        result = db.table("user_friends").select("id, friend_id").eq("user_id", user_id).execute()
+        result = supabase.table("user_friends").select("id, friend_id").eq("user_id", user_id).execute()
         records = result.data or []
         
         # 统计每个 friend_id 的记录
@@ -2330,7 +2302,7 @@ async def cleanup_duplicate_friends(user_id: str) -> Dict[str, Any]:
                 # 保留第一条，删除其他
                 to_delete = record_ids[1:]
                 for rid in to_delete:
-                    db.table("user_friends").delete().eq("id", rid).execute()
+                    supabase.table("user_friends").delete().eq("id", rid).execute()
                     deleted_count += 1
         
         return {"cleaned": deleted_count, "user_id": user_id}
@@ -2349,20 +2321,20 @@ def build_friend_invite_code(user_id: str) -> str:
 
 async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[str, Any]]:
     """根据短邀请码解析用户（匹配 user_id 前缀），返回公开资料。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     code = (invite_code or "").strip().lower()
     if not re.fullmatch(r"[0-9a-f]{6,12}", code):
         return None
     try:
-        # 避免对 UUID 字段使用 like 导致部分 PostgreSQL/Cloudflare 环境异常，
+        # 避免对 UUID 字段使用 like 导致部分 Supabase/Cloudflare 环境异常，
         # 改为分页拉取公开字段后在本地做前缀匹配。
         rows: List[Dict[str, Any]] = []
         page_size = 500
         offset = 0
         while True:
             batch = (
-                db
+                supabase
                 .table("weapp_user")
                 .select("id, nickname, avatar")
                 .range(offset, offset + page_size - 1)
@@ -2392,6 +2364,253 @@ async def resolve_user_by_friend_invite_code(invite_code: str) -> Optional[Dict[
         raise
 
 
+async def create_invite_referral_binding(
+    inviter_user_id: str,
+    invitee_user_id: str,
+    invite_code: Optional[str] = None,
+    source_request_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """记录邀请关系，供后续“完成 1 次有效使用后发奖励”使用。"""
+    if not inviter_user_id or not invitee_user_id or inviter_user_id == invitee_user_id:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_invite_referrals")
+            .select("*")
+            .eq("invitee_user_id", invitee_user_id)
+            .limit(1)
+            .execute()
+        )
+        if existing.data and len(existing.data) > 0:
+            return existing.data[0]
+
+        row = {
+            "inviter_user_id": inviter_user_id,
+            "invitee_user_id": invitee_user_id,
+            "status": "pending_qualified",
+        }
+        if invite_code:
+            row["invite_code"] = str(invite_code).strip().lower()
+        if source_request_id:
+            row["source_request_id"] = source_request_id
+
+        result = supabase.table("user_invite_referrals").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals"]):
+            print(f"[create_invite_referral_binding] 奖励表未就绪，跳过: {e}")
+            return None
+        print(f"[create_invite_referral_binding] 错误: {e}")
+        raise
+
+
+def activate_pending_invite_referral_on_first_valid_use_sync(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    """当被邀请人完成首次有效使用后，激活双方连续 3 天的邀请奖励。"""
+    if not invitee_user_id:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_invite_referrals")
+            .select("*")
+            .eq("invitee_user_id", invitee_user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = list(existing.data or [])
+        if not rows:
+            return None
+        referral = rows[0]
+        if str(referral.get("status") or "") != "pending_qualified":
+            return referral
+
+        now_utc = datetime.now(timezone.utc)
+        today_cn = datetime.now(CHINA_TZ).date()
+        month_start = today_cn.replace(day=1)
+        if month_start.month == 12:
+            next_month_start = month_start.replace(year=month_start.year + 1, month=1)
+        else:
+            next_month_start = month_start.replace(month=month_start.month + 1)
+
+        inviter_user_id = str(referral.get("inviter_user_id") or "")
+        qualified_result = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("inviter_user_id", inviter_user_id)
+            .in_("status", ["reward_active", "reward_completed"])
+            .gte("reward_start_date", month_start.isoformat())
+            .lt("reward_start_date", next_month_start.isoformat())
+            .execute()
+        )
+        qualified_count = len(qualified_result.data or [])
+
+        if qualified_count >= max(int(monthly_limit or 0), 0):
+            update_data = {
+                "status": "reward_blocked",
+                "first_effective_action_at": now_utc.isoformat(),
+                "first_effective_action_type": effective_action,
+                "blocked_reason": "monthly_limit_reached",
+                "updated_at": now_utc.isoformat(),
+            }
+        else:
+            reward_end = today_cn + timedelta(days=INVITE_REWARD_DAYS - 1)
+            update_data = {
+                "status": "reward_active",
+                "first_effective_action_at": now_utc.isoformat(),
+                "first_effective_action_type": effective_action,
+                "reward_start_date": today_cn.isoformat(),
+                "reward_end_date": reward_end.isoformat(),
+                "blocked_reason": None,
+                "updated_at": now_utc.isoformat(),
+            }
+
+        updated = (
+            supabase.table("user_invite_referrals")
+            .update(update_data)
+            .eq("id", referral["id"])
+            .execute()
+        )
+        if updated.data and len(updated.data) > 0:
+            return updated.data[0]
+        return {**referral, **update_data}
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals"]):
+            print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 奖励表未就绪，跳过: {e}")
+            return None
+        print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 错误: {e}")
+        raise
+
+
+async def activate_pending_invite_referral_on_first_valid_use(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    return activate_pending_invite_referral_on_first_valid_use_sync(
+        invitee_user_id,
+        effective_action,
+        monthly_limit=monthly_limit,
+    )
+
+
+async def get_daily_membership_bonus_breakdown(user_id: str, china_date_str: str) -> Dict[str, int]:
+    """获取用户某天的额外奖励积分明细。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        inviter_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("inviter_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+        invitee_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id")
+            .eq("invitee_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+        share_rows = (
+            supabase.table("user_credit_bonus_events")
+            .select("credits")
+            .eq("user_id", user_id)
+            .eq("bonus_type", "share_poster")
+            .eq("bonus_date", china_date_str)
+            .execute()
+        )
+
+        invite_bonus_count = len(inviter_rows.data or []) + len(invitee_rows.data or [])
+        invite_bonus_credits = invite_bonus_count * INVITE_REWARD_CREDITS_PER_DAY
+        share_bonus_credits = sum(int(row.get("credits") or 0) for row in (share_rows.data or []))
+        return {
+            "invite_bonus_credits": invite_bonus_credits,
+            "share_bonus_credits": share_bonus_credits,
+            "daily_bonus_credits": invite_bonus_credits + share_bonus_credits,
+        }
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals", "user_credit_bonus_events"]):
+            print(f"[get_daily_membership_bonus_breakdown] 奖励表未就绪，返回 0: {e}")
+            return {
+                "invite_bonus_credits": 0,
+                "share_bonus_credits": 0,
+                "daily_bonus_credits": 0,
+            }
+        print(f"[get_daily_membership_bonus_breakdown] 错误: {e}")
+        raise
+
+
+async def claim_share_poster_bonus(
+    user_id: str,
+    china_date_str: str,
+    source_record_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """领取“生成分享海报”奖励。每天最多一次。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        existing = (
+            supabase.table("user_credit_bonus_events")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("bonus_type", "share_poster")
+            .eq("bonus_date", china_date_str)
+            .limit(1)
+            .execute()
+        )
+        if existing.data and len(existing.data) > 0:
+            return {
+                "claimed": False,
+                "already_claimed": True,
+                "credits": 0,
+                "event": existing.data[0],
+            }
+
+        row = {
+            "user_id": user_id,
+            "bonus_type": "share_poster",
+            "bonus_date": china_date_str,
+            "credits": SHARE_POSTER_REWARD_CREDITS,
+            "meta": {"trigger": "record_detail_poster"},
+        }
+        if source_record_id:
+            row["source_record_id"] = source_record_id
+
+        result = supabase.table("user_credit_bonus_events").insert(row).execute()
+        event = (result.data or [None])[0]
+        return {
+            "claimed": bool(event),
+            "already_claimed": False,
+            "credits": SHARE_POSTER_REWARD_CREDITS if event else 0,
+            "event": event,
+        }
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_credit_bonus_events"]):
+            print(f"[claim_share_poster_bonus] 奖励表未就绪，跳过: {e}")
+            return {
+                "claimed": False,
+                "already_claimed": False,
+                "credits": 0,
+                "event": None,
+            }
+        print(f"[claim_share_poster_bonus] 错误: {e}")
+        raise
+
+
 # ---------- 圈子动态（好友今日饮食 + 点赞评论）----------
 
 
@@ -2411,12 +2630,12 @@ def _normalize_feed_comment_row(
         "content": row.get("content") or "",
         "created_at": row.get("created_at"),
         "nickname": author.get("nickname") or "用户",
-        "avatar": _resolve_storage_ref(USER_AVATARS_BUCKET, author.get("avatar")) or "",
+        "avatar": author.get("avatar") or "",
     }
 
 
 def _find_recent_duplicate_feed_comment_sync(
-    db,
+    supabase,
     user_id: str,
     record_id: str,
     content: str,
@@ -2430,7 +2649,7 @@ def _find_recent_duplicate_feed_comment_sync(
 
     try:
         result = (
-            db.table("feed_comments")
+            supabase.table("feed_comments")
             .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
             .eq("user_id", user_id)
             .eq("record_id", record_id)
@@ -2482,7 +2701,7 @@ def _build_feed_comment_bundle(
 
 
 def _query_feed_comments_bundle_sync(
-    db,
+    supabase,
     record_ids: List[str],
     comments_limit: int,
 ) -> Dict[str, Any]:
@@ -2490,7 +2709,7 @@ def _query_feed_comments_bundle_sync(
         return {"comments_map": {}, "comment_count_map": {}}
 
     comments_result = (
-        db.table("feed_comments")
+        supabase.table("feed_comments")
         .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
         .in_("record_id", record_ids)
         .order("created_at", desc=False)
@@ -2508,12 +2727,12 @@ def _query_feed_comments_bundle_sync(
     user_map: Dict[str, Dict[str, Any]] = {}
     if user_ids:
         users = (
-            db.table("weapp_user")
+            supabase.table("weapp_user")
             .select("id, nickname, avatar")
             .in_("id", list(user_ids))
             .execute()
         )
-        user_map = {u["id"]: _present_user_row(u) for u in (users.data or [])}
+        user_map = {u["id"]: u for u in (users.data or [])}
 
     return _build_feed_comment_bundle(all_comments, user_map, comments_limit)
 
@@ -2683,6 +2902,7 @@ async def list_friends_feed_records(
     sort_by: str = "latest",
     priority_author_ids: Optional[List[str]] = None,
     author_scope: str = "all",
+    author_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     获取好友 + 自己的饮食记录（支持分页），用于圈子 Feed。
@@ -2703,19 +2923,27 @@ async def list_friends_feed_records(
     if not author_ids:
         author_ids = [user_id]
 
-    normalized_priority_ids = [
-        aid for aid in list(dict.fromkeys([str(x).strip() for x in (priority_author_ids or []) if str(x).strip()]))
-        if aid in author_ids
-    ]
-    if author_scope == "priority":
-        author_ids = normalized_priority_ids
-        if not author_ids:
+    # 若指定了 author_id，只查询该用户（必须是好友或自己）
+    if author_id and str(author_id).strip():
+        target_id = str(author_id).strip()
+        if target_id not in author_ids:
             return []
+        author_ids = [target_id]
+        normalized_priority_ids: List[str] = []
+    else:
+        normalized_priority_ids = [
+            aid for aid in list(dict.fromkeys([str(x).strip() for x in (priority_author_ids or []) if str(x).strip()]))
+            if aid in author_ids
+        ]
+        if author_scope == "priority":
+            author_ids = normalized_priority_ids
+            if not author_ids:
+                return []
     
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        q = db.table("user_food_records").select("*").in_("user_id", author_ids)
+        q = supabase.table("user_food_records").select("*").in_("user_id", author_ids)
         q = q.neq("hidden_from_feed", True)
         
         if date:
@@ -2746,7 +2974,7 @@ async def list_friends_feed_records(
         if custom_rank:
             record_ids = [r["id"] for r in rec_list]
             likes_map = await get_feed_likes_for_records(record_ids, user_id) if record_ids else {}
-            comment_bundle = _query_feed_comments_bundle_sync(db, record_ids, 0) if record_ids else {"comment_count_map": {}}
+            comment_bundle = _query_feed_comments_bundle_sync(supabase, record_ids, 0) if record_ids else {"comment_count_map": {}}
             comment_count_map = comment_bundle["comment_count_map"]
 
             rec_list.sort(
@@ -2770,20 +2998,20 @@ async def list_friends_feed_records(
             
         # 获取作者信息（仅查询结果中涉及的用户）
         involved_user_ids = list(set(r["user_id"] for r in rec_list))
-        authors = db.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
-        author_map = {a["id"]: _present_user_row(a) for a in (authors.data or [])}
+        authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
+        author_map = {a["id"]: a for a in (authors.data or [])}
         
         # 批量获取评论（如果需要）
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
         if include_comments:
             record_ids = [r["id"] for r in rec_list]
-            bundle = _query_feed_comments_bundle_sync(db, record_ids, comments_limit)
+            bundle = _query_feed_comments_bundle_sync(supabase, record_ids, comments_limit)
             comments_map = bundle["comments_map"]
             comment_count_map = bundle["comment_count_map"]
         elif not comment_count_map:
             record_ids = [r["id"] for r in rec_list]
             if record_ids:
-                comment_count_map = _query_feed_comments_bundle_sync(db, record_ids, 0)["comment_count_map"]
+                comment_count_map = _query_feed_comments_bundle_sync(supabase, record_ids, 0)["comment_count_map"]
 
         if not likes_map:
             record_ids = [r["id"] for r in rec_list]
@@ -2794,7 +3022,7 @@ async def list_friends_feed_records(
             author = author_map.get(r["user_id"], {})
             like_info = likes_map.get(r["id"], {"count": 0, "liked": False})
             item = {
-                "record": _present_food_record_row(r),
+                "record": r,
                 "author": {
                     "id": author.get("id"),
                     "nickname": author.get("nickname") or "用户",
@@ -2825,18 +3053,31 @@ async def list_friends_feed_records(
         raise
 
 
-async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dict[str, Any]:
-    """
-    本周打卡排行榜：统计「自己 + 好友」在 user_food_records 中的记录条数。
-    自然周按北京时间：周一 00:00 至下周一 00:00（不含）。
-    """
-    friend_ids = await get_friend_ids(viewer_user_id)
+# ---- 原始版本（保留用于基准测试对比） ----
+async def _get_friend_circle_week_checkin_leaderboard_original(viewer_user_id: str) -> Dict[str, Any]:
+    """【原始版本】本周打卡排行榜：while循环分页拉取。内联原始 get_friend_ids 逻辑，避免受缓存影响。"""
+    # 内联原始 get_friend_ids 逻辑（无缓存）
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    friend_ids_set = set()
+    r1 = supabase.table("user_friends").select("friend_id").eq("user_id", viewer_user_id).execute()
+    for row in r1.data or []:
+        fid = row.get("friend_id")
+        if fid:
+            friend_ids_set.add(fid)
+    r2 = supabase.table("user_friends").select("user_id").eq("friend_id", viewer_user_id).execute()
+    for row in r2.data or []:
+        uid = row.get("user_id")
+        if uid:
+            friend_ids_set.add(uid)
+    friend_ids = list(friend_ids_set)
+
     author_ids = list(set(friend_ids) | {viewer_user_id})
     if not author_ids:
         author_ids = [viewer_user_id]
 
     now_cn = datetime.now(CHINA_TZ)
-    weekday = now_cn.weekday()  # Monday = 0
+    weekday = now_cn.weekday()
     week_start_cn = (now_cn - timedelta(days=weekday)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
@@ -2846,14 +3087,14 @@ async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dic
     end_ts = week_end_cn.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     counts: Counter = Counter()
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         page_size = 1000
         offset = 0
         while True:
             q = (
-                db.table("user_food_records")
+                supabase.table("user_food_records")
                 .select("user_id")
                 .in_("user_id", author_ids)
                 .gte("record_time", start_ts)
@@ -2871,12 +3112,12 @@ async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dic
             offset += page_size
 
         users_result = (
-            db.table("weapp_user")
+            supabase.table("weapp_user")
             .select("id, nickname, avatar")
             .in_("id", author_ids)
             .execute()
         )
-        profile_map = {u["id"]: _present_user_row(u) for u in (users_result.data or [])}
+        profile_map = {u["id"]: u for u in (users_result.data or [])}
 
         items = []
         for uid in author_ids:
@@ -2891,9 +3132,7 @@ async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dic
                 }
             )
 
-        items.sort(
-            key=lambda x: (-x["checkin_count"], x["nickname"] or ""),
-        )
+        items.sort(key=lambda x: (-x["checkin_count"], x["nickname"] or ""))
         for i, row in enumerate(items, start=1):
             row["rank"] = i
 
@@ -2905,6 +3144,92 @@ async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dic
             "week_end": week_end_inclusive,
             "list": items,
         }
+    except Exception as e:
+        print(f"[_get_friend_circle_week_checkin_leaderboard_original] 错误: {e}")
+        raise
+
+
+async def get_friend_circle_week_checkin_leaderboard(viewer_user_id: str) -> Dict[str, Any]:
+    """
+    本周打卡排行榜：统计「自己 + 好友」在 user_food_records 中的记录条数。
+    自然周按北京时间：周一 00:00 至下周一 00:00（不含）。
+    【优化】去掉 while 循环分页，改为一次批量拉取 + Python 计数 + 5 分钟内存缓存。
+    """
+    friend_ids = await get_friend_ids(viewer_user_id)
+    author_ids = list(set(friend_ids) | {viewer_user_id})
+    if not author_ids:
+        author_ids = [viewer_user_id]
+
+    now_cn = datetime.now(CHINA_TZ)
+    weekday = now_cn.weekday()
+    week_start_cn = (now_cn - timedelta(days=weekday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week_end_cn = week_start_cn + timedelta(days=7)
+
+    start_ts = week_start_cn.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    end_ts = week_end_cn.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    # 缓存 key 包含用户 ID 和周起始时间，确保同一周内命中缓存
+    cache_key = f"checkin_leaderboard:{viewer_user_id}:{start_ts}"
+    cached = _cache_get(_checkin_leaderboard_cache, cache_key, ttl_seconds=300)
+    if cached is not None:
+        return cached
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 优化：一次查询拉取所有匹配记录，不再分页循环
+        records_result = (
+            supabase.table("user_food_records")
+            .select("user_id")
+            .in_("user_id", author_ids)
+            .gte("record_time", start_ts)
+            .lt("record_time", end_ts)
+            .execute()
+        )
+        rows = list(records_result.data or [])
+        counts: Counter = Counter()
+        for r in rows:
+            uid = r.get("user_id")
+            if uid:
+                counts[uid] += 1
+
+        users_result = (
+            supabase.table("weapp_user")
+            .select("id, nickname, avatar")
+            .in_("id", author_ids)
+            .execute()
+        )
+        profile_map = {u["id"]: u for u in (users_result.data or [])}
+
+        items = []
+        for uid in author_ids:
+            p = profile_map.get(uid, {})
+            items.append(
+                {
+                    "user_id": uid,
+                    "nickname": (p.get("nickname") or "用户") if p else "用户",
+                    "avatar": (p.get("avatar") or "") if p else "",
+                    "checkin_count": int(counts.get(uid, 0)),
+                    "is_me": uid == viewer_user_id,
+                }
+            )
+
+        items.sort(key=lambda x: (-x["checkin_count"], x["nickname"] or ""))
+        for i, row in enumerate(items, start=1):
+            row["rank"] = i
+
+        week_start_str = week_start_cn.strftime("%Y-%m-%d")
+        week_end_inclusive = (week_start_cn + timedelta(days=6)).strftime("%Y-%m-%d")
+
+        result = {
+            "week_start": week_start_str,
+            "week_end": week_end_inclusive,
+            "list": items,
+        }
+        _cache_set(_checkin_leaderboard_cache, cache_key, result)
+        return result
     except Exception as e:
         print(f"[get_friend_circle_week_checkin_leaderboard] 错误: {e}")
         raise
@@ -2923,16 +3248,16 @@ async def list_public_feed_records(
     获取公共饮食记录（来自 public_records=true 的用户），无需登录。
     用于未登录用户浏览圈子。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 找出 public_records=true 的用户
-        public_users = db.table("weapp_user").select("id").eq("public_records", True).execute()
+        public_users = supabase.table("weapp_user").select("id").eq("public_records", True).execute()
         public_user_ids = [u["id"] for u in (public_users.data or [])]
         if not public_user_ids:
             return []
 
-        q = db.table("user_food_records").select("*").in_("user_id", public_user_ids)
+        q = supabase.table("user_food_records").select("*").in_("user_id", public_user_ids)
         q = q.neq("hidden_from_feed", True)
         if meal_type:
             q = q.eq("meal_type", meal_type)
@@ -2954,7 +3279,7 @@ async def list_public_feed_records(
         if custom_rank:
             record_ids = [r["id"] for r in rec_list]
             likes_map = await get_feed_likes_for_records(record_ids, None) if record_ids else {}
-            comment_bundle = _query_feed_comments_bundle_sync(db, record_ids, 0) if record_ids else {"comment_count_map": {}}
+            comment_bundle = _query_feed_comments_bundle_sync(supabase, record_ids, 0) if record_ids else {"comment_count_map": {}}
             comment_count_map = comment_bundle["comment_count_map"]
 
             rec_list.sort(
@@ -2977,19 +3302,19 @@ async def list_public_feed_records(
                 return []
 
         involved_user_ids = list(set(r["user_id"] for r in rec_list))
-        authors = db.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
-        author_map = {a["id"]: _present_user_row(a) for a in (authors.data or [])}
+        authors = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", involved_user_ids).execute()
+        author_map = {a["id"]: a for a in (authors.data or [])}
 
         comments_map: Dict[str, List[Dict[str, Any]]] = {}
         if include_comments:
             record_ids = [r["id"] for r in rec_list]
-            bundle = _query_feed_comments_bundle_sync(db, record_ids, comments_limit)
+            bundle = _query_feed_comments_bundle_sync(supabase, record_ids, comments_limit)
             comments_map = bundle["comments_map"]
             comment_count_map = bundle["comment_count_map"]
         elif not comment_count_map:
             record_ids = [r["id"] for r in rec_list]
             if record_ids:
-                comment_count_map = _query_feed_comments_bundle_sync(db, record_ids, 0)["comment_count_map"]
+                comment_count_map = _query_feed_comments_bundle_sync(supabase, record_ids, 0)["comment_count_map"]
 
         if not likes_map:
             record_ids = [r["id"] for r in rec_list]
@@ -3000,7 +3325,7 @@ async def list_public_feed_records(
             author = author_map.get(r["user_id"], {})
             like_info = likes_map.get(r["id"], {"count": 0, "liked": False})
             item: Dict[str, Any] = {
-                "record": _present_food_record_row(r),
+                "record": r,
                 "author": {
                     "id": author.get("id"),
                     "nickname": author.get("nickname") or "用户",
@@ -3033,10 +3358,10 @@ async def list_public_feed_records(
 
 async def add_feed_like(user_id: str, record_id: str) -> bool:
     """对某条饮食记录点赞；返回是否新增了一条点赞。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("feed_likes").insert({"user_id": user_id, "record_id": record_id}).execute()
+        supabase.table("feed_likes").insert({"user_id": user_id, "record_id": record_id}).execute()
         return True
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
@@ -3047,23 +3372,23 @@ async def add_feed_like(user_id: str, record_id: str) -> bool:
 
 async def remove_feed_like(user_id: str, record_id: str) -> None:
     """取消点赞"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("feed_likes").delete().eq("user_id", user_id).eq("record_id", record_id).execute()
+        supabase.table("feed_likes").delete().eq("user_id", user_id).eq("record_id", record_id).execute()
     except Exception as e:
         print(f"[remove_feed_like] 错误: {e}")
         raise
 
 
-async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Optional[str]) -> Dict[str, Any]:
-    """批量查询点赞数及当前用户是否已点赞。返回 { record_id: { count, liked } }"""
+async def _get_feed_likes_for_records_original(record_ids: List[str], current_user_id: Optional[str]) -> Dict[str, Any]:
+    """【原始版本】批量查询点赞数及当前用户是否已点赞。两次查询。"""
     if not record_ids:
         return {}
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        r = db.table("feed_likes").select("record_id").in_("record_id", record_ids).execute()
+        r = supabase.table("feed_likes").select("record_id").in_("record_id", record_ids).execute()
         rows = r.data or []
         count_map: Dict[str, int] = {}
         for row in rows:
@@ -3071,8 +3396,32 @@ async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Opt
             count_map[rid] = count_map.get(rid, 0) + 1
         my_set: set = set()
         if current_user_id:
-            my = db.table("feed_likes").select("record_id").eq("user_id", current_user_id).in_("record_id", record_ids).execute()
+            my = supabase.table("feed_likes").select("record_id").eq("user_id", current_user_id).in_("record_id", record_ids).execute()
             my_set = {m["record_id"] for m in (my.data or [])}
+        return {rid: {"count": count_map.get(rid, 0), "liked": rid in my_set} for rid in record_ids}
+    except Exception as e:
+        print(f"[_get_feed_likes_for_records_original] 错误: {e}")
+        raise
+
+
+async def get_feed_likes_for_records(record_ids: List[str], current_user_id: Optional[str]) -> Dict[str, Any]:
+    """批量查询点赞数及当前用户是否已点赞。返回 { record_id: { count, liked } }
+    【优化】合并两次查询为一次，减少一次网络往返。"""
+    if not record_ids:
+        return {}
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        # 优化：一次查询同时获取 record_id 和 user_id，在 Python 中同时统计
+        r = supabase.table("feed_likes").select("record_id, user_id").in_("record_id", record_ids).execute()
+        rows = r.data or []
+        count_map: Dict[str, int] = {}
+        my_set: set = set()
+        for row in rows:
+            rid = row["record_id"]
+            count_map[rid] = count_map.get(rid, 0) + 1
+            if current_user_id and row.get("user_id") == current_user_id:
+                my_set.add(rid)
         return {rid: {"count": count_map.get(rid, 0), "liked": rid in my_set} for rid in record_ids}
     except Exception as e:
         print(f"[get_feed_likes_for_records] 错误: {e}")
@@ -3087,12 +3436,12 @@ async def add_feed_comment(
     reply_to_user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """发表评论"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         normalized_content = content.strip()
         duplicate = _find_recent_duplicate_feed_comment_sync(
-            db,
+            supabase,
             user_id=user_id,
             record_id=record_id,
             content=normalized_content,
@@ -3112,7 +3461,7 @@ async def add_feed_comment(
             "parent_comment_id": parent_comment_id,
             "reply_to_user_id": reply_to_user_id,
         }
-        result = db.table("feed_comments").insert(row).execute()
+        result = supabase.table("feed_comments").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("发表评论失败")
@@ -3129,12 +3478,12 @@ def add_feed_comment_sync(
     reply_to_user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """发表评论（同步版本，供 Worker 使用）"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         normalized_content = content.strip()
         duplicate = _find_recent_duplicate_feed_comment_sync(
-            db,
+            supabase,
             user_id=user_id,
             record_id=record_id,
             content=normalized_content,
@@ -3154,7 +3503,7 @@ def add_feed_comment_sync(
             "parent_comment_id": parent_comment_id,
             "reply_to_user_id": reply_to_user_id,
         }
-        result = db.table("feed_comments").insert(row).execute()
+        result = supabase.table("feed_comments").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("发表评论失败")
@@ -3165,11 +3514,11 @@ def add_feed_comment_sync(
 
 async def list_feed_comments(record_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """某条动态的评论列表，含评论者 nickname、avatar"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("feed_comments")
+            supabase.table("feed_comments")
             .select("id, user_id, record_id, parent_comment_id, reply_to_user_id, content, created_at")
             .eq("record_id", record_id)
             .order("created_at", desc=False)
@@ -3185,7 +3534,7 @@ async def list_feed_comments(record_id: str, limit: int = 50) -> List[Dict[str, 
             for uid in ([r.get("user_id") for r in rows] + [r.get("reply_to_user_id") for r in rows])
             if uid
         }
-        users = db.table("weapp_user").select("id, nickname, avatar").in_("id", list(user_ids)).execute()
+        users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", list(user_ids)).execute()
         user_map = {u["id"]: u for u in (users.data or [])}
         return [_normalize_feed_comment_row(r, user_map) for r in rows]
     except Exception as e:
@@ -3223,11 +3572,11 @@ async def create_public_food_library_item(
     """
     创建公共食物库条目（上传/分享）。
     """
-    check_postgresql_configured()
-    db = get_database_client()
-    paths = _normalize_storage_key_list(FOOD_ANALYZE_BUCKET, image_paths if image_paths else ([image_path] if image_path else []))
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    paths = image_paths if image_paths else ([image_path] if image_path else [])
     first_path = paths[0] if paths else image_path
-    row = _prepare_public_library_write_data({
+    row = {
         "user_id": user_id,
         "image_path": first_path,
         "image_paths": paths,
@@ -3253,11 +3602,11 @@ async def create_public_food_library_item(
         "district": district or "",
         "status": "pending",  # 初始状态设为 pending
         "published_at": None, # 审核通过后再更新发帖时间
-    })
+    }
     try:
-        result = db.table("public_food_library").insert(row).execute()
+        result = supabase.table("public_food_library").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return _present_public_library_row(result.data[0])
+            return result.data[0]
         raise Exception("创建公共食物库条目失败：返回数据为空")
     except Exception as e:
         print(f"[create_public_food_library_item] 错误: {e}")
@@ -3267,8 +3616,8 @@ def update_public_food_library_status_sync(item_id: str, status: str) -> None:
     """
     更新公共食物库条目的状态。如果是 published，同时更新 published_at。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "status": status,
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -3276,7 +3625,7 @@ def update_public_food_library_status_sync(item_id: str, status: str) -> None:
     if status == "published":
         row["published_at"] = datetime.now(timezone.utc).isoformat()
     try:
-        db.table("public_food_library").update(row).eq("id", item_id).execute()
+        supabase.table("public_food_library").update(row).eq("id", item_id).execute()
     except Exception as e:
         print(f"[update_public_food_library_status_sync] 错误: {e}")
         raise
@@ -3352,10 +3701,10 @@ async def list_public_food_library(
     排序：latest（最新）/ hot（点赞最多）/ rating（评分最高）
          / balanced（营养更均衡）/ high_protein（高蛋白）/ low_calorie（低热量）/ recommended（综合推荐）。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        q = db.table("public_food_library").select("*").eq("status", "published")
+        q = supabase.table("public_food_library").select("*").eq("status", "published")
         if city:
             q = q.eq("city", city)
         if suitable_for_fat_loss is not None:
@@ -3381,7 +3730,7 @@ async def list_public_food_library(
         else:
             q = q.range(offset, offset + limit - 1)
         result = q.execute()
-        items = [_present_public_library_row(item) for item in (result.data or [])]
+        items = list(result.data or [])
 
         if custom_rank:
             items.sort(
@@ -3402,12 +3751,12 @@ async def list_public_food_library(
 
 async def get_public_food_library_item(item_id: str) -> Optional[Dict[str, Any]]:
     """获取单条公共食物库条目详情"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("public_food_library").select("*").eq("id", item_id).execute()
+        result = supabase.table("public_food_library").select("*").eq("id", item_id).execute()
         if result.data and len(result.data) > 0:
-            return _present_public_library_row(result.data[0])
+            return result.data[0]
         return None
     except Exception as e:
         print(f"[get_public_food_library_item] 错误: {e}")
@@ -3416,11 +3765,11 @@ async def get_public_food_library_item(item_id: str) -> Optional[Dict[str, Any]]
 
 async def list_my_public_food_library(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """获取当前用户上传/分享的公共食物库条目"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("public_food_library").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
-        return [_present_public_library_row(item) for item in (result.data or [])]
+        result = supabase.table("public_food_library").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
+        return list(result.data or [])
     except Exception as e:
         print(f"[list_my_public_food_library] 错误: {e}")
         raise
@@ -3428,10 +3777,10 @@ async def list_my_public_food_library(user_id: str, limit: int = 50) -> List[Dic
 
 async def add_public_food_library_like(user_id: str, item_id: str) -> None:
     """对公共食物库条目点赞"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("public_food_library_likes").insert({"user_id": user_id, "library_item_id": item_id}).execute()
+        supabase.table("public_food_library_likes").insert({"user_id": user_id, "library_item_id": item_id}).execute()
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
             return
@@ -3441,10 +3790,10 @@ async def add_public_food_library_like(user_id: str, item_id: str) -> None:
 
 async def remove_public_food_library_like(user_id: str, item_id: str) -> None:
     """取消点赞"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("public_food_library_likes").delete().eq("user_id", user_id).eq("library_item_id", item_id).execute()
+        supabase.table("public_food_library_likes").delete().eq("user_id", user_id).eq("library_item_id", item_id).execute()
     except Exception as e:
         print(f"[remove_public_food_library_like] 错误: {e}")
         raise
@@ -3454,16 +3803,16 @@ async def get_public_food_library_likes_for_items(item_ids: List[str], current_u
     """批量查询公共食物库点赞数及当前用户是否已点赞。返回 { item_id: { count, liked } }"""
     if not item_ids:
         return {}
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        r = db.table("public_food_library_likes").select("library_item_id").in_("library_item_id", item_ids).execute()
+        r = supabase.table("public_food_library_likes").select("library_item_id").in_("library_item_id", item_ids).execute()
         rows = r.data or []
         count_map: Dict[str, int] = {}
         for row in rows:
             iid = row["library_item_id"]
             count_map[iid] = count_map.get(iid, 0) + 1
-        my = db.table("public_food_library_likes").select("library_item_id").eq("user_id", current_user_id).in_("library_item_id", item_ids).execute()
+        my = supabase.table("public_food_library_likes").select("library_item_id").eq("user_id", current_user_id).in_("library_item_id", item_ids).execute()
         my_set = {m["library_item_id"] for m in (my.data or [])}
         return {iid: {"count": count_map.get(iid, 0), "liked": iid in my_set} for iid in item_ids}
     except Exception as e:
@@ -3473,10 +3822,10 @@ async def get_public_food_library_likes_for_items(item_ids: List[str], current_u
 
 async def add_public_food_library_collection(user_id: str, item_id: str) -> None:
     """收藏公共食物库条目"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("public_food_library_collections").insert({"user_id": user_id, "library_item_id": item_id}).execute()
+        supabase.table("public_food_library_collections").insert({"user_id": user_id, "library_item_id": item_id}).execute()
     except Exception as e:
         if "unique" in str(e).lower() or "duplicate" in str(e).lower():
             return
@@ -3486,10 +3835,10 @@ async def add_public_food_library_collection(user_id: str, item_id: str) -> None
 
 async def remove_public_food_library_collection(user_id: str, item_id: str) -> None:
     """取消收藏"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("public_food_library_collections").delete().eq("user_id", user_id).eq("library_item_id", item_id).execute()
+        supabase.table("public_food_library_collections").delete().eq("user_id", user_id).eq("library_item_id", item_id).execute()
     except Exception as e:
         print(f"[remove_public_food_library_collection] 错误: {e}")
         raise
@@ -3499,11 +3848,11 @@ async def get_public_food_library_collections_for_items(item_ids: List[str], cur
     """批量查询公共食物库收藏数及当前用户是否已收藏。返回 { item_id: { count, collected } }"""
     if not item_ids:
         return {}
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # collection_count 已在主表中维护，这里主要查当前用户是否收藏
-        my = db.table("public_food_library_collections").select("library_item_id").eq("user_id", current_user_id).in_("library_item_id", item_ids).execute()
+        my = supabase.table("public_food_library_collections").select("library_item_id").eq("user_id", current_user_id).in_("library_item_id", item_ids).execute()
         my_set = {m["library_item_id"] for m in (my.data or [])}
         return {iid: {"collected": iid in my_set} for iid in item_ids}
     except Exception as e:
@@ -3513,11 +3862,11 @@ async def get_public_food_library_collections_for_items(item_ids: List[str], cur
 
 async def list_collected_public_food_library(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """获取当前用户收藏的公共食物库条目（按收藏时间倒序）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         rows = (
-            db.table("public_food_library_collections")
+            supabase.table("public_food_library_collections")
             .select("library_item_id, created_at")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
@@ -3530,13 +3879,13 @@ async def list_collected_public_food_library(user_id: str, limit: int = 50) -> L
         item_ids_ordered = [r["library_item_id"] for r in data]
         # 只查已发布的
         result = (
-            db.table("public_food_library")
+            supabase.table("public_food_library")
             .select("*")
             .in_("id", item_ids_ordered)
             .eq("status", "published")
             .execute()
         )
-        items_by_id = {it["id"]: _present_public_library_row(it) for it in (result.data or [])}
+        items_by_id = {it["id"]: it for it in (result.data or [])}
         # 按收藏顺序返回，已删除或未发布的条目跳过
         out = []
         for iid in item_ids_ordered:
@@ -3555,8 +3904,8 @@ async def add_public_food_library_comment(
     rating: Optional[int] = None,
 ) -> Dict[str, Any]:
     """发表公共食物库评论（可选评分）"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "user_id": user_id,
         "library_item_id": item_id,
@@ -3565,7 +3914,7 @@ async def add_public_food_library_comment(
     if rating is not None:
         row["rating"] = rating
     try:
-        result = db.table("public_food_library_comments").insert(row).execute()
+        result = supabase.table("public_food_library_comments").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("发表评论失败")
@@ -3574,15 +3923,38 @@ async def add_public_food_library_comment(
         raise
 
 
+def _update_public_food_library_comment_stats_sync(supabase, item_id: str):
+    """更新公共食物库条目的评论数和平均分（同步内部辅助函数）。"""
+    try:
+        # 拉取该条目的所有评论 rating，在 Python 中计算
+        result = (
+            supabase.table("public_food_library_comments")
+            .select("rating")
+            .eq("library_item_id", item_id)
+            .execute()
+        )
+        rows = list(result.data or [])
+        count = len(rows)
+        ratings = [r["rating"] for r in rows if r.get("rating") is not None]
+        avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+        supabase.table("public_food_library").update({
+            "comment_count": count,
+            "avg_rating": avg_rating,
+        }).eq("id", item_id).execute()
+    except Exception as e:
+        print(f"[_update_public_food_library_comment_stats_sync] 错误: {e}")
+
+
 def add_public_food_library_comment_sync(
     user_id: str,
     item_id: str,
     content: str,
     rating: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """发表公共食物库评论（同步版本，供 Worker 使用）"""
-    check_postgresql_configured()
-    db = get_database_client()
+    """发表公共食物库评论（同步版本，供 Worker 使用）
+    【优化】插入后自动更新主表 comment_count 和 avg_rating。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "user_id": user_id,
         "library_item_id": item_id,
@@ -3591,27 +3963,57 @@ def add_public_food_library_comment_sync(
     if rating is not None:
         row["rating"] = rating
     try:
-        result = db.table("public_food_library_comments").insert(row).execute()
+        result = supabase.table("public_food_library_comments").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            comment = result.data[0]
+            # 异步更新主表统计（不阻塞返回）
+            try:
+                _update_public_food_library_comment_stats_sync(supabase, item_id)
+            except Exception:
+                pass
+            return comment
         raise Exception("发表评论失败")
     except Exception as e:
         print(f"[add_public_food_library_comment_sync] 错误: {e}")
         raise
 
 
+def add_public_food_library_feedback_sync(
+    user_id: str,
+    content: str,
+    library_item_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """提交公共食物库用户反馈（同步版本）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "user_id": user_id,
+        "content": content.strip(),
+    }
+    if library_item_id:
+        row["library_item_id"] = library_item_id
+    try:
+        result = supabase.table("public_food_library_feedback").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("提交反馈失败")
+    except Exception as e:
+        print(f"[add_public_food_library_feedback_sync] 错误: {e}")
+        raise
+
+
 async def list_public_food_library_comments(item_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """公共食物库条目的评论列表，含评论者 nickname、avatar"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("public_food_library_comments").select("id, user_id, library_item_id, content, rating, created_at").eq("library_item_id", item_id).order("created_at", desc=False).limit(limit).execute()
+        result = supabase.table("public_food_library_comments").select("id, user_id, library_item_id, content, rating, created_at").eq("library_item_id", item_id).order("created_at", desc=True).limit(limit).execute()
         rows = list(result.data or [])
         if not rows:
             return []
         user_ids = list({r["user_id"] for r in rows})
-        users = db.table("weapp_user").select("id, nickname, avatar").in_("id", user_ids).execute()
-        user_map = {u["id"]: _present_user_row(u) for u in (users.data or [])}
+        users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", user_ids).execute()
+        user_map = {u["id"]: u for u in (users.data or [])}
         out = []
         for r in rows:
             u = user_map.get(r["user_id"], {})
@@ -3633,12 +4035,12 @@ async def list_public_food_library_comments(item_id: str, limit: int = 50) -> Li
 
 async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
     """通过 ID 获取单条饮食记录（用于分享到公共库时读取来源记录）"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("user_food_records").select("*").eq("id", record_id).execute()
+        result = supabase.table("user_food_records").select("*").eq("id", record_id).execute()
         if result.data and len(result.data) > 0:
-            return _present_food_record_row(result.data[0])
+            return result.data[0]
         return None
     except Exception as e:
         print(f"[get_food_record_by_id] 错误: {e}")
@@ -3647,12 +4049,12 @@ async def get_food_record_by_id(record_id: str) -> Optional[Dict[str, Any]]:
 
 def get_food_record_by_id_sync(record_id: str) -> Optional[Dict[str, Any]]:
     """同步版：通过 ID 获取单条饮食记录，供 Worker 使用。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("user_food_records").select("*").eq("id", record_id).execute()
+        result = supabase.table("user_food_records").select("*").eq("id", record_id).execute()
         if result.data and len(result.data) > 0:
-            return _present_food_record_row(result.data[0])
+            return result.data[0]
         return None
     except Exception as e:
         print(f"[get_food_record_by_id_sync] 错误: {e}")
@@ -3661,10 +4063,10 @@ def get_food_record_by_id_sync(record_id: str) -> Optional[Dict[str, Any]]:
 
 def get_feed_comment_by_id_sync(comment_id: str) -> Optional[Dict[str, Any]]:
     """同步版：按 ID 获取圈子评论。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("feed_comments").select("*").eq("id", comment_id).execute()
+        result = supabase.table("feed_comments").select("*").eq("id", comment_id).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         return None
@@ -3675,91 +4077,16 @@ def get_feed_comment_by_id_sync(comment_id: str) -> Optional[Dict[str, Any]]:
 
 async def get_feed_comment_by_id(comment_id: str) -> Optional[Dict[str, Any]]:
     """按 ID 获取圈子评论。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("feed_comments").select("*").eq("id", comment_id).execute()
+        result = supabase.table("feed_comments").select("*").eq("id", comment_id).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         return None
     except Exception as e:
         print(f"[get_feed_comment_by_id] 错误: {e}")
         raise
-
-
-def delete_feed_comment_tree_sync(actor_user_id: str, record_id: str, comment_id: str) -> int:
-    """
-    删除一条圈子评论及其所有层级回复（同一 record_id 下 parent 链）。
-    仅允许：评论作者本人，或该条动态（饮食记录）发布者。
-    返回删除条数；评论不存在或 record 不匹配时返回 0。
-    无权删除时抛出 PermissionError。
-    """
-    comment = get_feed_comment_by_id_sync(comment_id)
-    if not comment or str(comment.get("record_id") or "") != str(record_id):
-        return 0
-    record = get_food_record_by_id_sync(record_id)
-    if not record:
-        return 0
-    author_id = str(comment.get("user_id") or "")
-    record_owner_id = str(record.get("user_id") or "")
-    if author_id != actor_user_id and record_owner_id != actor_user_id:
-        raise PermissionError("无权删除该评论")
-
-    check_postgresql_configured()
-    db = get_database_client()
-    try:
-        result = (
-            db.table("feed_comments")
-            .select("id, parent_comment_id")
-            .eq("record_id", record_id)
-            .execute()
-        )
-        rows = list(result.data or [])
-    except Exception as e:
-        print(f"[delete_feed_comment_tree_sync] 查询失败: {e}")
-        raise
-
-    children_map: Dict[str, List[str]] = {}
-    id_set: set = set()
-    for r in rows:
-        cid = str(r.get("id") or "").strip()
-        if not cid:
-            continue
-        id_set.add(cid)
-        pid = r.get("parent_comment_id")
-        if pid:
-            pk = str(pid).strip()
-            children_map.setdefault(pk, []).append(cid)
-
-    if comment_id not in id_set:
-        return 0
-
-    to_delete: set = set()
-    stack = [comment_id]
-    while stack:
-        cur = stack.pop()
-        if cur in to_delete:
-            continue
-        to_delete.add(cur)
-        for ch in children_map.get(cur, []):
-            if ch not in to_delete:
-                stack.append(ch)
-
-    if not to_delete:
-        return 0
-
-    ids_list = list(to_delete)
-    batch_size = 80
-    deleted_total = 0
-    for i in range(0, len(ids_list), batch_size):
-        batch = ids_list[i : i + batch_size]
-        try:
-            db.table("feed_comments").delete().in_("id", batch).execute()
-            deleted_total += len(batch)
-        except Exception as e:
-            print(f"[delete_feed_comment_tree_sync] 删除失败: {e}")
-            raise
-    return deleted_total
 
 
 def create_feed_interaction_notification_sync(
@@ -3772,8 +4099,8 @@ def create_feed_interaction_notification_sync(
     content_preview: Optional[str] = None,
 ) -> Dict[str, Any]:
     """创建一条圈子互动通知。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row: Dict[str, Any] = {
         "recipient_user_id": recipient_user_id,
         "notification_type": notification_type,
@@ -3786,7 +4113,7 @@ def create_feed_interaction_notification_sync(
     try:
         normalized_preview = str(content_preview or "").strip()
         duplicate_q = (
-            db.table("feed_interaction_notifications")
+            supabase.table("feed_interaction_notifications")
             .select("id, recipient_user_id, actor_user_id, record_id, comment_id, parent_comment_id, notification_type, content_preview, created_at")
             .eq("recipient_user_id", recipient_user_id)
             .eq("notification_type", notification_type)
@@ -3816,7 +4143,7 @@ def create_feed_interaction_notification_sync(
             if delta_seconds <= 45:
                 return existing
 
-        result = db.table("feed_interaction_notifications").insert(row).execute()
+        result = supabase.table("feed_interaction_notifications").insert(row).execute()
         if result.data and len(result.data) > 0:
             return result.data[0]
         raise Exception("创建互动通知失败")
@@ -3825,13 +4152,13 @@ def create_feed_interaction_notification_sync(
         raise
 
 
-async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-    """查询用户收到的圈子互动通知列表。"""
-    check_postgresql_configured()
-    db = get_database_client()
+async def _list_feed_interaction_notifications_original(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """【原始版本】查询用户收到的圈子互动通知列表。两次查询。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("feed_interaction_notifications")
+            supabase.table("feed_interaction_notifications")
             .select("*")
             .eq("recipient_user_id", user_id)
             .order("created_at", desc=True)
@@ -3844,11 +4171,50 @@ async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> 
         actor_ids = list({row.get("actor_user_id") for row in rows if row.get("actor_user_id")})
         actor_map: Dict[str, Dict[str, Any]] = {}
         if actor_ids:
-            users = db.table("weapp_user").select("id, nickname, avatar").in_("id", actor_ids).execute()
-            actor_map = {u["id"]: _present_user_row(u) for u in (users.data or [])}
+            users = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", actor_ids).execute()
+            actor_map = {u["id"]: u for u in (users.data or [])}
         out = []
         for row in rows:
             actor = actor_map.get(row.get("actor_user_id"), {})
+            out.append({
+                "id": row.get("id"),
+                "notification_type": row.get("notification_type"),
+                "record_id": row.get("record_id"),
+                "comment_id": row.get("comment_id"),
+                "parent_comment_id": row.get("parent_comment_id"),
+                "content_preview": row.get("content_preview") or "",
+                "is_read": bool(row.get("is_read")),
+                "created_at": row.get("created_at"),
+                "actor": {
+                    "id": actor.get("id"),
+                    "nickname": actor.get("nickname") or "系统",
+                    "avatar": actor.get("avatar") or "",
+                },
+            })
+        return out
+    except Exception as e:
+        print(f"[_list_feed_interaction_notifications_original] 错误: {e}")
+        raise
+
+
+async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """查询用户收到的圈子互动通知列表。
+    【优化】使用外键关联查询一次性获取通知 + actor 用户信息，减少一次网络往返。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("feed_interaction_notifications")
+            .select("*, actor:weapp_user!actor_user_id(id, nickname, avatar)")
+            .eq("recipient_user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = list(result.data or [])
+        out = []
+        for row in rows:
+            actor = row.get("actor") or {}
             out.append({
                 "id": row.get("id"),
                 "notification_type": row.get("notification_type"),
@@ -3870,19 +4236,39 @@ async def list_feed_interaction_notifications(user_id: str, limit: int = 50) -> 
         raise
 
 
-async def count_unread_feed_interaction_notifications(user_id: str) -> int:
-    """统计未读圈子互动通知数。"""
-    check_postgresql_configured()
-    db = get_database_client()
+async def _count_unread_feed_interaction_notifications_original(user_id: str) -> int:
+    """【原始版本】统计未读圈子互动通知数。拉取所有 id 再 len()。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("feed_interaction_notifications")
+            supabase.table("feed_interaction_notifications")
             .select("id")
             .eq("recipient_user_id", user_id)
             .eq("is_read", False)
             .execute()
         )
         return len(result.data or [])
+    except Exception as e:
+        print(f"[_count_unread_feed_interaction_notifications_original] 错误: {e}")
+        raise
+
+
+async def count_unread_feed_interaction_notifications(user_id: str) -> int:
+    """统计未读圈子互动通知数。
+    【优化】使用 count=exact + limit(0) 直接获取计数，避免传输任何行数据。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("feed_interaction_notifications")
+            .select("*", count="exact")
+            .eq("recipient_user_id", user_id)
+            .eq("is_read", False)
+            .limit(0)
+            .execute()
+        )
+        return result.count or 0
     except Exception as e:
         print(f"[count_unread_feed_interaction_notifications] 错误: {e}")
         raise
@@ -3893,11 +4279,11 @@ async def mark_feed_interaction_notifications_read(
     notification_ids: Optional[List[str]] = None,
 ) -> int:
     """标记圈子互动通知为已读；未传 notification_ids 时标记全部已读。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         q = (
-            db.table("feed_interaction_notifications")
+            supabase.table("feed_interaction_notifications")
             .update({"is_read": True, "read_at": datetime.now(timezone.utc).isoformat()})
             .eq("recipient_user_id", user_id)
             .eq("is_read", False)
@@ -3913,19 +4299,18 @@ async def mark_feed_interaction_notifications_read(
 
 async def update_food_record(user_id: str, record_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """更新用户自己的饮食记录，仅当记录属于该用户时更新。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        prepared_data = _prepare_food_record_write_data(data)
         result = (
-            db.table("user_food_records")
-            .update(prepared_data)
+            supabase.table("user_food_records")
+            .update(data)
             .eq("id", record_id)
             .eq("user_id", user_id)
             .execute()
         )
         if result.data and len(result.data) > 0:
-            return _present_food_record_row(result.data[0])
+            return result.data[0]
         return None
     except Exception as e:
         print(f"[update_food_record] 错误: {e}")
@@ -3934,10 +4319,10 @@ async def update_food_record(user_id: str, record_id: str, data: Dict[str, Any])
 
 async def delete_food_record(user_id: str, record_id: str) -> bool:
     """删除用户自己的饮食记录，仅当记录属于该用户时删除。返回是否删除了记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("user_food_records").delete().eq("id", record_id).eq("user_id", user_id).execute()
+        result = supabase.table("user_food_records").delete().eq("id", record_id).eq("user_id", user_id).execute()
         return result.data is not None and len(result.data) > 0
     except Exception as e:
         print(f"[delete_food_record] 错误: {e}")
@@ -3946,11 +4331,11 @@ async def delete_food_record(user_id: str, record_id: str) -> bool:
 
 async def hide_food_record_from_feed(user_id: str, record_id: str) -> bool:
     """将自己的饮食记录从圈子 Feed 中隐藏（不删除记录本身）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("user_food_records")
+            supabase.table("user_food_records")
             .update({"hidden_from_feed": True})
             .eq("id", record_id)
             .eq("user_id", user_id)
@@ -3977,8 +4362,8 @@ def _normalize_food_expiry_date_value(value: Any) -> Optional[str]:
 
 async def create_food_expiry_item_v2(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """创建新版食物保质期项。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = {
         "user_id": user_id,
         "food_name": data.get("food_name"),
@@ -3992,7 +4377,7 @@ async def create_food_expiry_item_v2(user_id: str, data: Dict[str, Any]) -> Dict
         "status": data.get("status") or "active",
     }
     try:
-        result = db.table("food_expiry_items").insert(row).execute()
+        result = supabase.table("food_expiry_items").insert(row).execute()
         return result.data[0] if result.data else {}
     except Exception as e:
         print(f"[create_food_expiry_item_v2] 错误: {e}")
@@ -4001,10 +4386,10 @@ async def create_food_expiry_item_v2(user_id: str, data: Dict[str, Any]) -> Dict
 
 async def list_food_expiry_items_v2(user_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
     """列出新版食物保质期项。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        query = db.table("food_expiry_items").select("*").eq("user_id", user_id)
+        query = supabase.table("food_expiry_items").select("*").eq("user_id", user_id)
         if status:
             query = query.eq("status", status)
         result = query.execute()
@@ -4016,11 +4401,11 @@ async def list_food_expiry_items_v2(user_id: str, status: Optional[str] = None) 
 
 async def get_food_expiry_item_v2(item_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     """获取新版单个食物保质期项。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("food_expiry_items")
+            supabase.table("food_expiry_items")
             .select("*")
             .eq("id", item_id)
             .eq("user_id", user_id)
@@ -4037,8 +4422,8 @@ async def get_food_expiry_item_v2(item_id: str, user_id: str) -> Optional[Dict[s
 
 async def update_food_expiry_item_v2(item_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """更新新版食物保质期项。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     row = dict(data)
     if "expire_date" in row:
         row["expire_date"] = _normalize_food_expiry_date_value(row.get("expire_date"))
@@ -4046,7 +4431,7 @@ async def update_food_expiry_item_v2(item_id: str, user_id: str, data: Dict[str,
         row["opened_date"] = _normalize_food_expiry_date_value(row.get("opened_date"))
     try:
         result = (
-            db.table("food_expiry_items")
+            supabase.table("food_expiry_items")
             .update(row)
             .eq("id", item_id)
             .eq("user_id", user_id)
@@ -4060,10 +4445,10 @@ async def update_food_expiry_item_v2(item_id: str, user_id: str, data: Dict[str,
 
 async def delete_food_expiry_item_v2(item_id: str, user_id: str) -> bool:
     """删除新版食物保质期项。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("food_expiry_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
+        supabase.table("food_expiry_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
         return True
     except Exception as e:
         print(f"[delete_food_expiry_item_v2] 错误: {e}")
@@ -4072,11 +4457,11 @@ async def delete_food_expiry_item_v2(item_id: str, user_id: str) -> bool:
 
 async def list_food_expiry_notification_jobs_by_item(expiry_item_id: str) -> List[Dict[str, Any]]:
     """获取某个保质期条目的通知任务。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("food_expiry_notification_jobs")
+            supabase.table("food_expiry_notification_jobs")
             .select("*")
             .eq("expiry_item_id", expiry_item_id)
             .order("created_at", desc=True)
@@ -4098,12 +4483,12 @@ async def upsert_food_expiry_notification_job(
     max_retry_count: int = 3,
 ) -> Dict[str, Any]:
     """按条目幂等创建或更新通知任务。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     scheduled_at_iso = str(scheduled_at)
     try:
         existing_result = (
-            db.table("food_expiry_notification_jobs")
+            supabase.table("food_expiry_notification_jobs")
             .select("*")
             .eq("expiry_item_id", expiry_item_id)
             .eq("template_id", template_id)
@@ -4128,13 +4513,13 @@ async def upsert_food_expiry_notification_job(
         if existing_result.data:
             existing = existing_result.data[0]
             result = (
-                db.table("food_expiry_notification_jobs")
+                supabase.table("food_expiry_notification_jobs")
                 .update(row)
                 .eq("id", existing["id"])
                 .execute()
             )
             return result.data[0] if result.data else existing
-        result = db.table("food_expiry_notification_jobs").insert(row).execute()
+        result = supabase.table("food_expiry_notification_jobs").insert(row).execute()
         return result.data[0] if result.data else {}
     except Exception as e:
         print(f"[upsert_food_expiry_notification_job] 错误: {e}")
@@ -4143,11 +4528,11 @@ async def upsert_food_expiry_notification_job(
 
 async def cancel_food_expiry_notification_jobs_by_item(expiry_item_id: str) -> int:
     """取消某个保质期条目的未完成通知任务。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("food_expiry_notification_jobs")
+            supabase.table("food_expiry_notification_jobs")
             .update({
                 "status": "cancelled",
                 "last_error": None,
@@ -4164,12 +4549,12 @@ async def cancel_food_expiry_notification_jobs_by_item(expiry_item_id: str) -> i
 
 def claim_next_pending_food_expiry_notification_job_sync() -> Optional[Dict[str, Any]]:
     """抢占下一条待发送的保质期通知任务。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     now_iso = datetime.now(timezone.utc).isoformat()
     try:
         result = (
-            db.table("food_expiry_notification_jobs")
+            supabase.table("food_expiry_notification_jobs")
             .select("*")
             .eq("status", "pending")
             .lte("scheduled_at", now_iso)
@@ -4182,7 +4567,7 @@ def claim_next_pending_food_expiry_notification_job_sync() -> Optional[Dict[str,
             return None
         job = result.data[0]
         claimed = (
-            db.table("food_expiry_notification_jobs")
+            supabase.table("food_expiry_notification_jobs")
             .update({"status": "processing", "last_error": None})
             .eq("id", job["id"])
             .eq("status", "pending")
@@ -4201,10 +4586,10 @@ def update_food_expiry_notification_job_sync(
     data: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     """更新单条保质期通知任务。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("food_expiry_notification_jobs").update(data).eq("id", job_id).execute()
+        result = supabase.table("food_expiry_notification_jobs").update(data).eq("id", job_id).execute()
         if result.data:
             return result.data[0]
         return None
@@ -4215,10 +4600,10 @@ def update_food_expiry_notification_job_sync(
 
 def get_food_expiry_item_v2_sync(item_id: str) -> Optional[Dict[str, Any]]:
     """同步获取新版食物保质期项，供 Worker 使用。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("food_expiry_items").select("*").eq("id", item_id).limit(1).execute()
+        result = supabase.table("food_expiry_items").select("*").eq("id", item_id).limit(1).execute()
         if result.data:
             return result.data[0]
         return None
@@ -4232,10 +4617,10 @@ def get_food_expiry_item_v2_sync(item_id: str) -> Optional[Dict[str, Any]]:
 
 async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """创建私人食谱"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        recipe_data = _prepare_recipe_write_data({
+        recipe_data = {
             "user_id": user_id,
             "recipe_name": data.get("recipe_name"),
             "description": data.get("description"),
@@ -4249,9 +4634,9 @@ async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, An
             "tags": data.get("tags", []),
             "meal_type": data.get("meal_type"),
             "is_favorite": data.get("is_favorite", False),
-        })
-        result = db.table("user_recipes").insert(recipe_data).execute()
-        return _present_recipe_row(result.data[0]) if result.data else {}
+        }
+        result = supabase.table("user_recipes").insert(recipe_data).execute()
+        return result.data[0] if result.data else {}
     except Exception as e:
         print(f"[create_user_recipe] 错误: {e}")
         raise
@@ -4259,16 +4644,16 @@ async def create_user_recipe(user_id: str, data: Dict[str, Any]) -> Dict[str, An
 
 async def list_user_recipes(user_id: str, meal_type: Optional[str] = None, is_favorite: Optional[bool] = None) -> List[Dict[str, Any]]:
     """获取用户的私人食谱列表"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        query = db.table("user_recipes").select("*").eq("user_id", user_id)
+        query = supabase.table("user_recipes").select("*").eq("user_id", user_id)
         if meal_type:
             query = query.eq("meal_type", meal_type)
         if is_favorite is not None:
             query = query.eq("is_favorite", is_favorite)
         result = query.order("created_at", desc=True).execute()
-        return [_present_recipe_row(row) for row in (result.data or [])]
+        return result.data or []
     except Exception as e:
         print(f"[list_user_recipes] 错误: {e}")
         raise
@@ -4276,12 +4661,12 @@ async def list_user_recipes(user_id: str, meal_type: Optional[str] = None, is_fa
 
 async def get_user_recipe(recipe_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     """获取单个食谱详情"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("user_recipes").select("*").eq("id", recipe_id).eq("user_id", user_id).execute()
+        result = supabase.table("user_recipes").select("*").eq("id", recipe_id).eq("user_id", user_id).execute()
         if result.data and len(result.data) > 0:
-            return _present_recipe_row(result.data[0])
+            return result.data[0]
         return None
     except Exception as e:
         print(f"[get_user_recipe] 错误: {e}")
@@ -4290,12 +4675,11 @@ async def get_user_recipe(recipe_id: str, user_id: str) -> Optional[Dict[str, An
 
 async def update_user_recipe(recipe_id: str, user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """更新食谱"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        prepared_data = _prepare_recipe_write_data(data)
-        result = db.table("user_recipes").update(prepared_data).eq("id", recipe_id).eq("user_id", user_id).execute()
-        return _present_recipe_row(result.data[0]) if result.data else {}
+        result = supabase.table("user_recipes").update(data).eq("id", recipe_id).eq("user_id", user_id).execute()
+        return result.data[0] if result.data else {}
     except Exception as e:
         print(f"[update_user_recipe] 错误: {e}")
         raise
@@ -4303,10 +4687,10 @@ async def update_user_recipe(recipe_id: str, user_id: str, data: Dict[str, Any])
 
 async def delete_user_recipe(recipe_id: str, user_id: str) -> bool:
     """删除食谱"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        db.table("user_recipes").delete().eq("id", recipe_id).eq("user_id", user_id).execute()
+        supabase.table("user_recipes").delete().eq("id", recipe_id).eq("user_id", user_id).execute()
         return True
     except Exception as e:
         print(f"[delete_user_recipe] 错误: {e}")
@@ -4315,8 +4699,8 @@ async def delete_user_recipe(recipe_id: str, user_id: str) -> bool:
 
 async def use_recipe_record(recipe_id: str, user_id: str) -> bool:
     """使用食谱时更新使用次数和最后使用时间"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 先获取当前使用次数
         recipe = await get_user_recipe(recipe_id, user_id)
@@ -4324,7 +4708,7 @@ async def use_recipe_record(recipe_id: str, user_id: str) -> bool:
             return False
         
         # 更新使用次数和时间
-        db.table("user_recipes").update({
+        supabase.table("user_recipes").update({
             "use_count": (recipe.get("use_count", 0) + 1),
             "last_used_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", recipe_id).eq("user_id", user_id).execute()
@@ -4346,10 +4730,10 @@ async def get_active_prompt(model_type: str) -> Optional[Dict[str, Any]]:
     Returns:
         提示词信息字典，如果不存在则返回 None
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("model_prompts")\
+        result = supabase.table("model_prompts")\
             .select("*")\
             .eq("model_type", model_type)\
             .eq("is_active", True)\
@@ -4373,10 +4757,10 @@ async def list_prompts(model_type: Optional[str] = None) -> List[Dict[str, Any]]
     Returns:
         提示词列表
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        query = db.table("model_prompts").select("*")
+        query = supabase.table("model_prompts").select("*")
         if model_type:
             query = query.eq("model_type", model_type)
         result = query.order("created_at", desc=True).execute()
@@ -4388,10 +4772,10 @@ async def list_prompts(model_type: Optional[str] = None) -> List[Dict[str, Any]]
 
 async def get_prompt_by_id(prompt_id: int) -> Optional[Dict[str, Any]]:
     """通过 ID 获取提示词"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("model_prompts")\
+        result = supabase.table("model_prompts")\
             .select("*")\
             .eq("id", prompt_id)\
             .execute()
@@ -4424,17 +4808,17 @@ async def create_prompt(
     Returns:
         创建的提示词信息
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 如果设为激活，先将该模型的其他提示词设为非激活
         if is_active:
-            db.table("model_prompts")\
+            supabase.table("model_prompts")\
                 .update({"is_active": False})\
                 .eq("model_type", model_type)\
                 .execute()
         
-        result = db.table("model_prompts").insert({
+        result = supabase.table("model_prompts").insert({
             "model_type": model_type,
             "prompt_name": prompt_name,
             "prompt_content": prompt_content,
@@ -4466,14 +4850,14 @@ async def update_prompt(
     Returns:
         更新后的提示词信息
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 先获取原提示词，用于记录历史
         old_prompt = await get_prompt_by_id(prompt_id)
         if old_prompt:
             # 记录修改历史
-            db.table("model_prompts_history").insert({
+            supabase.table("model_prompts_history").insert({
                 "prompt_id": prompt_id,
                 "model_type": old_prompt["model_type"],
                 "prompt_name": old_prompt["prompt_name"],
@@ -4490,7 +4874,7 @@ async def update_prompt(
         if description is not None:
             update_data["description"] = description
         
-        result = db.table("model_prompts")\
+        result = supabase.table("model_prompts")\
             .update(update_data)\
             .eq("id", prompt_id)\
             .execute()
@@ -4511,8 +4895,8 @@ async def set_active_prompt(prompt_id: int) -> bool:
     Returns:
         是否设置成功
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 获取提示词信息
         prompt = await get_prompt_by_id(prompt_id)
@@ -4522,13 +4906,13 @@ async def set_active_prompt(prompt_id: int) -> bool:
         model_type = prompt["model_type"]
         
         # 先将该模型的所有提示词设为非激活
-        db.table("model_prompts")\
+        supabase.table("model_prompts")\
             .update({"is_active": False})\
             .eq("model_type", model_type)\
             .execute()
         
         # 设置指定提示词为激活
-        db.table("model_prompts")\
+        supabase.table("model_prompts")\
             .update({"is_active": True})\
             .eq("id", prompt_id)\
             .execute()
@@ -4549,8 +4933,8 @@ async def delete_prompt(prompt_id: int) -> bool:
     Returns:
         是否删除成功
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         # 检查是否为激活状态
         prompt = await get_prompt_by_id(prompt_id)
@@ -4560,7 +4944,7 @@ async def delete_prompt(prompt_id: int) -> bool:
         if prompt.get("is_active"):
             raise ValueError("不能删除当前激活的提示词")
         
-        db.table("model_prompts")\
+        supabase.table("model_prompts")\
             .delete()\
             .eq("id", prompt_id)\
             .execute()
@@ -4573,10 +4957,10 @@ async def delete_prompt(prompt_id: int) -> bool:
 
 async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
     """获取提示词的修改历史"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("model_prompts_history")\
+        result = supabase.table("model_prompts_history")\
             .select("*")\
             .eq("prompt_id", prompt_id)\
             .order("changed_at", desc=True)\
@@ -4592,10 +4976,21 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
 _FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA = ("food", "food_text", "food_debug", "food_text_debug")
 
 
+def _is_exercise_fallback_task_payload(payload: Any) -> bool:
+    """判断 analysis_tasks.payload 是否是“运动记录回退投递到 food_text* 队列”的任务。"""
+    return isinstance(payload, dict) and bool(payload.get("exercise"))
+
+
 async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
-    """统计用户今日（中国时区）的食物分析次数：analysis_tasks 表中上述 task_type 的创建条数（拍照与文字分析均计入）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    """统计用户今日（中国时区）的食物分析次数。
+
+    只统计真实食物分析任务：
+    - 计入：food / food_text / food_debug / food_text_debug
+    - 排除：因数据库尚未支持 task_type=exercise，而回退投递到 food_text* 的运动任务
+      （其 payload.exercise=true，积分应按运动记录 1 分计算，不能再额外算成食物分析 2 分）
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         from datetime import date as _date, timedelta as _timedelta
         china_date   = _date.fromisoformat(china_date_str)
@@ -4603,15 +4998,20 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
         day_start    = f"{china_date_str}T00:00:00+08:00"
         day_end_excl = f"{next_date.strftime('%Y-%m-%d')}T00:00:00+08:00"
 
-        result = db.table("analysis_tasks")\
-            .select("id")\
+        result = supabase.table("analysis_tasks")\
+            .select("id, payload")\
             .eq("user_id", user_id)\
             .in_("task_type", list(_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA))\
             .gte("created_at", day_start)\
             .lt("created_at", day_end_excl)\
             .execute()
 
-        count = len(result.data) if result.data else 0
+        rows = result.data or []
+        count = sum(
+            1
+            for row in rows
+            if not _is_exercise_fallback_task_payload((row or {}).get("payload"))
+        )
         print(f"[get_today_food_analysis_count] user={user_id} date={china_date_str} count={count}")
         return count
     except Exception as e:
@@ -4620,13 +5020,14 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
 
 
 async def list_active_membership_plans() -> List[Dict[str, Any]]:
-    """获取所有启用中的会员套餐配置。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    """获取所有启用中的会员套餐配置。按 sort_order, created_at 升序返回。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("membership_plan_config")\
+        result = supabase.table("membership_plan_config")\
             .select("*")\
             .eq("is_active", True)\
+            .order("sort_order", desc=False)\
             .order("created_at", desc=False)\
             .execute()
         return result.data or []
@@ -4635,12 +5036,133 @@ async def list_active_membership_plans() -> List[Dict[str, Any]]:
         raise
 
 
+async def get_today_exercise_log_count(user_id: str, china_date_str: str) -> int:
+    """统计用户今日（中国时区 YYYY-MM-DD）的运动记录条数。用于积分消耗计算。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("user_exercise_logs")\
+            .select("id")\
+            .eq("user_id", user_id)\
+            .eq("recorded_on", china_date_str)\
+            .execute()
+        count = len(result.data) if result.data else 0
+        return count
+    except Exception as e:
+        err_s = str(e)
+        if (
+            "PGRST205" in err_s
+            or "Could not find the table" in err_s
+            or ("user_exercise_logs" in err_s and "relation" in err_s.lower())
+        ):
+            return 0
+        print(f"[get_today_exercise_log_count] 错误: {e}")
+        return 0
+
+
+async def list_test_backend_datasets() -> List[Dict[str, Any]]:
+    """列出测试后台可复用测试集。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("test_backend_datasets").select("*").order("created_at", desc=True).execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_test_backend_datasets] 错误: {e}")
+        raise
+
+
+async def get_test_backend_dataset(dataset_id: str) -> Optional[Dict[str, Any]]:
+    """读取单个测试集。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = supabase.table("test_backend_datasets").select("*").eq("id", dataset_id).limit(1).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+    except Exception as e:
+        print(f"[get_test_backend_dataset] 错误: {e}")
+        raise
+
+
+async def create_test_backend_dataset(data: Dict[str, Any]) -> Dict[str, Any]:
+    """创建测试集记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row = {
+        "id": data.get("id") or str(uuid.uuid4()),
+        "name": data.get("name"),
+        "description": data.get("description") or "",
+        "source_type": data.get("source_type") or "local_import",
+        "source_ref": data.get("source_ref") or "",
+        "cover_image_url": data.get("cover_image_url"),
+        "item_count": int(data.get("item_count") or 0),
+        "labeled_count": int(data.get("labeled_count") or 0),
+        "unlabeled_count": int(data.get("unlabeled_count") or 0),
+        "metadata": data.get("metadata") or {},
+    }
+    try:
+        result = supabase.table("test_backend_datasets").insert(row).execute()
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        raise Exception("创建测试集失败：返回数据为空")
+    except Exception as e:
+        print(f"[create_test_backend_dataset] 错误: {e}")
+        raise
+
+
+async def insert_test_backend_dataset_items(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """批量插入测试集图片项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    if not rows:
+        return []
+    safe_rows = []
+    for row in rows:
+        safe_rows.append({
+            "id": row.get("id") or str(uuid.uuid4()),
+            "dataset_id": row.get("dataset_id"),
+            "filename": row.get("filename"),
+            "image_url": row.get("image_url"),
+            "label_mode": row.get("label_mode") or "total",
+            "true_weight": float(row.get("true_weight") or 0),
+            "expected_items": row.get("expected_items") or [],
+            "sort_order": int(row.get("sort_order") or 0),
+            "metadata": row.get("metadata") or {},
+        })
+    try:
+        result = supabase.table("test_backend_dataset_items").insert(safe_rows).execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[insert_test_backend_dataset_items] 错误: {e}")
+        raise
+
+
+async def list_test_backend_dataset_items(dataset_id: str) -> List[Dict[str, Any]]:
+    """读取测试集下的全部图片项。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("test_backend_dataset_items")
+            .select("*")
+            .eq("dataset_id", dataset_id)
+            .order("sort_order", desc=False)
+            .execute()
+        )
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_test_backend_dataset_items] 错误: {e}")
+        raise
+
+
 async def get_membership_plan_by_code(code: str) -> Optional[Dict[str, Any]]:
     """按套餐编码获取会员套餐配置。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("membership_plan_config")\
+        result = supabase.table("membership_plan_config")\
             .select("*")\
             .eq("code", code)\
             .limit(1)\
@@ -4655,10 +5177,10 @@ async def get_membership_plan_by_code(code: str) -> Optional[Dict[str, Any]]:
 
 async def get_user_pro_membership(user_id: str) -> Optional[Dict[str, Any]]:
     """获取用户当前 Pro 会员状态。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("user_pro_memberships")\
+        result = supabase.table("user_pro_memberships")\
             .select("*")\
             .eq("user_id", user_id)\
             .limit(1)\
@@ -4673,10 +5195,10 @@ async def get_user_pro_membership(user_id: str) -> Optional[Dict[str, Any]]:
 
 async def create_user_pro_membership(data: Dict[str, Any]) -> Dict[str, Any]:
     """创建用户 Pro 会员状态记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("user_pro_memberships")\
+        result = supabase.table("user_pro_memberships")\
             .insert(data)\
             .execute()
         if result.data and len(result.data) > 0:
@@ -4689,10 +5211,10 @@ async def create_user_pro_membership(data: Dict[str, Any]) -> Dict[str, Any]:
 
 async def update_user_pro_membership(user_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """更新用户 Pro 会员状态记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("user_pro_memberships")\
+        result = supabase.table("user_pro_memberships")\
             .update(data)\
             .eq("user_id", user_id)\
             .execute()
@@ -4716,10 +5238,10 @@ async def save_user_pro_membership(user_id: str, data: Dict[str, Any]) -> Dict[s
 
 async def create_pro_membership_payment_record(data: Dict[str, Any]) -> Dict[str, Any]:
     """创建 Pro 会员支付记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("pro_membership_payment_records")\
+        result = supabase.table("pro_membership_payment_records")\
             .insert(data)\
             .execute()
         if result.data and len(result.data) > 0:
@@ -4730,12 +5252,60 @@ async def create_pro_membership_payment_record(data: Dict[str, Any]) -> Dict[str
         raise
 
 
+async def bulk_update_pro_membership_payment_records(
+    filters: Dict[str, Any],
+    data: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """批量更新会员支付记录。仅用于 pending 清理等后台收口动作。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("pro_membership_payment_records").update(data)
+        for key, value in (filters or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)):
+                query = query.in_(key, list(value))
+            else:
+                query = query.eq(key, value)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[bulk_update_pro_membership_payment_records] 错误: {e}")
+        raise
+
+
+async def list_pro_membership_payment_records(
+    filters: Dict[str, Any],
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """按条件查询会员支付记录。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("pro_membership_payment_records").select("*")
+        for key, value in (filters or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)):
+                query = query.in_(key, list(value))
+            else:
+                query = query.eq(key, value)
+        if limit is not None and limit > 0:
+            query = query.limit(limit)
+        result = query.execute()
+        return list(result.data or [])
+    except Exception as e:
+        print(f"[list_pro_membership_payment_records] 错误: {e}")
+        raise
+
+
 async def get_pro_membership_payment_record_by_order_no(order_no: str) -> Optional[Dict[str, Any]]:
     """按平台订单号获取 Pro 会员支付记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("pro_membership_payment_records")\
+        result = supabase.table("pro_membership_payment_records")\
             .select("*")\
             .eq("order_no", order_no)\
             .limit(1)\
@@ -4750,10 +5320,10 @@ async def get_pro_membership_payment_record_by_order_no(order_no: str) -> Option
 
 async def update_pro_membership_payment_record(order_no: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """按平台订单号更新 Pro 会员支付记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
-        result = db.table("pro_membership_payment_records")\
+        result = supabase.table("pro_membership_payment_records")\
             .update(data)\
             .eq("order_no", order_no)\
             .execute()
@@ -4778,12 +5348,72 @@ def _safe_manual_food_number(value: Any) -> float:
         return 0.0
 
 
+def _build_manual_nutrient_payload(
+    *,
+    calories: float = 0.0,
+    protein: float = 0.0,
+    carbs: float = 0.0,
+    fat: float = 0.0,
+    fiber: float = 0.0,
+    sugar: float = 0.0,
+    sodium_mg: float = 0.0,
+) -> Dict[str, float]:
+    return {
+        "calories": round(_safe_manual_food_number(calories), 2),
+        "protein": round(_safe_manual_food_number(protein), 2),
+        "carbs": round(_safe_manual_food_number(carbs), 2),
+        "fat": round(_safe_manual_food_number(fat), 2),
+        "fiber": round(_safe_manual_food_number(fiber), 2),
+        "sugar": round(_safe_manual_food_number(sugar), 2),
+        "sodium_mg": round(_safe_manual_food_number(sodium_mg), 2),
+    }
+
+
+def _build_manual_food_highlights(nutrients: Dict[str, float]) -> List[str]:
+    highlights: List[str] = []
+    fiber = _safe_manual_food_number(nutrients.get("fiber"))
+    sugar = _safe_manual_food_number(nutrients.get("sugar"))
+    sodium_mg = _safe_manual_food_number(nutrients.get("sodium_mg"))
+    if fiber > 0:
+        highlights.append(f"纤维 {round(fiber, 1)}g")
+    if sugar > 0:
+        highlights.append(f"糖 {round(sugar, 1)}g")
+    if sodium_mg > 0:
+        highlights.append(f"钠 {round(sodium_mg)}mg")
+    return highlights[:3]
+
+
+def _sum_manual_public_item_extra_nutrients(items_raw: List[Dict[str, Any]]) -> Dict[str, float]:
+    fiber = 0.0
+    sugar = 0.0
+    sodium_mg = 0.0
+    for item in items_raw:
+        if not isinstance(item, dict):
+            continue
+        nutrients = item.get("nutrients") or {}
+        if not isinstance(nutrients, dict):
+            continue
+        fiber += _safe_manual_food_number(nutrients.get("fiber"))
+        sugar += _safe_manual_food_number(nutrients.get("sugar"))
+        sodium_mg += _safe_manual_food_number(
+            nutrients.get("sodium_mg")
+            or nutrients.get("sodiumMg")
+            or nutrients.get("sodium")
+        )
+    return _build_manual_nutrient_payload(
+        fiber=fiber,
+        sugar=sugar,
+        sodium_mg=sodium_mg,
+    )
+
+
 def _build_manual_public_food_result(
     row: Dict[str, Any],
     *,
     collected: bool = False,
 ) -> Dict[str, Any]:
     items_raw = row.get("items") or []
+    extra_nutrients = _sum_manual_public_item_extra_nutrients(items_raw)
     total_weight = sum(
         max(int((it or {}).get("weight") or (it or {}).get("estimatedWeightGrams") or 0), 0)
         for it in items_raw
@@ -4800,42 +5430,114 @@ def _build_manual_public_food_result(
         "total_carbs": _safe_manual_food_number(row.get("total_carbs")),
         "total_fat": _safe_manual_food_number(row.get("total_fat")),
         "items": items_raw,
-        "image_path": _resolve_storage_ref(FOOD_ANALYZE_BUCKET, row.get("image_path")),
-        "image_paths": _resolve_storage_ref_list(FOOD_ANALYZE_BUCKET, row.get("image_paths")),
+        "image_path": row.get("image_path"),
+        "image_paths": row.get("image_paths"),
         "portion_label": "1份",
-        "source_label": "公共库",
+        "source_label": "真实餐食",
         "like_count": int(row.get("like_count") or 0),
         "collection_count": int(row.get("collection_count") or 0),
         "collected": bool(collected),
+        "extra_nutrients": extra_nutrients,
+        "nutrition_highlights": _build_manual_food_highlights(extra_nutrients),
     }
 
 
 def _build_manual_nutrition_food_result(row: Dict[str, Any]) -> Dict[str, Any]:
+    nutrients_per_100g = _build_manual_nutrient_payload(
+        calories=row.get("kcal_per_100g"),
+        protein=row.get("protein_per_100g"),
+        carbs=row.get("carbs_per_100g"),
+        fat=row.get("fat_per_100g"),
+        fiber=row.get("fiber_per_100g"),
+        sugar=row.get("sugar_per_100g"),
+        sodium_mg=row.get("sodium_mg_per_100g"),
+    )
     return {
         "id": str(row["id"]),
         "source": "nutrition_library",
         "title": row.get("canonical_name") or "未知食物",
         "subtitle": "标准食物词典 · 每100g",
         "default_weight_grams": 100,
-        "total_calories": _safe_manual_food_number(row.get("kcal_per_100g")),
-        "total_protein": _safe_manual_food_number(row.get("protein_per_100g")),
-        "total_carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
-        "total_fat": _safe_manual_food_number(row.get("fat_per_100g")),
-        "nutrients_per_100g": {
-            "calories": _safe_manual_food_number(row.get("kcal_per_100g")),
-            "protein": _safe_manual_food_number(row.get("protein_per_100g")),
-            "carbs": _safe_manual_food_number(row.get("carbs_per_100g")),
-            "fat": _safe_manual_food_number(row.get("fat_per_100g")),
-        },
+        "total_calories": nutrients_per_100g["calories"],
+        "total_protein": nutrients_per_100g["protein"],
+        "total_carbs": nutrients_per_100g["carbs"],
+        "total_fat": nutrients_per_100g["fat"],
+        "nutrients_per_100g": nutrients_per_100g,
         "items": None,
         "image_path": None,
         "image_paths": None,
         "portion_label": "100g",
-        "source_label": "营养词典",
+        "source_label": "标准食物",
         "collected": False,
         "like_count": 0,
         "collection_count": 0,
+        "extra_nutrients": {
+            "fiber": nutrients_per_100g["fiber"],
+            "sugar": nutrients_per_100g["sugar"],
+            "sodium_mg": nutrients_per_100g["sodium_mg"],
+        },
+        "nutrition_highlights": _build_manual_food_highlights(nutrients_per_100g),
     }
+
+
+_manual_food_stats_cache: Dict[str, Any] = {
+    "value": None,
+    "expires_at": None,
+}
+
+
+def _get_cached_manual_food_stats() -> Optional[Dict[str, int]]:
+    expires_at = _manual_food_stats_cache.get("expires_at")
+    if expires_at and isinstance(expires_at, datetime) and expires_at > datetime.now(timezone.utc):
+        cached = _manual_food_stats_cache.get("value")
+        if isinstance(cached, dict):
+            return cached
+    return None
+
+
+def _set_cached_manual_food_stats(value: Dict[str, int], ttl_seconds: int = 600) -> None:
+    _manual_food_stats_cache["value"] = value
+    _manual_food_stats_cache["expires_at"] = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+
+
+async def get_manual_food_library_stats() -> Dict[str, int]:
+    cached = _get_cached_manual_food_stats()
+    if cached:
+        return cached
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        nutrition_resp = supabase.table("food_nutrition_library") \
+            .select("id", count="exact") \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+        alias_resp = supabase.table("food_nutrition_aliases") \
+            .select("id", count="exact") \
+            .limit(1) \
+            .execute()
+        public_resp = supabase.table("public_food_library") \
+            .select("id", count="exact") \
+            .eq("status", "published") \
+            .limit(1) \
+            .execute()
+        stats = {
+            "nutrition_food_count": int(getattr(nutrition_resp, "count", 0) or 0),
+            "nutrition_alias_count": int(getattr(alias_resp, "count", 0) or 0),
+            "public_food_count": int(getattr(public_resp, "count", 0) or 0),
+        }
+        _set_cached_manual_food_stats(stats)
+        return stats
+    except Exception as e:
+        print(f"[get_manual_food_library_stats] 错误: {e}")
+        fallback = {
+            "nutrition_food_count": 0,
+            "nutrition_alias_count": 0,
+            "public_food_count": 0,
+        }
+        _set_cached_manual_food_stats(fallback, ttl_seconds=120)
+        return fallback
 
 
 def _compute_manual_food_match_score(
@@ -4910,11 +5612,11 @@ async def _get_manual_food_usage_stats(
             "recent_entries": [],
         }
 
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         rows = (
-            db.table("user_food_records")
+            supabase.table("user_food_records")
             .select("items,record_time,created_at")
             .eq("user_id", user_id)
             .order("record_time", desc=True)
@@ -5068,8 +5770,8 @@ async def search_manual_food(
     if not q or not q.strip():
         return []
     q = q.strip()
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     usage_stats = await _get_manual_food_usage_stats(current_user_id)
     results: List[Dict[str, Any]] = []
     search_limit = max(min(limit * 3, 60), 20)
@@ -5083,7 +5785,7 @@ async def search_manual_food(
             print(f"[search_manual_food] 读取收藏失败: {e}")
 
     try:
-        pfl = db.table("public_food_library")\
+        pfl = supabase.table("public_food_library")\
             .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths,like_count,collection_count")\
             .eq("status", "published")\
             .or_(f"food_name.ilike.%{q}%,description.ilike.%{q}%,merchant_name.ilike.%{q}%")\
@@ -5099,14 +5801,14 @@ async def search_manual_food(
         print(f"[search_manual_food] public_food_library 搜索出错: {e}")
 
     try:
-        fnl = db.table("food_nutrition_library")\
-            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+        fnl = supabase.table("food_nutrition_library")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
             .eq("is_active", True)\
             .ilike("canonical_name", f"%{q}%")\
             .limit(search_limit)\
             .execute()
         matched_ids = {row["id"] for row in (fnl.data or [])}
-        alias_rows = db.table("food_nutrition_aliases")\
+        alias_rows = supabase.table("food_nutrition_aliases")\
             .select("food_id,alias_name")\
             .ilike("alias_name", f"%{q}%")\
             .limit(search_limit)\
@@ -5115,8 +5817,8 @@ async def search_manual_food(
 
         extra_rows = []
         if alias_food_ids:
-            extra = db.table("food_nutrition_library")\
-                .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+            extra = supabase.table("food_nutrition_library")\
+                .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
                 .eq("is_active", True)\
                 .in_("id", alias_food_ids[:search_limit])\
                 .execute()
@@ -5143,8 +5845,8 @@ async def browse_manual_food_library(
     """
     返回手动记录默认浏览数据，并在已登录时补充最近常吃与收藏公共库。
     """
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     usage_stats = await _get_manual_food_usage_stats(current_user_id)
     public_items: List[Dict[str, Any]] = []
     nutrition_items: List[Dict[str, Any]] = []
@@ -5162,7 +5864,7 @@ async def browse_manual_food_library(
             print(f"[browse_manual_food_library] 收藏公共库出错: {e}")
 
     try:
-        pfl = db.table("public_food_library")\
+        pfl = supabase.table("public_food_library")\
             .select("id,food_name,description,merchant_name,items,total_calories,total_protein,total_carbs,total_fat,image_path,image_paths,like_count,collection_count")\
             .eq("status", "published")\
             .order("like_count", desc=True)\
@@ -5177,8 +5879,8 @@ async def browse_manual_food_library(
         print(f"[browse_manual_food_library] public_food_library 出错: {e}")
 
     try:
-        fnl = db.table("food_nutrition_library")\
-            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g")\
+        fnl = supabase.table("food_nutrition_library")\
+            .select("id,canonical_name,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,sugar_per_100g,sodium_mg_per_100g")\
             .eq("is_active", True)\
             .order("canonical_name")\
             .limit(160)\
@@ -5202,6 +5904,7 @@ async def browse_manual_food_library(
         "collected_public_library": collected_public_library[:8],
         "public_library": public_items[:18],
         "nutrition_library": nutrition_items[:36],
+        "stats": await get_manual_food_library_stats(),
     }
 
 
@@ -5209,24 +5912,24 @@ async def log_unresolved_food(raw_name: str) -> None:
     """记录未命中的搜索词到 food_unresolved_logs，用于后续词典扩充。"""
     if not raw_name or not raw_name.strip():
         return
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     import re
     normalized = re.sub(r'\s+', '', raw_name.strip().lower())
     try:
-        existing = db.table("food_unresolved_logs")\
+        existing = supabase.table("food_unresolved_logs")\
             .select("id,hit_count")\
             .eq("normalized_name", normalized)\
             .limit(1)\
             .execute()
         if existing.data and len(existing.data) > 0:
             row = existing.data[0]
-            db.table("food_unresolved_logs")\
+            supabase.table("food_unresolved_logs")\
                 .update({"hit_count": (row.get("hit_count") or 0) + 1})\
                 .eq("id", row["id"])\
                 .execute()
         else:
-            db.table("food_unresolved_logs")\
+            supabase.table("food_unresolved_logs")\
                 .insert({"raw_name": raw_name.strip(), "normalized_name": normalized, "hit_count": 1})\
                 .execute()
     except Exception as e:
@@ -5242,11 +5945,11 @@ async def list_user_exercise_logs(
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """读取用户运动记录（按时间倒序）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         query = (
-            db.table("user_exercise_logs")
+            supabase.table("user_exercise_logs")
             .select("*")
             .eq("user_id", user_id)
         )
@@ -5281,8 +5984,8 @@ def create_user_exercise_log_sync(
     ai_reasoning: Optional[str] = None,
 ) -> Dict[str, Any]:
     """新增一条运动记录（Worker 同步调用）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         day = recorded_on or datetime.now(CHINA_TZ).date().isoformat()
         row = {
@@ -5293,9 +5996,14 @@ def create_user_exercise_log_sync(
         }
         if ai_reasoning is not None and str(ai_reasoning).strip():
             row["ai_reasoning"] = str(ai_reasoning).strip()[:4000]
-        result = db.table("user_exercise_logs").insert(row).execute()
+        result = supabase.table("user_exercise_logs").insert(row).execute()
         if result.data and len(result.data) > 0:
-            return result.data[0]
+            created = result.data[0]
+            try:
+                activate_pending_invite_referral_on_first_valid_use_sync(user_id, "exercise_log")
+            except Exception as reward_err:
+                print(f"[create_user_exercise_log_sync] 邀请奖励激活失败（已忽略）: {reward_err}")
+            return created
         raise Exception("新增运动记录失败：返回数据为空")
     except Exception as e:
         print(f"[create_user_exercise_log_sync] 错误: {e}")
@@ -5317,11 +6025,11 @@ async def create_user_exercise_log(
 
 async def delete_user_exercise_log(user_id: str, log_id: str) -> bool:
     """删除指定ID的运动记录。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("user_exercise_logs")
+            supabase.table("user_exercise_logs")
             .delete()
             .eq("id", log_id)
             .eq("user_id", user_id)
@@ -5335,11 +6043,11 @@ async def delete_user_exercise_log(user_id: str, log_id: str) -> bool:
 
 def get_exercise_calories_by_date_sync(user_id: str, recorded_on: str) -> int:
     """获取用户指定日期运动消耗的总卡路里（Worker 同步）。"""
-    check_postgresql_configured()
-    db = get_database_client()
+    check_supabase_configured()
+    supabase = get_supabase_client()
     try:
         result = (
-            db.table("user_exercise_logs")
+            supabase.table("user_exercise_logs")
             .select("calories_burned")
             .eq("user_id", user_id)
             .eq("recorded_on", recorded_on)

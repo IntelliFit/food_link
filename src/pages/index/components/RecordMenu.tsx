@@ -3,12 +3,19 @@ import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
 import { getAccessToken, getMyMembership } from '../../../utils/api'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import {
+  getFoodAnalysisBlockedActionText,
+  getFoodAnalysisCreditBlockMessage,
+  isFoodAnalysisCreditExhausted,
+} from '../../../utils/membership'
 import {
   IconCamera,
   IconAlbum,
   IconText,
   IconEdit,
   IconHistory,
+  IconFavorite,
   IconChevronRight,
   IconTrendingUp
 } from '../../../components/iconfont'
@@ -30,7 +37,6 @@ const GRID_FEATURES: Array<{
   id: string
   label: string
   color: string
-  bgColor: string
   Icon: typeof IconCamera
   isNew?: boolean
 }> = [
@@ -38,39 +44,44 @@ const GRID_FEATURES: Array<{
     id: 'camera',
     label: '拍照识别',
     color: '#e85d75',
-    bgColor: '#fef2f4',
     Icon: IconCamera,
   },
   {
     id: 'album',
     label: '相册上传',
     color: '#10b981',
-    bgColor: '#ecfdf5',
     Icon: IconAlbum,
   },
   {
     id: 'text',
     label: '文本输入',
     color: '#f59e0b',
-    bgColor: '#fffbeb',
     Icon: IconText,
   },
   {
     id: 'manual',
     label: '手动输入',
-    color: '#6b9ac4',
-    bgColor: '#eff6ff',
+    color: '#3b82f6',
     Icon: IconEdit,
   },
 ]
 
-// 底部只有历史记录
-const HISTORY_ITEM = {
-  id: 'history',
-  label: '历史记录',
-  Icon: IconHistory,
-  color: '#6b7280',
-}
+const QUICK_ACCESS_ITEMS = [
+  {
+    id: 'favorites',
+    label: '我的收藏',
+    desc: '快速记录常吃餐食',
+    Icon: IconFavorite,
+    color: '#f59e0b',
+  },
+  {
+    id: 'history',
+    label: '历史记录',
+    desc: '查看以往识别记录',
+    Icon: IconHistory,
+    color: '#6b7280',
+  },
+] as const
 
 export function RecordMenu({ visible, onClose }: RecordMenuProps) {
   const [devToolsOpen, setDevToolsOpen] = useState(false)
@@ -94,9 +105,6 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
 
     switch (modeId) {
       case 'camera':
-        // record 为 tabBar 页，必须用 switchTab，navigateTo 会失败无反应
-        Taro.switchTab({ url: '/pages/record/index' })
-        break
       case 'album': {
         // 与 record 页「相册」一致：先校验今日次数，避免选图上传后 submit 才 429
         if (!getAccessToken()) {
@@ -106,32 +114,19 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         void (async () => {
           try {
             const membershipStatus = await getMyMembership()
-            if (typeof membershipStatus.points_balance === 'number') {
-              if (membershipStatus.points_balance < 1) {
-                Taro.showModal({
-                  title: '积分不足',
-                  content: '标准分析需至少 1 积分，请先充值。',
-                  confirmText: '去充值',
-                  cancelText: '取消',
-                  success: (r) => {
-                    if (r.confirm) Taro.navigateTo({ url: '/pages/pro-membership/index' })
-                  }
-                })
-                return
-              }
-            } else if (membershipStatus.daily_remaining !== null && membershipStatus.daily_remaining <= 0) {
-              const isPro = membershipStatus.is_pro
+            if (isFoodAnalysisCreditExhausted(membershipStatus)) {
+              const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
+              const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
+              const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus.is_pro
               Taro.showModal({
-                title: '今日次数已用完',
-                content: isPro
-                  ? `今日 ${membershipStatus.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-                  : `免费版每日限 ${membershipStatus.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-                confirmText: isPro ? '知道了' : '去开通',
+                title: '积分不足',
+                content,
+                confirmText: showUpgrade ? confirmText : '知道了',
                 cancelText: '取消',
-                showCancel: !isPro,
+                showCancel: showUpgrade,
                 success: (r) => {
-                  if (!isPro && r.confirm) {
-                    Taro.navigateTo({ url: '/pages/pro-membership/index' })
+                  if (showUpgrade && r.confirm) {
+                    Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
                   }
                 }
               })
@@ -141,13 +136,16 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
           Taro.chooseImage({
-            count: 1,
+            count: modeId === 'album' ? 5 : 1,
             sizeType: ['compressed'],
-            sourceType: ['album'],
+            sourceType: modeId === 'camera' ? ['camera'] : ['album'],
             success: (res) => {
-              const imagePath = res.tempFilePaths[0]
-              Taro.setStorageSync('analyzeImagePath', imagePath)
-              Taro.navigateTo({ url: '/pages/analyze/index' })
+              const tempPaths = res.tempFilePaths || []
+              if (tempPaths.length > 0) {
+                Taro.setStorageSync('analyzeImagePath', tempPaths[0])
+                Taro.setStorageSync('analyzeImagePaths', tempPaths)
+              }
+              Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
             },
             fail: (err) => {
               if (err.errMsg?.includes('cancel')) return
@@ -158,17 +156,24 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         break
       }
       case 'text':
-        Taro.navigateTo({ url: '/pages/record-text/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })
         break
       case 'manual':
-        Taro.navigateTo({ url: '/pages/record-manual/index' })
+        Taro.navigateTo({ url: extraPkgUrl('/pages/record-manual/index') })
         break
     }
   }
 
-  const handleHistoryClick = () => {
+  const handleQuickAccessClick = (modeId: string) => {
     onClose()
-    Taro.navigateTo({ url: '/pages/analyze-history/index' })
+    switch (modeId) {
+      case 'favorites':
+        Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })
+        break
+      case 'history':
+        Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+        break
+    }
   }
 
   const runDevTool = (fn: () => void) => {
@@ -200,7 +205,6 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
               <View
                 key={feature.id}
                 className='record-menu-grid-card'
-                style={{ backgroundColor: feature.bgColor }}
                 onClick={() => handleGridClick(feature.id)}
               >
                 {feature.isNew && (
@@ -221,22 +225,31 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
           })}
         </View>
 
-        {/* 底部历史记录 */}
+        {/* 底部快捷入口 */}
         <View className='record-menu-list-v2'>
-          <View
-            className='record-menu-list-item-v2'
-            onClick={handleHistoryClick}
-          >
-            <View className='record-menu-list-left'>
-              <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${HISTORY_ITEM.color}15` }}>
-                <HISTORY_ITEM.Icon size={24} color={HISTORY_ITEM.color} />
+          {QUICK_ACCESS_ITEMS.map((item) => {
+            const IconComponent = item.Icon
+            return (
+              <View
+                key={item.id}
+                className='record-menu-list-item-v2'
+                onClick={() => handleQuickAccessClick(item.id)}
+              >
+                <View className='record-menu-list-left'>
+                  <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${item.color}15` }}>
+                    <IconComponent size={24} color={item.color} />
+                  </View>
+                  <View className='record-menu-list-texts'>
+                    <Text className='record-menu-list-label-v2'>{item.label}</Text>
+                    <Text className='record-menu-list-desc-v2'>{item.desc}</Text>
+                  </View>
+                </View>
+                <View className='record-menu-list-right'>
+                  <IconChevronRight size={16} color='#d1d5db' />
+                </View>
               </View>
-              <Text className='record-menu-list-label-v2'>{HISTORY_ITEM.label}</Text>
-            </View>
-            <View className='record-menu-list-right'>
-              <IconChevronRight size={16} color='#d1d5db' />
-            </View>
-          </View>
+            )
+          })}
 
           {__ENABLE_DEV_DEBUG_UI__ && (
             <View className='record-menu-dev-toolkit'>

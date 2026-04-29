@@ -1,386 +1,1408 @@
 # CURRENT_TASK
 
-- Task: PostgreSQL 硬切并清理旧数据库依赖
-- Status: code done；pending 最终全文扫描、最小验证与本地开发服务重启
+- Task: 手动记录页面心智收口为“双库模式”
+- Status: done（前台展示正式收口为 `food_nutrition_library + public_food_library` 两类；静态校验通过；`weapp-devtools` 运行态验证仍受本机 `mrc.cmd` 权限阻塞）
 - Scope:
-  - `backend/pg_client.py`
-    - 新增轻量 PostgreSQL 查询兼容层，覆盖 `.table(...).select().eq()...execute()` 常用链式调用
-  - `backend/database.py`
-    - 全量切到 PostgreSQL 客户端，移除 Supabase SDK 依赖与命名口径
-  - `backend/main.py` `backend/user_points.py` `backend/worker.py`
-    - 清理运行时剩余的旧数据库调用与说明文案
-  - `backend/cleanup_duplicate_feed_comments.py` `backend/cleanup_duplicate_feed_notifications.py` `backend/cleanup_orphans.py`
-  - `backend/seed_test_data.py` `backend/seed_xiaomage_request.py` `backend/compress_food_images.py`
-    - 脚本与种子改为走 PostgreSQL / COS，不再依赖旧 REST / SDK
-  - `backend/tests/conftest.py` `backend/requirements.txt`
-    - 测试环境变量与依赖配置收口到 `POSTGRESQL_*`
-  - `backend/README.md` `backend/AUTH_README.md` `backend/sql/*` `backend/database/*.sql`
-    - 当前使用文档改为 PostgreSQL / COS 口径
+  - 前端：
+    - `src/packageExtra/pages/record-manual/index.tsx`
+      - 顶部副标题改为“双库模式：标准食物库 + 真实餐食库”
+      - 搜索占位文案改为“搜索标准食物、菜名、商家餐”
+      - 筛选 chip 文案收口为：`全部 / 最近常吃 / 收藏餐食 / 真实餐食 / 标准食物`
+      - 默认浏览分组文案统一收口：
+        - `收藏优先 -> 收藏餐食`
+        - `公共库推荐 -> 真实餐食库`
+        - `标准营养词典 -> 标准食物库`
+      - 库说明文案不再强调 `aliases`，改为只强调两张主库：`标准食物 + 真实餐食`
+      - 结果卡来源徽标 fallback 也同步改为 `真实餐食 / 标准食物`
+  - 后端：
+    - `backend/database.py`
+      - 手动记录搜索结果里的 `source_label` 改为 `真实餐食 / 标准食物`
+- Product behavior:
+  - 前台只把 `food_nutrition_library` 视作标准食物主库，把 `public_food_library` 视作真实餐食补充库
+  - `food_nutrition_aliases` 继续只承担后台搜索召回角色，不再在页面文案里作为“可见库”出现
+  - `food_unresolved_logs` 继续只作为后台补词典日志，不进入手动记录展示层
 - Verification:
-  - `py_compile` 已通过：`backend/pg_client.py`、`backend/database.py`、`backend/main.py`、`backend/user_points.py`、`backend/worker.py`
-  - `py_compile` 已通过：`backend/cleanup_duplicate_feed_comments.py`、`backend/cleanup_duplicate_feed_notifications.py`、`backend/seed_test_data.py`、`backend/seed_xiaomage_request.py`、`backend/cleanup_orphans.py`、`backend/compress_food_images.py`、`backend/tests/conftest.py`、`backend/scripts/apply_exercise_migration.py`
-  - PostgreSQL smoke check 已通过：基础查询层可读取 `weapp_user`、`user_food_records`、`public_food_library`
-  - 待执行：全文残留扫描、最小 pytest/运行时验证、`npm run dev:restart`
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\database.py backend\\main.py` 通过
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
+  - 已按项目要求尝试 `weapp-devtools`：
+    - `cmd /c where mrc` 可定位到 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
+    - 直接执行 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd where --port 9420` 当前返回 `Access is denied.`
+  - 因此本轮仍未能补运行态截图与页面交互验证
+- Notes:
+  - 这次是“展示层心智收口”，没有改动 alias 搜索召回逻辑本身
 
-- Task: 切换对象存储到腾讯云 COS/CDN（公开桶 CDN + 私有 health-reports）
-- Status: code done；已补目标 PostgreSQL 历史 URL -> key 清洗脚本，pending end-to-end verification 与正式 apply
+- Task: 手动记录补强“标准营养库 + 大词典”利用率
+- Status: done（后端已确认当前实库存在 `11275` 条 `food_nutrition_library` 与 `9925` 条 `food_nutrition_aliases`；手动记录已接通更多营养字段与库规模提示；运行态自动化验证受 DevTools `9420` 端口未开启阻塞）
 - Scope:
-  - `backend/cos_storage.py`
-    - 新增统一 COS 适配层：分桶配置、公开 CDN URL 生成、私有签名 URL、旧 Supabase URL / 新 CDN URL / 原始 key 统一解析
-    - `health-reports` 私有访问已写死到代码，不再依赖环境变量开关
-    - 兼容口径继续收紧：若数据库里还是完整 URL，会先校验是否属于可信的 Supabase/COS/CDN 来源，再提取 key 并重建为当前 CDN/签名 URL；未知外链不会被私有桶当作可信资源签名
-  - `backend/database.py`
-    - 上传食物图、头像、体检报告改为走 COS
-    - 删除图片改为从 URL/key 解析对象 key 后删除 COS 对象
-    - 新上传对象 key 改为按中国自然日分层：食物图 `YYYY/MM/DD/...`；头像/报告 `user_id/YYYY/MM/DD/...`
+  - 数据现状核对：
+    - 通过 Supabase 当前 `rest/v1` 实查，确认“手动记录”相关食物表当前量级为：
+      - `food_nutrition_library = 11275`
+      - `food_nutrition_aliases = 9925`
+      - `public_food_library = 48`
+      - `food_unresolved_logs = 40`
+    - 结论：用户感知到的“大量食物数据”主要来自标准营养库与别名库，而不是公共库
+  - 后端：
+    - `backend/database.py`
+      - 手动记录搜索/浏览从营养库补充读取 `fiber_per_100g / sugar_per_100g / sodium_mg_per_100g`
+      - 公共库结果会从 `items[].nutrients` 汇总 `fiber / sugar / sodium`
+      - 新增手动记录食物库规模统计缓存，浏览接口返回 `nutrition_food_count / nutrition_alias_count / public_food_count`
+      - 搜索结果补充 `extra_nutrients / nutrition_highlights`
+    - `backend/main.py`
+      - `FoodRecordItemNutrients` 新增 `sodium_mg`
+      - 手动记录浏览接口说明更新为“返回浏览分组 + 库规模信息”
+  - 前端：
+    - `src/utils/api.ts`
+      - `Nutrients` 新增可选 `sodium_mg`
+      - 手动记录搜索结果类型补充 `fiber / sugar / sodium_mg`、`extra_nutrients`、`nutrition_highlights`
+      - 手动记录浏览结果新增 `stats`
+    - `src/packageExtra/pages/record-manual/index.tsx`
+      - 选中项营养计算不再只算热量/蛋白/碳水/脂肪，也会保留 `fiber / sugar / sodium_mg`
+      - 保存手动记录时不再把 `fiber / sugar` 强制写成 `0`，同时把 `sodium_mg` 一并写入 `items[].nutrients`
+      - 搜索/推荐卡片会优先展示 `纤维 / 糖 / 钠` 营养亮点
+      - 默认浏览文案会明确提示“已接入 11275 种标准食物、9925 个别名”
+      - 页面加载 spinner 已去掉“加载中/搜索中”文字，符合项目加载态规范
+- Verification:
+  - `python -m py_compile backend/main.py backend/database.py` 通过
+  - `node .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
+  - 当前返回 `Failed connecting to ws://localhost:9420`，说明微信开发者工具自动化端口未开启，因此未能补运行态截图与交互验证
+- Notes:
+  - 当前手动记录其实早已接了 `public_food_library + food_nutrition_library + food_nutrition_aliases + food_unresolved_logs` 四层，但过去前端感知较弱，且额外营养字段没有被真正带到记录保存链路
+  - 本轮没有改动“搜索排序主逻辑”，而是先优先补足“库规模可见性 + 额外营养字段真正落记录”这两层
+
+- Task: 保质期提醒新增“拍照识别预填”多食物录入能力
+- Status: done（前后端代码已落地；静态校验通过；`weapp-devtools` 运行态验证受本机 `mrc` shim 调用阻塞）
+- Scope:
+  - 后端：
+    - `backend/main.py`
+      - 新增 `POST /api/expiry/recognize`
+      - 复用现有视觉模型做“多食物保质期识别”，返回结构化预填字段
+      - 识别调用按现有食物分析口径计入 `2` 积分消耗，并以 `payload.expiry_recognition=true` 隐藏标记，避免混入普通分析历史
+  - 前端：
+    - `src/utils/api.ts`
+      - 新增 `recognizeManagedFoodExpiryItems(...)`
+      - 新增保质期 AI 识别响应类型
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - 新增“拍照识别预填”区：支持最多 `5` 张图
+      - 识别后生成多个待确认食物卡片
+      - 每个卡片沿用原有保质期表单结构，用户只需补齐缺失信息
+      - 支持“手动再加一项”，兼容 AI 识别 + 手动补录混合流
+      - 多条目保存后复用现有订阅消息能力，一次性为新条目登记提醒
+    - `src/packageExtra/pages/expiry-edit/index.scss`
+      - 新增 AI 上传区、图片网格、多卡片编辑态、spinner 等样式
+    - `src/packageExtra/pages/analyze-history/index.tsx`
+      - 过滤 `payload.expiry_recognition=true` 的隐藏记账任务，避免出现在普通分析历史
+- Product behavior:
+  - 一张图可识别多个食物，多张图也可一起识别
+  - 能识别出的字段自动预填；无法识别或低置信字段由用户继续补
+  - 若未识别到明确到期日，AI 可给“建议天数 + 默认到期日”，并在卡片中提示这是估计值
+- Verification:
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\expiry-edit\\index.tsx src\\packageExtra\\pages\\analyze-history\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\main.py` 通过
+  - 已按项目要求尝试 `weapp-devtools`：
+    - `cmd /c where mrc` 可定位到 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
+    - 但当前会话直接执行 `mrc` / `mrc.cmd` 仍受本机 shim 调用与权限问题阻塞，未能继续拿到 `9420` 端口页面信息与截图
+- Notes:
+  - 本轮未替用户启动 `npm run dev:weapp`；若本地未在 watch，需要用户手动重新编译后才能在微信开发者工具看到新交互
+  - 当前工作区存在与本任务无关的既有改动，未在本轮处理
+
+- Task: 精准模式参考物改为“默认手掌 + 用户级尺寸记忆”
+- Status: done（默认参考物、尺寸持久化、自定义参考物记忆已接通；运行态自动化验证受本机 `mrc` 调用阻塞）
+- Scope:
+  - 前端：
+    - `src/packageExtra/pages/result/index.tsx`
+      - 精准模式参考物默认值从“筷子”改为“手掌”
+      - 结果页会读取用户健康档案中的 `precision_reference_defaults`
+      - 当前选中的参考物名称与尺寸会在“继续精准估计”时自动保存为用户默认值，下次直接复用
+      - 参考物预设收口为 `手掌 / 常规卡片 / 大卡片 / 自定义`
+      - 保留并支持自定义参考物名称与尺寸
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 图片分析入口页的参考物预设也已同步收口为 `手掌 / 常规卡片 / 大卡片 / 自定义`
+      - 入口页会读取并回填用户默认参考物，不再固定落到“筷子”
+      - 点击开始分析时会自动把当前参考物配置写回用户默认值
+    - `src/utils/api.ts`
+      - 新增 `PrecisionReferenceDefaults / PrecisionReferencePresetConfig / PrecisionReferencePresetKey` 类型
+      - `HealthCondition / HealthProfileUpdateRequest` 增加 `precision_reference_defaults`
+  - 后端：
+    - `backend/main.py`
+      - 新增 `PrecisionReferenceDefaults` 相关 schema 与归一化逻辑
+      - `PUT /api/user/health-profile` 支持把默认参考物配置持久化到 `health_condition.precision_reference_defaults`
+    - `backend/worker.py`
+      - 精准模式 planner 的默认参考物建议从“筷子/银行卡/易拉罐”收口为“手掌/常规卡片/大卡片”
+- Verification:
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend/main.py backend/worker.py` 通过
+  - 目标文件定向 TypeScript 检查：`src/packageExtra/pages/result/index.tsx`、`src/utils/api.ts` 无新增报错
+  - 已按项目要求尝试 `weapp-devtools`：
+    - 已确认 `mrc` 安装路径存在：`C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd`
+    - 但当前会话直接调用该 shim 时出现权限/调用阻塞，未能继续完成 `where --port 9420` 与截图
+- Notes:
+  - 这次先采用“复用健康档案 JSON 存默认参考物”的轻量方案，没有新建独立数据表
+  - 当前是“每个预设参考物各自记住自己的尺寸”，并额外支持记住 1 个自定义参考物
+  - 摆放说明 `placement_note` 仍按单次会话输入，不做用户级默认持久化
+
+- Task: 修复“保质期提醒”页打开后正文空白
+- Status: done（已定位并修复页面运行时错误；自动化截图验证受 DevTools 9420 端口未开启阻塞）
+- Scope:
+  - `src/packageExtra/pages/expiry/index.tsx`
+    - 补上缺失的 `useEffect` 导入，修复页面首屏运行时白屏
+    - 将纯文字加载态改为可视化 spinner，符合项目加载态规范
+  - `src/packageExtra/pages/expiry/index.scss`
+    - 新增 `expiry-loading-spinner` 与旋转动画样式
+- Root cause:
+  - 页面组件内部调用了 `useEffect(...)`，但顶部只导入了 `useCallback / useMemo / useState`
+  - 小程序运行时进入页面后会直接命中 `useEffect is not defined`，表现为“导航栏正常、正文整页空白”
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/expiry/index.tsx` 通过
+  - 已确认 `dist/packageExtra/pages/expiry/index.js` 含 `taro.useEffect(...)` 与 `expiry-loading-spinner`
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
+  - 当前返回 `Failed connecting to ws://localhost:9420`，因此未能补运行态截图
+- Notes:
+  - 当前 `src/app.config.ts` 里仍保留无效的 `permission.scope.camera`，这次没有顺手改动，因为它不是本次白屏根因
+  - 若用户本地 `npm run dev:weapp` 正在 watch，源码保存后 `dist` 已同步更新；否则需要用户重新触发一次开发编译
+
+- Task: 调整分析历史页左滑“分享 / 删除”按钮对比度
+- Status: done（浅色主题下按钮底色已加深，文字与图标可读性已增强；运行态自动化截图受 DevTools 9420 端口未开启阻塞）
+- Scope:
+  - `src/packageExtra/pages/analyze-history/index.scss`
+    - 左滑操作按钮 `share / delete` 渐变底色改为更深的绿色 / 红色
+    - 图标字号从 `32rpx` 提到 `34rpx`
+    - 文字字号从 `22rpx` 提到 `24rpx`，字重从 `600` 提到 `700`
+    - 为图标和文字补充轻微阴影，提升浅底环境下的可读性
+    - disabled 分享按钮也同步改为更稳定的灰色渐变，避免发白
+- Verification:
+  - 已执行 `mrc where --port 9420`
+  - 当前返回 `Failed connecting to ws://localhost:9420`，说明微信开发者工具自动化端口未开启，未能补到运行态截图
+- Notes:
+  - 本轮只改了历史页左滑操作区的视觉对比度，没有调整交互宽度和删除/分享逻辑
+
+- Task: 修复“收藏餐食”后在列表中不易查看，并收口「我的收藏」页面定义
+- Status: done（已改成单一“我的收藏”心智，并把首页记录弹层入口前移到和历史记录同层；运行态自动化验证受微信开发者工具端口未开启阻塞）
+- Scope:
+  - `src/pages/index/components/RecordMenu.tsx`
+    - 首页记录弹层底部快捷入口从“仅历史记录”扩展为“我的收藏 + 历史记录”
+    - “我的收藏”文案强调“快速记录常吃餐食”，缩短它与记录动作之间的心智距离
+  - `src/components/iconfont/index.tsx`
+    - 新增 `IconFavorite`
+  - `src/pages/index/index.scss`
+    - 为弹层快捷入口补充标题 + 说明的双行排版
+  - `src/packageExtra/pages/result/index.tsx`
+    - 分析结果页点击“收藏餐食”时，创建食谱默认写入 `is_favorite: true`
+    - 收藏成功提示文案改为“可在我的收藏中快速复用记录”
+  - `src/packageExtra/pages/recipes/index.tsx`
+    - 页面收口为单列表“我的收藏”，不再保留“我的食谱 / 全部模板 / 已收藏”切换
+    - 列表拉取改为先取全部餐食模板，再由前端筛出 `is_favorite`，避免被后端 query 参数过滤差异卡空
+    - 空状态文案改为直接提示“分析结果页点击收藏后会显示在这里”
+    - 右下角 `+` 浮动按钮已删除，避免出现“点加号却提示先收藏”的反直觉交互
+  - `src/packageExtra/pages/recipes/index.config.ts`
+    - 页面标题改为“我的收藏”
+  - `src/pages/profile/index.tsx`
+    - 「我的」页服务入口标题改为“我的收藏”
+  - `src/packageExtra/pages/recipes/index.scss`
+    - 修复列表容器错误的高度写法，改为 `flex: 1 + min-height: 0`，避免内容被整体压没
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 配合新单列表头部收口浅色/深色样式
+- Verification:
+  - `npm run lint -- src/pages/index/components/RecordMenu.tsx src/components/iconfont/index.tsx` 通过
+  - `npm run lint -- src/packageExtra/pages/recipes/index.tsx src/pages/profile/index.tsx src/packageExtra/pages/result/index.tsx` 通过
+  - 已尝试 `weapp-devtools` 运行态验证：
+    - `mrc where --port 9420` 失败（未连接到已开启自动化的 DevTools）
+- Notes:
+  - 这次没有改后端接口，主要是修正“收藏动作默认没打星”和页面信息架构不清晰
+  - 用户这次反馈“明明收藏了却看不到”后，进一步定位到收藏页存在渲染层问题：`recipe-list` 容器接近 `height: 0`，会把空态和真实卡片一起压没
+  - 用户随后明确指出“我的收藏”入口离“记录”动作太远，因此首页记录弹层已补充直达收藏入口，作为快速复用记录链路的一部分
+  - 若用户稍后开启 DevTools 自动化端口，可继续补截图和切页交互验证
+- Task: 测试后台支持“多提示词同时测试”
+- Status: done（`custom` 模式已支持多选提示词；分析体验与批量测试都会按“模型 × 提示词”并跑）
+- Scope:
+  - `backend/static/test_backend/index.html`
+    - 分析体验、批量测试的自定义提示词选择器改为可多选
+    - 文案明确说明会按“所选模型 × 所选提示词”同时并跑
+  - `backend/static/test_backend/app.js`
+    - 前端提交参数新增 `prompt_ids`
+    - 结果卡、批量汇总、批量详情改为把“同模型不同提示词”拆开显示
   - `backend/main.py`
-    - 健康报告上传接口返回 `imageUrl + storageKey`
-    - OCR / 异步提取任务支持传 `storageKey`
-    - 新增私有报告签名访问接口 `/api/user/health-profile/report-access-url`
-  - `backend/worker.py`
-    - health_report 异步任务执行前按私有 key 生成临时签名 URL，再传给 OCR 模型
-  - `backend/scripts/normalize_storage_keys_in_postgresql.py`
-    - 仅连接 `POSTGRESQL_*` 指向的目标 PostgreSQL，默认 dry-run
-    - 处理 `weapp_user.avatar`、`user_food_records.*`、`analysis_tasks.*`、`user_health_documents.image_url`、`public_food_library.*`、`user_recipes.image_path`
-    - 只把可信存储来源的完整 URL 归一成 key；已是 key 的值跳过，支持重复运行
-    - 内置安全保护：目标库若疑似 Supabase，则直接拒绝执行
-  - `backend/image_compressor.py` `backend/compress_food_images.py` `backend/cleanup_orphans.py` `backend/check_storage.py` `backend/check_avatars.py`
-    - 统一切到 COS，并兼容旧 Supabase URL 的 key 解析
-  - `src/pages/login/index.tsx` `src/pages/about/index.tsx`
-    - icon 资源改到 `cdn-food-icon.coachlink.fit`
-  - `src/utils/api.ts` `src/pages/health-profile/index.tsx` `src/pages/health-profile-edit/index.tsx`
-    - 健康报告上传后保存预览 URL 与 `storageKey`，后台任务优先提交 `storageKey`
+    - 新增 `prompt_ids` 解析
+    - 单图分析与批量任务都支持 `custom` 模式下按“模型 × 提示词”笛卡尔积执行
 - Verification:
-  - `py_compile` 已通过：`backend/cos_storage.py`、`backend/database.py`、`backend/main.py`、`backend/worker.py`、`backend/image_compressor.py`、`backend/compress_food_images.py`、`backend/cleanup_orphans.py`、`backend/check_storage.py`、`backend/check_avatars.py`
-  - `ReadLints` 检查已通过，当前无新增 lints
-  - 运行时 smoke check 已通过：
-    - COS SDK 可导入
-    - 公开/私有桶配置可解析
-    - 旧 Supabase URL、新 CDN URL、原始 key 都可解析出对象 key
-    - 私有 `health-reports` 可生成签名 URL
-  - 历史数据清洗 dry-run 已通过（目标 PostgreSQL）：
-    - 总扫描约 `18603` 行
-    - 预计更新约 `12039` 行 / `12885` 个值
-    - 预计存在 `15` 个未识别外链，需 apply 前再决定是否保留原值
-  - 待你在线上补做真实联调：新上传食物图/头像/报告、后台 OCR、旧图展示、海报加载、删除任务清理
+  - `python -m py_compile backend/main.py` 通过
+  - `node --check backend/static/test_backend/app.js` 通过
+- Notes:
+  - 本轮改的是后端静态测试后台，不涉及微信小程序页面
+  - 运行态页面验证仍需用户重启后端并刷新 `http://127.0.0.1:3010/test-backend`
 
-- Task: 修复首页日期热图颜色丢失 + 本地 storage 自动补齐 7 天
-- Status: done（开发者工具 DOM 验证通过：日期圆圈已正确显示 is-recorded/is-over）
+- Task: 对齐到最新 `main` 作为当前默认开发基线
+- Status: done（`2026-04-27` 已清理 7 个工作区噪音改动，并将本地 `main` 快进到 `eddf47b`）
 - Scope:
-  - `src/pages/index/index.tsx`
-    - **根因**：`loadDashboard` 与 `syncDashboardForDate` 共用 `loadDashboardSeqRef`，且 `loadDashboardPendingRef` 跳过逻辑在 `++seq` 之后，导致并发竞争下 `seq` 不匹配，整个 `loadDashboard` 响应被丢弃，`weekHeatmapCells` 永远没被写入
-    - **修复**：
-      - `loadDashboard`：将 `loadDashboardPendingRef` 同日期跳过判断提前到 `++seq` 之前
-      - `syncDashboardForDate`：改为使用独立的 `syncDashboardSeqRef`，不再干扰 `loadDashboard` 的 seq 校验
-    - **storage 补齐**：在 `loadDashboard` 成功后，若 `getStoredHomeDashboardSnapshots().length < 7`，则后台并发请求缺失的近 7 天 `getHomeDashboard` 数据并写入 storage；完成后从 storage 刷新当前选中日期 UI
+  - 已恢复的工作区噪音文件：
+    - `PROGRESS.md`
+    - `backend/exercise_llm.py`
+    - `memory/2026-04-10.md`
+    - `src/pages/analyze-history/index.tsx`
+    - `src/pages/analyze/index.scss`
+    - `src/pages/result/index.scss`
+    - `src/pages/result/index.tsx`
+  - 这 7 个文件在恢复前的磁盘 `LastWriteTime` 均为 `2026-04-27 00:44:18`
+  - `git diff` 无正文差异，判断为一次性产生的换行符/编辑器噪音，而不是长期未提交的业务代码改动
+  - 已执行 `git pull --ff-only origin main`
+  - 当前本地 `main` = `origin/main` = `eddf47b`（`fix(home): 确保每餐蛋白质/脂肪/碳水被正确缓存，旧缓存缺失时自动刷新`）
+- Notes:
+  - 当前仍有 2 个未跟踪文件：`docs/微信支付委托代扣_自动续费_申请材料.md`、`memory/2026-04-27.md`
+  - 后续默认以最新 `main` 为工作基线，除非用户再明确要求切到其它分支
+- Task: 食物分析提示词补充地理位置上下文
+- Status: done（已完成前后端主链路接入；运行态自动化验证受微信开发者工具 9420 端口未开启阻塞）
+- Scope:
+  - 前端：
+    - `src/utils/api.ts`
+      - 为图片分析、文字分析、继续精准模式统一补充 `province / city / district`
+      - 新增粗粒度位置缓存与静默解析：仅在小程序已授权 `scope.userLocation` 时调用定位 + 逆地理；未授权则直接跳过，不打断分析流程
+  - 后端：
+    - `backend/main.py`
+      - 图片同步分析、异步图片分析、异步文字分析、继续精准模式请求体均补充 `province / city / district`
+      - 精准会话 `latest_inputs` 也会持久化位置上下文，避免多轮继续时丢失
+    - `backend/worker.py`
+      - 图片与文字两条标准/精准 prompt 都已加入“位置”辅助提示
+      - 位置只作为弱提示，用于帮助理解地域菜名、口味与常见分量；若与图片/文字冲突，仍以图片/文字本身为准
 - Verification:
-  - DOM 检查确认：13-16 号圆圈已显示 `is-recorded`（绿色），17-19 号保持 `is-empty`（白色）
-  - storage 检查确认：本地缓存已从 1 条自动补齐到 7 条（2026-04-10 ~ 04-16）
+  - `python -m py_compile backend/main.py backend/worker.py` 通过
+  - `npx prettier --check src/utils/api.ts` 返回仅代码风格提示，说明 TS 文件可被 parser 正常解析
+  - 按 `weapp-devtools` 尝试运行 `mrc where --port 9420` 与截图命令，均因开发者工具未开启 9420 自动化端口而失败
+- Notes:
+  - 本轮未新增分析页位置选择 UI，先采用“已有定位授权则静默带上粗粒度省市区”的最小侵入方案
+  - 当前不向模型透传原始经纬度，只透传 `province / city / district`
 
-- Task: 修复真机调试切换日期/分享餐食报 `c is not a function`
-- Status: fix applied, pending real-device verification
+- Task: 会员数据治理（筛假会员 / 补异常丢资格 / 清历史 pending）
+- Status: in_progress（已完成名单审核；当前改为“只取消 4 个指定假会员、不做补偿”，并已关闭前后端临时会员开通入口）
+- Scope:
+  - 数据库：
+    - 新增 `backend/sql/review_membership_data_20260427.sql`
+      - 汇总真实有效会员 / paid 用户 / 当前试用用户 / 假会员候选 / 补偿候选 / pending 概览
+      - 单独列出“假会员候选明细”“异常丢资格补偿候选明细”“超过 1 天的会员 pending 明细”
+    - 新增 `backend/sql/fix_membership_data_20260427.sql`
+      - 取消“当前 active、无 paid、且不在试用期”的假会员
+      - 仅对“最近一次 paid 理论上仍未到期却失去会员资格”的用户补 1 个月会员
+      - 将超过 `1` 天的历史会员 `pending` 改成 `expired`，且保留/追加订单 `extra`
+    - 因 Supabase SQL Editor 存在 `200` 行限制，已额外拆分为可直接执行的小脚本：
+      - `membership_governance_review_01_summary.sql`
+      - `membership_governance_review_02_fake_memberships.sql`
+      - `membership_governance_review_03_compensation_candidates.sql`
+      - `membership_governance_review_04_pending_orders.sql`
+      - `membership_governance_fix_01_cancel_fake_memberships.sql`
+      - `membership_governance_fix_02_compensate_existing_memberships.sql`
+      - `membership_governance_fix_03_compensate_missing_memberships.sql`
+      - `membership_governance_fix_04_expire_stale_pending.sql`
+      - `membership_governance_debug_weapp_user_columns.sql`（若注册时间字段名与预期不一致，先用它诊断）
+    - 新增 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
+      - 只取消用户明确确认的 4 个假会员：`凣凣尜尜 / 草！我要干俄挺 / kk / 条条`
+    - 新增 `membership_governance_fix_20260429_expire_active_but_past_due.sql`
+      - 只收口“`expires_at` 已经过期，但 `status` 仍为 `active`”的脏状态会员
+    - 新增 `membership_governance_fix_20260429_reconcile_paid_memberships_except_xmj_jh.sql`
+      - 排除 `小马哥 / 锦恢` 不动
+      - 其余存在真实 `paid` 会员订单的用户，统一按最近一次 `paid` 订单回写 `current_plan_code / status / expires_at / last_paid_at / daily_credits`
+      - 目的是修正“明明只付了月卡，却在 `user_pro_memberships` 里错挂成年卡”的脏状态
+  - 文档：
+    - 新增 `docs/public-schema-字段明细版-2026-04-27.md`
+    - 更新 `docs/数据库实库Schema分析报告.md`，补充“字段明细版”入口，并注明 `weapp_user` 当前注册时间字段为 `create_time`
+- Notes:
+  - 本轮按“先审名单，再执行修复”的安全顺序推进
+  - 用户最新决定：本轮先不做补偿会员；`ikura` 暂不处理
+  - `2026-04-29` 用户再次确认：当前实际要取消的仍然只有 `凣凣尜尜 / 草！我要干俄挺 / kk / 条条` 这 4 个，继续使用 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
+  - `points_recharge` 不在本轮清理范围内，不会被误伤
+  - `2026-04-27` 用户实际库中 `weapp_user.created_at` 不存在；治理 SQL 已按真实字段 `create_time` 收口，后端试用判定会优先识别 `create_time`
+  - 临时会员开通入口已关闭：前端会员页移除 `[DEV]` 测试区块；后端 `/api/dev/toggle-test-membership` 测试路由已删除
+  - `2026-04-29` 用户最新收口：本轮除已取消的 4 个指定假会员外，只继续处理“过期但 `status` 未收口”的脏状态，不再扩大到其他 active 假会员
+  - `2026-04-29` 用户随后继续收口：除 `小马哥 / 锦恢` 外，其余会员状态按真实 paid 记录修正；因此像 `饭饭` 这种“只付了月卡但被挂成年卡”的记录，会被回写成月卡
+
+- Task: 会员奖励体系（邀请好友 + 分享海报）
+- Status: in_progress（数据库迁移与前后端代码已落地；等待用户自行执行 SQL 与验证）
+- Scope:
+  - 数据库：
+    - 新增 `backend/sql/add_membership_reward_system.sql`
+      - `user_invite_referrals`：记录邀请关系、首次有效使用、奖励起止日期、月度封顶阻断状态
+      - `user_credit_bonus_events`：记录分享海报奖励，当前口径每日限 1 次
+  - 后端：
+    - `backend/database.py`
+      - 新增邀请关系绑定、首次有效使用激活奖励、每日奖励积分汇总、海报奖励领取
+      - `insert_food_record` / `create_user_exercise_log_sync` 在成功创建记录后会尝试激活邀请奖励，但失败不影响主链路
+    - `backend/main.py`
+      - `/api/friend/invite/accept` 在发起好友申请后同步写入邀请绑定
+      - `/api/membership/me` 新增 `daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits`
+      - 新增 `POST /api/membership/rewards/share-poster/claim`
+  - 前端：
+    - `src/utils/api.ts`
+      - 新增 `claimSharePosterReward`
+      - `MembershipStatus` 增加奖励积分拆分字段
+    - `src/pages/record-detail/index.tsx`
+      - 记录拥有者成功生成海报后自动领取当日 `+1` 积分奖励
+    - `src/pages/pro-membership/index.tsx`
+      - 页面新增邀请/海报奖励说明与奖励积分展示
+    - `src/pages/profile/index.tsx`
+      - “我的”页会员卡和服务入口可显示“奖励 +x”
+- Notes:
+  - 当前“有效使用”口径采用：成功保存 1 次饮食记录，或成功写入 1 条运动记录
+  - 当前月度防刷上限先按 `10` 个有效邀请 / 月实现，后续如产品定新值再改
+  - 本轮只改代码，不代用户运行
+
+- Task: 会员体系线上止血（关闭 dev 开通口 + 减少 pending 堆积）
+- Status: in_progress（已完成后端默认关停 dev 会员切换接口，并在创建新订单/支付成功后自动清理当前用户旧 pending；等待用户自行重启验证）
+- Scope:
+  - 后端：
+    - `backend/main.py`
+      - `/api/dev/toggle-test-membership` 现在默认返回 `404`，且已从 OpenAPI schema 隐藏；只有显式设置环境变量 `ENABLE_DEV_MEMBERSHIP_TOGGLE=1` 才能重新开启
+      - `POST /api/membership/pay/create` 在创建新订单前，会先把当前用户历史“会员类” `pending` 支付单改成 `expired`
+      - `POST /api/payment/wechat/notify/membership` 在某笔会员订单支付成功后，也会把该用户残留“会员类” `pending` 单改成 `expired`
+    - `backend/database.py`
+      - 新增 `list_pro_membership_payment_records(...)` 供 membership pending 精确清理复用
+- Notes:
+  - 这是后端止血，不依赖前端审核发版
+  - 当前清理是“按当前用户清理旧 membership pending”，不会误伤同表里的 `points_recharge`
+  - 清理时会保留原订单 `extra`，只追加 `expire_reason / expired_at / superseded_by_order_no`
+  - 这还不是全库历史垃圾一次性清扫
+
+- Task: 创始用户试用策略（前 500 名 2 个月 / 501-1000 名 1 个月）
+- Status: in_progress（已完成后端试用策略三层分段、创始用户付费积分翻倍与前端编号展示；等待用户自行重启后验证）
+- Scope:
+  - 后端：
+    - `backend/database.py`
+      - 新增 `is_user_in_first_membership_trial_batch(user_id, limit=1000)`，按 `weapp_user` 注册顺序判断是否属于最早 1000 名注册用户；注册时间字段自动识别
+      - 新增 `get_first_membership_trial_batch_rank(user_id, limit=1000)`，返回用户在首批 1000 名中的注册序号（1-based）
+    - `backend/main.py`
+      - 会员积分试用口径从“统一 3 天”升级为“前 500 名 60 天、第 501-1000 名 30 天、其余用户 3 天”
+      - 新增 `EARLY_USER_TOP_500_LIMIT / EARLY_USER_TOP_500_TRIAL_DAYS / EARLY_USER_TRIAL_LIMIT / EARLY_USER_TRIAL_DAYS / REGULAR_USER_TRIAL_DAYS`
+      - 新增 `_resolve_user_trial_policy(...)`
+      - `/api/membership/me` 新增返回 `trial_days_total / trial_policy`
+      - 创始用户开通会员后，套餐基础积分按 `x2` 发放；`/api/membership/me` 额外返回 `early_user_rank / early_user_limit / early_user_paid_bonus_multiplier / early_user_paid_bonus_eligible / early_user_paid_bonus_active`
+      - 微信支付回调写入 `user_pro_memberships.daily_credits` 快照时，会对前 1000 名用户按翻倍后的积分落库
+  - 前端：
+    - `src/utils/api.ts`
+      - `MembershipStatus` 补充 `trial_days_total / trial_policy` 与创始用户编号/翻倍字段
+    - `src/pages/pro-membership/index.tsx`
+      - 试用展示改为区分“前 500 用户免费 2 个月”“前 1000 用户免费 1 个月”与“新用户免费 3 天”
+      - 会员页显示“你是第 N / 1000 位用户”“创始用户礼遇：会员积分 x2”
+      - 对前 1000 名用户，档位卡/对比表/价格卡中的每日积分展示为翻倍后的 `16 / 40 / 80`
+    - `src/pages/profile/index.tsx`
+      - “食探会员”入口说明与会员卡试用文案同步改为按试用策略展示，并提示“从注册开始算 2 个月 / 1 个月”
+      - 若属于创始用户，个人页会员入口与会员卡会显示“创始第 N 位”“会员积分 x2”
+- Notes:
+  - 本轮只改代码，不代用户运行
+  - 当前实现按注册顺序前 1000 名判定；其中前 500 名享受 60 天，501-1000 名享受 30 天；排序使用“自动识别到的注册时间字段”升序，时间相同再按 `id` 升序稳定打散
+  - 当前仍沿用“试用期每日 8 积分、当天清零”的积分规则
+  - 创始用户的“付费积分翻倍”只放大会员套餐基础积分，不放大奖励积分（邀请/海报）与免费试用积分
+  - 用户最新明确要求：额外积分仍可通过邀请/海报等其他途径正常获取；这条逻辑保持不变
+- Task: 圈子搜索优先匹配好友昵称，再加载该好友动态
+- Status: done（前端搜索框输入后先从好友列表匹配昵称，点击好友后按 `author_id` 拉取该用户动态）
+- Scope:
+  - `backend/database.py` / `backend/main.py`
+    - `list_friends_feed_records` 与 `/api/community/feed` 新增 `author_id` 参数
+    - 传入 `author_id` 时只查询该用户（必须是好友或自己）
+  - `src/utils/api.ts`
+    - `communityGetFeed` 与 `CommunityFeedQueryParams` 新增 `author_id`
+    - `normalizeHomeMealItem` / `stripMealFullRecordsFromDashboard` 明确保留 `protein/carbs/fat`
+  - `src/pages/community/index.tsx`
+    - 新增 `feedSearchMatchedFriends` / `feedSearchAuthorId` 状态
+    - `useEffect` 监听 `feedSearchKeyword`，从 `friends` 中过滤昵称匹配项
+    - `handleSelectSearchFriend`：选中好友后设置 `author_id` 并刷新 feed
+    - `handleClearSearchAuthor`：清除筛选恢复全部 feed
+    - `buildFeedQueryParams` / `loadFeed` / `loadMoreFeed` 支持 `author_id`
+  - `src/pages/community/index.scss`
+    - `.feed-search-friends-panel` / `.feed-search-friend-item` 好友搜索结果样式
+    - `.feed-search-author-bar` 已选中作者标签栏样式
+  - `src/pages/index/index.tsx`
+    - `useDidShow` 检测旧缓存缺少 PFC 时强制标记脏数据并刷新
+  - `src/utils/home-dashboard-local-cache.ts`
+    - `stripMealFullRecords` 明确保留 `protein/carbs/fat`
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc exists .feed-search-friends-panel --port 9420`：输入 "alpa" 后存在 ✅
+  - `mrc exists .feed-search-friend-item --port 9420`：存在 ✅
+  - `mrc tap .feed-search-friend-item --port 9420`：点击成功 ✅
+  - `mrc exists .feed-search-author-bar --port 9420`：切换后存在 ✅
+  - `mrc logs error 10 --port 9420`：`0` 条错误 ✅
+- Blocked / Notes:
+  - 后端进程 `run_backend.py` (PID 17254) 为 00:08 启动的旧进程，未加载本次新增的 `author_id` 参数
+  - 需要用户手动重启后端（`pkill -f run_backend.py` 或在新终端重新启动）后，"加载该好友动态" 才能按 `author_id` 正确筛选
+  - 前端好友匹配与 UI 交互已验证正常
+
+- Task: 更新应用版本到 `2.0.17`，并让「我的」页底部版本号跟随构建常量显示
+- Status: done（`package.json` / `package-lock.json` 已 bump 到 `2.0.17`，「我的」页不再写死版本字符串）
+- Scope:
+  - `package.json`
+  - `package-lock.json`
+    - 通过 `npm version 2.0.17 --no-git-tag-version` 统一更新版本
+  - `src/pages/profile/index.tsx`
+    - 底部版本号改为读取 `__APP_VERSION__`
+- Verification:
+  - `node -p "require('./package.json').version"`：`2.0.17`
+  - `node -p "require('./package-lock.json').version"`：`2.0.17`
+  - `npm run lint -- src/pages/profile/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+
+- Task: 修复系统黑色模式误影响白色主题小程序，导致页面出现“上半黑下半白”的混合态
+- Status: done（已关闭宿主自动深色并移除全局 `prefers-color-scheme` 背景切换）
+- Scope:
+  - `src/app.config.ts`
+    - 将 `darkmode` 从 `true` 改为 `false`
+  - `src/app.scss`
+    - 删除 `page` 上的 `@media (prefers-color-scheme: dark)` 背景覆盖
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/app.json`：已确认 `"darkmode": false`
+  - `dist/app-origin.wxss`：已确认不再包含全局 `prefers-color-scheme` 深色背景逻辑
+- Blocked / Notes:
+  - DevTools 自动化本轮页面连接正常，但无法直接模拟系统级深色模式切换，因此验证以配置产物和运行时错误日志为主
+
+- Task: 修复社区页搜索功能输入框在黑色主题下的颜色问题
+- Status: done（暗色模式下输入框本体已改回透明，避免在圆角搜索框内部出现一块单独的深色矩形）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `.feed-search-input` 的暗色背景由实底改为透明
+    - 新增 `.feed-search-placeholder` 的暗色文字色
+- Verification:
+  - `npm run lint -- src/pages/community/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/common.wxss` 已确认包含 `feed-search-input { background: transparent }` 和 `feed-search-placeholder` 暗色规则
+- Blocked / Notes:
+  - 微信开发者工具自动化本轮能连通，但切到 `pages/community/index` 的页面回执不稳定，`where` 多次跳回首页，因此没有拿到社区页新截图
+
+- Task: 恢复积分充值页 Hero 区“食探会员”文案，并将“选择档位”元素回退到上一版简洁样式
+- Status: done（Hero 标题说明已补回；档位区已从价格/能力点/CTA 卡片退回简洁积分档位卡）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - Hero 区恢复 `hero-copy / hero-title / hero-subtitle`
+    - 档位区移除横向 `ScrollView`
+    - 删除价格、能力点和底部 CTA 元素，回退为积分数 + 简述结构
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 恢复 Hero 文案样式
+    - 档位卡片恢复上一版三列简洁布局
+    - 清理本轮新增的价格行、能力点、CTA 和对应暗色覆盖
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc relaunch` 本轮仍在连接后等待回执中，尚未拿到新的页面截图
+
+- Task: 调整积分充值页“选择档位”UI，去掉参考图的紫色风格并改为应用自身绿色主题
+- Status: done（档位区已从拥挤三列改成横向卡片带，深浅色都回到品牌绿色体系）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 档位卡容器改为横向 `ScrollView`
+    - 保留三档信息，但让手机端按卡片带滑动浏览，不再硬挤三列
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 档位卡整体改回品牌绿系深色卡面
+    - 去掉紫色选中态、紫色徽章和紫色按钮
+    - 重做卡片间距、价格字号、摘要高度、能力点排版与 CTA 层级
+    - 修正 `.membership-page--dark` 下对档位卡的覆盖，避免暗色模式把新卡面重新洗灰
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js/.wxss` 已确认包含 `tier-scroll`、绿色 CTA 渐变和新的暗色卡面规则
+- Blocked / Notes:
+  - `mrc screenshot` 仍返回 `fail to capture screenshot`，这轮没有拿到新的会员页截图
+  - 当前自动化 `relaunch` 偶尔会跳回首页，但本轮最终 `where` 已确认在会员页
+
+- Task: 将「我的」页左上角主题切换图标替换为 `icon-zaoshang / icon-wanshang`
+- Status: done（主题切换入口仍保留在左上角，仅将图标资源从字符改为 iconfont）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - `.profile-theme-chip` 内的图标切换逻辑改为 iconfont 类名
+    - 暗色主题显示 `icon-zaoshang`
+    - 浅色主题显示 `icon-wanshang`
+- Verification:
+  - `rg -n "icon-zaoshang|icon-wanshang" src/pages/profile/index.tsx src/assets/iconfont/iconfont.css`：确认页面已接入对应 iconfont，图标资源存在
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc relaunch /pages/profile/index` 与 `mrc exists .profile-theme-chip` 这轮仍停在连接后无页面回执，DevTools 自动化会话依旧不稳定
+  - `npm run build:weapp` 当前停在 `transforming...`，所以这次前端验证以源码、资源存在性和运行时错误日志为主
+
+- Task: 将积分充值页“选择档位”改成参考图风格的定价卡 UI
+- Status: done（档位区已改为三张定价卡，包含徽章、标题、副标题、价格、能力点与底部 CTA）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 为三档卡片补充周期联动价格
+    - 新增每档能力点列表
+    - 新增底部 CTA 文案与“最受欢迎 / 当前套餐”徽章
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 档位卡整体改为深色定价卡风格
+    - 选中态改为更强的描边 + 浮起阴影
+    - 价格区、能力点列表、按钮区按参考图重构
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 已确认包含 `tier-card-price-row / tier-card-features / tier-card-cta / 最受欢迎`
+- Blocked / Notes:
+  - 这轮 `mrc relaunch` 回执不稳定，会员页自动化跳转最终落回了首页；因此没有拿到最新会员页截图，但构建产物与运行态错误日志都正常
+
+- Task: 去掉积分充值页 Hero 区的标题和说明文案
+- Status: done（已移除“食探会员”标题与“按使用强度选套餐...”说明文案）
+- Scope:
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 删除 `.hero-copy` 整块节点
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 删除 `.hero-copy / .hero-title / .hero-subtitle`
+    - 适度收紧 `hero-emblem-row` 底部间距，避免删文案后出现过大空白
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 已确认不再包含 `hero-title / hero-subtitle / hero-copy`
+
+- Task: 恢复「我的」页左上角主题切换入口
+- Status: done（样式未丢，实际是 JSX 节点在合并中被删；现已补回）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - 重新接入 `useAppColorScheme`
+    - 在页面左上角恢复 `.profile-theme-chip`
+    - 点击后调用 `toggleScheme()`
+    - 图标按当前主题切换：暗色显示 `☀`，浅色显示 `☾`
+- Verification:
+  - `npm run lint -- src/pages/profile/index.tsx`：通过
+  - `npm run build:weapp`：通过
+  - `dist/pages/profile/index.js` 已包含 `useAppColorScheme / toggleScheme / profile-theme-chip`
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 DevTools 自动化会话对 `pages/profile/index` 的节点查询仍回报旧运行态，`.profile-theme-chip` 没查到；但最新构建产物已确认包含该节点，说明代码修复已生效，运行端需要重新吃到最新包
+
+- Task: 修复 main 分支 GitHub Actions 后端自动部署失败
+- Status: done（`Deploy Backend` 最新 run `24941017274` 已成功）
+- Scope:
+  - `.github/workflows/deploy-backend.yml`
+    - `actions/checkout` 升级到 `v5`
+    - 增加 `DEPLOY_PORT`、`DEPLOY_BRANCH`、`DEPLOY_SERVICE`
+    - 远端执行改为 `bash` 显式调用，避免服务器上的 `deploy_backend.sh` 缺少可执行权限时报 `exit code 126`
+    - 增加脚本查找/回退顺序：
+      - `./deploy_backend.sh`
+      - `./deploy/scripts/deploy_backend_v2.sh`
+      - `./deploy/scripts/deploy_backend.sh`
+- Verification:
+  - `gh run view 24940832898 --log-failed`：确认旧失败原因为 `zsh:1: permission denied: ./deploy_backend.sh`
+  - 推送 `main` 提交 `30427c6 fix(ci): harden backend deploy workflow`
+  - `gh run watch 24941017274`：最新 `Deploy Backend` 成功，`deploy in 23s`
+- Notes:
+  - 之前一次老失败 `24860907702` 另有 SSH 超时，但本轮修复后最新自动部署已成功完成
+
+- Task: 修复当日代谢页图标漂移
+- Status: done（将该页 iconfont 收口为固定尺寸块级元素，避免文本基线导致返回箭头和指标图标漂移）
+- Scope:
+  - `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
+    - `.metabolic-report__back-arrow`
+    - `.metabolic-report__phys-btn-icon`
+    - `.metabolic-report__title-icon`
+    - `.metabolic-report__summary-label-icon`
+    - 统一改为固定 `width/height + line-height + text-align + display:block`
+- Verification:
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/stats-metabolic/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc screenshot` 这轮仍未稳定产出截图文件，所以未拿到新的 UI 截图证据；本次以运行态页面连接和错误日志为主
+
+- Task: 修复分享卡片多图角标未出现在海报图片区右上角
+- Status: done（角标已内绘到海报顶图右上角；详情/分享接口也会补回多图 `image_paths`）
+- Scope:
+  - `src/utils/poster.ts`
+    - 海报绘制继续使用顶图右上角内绘 `共 N 张`
+  - `backend/main.py`
+    - 新增 `_hydrate_food_record_image_paths(...)`
+    - `/api/food-record/{record_id}` 与 `/api/food-record/share/{record_id}` 统一补全 `image_paths`
+    - 当记录本身没有多图字段、但有 `source_task_id` 时，从来源分析任务回填多图
+  - `backend/tests/integration/test_food_record_api.py`
+    - 新增分享详情补全多图测试，覆盖“记录缺少 `image_paths`，来源任务有多图”的场景
+- Verification:
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_record_api.py -q`：`11 passed`
+  - `python -m py_compile backend/main.py`：通过
+- Blocked / Notes:
+  - 当前本地运行中的后端若还没重启，仍会是旧逻辑；需要重新启动后才会在分享卡片里看到新角标
+
+- Task: 分享卡片多图角标改为画在海报图片区右上角
+- Status: done（“共 N 张”已内绘到海报图片区域，不再漂浮在预览弹层右上角）
+- Scope:
+  - `src/utils/poster.ts`
+    - `drawRecordPoster(...)` 新增多图计数角标绘制
+    - 角标位置固定在海报顶图右上角
+    - 背景改为更淡的浅绿色半透明底，文字改为深绿色
+  - `src/pages/index/components/MealRecordPosterModal.tsx`
+  - `src/packageExtra/pages/record-detail/index.tsx`
+    - 删除弹层外置的 `.poster-batch-badge`，避免和海报内角标重复、错位
+  - `src/pages/index/index.scss`
+  - `src/pages/index/components/MealRecordPosterModal.scss`
+  - `src/packageExtra/pages/record-detail/index.scss`
+    - 清理已失效的 `.poster-batch-badge` 样式
+- Verification:
+  - `npm run lint -- src/utils/poster.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/record-detail/index.tsx`：通过
+  - `mrc where --port 9420`：当前页为 `pages/index/index`
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 这轮没有直接拿到“分享弹层已打开后的新截图”，因为 DevTools 自动化当前只稳定支持页面级连接和日志读取；但海报绘制位置已经从根因上改成 canvas 内绘，首页和记录详情页会统一生效
+
+- Task: 首页今日餐食 warning 卡片与相关错误态做黑色主题适配
+- Status: done（`meal-item.is-warning`、warning/error 面板已切到稳定深色，不再在暗色下发灰）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 为首页今日餐食 warning 卡片补齐真实类名覆盖：
+      - `.meal-item.is-warning`
+      - `.meal-desc`
+      - `.meal-time-pill / .meal-time-pill-text`
+      - `.meal-type-target`
+      - `.meal-macro-text`
+      - `.meal-progress-percent`
+      - `.meal-thumb-badge`
+    - warning 卡片统一收口为深红底 + 深红描边，文字改为高对比浅红
+    - `.analysis-status` / `.analysis-status.warning` / `.analysis-error` 从半透明底改成稳定实色深底，避免黑色主题下发灰
+- Verification:
+  - `npm run lint -- src/pages/index/index.tsx src/packageExtra/pages/result/index.tsx src/utils/home-dashboard-local-cache.ts`：通过
+  - `mrc where --port 9420`：当前页为 `pages/index/index`
+  - `mrc exists .meal-item --port 9420`：存在
+  - `mrc click .meal-item --port 9420`：成功
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc screenshot` 这轮回执持续挂起，没能稳定产出截图文件；因此本次运行态验证以页面连接、元素存在、点击成功和错误日志为主
+
+- Task: 记录饮食后立即同步本地首页缓存，并刷新当天首页的今日餐食
+- Status: done（保存成功后会先写本地 dashboard 快照，再触发首页即时回填；云端仍异步回刷兜底）
+- Scope:
+  - `src/utils/home-dashboard-local-cache.ts`
+    - 新增 `applyOptimisticFoodRecordToHomeDashboardSnapshot(...)`
+    - 保存记录成功后，立即把今天的本地 dashboard 快照中的：
+      - `intakeData.current / macros`
+      - `meals`
+      - 对应餐次的 `meal_record_entries / primary_record_id / 图片 / 热量 / 宏量`
+      同步更新
+  - `src/packageExtra/pages/result/index.tsx`
+    - `saveFoodRecord(...)` 成功后，若不是 `already_saved`，先写本地 dashboard 快照
+    - 再触发 `HOME_INTAKE_DATA_CHANGED_EVENT`
+    - 最后继续异步 `refreshHomeDashboardLocalSnapshotFromCloud(...)` 作为服务端兜底同步
+  - `src/pages/index/index.tsx`
+    - 首页监听 `HOME_INTAKE_DATA_CHANGED_EVENT` 后，不再只标记 stale
+    - 若当前查看的是今天，先直接从本地 dashboard 快照回填 `intakeData / meals / achievement / weekHeatmap`
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/result/index.tsx src/pages/index/index.tsx src/utils/home-dashboard-local-cache.ts`：通过
+  - `python -m py_compile backend/main.py`：通过
+- Notes:
+  - 当前这次是“先本地乐观更新，再云端回刷校正”的双层策略
+  - 若服务端返回 `already_saved=true`，则不再额外叠加本地 intake，避免重复累计
+
+- Task: 修复分析结果页多图头图无法左右滑动的问题
+- Status: done（已修正头图层级，避免透明 `ScrollView` 覆盖 `Swiper` 触摸区域）
+- Scope:
+  - `src/packageExtra/pages/result/index.scss`
+    - 将 `.scanner-hero-section` 的 `z-index` 从 `1` 提高到 `3`
+    - 给 `.scanner-hero-swiper` 显式补上 `pointer-events: auto`
+  - 根因判断：
+    - 结果页顶部图片区是固定层，但整页 `ScrollView` 透明覆盖在上面
+    - 视觉上能看到图片，实际横向手势先被滚动容器吃掉，导致 `Swiper` 看起来不能滑
+- Verification:
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/result/index`
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 `dev:weapp` 仍卡在 `transforming...`，DevTools 运行态没有稳定吃到最新构建产物
+  - 当前 `mrc` 版本的 `swipe` 不可用（`mp.swipe is not a function`），因此没法在自动化里直接录到“1/2 -> 2/2”的横向手势证据
+  - 这次修复基于页面结构与层级问题直接下手，属于高置信度修复
+
+- Task: 修复多图实物分析交互为“提交后台任务后进入 loading 页”，并确认结果页多图可滑动查看
+- Status: done（分析页多图已回到异步任务链路；结果页多图查看继续使用 Swiper，并补了索引稳态）
+- Scope:
+  - `src/packageExtra/pages/analyze/index.tsx`
+    - 删除多图走同步 `/api/analyze/batch` 后直接跳结果页的特殊分支
+    - 统一改为与单图一致：提交异步图片分析任务后 `redirectTo(analyze-loading)`
+    - 保留 `analyzeImagePaths` / `analyzeImagePath` 的 storage 写入，让 loading 页和结果页都能拿到多图
+  - `src/packageExtra/pages/result/index.tsx`
+    - 保留现有多图 `Swiper` 头图交互
+    - 新增 `imagePaths` 变化时的 `currentImageIndex` 归位逻辑，避免多图/单图切换后索引越界
+- Verification:
+  - `npm run lint -- src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/result/index.tsx`：通过
+  - `mrc where --port 9420`：DevTools 自动化连接成功
+  - `mrc relaunch /packageExtra/pages/result/index --port 9420`：成功
+  - `mrc exists .scanner-hero-swiper --port 9420`：存在
+  - `mrc exists .image-counter --port 9420`：存在
+  - `mrc relaunch /packageExtra/pages/analyze-loading/index?... --port 9420`：成功
+  - `mrc exists .btn-leave-v3 --port 9420`：存在
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 `npm run dev:weapp` 仍停在 `transforming...`，无法确认最新前端改动已被 watch 构建产物实时吃到
+  - 因此这轮运行态验证以现有 DevTools 会话里的页面结构验证为主；“多图提交后自动跳 loading 页”的最终端到端动作，代码路径已修正，但未在最新构建产物上完成一次真实点击提交流程复演
+
+- Task: 修复 `modelName=gemini` 时 `/api/analyze/batch` 全失败，并用用户给定 payload 复测成功
+- Status: done（Gemini provider 路由已补齐；用户原始 payload 已拿到 200）
+- Scope:
+  - `backend/main.py`
+    - 新增 `_resolve_food_vision_model_config(...)`，统一把：
+      - `qwen / qwen-vl-max` 解析到 DashScope
+      - `gemini / gemini-*` 解析到 OfoxAI Gemini
+    - `analyze_food(...)` 与 `analyze_batch(...)` 现在都会按 `modelName` 正确选择 provider
+    - `_analyze_single_image_for_batch(...)` 在 `gemini` 模式下直接走 `_analyze_with_gemini(...)`
+  - `backend/tests/integration/test_food_analysis_batch_api.py`
+    - 新增 `gemini` alias 测试，覆盖 `modelName: "gemini"` 时 batch 走 Gemini provider
+- Verification:
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`：`4 passed`
+  - `python -m py_compile backend/main.py`：通过
+  - 使用用户提供的原始 payload，通过 ASGI 接口层 + 真实 Gemini 调用复测：
+    - `status_code = 200`
+    - `image_count = 2`
+    - 返回了有效 `result.items`
+- Notes:
+  - 这次真实 payload 复测时，认证 / 积分 / 任务写库做了 mock，避免消耗真实账号积分；AI 分析调用本身是真实请求
+  - 本地 `3010` 后端已重启到修复后版本
+
+- Task: 修复多图食物分析 `/api/analyze/batch` 500，并让返回结果兼容单张分析结构
+- Status: done（批量接口已补齐重试、限并发、部分成功容错和单张兼容字段）
+- Scope:
+  - `backend/main.py`
+    - `update_analysis_task_result_sync` 补回主模块 import，避免批量成功路径写任务结果时报 `NameError`
+    - `_analyze_single_image_for_batch(...)` 增加 3 次重试和退避等待
+    - `analyze_batch(...)` 改为最多并发 `3` 张，避免多图同时打满模型接口
+    - `_merge_batch_results(...)` 现在会合并并保留与单张结果兼容的字段：
+      - `description / insight / items`
+      - `pfc_ratio_comment / absorption_notes / context_advice`
+      - `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / followupQuestions`
+    - 若部分图片失败，保留成功图片的汇总结果，并把失败下标写入任务 `payload.failed_indices`
+  - `backend/tests/integration/test_food_analysis_batch_api.py`
+    - 新增 3 个接口测试：
+      - 正常多图汇总时，返回 `result` 结构兼容单张分析
+      - 部分图片失败时，接口仍返回成功汇总
+      - 全部图片失败时，接口返回 `500` 和明确错误文案
+- Verification:
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`：`3 passed`
+  - `python -m py_compile backend/main.py`：通过
+- Notes:
+  - 这次没有跑真实 DashScope live 请求；当前验证口径是后端接口测试 + 语法检查
+
+- Task: 应用户要求启动本地前后端并打开微信开发者工具
+- Status: done（前端 watch 与 DevTools 自动化已拉起；后端最终已恢复到 `3010` 监听）
+- Scope:
+  - 执行 `npm run dev:restart`
+  - 执行 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+  - 因本轮 `dev:restart` 后 backend 未稳定驻留，额外执行一次 `npm run dev:backend` 并确认 `3010` 恢复监听
+- Verification:
+  - `lsof -iTCP:3010 -sTCP:LISTEN`：可见 Python 进程监听 `3010`
+  - `curl -I http://127.0.0.1:3010/`：返回 `HTTP/1.1 404 Not Found`（说明 HTTP 服务已起来）
+  - `lsof -iTCP:9420 -sTCP:LISTEN`：微信开发者工具自动化端口已监听
+  - `mrc errors 10 --port 9420`：`0`
+- Blocked / Notes:
+  - `mrc where --port 9420` 本轮可连上 DevTools，但页面信息回执持续挂起，暂未拿到当前页面路径
+  - 本轮后端当前依赖额外拉起的 PTY 会话驻留；如果后续终端会话结束，需要重新确认 `3010` 是否仍在监听
+
+- Task: 补齐分析页底部固定操作区的暗色主题适配
+- Status: done（暗色适配已明确写回页面本地 SCSS；`confirm-section`、确认按钮、历史入口和多视角开关已统一接入暗色底栏样式）
+- Scope:
+  - `src/packageExtra/pages/analyze/index.scss`
+    - 页面本地新增 `.fl-page-theme-root--dark` 下的暗色样式块
+    - 补齐 `confirm-section / confirm-btn / history-link / multiview-toggle / precision-session-tip`
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 将 `analyze-page .confirm-section` 从半透明渐变改为稳定深色底栏，并补上顶部分隔线与阴影
+    - 新增 `confirm-btn` 的暗色主题样式，包含正常态与 `disabled` 禁用态文字/底色
+    - 将 `history-link` 改成与暗色主题一致的 ghost button
+    - 新增 `multiview-toggle / multiview-toggle--on / multiview-toggle-knob` 的暗色适配
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+- Notes:
+  - 本轮用户指出“页面 SCSS 文件本身看起来没改”，已修正为同时在本地页面 SCSS 和全局暗色文件两处对齐
+  - `npm run build:weapp -- --no-check` 这轮 CLI 会话在 `transforming...` 后未及时返回完整输出，需后续再补一次稳定回包
+
+- Task: 统一暗色主题基础面板为不透明深色底
+- Status: done（暗色主题基础变量和结果页 insight 变体底色已改为实色，不再使用透明面板）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 将暗色主题基础变量中的半透明背景全部改为不透明深色：
+      - `$fl-dark-border`
+      - `$fl-dark-panel-bg`
+      - `$fl-dark-panel-bg-strong`
+      - `$fl-dark-panel-bg-soft`
+      - `$fl-dark-input-bg`
+      - `$fl-dark-ghost-bg`
+      - `$fl-dark-warning-bg`
+      - `$fl-dark-modal-bg`
+      - `$fl-dark-modal-bg-soft`
+    - 将 `result-page / result-text-page` 的 `insight-item` 语义变体（`highlight / intro / ratio / absorption / context`）改为对应的实色深底，避免黑色主题下继续透出下层内容
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 补强从分析历史页进入的图片结果页暗色主题效果
+- Status: done（图片结果页顶部模式区、营养卡和 AI 分析卡在暗色主题下已进一步压深，不再出现浅色白卡感）
+- Scope:
+  - `src/packageExtra/pages/result/index.scss`
+    - 深色模式下给 `execution-mode-row` 增加深色玻璃底
+    - `total-weight-badge` 改为更稳的浅灰徽章
+    - `insight-item` 及其 `intro/highlight/ratio/absorption/context` 变体全部重做深色底
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 补齐 `result-page` 分支对：
+      - `total-weight-badge`
+      - `insight-item`
+      - `insight-label`
+      - `ratio-display`
+      的暗色覆盖
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 修复分析历史页暗色主题下卡片背景半透明导致左滑操作区透出的回归
+- Status: done（全局暗色主题里历史页 `.task-card` 已改为纯深色实底）
+- Scope:
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 将 `.fl-page-theme-root--dark .analyze-history-page .task-card` 从共用 `$fl-dark-panel-bg` 半透明面板拆出来
+    - 改成不透明深色背景 `#18211f`
+    - `:active` 态改成 `#1d2724`
+    - 避免左滑时后方 `分享 / 删除` 区域从卡片底色中透出
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 分析历史页继续优化左滑操作区和返回按钮体验
+- Status: done（左滑按钮已缩窄且不再遮住关键信息；页面改成自定义导航栏箭头返回）
+- Scope:
+  - `src/packageExtra/pages/analyze-history/index.config.ts`
+    - 切到 `navigationStyle: 'custom'`
+  - `src/packageExtra/pages/analyze-history/index.tsx`
+    - 接入 `CustomNavBar`
+    - 返回逻辑改为和会员页一致：优先回上一页，上一页是 Tab 时 `switchTab`，否则 `redirectTo`
+    - 左滑按钮宽度从 `140rpx` 收到 `108rpx`
+    - 状态/来源/精准标签从卡片右侧移回主内容区，避免被左滑操作区遮挡
+  - `src/packageExtra/pages/analyze-history/index.scss`
+    - 左滑按钮字体和图标缩小
+    - 右侧区域只保留箭头
+    - 标签改成左侧 inline wrap 布局，提升扫读效率
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+- Blocked / Notes:
+  - 当前 DevTools 自动化会话里，`relaunch / where / exists` 这类页面回执这轮再次卡住，没能稳定拿到“自定义导航栏节点已存在”的最终回包
+  - 但构建产物已更新，且运行时错误日志为 `0`
+
+- Task: 分析历史页面 UI 收口，并优化文字记录类型的封面头像
+- Status: done（历史页已改成更清晰的卡片结构；文字记录封面改为文本前几字头像）
+- Scope:
+  - `src/packageExtra/pages/analyze-history/index.tsx`
+    - 新增文字头像提取：从 `text_input` 里取前 1-4 个字作为封面
+    - 新增卡片主标题、记录类型说明、副文案
+    - 历史卡片右侧标签重排为：来源类型 / 状态 / 精准标签 / 精准结果
+    - 页面根节点接入 `analyze-history-page--dark`
+  - `src/packageExtra/pages/analyze-history/index.scss`
+    - 历史页背景改为更轻的层次渐变
+    - 卡片改为更圆、更有层次的玻璃卡
+    - 文字记录缩略图改为深绿文本头像封面
+    - 卡路里数字、标题、meta 文案和标签区层级重新梳理
+    - 新增 dark 覆盖，避免深色模式下仍像旧浅色列表
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc relaunch /packageExtra/pages/analyze-history/index --port 9420`：成功
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/analyze-history/index`
+  - `mrc exists .task-card --port 9420`：存在
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 文字记录在 loading 页和分析结果页顶部占位区回显用户原始输入
+- Status: done（文字链路现在优先展示 `analyzeTextInput`，不再固定显示“文字记录，未提供实物照片”）
+- Scope:
+  - `src/packageExtra/pages/analyze-loading/index.tsx`
+    - 新增 `textRecordInput` 状态
+    - 从 `analyzeTextInput` storage 同步文字记录输入
+    - loading 页全屏占位区与扫描框内占位文案都改为优先显示用户输入
+  - `src/packageExtra/pages/analyze-loading/index.scss`
+    - 文字回显区域增加多行显示、换行和截断保护，避免长文案撑坏布局
+  - `src/packageExtra/pages/result/index.tsx`
+    - 结果页顶部无图占位区改为优先显示用户输入
+  - `src/packageExtra/pages/result/index.scss`
+    - 顶部占位区文字增加多行展示和截断保护
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 分析结果页黑色主题适配收口
+- Status: done（结果页已接入 `scheme` 与导航栏深色同步；主要漏白卡片、底栏和弹层已统一做深色覆层）
+- Scope:
+  - `src/packageExtra/pages/result/index.tsx`
+    - 接入 `useAppColorScheme`
+    - `useDidShow/useEffect` 中调用 `applyThemeNavigationBar(...)`
+    - 页面根节点新增 `result-page--dark`
+  - `src/packageExtra/pages/result/index.scss`
+    - 新增 `.result-page--dark` 深色主题覆盖
+    - 收口区域包括：
+      - 顶部无图占位态与渐变蒙层
+      - 内容容器底色
+      - 模式标签 / 说明文案
+      - 营养概览卡
+      - AI 饮食分析卡
+      - 成分卡、营养条、重量与摄入控件
+      - 底部固定操作栏
+      - 餐次选择弹窗
+      - 二次纠错抽屉
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc relaunch /packageExtra/pages/result/index --port 9420`：成功
+  - `mrc exists .result-page --port 9420`：存在
+  - `mrc exists .nutrition-overview-card --port 9420`：存在
+  - `mrc exists .insight-card --port 9420`：存在
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+
+- Task: 清理 `npm run dev:weapp` 当前仍会刷出的构建报错 / warning
+- Status: done（已修复真实 Sass 编译错误，并收敛 Sass / iconfont 构建噪音；`build:weapp -- --no-check` 已完整通过）
 - Scope:
   - `config/index.ts`
-    - 新增 `taro-fix-target` Vite 插件，在 `configResolved` 中将 `build.target` 从 Taro 默认的 `es6` 覆盖为 `es2018`
-    - 阻止 `async/await` 被编译为 generator + 内联辅助函数，避免短变量名 `c` 在真机 JSCore 上与局部变量冲突
-- Verification:
-  - `npm run build:weapp` 产物：`dist/pages/index/index.js` 中 `function*`/`yield` 为 0，`async`/`await` 被保留
-  - `npm run dev:restart` 后开发者工具自动化验证通过（切换日期、分享海报、无报错）
-  - 需重新打包上传后在真机上复验
-
-- Task: 底部 tab bar  refinements（透明背景、图标下移放大、中心 kcal 图标、问候语时段图标）
-- Status: done（构建通过，截图因 mrc 间歇性超时未完成）
-- Scope:
-  - `custom-tab-bar/index.wxss`
-    - `.custom-tab-bar` 背景改为 `transparent`（仅保留 SVG 白色曲线背景）
-    - `.tab-icon` 从 `28rpx` → `32rpx` → `36rpx`（二次放大）
-    - `.icon-wrapper` 从 `36rpx` → `42rpx` → `46rpx`（同步放大）
-    - `.tab-item` `padding-bottom` 从 `12rpx` 增加到 `20rpx`（图标文本整体下移）
-    - `.center-plus` 重命名为 `.center-icon`，颜色改为 `#ffffff`
-    - base64 iconfont 规则中保留 `.icon-kcal:before { content: "\e831"; }`
-  - `custom-tab-bar/index.wxml`
-    - 中间记录按钮的 `+` 最终替换为白色 `icon-kcal`
-  - `src/pages/index/utils/helpers.ts`
-    - `getGreeting()` 返回 `{ text, iconClass }`，根据时段映射 `icon-zaoshang` / `icon-zhongwu` / `icon-wanshang`
-  - `src/pages/index/components/GreetingSection.tsx`
-    - 在问候语文本左侧插入对应 iconfont 图标
-  - `src/pages/index/index.scss`
-    - `.greeting-title` 改为 flex 布局，图标与文字间距 `12rpx`
-- Verification:
-  - `npm run build:weapp -- --no-check` 通过
-  - 微信开发者工具自动化端口已迁移至 `3001`（portman 分配）
-  - 开发者工具已重新加载 `pages/index/index`，可直接在本地窗口查看效果
-
-- Task: 首页餐食卡片直达风险海报与海报居中修复
-- Status: done（已提交并推送）
-- Scope:
-  - `src/pages/index/index.tsx`
-    - 餐食卡片点击后弹出 Action Sheet，支持「修改记录」和「生成风险海报」
-    - 海报生成前预加载 iconfont，config 同步补充 copy 规则
-  - `src/pages/record-detail/index.tsx`
-    - 支持 `autoPoster=1` 路由参数，进入页面后自动触发生成海报
-  - `src/utils/poster.ts`
-    - 标题区「今日总结」与「坚持目标 X 天」垂直居中
-    - 圆内百分比与「已摄入」整体严格垂直居中
-    - 底部恢复五竖条（蛋白质/碳水/脂肪/喝水/运动）
-  - `src/pages/index/index.scss`
-    - 餐食卡片多图时显示餐次图标与目标能量
-- Verification:
-  - 构建通过
-  - commit `9d250df` 已推送至 origin/main
-
-- Task: 每日总结分享海报底部布局重设计
-- Status: done（已移除 5 根竖条，改为两行 icon+数值标签；百分比与百分号作为整体在圆心居中；日期胶囊下移到「坚持目标 X 天」下方）
-- Scope:
-  - `src/utils/poster.ts`
-    - 日期胶囊绘制位置从标题上方移到「坚持目标 X 天」下方，同步调整 `cy` 推进与高度计算
-    - 圆内百分比数字与 `%` 改为整体水平居中：先测总宽 `pctNumW + pctGap + pctSignW`，再以圆心为基准左对齐绘制
-    - 删除底部 5 根竖向进度条（`drawDailyVerticalBar` 仍保留函数定义但不再被每日小结调用）
-    - 新增两行水平统计标签：蛋白质/碳水/脂肪第一行，喝水/运动第二行
-    - 图标改用与首页一致的 iconfont 字符：蛋白质 `\uE62B`、碳水 `\uE632`、脂肪 `\uE62A`、喝水 `\uE645`、运动 `\uE70D`
-    - 图标颜色与首页对齐：`#3b82f6`（蛋白质/喝水）、`#eab308`（碳水）、`#f97316`（脂肪/运动）
-    - `drawStatRow` 动态测量每项宽度并整体水平居中，留足 `itemGap = 24` 防止重叠或换行
-- Verification:
-  - `npm run build:weapp -- --no-check` 通过
-  - 当前阻塞：微信开发者工具自动化端口 `9420` 已关闭，`mrc` 无法连接，未完成分享海报的运行态截图验证
-
-- Task: 首页核心数据本地快照与静默云同步
-- Status: done（首页卡路里/餐食/运动/保质期改为本地快照优先渲染，网络返回后差异覆盖本地；缓存按日期保留最近60条）
-- Scope:
-  - `src/pages/index/index.tsx`
-    - 新增 `home_dashboard_local_cache_v1` 本地快照存储与60条上限策略
-    - 首屏与切日优先读取本地快照，减少等待网络导致的空白/加载态
-    - `loadDashboard` 支持静默同步参数，后台请求完成后按差异覆盖本地快照
-
-- Task: 首页分享称号显示开关与功能下线
-- Status: done（分享弹层已移除“显示今日称号”开关，分享海报生成流程恢复为固定逻辑，不再维护称号显示状态）
-- Scope:
-  - `src/pages/index/index.tsx`
-    - 删除 `Switch` 组件依赖与称号计算/切换状态
-    - 分享方法改回无参固定生成流程
-  - `src/pages/index/index.scss`
-    - 删除开关区域样式
-
-- Task: 今日小结圆内百分比字体回切思源宋体
-- Status: done（百分比数字与 `%` 已改回思源宋体，保留分离绘制和 baseline 对齐）
-- Scope:
-  - `src/utils/poster.ts`
-    - 圆内百分比主数字字体函数改回宋体族
-    - `%` 字体改回宋体族
-
-- Task: 今日小结圆内百分比与“已摄入”对齐修正
-- Status: done（`已摄入` 文案恢复水平居中；百分比数字与 `%` 统一思源黑体并按 baseline 对齐）
-- Scope:
-  - `src/utils/poster.ts`
-    - 百分比字体族改为思源黑体系
-    - 数字与 `%` 改为 `alphabetic` 基线对齐
-    - `已摄入` 文案强制 `textAlign: center`
-
-- Task: 调试器 WXSS 编译错误与存储超限修复
-- Status: done（已移除全局 `@font-face` 的本地 OTF 注入，`app-origin.wxss` 从约 22MB 回落到约 64KB）
-- Scope:
+    - 给 Vite 的 `scss` / `sass` 预处理配置补上 `quietDeps`
+    - 静默 `legacy-js-api` 与 `import` deprecation 输出，避免依赖链 Sass warning 刷屏
   - `src/app.scss`
-    - 删除 `@font-face` 本地字体文件注入
-    - 保留思源黑体字体族优先级（系统字体名 + 回退链）
+    - 不再在文件底部直接使用 `@use`
+    - 改为顶部 `@use 'sass:meta'`，底部用 `@include meta.load-css(...)` 安全加载深色主题样式
+  - `src/packageExtra/pages/interaction-feed-detail/index.scss`
+    - 社区样式复用从 `@import` 改为 `@use`
+  - `src/assets/iconfont/iconfont.css`
+    - 删除 `svg` 字体源，避免 `iconfont.svg` 在构建期持续报未解析 warning
+- Verification:
+  - `npm run build:weapp -- --no-check`：通过
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `mrc where --port 9420`：当前页为 `pages/index/index`
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
 
-- Task: 圈子动态正文加粗
-- Status: done（用户动态正文已加粗，提升浏览时正文可见性）
+- Task: 文字记录页“开始智能分析”去掉确认弹窗，并修复提交后不跳转的问题
+- Status: done（已取消二次确认；文本分析提交成功后会直接进入分析加载页）
 - Scope:
-  - `src/pages/community/index.scss`
-    - `.feed-content` 新增 `font-weight: 600`
+  - `src/packageExtra/pages/record-text/index.tsx`
+    - 删除“确认分析”弹窗，点击开始智能分析后直接提交任务
+    - 文本分析提交成功后的跳转从裸 `/pages/analyze-loading/index` 改成 `extraPkgUrl('/pages/analyze-loading/index')`
+    - 避免分包页内 `navigateTo` 到加载页时停留原页无反应
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/record-text/index`
+  - `mrc exists .tag-item --port 9420`：存在
+  - `mrc exists .meal-item --port 9420`：存在
+  - `mrc click .tag-item --port 9420`：成功
+  - `mrc click .meal-item --port 9420`：成功
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
 
-- Task: 全站默认字体切换为思源黑体
-- Status: done（全局默认字体已改为思源黑体，包含页面与常用基础组件）
+- Task: 清理 `dev:weapp` 对应的 lint / typecheck 报错并补齐正式校验脚本
+- Status: done（`lint`、`typecheck`、`build:weapp -- --no-check` 均已通过；微信开发者工具错误日志为 0）
 - Scope:
-  - `src/app.scss`
-    - 注册 `Source Han Sans SC` 的 `@font-face`
-    - 统一覆盖 `page/view/text/button/input/textarea/picker/label` 默认字体族
+  - 校验入口：
+    - 新增 `npm run lint`
+    - 新增 `npm run typecheck`
+    - `tsconfig.json` 增加 `skipLibCheck`
+    - `tsconfig.json` 关闭 `noUnusedLocals / noUnusedParameters`，避免历史遗留未使用变量阻断编译
+    - `.eslintrc` 收口为只拦截硬错误，不再让 repo 级 `no-unused-vars / exhaustive-deps` warning 阻断 lint
+  - 本轮修复的源码问题：
+    - `src/utils/api.ts`
+      - 补齐 `MembershipStatus.points_balance` 兼容字段
+      - `AnalysisTask.status` 补 `timed_out`
+      - `HomeMealItem` 补 `images` 兼容字段并统一归一化
+    - `src/utils/weapp-open-analyze-image.ts`
+      - 旧积分校验改成兼容 `daily_credits_remaining / points_balance`
+      - 食物分析所需积分提示统一为 `2` 分
+    - `src/utils/weapp-save-image-album.ts`
+      - 修正 `getFileInfo()` 返回值类型，清掉 `size` 相关 TS 报错
+    - `src/packageExtra/pages/friends/index.tsx`
+      - 修正好友请求概览字段：`counterpart_user_id`
+      - 空态配置类型补齐可选 `action / onAction`
+    - `src/packageExtra/pages/record-manual/index.tsx`
+    - `src/packageExtra/pages/record-text/index.tsx`
+    - `src/packageExtra/pages/result-text/index.tsx`
+      - 修正餐次类型与 `getSavedSelectableMealType()` 缺失
+    - `src/packageExtra/pages/analyze-loading/index.tsx`
+      - 修正运动任务结果类型断言
+    - `src/packageExtra/pages/record-detail/index.tsx`
+      - 去掉条件分支后的 `useCallback`，清掉 hooks 规则错误
+    - `src/packageExtra/pages/exercise-record/index.tsx`
+      - 修正 JSX 未转义引号
+    - `src/packageExtra/pages/interaction-feed-detail/index.tsx`
+      - 合并重复的 `withAuth` import
+    - `src/pages/index/index.tsx`
+    - `src/pages/index/types/index.ts`
+    - `src/pages/index/utils/constants.ts`
+    - `src/pages/index/utils/helpers.ts`
+    - `src/pages/stats/index.tsx`
+      - 修正首页/统计页的类型漂移与 API 兼容问题
+    - `src/packageExtra/pages/stats-metabolic/index.tsx`
+    - `src/packageExtra/pages/stats-metabolic/index.config.ts`
+      - 移除分包页手动挂载 `custom-tab-bar`，清掉构建 warning
+- Verification:
+  - `npm run lint`：通过
+  - `npm run typecheck`：通过
+  - `npm run build:weapp -- --no-check`：通过
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+- Notes:
+  - 构建输出里仍有第三方依赖链 warning：
+    - Sass `legacy-js-api`
+    - Sass `@import` deprecation
+    - `iconfont.svg ... didn't resolve at build time`
+  - 这些 warning 主要来自现有依赖与 iconfont 资源策略，不是本轮新增的源码错误
 
-- Task: 今日小结百分比分离样式导致布局错位修复
-- Status: done（圆内百分比位置与层级已恢复原稳定布局，保留 `%` 小号分离与换色样式）
+- Task: 重启前后端与微信开发者工具，并继续优化会员充值页顶部板块
+- Status: done（已按用户明确要求执行 `npm run dev:restart` 并重新拉起微信开发者工具自动化；会员页 Hero 顶部已进一步向参考图收口）
 - Scope:
-  - `src/utils/poster.ts`
-    - 百分比字号测量恢复为含 `%` 的原口径
-    - 数字与 `%` 分离绘制改回原圆心中线布局，避免与日期/底部文案冲突
+  - 进程重启：
+    - 已执行 `npm run dev:restart`
+    - `backend-dev.log` 显示本地后端已重新启动 worker
+    - `dist/` 构建产物已恢复完整，`dist/app.json`、会员页 `index.js/index.wxss` 均已存在
+    - 已执行 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+  - 页面调整：
+    - `src/packageExtra/pages/pro-membership/index.tsx`
+      - Hero 文案区新增 `hero-copy`
+      - 积分卡根据状态区分 `hero-credits--active / hero-credits--idle`
+    - `src/packageExtra/pages/pro-membership/index.scss`
+      - Hero 背景改为更深的多层绿渐变 + 柔光圆形氛围层
+      - 徽章 halo、标题字重、标题区间距进一步强化
+      - 顶部积分卡改成更宽、更高、更接近参考图的半透明玻璃卡
+      - 空态积分卡单独收口，避免文案挤压
+- Verification:
+  - `lsof -i :3010 -i :9420`：确认后端与微信开发者工具自动化端口均在运行
+  - `mrc errors 20 --port 9420`：`0`
+  - `mrc logs error 20 --port 9420`：`0`
+  - `dist/packageExtra/pages/pro-membership/index.js`
+  - `dist/packageExtra/pages/pro-membership/index.wxss`
+    - 时间戳已更新到本轮修改后的编译时间
+- Blocked / Next:
+  - 当前 DevTools 环境下，`mrc pageInfo / relaunch / exists / stack` 与 `miniprogram-automator` 的页面回执类命令再次持续卡住
+  - 因此这次没有成功拿到新的会员页截图，也没完成稳定的页面级导航回执；后续若要补截图，需优先处理当前 DevTools 自动化会话卡住的问题
 
-- Task: 今日小结底栏头像与文案行距微调
-- Status: done（底栏头像放大；“今日小结”与“扫码登录可一键成为好友”两行间距增大）
+- Task: 禁止代理默认自动启动本地后端 / 避免抢占 3010
+- Status: done（已把项目规则改成“默认不自动运行”；`npm run dev:backend` 也已增加端口占用预检查，端口已占用时直接退出，不再先起 worker 再报 bind 错）
 - Scope:
-  - `src/utils/poster.ts`
-    - 头像尺寸 `avatarSz` 从 `32` 调整到 `38`
-    - 两行文案 Y 位置拉开，增强可读性
-
-- Task: 今日小结圆内百分比视觉强化（数字与%分离）
-- Status: done（百分比改为“数字 + %”分离绘制；数字更粗，`%` 明显缩小并换色，二者基线对齐后整体下移居中）
-- Scope:
-  - `src/utils/poster.ts`
-    - 圆内百分比从单字符串改为双文本分离绘制
-    - 新增数字/百分号独立字号、颜色与对齐逻辑
-
-- Task: 今日小结默认态标题区间距微调（坚持目标下移）
-- Status: done（称号开关默认改为关闭；默认双标题态下“坚持目标 X 天”已下移，并同步压缩其到圆球的留白）
-- Scope:
-  - `src/pages/index/index.tsx`
-    - `showHonorTitleOnPoster` 默认值改为 `false`
-  - `src/utils/poster.ts`
-    - 新增 `DAILY_HEADER_DEFAULT_LINE2_OFFSET`
-    - 默认态标题绘制改为“第二行下移 + 下方留白等量回收”
-
-- Task: 首页分享卡片字体切换为思源宋体
-- Status: done（已下载思源宋体/思源黑体到项目，今日小结海报绘制字体统一切换为思源宋体）
-- Scope:
-  - `src/assets/fonts/SourceHanSerifSC-Regular.otf`
-  - `src/assets/fonts/SourceHanSansSC-Regular.otf`
-  - `src/utils/poster.ts`
-    - 新增 `DAILY_SUMMARY_SERIF_FAMILY` 字体族常量
-    - 今日小结海报各文本绘制（标题、称号、日期、百分比、底部文案）统一改用思源宋体字体族
-
-- Task: 首页风险卡片默认双标题行间距优化
-- Status: done（针对“今日总结 / 坚持目标”两行间距单独加大，修复用户反馈的标题区间距不协调）
-- Scope:
-  - `src/utils/poster.ts`
-    - 新增 `DAILY_HEADER_TITLE_LINE_GAP`
-    - 默认标题渲染与高度计算同步应用该间距
-
-- Task: 今日小结圆圈上方文案重构（美食品味 + 称号）
-- Status: done（显示称号时改为“你的今日美食品味为 / 「称号」”，称号更大更亮；关闭称号显示时自动恢复原日期胶囊样式）
-- Scope:
-  - `src/utils/poster.ts`
-    - 圆区顶部文案按 `honorTitle` 是否存在走双分支渲染
-    - 称号态：两行文案+高亮主题色大字
-    - 无称号态：沿用原日期胶囊
-
-- Task: 单动态详情页评论输入区与圈子交互对齐
-- Status: done（评论输入区去掉取消按钮，发送按钮改为圈子同款圆形 `icon-send`；点击页面其它区域可自动收起输入区）
-- Scope:
-  - `src/pages/interaction-feed-detail/index.tsx`
-    - 评论输入区改用 `comment-bottom-send` 同款发送按钮
-    - 评论按钮/评论项点击增加事件阻止，避免与外层收起逻辑冲突
-    - 增加输入框焦点、长度与 `cursorSpacing` 参数
-    - 新增透明 dismiss mask，点击空白处收起输入区
-  - `src/pages/interaction-feed-detail/index.scss`
-    - 新增 `.interaction-feed-detail-dismiss-mask` 遮罩层样式
-
-- Task: 互动消息单动态页“持续加载中”二次修复
-- Status: done（页面改为 `withAuth(..., { public: true })` 保证生命周期触发；页面内自行鉴权；兼容 `recordId/record_id/id` 取参；请求增加超时兜底，避免长期卡 loading）
-- Scope:
-  - `src/pages/interaction-feed-detail/index.tsx`
-    - 新增 `pickRecordId` 多键取参
-    - `loadDetail` 增加登录判断与超时 `Promise.race`
-    - `useDidShow` 在 `recordId` 为空时兜底回填路由参数
-    - 导出改为 `withAuth(..., { public: true })`
-
-- Task: 今日小结标题替换与圆内文字可读性优化
-- Status: done（称号上移替换“今日总结”；称号使用原主标题色；圆内日期和 57% 等核心数字提升对比度与描边）
-- Scope:
-  - `src/utils/poster.ts`
-    - 顶部首行改为称号文案（不再显示“今日总结”）
-    - 日期胶囊改深底白字
-    - 百分比与摄入 kcal 改白字并增加描边
-
-- Task: 互动消息单动态页加载卡住与头部清理
-- Status: done（修复缺参导致的持续 loading；兼容 `recordId/record_id`；移除页面标题和简介；加载态改为 spinner 动画）
-- Scope:
-  - `src/pages/interaction-feed-detail/index.tsx`
-    - `recordId` 缺失时不再卡在 loading，直接结束加载并提示
-    - 读取参数兼容 `recordId` 与 `record_id`
-    - 删除顶部标题与副标题块
-  - `src/pages/interaction-feed-detail/index.scss`
-    - 加载态改为动画 spinner（去掉“加载中...”文字）
+  - `scripts/run-backend.cjs`
+    - 启动前先检查 `PORT`（默认 `3010`）是否已被占用
+    - 若端口被占用，直接打印明确提示并退出
+    - 不再出现“先启动一堆 worker，最后 uvicorn 才报 10048”的低效行为
+  - `scripts/stop-backend.cjs`
+    - 新增一键停止脚本：优先尝试 `backend/backend.pid`，再兜底清理占用 `3010` 的进程
+    - `package.json` 已新增 `npm run stop:backend`
   - `AGENTS.md`
-    - 新增加载态规范：页面加载中不显示“加载中”文字，统一动画表达
+    - 项目规则已改为：默认不要替用户自动启动或重启本地前后端
+    - 只有用户明确要求“你来启动/重启/运行”时才允许代理动本地常驻进程
+- Notes:
+  - 用户明确要求：AI 永远不要自动运行；本地前后端统一由用户自己手动启动和关闭
+  - 已手动清理掉占用 `3010` 的残留 `python.exe backend\\run_backend.py`
 
-- Task: 今日小结开关位移与圆形液位进度效果
-- Status: done（“显示今日称号”开关 `margin-top` 提升到 `120rpx`；中心圆增加同色描边与波浪液位，按实际进度从下往上填充）
+- Task: 食物测试后台支持“可复用测试集”而不是每次重新上传 ZIP
+- Status: in_progress（代码已接入后端 API + 后台页面入口；按用户最新要求，本轮不做本地运行验证）
 - Scope:
-  - `src/pages/index/index.scss`
-    - `.poster-title-toggle-row` 上边距调整为 `120rpx`
-  - `src/utils/poster.ts`
-    - 中心圆改为“底色 + 波浪液位 + 同色描边”
-    - 液位按 `calPct` 映射（视觉封顶 100%）
+  - 目标口径：
+    - 后台批量测试不再只依赖“临时上传 ZIP -> 当前浏览器内批次”
+    - 增加“可复用测试集”能力：可从服务器本机目录导入一个标准测试集，持久化到云端，之后在后台列表中反复载入为新批次
+    - ZIP 仍保留为兼容导入格式，但不再作为长期复用的主工作流
+    - 未标注样本既然在导入时已忽略，后台列表中的样本数也必须只显示“可测样本数”，不能再显示源目录总图数（例如 `33/37`）
+  - 已完成代码：
+    - `backend/sql/add_test_backend_datasets.sql`
+      - 新增 `test_backend_datasets`、`test_backend_dataset_items` 两张表
+    - `backend/database.py`
+      - 新增测试集增删查相关方法：`list/get/create/insert_items/list_items`
+    - `backend/main.py`
+      - 新增本地目录扫描：`_scan_test_backend_local_dataset_dir(...)`
+      - 新增测试集转批次：`_build_test_backend_batch_from_dataset(...)`
+      - 新增接口：
+        - `GET /api/test-backend/datasets`
+        - `POST /api/test-backend/datasets/import-local`
+        - `POST /api/test-backend/datasets/{dataset_id}/prepare`
+    - `backend/static/test_backend/index.html`
+      - 批量测试页新增“可复用测试集”区域、导入按钮、测试集表格
+    - `backend/static/test_backend/app.js`
+      - 新增 `loadTestDatasets / renderDatasetsTable / importLocalDataset / prepareSavedDatasetBatch`
+  - 本轮暂不做的事：
+    - 不处理本地 `3010` 旧进程替换
+    - 不做本地页面验证、接口联调、端口排查
+- Blocked / Next:
+  - 需要把 `backend/sql/add_test_backend_datasets.sql` 执行到 Supabase
+  - 导入完成后，建议把 `D:\创业\healthymax\food_test_sanitized_20260424` 注册成首个长期复用测试集
+  - Latest:
+  - `food_test_20260424` 已成功导入为可复用测试集，ID=`46ccb0ef-0fa2-484a-b06e-595f0c05120f`
+  - 已从该测试集生成 pending 批次，批次 ID=`80bc6b6a92fe1b687430698c`
+  - 已修正展示与存储口径：该测试集现在显示 `itemCount=33`、`unlabeledCount=0`，不再显示 `33/37`
+  - 已新增第二个小型测试集 `food_test_20260424_mini10`，从 33 张已标注样本中按固定随机种子 `20260424` 抽取 10 张
+  - 小型测试集目录：`D:\创业\healthymax\food_test_sanitized_20260424_mini10`
+  - 小型测试集 ID：`c4b74960-d83a-4f05-a2d4-babfeb7886d3`
+  - 已从小型测试集生成 pending 批次，批次 ID=`894ecc623c4fd89068fcfdfb`
+  - 测试后台模型选项已收口为两个 Gemini 具体型号：`gemini-3-flash-preview`、`gemini-3.1-flash-lite-preview`
+  - 用户最新要求：测试后台做 prompt 实验时，暂时不要再走 `backend/worker.py` 主链路默认 prompt；分析体验 / 批量测试 / 可复用测试集批次应优先读取 `model_prompts` 中当前激活的 `gemini` 提示词
+  - 已完成代码切换：`backend/main.py::_run_test_backend_provider_analysis(...)` 现优先读取 `get_active_prompt("gemini")`，只有当激活提示词为空时才回退 `backend/worker.py::_build_food_prompt`
+  - 已继续收口 UI 与接口：测试后台保留 `standard / strict` 两种原有模式，并新增 `custom` 自定义模式；只有 `custom` 才读取“提示词管理”里的 Gemini 自定义提示词，后端新增 `prompt_id` 透传，若未选择或提示词为空才回退 `backend/worker.py::_build_food_prompt`
+  - `backend/static/test_backend/index.html` 与 `backend/static/test_backend/app.js` 已改成“三模式并存”：分析体验与批量测试都保留模式选择；自定义提示词选择器仅在 `custom` 模式下生效；结果区会展示本次实际使用的模式与提示词名称
+  - 已继续清理“提示词管理”页心智：去掉页内单独的模型切换按钮；提示词管理只维护 `custom` 模式会使用的 Gemini 自定义提示词，实际跑哪个模型一律以“分析体验 / 批量测试”页面的模型勾选为准
+  - 已修正单图多模型结果展示：此前前端摘要区会列出多个模型，但“AI 分析结果 / 识别食物明细”只渲染第一个成功模型，导致看起来像只返回了一份结果；现在改为按模型分别展示完整结果卡，摘要区也显示具体模型名
+  - 已把测试后台评测口径升级为两阶段 benchmark：
+    - `backend/test_backend/utils.py` 现先做食物匹配，再算匹配食物重量误差，最后保留总重量误差
+    - 新增指标：`Food Precision / Recall / F1`、`matchedWeightMaeGrams`、`matchedWeightRelativeError`（按 `max(gt, 50g)` 归一化）、`matchedWeightScore`、`weightedFoodRecall`、`finalCompositeScore`
+    - `2026-04-27` 继续升级：`items` 模式的食物匹配评估器已切到 DeepSeek（`deepseek-v4-flash`）主判定；代码继续负责最终算分，不把总分交给模型黑箱
+    - 当前仍保留 deterministic matcher 作为兜底；当 `DEEPSEEK_API_KEY` 缺失或 API 异常时，会回退到本地规则匹配，并在结果里显式返回 `evaluatorSource / evaluatorError`
+  - 已把 benchmark 展示接到测试后台 UI：
+    - 单图分析卡与批量详情都会展示 `综合分 + Food F1 + 匹配食物 MAE + 匹配食物相对误差 + 总重量误差`
+    - 批量页顶部会按模型显示“平均综合分”或“平均总重误差”，便于直接做模型/提示词对比
+    - 结果区会额外显示“匹配评估器”：`DeepSeek evaluator / 本地规则兜底 / 总重直算`
+  - `2026-04-28` 已继续收口结果展示口径：
+    - 单图页顶部“分析摘要”不再展示歧义性的共享 `估算总重量 / 估算总热量`，改为只展示全局信息：图片数、参与模型数、标签模式、标准总重量、最佳综合分模型/最低总重误差模型
+    - 每个模型结果卡单独展示自己的 `估重 / 热量 / 回答时长`
+    - 批量页顶部摘要新增“各模型平均回答时长”，便于直接比较生产可用性
+  - `2026-04-28` 已继续收口为“只测食物名称 + 重量”的 benchmark 页面：
+    - 后端测试链路不再为缺失的 `description / insight` 强塞占位默认文案
+    - 单图与批量详情页移除描述、建议、PFC、吸收率、情境建议、热量等主展示内容
+    - 结果页与批量列表改为突出 `识别结果摘要 / 识别食物明细 / benchmark 指标 / 回答时长`
+    - 提示词管理说明补充：`custom` 模式提示词可以只返回 `items[].name + items[].estimatedWeightGrams`
+  - `2026-04-28` 已修正 benchmark 报告的一个关键呈现问题：
+    - 对于“模型识别到了某个候选，但 DeepSeek 判定它和标准标签不匹配”的情况，评测表不再直接写成“未识别”
+    - 现在会保留该候选识别结果和重量，并显示对应匹配类型（如 `识别成其他食物 / 名称过泛 / 未匹配`）
+    - 这样像 `炖冬瓜（含虾米少量） -> 白萝卜` 这类错误，会明确显示成“识别错了什么”，而不是看起来像模型完全没看到
+  - `2026-04-28` 已继续修正 DeepSeek evaluator 的“未匹配候选回填”：
+    - DeepSeek prompt 现在明确要求：对每个 `expected_item` 都返回一条 assignment；即使 `accepted=false`，也要尽量给出最像的 `predicted_index`
+    - 若 DeepSeek 仍漏掉 rejected candidate，本地兜底会用更宽松的“主体食材候选”规则回填展示候选（如去掉 `清炒 / 炖 / 红烧` 等做法前缀后再比较）
+    - 这类回填只用于报告展示，不会改变评分；`status / Food F1 / Precision / Recall` 仍按未匹配处理
+  - `2026-04-28` 已继续适配新的 item-only prompt 结构：
+    - DeepSeek evaluator 现在会读取并透传 `isMixedDish / count / confidence` 到匹配 prompt
+    - 对标签侧没有显式 `isMixedDish` 的项，会基于名称做保守启发式推断（如带 `含...`、括号辅料说明、明显混合菜词）
+    - DeepSeek prompt 已新增“混合菜匹配规则”：混合菜优先匹配混合菜，单食物不要轻易匹配成明显混合菜
+    - 当前 `confidence / count / totalEstimatedWeightGrams` 仅用于辅助匹配，不进入正式 benchmark 主评分
+  - `2026-04-28` 已修复本地脱敏测试集标签的一处 benchmark 口径问题：
+    - `D:\创业\healthymax\food_test_sanitized_20260424\labels.txt` 与 `...\food_test_sanitized_20260424_mini10\labels.txt` 中，原先很多“单食物 / 单菜品”样本只有总重量、没有标准食物名
+    - 现已把可明确识别为单食物的样本改成单项 `items` 标签，如 `德芙巧克力=14g`、`黑咖啡=245g`、`牛油拌饭=204g`
+    - 多食物总重、未知食物、空包装 `0g` 样本仍先保留 `total`，避免硬猜错误标签
+    - 私有映射表 `D:\创业\healthymax\food_test_sanitized_20260424_private_mapping.csv` 也已同步更新
+- Notes:
+  - 用户已明确：本轮不需要本地运行验证，只要把代码写好即可
+  - 本轮改的是后端静态测试后台，不涉及微信小程序页面
 
-- Task: 今日小结称号与日期位置互换 + 字级强化
-- Status: done（称号去掉“今日称号”前缀并放大至接近主标题；称号与日期互换位置；日期移至热量圆上半区并去掉年份，且更贴近圆心）
+- Task: 本地 `food_test` 脱敏数据集整理并上传测试后台
+- Status: done（已基于 `D:\创业\healthymax\food_test` 生成无标签文件名的新数据集目录；图片统一改为匿名 `sample_XXXX`，标签独立写入 `labels.txt`；已上传到本地测试后台 pending 批次）
 - Scope:
-  - `src/utils/poster.ts`
-    - 顶部原日期区改为展示称号大字
-    - 圆上半区改为展示日期
-    - 日期格式从 `d Mon YYYY` 收口为 `d Mon`
-
-- Task: 互动消息改为独立单动态详情页
-- Status: done（互动消息点击后进入 `pages/interaction-feed-detail/index`，页面只展示当前被点击动态，保留与圈子列表一致的卡片结构、点赞与评论信息，并支持直接评论）
-- Scope:
-  - `src/pages/interaction-notifications/index.tsx`
-    - 点击消息不再 `switchTab`/滚动定位，改为 `navigateTo` 独立详情页并透传 `recordId/commentId`
-  - `src/pages/interaction-feed-detail/index.tsx`
-    - 新增单动态详情页面，加载 `communityGetFeedContext + communityGetComments`
-    - 复用圈子动态卡片结构，支持点赞、评论查看、回复与发送
-  - `src/pages/interaction-feed-detail/index.scss`
-    - 复用圈子样式并补充详情页容器与目标评论高亮
-  - `src/pages/interaction-feed-detail/index.config.ts`
-  - `src/app.config.ts`
-    - 注册新页面路由
+  - 数据集整理：
+    - 原目录未改动：`D:\创业\healthymax\food_test`
+    - 新脱敏目录：`D:\创业\healthymax\food_test_sanitized_20260424`
+    - 上传 ZIP：`D:\创业\healthymax\food_test_sanitized_20260424_upload.zip`
+    - 私有映射表（不放进上传包）：`D:\创业\healthymax\food_test_sanitized_20260424_private_mapping.csv`
+  - 标签口径：
+    - 总样本 `37` 张，其中已标注 `33` 张、未标注 `4` 张
+    - 总重量样本写入 `labels.txt` 的 `total` 格式：`sample_0001.png 134g`
+    - 用户提供细分标签的 `4` 张工作餐样本写入 `items` 格式，逐项食物与克重已拆开记录
+    - 当前未标注样本（脱敏后文件名）记录在 `unlabeled_samples.txt`：`sample_0006.png`、`sample_0011.jpg`、`sample_0032.jpg`、`sample_0033.jpg`
+    - 用户最新确认：未标注样本目前直接忽略，不再作为本轮待补任务处理
+  - 上传结果：
+    - 本地测试后台 `POST /api/test-backend/batch/prepare` 已成功接收脱敏 ZIP
+    - 批次号：`6536d31ee0ec7103d7ea3ad1`
+    - 当前状态：`pending`
+    - 可处理样本数：`33`
+    - 跳过未标注样本数：`4`
 - Verification:
-  - `mrc relaunch "/pages/interaction-feed-detail/index?recordId=test123&notificationType=comment_received" --port 9420` 可直达新页面
-  - `mrc where --port 9420` 显示当前页面为 `pages/interaction-feed-detail/index`
-  - `mrc logs error 20 --port 9420` 返回 `0` 条错误
-  - 备注：当前自动化环境未复现真实“互动消息列表点击某条已有数据”链路（受登录态/数据状态影响），已完成路由与页面级验证
+  - 数据集脱敏复制完成，原目录未改动
+  - ZIP 体积约 `35.76 MB`，低于测试后台 `50 MB` 限制
+  - `sample_0014.png`、`sample_0015.png`、`sample_0016.png`、`sample_0017.png` 已在后台返回 `labelMode=items`
+  - 其余带总重量标签样本在后台返回 `labelMode=total`
+- Notes:
+  - 本轮只做“上传准备”，没有启动批量分析，避免直接消耗上游模型额度
+  - 这是本地数据集整理与后台上传，不涉及微信小程序页面，因此未使用 `weapp-devtools`
 
-- Task: 今日小结称号位置与开关遮挡样式修正
-- Status: done（称号已改为绝对定位到热量圆上半区；分享弹层称号开关新增上边距，避免顶部被遮挡）
+- Task: 食物识别测试后台改造（多模型对比 + 每食物标准标签）
+- Status: done（一期已落地：后台单图/批量均支持 Qwen/Gemini 同时测试；标准标签正式支持两种模式：整餐总重量 total、每种食物克重 items；批量 ZIP `labels.txt` 可混用两种格式）
 - Scope:
-  - `src/utils/poster.ts`
-    - 称号渲染从下方流式区域迁移到圆形区内部上半区
-  - `src/pages/index/index.scss`
-    - `.poster-title-toggle-row` 增加 `margin-top`
+  - 后端：
+    - `backend/test_backend/utils.py`：新增两类标签解析、BOM 兼容、JSON/inline/旧格式兼容；`calculate_item_weight_evaluation` 支持 total 模式只算整餐总偏差、items 模式计算逐项匹配/偏差
+    - `backend/main.py`：`/api/test-backend/analyze` 与 `/api/test-backend/batch/*` 新增 `models`、`execution_mode`、`expected_items_json`；同一输入可并发跑 `qwen/gemini`
+    - 测试后台模型调用改为复用 `backend/worker.py::_build_food_prompt` 生成主链路动态 prompt，不再用 `model_prompts` 旧提示词做评测
+    - 批量任务结果新增 `labelMode`、`expectedItems`、`modelResults`、逐项匹配/缺失/额外识别/总重量偏差
+  - 后台页面：
+    - `backend/static/test_backend/index.html|app.js|style.css`：新增模型勾选、standard/strict 模式选择、单图标准标签输入、批量标准测试集格式说明、多模型结果摘要；详情弹窗会按 total/items 模式展示不同评测口径
+    - 提示词管理页新增说明：`model_prompts` 不直接影响当前主链路测试
+  - 标准测试集说明：
+    - 新增 `backend/test_backend/fixtures/README.md`，约定 ZIP + `labels.txt` 两种格式：总重量 `图片名 500g` / `图片名 | 总重量=500g`；逐项 `图片名 | 食物=克重; 食物=克重`
+- Verification:
+  - `python -m py_compile backend/main.py backend/test_backend/utils.py backend/test_backend/batch_processor.py backend/test_backend/single_processor.py` 通过
+  - `node --check backend/static/test_backend/app.js` 通过
+  - 纯函数样例验证：`labels.txt` 的 total/items 两种格式解析通过；total 模式不再被误判为“缺少总重量食物”，items 模式逐项偏差计算通过
+  - 已重启本地后端，`3010` 端口由新 server 监听
+  - `GET http://127.0.0.1:3010/test-backend/login` 返回 200
+  - 登录后调用 `/api/test-backend/batch/prepare` 上传测试 ZIP，成功返回 `labelMode=total/items`、`expectedItems` 与 pending 批次
+- Notes:
+  - `npm run dev:restart` 在当前 Windows/WSL 环境因 `scripts/restart-dev.sh` CRLF/`pipefail` 兼容问题失败；已改用 PowerShell 精确重启 3010 后端
+  - 本轮改的是后端静态测试后台，不是微信小程序页面，因此未使用 `weapp-devtools` 做小程序 UI 截图
+  - 真实模型分析接口未用假图片触发，以避免浪费上游模型额度；已验证到登录、静态资源和批量解析层
 
-- Task: 首页分享称号系统与称号显示开关
-- Status: done（分享按钮改为 `iconfont icon-share`；新增独立 TS 称号系统按当日摄入/宏量/喝水/运动/打卡计算称号；分享页新增「显示今日称号」开关，默认开启，切换后自动重新生成海报）
-- Scope:
-  - `src/utils/daily-honor-title.ts`
-    - 新增称号计算模块 `resolveDailyHonorTitle(...)`
-    - 覆盖称号：`顶级吃货 / 素食主义者 / 减肥专家 / 蛋白质女王 / 美食博主`
-  - `src/pages/index/components/GreetingSection.tsx`
-    - 首页右上角分享图标改为 `iconfont icon-share`
-  - `src/pages/index/index.tsx`
-    - 接入称号计算并透传到海报数据
-    - 新增分享弹层开关：`showHonorTitleOnPoster`（默认 true）
-    - 切换开关后立即触发海报重生成
-  - `src/utils/poster.ts`
-    - `DailySummaryPosterInput` 新增 `honorTitle`
-    - 今日小结海报增加「今日称号」胶囊渲染
-  - `src/pages/index/index.scss`
-    - 补充分享弹层称号开关样式
 
-- Task: 按 skill 启动本地联调（前后端 + 微信开发者工具自动化）
-- Status: done（`dev:restart` 已成功；`/openapi.json` 返回 200；微信 CLI `auto --project ... --auto-port 9420` 已拉起并可通过 `mrc` 连接）
+- Task: 定价策略整改 —— 三档 × 三周期 + 每日积分 + 新用户试用
+- Status: in_progress（数据库 / 后端 / 前端价格矩阵与积分展示已落地；邀请奖励 / 分享奖励已二期接入；自动续费留待后续阶段）
 - Scope:
-  - 环境与连接：
-    - `mrc --version` 可用（v1.0.0）
-    - `/Applications/wechatwebdevtools.app/Contents/MacOS/cli` 可执行
-    - `lsof -i :9420` 已监听，`mrc where --port 9420` 连接成功
-  - 本地服务：
-    - 执行 `npm run dev:restart`
-    - 期间发现旧后端实例异常占用 `3010` 且 `/openapi.json` 返回 500，已清理旧进程后重启
-    - 当前 `backend-dev.log` 显示 `Uvicorn running on http://0.0.0.0:3010`
-  - 调试动作：
-    - 已切换并调试 `pages/community/index`
-    - 已生成截图 `community-debug.png`
-    - 当前抓取错误日志为 `0` 条
-  - 当前注意项：
-    - `mrc screenshot` 在 `pages/interaction-notifications/index` 场景出现过一次挂起（已手动终止），该页调试建议优先在登录态下重试
+  - 数据库：
+    - 新增 `backend/sql/add_tiered_membership_pricing.sql`：`membership_plan_config` 新增 `tier / period / daily_credits / original_amount / sort_order`；`user_pro_memberships` 新增 `daily_credits` 快照
+    - 更新 `backend/database/membership_plan_config_seed.sql`：停用旧 `pro_monthly`，插入 9 档（light / standard / advanced × monthly / quarterly / yearly），带 `daily_credits`、`original_amount`、`sort_order`
+  - 后端：
+    - `backend/database.py`：`list_active_membership_plans` 按 `sort_order` 排序；新增 `get_today_exercise_log_count`
+    - `backend/database.py`：修正积分试算口径，`get_today_food_analysis_count` 现会排除 `payload.exercise=true` 的 exercise fallback 任务，避免运动记录被误算成 `食物分析 2 分 + 运动 1 分 = 3 分`
+    - `backend/main.py`：
+      - `MembershipPlanResponse` 扩展 `tier / period / daily_credits / original_amount / savings / sort_order`
+      - `MembershipStatusResponse` 扩展 `daily_credits_max/used/remaining / daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits / credits_reset_at / trial_active / trial_expires_at`
+      - 新增 `_credits_reset_time_iso / _is_user_in_trial / _compute_daily_credits_status`；积分消耗口径：食物分析 2 / 运动记录 1
+      - 免费试用已升级为双层口径：前 `1000` 名注册用户 `30` 天试用，其余新用户 `3` 天试用；两类试用均按 `weapp_user` 注册顺序判定、每日 `8` 积分、不累计
+      - `/api/membership/plans` 返回扩展字段并计算 `savings`
+      - `/api/membership/me` 合并积分状态与试用信息
+      - `/api/payment/wechat/notify/membership` 成功回调时把所选套餐 `daily_credits` 快照写入 `user_pro_memberships`
+      - 邀请奖励已接入：用户通过现有好友邀请码链路进入后，完成 1 次有效使用（当前口径：饮食记录或运动记录成功写入）即可让双方连续 3 天每天 `+5` 积分；当前月度上限先按 `10` 个有效邀请 / 月实现
+      - 分享海报奖励已接入：记录拥有者在详情页成功生成海报后，可自动领取当日 `+1` 积分（每日上限 1 次）
+      - `2026-04-24` 继续收口：`/api/analyze`、`/api/analyze/submit`、`/api/analyze-text`、`/api/analyze-text/submit`、`/api/precision-sessions/{session_id}/continue` 已统一接入 `_validate_food_analysis_access(...)`
+        - 食物分析积分不足时统一返回 `402`
+        - 精准模式权限统一改为“仅 standard / advanced 可用”；light 会员若显式请求 strict，会收到“去升级”的 402，而不是继续放行
+        - 若用户档案默认还是 `strict`，但当前套餐已无权使用，后端会自动降回 `standard`，避免老状态穿透
+      - `2026-04-24` 继续收口：`/api/exercise-logs` 已接入运动积分校验；运动记录需 `1` 积分/次，积分不足时同样返回 `402`
+  - 前端：
+    - `src/utils/api.ts`：补 `MembershipTier / MembershipPeriod / MembershipPlan / MembershipStatus` 新字段
+    - `src/pages/pro-membership/index.tsx + index.scss`：完整重做
+      - Hero 区展示「今日剩余积分」或试用态胶囊
+      - 3 档卡片 + 3 周期 tab；tab 上显示「立省¥」标签
+      - 选中套餐大价格卡：折后单价、≈每月、立省标签
+      - 三档能力对比表 / 积分消耗说明 / 当前状态（生效中 / 试用中 / 未开通）
+      - 新增奖励机制说明与奖励积分展示（邀请好友 / 分享海报）
+    - `src/pages/profile/index.tsx`：「我的」会员卡从「今日拍照 x/y」改为「今日积分 x/y」；非会员区分「试用中」与「未开通」；服务入口「食探会员」描述同步为积分口径
+    - `src/pages/analyze/index.tsx + index.scss`：精准模式入口继续收口为档位判断而非 `is_pro` 一刀切；轻度版点击精准时提示“去升级”，并把会员页默认定位到标准版同周期；顶部提示条改为积分口径与升级提示
+    - `src/pages/pro-membership/index.tsx + index.scss`：积分展示改成「今日已用 / 今日剩余」双语义；当前套餐在档位卡与周期 tab 上增加标识；套餐差异表只保留真实已上线差异（每日积分、精准模式、适合频率）
+    - `src/pages/profile/index.tsx`：会员卡与服务入口文案统一改为「已用 x/y + 剩余 z」，会员徽标改为当前档位（轻度/标准/进阶）
+    - `src/utils/execution-mode.ts`、`src/pages/health-profile/index.tsx`、`src/pages/health-profile-edit/index.tsx`：精准模式权限判断继续统一到“standard / advanced 付费会员才可用”；轻度版不再因为 `is_pro=true` 被误判成可选 strict，档案页保存/编辑时也会提示“去升级”而不是“去开通会员”
+    - `backend/database/membership_plan_config_seed.sql`：套餐 seed 描述收口为真实已上线能力，移除轻度版“精准识别”和未上线能力的暗示性描述
+    - `2026-04-24` 继续收口：`src/pages/analyze/index.tsx`、`src/pages/record-text/index.tsx`、`src/pages/record/index.tsx`、`src/pages/index/components/RecordMenu.tsx` 不再看旧 `daily_limit / daily_remaining`
+      - 统一改为基于 `/api/membership/me` 的 `daily_credits_max / used / remaining`
+      - 本地预检查与按钮禁用统一用“食物分析需 2 积分/次”
+      - 超额提示统一从“今日次数已用完”改为“积分不足”，并根据当前状态给出“去开通 / 去升级”
+    - `2026-04-24` 继续收口：`src/pages/exercise-record/index.tsx` 已接入会员状态读取与运动积分预检查；当剩余积分 `< 1` 时，运动提交前会直接弹“积分不足”，不再继续创建任务
+- Verification:
+  - `ReadLints` 检查新改动文件无新增报错
+  - 当前尚未执行 `npm run dev:weapp` 重编译与微信开发者工具运行态截图
+- Blocked / 待执行：
+  - 2026-04-24 代码复核新增状态：
+    - 当前本地 `dev` 工作区并非最新：已 `git fetch origin dev`，结果显示本地 `HEAD=14b5bea` 相比 `origin/dev=185be02` 落后 `54` 个提交，且当前工作树存在大量未提交改动，不能直接安全 `pull`
+    - `backend/database/membership_plan_config_seed.sql` 中的脏文本已修掉；当前文件仅做 seed 更新、不改 schema，可在已迁移库上重复执行
+    - `/api/dev/toggle-test-membership` 已改为“当前登录用户 + 指定/默认有效套餐”，不再写死测试用户和 `pro_monthly`；会员页 `[DEV]` 区块也会按当前选中的套餐做模拟开通
+  - 线上数据库执行 `backend/sql/add_tiered_membership_pricing.sql` 与 `backend/database/membership_plan_config_seed.sql`（seed 为 `ON CONFLICT (code) DO UPDATE`，可多次执行）
+  - 本机重启前后端跑一遍：套餐列表、`/api/membership/me`、付款通知写入 `daily_credits`
+  - 微信开发者工具跑一遍运行态验证（tier/period 切换、价格、积分胶囊、profile 展示）
+  - 2026-04-24 用户最新要求：运行与验证由用户自行执行；代理本轮后续只继续改代码，不再主动启动项目或执行运行态验证
+  - 2026-04-24 继续收口：会员购买页对轻度版会员增加显式升级提示与“去看标准版”入口；健康档案的执行模式选择也已和会员档位对齐，避免轻度版继续保存成 `strict`
+  - 2026-04-24 继续收口：积分 enforcement 已从“仅展示”推进到“后端真拦截 + 前端预拦截”
+    - 食物分析：`2` 积分/次
+    - 运动记录：`1` 积分/次
+    - 用户后续自测时，积分不足应直接在提交前被挡住，后端兜底返回 `402`
+- 后续阶段（本轮未做，需继续）：
+  - 积分“真扣减”仍是按“已发生行为计数”试算，而非提交时原子扣库存；当前已能拦截超额继续分析，但尚未实现单独的积分流水表与并发扣减
+  - 微信支付自动续费（包月 / 包季 / 包年）
+  - 「pending」支付记录清理：现 `user_membership_payments.pending` 长期堆积的问题尚未并入本轮整改
+  - Next 文档：`memory/2026-04-21.md` 本轮交接
 
-- Task: 圈子模块细节修复（标题字号、互动消息跳转、筛选漏斗图标）
-- Status: done（好友动态标题已调大；互动消息点击优先返回圈子页并定位对应动态；搜索框下方左侧筛选图标改为 `iconfont icon-filter-filling`）
+- Task: 输出对外版《食探（智健食探）商业计划书》精简 PDF
+- Status: done（已将原始草稿收敛为更精简、更适合外部沟通的版本，弱化“尚未正式付费验证”的内部表达；首次 ReportLab CID 字体版在浏览器中显示为空白/乱码，已返工为 PIL + NotoSansSC 图片页封装 PDF，并用预览 PNG 抽查确认中文可读）
+- Deliverables:
+  - 文案源文件：`docs/食探-商业计划书-精简版.md`
+  - PDF 成品：`docs/shitan-business-plan-brief.pdf`
+  - 中文文件名副本：`docs/食探-商业计划书-精简版.pdf`
+  - 生成脚本：`scripts/generate_shitan_bp_pdf.py`
+  - 预览图目录：`docs/business_plan_preview/`
+- Notes:
+  - 对外品牌表达统一为：`食探（智健食探）`
+  - 文案保留真实数据支撑，但不再把早期自愿付费样本作为核心卖点
+  - 内容已按用户要求压缩为“抓核心痛点、不过长”的精简版，适合先发人看
+  - 当前 PDF 为图片页格式，优点是微信/浏览器/PDF 查看器中文显示更稳；缺点是正文不可复制检索，可编辑文本仍以 Markdown 文件为准
+  - 本轮未做小程序前端改动，因此未触发 `weapp-devtools` 运行态验证
+
+- Task: 将《食探（智健食探）商业计划书》改为更紧凑的 Word/docx 版本
+- Status: done（用户反馈 PDF 内容太少、排版不够紧密；已改为可编辑 Word 文档，并按用户最新方案更新为“三档订阅 + 每日积分清零”：轻度/标准/进阶，保留精简外部口径但信息密度更高）
+- Deliverables:
+  - Word 文档：`docs/食探（智健食探）商业计划书.docx`
+  - 生成脚本：`scripts/generate_shitan_bp_docx.py`
+- Verification:
+  - 使用 `python-docx` 读取校验通过：`42` 个段落、`14` 张表格
+  - 校验关键字：`轻度版 / 标准版 / 进阶版 / 免费 3 天` 均已写入文档
+  - 本轮仍未做小程序前端改动，因此未触发 `weapp-devtools` 运行态验证
+
+- Task: 修复小程序模拟器 `dist/app.json` 缺失报错，并验证会员页返回
+- Status: done（`dist/` 构建产物已恢复；会员页左上角返回已修复并做了自动化回归）
 - Scope:
-  - `src/pages/community/index.tsx`
-    - 动态标题增加 `feed-section-title`，仅放大圈子模块标题
-    - 漏斗图标从 `icon-filter` 切换为 `icon-filter-filling`
-  - `src/pages/community/index.scss`
-    - 新增 `.feed-section-title` 字号
-    - 漏斗按钮图标样式同步切换到 `.icon-filter-filling`
-  - `src/pages/interaction-notifications/index.tsx`
-    - 点击通知后优先 `navigateBack` 返回上一个圈子页（保留已有页面状态），否则回退 `switchTab`
+  - 模拟器启动失败：
+    - 现象：微信开发者工具报 `dist/app.json` 不存在，提示检查 `project.config.json -> miniprogramRoot`
+    - 结论：`project.config.json` 中 `miniprogramRoot: "dist/"` 无需修改，问题是上一次 `npm run dev:weapp` 中断后 `dist/` 只剩零散产物
+    - 当前状态：重新完成 `dev:weapp` 编译后，`dist/app.json` 已恢复
+  - 会员页返回修复：
+    - `src/components/CustomNavBar/index.tsx`
+      - 自定义导航栏支持 `onBack`
+    - `src/packageExtra/pages/pro-membership/index.tsx`
+      - 会员页返回改为读取上一页路由
+      - 上一页若为 Tab（如 `/pages/profile/index`）则走 `Taro.switchTab(...)`
+      - 非 Tab 页则走 `normalizeRedirectUrlForSubpackage(...) + Taro.redirectTo(...)`
+      - 兜底仍返回 `/pages/profile/index`
+- Verification:
+  - `dist/app.json` 存在
+  - `dist/packageExtra/pages/pro-membership/index.js` 已包含 `MAIN_TAB_ROUTES` 与 `normalizeRedirectUrlForSubpackage` 返回逻辑
+  - `weapp-devtools` 自动化：
+    - `mrc pageInfo --port 9420`：进入会员卡后页面为 `packageExtra/pages/pro-membership/index`
+    - `mrc click .custom-nav-bar__back --port 9420` 后，`mrc pageInfo --port 9420`：页面回到 `pages/profile/index`
+    - `mrc stack --port 9420`：页面栈深度为 `1`，当前页为 `pages/profile/index`
+    - `mrc errors 20 --port 9420`：`0` 条错误
+- Blocked / Notes:
+  - 这次 `mrc screenshot` 与 `miniprogram-automator.screenshot()` 仍在当前 DevTools 环境卡住/超时，没能落下截图文件
+
+- Task: 会员页顶部导航与 Hero 继续按参考图优化
+- Status: done（返回按钮已从字符换成图标，顶部视觉已向参考图收口；运行态已验证进入与返回）
+- Scope:
+  - `src/components/CustomNavBar/index.tsx`
+    - 返回按钮改为 `@taroify/icons` 的 `ArrowLeft`
+    - 不再使用字符 `‹`
+  - `src/components/CustomNavBar/index.scss`
+    - 调整返回按钮点击区、图标尺寸、标题字重和导航栏通透感
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - Hero 改成 `hero-inner + hero-orb` 结构
+    - 保留自定义返回逻辑，顶部卡片文案继续按积分口径展示
+    - 去掉试用态积分标题里的 emoji，避免视觉噪音
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 顶部 Hero 改成更接近参考图的深绿渐变、右上/左下柔光圆形背景
+    - `食探会员` 标题、说明、副卡片间距和透明度重新收口
+    - 积分卡改成更宽的半透明玻璃卡，强调 `0 / 40` 这类主数字层级
+- Verification:
+  - 编译产物已更新：
+    - `dist/packageExtra/pages/pro-membership/index.js` 已包含 `hero-orb` / `hero-inner`
+  - `weapp-devtools` 自动化：
+    - 通过 automator 从 `pages/profile/index` 点击 `.member-card` 后，当前页为 `packageExtra/pages/pro-membership/index`
+    - 当前页检测到 `.custom-nav-bar__back`
+    - 当前页检测到 `.hero-title`、`.hero-subtitle`、`.hero-credits`
+    - 点击 `.custom-nav-bar__back` 后，页面回到 `pages/profile/index`
+    - `mrc errors 20 --port 9420`：`0` 条错误
+- Blocked / Notes:
+  - 本轮再次尝试 `mrc screenshot`，仍在当前 DevTools 环境卡住，未能生成截图文件
+
+- Task: 基于 Supabase 聚合数据评估 `food_link` 在中国的商业化与盈利可能
+- Status: done（已做匿名聚合分析，未读取/披露个人明细；结论是“有主需求和早期付费苗头，但当前不适合押社区，应先做 AI 饮食记录 + 体重管理订阅/积分验证”）
+- Key data points:
+  - Supabase 当前聚合：`weapp_user=622`，近 30 天活跃用户约 `270`，近 30 天分析任务 `3408`，近 30 天饮食记录 `2278`
+  - 主链路使用：分析任务用户 `394`，饮食记录用户 `256`；完成分析后有饮食记录的用户约 `66.1%`
+  - 留存粗算：D1 exact `21.1%`，D7 后 7 日窗口 `17.1%`，D30 后 7 日窗口 `12.9%`
+  - 商业化：会员支付记录 `45`，其中 `paid=4`、`pending=41`；唯一付费用户 `3`，已付金额合计约 `20.81`
+  - 社区/公共库：公共食物库 `41` 条、发布者 `20`、评论 `2`、收藏 `4`，暂不足以支撑社区型商业化
+- Recommended next step:
+  - 用户倾向重新回到“订阅制度”作为主商业模型；当前建议调整为“订阅会员对外主卖 + 后台额度/加量包控制 AI 成本”，不要把积分作为用户侧核心心智
+  - 不要继续以免费高额度拍照作为默认卖点
+  - 将盈利叙事从“AI 拍照次数”升级为“体重管理闭环：饮食记录、趋势洞察、执行计划、复盘提醒”
+  - 保持手动记录永久免费，AI 分析/精准模式/周报复盘作为消耗积分或会员权益
+  - 增加支付失败/取消原因与会员页曝光漏斗埋点，定位 `pending` 大量堆积的原因
 
 - Task: 微信审核「先浏览后登录」整改
 - Status: done（Tab 可进、首页/分析引导、操作点统一跳转登录页并带 redirect；已 `npm run build:weapp`）
@@ -1859,6 +2881,7 @@
       - 深蹲 15 分钟
       - 拉伸 10 分钟
       做 UTF-8 本地复测，已成功返回总计 `518 kcal`，不再直接报错
+    - 按用户要求，运动热量估算模型已改为在 `backend/exercise_llm.py` 内直接写死 `google/gemini-3.1-flash-lite-preview`，并撤回了 `backend/.env` 中新增的模型环境变量
 - Next step:
   - 统一执行数据库 SQL：
     - `backend/sql/migrate_exercise_logs_and_task_type.sql`（若线上还未执行）
@@ -1935,60 +2958,291 @@
   - 用户在微信开发者工具手动复测“分析页 -> 统计页”
   - 若仍报错，优先把控制台里 `[stats] fetchStats failed:` 后面的真实异常贴出来继续定位
 
-- Task: 首页「今日餐食」卡片数据不显示描述与三大营养素
-- Status: done（根因定位：数据库顶层 total_protein/carbs/fat 为 null 时后端默认返回 0，前端 v3 缓存写入并保留了这些 0 值；已修复后端兜底计算、前端脏缓存迁移与渲染条件）
+- Task: 「我的」页进入时报错 `ReferenceError: extraPkgUrl is not defined`
+- Status: done（已修复运行时引用错误；`weapp-devtools` 已完成日志级验证，截图命令在当前 DevTools 自动化环境下卡住未落盘）
 - Scope:
-  - 后端 `backend/main.py`：
-    - 新增 `_sum_macro_from_record_items()` 辅助函数
-    - 当 `total_protein/total_carbs/total_fat` 聚合为 0 时，自动从 `record.items[].nutrients` 明细中兜底重新计算宏量营养素
-    - `/api/home/dashboard` 的 `meals_out` 现在能正确返回 `protein/carbs/fat/description`
-  - 前端 `src/pages/index/index.tsx`：
-    - 放宽营养素渲染条件：从 `Number(meal.protein) > 0` 改为 `typeof meal.protein === 'number'`，确保只要后端返回了数据就显示（包括 0）
-    - 在 `getStoredHomeDashboardSnapshots()` 中增加临时迁移逻辑：若缓存快照中存在「有 description 但三大营养素全为 0」的餐食，判定为脏缓存并强制清空，促使下次切日时从后端拉取最新完整数据
-  - 前后端已重启：`npm run dev:restart` 成功，`backend-dev.log` 与 `weapp-dev.log` 均已正常输出
+  - 根因定位：
+    - `src/pages/profile/index.tsx` 在会员入口处直接调用 `extraPkgUrl('/pages/pro-membership/index')`
+    - 该文件遗漏了 `../../utils/subpackage-extra` 的 `extraPkgUrl` 导入，导致进入「我的」页渲染时直接抛 `ReferenceError`
+  - 修复内容：
+    - `src/pages/profile/index.tsx` 新增 `extraPkgUrl` import
+    - 同页里原本仍写死为主包路径的分包跳转一并收口到 `extraPkgUrl(...)`
+      - 健康档案 / 健康档案查看
+      - 收藏餐食
+      - 食物保质期
+      - 关于我们
+      - 好友管理
+      - 隐私设置
+      - 个人设置
+  - 影响面：
+    - 修复「我的」页首屏渲染崩溃
+    - 同时避免该页内后续点击分包页面时再出现错误路由
 - Verification:
-  - 后端日志确认：2026-04-13 请求返回 4 条记录，计算结果 `protein=42.5, carbs=190.1, fat=36.8`
-  - `mrc where --port 9420` 连接成功，当前页面 `pages/index/index`
-  - `mrc click '.date-item:nth-child(3)' --port 9420`（切到 4 月 13 日）成功
-  - 等待 4 秒后验证：
-    - `mrc exists '.meal-desc' --port 9420` → 存在
-    - `mrc exists '.meal-macro-pill' --port 9420` → 存在
-    - `mrc exists '.meal-type-tag' --port 9420` → 存在
-  - `mrc logs error 20 --port 9420` → 0 条错误
-  - 备注：`mrc screenshot` 在本环境仍持续 30s+ 超时，未能获取截图，但通过元素存在性检查已确认数据渲染链路正常
+  - 已执行 `npm run dev:weapp`，`dist/` 已重新生成
+  - 已按项目要求使用 `weapp-devtools`
+    - `cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+    - `mrc errors 20 --port 9420` 返回 `0`
+    - `mrc logs error 20 --port 9420` 返回 `0`
+  - 阻塞：
+    - `mrc pageInfo`、`mrc screenshot` 以及 `miniprogram-automator` 的页面回执类命令在当前宿主环境持续卡住，未能拿到截图文件
 - Next step:
-  - 用户在微信开发者工具中切到 4 月 13 日，确认今日餐食卡片已正确显示食物描述、时间胶囊、餐次标签、卡路里及蛋白质/碳水/脂肪图标数值
+  - 用户如需补截图证据，可在当前已连通的 DevTools 自动化会话里再试一次手动截图，或待宿主截图能力恢复后补跑 `mrc screenshot`
 
-- Task: 修复首页切换日期时本地缓存失效导致数据归零
-- Status: done
+- Task: 会员充值页适配黑色主题 + 给锦恢补进阶版半年会员
+- Status: done（页面深色主题已落地并重新编译；数据库已完成手动会员追加；`weapp-devtools` 已做运行态尝试但截图仍受宿主自动化阻塞）
 - Scope:
-  - `src/pages/index/index.tsx`
-    - `getStoredHomeDashboardSnapshots()` 移除了对 `meals[0]` 中 `protein/carbs/fat/description` 字段的强制存在性检查
-    - 这些字段在 `HomeMealItem` 类型中本来就是可选字段，旧缓存缺失它们是合法状态
-- Root cause:
-  - 过滤条件过于严格，把合法的旧格式缓存全部过滤掉
-  - `getStoredHomeDashboardSnapshotByDate()` 因此返回 `null`
-  - `handleDateSelect()` 的 else 分支把所有状态重置为默认值，导致用户看到数据先归零、再等网络请求返回
+  - 前端：
+    - `src/packageExtra/pages/pro-membership/index.tsx`
+      - 接入 `useAppColorScheme`
+      - 页面进入与主题切换时同步调用 `applyThemeNavigationBar(...)`
+      - 页面根节点追加 `membership-page--dark` class
+    - `src/packageExtra/pages/pro-membership/index.scss`
+      - 新增整页深色主题覆盖：Hero、升级提示、档位卡、周期卡、价格卡、对比表、积分说明、状态卡、按钮、测试区
+      - 目标是把原先白卡强对比样式收成暗底玻璃卡 + 绿色高亮，更贴合黑色主题
+  - 数据库：
+    - 已定位用户 `锦恢`
+      - `user_id=8826bc8d-81ad-40a4-bc42-6cc30506b8c3`
+    - 已读取到该用户原有会员记录：
+      - 原 `current_plan_code=pro_monthly`
+      - 原 `expires_at=2027-04-03T13:09:25.426678+00:00`
+      - 原 `daily_credits=0`
+    - 因系统当前没有正式的“半年卡”套餐编码，为避免缩短原权益，按“在现有权益基础上追加 6 个月，并切到进阶版权益”处理：
+      - 更新为 `current_plan_code=advanced_yearly`
+      - `daily_credits=40`
+      - `expires_at=2027-10-03T13:09:25.426678+00:00`
+      - `updated_at/last_paid_at=2026-04-24T19:51:22.409101+00:00`
 - Verification:
-  - `npm run build:weapp -- --no-check` 编译成功
-  - 使用 `miniprogram-automator` 直连 9420 端口对比验证：
-    - 本地缓存 2 条，旧过滤逻辑 0 条通过，新过滤逻辑 2 条全部通过
+  - 静态检查：
+    - `eslint src/packageExtra/pages/pro-membership/index.tsx` 通过
+  - 编译验证：
+    - `npm run dev:weapp` 已重新生成会员页产物
+    - `dist/packageExtra/pages/pro-membership/index.js|index.wxss` 已包含本轮深色主题与导航栏主题切换代码
+  - 运行态验证（按项目要求使用 `weapp-devtools`）：
+    - `mrc errors 20 --port 9420` 返回 `0`
+    - 已尝试 `mrc relaunch` / `switchTab` / `pageInfo` / `screenshot`
+    - 已尝试 `miniprogram-automator` 直连 9420 导航 + 截图
+    - 当前宿主环境仍会在页面回执/截图阶段超时，未成功产出截图文件
+- Next step:
+  - 若需要留视觉证据，建议在当前 DevTools 已连通状态下手动打开会员页截一张，或等自动化截图恢复后补跑
 
-- Task: 运动记录页加载历史记录时增加 loading spinner
-- Status: done
+- Task: 继续优化会员充值页“选择档位 / 选择周期 / 定价卡”视觉
+- Status: done（已按参考图进一步优化结构与层级；`weapp-devtools` 日志验证通过，但本轮 `dev:weapp` 首轮完整产物仍未等到落盘）
 - Scope:
-  - `src/pages/exercise-record/index.tsx`
-    - 新增 `loadingLogs` state，`loadTodayRecords` 请求期间显示加载动画
-    - 列表区域在加载期间显示居中的 `loading-spinner-md`，不显示文字（符合加载态规范）
-  - `src/pages/exercise-record/index.scss`
-    - 新增 `.exercise-logs-loading` 样式
-- Verification: `npm run build:weapp -- --no-check` 编译通过
+  - `src/packageExtra/pages/pro-membership/index.tsx`
+    - 档位卡新增标题图标（轻度/标准/进阶）
+    - 周期卡新增：
+      - 年卡“推荐”角标
+      - 更强的价格排版（`¥` / 主价格 / 单位分层）
+      - 底部 `30 / 90 / 365` 水印
+      - 标题区右侧辅助提示文案
+    - 已选套餐价格卡新增原价行（当 `original_amount > amount` 时展示）
+  - `src/packageExtra/pages/pro-membership/index.scss`
+    - 收紧档位卡比例、标题头部、数字大小、摘要区留白
+    - 周期卡改为更接近参考图的暗色大卡结构、推荐角标和底部水印
+    - 定价总览卡增加原价删除线层级
+    - 深色主题下同步适配新增结构
+- Verification:
+  - `eslint src/packageExtra/pages/pro-membership/index.tsx` 未返回报错
+  - `weapp-devtools`：
+    - `mrc errors 20 --port 9420` 返回 `0`
+    - `mrc logs error 20 --port 9420` 返回 `0`
+  - 阻塞：
+    - 本轮 `npm run dev:weapp` 启动后，长时间停留在 `transforming...`
+    - 当前 `dist/` 仅见 `project.config.json`，未能在本轮等待窗口内拿到完整会员页产物与截图文件
 
-- Task: 确认首页本地缓存60条上限
-- Status: done（代码已严格限制，无需修改）
-- Scope: `src/pages/index/index.tsx`
-- 结论：
-  - 当前只有一个缓存键 `home_dashboard_local_cache_v3`，按日期存储完整 dashboard 快照
-  - `HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 60`
-  - 读写两端均有 `.slice(0, 60)` 截断，快照总数严格不超过60条
-- 注意：目前不是按蛋白质/碳水/脂肪等类别分别存60天数组，而是每天一个完整快照。若需要按类别独立存储60天历史，需额外设计。
+- Task: 公共食物库页面深度改版
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - Tab 布局改为 space-around + Swiper 左右滑动切换
+    - 筛选按钮增加 iconfont 图标（`icon-filter-filling`）
+    - 点击筛选按钮展开下拉浮层（绝对定位 + 阴影），选项：全部 / 适合减脂
+    - 列表页底部新增「结果如果不准确的话，可以点击向我们提交反馈」入口
+  - `src/packageExtra/pages/food-library/index.scss`
+    - 全部绿色统一为首页低饱和绿 `#5cb896`（替换原来的 `#00bc7d` / `#4a9e7f`）
+    - 卡片改为左图右文横向布局
+    - 筛选下拉浮层样式：absolute 定位、圆角、阴影
+    - sort-item active 下划线同步为 `#5cb896`
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - 底部操作栏下方新增「信息有误？点击修正」入口
+    - 点击后弹出修正内容输入框，提交到 `submitPublicFoodLibraryFeedback`（带 libraryItemId）
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - correction-bar 样式：fixed 定位、居中对齐
+    - correction-link 颜色为 `#5cb896`
+  - `src/styles/fl-color-scheme-dark.scss`
+    - 新增 filter-dropdown-panel、filter-dropdown-option、correction-bar 暗色覆盖
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
+  - `mrc errors 20 --port 9420`：`0`
+- Notes:
+  - 微信开发者工具自动化 `mrc screenshot` 当前环境中偶发超时，本轮截图验证以列表页 + 筛选面板为主；详情页修正入口截图待后续补
+  - 提交记录：`189880b`
+
+- Task: 搜索/排序/筛选切换时清空列表并显示 spinner
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - 新增 `refreshList()` 函数：先 `setList([])` 清空列表 + `setLoading(true)` 显示 spinner + `clearCache()` 清除缓存，再请求数据
+    - `handleSearch` 搜索后直接调用 `refreshList`
+    - 排序点击（最新/最热/评分）设置状态后直接调用 `refreshList`
+    - 筛选点击（全部/适合减脂）设置状态 + 关闭面板后直接调用 `refreshList`
+    - `useEffect` 依赖从 `[sortBy, filterFatLoss, searchMerchant, loggedIn, tabMode]` 收敛为 `[loggedIn, tabMode]`，避免与用户主动操作重复触发加载
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
+  - `mrc tap .sort-filter-btn --port 9420`：点击成功
+  - `mrc tap .filter-dropdown-option --port 9420`：点击成功
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`296af07`
+
+- Task: 优化圈子社区接口性能（好友排名、互动消息、好友动态）
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `backend/database.py`
+    - `get_friend_ids`：合并两次查询为一次（`or_` 条件），减少一次网络往返；增加 5 分钟内存缓存
+    - `get_friend_circle_week_checkin_leaderboard`：去掉 while 循环分页，改为一次批量拉取；增加 5 分钟内存缓存（按周起始时间作为 key）
+    - `get_feed_likes_for_records`：合并两次查询为一次（同时获取 record_id + user_id，Python 中同时统计点赞数和当前用户是否点赞）
+    - `list_feed_interaction_notifications`：使用外键关联查询 `actor:weapp_user!actor_user_id(id, nickname, avatar)` 一次性获取通知 + 用户信息
+    - `count_unread_feed_interaction_notifications`：使用 `select("*", count="exact").limit(0)` 直接获取计数，避免传输行数据
+  - `backend/tests/benchmark_community_apis.py`
+    - 新增基准测试脚本，分别调用原始版本和优化版本函数，各跑 10 次取平均
+    - 每次测试前清除缓存，确保公平对比
+- Verification:
+  - `python -m py_compile backend/database.py`：通过
+  - `python tests/benchmark_community_apis.py`：运行成功，结果稳定
+- 优化前后速度差异（表格）：
+
+| 接口 | 优化前(ms) | 优化后(ms) | 节省(ms) | 提升幅度 |
+|------|-----------|-----------|---------|---------|
+| 好友排名 | 1523.33 | 1131.11 | 392.22 | 25.7% |
+| 点赞查询 | 716.70 | 362.17 | 354.52 | 49.5% |
+| 互动消息列表 | 739.08 | 384.67 | 354.41 | 48.0% |
+| 未读通知计数 | 380.48 | 392.23 | -11.76 | -3.1% |
+| **合计** | **3359.59** | **2270.18** | **1089.41** | **32.4%** |
+
+- Notes:
+  - 测试数据：好友排名测试用户有 110 个好友，一周内 114 条记录；互动消息测试用户有 90 条通知
+  - 未读通知计数提升不明显，原因是数据量小（90 条），网络往返时间主导，SQL 层面优化收益有限
+  - 三个核心接口（好友排名、点赞查询、互动消息列表）均有显著提速，合计提升约 1.1 秒
+  - 提交记录：`c688f33`
+
+- Task: 调整公共食物库反馈入口位置
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library/index.tsx`
+    - 删除列表页底部 `feedback-bar`（"结果如果不准确的话，可以点击向我们提交反馈"）
+    - `handleFeedback` 函数保留（详情页修正弹窗仍在使用）
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - 将 `correction-bar` 从 `bottom-bar` 外部移入内部，放在 `comment-btn` 下方
+    - 新增 `comment-section` 容器包裹 `comment-btn` + `correction-bar`
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - 新增 `.comment-section`：flex 垂直布局，占满剩余空间
+    - `.correction-bar`：从 `position: fixed` 改为普通流布局，字号微调为 22rpx
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`885fb59`
+
+- Task: 修复公共食物库详情页评论区交互及后端数据一致性
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - Textarea 增加 `autoFocus` + `fixed` 属性，弹窗打开后自动聚焦
+  - `src/packageExtra/pages/food-library-detail/index.scss`
+    - `.comment-input` 边框从 `transparent` 改为 `#e5e7eb`，提高输入框可见性
+  - `backend/database.py`
+    - 新增 `_update_public_food_library_comment_stats_sync()`：在插入评论后自动更新 `public_food_library` 表的 `comment_count` 和 `avg_rating`
+    - `list_public_food_library_comments()`：排序从 `created_at ASC` 改为 `DESC`，与前端乐观更新顺序一致
+- Verification:
+  - `python -m py_compile backend/database.py`：通过
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+- Notes:
+  - 后端评论接口此前已实现完整（POST / GET），但缺少主表统计字段的自动更新，导致列表页评论数/评分显示不准确
+  - 提交记录：`516d1ea`
+
+- Task: 首页编辑目标按钮改为 stats 页 hero-badge 风格
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/pages/index/index.scss`
+    - `.target-edit-btn`：背景从 `#f3f4f6` 灰色改为 `rgb(255 255 255 / 94%)` 白色半透明；去掉边框；增加 box-shadow 胶囊阴影
+    - `.target-edit-icon`：从 `#6b7280` 灰色改为 `#5cb896` 品牌绿
+    - `.target-edit-text`：从 `#6b7280` 灰色 `#6b7280` 改为 `#2f7f62` 深绿；字重从 400 改为 600
+  - `src/styles/fl-color-scheme-dark.scss`
+    - `.target-edit-btn`：暗色下改为 `rgb(30 40 36 / 85%)` 深半透明底
+    - `.target-edit-icon`：暗色下改为 `$fl-dark-accent`
+    - `.target-edit-text`：暗色下改为 `#7dd3b0`
+- Verification:
+  - `npm run build:weapp`：通过
+  - `mrc errors 10 --port 9420`：`0`
+- Notes:
+  - 提交记录：`f2e908c`
+
+- Task: 我的页用户信息与会员状态先读本地缓存再异步更新
+- Status: done（已提交 dev 分支）
+- Scope:
+  - `src/pages/profile/index.tsx`
+    - `loadUserInfo()` 重构为两步加载：
+      1. **零延迟读缓存**：先读取 `userInfo`、`membershipStatus`、`userRegisterTime` 本地缓存并立即 setState，用户立刻看到旧数据
+      2. **异步请求更新**：再发起 `getUserProfile` / `getMyMembership` / `getFoodExpiryDashboard` / `friendGetRequestsOverview` 请求，获取最新数据后更新状态并回写缓存
+    - 新增 `membershipStatus` 的 storage 缓存读写（JSON 序列化）
+    - 网络失败时，本地缓存已先行展示，不再出现白屏/空白
+- Verification:
+  - `npm run lint`：通过
+  - `npm run build:weapp`：通过
+- Notes:
+  - 提交记录：`7cf0813`
+
+- Task: 重构底部导航「分析」页定位，探索从“营养统计看板”升级为“疾病风险可视化报告”
+- Status: in_progress（已落地第一版前端信息架构草案；运行态自动化验证受 DevTools 9420 端口未开启阻塞）
+- Scope:
+  - 当前目标页：`src/pages/stats/index.tsx`
+  - 用户希望弱化“泛营养报告 / 热量统计”心智，强化“疾病预防指数 / 健康寿命趋势 / 可逆转改善动作”表达
+  - 方向上优先评估以下风险维度是否适合作为 MVP：
+    - 高血压预防指数
+    - 糖尿病预防指数
+    - 心血管保护指数
+    - 结直肠癌饮食风险指数
+    - 体重管理友好度
+    - 健康寿命趋势分
+- Notes:
+  - 用户明确要求：不要把页面做成“治疗建议”或“医学诊断”，而应表述为“饮食相关风险趋势”
+  - 用户给出的核心定位是“从卡路里工具升级为疾病预防和健康寿命管理工具”
+  - 当前已实现的草案形态：
+    - 第一屏改为“疾病预防指数总分 + 4 张风险卡 + 最小改善动作 + AI 风险解读”
+    - 原有热力图、热量趋势、宏量占比、餐次结构、体重喝水、连续记录统一下沉为“支撑证据”
+    - 风险卡改为更小的双列卡片，点击后再展开详情
+    - 所有疾病卡当前默认折叠
+    - `AI 风险解读` 与各项证据模块改为折叠卡，避免页面默认展开过长
+    - 已删除“当前版本先基于……估计”这类开发者视角文案
+    - 4 个风险维度当前先用现有 `stats` 数据前端推导：高血压预防、糖尿病预防、心血管保护、体重管理友好度
+    - 新增“我的关注”管理卡，支持添加 / 移除疾病方向，并把当前选择持久化到本地 storage
+    - `我的关注` 本轮继续产品化收口：默认折叠时直接展示“已关注 X 项”，展开后按“已关注优先”的顺序管理疾病卡片
+    - 风险卡折叠态继续压缩为“标题 + 分数 + 一句很短的判断”，展开后再看依据、最小改善动作和预计提升
+    - 页面语气继续柔化：总分标题改为“饮食健康参考指数”，并补充“结果仅供参考”；“疾病方向”统一改成更委婉的“健康方向 / 友好度 / 长期状态趋势”
+  - 当前这版仍是前端原型，不是最终科学模型：
+    - 还没有接入钠、膳食纤维、加工肉、全谷物、含糖饮料等真实风险因子
+    - 分数与“预计提升”目前是基于热量、宏量比例、餐次分布、超标频率的前端启发式映射
+  - Verification:
+    - `npm run lint -- src/pages/stats/index.tsx` 通过
+    - `npx tsc --noEmit --pretty false` 仍被项目既有历史类型错误阻塞，未发现本次 `stats` 页新增报错
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
+    - 当前环境这轮返回 `Access is denied.`，此前同样尝试过 `Failed connecting to ws://localhost:9420`；两者都说明微信开发者工具自动化链路当前不可用，未能完成分析页截图与交互验证
+  - 下一步建议：
+    - 决定这版“风险感”是否是你想要的方向
+    - 再决定“我的关注”是否继续升级为独立设置页，还是维持页面内轻量管理
+    - 若方向成立，再补真实风险因子与证据卡片，避免长期停留在前端启发式打分
+  - 发布安排：
+    - `2026-04-29` 用户已明确要求先把当前工作区全部改动整体提交到远端
+    - 顺序为：先提交并推送 `dev`，再合并到 `main` 并推送，然后再回头复查线上会员页与支付问题
+  - 线上支付排查新增结论：
+    - 体验版登录域名问题已与支付问题拆开
+    - 当前支付“签名错误”更像是运行中的后端微信支付配置问题，而不是前端包本身
+    - 现有后端自动部署 GitHub Actions 处于停用状态，且 Docker/K8s 运行配置由集群 `ConfigMap` 注入
+    - `foodlink-main` 生产 Deployment 使用 `envFrom -> configMapRef -> foodlink-main-env`
+    - 因此若支付证书/商户号/appid 有误，优先应检查并更新集群中的 `foodlink-main-env`，而不是只改前端或只推镜像

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>食物分析测试后台</title>
-    <link rel="stylesheet" href="/static/test_backend/style.css?v=20260318c">
+    <link rel="stylesheet" href="/static/test_backend/style.css?v=20260427a">
 </head>
 <body>
     <div class="container">
@@ -45,9 +45,36 @@
                     </div>
 
                     <div class="form-group input-card">
-                        <label for="reference-weight-input">参考克数（选填）</label>
-                        <input type="number" id="reference-weight-input" min="0" step="0.1" placeholder="例如：320">
-                        <p class="field-hint">填写后会用 AI 估算总重量和你输入的克数做对比，并计算偏差。</p>
+                        <label>测试模型</label>
+                        <div class="choice-row">
+                            <label class="pill-check"><input type="checkbox" id="model-gemini-flash" value="gemini-3-flash-preview" checked><span>gemini-3-flash-preview</span></label>
+                            <label class="pill-check"><input type="checkbox" id="model-gemini-flash-lite" value="gemini-3.1-flash-lite-preview"><span>gemini-3.1-flash-lite-preview</span></label>
+                        </div>
+                        <p class="field-hint">只保留两个 Gemini 视觉模型，可同时勾选，用同一张图和同一份主链路 prompt 对比结果。</p>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="execution-mode-select">识别模式</label>
+                        <select id="execution-mode-select">
+                            <option value="standard" selected>standard 标准模式</option>
+                            <option value="strict">strict 严格模式</option>
+                            <option value="custom">custom 自定义模式</option>
+                        </select>
+                        <p class="field-hint">`standard / strict` 继续走原有真实链路；只有 `custom` 才会改用提示词管理里的 Gemini 自定义提示词。</p>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="analyze-prompt-select">自定义模式提示词</label>
+                        <select id="analyze-prompt-select" multiple size="6">
+                            <option value="">当前激活提示词</option>
+                        </select>
+                        <p class="field-hint" id="analyze-prompt-hint">仅在 `custom` 模式下生效。可多选，会按“所选模型 × 所选提示词”同时并跑。</p>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="expected-items-input">标准标签（选填）</label>
+                        <textarea id="expected-items-input" class="notes-textarea compact" placeholder="总重量=500g 或 米饭=120g; 鸡胸肉=80g; 西兰花=60g"></textarea>
+                        <p class="field-hint">支持两种格式：只有整餐总重量时只评估总重量误差；知道每种食物克重时，会先评估食物识别是否匹配，再评估匹配食物的重量误差。当前 benchmark 主视角只关注“食物名称 + 重量”。</p>
                     </div>
 
                     <div class="form-group checkbox-card">
@@ -73,71 +100,59 @@
                     <div class="summary-grid" id="summary-grid"></div>
                 </div>
 
-                <div class="result-card">
-                    <div class="result-header">
-                        <h3>AI 分析结果</h3>
-                        <div class="result-badges" id="result-badges"></div>
-                    </div>
-                    <div class="result-section">
-                        <h4>餐食描述</h4>
-                        <p id="result-description">-</p>
-                    </div>
-                    <div class="result-section">
-                        <h4>文字补充</h4>
-                        <p id="result-notes">-</p>
-                    </div>
-                    <div class="result-section">
-                        <h4>健康建议</h4>
-                        <p id="result-insight">-</p>
-                    </div>
-                    <div class="result-grid">
-                        <div class="result-section">
-                            <h4>PFC 比例评价</h4>
-                            <p id="result-pfc">-</p>
-                        </div>
-                        <div class="result-section">
-                            <h4>吸收率说明</h4>
-                            <p id="result-absorption">-</p>
-                        </div>
-                    </div>
-                    <div class="result-section">
-                        <h4>情境建议</h4>
-                        <p id="result-context">-</p>
-                    </div>
-                </div>
-
-                <div class="result-card">
-                    <div class="result-header">
-                        <h3>识别食物明细</h3>
-                    </div>
-                    <div class="results-table-wrapper">
-                        <table class="results-table">
-                            <thead>
-                                <tr>
-                                    <th>食物</th>
-                                    <th>重量 (g)</th>
-                                    <th>热量</th>
-                                    <th>蛋白质</th>
-                                    <th>碳水</th>
-                                    <th>脂肪</th>
-                                    <th>纤维</th>
-                                    <th>糖分</th>
-                                </tr>
-                            </thead>
-                            <tbody id="food-items-body"></tbody>
-                        </table>
-                    </div>
-                </div>
+                <div class="analyze-model-results" id="analyze-model-results"></div>
             </div>
         </div>
 
         <div class="tab-panel" id="batch-panel">
             <div class="analyze-shell">
+                <div class="result-card">
+                    <div class="result-header">
+                        <h3>可复用测试集</h3>
+                        <button type="button" class="text-btn" id="reload-datasets-btn">刷新</button>
+                    </div>
+                    <div class="config-grid">
+                        <div class="form-group input-card">
+                            <label for="dataset-name-input">新测试集名称</label>
+                            <input type="text" id="dataset-name-input" placeholder="例如：food_test_20260424">
+                        </div>
+                        <div class="form-group input-card">
+                            <label for="dataset-source-dir-input">本机目录</label>
+                            <input type="text" id="dataset-source-dir-input" placeholder="例如：D:\创业\healthymax\food_test_sanitized_20260424">
+                            <p class="field-hint">从本地目录一次导入到云端，后面就能反复复用，不用再传 ZIP。</p>
+                        </div>
+                        <div class="form-group input-card">
+                            <label for="dataset-description-input">说明（选填）</label>
+                            <textarea id="dataset-description-input" class="notes-textarea compact" placeholder="例如：2026-04-24 脱敏版；33 张已标注样本；4 张工作餐为逐项标签。"></textarea>
+                        </div>
+                        <div class="form-group checkbox-card">
+                            <button type="button" class="analyze-btn secondary import-dataset-btn" id="import-dataset-btn">导入为可复用测试集</button>
+                            <p class="field-hint">导入后会出现在下方列表，可直接“载入批次”。</p>
+                        </div>
+                    </div>
+                    <div class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th>测试集</th>
+                                    <th>样本数</th>
+                                    <th>来源</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="datasets-body">
+                                <tr><td colspan="5" class="empty-row">正在加载测试集...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div class="upload-section">
                     <div class="upload-area" id="batch-upload-area">
                         <div class="upload-icon">📦</div>
                         <p>上传 ZIP 批量测试包</p>
-                        <p class="upload-hint">ZIP 内需包含图片和 labels.txt；上传后先解析列表，再手动开始逐张处理。</p>
+                        <p class="upload-hint">ZIP 内需包含图片和 labels.txt；可标总重量，也可标每种食物克重。</p>
                         <button type="button" class="upload-trigger" id="choose-batch-btn">选择 ZIP</button>
                     </div>
                     <input class="visually-hidden-file" type="file" id="batch-file-input" accept=".zip,application/zip">
@@ -163,6 +178,37 @@
                         </label>
                         <p class="field-hint">适用于 ZIP 中每一张图都表示同一份食物的不同角度；若 ZIP 中是多张独立样本，请不要开启。</p>
                     </div>
+
+                    <div class="form-group input-card">
+                        <label>批量测试模型</label>
+                        <div class="choice-row">
+                            <label class="pill-check"><input type="checkbox" id="batch-model-gemini-flash" value="gemini-3-flash-preview" checked><span>gemini-3-flash-preview</span></label>
+                            <label class="pill-check"><input type="checkbox" id="batch-model-gemini-flash-lite" value="gemini-3.1-flash-lite-preview"><span>gemini-3.1-flash-lite-preview</span></label>
+                        </div>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="batch-execution-mode-select">批量识别模式</label>
+                        <select id="batch-execution-mode-select">
+                            <option value="standard" selected>standard 标准模式</option>
+                            <option value="strict">strict 严格模式</option>
+                            <option value="custom">custom 自定义模式</option>
+                        </select>
+                        <p class="field-hint">批量测试同样保留原 `standard / strict` 逻辑；只有 `custom` 才读取自定义提示词。</p>
+                    </div>
+
+                    <div class="form-group input-card">
+                        <label for="batch-prompt-select">批量自定义提示词</label>
+                        <select id="batch-prompt-select" multiple size="6">
+                            <option value="">当前激活提示词</option>
+                        </select>
+                        <p class="field-hint" id="batch-prompt-hint">仅在批量 `custom` 模式下生效。可多选，会按“所选模型 × 所选提示词”同时并跑。</p>
+                    </div>
+                </div>
+
+                <div class="tips-card">
+                    <h3>标准测试集格式</h3>
+                    <p>总重量标签：<code>bento01.jpg 500g</code> 或 <code>bento01.jpg | 总重量=500g</code>；逐项标签：<code>bento02.jpg | 米饭=120g; 鸡胸肉=80g; 西兰花=60g</code>。</p>
                 </div>
 
                 <div class="batch-actions">
@@ -191,11 +237,11 @@
                             <thead>
                                 <tr>
                                     <th>文件名</th>
-                                    <th>真实重量 (g)</th>
+                                    <th>标准标签</th>
                                     <th>状态</th>
-                                    <th>估算重量 (g)</th>
-                                    <th>偏差</th>
-                                    <th>描述 / 错误</th>
+                                    <th>模型结果</th>
+                                    <th>主展示模型总重误差</th>
+                                    <th>识别结果 / 错误</th>
                                     <th>详情</th>
                                 </tr>
                             </thead>
@@ -218,14 +264,14 @@
 
         <div class="tab-panel" id="prompts-panel">
             <div class="prompts-section">
-                <div class="model-tabs">
-                    <button class="model-tab active" data-model="qwen">千问模型</button>
-                    <button class="model-tab" data-model="gemini">Gemini 模型</button>
+                <div class="tips-card prompt-notice">
+                    <h3>提示词说明</h3>
+                    <p>这里不再单独管理“用哪个模型”。测试后台实际跑哪个模型，只看“分析体验 / 批量测试”页面里的模型勾选。这里仅维护 <code>custom</code> 模式会使用的 Gemini 自定义提示词；如果没选或激活提示词为空，才会回退到 <code>backend/worker.py::_build_food_prompt</code>。如果你当前只想 benchmark “食物名称 + 重量”，自定义提示词直接只返回 <code>items[].name</code> 和 <code>items[].estimatedWeightGrams</code> 就可以。</p>
                 </div>
 
                 <div class="prompts-list-section">
                     <div class="prompts-header">
-                        <h3>提示词列表</h3>
+                        <h3>自定义提示词列表</h3>
                         <button class="add-prompt-btn" onclick="showAddPromptModal()">+ 新建提示词</button>
                     </div>
                     <div class="prompts-list" id="prompts-list"></div>
@@ -287,6 +333,6 @@
         </div>
     </div>
 
-    <script src="/static/test_backend/app.js?v=20260318c"></script>
+    <script src="/static/test_backend/app.js?v=20260428a"></script>
 </body>
 </html>

@@ -4,7 +4,17 @@ export default {
   jsMinimizer: 'terser',
   cssMinimizer: 'csso',
   terser: {
-    enable: true
+    enable: true,
+    config: {
+      // fix: 禁用变量名混淆，避免 Terser 压缩后的短变量名与小程序 JSCore 全局 const 冲突，
+      // 导致真机偶发 "Assignment to constant variable" 异常。
+      mangle: false,
+      compress: {
+        // 保留基础压缩，但关闭已知容易导致小程序问题的优化项
+        dead_code: true,
+        drop_debugger: true,
+      }
+    }
   },
   csso: {
     enable: true

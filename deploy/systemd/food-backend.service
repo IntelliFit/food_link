@@ -1,0 +1,14 @@
+[Unit]
+Description=Food Link Backend
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/wwwroot/food/food_link/backend
+ExecStart=/www/wwwroot/food/food_link/backend/venv/bin/python run_backend.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

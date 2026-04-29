@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Slider, Canvas } from '@tarojs/components'
+import { View, Text, Input, Image, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -7,7 +7,6 @@ import {
   getStatsSummary,
   getAccessToken,
   updateDashboardTargets,
-  getStoredDashboardTargets,
   getBodyMetricsSummary,
   getExerciseLogs,
   getUnlimitedQRCode,
@@ -18,6 +17,7 @@ import {
   resetBodyWaterLogs,
   mapCalendarDateToApi,
   resolveHomeMealPrimaryRecordId,
+  deleteFoodRecord,
   type DashboardTargets,
   type HomeAchievement,
   type HomeIntakeData,
@@ -27,7 +27,8 @@ import {
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary,
-  type FoodRecord
+  type FoodRecord,
+  getCachedMealFullRecord
 } from '../../utils/api'
 import {
   drawDailySummaryPoster,
@@ -37,17 +38,26 @@ import {
   type DailySummaryPosterInput
 } from '../../utils/poster'
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
-import { IconCamera, IconText, IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight, IconWaterDrop } from '../../components/iconfont'
-import CustomNavBar, { getStatusBarHeightSafe } from '../../components/CustomNavBar'
+
+import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconWaterDrop } from '../../components/iconfont'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
 import {
   HOME_DASHBOARD_REFRESH_EVENT,
   HOME_INTAKE_DATA_CHANGED_EVENT,
+  COMMUNITY_FEED_CHANGED_EVENT,
   HOME_DASHBOARD_CACHE_TTL_MS
 } from '../../utils/home-events'
+import {
+  DEFAULT_EXPIRY_SUMMARY,
+  getStoredHomeDashboardSnapshots,
+  getStoredHomeDashboardSnapshotByDate,
+  saveHomeDashboardSnapshot,
+  type HomeDashboardLocalSnapshot
+} from '../../utils/home-dashboard-local-cache'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -56,13 +66,12 @@ import {
   WEIGHT_HISTORY_LIMIT,
   QUICK_WATER_AMOUNTS,
   WATER_GOAL_DEFAULT,
-  DAY_NAMES,
   SHORT_DAY_NAMES,
   HOME_WARNING_RED
 } from './utils/constants'
-import { getGreeting, formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
+import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal } from './components'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
 
 /** 微信操作面板单行不宜过长，总长度含「 · 」分隔符一并限制 */
 const HOME_MEAL_PICKER_LINE_MAX_CHARS = 34
@@ -107,18 +116,6 @@ function formatHomeMealPickerEntry(entry: HomeMealRecordEntry): string {
 }
 
 const HOME_MEAL_ACTION_SHEET_MAX = 6
-const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache_v3'
-const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 60
-
-interface HomeDashboardLocalSnapshot {
-  date: string
-  updatedAt: number
-  intakeData: HomeIntakeData
-  meals: HomeMealItem[]
-  expirySummary: HomeFoodExpirySummary
-  exerciseBurnedKcal: number
-  achievement: HomeAchievement
-}
 
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
 function getInviteCodeFromUserId(userId: string): string {
@@ -171,52 +168,6 @@ function migrateLegacy2025BodyMetricKeys(metrics: BodyMetricsStorage): BodyMetri
     saveBodyMetrics(next)
   }
   return next
-}
-
-const DEFAULT_EXPIRY_SUMMARY: HomeFoodExpirySummary = {
-  pendingCount: 0,
-  soonCount: 0,
-  overdueCount: 0,
-  items: []
-}
-
-function getStoredHomeDashboardSnapshots(): HomeDashboardLocalSnapshot[] {
-  try {
-    const raw = Taro.getStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY) as unknown
-    if (!Array.isArray(raw)) return []
-    const valid = raw
-      .filter((item): item is HomeDashboardLocalSnapshot => {
-        if (!item || typeof item !== 'object') return false
-        const date = (item as { date?: unknown }).date
-        if (typeof date !== 'string' || date.length === 0) return false
-        // meals 为可选数组；protein/carbs/fat/description 在 HomeMealItem 中均为可选字段，
-        // 旧缓存缺少这些字段是合法的，不应因此过滤掉整条快照
-        return true
-      })
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-      .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
-    return valid
-  } catch {
-    return []
-  }
-}
-
-function getStoredHomeDashboardSnapshotByDate(date: string): HomeDashboardLocalSnapshot | null {
-  const normalizedDate = mapCalendarDateToApi(date) || date
-  const snapshots = getStoredHomeDashboardSnapshots()
-  return snapshots.find((item) => item.date === normalizedDate) || null
-}
-
-function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot): void {
-  const current = getStoredHomeDashboardSnapshots().filter((item) => item.date !== snapshot.date)
-  const next = [snapshot, ...current]
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-    .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
-  try {
-    Taro.setStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY, next)
-  } catch {
-    // ignore
-  }
 }
 
 function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {
@@ -571,7 +522,7 @@ function formatExpiryMeta(item: HomeFoodExpiryItem): string {
     .join(' · ')
 }
 
-function getExpiryTagClass(urgency: FoodExpiryItem['urgency_level']): string {
+function getExpiryTagClass(urgency: HomeFoodExpiryItem['urgency_level']): string {
   if (urgency === 'overdue') return 'overdue'
   if (urgency === 'today') return 'today'
   if (urgency === 'soon') return 'soon'
@@ -618,6 +569,8 @@ function IndexPage() {
   const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
   const [loading, setLoading] = useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
+  /** 后台静默同步中：左上角微型 spinner，不占文档流 */
+  const [dataSyncing, setDataSyncing] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
@@ -643,6 +596,8 @@ function IndexPage() {
   const syncDashboardSeqRef = useRef(0)
   /** 防止并发重复请求：同日期 dashboard 正在加载中时跳过新调用 */
   const loadDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
+  /** 防止并发重复请求：切日同步专用的 pending ref */
+  const syncDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
   /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
   const homeLastLoadRef = useRef<{ date: string; ts: number } | null>(null)
   /** 为 true 时下次「今日」展示必须重拉（饮食/运动/保质期等变更） */
@@ -663,6 +618,31 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = useState<FoodRecord | null>(null)
   const [showRecordEditModal, setShowRecordEditModal] = useState(false)
   const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
+
+  const showRecordPosterModalRef = useRef(false)
+  const showDailyPosterModalRef = useRef(false)
+  const mealPosterShareForAppMessageRef = useRef<MealPosterSharePayload | null>(null)
+  const dailyPosterShareForAppMessageRef = useRef<{ imageUrl: string } | null>(null)
+
+  useEffect(() => {
+    showRecordPosterModalRef.current = showRecordPosterModal
+  }, [showRecordPosterModal])
+
+  useEffect(() => {
+    showDailyPosterModalRef.current = showDailyPosterModal
+  }, [showDailyPosterModal])
+
+  const handleMealPosterShareContext = useCallback((ctx: MealPosterSharePayload | null) => {
+    mealPosterShareForAppMessageRef.current = ctx
+  }, [])
+
+  useEffect(() => {
+    if (showDailyPosterModal && dailyPosterImageUrl) {
+      dailyPosterShareForAppMessageRef.current = { imageUrl: dailyPosterImageUrl }
+    } else {
+      dailyPosterShareForAppMessageRef.current = null
+    }
+  }, [showDailyPosterModal, dailyPosterImageUrl])
 
   // 加载指定日期的首页数据
   const loadDashboard = useCallback(async (targetDate?: string, silent = false) => {
@@ -698,6 +678,8 @@ function IndexPage() {
 
     if (!silent) {
       setLoading(true)
+    } else {
+      setDataSyncing(true)
     }
     try {
       const exerciseLogParams = { date: resolvedDate }
@@ -780,53 +762,62 @@ function IndexPage() {
 
       // 若本地缓存不足 7 天，后台异步补齐近 7 天数据
       void (async () => {
-        const snapshots = getStoredHomeDashboardSnapshots()
-        if (snapshots.length >= 7) return
-        const today = new Date()
-        const missingDates: string[] = []
-        for (let offset = -6; offset <= 0; offset++) {
-          const d = new Date(today)
-          d.setDate(today.getDate() + offset)
-          const dateKey = formatDateKey(d)
-          if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
-            missingDates.push(dateKey)
-          }
-        }
-        if (missingDates.length === 0) return
-        const results = await Promise.all(
-          missingDates.map(async (date) => {
-            try {
-              const dayRes = await getHomeDashboard(date)
-              const normDate = mapCalendarDateToApi(date) || date
-              return {
-                date: normDate,
-                updatedAt: Date.now(),
-                intakeData: dayRes.intakeData,
-                meals: dayRes.meals || [],
-                expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
-                exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
-                achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
-              } as HomeDashboardLocalSnapshot
-            } catch {
-              return null
+        try {
+          const snapshots = getStoredHomeDashboardSnapshots()
+          if (snapshots.length >= 7) return
+          const today = new Date()
+          const missingDates: string[] = []
+          // 用 Array.from + forEach 替代 for 循环，规避 Terser 对带闭包 for 循环的已知优化 bug
+          Array.from({ length: 7 }).forEach((_, idx) => {
+            const offset = idx - 6
+            const d = new Date(today)
+            d.setDate(today.getDate() + offset)
+            const dateKey = formatDateKey(d)
+            if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
+              missingDates.push(dateKey)
             }
           })
-        )
-        results.forEach((snapshot) => {
-          if (snapshot) saveHomeDashboardSnapshot(snapshot)
-        })
-        // 完成后从缓存刷新热图 UI
-        setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
-        // 若当前选中日期已补齐，同步刷新首页数据
-        const currentDate = selectedDateRef.current || formatDateKey(new Date())
-        const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
-        if (refreshed) {
-          setIntakeData(refreshed.intakeData)
-          setMeals(refreshed.meals || [])
-          setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-          setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
-          setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
-          setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
+          if (missingDates.length === 0) return
+          console.log('[dashboard-backfill] missing dates:', missingDates)
+          const results = await Promise.all(
+            missingDates.map(async (date) => {
+              try {
+                const dayRes = await getHomeDashboard(date)
+                const normDate = mapCalendarDateToApi(date) || date
+                return {
+                  date: normDate,
+                  updatedAt: Date.now(),
+                  intakeData: dayRes.intakeData,
+                  meals: dayRes.meals || [],
+                  expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+                  exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
+                  achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
+                } as HomeDashboardLocalSnapshot
+              } catch (err) {
+                console.error('[dashboard-backfill] fetch failed for', date, err)
+                return null
+              }
+            })
+          )
+          results.forEach((snapshot) => {
+            if (snapshot) saveHomeDashboardSnapshot(snapshot)
+          })
+          // 完成后从缓存刷新热图 UI
+          setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+          // 若当前选中日期已补齐，同步刷新首页数据
+          const currentDate = selectedDateRef.current || formatDateKey(new Date())
+          const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
+          if (refreshed) {
+            setIntakeData(refreshed.intakeData)
+            setMeals(refreshed.meals || [])
+            setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+            setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
+            setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
+            setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
+          }
+          console.log('[dashboard-backfill] done')
+        } catch (err) {
+          console.error('[dashboard-backfill] unhandled error', err)
         }
       })()
 
@@ -880,6 +871,7 @@ function IndexPage() {
       if (seq === loadDashboardSeqRef.current) {
         setLoading(false)
         setIsSwitchingDate(false)
+        setDataSyncing(false)
       }
     }
   }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading, setIsSwitchingDate])
@@ -915,6 +907,15 @@ function IndexPage() {
       return
     }
     const targetDate = currentSelected || today
+
+    // 若本地缓存的 meals 缺少蛋白质/脂肪/碳水，视为脏数据，强制走云端刷新
+    const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
+    if (localSnapshot && (localSnapshot.meals || []).some(
+      (meal) => typeof meal.protein !== 'number' || typeof meal.carbs !== 'number' || typeof meal.fat !== 'number'
+    )) {
+      homeDataStaleRef.current = true
+    }
+
     const last = homeLastLoadRef.current
     const canCache =
       !homeDataStaleRef.current &&
@@ -924,7 +925,6 @@ function IndexPage() {
     if (canCache) {
       return
     }
-    const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
     if (localSnapshot) {
       setIntakeData(localSnapshot.intakeData)
       setMeals(localSnapshot.meals || [])
@@ -937,10 +937,30 @@ function IndexPage() {
     void loadDashboard(targetDate, Boolean(localSnapshot))
   })
 
-  useShareAppMessage(() => ({
-    title: '食探 - AI 智能饮食记录',
-    path: '/pages/index/index'
-  }))
+  useShareAppMessage(() => {
+    if (showRecordPosterModalRef.current && mealPosterShareForAppMessageRef.current?.imageUrl) {
+      const m = mealPosterShareForAppMessageRef.current
+      const img = m.imageUrl
+      // 若 imageUrl 是 canvasToTempFilePath 生成的本地临时路径，部分基础库/真机分享时无法识别
+      // fallback 到记录原图（网络地址），确保分享卡片能正常显示自定义封面
+      const isLocalTmp = /^wxfile:\/\/tmp\//i.test(img) || /^https?:\/\/tmp\//i.test(img)
+      const shareImageUrl = isLocalTmp && mealActionRecord?.image_path ? mealActionRecord.image_path : img
+      return { title: m.title, path: m.path, imageUrl: shareImageUrl }
+    }
+    if (showDailyPosterModalRef.current && dailyPosterShareForAppMessageRef.current?.imageUrl) {
+      const d = dailyPosterShareForAppMessageRef.current
+      const img = d.imageUrl
+      const isLocalTmp = /^wxfile:\/\/tmp\//i.test(img) || /^https?:\/\/tmp\//i.test(img)
+      // 每日小结海报无对应记录原图，本地路径在支持的基础库下可用；不支持的会自动用小程序默认封面
+      const shareImageUrl = isLocalTmp ? undefined : img
+      return {
+        title: '今日饮食小结',
+        path: '/pages/index/index',
+        imageUrl: shareImageUrl
+      }
+    }
+    return { title: '食探 - AI 智能饮食记录', path: '/pages/index/index' }
+  })
 
   useShareTimeline(() => ({
     title: '食探 - AI 智能饮食记录'
@@ -950,7 +970,7 @@ function IndexPage() {
     Taro.showShareMenu({
       withShareTicket: true,
       menus: ['shareAppMessage', 'shareTimeline']
-    })
+    } as any)
     // 清理旧版本缓存，避免脏数据干扰
     try {
       Taro.removeStorageSync('home_dashboard_local_cache_v1')
@@ -994,6 +1014,22 @@ function IndexPage() {
   useEffect(() => {
     const markHomeStale = (): void => {
       homeDataStaleRef.current = true
+      const today = formatDateKey(new Date())
+      const currentSelected = selectedDateRef.current || today
+      if (currentSelected !== today) {
+        return
+      }
+      const localSnapshot = getStoredHomeDashboardSnapshotByDate(today)
+      if (!localSnapshot) {
+        return
+      }
+      setIntakeData(localSnapshot.intakeData)
+      setMeals(localSnapshot.meals || [])
+      setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
+      setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
+      setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
+      setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
     }
     Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
     Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
@@ -1204,7 +1240,7 @@ function IndexPage() {
     }
     const raw = selectedDateRef.current || formatDateKey(new Date())
     const d = mapCalendarDateToApi(raw) || raw
-    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
   }
 
   /** 「查看饮食统计」入口：进入当日记录列表 */
@@ -1214,7 +1250,7 @@ function IndexPage() {
       return
     }
     const d = mapCalendarDateToApi(selectedDate) || selectedDate
-    Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
   }, [selectedDate])
 
   /** 今日餐食单条 → 弹出记录操作菜单（多条同餐时先选记录） */
@@ -1235,7 +1271,7 @@ function IndexPage() {
       if (!rid) {
         const raw = selectedDateRef.current || formatDateKey(new Date())
         const d = mapCalendarDateToApi(raw) || raw
-        Taro.navigateTo({ url: `/pages/day-record/index?date=${encodeURIComponent(d)}` })
+        Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
         return
       }
       openActionSheet(rid)
@@ -1262,6 +1298,12 @@ function IndexPage() {
 
   const handleMealEdit = async () => {
     if (!mealActionRecordId) return
+    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
+    if (cachedRecord) {
+      setMealActionRecord(cachedRecord)
+      setShowRecordEditModal(true)
+      return
+    }
     Taro.showLoading({ title: '加载中...', mask: true })
     try {
       const res = await getSharedFoodRecord(mealActionRecordId)
@@ -1276,6 +1318,12 @@ function IndexPage() {
 
   const handleMealPoster = async () => {
     if (!mealActionRecordId) return
+    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
+    if (cachedRecord) {
+      setMealActionRecord(cachedRecord)
+      setShowRecordPosterModal(true)
+      return
+    }
     Taro.showLoading({ title: '加载中...', mask: true })
     try {
       const res = await getSharedFoodRecord(mealActionRecordId)
@@ -1283,6 +1331,55 @@ function IndexPage() {
       setShowRecordPosterModal(true)
     } catch (e: any) {
       Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
+  const handleMealDelete = async () => {
+    if (!mealActionRecordId) return
+    const { confirm } = await Taro.showModal({
+      title: '确认删除',
+      content: '确定要删除这条饮食记录吗？删除后不可恢复。',
+      confirmText: '删除',
+      confirmColor: '#e53e3e',
+    })
+    if (!confirm) return
+
+    Taro.showLoading({ title: '删除中...', mask: true })
+    try {
+      await deleteFoodRecord(mealActionRecordId)
+
+      // 先从当前 meals 中移除被删记录，做乐观更新
+      let found = false
+      const updatedMeals = meals.map((meal) => {
+        const entries = meal.meal_record_entries || []
+        const idx = entries.findIndex((e) => e.id === mealActionRecordId)
+        if (idx === -1) return meal
+        found = true
+        const newEntries = entries.filter((_, i) => i !== idx)
+        if (newEntries.length === 0) return null
+        return { ...meal, meal_record_entries: newEntries }
+      }).filter(Boolean) as HomeMealItem[]
+
+      if (found) {
+        setMeals(updatedMeals)
+      }
+
+      // 重新从后端拉取当日 dashboard，确保能量、宏量等数据准确
+      const currentDate = selectedDateRef.current || formatDateKey(new Date())
+      await syncDashboardForDate(currentDate)
+
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+        Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+      } catch {
+        /* ignore */
+      }
+
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '删除失败', icon: 'none' })
     } finally {
       Taro.hideLoading()
     }
@@ -1299,7 +1396,7 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: '/pages/expiry/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
   }
 
   const openFoodExpiryEdit = (id: string) => {
@@ -1307,7 +1404,7 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: `/pages/expiry-edit/index?id=${encodeURIComponent(id)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/expiry-edit/index')}?id=${encodeURIComponent(id)}` })
   }
 
   const openExerciseRecord = () => {
@@ -1316,24 +1413,25 @@ function IndexPage() {
       return
     }
     const date = selectedDateRef.current || formatDateKey(new Date())
-    Taro.navigateTo({ url: `/pages/exercise-record/index?date=${encodeURIComponent(date)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(date)}` })
   }
 
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
   const syncDashboardForDate = useCallback(async (date: string) => {
     // 若同日期请求已在进行中，跳过本次调用
     if (
-      loadDashboardPendingRef.current &&
-      loadDashboardPendingRef.current.date === date
+      syncDashboardPendingRef.current &&
+      syncDashboardPendingRef.current.date === date
     ) {
       return
     }
     const seq = ++syncDashboardSeqRef.current
-    loadDashboardPendingRef.current = { date, seq }
+    syncDashboardPendingRef.current = { date, seq }
     if (!getAccessToken()) {
-      loadDashboardPendingRef.current = null
+      syncDashboardPendingRef.current = null
       return
     }
+    setDataSyncing(true)
     try {
       const [res, exerciseLogsRes] = await Promise.all([
         getHomeDashboard(date),
@@ -1378,9 +1476,10 @@ function IndexPage() {
     } catch (err) {
       // 静默失败，不打扰用户；本地缓存已保证基本可用性
     } finally {
-      if (loadDashboardPendingRef.current?.seq === seq) {
-        loadDashboardPendingRef.current = null
+      if (syncDashboardPendingRef.current?.seq === seq) {
+        syncDashboardPendingRef.current = null
       }
+      setDataSyncing(false)
     }
   }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
@@ -1662,7 +1761,7 @@ function IndexPage() {
 
   const handleShareDailyPosterImage = useCallback(() => {
     if (!dailyPosterImageUrl) return
-    // @ts-ignore Taro 类型可能未收录 showShareImageMenu
+    // @ts-ignore
     Taro.showShareImageMenu({
       path: dailyPosterImageUrl,
       fail: (err: { errMsg?: string }) => {
@@ -1873,11 +1972,13 @@ function IndexPage() {
             sharerAvatarImage: avatarImg
           })
 
+          // JPG：真机存相册对 PNG/透明导出偶发失败；今日小结海报为实底
           Taro.canvasToTempFilePath({
             canvas: canvas as any,
             destWidth: POSTER_WIDTH * 2,
             destHeight: heightPx * 2,
-            fileType: 'png',
+            fileType: 'jpg',
+            quality: 0.95,
             success: (resp) => {
               Taro.hideLoading()
               setDailyPosterGenerating(false)
@@ -1914,6 +2015,12 @@ function IndexPage() {
 
   return (
     <View className='home-page'>
+      {/* 后台静默同步中：左上角微型 spinner */}
+      {dataSyncing ? (
+        <View className='home-page__data-sync'>
+          <View className='home-page__data-sync-spinner' />
+        </View>
+      ) : null}
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}
@@ -2241,7 +2348,7 @@ function IndexPage() {
                       )}
                       {hasRealImage && mealImageUrls.length > 1 && (
                         <View className='meal-thumb-badge'>
-                          <Text className='meal-thumb-badge-text'>{mealImageUrls.length}张</Text>
+                          <Text className='meal-thumb-badge-text'>共 {mealImageUrls.length} 张</Text>
                         </View>
                       )}
                     </View>
@@ -2614,6 +2721,7 @@ function IndexPage() {
         onClose={() => setMealActionSheetVisible(false)}
         onEdit={handleMealEdit}
         onPoster={handleMealPoster}
+        onDelete={handleMealDelete}
       />
 
       {/* 餐食记录编辑弹窗 */}
@@ -2629,6 +2737,7 @@ function IndexPage() {
         visible={showRecordPosterModal}
         record={mealActionRecord}
         onClose={() => setShowRecordPosterModal(false)}
+        onShareContextChange={handleMealPosterShareContext}
       />
     </View>
   )

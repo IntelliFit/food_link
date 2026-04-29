@@ -1,7 +1,7 @@
 export default definePageConfig({
-  navigationBarTitleText: '圈子',
+  navigationStyle: 'custom',
   enableShareAppMessage: true,
   enableShareTimeline: true,
-  disableScroll: true
+  disableScroll: true,
 })
 

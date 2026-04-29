@@ -164,3 +164,25 @@ image.tab-icon {
 .custom-tab-bar.hidden::before {
   display: none;
 }
+
+/* 深色主题：与页面 `fl-page-theme-root--dark` 协调 */
+.custom-tab-bar--dark::before {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20750%2096%27%20preserveAspectRatio%3D%27none%27%3E%3Cpath%20d%3D%27M0%2C0%20L265%2C0%20C295%2C0%20315%2C10%20330%2C30%20C345%2C44%20360%2C44%20375%2C44%20C390%2C44%20405%2C44%20420%2C30%20C435%2C10%20455%2C0%20485%2C0%20L750%2C0%20L750%2C96%20L0%2C96%20Z%27%20fill%3D%27%231a2220%27/%3E%3C/svg%3E");
+  filter: drop-shadow(0 -8rpx 28rpx rgba(0, 0, 0, 0.45));
+}
+
+.custom-tab-bar--dark .tab-icon {
+  color: #6b7280;
+}
+
+.custom-tab-bar--dark .tab-item.selected .tab-icon {
+  color: #7dd3b0;
+}
+
+.custom-tab-bar--dark .tab-text {
+  color: #6b7280;
+}
+
+.custom-tab-bar--dark .tab-item.selected .tab-text {
+  color: #7dd3b0;
+}

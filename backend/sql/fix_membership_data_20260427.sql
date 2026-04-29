@@ -1,0 +1,9 @@
+-- 已弃用：Supabase SQL Editor 有 200 行限制，请改用以下拆分版执行脚本
+--
+-- 1. membership_governance_fix_01_cancel_fake_memberships.sql
+-- 2. membership_governance_fix_02_compensate_existing_memberships.sql
+-- 3. membership_governance_fix_03_compensate_missing_memberships.sql
+-- 4. membership_governance_fix_04_expire_stale_pending.sql
+--
+-- 使用顺序：
+--   先跑 review 拆分版看名单，再执行 fix 拆分版

@@ -98,7 +98,8 @@ class BatchProcessor:
                     current = len(results) + 1
                     progress_callback(current, total, img_name)
                 
-                true_weight = labels[img_name]
+                label = labels[img_name]
+                true_weight = float(label.get("trueWeight") or 0) if isinstance(label, dict) else float(label or 0)
                 result = await self.single_processor.analyze_image(
                     img_bytes, true_weight, img_name
                 )
@@ -118,7 +119,9 @@ class BatchProcessor:
                 img_name = list(images.keys())[i]
                 processed_results.append({
                     "imageName": img_name,
-                    "trueWeight": labels.get(img_name, 0),
+                    "trueWeight": (labels.get(img_name) or {}).get("trueWeight", 0)
+                    if isinstance(labels.get(img_name), dict)
+                    else labels.get(img_name, 0),
                     "error": str(result)
                 })
             else:

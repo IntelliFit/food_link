@@ -1,5 +1,5 @@
 import { type HomeIntakeData } from '../../../utils/api'
-import { type SimpleTargetState } from '../types'
+import { type SimpleTargetState } from '../types/index'
 
 export const DEFAULT_INTAKE: HomeIntakeData = {
   current: 0,

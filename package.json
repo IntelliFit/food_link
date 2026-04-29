@@ -1,6 +1,6 @@
 {
   "name": "food_link",
-  "version": "2.0.14",
+  "version": "2.0.17",
   "private": true,
   "description": "AI Food Analysis and Diet Sharing Community",
   "templateInfo": {
@@ -12,7 +12,10 @@
   "scripts": {
     "prepare": "husky",
     "new": "taro new",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
+    "typecheck": "tsc --noEmit --pretty false",
     "dev:backend": "node scripts/run-backend.cjs",
+    "stop:backend": "node scripts/stop-backend.cjs",
     "dev:restart": "bash scripts/restart-dev.sh",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -21,6 +24,7 @@
     "test:backend:coverage": "cd backend && source venv/bin/activate && pytest --cov=. --cov-report=html",
     "build:weapp": "taro build --type weapp",
     "build:weapp:preview": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://healthymax.cn npm run build:weapp",
+    "build:weapp:debug": "cross-env NODE_ENV=development TARO_APP_API_BASE_URL=https://healthymax.cn npm run build:weapp -- --no-check",
     "build:swan": "taro build --type swan",
     "build:alipay": "taro build --type alipay",
     "build:tt": "taro build --type tt",
@@ -39,7 +43,8 @@
     "dev:qq": "npm run build:qq -- --watch",
     "dev:jd": "npm run build:jd -- --watch",
     "dev:harmony-hybrid": "npm run build:harmony-hybrid -- --watch",
-    "iconfont": "iconfont-taro"
+    "iconfont": "iconfont-taro",
+    "push-docker-ccr": "node backend/scripts/push-docker-ccr.mjs"
   },
   "browserslist": {
     "development": [
@@ -73,6 +78,7 @@
     "@tarojs/shared": "4.1.10",
     "@tarojs/taro": "4.1.10",
     "@vant/area-data": "^2.1.0",
+    "echarts": "^5.6.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "taro-plugin-canvas": "^1.0.10",
@@ -107,6 +113,7 @@
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "lint-staged": "^16.1.2",
+    "miniprogram-automator": "^0.12.1",
     "postcss": "^8.5.6",
     "react-refresh": "^0.14.0",
     "sass": "^1.75.0",

@@ -38,6 +38,8 @@ const TEXT_INK = '#0f172a'
 const TEXT_MUTED = '#64748b'
 const TEXT_SUB = '#94a3b8'
 const LINE = '#e5e7eb'
+const IMAGE_COUNT_BADGE_BG = 'rgba(201, 234, 220, 0.92)'
+const IMAGE_COUNT_BADGE_TEXT = '#2f5d4d'
 
 /** 宏量营养配色 */
 const MACRO_PROTEIN = '#3b82f6'
@@ -169,6 +171,9 @@ export function drawRecordPoster(
   const f = Math.round(record.total_fat ?? 0)
   const items = record.items || []
   const maxItems = 4
+  const imageCount = Array.isArray(record.image_paths)
+    ? record.image_paths.filter(Boolean).length
+    : (record.image_path ? 1 : 0)
 
   const cardX = 0
   const cardW = W
@@ -214,6 +219,25 @@ export function drawRecordPoster(
   ctx.textBaseline = 'middle'
   ctx.fillText(mealName, cardX + tagPad + tagW / 2, cardTop + tagPad + tagH / 2)
   ctx.restore()
+
+  if (imageCount > 1) {
+    const badgeMargin = 14
+    const badgeH = 28
+    const badgeText = `共 ${imageCount} 张`
+    ctx.save()
+    ctx.font = '700 12px sans-serif'
+    const badgeW = Math.ceil(ctx.measureText(badgeText).width + 24)
+    const badgeX = cardX + cardW - badgeMargin - badgeW
+    const badgeY = cardTop + badgeMargin
+    drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 14)
+    ctx.fillStyle = IMAGE_COUNT_BADGE_BG
+    ctx.fill()
+    ctx.fillStyle = IMAGE_COUNT_BADGE_TEXT
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2 + 0.5)
+    ctx.restore()
+  }
 
   // 日期：左下角，格式 "9 Apr."，日期和月份底部对齐
   const dateInfo = getRecordDateInfo(record.record_time)

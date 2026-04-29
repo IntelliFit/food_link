@@ -1,8 +1,5 @@
 """
 Pytest 配置文件 - 共享 fixtures 和配置
-
-默认单测超时由 pytest-timeout 提供，见 backend/pytest.ini 中 timeout / timeout_func_only。
-单条用例需更长时可使用：@pytest.mark.timeout(300)
 """
 import pytest
 import os
@@ -20,21 +17,6 @@ os.environ.setdefault("POSTGRESQL_PORT", "5432")
 os.environ.setdefault("POSTGRESQL_USER", "test")
 os.environ.setdefault("POSTGRESQL_PASSWORD", "test")
 os.environ.setdefault("POSTGRESQL_DATABASE", "food_link_test")
-
-# 与 pytest.ini [pytest] timeout 一致；单条用例需更长时使用 @pytest.mark.timeout(N)
-DEFAULT_TEST_TIMEOUT_SECONDS = 120
-
-
-def pytest_collection_modifyitems(config, items) -> None:
-    """
-    为未显式声明 timeout 的用例打上默认标记，使每个样例在收集结果中均带超时约束（pytest-timeout）。
-    """
-    if not config.pluginmanager.has_plugin("timeout"):
-        return
-    for item in items:
-        if item.get_closest_marker("timeout") is not None:
-            continue
-        item.add_marker(pytest.mark.timeout(DEFAULT_TEST_TIMEOUT_SECONDS))
 
 
 @pytest.fixture

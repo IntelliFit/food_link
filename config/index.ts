@@ -94,7 +94,72 @@ export default defineConfig<'vite'>(async (merge) => {
           configResolved(config) {
             config.build.target = 'es2018'
           }
-        }
+        },
+        // debug: 开发构建时关闭压缩、保留 sourcemap，便于真机调试定位完整错误栈
+        {
+          name: 'taro-debug-build',
+          configResolved(config) {
+            config.css ??= {}
+            config.css.preprocessorOptions ??= {}
+            const scssOptions = ((config.css.preprocessorOptions as Record<string, Record<string, unknown>>).scss ??= {})
+            scssOptions.quietDeps = true
+            scssOptions.silenceDeprecations = ['legacy-js-api', 'import']
+            const sassOptions = ((config.css.preprocessorOptions as Record<string, Record<string, unknown>>).sass ??= {})
+            sassOptions.quietDeps = true
+            sassOptions.silenceDeprecations = ['legacy-js-api', 'import']
+            if (process.env.NODE_ENV === 'development') {
+              config.build.minify = false
+              config.build.sourcemap = true
+              config.build.cssMinify = false
+            }
+          }
+        },
+        // 将 ECharts/ZRender 打到分包目录，避免进入主包根目录 vendors（缓解主包 2MB）
+        {
+          name: 'echarts-chunk-to-package-extra',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/node_modules[\\/](echarts|zrender)[\\/]/.test(id)) {
+                  return 'echarts-vendor'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(
+                    o,
+                    id,
+                    ctx
+                  )
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'echarts-vendor') {
+                  return 'packageExtra/echarts-vendor.js'
+                }
+                if (typeof prevNames === 'function') {
+                  return prevNames(chunkInfo)
+                }
+                if (typeof prevNames === 'string') {
+                  return prevNames
+                }
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
+        },
       ],
     },
     mini: {

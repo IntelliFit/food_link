@@ -18,12 +18,13 @@ export function GreetingSection({ onSharePress }: GreetingSectionProps) {
         </View>
         <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
       </View>
-      <View
+      {/* 右上角分享按钮已隐藏 */}
+      {/* <View
         className={`greeting-icon ${onSharePress ? 'greeting-icon--tappable' : ''}`}
         onClick={() => onSharePress?.()}
       >
         <Text className='iconfont icon-share' />
-      </View>
+      </View> */}
     </View>
   )
 }

@@ -1,6 +1,8 @@
 import { View, Text } from '@tarojs/components'
 import React from 'react'
 import Taro from '@tarojs/taro'
+import { ArrowLeft } from '@taroify/icons'
+import '@taroify/icons/style'
 import './index.scss'
 
 interface CustomNavBarProps {
@@ -9,6 +11,8 @@ interface CustomNavBarProps {
     color?: string
     /** 是否显示返回按钮 */
     showBack?: boolean
+    /** 自定义返回逻辑 */
+    onBack?: () => void
     /** 自定义背景样式（支持渐变等） */
     background?: string
     /** 额外的 className */
@@ -36,6 +40,7 @@ export default function CustomNavBar({
     title = '',
     color = '#ffffff',
     showBack = false,
+    onBack,
     background = 'linear-gradient(to right, #00bc7d 0%, #00bba7 100%)',
     className = ''
 }: CustomNavBarProps) {
@@ -48,6 +53,10 @@ export default function CustomNavBar({
     })
 
     const handleBack = () => {
+        if (onBack) {
+            onBack()
+            return
+        }
         Taro.navigateBack()
     }
 
@@ -65,7 +74,7 @@ export default function CustomNavBar({
             >
                 {showBack && (
                     <View className='custom-nav-bar__back' onClick={handleBack}>
-                        <Text className='custom-nav-bar__back-icon' style={{ color }}>&#8249;</Text>
+                        <ArrowLeft className='custom-nav-bar__back-icon' style={{ color }} />
                     </View>
                 )}
                 <Text className='custom-nav-bar__title' style={{ color }}>

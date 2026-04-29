@@ -1,0 +1,366 @@
+.expiry-edit-page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #e7faf3 0%, #f4f7f6 24%, #f6f8fa 100%);
+}
+
+.expiry-edit-scroll {
+  height: 100vh;
+}
+
+.expiry-edit-panel {
+  padding: 32rpx;
+}
+
+.expiry-ai-panel,
+.expiry-draft-card,
+.expiry-edit-block,
+.expiry-loading {
+  background: rgb(255 255 255 / 94%);
+  border-radius: 28rpx;
+  box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);
+}
+
+.expiry-ai-panel,
+.expiry-draft-card,
+.expiry-edit-block {
+  margin-top: 28rpx;
+}
+
+.expiry-ai-panel:first-child,
+.expiry-edit-block:first-child,
+.expiry-draft-card:first-child {
+  margin-top: 0;
+}
+
+.expiry-ai-panel,
+.expiry-draft-card,
+.expiry-edit-block {
+  padding: 28rpx;
+}
+
+.expiry-edit-block--embedded {
+  margin-top: 24rpx;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.expiry-ai-head,
+.expiry-draft-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.expiry-ai-title,
+.expiry-draft-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #16332a;
+}
+
+.expiry-ai-desc,
+.expiry-draft-subtitle {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #61756d;
+}
+
+.expiry-ai-cost,
+.expiry-ai-badge {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: #ecfdf5;
+  color: #15803d;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.expiry-draft-head-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.expiry-draft-remove {
+  padding: 10rpx 0 10rpx 10rpx;
+  font-size: 24rpx;
+  color: #00a36b;
+}
+
+.expiry-upload-area {
+  margin-top: 24rpx;
+  padding: 36rpx 28rpx;
+  border-radius: 24rpx;
+  background: linear-gradient(180deg, #f3fbf7 0%, #eef8f4 100%);
+  border: 2rpx dashed rgb(0 188 125 / 26%);
+  text-align: center;
+}
+
+.expiry-upload-icon {
+  display: block;
+  font-size: 52rpx;
+  line-height: 1;
+  color: #00bc7d;
+}
+
+.expiry-upload-title {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #16332a;
+}
+
+.expiry-upload-desc {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #61756d;
+}
+
+.expiry-image-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.expiry-image-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 22rpx;
+  overflow: hidden;
+  background: #eef4f1;
+}
+
+.expiry-image-thumb {
+  width: 100%;
+  height: 100%;
+}
+
+.expiry-image-remove {
+  position: absolute;
+  top: 10rpx;
+  right: 10rpx;
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 50%;
+  background: rgb(15 23 42 / 65%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+}
+
+.expiry-image-item--add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  border: 2rpx dashed #c9e6da;
+  background: #f4f8f6;
+  color: #4f6b62;
+}
+
+.expiry-image-add-icon {
+  font-size: 40rpx;
+  line-height: 1;
+}
+
+.expiry-image-add-text {
+  font-size: 22rpx;
+}
+
+.expiry-ai-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 24rpx;
+}
+
+.expiry-ai-btn,
+.expiry-submit-btn,
+.expiry-add-item-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96rpx;
+  border-radius: 999rpx;
+  text-align: center;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.expiry-ai-btn {
+  flex: 1;
+  font-size: 28rpx;
+}
+
+.expiry-ai-btn--ghost,
+.expiry-add-item-bar {
+  background: #f3f7f5;
+  color: #314740;
+}
+
+.expiry-ai-btn--primary,
+.expiry-submit-btn {
+  background: #00bc7d;
+  color: #fff;
+  box-shadow: 0 12rpx 28rpx rgb(0 188 125 / 22%);
+}
+
+.expiry-ai-result-banner {
+  margin-top: 20rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 22rpx;
+  background: #f4fbf7;
+  color: #2f7f62;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.expiry-ai-tip {
+  margin-top: 20rpx;
+  padding: 18rpx 22rpx;
+  border-radius: 20rpx;
+  background: #fff6e8;
+}
+
+.expiry-ai-tip--soft {
+  background: #f4fbf7;
+}
+
+.expiry-ai-tip-text {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #5b6b65;
+}
+
+.expiry-missing-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.expiry-missing-chip {
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: #eef8f4;
+  color: #4f6b62;
+  font-size: 22rpx;
+}
+
+.expiry-edit-label {
+  display: block;
+  font-size: 28rpx;
+  color: #16332a;
+  font-weight: 600;
+  margin-bottom: 18rpx;
+}
+
+.expiry-input,
+.expiry-picker,
+.expiry-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #f4f8f6;
+  border-radius: 20rpx;
+  font-size: 28rpx;
+  color: #16332a;
+}
+
+.expiry-input,
+.expiry-picker {
+  min-height: 92rpx;
+  padding: 0 24rpx;
+  line-height: 92rpx;
+}
+
+.expiry-picker {
+  display: block;
+}
+
+.expiry-textarea {
+  padding: 24rpx;
+  min-height: 180rpx;
+  line-height: 1.6;
+}
+
+.expiry-textarea--compact {
+  min-height: 132rpx;
+}
+
+.expiry-preset-list,
+.expiry-choice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.expiry-preset-chip,
+.expiry-choice-chip {
+  padding: 16rpx 24rpx;
+  border-radius: 999rpx;
+  background: #f4f8f6;
+  color: #314740;
+  font-size: 26rpx;
+}
+
+.expiry-choice-chip.is-active {
+  background: #00bc7d;
+  color: #fff;
+}
+
+.expiry-custom-category-wrap {
+  margin-top: 18rpx;
+}
+
+.expiry-loading {
+  margin-top: 32rpx;
+  margin-bottom: 40rpx;
+  padding: 56rpx 0;
+}
+
+.expiry-loading-spinner {
+  width: 56rpx;
+  height: 56rpx;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 6rpx solid rgb(0 188 125 / 16%);
+  border-top-color: #00bc7d;
+  animation: expiry-spin 0.9s linear infinite;
+}
+
+.expiry-loading-spinner--sm {
+  width: 40rpx;
+  height: 40rpx;
+  border-width: 5rpx;
+}
+
+.expiry-add-item-bar {
+  margin-top: 32rpx;
+}
+
+.expiry-submit-btn {
+  margin-top: 20rpx;
+  margin-bottom: 40rpx;
+}
+
+@keyframes expiry-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

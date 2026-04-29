@@ -1,3 +1,4 @@
 export default definePageConfig({
-  navigationBarTitleText: '饮食记录'
+  /** 去掉系统顶栏；顶距由页面 `padding-top: 180rpx` 留白 */
+  navigationStyle: 'custom',
 })
