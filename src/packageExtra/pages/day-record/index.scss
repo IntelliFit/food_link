@@ -274,6 +274,45 @@
   font-weight: 600;
 }
 
+// 每餐宏量营养行
+.day-record-macro-row {
+  display: flex;
+  gap: 20rpx;
+  padding-top: 18rpx;
+  margin-top: 14rpx;
+  border-top: 1rpx solid #eef2f7;
+}
+
+.day-record-macro-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.day-record-macro-label {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #94a3b8;
+}
+
+.day-record-macro-value {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 700;
+
+  &.macro-protein {
+    color: #3b82f6;
+  }
+
+  &.macro-carbs {
+    color: #eab308;
+  }
+
+  &.macro-fat {
+    color: #f97316;
+  }
+}
+
 .day-record-empty {
   padding: 120rpx 40rpx;
   display: flex;

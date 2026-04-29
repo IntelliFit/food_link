@@ -545,6 +545,21 @@ function DayRecordPage() {
                     </View>
                   ))}
                 </View>
+
+                <View className='day-record-macro-row'>
+                  <View className='day-record-macro-item'>
+                    <Text className='day-record-macro-label'>蛋白质</Text>
+                    <Text className='day-record-macro-value macro-protein'>{Math.round(meal.totalProtein)}g</Text>
+                  </View>
+                  <View className='day-record-macro-item'>
+                    <Text className='day-record-macro-label'>碳水</Text>
+                    <Text className='day-record-macro-value macro-carbs'>{Math.round(meal.totalCarbs)}g</Text>
+                  </View>
+                  <View className='day-record-macro-item'>
+                    <Text className='day-record-macro-label'>脂肪</Text>
+                    <Text className='day-record-macro-value macro-fat'>{Math.round(meal.totalFat)}g</Text>
+                  </View>
+                </View>
               </View>
             ))}
           </View>

@@ -796,14 +796,12 @@ export function drawDayRecordPoster(
   const contentW = W - PAD * 2
   const cx = PAD
 
-  // 先填纯白底，再叠绿色渐变（避免 canvas 透明底层透出深色）
-  ctx.fillStyle = '#f8faf8'
-  ctx.fillRect(0, 0, W, H)
-  const grad = ctx.createLinearGradient(0, 0, 0, H * 0.75)
-  grad.addColorStop(0, 'rgba(92, 184, 150, 0.12)')
-  grad.addColorStop(0.5, 'rgba(92, 184, 150, 0.04)')
-  grad.addColorStop(1, '#f8faf8')
-  ctx.fillStyle = grad
+  // 背景：与当日饮食记录页一致的绿色→白色渐变（白色占比更大）
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, H)
+  bgGrad.addColorStop(0, '#f6fbf8')
+  bgGrad.addColorStop(0.25, '#ffffff')
+  bgGrad.addColorStop(1, '#ffffff')
+  ctx.fillStyle = bgGrad
   ctx.fillRect(0, 0, W, H)
 
   let cy = 32
