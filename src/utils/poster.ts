@@ -762,7 +762,7 @@ function truncateDRText(ctx: CanvasRenderingContext2D, text: string, maxWidth: n
 }
 
 export function computeDayRecordPosterHeight(mealCount: number): number {
-  const TOP = 32
+  const TOP = 48
   const HEADER_ROW = 32   // date pill + energy dots row
   const HEADER_GAP = 18
   const INTAKE_ROW = 28
@@ -804,7 +804,7 @@ export function drawDayRecordPoster(
   ctx.fillStyle = bgGrad
   ctx.fillRect(0, 0, W, H)
 
-  let cy = 32
+  let cy = 48
 
   // ---- 第一行：左侧日期胶囊 + 右侧能量等级 ----
   const headerMidY = cy + 16
