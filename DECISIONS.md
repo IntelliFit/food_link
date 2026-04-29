@@ -4,6 +4,8 @@
   - `backend/main.py` 默认支持通过 OTLP HTTP 上报 trace 与 logs
   - 默认 Collector 地址使用 `OTEL_EXPORTER_OTLP_ENDPOINT`，当前约定值是 `http://otel-collector.observability.svc.cluster.local:4318`
   - 每个 HTTP 响应统一返回 `x-trace-id` 与 `traceparent`，便于前端/测试同学回传链路 ID 直查 Jaeger
+  - 多 Pod 排障默认再返回 `x-instance-id`；值优先使用 `POD_NAME`，回退 `HOSTNAME`
+  - 实例头支持开关：`INSTANCE_HEADER_ENABLED`，默认开启；响应头名可由 `INSTANCE_HEADER_NAME` 覆盖
   - 生产环境可按需通过 `OTEL_ENABLED` 与 `OTEL_LOGS_ENABLED` 分别开关 trace 与 logs 上报
 
 - `2026-04-29`: 手动记录前台展示的正式心智继续收口为“双库模式”，不要把辅助表也讲成用户可见数据库。当前稳定规则是：

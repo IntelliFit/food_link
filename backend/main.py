@@ -213,6 +213,14 @@ GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
 OTEL_ENABLED = os.getenv("OTEL_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
 OTEL_LOGS_ENABLED = os.getenv("OTEL_LOGS_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
 OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "food-link-backend").strip() or "food-link-backend"
+INSTANCE_HEADER_ENABLED = os.getenv("INSTANCE_HEADER_ENABLED", "1").strip().lower() in {"1", "true", "yes", "on"}
+INSTANCE_HEADER_NAME = os.getenv("INSTANCE_HEADER_NAME", "x-instance-id").strip() or "x-instance-id"
+INSTANCE_ID = (
+    os.getenv("POD_NAME", "").strip()
+    or os.getenv("HOSTNAME", "").strip()
+    or os.getenv("COMPUTERNAME", "").strip()
+    or "unknown-instance"
+)
 
 
 def _normalize_otlp_http_endpoint(value: Optional[str], signal_path: str) -> str:
@@ -226,33 +234,6 @@ def _normalize_otlp_http_endpoint(value: Optional[str], signal_path: str) -> str
 
 def _build_traceparent(trace_id_hex: str, span_id_hex: str, sampled: bool) -> str:
     return f"00-{trace_id_hex}-{span_id_hex}-{'01' if sampled else '00'}"
-
-
-def _inject_trace_headers_into_asgi_message(span, _scope, message):
-    if message.get("type") != "http.response.start":
-        return
-    if span is None:
-        return
-    span_context = span.get_span_context()
-    if not span_context.is_valid:
-        return
-
-    headers = list(message.get("headers") or [])
-    filtered_headers = [
-        (k, v)
-        for k, v in headers
-        if k.lower() not in {b"x-trace-id", b"traceparent"}
-    ]
-    trace_id_hex = format_trace_id(span_context.trace_id)
-    span_id_hex = format_span_id(span_context.span_id)
-    filtered_headers.append((b"x-trace-id", trace_id_hex.encode("ascii")))
-    filtered_headers.append(
-        (
-            b"traceparent",
-            _build_traceparent(trace_id_hex, span_id_hex, span_context.trace_flags.sampled).encode("ascii"),
-        )
-    )
-    message["headers"] = filtered_headers
 
 
 def _setup_otel_observability(target_app: FastAPI) -> None:
@@ -277,7 +258,6 @@ def _setup_otel_observability(target_app: FastAPI) -> None:
     FastAPIInstrumentor.instrument_app(
         target_app,
         tracer_provider=tracer_provider,
-        server_response_hook=_inject_trace_headers_into_asgi_message,
     )
     HTTPXClientInstrumentor().instrument(tracer_provider=tracer_provider)
 
@@ -1976,6 +1956,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def attach_trace_headers(request: Request, call_next):
+    response = await call_next(request)
+    span = trace.get_current_span()
+    span_context = span.get_span_context() if span else None
+    if INSTANCE_HEADER_ENABLED:
+        response.headers[INSTANCE_HEADER_NAME] = INSTANCE_ID
+    if span_context and span_context.is_valid:
+        trace_id_hex = format_trace_id(span_context.trace_id)
+        span_id_hex = format_span_id(span_context.span_id)
+        response.headers["x-trace-id"] = trace_id_hex
+        response.headers["traceparent"] = _build_traceparent(
+            trace_id_hex,
+            span_id_hex,
+            span_context.trace_flags.sampled,
+        )
+    return response
+
 
 _setup_otel_observability(app)
 

@@ -1,22 +1,26 @@
 # CURRENT_TASK
 
 - Task: 后端接入 OpenTelemetry 并回传 Trace ID
-- Status: done（已接通 OTLP HTTP trace/logs 上报，响应头返回 `x-trace-id` 与 `traceparent`）
+- Status: done（已接通 OTLP HTTP trace/logs 上报；响应头支持返回 `x-trace-id` / `traceparent`，并新增实例标识头）
 - Scope:
   - `backend/main.py`
     - 新增 OTel 初始化：`TracerProvider + OTLPSpanExporter + FastAPIInstrumentor + HTTPXClientInstrumentor`
     - 新增日志导出：`LoggerProvider + OTLPLogExporter + LoggingHandler`
-    - 通过 `server_response_hook` 在每个 HTTP 响应注入 `x-trace-id` 与 `traceparent`
+    - 通过 FastAPI `@app.middleware("http")` 在每个 HTTP 响应注入 `x-trace-id` 与 `traceparent`
+    - 新增实例标识头：`x-instance-id`（默认优先 `POD_NAME`，回退 `HOSTNAME`）
   - `backend/requirements.txt`
     - 新增 OTel 依赖（api/sdk/exporter/instrumentation）
   - `backend/.env`
     - 新增 OTel 环境变量：`OTEL_ENABLED / OTEL_LOGS_ENABLED / OTEL_SERVICE_NAME / OTEL_EXPORTER_OTLP_ENDPOINT`
+    - 新增实例头开关：`INSTANCE_HEADER_ENABLED / INSTANCE_HEADER_NAME`
 - Verification:
   - `python -m py_compile backend/main.py` 通过
   - IDE lints 仅提示本地解释器尚未安装 opentelemetry 依赖（安装依赖后消失）
+  - 后续修正：改为 FastAPI `@app.middleware("http")` 注入 trace 头，避免 instrumentor hook 参数兼容性导致响应头缺失
 - Notes:
   - 当前默认 Collector 地址为 `http://otel-collector.observability.svc.cluster.local:4318`
   - 若需单独指定可覆盖：`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
+  - 实例标识头默认取 `POD_NAME`，标准 K8s 可用 Downward API 注入；未注入时会回退到容器 `HOSTNAME`
 
 - Task: 手动记录页面心智收口为“双库模式”
 - Status: done（前台展示正式收口为 `food_nutrition_library + public_food_library` 两类；静态校验通过；`weapp-devtools` 运行态验证仍受本机 `mrc.cmd` 权限阻塞）
