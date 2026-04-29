@@ -358,16 +358,16 @@
   - 清理时会保留原订单 `extra`，只追加 `expire_reason / expired_at / superseded_by_order_no`
   - 这还不是全库历史垃圾一次性清扫
 
-- Task: 首批 1000 用户免费 1 个月试用策略
-- Status: in_progress（已完成后端试用策略分层、创始用户付费积分翻倍与前端编号展示；等待用户自行重启后验证）
+- Task: 创始用户试用策略（前 500 名 2 个月 / 501-1000 名 1 个月）
+- Status: in_progress（已完成后端试用策略三层分段、创始用户付费积分翻倍与前端编号展示；等待用户自行重启后验证）
 - Scope:
   - 后端：
     - `backend/database.py`
       - 新增 `is_user_in_first_membership_trial_batch(user_id, limit=1000)`，按 `weapp_user` 注册顺序判断是否属于最早 1000 名注册用户；注册时间字段自动识别
       - 新增 `get_first_membership_trial_batch_rank(user_id, limit=1000)`，返回用户在首批 1000 名中的注册序号（1-based）
     - `backend/main.py`
-      - 会员积分试用口径从“统一 3 天”升级为“前 1000 名 30 天，其余用户 3 天”
-      - 新增 `EARLY_USER_TRIAL_LIMIT / EARLY_USER_TRIAL_DAYS / REGULAR_USER_TRIAL_DAYS`
+      - 会员积分试用口径从“统一 3 天”升级为“前 500 名 60 天、第 501-1000 名 30 天、其余用户 3 天”
+      - 新增 `EARLY_USER_TOP_500_LIMIT / EARLY_USER_TOP_500_TRIAL_DAYS / EARLY_USER_TRIAL_LIMIT / EARLY_USER_TRIAL_DAYS / REGULAR_USER_TRIAL_DAYS`
       - 新增 `_resolve_user_trial_policy(...)`
       - `/api/membership/me` 新增返回 `trial_days_total / trial_policy`
       - 创始用户开通会员后，套餐基础积分按 `x2` 发放；`/api/membership/me` 额外返回 `early_user_rank / early_user_limit / early_user_paid_bonus_multiplier / early_user_paid_bonus_eligible / early_user_paid_bonus_active`
@@ -376,17 +376,18 @@
     - `src/utils/api.ts`
       - `MembershipStatus` 补充 `trial_days_total / trial_policy` 与创始用户编号/翻倍字段
     - `src/pages/pro-membership/index.tsx`
-      - 试用展示改为区分“首批用户免费 1 个月”与“新用户免费 3 天”
+      - 试用展示改为区分“前 500 用户免费 2 个月”“前 1000 用户免费 1 个月”与“新用户免费 3 天”
       - 会员页显示“你是第 N / 1000 位用户”“创始用户礼遇：会员积分 x2”
       - 对前 1000 名用户，档位卡/对比表/价格卡中的每日积分展示为翻倍后的 `16 / 40 / 80`
     - `src/pages/profile/index.tsx`
-      - “食探会员”入口说明与会员卡试用文案同步改为按试用策略展示
+      - “食探会员”入口说明与会员卡试用文案同步改为按试用策略展示，并提示“从注册开始算 2 个月 / 1 个月”
       - 若属于创始用户，个人页会员入口与会员卡会显示“创始第 N 位”“会员积分 x2”
 - Notes:
   - 本轮只改代码，不代用户运行
-  - 当前实现按注册顺序前 1000 名判定；排序使用“自动识别到的注册时间字段”升序，时间相同再按 `id` 升序稳定打散
+  - 当前实现按注册顺序前 1000 名判定；其中前 500 名享受 60 天，501-1000 名享受 30 天；排序使用“自动识别到的注册时间字段”升序，时间相同再按 `id` 升序稳定打散
   - 当前仍沿用“试用期每日 8 积分、当天清零”的积分规则
   - 创始用户的“付费积分翻倍”只放大会员套餐基础积分，不放大奖励积分（邀请/海报）与免费试用积分
+  - 用户最新明确要求：额外积分仍可通过邀请/海报等其他途径正常获取；这条逻辑保持不变
 - Task: 圈子搜索优先匹配好友昵称，再加载该好友动态
 - Status: done（前端搜索框输入后先从好友列表匹配昵称，点击好友后按 `author_id` 拉取该用户动态）
 - Scope:
@@ -3239,3 +3240,9 @@
   - 发布安排：
     - `2026-04-29` 用户已明确要求先把当前工作区全部改动整体提交到远端
     - 顺序为：先提交并推送 `dev`，再合并到 `main` 并推送，然后再回头复查线上会员页与支付问题
+  - 线上支付排查新增结论：
+    - 体验版登录域名问题已与支付问题拆开
+    - 当前支付“签名错误”更像是运行中的后端微信支付配置问题，而不是前端包本身
+    - 现有后端自动部署 GitHub Actions 处于停用状态，且 Docker/K8s 运行配置由集群 `ConfigMap` 注入
+    - `foodlink-main` 生产 Deployment 使用 `envFrom -> configMapRef -> foodlink-main-env`
+    - 因此若支付证书/商户号/appid 有误，优先应检查并更新集群中的 `foodlink-main-env`，而不是只改前端或只推镜像

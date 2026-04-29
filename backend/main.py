@@ -1370,7 +1370,8 @@ def _get_food_analysis_daily_limit(is_pro: bool) -> Optional[int]:
 # 积分发放：
 #   - 付费套餐：每日按套餐 daily_credits 发放，当天清零
 #   - 免费试用：
-#       * 前 1000 名注册用户：注册起 30 天内每日 8 积分
+#       * 前 500 名注册用户：注册起 60 天内每日 8 积分
+#       * 第 501-1000 名注册用户：注册起 30 天内每日 8 积分
 #       * 其余新用户：注册起 3 天内每日 8 积分
 # 邀请/分享奖励：
 #   - 邀请好友：有效邀请生效后，双方连续 3 天每天 +5 积分
@@ -1381,7 +1382,9 @@ CREDIT_COST_PER_FOOD_ANALYSIS = 2
 CREDIT_COST_PER_EXERCISE_LOG = 1
 
 TRIAL_DAILY_CREDITS = 8
+EARLY_USER_TOP_500_LIMIT = 500
 EARLY_USER_TRIAL_LIMIT = 1000
+EARLY_USER_TOP_500_TRIAL_DAYS = 60
 EARLY_USER_TRIAL_DAYS = 30
 REGULAR_USER_TRIAL_DAYS = 3
 EARLY_USER_PAID_CREDITS_MULTIPLIER = 2
@@ -1476,10 +1479,18 @@ async def _resolve_user_trial_policy(
         }
 
     meta = early_user_meta or await _resolve_early_user_membership_meta(user_id, user_row)
+    rank = int(meta.get("early_user_rank") or 0)
     is_early_user = bool(meta.get("early_user_paid_bonus_eligible"))
-    trial_days = EARLY_USER_TRIAL_DAYS if is_early_user else REGULAR_USER_TRIAL_DAYS
+    if rank and rank <= EARLY_USER_TOP_500_LIMIT:
+        trial_days = EARLY_USER_TOP_500_TRIAL_DAYS
+        trial_policy = "founding_top_500_bonus_month"
+    elif is_early_user:
+        trial_days = EARLY_USER_TRIAL_DAYS
+        trial_policy = "early_first_1000"
+    else:
+        trial_days = REGULAR_USER_TRIAL_DAYS
+        trial_policy = "regular_new_user"
     trial_end = created_at + timedelta(days=trial_days)
-    trial_policy = "early_first_1000" if is_early_user else "regular_new_user"
     return {
         "trial_active": datetime.now(timezone.utc) < trial_end,
         "trial_expires_at": trial_end,
@@ -2436,8 +2447,8 @@ class MembershipStatusResponse(BaseModel):
     credits_reset_at: Optional[str] = None  # 次日 00:00+08:00
     trial_active: bool = False              # 是否在免费试用期
     trial_expires_at: Optional[str] = None  # 试用截止（UTC）
-    trial_days_total: int = 0              # 当前试用总天数：30 / 3 / 0
-    trial_policy: Optional[str] = None     # early_first_1000 / regular_new_user
+    trial_days_total: int = 0              # 当前试用总天数：60 / 30 / 3 / 0
+    trial_policy: Optional[str] = None     # founding_top_500_bonus_month / early_first_1000 / regular_new_user
     early_user_rank: Optional[int] = None  # 若属于前 1000 名，则返回其注册名次（1-based）
     early_user_limit: int = 0              # 创始用户活动总名额
     early_user_paid_bonus_multiplier: int = 1  # 前 1000 名付费会员积分倍数
