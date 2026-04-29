@@ -254,7 +254,7 @@ function ProfilePage() {
           ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))}${membershipStatus?.early_user_paid_bonus_active ? ` · 创始 x${membershipStatus?.early_user_paid_bonus_multiplier ?? 2}` : ''} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
           : `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 不限次数`
         : membershipStatus?.trial_active
-          ? `${(membershipStatus?.trial_days_total ?? 0) >= 30 ? `首批 #${membershipStatus?.early_user_rank ?? '--'} 免费月` : '免费 3 天试用'} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
+          ? `${membershipStatus?.trial_policy === 'founding_top_500_bonus_month' ? `前 500 #${membershipStatus?.early_user_rank ?? '--'} 免费 2 个月` : (membershipStatus?.trial_policy === 'early_first_1000' || (membershipStatus?.trial_days_total ?? 0) >= 30) ? `前 1000 #${membershipStatus?.early_user_rank ?? '--'} 免费月` : '免费 3 天试用'} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
           : '3 档会员 · 每日积分领取',
       path: extraPkgUrl('/pages/pro-membership/index')
     }
@@ -446,7 +446,9 @@ function ProfilePage() {
             const cRemain = membershipStatus?.daily_credits_remaining ?? 0
             const progressPct = cMax > 0 ? Math.min((cUsed / cMax) * 100, 100) : 0
             const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
-            const isEarlyTrial = isTrial && (membershipStatus?.trial_days_total ?? 0) >= 30
+            const trialPolicy = membershipStatus?.trial_policy ?? null
+            const isTop500Trial = isTrial && trialPolicy === 'founding_top_500_bonus_month'
+            const isEarlyTrial = isTrial && (trialPolicy === 'founding_top_500_bonus_month' || trialPolicy === 'early_first_1000' || (membershipStatus?.trial_days_total ?? 0) >= 30)
             const earlyUserRank = membershipStatus?.early_user_rank ?? null
             const earlyUserLimit = membershipStatus?.early_user_limit ?? 1000
             const earlyUserEligible = !!membershipStatus?.early_user_paid_bonus_eligible
@@ -493,7 +495,7 @@ function ProfilePage() {
                   <View>
                     <Text className='card-validity'>
                       {isTrial
-                        ? `${isEarlyTrial ? `首批 #${earlyUserRank || '--'} 免费月到期` : '试用到期'} ${formatExpiry(membershipStatus?.trial_expires_at)}`
+                        ? `${isTop500Trial ? `前 500 #${earlyUserRank || '--'} 免费 2 个月到期` : isEarlyTrial ? `前 1000 #${earlyUserRank || '--'} 免费月到期` : '试用到期'} ${formatExpiry(membershipStatus?.trial_expires_at)}`
                         : `注册时间 ${registerDate}`}
                     </Text>
                     <Text className='card-title'>食探会员</Text>
@@ -506,7 +508,7 @@ function ProfilePage() {
                   <View className='progress-info'>
                     <Text className='progress-text'>
                       {isTrial
-                        ? `${isEarlyTrial ? '首批免费月' : '免费试用'}已用 ${cUsed}/${cMax}`
+                        ? `${isTop500Trial ? '前 500 免费 2 个月' : isEarlyTrial ? '前 1000 免费月' : '免费试用'}已用 ${cUsed}/${cMax}`
                         : '未开通 · 开通后每日发放积分'}
                     </Text>
                     {isTrial && cMax > 0 && (
@@ -517,7 +519,7 @@ function ProfilePage() {
                   </View>
                   <Text className='card-tip'>
                     {isTrial
-                      ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${isEarlyTrial ? ` · 开通后会员积分 x${paidBonusMultiplier}` : ''}`
+                      ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${isEarlyTrial ? ` · 从注册开始算${isTop500Trial ? '2 个月' : '1 个月'} · 开通后会员积分 x${paidBonusMultiplier}` : ''}`
                       : `轻度 ${earlyUserEligible ? 16 : 8} · 标准 ${earlyUserEligible ? 40 : 20} · 进阶 ${earlyUserEligible ? 80 : 40} 积分 / 日`}
                   </Text>
                 </View>

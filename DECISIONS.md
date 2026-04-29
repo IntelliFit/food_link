@@ -73,11 +73,12 @@
 
 - `2026-04-27`: 会员免费试用策略从“统一 3 天”升级为分层口径：按 `weapp_user` 注册顺序判定，前 `1000` 名注册用户享受 `30` 天免费试用，之后的新用户享受 `3` 天免费试用；两类试用均为每天 `8` 积分、当天清零、不累计。当前治理 SQL 直接使用实库字段 `create_time`，后端 `/api/membership/me` 继续作为唯一真源，并额外返回 `trial_days_total / trial_policy` 供前端展示。
 - `2026-04-29`: 前 `1000` 名注册用户的创始礼遇从“仅免费试用 30 天”升级为“双重激励”：
-  - 免费试用阶段仍为 `30` 天、每天 `8` 积分、当天清零
+  - 免费试用阶段进一步细分为：前 `500` 名用户从注册开始享受 `60` 天、每天 `8` 积分；第 `501-1000` 名用户从注册开始享受 `30` 天、每天 `8` 积分；其余新用户为 `3` 天
   - 一旦开通任意付费会员，套餐基础积分按 `x2` 发放；当前口径对应为：轻度版 `16/日`、标准版 `40/日`、进阶版 `80/日`
   - 该翻倍仅作用于会员套餐基础积分，不放大奖励积分（邀请/海报）与试用积分
+  - 试用期内的额外积分获取渠道保持可用：邀请奖励、分享海报等奖励可在基础 `8` 积分之外正常叠加
   - `/api/membership/me` 必须返回创始用户编号与翻倍状态：`early_user_rank / early_user_limit / early_user_paid_bonus_multiplier / early_user_paid_bonus_eligible / early_user_paid_bonus_active`
-  - 会员购买页与「我的」页都需要明确展示“你是第 N / 1000 位用户”，让用户知道自己属于创始用户批次
+  - 会员购买页与「我的」页都需要明确展示“你是第 N / 1000 位用户”，并让前 `500` 名用户能感知自己拿到的是“额外加赠 1 个月”的版本
 - `2026-04-28`: 测试后台 `custom` 模式的正式 prompt 实验口径继续升级为“多提示词并跑”：
   - 分析体验与批量测试都允许同时选择多个 Gemini 自定义提示词
   - 实际执行语义是“所选模型 × 所选提示词”的笛卡尔积，而不是只支持单个 `prompt_id`
@@ -354,6 +355,12 @@
   - 风险卡默认折叠，只先展示标题、分数和一句短判断；详细依据与改善动作按点击展开
   - 用户可通过页面内的“我的关注”本地管理想显示的疾病卡片；默认至少保留 1 项，且显示顺序优先跟随当前关注项
   - 页面文案应尽量避免过硬的“疾病报告”语气，优先使用“健康方向 / 友好度 / 长期状态趋势 / 仅供参考”这类更柔和的健康管理表达
+- `2026-04-29`: FoodLink 当前 Docker/K8s 部署口径下，后端业务敏感配置不打进镜像，而由集群运行时 `ConfigMap` 注入。当前稳定规则是：
+  - 本地 `npm run push-docker-ccr` 只负责构建并推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink` 镜像，不负责把本机 shell 环境变量烤进镜像
+  - `backend/Dockerfile` 只保留通用默认 `ENV`（如 `PORT/HOST`），支付/数据库/第三方密钥应通过运行时注入
+  - `littlehorse-deployment/foodlink/main/deployment.yaml` 的生产后端使用 `envFrom -> configMapRef -> foodlink-main-env`
+  - 因此生产支付配置（如 `APPID / WECHAT_PAY_MCHID / WECHAT_PAY_SERIAL_NO / WECHAT_PAY_PRIVATE_KEY / WECHAT_PAY_NOTIFY_URL / WECHAT_PAY_API_V3_KEY`）的真源应视为集群中的 `foodlink-main-env`，而不是镜像构建机当前环境
+  - 若仅更新镜像、不更新 `foodlink-main-env` 或不重启 Pod，线上仍会继续使用旧支付配置
 
 - `2026-03-27`: Added persistent state files so `food_link` context survives session resets and compaction better.
 - `2026-03-27`: Project ownership must come from `IDENTITY.md` plus state files, not stale transcript memory.

@@ -794,10 +794,10 @@ export interface MembershipStatus {
   trial_active?: boolean
   /** 试用期截止时间（UTC ISO） */
   trial_expires_at?: string | null
-  /** 当前试用总天数：前 1000 名为 30，其余新用户为 3 */
+  /** 当前试用总天数：前 500 名为 60，501-1000 名为 30，其余新用户为 3 */
   trial_days_total?: number
-  /** 试用策略标识：early_first_1000 / regular_new_user */
-  trial_policy?: 'early_first_1000' | 'regular_new_user' | null
+  /** 试用策略标识：founding_top_500_bonus_month / early_first_1000 / regular_new_user */
+  trial_policy?: 'founding_top_500_bonus_month' | 'early_first_1000' | 'regular_new_user' | null
   /** 若属于首批用户，返回其注册序号（1-based） */
   early_user_rank?: number | null
   /** 创始用户活动总名额 */

@@ -245,7 +245,9 @@ function ProMembershipPage() {
   const isPro = membership?.is_pro ?? false
   const isTrial = !isPro && !!membership?.trial_active
   const trialDaysTotal = membership?.trial_days_total ?? 0
-  const isEarlyTrial = isTrial && trialDaysTotal >= 30
+  const trialPolicy = membership?.trial_policy ?? null
+  const isTop500Trial = isTrial && trialPolicy === 'founding_top_500_bonus_month'
+  const isEarlyTrial = isTrial && (trialPolicy === 'founding_top_500_bonus_month' || trialPolicy === 'early_first_1000' || trialDaysTotal >= 30)
   const earlyUserRank = membership?.early_user_rank ?? null
   const earlyUserLimit = membership?.early_user_limit ?? 1000
   const earlyUserEligible = !!membership?.early_user_paid_bonus_eligible
@@ -379,7 +381,7 @@ function ProMembershipPage() {
                 <>
                   <Text className='hero-credits-label'>
                     {isTrial
-                      ? `🎁 ${isEarlyTrial ? '首批用户免费 1 个月' : '新用户免费试用'} · 今日已用积分`
+                      ? `🎁 ${isTop500Trial ? '前 500 用户免费 2 个月' : isEarlyTrial ? '前 1000 用户免费 1 个月' : '新用户免费试用'} · 今日已用积分`
                       : paidBonusActive
                         ? `🎁 创始会员积分 x${paidBonusMultiplier} · 今日已用积分`
                         : '今日已用积分'}
@@ -630,7 +632,7 @@ function ProMembershipPage() {
               <View className='status-row'>
                 <Text className='status-label'>试用权益</Text>
                 <Text className='status-value'>
-                  {trialDaysTotal >= 30 ? '首批用户免费 1 个月' : '新用户免费 3 天'}
+                  {isTop500Trial ? '前 500 用户免费 2 个月' : isEarlyTrial ? '前 1000 用户免费 1 个月' : '新用户免费 3 天'}
                 </Text>
               </View>
               <View className='status-row'>
