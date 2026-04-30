@@ -1466,7 +1466,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 // 首页底部弹层共用：记录菜单 / 体重 / 喝水 / 编辑目标 — 浮在 tabBar 上、四周留白圆角卡片
 $sheet-float-gap-x: 24rpx;
 $sheet-float-gap-top: 48rpx;
-$sheet-float-above-tabbar: calc(env(safe-area-inset-bottom) + 128rpx);
+$sheet-float-above-tabbar: calc(env(safe-area-inset-bottom) + 24rpx);
 $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-inset-bottom) - 128rpx);
 
 // 目标编辑弹窗（与 RecordMenu 同款悬浮底卡）
@@ -2559,7 +2559,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(20rpx);
+    transform: translateY(100%);
   }
   to {
     opacity: 1;
