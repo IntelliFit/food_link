@@ -21,6 +21,7 @@ import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
 
 import './index.scss'
 
@@ -413,6 +414,11 @@ function RecordDetailPage() {
   if (loading || !record) {
     return (
       <View className='record-detail-root'>
+        <CustomNavBar
+          title='识别记录详情'
+          showBack
+          onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+        />
         <View className='record-detail-below-nav record-detail-loading-placeholder'>
           <View className='empty-tip'>
             {loading ? <View className='loading-spinner-md' /> : '记录不存在'}
@@ -693,14 +699,21 @@ function RecordDetailPage() {
     })
   }
 
+  const navBarHeight = getNavBarHeight()
+
   return (
     <View className='record-detail-root'>
+      <CustomNavBar
+        title='识别记录详情'
+        showBack
+        onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+      />
       {/*
         海报预览/离屏 Canvas 勿放在 ScrollView 内：真机上 fixed 全屏层会相对滚动容器错位；
         与首页「今日小结」分享层结构一致（根节点下独立一层）
       */}
       <View className='record-detail-below-nav'>
-      <ScrollView className='record-detail-page' scrollY>
+      <ScrollView className='record-detail-page' scrollY style={{ height: `calc(100vh - ${navBarHeight}px)` }}>
       <View className='record-detail-body'>
         <View className='detail-header'>
           <View className='meal-badge'>
