@@ -116,11 +116,19 @@ Component({
             // ignore
           }
 
+          let statsRiskDetailOpen = false
+          try {
+            statsRiskDetailOpen = wx.getStorageSync('stats_risk_detail_visible') === '1'
+          } catch (e) {
+            // ignore
+          }
+
           const shouldHide =
             currentPath === '/pages/record/index' ||
             currentPath === '/packageExtra/pages/record-menu/index' ||
             (currentPath === '/pages/community/index' && communityCommentOpen) ||
-            (currentPath === '/pages/index/index' && homePosterModalOpen)
+            (currentPath === '/pages/index/index' && homePosterModalOpen) ||
+            (currentPath === '/pages/stats/index' && statsRiskDetailOpen)
 
           if (shouldHide !== this.data.hidden) {
             this.setData({ hidden: shouldHide })

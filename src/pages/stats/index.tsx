@@ -219,7 +219,27 @@ function StatsPage() {
   const [range, setRange] = useState<'week' | 'month'>('week')
   const rangeRef = useRef(range)
   rangeRef.current = range
-  const [expandedRiskKey, setExpandedRiskKey] = useState<string | null>(null)
+  const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCardModel | null }>({ visible: false, card: null })
+
+  // 自定义 tabBar 显隐同步：弹窗打开时隐藏底栏
+  useEffect(() => {
+    try {
+      if (riskDetailModal.visible) {
+        Taro.setStorageSync('stats_risk_detail_visible', '1')
+      } else {
+        Taro.removeStorageSync('stats_risk_detail_visible')
+      }
+    } catch {
+      // ignore
+    }
+    return () => {
+      try {
+        Taro.removeStorageSync('stats_risk_detail_visible')
+      } catch {
+        // ignore
+      }
+    }
+  }, [riskDetailModal.visible])
   const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(() => {
     try {
       const stored = Taro.getStorageSync(RISK_PREF_STORAGE_KEY)
@@ -855,8 +875,8 @@ function StatsPage() {
       } catch {
         // ignore
       }
-      if (expandedRiskKey === riskKey && exists) {
-        setExpandedRiskKey(null)
+      if (riskDetailModal.card?.key === riskKey && exists) {
+        setRiskDetailModal(prev => ({ ...prev, card: null }))
       }
       return normalized
     })
@@ -972,33 +992,69 @@ function StatsPage() {
           {visibleRiskCards.map((card) => (
             <View
               key={card.key}
-              className={`stats-card risk-card tone-${card.tone} ${expandedRiskKey === card.key ? 'is-expanded' : ''}`}
-              onClick={() => setExpandedRiskKey(prev => (prev === card.key ? null : card.key))}
+              className={`stats-card risk-card tone-${card.tone}`}
+              onClick={() => setRiskDetailModal({ visible: true, card })}
             >
-                <View className='risk-card-top'>
-                  <View className='risk-card-title-wrap'>
-                    <Text className='risk-card-title'>{card.title}</Text>
-                    <Text className='risk-card-summary'>{card.brief}</Text>
-                  </View>
+              <View className='risk-card-top'>
+                <View className='risk-card-title-wrap'>
+                  <Text className='risk-card-title'>{card.title}</Text>
+                  <Text className='risk-card-summary'>{card.brief}</Text>
+                </View>
                 <View className='risk-card-score-wrap'>
                   <Text className='risk-card-score'>{card.score}</Text>
                   <Text className='risk-card-score-unit'>分</Text>
-                  <View className='risk-card-expand'>{expandedRiskKey === card.key ? <IconCollapse size={20} color='#94a3b8' /> : <IconExpand size={20} color='#94a3b8' />}</View>
                 </View>
               </View>
-              {expandedRiskKey === card.key ? (
-                <View className='risk-card-body'>
-                  <Text className='risk-card-summary-expanded'>{card.summary}</Text>
-                  <Text className='risk-card-basis'>{card.basis}</Text>
-                  <View className='risk-card-divider' />
-                  <Text className='risk-card-action-label'>最小改善动作</Text>
-                  <Text className='risk-card-action'>{card.action}</Text>
-                  <Text className='risk-card-delta'>预计可提升 {card.delta} 分</Text>
-                </View>
-              ) : null}
+              <View className='risk-card-more-btn'>
+                <Text className='risk-card-more-text'>查看更多</Text>
+              </View>
             </View>
           ))}
         </View>
+
+        {/* 友好度详情底部弹窗 */}
+        {riskDetailModal.visible && riskDetailModal.card && (
+          <View
+            className='risk-detail-modal'
+            onClick={() => setRiskDetailModal({ visible: false, card: null })}
+          >
+            <View className='risk-detail-backdrop' />
+            <View
+              className='risk-detail-panel'
+              onClick={(e) => e.stopPropagation()}
+            >
+              <View className='risk-detail-handle' />
+              <View className='risk-detail-header'>
+                <Text className='risk-detail-title'>{riskDetailModal.card.title}</Text>
+                <View className='risk-detail-score-row'>
+                  <Text className='risk-detail-score'>{riskDetailModal.card.score}</Text>
+                  <Text className='risk-detail-score-unit'>分</Text>
+                  <View className={`risk-detail-badge tone-${riskDetailModal.card.tone}`}>
+                    <Text className='risk-detail-badge-text'>{scoreToLabel(riskDetailModal.card.score)}</Text>
+                  </View>
+                </View>
+              </View>
+              <View className='risk-detail-body'>
+                <Text className='risk-detail-section-text'>{riskDetailModal.card.summary}</Text>
+                <View className='risk-detail-divider' />
+                <Text className='risk-detail-section-label'>判断依据</Text>
+                <Text className='risk-detail-section-text'>{riskDetailModal.card.basis}</Text>
+                <View className='risk-detail-divider' />
+                <Text className='risk-detail-section-label'>最小改善动作</Text>
+                <Text className='risk-detail-section-text'>{riskDetailModal.card.action}</Text>
+                <View className='risk-detail-delta'>
+                  <Text className='risk-detail-delta-text'>预计可提升 {riskDetailModal.card.delta} 分</Text>
+                </View>
+              </View>
+              <View
+                className='risk-detail-close-btn'
+                onClick={() => setRiskDetailModal({ visible: false, card: null })}
+              >
+                <Text className='risk-detail-close-text'>知道了</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         <View className='stats-card action-plan-card'>
           <View className='card-header action-plan-card__header'>
