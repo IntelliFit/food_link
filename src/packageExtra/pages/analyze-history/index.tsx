@@ -2,7 +2,7 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
+import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -384,7 +384,7 @@ function AnalyzeHistoryPage() {
     } catch (e: any) {
       if (seq !== loadSeqRef.current) return
       console.error('[analyze-history] load failed', e)
-      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载失败')
     } finally {
       if (seq === loadSeqRef.current) setLoading(false)
     }
@@ -407,7 +407,7 @@ function AnalyzeHistoryPage() {
       // 从列表中移除
       setTasks(prev => prev.filter(t => t.id !== taskId))
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '删除失败', icon: 'none' })
+      await showUnifiedApiError(e, '删除失败')
     }
   }
 
@@ -501,7 +501,7 @@ function AnalyzeHistoryPage() {
       return
     }
     if (task.status === 'failed' || task.status === 'timed_out') {
-      Taro.showToast({ title: task.error_message || '识别失败', icon: 'none' })
+      void showUnifiedApiError(new Error(task.error_message || '识别失败'), '识别失败')
     }
   }
 

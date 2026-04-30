@@ -2,7 +2,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { View, Text, ScrollView, Image } from '@tarojs/components'
 import { useCallback, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { communityGetCheckinLeaderboard, getAccessToken, type CheckinLeaderboardItem } from '../../../utils/api'
+import { communityGetCheckinLeaderboard, getAccessToken, showUnifiedApiError, type CheckinLeaderboardItem } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
@@ -28,7 +28,8 @@ function CheckinLeaderboardPage() {
       setWeekEnd(res.week_end)
       setList(res.list || [])
     } catch (e: unknown) {
-      setError((e as Error).message || '加载失败')
+      setError('加载失败，请稍后重试')
+      await showUnifiedApiError(e, '加载失败')
       setList([])
     } finally {
       setLoading(false)

@@ -1,7 +1,7 @@
 import { View, Text, Input, ScrollView, Map } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { getCurrentInstance } from '@tarojs/taro'
-import { API_BASE_URL } from '../../../utils/api'
+import { API_BASE_URL, showUnifiedApiError } from '../../../utils/api'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -47,7 +47,7 @@ function LocationSearchPage() {
       })
       .catch(() => {
         if (!cancelled) {
-          Taro.showToast({ title: '定位失败，使用默认位置', icon: 'none' })
+          void showUnifiedApiError(new Error('定位失败，使用默认位置'), '定位失败，使用默认位置')
         }
       })
       .finally(() => {
@@ -123,8 +123,8 @@ function LocationSearchPage() {
       if (pois.length === 0) {
         Taro.showToast({ title: '未找到相关位置', icon: 'none' })
       }
-    } catch {
-      Taro.showToast({ title: '搜索失败', icon: 'none' })
+    } catch (e) {
+      await showUnifiedApiError(e, '搜索失败')
     } finally {
       setSearching(false)
     }

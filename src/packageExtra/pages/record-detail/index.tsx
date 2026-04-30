@@ -11,6 +11,7 @@ import {
   getPosterCalorieCompare,
   getMyMembership,
   claimSharePosterReward,
+  showUnifiedApiError,
   type FoodRecord,
   type Nutrients
 } from '../../../utils/api'
@@ -188,7 +189,7 @@ function RecordDetailPage() {
           } catch { /* ignore */ }
         } catch (e: any) {
           const msg = e.message || '加载记录失败'
-          Taro.showToast({ title: msg, icon: 'none' })
+          await showUnifiedApiError(new Error(msg), '加载记录失败')
           setTimeout(() => Taro.navigateBack(), 1500)
         } finally {
           setLoading(false)
@@ -206,7 +207,7 @@ function RecordDetailPage() {
             setTimeout(() => Taro.navigateBack(), 1500)
           }
         } catch {
-          Taro.showToast({ title: '加载失败', icon: 'none' })
+          void showUnifiedApiError(new Error('加载失败'), '加载失败')
           setTimeout(() => Taro.navigateBack(), 1500)
         }
       }
@@ -404,7 +405,7 @@ function RecordDetailPage() {
       path: posterImageUrl,
       fail: (err: { errMsg?: string }) => {
         console.error('showShareImageMenu fail', err)
-        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+        void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
     })
   }, [posterImageUrl])
@@ -466,7 +467,7 @@ function RecordDetailPage() {
       Taro.showToast({ title: '修改成功', icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(e, '保存失败')
     } finally {
       setEditSaving(false)
     }
@@ -653,14 +654,14 @@ function RecordDetailPage() {
               fail: (err) => {
                 Taro.hideLoading()
                 setPosterGenerating(false)
-                Taro.showToast({ title: '生成失败', icon: 'none' })
+                void showUnifiedApiError(new Error('生成失败'), '生成失败')
                 console.error('canvasToTempFilePath fail', err)
               }
             })
           } catch (e) {
             Taro.hideLoading()
             setPosterGenerating(false)
-            Taro.showToast({ title: '绘制失败', icon: 'none' })
+            void showUnifiedApiError(e, '绘制失败')
             console.error('drawSmartPoster error', e)
           }
         })
@@ -686,7 +687,7 @@ function RecordDetailPage() {
             }
           })
         } else {
-          Taro.showToast({ title: '保存失败', icon: 'none' })
+          void showUnifiedApiError(new Error('保存失败'), '保存失败')
         }
       }
     })

@@ -9,6 +9,7 @@ import {
   getAccessToken,
   getMembershipPlans,
   getMyMembership,
+  showUnifiedApiError,
   MembershipPeriod,
   MembershipPlan,
   MembershipStatus,
@@ -155,7 +156,7 @@ function ProMembershipPage() {
         }
       }
     } catch (error: any) {
-      Taro.showToast({ title: error.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(error, '加载失败')
     } finally {
       setPageLoading(false)
     }
@@ -235,7 +236,7 @@ function ProMembershipPage() {
       if (String(message).includes('cancel')) {
         Taro.showToast({ title: '已取消支付', icon: 'none' })
       } else {
-        Taro.showToast({ title: error.message || '支付失败，请重试', icon: 'none' })
+        await showUnifiedApiError(error, '支付失败，请重试')
       }
     } finally {
       setLoading(false)

@@ -8,6 +8,7 @@ import {
   friendGetList,
   friendGetRequestsOverview,
   friendRespondRequest,
+  showUnifiedApiError,
   FriendListItem,
   FriendRequestOverviewItem
 } from '../../../utils/api'
@@ -153,7 +154,7 @@ function FriendsPage() {
       setReceived(requestRes.received || [])
       setSent(requestRes.sent || [])
     } catch (error: any) {
-      Taro.showToast({ title: error?.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(error, '加载失败')
     } finally {
       setLoading(false)
     }
@@ -185,7 +186,7 @@ function FriendsPage() {
       await loadData()
     } catch (error: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: error?.message || '删除失败', icon: 'none' })
+      await showUnifiedApiError(error, '删除失败')
     }
   }
 
@@ -224,7 +225,7 @@ function FriendsPage() {
       }
     } catch (error: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: error?.message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(error, '操作失败')
     }
   }
 
@@ -245,7 +246,7 @@ function FriendsPage() {
       Taro.showToast({ title: '已撤销申请', icon: 'success' })
       await loadData()
     } catch (error: any) {
-      Taro.showToast({ title: error?.message || '撤销失败', icon: 'none' })
+      await showUnifiedApiError(error, '撤销失败')
     } finally {
       setRevokingId(null)
     }

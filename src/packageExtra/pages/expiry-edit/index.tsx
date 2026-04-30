@@ -4,6 +4,7 @@ import Taro, { useRouter, useDidShow } from '@tarojs/taro'
 import {
   createManagedFoodExpiryItem,
   getManagedFoodExpiryItem,
+  showUnifiedApiError,
   updateManagedFoodExpiryItem,
   subscribeManagedFoodExpiryItem,
   recognizeManagedFoodExpiryItems,
@@ -302,7 +303,7 @@ export default function ExpiryEditPage() {
       const res = await getManagedFoodExpiryItem(itemId)
       setDraftItems([buildDraftFromSavedItem(res.item)])
     } catch (error: any) {
-      Taro.showToast({ title: error?.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(error, '加载失败')
     } finally {
       setLoading(false)
     }
@@ -430,7 +431,7 @@ export default function ExpiryEditPage() {
           },
         })
       } else {
-        Taro.showToast({ title: message, icon: 'none' })
+        await showUnifiedApiError(error, '保质期识别失败')
       }
     } finally {
       Taro.hideLoading()
@@ -497,7 +498,7 @@ export default function ExpiryEditPage() {
       }
     } catch (error: any) {
       console.error('[expiry] requestSubscribeMessage failed:', error)
-      Taro.showToast({ title: error?.message || '订阅提醒失败', icon: 'none' })
+      await showUnifiedApiError(error, '订阅提醒失败')
     }
   }
 
@@ -554,7 +555,7 @@ export default function ExpiryEditPage() {
       }, 300)
     } catch (error: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: error?.message || '提交失败', icon: 'none' })
+      await showUnifiedApiError(error, '提交失败')
     } finally {
       setSubmitting(false)
     }

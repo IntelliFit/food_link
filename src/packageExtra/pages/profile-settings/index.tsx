@@ -1,7 +1,7 @@
 import { View, Text, Image, Button, Input } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { updateUserInfo, uploadUserAvatar, imageToBase64 } from '../../../utils/api'
+import { updateUserInfo, uploadUserAvatar, imageToBase64, showUnifiedApiError } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
@@ -31,7 +31,7 @@ export default function ProfileSettingsPage() {
         Taro.hideLoading()
       } catch (err: any) {
         Taro.hideLoading()
-        Taro.showToast({ title: '上传失败', icon: 'none' })
+        await showUnifiedApiError(err, '上传失败')
       }
     } else {
       setTempAvatar(avatarUrl)
@@ -74,7 +74,7 @@ export default function ProfileSettingsPage() {
       }, 600)
     } catch (err: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: err.message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(err, '保存失败')
     } finally {
       setLoading(false)
     }

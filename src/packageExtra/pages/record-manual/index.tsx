@@ -6,6 +6,7 @@ import {
   saveFoodRecord,
   browseManualFood,
   searchManualFood,
+  showUnifiedApiError,
   type CanonicalMealType,
   type ManualFoodBrowseResult,
   type ManualFoodSearchResult,
@@ -167,7 +168,7 @@ function RecordManualPage() {
       const data = await browseManualFood()
       setBrowseData(data)
     } catch (e: any) {
-      Taro.showToast({ title: '加载食物库失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载食物库失败')
     } finally {
       setBrowseLoading(false)
     }
@@ -186,7 +187,7 @@ function RecordManualPage() {
         const results = await searchManualFood(keyword, 40)
         setSearchResults(results)
       } catch (e: any) {
-        Taro.showToast({ title: e.message || '搜索失败', icon: 'none' })
+        await showUnifiedApiError(e, '搜索失败')
       } finally {
         setSearchLoading(false)
       }
@@ -448,7 +449,7 @@ function RecordManualPage() {
         })
       }, 600)
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(e, '保存失败')
     } finally {
       setSaving(false)
     }
