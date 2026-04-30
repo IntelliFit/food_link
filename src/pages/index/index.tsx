@@ -642,12 +642,23 @@ function IndexPage() {
     }
     try {
       const exerciseLogParams = { date: resolvedDate }
-      const [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
-        getHomeDashboard(resolvedDate),
-        getStatsSummary('week'),
-        fetchBodyMetricsSummaryRetry(),
-        getExerciseLogs(exerciseLogParams).catch(() => null)
-      ])
+      console.log('[DEBUG] loadDashboard start, date=', resolvedDate, 'seq=', seq)
+      let res, stats, bodyMetricsRes, exerciseLogsRes
+      try {
+        [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
+          getHomeDashboard(resolvedDate),
+          getStatsSummary('week'),
+          fetchBodyMetricsSummaryRetry(),
+          getExerciseLogs(exerciseLogParams).catch((err) => {
+            console.error('[DEBUG] getExerciseLogs FAILED:', err)
+            return null
+          })
+        ])
+        console.log('[DEBUG] loadDashboard Promise.all success')
+      } catch (err: any) {
+        console.error('[DEBUG] loadDashboard Promise.all FAILED:', err)
+        throw err
+      }
       if (seq !== loadDashboardSeqRef.current) {
         return
       }
@@ -685,6 +696,7 @@ function IndexPage() {
         achievement: nextAchievement
       }
       const currentSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
+      console.log('[DEBUG] about to save snapshot, date=', normalizedDate, 'currentSnapshotExists=', !!currentSnapshot)
       if (!currentSnapshot || JSON.stringify({
         intakeData: currentSnapshot.intakeData,
         meals: currentSnapshot.meals,
@@ -726,6 +738,7 @@ function IndexPage() {
           isToday: offset === 0
         })
       }
+      console.log('[DEBUG] weekHeatmapCells built:', nextWeekHeatmapCells.map(c => ({ date: c.date, state: c.state, calories: c.calories })))
       setWeekHeatmapCells(nextWeekHeatmapCells)
 
       homeLastLoadRef.current = { date: resolvedDate, ts: Date.now() }
