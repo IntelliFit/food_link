@@ -9,6 +9,7 @@ import {
   getAccessToken,
   getMembershipPlans,
   getMyMembership,
+  showUnifiedApiError,
   MembershipPeriod,
   MembershipPlan,
   MembershipStatus,
@@ -16,6 +17,8 @@ import {
 } from '../../../utils/api'
 import {
   compareMembershipTier,
+  getFounderPaidBonusRankLabel,
+  getFounderPaidBonusSourceLabel,
   getCurrentMembershipPeriod,
   getCurrentMembershipTier,
   getMembershipTierLabel,
@@ -155,7 +158,7 @@ function ProMembershipPage() {
         }
       }
     } catch (error: any) {
-      Taro.showToast({ title: error.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(error, '加载失败')
     } finally {
       setPageLoading(false)
     }
@@ -235,7 +238,7 @@ function ProMembershipPage() {
       if (String(message).includes('cancel')) {
         Taro.showToast({ title: '已取消支付', icon: 'none' })
       } else {
-        Taro.showToast({ title: error.message || '支付失败，请重试', icon: 'none' })
+        await showUnifiedApiError(error, '支付失败，请重试')
       }
     } finally {
       setLoading(false)
@@ -250,8 +253,11 @@ function ProMembershipPage() {
   const isEarlyTrial = isTrial && (trialPolicy === 'founding_top_500_bonus_month' || trialPolicy === 'early_first_1000' || trialDaysTotal >= 30)
   const earlyUserRank = membership?.early_user_rank ?? null
   const earlyUserLimit = membership?.early_user_limit ?? 1000
+  const earlyPaidUserLimit = membership?.early_paid_user_limit ?? 100
   const earlyUserEligible = !!membership?.early_user_paid_bonus_eligible
   const paidBonusMultiplier = membership?.early_user_paid_bonus_multiplier ?? 1
+  const founderBonusSourceLabel = getFounderPaidBonusSourceLabel(membership)
+  const founderBonusRankLabel = getFounderPaidBonusRankLabel(membership)
   const paidBonusActive = !!membership?.early_user_paid_bonus_active
   const creditsMax = membership?.daily_credits_max ?? 0
   const creditsUsed = membership?.daily_credits_used ?? 0
@@ -361,9 +367,9 @@ function ProMembershipPage() {
           </View>
         <View className='hero-copy'>
           <Text className='hero-title'>食探会员</Text>
-          <Text className='hero-subtitle'>
+            <Text className='hero-subtitle'>
             {earlyUserEligible
-              ? `你是首批第 ${earlyUserRank || '--'} / ${earlyUserLimit} 位用户，开通会员后每日积分翻倍`
+              ? `你属于${founderBonusSourceLabel || `前 ${earlyUserLimit} 注册用户 / 前 ${earlyPaidUserLimit} 付费用户`}礼遇，开通会员后每日积分翻倍`
               : '按使用强度选套餐，轻度版不含精准模式'}
           </Text>
         </View>
@@ -402,7 +408,7 @@ function ProMembershipPage() {
                   <View className='hero-credits-pill'>
                     <Text className='hero-credits-tip'>
                       {earlyUserEligible
-                        ? `你是首批第 ${earlyUserRank || '--'} 位用户，开通后每日按套餐积分 x${paidBonusMultiplier} 发放`
+                        ? `${founderBonusRankLabel || '你属于创始用户礼遇'}，开通后每日按套餐积分 x${paidBonusMultiplier} 发放`
                         : '开通后每日按套餐发放积分，当天有效不累计'}
                     </Text>
                   </View>
@@ -576,7 +582,7 @@ function ProMembershipPage() {
       {/* 积分说明 */}
       <View className='credits-hint-card'>
         <Text className='credits-hint-title'>💡 积分消耗</Text>
-        <Text className='credits-hint-item'>· 创始用户礼遇：前 1000 名注册用户开通会员后，每日套餐积分翻倍</Text>
+        <Text className='credits-hint-item'>· 创始用户礼遇：前 1000 名注册用户或前 100 名付费用户，开通会员后每日套餐积分翻倍</Text>
         <Text className='credits-hint-item'>· 运动记录：1 积分 / 次</Text>
         <Text className='credits-hint-item'>· 基础记录 / 基础分析：2 积分 / 次</Text>
         <Text className='credits-hint-item credits-hint-item--muted'>积分每日发放，当天有效不累计</Text>
@@ -597,12 +603,12 @@ function ProMembershipPage() {
             <>
               <View className='status-row'>
                 <Text className='status-label'>创始用户编号</Text>
-                <Text className='status-value'>第 {earlyUserRank || '--'} / {earlyUserLimit} 位</Text>
+                <Text className='status-value'>{founderBonusRankLabel || `注册第 ${earlyUserRank || '--'} / ${earlyUserLimit} 位`}</Text>
               </View>
               <View className='status-row'>
                 <Text className='status-label'>创始礼遇</Text>
                 <Text className='status-value status-value--active'>
-                  付费会员积分 x{paidBonusMultiplier}{paidBonusActive ? '（已生效）' : '（开通后生效）'}
+                  {founderBonusSourceLabel || '创始用户'} · 付费会员积分 x{paidBonusMultiplier}{paidBonusActive ? '（已生效）' : '（开通后生效）'}
                 </Text>
               </View>
             </>

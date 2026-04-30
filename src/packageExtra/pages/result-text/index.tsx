@@ -2,7 +2,7 @@ import { View, Text, ScrollView, Slider } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
-import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord } from '../../../utils/api'
+import { AnalyzeResponse, FoodItem, MealType, saveFoodRecord, showUnifiedApiError } from '../../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
@@ -308,7 +308,7 @@ function ResultTextPage() {
         Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(saveResult.id)}` })
       }, 500)
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(e, '保存失败')
     } finally {
       setSaving(false)
     }

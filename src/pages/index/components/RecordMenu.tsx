@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
-import { getAccessToken, getMyMembership, type MembershipStatus } from '../../../utils/api'
+import { getAccessToken, getMyMembership, showUnifiedApiError, type MembershipStatus } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   getFoodAnalysisBlockedActionText,
@@ -155,7 +155,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
             },
             fail: (err) => {
               if (err.errMsg?.includes('cancel')) return
-              Taro.showToast({ title: '选择图片失败', icon: 'none' })
+              void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
             }
           })
         })()

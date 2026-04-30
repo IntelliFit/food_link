@@ -2,7 +2,7 @@ import { View, Text } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { Cell, Switch } from '@taroify/core'
 import { useState } from 'react'
-import { getUserProfile, authenticatedRequest } from '../../../utils/api'
+import { getUserProfile, authenticatedRequest, showUnifiedApiError } from '../../../utils/api'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -24,7 +24,7 @@ function PrivacySettings() {
             setPublicRecords(profile.public_records ?? true)
         } catch (e) {
             console.error('Failed to fetch privacy settings:', e)
-            Taro.showToast({ title: '加载失败', icon: 'error' })
+            await showUnifiedApiError(e, '加载失败')
         } finally {
             setLoading(false)
         }
@@ -47,7 +47,7 @@ function PrivacySettings() {
             Taro.showToast({ title: '设置已更新', icon: 'success' })
         } catch (e) {
             console.error('Failed to update privacy settings', e)
-            Taro.showToast({ title: '更新失败', icon: 'error' })
+            await showUnifiedApiError(e, '更新失败')
             // Revert optimism setup
             if (key === 'searchable') setSearchable(!value)
             if (key === 'public_records') setPublicRecords(!value)

@@ -13,6 +13,7 @@ import {
   uploadAnalyzeImage,
   analyzeFoodImage,
   imageToBase64,
+  showUnifiedApiError,
   type FoodRecord,
   type Nutrients
 } from '../../../utils/api'
@@ -107,7 +108,7 @@ function FoodLibrarySharePage() {
         handleSelectRecord(record)
       } catch (e: any) {
         console.error('加载来源记录失败:', e)
-        Taro.showToast({ title: e.message || '加载识别结果失败', icon: 'none' })
+        await showUnifiedApiError(e, '加载识别结果失败')
       } finally {
         setLoadingSourceRecord(false)
       }
@@ -304,7 +305,7 @@ function FoodLibrarySharePage() {
         setImageUrls(prevUrls)
         setImageUrl(prevUrls[0] || '')
         setAnalyzeResultsMap(prevResultsMap)
-        Taro.showToast({ title: e.message || '上传或识别失败', icon: 'none' })
+        await showUnifiedApiError(e, '上传或识别失败')
       } finally {
         Taro.hideLoading()
         setAnalyzing(false)
@@ -528,7 +529,7 @@ function FoodLibrarySharePage() {
         Taro.navigateBack()
       }, 2500)
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '分享失败', icon: 'none' })
+      await showUnifiedApiError(e, '分享失败')
     } finally {
       setSubmitting(false)
     }

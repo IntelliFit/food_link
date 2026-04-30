@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getUserRecipes, deleteUserRecipe, applyUserRecipe, type UserRecipe, type FoodRecord } from '../../../utils/api'
+import { getUserRecipes, deleteUserRecipe, applyUserRecipe, showUnifiedApiError, type UserRecipe, type FoodRecord } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
@@ -33,7 +33,7 @@ function RecipesPage() {
       if (msg.includes('未登录') || msg.includes('认证')) {
         Taro.showToast({ title: '请先登录', icon: 'none' })
       } else {
-        Taro.showToast({ title: msg, icon: 'none' })
+        await showUnifiedApiError(e, '加载失败')
       }
       setRecipes([])
     } finally {
@@ -86,7 +86,7 @@ function RecipesPage() {
       if (e.errMsg && e.errMsg.includes('cancel')) return
 
       Taro.hideLoading()
-      Taro.showToast({ title: e.message || '记录失败', icon: 'none' })
+      await showUnifiedApiError(e, '记录失败')
     }
   }
 
@@ -139,7 +139,7 @@ function RecipesPage() {
       loadRecipes()
     } catch (e: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: e.message || '删除失败', icon: 'none' })
+      await showUnifiedApiError(e, '删除失败')
     }
   }
 

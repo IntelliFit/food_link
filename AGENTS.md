@@ -137,6 +137,17 @@ npm run push-docker-ccr
 
 微信小程序前端**不通过此服务器部署**，需使用微信开发者工具上传。
 
+### 后端 Docker 镜像部署流程（腾讯云 CCR）
+
+- 在仓库根目录执行 `npm run push-docker-ccr`。
+- 镜像源与 namespace 保持不变：`ccr.ccs.tencentyun.com/littlehorse`，当前仓库名为 `foodlink`。
+- 若推送报鉴权或权限错误，先执行 `docker login ccr.ccs.tencentyun.com` 完成登录，再重新执行推送。
+- 部署端已配置自动更新脚本；镜像推送成功后，服务会在 5 分钟内自动完成更新。
+
+```bash
+npm run push-docker-ccr
+```
+
 ## 图标更新
 
 当前项目使用iconfont作为图标系统。更新图标的命令为 python scripts/update-icon.py

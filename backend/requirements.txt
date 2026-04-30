@@ -1,6 +1,12 @@
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 httpx==0.26.0
+opentelemetry-api==1.33.1
+opentelemetry-sdk==1.33.1
+opentelemetry-exporter-otlp-proto-http==1.33.1
+opentelemetry-instrumentation-fastapi==0.54b1
+opentelemetry-instrumentation-httpx==0.54b1
+opentelemetry-instrumentation-logging==0.54b1
 pydantic>=2.8.0
 # 运动热量估算：Instructor + OpenAI SDK（OpenAI 兼容接口）
 instructor==1.15.1

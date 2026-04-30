@@ -10,6 +10,7 @@ import {
   submitReportExtractionTask,
   imageToBase64,
   getMyMembership,
+  showUnifiedApiError,
   type HealthProfileUpdateRequest,
   type ExecutionMode,
   type MembershipStatus,
@@ -144,7 +145,7 @@ function HealthProfileEditPage() {
       if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
     } catch {
-      Taro.showToast({ title: '获取档案失败', icon: 'none' })
+      await showUnifiedApiError(e, '获取档案失败')
     } finally {
       setLoading(false)
     }
@@ -285,7 +286,7 @@ function HealthProfileEditPage() {
         Taro.redirectTo({ url: '/pages/health-profile-view/index' })
       }, 1500)
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(e, '保存失败')
     } finally {
       setSaving(false)
     }
@@ -302,7 +303,7 @@ function HealthProfileEditPage() {
       Taro.showToast({ title: '上传成功，保存时将自动识别', icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: e.message || '上传失败', icon: 'none' })
+      await showUnifiedApiError(e, '上传失败')
     }
   }
 

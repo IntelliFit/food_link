@@ -264,6 +264,21 @@
   line-height: 1.6;
 }
 
+.expiry-empty--failed .expiry-empty-title {
+  color: #b45309;
+}
+
+.expiry-retry-btn {
+  margin-top: 32rpx;
+  width: 100% !important;
+  max-width: 420rpx;
+  border-radius: 999rpx !important;
+  background: #00bc7d !important;
+  border: none !important;
+  font-size: 28rpx !important;
+  font-weight: 600 !important;
+}
+
 @keyframes expiry-spin {
   from {
     transform: rotate(0deg);

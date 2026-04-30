@@ -7,9 +7,12 @@ import os
 import base64
 import uuid
 import re
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
@@ -31,6 +34,37 @@ SHARE_POSTER_REWARD_CREDITS = 1
 
 # 延迟初始化 Supabase 客户端
 _supabase_client = None
+_tracer = trace.get_tracer("food_link.backend.database")
+_logger = logging.getLogger(__name__)
+
+
+def _safe_add_span_event(name: str, attributes: Optional[Dict[str, Any]] = None) -> None:
+    span = trace.get_current_span()
+    span_context = span.get_span_context() if span else None
+    if not span_context or not span_context.is_valid:
+        return
+    safe_attrs = {k: v for k, v in (attributes or {}).items() if v is not None}
+    span.add_event(name, attributes=safe_attrs)
+
+
+def _record_db_exception(op_name: str, err: Exception, **attrs: Any) -> None:
+    err_type = type(err).__name__
+    err_msg = str(err)[:300]
+    _safe_add_span_event(
+        "db.error",
+        {
+            "db.operation": op_name,
+            "error.type": err_type,
+            "error.message": err_msg,
+            **attrs,
+        },
+    )
+    span = trace.get_current_span()
+    span_context = span.get_span_context() if span else None
+    if span_context and span_context.is_valid:
+        span.record_exception(err)
+        span.set_status(Status(StatusCode.ERROR, f"{op_name}:{err_type}"))
+    _logger.warning("[database.%s] %s: %s", op_name, err_type, err_msg)
 
 # ---- 社区接口内存缓存 ----
 # 好友排名缓存：key = "checkin_leaderboard:{user_id}:{week_start_iso}", TTL = 5 分钟
@@ -66,11 +100,14 @@ def get_supabase_client():
     if _supabase_client is None:
         SUPABASE_URL = os.getenv("SUPABASE_URL")
         SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        
-        if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        configured = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
+        _safe_add_span_event("db.supabase_client.init", {"db.supabase.configured": configured})
+        if configured:
             _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
         else:
-            raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
+            err = Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
+            _record_db_exception("get_supabase_client", err, **{"db.supabase.configured": configured})
+            raise err
     
     return _supabase_client
 
@@ -80,6 +117,7 @@ def check_supabase_configured():
     try:
         get_supabase_client()
     except Exception as e:
+        _record_db_exception("check_supabase_configured", e)
         raise Exception("Supabase 未配置，请设置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 环境变量")
 
 
@@ -138,6 +176,19 @@ def resolve_user_registration_datetime(user_row: Optional[Dict[str, Any]]) -> Op
         if parsed:
             return parsed
     return None
+
+
+_LEGACY_MEMBERSHIP_PLAN_CODES = {"pro_monthly"}
+_MEMBERSHIP_PLAN_PREFIXES = ("light_", "standard_", "advanced_")
+
+
+def _is_membership_subscription_plan_code(plan_code: Optional[str]) -> bool:
+    code = str(plan_code or "").strip().lower()
+    if not code:
+        return False
+    if code in _LEGACY_MEMBERSHIP_PLAN_CODES:
+        return True
+    return code.startswith(_MEMBERSHIP_PLAN_PREFIXES)
 
 
 async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
@@ -225,6 +276,52 @@ async def get_first_membership_trial_batch_rank(user_id: str, limit: int = 1000)
         return None
     except Exception as e:
         print(f"[get_first_membership_trial_batch_rank] 错误: {e}")
+        raise
+
+
+async def get_first_paid_membership_user_rank(user_id: str, limit: int = 100) -> Optional[int]:
+    """返回用户在首批付费会员中的名次（1-based）；若不在前 N 名则返回 None。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.table("pro_membership_payment_records")\
+            .select("id, user_id, plan_code, paid_at, created_at")\
+            .eq("status", "paid")\
+            .limit(5000)\
+            .execute()
+
+        rows = [
+            row for row in list(result.data or [])
+            if _is_membership_subscription_plan_code(row.get("plan_code")) and str(row.get("user_id") or "").strip()
+        ]
+        rows.sort(
+            key=lambda row: (
+                _parse_possible_datetime(row.get("paid_at"))
+                or _parse_possible_datetime(row.get("created_at"))
+                or datetime.max.replace(tzinfo=timezone.utc),
+                _parse_possible_datetime(row.get("created_at"))
+                or _parse_possible_datetime(row.get("paid_at"))
+                or datetime.max.replace(tzinfo=timezone.utc),
+                str(row.get("id") or ""),
+            )
+        )
+
+        seen_user_ids: set[str] = set()
+        rank = 0
+        for row in rows:
+            current_user_id = str(row.get("user_id") or "").strip()
+            if not current_user_id or current_user_id in seen_user_ids:
+                continue
+            seen_user_ids.add(current_user_id)
+            rank += 1
+            if current_user_id == user_id:
+                return rank if rank <= limit else None
+            if rank >= limit:
+                break
+        return None
+    except Exception as e:
+        print(f"[get_first_paid_membership_user_rank] 错误: {e}")
         raise
 
 
@@ -518,20 +615,27 @@ async def list_food_records(
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        q = supabase.table("user_food_records").select("*").eq("user_id", user_id)
-        if date:
-            start_local = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
-            end_local = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
-            start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-            end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-            q = q.gte("record_time", start_ts).lt("record_time", end_ts)
-        q = q.order("record_time", desc=True).limit(limit)
-        result = q.execute()
-        return list(result.data or [])
-    except Exception as e:
-        print(f"[list_food_records] 错误: {e}")
-        raise
+    with _tracer.start_as_current_span("db.list_food_records") as span:
+        span.set_attribute("db.table", "user_food_records")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.limit", int(limit))
+        span.set_attribute("db.has_date_filter", bool(date))
+        try:
+            q = supabase.table("user_food_records").select("*").eq("user_id", user_id)
+            if date:
+                start_local = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
+                end_local = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
+                start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+                end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+                q = q.gte("record_time", start_ts).lt("record_time", end_ts)
+            q = q.order("record_time", desc=True).limit(limit)
+            result = q.execute()
+            rows = list(result.data or [])
+            _safe_add_span_event("db.query.success", {"db.rows": len(rows), "db.operation": "list_food_records"})
+            return rows
+        except Exception as e:
+            _record_db_exception("list_food_records", e, **{"db.table": "user_food_records"})
+            raise
 
 
 async def list_food_records_by_range(
@@ -545,18 +649,25 @@ async def list_food_records_by_range(
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        # 将中国区自然日转换为 UTC 时间范围
-        start_local = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
-        end_local = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
-        start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-        end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-        q = supabase.table("user_food_records").select("*").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=False)
-        result = q.execute()
-        return list(result.data or [])
-    except Exception as e:
-        print(f"[list_food_records_by_range] 错误: {e}")
-        raise
+    with _tracer.start_as_current_span("db.list_food_records_by_range") as span:
+        span.set_attribute("db.table", "user_food_records")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.start_date", start_date)
+        span.set_attribute("db.end_date", end_date)
+        try:
+            # 将中国区自然日转换为 UTC 时间范围
+            start_local = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=CHINA_TZ)
+            end_local = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).replace(tzinfo=CHINA_TZ)
+            start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            q = supabase.table("user_food_records").select("*").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).order("record_time", desc=False)
+            result = q.execute()
+            rows = list(result.data or [])
+            _safe_add_span_event("db.query.success", {"db.rows": len(rows), "db.operation": "list_food_records_by_range"})
+            return rows
+        except Exception as e:
+            _record_db_exception("list_food_records_by_range", e, **{"db.table": "user_food_records"})
+            raise
 
 
 async def get_streak_days(user_id: str) -> int:
@@ -596,22 +707,29 @@ async def get_cached_insight(user_id: str, range_type: str, generated_date: str)
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        result = (
-            supabase.table("ai_stats_insights")
-            .select("generated_date, data_fingerprint, insight_text")
-            .eq("user_id", user_id)
-            .eq("range_type", range_type)
-            .eq("generated_date", generated_date)
-            .limit(1)
-            .execute()
-        )
-        if result.data and len(result.data) > 0:
-            return result.data[0]
-        return None
-    except Exception as e:
-        print(f"[get_cached_insight] 错误: {e}")
-        return None
+    with _tracer.start_as_current_span("db.get_cached_insight") as span:
+        span.set_attribute("db.table", "ai_stats_insights")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.range_type", range_type)
+        span.set_attribute("db.generated_date", generated_date)
+        try:
+            result = (
+                supabase.table("ai_stats_insights")
+                .select("generated_date, data_fingerprint, insight_text")
+                .eq("user_id", user_id)
+                .eq("range_type", range_type)
+                .eq("generated_date", generated_date)
+                .limit(1)
+                .execute()
+            )
+            if result.data and len(result.data) > 0:
+                _safe_add_span_event("db.cache.hit", {"db.operation": "get_cached_insight"})
+                return result.data[0]
+            _safe_add_span_event("db.cache.miss", {"db.operation": "get_cached_insight"})
+            return None
+        except Exception as e:
+            _record_db_exception("get_cached_insight", e, **{"db.table": "ai_stats_insights"})
+            return None
 
 
 async def get_latest_cached_insight(user_id: str, range_type: str) -> Optional[Dict[str, Any]]:
@@ -621,22 +739,28 @@ async def get_latest_cached_insight(user_id: str, range_type: str) -> Optional[D
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        result = (
-            supabase.table("ai_stats_insights")
-            .select("generated_date, data_fingerprint, insight_text")
-            .eq("user_id", user_id)
-            .eq("range_type", range_type)
-            .order("generated_date", desc=True)
-            .limit(1)
-            .execute()
-        )
-        if result.data and len(result.data) > 0:
-            return result.data[0]
-        return None
-    except Exception as e:
-        print(f"[get_latest_cached_insight] 错误: {e}")
-        return None
+    with _tracer.start_as_current_span("db.get_latest_cached_insight") as span:
+        span.set_attribute("db.table", "ai_stats_insights")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.range_type", range_type)
+        try:
+            result = (
+                supabase.table("ai_stats_insights")
+                .select("generated_date, data_fingerprint, insight_text")
+                .eq("user_id", user_id)
+                .eq("range_type", range_type)
+                .order("generated_date", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if result.data and len(result.data) > 0:
+                _safe_add_span_event("db.cache.hit", {"db.operation": "get_latest_cached_insight"})
+                return result.data[0]
+            _safe_add_span_event("db.cache.miss", {"db.operation": "get_latest_cached_insight"})
+            return None
+        except Exception as e:
+            _record_db_exception("get_latest_cached_insight", e, **{"db.table": "ai_stats_insights"})
+            return None
 
 
 async def upsert_insight_cache(
@@ -652,29 +776,35 @@ async def upsert_insight_cache(
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        row = {
-            "user_id": user_id,
-            "range_type": range_type,
-            "generated_date": generated_date,
-            "data_fingerprint": data_fingerprint,
-            "insight_text": insight_text,
-        }
-        # 确保所有字段可 JSON 序列化，防止意外传入非基本类型
+    with _tracer.start_as_current_span("db.upsert_insight_cache") as span:
+        span.set_attribute("db.table", "ai_stats_insights")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.range_type", range_type)
+        span.set_attribute("db.generated_date", generated_date)
         try:
-            import json as _json  # 局部导入，避免循环依赖
+            row = {
+                "user_id": user_id,
+                "range_type": range_type,
+                "generated_date": generated_date,
+                "data_fingerprint": data_fingerprint,
+                "insight_text": insight_text,
+            }
+            # 确保所有字段可 JSON 序列化，防止意外传入非基本类型
+            try:
+                import json as _json  # 局部导入，避免循环依赖
 
-            safe_row = _json.loads(_json.dumps(row, ensure_ascii=False, default=str))
-        except Exception:
-            safe_row = row
+                safe_row = _json.loads(_json.dumps(row, ensure_ascii=False, default=str))
+            except Exception:
+                safe_row = row
 
-        supabase.table("ai_stats_insights").upsert(
-            safe_row,
-            on_conflict="user_id,range_type,generated_date",
-        ).execute()
-    except Exception as e:
-        print(f"[upsert_insight_cache] 错误: {e}")
-        raise
+            supabase.table("ai_stats_insights").upsert(
+                safe_row,
+                on_conflict="user_id,range_type,generated_date",
+            ).execute()
+            _safe_add_span_event("db.upsert.success", {"db.operation": "upsert_insight_cache"})
+        except Exception as e:
+            _record_db_exception("upsert_insight_cache", e, **{"db.table": "ai_stats_insights"})
+            raise
 
 
 async def list_user_weight_records(
@@ -1009,14 +1139,22 @@ def create_analysis_task_sync(
     if text_input:
         row["text_input"] = text_input
     
-    try:
-        result = supabase.table("analysis_tasks").insert(row).execute()
-        if result.data and len(result.data) > 0:
-            return result.data[0]
-        raise Exception("创建分析任务失败：返回数据为空")
-    except Exception as e:
-        print(f"[create_analysis_task_sync] 错误: {e}")
-        raise
+    with _tracer.start_as_current_span("db.create_analysis_task_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.task_type", str(task_type or ""))
+        span.set_attribute("db.has_image", bool(image_url))
+        span.set_attribute("db.has_text", bool(text_input))
+        try:
+            result = supabase.table("analysis_tasks").insert(row).execute()
+            if result.data and len(result.data) > 0:
+                _safe_add_span_event("db.insert.success", {"db.rows": len(result.data)})
+                return result.data[0]
+            err = Exception("创建分析任务失败：返回数据为空")
+            _record_db_exception("create_analysis_task_sync", err, **{"db.table": "analysis_tasks"})
+            raise err
+        except Exception as e:
+            _record_db_exception("create_analysis_task_sync", e, **{"db.table": "analysis_tasks"})
+            raise
 
 
 def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
@@ -1026,37 +1164,45 @@ def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        # 取一条 pending
-        r = (
-            supabase.table("analysis_tasks")
-            .select("*")
-            .eq("status", "pending")
-            .eq("task_type", task_type)
-            .order("created_at")
-            .limit(1)
-            .execute()
-        )
-        rows = list(r.data or [])
-        if not rows:
+    with _tracer.start_as_current_span("db.claim_next_pending_task_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.task_type", str(task_type or ""))
+        try:
+            # 取一条 pending
+            r = (
+                supabase.table("analysis_tasks")
+                .select("*")
+                .eq("status", "pending")
+                .eq("task_type", task_type)
+                .order("created_at")
+                .limit(1)
+                .execute()
+            )
+            rows = list(r.data or [])
+            if not rows:
+                _safe_add_span_event("db.claim.empty", {"db.task_type": task_type})
+                return None
+            task_id = rows[0]["id"]
+            span.set_attribute("db.task_id", str(task_id))
+            # 仅当仍为 pending 时更新为 processing，避免多 Worker 重复抢
+            up = (
+                supabase.table("analysis_tasks")
+                .update({"status": "processing", "updated_at": datetime.now(timezone.utc).isoformat()})
+                .eq("id", task_id)
+                .eq("status", "pending")
+                .execute()
+            )
+            if up.data and len(up.data) > 0:
+                _safe_add_span_event("db.claim.success", {"db.task_id": str(task_id)})
+                return up.data[0]
+            _safe_add_span_event("db.claim.lost_race", {"db.task_id": str(task_id)})
             return None
-        task_id = rows[0]["id"]
-        # 仅当仍为 pending 时更新为 processing，避免多 Worker 重复抢
-        up = (
-            supabase.table("analysis_tasks")
-            .update({"status": "processing", "updated_at": datetime.now(timezone.utc).isoformat()})
-            .eq("id", task_id)
-            .eq("status", "pending")
-            .execute()
-        )
-        if up.data and len(up.data) > 0:
-            return up.data[0]
-        return None
-    except Exception as e:
-        # 不抛出异常，避免工作进程因网络问题（502/503等）崩溃
-        error_msg = str(e)[:200]
-        print(f"[claim_next_pending_task_sync] 网络错误，稍后重试: {error_msg}")
-        return None
+        except Exception as e:
+            # 不抛出异常，避免工作进程因网络问题（502/503等）崩溃
+            _record_db_exception("claim_next_pending_task_sync", e, **{"db.task_type": task_type})
+            error_msg = str(e)[:200]
+            print(f"[claim_next_pending_task_sync] 网络错误，稍后重试: {error_msg}")
+            return None
 
 
 def update_analysis_task_result_sync(
@@ -1201,15 +1347,20 @@ def get_analysis_task_by_id_sync(task_id: str) -> Optional[Dict[str, Any]]:
     """按 ID 查询单条任务。"""
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        print(f"[get_analysis_task_by_id_sync] Querying task_id: {task_id}")
-        r = supabase.table("analysis_tasks").select("*").eq("id", task_id).limit(1).execute()
-        if r.data and len(r.data) > 0:
-            return r.data[0]
-        return None
-    except Exception as e:
-        print(f"[get_analysis_task_by_id_sync] 错误: {e}")
-        raise
+    with _tracer.start_as_current_span("db.get_analysis_task_by_id_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.task_id", str(task_id))
+        try:
+            print(f"[get_analysis_task_by_id_sync] Querying task_id: {task_id}")
+            r = supabase.table("analysis_tasks").select("*").eq("id", task_id).limit(1).execute()
+            if r.data and len(r.data) > 0:
+                _safe_add_span_event("db.query.hit", {"db.operation": "get_analysis_task_by_id_sync"})
+                return r.data[0]
+            _safe_add_span_event("db.query.miss", {"db.operation": "get_analysis_task_by_id_sync"})
+            return None
+        except Exception as e:
+            _record_db_exception("get_analysis_task_by_id_sync", e, **{"db.table": "analysis_tasks"})
+            raise
 
 
 async def get_analysis_tasks_by_ids(task_ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -1218,17 +1369,24 @@ async def get_analysis_tasks_by_ids(task_ids: List[str]) -> Dict[str, Dict[str, 
         return {}
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        r = supabase.table("analysis_tasks").select("id, image_paths, image_url").in_("id", task_ids).execute()
-        out = {}
-        for row in (r.data or []):
-            tid = row.get("id")
-            if tid:
-                out[tid] = row
-        return out
-    except Exception as e:
-        print(f"[get_analysis_tasks_by_ids] 错误: {e}")
-        return {}
+    with _tracer.start_as_current_span("db.get_analysis_tasks_by_ids") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.task_ids.count", len(task_ids))
+        try:
+            r = supabase.table("analysis_tasks").select("id, image_paths, image_url").in_("id", task_ids).execute()
+            out = {}
+            for row in (r.data or []):
+                tid = row.get("id")
+                if tid:
+                    out[tid] = row
+            _safe_add_span_event(
+                "db.query.success",
+                {"db.operation": "get_analysis_tasks_by_ids", "db.rows": len(out)},
+            )
+            return out
+        except Exception as e:
+            _record_db_exception("get_analysis_tasks_by_ids", e, **{"db.table": "analysis_tasks"})
+            return {}
 
 
 def list_analysis_tasks_by_user_sync(
@@ -1240,17 +1398,25 @@ def list_analysis_tasks_by_user_sync(
     """按用户查询任务列表，支持按 task_type、status 筛选。"""
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        q = supabase.table("analysis_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
-        if task_type:
-            q = q.eq("task_type", task_type)
-        if status:
-            q = q.eq("status", status)
-        r = q.execute()
-        return list(r.data or [])
-    except Exception as e:
-        print(f"[list_analysis_tasks_by_user_sync] 错误: {e}")
-        raise
+    with _tracer.start_as_current_span("db.list_analysis_tasks_by_user_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.limit", int(limit))
+        span.set_attribute("db.task_type.filter", str(task_type or ""))
+        span.set_attribute("db.status.filter", str(status or ""))
+        try:
+            q = supabase.table("analysis_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
+            if task_type:
+                q = q.eq("task_type", task_type)
+            if status:
+                q = q.eq("status", status)
+            r = q.execute()
+            rows = list(r.data or [])
+            _safe_add_span_event("db.query.success", {"db.operation": "list_analysis_tasks_by_user_sync", "db.rows": len(rows)})
+            return rows
+        except Exception as e:
+            _record_db_exception("list_analysis_tasks_by_user_sync", e, **{"db.table": "analysis_tasks"})
+            raise
 
 
 def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: bool = True) -> dict:
@@ -4991,32 +5157,40 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
     """
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        from datetime import date as _date, timedelta as _timedelta
-        china_date   = _date.fromisoformat(china_date_str)
-        next_date    = china_date + _timedelta(days=1)
-        day_start    = f"{china_date_str}T00:00:00+08:00"
-        day_end_excl = f"{next_date.strftime('%Y-%m-%d')}T00:00:00+08:00"
+    with _tracer.start_as_current_span("db.get_today_food_analysis_count") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.china_date", china_date_str)
+        try:
+            from datetime import date as _date, timedelta as _timedelta
+            china_date   = _date.fromisoformat(china_date_str)
+            next_date    = china_date + _timedelta(days=1)
+            day_start    = f"{china_date_str}T00:00:00+08:00"
+            day_end_excl = f"{next_date.strftime('%Y-%m-%d')}T00:00:00+08:00"
 
-        result = supabase.table("analysis_tasks")\
-            .select("id, payload")\
-            .eq("user_id", user_id)\
-            .in_("task_type", list(_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA))\
-            .gte("created_at", day_start)\
-            .lt("created_at", day_end_excl)\
-            .execute()
+            result = supabase.table("analysis_tasks")\
+                .select("id, payload")\
+                .eq("user_id", user_id)\
+                .in_("task_type", list(_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA))\
+                .gte("created_at", day_start)\
+                .lt("created_at", day_end_excl)\
+                .execute()
 
-        rows = result.data or []
-        count = sum(
-            1
-            for row in rows
-            if not _is_exercise_fallback_task_payload((row or {}).get("payload"))
-        )
-        print(f"[get_today_food_analysis_count] user={user_id} date={china_date_str} count={count}")
-        return count
-    except Exception as e:
-        print(f"[get_today_food_analysis_count] 错误: {e}")
-        return 0
+            rows = result.data or []
+            count = sum(
+                1
+                for row in rows
+                if not _is_exercise_fallback_task_payload((row or {}).get("payload"))
+            )
+            _safe_add_span_event(
+                "db.count.success",
+                {"db.operation": "get_today_food_analysis_count", "db.rows": len(rows), "db.count": count},
+            )
+            print(f"[get_today_food_analysis_count] user={user_id} date={china_date_str} count={count}")
+            return count
+        except Exception as e:
+            _record_db_exception("get_today_food_analysis_count", e, **{"db.table": "analysis_tasks"})
+            return 0
 
 
 async def list_active_membership_plans() -> List[Dict[str, Any]]:
@@ -5040,24 +5214,30 @@ async def get_today_exercise_log_count(user_id: str, china_date_str: str) -> int
     """统计用户今日（中国时区 YYYY-MM-DD）的运动记录条数。用于积分消耗计算。"""
     check_supabase_configured()
     supabase = get_supabase_client()
-    try:
-        result = supabase.table("user_exercise_logs")\
-            .select("id")\
-            .eq("user_id", user_id)\
-            .eq("recorded_on", china_date_str)\
-            .execute()
-        count = len(result.data) if result.data else 0
-        return count
-    except Exception as e:
-        err_s = str(e)
-        if (
-            "PGRST205" in err_s
-            or "Could not find the table" in err_s
-            or ("user_exercise_logs" in err_s and "relation" in err_s.lower())
-        ):
+    with _tracer.start_as_current_span("db.get_today_exercise_log_count") as span:
+        span.set_attribute("db.table", "user_exercise_logs")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.china_date", china_date_str)
+        try:
+            result = supabase.table("user_exercise_logs")\
+                .select("id")\
+                .eq("user_id", user_id)\
+                .eq("recorded_on", china_date_str)\
+                .execute()
+            count = len(result.data) if result.data else 0
+            _safe_add_span_event("db.count.success", {"db.operation": "get_today_exercise_log_count", "db.count": count})
+            return count
+        except Exception as e:
+            err_s = str(e)
+            if (
+                "PGRST205" in err_s
+                or "Could not find the table" in err_s
+                or ("user_exercise_logs" in err_s and "relation" in err_s.lower())
+            ):
+                _safe_add_span_event("db.table_not_ready", {"db.table": "user_exercise_logs"})
+                return 0
+            _record_db_exception("get_today_exercise_log_count", e, **{"db.table": "user_exercise_logs"})
             return 0
-        print(f"[get_today_exercise_log_count] 错误: {e}")
-        return 0
 
 
 async def list_test_backend_datasets() -> List[Dict[str, Any]]:

@@ -1,7 +1,7 @@
 import { View, Text, ScrollView } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getHealthProfile, type HealthProfile } from '../../../utils/api'
+import { getHealthProfile, showUnifiedApiError, type HealthProfile } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
@@ -49,7 +49,10 @@ function HealthProfileViewPage() {
   useDidShow(() => {
     getHealthProfile()
       .then(setProfile)
-      .catch((e: Error) => setError(e.message || '获取失败'))
+      .catch(async (e: Error) => {
+        setError('获取失败，请稍后重试')
+        await showUnifiedApiError(e, '获取失败')
+      })
       .finally(() => setLoading(false))
   })
 
