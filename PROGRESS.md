@@ -59,7 +59,7 @@
 - ✨ feat: 统计页「当日代谢流」模块：Kevin Hall 精简分钟级模拟（吸收核/昼夜节律/TEF/运动分摊/糖原+P-ratio 脂肪淤积）、Canvas 2D 双轴示意曲线与近 7 日淤积条，独立文件接入 `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.tsx` `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss` `src/pages/stats/index.tsx`
 - 🎨 style: 「饮食记录分析」统计页配色对齐首页低饱和：时间轴/月历绿 #5cb896、红 #e57373；页背景与热量缺口卡、摄入柱、营养素与餐次、喝水趋势等统一柔和色 `src/pages/stats/index.scss` `src/pages/stats/index.tsx`
 - 🎨 style: 「识别记录详情」导航与「当天饮食记录」一致：微信默认导航栏（`navigationBarTitleText` + 继承 app 白底黑字），去掉自定义顶栏；撤回 `CustomNavBar` 的 `onBack` 与 `--light` `src/pages/record-detail/*` `src/components/CustomNavBar/*`
-- 🐛 fix: 拍照/文字/手动保存饮食记录后立即请求当日 dashboard 并写入 `home_dashboard_local_cache_v4`，回首页本地快照即时含新摄入与餐次；快照读写抽至 `src/utils/home-dashboard-local-cache.ts`，运动页补丁缓存键对齐 v4 `src/pages/exercise-record/index.tsx`
+- 🐛 fix: 拍照/文字/手动保存饮食记录后立即请求当日 dashboard 并写入 `home_dashboard_local_cache`，回首页本地快照即时含新摄入与餐次；快照读写抽至 `src/utils/home-dashboard-local-cache.ts`，运动页补丁缓存键对齐 v4 `src/pages/exercise-record/index.tsx`
 
 ## 2026-04-13
 

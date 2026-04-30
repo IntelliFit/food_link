@@ -17,7 +17,7 @@ import {
   type SaveFoodRecordRequest
 } from './api'
 
-export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache_v4'
+export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache'
 export const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 14
 
 export interface HomeDashboardLocalSnapshot {
