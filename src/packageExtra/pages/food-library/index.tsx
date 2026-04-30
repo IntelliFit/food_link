@@ -11,6 +11,7 @@ import {
   collectPublicFoodLibraryItem,
   uncollectPublicFoodLibraryItem,
   submitPublicFoodLibraryFeedback,
+  showUnifiedApiError,
   type PublicFoodLibraryItem
 } from '../../../utils/api'
 import { Star, StarOutlined } from '@taroify/icons'
@@ -158,7 +159,7 @@ function FoodLibraryPage() {
     } catch (e: any) {
       console.error('加载公共食物库失败:', e)
       if (!silent) {
-        Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+        await showUnifiedApiError(e, '获取列表失败')
       }
     } finally {
       if (!silent) setLoading(false)
@@ -196,7 +197,7 @@ function FoodLibraryPage() {
       lastRefreshTime.current = Date.now()
     } catch (e: any) {
       console.error('加载公共食物库失败:', e)
-      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '获取列表失败')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -213,7 +214,7 @@ function FoodLibraryPage() {
       const res = await getPublicFoodLibraryCollections()
       setCollectionList(res.list || [])
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '加载收藏失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载收藏失败')
     } finally {
       setCollectionLoading(false)
     }
@@ -345,7 +346,7 @@ function FoodLibraryPage() {
       // 3. 失败则回滚
       setList(list)
       saveToCache(list)
-      Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(e, '操作失败')
     }
   }
 
@@ -386,7 +387,7 @@ function FoodLibraryPage() {
       if (tabMode === 'collections' && isUncollect) {
         setCollectionList(prev => [...prev, item])
       }
-      Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(e, '操作失败')
     }
   }
 
@@ -433,7 +434,7 @@ function FoodLibraryPage() {
       await submitPublicFoodLibraryFeedback(content.trim())
       Taro.showToast({ title: '反馈已提交', icon: 'success' })
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '提交失败', icon: 'none' })
+      await showUnifiedApiError(e, '提交失败')
     } finally {
       Taro.hideLoading()
     }

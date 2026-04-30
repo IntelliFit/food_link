@@ -32,6 +32,33 @@
   - `python -m py_compile backend/main.py` 通过
   - `ReadLints`（`backend/main.py`）无新增告警
 
+- Task: 小程序错误提示链路统一并携带 traceId
+- Status: in_progress（`showUnifiedApiError` 无 traceId 时也统一 `showModal`；首页/公共食物库/好友/统计 AI 洞察等已改用统一弹窗，避免长 toast）
+- Scope:
+  - 新增统一能力：
+    - `showUnifiedApiError(error, fallback)`：统一弹窗且必须用户确认；确认按钮固定为「复制traceId并确认」，无 `traceId` 时也复制占位值 `no-trace-id`，不再降级 toast
+    - `getTraceIdFromError(error)`：从错误对象/消息提取 traceId（支持半角/全角冒号）
+    - `stripTraceSuffixFromUserMessage`：弹窗内去重已拼进 message 的 trace 后缀
+    - `throwHttpErrorWithStatus(..., headers)`：自动从响应头提取 `x-trace-id` 并拼接用户可见提示
+  - 已接入 traceId 错误包装的高频请求：
+    - 登录、上传分析图、图片分析、对比分析、文字分析、会员套餐获取、`authenticatedRequest` 非 2xx
+  - 已接入页面侧统一错误弹窗：
+    - `src/packageExtra/pages/expiry/index.tsx`（加载失败时 `fetchFailed` 区分空数据；避免误显示「还没有记录」）
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+    - `src/pages/stats/index.tsx`（并去掉 AI 洞察失败后的重复 toast）
+    - `src/packageExtra/pages/day-record/index.tsx`
+    - `src/packageExtra/pages/health-profile-view/index.tsx`
+    - `src/packageExtra/pages/checkin-leaderboard/index.tsx`
+    - `src/pages/index/index.tsx`（首页 dashboard 加载失败）
+    - `src/packageExtra/pages/food-library/index.tsx`
+    - `src/packageExtra/pages/friends/index.tsx`
+    - `src/packageExtra/pages/login/index.tsx`（登录页新增本地硬弹窗 `showLoginErrorModal`；登录/绑定/头像上传/资料保存失败全部改为“复制traceId并确认”）
+  - 全局兜底收口：
+    - `src/app.ts` 增加 `Taro.showToast` 失败类关键词拦截器；凡命中失败关键词（如“失败/错误/异常/重试”等）且非成功态的 toast，统一改为“请求失败”确认弹窗 + 复制 traceId（无 trace 时复制 `no-trace-id`）
+- Verification:
+  - `eslint src/utils/api.ts src/packageExtra/pages/expiry/index.tsx src/packageExtra/pages/expiry-edit/index.tsx src/pages/stats/index.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/packageExtra/pages/checkin-leaderboard/index.tsx --max-warnings 0` 通过
+  - `weapp-devtools`：`mrc pageInfo -p 9420` 当前环境未连上开发者工具自动化（需本机开启服务端口），未做运行态截图
+
 - Task: 后端接入 OpenTelemetry 并回传 Trace ID
 - Status: done（已接通 OTLP HTTP trace/logs 上报；响应头支持返回 `x-trace-id` / `traceparent`，并新增实例标识头）
 - Scope:

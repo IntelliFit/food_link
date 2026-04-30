@@ -28,7 +28,8 @@ import {
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary,
   type FoodRecord,
-  getCachedMealFullRecord
+  getCachedMealFullRecord,
+  showUnifiedApiError
 } from '../../utils/api'
 import {
   drawDailySummaryPoster,
@@ -845,7 +846,7 @@ function IndexPage() {
         return
       }
       console.error('首页 dashboard 加载失败:', error)
-      Taro.showToast({ title: '加载失败: ' + (error as Error).message, icon: 'none', duration: 3000 })
+      await showUnifiedApiError(error, '获取首页数据失败')
       const localFallback = getStoredHomeDashboardSnapshotByDate(resolvedDate)
       if (localFallback) {
         setIntakeData(localFallback.intakeData)
