@@ -7,6 +7,7 @@ import {
   communityLike,
   communityPostComment,
   communityUnlike,
+  showUnifiedApiError,
   type CommunityFeedItem,
   type FeedCommentItem
 } from '../../../utils/api'
@@ -98,7 +99,7 @@ function InteractionFeedDetailPage() {
       })
     } catch (e) {
       console.error('加载动态详情失败:', e)
-      Taro.showToast({ title: (e as Error).message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载失败')
       setFeedItem(null)
     } finally {
       setLoading(false)
@@ -151,7 +152,7 @@ function InteractionFeedDetailPage() {
       }
     } catch (e) {
       setFeedItem(prev)
-      Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(e, '操作失败')
     } finally {
       likePendingRef.current = false
     }
@@ -182,7 +183,7 @@ function InteractionFeedDetailPage() {
       await loadDetail(feedItem.record.id)
       Taro.showToast({ title: '评论成功', icon: 'success' })
     } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '评论失败', icon: 'none' })
+      await showUnifiedApiError(e, '评论失败')
     } finally {
       setSubmitting(false)
     }

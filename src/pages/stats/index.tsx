@@ -8,6 +8,7 @@ import {
   generateStatsInsight,
   saveStatsInsight,
   getBodyMetricsSummary,
+  showUnifiedApiError,
   type StatsSummary,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
@@ -383,7 +384,8 @@ function StatsPage() {
         setData(cached)
         setError(null)
       } else if (!silent) {
-        setError((e as Error)?.message || '获取统计失败')
+        setError('获取统计失败，请稍后重试')
+        await showUnifiedApiError(e, '获取统计失败')
       }
     } finally {
       if (reqId !== fetchIdRef.current) return
@@ -458,10 +460,7 @@ function StatsPage() {
     } catch (e: unknown) {
       const message = (e as Error).message || 'AI 洞察生成失败，请稍后重试'
       setInsightError(message)
-      Taro.showToast({
-        title: '生成失败',
-        icon: 'none'
-      })
+      await showUnifiedApiError(e, 'AI 洞察生成失败')
     } finally {
       setInsightActionLoading(false)
     }

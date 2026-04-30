@@ -1,9 +1,10 @@
-import { View, Text, ScrollView } from '@tarojs/components'
+import { View, Text, ScrollView, Button } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getFoodExpiryDashboard,
   listManagedFoodExpiryItems,
+  showUnifiedApiError,
   updateManagedFoodExpiryStatus,
   type FoodExpiryDashboard,
   type FoodExpiryItem,
@@ -38,11 +39,13 @@ function groupItems(items: FoodExpiryItem[]) {
 export default function ExpiryPage() {
   const scheme = useAppColorScheme()
   const [loading, setLoading] = useState(true)
+  const [fetchFailed, setFetchFailed] = useState(false)
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)
   const [items, setItems] = useState<FoodExpiryItem[]>([])
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    setFetchFailed(false)
     try {
       const [dashboardRes, listRes] = await Promise.all([
         getFoodExpiryDashboard(),
@@ -52,7 +55,10 @@ export default function ExpiryPage() {
       setItems(listRes.items || [])
     } catch (error: any) {
       console.error('[expiry] loadData failed:', error)
-      Taro.showToast({ title: error?.message || '加载失败', icon: 'none' })
+      setFetchFailed(true)
+      setDashboard(null)
+      setItems([])
+      await showUnifiedApiError(error, '加载保质期数据失败')
     } finally {
       setLoading(false)
     }
@@ -99,7 +105,7 @@ export default function ExpiryPage() {
       loadData()
     } catch (error: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: error?.message || '更新失败', icon: 'none' })
+      await showUnifiedApiError(error, '更新失败')
     }
   }
 
@@ -218,6 +224,14 @@ export default function ExpiryPage() {
         {loading ? (
           <View className='expiry-empty'>
             <View className='expiry-loading-spinner' />
+          </View>
+        ) : fetchFailed ? (
+          <View className='expiry-empty expiry-empty--failed'>
+            <Text className='expiry-empty-title'>加载失败</Text>
+            <Text className='expiry-empty-desc'>网络或服务异常，请稍后重试。若已弹出说明框，可复制 traceId 联系技术支持。</Text>
+            <Button className='expiry-retry-btn' type='primary' onClick={() => void loadData()}>
+              重试
+            </Button>
           </View>
         ) : items.length === 0 ? (
           <View className='expiry-empty'>

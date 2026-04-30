@@ -8,6 +8,7 @@ import {
   getFoodRecordList,
   getHomeDashboard,
   mapCalendarDateToApi,
+  showUnifiedApiError,
   type FoodRecord,
 } from '../../../utils/api'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
@@ -146,7 +147,8 @@ function DayRecordPage() {
         setTargetCalories(dashboardRes.intakeData.target)
       }
     } catch (e: any) {
-      setError(e?.message || '获取当天记录失败')
+      setError('获取当天记录失败，请稍后重试')
+      await showUnifiedApiError(e, '获取当天记录失败')
       setRecords([])
       setHistoryTotalCalorie(0)
     } finally {
@@ -196,7 +198,7 @@ function DayRecordPage() {
               Taro.showToast({ title: '已删除', icon: 'success' })
               loadDayRecords()
             } catch (err: any) {
-              Taro.showToast({ title: err?.message || '删除失败', icon: 'none' })
+              await showUnifiedApiError(err, '删除失败')
             }
           },
         })

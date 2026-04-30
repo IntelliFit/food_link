@@ -955,7 +955,7 @@ function ResultPage() {
                     console.error('同步更新 analysis_tasks 失败:', error)
                     Taro.hideLoading()
                     // 即使后端同步失败，本地已经修改了，也提示成功但告知同步失败
-                    await showUnifiedApiError(error, '本地已更新(同步失败)')
+                    void showUnifiedApiError(new Error('本地已更新(同步失败)'), '本地已更新(同步失败)')
                   }
                 } else {
                   // 没有 taskId，仅本地更新

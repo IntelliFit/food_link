@@ -7,6 +7,7 @@ import {
   getFriendInviteProfile,
   getPosterCalorieCompare,
   getMyMembership,
+  showUnifiedApiError,
   type FoodRecord
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
@@ -117,7 +118,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         if (!res?.[0]?.node) {
           Taro.hideLoading()
           setPosterGenerating(false)
-          Taro.showToast({ title: '画布未就绪，请重试', icon: 'none' })
+          void showUnifiedApiError(new Error('画布未就绪，请重试'), '画布未就绪，请重试')
           return
         }
         const canvas = res[0].node as HTMLCanvasElement & { createImage?: () => { src: string; onload: () => void; onerror: (err?: any) => void; width: number; height: number } }
@@ -174,7 +175,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
             if (!ctx) {
               Taro.hideLoading()
               setPosterGenerating(false)
-              Taro.showToast({ title: '画布不可用', icon: 'none' })
+              void showUnifiedApiError(new Error('画布不可用'), '画布不可用')
               return
             }
 
@@ -216,14 +217,14 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
               fail: (err) => {
                 Taro.hideLoading()
                 setPosterGenerating(false)
-                Taro.showToast({ title: '生成失败', icon: 'none' })
+                void showUnifiedApiError(new Error('生成失败'), '生成失败')
                 console.error('canvasToTempFilePath fail', err)
               }
             })
           } catch (e) {
             Taro.hideLoading()
             setPosterGenerating(false)
-            Taro.showToast({ title: '绘制失败', icon: 'none' })
+            void showUnifiedApiError(e, '绘制失败')
             console.error('drawSmartPoster error', e)
           }
         })
@@ -237,7 +238,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
       path: posterImageUrl,
       fail: (err: { errMsg?: string }) => {
         console.error('showShareImageMenu fail', err)
-        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+        void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
     })
   }, [posterImageUrl])
@@ -261,7 +262,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
             }
           })
         } else {
-          Taro.showToast({ title: '保存失败', icon: 'none' })
+          void showUnifiedApiError(new Error('保存失败'), '保存失败')
         }
       }
     })

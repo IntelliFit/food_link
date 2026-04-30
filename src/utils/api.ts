@@ -1263,7 +1263,38 @@ function parseFastApiDetail(data: unknown): string | undefined {
   const obj = normalizeTaroResponseJson(data)
   if (!obj) return undefined
   const d = obj.detail
-  if (typeof d === 'string' && d.trim()) return d.trim()
+  if (typeof d === 'string' && d.trim()) {
+    const text = d.trim()
+    // 某些后端会把上游 JSON 错误整体塞进 detail 字符串，这里优先提取可读 message
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>
+      if (parsed && typeof parsed === 'object') {
+        const topMessage = typeof parsed.message === 'string' ? parsed.message.trim() : ''
+        if (topMessage) return topMessage
+        const nestedDetails = typeof parsed.details === 'string' ? parsed.details : ''
+        if (nestedDetails) {
+          try {
+            const nestedParsed = JSON.parse(nestedDetails) as Record<string, unknown>
+            const nestedMessage = typeof nestedParsed?.message === 'string' ? nestedParsed.message.trim() : ''
+            if (nestedMessage) return nestedMessage
+          } catch {
+            // ignore nested parse error
+          }
+        }
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+    // 兼容 Python/日志风格单引号 pseudo-json：{'message': '...'}
+    const pseudoMessage = text.match(/['"]message['"]\s*:\s*['"]([^'"]+)['"]/i)?.[1]
+    if (pseudoMessage && pseudoMessage.trim()) return pseudoMessage.trim()
+    const nestedPseudo = text.match(/['"]details['"]\s*:\s*['"]([^'"]+)['"]/i)?.[1]
+    if (nestedPseudo && nestedPseudo.trim()) {
+      const nestedMsg = nestedPseudo.match(/['"]message['"]\s*:\s*['"]([^'"]+)['"]/i)?.[1]
+      if (nestedMsg && nestedMsg.trim()) return nestedMsg.trim()
+    }
+    return text
+  }
   if (Array.isArray(d) && d.length > 0) {
     const first = d[0] as { msg?: string }
     if (typeof first?.msg === 'string' && first.msg.trim()) return first.msg.trim()
@@ -1273,73 +1304,122 @@ function parseFastApiDetail(data: unknown): string | undefined {
   return undefined
 }
 
+type ErrorLike = Error & {
+  statusCode?: number
+  traceId?: string
+}
+
+function getHeaderValueIgnoreCase(headers: Record<string, any> | undefined, key: string): string | undefined {
+  if (!headers) return undefined
+  const target = key.toLowerCase()
+  const matchedKey = Object.keys(headers).find((k) => k.toLowerCase() === target)
+  if (!matchedKey) return undefined
+  const value = headers[matchedKey]
+  if (value == null) return undefined
+  const text = String(value).trim()
+  return text || undefined
+}
+
+function extractTraceIdFromHeaders(headers: Record<string, any> | undefined): string | undefined {
+  return getHeaderValueIgnoreCase(headers, 'x-trace-id')
+}
+
+function formatUserErrorWithTrace(message: string, traceId?: string): string {
+  const msg = (message || '').trim() || '网络错误，请稍后重试'
+  if (!traceId) return msg
+  return `${msg}（traceId: ${traceId}）`
+}
+
+/** 从文案里去掉已拼接的 traceId 后缀，避免弹窗里重复展示 */
 function stripTraceSuffixFromUserMessage(message: string): string {
-  const text = String(message || '').trim()
-  if (!text) return text
-  return text
-    .replace(/\s*[（(]\s*traceid\s*[:：]\s*[a-zA-Z0-9-]+\s*[）)]\s*/gi, ' ')
-    .replace(/\s*traceid\s*[:：]\s*[a-zA-Z0-9-]+\s*/gi, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
+  let s = (message || '').trim()
+  s = s.replace(/\s*[\(（]\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*[\)）]\s*$/gi, '')
+  s = s.replace(/\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*$/gi, '')
+  return s.trim()
 }
 
-function getTraceIdFromError(error: unknown): string {
-  const fromObject = (error as { traceId?: unknown })?.traceId
-  if (typeof fromObject === 'string' && fromObject.trim()) {
-    return fromObject.trim()
-  }
-  const fromMessage = (error as { message?: unknown })?.message
-  const text = typeof fromMessage === 'string' ? fromMessage : String(error || '')
-  const match = text.match(/traceid\s*[:：]\s*([a-zA-Z0-9-]+)/i)
-  return (match?.[1] || '').trim()
-}
-
+/** 统一错误弹窗正文：不展示 traceId，一句一行；点击「复制」后剪贴板仍为 traceId */
 export function formatApiErrorModalBody(summaryLine: string): string {
-  const summary = stripTraceSuffixFromUserMessage(summaryLine || '').trim() || '请求失败，请稍后重试'
+  const line1 = stripTraceSuffixFromUserMessage((summaryLine || '').trim()) || '请求失败，请稍后重试'
   return [
-    summary,
+    line1,
     '',
     '请点击下方「复制」按钮。',
-    '将剪贴板内容反馈给工作人员或开发者，便于定位问题。'
+    '将剪贴板内容反馈给工作人员或开发者，便于定位问题。',
   ].join('\n')
 }
 
-export async function showUnifiedApiError(error: unknown, fallback: string): Promise<void> {
-  const rawMessage = typeof (error as { message?: unknown })?.message === 'string'
-    ? String((error as { message?: unknown }).message)
-    : ''
-  const summary = stripTraceSuffixFromUserMessage(rawMessage || fallback || '请求失败，请稍后重试')
-  const traceId = getTraceIdFromError(error) || 'no-trace-id'
-  const content = formatApiErrorModalBody(summary)
+export function getTraceIdFromError(error: unknown): string | undefined {
+  const err = error as ErrorLike | undefined
+  const trace = (err?.traceId || '').trim()
+  if (trace) return trace
+  const message = String(err?.message || '')
+  const m = message.match(/traceId\s*[:：]\s*([a-fA-F0-9]+)/i)
+  return m?.[1]
+}
 
+/** 微信 `showModal` 的 `content` 过长时可能失败或不展示，统一截断 */
+const UNIFIED_ERROR_MODAL_CONTENT_MAX = 880
+
+function truncateModalContent(text: string, max: number): string {
+  const t = (text || '').trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, Math.max(0, max - 1))}…`
+}
+
+export async function showUnifiedApiError(error: unknown, fallback: string = '网络错误，请稍后重试'): Promise<void> {
+  const err = error as ErrorLike | undefined
+  const traceId = getTraceIdFromError(err)
+  const raw = (err?.message || '').trim()
+  const userMsg = stripTraceSuffixFromUserMessage(raw) || fallback
+  const traceForCopy = traceId || 'no-trace-id'
+  const content = truncateModalContent(formatApiErrorModalBody(userMsg), UNIFIED_ERROR_MODAL_CONTENT_MAX)
+  // 延后到下一宏任务，避免与首帧渲染 / loading 同步更新冲突导致弹窗不弹出
+  await new Promise<void>((resolve) => {
+    setTimeout(() => resolve(), 0)
+  })
   try {
     await Taro.showModal({
       title: '请求失败',
       content,
-      showCancel: false,
       confirmText: '复制',
+      showCancel: false,
     })
     try {
-      await Taro.setClipboardData({ data: traceId })
+      await Taro.setClipboardData({ data: traceForCopy })
       Taro.showToast({ title: '已复制', icon: 'success' })
     } catch {
       Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
     }
-  } catch {
-    Taro.showModal({
+  } catch (e) {
+    console.warn('[showUnifiedApiError] 首次 showModal 失败，重试极简弹窗', e)
+    await Taro.showModal({
       title: '请求失败',
-      content: summary || '请求失败，请稍后重试',
+      content: formatApiErrorModalBody('请求失败，请稍后重试'),
+      confirmText: '复制',
       showCancel: false,
-      confirmText: '确定',
     })
+    try {
+      await Taro.setClipboardData({ data: traceForCopy })
+      Taro.showToast({ title: '已复制', icon: 'success' })
+    } catch {
+      Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
+    }
   }
 }
 
 /** 抛出带 HTTP 状态码的错误，便于页面区分 429 等场景 */
-function throwHttpErrorWithStatus(statusCode: number, data: unknown, fallback: string): never {
+function throwHttpErrorWithStatus(
+  statusCode: number,
+  data: unknown,
+  fallback: string,
+  headers?: Record<string, any>
+): never {
   const msg = parseFastApiDetail(data) || fallback
-  const err = new Error(msg) as Error & { statusCode: number }
+  const traceId = extractTraceIdFromHeaders(headers)
+  const err = new Error(formatUserErrorWithTrace(msg, traceId)) as ErrorLike
   err.statusCode = statusCode
+  if (traceId) err.traceId = traceId
   throw err
 }
 
@@ -1382,7 +1462,12 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
 
   const parsedData = parseUploadAnalyzeResponseData(response?.data)
   if (response?.statusCode !== 200) {
-    throw new Error(formatUploadAnalyzeHttpError(Number(response?.statusCode || 0), parsedData))
+    throwHttpErrorWithStatus(
+      Number(response?.statusCode || 0),
+      parsedData,
+      formatUploadAnalyzeHttpError(Number(response?.statusCode || 0), parsedData),
+      response?.header as Record<string, any> | undefined
+    )
   }
 
   const imageUrl = String(parsedData?.imageUrl || '').trim()
@@ -1409,7 +1494,12 @@ export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUr
     timeout: 60000,
   })
   if (response.statusCode !== 200) {
-    throw new Error(formatUploadAnalyzeHttpError(response.statusCode, response.data))
+    throwHttpErrorWithStatus(
+      response.statusCode,
+      response.data,
+      formatUploadAnalyzeHttpError(response.statusCode, response.data),
+      response.header as Record<string, any> | undefined
+    )
   }
   return response.data as { imageUrl: string }
 }
@@ -1445,8 +1535,12 @@ export async function analyzeFoodImage(
     })
 
     if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '分析失败，请重试'
-      throw new Error(errorMsg)
+      throwHttpErrorWithStatus(
+        response.statusCode,
+        response.data,
+        '分析失败，请重试',
+        response.header as Record<string, any> | undefined
+      )
     }
 
     return response.data as AnalyzeResponse
@@ -1494,8 +1588,12 @@ export async function analyzeFoodImageCompare(
     })
 
     if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '对比分析失败，请重试'
-      throw new Error(errorMsg)
+      throwHttpErrorWithStatus(
+        response.statusCode,
+        response.data,
+        '对比分析失败，请重试',
+        response.header as Record<string, any> | undefined
+      )
     }
 
     return response.data as CompareAnalyzeResponse
@@ -1537,8 +1635,12 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
       timeout: 60000
     })
     if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '分析失败，请重试'
-      throw new Error(errorMsg)
+      throwHttpErrorWithStatus(
+        response.statusCode,
+        response.data,
+        '分析失败，请重试',
+        response.header as Record<string, any> | undefined
+      )
     }
     return response.data as AnalyzeResponse
   } catch (error: any) {
@@ -2402,6 +2504,15 @@ export async function authenticatedRequest(
     }
   }
 
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throwHttpErrorWithStatus(
+      res.statusCode,
+      res.data,
+      '请求失败，请稍后重试',
+      res.header as Record<string, any> | undefined
+    )
+  }
+
   return res
 }
 
@@ -2435,8 +2546,12 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     })
 
     if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '登录失败，请重试'
-      throw new Error(errorMsg)
+      throwHttpErrorWithStatus(
+        response.statusCode,
+        response.data,
+        '登录失败，请重试',
+        response.header as Record<string, any> | undefined
+      )
     }
 
     const loginData = response.data as LoginResponse
@@ -2455,6 +2570,10 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
   } catch (error: any) {
     console.error('登录API调用失败:', error)
     console.error('错误详情:', JSON.stringify(error))
+    // 如果是上游已包装过的错误（含 traceId / 用户友好文案），直接透传给页面统一弹窗处理
+    if (error instanceof Error && (error as ErrorLike).message) {
+      throw error
+    }
     // 提取更有意义的错误信息
     const errMsg = error.errMsg || error.message || ''
     if (errMsg.includes('ERR_CERT')) {
@@ -2462,9 +2581,9 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     } else if (errMsg.includes('timeout')) {
       throw new Error('请求超时，请稍后重试')
     } else if (errMsg.includes('fail')) {
-      throw new Error(`网络请求失败: ${errMsg}`)
+      throw new Error('网络请求失败，请稍后重试')
     }
-    throw new Error(error.message || '连接服务器失败，请检查网络')
+    throw new Error('登录失败，请稍后重试')
   }
 }
 
@@ -2504,8 +2623,12 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
     })
 
     if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '获取会员套餐失败'
-      throw new Error(errorMsg)
+      throwHttpErrorWithStatus(
+        response.statusCode,
+        response.data,
+        '获取会员套餐失败',
+        response.header as Record<string, any> | undefined
+      )
     }
 
     return ((response.data as MembershipPlansResponse)?.list || []) as MembershipPlan[]
@@ -2559,19 +2682,10 @@ export async function claimSharePosterReward(recordId?: string): Promise<ClaimSh
 }
 
 export async function getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
-  try {
-    const response = await authenticatedRequest('/api/expiry/dashboard', {
-      method: 'GET'
-    })
-    if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '获取保质期摘要失败'
-      throw new Error(errorMsg)
-    }
-    return response.data as FoodExpiryDashboard
-  } catch (error: any) {
-    console.error('获取保质期摘要失败:', error)
-    throw new Error(error.message || '获取保质期摘要失败')
-  }
+  const response = await authenticatedRequest('/api/expiry/dashboard', {
+    method: 'GET',
+  })
+  return response.data as FoodExpiryDashboard
 }
 
 export async function listManagedFoodExpiryItems(status?: FoodExpiryStatus): Promise<{ items: FoodExpiryItem[] }> {
