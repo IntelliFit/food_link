@@ -19,6 +19,7 @@ import {
   isExerciseLogCreditExhausted,
 } from '../../../utils/membership'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { showUnifiedApiError } from '../../../utils/error-modal'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import './index.scss'
@@ -351,7 +352,7 @@ export default function ExerciseRecordPage() {
           }
         })
       } else {
-        Taro.showToast({ title: msg, icon: 'none', duration: 3000 })
+        await showUnifiedApiError(e, '提交失败')
       }
     } finally {
       Taro.hideLoading()
@@ -376,8 +377,7 @@ export default function ExerciseRecordPage() {
           Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
           Taro.showToast({ title: '已删除', icon: 'success' })
         } catch (e) {
-          const msg = e instanceof Error ? e.message : '删除失败'
-          Taro.showToast({ title: msg, icon: 'none' })
+          await showUnifiedApiError(e, '删除失败')
         } finally {
           Taro.hideLoading()
         }

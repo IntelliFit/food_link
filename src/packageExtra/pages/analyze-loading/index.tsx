@@ -9,6 +9,7 @@ import {
   type ExecutionMode,
   type ExerciseTaskResultPayload
 } from '../../../utils/api'
+import { showUnifiedApiError } from '../../../utils/error-modal'
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
@@ -255,7 +256,7 @@ function AnalyzeLoadingPage() {
     setIsDebugMode(isDebug)
 
     if (!id) {
-      Taro.showToast({ title: '缺少任务 ID', icon: 'none' })
+      void showUnifiedApiError(new Error('缺少任务 ID'), '缺少任务 ID')
       setTimeout(() => Taro.navigateBack(), 1500)
       return
     }

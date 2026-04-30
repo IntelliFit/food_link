@@ -15,7 +15,6 @@ import {
   submitAnalyzeTask,
   submitTextAnalyzeTask,
   continuePrecisionSession,
-  showUnifiedApiError,
   type ExecutionMode,
   type AnalyzeRecognitionOutcome,
   type AllowedFoodCategory,
@@ -26,6 +25,7 @@ import {
   type PrecisionReferencePresetKey
 } from '../../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../../utils/execution-mode'
+import { showUnifiedApiError } from '../../../utils/error-modal'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { withAuth } from '../../../utils/withAuth'
@@ -550,10 +550,7 @@ function ResultPage() {
       }
     } catch (error) {
       console.error('获取数据失败:', error)
-      Taro.showToast({
-        title: '数据加载失败',
-        icon: 'none'
-      })
+      void showUnifiedApiError(error, '数据加载失败')
     }
   }, [hydrateCommittedRecord])
 
