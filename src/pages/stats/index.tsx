@@ -13,7 +13,7 @@ import {
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
 } from '../../utils/api'
-import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../components/iconfont'
+import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconExpand, IconCollapse } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -935,7 +935,7 @@ function StatsPage() {
               <Text className='card-title'>我的关注</Text>
               <Text className='card-subtitle'>只显示你现在更想留意的健康方向</Text>
             </View>
-            <Text className='card-header-arrow'>{riskPickerVisible ? '收起' : '管理卡片'}</Text>
+            <View className='card-header-arrow'>{riskPickerVisible ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
           {riskPickerVisible ? (
             <View className='card-collapsible-content'>
@@ -983,7 +983,7 @@ function StatsPage() {
                 <View className='risk-card-score-wrap'>
                   <Text className='risk-card-score'>{card.score}</Text>
                   <Text className='risk-card-score-unit'>分</Text>
-                  <Text className='risk-card-expand'>{expandedRiskKey === card.key ? '收起' : '展开'}</Text>
+                  <View className='risk-card-expand'>{expandedRiskKey === card.key ? <IconCollapse size={20} color='#94a3b8' /> : <IconExpand size={20} color='#94a3b8' />}</View>
                 </View>
               </View>
               {expandedRiskKey === card.key ? (
@@ -1063,7 +1063,7 @@ function StatsPage() {
                   {insightActionLoading ? '生成中...' : hasInsight ? '更新' : '生成'}
                 </Text>
               </View>
-              <Text className='card-header-arrow'>{expandedSections.ai ? '收起' : '展开'}</Text>
+              <View className='card-header-arrow'>{expandedSections.ai ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
             </View>
           </View>
           {expandedSections.ai ? (
@@ -1126,7 +1126,7 @@ function StatsPage() {
                 <Text className='card-title'>每日记录分布</Text>
                 <Text className='card-subtitle'>点击有记录的日期，可继续查看当天吃了什么</Text>
               </View>
-              <Text className='card-header-arrow'>{expandedSections.heatmap ? '收起' : '展开'}</Text>
+              <View className='card-header-arrow'>{expandedSections.heatmap ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
             </View>
             {expandedSections.heatmap ? (
               <View className='card-collapsible-content'>
@@ -1168,7 +1168,7 @@ function StatsPage() {
                 <Text className='card-title'>本月记录分布</Text>
                 <Text className='card-subtitle'>点击任意有记录的日期，可继续查看当天吃了什么</Text>
               </View>
-              <Text className='card-header-arrow'>{expandedSections.heatmap ? '收起' : '展开'}</Text>
+              <View className='card-header-arrow'>{expandedSections.heatmap ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
             </View>
             {expandedSections.heatmap ? (
               <View className='card-collapsible-content'>
@@ -1207,20 +1207,22 @@ function StatsPage() {
               </View>
             </View>
             <View className='card-header-actions'>
-              <View className='chart-switch-wrap' onClick={(e) => e.stopPropagation()}>
-                <Text className='chart-switch-label'>显示数值</Text>
-                <Switch
-                  className='chart-switch'
-                  checked={showCalories}
-                  onChange={(v: any) => setShowCalories(Boolean(typeof v === 'object' ? v?.detail?.value : v))}
-                  style={{ '--switch-checked-background-color': '#5cb896' } as CSSProperties}
-                />
-              </View>
-              <Text className='card-header-arrow'>{expandedSections.calories ? '收起' : '展开'}</Text>
+              <View className='card-header-arrow'>{expandedSections.calories ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
             </View>
           </View>
           {expandedSections.calories ? (
             <View className='card-collapsible-content'>
+              <View style={{ marginBottom: '20rpx' }}>
+                <View className='chart-switch-wrap' onClick={(e) => e.stopPropagation()}>
+                  <Text className='chart-switch-label'>显示数值</Text>
+                  <Switch
+                    className='chart-switch'
+                    checked={showCalories}
+                    onChange={(v: any) => setShowCalories(Boolean(typeof v === 'object' ? v?.detail?.value : v))}
+                    style={{ '--switch-checked-background-color': '#5cb896' } as CSSProperties}
+                  />
+                </View>
+              </View>
               {chartDays.length > 0 ? (
                 <View className='bar-chart-container'>
                   {chartDays.map((item) => {
@@ -1257,7 +1259,7 @@ function StatsPage() {
               <Text className='card-title'>宏量结构证据</Text>
               <Text className='card-subtitle'>当前草案主要用它来解释代谢稳定和心血管保护倾向</Text>
             </View>
-            <Text className='card-header-arrow'>{expandedSections.macro ? '收起' : '展开'}</Text>
+            <View className='card-header-arrow'>{expandedSections.macro ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
           {expandedSections.macro ? (
             <View className='card-collapsible-content'>
@@ -1312,7 +1314,7 @@ function StatsPage() {
               <Text className='card-title'>餐次分布证据</Text>
               <Text className='card-subtitle'>当前草案重点关注有没有把热量过度堆在晚餐和夜间</Text>
             </View>
-            <Text className='card-header-arrow'>{expandedSections.meals ? '收起' : '展开'}</Text>
+            <View className='card-header-arrow'>{expandedSections.meals ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
           {expandedSections.meals ? (
             <View className='card-collapsible-content'>
@@ -1375,7 +1377,7 @@ function StatsPage() {
                 </View>
               </View>
             </View>
-            <Text className='card-header-arrow'>{expandedSections.streak ? '收起' : '展开'}</Text>
+            <View className='card-header-arrow'>{expandedSections.streak ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
           {expandedSections.streak ? (
             <View className='card-collapsible-content'>
@@ -1396,7 +1398,7 @@ function StatsPage() {
               <Text className='card-title'>长期健康指标</Text>
               <Text className='card-subtitle'>这部分不直接决定饮食风险分，但可以帮助观察长期结果</Text>
             </View>
-            <Text className='card-header-arrow'>{expandedSections.body ? '收起' : '展开'}</Text>
+            <View className='card-header-arrow'>{expandedSections.body ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
           {expandedSections.body ? (
             <View className='card-collapsible-content'>
