@@ -113,6 +113,97 @@
   - 若需单独指定可覆盖：`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
   - 实例标识头默认取 `POD_NAME`，标准 K8s 可用 Downward API 注入；未注入时会回退到容器 `HOSTNAME`
 
+- Task: 验证 `origin/main` 的 trace 错误链路是否覆盖食物分析核心失败场景
+- Status: done（已在 `origin/main` 快照上完成进程内失败测试；发现 `/api/analyze/submit` 在依赖层异常时仍会裸掉成 `500 Internal Server Error`）
+- Scope:
+  - 测试方式：
+    - 使用 `git worktree` 拉出 `D:\files\food_link_origin_main`
+    - 在快照 `backend/` 下创建临时虚拟环境 `.venv_test`
+    - 用 `fastapi.testclient.TestClient` 进程内调用接口，避免改业务代码和本地小程序环境
+    - 通过依赖覆盖伪造 `get_current_user_info`，专测接口失败响应
+    - 通过临时改坏 `SUPABASE_SERVICE_ROLE_KEY` 模拟数据库 / 存储依赖故障
+  - 已测核心接口：
+    - `POST /api/upload-analyze-image`
+    - `POST /api/upload-analyze-image-file`
+    - `POST /api/analyze/submit`
+    - `GET /api/analyze/tasks/{task_id}`
+    - `POST /api/food-record/save`
+  - 已确认通过的点：
+    - 多数 `4xx/5xx` 失败响应都会带：
+      - `x-trace-id`
+      - `x-instance-id`
+      - `traceparent`
+    - `upload-analyze-image`、`get_analyze_task`、`save_food_record` 在依赖故障时能返回结构化错误体
+  - 关键发现：
+    - `POST /api/analyze/submit` 在“数据库依赖坏掉”这类异常里，没有稳定落到统一错误响应
+    - 现象是：
+      - HTTP `500`
+      - body 只有 `Internal Server Error`
+      - 缺少 `x-trace-id / x-instance-id / traceparent`
+    - 当前判断是：该接口前半段存在未被统一 `try/except` 接住的数据库调用，异常在生成标准响应前直接冒泡
+  - 其他观察：
+    - `POST /api/upload-analyze-image` 空 body 当前返回的是 `422`（Pydantic 缺字段），不是接口内部手写的 `400`
+    - 若本地未连 OTLP collector，trace header 仍能生成；只是 exporter 会在后台报连接拒绝，这不影响“前端拿 traceId”本身
+- Next step:
+  - 优先补测真实小程序页面上的 3 条用户链路：
+    - 分析页提交失败
+    - 分析中页轮询失败
+    - 结果页保存失败
+  - 若要修主问题，优先检查 `origin/main` 的 `analyze_submit(...)` 中数据库访问与统一异常包装边界
+
+- Task: 创始会员双倍积分资格扩展到“前 1000 注册或前 100 付费”
+- Status: done（后端资格判定、付费快照、会员页/我的页文案已同步；未按用户要求执行运行态验证）
+- Scope:
+  - 后端：
+    - `backend/database.py`
+      - 新增 `get_first_paid_membership_user_rank(...)`，按 `pro_membership_payment_records.status='paid'` 且会员套餐单过滤，计算前 `100` 名付费用户
+    - `backend/main.py`
+      - 创始付费翻倍资格改为：`前 1000 注册用户 OR 前 100 付费用户`
+      - 试用资格与付费翻倍资格拆开：试用仍只看注册顺序，避免前 `100` 付费用户误吃 `30` 天试用
+      - `/api/membership/me` 新增返回：
+        - `early_paid_user_rank`
+        - `early_paid_user_limit`
+        - `early_user_paid_bonus_source`
+  - 前端：
+    - `src/utils/api.ts`
+      - `MembershipStatus` 类型补齐前 `100` 付费用户相关字段
+    - `src/utils/membership.ts`
+      - 新增创始礼遇来源/名次文案辅助函数
+    - `src/packageExtra/pages/pro-membership/index.tsx`
+      - 会员页文案改为“前 1000 注册用户或前 100 付费用户”
+      - 创始编号展示兼容“注册序号 / 付费序号 / 同时满足”
+    - `src/pages/profile/index.tsx`
+      - 「我的」页会员卡与会员入口说明同步改为新口径
+  - Seed 注释：
+    - `backend/database/membership_plan_config_seed.sql` 已补创始付费礼遇说明
+- Notes:
+  - 本轮按用户要求只改代码，没有运行 `npm run dev:weapp`、后端服务或 `weapp-devtools`
+
+- Task: 统计体验成员清理候选名单（按最近使用时间）
+- Status: done（已生成超过 7 天未使用观察名单与超过 37 天未使用优先移除名单）
+- Scope:
+  - 数据来源：
+    - `weapp_user.create_time`
+    - `user_food_records.record_time / created_at`
+    - `analysis_tasks.created_at / updated_at`
+    - `user_exercise_logs.recorded_at / created_at`
+    - `user_water_logs.recorded_at`
+    - `user_weight_records.recorded_on / created_at / updated_at`
+    - `food_expiry_items.updated_at / created_at`
+  - 输出文件：
+    - `memory/2026-04-29_experience_member_inactive_report.csv`
+    - `memory/2026-04-29_experience_member_inactive_summary.md`
+  - 当前统计口径：
+    - 由于项目库里没有单独存“体验成员名单”，本轮先按“全量真实用户（排除 `openid` 以 `seed_` 开头的种子测试号）”输出未活跃名单
+    - 由于项目库里没有用户手填“微信号”，名单中的“微信 id”当前使用登录唯一标识 `openid`
+- Result:
+  - 真实用户总数（排除 `seed_*`）：`670`
+  - 超过 `7` 天未使用：`599`
+  - 超过 `37` 天未使用：`249`
+- Notes:
+  - 这次“最近使用”是按“有落库行为”的最近时间估算，不包含纯浏览但未写库的行为
+  - 若后续用户提供微信后台当前体验成员名单，可再二次交叉筛出“当前体验成员里该移除的人”
+
 - Task: 手动记录页面心智收口为“双库模式”
 - Status: done（前台展示正式收口为 `food_nutrition_library + public_food_library` 两类；静态校验通过；`weapp-devtools` 运行态验证仍受本机 `mrc.cmd` 权限阻塞）
 - Scope:

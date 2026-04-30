@@ -81,6 +81,43 @@ export function getCurrentMembershipPeriod(status?: Pick<MembershipStatus, 'curr
   return getMembershipPeriodFromPlanCode(status?.current_plan_code)
 }
 
+export function getFounderPaidBonusSource(status?: MembershipStatus | null): 'registration_top_1000' | 'paid_top_100' | 'both' | null {
+  const source = status?.early_user_paid_bonus_source
+  if (source === 'registration_top_1000' || source === 'paid_top_100' || source === 'both') {
+    return source
+  }
+  return null
+}
+
+export function getFounderPaidBonusSourceLabel(status?: MembershipStatus | null): string | null {
+  const source = getFounderPaidBonusSource(status)
+  const registrationLimit = status?.early_user_limit ?? 1000
+  const paidLimit = status?.early_paid_user_limit ?? 100
+  if (source === 'both') return `前 ${registrationLimit} 注册用户 / 前 ${paidLimit} 付费用户`
+  if (source === 'registration_top_1000') return `前 ${registrationLimit} 注册用户`
+  if (source === 'paid_top_100') return `前 ${paidLimit} 付费用户`
+  return null
+}
+
+export function getFounderPaidBonusRankLabel(status?: MembershipStatus | null): string | null {
+  const source = getFounderPaidBonusSource(status)
+  const registrationRank = status?.early_user_rank ?? null
+  const registrationLimit = status?.early_user_limit ?? 1000
+  const paidRank = status?.early_paid_user_rank ?? null
+  const paidLimit = status?.early_paid_user_limit ?? 100
+
+  if (source === 'both') {
+    return `注册第 ${registrationRank ?? '--'} / ${registrationLimit} 位 · 付费第 ${paidRank ?? '--'} / ${paidLimit} 位`
+  }
+  if (source === 'registration_top_1000') {
+    return `注册第 ${registrationRank ?? '--'} / ${registrationLimit} 位`
+  }
+  if (source === 'paid_top_100') {
+    return `付费第 ${paidRank ?? '--'} / ${paidLimit} 位`
+  }
+  return null
+}
+
 export function getMembershipCreditSummary(status?: MembershipStatus | null): {
   hasInfo: boolean
   max: number

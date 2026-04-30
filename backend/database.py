@@ -178,6 +178,19 @@ def resolve_user_registration_datetime(user_row: Optional[Dict[str, Any]]) -> Op
     return None
 
 
+_LEGACY_MEMBERSHIP_PLAN_CODES = {"pro_monthly"}
+_MEMBERSHIP_PLAN_PREFIXES = ("light_", "standard_", "advanced_")
+
+
+def _is_membership_subscription_plan_code(plan_code: Optional[str]) -> bool:
+    code = str(plan_code or "").strip().lower()
+    if not code:
+        return False
+    if code in _LEGACY_MEMBERSHIP_PLAN_CODES:
+        return True
+    return code.startswith(_MEMBERSHIP_PLAN_PREFIXES)
+
+
 async def get_user_by_openid(openid: str) -> Optional[Dict[str, Any]]:
     """
     通过 openid 查询用户
@@ -263,6 +276,52 @@ async def get_first_membership_trial_batch_rank(user_id: str, limit: int = 1000)
         return None
     except Exception as e:
         print(f"[get_first_membership_trial_batch_rank] 错误: {e}")
+        raise
+
+
+async def get_first_paid_membership_user_rank(user_id: str, limit: int = 100) -> Optional[int]:
+    """返回用户在首批付费会员中的名次（1-based）；若不在前 N 名则返回 None。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.table("pro_membership_payment_records")\
+            .select("id, user_id, plan_code, paid_at, created_at")\
+            .eq("status", "paid")\
+            .limit(5000)\
+            .execute()
+
+        rows = [
+            row for row in list(result.data or [])
+            if _is_membership_subscription_plan_code(row.get("plan_code")) and str(row.get("user_id") or "").strip()
+        ]
+        rows.sort(
+            key=lambda row: (
+                _parse_possible_datetime(row.get("paid_at"))
+                or _parse_possible_datetime(row.get("created_at"))
+                or datetime.max.replace(tzinfo=timezone.utc),
+                _parse_possible_datetime(row.get("created_at"))
+                or _parse_possible_datetime(row.get("paid_at"))
+                or datetime.max.replace(tzinfo=timezone.utc),
+                str(row.get("id") or ""),
+            )
+        )
+
+        seen_user_ids: set[str] = set()
+        rank = 0
+        for row in rows:
+            current_user_id = str(row.get("user_id") or "").strip()
+            if not current_user_id or current_user_id in seen_user_ids:
+                continue
+            seen_user_ids.add(current_user_id)
+            rank += 1
+            if current_user_id == user_id:
+                return rank if rank <= limit else None
+            if rank >= limit:
+                break
+        return None
+    except Exception as e:
+        print(f"[get_first_paid_membership_user_rank] 错误: {e}")
         raise
 
 

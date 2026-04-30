@@ -171,6 +171,7 @@ from database import (
     get_pro_membership_payment_record_by_order_no,
     update_pro_membership_payment_record,
     get_first_membership_trial_batch_rank,
+    get_first_paid_membership_user_rank,
     get_daily_membership_bonus_breakdown,
     claim_share_poster_bonus,
     get_today_food_analysis_count,
@@ -1489,6 +1490,7 @@ CREDIT_COST_PER_EXERCISE_LOG = 1
 TRIAL_DAILY_CREDITS = 8
 EARLY_USER_TOP_500_LIMIT = 500
 EARLY_USER_TRIAL_LIMIT = 1000
+EARLY_PAID_USER_LIMIT = 100
 EARLY_USER_TOP_500_TRIAL_DAYS = 60
 EARLY_USER_TRIAL_DAYS = 30
 REGULAR_USER_TRIAL_DAYS = 3
@@ -1585,11 +1587,10 @@ async def _resolve_user_trial_policy(
 
     meta = early_user_meta or await _resolve_early_user_membership_meta(user_id, user_row)
     rank = int(meta.get("early_user_rank") or 0)
-    is_early_user = bool(meta.get("early_user_paid_bonus_eligible"))
     if rank and rank <= EARLY_USER_TOP_500_LIMIT:
         trial_days = EARLY_USER_TOP_500_TRIAL_DAYS
         trial_policy = "founding_top_500_bonus_month"
-    elif is_early_user:
+    elif rank and rank <= EARLY_USER_TRIAL_LIMIT:
         trial_days = EARLY_USER_TRIAL_DAYS
         trial_policy = "early_first_1000"
     else:
@@ -1608,24 +1609,41 @@ async def _resolve_early_user_membership_meta(
     user_id: str,
     user_row: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """解析首批 1000 用户的创始编号与会员翻倍权益。"""
+    """解析创始资格：前 1000 注册用户或前 100 付费用户可享会员积分翻倍。"""
     default_meta = {
         "early_user_rank": None,
         "early_user_limit": EARLY_USER_TRIAL_LIMIT,
+        "early_paid_user_rank": None,
+        "early_paid_user_limit": EARLY_PAID_USER_LIMIT,
         "early_user_paid_bonus_multiplier": 1,
         "early_user_paid_bonus_eligible": False,
+        "early_user_paid_bonus_source": None,
         "early_user_paid_bonus_active": False,
     }
-    if not user_row or not resolve_user_registration_datetime(user_row):
-        return default_meta
+    registration_rank: Optional[int] = None
+    if user_row and resolve_user_registration_datetime(user_row):
+        registration_rank = await get_first_membership_trial_batch_rank(user_id, EARLY_USER_TRIAL_LIMIT)
+    paid_rank = await get_first_paid_membership_user_rank(user_id, EARLY_PAID_USER_LIMIT)
+    is_registration_eligible = registration_rank is not None
+    is_paid_eligible = paid_rank is not None
 
-    rank = await get_first_membership_trial_batch_rank(user_id, EARLY_USER_TRIAL_LIMIT)
-    is_early_user = rank is not None
+    bonus_source: Optional[str] = None
+    if is_registration_eligible and is_paid_eligible:
+        bonus_source = "both"
+    elif is_registration_eligible:
+        bonus_source = "registration_top_1000"
+    elif is_paid_eligible:
+        bonus_source = "paid_top_100"
+
+    is_eligible = is_registration_eligible or is_paid_eligible
     return {
-        "early_user_rank": rank,
+        "early_user_rank": registration_rank,
         "early_user_limit": EARLY_USER_TRIAL_LIMIT,
-        "early_user_paid_bonus_multiplier": EARLY_USER_PAID_CREDITS_MULTIPLIER if is_early_user else 1,
-        "early_user_paid_bonus_eligible": is_early_user,
+        "early_paid_user_rank": paid_rank,
+        "early_paid_user_limit": EARLY_PAID_USER_LIMIT,
+        "early_user_paid_bonus_multiplier": EARLY_USER_PAID_CREDITS_MULTIPLIER if is_eligible else 1,
+        "early_user_paid_bonus_eligible": is_eligible,
+        "early_user_paid_bonus_source": bonus_source,
         "early_user_paid_bonus_active": False,
     }
 
@@ -1705,8 +1723,11 @@ async def _compute_daily_credits_status(
         "trial_policy": trial_policy,
         "early_user_rank": early_user_meta.get("early_user_rank"),
         "early_user_limit": int(early_user_meta.get("early_user_limit") or EARLY_USER_TRIAL_LIMIT),
+        "early_paid_user_rank": early_user_meta.get("early_paid_user_rank"),
+        "early_paid_user_limit": int(early_user_meta.get("early_paid_user_limit") or EARLY_PAID_USER_LIMIT),
         "early_user_paid_bonus_multiplier": early_multiplier,
         "early_user_paid_bonus_eligible": bool(early_user_meta.get("early_user_paid_bonus_eligible")),
+        "early_user_paid_bonus_source": early_user_meta.get("early_user_paid_bonus_source"),
         "early_user_paid_bonus_active": bool(early_user_meta.get("early_user_paid_bonus_active")),
     }
 
@@ -2575,10 +2596,13 @@ class MembershipStatusResponse(BaseModel):
     trial_expires_at: Optional[str] = None  # 试用截止（UTC）
     trial_days_total: int = 0              # 当前试用总天数：60 / 30 / 3 / 0
     trial_policy: Optional[str] = None     # founding_top_500_bonus_month / early_first_1000 / regular_new_user
-    early_user_rank: Optional[int] = None  # 若属于前 1000 名，则返回其注册名次（1-based）
-    early_user_limit: int = 0              # 创始用户活动总名额
-    early_user_paid_bonus_multiplier: int = 1  # 前 1000 名付费会员积分倍数
-    early_user_paid_bonus_eligible: bool = False # 是否属于创始用户翻倍活动
+    early_user_rank: Optional[int] = None  # 若属于前 1000 名注册用户，则返回其注册名次（1-based）
+    early_user_limit: int = 0              # 前 1000 注册用户活动总名额
+    early_paid_user_rank: Optional[int] = None  # 若属于前 100 名付费用户，则返回其付费名次（1-based）
+    early_paid_user_limit: int = 0         # 前 100 付费用户活动总名额
+    early_user_paid_bonus_multiplier: int = 1  # 创始会员积分倍数
+    early_user_paid_bonus_eligible: bool = False # 是否属于创始翻倍活动（前1000注册或前100付费）
+    early_user_paid_bonus_source: Optional[str] = None # registration_top_1000 / paid_top_100 / both
     early_user_paid_bonus_active: bool = False   # 当前付费权益是否已按创始翻倍生效
 
 
