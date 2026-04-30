@@ -1,5 +1,11 @@
 # DECISIONS
 
+- `2026-04-30`: 后端 OpenTelemetry 依赖在本项目里不能再作为“本地必装硬依赖”阻塞启动。当前稳定口径是：
+  - `backend/main.py`、`backend/database.py`、`backend/worker.py` 相关 OTel 能力必须通过兼容层接入
+  - 本地/临时环境若未安装 `opentelemetry-*` 包，后端应自动降级为 no-op observability，并继续可启动
+  - 只有在正式环境已安装依赖时，才启用真实 trace/log/exporter/instrumentation
+  - “未装 OTel 时打印 warning 并关闭观测”优先于“因 import 失败导致整个后端不可启动”
+
 - `2026-04-30`: 小程序错误提示统一的实现策略正式收口为“静态替换失败类 toast”，不再使用 `app.ts` 里的全局 `showToast` 运行时拦截。稳定口径是：
   - 失败类提示统一改为 `showUnifiedApiError(...)`（阻塞弹窗 + 复制 traceId）
   - 成功提示、输入校验提示、复制动作提示可继续保留普通 `showToast`

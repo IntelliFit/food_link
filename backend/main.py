@@ -194,19 +194,26 @@ from database import (
 )
 from middleware import get_current_user_info, get_current_user_id, get_current_openid, get_optional_user_info
 from metabolic import calculate_bmr, calculate_tdee, get_age_from_birthday
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import Status, StatusCode
-from opentelemetry.trace import format_span_id, format_trace_id
+from otel_compat import (
+    OTEL_AVAILABLE,
+    BatchLogRecordProcessor,
+    BatchSpanProcessor,
+    FastAPIInstrumentor,
+    HTTPXClientInstrumentor,
+    LoggerProvider,
+    LoggingHandler,
+    LoggingInstrumentor,
+    OTLPLogExporter,
+    OTLPSpanExporter,
+    Resource,
+    SERVICE_NAME,
+    Status,
+    StatusCode,
+    TracerProvider,
+    format_span_id,
+    format_trace_id,
+    trace,
+)
 
 # 从 .env 文件加载环境变量
 BACKEND_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -269,6 +276,11 @@ def _trace_record_error(stage: str, err: Exception, **attrs: Any) -> None:
 
 def _setup_otel_observability(target_app: FastAPI) -> None:
     if not OTEL_ENABLED:
+        return
+    if not OTEL_AVAILABLE:
+        logging.getLogger(__name__).warning(
+            "OpenTelemetry packages are not installed in the current environment; observability is disabled."
+        )
         return
 
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
