@@ -21,6 +21,7 @@ import {
   communityDeleteComment,
   communityGetCheckinLeaderboard,
   communityHideFeed,
+  showUnifiedApiError,
   type FriendSearchUser,
   type FriendRequestItem,
   type FriendListItem,
@@ -601,7 +602,7 @@ function CommunityPage() {
       lastFriendsRefreshTime.current = Date.now()
     } catch (e) {
       if (!silent) {
-        Taro.showToast({ title: (e as Error).message || '加载失败', icon: 'none' })
+        await showUnifiedApiError(e, '加载失败')
       }
     } finally {
       if (!silent) setLoadingFriends(false)
@@ -669,7 +670,7 @@ function CommunityPage() {
       lastFeedRefreshTime.current = Date.now()
     } catch (e) {
       if (!silent) {
-        Taro.showToast({ title: (e as Error).message || '刷新失败', icon: 'none' })
+        await showUnifiedApiError(e, '刷新失败')
       }
     } finally {
       refreshFeedPendingRef.current = false
@@ -701,7 +702,7 @@ function CommunityPage() {
       setOffset(prev => prev + list.length)
       setHasMore(res.has_more ?? list.length >= PAGE_SIZE)
     } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '加载更多失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载更多失败')
     } finally {
       setLoadingMore(false)
     }
@@ -913,7 +914,7 @@ function CommunityPage() {
       setSearchResults(res.list || [])
       if (!res.list?.length) Taro.showToast({ title: '未找到用户', icon: 'none' })
     } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '搜索失败', icon: 'none' })
+      await showUnifiedApiError(e, '搜索失败')
     } finally {
       setSearching(false)
     }
@@ -926,7 +927,7 @@ function CommunityPage() {
       Taro.showToast({ title: '已发送好友请求', icon: 'success' })
       setSearchResults(prev => prev.filter(u => u.id !== userId))
     } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '发送失败', icon: 'none' })
+      await showUnifiedApiError(e, '发送失败')
     } finally {
       setSendingId(null)
     }
@@ -978,7 +979,7 @@ function CommunityPage() {
       // 失败则回滚
       setFeedList(feedList)
       saveToCache(feedList)
-      Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(e, '操作失败')
     }
   }
 
@@ -998,7 +999,7 @@ function CommunityPage() {
           saveToCache(newList)
           Taro.showToast({ title: '已从圈子移除', icon: 'success' })
         } catch (e) {
-          Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
+          await showUnifiedApiError(e, '操作失败')
         }
       }
     })
@@ -1015,7 +1016,7 @@ function CommunityPage() {
         url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}`
       })
     } catch (e) {
-      Taro.showToast({ title: '打开详情失败', icon: 'none' })
+      void showUnifiedApiError(e, '打开详情失败')
     }
   }
 
@@ -1230,7 +1231,7 @@ function CommunityPage() {
       }
     } catch (e) {
       console.error('处理互动消息跳转失败:', e)
-      Taro.showToast({ title: '打开评论区失败', icon: 'none' })
+      void showUnifiedApiError(e, '打开评论区失败')
     } finally {
       pendingNotificationNavigationRef.current = false
     }
@@ -1253,7 +1254,7 @@ function CommunityPage() {
       saveToCache(mergedList)
       setFeedCommentPreviewExpanded((prev) => ({ ...prev, [recordId]: true }))
     } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '获取评论失败', icon: 'none' })
+      await showUnifiedApiError(e, '获取评论失败')
     }
   }
 
@@ -1343,8 +1344,8 @@ function CommunityPage() {
             handleRemoveCommentLocally(recordId, comment)
             Taro.showToast({ title: '已删除', icon: 'success' })
           })
-          .catch((e: Error) => {
-            Taro.showToast({ title: e.message || '删除失败', icon: 'none' })
+          .catch(async (e: Error) => {
+            await showUnifiedApiError(e, '删除失败')
           })
           .finally(() => {
             Taro.hideLoading()
@@ -1475,7 +1476,7 @@ function CommunityPage() {
         saveToCache(next)
         return next
       })
-      Taro.showToast({ title: (e as Error).message || '发表失败', icon: 'none' })
+      await showUnifiedApiError(e, '发表失败')
     } finally {
       setCommentInFlightCount((c) => Math.max(0, c - 1))
     }
@@ -1501,7 +1502,7 @@ function CommunityPage() {
       fail: (err) => {
         if (err?.errMsg?.includes('cancel')) return
         console.error('选择图片失败:', err)
-        Taro.showToast({ title: '选择图片失败', icon: 'none' })
+        void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
       }
     })
   }

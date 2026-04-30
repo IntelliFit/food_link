@@ -1219,7 +1219,7 @@ function IndexPage() {
         })
       }
     } catch (error) {
-      Taro.showToast({ title: (error as Error).message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(error, '保存失败')
     } finally {
       setSavingTargets(false)
     }
@@ -1311,7 +1311,7 @@ function IndexPage() {
       setMealActionRecord(res.record)
       setShowRecordEditModal(true)
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载失败')
     } finally {
       Taro.hideLoading()
     }
@@ -1331,7 +1331,7 @@ function IndexPage() {
       setMealActionRecord(res.record)
       setShowRecordPosterModal(true)
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载失败')
     } finally {
       Taro.hideLoading()
     }
@@ -1380,7 +1380,7 @@ function IndexPage() {
 
       Taro.showToast({ title: '已删除', icon: 'success' })
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '删除失败', icon: 'none' })
+      await showUnifiedApiError(e, '删除失败')
     } finally {
       Taro.hideLoading()
     }
@@ -1567,7 +1567,7 @@ function IndexPage() {
       setShowWeightEditor(false)
       Taro.showToast({ title: '体重已记录', icon: 'success' })
     } catch (error) {
-      Taro.showToast({ title: (error as Error).message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(error, '保存失败')
     } finally {
       setSavingWeight(false)
     }
@@ -1605,7 +1605,7 @@ function IndexPage() {
       
       Taro.showToast({ title: `已添加 ${amount}ml`, icon: 'success' })
     } catch (error) {
-      Taro.showToast({ title: (error as Error).message || '记录失败', icon: 'none' })
+      await showUnifiedApiError(error, '记录失败')
     } finally {
       setSavingWater(false)
     }
@@ -1643,7 +1643,7 @@ function IndexPage() {
       setWaterInputFocused(false)
       Taro.showToast({ title: '已清空今日喝水记录', icon: 'success' })
     } catch (error) {
-      Taro.showToast({ title: (error as Error).message || '清空失败', icon: 'none' })
+      await showUnifiedApiError(error, '清空失败')
     }
   }
 
@@ -1767,7 +1767,7 @@ function IndexPage() {
       path: dailyPosterImageUrl,
       fail: (err: { errMsg?: string }) => {
         console.error('showShareImageMenu fail', err)
-        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+        void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
     })
   }, [dailyPosterImageUrl])
@@ -1791,7 +1791,7 @@ function IndexPage() {
             }
           })
         } else {
-          Taro.showToast({ title: '保存失败', icon: 'none' })
+          void showUnifiedApiError(new Error('保存失败'), '保存失败')
         }
       }
     })
@@ -1989,7 +1989,7 @@ function IndexPage() {
             fail: (err) => {
               Taro.hideLoading()
               setDailyPosterGenerating(false)
-              Taro.showToast({ title: '生成失败', icon: 'none' })
+              void showUnifiedApiError(new Error('生成失败'), '生成失败')
               console.error('canvasToTempFilePath fail', err)
             }
           })
@@ -1998,7 +1998,7 @@ function IndexPage() {
         void run().catch((e) => {
           Taro.hideLoading()
           setDailyPosterGenerating(false)
-          Taro.showToast({ title: '生成失败', icon: 'none' })
+          void showUnifiedApiError(e, '生成失败')
           console.error('daily summary poster', e)
         })
       })

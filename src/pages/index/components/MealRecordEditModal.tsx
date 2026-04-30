@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, Button, Input, Slider } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { updateFoodRecord, type FoodRecord, type Nutrients, type MealType, type DietGoal, type ActivityTiming } from '../../../utils/api'
+import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients, type MealType, type DietGoal, type ActivityTiming } from '../../../utils/api'
 
 import './MealRecordEditModal.scss'
 
@@ -265,7 +265,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     } catch (e: any) {
       Taro.hideLoading()
       setEditSaving(false)
-      Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+      await showUnifiedApiError(e, '保存失败')
     }
   }
 

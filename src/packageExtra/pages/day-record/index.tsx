@@ -198,7 +198,7 @@ function DayRecordPage() {
               Taro.showToast({ title: '已删除', icon: 'success' })
               loadDayRecords()
             } catch (err: any) {
-              Taro.showToast({ title: err?.message || '删除失败', icon: 'none' })
+              await showUnifiedApiError(err, '删除失败')
             }
           },
         })

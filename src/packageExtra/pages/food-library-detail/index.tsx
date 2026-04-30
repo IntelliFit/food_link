@@ -9,6 +9,7 @@ import {
   getPublicFoodLibraryComments,
   postPublicFoodLibraryComment,
   submitPublicFoodLibraryFeedback,
+  showUnifiedApiError,
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment,
   collectPublicFoodLibraryItem,
@@ -80,7 +81,7 @@ function FoodLibraryDetailPage() {
       const data = await getPublicFoodLibraryItem(itemId)
       setItem(data)
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载失败')
     } finally {
       setLoading(false)
     }
@@ -112,7 +113,7 @@ function FoodLibraryDetailPage() {
         setItem({ ...item, liked: true, like_count: item.like_count + 1 })
       }
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(e, '操作失败')
     }
   }
 
@@ -128,7 +129,7 @@ function FoodLibraryDetailPage() {
         setItem({ ...item, collected: true, collection_count: (item.collection_count || 0) + 1 })
       }
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(e, '操作失败')
     }
   }
 
@@ -151,7 +152,7 @@ function FoodLibraryDetailPage() {
       await submitPublicFoodLibraryFeedback(content.trim(), item.id)
       Taro.showToast({ title: '修正已提交', icon: 'success' })
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '提交失败', icon: 'none' })
+      await showUnifiedApiError(e, '提交失败')
     } finally {
       Taro.hideLoading()
     }
@@ -189,7 +190,7 @@ function FoodLibraryDetailPage() {
         setItem({ ...item, comment_count: item.comment_count + 1 })
       }
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '评论失败', icon: 'none' })
+      await showUnifiedApiError(e, '评论失败')
     } finally {
       setSubmitting(false)
     }

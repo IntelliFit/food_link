@@ -1,5 +1,37 @@
 # CURRENT_TASK
 
+- Task: 全局静态替换“失败类 showToast”为统一错误弹窗（禁止运行时拦截）
+- Status: in_progress（已完成核心高频页面替换，仍剩登录页“复制失败”toast 作为复制动作提示保留）
+- Scope:
+  - 已移除 `src/app.ts` 全局 toast 拦截，彻底回到“源码静态替换”策略
+  - 已完成失败 toast -> `showUnifiedApiError(...)` 的页面（含高频）：
+    - `src/pages/community/index.tsx`
+    - `src/pages/index/index.tsx`
+    - `src/pages/index/components/MealRecordEditModal.tsx`
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+    - `src/pages/index/components/RecordMenu.tsx`
+    - `src/packageExtra/pages/interaction-feed-detail/index.tsx`
+    - `src/packageExtra/pages/interaction-notifications/index.tsx`
+    - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - `src/packageExtra/pages/food-library-share/index.tsx`
+    - `src/packageExtra/pages/analyze-history/index.tsx`
+    - `src/packageExtra/pages/day-record/index.tsx`
+    - `src/packageExtra/pages/record-manual/index.tsx`
+    - `src/packageExtra/pages/recipes/index.tsx`
+    - `src/packageExtra/pages/record-detail/index.tsx`
+    - `src/packageExtra/pages/result/index.tsx`
+    - `src/packageExtra/pages/result-text/index.tsx`
+    - `src/packageExtra/pages/health-profile/index.tsx`
+    - `src/packageExtra/pages/health-profile-edit/index.tsx`
+    - `src/packageExtra/pages/profile-settings/index.tsx`
+    - `src/packageExtra/pages/pro-membership/index.tsx`
+    - `src/packageExtra/pages/location-search/index.tsx`
+    - `src/packageExtra/pages/recipe-edit/index.tsx`
+- Verification:
+  - `rg` 校验：`title: .*message.* icon: 'none'` 已无残留
+  - `rg` 校验：`title: '...失败...' icon: 'none'` 仅剩登录页复制动作失败提示（非 API 失败）
+  - `ReadLints`：本轮改动文件无新增 lints
+
 - Task: 为数据库关键路径补充 Trace 埋点，定位“网络错误，稍后重试”
 - Status: done（已在 `backend/database.py` 关键函数补齐 trace event + exception 记录，并扩展到高频查询/统计路径）
 - Scope:

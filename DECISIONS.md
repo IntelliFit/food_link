@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-04-30`: 小程序错误提示统一的实现策略正式收口为“静态替换失败类 toast”，不再使用 `app.ts` 里的全局 `showToast` 运行时拦截。稳定口径是：
+  - 失败类提示统一改为 `showUnifiedApiError(...)`（阻塞弹窗 + 复制 traceId）
+  - 成功提示、输入校验提示、复制动作提示可继续保留普通 `showToast`
+  - 登录页里“复制失败，请手动记录”属于复制动作反馈，不视为 API 失败弹窗范围
+
 - `2026-04-30`: 后端链路排障的可观测性口径新增 OpenTelemetry 基线：
   - `backend/main.py` 默认支持通过 OTLP HTTP 上报 trace 与 logs
   - 默认 Collector 地址使用 `OTEL_EXPORTER_OTLP_ENDPOINT`，当前约定值是 `http://otel-collector.observability.svc.cluster.local:4318`

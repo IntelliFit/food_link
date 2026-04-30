@@ -6,6 +6,7 @@ import Taro from '@tarojs/taro'
 import {
   communityGetNotifications,
   communityMarkNotificationsRead,
+  showUnifiedApiError,
   type FeedInteractionNotification
 } from '../../../utils/api'
 
@@ -74,7 +75,7 @@ function InteractionNotificationsPage() {
         setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
       }
     } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载失败')
     } finally {
       setLoading(false)
     }
@@ -93,7 +94,7 @@ function InteractionNotificationsPage() {
       setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
       Taro.showToast({ title: '已全部标记已读', icon: 'success' })
     } catch (e) {
-      Taro.showToast({ title: (e as Error).message || '操作失败', icon: 'none' })
+      await showUnifiedApiError(e, '操作失败')
     } finally {
       setMarkingRead(false)
     }

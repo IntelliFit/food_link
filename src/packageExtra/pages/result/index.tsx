@@ -15,6 +15,7 @@ import {
   submitAnalyzeTask,
   submitTextAnalyzeTask,
   continuePrecisionSession,
+  showUnifiedApiError,
   type ExecutionMode,
   type AnalyzeRecognitionOutcome,
   type AllowedFoodCategory,
@@ -699,7 +700,7 @@ function ResultPage() {
       })
     } catch (e: any) {
       Taro.hideLoading()
-      Taro.showToast({ title: e?.message || '继续精准模式失败', icon: 'none' })
+      await showUnifiedApiError(e, '继续精准模式失败')
     } finally {
       setContinuingPrecision(false)
     }
@@ -957,7 +958,7 @@ function ResultPage() {
                     console.error('同步更新 analysis_tasks 失败:', error)
                     Taro.hideLoading()
                     // 即使后端同步失败，本地已经修改了，也提示成功但告知同步失败
-                    Taro.showToast({ title: '本地已更新(同步失败)', icon: 'none' })
+                    void showUnifiedApiError(new Error('本地已更新(同步失败)'), '本地已更新(同步失败)')
                   }
                 } else {
                   // 没有 taskId，仅本地更新
@@ -1106,7 +1107,7 @@ function ResultPage() {
           })
         }, 500)
       } catch (e: any) {
-        Taro.showToast({ title: e.message || '保存失败', icon: 'none' })
+        await showUnifiedApiError(e, '保存失败')
       } finally {
         setSaving(false)
       }
@@ -1534,7 +1535,7 @@ function ResultPage() {
 
         } catch (e: any) {
           Taro.hideLoading()
-          Taro.showToast({ title: e.message || '重新分析失败', icon: 'none' })
+          await showUnifiedApiError(e, '重新分析失败')
         } finally {
           setIsResubmitting(false)
         }

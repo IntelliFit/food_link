@@ -2,6 +2,7 @@ import { View, Text, Input, Textarea, Button } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
+import { showUnifiedApiError } from '../../../utils/api'
 
 import './index.scss'
 
@@ -60,7 +61,7 @@ function RecipeEditPage() {
       // ...
       console.log('Load recipe:', id)
     } catch (e) {
-      Taro.showToast({ title: '加载失败', icon: 'none' })
+      await showUnifiedApiError(e, '加载失败')
     } finally {
       setLoading(false)
     }
@@ -81,7 +82,7 @@ function RecipeEditPage() {
         Taro.navigateBack()
       }, 1500)
     } catch (e) {
-      Taro.showToast({ title: '保存失败', icon: 'none' })
+      await showUnifiedApiError(e, '保存失败')
     } finally {
       setLoading(false)
     }
@@ -106,7 +107,7 @@ function RecipeEditPage() {
         Taro.navigateBack()
       }, 1500)
     } catch (e) {
-      Taro.showToast({ title: '删除失败', icon: 'none' })
+      await showUnifiedApiError(e, '删除失败')
     } finally {
       setLoading(false)
     }
