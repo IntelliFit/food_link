@@ -652,6 +652,18 @@ function IndexPage() {
         return
       }
       const intake = res.intakeData
+      // DEBUG: 打印首页餐食原始数据，排查 description / meal_record_entries 是否为空
+      console.log('[DEBUG] getHomeDashboard meals raw:', JSON.stringify(res.meals || [], null, 2))
+      if (Array.isArray(res.meals)) {
+        res.meals.forEach((m, i) => {
+          console.log(`[DEBUG] meal[${i}] type=${m.type} name=${m.name} description=${m.description} entriesCount=${Array.isArray(m.meal_record_entries) ? m.meal_record_entries.length : 'N/A'}`)
+          if (Array.isArray(m.meal_record_entries)) {
+            m.meal_record_entries.forEach((e, j) => {
+              console.log(`[DEBUG]   entry[${j}] id=${e.id} title=${e.title} total_calories=${e.total_calories}`)
+            })
+          }
+        })
+      }
       setIntakeData(intake)
       setMeals(res.meals || [])
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
