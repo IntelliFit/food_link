@@ -3519,3 +3519,98 @@
     - 现有后端自动部署 GitHub Actions 处于停用状态，且 Docker/K8s 运行配置由集群 `ConfigMap` 注入
     - `foodlink-main` 生产 Deployment 使用 `envFrom -> configMapRef -> foodlink-main-env`
     - 因此若支付证书/商户号/appid 有误，优先应检查并更新集群中的 `foodlink-main-env`，而不是只改前端或只推镜像
+
+
+---
+
+## 2026-04-30 — 新增「我的」页「清除缓存」功能
+
+- Task: 在「我的」页面退出登录按钮上方新增「清除缓存」入口
+- Status: done
+- Scope:
+  - 文件变更：
+    - `src/pages/profile/index.tsx`
+      - 新增 `handleClearCache()` 函数，点击后弹出二次确认 modal
+      - 在 JSX 中退出登录按钮上方新增 `<View className='profile-card clear-cache-card'>` 按钮
+    - `src/pages/profile/index.scss`
+      - 新增 `.clear-cache-card` 和 `.clear-cache-text` 样式（灰色文字，与退出登录的红色形成区分）
+  - 清除的 Storage key 列表：
+    - 首页相关：
+      - `home_dashboard_local_cache` — 首页 7 日 dashboard 快照
+      - `body_metrics_storage` — 身体指标
+      - `food_link_dashboard_targets_v1` — 摄入目标
+      - `home_poster_modal_visible` — 首页海报弹窗标记
+      - `showRecordMenuModal` — 记录菜单弹窗标记
+    - 朋友圈相关：
+      - `community_feed_cache` — feed 数据
+      - `community_friends_cache` — 好友列表
+      - `community_requests_cache` — 好友请求
+      - `community_feed_timestamp` / `community_friends_timestamp` — 时间戳
+      - `community_feed_filters_v2` — feed 筛选状态
+      - `community_priority_authors_v1` — 特别关注作者
+      - `community_notification_target_v1` — 互动消息跳转目标
+      - `community_comment_bar_visible` — 评论栏可见性
+    - 动态 key（遍历所有 storage key，按前缀匹配删除）：
+      - `comment_draft_*` — 评论草稿
+      - `temp_comments_*` — 临时评论
+- Verification:
+  - `mrc exists '.clear-cache-card' --port 9420` → 存在 ✅
+  - `mrc exists '.logout-card' --port 9420` → 存在 ✅
+  - `mrc tap '.clear-cache-card' --port 9420` → 点击成功 ✅
+  - `dist/pages/profile/index.js` 编译产物确认包含 `handleClearCache` 和清除缓存按钮 JSX ✅
+  - `mrc screenshot` 当前环境截图功能报错（已知问题，不影响功能验证）
+
+## 2026-04-30 — 新增开发调试入口：快捷进入画像引导页
+
+- Task: 在「我的」页面开发模式下新增调试入口，一键跳转到用户注册后的画像引导页（health-profile）
+- Status: done
+- Scope:
+  - 文件变更：
+    - `src/pages/profile/index.tsx`
+      - 在「清除缓存」按钮上方新增条件渲染的调试入口（`process.env.NODE_ENV === 'development'`）
+      - 点击后 `Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })`
+    - `src/pages/profile/index.scss`
+      - 新增 `.dev-debug-card` / `.dev-debug-text` 样式（黄色背景 + 虚线边框，与常规按钮明显区分）
+  - 仅在开发构建时显示，生产构建自动隐藏
+- Verification:
+  - `mrc exists '.dev-debug-card' --port 9420` → 存在 ✅
+  - `mrc tap '.dev-debug-card' --port 9420` → 点击成功 ✅
+  - 点击后 `mrc pageInfo` 显示当前页面为 `packageExtra/pages/health-profile/index` → 跳转正确 ✅
+  - 编译产物 `dist/pages/profile/index.js` 确认包含调试按钮逻辑 ✅
+
+## 2026-04-30 — 移动调试入口到 RecordMenu + 暗黑模式支持
+
+- Task: 1) 将「调试：进入画像引导」从 profile 页移至 RecordMenu 调试面板；2) RecordMenu 调试面板和 health-profile 页支持暗黑模式
+- Status: done
+- Scope:
+  - 文件变更：
+    - `src/pages/profile/index.tsx`
+      - 移除开发调试入口 JSX（`process.env.NODE_ENV === 'development'` 条件渲染的「调试：进入画像引导」按钮）
+    - `src/pages/profile/index.scss`
+      - 移除 `.dev-debug-card` 和 `.dev-debug-text` 样式
+    - `src/utils/dev-debug-tools.ts`
+      - 新增 `openDebugHealthProfileFromMenu()` 函数：跳转到 `extraPkgUrl('/pages/health-profile/index')`
+    - `src/pages/index/components/RecordMenu.tsx`
+      - 导入 `openDebugHealthProfileFromMenu` 和 `useAppColorScheme`
+      - 新增 `isDark = scheme === 'dark'` 状态
+      - 给 `record-menu-content` 添加条件 class `record-menu-content--dark`
+      - 在调试面板末尾新增「进入画像引导」入口（`record-menu-dev-item-last`）
+    - `src/styles/fl-color-scheme-dark.scss`
+      - 补充 RecordMenu 调试面板缺少的暗黑样式：
+        - `.record-menu-dev-url-block` / `.record-menu-dev-items`
+        - `.record-menu-dev-url-input`
+        - `.record-menu-dev-url-placeholder`
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 导入 `useAppColorScheme` 和 `applyThemeNavigationBar`
+      - 新增 `scheme` 读取
+      - 新增 `useEffect` 在 `scheme` 变化时调用 `applyThemeNavigationBar(scheme)`
+  - 暗黑模式说明：
+    - RecordMenu 和 health-profile 页面都通过 `withAuth` HOC 获得 `FlPageThemeRoot`
+    - `fl-color-scheme-dark.scss` 中已有大量 `.health-profile-page` 和 `.record-menu-*` 的暗黑覆盖
+    - 本次仅补充了 RecordMenu 调试面板中缺失的几个元素样式
+- Verification:
+  - `mrc exists '.record-menu-dev-item-last' --port 9420` → 存在 ✅
+  - `mrc tap '.record-menu-dev-item-last' --port 9420` → 点击成功 ✅
+  - 点击后 `mrc pageInfo` 显示 `packageExtra/pages/health-profile/index` → 跳转正确 ✅
+  - 编译产物 `dist/pages/index/index.js` 确认包含 `openDebugHealthProfileFromMenu` 和新调试项 ✅
+  - 编译产物 `dist/pages/profile/index.js` 确认已无调试按钮代码 ✅

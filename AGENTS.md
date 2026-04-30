@@ -111,15 +111,9 @@
 - **服务名**: `food-backend.service`
 - **Python 虚拟环境**: `/www/wwwroot/food/food_link/backend/venv/bin/python`
 
-### 手动后端部署命令
+### 后端部署
 
-```bash
-ssh root@coachlink.fit "cd /www/wwwroot/food/food_link && git fetch origin && git reset --hard origin/main && cd backend && ./venv/bin/python -m pip install -q -r requirements.txt && systemctl restart food-backend.service"
-```
-
-### Docker 镜像推送（腾讯云 CCR）
-
-当后端有变更需要更新线上容器时，在本机构建并推送 Docker 镜像到腾讯云 CCR：
+部署后端统一通过以下命令执行：
 
 ```bash
 npm run push-docker-ccr
@@ -132,21 +126,12 @@ npm run push-docker-ccr
   - `dev` → `:dev`、`:<7位 commit sha>`
   - 其他分支 → 脚本会提示先切换到 `main` 或 `dev`
 - 脚本位置：`backend/scripts/push-docker-ccr.mjs`
+- 若推送报鉴权或权限错误，先执行 `docker login ccr.ccs.tencentyun.com` 完成登录，再重新执行推送。
+- 部署端已配置自动更新脚本；镜像推送成功后，服务会在 5 分钟内自动完成更新。
 
 ### 前端部署
 
 微信小程序前端**不通过此服务器部署**，需使用微信开发者工具上传。
-
-### 后端 Docker 镜像部署流程（腾讯云 CCR）
-
-- 在仓库根目录执行 `npm run push-docker-ccr`。
-- 镜像源与 namespace 保持不变：`ccr.ccs.tencentyun.com/littlehorse`，当前仓库名为 `foodlink`。
-- 若推送报鉴权或权限错误，先执行 `docker login ccr.ccs.tencentyun.com` 完成登录，再重新执行推送。
-- 部署端已配置自动更新脚本；镜像推送成功后，服务会在 5 分钟内自动完成更新。
-
-```bash
-npm run push-docker-ccr
-```
 
 ## 图标更新
 
