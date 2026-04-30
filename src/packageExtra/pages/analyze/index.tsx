@@ -22,6 +22,7 @@ import {
   PrecisionReferencePresetKey
 } from '../../../utils/api'
 import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
+import { showUnifiedApiError } from '../../../utils/error-modal'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,
@@ -656,12 +657,7 @@ function AnalyzePage() {
           }
         })
       } else {
-        Taro.showModal({
-          title: '分析失败',
-          content: errMsg,
-          showCancel: false,
-          confirmText: '确定'
-        })
+        await showUnifiedApiError(error, '分析失败，请重试')
       }
     }
   }

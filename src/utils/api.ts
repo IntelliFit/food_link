@@ -1273,6 +1273,68 @@ function parseFastApiDetail(data: unknown): string | undefined {
   return undefined
 }
 
+function stripTraceSuffixFromUserMessage(message: string): string {
+  const text = String(message || '').trim()
+  if (!text) return text
+  return text
+    .replace(/\s*[（(]\s*traceid\s*[:：]\s*[a-zA-Z0-9-]+\s*[）)]\s*/gi, ' ')
+    .replace(/\s*traceid\s*[:：]\s*[a-zA-Z0-9-]+\s*/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function getTraceIdFromError(error: unknown): string {
+  const fromObject = (error as { traceId?: unknown })?.traceId
+  if (typeof fromObject === 'string' && fromObject.trim()) {
+    return fromObject.trim()
+  }
+  const fromMessage = (error as { message?: unknown })?.message
+  const text = typeof fromMessage === 'string' ? fromMessage : String(error || '')
+  const match = text.match(/traceid\s*[:：]\s*([a-zA-Z0-9-]+)/i)
+  return (match?.[1] || '').trim()
+}
+
+export function formatApiErrorModalBody(summaryLine: string): string {
+  const summary = stripTraceSuffixFromUserMessage(summaryLine || '').trim() || '请求失败，请稍后重试'
+  return [
+    summary,
+    '',
+    '请点击下方「复制」按钮。',
+    '将剪贴板内容反馈给工作人员或开发者，便于定位问题。'
+  ].join('\n')
+}
+
+export async function showUnifiedApiError(error: unknown, fallback: string): Promise<void> {
+  const rawMessage = typeof (error as { message?: unknown })?.message === 'string'
+    ? String((error as { message?: unknown }).message)
+    : ''
+  const summary = stripTraceSuffixFromUserMessage(rawMessage || fallback || '请求失败，请稍后重试')
+  const traceId = getTraceIdFromError(error) || 'no-trace-id'
+  const content = formatApiErrorModalBody(summary)
+
+  try {
+    await Taro.showModal({
+      title: '请求失败',
+      content,
+      showCancel: false,
+      confirmText: '复制',
+    })
+    try {
+      await Taro.setClipboardData({ data: traceId })
+      Taro.showToast({ title: '已复制', icon: 'success' })
+    } catch {
+      Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
+    }
+  } catch {
+    Taro.showModal({
+      title: '请求失败',
+      content: summary || '请求失败，请稍后重试',
+      showCancel: false,
+      confirmText: '确定',
+    })
+  }
+}
+
 /** 抛出带 HTTP 状态码的错误，便于页面区分 429 等场景 */
 function throwHttpErrorWithStatus(statusCode: number, data: unknown, fallback: string): never {
   const msg = parseFastApiDetail(data) || fallback
