@@ -11,8 +11,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
-from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
+from otel_compat import Status, StatusCode, trace
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))

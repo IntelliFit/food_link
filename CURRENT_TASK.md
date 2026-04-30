@@ -1,5 +1,74 @@
 # CURRENT_TASK
 
+- Task: 修复本地后端因缺少 `opentelemetry` 依赖而无法启动
+- Status: done（已将 OTel 改为可选依赖；当前环境未安装时自动降级，不再阻塞 `main.py / worker.py / database.py` 导入）
+- Scope:
+  - 根因：
+    - `backend/main.py`、`backend/database.py` 直接 `from opentelemetry ... import ...`
+    - 当前本地 Anaconda 环境没有安装 OTel 包，导致主进程与多个 worker 进程都在 import 阶段崩溃
+  - 修复：
+    - 新增 `backend/otel_compat.py`
+      - 有 OTel 包时走真实实现
+      - 无 OTel 包时提供 no-op `trace / tracer / exporter / instrumentation / logging handler / Status` 兼容实现
+    - `backend/database.py` 改为从 `otel_compat` 导入 `trace / Status / StatusCode`
+    - `backend/main.py` 改为统一从 `otel_compat` 导入全部 OTel 相关符号
+    - `_setup_otel_observability(...)` 新增 `OTEL_AVAILABLE` 判断：本地未装依赖时只打印 warning，不再抛异常
+- Verification:
+  - `python -m py_compile backend\\otel_compat.py backend\\database.py backend\\main.py backend\\worker.py` 通过
+  - 进程内直接 `import backend/main.py` 成功，输出：
+    - `main_import_ok`
+    - `OpenTelemetry packages are not installed in the current environment; observability is disabled.`
+  - 已进一步补齐 no-op span 兼容接口：
+    - `set_attribute(...)`
+    - `set_attributes(...)`
+    - `is_recording()`
+  - 进程内最小调用验证通过：
+    - `span.set_attribute('a', 1)`
+    - `span.set_attributes({'b': 2})`
+    - `span.is_recording() == False`
+- Notes:
+  - 这样处理后，本地开发环境即使没装 OTel 也能启动后端
+  - 若线上/正式环境安装了 OTel 依赖，观测能力会自动恢复，无需改代码
+  - 用户后续在本地实际运行时又发现一层兼容性问题：
+    - worker 与首页/统计接口持续报：`'_NoOpSpan' object has no attribute 'set_attribute'`
+    - 说明当前 no-op 兼容层虽然解决了 import 崩溃，但 `_NoOpSpan` 还缺 `set_attribute(...)`
+    - 由于 `backend/database.py` 中多处 `with _tracer.start_as_current_span(...) as span:` 后直接调用 `span.set_attribute(...)`，导致 tracing 本身把业务接口打成 `500`
+    - 这也解释了前端复制错误时只拿到 `no-trace-id`：当前没有真实有效 span，自然也不会注入 `x-trace-id`
+  - 现已补齐上述 no-op span 方法；当前需要用户重启本地后端进程后才会生效
+  - 用户随后明确要求直接在本地后端 Python 环境安装真实 OTel 依赖
+  - 已执行安装到当前后端实际使用的解释器：
+    - `D:\software\anaconda\python.exe`
+    - `opentelemetry-api==1.33.1`
+    - `opentelemetry-sdk==1.33.1`
+    - `opentelemetry-exporter-otlp-proto-http==1.33.1`
+    - `opentelemetry-instrumentation-fastapi==0.54b1`
+    - `opentelemetry-instrumentation-httpx==0.54b1`
+    - `opentelemetry-instrumentation-logging==0.54b1`
+  - 校验结果：
+    - `OTEL_AVAILABLE=True`
+    - `import main` 成功
+    - 说明当前后端已走真实 OTel 实现，不再依赖 no-op 兼容层
+  - 当前剩余现象：
+    - `main.py` 已开始尝试向 `http://localhost:4318/v1/logs` 上报
+    - 若本机未起 collector / 未建立 SSH 隧道，就会继续看到 exporter `ConnectionRefused`
+    - 这不再是“缺依赖”问题，而是“本地 4318 没有接收端”的问题
+
+- Task: 发布版本号更新到 `2.1.1`，确保「我的」页底部显示真实生效
+- Status: done（已按发布规则从 `package.json` / `package-lock.json` 源头升级到 `2.1.1`；页面代码确认读取 `__APP_VERSION__` 注入）
+- Scope:
+  - 版本源头：
+    - 已执行 `npm version 2.1.1 --no-git-tag-version`
+    - `package.json` 已更新为 `2.1.1`
+    - `package-lock.json` 根级 `version` 与根包 `packages[""].version` 已同步为 `2.1.1`
+  - 页面代码核对：
+    - `config/index.ts` 继续通过 `readPackageVersion()` 从根目录 `package.json` 读取版本，并注入 `defineConstants.__APP_VERSION__`
+    - `src/pages/profile/index.tsx` 底部版本展示继续为 `版本号 v${__APP_VERSION__}`
+  - 说明：
+    - 这次不需要手改「我的」页硬编码字符串，当前链路本来就是正确的构建注入方案
+- Next step:
+  - 用 `npm run build:weapp:preview` 生成上传产物
+  - 按项目要求尝试 `weapp-devtools` 核对运行态版本显示；若自动化端口不可用，则以构建产物与代码链路核对为准并说明阻塞
+
 - Task: 全局静态替换“失败类 showToast”为统一错误弹窗（禁止运行时拦截）
 - Status: in_progress（已完成核心高频页面替换，仍剩登录页“复制失败”toast 作为复制动作提示保留）
 - Scope:
