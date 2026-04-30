@@ -800,12 +800,18 @@ export interface MembershipStatus {
   trial_policy?: 'founding_top_500_bonus_month' | 'early_first_1000' | 'regular_new_user' | null
   /** 若属于首批用户，返回其注册序号（1-based） */
   early_user_rank?: number | null
-  /** 创始用户活动总名额 */
+  /** 前 1000 注册用户活动总名额 */
   early_user_limit?: number
-  /** 前 1000 名付费会员积分倍数 */
+  /** 若属于前 100 付费用户，返回其付费序号（1-based） */
+  early_paid_user_rank?: number | null
+  /** 前 100 付费用户活动总名额 */
+  early_paid_user_limit?: number
+  /** 创始会员积分倍数 */
   early_user_paid_bonus_multiplier?: number
-  /** 是否属于创始用户翻倍活动 */
+  /** 是否属于创始用户翻倍活动（前 1000 注册或前 100 付费） */
   early_user_paid_bonus_eligible?: boolean
+  /** 创始翻倍来源：前 1000 注册 / 前 100 付费 / 同时满足 */
+  early_user_paid_bonus_source?: 'registration_top_1000' | 'paid_top_100' | 'both' | null
   /** 当前付费状态是否已按创始翻倍生效 */
   early_user_paid_bonus_active?: boolean
   points_balance?: number | null

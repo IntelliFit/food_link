@@ -27,6 +27,8 @@ import {
   FoodExpiryDashboard
 } from '../../utils/api'
 import {
+  getFounderPaidBonusRankLabel,
+  getFounderPaidBonusSourceLabel,
   getCurrentMembershipTier,
   getMembershipTierLabel,
   getMembershipTierShortLabel,
@@ -255,7 +257,9 @@ function ProfilePage() {
           : `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 不限次数`
         : membershipStatus?.trial_active
           ? `${membershipStatus?.trial_policy === 'founding_top_500_bonus_month' ? `前 500 #${membershipStatus?.early_user_rank ?? '--'} 免费 2 个月` : (membershipStatus?.trial_policy === 'early_first_1000' || (membershipStatus?.trial_days_total ?? 0) >= 30) ? `前 1000 #${membershipStatus?.early_user_rank ?? '--'} 免费月` : '免费 3 天试用'} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
-          : '3 档会员 · 每日积分领取',
+          : membershipStatus?.early_user_paid_bonus_eligible
+            ? `创始礼遇 · ${getFounderPaidBonusSourceLabel(membershipStatus) || '前 1000 注册 / 前 100 付费'}开通后积分翻倍`
+            : '3 档会员 · 每日积分领取',
       path: extraPkgUrl('/pages/pro-membership/index')
     }
   ]
@@ -453,6 +457,8 @@ function ProfilePage() {
             const earlyUserLimit = membershipStatus?.early_user_limit ?? 1000
             const earlyUserEligible = !!membershipStatus?.early_user_paid_bonus_eligible
             const paidBonusMultiplier = membershipStatus?.early_user_paid_bonus_multiplier ?? 1
+            const founderBonusSourceLabel = getFounderPaidBonusSourceLabel(membershipStatus)
+            const founderBonusRankLabel = getFounderPaidBonusRankLabel(membershipStatus)
             const paidBonusActive = !!membershipStatus?.early_user_paid_bonus_active
             const currentTier = getCurrentMembershipTier(membershipStatus)
             if (membershipStatus?.is_pro) {
@@ -462,7 +468,7 @@ function ProfilePage() {
                     <View>
                       <Text className='card-validity'>
                         {earlyUserEligible
-                          ? `创始第 ${earlyUserRank || '--'} / ${earlyUserLimit} 位 · 到期 ${formatExpiry(membershipStatus.expires_at)}`
+                          ? `${founderBonusRankLabel || `注册第 ${earlyUserRank || '--'} / ${earlyUserLimit} 位`} · 到期 ${formatExpiry(membershipStatus.expires_at)}`
                           : `到期 ${formatExpiry(membershipStatus.expires_at)}`}
                       </Text>
                       <View className='card-title-row'>
@@ -480,11 +486,11 @@ function ProfilePage() {
                         </View>
                       )}
                     </View>
-                    <Text className='card-tip'>
-                      {cMax > 0
-                        ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${paidBonusActive ? ` · 创始会员 x${paidBonusMultiplier}` : ''}${currentTier === 'light' ? ' · 轻度版不含精准模式' : ''}`
+                  <Text className='card-tip'>
+                    {cMax > 0
+                        ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${paidBonusActive ? ` · ${founderBonusSourceLabel || '创始会员'} x${paidBonusMultiplier}` : ''}${currentTier === 'light' ? ' · 轻度版不含精准模式' : ''}`
                         : '会员权益已激活'}
-                    </Text>
+                  </Text>
                   </View>
                 </>
               )
@@ -520,7 +526,7 @@ function ProfilePage() {
                   <Text className='card-tip'>
                     {isTrial
                       ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${isEarlyTrial ? ` · 从注册开始算${isTop500Trial ? '2 个月' : '1 个月'} · 开通后会员积分 x${paidBonusMultiplier}` : ''}`
-                      : `轻度 ${earlyUserEligible ? 16 : 8} · 标准 ${earlyUserEligible ? 40 : 20} · 进阶 ${earlyUserEligible ? 80 : 40} 积分 / 日`}
+                      : `${earlyUserEligible ? `${founderBonusSourceLabel || '创始礼遇'} · ` : ''}轻度 ${earlyUserEligible ? 16 : 8} · 标准 ${earlyUserEligible ? 40 : 20} · 进阶 ${earlyUserEligible ? 80 : 40} 积分 / 日`}
                   </Text>
                 </View>
               </>

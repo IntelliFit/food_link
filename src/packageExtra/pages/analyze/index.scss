@@ -573,11 +573,27 @@
 
 .history-link {
   pointer-events: auto;
-  padding: 16rpx 32rpx;
+  padding: 20rpx 40rpx;
+  background: #fff;
+  border: 2rpx solid #00bc7d;
+  border-radius: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 15%);
+  transition: all 0.2s ease;
+
+  &:active {
+    transform: scale(0.96);
+    background: #f0fdf9;
+    box-shadow: 0 2rpx 8rpx rgb(0 188 125 / 20%);
+  }
 
   .history-link-text {
-    font-size: 26rpx;
+    font-size: 28rpx;
     color: #00bc7d;
+    font-weight: 600;
   }
 }
 
@@ -792,12 +808,23 @@
 
   .analyze-page .history-link {
     background: #27322f;
-    border: 1rpx solid #3d5d51;
-    border-radius: 999rpx;
+    border: 2rpx solid #4a9d7d;
+    border-radius: 32rpx;
+    box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 20%);
   }
 
   .analyze-page .history-link .history-link-text {
-    color: #e8ece9;
+    color: #7dd3b0;
+    font-weight: 600;
+  }
+
+  .analyze-page .history-link::before {
+    color: #7dd3b0;
+  }
+
+  .analyze-page .history-link:active {
+    background: #1a2e25;
+    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 30%);
   }
 
   .analyze-page .multiview-toggle {
