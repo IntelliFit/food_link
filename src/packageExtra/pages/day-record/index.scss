@@ -231,9 +231,9 @@
 
 .day-record-food-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8rpx 16rpx;
   padding: 18rpx 0;
   border-bottom: 1rpx solid #f1f5f9;
 
@@ -265,6 +265,7 @@
   background: #f8fafc;
   border-radius: 999rpx;
   padding: 4rpx 12rpx;
+  flex-shrink: 0;
 }
 
 .day-record-food-calorie {
@@ -272,33 +273,21 @@
   line-height: 36rpx;
   color: #475569;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
-// 每餐宏量营养行
-.day-record-macro-row {
+// 每个食物的宏量营养行
+.day-record-food-macros {
   display: flex;
-  gap: 20rpx;
-  padding-top: 18rpx;
-  margin-top: 14rpx;
-  border-top: 1rpx solid #eef2f7;
+  gap: 16rpx;
+  width: 100%;
+  padding-top: 6rpx;
 }
 
-.day-record-macro-item {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.day-record-macro-label {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #94a3b8;
-}
-
-.day-record-macro-value {
-  font-size: 24rpx;
-  line-height: 32rpx;
-  font-weight: 700;
+.day-record-food-macro {
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 600;
 
   &.macro-protein {
     color: #5c9ed4;

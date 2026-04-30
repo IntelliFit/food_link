@@ -82,7 +82,7 @@ type DayRecordCard = {
   imageUrls: string[]
   previewImage: string
   hasRealImage: boolean
-  foods: Array<{ name: string; amount: string; calorie: number }>
+  foods: Array<{ name: string; amount: string; calorie: number; protein: number; carbs: number; fat: number }>
   totalCalorie: number
   totalProtein: number
   totalCarbs: number
@@ -144,10 +144,16 @@ function DayRecordPage() {
           const ratio = item.ratio ?? 100
           const fullCalorie = item.nutrients?.calories ?? 0
           const consumedCalorie = fullCalorie * (ratio / 100)
+          const fullProtein = item.nutrients?.protein ?? 0
+          const fullCarbs = item.nutrients?.carbs ?? 0
+          const fullFat = item.nutrients?.fat ?? 0
           return {
             name: item.name,
             amount: `${item.intake ?? 0}g`,
             calorie: Math.round(consumedCalorie * 10) / 10,
+            protein: Math.round(fullProtein * (ratio / 100) * 10) / 10,
+            carbs: Math.round(fullCarbs * (ratio / 100) * 10) / 10,
+            fat: Math.round(fullFat * (ratio / 100) * 10) / 10,
           }
         })
         const foodName = foodItems.map(f => f.name).filter(Boolean).join('、') || '未命名食物'
@@ -544,23 +550,13 @@ function DayRecordPage() {
                         <Text className='day-record-food-amount'>{food.amount}</Text>
                       </View>
                       <Text className='day-record-food-calorie'>{food.calorie} kcal</Text>
+                      <View className='day-record-food-macros'>
+                        <Text className='day-record-food-macro macro-protein'>蛋白质 {Math.round(food.protein)}g</Text>
+                        <Text className='day-record-food-macro macro-carbs'>碳水 {Math.round(food.carbs)}g</Text>
+                        <Text className='day-record-food-macro macro-fat'>脂肪 {Math.round(food.fat)}g</Text>
+                      </View>
                     </View>
                   ))}
-                </View>
-
-                <View className='day-record-macro-row'>
-                  <View className='day-record-macro-item'>
-                    <Text className='day-record-macro-label'>蛋白质</Text>
-                    <Text className='day-record-macro-value macro-protein'>{Math.round(meal.totalProtein)}g</Text>
-                  </View>
-                  <View className='day-record-macro-item'>
-                    <Text className='day-record-macro-label'>碳水</Text>
-                    <Text className='day-record-macro-value macro-carbs'>{Math.round(meal.totalCarbs)}g</Text>
-                  </View>
-                  <View className='day-record-macro-item'>
-                    <Text className='day-record-macro-label'>脂肪</Text>
-                    <Text className='day-record-macro-value macro-fat'>{Math.round(meal.totalFat)}g</Text>
-                  </View>
                 </View>
               </View>
             ))}
