@@ -4,6 +4,11 @@
 
 ---
 
+## 2026-05-01
+
+- 📝 docs: 完善 `AGENTS.md` 的部署章节，补充 buildx/平台覆盖、标准操作步骤和常见故障排查，确保跨架构部署口径清晰 `AGENTS.md`
+- 🔧 chore: 推镜像脚本改为 `buildx --platform` 并默认 `linux/amd64`，避免 ARM 开发机构建产物在 AMD64 服务器上出现架构不兼容 `backend/scripts/push-docker-ccr.mjs`
+
 ## 2026-04-22
 
 - 🐛 fix: `withAuth` 已登录时首帧即渲染，避免分包记录详情等短暂白屏；记录详情加载态改用 `loading-spinner-md` 在浅底可见 `src/utils/withAuth.tsx` `src/packageExtra/pages/record-detail/index.tsx`
