@@ -2167,24 +2167,38 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   console.log('[DEBUG API] 转换后日期:', apiDate)
   console.log('[DEBUG API] 请求 URL:', url)
   
-  const res = await authenticatedRequest(url, { 
-    method: 'GET', 
-    timeout: 10000,
-    header: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache'
-    }
-  })
+  let res
+  try {
+    res = await authenticatedRequest(url, { 
+      method: 'GET', 
+      timeout: 30000,
+      header: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    })
+  } catch (err) {
+    console.error('[DEBUG API] authenticatedRequest 抛出异常:', err)
+    throw err
+  }
   console.log('[DEBUG API] 响应状态:', res.statusCode)
+  console.log('[DEBUG API] 响应数据类型:', typeof res.data)
   console.log('[DEBUG API] 响应数据 intakeData:', res.data?.intakeData)
   console.log('[DEBUG API] ====== 请求结束 ======')
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取首页数据失败'
     throw new Error(msg)
   }
-  const data = res.data as HomeDashboard
-  const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
-  return stripMealFullRecordsFromDashboard({ ...data, meals })
+  let data: HomeDashboard
+  try {
+    data = res.data as HomeDashboard
+    const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
+    return stripMealFullRecordsFromDashboard({ ...data, meals })
+  } catch (parseErr) {
+    console.error('[DEBUG API] 解析响应数据失败:', parseErr)
+    console.error('[DEBUG API] 原始数据:', JSON.stringify(res.data).slice(0, 500))
+    throw parseErr
+  }
 }
 
 /**
@@ -2486,6 +2500,7 @@ export async function authenticatedRequest(
     throw new Error('未登录，请先登录')
   }
 
+  console.log(`[DEBUG AUTH] 请求开始: ${url}`)
   const res = await Taro.request({
     url: `${API_BASE_URL}${url}`,
     ...options,
@@ -2495,6 +2510,7 @@ export async function authenticatedRequest(
       ...(options.header || {})
     })
   })
+  console.log(`[DEBUG AUTH] 请求完成: ${url}, statusCode=${res.statusCode}, dataType=${typeof res.data}, dataKeys=${res.data && typeof res.data === 'object' ? Object.keys(res.data).join(',') : 'N/A'}`)
 
   if (res.statusCode === 401 || res.statusCode === 403) {
     redirectToLogin('登录已失效，请重新登录')

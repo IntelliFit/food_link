@@ -512,6 +512,25 @@
   }
 }
 
+// 清除缓存按钮
+.clear-cache-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28rpx 32rpx;
+  margin-bottom: 16rpx;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.clear-cache-text {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #64748b;
+}
+
 // 登录/退出登录按钮
 .login-card,
 .logout-card {

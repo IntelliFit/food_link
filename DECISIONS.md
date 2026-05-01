@@ -1,5 +1,14 @@
 # DECISIONS
 
+- `2026-05-01`: 项目部署文档口径升级为“可直接执行的操作手册”，不能只保留命令名。当前稳定规则是：
+  - `AGENTS.md` 的后端部署章节必须明确：前置依赖（Docker + Buildx）、默认平台策略（`linux/amd64`）、平台覆盖方式（`DOCKER_BUILD_PLATFORM`）
+  - 必须包含标准操作步骤与常见故障排查，确保不同开发机架构下部署一致可执行
+
+- `2026-05-01`: 后端镜像推送脚本的构建平台口径收敛为“默认强制 `linux/amd64`”，避免开发机架构影响线上可运行性。当前稳定规则是：
+  - `npm run push-docker-ccr` 统一走 `docker buildx build --platform ... --push`
+  - 默认平台为 `linux/amd64`，确保 ARM 开发机构建时不会推送仅 ARM 可运行的镜像到 AMD64 服务器
+  - 仅在明确需要时，通过 `DOCKER_BUILD_PLATFORM` 覆盖默认平台（例如 `linux/amd64,linux/arm64`）
+
 - `2026-04-30`: 后端 OpenTelemetry 依赖在本项目里不能再作为“本地必装硬依赖”阻塞启动。当前稳定口径是：
   - `backend/main.py`、`backend/database.py`、`backend/worker.py` 相关 OTel 能力必须通过兼容层接入
   - 本地/临时环境若未安装 `opentelemetry-*` 包，后端应自动降级为 no-op observability，并继续可启动
