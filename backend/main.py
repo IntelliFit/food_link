@@ -66,6 +66,7 @@ from database import (
     get_analysis_task_by_id_sync,
     get_analysis_tasks_by_ids,
     list_analysis_tasks_by_user_sync,
+    count_analysis_tasks_by_user_sync,
     create_precision_session_sync,
     get_precision_session_by_id_sync,
     update_precision_session_sync,
@@ -102,6 +103,7 @@ from database import (
     respond_friend_request,
     cancel_sent_friend_request,
     get_friends_with_profile,
+    count_friends_sync,
     delete_friend_pair,
     get_friend_requests_overview,
     cleanup_duplicate_friends,
@@ -152,6 +154,7 @@ from database import (
     # 私人食谱
     create_user_recipe,
     list_user_recipes,
+    count_user_recipes_sync,
     get_user_recipe,
     update_user_recipe,
     delete_user_recipe,
@@ -3878,6 +3881,22 @@ async def list_analyze_tasks(
     except Exception as e:
         print(f"[analyze/tasks] 错误: {e}")
         raise HTTPException(status_code=500, detail="查询任务列表失败")
+
+
+@app.get("/api/analyze/tasks/count")
+async def get_analyze_tasks_count(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取当前用户的食物分析任务数量"""
+    try:
+        count = await asyncio.to_thread(
+            count_analysis_tasks_by_user_sync,
+            user_id=user_info["user_id"],
+        )
+        return {"count": count}
+    except Exception as e:
+        print(f"[analyze/tasks/count] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取任务数量失败")
 
 
 @app.get("/api/analyze/tasks/{task_id}")
@@ -8005,6 +8024,17 @@ async def api_friend_list(user_info: dict = Depends(get_current_user_info)):
         raise HTTPException(status_code=500, detail="获取失败")
 
 
+@app.get("/api/friend/count")
+async def api_friend_count(user_info: dict = Depends(get_current_user_info)):
+    """获取当前用户的好友数量"""
+    try:
+        count = await count_friends_sync(user_info["user_id"])
+        return {"count": count}
+    except Exception as e:
+        print(f"[api/friend/count] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取好友数量失败")
+
+
 @app.delete("/api/friend/{friend_id}")
 async def api_friend_delete(
     friend_id: str,
@@ -9469,6 +9499,21 @@ async def list_recipes(
     except Exception as e:
         print(f"[list_recipes] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取列表失败: {str(e)}")
+
+
+@app.get("/api/recipes/count")
+async def get_recipes_count(
+    is_favorite: Optional[bool] = None,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """获取私人食谱数量"""
+    user_id = user_info["user_id"]
+    try:
+        count = await count_user_recipes_sync(user_id, is_favorite)
+        return {"count": count}
+    except Exception as e:
+        print(f"[recipes/count] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取数量失败: {str(e)}")
 
 
 @app.get("/api/recipes/{recipe_id}")

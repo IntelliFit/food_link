@@ -47,18 +47,25 @@
   overflow: hidden;
 }
 
+// 顶部用户信息区域（仿知乎风格，无白色背景）
+.profile-header-section {
+  margin: 0 24rpx 24rpx;
+}
+
 // 顶部用户信息卡片（微信风格）
 .user-card {
   display: flex;
   align-items: center;
   gap: 24rpx;
-  padding: 32rpx;
+  padding: 32rpx 0;
+  background: transparent;
+  margin: 0;
 
   .user-avatar-wrapper {
-    width: 120rpx;
-    height: 120rpx;
-    border-radius: 16rpx;
-    background: #f3f4f6;
+    width: 128rpx;
+    height: 128rpx;
+    border-radius: 50%;
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -73,6 +80,7 @@
   .user-avatar-image {
     width: 100%;
     height: 100%;
+    border-radius: 50%;
   }
 
   .user-avatar-icon {
@@ -94,6 +102,12 @@
     gap: 8rpx;
   }
 
+  .user-name-row {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+  }
+
   .user-name {
     font-size: 40rpx;
     font-weight: 600;
@@ -101,14 +115,105 @@
     line-height: 52rpx;
   }
 
-  .user-subtitle {
-    font-size: 26rpx;
-    color: #6b7280;
-    line-height: 40rpx;
+  .user-days-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4rpx 14rpx;
+    background: #e8f5e9;
+    border-radius: 999rpx;
+    border: 1rpx solid #c8e6c9;
+    flex-shrink: 0;
   }
 
-  .user-arrow {
-    flex-shrink: 0;
+  .user-days-pill-text {
+    font-size: 22rpx;
+    color: #2e7d32;
+    font-weight: 500;
+    line-height: 30rpx;
+  }
+
+  .user-edit-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4rpx;
+    margin-top: 4rpx;
+    align-self: flex-start;
+
+    &:active {
+      opacity: 0.6;
+    }
+  }
+
+  .user-edit-text {
+    font-size: 24rpx;
+    color: #9ca3af;
+    line-height: 34rpx;
+  }
+}
+
+// 快捷入口（仿知乎头像下方统计/入口：数字 + 名称）
+.profile-quick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 24rpx 0 8rpx;
+  border-top: 1rpx solid rgb(0 0 0 / 6%);
+
+  .quick-action-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8rpx;
+    padding: 12rpx 24rpx;
+    position: relative;
+    min-width: 120rpx;
+
+    &:active {
+      opacity: 0.6;
+    }
+  }
+
+  .quick-action-num-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .quick-action-num {
+    font-size: 36rpx;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 44rpx;
+  }
+
+  .quick-action-text {
+    font-size: 24rpx;
+    color: #6b7280;
+    line-height: 32rpx;
+  }
+
+  .quick-action-badge {
+    position: absolute;
+    top: -10rpx;
+    right: -20rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28rpx;
+    height: 28rpx;
+    background: #ef4444;
+    border-radius: 50%;
+    padding: 0 6rpx;
+    box-sizing: border-box;
+
+    .quick-action-badge-text {
+      font-size: 18rpx;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1;
+    }
   }
 }
 
@@ -487,6 +592,13 @@
   }
 }
 
+// 合并列表中的分隔线
+.list-divider {
+  height: 1rpx;
+  background: #f1f5f9;
+  margin: 0 -32rpx;
+}
+
 // 引导横幅
 .onboarding-card {
   display: flex;
@@ -512,48 +624,30 @@
   }
 }
 
-// 清除缓存按钮
-.clear-cache-card {
+// 工具按钮（清除缓存、登录/退出登录）
+.tool-card {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 28rpx 32rpx;
-  margin-bottom: 16rpx;
 
   &:active {
     opacity: 0.7;
   }
 }
 
-.clear-cache-text {
+.tool-text {
   font-size: 30rpx;
   font-weight: 500;
   color: #64748b;
-}
 
-// 登录/退出登录按钮
-.login-card,
-.logout-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 28rpx 32rpx;
-
-  &:active {
-    opacity: 0.7;
+  &--login {
+    color: #5cb896;
   }
-}
 
-.login-text {
-  font-size: 30rpx;
-  font-weight: 500;
-  color: #5cb896;
-}
-
-.logout-text {
-  font-size: 30rpx;
-  font-weight: 500;
-  color: #ef4444;
+  &--logout {
+    color: #ef4444;
+  }
 }
 
 .profile-version {

@@ -1418,6 +1418,30 @@ def list_analysis_tasks_by_user_sync(
             raise
 
 
+def count_analysis_tasks_by_user_sync(user_id: str) -> int:
+    """按用户查询食物分析任务数量（排除 exercise/health_report/public_food_library_text）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.count_analysis_tasks_by_user_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        try:
+            q = (
+                supabase.table("analysis_tasks")
+                .select("*", count="exact")
+                .eq("user_id", user_id)
+                .in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
+                .limit(0)
+            )
+            r = q.execute()
+            count = int(getattr(r, "count", 0) or 0)
+            _safe_add_span_event("db.query.success", {"db.operation": "count_analysis_tasks_by_user_sync", "db.count": count})
+            return count
+        except Exception as e:
+            _record_db_exception("count_analysis_tasks_by_user_sync", e, **{"db.table": "analysis_tasks"})
+            raise
+
+
 def delete_analysis_task_sync(task_id: str, user_id: str, cancel_processing: bool = True) -> dict:
     """
     删除用户的分析任务。
@@ -2341,6 +2365,34 @@ async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
     supabase = get_supabase_client()
     result = supabase.table("weapp_user").select("id, nickname, avatar").in_("id", unique_friend_ids).execute()
     return list(result.data or [])
+
+
+async def count_friends_sync(user_id: str) -> int:
+    """获取用户的好友数量（双向关系去重）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        r = (
+            supabase.table("user_friends")
+            .select("user_id, friend_id")
+            .or_(f"user_id.eq.{user_id},friend_id.eq.{user_id}")
+            .execute()
+        )
+        rows = r.data or []
+        out = set()
+        for row in rows:
+            if row.get("user_id") == user_id:
+                fid = row.get("friend_id")
+                if fid:
+                    out.add(fid)
+            elif row.get("friend_id") == user_id:
+                uid = row.get("user_id")
+                if uid:
+                    out.add(uid)
+        return len(out)
+    except Exception as e:
+        print(f"[count_friends_sync] 错误: {e}")
+        raise
 
 
 async def delete_friend_pair(user_id: str, friend_id: str) -> Dict[str, int]:
@@ -4821,6 +4873,21 @@ async def list_user_recipes(user_id: str, meal_type: Optional[str] = None, is_fa
         return result.data or []
     except Exception as e:
         print(f"[list_user_recipes] 错误: {e}")
+        raise
+
+
+async def count_user_recipes_sync(user_id: str, is_favorite: Optional[bool] = None) -> int:
+    """获取用户的私人食谱数量"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("user_recipes").select("*", count="exact").eq("user_id", user_id)
+        if is_favorite is not None:
+            query = query.eq("is_favorite", is_favorite)
+        result = query.limit(0).execute()
+        return int(getattr(result, "count", 0) or 0)
+    except Exception as e:
+        print(f"[count_user_recipes_sync] 错误: {e}")
         raise
 
 

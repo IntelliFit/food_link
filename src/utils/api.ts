@@ -3352,6 +3352,15 @@ export async function friendCancelSentRequest(requestId: string): Promise<void> 
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '撤销失败')
 }
 
+/** 获取食物分析任务数量 */
+export async function getAnalyzeTaskCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/analyze/tasks/count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取任务数量失败')
+  }
+  return res.data as { count: number }
+}
+
 /** 好友列表 */
 export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
@@ -3940,6 +3949,15 @@ export async function createUserRecipe(data: CreateRecipeRequest): Promise<{ id:
   return response.data as { id: string; message: string }
 }
 
+/** 获取好友数量 */
+export async function getFriendCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/friend/count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取好友数量失败')
+  }
+  return res.data as { count: number }
+}
+
 /** 获取私人食谱列表 */
 export async function getUserRecipes(params?: { meal_type?: string; is_favorite?: boolean }): Promise<{ recipes: UserRecipe[] }> {
   const q = new URLSearchParams()
@@ -3952,6 +3970,15 @@ export async function getUserRecipes(params?: { meal_type?: string; is_favorite?
     throw new Error((response.data as any)?.detail || '获取食谱列表失败')
   }
   return response.data as { recipes: UserRecipe[] }
+}
+
+/** 获取收藏/食谱数量 */
+export async function getFavoriteCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/recipes/count?is_favorite=true', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取收藏数量失败')
+  }
+  return res.data as { count: number }
 }
 
 /** 获取单个食谱详情 */
