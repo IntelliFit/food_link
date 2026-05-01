@@ -406,6 +406,14 @@ function AnalyzeHistoryPage() {
       }
       // 从列表中移除
       setTasks(prev => prev.filter(t => t.id !== taskId))
+      // 更新 profile 页识别记录统计缓存
+      try {
+        const cached = Taro.getStorageSync('profile_stats_analyze_count')
+        if (cached !== undefined && cached !== '') {
+          const next = Math.max(0, Number(cached) - 1)
+          Taro.setStorageSync('profile_stats_analyze_count', String(next))
+        }
+      } catch (_) { /* ignore */ }
     } catch (e: any) {
       await showUnifiedApiError(e, '删除失败')
     }

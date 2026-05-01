@@ -184,6 +184,14 @@ function FriendsPage() {
       Taro.hideLoading()
       Taro.showToast({ title: '已删除', icon: 'success' })
       await loadData()
+      // 更新 profile 页好友统计缓存
+      try {
+        const cached = Taro.getStorageSync('profile_stats_friend_count')
+        if (cached !== undefined && cached !== '') {
+          const next = Math.max(0, Number(cached) - 1)
+          Taro.setStorageSync('profile_stats_friend_count', String(next))
+        }
+      } catch (_) { /* ignore */ }
     } catch (error: any) {
       Taro.hideLoading()
       await showUnifiedApiError(error, '删除失败')
@@ -216,6 +224,14 @@ function FriendsPage() {
             avatar: acceptedRequest.counterpart_avatar || '',
           }
           setFriends(prev => [newFriend, ...prev])
+          // 更新 profile 页好友统计缓存
+          try {
+            const cached = Taro.getStorageSync('profile_stats_friend_count')
+            if (cached !== undefined && cached !== '') {
+              const next = Number(cached) + 1
+              Taro.setStorageSync('profile_stats_friend_count', String(next))
+            }
+          } catch (_) { /* ignore */ }
         }
       } else {
         // 拒绝：只更新请求状态

@@ -106,6 +106,13 @@ function ProfilePage() {
   const [friendCount, setFriendCount] = useState(0)
   const [favoriteCount, setFavoriteCount] = useState(0)
 
+  // 本地缓存 key
+  const PROFILE_STATS_KEYS = {
+    analyze: 'profile_stats_analyze_count',
+    friend: 'profile_stats_friend_count',
+    favorite: 'profile_stats_favorite_count'
+  }
+
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
     loadUserInfo()
@@ -132,6 +139,22 @@ function ProfilePage() {
             setMembershipStatus(JSON.parse(storedMembership))
           } catch (_) { /* ignore */ }
         }
+
+        // 读取快捷入口统计缓存（零延迟展示）
+        try {
+          const cachedAnalyze = Taro.getStorageSync(PROFILE_STATS_KEYS.analyze)
+          if (cachedAnalyze !== undefined && cachedAnalyze !== '') {
+            setAnalyzeCount(Number(cachedAnalyze))
+          }
+          const cachedFriend = Taro.getStorageSync(PROFILE_STATS_KEYS.friend)
+          if (cachedFriend !== undefined && cachedFriend !== '') {
+            setFriendCount(Number(cachedFriend))
+          }
+          const cachedFavorite = Taro.getStorageSync(PROFILE_STATS_KEYS.favorite)
+          if (cachedFavorite !== undefined && cachedFavorite !== '') {
+            setFavoriteCount(Number(cachedFavorite))
+          }
+        } catch (_) { /* ignore */ }
 
         // 2. 异步请求网络，获取最新数据后更新
         try {
@@ -232,12 +255,15 @@ function ProfilePage() {
 
       if (analyzeRes) {
         setAnalyzeCount(analyzeRes.count)
+        Taro.setStorageSync(PROFILE_STATS_KEYS.analyze, String(analyzeRes.count))
       }
       if (friendRes) {
         setFriendCount(friendRes.count)
+        Taro.setStorageSync(PROFILE_STATS_KEYS.friend, String(friendRes.count))
       }
       if (favoriteRes) {
         setFavoriteCount(favoriteRes.count)
+        Taro.setStorageSync(PROFILE_STATS_KEYS.favorite, String(favoriteRes.count))
       }
     } catch (error) {
       console.error('加载快捷入口统计失败:', error)
@@ -394,6 +420,11 @@ function ProfilePage() {
             }
           })
 
+          // 清除快捷入口统计缓存
+          Taro.removeStorageSync(PROFILE_STATS_KEYS.analyze)
+          Taro.removeStorageSync(PROFILE_STATS_KEYS.friend)
+          Taro.removeStorageSync(PROFILE_STATS_KEYS.favorite)
+
           Taro.showToast({ title: '缓存已清除', icon: 'success' })
         } catch (error) {
           console.error('清除缓存失败:', error)
@@ -424,6 +455,9 @@ function ProfilePage() {
             setAnalyzeCount(0)
             setFriendCount(0)
             setFavoriteCount(0)
+            Taro.removeStorageSync(PROFILE_STATS_KEYS.analyze)
+            Taro.removeStorageSync(PROFILE_STATS_KEYS.friend)
+            Taro.removeStorageSync(PROFILE_STATS_KEYS.favorite)
             Taro.removeStorageSync('userRegisterTime')
             Taro.showToast({ title: '已退出登录', icon: 'success' })
           } catch (error) {

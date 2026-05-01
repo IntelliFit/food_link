@@ -1321,6 +1321,14 @@ function ResultPage() {
               content: '已收藏，可在“我的收藏”中快速复用记录',
               showCancel: false
             })
+            // 更新 profile 页收藏统计缓存
+            try {
+              const cached = Taro.getStorageSync('profile_stats_favorite_count')
+              if (cached !== undefined && cached !== '') {
+                const next = Number(cached) + 1
+                Taro.setStorageSync('profile_stats_favorite_count', String(next))
+              }
+            } catch (_) { /* ignore */ }
           } catch (error: any) {
             Taro.hideLoading()
             Taro.showToast({
