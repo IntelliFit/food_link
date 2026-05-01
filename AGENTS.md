@@ -102,32 +102,58 @@
 
 ## 部署
 
-### 生产服务器
-
-- **主机**: `coachlink.fit`
-- **SSH**: `ssh root@coachlink.fit`（本地已配置免密登录）
-- **项目路径**: `/www/wwwroot/food/food_link/`
-- **后端路径**: `/www/wwwroot/food/food_link/backend/`
-- **服务名**: `food-backend.service`
-- **Python 虚拟环境**: `/www/wwwroot/food/food_link/backend/venv/bin/python`
 
 ### 后端部署
 
-部署后端统一通过以下命令执行：
+部署后端统一通过以下命令执行（在仓库根目录）：
 
 ```bash
 npm run push-docker-ccr
 ```
 
+- 该命令会调用：`backend/scripts/push-docker-ccr.mjs`
 - 镜像路径：`ccr.ccs.tencentyun.com/littlehorse/foodlink`
 - 构建上下文：`backend/`（使用 `backend/Dockerfile`）
+- 默认构建平台：`linux/amd64`（避免 ARM 开发机构建后在 AMD64 服务器不可运行）
+- 如需覆盖平台（例如构建多架构清单），可设置环境变量：
+  - PowerShell：`$env:DOCKER_BUILD_PLATFORM="linux/amd64,linux/arm64"; npm run push-docker-ccr`
+  - Bash：`DOCKER_BUILD_PLATFORM=linux/amd64,linux/arm64 npm run push-docker-ccr`
 - 分支与标签映射：
   - `main` → `:latest`、`:main`、`:<7位 commit sha>`
   - `dev` → `:dev`、`:<7位 commit sha>`
   - 其他分支 → 脚本会提示先切换到 `main` 或 `dev`
 - 脚本位置：`backend/scripts/push-docker-ccr.mjs`
+- 依赖要求：
+  - 本机已安装并启动 Docker（`docker version` 可用）
+  - 本机可用 Buildx（`docker buildx version` 可用）
 - 若推送报鉴权或权限错误，先执行 `docker login ccr.ccs.tencentyun.com` 完成登录，再重新执行推送。
 - 部署端已配置自动更新脚本；镜像推送成功后，服务会在 5 分钟内自动完成更新。
+
+#### 后端部署标准操作（一步步）
+
+1. 确认当前分支为 `main` 或 `dev`，并完成需要发布的提交
+2. 本机确认 Docker/Buildx 可用：
+   - `docker version`
+   - `docker buildx version`
+3. 登录腾讯云镜像仓库（如未登录）：
+   - `docker login ccr.ccs.tencentyun.com`
+4. 执行推送：
+   - `npm run push-docker-ccr`
+5. 等待部署端自动拉取并更新（约 5 分钟）
+6. 如需上机确认，可 SSH 到服务器检查服务状态：
+   - `ssh root@coachlink.fit`
+   - `systemctl status food-backend.service`
+
+#### 常见故障与排查
+
+- `no matching manifest for linux/amd64` / `exec format error`
+  - 通常是镜像平台不匹配；确认脚本输出里 `构建平台` 是否为 `linux/amd64`
+- `unauthorized` / `denied: requested access`
+  - 重新执行 `docker login ccr.ccs.tencentyun.com`
+- `docker buildx` 不可用
+  - 升级或重装 Docker Desktop，确保 Buildx 启用
+- 推送成功但线上未生效
+  - 等待自动更新窗口（约 5 分钟）后，再检查 `food-backend.service` 状态与镜像拉取日志
 
 ### 前端部署
 

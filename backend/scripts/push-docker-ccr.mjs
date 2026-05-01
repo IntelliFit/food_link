@@ -9,6 +9,8 @@
  *   npm run push-docker-ccr
  *
  * 构建上下文为 backend/（与 backend/Dockerfile 注释一致）。
+ * 默认强制构建 linux/amd64，避免 ARM 开发机推送后在 AMD64 服务器无法运行。
+ * 如需覆盖平台，可传入环境变量 DOCKER_BUILD_PLATFORM（例如 linux/amd64,linux/arm64）。
  *
  * 分支与标签：
  *   main → :latest、:main、:<7位 sha>
@@ -89,6 +91,19 @@ function hasDocker() {
   return { ok: true };
 }
 
+function hasBuildx() {
+  const r = run('docker buildx version', 'docker', ['buildx', 'version'], { inherit: false });
+  if (!r.ok) {
+    return {
+      ok: false,
+      hint:
+        '未检测到可用的 Docker Buildx。\n' +
+        '请先确认 Docker Desktop 已启用 Buildx（或升级 Docker 版本），然后执行 `docker buildx version` 验证。',
+    };
+  }
+  return { ok: true };
+}
+
 function git(args, inherit = false) {
   return run(`git ${args.join(' ')}`, 'git', args, { inherit, cwd: GIT_ROOT ?? BACKEND_ROOT });
 }
@@ -99,6 +114,11 @@ function main() {
   const dockerCheck = hasDocker();
   if (!dockerCheck.ok) {
     die('无法执行 docker', dockerCheck.hint);
+  }
+
+  const buildxCheck = hasBuildx();
+  if (!buildxCheck.ok) {
+    die('无法执行 docker buildx', buildxCheck.hint);
   }
 
   if (!GIT_ROOT) {
@@ -132,11 +152,13 @@ function main() {
     branch === 'main'
       ? [`${imageBase}:latest`, `${imageBase}:main`, `${imageBase}:${shortSha}`]
       : [`${imageBase}:dev`, `${imageBase}:${shortSha}`];
+  const buildPlatform = (process.env.DOCKER_BUILD_PLATFORM || 'linux/amd64').trim() || 'linux/amd64';
 
   print(`Registry:   ${REGISTRY}`);
   print(`镜像基名:   ${imageBase}（命名空间 littlehorse，仓库名 foodlink）`);
   print(`当前分支:   ${branch}`);
   print(`Git 短 SHA: ${shortSha}`);
+  print(`构建平台:   ${buildPlatform}`);
   print(`将打标签:   ${tags.join(', ')}\n`);
 
   print('--- 登录（推送前须已登录腾讯云 CCR）---');
@@ -144,34 +166,26 @@ function main() {
   print(`  docker login ${REGISTRY}`);
   print('然后再运行本脚本。\n');
 
-  const buildArgs = ['build'];
+  const buildArgs = ['buildx', 'build', '--platform', buildPlatform];
   for (const t of tags) {
     buildArgs.push('-t', t);
   }
+  buildArgs.push('--push');
   buildArgs.push('.');
 
-  print('--- docker build ---');
-  const build = run('docker build', 'docker', buildArgs, { inherit: true });
+  print('--- docker buildx build --push ---');
+  const build = run('docker buildx build --push', 'docker', buildArgs, { inherit: true });
   if (!build.ok) {
-    die('docker build 失败', '请根据上方日志排查 Dockerfile。');
+    die(
+      'docker buildx build --push 失败',
+      '常见原因：未登录腾讯云 CCR、账号或密码错误、网络问题。\n' +
+        `请先执行: docker login ${REGISTRY}\n` +
+        '用户名一般为腾讯云账号 ID；密码为容器镜像服务控制台为实例设置的登录密码。\n' +
+        '若已登录仍失败，请查看上方 docker 原始报错。',
+    );
   }
 
-  print('\n--- docker push ---');
-  for (const t of tags) {
-    print(`\n推送: ${t}`);
-    const p = run(`docker push ${t}`, 'docker', ['push', t], { inherit: true });
-    if (!p.ok) {
-      die(
-        `推送失败: ${t}`,
-        '常见原因：未登录腾讯云 CCR、账号或密码错误、网络问题。\n' +
-          `请先执行: docker login ${REGISTRY}\n` +
-          '用户名一般为腾讯云账号 ID；密码为容器镜像服务控制台为实例设置的登录密码。\n' +
-          '若已登录仍失败，请查看上方 docker 原始报错。',
-      );
-    }
-  }
-
-  print('\n全部推送完成。');
+  print('\n全部构建并推送完成。');
   print(`示例拉取: docker pull ${tags[0]}`);
 }
 

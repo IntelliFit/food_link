@@ -1,5 +1,28 @@
 # CURRENT_TASK
 
+- Task: 完善 `AGENTS.md` 的部署操作文档，覆盖跨架构与标准执行步骤
+- Status: done（已补齐后端部署章节的前置依赖、平台策略、操作步骤和故障排查）
+- Scope:
+  - 文件：
+    - `AGENTS.md`
+  - 已补内容：
+    - 明确 `push-docker-ccr` 默认 `linux/amd64`
+    - 补充 `DOCKER_BUILD_PLATFORM` 覆盖示例（PowerShell/Bash）
+    - 新增部署标准操作 1-6 步
+    - 新增常见故障与排查（平台不匹配、鉴权失败、Buildx 不可用、推送成功未生效）
+
+- Task: 修正镜像推送脚本的跨架构兼容性，确保开发机架构不影响服务器部署
+- Status: done（`push-docker-ccr` 已切换为 `docker buildx build --platform ... --push`，默认 `linux/amd64`）
+- Scope:
+  - 文件：
+    - `backend/scripts/push-docker-ccr.mjs`
+  - 关键变更：
+    - 新增 `buildx` 可用性检查（`docker buildx version`）
+    - 默认构建平台固定为 `linux/amd64`，可用 `DOCKER_BUILD_PLATFORM` 覆盖
+    - 构建推送流程收口为单条 `docker buildx build --push`（保留原有分支/tag 规则）
+  - 结果：
+    - 即使本机是 ARM，也会推送可在 `linux/amd64` 服务器直接运行的镜像（默认配置下）
+
 - Task: 修复本地后端因缺少 `opentelemetry` 依赖而无法启动
 - Status: done（已将 OTel 改为可选依赖；当前环境未安装时自动降级，不再阻塞 `main.py / worker.py / database.py` 导入）
 - Scope:
