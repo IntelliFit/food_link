@@ -2,6 +2,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { View, Text, ScrollView, Image, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { Popup, AreaPicker } from '@taroify/core'
 import '@taroify/core/popup/style'
 import '@taroify/core/picker/style'
@@ -579,8 +580,10 @@ function FoodLibrarySharePage() {
   const canSubmit = hasImages && !submitting && !analyzing && !loadingSourceRecord
   const displayLength = Math.max(imagePaths.length, imageUrls.length)
 
+  const { scheme } = useAppColorScheme()
+
   return (
-    <View className='share-page'>
+    <View className={`share-page ${scheme === 'dark' ? 'share-page--dark' : ''}`}>
       {quickUploadMode && (
         <View className='quick-upload-tip'>
           <Text className='quick-upload-title'>上传到公共食物库</Text>

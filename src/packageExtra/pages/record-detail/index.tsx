@@ -420,6 +420,8 @@ function RecordDetailPage() {
           title='识别记录详情'
           showBack
           onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+          color={scheme === 'dark' ? '#ffffff' : '#000000'}
+          background={scheme === 'dark' ? '#101716' : '#f8fafc'}
         />
         <View className='record-detail-below-nav record-detail-loading-placeholder'>
           <View className='empty-tip'>
