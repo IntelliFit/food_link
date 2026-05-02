@@ -156,6 +156,46 @@ function FoodLibrarySharePage() {
     }
   }, [quickUploadMode, sourceRecordId])
 
+  // 从识别记录分享：自动填充 analyzeShareData
+  useEffect(() => {
+    if (routerParams?.from_analyze !== '1') return
+
+    try {
+      const raw = Taro.getStorageSync('analyzeShareData')
+      if (!raw) return
+
+      const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+      const urls = Array.isArray(data?.imageUrls)
+        ? data.imageUrls.map((item: string) => `${item || ''}`.trim()).filter(Boolean)
+        : (data?.imageUrl ? [data.imageUrl] : [])
+
+      if (urls.length > 0) {
+        setSourceType('upload')
+        setSelectedRecord(null)
+        setImagePaths([])
+        setImageUrls(urls)
+        setImageUrl(urls[0] || '')
+      }
+
+      setTotalCalories(Number(data?.totalCalories) || 0)
+      setTotalProtein(Number(data?.totalProtein) || 0)
+      setTotalCarbs(Number(data?.totalCarbs) || 0)
+      setTotalFat(Number(data?.totalFat) || 0)
+      setItems(Array.isArray(data?.items) ? data.items : [])
+      setDescription(data?.description || '')
+      setInsight(data?.insight || '')
+
+      const inferredName = inferFoodName(null, data?.items || [], data?.description || '')
+      if (inferredName) {
+        setFoodName(prev => prev.trim() || inferredName)
+      }
+    } catch (e) {
+      console.error('加载识别记录分享数据失败:', e)
+    } finally {
+      Taro.removeStorageSync('analyzeShareData')
+    }
+  }, [routerParams?.from_analyze])
+
   const inferFoodName = (record?: FoodRecord | null, nextItems?: Array<{ name: string }>, nextDescription?: string) => {
     const itemNames = (nextItems || record?.items || [])
       .map(item => item.name?.trim())

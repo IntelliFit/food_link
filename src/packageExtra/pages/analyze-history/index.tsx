@@ -338,11 +338,25 @@ function AnalyzeHistoryPage() {
     // 分享功能：跳转到分享页面
     if (task.status === 'done' && task.result) {
       const result = task.result as AnalyzeResponse
-      // 准备分享数据
+      // 准备分享数据：自动填充到公共食物库分享页
+      const imageUrls = task.image_paths && task.image_paths.length > 0
+        ? task.image_paths
+        : (task.image_url ? [task.image_url] : [])
+      const items = (result.items || []).map(it => ({
+        name: it.name || '',
+        weight: it.estimatedWeightGrams ?? it.originalWeightGrams ?? 0,
+        nutrients: it.nutrients
+      }))
       const shareData = {
         imageUrl: task.image_url || '',
+        imageUrls,
         description: result.description || '',
-        totalCalories: result.items?.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0) || 0
+        insight: result.insight || '',
+        items,
+        totalCalories: items.reduce((sum, it) => sum + (it.nutrients?.calories || 0), 0),
+        totalProtein: items.reduce((sum, it) => sum + (it.nutrients?.protein || 0), 0),
+        totalCarbs: items.reduce((sum, it) => sum + (it.nutrients?.carbs || 0), 0),
+        totalFat: items.reduce((sum, it) => sum + (it.nutrients?.fat || 0), 0)
       }
       Taro.setStorageSync('analyzeShareData', shareData)
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?from_analyze=1` })
