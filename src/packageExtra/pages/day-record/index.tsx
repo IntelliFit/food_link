@@ -18,6 +18,13 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type DayRecordPosterMeal } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 
+/** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
 import './index.scss'
 
 const MEAL_TYPE_NAMES: Record<string, string> = {
@@ -176,7 +183,7 @@ function DayRecordPage() {
       })
 
       setRecords(nextRecords)
-      setHistoryTotalCalorie(nextRecords.reduce((sum, item) => sum + item.totalCalorie, 0))
+      setHistoryTotalCalorie(Math.round(nextRecords.reduce((sum, item) => sum + item.totalCalorie, 0) * 10) / 10)
       if (dashboardRes?.intakeData?.target) {
         setTargetCalories(dashboardRes.intakeData.target)
       }
@@ -468,11 +475,11 @@ function DayRecordPage() {
         <View className='day-record-summary'>
           <View className='summary-card'>
             <Text className='summary-label'>总摄入</Text>
-            <Text className='summary-value'>{historyTotalCalorie} kcal</Text>
+            <Text className='summary-value'>{formatNumber(historyTotalCalorie)} kcal</Text>
           </View>
           <View className='summary-card'>
             <Text className='summary-label'>目标</Text>
-            <Text className='summary-value'>{targetCalories} kcal</Text>
+            <Text className='summary-value'>{formatNumber(targetCalories)} kcal</Text>
           </View>
           <View className='summary-card'>
             <Text className='summary-label'>记录数</Text>
@@ -532,7 +539,7 @@ function DayRecordPage() {
                     </View>
                   </View>
                   <View className='day-record-card-actions'>
-                    <Text className='day-record-card-calorie'>{meal.totalCalorie} kcal</Text>
+                    <Text className='day-record-card-calorie'>{formatNumber(meal.totalCalorie)} kcal</Text>
                     <View
                       className='day-record-card-delete'
                       onClick={(e) => handleDeleteRecord(e as any, meal.id)}
@@ -549,7 +556,7 @@ function DayRecordPage() {
                         <Text className='day-record-food-name'>{food.name}</Text>
                         <Text className='day-record-food-amount'>{food.amount}</Text>
                       </View>
-                      <Text className='day-record-food-calorie'>{food.calorie} kcal</Text>
+                      <Text className='day-record-food-calorie'>{formatNumber(food.calorie)} kcal</Text>
                       <View className='day-record-food-macros'>
                         <Text className='day-record-food-macro macro-protein'>蛋白质 {Math.round(food.protein)}g</Text>
                         <Text className='day-record-food-macro macro-carbs'>碳水 {Math.round(food.carbs)}g</Text>
