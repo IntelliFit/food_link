@@ -70,7 +70,3 @@ export function openDebugHealthProfileFromMenu(): void {
   Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
 }
 
-/** 调试：进入新用户引导页面（注册后的健康档案问卷） */
-export function openDebugOnboardingFromMenu(): void {
-  Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
-}
