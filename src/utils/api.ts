@@ -1719,14 +1719,40 @@ export interface AnalysisTask {
   image_url?: string | null  // 图片分析时有值，文字分析时为空
   image_paths?: string[] | null // 多图分析时有值
   text_input?: string | null  // 文字分析时有值，图片分析时为空
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out'
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out' | 'cancelled'
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
   is_violated?: boolean          // AI 审核是否违规
   violation_reason?: string | null // 违规原因
+  is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
+  record_id?: string              // 已保存时对应的饮食记录 ID，供跳转详情页
   created_at: string
   updated_at: string
+}
+
+export interface AnalyzeTaskStatusCount {
+  recognizing: number
+  waiting_record: number
+  recorded: number
+  has_unseen_waiting_record: boolean
+}
+
+export async function getAnalyzeTaskStatusCount(): Promise<AnalyzeTaskStatusCount> {
+  const res = await authenticatedRequest('/api/analyze/tasks/status-count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取任务状态数量失败')
+  }
+  return res.data as AnalyzeTaskStatusCount
+}
+
+/** 标记用户已查看识别记录列表 */
+export async function markAnalyzeHistorySeen(): Promise<{ success: boolean }> {
+  const res = await authenticatedRequest('/api/user/last-seen-analyze-history', { method: 'POST' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '标记查看状态失败')
+  }
+  return res.data as { success: boolean }
 }
 
 /** 提交食物分析任务，立即返回 task_id */

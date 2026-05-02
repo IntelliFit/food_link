@@ -211,6 +211,25 @@
       .status-text { color: #00bc7d; }
     }
 
+    /* 三态展示：正在识别 / 等待记录 / 已经记录 */
+    &.status-recognizing {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      .status-text { color: #2563eb; }
+    }
+
+    &.status-waiting {
+      background: #fef3c7;
+      border-color: #fcd34d;
+      .status-text { color: #d97706; }
+    }
+
+    &.status-recorded {
+      background: #d1fae5;
+      border-color: #86efac;
+      .status-text { color: #00bc7d; }
+    }
+
     &.status-failed {
       background: #fef8f8;
       border-color: #f5d4d4;
@@ -529,6 +548,8 @@
   .task-card .thumb {
     background: rgba(37, 47, 45, 0.96);
     border-color: rgba(112, 196, 149, 0.16);
+    width: 150rpx;
+    height: 150rpx;
   }
 
   .task-card .thumb-placeholder {
@@ -588,5 +609,19 @@
 
   .action-sheet-cancel-text {
     color: rgba(214, 226, 220, 0.6);
+  }
+}
+
+// 导航栏右侧清除按钮
+.clear-waiting-btn {
+  width: 68rpx;
+  height: 68rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+
+  &:active {
+    background: rgba(0, 0, 0, 0.06);
   }
 }

@@ -3899,6 +3899,41 @@ async def get_analyze_tasks_count(
         raise HTTPException(status_code=500, detail="获取任务数量失败")
 
 
+@app.get("/api/analyze/tasks/status-count")
+async def get_analyze_tasks_status_count(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取当前用户识别任务的三种业务状态数量：recognizing / waiting_record / recorded
+    同时返回 has_unseen_waiting_record 用于前端红点提醒。"""
+    from database import count_analysis_tasks_by_status_sync
+    try:
+        result = await asyncio.to_thread(
+            count_analysis_tasks_by_status_sync,
+            user_id=user_info["user_id"],
+        )
+        return result
+    except Exception as e:
+        print(f"[analyze/tasks/status-count] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取任务状态数量失败")
+
+
+@app.post("/api/user/last-seen-analyze-history")
+async def mark_analyze_history_seen(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """标记用户已查看识别记录列表，更新 last_seen_analyze_history_at 为当前时间。"""
+    from database import update_user_last_seen_analyze_history_sync
+    try:
+        ok = await asyncio.to_thread(
+            update_user_last_seen_analyze_history_sync,
+            user_id=user_info["user_id"],
+        )
+        return {"success": ok}
+    except Exception as e:
+        print(f"[user/last-seen-analyze-history] 错误: {e}")
+        raise HTTPException(status_code=500, detail="标记查看状态失败")
+
+
 @app.get("/api/analyze/tasks/{task_id}")
 async def get_analyze_task(
     task_id: str,

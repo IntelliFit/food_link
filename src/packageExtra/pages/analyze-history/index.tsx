@@ -1,8 +1,8 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useCallback, useRef } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
+import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
+import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, getAnalyzeTaskStatusCount, markAnalyzeHistorySeen, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -17,6 +17,19 @@ const STATUS_MAP: Record<string, string> = {
   violated: '内容违规',
   timed_out: '已超时',
   cancelled: '已取消'
+}
+
+/** 根据后端返回的 status + is_recorded 决定列表中展示的状态文案和样式类名 */
+const pickDisplayStatus = (task: AnalysisTask): { text: string; className: string } => {
+  if (task.status === 'pending' || task.status === 'processing') {
+    return { text: '正在识别', className: 'status-recognizing' }
+  }
+  if (task.status === 'done') {
+    if (task.is_recorded === true) return { text: '已经记录', className: 'status-recorded' }
+    if (task.is_recorded === false) return { text: '等待记录', className: 'status-waiting' }
+    return { text: '已完成', className: 'status-done' } // 兼容旧数据
+  }
+  return { text: STATUS_MAP[task.status] || task.status, className: `status-${task.status}` }
 }
 
 const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
@@ -210,9 +223,14 @@ function TaskCard({ task, onTap, onMore }: TaskCardProps) {
               <Text className='meta'>{meta}</Text>
               <View className='time-row'>
                 <Text className='time'>{timeInfo.text}</Text>
-                <View className={`status-badge status-${task.status}`}>
-                  <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
-                </View>
+                {(() => {
+                  const ds = pickDisplayStatus(task)
+                  return (
+                    <View className={`status-badge ${ds.className}`}>
+                      <Text className='status-text'>{ds.text}</Text>
+                    </View>
+                  )
+                })()}
               </View>
               <View className='tag-row-inline'>
                 {mode === 'strict' && (
@@ -308,6 +326,28 @@ function AnalyzeHistoryPage() {
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
     void load()
+    // 刷新 waiting_record badge 计数
+    void (async () => {
+      try {
+        const sc = await getAnalyzeTaskStatusCount()
+        Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
+        Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
+      } catch {
+        // 静默失败
+      }
+    })()
+  })
+
+  useDidHide(() => {
+    // 页面隐藏时标记已查看识别记录列表
+    void (async () => {
+      try {
+        await markAnalyzeHistorySeen()
+        Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
+      } catch {
+        // 静默失败
+      }
+    })()
   })
 
   const handleDelete = async (taskId: string) => {
@@ -332,6 +372,56 @@ function AnalyzeHistoryPage() {
     } catch (e: any) {
       await showUnifiedApiError(e, '删除失败')
     }
+  }
+
+  const handleClearAllWaiting = () => {
+    const waitingTasks = tasks.filter(t => t.status === 'pending' || t.status === 'processing')
+    if (waitingTasks.length === 0) {
+      Taro.showToast({ title: '没有等待中的记录', icon: 'none' })
+      return
+    }
+    Taro.showModal({
+      title: '确认清除',
+      content: `确定清除 ${waitingTasks.length} 条排队中/识别中的记录吗？`,
+      confirmText: '清除',
+      confirmColor: '#e57373',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          void (async () => {
+            Taro.showLoading({ title: '清除中...', mask: true })
+            const results = await Promise.allSettled(
+              waitingTasks.map(t => deleteAnalysisTask(t.id))
+            )
+            const successCount = results.filter(r => r.status === 'fulfilled').length
+            const failCount = results.length - successCount
+            Taro.hideLoading()
+            if (failCount > 0) {
+              Taro.showToast({ title: `已清除 ${successCount} 条，${failCount} 条失败`, icon: 'none' })
+            } else {
+              Taro.showToast({ title: `已清除 ${successCount} 条记录`, icon: 'success' })
+            }
+            // 从列表中移除已删除的任务
+            setTasks(prev => prev.filter(t => !(t.status === 'pending' || t.status === 'processing')))
+            // 更新 profile 页识别记录统计缓存
+            try {
+              const cached = Taro.getStorageSync('profile_stats_analyze_count')
+              if (cached !== undefined && cached !== '') {
+                const next = Math.max(0, Number(cached) - successCount)
+                Taro.setStorageSync('profile_stats_analyze_count', String(next))
+              }
+            } catch (_) { /* ignore */ }
+            // 刷新 waiting_record badge 计数
+            try {
+              const sc = await getAnalyzeTaskStatusCount()
+              Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
+            } catch {
+              // 静默失败
+            }
+          })()
+        }
+      }
+    })
   }
 
   const handleShare = (task: AnalysisTask) => {
@@ -448,6 +538,15 @@ function AnalyzeHistoryPage() {
       }
       Taro.setStorageSync('analyzeSourceTaskId', task.id)
       Taro.setStorageSync('analyzeTaskType', sourceTaskType)
+      if (task.is_recorded) {
+        Taro.setStorageSync('analyzeTaskIsRecorded', '1')
+        if (task.record_id) {
+          Taro.setStorageSync('analyzeCommittedRecordId', task.record_id)
+        }
+      } else {
+        Taro.removeStorageSync('analyzeTaskIsRecorded')
+        Taro.removeStorageSync('analyzeCommittedRecordId')
+      }
       Taro.navigateTo({ url: extraPkgUrl('/pages/result/index') })
       return
     }
@@ -487,6 +586,20 @@ function AnalyzeHistoryPage() {
         onBack={handleBack}
         color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
         background={scheme === 'dark' ? '#101716' : '#f6faf8'}
+        rightContent={
+          <View
+            className='clear-waiting-btn'
+            onClick={(e) => {
+              e.stopPropagation()
+              handleClearAllWaiting()
+            }}
+          >
+            <Text
+              className='iconfont icon-shanchu'
+              style={{ fontSize: '36rpx', color: scheme === 'dark' ? '#f3f7f4' : '#0f172a' }}
+            />
+          </View>
+        }
       />
       <ScrollView className='list' scrollY style={{ height: `calc(100vh - ${navBarHeight}px)` }}>
         {loading ? (

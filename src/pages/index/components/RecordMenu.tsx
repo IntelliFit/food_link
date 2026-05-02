@@ -32,6 +32,8 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 interface RecordMenuProps {
   visible: boolean
   onClose: () => void
+  waitingRecordCount?: number
+  hasUnseenWaitingRecord?: boolean
 }
 
 // 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
@@ -85,7 +87,7 @@ const QUICK_ACCESS_ITEMS = [
   },
 ] as const
 
-export function RecordMenu({ visible, onClose }: RecordMenuProps) {
+export function RecordMenu({ visible, onClose, waitingRecordCount = 0, hasUnseenWaitingRecord = false }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)
@@ -255,6 +257,9 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                   </View>
                 </View>
                 <View className='record-menu-list-right'>
+                  {item.id === 'history' && hasUnseenWaitingRecord && (
+                    <View className='record-menu-dot' />
+                  )}
                   <IconChevronRight size={16} color='#d1d5db' />
                 </View>
               </View>

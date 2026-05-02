@@ -93,6 +93,13 @@ function ProfilePage() {
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
   const [registerDate, setRegisterDate] = useState('--')
+  // 是否有未查看的 waiting_record 任务（用于红点提醒）
+  const [hasUnseenWaitingRecord, setHasUnseenWaitingRecord] = useState(() => {
+    try {
+      const raw = Taro.getStorageSync('analyze_has_unseen_waiting_record')
+      return raw === true || raw === 'true' || raw === 1
+    } catch { return false }
+  })
 
   // 会员状态
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
@@ -100,6 +107,9 @@ function ProfilePage() {
 
   // 好友请求数量
   const [friendRequestCount, setFriendRequestCount] = useState(0)
+
+  /** 后台静默同步中：左上角微型 spinner，不占文档流 */
+  const [dataSyncing, setDataSyncing] = useState(false)
 
   // 快捷入口统计数字
   const [analyzeCount, setAnalyzeCount] = useState(0)
@@ -157,6 +167,7 @@ function ProfilePage() {
         } catch (_) { /* ignore */ }
 
         // 2. 异步请求网络，获取最新数据后更新
+        setDataSyncing(true)
         try {
           const [apiUserInfo, membershipData, dashboardData, friendRequestsData] = await Promise.all([
             getUserProfile(),
@@ -187,6 +198,18 @@ function ProfilePage() {
           if (dashboardData !== null) {
             setExpiryDashboard(dashboardData as FoodExpiryDashboard)
           }
+
+          // 计算底部导航栏"我的"按钮 badge 总数
+          try {
+            const expiryTodo = dashboardData
+              ? ((dashboardData as FoodExpiryDashboard).expired_count || 0)
+                + ((dashboardData as FoodExpiryDashboard).today_count || 0)
+                + ((dashboardData as FoodExpiryDashboard).soon_count || 0)
+              : 0
+            const cachedAnalyze = Taro.getStorageSync(PROFILE_STATS_KEYS.analyze)
+            const analyzeNum = cachedAnalyze !== undefined && cachedAnalyze !== '' ? Number(cachedAnalyze) : 0
+            Taro.setStorageSync('profile_tab_badge_count', analyzeNum + expiryTodo)
+          } catch (_) { /* ignore */ }
 
           // 获取记录天数
           let days = 0
@@ -224,6 +247,8 @@ function ProfilePage() {
         } catch (error) {
           console.error('获取用户信息失败:', error)
           // 网络请求失败时，本地缓存已经在上面展示过了，无需额外处理
+        } finally {
+          setDataSyncing(false)
         }
       } else {
         setIsLoggedIn(false)
@@ -407,7 +432,7 @@ function ProfilePage() {
   const handleClearCache = () => {
     Taro.showModal({
       title: '提示',
-      content: '确定要清除缓存吗？这将重置首页和朋友圈的本地数据，下次进入时会重新加载。',
+      content: '确定要清除缓存吗？这将重置首页、识别记录和朋友圈的本地数据，下次进入时会重新加载。',
       success: (res) => {
         if (!res.confirm) return
         try {
@@ -417,6 +442,28 @@ function ProfilePage() {
           Taro.removeStorageSync('food_link_dashboard_targets_v1')
           Taro.removeStorageSync('home_poster_modal_visible')
           Taro.removeStorageSync('showRecordMenuModal')
+
+          // 识别记录 / 结果页相关缓存
+          Taro.removeStorageSync('analyzeResult')
+          Taro.removeStorageSync('analyzeSourceTaskId')
+          Taro.removeStorageSync('analyzeImagePaths')
+          Taro.removeStorageSync('analyzeImagePath')
+          Taro.removeStorageSync('analyzeTextInput')
+          Taro.removeStorageSync('analyzeTextAdditionalContext')
+          Taro.removeStorageSync('analyzeMealType')
+          Taro.removeStorageSync('analyzeDietGoal')
+          Taro.removeStorageSync('analyzeActivityTiming')
+          Taro.removeStorageSync('analyzeExecutionMode')
+          Taro.removeStorageSync('analyzePrecisionSessionId')
+          Taro.removeStorageSync('analyzeTaskType')
+          Taro.removeStorageSync('analyzeCompareMode')
+          Taro.removeStorageSync('analyzePendingCorrectionItems')
+          Taro.removeStorageSync('analyzePendingCorrectionTaskId')
+          Taro.removeStorageSync('analyzeDebugPreview')
+          Taro.removeStorageSync('analyzeShareData')
+          Taro.removeStorageSync('analyze_waiting_record_count')
+          Taro.removeStorageSync('analyzeTaskIsRecorded')
+          Taro.removeStorageSync('analyzeCommittedRecordId')
 
           // 朋友圈相关缓存
           Taro.removeStorageSync('community_feed_cache')
@@ -506,6 +553,12 @@ function ProfilePage() {
 
   return (
     <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
+      {/* 后台静默同步中：左上角微型 spinner */}
+      {dataSyncing ? (
+        <View className='profile-page__data-sync'>
+          <View className='profile-page__data-sync-spinner' />
+        </View>
+      ) : null}
       {/* 顶部用户信息区域（仿知乎风格） */}
       <View className='profile-header-section'>
         <View className='user-card'>
@@ -550,7 +603,12 @@ function ProfilePage() {
               className='quick-action-item'
               url={extraPkgUrl('/pages/analyze-history/index')}
             >
-              <Text className='quick-action-num'>{analyzeCount}</Text>
+              <View className='quick-action-num-wrap'>
+                <Text className='quick-action-num'>{analyzeCount}</Text>
+                {hasUnseenWaitingRecord && (
+                  <View className='quick-action-dot' />
+                )}
+              </View>
               <Text className='quick-action-text'>识别记录</Text>
             </Navigator>
             <Navigator

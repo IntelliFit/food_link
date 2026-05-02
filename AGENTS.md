@@ -59,7 +59,9 @@
 
 ### 运行开发服务器
 
-- 开发时必须使用 `npm run dev:weapp` 启动开发服务器，禁止用 `npm run build:weapp` 构建。
+> ⚠️ **重要提醒**：**开发模式下，代理改完前端代码后，绝对不要运行 `npm run build:weapp`。** 构建命令仅用于生产打包和真机预览，开发调试必须使用 watch 模式。代理在任何情况下都不应在开发迭代中触发完整构建。
+
+- 开发时必须使用 `npm run dev:weapp` 启动开发服务器，**禁止用 `npm run build:weapp` 构建**。
 - 该命令会正确设置 `NODE_ENV=development` 和 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`
 - 需要**请求线上后端**（真机、或本机模拟器联调生产 API）时：用 `npm run build:weapp:preview` 一次性构建，或 `npm run dev:weapp:online`（watch + `https://healthymax.cn`，与 `build:weapp:preview` 同源注入）
 - 不要直接使用 `taro build --type weapp --watch`，这可能导致 API 地址错误

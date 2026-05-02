@@ -17,6 +17,8 @@ interface CustomNavBarProps {
     background?: string
     /** 额外的 className */
     className?: string
+    /** 右侧自定义内容 */
+    rightContent?: React.ReactNode
 }
 
 export function getStatusBarHeightSafe(): number {
@@ -42,7 +44,8 @@ export default function CustomNavBar({
     showBack = false,
     onBack,
     background = 'linear-gradient(to right, #00bc7d 0%, #00bba7 100%)',
-    className = ''
+    className = '',
+    rightContent
 }: CustomNavBarProps) {
     const [navInfo] = React.useState(() => {
         const menuBtn = Taro.getMenuButtonBoundingClientRect()
@@ -80,6 +83,11 @@ export default function CustomNavBar({
                 <Text className='custom-nav-bar__title' style={{ color }}>
                     {title}
                 </Text>
+                {rightContent && (
+                    <View className='custom-nav-bar__right'>
+                        {rightContent}
+                    </View>
+                )}
             </View>
         </View>
     )

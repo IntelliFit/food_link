@@ -9,6 +9,29 @@
     #f0f3f6 100%
   );
   padding: 182rpx 0 320rpx;
+
+  &__data-sync {
+    position: fixed;
+    left: 28rpx;
+    /* 与微信默认胶囊按钮同一水平线 */
+    top: 130rpx;
+    z-index: 200;
+    pointer-events: none;
+    width: 40rpx;
+    height: 40rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__data-sync-spinner {
+    width: 28rpx;
+    height: 28rpx;
+    border-radius: 50%;
+    border: 3rpx solid rgb(92 184 150 / 22%);
+    border-top-color: #5cb896;
+    animation: spin 0.75s linear infinite;
+  }
 }
 
 // 主题切换：位于用户信息卡片最右侧
@@ -227,6 +250,16 @@
       color: #fff;
       line-height: 1;
     }
+  }
+
+  .quick-action-dot {
+    position: absolute;
+    top: -4rpx;
+    right: -10rpx;
+    width: 16rpx;
+    height: 16rpx;
+    background: #ef4444;
+    border-radius: 50%;
   }
 }
 

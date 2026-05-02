@@ -139,12 +139,43 @@ image.tab-icon {
   margin-left: -55rpx;
   margin-top: -55rpx;
   transform: translateY(-18rpx);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .center-icon {
   font-size: 54rpx;
   color: #ffffff;
   font-weight: 500;
+  line-height: 1;
+}
+
+/* 我的按钮上的数字 badge */
+.profile-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-badge {
+  position: absolute;
+  top: -8rpx;
+  right: -14rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  padding: 0 8rpx;
+  background: #ef4444;
+  border-radius: 9999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.tab-badge-text {
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #ffffff;
   line-height: 1;
 }
 

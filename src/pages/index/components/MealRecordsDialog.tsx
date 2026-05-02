@@ -61,14 +61,19 @@ export function MealRecordsDialog({ visible, meal, onClose, onSelectRecord }: Me
         <View className='meal-record-entries'>
           {entries.map((entry) => {
             const cachedFull = getCachedMealFullRecord(entry.id)
-            const imageUrl = cachedFull?.image_path || meal.image_path || (Array.isArray(meal.image_paths) && meal.image_paths[0]) || ''
+            // 每条记录只使用自己的图片，不 fallback 到餐次级别图片，避免同餐多条记录显示同一张图
+            const imageUrl = cachedFull?.image_path || ''
             const hasImage = !!imageUrl
             const time = formatEntryTime(entry.record_time)
             const totalCalories = entry.total_calories ?? 0
             const protein = cachedFull?.total_protein ?? 0
             const carbs = cachedFull?.total_carbs ?? 0
             const fat = cachedFull?.total_fat ?? 0
-            const title = (entry.title || '').trim() || label
+            // title 兜底：优先 entry.title，其次缓存的 full_record 中的食物名/description，最后餐次名
+            const title = (entry.title || '').trim()
+              || (cachedFull?.items?.[0]?.name || '').trim()
+              || (cachedFull?.description || '').trim().split('\n')[0]
+              || label
 
             return (
               <View

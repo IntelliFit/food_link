@@ -1394,7 +1394,9 @@ def list_analysis_tasks_by_user_sync(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    """按用户查询任务列表，支持按 task_type、status 筛选。"""
+    """按用户查询任务列表，支持按 task_type、status 筛选。
+    返回的每行会额外包含 is_recorded 字段（bool），
+    通过查询 user_food_records.source_task_id 关联判断。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     with _tracer.start_as_current_span("db.list_analysis_tasks_by_user_sync") as span:
@@ -1411,6 +1413,41 @@ def list_analysis_tasks_by_user_sync(
                 q = q.eq("status", status)
             r = q.execute()
             rows = list(r.data or [])
+
+            # 批量查询哪些 done 任务已保存为饮食记录，同时取 record_id 供跳转
+            done_task_ids = [row["id"] for row in rows if row.get("status") == "done"]
+            if done_task_ids:
+                try:
+                    rec_r = (
+                        supabase.table("user_food_records")
+                        .select("id, source_task_id")
+                        .eq("user_id", user_id)
+                        .in_("source_task_id", done_task_ids)
+                        .execute()
+                    )
+                    # 取每个 source_task_id 对应的最新记录 id
+                    recorded_map: Dict[str, str] = {}
+                    for rec in (rec_r.data or []):
+                        sid = rec.get("source_task_id")
+                        if sid:
+                            recorded_map[sid] = rec.get("id", "")
+                    recorded_ids = set(recorded_map.keys())
+                except Exception as join_err:
+                    print(f"[list_analysis_tasks_by_user_sync] 查询已记录状态失败: {join_err}")
+                    recorded_ids = set()
+                    recorded_map = {}
+            else:
+                recorded_ids = set()
+                recorded_map = {}
+
+            for row in rows:
+                if row.get("status") == "done":
+                    row["is_recorded"] = row["id"] in recorded_ids
+                    if row["is_recorded"]:
+                        row["record_id"] = recorded_map.get(row["id"], "")
+                else:
+                    row["is_recorded"] = False
+
             _safe_add_span_event("db.query.success", {"db.operation": "list_analysis_tasks_by_user_sync", "db.rows": len(rows)})
             return rows
         except Exception as e:
@@ -1439,6 +1476,115 @@ def count_analysis_tasks_by_user_sync(user_id: str) -> int:
             return count
         except Exception as e:
             _record_db_exception("count_analysis_tasks_by_user_sync", e, **{"db.table": "analysis_tasks"})
+            raise
+
+
+def count_analysis_tasks_by_status_sync(user_id: str) -> Dict[str, Any]:
+    """按用户查询识别任务按业务状态分类的数量：recognizing / waiting_record / recorded。
+    通过查询 user_food_records.source_task_id 判断 done 任务是否已保存记录。
+    同时返回 has_unseen_waiting_record：当存在 waiting_record 且用户未查看过时为 True。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.count_analysis_tasks_by_status_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        try:
+            # 拉取近 500 条 food 类型任务（足够覆盖日常场景），在内存中统计
+            q = (
+                supabase.table("analysis_tasks")
+                .select("id, status, created_at")
+                .eq("user_id", user_id)
+                .in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
+                .order("created_at", desc=True)
+                .limit(500)
+            )
+            r = q.execute()
+            tasks = list(r.data or [])
+
+            done_task_ids = [t["id"] for t in tasks if t.get("status") == "done"]
+            if done_task_ids:
+                try:
+                    rec_r = (
+                        supabase.table("user_food_records")
+                        .select("source_task_id")
+                        .eq("user_id", user_id)
+                        .in_("source_task_id", done_task_ids)
+                        .execute()
+                    )
+                    recorded_ids = {rec["source_task_id"] for rec in (rec_r.data or []) if rec.get("source_task_id")}
+                except Exception as join_err:
+                    print(f"[count_analysis_tasks_by_status_sync] 查询已记录状态失败: {join_err}")
+                    recorded_ids = set()
+            else:
+                recorded_ids = set()
+
+            recognizing = sum(1 for t in tasks if t.get("status") in ("pending", "processing"))
+            recorded = sum(1 for t in tasks if t.get("status") == "done" and t["id"] in recorded_ids)
+            waiting_tasks = [t for t in tasks if t.get("status") == "done" and t["id"] not in recorded_ids]
+            waiting_record = len(waiting_tasks)
+
+            # 判断是否有未查看的 waiting_record
+            has_unseen_waiting_record = False
+            if waiting_record > 0:
+                try:
+                    user_r = (
+                        supabase.table("weapp_user")
+                        .select("last_seen_analyze_history_at")
+                        .eq("id", user_id)
+                        .execute()
+                    )
+                    last_seen = user_r.data[0].get("last_seen_analyze_history_at") if user_r.data else None
+                    if last_seen is None:
+                        has_unseen_waiting_record = True
+                    else:
+                        from datetime import datetime, timezone
+                        last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                        has_unseen_waiting_record = any(
+                            datetime.fromisoformat(str(t.get("created_at", "")).replace("Z", "+00:00")) > last_seen_dt
+                            for t in waiting_tasks
+                            if t.get("created_at")
+                        )
+                except Exception as unseen_err:
+                    print(f"[count_analysis_tasks_by_status_sync] 判断未查看状态失败: {unseen_err}")
+                    has_unseen_waiting_record = waiting_record > 0
+
+            _safe_add_span_event("db.query.success", {
+                "db.operation": "count_analysis_tasks_by_status_sync",
+                "db.recognizing": recognizing,
+                "db.waiting_record": waiting_record,
+                "db.recorded": recorded,
+                "db.has_unseen_waiting_record": has_unseen_waiting_record,
+            })
+            return {
+                "recognizing": recognizing,
+                "waiting_record": waiting_record,
+                "recorded": recorded,
+                "has_unseen_waiting_record": has_unseen_waiting_record,
+            }
+        except Exception as e:
+            _record_db_exception("count_analysis_tasks_by_status_sync", e, **{"db.table": "analysis_tasks"})
+            raise
+
+
+def update_user_last_seen_analyze_history_sync(user_id: str) -> bool:
+    """更新用户最后一次查看识别记录列表的时间为当前时间。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.update_user_last_seen_analyze_history_sync") as span:
+        span.set_attribute("db.table", "weapp_user")
+        span.set_attribute("db.user_id", user_id)
+        try:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).isoformat()
+            result = (
+                supabase.table("weapp_user")
+                .update({"last_seen_analyze_history_at": now})
+                .eq("id", user_id)
+                .execute()
+            )
+            return bool(result.data)
+        except Exception as e:
+            _record_db_exception("update_user_last_seen_analyze_history_sync", e, **{"db.table": "weapp_user"})
             raise
 
 

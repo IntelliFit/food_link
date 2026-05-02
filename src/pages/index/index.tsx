@@ -18,6 +18,8 @@ import {
   mapCalendarDateToApi,
   resolveHomeMealPrimaryRecordId,
   deleteFoodRecord,
+  getAnalyzeTaskStatusCount,
+  getFoodExpiryDashboard,
   type DashboardTargets,
   type HomeAchievement,
   type HomeIntakeData,
@@ -561,6 +563,18 @@ function IndexPage() {
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
+  // 等待记录的识别任务数量（用于 RecordMenu badge 和 custom-tab-bar badge）
+  const [waitingRecordCount, setWaitingRecordCount] = useState(() => {
+    try { return Number(Taro.getStorageSync('analyze_waiting_record_count') || 0) }
+    catch { return 0 }
+  })
+  // 是否有未查看的 waiting_record 任务（用于红点提醒）
+  const [hasUnseenWaitingRecord, setHasUnseenWaitingRecord] = useState(() => {
+    try {
+      const raw = Taro.getStorageSync('analyze_has_unseen_waiting_record')
+      return raw === true || raw === 'true' || raw === 1
+    } catch { return false }
+  })
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
@@ -890,6 +904,29 @@ function IndexPage() {
     if (!getAccessToken()) {
       return
     }
+
+    // 刷新识别任务 waiting_record badge 计数 + 食物保质期待办数量
+    void (async () => {
+      try {
+        const [sc, expiry] = await Promise.all([
+          getAnalyzeTaskStatusCount(),
+          getFoodExpiryDashboard().catch(() => null),
+        ])
+        const count = sc.waiting_record || 0
+        setWaitingRecordCount(count)
+        setHasUnseenWaitingRecord(sc.has_unseen_waiting_record || false)
+        Taro.setStorageSync('analyze_waiting_record_count', count)
+        Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
+        // 计算 profile tab badge 总数：waiting_record + 食物保质期待办 (expired + today + soon)
+        const expiryTodo = expiry
+          ? (expiry.expired_count || 0) + (expiry.today_count || 0) + (expiry.soon_count || 0)
+          : 0
+        Taro.setStorageSync('profile_tab_badge_count', count + expiryTodo)
+      } catch {
+        // 静默失败，保留旧值
+      }
+    })()
+
     const targetDate = currentSelected || today
 
     // 若本地缓存的 meals 缺少蛋白质/脂肪/碳水，视为脏数据，强制走云端刷新
@@ -2658,7 +2695,7 @@ function IndexPage() {
       )}
 
       {/* 记录菜单弹窗 */}
-      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} />
+      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} waitingRecordCount={waitingRecordCount} hasUnseenWaitingRecord={hasUnseenWaitingRecord} />
 
       <View className='poster-canvas-wrap'>
         <Canvas

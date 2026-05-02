@@ -19,7 +19,12 @@
         <text class="iconfont icon-quanzi tab-icon"></text>
       </block>
       <block wx:elif="{{item.id === 'profile'}}">
-        <text class="iconfont icon-user tab-icon"></text>
+        <view class="profile-icon-wrapper">
+          <text class="iconfont icon-user tab-icon"></text>
+          <view wx:if="{{profileTabBadgeCount > 0}}" class="tab-badge">
+            <text class="tab-badge-text">{{profileTabBadgeCount > 99 ? '99+' : profileTabBadgeCount}}</text>
+          </view>
+        </view>
       </block>
       <block wx:elif="{{item.isCenter}}">
         <view class="center-icon-wrapper">
