@@ -377,7 +377,13 @@ function ProfilePage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: extraPkgUrl('/pages/profile-settings/index') })
+    Taro.navigateTo({
+      url: extraPkgUrl('/pages/profile-settings/index'),
+      fail: (err) => {
+        console.error('[profile] navigateTo profile-settings failed:', err)
+        Taro.showToast({ title: '跳转失败，请重试', icon: 'none' })
+      }
+    })
   }
 
   // 快捷入口点击处理
@@ -499,11 +505,7 @@ function ProfilePage() {
   }
 
   return (
-    <View className='profile-page'>
-      <View className='profile-theme-chip' onClick={toggleScheme}>
-        <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-theme-chip-icon`} />
-      </View>
-
+    <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
       {/* 顶部用户信息区域（仿知乎风格） */}
       <View className='profile-header-section'>
         <View className='profile-card user-card'>
@@ -517,6 +519,9 @@ function ProfilePage() {
             )}
           </View>
           <View className='user-info-main'>
+            <View className='profile-theme-chip' onClick={toggleScheme}>
+              <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-theme-chip-icon`} />
+            </View>
             {isLoggedIn ? (
               <>
                 <View className='user-name-row'>

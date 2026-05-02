@@ -11,11 +11,12 @@
   padding: 182rpx 0 320rpx;
 }
 
-/* 主题切换：绝对定位左上角（避让状态栏，与自定义顶栏留白协调） */
-.profile-page > .profile-theme-chip {
+// 主题切换：位于用户信息卡片最右侧
+.profile-theme-chip {
   position: absolute;
-  left: 24rpx;
-  top: calc(env(safe-area-inset-top) + 96rpx);
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 20;
   width: 64rpx;
   height: 64rpx;
@@ -100,6 +101,7 @@
     display: flex;
     flex-direction: column;
     gap: 8rpx;
+    position: relative;
   }
 
   .user-name-row {
@@ -668,4 +670,104 @@
   padding: 16rpx 0 44rpx;
   font-size: 24rpx;
   color: #94a3b8;
+}
+
+
+// Dark mode
+.profile-page--dark {
+  background: linear-gradient(180deg,
+    rgb(16 23 22 / 100%) 0%,
+    rgb(16 23 22 / 100%) 40%,
+    #0d1312 80%,
+    #0d1312 100%
+  );
+
+  .profile-theme-chip {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(112, 196, 149, 0.3);
+  }
+
+  .profile-theme-chip-icon {
+    color: #f3f7f4;
+  }
+
+  .profile-card {
+    background: #181f1d;
+  }
+
+  .user-name {
+    color: #f2f7f4;
+  }
+
+  .user-edit-text {
+    color: #9ca3af;
+  }
+
+  .quick-action-num {
+    color: #f2f7f4;
+  }
+
+  .quick-action-text {
+    color: rgba(214, 226, 220, 0.6);
+  }
+
+  .section-title {
+    color: #f2f7f4;
+  }
+
+  .service-title,
+  .setting-title {
+    color: #f2f7f4;
+  }
+
+  .service-desc,
+  .setting-desc {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .card-title {
+    color: #f2f7f4;
+  }
+
+  .card-validity {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .list-title {
+    color: #f2f7f4;
+  }
+
+  .list-desc {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .tool-text {
+    color: #94a3b8;
+  }
+
+  .profile-version {
+    color: rgba(214, 226, 220, 0.4);
+  }
+
+  .onboarding-card {
+    background: linear-gradient(135deg, #1a2e24 0%, #181f1d 100%);
+    border-color: rgba(112, 196, 149, 0.25);
+
+    .onboarding-text {
+      color: #6ee7b7;
+    }
+
+    .onboarding-arrow {
+      color: #6ee7b7;
+    }
+  }
+
+  .user-days-pill {
+    background: rgba(94, 211, 145, 0.15);
+    border-color: rgba(94, 211, 145, 0.3);
+
+    .user-days-pill-text {
+      color: #6ee7b7;
+    }
+  }
 }
