@@ -69,6 +69,7 @@ interface MealRecordEditModalProps {
 }
 
 export function MealRecordEditModal({ visible, record, onClose, onSuccess }: MealRecordEditModalProps) {
+  const { scheme } = useAppColorScheme()
   const [editItems, setEditItems] = useState<EditableFoodItem[]>([])
   const [editSaving, setEditSaving] = useState(false)
   const [mealType, setMealType] = useState<MealType>('breakfast')
@@ -272,7 +273,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   if (!visible) return null
 
   return (
-    <View className='edit-modal' catchMove>
+    <View className={`edit-modal ${scheme === 'dark' ? 'edit-modal--dark' : ''}`} catchMove>
       <View className='edit-modal-mask' onClick={onClose} />
       <View className='edit-modal-content'>
         <View className='edit-modal-header'>
