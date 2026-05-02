@@ -1,6 +1,6 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
-import { useState, useRef, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
@@ -157,26 +157,15 @@ function formatTime(iso: string): { text: string; isToday: boolean } {
   }
 }
 
-// 左滑操作按钮宽度
-const ACTION_BUTTON_WIDTH = 108 // rpx
-
-interface SwipeableTaskCardProps {
+interface TaskCardProps {
   task: AnalysisTask
   onTap: (task: AnalysisTask) => void
-  onDelete: (taskId: string) => void
-  onShare: (task: AnalysisTask) => void
+  onMore: (task: AnalysisTask) => void
 }
 
-function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCardProps) {
-  const [offset, setOffset] = useState(0)
-  const [isOpen, setIsOpen] = useState(false)
-  const startXRef = useRef(0)
-  const currentXRef = useRef(0)
-  const maxOffset = ACTION_BUTTON_WIDTH * 2 // 两个按钮的总宽度
-
+function TaskCard({ task, onTap, onMore }: TaskCardProps) {
   const mode = pickExecutionMode(task)
   const recognitionOutcome = pickRecognitionOutcome(task)
-  const canSwipe = task.status !== 'pending' // 排队中不能滑动，其他都可以
   const canShare = task.status === 'done' && task.result // 只有完成的才能分享
   const totalCalories = getTotalCalories(task)
   const sourceType = pickSourceTaskType(task)
@@ -185,93 +174,16 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
   const textAvatar = pickTextAvatar(task.text_input)
   const timeInfo = formatTime(task.created_at)
 
-  const handleTouchStart = (e: any) => {
-    if (!canSwipe) return
-    startXRef.current = e.touches[0].clientX
-    currentXRef.current = offset
-  }
-
-  const handleTouchMove = (e: any) => {
-    if (!canSwipe) return
-    const diff = e.touches[0].clientX - startXRef.current
-    let newOffset = currentXRef.current + diff
-    // 限制滑动范围
-    newOffset = Math.max(-maxOffset, Math.min(0, newOffset))
-    setOffset(newOffset)
-  }
-
-  const handleTouchEnd = () => {
-    if (!canSwipe) return
-    if (offset < -ACTION_BUTTON_WIDTH * 0.72) {
-      setOffset(-maxOffset)
-      setIsOpen(true)
-    } else {
-      setOffset(0)
-      setIsOpen(false)
-    }
-  }
-
-  const handleDelete = () => {
-    Taro.showModal({
-      title: '确认删除',
-      content: '删除后无法恢复，是否确认删除？',
-      confirmText: '删除',
-      confirmColor: '#e57373',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          onDelete(task.id)
-          setOffset(0)
-          setIsOpen(false)
-        }
-      }
-    })
-  }
-
-  const handleShare = () => {
-    if (!canShare) {
-      Taro.showToast({ title: '识别完成后才能分享', icon: 'none' })
-      return
-    }
-    onShare(task)
-    setOffset(0)
-    setIsOpen(false)
-  }
-
-  const handleTap = () => {
-    if (isOpen) {
-      setOffset(0)
-      setIsOpen(false)
-    } else {
-      onTap(task)
-    }
+  const handleMore = (e: any) => {
+    e.stopPropagation()
+    onMore(task)
   }
 
   return (
-    <View className='swipeable-card-wrapper'>
-      {/* 背景操作按钮 */}
-      <View className='action-buttons' style={{ width: `${maxOffset}rpx` }}>
-        <View 
-          className={`action-btn share ${!canShare ? 'disabled' : ''}`} 
-          onClick={handleShare}
-        >
-          <Text className='iconfont icon-fenxiang' />
-          <Text className='action-text'>分享</Text>
-        </View>
-        <View className='action-btn delete' onClick={handleDelete}>
-          <Text className='iconfont icon-shanchu' />
-          <Text className='action-text'>删除</Text>
-        </View>
-      </View>
-
-      {/* 卡片内容 */}
+    <View className='task-card-wrapper'>
       <View
         className={`task-card ${task.status === 'violated' || task.is_violated ? 'task-card-violated' : ''}`}
-        style={{ transform: `translateX(${offset}rpx)` }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={handleTap}
+        onClick={() => onTap(task)}
       >
         <View className='thumb'>
           {task.status === 'violated' || task.is_violated ? (
@@ -296,14 +208,13 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
               <Text className='headline'>{headline}</Text>
               <Text className='calories'>{totalCalories > 0 ? `${Math.round(totalCalories)} kcal` : '--'}</Text>
               <Text className='meta'>{meta}</Text>
-              <Text className='time'>{timeInfo.text}</Text>
-              <View className='tag-row-inline'>
-                <View className={`source-badge source-${sourceType}`}>
-                  <Text className='source-badge-text'>{sourceType === 'food_text' ? '文字' : '图片'}</Text>
-                </View>
+              <View className='time-row'>
+                <Text className='time'>{timeInfo.text}</Text>
                 <View className={`status-badge status-${task.status}`}>
                   <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
                 </View>
+              </View>
+              <View className='tag-row-inline'>
                 {mode === 'strict' && (
                   <View className='mode-tag strict'>
                     <Text className='mode-tag-text'>精准</Text>
@@ -317,15 +228,17 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
               </View>
             </View>
             <View className='right-content'>
-              {(task.status === 'done' || task.status === 'failed' || task.status === 'processing') && !task.is_violated && (
-                <Text className='arrow'>›</Text>
-              )}
+              <View className='more-btn' onClick={handleMore}>
+                <Text className='more-dots'>⋮</Text>
+              </View>
             </View>
           </View>
           {(task.status === 'violated' || task.is_violated) && task.violation_reason && (
             <Text className='violation-reason'>{task.violation_reason}</Text>
           )}
         </View>
+
+
       </View>
     </View>
   )
@@ -335,6 +248,8 @@ function AnalyzeHistoryPage() {
   const { scheme } = useAppColorScheme()
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [showActionSheet, setShowActionSheet] = useState(false)
+  const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
   const loadSeqRef = useRef(0)
   const navBarHeight = getNavBarHeight()
 
@@ -436,6 +351,43 @@ function AnalyzeHistoryPage() {
     }
   }
 
+  const handleMore = (task: AnalysisTask) => {
+    setActiveTask(task)
+    setShowActionSheet(true)
+  }
+
+  const closeActionSheet = () => {
+    setShowActionSheet(false)
+    setActiveTask(null)
+  }
+
+  const actionSheetShare = () => {
+    if (!activeTask) return
+    if (activeTask.status === 'done' && activeTask.result) {
+      handleShare(activeTask)
+    } else {
+      Taro.showToast({ title: '只能分享已完成的任务', icon: 'none' })
+    }
+    closeActionSheet()
+  }
+
+  const actionSheetDelete = () => {
+    if (!activeTask) return
+    closeActionSheet()
+    Taro.showModal({
+      title: '确认删除',
+      content: '删除后无法恢复，是否确认删除？',
+      confirmText: '删除',
+      confirmColor: '#e57373',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          void handleDelete(activeTask.id)
+        }
+      }
+    })
+  }
+
   const onTaskTap = (task: AnalysisTask) => {
     // 违规任务不允许查看详情
     if (task.status === 'violated' || task.is_violated) {
@@ -516,7 +468,7 @@ function AnalyzeHistoryPage() {
   return (
     <View className={`analyze-history-page ${scheme === 'dark' ? 'analyze-history-page--dark' : ''}`}>
       <CustomNavBar
-        title='分析历史'
+        title='识别记录'
         showBack
         onBack={handleBack}
         color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
@@ -534,16 +486,42 @@ function AnalyzeHistoryPage() {
           </View>
         ) : (
           tasks.map(t => (
-            <SwipeableTaskCard
+            <TaskCard
               key={t.id}
               task={t}
               onTap={onTaskTap}
-              onDelete={handleDelete}
-              onShare={handleShare}
+              onMore={handleMore}
             />
           ))
         )}
       </ScrollView>
+
+      {/* 底部操作弹窗 */}
+      {showActionSheet && activeTask && (
+        <View className='action-sheet-overlay' catchMove>
+          <View className='action-sheet-mask' onClick={closeActionSheet} />
+          <View className='action-sheet-content'>
+            <View className='action-sheet-handle-bar' />
+            <View className='action-sheet-actions'>
+              <View
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
+                onClick={actionSheetShare}
+              >
+                <Text className='iconfont icon-fenxiang action-sheet-icon' />
+                <Text className='action-sheet-label'>分享到公共食物库</Text>
+              </View>
+              <View className='action-sheet-divider' />
+              <View className='action-sheet-item action-sheet-item--danger' onClick={actionSheetDelete}>
+                <Text className='iconfont icon-shanchu action-sheet-icon' />
+                <Text className='action-sheet-label'>删除</Text>
+              </View>
+            </View>
+            <View className='action-sheet-cancel' onClick={closeActionSheet}>
+              <Text className='action-sheet-cancel-text'>取消</Text>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

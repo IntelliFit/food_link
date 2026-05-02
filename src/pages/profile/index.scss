@@ -143,6 +143,10 @@
     &:active {
       opacity: 0.6;
     }
+
+    &--active {
+      opacity: 0.6;
+    }
   }
 
   .user-edit-text {
@@ -168,10 +172,17 @@
     padding: 12rpx 24rpx;
     position: relative;
     min-width: 120rpx;
+    text-decoration: none;
+    color: inherit;
 
     &:active {
       opacity: 0.6;
     }
+  }
+
+  navigator.quick-action-item {
+    text-decoration: none;
+    color: inherit;
   }
 
   .quick-action-num-wrap {

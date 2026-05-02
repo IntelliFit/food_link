@@ -1,5 +1,5 @@
-import { View, Text, Image } from '@tarojs/components'
-import { useState } from 'react'
+import { View, Text, Image, Navigator } from '@tarojs/components'
+import { useState, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   TodoListOutlined,
@@ -289,7 +289,7 @@ function ProfilePage() {
     {
       id: 7,
       icon: <ClockOutlined size='20' />,
-      title: '识别历史',
+      title: '识别记录',
       desc: '查看以往识别记录'
     },
     {
@@ -328,7 +328,7 @@ function ProfilePage() {
       Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
       return
     }
-    // 识别历史
+    // 识别记录
     if (service.id === 7) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
       return
@@ -379,6 +379,18 @@ function ProfilePage() {
     }
     Taro.navigateTo({ url: extraPkgUrl('/pages/profile-settings/index') })
   }
+
+  // 快捷入口点击处理
+  const handleQuickActionClick = useCallback((path: string) => {
+    console.log('[profile] quick action click:', path)
+    Taro.navigateTo({
+      url: path,
+      fail: (err) => {
+        console.error('[profile] navigateTo failed:', err)
+        Taro.showToast({ title: '页面跳转失败', icon: 'none' })
+      }
+    })
+  }, [])
 
   // 处理去登录
   const handleGoLogin = () => {
@@ -529,11 +541,17 @@ function ProfilePage() {
         {/* 快捷入口（仿知乎头像下方统计/入口，数字 + 名称） */}
         {isLoggedIn && (
           <View className='profile-quick-actions'>
-            <View className='quick-action-item' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })}>
+            <Navigator
+              className='quick-action-item'
+              url={extraPkgUrl('/pages/analyze-history/index')}
+            >
               <Text className='quick-action-num'>{analyzeCount}</Text>
               <Text className='quick-action-text'>识别记录</Text>
-            </View>
-            <View className='quick-action-item' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/friends/index') })}>
+            </Navigator>
+            <Navigator
+              className='quick-action-item'
+              url={extraPkgUrl('/pages/friends/index')}
+            >
               <View className='quick-action-num-wrap'>
                 <Text className='quick-action-num'>{friendCount}</Text>
                 {friendRequestCount > 0 && (
@@ -543,11 +561,14 @@ function ProfilePage() {
                 )}
               </View>
               <Text className='quick-action-text'>好友管理</Text>
-            </View>
-            <View className='quick-action-item' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })}>
+            </Navigator>
+            <Navigator
+              className='quick-action-item'
+              url={extraPkgUrl('/pages/recipes/index')}
+            >
               <Text className='quick-action-num'>{favoriteCount}</Text>
               <Text className='quick-action-text'>我的收藏</Text>
-            </View>
+            </Navigator>
           </View>
         )}
       </View>

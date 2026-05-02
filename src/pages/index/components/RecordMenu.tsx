@@ -78,7 +78,7 @@ const QUICK_ACCESS_ITEMS = [
   },
   {
     id: 'history',
-    label: '历史记录',
+    label: '识别记录',
     desc: '查看以往识别记录',
     Icon: IconHistory,
     color: '#6b7280',

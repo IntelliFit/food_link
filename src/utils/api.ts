@@ -368,7 +368,7 @@ export interface SaveFoodRecordRequest {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
-  /** 来源识别任务 ID（从分析历史保存而来时传入） */
+  /** 来源识别任务 ID（从识别记录保存而来时传入） */
   source_task_id?: string
 }
 
@@ -1681,7 +1681,7 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{
   }
 }
 
-// ---------- 异步分析任务（提交后 Worker 执行，可稍后在分析历史查看） ----------
+// ---------- 异步分析任务（提交后 Worker 执行，可稍后在识别记录查看） ----------
 
 export interface AnalyzeTaskSubmitParams {
   image_url: string

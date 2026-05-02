@@ -15,7 +15,7 @@ export default function RecordPage() {
   const recordMethods = [
     { id: 'photo', icon: '📷', text: '拍照识别', iconClass: 'photo-icon' },
     { id: 'text', icon: '✏️', text: '文字记录', iconClass: 'text-icon' },
-    { id: 'history', icon: '📋', text: '历史记录', iconClass: 'history-icon' }
+    { id: 'history', icon: '📋', text: '识别记录', iconClass: 'history-icon' }
   ]
 
   const handleMethodClick = (methodId: string) => {
@@ -123,7 +123,7 @@ export default function RecordPage() {
     setSelectedTime('')
   }
 
-  // 历史记录数据
+  // 识别记录数据
   const getTodayDate = () => {
     return new Date().toISOString().split('T')[0]
   }
@@ -408,7 +408,7 @@ export default function RecordPage() {
         </View>
       )}
 
-      {/* 历史记录区域 */}
+      {/* 识别记录区域 */}
       {activeMethod === 'history' && (
         <View className='history-section'>
           {/* 日期选择 */}

@@ -1031,7 +1031,7 @@ function AnalyzePage() {
           onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })}
         >
           <Text className='iconfont icon-history' />
-          <Text className='history-link-text'>查看分析历史</Text>
+          <Text className='history-link-text'>查看识别记录</Text>
         </View>
       </View>
     </View>
