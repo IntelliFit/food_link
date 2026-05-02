@@ -2,6 +2,7 @@ import { View, Text, ScrollView, Button, Input, Slider } from '@tarojs/component
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients, type MealType, type DietGoal, type ActivityTiming } from '../../../utils/api'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 import './MealRecordEditModal.scss'
 
