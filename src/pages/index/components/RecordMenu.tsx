@@ -23,6 +23,7 @@ import {
   openAnalyzePageFromMenu,
   openDebugAnalyzeLoadingFromMenu,
   openDebugHealthProfileFromMenu,
+  openDebugOnboardingFromMenu,
   openDebugRecordDetailPosterFromMenu,
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
@@ -340,11 +341,18 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                       <Text className='record-menu-dev-item-desc'>正常实拍分析流程</Text>
                     </View>
                     <View
-                      className='record-menu-dev-item record-menu-dev-item-last'
+                      className='record-menu-dev-item'
                       onClick={() => runDevTool(openDebugHealthProfileFromMenu)}
                     >
                       <Text className='record-menu-dev-item-label'>进入画像引导</Text>
                       <Text className='record-menu-dev-item-desc'>健康档案问卷调试入口</Text>
+                    </View>
+                    <View
+                      className='record-menu-dev-item record-menu-dev-item-last'
+                      onClick={() => runDevTool(openDebugOnboardingFromMenu)}
+                    >
+                      <Text className='record-menu-dev-item-label'>新用户引导</Text>
+                      <Text className='record-menu-dev-item-desc'>注册后引导页调试入口，不写入数据</Text>
                     </View>
                   </View>
                 </View>
