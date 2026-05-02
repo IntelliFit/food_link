@@ -415,7 +415,7 @@ function RecordDetailPage() {
 
   if (loading || !record) {
     return (
-      <View className='record-detail-root'>
+      <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
         <CustomNavBar
           title='识别记录详情'
           showBack
@@ -704,7 +704,7 @@ function RecordDetailPage() {
   const navBarHeight = getNavBarHeight()
 
   return (
-    <View className='record-detail-root'>
+    <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
       <CustomNavBar
         title='识别记录详情'
         showBack

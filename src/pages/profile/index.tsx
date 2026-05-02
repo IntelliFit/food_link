@@ -508,7 +508,7 @@ function ProfilePage() {
     <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
       {/* 顶部用户信息区域（仿知乎风格） */}
       <View className='profile-header-section'>
-        <View className='profile-card user-card'>
+        <View className='user-card'>
           <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
             {!isLoggedIn ? (
               <Text className='iconfont icon-weidenglu user-avatar-icon' />
@@ -708,8 +708,6 @@ function ProfilePage() {
             </View>
           </View>
         ))}
-
-        <View className='list-divider' />
 
         {/* 设置 */}
         {settings.map((setting) => (

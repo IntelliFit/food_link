@@ -3,9 +3,12 @@ import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { updateUserInfo, uploadUserAvatar, imageToBase64, showUnifiedApiError } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
 import './index.scss'
 
 export default function ProfileSettingsPage() {
+  const { scheme } = useAppColorScheme()
   const [tempAvatar, setTempAvatar] = useState('')
   const [tempNickname, setTempNickname] = useState('')
   const [loading, setLoading] = useState(false)
@@ -82,7 +85,13 @@ export default function ProfileSettingsPage() {
 
   return (
     <FlPageThemeRoot>
-    <View className='profile-settings-page'>
+    <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
+      <CustomNavBar
+        title='个人设置'
+        showBack
+        color={scheme === 'dark' ? '#ffffff' : '#000000'}
+        background={scheme === 'dark' ? '#101716' : '#f8fafc'}
+      />
       <View className='settings-card'>
         <View className='avatar-section'>
           <Text className='form-label'>更换头像</Text>

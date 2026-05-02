@@ -1,3 +1,4 @@
-export default {
-  navigationBarTitleText: '个人设置'
-}
+export default definePageConfig({
+  navigationBarTitleText: '个人设置',
+  navigationStyle: 'custom'
+})

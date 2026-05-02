@@ -58,7 +58,7 @@
   display: flex;
   align-items: center;
   gap: 24rpx;
-  padding: 32rpx 0;
+  padding: 32rpx 20rpx;
   background: transparent;
   margin: 0;
 
@@ -603,13 +603,6 @@
       color: #fff;
     }
   }
-}
-
-// 合并列表中的分隔线
-.list-divider {
-  height: 1rpx;
-  background: #f1f5f9;
-  margin: 0 -32rpx;
 }
 
 // 引导横幅
