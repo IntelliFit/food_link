@@ -149,7 +149,7 @@ image.tab-icon {
   line-height: 1;
 }
 
-/* 我的按钮上的数字 badge */
+/* 我的按钮上的红点提醒 */
 .profile-icon-wrapper {
   position: relative;
   display: inline-flex;
@@ -161,27 +161,13 @@ image.tab-icon {
 
 .tab-badge {
   position: absolute;
-  top: -8rpx;
-  right: -15rpx;
-  width: 32rpx;
-  height: 32rpx;
+  top: -4rpx;
+  right: -4rpx;
+  width: 20rpx;
+  height: 20rpx;
   background: #ef4444;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 10;
-}
-
-.tab-badge--small-text .tab-badge-text {
-  font-size: 16rpx;
-}
-
-.tab-badge-text {
-  font-size: 16rpx;
-  font-weight: 700;
-  color: #ffffff;
-  line-height: 1;
 }
 
 /* ===== 文字样式 ===== */

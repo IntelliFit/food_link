@@ -3671,9 +3671,6 @@ async def analyze_submit(
         if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
             _trace_add_event("biz.submit.invalid_input", {"biz.reason": "missing_image_url"})
             raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
-        if body.image_urls and len(body.image_urls) > 1 and not body.is_multi_view:
-            _trace_add_event("biz.submit.invalid_input", {"biz.reason": "multi_images_without_multi_view"})
-            raise HTTPException(status_code=400, detail="上传多张图片前请先开启多视角模式")
 
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
     user = await get_user_by_id(user_info["user_id"])
