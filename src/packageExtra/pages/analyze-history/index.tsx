@@ -379,35 +379,35 @@ function AnalyzeHistoryPage() {
     }
   }
 
-  const handleClearAllWaiting = () => {
-    const waitingTasks = tasks.filter(t => t.status === 'pending' || t.status === 'processing')
-    if (waitingTasks.length === 0) {
-      Taro.showToast({ title: '没有等待中的记录', icon: 'none' })
+  const handleDiscardUnrecorded = () => {
+    const discardableTasks = tasks.filter(t => t.status === 'pending' || t.status === 'failed')
+    if (discardableTasks.length === 0) {
+      Taro.showToast({ title: '没有可丢弃的未记录', icon: 'none' })
       return
     }
     Taro.showModal({
-      title: '确认清除',
-      content: `确定清除 ${waitingTasks.length} 条排队中/识别中的记录吗？`,
-      confirmText: '清除',
+      title: '确认丢弃',
+      content: `确定丢弃 ${discardableTasks.length} 条排队中/识别失败的记录吗？丢弃后不可恢复。`,
+      confirmText: '丢弃',
       confirmColor: '#e57373',
       cancelText: '取消',
       success: (res) => {
         if (res.confirm) {
           void (async () => {
-            Taro.showLoading({ title: '清除中...', mask: true })
+            Taro.showLoading({ title: '丢弃中...', mask: true })
             const results = await Promise.allSettled(
-              waitingTasks.map(t => deleteAnalysisTask(t.id))
+              discardableTasks.map(t => deleteAnalysisTask(t.id))
             )
             const successCount = results.filter(r => r.status === 'fulfilled').length
             const failCount = results.length - successCount
             Taro.hideLoading()
             if (failCount > 0) {
-              Taro.showToast({ title: `已清除 ${successCount} 条，${failCount} 条失败`, icon: 'none' })
+              Taro.showToast({ title: `已丢弃 ${successCount} 条，${failCount} 条失败`, icon: 'none' })
             } else {
-              Taro.showToast({ title: `已清除 ${successCount} 条记录`, icon: 'success' })
+              Taro.showToast({ title: `已丢弃 ${successCount} 条记录`, icon: 'success' })
             }
             // 从列表中移除已删除的任务
-            setTasks(prev => prev.filter(t => !(t.status === 'pending' || t.status === 'processing')))
+            setTasks(prev => prev.filter(t => !(t.status === 'pending' || t.status === 'failed')))
             // 更新 profile 页识别记录统计缓存
             try {
               const cached = Taro.getStorageSync('profile_stats_analyze_count')
@@ -593,10 +593,10 @@ function AnalyzeHistoryPage() {
         background={scheme === 'dark' ? '#101716' : '#f6faf8'}
         rightContent={
           <View
-            className='clear-waiting-btn'
+            className='discard-unrecorded-btn'
             onClick={(e) => {
               e.stopPropagation()
-              handleClearAllWaiting()
+              handleDiscardUnrecorded()
             }}
           >
             <Text
