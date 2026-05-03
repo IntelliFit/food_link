@@ -6,6 +6,9 @@ Component({
     hidden: false,
     /** 与 React 端 `fl_app_color_scheme` 同步，供深色底栏 */
     colorScheme: 'light',
+    waitingRecordCount: 0,
+    hasUnseenWaitingRecord: false,
+    profileTabBadgeCount: 0,
     tabList: [
       { 
         id: 'home',
@@ -50,10 +53,12 @@ Component({
       this.updateSelected()
       this.updateHidden()
       this.updateColorScheme()
+      this.updateWaitingBadge()
       this.data.timer = setInterval(() => {
         this.updateSelected()
         this.updateHidden()
         this.updateColorScheme()
+        this.updateWaitingBadge()
       }, 300)
     },
     
@@ -93,6 +98,34 @@ Component({
       } catch (e) {
         // ignore
       }
+    },
+
+    updateWaitingBadge() {
+      try {
+        // 未登录不显示 badge
+        const token = wx.getStorageSync('access_token')
+        if (!token) {
+          if (this.data.profileTabBadgeCount !== 0 || this.data.hasUnseenWaitingRecord) {
+            this.setData({ profileTabBadgeCount: 0, hasUnseenWaitingRecord: false })
+          }
+          return
+        }
+        const count = wx.getStorageSync('analyze_waiting_record_count') || 0
+        const num = Number(count)
+        const hasUnseen = wx.getStorageSync('analyze_has_unseen_waiting_record') === true ||
+                          wx.getStorageSync('analyze_has_unseen_waiting_record') === 'true' ||
+                          wx.getStorageSync('analyze_has_unseen_waiting_record') === 1
+        const profileBadge = Number(wx.getStorageSync('profile_tab_badge_count') || 0)
+        if (num !== this.data.waitingRecordCount) {
+          this.setData({ waitingRecordCount: num })
+        }
+        if (hasUnseen !== this.data.hasUnseenWaitingRecord) {
+          this.setData({ hasUnseenWaitingRecord: hasUnseen })
+        }
+        if (profileBadge !== this.data.profileTabBadgeCount) {
+          this.setData({ profileTabBadgeCount: profileBadge })
+        }
+      } catch (e) {}
     },
 
     updateHidden() {

@@ -1,17 +1,19 @@
 import { View, Text, ScrollView, Button } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
 import {
   getFoodExpiryDashboard,
   listManagedFoodExpiryItems,
   showUnifiedApiError,
   updateManagedFoodExpiryStatus,
+  markAnalyzeHistorySeen,
   type FoodExpiryDashboard,
   type FoodExpiryItem,
   type FoodExpiryStatus,
 } from '../../../utils/api'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../../utils/food-expiry-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { IconExpand, IconCollapse } from '../../../components/iconfont'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -42,6 +44,7 @@ export default function ExpiryPage() {
   const [fetchFailed, setFetchFailed] = useState(false)
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)
   const [items, setItems] = useState<FoodExpiryItem[]>([])
+  const [processedExpanded, setProcessedExpanded] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -67,6 +70,23 @@ export default function ExpiryPage() {
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
     loadData()
+  })
+
+  useDidHide(() => {
+    // 页面隐藏时：食物保质期 + 识别记录 未读全部一笔勾销
+    void (async () => {
+      try {
+        await markAnalyzeHistorySeen()
+      } catch {
+        // 静默失败
+      }
+      const today = new Date().toISOString().slice(0, 10)
+      Taro.setStorageSync('food_expiry_last_seen_date', today)
+      Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
+      Taro.setStorageSync('analyze_waiting_record_count', 0)
+      const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+      Taro.setStorageSync('profile_tab_badge_count', friendBadge)
+    })()
   })
 
   useEffect(() => {
@@ -256,8 +276,16 @@ export default function ExpiryPage() {
 
             {!!grouped.processed.length && (
               <View className='expiry-section'>
-                <Text className='expiry-section-title'>已处理</Text>
-                {grouped.processed.map(renderItemCard)}
+                <View
+                  className='expiry-section-header'
+                  onClick={() => setProcessedExpanded(!processedExpanded)}
+                >
+                  <Text className='expiry-section-title'>
+                    已处理 ({grouped.processed.length})
+                  </Text>
+                  {processedExpanded ? <IconCollapse size={24} color='#61756d' /> : <IconExpand size={24} color='#61756d' />}
+                </View>
+                {processedExpanded && grouped.processed.map(renderItemCard)}
               </View>
             )}
           </>

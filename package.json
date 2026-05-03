@@ -1,6 +1,6 @@
 {
   "name": "food_link",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "private": true,
   "description": "AI Food Analysis and Diet Sharing Community",
   "templateInfo": {
@@ -11,6 +11,7 @@
   },
   "scripts": {
     "prepare": "husky",
+    "postinstall": "patch-package",
     "new": "taro new",
     "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
     "typecheck": "tsc --noEmit --pretty false",
@@ -114,6 +115,7 @@
     "jest-environment-jsdom": "^30.3.0",
     "lint-staged": "^16.1.2",
     "miniprogram-automator": "^0.12.1",
+    "patch-package": "^8.0.1",
     "postcss": "^8.5.6",
     "react-refresh": "^0.14.0",
     "sass": "^1.75.0",

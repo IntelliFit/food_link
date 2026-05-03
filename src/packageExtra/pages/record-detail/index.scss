@@ -1072,3 +1072,177 @@ button.poster-share-channel--btn {
     opacity: 0.7;
   }
 }
+
+
+/* Dark mode */
+.record-detail-root--dark {
+  background: #0d1312;
+
+  .record-detail-page {
+    background: #0d1312;
+  }
+
+  .detail-header {
+    background: #181f1d;
+  }
+
+  .meal-name {
+    color: #f2f7f4;
+  }
+
+  .meal-time {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .total-calorie .num {
+    color: #f2f7f4;
+  }
+
+  .total-calorie .unit {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .detail-card {
+    background: #181f1d;
+  }
+
+  .ingredient-name {
+    color: #f2f7f4;
+  }
+
+  .ingredient-nutrients {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .section-title {
+    color: #f2f7f4;
+  }
+
+  .section-desc {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  /* 编辑弹窗 dark */
+  .edit-modal-content {
+    background: #1e2624;
+  }
+
+  .edit-modal-header {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .edit-modal-title {
+    color: #f2f7f4;
+  }
+
+  .edit-modal-close {
+    background: #2a3330;
+
+    &::before,
+    &::after {
+      background: #94a3b8;
+    }
+  }
+
+  .edit-food-card {
+    background: #181f1d;
+  }
+
+  .edit-food-name {
+    color: #f2f7f4;
+  }
+
+  .edit-food-name-btn {
+    color: rgba(214, 226, 220, 0.6);
+  }
+
+  .edit-food-delete {
+    color: #ef4444;
+  }
+
+  .edit-section-label {
+    color: rgba(214, 226, 220, 0.76);
+  }
+
+  .intake-input {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #f2f7f4;
+  }
+
+  .intake-unit {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .adjust-btn {
+    background: #2a3330;
+    color: #f2f7f4;
+
+    &.minus {
+      color: #ef4444;
+    }
+
+    &.plus {
+      color: #00bc7d;
+    }
+  }
+
+  .ratio-value {
+    color: #00bc7d;
+
+    &.over {
+      color: #f59e0b;
+    }
+  }
+
+  .nutrient-chip {
+    background: #1e2624;
+  }
+
+  .nutrient-chip-label {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .nutrient-chip-value {
+    color: #f2f7f4;
+  }
+
+  .nutrient-chip-unit {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .edit-modal-footer {
+    border-top-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .edit-cancel-btn {
+    background: #2a3330;
+    color: #94a3b8;
+  }
+
+  .edit-save-btn {
+    background: linear-gradient(135deg, #00a870 0%, #00bc7d 100%);
+  }
+
+  /* 标签 */
+  .tag-chip {
+    background: #1e2624;
+    color: rgba(214, 226, 220, 0.76);
+
+    &.active {
+      background: rgba(0, 188, 125, 0.2);
+      color: #00bc7d;
+    }
+  }
+
+  /* 底部操作栏 */
+  .bottom-action-bar {
+    background: #181f1d;
+    border-top-color: rgba(255, 255, 255, 0.08);
+  }
+
+  /* 记录详情文字 */
+  .record-detail-body {
+    color: #f2f7f4;
+  }
+}

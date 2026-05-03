@@ -514,7 +514,7 @@ function AnalyzeLoadingPage() {
     }
     Taro.showModal({
       title: '稍后查看',
-      content: '分析将在后台继续，完成后可在「分析历史」中查看结果。',
+      content: '分析将在后台继续，完成后可在「识别记录」中查看结果。',
       showCancel: true,
       confirmText: '去历史',
       success: res => {
@@ -546,7 +546,7 @@ function AnalyzeLoadingPage() {
           <Text className='violated-title'>内容审核未通过</Text>
           <Text className='violated-reason'>{violationReason}</Text>
           <Text className='violated-hint'>您提交的内容不符合平台使用规范，请确保上传与食物相关的图片或文字描述。</Text>
-          <Text className='btn-history' onClick={handleGoHistory}>返回分析历史</Text>
+          <Text className='btn-history' onClick={handleGoHistory}>返回识别记录</Text>
           <Text className='ai-notice'> 食探 - 您的智能健康管理助手</Text>
         </View>
       </View>
@@ -569,7 +569,7 @@ function AnalyzeLoadingPage() {
                 : handleGoHistory()
             }
           >
-            {taskType === 'exercise' ? '返回记运动' : '去分析历史'}
+            {taskType === 'exercise' ? '返回记运动' : '去识别记录'}
           </Text>
           <Text className='ai-notice'> 食探 - 您的智能健康管理助手</Text>
         </View>

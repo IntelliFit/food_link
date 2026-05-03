@@ -368,7 +368,7 @@ export interface SaveFoodRecordRequest {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
-  /** 来源识别任务 ID（从分析历史保存而来时传入） */
+  /** 来源识别任务 ID（从识别记录保存而来时传入） */
   source_task_id?: string
   /** 记录日期 YYYY-MM-DD，仅支持近 3 天内补录 */
   date?: string
@@ -435,6 +435,10 @@ export interface HomeMealRecordEntry {
   total_calories?: number
   /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
   title?: string
+  /** 记录图片（单图），供弹层面板直接展示 */
+  image_path?: string | null
+  /** 记录图片列表 */
+  image_paths?: string[] | null
   /** 完整记录数据，用于首页直接编辑而无需二次请求 */
   full_record?: FoodRecord
 }
@@ -1699,7 +1703,7 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{
   }
 }
 
-// ---------- 异步分析任务（提交后 Worker 执行，可稍后在分析历史查看） ----------
+// ---------- 异步分析任务（提交后 Worker 执行，可稍后在识别记录查看） ----------
 
 export interface AnalyzeTaskSubmitParams {
   image_url: string
@@ -1738,14 +1742,40 @@ export interface AnalysisTask {
   image_url?: string | null  // 图片分析时有值，文字分析时为空
   image_paths?: string[] | null // 多图分析时有值
   text_input?: string | null  // 文字分析时有值，图片分析时为空
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out'
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out' | 'cancelled'
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
   is_violated?: boolean          // AI 审核是否违规
   violation_reason?: string | null // 违规原因
+  is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
+  record_id?: string              // 已保存时对应的饮食记录 ID，供跳转详情页
   created_at: string
   updated_at: string
+}
+
+export interface AnalyzeTaskStatusCount {
+  recognizing: number
+  waiting_record: number
+  recorded: number
+  has_unseen_waiting_record: boolean
+}
+
+export async function getAnalyzeTaskStatusCount(): Promise<AnalyzeTaskStatusCount> {
+  const res = await authenticatedRequest('/api/analyze/tasks/status-count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取任务状态数量失败')
+  }
+  return res.data as AnalyzeTaskStatusCount
+}
+
+/** 标记用户已查看识别记录列表 */
+export async function markAnalyzeHistorySeen(): Promise<{ success: boolean }> {
+  const res = await authenticatedRequest('/api/user/last-seen-analyze-history', { method: 'POST' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '标记查看状态失败')
+  }
+  return res.data as { success: boolean }
 }
 
 /** 提交食物分析任务，立即返回 task_id */
@@ -3380,6 +3410,15 @@ export async function friendCancelSentRequest(requestId: string): Promise<void> 
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '撤销失败')
 }
 
+/** 获取食物分析任务数量 */
+export async function getAnalyzeTaskCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/analyze/tasks/count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取任务数量失败')
+  }
+  return res.data as { count: number }
+}
+
 /** 好友列表 */
 export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
@@ -3981,6 +4020,15 @@ export async function createUserRecipe(data: CreateRecipeRequest): Promise<{ id:
   return response.data as { id: string; message: string }
 }
 
+/** 获取好友数量 */
+export async function getFriendCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/friend/count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取好友数量失败')
+  }
+  return res.data as { count: number }
+}
+
 /** 获取私人食谱列表 */
 export async function getUserRecipes(params?: { meal_type?: string; is_favorite?: boolean }): Promise<{ recipes: UserRecipe[] }> {
   const q = new URLSearchParams()
@@ -3993,6 +4041,15 @@ export async function getUserRecipes(params?: { meal_type?: string; is_favorite?
     throw new Error((response.data as any)?.detail || '获取食谱列表失败')
   }
   return response.data as { recipes: UserRecipe[] }
+}
+
+/** 获取收藏/食谱数量 */
+export async function getFavoriteCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/recipes/count?is_favorite=true', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取收藏数量失败')
+  }
+  return res.data as { count: number }
 }
 
 /** 获取单个食谱详情 */

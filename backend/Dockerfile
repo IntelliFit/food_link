@@ -16,10 +16,18 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Pillow 等常见二进制依赖
+# Pillow 等运行时二进制依赖
+# 注：当前依赖均有 manylinux 预编译 wheel，但为了防御未来版本移除 wheel 或跨平台 QEMU 构建需要编译的情况，
+# 保留编译工具链。如需极致精简镜像，可改用多阶段构建。
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo \
     zlib1g \
+    gcc \
+    g++ \
+    make \
+    libffi-dev \
+    libssl-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

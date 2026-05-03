@@ -1,6 +1,6 @@
 import { withAuth } from '../../../utils/withAuth'
 import { View, Text, Image, Button, Input } from '@tarojs/components'
-import Taro, { useDidShow, useRouter } from '@tarojs/taro'
+import Taro, { useDidShow, useDidHide, useRouter } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
 import {
   friendCancelSentRequest,
@@ -168,6 +168,14 @@ function FriendsPage() {
     loadData()
   })
 
+  useDidHide(() => {
+    // 离开好友页时，已查看的好友请求不再计入未读 badge
+    const oldFriend = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+    Taro.setStorageSync('profile_tab_badge_friend_count', 0)
+    const oldBadge = Number(Taro.getStorageSync('profile_tab_badge_count') || 0)
+    Taro.setStorageSync('profile_tab_badge_count', Math.max(0, oldBadge - oldFriend))
+  })
+
   const handleDeleteFriend = async (friend: FriendListItem) => {
     const confirm = await Taro.showModal({
       title: '删除好友',
@@ -184,6 +192,14 @@ function FriendsPage() {
       Taro.hideLoading()
       Taro.showToast({ title: '已删除', icon: 'success' })
       await loadData()
+      // 更新 profile 页好友统计缓存
+      try {
+        const cached = Taro.getStorageSync('profile_stats_friend_count')
+        if (cached !== undefined && cached !== '') {
+          const next = Math.max(0, Number(cached) - 1)
+          Taro.setStorageSync('profile_stats_friend_count', String(next))
+        }
+      } catch (_) { /* ignore */ }
     } catch (error: any) {
       Taro.hideLoading()
       await showUnifiedApiError(error, '删除失败')
@@ -216,6 +232,14 @@ function FriendsPage() {
             avatar: acceptedRequest.counterpart_avatar || '',
           }
           setFriends(prev => [newFriend, ...prev])
+          // 更新 profile 页好友统计缓存
+          try {
+            const cached = Taro.getStorageSync('profile_stats_friend_count')
+            if (cached !== undefined && cached !== '') {
+              const next = Number(cached) + 1
+              Taro.setStorageSync('profile_stats_friend_count', String(next))
+            }
+          } catch (_) { /* ignore */ }
         }
       } else {
         // 拒绝：只更新请求状态

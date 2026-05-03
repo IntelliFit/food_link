@@ -44,16 +44,12 @@ import './index.scss'
 
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
-/** 按 analyzeSourceTaskId 记录已保存的 food record id，用于返回结果页时显示「查看结果」 */
-const ANALYZE_COMMITTED_SESSION_KEY = 'analyze_committed_session'
-
+/** 判断当前识别会话是否已保存为饮食记录。
+ * 优先读取 analyze-history 列表传入的 analyzeTaskIsRecorded 标记；
+ * 不再依赖本地 analyze_committed_session 缓存，状态由后端返回。 */
 function isAnalyzeSessionCommitted(): boolean {
   try {
-    const tid = Taro.getStorageSync('analyzeSourceTaskId')
-    if (!tid) return false
-    const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
-    const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string }>) : {}
-    return Boolean(map[String(tid)]?.record_id)
+    return Taro.getStorageSync('analyzeTaskIsRecorded') === '1'
   } catch {
     return false
   }
@@ -354,6 +350,11 @@ function ResultPage() {
       if (resultScrollRafRef.current != null) {
         cancelAnimationFrame(resultScrollRafRef.current)
       }
+      // 页面卸载时清除识别记录导航标记，避免影响其他入口
+      try {
+        Taro.removeStorageSync('analyzeTaskIsRecorded')
+        Taro.removeStorageSync('analyzeCommittedRecordId')
+      } catch {}
     }
   }, [])
 
@@ -467,17 +468,11 @@ function ResultPage() {
   }
 
   const hydrateCommittedRecord = useCallback(() => {
+    // 状态由 analyze-history 列表传入的 analyzeTaskIsRecorded 标记决定，
+    // 不再查询后端或维护本地 analyze_committed_session 缓存。
     try {
-      const tid = Taro.getStorageSync('analyzeSourceTaskId')
-      if (!tid) {
-        setCommittedRecordId(null)
-        return
-      }
-      const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
-      const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string }>) : {}
-      const rec = map[String(tid)]
-      if (rec?.record_id) {
-        setCommittedRecordId(String(rec.record_id))
+      if (Taro.getStorageSync('analyzeTaskIsRecorded') === '1') {
+        setCommittedRecordId('history')
       } else {
         setCommittedRecordId(null)
       }
@@ -487,7 +482,7 @@ function ResultPage() {
   }, [])
 
   useDidShow(() => {
-    hydrateCommittedRecord()
+    void hydrateCommittedRecord()
   })
 
   useEffect(() => {
@@ -542,7 +537,7 @@ function ResultPage() {
         const items = convertApiDataToItems(result.items)
         setNutritionItems(items)
         calculateNutritionStats(items)
-        hydrateCommittedRecord()
+        void hydrateCommittedRecord()
       } else {
         Taro.showModal({
           title: '提示',
@@ -635,12 +630,16 @@ function ResultPage() {
     savedPrecisionReferenceDefaults,
   ])
 
+  const precisionDefaultsLoadedRef = useRef(false)
+
   useEffect(() => {
+    if (precisionDefaultsLoadedRef.current) return
     let active = true
     ;(async () => {
       try {
         const profile = await getHealthProfile()
         if (!active) return
+        precisionDefaultsLoadedRef.current = true
         const defaults = normalizePrecisionReferenceDefaults(profile.health_condition?.precision_reference_defaults)
         setSavedPrecisionReferenceDefaults(defaults)
         applyPrecisionReferencePreset(defaults.preferred_reference_key || DEFAULT_PRECISION_REFERENCE_PRESET, defaults)
@@ -1136,11 +1135,9 @@ function ResultPage() {
   /** 已保存后跳转记录详情（不重复写入、不重复发动态） */
   const handleViewCommittedResult = useCallback(() => {
     try {
-      const tid = Taro.getStorageSync('analyzeSourceTaskId')
-      const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
-      const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string }>) : {}
-      const rid = (tid && map[String(tid)]?.record_id) || committedRecordId
-      if (!rid) {
+      // 优先使用 analyze-history 列表传入的 record_id，其次使用当前会话保存后设置的 id
+      const rid = Taro.getStorageSync('analyzeCommittedRecordId') || committedRecordId
+      if (!rid || rid === 'history') {
         Taro.showToast({ title: '未找到已保存记录', icon: 'none' })
         return
       }
@@ -1328,6 +1325,14 @@ function ResultPage() {
               content: '已收藏，可在“我的收藏”中快速复用记录',
               showCancel: false
             })
+            // 更新 profile 页收藏统计缓存
+            try {
+              const cached = Taro.getStorageSync('profile_stats_favorite_count')
+              if (cached !== undefined && cached !== '') {
+                const next = Number(cached) + 1
+                Taro.setStorageSync('profile_stats_favorite_count', String(next))
+              }
+            } catch (_) { /* ignore */ }
           } catch (error: any) {
             Taro.hideLoading()
             Taro.showToast({

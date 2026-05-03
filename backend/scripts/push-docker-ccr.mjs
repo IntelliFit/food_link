@@ -153,12 +153,16 @@ function main() {
       ? [`${imageBase}:latest`, `${imageBase}:main`, `${imageBase}:${shortSha}`]
       : [`${imageBase}:dev`, `${imageBase}:${shortSha}`];
   const buildPlatform = (process.env.DOCKER_BUILD_PLATFORM || 'linux/amd64').trim() || 'linux/amd64';
+  const buildProgress = (process.env.DOCKER_BUILD_PROGRESS || 'auto').trim() || 'auto';
 
   print(`Registry:   ${REGISTRY}`);
   print(`镜像基名:   ${imageBase}（命名空间 littlehorse，仓库名 foodlink）`);
   print(`当前分支:   ${branch}`);
   print(`Git 短 SHA: ${shortSha}`);
   print(`构建平台:   ${buildPlatform}`);
+  if (buildProgress !== 'auto') {
+    print(`进度模式:   ${buildProgress}（如需默认进度条，去掉 DOCKER_BUILD_PROGRESS 环境变量）`);
+  }
   print(`将打标签:   ${tags.join(', ')}\n`);
 
   print('--- 登录（推送前须已登录腾讯云 CCR）---');
@@ -167,6 +171,9 @@ function main() {
   print('然后再运行本脚本。\n');
 
   const buildArgs = ['buildx', 'build', '--platform', buildPlatform];
+  if (buildProgress !== 'auto') {
+    buildArgs.push('--progress', buildProgress);
+  }
   for (const t of tags) {
     buildArgs.push('-t', t);
   }
@@ -176,13 +183,17 @@ function main() {
   print('--- docker buildx build --push ---');
   const build = run('docker buildx build --push', 'docker', buildArgs, { inherit: true });
   if (!build.ok) {
-    die(
-      'docker buildx build --push 失败',
+    const tip =
       '常见原因：未登录腾讯云 CCR、账号或密码错误、网络问题。\n' +
-        `请先执行: docker login ${REGISTRY}\n` +
-        '用户名一般为腾讯云账号 ID；密码为容器镜像服务控制台为实例设置的登录密码。\n' +
-        '若已登录仍失败，请查看上方 docker 原始报错。',
-    );
+      `请先执行: docker login ${REGISTRY}\n` +
+      '用户名一般为腾讯云账号 ID；密码为容器镜像服务控制台为实例设置的登录密码。\n' +
+      '\n' +
+      '若上方 docker 原始报错信息不够，可使用以下命令查看每个构建步骤的完整输出：\n' +
+      `  DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr\n` +
+      '\n' +
+      '也可以单独调试构建（不推送）：\n' +
+      `  docker buildx build --platform ${buildPlatform} --progress plain -t ${tags[0]} ${BACKEND_ROOT}`;
+    die('docker buildx build --push 失败', tip);
   }
 
   print('\n全部构建并推送完成。');

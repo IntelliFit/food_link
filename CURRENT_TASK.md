@@ -1,3 +1,6 @@
+# 当前任务
+
+## 状态：进行中 - 等待用户反馈调试日志
 
 - 2026-05-03 update:
   - Added `testOpenid` dev-environment bypass for testing invite-new-user flow without real WeChat accounts.
@@ -101,17 +104,27 @@
     - 新增部署标准操作 1-6 步
     - 新增常见故障与排查（平台不匹配、鉴权失败、Buildx 不可用、推送成功未生效）
 
-- Task: 修正镜像推送脚本的跨架构兼容性，确保开发机架构不影响服务器部署
-- Status: done（`push-docker-ccr` 已切换为 `docker buildx build --platform ... --push`，默认 `linux/amd64`）
-- Scope:
-  - 文件：
-    - `backend/scripts/push-docker-ccr.mjs`
-  - 关键变更：
-    - 新增 `buildx` 可用性检查（`docker buildx version`）
-    - 默认构建平台固定为 `linux/amd64`，可用 `DOCKER_BUILD_PLATFORM` 覆盖
-    - 构建推送流程收口为单条 `docker buildx build --push`（保留原有分支/tag 规则）
-  - 结果：
-    - 即使本机是 ARM，也会推送可在 `linux/amd64` 服务器直接运行的镜像（默认配置下）
+## 任务列表
+
+### 1. 一键删除未记录按钮 ✅ 已完成
+- **导航栏右上角按钮**：已恢复垃圾桶图标（`icon-shanchu`）
+- **列表顶部胶囊按钮**：保留
+- **删除范围**：`pending + processing + failed`
+- **过滤逻辑**：基于后端删除结果过滤列表
+- **缓存清除**：删除后清理 `analyze_waiting_record_count`
+
+### 2. 已记录天数排查 🔄 等待反馈
+- **调试日志已添加**：`src/pages/profile/index.tsx` 中已添加 `console.log('[Profile] getUserRecordDays 返回:', recordDaysData)`
+- **请用户操作**：进入「我的」页面，查看微信开发者工具控制台输出
+- **预期情况**：如果用户只做了识别（未保存到食物日记），`user_food_records` 表为空，返回 0 是正常的
+- **下一步**：根据控制台输出判断是后端问题还是数据问题
+
+## 阻塞点
+- 需要用户在开发者工具中查看控制台日志，确认 `getUserRecordDays` 返回值
+
+---
+
+## 历史任务记录
 
 - Task: 修复本地后端因缺少 `opentelemetry` 依赖而无法启动
 - Status: done（已将 OTel 改为可选依赖；当前环境未安装时自动降级，不再阻塞 `main.py / worker.py / database.py` 导入）

@@ -66,6 +66,7 @@ from database import (
     get_analysis_task_by_id_sync,
     get_analysis_tasks_by_ids,
     list_analysis_tasks_by_user_sync,
+    count_analysis_tasks_by_user_sync,
     create_precision_session_sync,
     get_precision_session_by_id_sync,
     update_precision_session_sync,
@@ -101,6 +102,7 @@ from database import (
     respond_friend_request,
     cancel_sent_friend_request,
     get_friends_with_profile,
+    count_friends_sync,
     delete_friend_pair,
     get_friend_requests_overview,
     cleanup_duplicate_friends,
@@ -151,6 +153,7 @@ from database import (
     # 私人食谱
     create_user_recipe,
     list_user_recipes,
+    count_user_recipes_sync,
     get_user_recipe,
     update_user_recipe,
     delete_user_recipe,
@@ -3987,9 +3990,6 @@ async def analyze_submit(
         if (not body.image_url or not body.image_url.strip()) and (not body.image_urls or len(body.image_urls) == 0):
             _trace_add_event("biz.submit.invalid_input", {"biz.reason": "missing_image_url"})
             raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
-        if body.image_urls and len(body.image_urls) > 1 and not body.is_multi_view:
-            _trace_add_event("biz.submit.invalid_input", {"biz.reason": "multi_images_without_multi_view"})
-            raise HTTPException(status_code=400, detail="上传多张图片前请先开启多视角模式")
 
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
     user = await get_user_by_id(user_info["user_id"])
@@ -4217,6 +4217,57 @@ async def list_analyze_tasks(
     except Exception as e:
         print(f"[analyze/tasks] 错误: {e}")
         raise HTTPException(status_code=500, detail="查询任务列表失败")
+
+
+@app.get("/api/analyze/tasks/count")
+async def get_analyze_tasks_count(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取当前用户的食物分析任务数量"""
+    try:
+        count = await asyncio.to_thread(
+            count_analysis_tasks_by_user_sync,
+            user_id=user_info["user_id"],
+        )
+        return {"count": count}
+    except Exception as e:
+        print(f"[analyze/tasks/count] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取任务数量失败")
+
+
+@app.get("/api/analyze/tasks/status-count")
+async def get_analyze_tasks_status_count(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """获取当前用户识别任务的三种业务状态数量：recognizing / waiting_record / recorded
+    同时返回 has_unseen_waiting_record 用于前端红点提醒。"""
+    from database import count_analysis_tasks_by_status_sync
+    try:
+        result = await asyncio.to_thread(
+            count_analysis_tasks_by_status_sync,
+            user_id=user_info["user_id"],
+        )
+        return result
+    except Exception as e:
+        print(f"[analyze/tasks/status-count] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取任务状态数量失败")
+
+
+@app.post("/api/user/last-seen-analyze-history")
+async def mark_analyze_history_seen(
+    user_info: dict = Depends(get_current_user_info),
+):
+    """标记用户已查看识别记录列表，更新 last_seen_analyze_history_at 为当前时间。"""
+    from database import update_user_last_seen_analyze_history_sync
+    try:
+        ok = await asyncio.to_thread(
+            update_user_last_seen_analyze_history_sync,
+            user_id=user_info["user_id"],
+        )
+        return {"success": ok}
+    except Exception as e:
+        print(f"[user/last-seen-analyze-history] 错误: {e}")
+        raise HTTPException(status_code=500, detail="标记查看状态失败")
 
 
 @app.get("/api/analyze/tasks/{task_id}")
@@ -7767,11 +7818,22 @@ async def get_home_dashboard(
                     if len(first_line) > 30:
                         first_line = first_line[:30] + "…"
                     record_title = first_line
+            record_image_urls: List[str] = []
+            rec_image_paths = rec.get("image_paths") or []
+            if not isinstance(rec_image_paths, list):
+                rec_image_paths = []
+            if not rec_image_paths and rec.get("image_path"):
+                rec_image_paths = [rec.get("image_path")]
+            for img_url in rec_image_paths:
+                if isinstance(img_url, str) and img_url.strip():
+                    record_image_urls.append(img_url.strip())
             meal_record_entries.append({
                 "id": str(rid),
                 "record_time": rec.get("record_time"),
                 "total_calories": float(rec.get("total_calories") or 0),
                 "title": record_title,
+                "image_path": record_image_urls[0] if record_image_urls else None,
+                "image_paths": record_image_urls if record_image_urls else None,
                 "full_record": rec,
             })
 
@@ -8546,6 +8608,17 @@ async def api_friend_list(user_info: dict = Depends(get_current_user_info)):
     except Exception as e:
         print(f"[api/friend/list] 错误: {e}")
         raise HTTPException(status_code=500, detail="获取失败")
+
+
+@app.get("/api/friend/count")
+async def api_friend_count(user_info: dict = Depends(get_current_user_info)):
+    """获取当前用户的好友数量"""
+    try:
+        count = await count_friends_sync(user_info["user_id"])
+        return {"count": count}
+    except Exception as e:
+        print(f"[api/friend/count] 错误: {e}")
+        raise HTTPException(status_code=500, detail="获取好友数量失败")
 
 
 @app.delete("/api/friend/{friend_id}")
@@ -10035,6 +10108,21 @@ async def list_recipes(
     except Exception as e:
         print(f"[list_recipes] 错误: {e}")
         raise HTTPException(status_code=500, detail=f"获取列表失败: {str(e)}")
+
+
+@app.get("/api/recipes/count")
+async def get_recipes_count(
+    is_favorite: Optional[bool] = None,
+    user_info: dict = Depends(get_current_user_info)
+):
+    """获取私人食谱数量"""
+    user_id = user_info["user_id"]
+    try:
+        count = await count_user_recipes_sync(user_id, is_favorite)
+        return {"count": count}
+    except Exception as e:
+        print(f"[recipes/count] 错误: {e}")
+        raise HTTPException(status_code=500, detail=f"获取数量失败: {str(e)}")
 
 
 @app.get("/api/recipes/{recipe_id}")

@@ -220,11 +220,12 @@ function StatsPage() {
   const rangeRef = useRef(range)
   rangeRef.current = range
   const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCardModel | null }>({ visible: false, card: null })
+  const [aiDetailVisible, setAiDetailVisible] = useState(false)
 
   // 自定义 tabBar 显隐同步：弹窗打开时隐藏底栏
   useEffect(() => {
     try {
-      if (riskDetailModal.visible) {
+      if (riskDetailModal.visible || aiDetailVisible) {
         Taro.setStorageSync('stats_risk_detail_visible', '1')
       } else {
         Taro.removeStorageSync('stats_risk_detail_visible')
@@ -239,7 +240,7 @@ function StatsPage() {
         // ignore
       }
     }
-  }, [riskDetailModal.visible])
+  }, [riskDetailModal.visible, aiDetailVisible])
   const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(() => {
     try {
       const stored = Taro.getStorageSync(RISK_PREF_STORAGE_KEY)
@@ -1101,74 +1102,86 @@ function StatsPage() {
           </View>
         </View>
 
-        <View className='stats-card analysis-card'>
-          <View className='card-header card-header--collapsible' onClick={() => toggleSection('ai')}>
-            <View className='card-header-copy'>
-              <Text className='card-title'>AI 风险解读</Text>
-              <Text className='card-subtitle'>用于把统计结果翻译成更容易理解的长期趋势结论</Text>
-            </View>
-            <View className='card-header-actions'>
-              <View
-                className={`analysis-action-btn${insightActionLoading ? ' disabled' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!insightActionLoading) handleGenerateInsight()
-                }}
-              >
-                <Text className='analysis-action-btn-text'>
-                  {insightActionLoading ? '生成中...' : hasInsight ? '更新' : '生成'}
-                </Text>
-              </View>
-              <View className='card-header-arrow'>{expandedSections.ai ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
-            </View>
-          </View>
-          {expandedSections.ai ? (
-            <View className='card-collapsible-content'>
-              <View className='ai-disclaimer'>
-                <Text className='ai-disclaimer-text'>本页表达的是饮食相关风险趋势，不构成医学诊断或治疗建议。</Text>
-              </View>
-              {insightGeneratedDate ? (
-                <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
-                  <Text className='analysis-status-text'>
-                    {insightNeedsRefresh
-                      ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
-                      : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
-                  </Text>
-                </View>
-              ) : null}
-              {insightError ? (
-                <View className='analysis-error'>
-                  <Text className='analysis-error-text'>{insightError}</Text>
-                </View>
-              ) : null}
-              {displayInsightText ? (
-                <Text className='analysis-content'>{displayInsightText}</Text>
-              ) : insightActionLoading || isTyping ? (
-                <View className='analysis-loading'>
-                  <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
-                  <Text className='analysis-loading-text'>
-                    {insightActionLoading ? 'AI 正在生成当前统计周期的营养洞察，请稍候...' : '正在展示已生成的洞察...'}
-                  </Text>
-                </View>
-              ) : (
-                <View className='analysis-empty'>
-                  <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>
-                  <View className='analysis-empty-action' onClick={handleGenerateInsight}>
-                    <Text className='analysis-empty-action-text'>生成本{range === 'week' ? '周' : '月'}洞察</Text>
-                  </View>
-                </View>
-              )}
-            </View>
-          ) : (
-            <View className='card-collapsed-preview'>
-              <Text className='card-collapsed-preview__text'>
+        <View
+          className='stats-card ai-insight-card'
+          onClick={() => setAiDetailVisible(true)}
+        >
+          <View className='ai-insight-card-top'>
+            <View className='ai-insight-card-title-wrap'>
+              <Text className='ai-insight-card-title'>AI 风险解读</Text>
+              <Text className='ai-insight-card-summary'>
                 {displayInsightText
                   ? `${displayInsightText.slice(0, 46)}${displayInsightText.length > 46 ? '...' : ''}`
-                  : `点开查看本${range === 'week' ? '周' : '月'}的风险解读`}
+                  : '用于把统计结果翻译成更容易理解的长期趋势结论'}
               </Text>
             </View>
-          )}
+          </View>
+          <View className='ai-insight-card-more-btn'>
+            <Text className='ai-insight-card-more-text'>查看详情</Text>
+          </View>
         </View>
+
+        {/* AI 风险解读详情底部弹窗 */}
+        {aiDetailVisible && (
+          <View
+            className='ai-detail-modal'
+            onClick={() => setAiDetailVisible(false)}
+          >
+            <View className='ai-detail-backdrop' />
+            <View
+              className='ai-detail-panel'
+              onClick={(e) => e.stopPropagation()}
+            >
+              <View className='ai-detail-handle' />
+              <View className='ai-detail-header'>
+                <Text className='ai-detail-title'>AI 风险解读</Text>
+                <Text className='ai-detail-subtitle'>用于把统计结果翻译成更容易理解的长期趋势结论</Text>
+              </View>
+              <View className='ai-detail-body'>
+                <View className='ai-disclaimer'>
+                  <Text className='ai-disclaimer-text'>本页表达的是饮食相关风险趋势，不构成医学诊断或治疗建议。</Text>
+                </View>
+                {insightGeneratedDate ? (
+                  <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
+                    <Text className='analysis-status-text'>
+                      {insightNeedsRefresh
+                        ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
+                        : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
+                    </Text>
+                  </View>
+                ) : null}
+                {insightError ? (
+                  <View className='analysis-error'>
+                    <Text className='analysis-error-text'>{insightError}</Text>
+                  </View>
+                ) : null}
+                {displayInsightText ? (
+                  <Text className='analysis-content'>{displayInsightText}</Text>
+                ) : insightActionLoading || isTyping ? (
+                  <View className='analysis-loading'>
+                    <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
+                    <Text className='analysis-loading-text'>
+                      {insightActionLoading ? 'AI 正在生成当前统计周期的营养洞察，请稍候...' : '正在展示已生成的洞察...'}
+                    </Text>
+                  </View>
+                ) : (
+                  <View className='analysis-empty'>
+                    <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>
+                    <View className='analysis-empty-action' onClick={handleGenerateInsight}>
+                      <Text className='analysis-empty-action-text'>生成本{range === 'week' ? '周' : '月'}洞察</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <View
+                className='ai-detail-close-btn'
+                onClick={() => setAiDetailVisible(false)}
+              >
+                <Text className='ai-detail-close-text'>知道了</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         <View className='stats-section-head'>
           <Text className='stats-section-head__title'>支撑证据</Text>

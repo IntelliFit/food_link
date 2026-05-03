@@ -40,7 +40,13 @@ export function MealRecordsDialog({ visible, meal, onClose, onSelectRecord }: Me
   const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
   const { Icon, color, bgColor, label } = config
   const entries = (Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()) : []) as HomeMealRecordEntry[]
-  const count = entries.length
+  // 按提交时间 created_at 从早到晚排序（fallback 到用餐时间 record_time）
+  const sortedEntries = [...entries].sort((a, b) => {
+    const timeA = a.full_record?.created_at || a.record_time || ''
+    const timeB = b.full_record?.created_at || b.record_time || ''
+    return new Date(timeA).getTime() - new Date(timeB).getTime()
+  })
+  const count = sortedEntries.length
 
   return (
     <View className='record-menu-modal' catchMove>
@@ -59,16 +65,24 @@ export function MealRecordsDialog({ visible, meal, onClose, onSelectRecord }: Me
 
         {/* 记录列表 */}
         <View className='meal-record-entries'>
-          {entries.map((entry) => {
+          {sortedEntries.map((entry) => {
             const cachedFull = getCachedMealFullRecord(entry.id)
-            const imageUrl = cachedFull?.image_path || meal.image_path || (Array.isArray(meal.image_paths) && meal.image_paths[0]) || ''
+            // 优先从 entry 直接取图（后端已下发），避免缓存未命中导致图片缺失；fallback 到缓存与餐次级别图片
+            const imageUrl = entry.image_path
+              || cachedFull?.image_path
+              || cachedFull?.image_paths?.[0]
+              || ''
             const hasImage = !!imageUrl
             const time = formatEntryTime(entry.record_time)
             const totalCalories = entry.total_calories ?? 0
             const protein = cachedFull?.total_protein ?? 0
             const carbs = cachedFull?.total_carbs ?? 0
             const fat = cachedFull?.total_fat ?? 0
-            const title = (entry.title || '').trim() || label
+            // title 兜底：优先 entry.title，其次缓存的 full_record 中的食物名/description，最后餐次名
+            const title = (entry.title || '').trim()
+              || (cachedFull?.items?.[0]?.name || '').trim()
+              || (cachedFull?.description || '').trim().split('\n')[0]
+              || label
 
             return (
               <View

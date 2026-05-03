@@ -80,7 +80,7 @@ const QUICK_ACCESS_ITEMS = [
   },
   {
     id: 'history',
-    label: '历史记录',
+    label: '识别记录',
     desc: '查看以往识别记录',
     Icon: IconHistory,
     color: '#6b7280',
@@ -258,6 +258,9 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                   </View>
                 </View>
                 <View className='record-menu-list-right'>
+                  {item.id === 'history' && hasUnseenWaitingRecord && (
+                    <View className='record-menu-dot' />
+                  )}
                   <IconChevronRight size={16} color='#d1d5db' />
                 </View>
               </View>

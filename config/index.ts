@@ -64,6 +64,10 @@ export default defineConfig<'vite'>(async (merge) => {
           from: 'src/assets/iconfont',
           to: 'assets/iconfont'
         },
+        {
+          from: 'src/assets/vant-icon',
+          to: 'assets/vant-icon'
+        },
 
       ],
       options: {
@@ -93,6 +97,20 @@ export default defineConfig<'vite'>(async (merge) => {
           name: 'taro-fix-target',
           configResolved(config) {
             config.build.target = 'es2018'
+          }
+        },
+        // fix: @taroify/icons 使用的 iconfont CDN (at.alicdn.com) 在小程序环境中
+        // 无法加载，替换为本地托管的 vant-icon 字体文件
+        {
+          name: 'taro-fix-vant-icon-font',
+          transform(code, id) {
+            if (/@taroify[\\/]icons/.test(id) && /\.(css|scss|less|wxss)$/.test(id)) {
+              return code.replace(
+                /url\(['"]?\/\/at\.alicdn\.com\/t\/c\/font_2553510_\w+\.(woff2|woff)\?t=\d+['"]?\)/g,
+                (match, format) => `url("/assets/vant-icon/vant-icon.${format}")`
+              )
+            }
+            return null
           }
         },
         // debug: 开发构建时关闭压缩、保留 sourcemap，便于真机调试定位完整错误栈

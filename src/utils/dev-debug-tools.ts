@@ -69,3 +69,4 @@ export function openAnalyzePageFromMenu(): void {
 export function openDebugHealthProfileFromMenu(): void {
   Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
 }
+

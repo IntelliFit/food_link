@@ -673,3 +673,199 @@
     transform: rotate(360deg);
   }
 }
+
+/* ==================== 深色模式 ==================== */
+.share-page--dark {
+  background: #101715;
+
+  .quick-upload-tip {
+    background: linear-gradient(135deg, #153127 0%, #1a3328 100%);
+    border-color: rgb(92 184 150 / 18%);
+  }
+
+  .quick-upload-title {
+    color: #7dd3b0;
+  }
+
+  .quick-upload-subtitle {
+    color: #9ca3a8;
+  }
+
+  .image-section,
+  .nutrition-section,
+  .merchant-section,
+  .tags-section,
+  .location-section,
+  .source-section {
+    background: #18211f;
+  }
+
+  .section-title {
+    color: #e8ece9;
+  }
+
+  .image-upload-area {
+    background: #222c29;
+    border-color: #3d5d51;
+  }
+
+  .upload-text {
+    color: #9ca3a8;
+  }
+
+  .image-count {
+    color: #9ca3a8;
+  }
+
+  .share-grid-item {
+    background: #222c29;
+
+    &.share-add-btn {
+      border-color: #3d5d51;
+      background: #222c29;
+    }
+  }
+
+  .share-add-btn .share-add-icon,
+  .share-add-btn .share-add-text {
+    color: #9ca3a8;
+  }
+
+  .nutrition-summary {
+    background: #222c29;
+  }
+
+  .nutrition-label,
+  .nutrition-tip {
+    color: #9ca3a8;
+  }
+
+  .form-label {
+    color: #e8ece9;
+  }
+
+  .form-input,
+  .form-textarea,
+  .tag-input {
+    background: #222c29;
+    color: #e8ece9;
+  }
+
+  .city-value {
+    color: #e8ece9;
+  }
+
+  .city-placeholder {
+    color: #9ca3a8;
+  }
+
+  .source-tag-chip {
+    background: #222c29;
+    color: #9ca3a8;
+
+    &.active {
+      background: rgb(92 184 150 / 12%);
+      color: #7dd3b0;
+      border-color: #3d5d51;
+    }
+  }
+
+  .rating-star {
+    color: #3d5d51;
+  }
+
+  .switch-row {
+    border-bottom-color: #3d5d51;
+  }
+
+  .switch-label {
+    color: #e8ece9;
+  }
+
+  .switch-btn {
+    background: #3d5d51;
+  }
+
+  .quick-tag {
+    background: #222c29;
+    color: #9ca3a8;
+
+    &.selected {
+      background: rgb(92 184 150 / 12%);
+      color: #7dd3b0;
+    }
+  }
+
+  .selected-tag {
+    background: rgb(92 184 150 / 12%);
+    color: #7dd3b0;
+  }
+
+  .remove-tag {
+    color: #9ca3a8;
+  }
+
+  .search-location-btn {
+    background: rgb(92 184 150 / 12%);
+    color: #7dd3b0;
+
+    .iconfont {
+      color: #7dd3b0;
+    }
+  }
+
+  .submit-bar {
+    background: #18211f;
+    box-shadow: 0 -4rpx 16rpx rgb(0 0 0 / 25%);
+  }
+
+  .submit-btn.disabled {
+    background: #3d5d51;
+  }
+
+  .record-modal-content {
+    background: #18211f;
+  }
+
+  .modal-title {
+    color: #e8ece9;
+  }
+
+  .modal-close {
+    color: #9ca3a8;
+  }
+
+  .record-item {
+    border-bottom-color: #3d5d51;
+  }
+
+  .record-image,
+  .record-image-placeholder {
+    background: #222c29;
+  }
+
+  .record-desc {
+    color: #e8ece9;
+  }
+
+  .record-meta {
+    color: #9ca3a8;
+  }
+
+  .record-empty {
+    color: #9ca3a8;
+  }
+
+  .source-option {
+    background: #222c29;
+
+    &.active {
+      background: rgb(92 184 150 / 12%);
+      border-color: #3d5d51;
+    }
+  }
+
+  .source-text {
+    color: #9ca3a8;
+  }
+}

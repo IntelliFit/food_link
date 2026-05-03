@@ -22,6 +22,7 @@ import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../compon
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 import './index.scss'
 
@@ -140,6 +141,7 @@ async function fetchPosterCalorieCompareForRecord(record: FoodRecord): Promise<P
 }
 
 function RecordDetailPage() {
+  const { scheme } = useAppColorScheme()
   const router = useRouter()
   const [record, setRecord] = React.useState<FoodRecord | null>(null)
   const [posterGenerating, setPosterGenerating] = React.useState(false)
@@ -413,11 +415,13 @@ function RecordDetailPage() {
 
   if (loading || !record) {
     return (
-      <View className='record-detail-root'>
+      <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
         <CustomNavBar
           title='识别记录详情'
           showBack
           onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+          color={scheme === 'dark' ? '#ffffff' : '#000000'}
+          background={scheme === 'dark' ? '#101716' : '#f8fafc'}
         />
         <View className='record-detail-below-nav record-detail-loading-placeholder'>
           <View className='empty-tip'>
@@ -702,11 +706,13 @@ function RecordDetailPage() {
   const navBarHeight = getNavBarHeight()
 
   return (
-    <View className='record-detail-root'>
+    <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
       <CustomNavBar
         title='识别记录详情'
         showBack
         onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+        color={scheme === 'dark' ? '#ffffff' : '#000000'}
+        background={scheme === 'dark' ? '#101716' : '#f8fafc'}
       />
       {/*
         海报预览/离屏 Canvas 勿放在 ScrollView 内：真机上 fixed 全屏层会相对滚动容器错位；

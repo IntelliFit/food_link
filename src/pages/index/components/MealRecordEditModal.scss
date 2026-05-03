@@ -17,7 +17,7 @@
 .edit-modal-content {
   position: relative;
   width: 100%;
-  max-height: 85vh;
+  max-height: 92vh;
   background: #fff;
   border-radius: 32rpx 32rpx 0 0;
   display: flex;
@@ -74,7 +74,7 @@
 .edit-modal-body {
   flex: 1;
   min-height: 0;
-  max-height: 60vh;
+  height: 0;
   padding: 24rpx 36rpx;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
@@ -474,5 +474,184 @@
 @keyframes btn-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+
+/* Dark mode */
+.edit-modal--dark {
+  .edit-modal-content {
+    background: #1e2624;
+  }
+
+  .edit-modal-header {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .edit-modal-title {
+    color: #f2f7f4;
+  }
+
+  .edit-modal-close {
+    background: #2a3330;
+
+    &::before,
+    &::after {
+      background: #94a3b8;
+    }
+  }
+
+  .edit-meta-card {
+    background: #181f1d;
+  }
+
+  .meal-option {
+    background: #1e2624;
+
+    .meal-icon {
+      color: #94a3b8;
+    }
+
+    .meal-label {
+      color: #94a3b8;
+    }
+
+    &.active {
+      background: rgba(0, 188, 125, 0.2);
+      border-color: #00bc7d;
+
+      .meal-icon {
+        color: #00bc7d;
+      }
+
+      .meal-label {
+        color: #00bc7d;
+      }
+    }
+  }
+
+  .state-option {
+    background: #1e2624;
+
+    .state-icon {
+      color: #94a3b8;
+    }
+
+    .state-label {
+      color: #94a3b8;
+    }
+
+    &.active {
+      background: rgba(0, 188, 125, 0.2);
+      border-color: #00bc7d;
+
+      .state-icon {
+        color: #00bc7d;
+      }
+
+      .state-label {
+        color: #00bc7d;
+      }
+    }
+  }
+
+  .edit-food-card {
+    background: #181f1d;
+  }
+
+  .edit-food-name {
+    color: #f2f7f4;
+  }
+
+  .edit-food-name-btn {
+    background: #2a3330;
+
+    .iconfont {
+      color: #94a3b8;
+    }
+  }
+
+  .edit-food-delete {
+    background: #2a3330;
+
+    .iconfont {
+      color: #e09090;
+    }
+  }
+
+  .edit-section-label {
+    color: rgba(214, 226, 220, 0.76);
+  }
+
+  .intake-adjuster {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .adjust-btn {
+    &:active {
+      background: #2a3330;
+    }
+
+    &.minus {
+      border-right-color: rgba(255, 255, 255, 0.08);
+    }
+
+    &.plus {
+      border-left-color: rgba(255, 255, 255, 0.08);
+    }
+  }
+
+  .adjust-btn-text {
+    color: #00bc7d;
+  }
+
+  .intake-input {
+    color: #f2f7f4;
+  }
+
+  .intake-unit {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .ratio-value {
+    color: #00bc7d;
+
+    &.over {
+      color: #f59e0b;
+    }
+  }
+
+  .edit-nutrients-tip {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .nutrient-chip {
+    background: #1e2624;
+  }
+
+  .nutrient-chip-label {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .nutrient-chip-value {
+    color: #f2f7f4;
+  }
+
+  .nutrient-chip-unit {
+    color: rgba(214, 226, 220, 0.58);
+  }
+
+  .edit-modal-footer {
+    border-top-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .edit-cancel-btn {
+    background: #2a3330;
+    color: #94a3b8;
+  }
+
+  .edit-save-btn {
+    background: linear-gradient(135deg, #00a870 0%, #00bc7d 100%);
   }
 }

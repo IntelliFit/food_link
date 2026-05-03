@@ -47,6 +47,9 @@
   line-height: 42rpx;
   color: #0f172a;
   font-weight: 700;
+  overflow-wrap: break-word;
+  word-break: break-all;
+  min-width: 0;
 }
 
 .day-record-list {

@@ -17,6 +17,7 @@ import {
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
+import loginLogo from '../../../assets/login-logo.png'
 import './index.scss'
 
 interface UserInfo {
@@ -24,8 +25,6 @@ interface UserInfo {
     name: string
     meta: string
 }
-
-const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
 
 /** 安全返回：若当前是第一个页面则跳转首页 */
 function safeNavigateBack() {
@@ -315,7 +314,7 @@ export default function LoginPage() {
         <FlPageThemeRoot>
         <View className='login-page'>
             <View className='login-header'>
-                <Image src={APP_LOGO_URL} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
+                <Image src={loginLogo} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
                 <Text className='app-name'>智健食探</Text>
                 <Text className='app-slogan'>记录饮食，连接健康</Text>
             </View>
@@ -346,7 +345,7 @@ export default function LoginPage() {
                   onClick={handleWxLogin}
                   loading={loading && !showProfileForm}
                 >
-                    微信一键登录
+                    手机号快捷登录
                 </TaroifyButton>
                 <TaroifyButton
                   className='skip-login-btn'

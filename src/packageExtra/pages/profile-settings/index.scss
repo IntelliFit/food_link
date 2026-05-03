@@ -134,3 +134,50 @@
     box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
   }
 }
+
+
+/* Dark mode */
+.profile-settings-page--dark {
+  background: #0d1312;
+
+  .settings-card {
+    background: #181f1d;
+  }
+
+  .settings-section-title {
+    color: #f2f7f4;
+  }
+
+  .form-label {
+    color: rgba(214, 226, 220, 0.76);
+  }
+
+  .avatar-choose-wrapper {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .avatar-placeholder-text {
+    color: #94a3b8;
+  }
+
+  .nickname-input {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #f2f7f4;
+
+    &::placeholder {
+      color: rgba(214, 226, 220, 0.4);
+    }
+
+    &:focus {
+      background: #1e2624;
+      border-color: #00bc7d;
+      box-shadow: 0 0 0 4rpx rgb(0 188 125 / 15%);
+    }
+  }
+
+  .save-btn {
+    background: linear-gradient(135deg, #00a870 0%, #00bc7d 100%);
+  }
+}

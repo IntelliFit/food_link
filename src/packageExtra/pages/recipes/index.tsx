@@ -137,6 +137,14 @@ function RecipesPage() {
       Taro.hideLoading()
       Taro.showToast({ title: '删除成功', icon: 'success' })
       loadRecipes()
+      // 更新 profile 页收藏统计缓存
+      try {
+        const cached = Taro.getStorageSync('profile_stats_favorite_count')
+        if (cached !== undefined && cached !== '') {
+          const next = Math.max(0, Number(cached) - 1)
+          Taro.setStorageSync('profile_stats_favorite_count', String(next))
+        }
+      } catch (_) { /* ignore */ }
     } catch (e: any) {
       Taro.hideLoading()
       await showUnifiedApiError(e, '删除失败')

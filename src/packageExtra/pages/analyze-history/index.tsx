@@ -1,8 +1,8 @@
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
-import { useState, useRef, useCallback } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
+import { useState, useCallback, useRef } from 'react'
+import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
+import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, getAnalyzeTaskStatusCount, markAnalyzeHistorySeen, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -17,6 +17,19 @@ const STATUS_MAP: Record<string, string> = {
   violated: '内容违规',
   timed_out: '已超时',
   cancelled: '已取消'
+}
+
+/** 根据后端返回的 status + is_recorded 决定列表中展示的状态文案和样式类名 */
+const pickDisplayStatus = (task: AnalysisTask): { text: string; className: string } => {
+  if (task.status === 'pending' || task.status === 'processing') {
+    return { text: '正在识别', className: 'status-recognizing' }
+  }
+  if (task.status === 'done') {
+    if (task.is_recorded === true) return { text: '已经记录', className: 'status-recorded' }
+    if (task.is_recorded === false) return { text: '等待记录', className: 'status-waiting' }
+    return { text: '已完成', className: 'status-done' } // 兼容旧数据
+  }
+  return { text: STATUS_MAP[task.status] || task.status, className: `status-${task.status}` }
 }
 
 const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
@@ -157,26 +170,15 @@ function formatTime(iso: string): { text: string; isToday: boolean } {
   }
 }
 
-// 左滑操作按钮宽度
-const ACTION_BUTTON_WIDTH = 108 // rpx
-
-interface SwipeableTaskCardProps {
+interface TaskCardProps {
   task: AnalysisTask
   onTap: (task: AnalysisTask) => void
-  onDelete: (taskId: string) => void
-  onShare: (task: AnalysisTask) => void
+  onMore: (task: AnalysisTask) => void
 }
 
-function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCardProps) {
-  const [offset, setOffset] = useState(0)
-  const [isOpen, setIsOpen] = useState(false)
-  const startXRef = useRef(0)
-  const currentXRef = useRef(0)
-  const maxOffset = ACTION_BUTTON_WIDTH * 2 // 两个按钮的总宽度
-
+function TaskCard({ task, onTap, onMore }: TaskCardProps) {
   const mode = pickExecutionMode(task)
   const recognitionOutcome = pickRecognitionOutcome(task)
-  const canSwipe = task.status !== 'pending' // 排队中不能滑动，其他都可以
   const canShare = task.status === 'done' && task.result // 只有完成的才能分享
   const totalCalories = getTotalCalories(task)
   const sourceType = pickSourceTaskType(task)
@@ -185,93 +187,16 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
   const textAvatar = pickTextAvatar(task.text_input)
   const timeInfo = formatTime(task.created_at)
 
-  const handleTouchStart = (e: any) => {
-    if (!canSwipe) return
-    startXRef.current = e.touches[0].clientX
-    currentXRef.current = offset
-  }
-
-  const handleTouchMove = (e: any) => {
-    if (!canSwipe) return
-    const diff = e.touches[0].clientX - startXRef.current
-    let newOffset = currentXRef.current + diff
-    // 限制滑动范围
-    newOffset = Math.max(-maxOffset, Math.min(0, newOffset))
-    setOffset(newOffset)
-  }
-
-  const handleTouchEnd = () => {
-    if (!canSwipe) return
-    if (offset < -ACTION_BUTTON_WIDTH * 0.72) {
-      setOffset(-maxOffset)
-      setIsOpen(true)
-    } else {
-      setOffset(0)
-      setIsOpen(false)
-    }
-  }
-
-  const handleDelete = () => {
-    Taro.showModal({
-      title: '确认删除',
-      content: '删除后无法恢复，是否确认删除？',
-      confirmText: '删除',
-      confirmColor: '#e57373',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          onDelete(task.id)
-          setOffset(0)
-          setIsOpen(false)
-        }
-      }
-    })
-  }
-
-  const handleShare = () => {
-    if (!canShare) {
-      Taro.showToast({ title: '识别完成后才能分享', icon: 'none' })
-      return
-    }
-    onShare(task)
-    setOffset(0)
-    setIsOpen(false)
-  }
-
-  const handleTap = () => {
-    if (isOpen) {
-      setOffset(0)
-      setIsOpen(false)
-    } else {
-      onTap(task)
-    }
+  const handleMore = (e: any) => {
+    e.stopPropagation()
+    onMore(task)
   }
 
   return (
-    <View className='swipeable-card-wrapper'>
-      {/* 背景操作按钮 */}
-      <View className='action-buttons' style={{ width: `${maxOffset}rpx` }}>
-        <View 
-          className={`action-btn share ${!canShare ? 'disabled' : ''}`} 
-          onClick={handleShare}
-        >
-          <Text className='iconfont icon-fenxiang' />
-          <Text className='action-text'>分享</Text>
-        </View>
-        <View className='action-btn delete' onClick={handleDelete}>
-          <Text className='iconfont icon-shanchu' />
-          <Text className='action-text'>删除</Text>
-        </View>
-      </View>
-
-      {/* 卡片内容 */}
+    <View className='task-card-wrapper'>
       <View
         className={`task-card ${task.status === 'violated' || task.is_violated ? 'task-card-violated' : ''}`}
-        style={{ transform: `translateX(${offset}rpx)` }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={handleTap}
+        onClick={() => onTap(task)}
       >
         <View className='thumb'>
           {task.status === 'violated' || task.is_violated ? (
@@ -296,14 +221,18 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
               <Text className='headline'>{headline}</Text>
               <Text className='calories'>{totalCalories > 0 ? `${Math.round(totalCalories)} kcal` : '--'}</Text>
               <Text className='meta'>{meta}</Text>
-              <Text className='time'>{timeInfo.text}</Text>
+              <View className='time-row'>
+                <Text className='time'>{timeInfo.text}</Text>
+                {(() => {
+                  const ds = pickDisplayStatus(task)
+                  return (
+                    <View className={`status-badge ${ds.className}`}>
+                      <Text className='status-text'>{ds.text}</Text>
+                    </View>
+                  )
+                })()}
+              </View>
               <View className='tag-row-inline'>
-                <View className={`source-badge source-${sourceType}`}>
-                  <Text className='source-badge-text'>{sourceType === 'food_text' ? '文字' : '图片'}</Text>
-                </View>
-                <View className={`status-badge status-${task.status}`}>
-                  <Text className='status-text'>{STATUS_MAP[task.status] || task.status}</Text>
-                </View>
                 {mode === 'strict' && (
                   <View className='mode-tag strict'>
                     <Text className='mode-tag-text'>精准</Text>
@@ -317,15 +246,17 @@ function SwipeableTaskCard({ task, onTap, onDelete, onShare }: SwipeableTaskCard
               </View>
             </View>
             <View className='right-content'>
-              {(task.status === 'done' || task.status === 'failed' || task.status === 'processing') && !task.is_violated && (
-                <Text className='arrow'>›</Text>
-              )}
+              <View className='more-btn' onClick={handleMore}>
+                <Text className='more-dots'>⋮</Text>
+              </View>
             </View>
           </View>
           {(task.status === 'violated' || task.is_violated) && task.violation_reason && (
             <Text className='violation-reason'>{task.violation_reason}</Text>
           )}
         </View>
+
+
       </View>
     </View>
   )
@@ -335,6 +266,8 @@ function AnalyzeHistoryPage() {
   const { scheme } = useAppColorScheme()
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [showActionSheet, setShowActionSheet] = useState(false)
+  const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
   const loadSeqRef = useRef(0)
   const navBarHeight = getNavBarHeight()
 
@@ -376,6 +309,7 @@ function AnalyzeHistoryPage() {
         const allTasks = (res.tasks || []).filter((t) => {
           const payload = (t.payload || {}) as Record<string, unknown>
           if (payload.expiry_recognition) return false
+          if (payload.exercise) return false // 排除运动回退任务（payload.exercise=true）
           return isAnalyzeHistoryTaskType(t.task_type)
         })
       allTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -393,6 +327,34 @@ function AnalyzeHistoryPage() {
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
     void load()
+    // 刷新 waiting_record badge 计数
+    void (async () => {
+      try {
+        const sc = await getAnalyzeTaskStatusCount()
+        Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
+        Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
+      } catch {
+        // 静默失败
+      }
+    })()
+  })
+
+  useDidHide(() => {
+    // 页面隐藏时：识别记录 + 食物保质期 未读全部一笔勾销
+    void (async () => {
+      try {
+        await markAnalyzeHistorySeen()
+      } catch {
+        // 静默失败
+      }
+      // 清零识别记录 + 食物保质期未读，保留好友请求 badge
+      const today = new Date().toISOString().slice(0, 10)
+      Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
+      Taro.setStorageSync('analyze_waiting_record_count', 0)
+      Taro.setStorageSync('food_expiry_last_seen_date', today)
+      const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+      Taro.setStorageSync('profile_tab_badge_count', friendBadge)
+    })()
   })
 
   const handleDelete = async (taskId: string) => {
@@ -406,26 +368,155 @@ function AnalyzeHistoryPage() {
       }
       // 从列表中移除
       setTasks(prev => prev.filter(t => t.id !== taskId))
+      // 更新 profile 页识别记录统计缓存
+      try {
+        const cached = Taro.getStorageSync('profile_stats_analyze_count')
+        if (cached !== undefined && cached !== '') {
+          const next = Math.max(0, Number(cached) - 1)
+          Taro.setStorageSync('profile_stats_analyze_count', String(next))
+        }
+      } catch (_) { /* ignore */ }
     } catch (e: any) {
       await showUnifiedApiError(e, '删除失败')
     }
+  }
+
+  const handleDiscardUnrecorded = () => {
+    const discardableTasks = tasks.filter(
+      t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed' ||
+        (t.status === 'done' && t.is_recorded === false)
+    )
+    if (discardableTasks.length === 0) {
+      Taro.showToast({ title: '没有可丢弃的未记录', icon: 'none' })
+      return
+    }
+    Taro.showModal({
+      title: '确认丢弃',
+      content: `确定丢弃 ${discardableTasks.length} 条未记录的识别结果吗？丢弃后不可恢复。`,
+      confirmText: '丢弃',
+      confirmColor: '#e57373',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          void (async () => {
+            Taro.showLoading({ title: '丢弃中...', mask: true })
+            const results = await Promise.allSettled(
+              discardableTasks.map(t => deleteAnalysisTask(t.id))
+            )
+            // 收集成功删除的任务 ID
+            const deletedIds: string[] = []
+            results.forEach((r, idx) => {
+              if (r.status === 'fulfilled') {
+                deletedIds.push(discardableTasks[idx].id)
+              }
+            })
+            const successCount = deletedIds.length
+            const failCount = results.length - successCount
+            Taro.hideLoading()
+            if (failCount > 0) {
+              Taro.showToast({ title: `已丢弃 ${successCount} 条，${failCount} 条失败`, icon: 'none' })
+            } else {
+              Taro.showToast({ title: `已丢弃 ${successCount} 条记录`, icon: 'success' })
+            }
+            // 只从列表中移除后端确认删除成功的任务
+            setTasks(prev => prev.filter(t => !deletedIds.includes(t.id)))
+            // 更新 profile 页识别记录统计缓存
+            try {
+              const cached = Taro.getStorageSync('profile_stats_analyze_count')
+              if (cached !== undefined && cached !== '') {
+                const next = Math.max(0, Number(cached) - successCount)
+                Taro.setStorageSync('profile_stats_analyze_count', String(next))
+              }
+            } catch (_) { /* ignore */ }
+            // 刷新 waiting_record badge 计数并清除未读消息
+            try {
+              const sc = await getAnalyzeTaskStatusCount()
+              Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
+              Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
+              // 更新 profile tab badge：只替换 waiting_record 部分，保留食物保质期 + 好友请求部分
+              const today = new Date().toISOString().slice(0, 10)
+              const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
+              const oldProfileBadge = Number(Taro.getStorageSync('profile_tab_badge_count') || 0)
+              const oldWaitingRecord = Number(Taro.getStorageSync('analyze_waiting_record_count') || 0)
+              const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+              const oldFoodExpiryBadge = Math.max(0, oldProfileBadge - oldWaitingRecord - friendBadge)
+              const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : oldFoodExpiryBadge
+              Taro.setStorageSync('profile_tab_badge_count', (sc.waiting_record || 0) + foodExpiryBadge + friendBadge)
+            } catch {
+              // 静默失败
+            }
+          })()
+        }
+      }
+    })
   }
 
   const handleShare = (task: AnalysisTask) => {
     // 分享功能：跳转到分享页面
     if (task.status === 'done' && task.result) {
       const result = task.result as AnalyzeResponse
-      // 准备分享数据
+      // 准备分享数据：自动填充到公共食物库分享页
+      const imageUrls = task.image_paths && task.image_paths.length > 0
+        ? task.image_paths
+        : (task.image_url ? [task.image_url] : [])
+      const items = (result.items || []).map(it => ({
+        name: it.name || '',
+        weight: it.estimatedWeightGrams ?? it.originalWeightGrams ?? 0,
+        nutrients: it.nutrients
+      }))
       const shareData = {
         imageUrl: task.image_url || '',
+        imageUrls,
         description: result.description || '',
-        totalCalories: result.items?.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0) || 0
+        insight: result.insight || '',
+        items,
+        totalCalories: items.reduce((sum, it) => sum + (it.nutrients?.calories || 0), 0),
+        totalProtein: items.reduce((sum, it) => sum + (it.nutrients?.protein || 0), 0),
+        totalCarbs: items.reduce((sum, it) => sum + (it.nutrients?.carbs || 0), 0),
+        totalFat: items.reduce((sum, it) => sum + (it.nutrients?.fat || 0), 0)
       }
       Taro.setStorageSync('analyzeShareData', shareData)
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?from_analyze=1` })
     } else {
       Taro.showToast({ title: '只能分享已完成的任务', icon: 'none' })
     }
+  }
+
+  const handleMore = (task: AnalysisTask) => {
+    setActiveTask(task)
+    setShowActionSheet(true)
+  }
+
+  const closeActionSheet = () => {
+    setShowActionSheet(false)
+    setActiveTask(null)
+  }
+
+  const actionSheetShare = () => {
+    if (!activeTask) return
+    if (activeTask.status === 'done' && activeTask.result) {
+      handleShare(activeTask)
+    } else {
+      Taro.showToast({ title: '只能分享已完成的任务', icon: 'none' })
+    }
+    closeActionSheet()
+  }
+
+  const actionSheetDelete = () => {
+    if (!activeTask) return
+    closeActionSheet()
+    Taro.showModal({
+      title: '确认删除',
+      content: '删除后无法恢复，是否确认删除？',
+      confirmText: '删除',
+      confirmColor: '#e57373',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          void handleDelete(activeTask.id)
+        }
+      }
+    })
   }
 
   const onTaskTap = (task: AnalysisTask) => {
@@ -474,6 +565,15 @@ function AnalyzeHistoryPage() {
       }
       Taro.setStorageSync('analyzeSourceTaskId', task.id)
       Taro.setStorageSync('analyzeTaskType', sourceTaskType)
+      if (task.is_recorded) {
+        Taro.setStorageSync('analyzeTaskIsRecorded', '1')
+        if (task.record_id) {
+          Taro.setStorageSync('analyzeCommittedRecordId', task.record_id)
+        }
+      } else {
+        Taro.removeStorageSync('analyzeTaskIsRecorded')
+        Taro.removeStorageSync('analyzeCommittedRecordId')
+      }
       Taro.navigateTo({ url: extraPkgUrl('/pages/result/index') })
       return
     }
@@ -508,7 +608,7 @@ function AnalyzeHistoryPage() {
   return (
     <View className={`analyze-history-page ${scheme === 'dark' ? 'analyze-history-page--dark' : ''}`}>
       <CustomNavBar
-        title='分析历史'
+        title='识别记录'
         showBack
         onBack={handleBack}
         color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
@@ -525,17 +625,52 @@ function AnalyzeHistoryPage() {
             <Text className='empty-text'>暂时没有记录，快去拍一张吧~</Text>
           </View>
         ) : (
-          tasks.map(t => (
-            <SwipeableTaskCard
-              key={t.id}
-              task={t}
-              onTap={onTaskTap}
-              onDelete={handleDelete}
-              onShare={handleShare}
-            />
-          ))
+          <>
+            <View className='list-header'>
+              <View className='list-header-spacer' />
+              <View className='bulk-delete-btn' onClick={handleDiscardUnrecorded}>
+                <Text className='iconfont icon-shanchu bulk-delete-icon' />
+                <Text className='bulk-delete-text'>一键删除未记录</Text>
+              </View>
+            </View>
+            {tasks.map(t => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                onTap={onTaskTap}
+                onMore={handleMore}
+              />
+            ))}
+          </>
         )}
       </ScrollView>
+
+      {/* 底部操作弹窗 */}
+      {showActionSheet && activeTask && (
+        <View className='action-sheet-overlay' catchMove>
+          <View className='action-sheet-mask' onClick={closeActionSheet} />
+          <View className='action-sheet-content'>
+            <View className='action-sheet-handle-bar' />
+            <View className='action-sheet-actions'>
+              <View
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
+                onClick={actionSheetShare}
+              >
+                <Text className='iconfont icon-fenxiang action-sheet-icon' />
+                <Text className='action-sheet-label'>分享到公共食物库</Text>
+              </View>
+              <View className='action-sheet-divider' />
+              <View className='action-sheet-item action-sheet-item--danger' onClick={actionSheetDelete}>
+                <Text className='iconfont icon-shanchu action-sheet-icon' />
+                <Text className='action-sheet-label'>删除</Text>
+              </View>
+            </View>
+            <View className='action-sheet-cancel' onClick={closeActionSheet}>
+              <Text className='action-sheet-cancel-text'>取消</Text>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

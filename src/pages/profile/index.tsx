@@ -1,16 +1,12 @@
-import { View, Text, Image, Button } from '@tarojs/components'
-import { useState } from 'react'
+import { View, Text, Image, Navigator } from '@tarojs/components'
+import { useState, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   TodoListOutlined,
-  NotesOutlined,
-  ChartTrendingOutlined,
-  LocationOutlined,
+  CalendarOutlined,
   ShopOutlined,
-  Bell,
   ShieldOutlined,
   InfoOutlined,
-  CalendarOutlined,
   Arrow,
   ClockOutlined
 } from '@taroify/icons'
@@ -23,6 +19,10 @@ import {
   getMyMembership,
   getFoodExpiryDashboard,
   friendGetRequestsOverview,
+  getAnalyzeTaskCount,
+  getAnalyzeTaskStatusCount,
+  getFriendCount,
+  getFavoriteCount,
   MembershipStatus,
   FoodExpiryDashboard
 } from '../../utils/api'
@@ -122,13 +122,39 @@ function ProfilePage() {
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
   const [registerDate, setRegisterDate] = useState('--')
+  // 是否有未查看的 waiting_record 任务（用于红点提醒）
+  const [hasUnseenWaitingRecord, setHasUnseenWaitingRecord] = useState(() => {
+    try {
+      const raw = Taro.getStorageSync('analyze_has_unseen_waiting_record')
+      return raw === true || raw === 'true' || raw === 1
+    } catch { return false }
+  })
 
   // 会员状态
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [expiryDashboard, setExpiryDashboard] = useState<FoodExpiryDashboard | null>(null)
-  
+
   // 好友请求数量
   const [friendRequestCount, setFriendRequestCount] = useState(0)
+
+  /** 后台静默同步中：左上角微型 spinner，不占文档流 */
+  const [dataSyncing, setDataSyncing] = useState(false)
+
+  // 快捷入口统计数字
+  const [analyzeCount, setAnalyzeCount] = useState(0)
+  const [analyzeWaitingRecordCount, setAnalyzeWaitingRecordCount] = useState(() => {
+    try { return Number(Taro.getStorageSync('analyze_waiting_record_count') || 0) }
+    catch { return 0 }
+  })
+  const [friendCount, setFriendCount] = useState(0)
+  const [favoriteCount, setFavoriteCount] = useState(0)
+
+  // 本地缓存 key
+  const PROFILE_STATS_KEYS = {
+    analyze: 'profile_stats_analyze_count',
+    friend: 'profile_stats_friend_count',
+    favorite: 'profile_stats_favorite_count'
+  }
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -157,9 +183,26 @@ function ProfilePage() {
           } catch (_) { /* ignore */ }
         }
 
-        // 2. 异步请求网络，获取最新数据后更新
+        // 读取快捷入口统计缓存（零延迟展示）
         try {
-          const [apiUserInfo, membershipData, dashboardData, friendRequestsData] = await Promise.all([
+          const cachedAnalyze = Taro.getStorageSync(PROFILE_STATS_KEYS.analyze)
+          if (cachedAnalyze !== undefined && cachedAnalyze !== '') {
+            setAnalyzeCount(Number(cachedAnalyze))
+          }
+          const cachedFriend = Taro.getStorageSync(PROFILE_STATS_KEYS.friend)
+          if (cachedFriend !== undefined && cachedFriend !== '') {
+            setFriendCount(Number(cachedFriend))
+          }
+          const cachedFavorite = Taro.getStorageSync(PROFILE_STATS_KEYS.favorite)
+          if (cachedFavorite !== undefined && cachedFavorite !== '') {
+            setFavoriteCount(Number(cachedFavorite))
+          }
+        } catch (_) { /* ignore */ }
+
+        // 2. 异步请求网络，获取最新数据后更新
+        setDataSyncing(true)
+        try {
+          const [apiUserInfo, membershipData, dashboardData, friendRequestsData, statusCount] = await Promise.all([
             getUserProfile(),
             getMyMembership().catch((err) => {
               console.error('[profile] 获取会员状态失败:', err)
@@ -173,12 +216,21 @@ function ProfilePage() {
               console.error('[profile] 获取好友请求失败:', err)
               return null
             }),
+            getAnalyzeTaskStatusCount().catch((err) => {
+              console.error('[profile] 获取识别任务状态失败:', err)
+              return null
+            }),
           ])
 
           // 计算待处理的好友请求数量
+          let pendingFriendCount = 0
           if (friendRequestsData?.received) {
-            const pendingCount = friendRequestsData.received.filter(r => r.status === 'pending').length
-            setFriendRequestCount(pendingCount)
+            pendingFriendCount = friendRequestsData.received.filter(r => r.status === 'pending').length
+            setFriendRequestCount(pendingFriendCount)
+            Taro.setStorageSync('profile_tab_badge_friend_count', pendingFriendCount)
+          } else {
+            // 保持旧值，避免网络抖动导致清零
+            pendingFriendCount = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
           }
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
@@ -189,11 +241,35 @@ function ProfilePage() {
             setExpiryDashboard(dashboardData as FoodExpiryDashboard)
           }
 
+          // 更新识别记录 waiting_record 数量
+          const waitingRecord = statusCount?.waiting_record ?? 0
+          setAnalyzeWaitingRecordCount(waitingRecord)
+          Taro.setStorageSync('analyze_waiting_record_count', waitingRecord)
+          if (statusCount?.has_unseen_waiting_record != null) {
+            setHasUnseenWaitingRecord(statusCount.has_unseen_waiting_record)
+            Taro.setStorageSync('analyze_has_unseen_waiting_record', statusCount.has_unseen_waiting_record)
+          }
+
+          // 计算底部导航栏"我的"按钮 badge 总数 = 识别记录 + 食物保质期 + 好友请求
+          try {
+            const expiryTodo = dashboardData
+              ? ((dashboardData as FoodExpiryDashboard).expired_count || 0)
+                + ((dashboardData as FoodExpiryDashboard).today_count || 0)
+                + ((dashboardData as FoodExpiryDashboard).soon_count || 0)
+              : 0
+            // 食物保质期：如果今天已看过，不算未读
+            const today = new Date().toISOString().slice(0, 10)
+            const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
+            const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : expiryTodo
+            Taro.setStorageSync('profile_tab_badge_count', waitingRecord + foodExpiryBadge + pendingFriendCount)
+          } catch (_) { /* ignore */ }
+
           // 获取记录天数
           let days = 0
           try {
             const recordDaysData = await getUserRecordDays()
             days = recordDaysData.record_days
+            console.log('[Profile] getUserRecordDays 返回:', recordDaysData)
             setRecordDays(days)
           } catch (error) {
             console.error('获取记录天数失败:', error)
@@ -219,9 +295,14 @@ function ProfilePage() {
           }
           // 同步到 storage
           Taro.setStorageSync('userInfo', nextUserInfo)
+
+          // 3. 加载快捷入口统计数字（不阻塞主数据展示）
+          loadQuickStats()
         } catch (error) {
           console.error('获取用户信息失败:', error)
           // 网络请求失败时，本地缓存已经在上面展示过了，无需额外处理
+        } finally {
+          setDataSyncing(false)
         }
       } else {
         setIsLoggedIn(false)
@@ -233,9 +314,38 @@ function ProfilePage() {
         })
         setRecordDays(0)
         setRegisterDate('--')
+        setAnalyzeCount(0)
+        setFriendCount(0)
+        setFavoriteCount(0)
       }
     } catch (error) {
       console.error('读取登录状态失败:', error)
+    }
+  }
+
+  // 加载快捷入口统计数字
+  const loadQuickStats = async () => {
+    try {
+      const [analyzeRes, friendRes, favoriteRes] = await Promise.all([
+        getAnalyzeTaskCount().catch(() => null),
+        getFriendCount().catch(() => null),
+        getFavoriteCount().catch(() => null),
+      ])
+
+      if (analyzeRes) {
+        setAnalyzeCount(analyzeRes.count)
+        Taro.setStorageSync(PROFILE_STATS_KEYS.analyze, String(analyzeRes.count))
+      }
+      if (friendRes) {
+        setFriendCount(friendRes.count)
+        Taro.setStorageSync(PROFILE_STATS_KEYS.friend, String(friendRes.count))
+      }
+      if (favoriteRes) {
+        setFavoriteCount(favoriteRes.count)
+        Taro.setStorageSync(PROFILE_STATS_KEYS.favorite, String(favoriteRes.count))
+      }
+    } catch (error) {
+      console.error('加载快捷入口统计失败:', error)
     }
   }
 
@@ -252,13 +362,6 @@ function ProfilePage() {
       title: '健康档案',
       desc: '生理指标、BMR/TDEE、病史与饮食偏好'
     },
-      {
-        id: 1,
-        icon: <NotesOutlined size='20' />,
-        title: '我的收藏',
-        desc: '收藏过的餐食，随时复用',
-        path: '/pages/recipes/index'
-      },
     {
       id: 2,
       icon: <CalendarOutlined size='20' />,
@@ -266,12 +369,6 @@ function ProfilePage() {
       desc: formatExpiryPreviewText(expiryDashboard),
       path: '/pages/expiry/index',
       badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
-    },
-    {
-      id: 3,
-      icon: <ChartTrendingOutlined size='20' />,
-      title: '饮食记录',
-      desc: '日历图查看每天吃多吃少'
     },
     {
       id: 4,
@@ -302,11 +399,11 @@ function ProfilePage() {
             : '3 档会员 · 每日系统积分发放',
       path: extraPkgUrl('/pages/pro-membership/index')
     }
+    }
   ]
 
   // 设置项
   const settings = [
-    { id: 2, icon: <Bell size='20' />, title: '好友管理', badge: friendRequestCount },
     { id: 3, icon: <ShieldOutlined size='20' />, title: '隐私设置' },
     { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' }
   ]
@@ -327,19 +424,14 @@ function ProfilePage() {
       }
       return
     }
-    // 我的收藏
-    if (service.id === 1) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })
-      return
-    }
     // 食物管理
     if (service.id === 2) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
       return
     }
-    // 饮食记录（整合日历图和数据统计）
-    if (service.id === 3) {
-      Taro.switchTab({ url: '/pages/stats/index' })
+    // 识别记录
+    if (service.id === 7) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
       return
     }
     if (service.id === 4) {
@@ -373,11 +465,6 @@ function ProfilePage() {
       redirectToLogin()
       return
     }
-    // 好友管理
-    if (setting.id === 2) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/friends/index') })
-      return
-    }
     // 隐私设置
     if (setting.id === 3) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/privacy-settings/index') })
@@ -395,8 +482,26 @@ function ProfilePage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: extraPkgUrl('/pages/profile-settings/index') })
+    Taro.navigateTo({
+      url: extraPkgUrl('/pages/profile-settings/index'),
+      fail: (err) => {
+        console.error('[profile] navigateTo profile-settings failed:', err)
+        Taro.showToast({ title: '跳转失败，请重试', icon: 'none' })
+      }
+    })
   }
+
+  // 快捷入口点击处理
+  const handleQuickActionClick = useCallback((path: string) => {
+    console.log('[profile] quick action click:', path)
+    Taro.navigateTo({
+      url: path,
+      fail: (err) => {
+        console.error('[profile] navigateTo failed:', err)
+        Taro.showToast({ title: '页面跳转失败', icon: 'none' })
+      }
+    })
+  }, [])
 
   // 处理去登录
   const handleGoLogin = () => {
@@ -407,7 +512,7 @@ function ProfilePage() {
   const handleClearCache = () => {
     Taro.showModal({
       title: '提示',
-      content: '确定要清除缓存吗？这将重置首页和朋友圈的本地数据，下次进入时会重新加载。',
+      content: '确定要清除缓存吗？这将重置首页、识别记录和朋友圈的本地数据，下次进入时会重新加载。',
       success: (res) => {
         if (!res.confirm) return
         try {
@@ -417,6 +522,36 @@ function ProfilePage() {
           Taro.removeStorageSync('food_link_dashboard_targets_v1')
           Taro.removeStorageSync('home_poster_modal_visible')
           Taro.removeStorageSync('showRecordMenuModal')
+
+          // 识别记录 / 结果页相关缓存
+          Taro.removeStorageSync('analyzeResult')
+          Taro.removeStorageSync('analyzeSourceTaskId')
+          Taro.removeStorageSync('analyzeImagePaths')
+          Taro.removeStorageSync('analyzeImagePath')
+          Taro.removeStorageSync('analyzeTextInput')
+          Taro.removeStorageSync('analyzeTextAdditionalContext')
+          Taro.removeStorageSync('analyzeMealType')
+          Taro.removeStorageSync('analyzeDietGoal')
+          Taro.removeStorageSync('analyzeActivityTiming')
+          Taro.removeStorageSync('analyzeExecutionMode')
+          Taro.removeStorageSync('analyzePrecisionSessionId')
+          Taro.removeStorageSync('analyzeTaskType')
+          Taro.removeStorageSync('analyzeCompareMode')
+          Taro.removeStorageSync('analyzePendingCorrectionItems')
+          Taro.removeStorageSync('analyzePendingCorrectionTaskId')
+          Taro.removeStorageSync('analyzeDebugPreview')
+          Taro.removeStorageSync('analyzeShareData')
+          Taro.removeStorageSync('analyze_waiting_record_count')
+          Taro.removeStorageSync('analyze_has_unseen_waiting_record')
+          Taro.removeStorageSync('analyzeTaskIsRecorded')
+          Taro.removeStorageSync('analyzeCommittedRecordId')
+
+          // 食物保质期已读标记
+          Taro.removeStorageSync('food_expiry_last_seen_date')
+
+          // 底部导航栏 badge 计数
+          Taro.removeStorageSync('profile_tab_badge_count')
+          Taro.removeStorageSync('profile_tab_badge_friend_count')
 
           // 朋友圈相关缓存
           Taro.removeStorageSync('community_feed_cache')
@@ -437,6 +572,11 @@ function ProfilePage() {
               try { Taro.removeStorageSync(key) } catch (_) {}
             }
           })
+
+          // 清除快捷入口统计缓存
+          Taro.removeStorageSync(PROFILE_STATS_KEYS.analyze)
+          Taro.removeStorageSync(PROFILE_STATS_KEYS.friend)
+          Taro.removeStorageSync(PROFILE_STATS_KEYS.favorite)
 
           Taro.showToast({ title: '缓存已清除', icon: 'success' })
         } catch (error) {
@@ -465,6 +605,12 @@ function ProfilePage() {
             })
             setRecordDays(0)
             setRegisterDate('--')
+            setAnalyzeCount(0)
+            setFriendCount(0)
+            setFavoriteCount(0)
+            Taro.removeStorageSync(PROFILE_STATS_KEYS.analyze)
+            Taro.removeStorageSync(PROFILE_STATS_KEYS.friend)
+            Taro.removeStorageSync(PROFILE_STATS_KEYS.favorite)
             Taro.removeStorageSync('userRegisterTime')
             Taro.showToast({ title: '已退出登录', icon: 'success' })
           } catch (error) {
@@ -478,19 +624,17 @@ function ProfilePage() {
   const getServiceColor = (id: number) => {
     const colors: Record<number, string> = {
       0: '#10b981', // 健康档案 - 绿
-      1: '#f59e0b', // 收藏餐食 - 橙
       2: '#8b5cf6', // 食物管理 - 紫
       3: '#3b82f6', // 饮食记录 - 蓝
       4: '#f59e0b', // 邀请有礼 - 金
       5: '#10b981', // 公共食物库 - 绿
-      6: '#f59e0b'  // 食探会员 - 金
+      7: '#6b7280'  // 识别历史 - 灰
     }
     return colors[id] || '#6b7280'
   }
 
   const getSettingColor = (id: number) => {
     const colors: Record<number, string> = {
-      2: '#3b82f6', // 好友管理 - 蓝
       3: '#10b981', // 隐私设置 - 绿
       5: '#8b5cf6'  // 关于我们 - 紫
     }
@@ -498,34 +642,98 @@ function ProfilePage() {
   }
 
   return (
-    <View className='profile-page'>
-      <View className='profile-theme-chip' onClick={toggleScheme}>
-        <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-theme-chip-icon`} />
+    <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
+      {/* 顶部用户信息区域（仿知乎风格） */}
+      <View className='profile-header-section'>
+        <View className='user-card'>
+          <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
+            {!isLoggedIn ? (
+              <Text className='iconfont icon-weidenglu user-avatar-icon' />
+            ) : userInfo.avatar && userInfo.avatar.startsWith('http') ? (
+              <Image src={userInfo.avatar} mode='aspectFill' className='user-avatar-image' />
+            ) : (
+              <Text className='iconfont icon-user user-avatar-icon' />
+            )}
+          </View>
+          <View className='user-info-main'>
+            <View className='profile-theme-chip' onClick={toggleScheme}>
+              <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-theme-chip-icon`} />
+            </View>
+            {isLoggedIn ? (
+              <>
+                <View className='user-name-row'>
+                  <Text className='user-name'>{userInfo.name}</Text>
+                  <View className='user-days-pill'>
+                    <Text className='user-days-pill-text'>已记录 {recordDays} 天</Text>
+                  </View>
+                </View>
+                <View className='user-edit-row' onClick={handleSettings}>
+                  <Text className='user-edit-text'>编辑资料</Text>
+                  <Arrow size={12} color='#9ca3af' />
+                </View>
+              </>
+            ) : (
+              <View className='user-name-row'>
+                <Text className='user-name' onClick={handleGoLogin}>点击登录</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* 快捷入口（仿知乎头像下方统计/入口，数字 + 名称） */}
+        {isLoggedIn && (
+          <View className='profile-quick-actions'>
+            <Navigator
+              className='quick-action-item'
+              url={extraPkgUrl('/pages/analyze-history/index')}
+            >
+              <View className='quick-action-num-wrap'>
+                <Text className='quick-action-num'>{analyzeCount}</Text>
+                {analyzeWaitingRecordCount > 0 && (
+                  <View className='quick-action-badge'>
+                    <Text className='quick-action-badge-text'>
+                      {analyzeWaitingRecordCount > 99 ? '99+' : analyzeWaitingRecordCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text className='quick-action-text'>识别记录</Text>
+            </Navigator>
+            <Navigator
+              className='quick-action-item'
+              url={extraPkgUrl('/pages/friends/index')}
+            >
+              <View className='quick-action-num-wrap'>
+                <Text className='quick-action-num'>{friendCount}</Text>
+                {friendRequestCount > 0 && (
+                  <View className='quick-action-badge'>
+                    <Text className='quick-action-badge-text'>{friendRequestCount}</Text>
+                  </View>
+                )}
+              </View>
+              <Text className='quick-action-text'>好友管理</Text>
+            </Navigator>
+            <Navigator
+              className='quick-action-item'
+              url={extraPkgUrl('/pages/recipes/index')}
+            >
+              <Text className='quick-action-num'>{favoriteCount}</Text>
+              <Text className='quick-action-text'>我的收藏</Text>
+            </Navigator>
+          </View>
+        )}
       </View>
 
-      {/* 顶部用户信息卡片（微信风格） */}
-      <View className='profile-card user-card' onClick={isLoggedIn ? handleSettings : handleGoLogin}>
-        <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
-          {!isLoggedIn ? (
-            <Text className='iconfont icon-weidenglu user-avatar-icon' />
-          ) : userInfo.avatar && userInfo.avatar.startsWith('http') ? (
-            <Image src={userInfo.avatar} mode='aspectFit' className='user-avatar-image' />
-          ) : (
-            <Text className='iconfont icon-weidenglu user-avatar-icon' />
-          )}
+      {/* 引导横幅 */}
+      {isLoggedIn && !onboardingCompleted && (
+        <View
+          className='profile-card onboarding-card'
+          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
+        >
+          <Text className='onboarding-text'>📋 完善健康档案，获取个性化饮食建议</Text>
+          <Text className='onboarding-arrow'>{'>'}</Text>
         </View>
-        <View className='user-info-main'>
-          {isLoggedIn ? (
-            <>
-              <Text className='user-name'>{userInfo.name}</Text>
-              <Text className='user-subtitle'>{userInfo.meta}</Text>
-            </>
-          ) : (
-            <Text className='user-name'>点击登录</Text>
-          )}
-        </View>
-        <Arrow size={20} color='#c8c9cc' className='user-arrow' />
-      </View>
+      )}
 
       {/* 会员卡片（仅登录后展示） */}
       {isLoggedIn && (
@@ -595,45 +803,18 @@ function ProfilePage() {
         </View>
       )}
 
-      {/* 引导横幅 */}
-      {isLoggedIn && !onboardingCompleted && (
-        <View
-          className='profile-card onboarding-card'
-          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
-        >
-          <Text className='onboarding-text'>📋 完善健康档案，获取个性化饮食建议</Text>
-          <Text className='onboarding-arrow'>{'>'}</Text>
-        </View>
-      )}
-
-      {/* 服务分组（微信列表风格） */}
-      <View className='profile-card list-card'>
+      {/* 功能列表（合并为单个白色卡片） */}
+      <View className='profile-card list-card combined-list'>
+        {/* 核心功能 */}
         {services.map((service) => (
           <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
             <View className='list-icon' style={{ color: getServiceColor(service.id) }}>
               {service.icon}
             </View>
             <Text className='list-title'>{service.title}</Text>
-            <View className='list-arrow'>
-              <Arrow size={16} color='#c8c9cc' />
-            </View>
-          </View>
-        ))}
-      </View>
-
-      {/* 设置分组（微信列表风格） */}
-      <View className='profile-card list-card'>
-        {settings.map((setting) => (
-          <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
-            <View className='list-icon' style={{ color: getSettingColor(setting.id) }}>
-              {setting.icon}
-            </View>
-            <Text className='list-title'>{setting.title}</Text>
-            {(setting as any).text && <Text className='list-extra'>{(setting as any).text}</Text>}
-            {/* 好友请求数量圆圈 */}
-            {(setting as any).badge > 0 && (
+            {(service as any).badgeCount > 0 && (
               <View className='list-badge'>
-                <Text className='list-badge-text'>{(setting as any).badge}</Text>
+                <Text className='list-badge-text'>{(service as any).badgeCount}</Text>
               </View>
             )}
             <View className='list-arrow'>
@@ -641,21 +822,34 @@ function ProfilePage() {
             </View>
           </View>
         ))}
+
+        {/* 设置 */}
+        {settings.map((setting) => (
+          <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
+            <View className='list-icon' style={{ color: getSettingColor(setting.id) }}>
+              {setting.icon}
+            </View>
+            <Text className='list-title'>{setting.title}</Text>
+            <View className='list-arrow'>
+              <Arrow size={16} color='#c8c9cc' />
+            </View>
+          </View>
+        ))}
       </View>
 
-      {/* 清除缓存 */}
-      <View className='profile-card clear-cache-card' onClick={handleClearCache}>
-        <Text className='clear-cache-text'>清除缓存</Text>
+      {/* 清除缓存（独立工具卡片） */}
+      <View className='profile-card tool-card' onClick={handleClearCache}>
+        <Text className='tool-text'>清除缓存</Text>
       </View>
 
-      {/* 登录/退出登录 */}
+      {/* 登录/退出登录（独立工具卡片） */}
       {isLoggedIn ? (
-        <View className='profile-card logout-card' onClick={handleLogout}>
-          <Text className='logout-text'>退出登录</Text>
+        <View className='profile-card tool-card' onClick={handleLogout}>
+          <Text className='tool-text tool-text--logout'>退出登录</Text>
         </View>
       ) : (
-        <View className='profile-card login-card' onClick={handleGoLogin}>
-          <Text className='login-text'>登录</Text>
+        <View className='profile-card tool-card' onClick={handleGoLogin}>
+          <Text className='tool-text tool-text--login'>登录</Text>
         </View>
       )}
 

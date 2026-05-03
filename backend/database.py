@@ -1412,7 +1412,9 @@ def list_analysis_tasks_by_user_sync(
     status: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    """按用户查询任务列表，支持按 task_type、status 筛选。"""
+    """按用户查询任务列表，支持按 task_type、status 筛选。
+    返回的每行会额外包含 is_recorded 字段（bool），
+    通过查询 user_food_records.source_task_id 关联判断。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     with _tracer.start_as_current_span("db.list_analysis_tasks_by_user_sync") as span:
@@ -1425,14 +1427,193 @@ def list_analysis_tasks_by_user_sync(
             q = supabase.table("analysis_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
             if task_type:
                 q = q.eq("task_type", task_type)
+            else:
+                # 识别记录页面：默认只返回食物相关任务，排除运动/健康报告等
+                q = q.in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
             if status:
                 q = q.eq("status", status)
             r = q.execute()
             rows = list(r.data or [])
+
+            # 过滤不应出现在识别记录中的任务（运动回退 + 保质期识别）
+            rows = [row for row in rows if not _is_excluded_from_analyze_history(row.get("payload"))]
+
+            # 批量查询哪些 done 任务已保存为饮食记录，同时取 record_id 供跳转
+            done_task_ids = [row["id"] for row in rows if row.get("status") == "done"]
+            if done_task_ids:
+                try:
+                    rec_r = (
+                        supabase.table("user_food_records")
+                        .select("id, source_task_id")
+                        .eq("user_id", user_id)
+                        .in_("source_task_id", done_task_ids)
+                        .execute()
+                    )
+                    # 取每个 source_task_id 对应的最新记录 id
+                    recorded_map: Dict[str, str] = {}
+                    for rec in (rec_r.data or []):
+                        sid = rec.get("source_task_id")
+                        if sid:
+                            recorded_map[sid] = rec.get("id", "")
+                    recorded_ids = set(recorded_map.keys())
+                except Exception as join_err:
+                    print(f"[list_analysis_tasks_by_user_sync] 查询已记录状态失败: {join_err}")
+                    recorded_ids = set()
+                    recorded_map = {}
+            else:
+                recorded_ids = set()
+                recorded_map = {}
+
+            for row in rows:
+                if row.get("status") == "done":
+                    row["is_recorded"] = row["id"] in recorded_ids
+                    if row["is_recorded"]:
+                        row["record_id"] = recorded_map.get(row["id"], "")
+                else:
+                    row["is_recorded"] = False
+
             _safe_add_span_event("db.query.success", {"db.operation": "list_analysis_tasks_by_user_sync", "db.rows": len(rows)})
             return rows
         except Exception as e:
             _record_db_exception("list_analysis_tasks_by_user_sync", e, **{"db.table": "analysis_tasks"})
+            raise
+
+
+def count_analysis_tasks_by_user_sync(user_id: str) -> int:
+    """按用户查询食物分析任务数量（排除 exercise/health_report/public_food_library_text）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.count_analysis_tasks_by_user_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        try:
+            q = (
+                supabase.table("analysis_tasks")
+                .select("id, payload")
+                .eq("user_id", user_id)
+                .in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
+                .order("created_at", desc=True)
+                .limit(10000)
+            )
+            r = q.execute()
+            rows = r.data or []
+            count = sum(1 for row in rows if not _is_excluded_from_analyze_history(row.get("payload")))
+            _safe_add_span_event("db.query.success", {"db.operation": "count_analysis_tasks_by_user_sync", "db.count": count})
+            return count
+        except Exception as e:
+            _record_db_exception("count_analysis_tasks_by_user_sync", e, **{"db.table": "analysis_tasks"})
+            raise
+
+
+def count_analysis_tasks_by_status_sync(user_id: str) -> Dict[str, Any]:
+    """按用户查询识别任务按业务状态分类的数量：recognizing / waiting_record / recorded。
+    通过查询 user_food_records.source_task_id 判断 done 任务是否已保存记录。
+    同时返回 has_unseen_waiting_record：当存在 waiting_record 且用户未查看过时为 True。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.count_analysis_tasks_by_status_sync") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        try:
+            # 拉取近 500 条 food 类型任务（足够覆盖日常场景），在内存中统计
+            q = (
+                supabase.table("analysis_tasks")
+                .select("id, status, created_at, payload")
+                .eq("user_id", user_id)
+                .in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
+                .order("created_at", desc=True)
+                .limit(500)
+            )
+            r = q.execute()
+            tasks = list(r.data or [])
+
+            # 过滤不应出现在识别记录中的任务（运动回退 + 保质期识别）
+            tasks = [t for t in tasks if not _is_excluded_from_analyze_history(t.get("payload"))]
+
+            done_task_ids = [t["id"] for t in tasks if t.get("status") == "done"]
+            if done_task_ids:
+                try:
+                    rec_r = (
+                        supabase.table("user_food_records")
+                        .select("source_task_id")
+                        .eq("user_id", user_id)
+                        .in_("source_task_id", done_task_ids)
+                        .execute()
+                    )
+                    recorded_ids = {rec["source_task_id"] for rec in (rec_r.data or []) if rec.get("source_task_id")}
+                except Exception as join_err:
+                    print(f"[count_analysis_tasks_by_status_sync] 查询已记录状态失败: {join_err}")
+                    recorded_ids = set()
+            else:
+                recorded_ids = set()
+
+            recognizing = sum(1 for t in tasks if t.get("status") in ("pending", "processing"))
+            recorded = sum(1 for t in tasks if t.get("status") == "done" and t["id"] in recorded_ids)
+            waiting_tasks = [t for t in tasks if t.get("status") == "done" and t["id"] not in recorded_ids]
+            waiting_record = len(waiting_tasks)
+
+            # 判断是否有未查看的 waiting_record
+            has_unseen_waiting_record = False
+            if waiting_record > 0:
+                try:
+                    user_r = (
+                        supabase.table("weapp_user")
+                        .select("last_seen_analyze_history_at")
+                        .eq("id", user_id)
+                        .execute()
+                    )
+                    last_seen = user_r.data[0].get("last_seen_analyze_history_at") if user_r.data else None
+                    if last_seen is None:
+                        has_unseen_waiting_record = True
+                    else:
+                        from datetime import datetime, timezone
+                        last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                        has_unseen_waiting_record = any(
+                            datetime.fromisoformat(str(t.get("created_at", "")).replace("Z", "+00:00")) > last_seen_dt
+                            for t in waiting_tasks
+                            if t.get("created_at")
+                        )
+                except Exception as unseen_err:
+                    print(f"[count_analysis_tasks_by_status_sync] 判断未查看状态失败: {unseen_err}")
+                    has_unseen_waiting_record = waiting_record > 0
+
+            _safe_add_span_event("db.query.success", {
+                "db.operation": "count_analysis_tasks_by_status_sync",
+                "db.recognizing": recognizing,
+                "db.waiting_record": waiting_record,
+                "db.recorded": recorded,
+                "db.has_unseen_waiting_record": has_unseen_waiting_record,
+            })
+            return {
+                "recognizing": recognizing,
+                "waiting_record": waiting_record,
+                "recorded": recorded,
+                "has_unseen_waiting_record": has_unseen_waiting_record,
+            }
+        except Exception as e:
+            _record_db_exception("count_analysis_tasks_by_status_sync", e, **{"db.table": "analysis_tasks"})
+            raise
+
+
+def update_user_last_seen_analyze_history_sync(user_id: str) -> bool:
+    """更新用户最后一次查看识别记录列表的时间为当前时间。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.update_user_last_seen_analyze_history_sync") as span:
+        span.set_attribute("db.table", "weapp_user")
+        span.set_attribute("db.user_id", user_id)
+        try:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).isoformat()
+            result = (
+                supabase.table("weapp_user")
+                .update({"last_seen_analyze_history_at": now})
+                .eq("id", user_id)
+                .execute()
+            )
+            return bool(result.data)
+        except Exception as e:
+            _record_db_exception("update_user_last_seen_analyze_history_sync", e, **{"db.table": "weapp_user"})
             raise
 
 
@@ -2361,6 +2542,34 @@ async def get_friends_with_profile(user_id: str) -> List[Dict[str, Any]]:
     return list(result.data or [])
 
 
+async def count_friends_sync(user_id: str) -> int:
+    """获取用户的好友数量（双向关系去重）"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        r = (
+            supabase.table("user_friends")
+            .select("user_id, friend_id")
+            .or_(f"user_id.eq.{user_id},friend_id.eq.{user_id}")
+            .execute()
+        )
+        rows = r.data or []
+        out = set()
+        for row in rows:
+            if row.get("user_id") == user_id:
+                fid = row.get("friend_id")
+                if fid:
+                    out.add(fid)
+            elif row.get("friend_id") == user_id:
+                uid = row.get("user_id")
+                if uid:
+                    out.add(uid)
+        return len(out)
+    except Exception as e:
+        print(f"[count_friends_sync] 错误: {e}")
+        raise
+
+
 async def delete_friend_pair(user_id: str, friend_id: str) -> Dict[str, int]:
     """删除双向好友关系，返回删除条数。"""
     check_supabase_configured()
@@ -2553,7 +2762,7 @@ async def create_invite_referral_binding(
     invite_code: Optional[str] = None,
     source_request_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """记录邀请关系，供后续“完成 1 次有效使用后发奖励”使用。"""
+    """记录邀请关系，供后续"完成 1 次有效使用后发奖励"使用。"""
     if not inviter_user_id or not invitee_user_id or inviter_user_id == invitee_user_id:
         return None
     check_supabase_configured()
@@ -3205,7 +3414,6 @@ async def claim_share_poster_bonus(
             "share_poster_claims_today": 0,
             "error": "record_id_required",
         }
-
     check_supabase_configured()
     supabase = get_supabase_client()
     claims_before_insert = 0
@@ -5376,6 +5584,21 @@ async def list_user_recipes(user_id: str, meal_type: Optional[str] = None, is_fa
         raise
 
 
+async def count_user_recipes_sync(user_id: str, is_favorite: Optional[bool] = None) -> int:
+    """获取用户的私人食谱数量"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        query = supabase.table("user_recipes").select("*", count="exact").eq("user_id", user_id)
+        if is_favorite is not None:
+            query = query.eq("is_favorite", is_favorite)
+        result = query.limit(0).execute()
+        return int(getattr(result, "count", 0) or 0)
+    except Exception as e:
+        print(f"[count_user_recipes_sync] 错误: {e}")
+        raise
+
+
 async def get_user_recipe(recipe_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     """获取单个食谱详情"""
     check_supabase_configured()
@@ -5696,8 +5919,19 @@ _EXERCISE_LOG_CREDIT_COST = 1
 
 
 def _is_exercise_fallback_task_payload(payload: Any) -> bool:
-    """判断 analysis_tasks.payload 是否是“运动记录回退投递到 food_text* 队列”的任务。"""
+    """判断 analysis_tasks.payload 是否是运动记录回退投递到 food_text* 队列的任务。"""
     return isinstance(payload, dict) and bool(payload.get("exercise"))
+
+
+def _is_expiry_recognition_task_payload(payload: Any) -> bool:
+    """判断 analysis_tasks.payload 是否是食物保质期识别任务。
+    这类任务在识别记录页面不展示、不计入 badge，只在食物管理页查看。"""
+    return isinstance(payload, dict) and bool(payload.get("expiry_recognition"))
+
+
+def _is_excluded_from_analyze_history(payload: Any) -> bool:
+    """排除不应出现在识别记录列表/计数中的任务：运动回退 + 保质期识别。"""
+    return _is_exercise_fallback_task_payload(payload) or _is_expiry_recognition_task_payload(payload)
 
 
 def _normalize_task_payload(payload: Any) -> Dict[str, Any]:
