@@ -20,6 +20,7 @@ import {
   getFoodExpiryDashboard,
   friendGetRequestsOverview,
   getAnalyzeTaskCount,
+  getAnalyzeTaskStatusCount,
   getFriendCount,
   getFavoriteCount,
   MembershipStatus,
@@ -113,6 +114,10 @@ function ProfilePage() {
 
   // 快捷入口统计数字
   const [analyzeCount, setAnalyzeCount] = useState(0)
+  const [analyzeWaitingRecordCount, setAnalyzeWaitingRecordCount] = useState(() => {
+    try { return Number(Taro.getStorageSync('analyze_waiting_record_count') || 0) }
+    catch { return 0 }
+  })
   const [friendCount, setFriendCount] = useState(0)
   const [favoriteCount, setFavoriteCount] = useState(0)
 
@@ -169,7 +174,7 @@ function ProfilePage() {
         // 2. 异步请求网络，获取最新数据后更新
         setDataSyncing(true)
         try {
-          const [apiUserInfo, membershipData, dashboardData, friendRequestsData] = await Promise.all([
+          const [apiUserInfo, membershipData, dashboardData, friendRequestsData, statusCount] = await Promise.all([
             getUserProfile(),
             getMyMembership().catch((err) => {
               console.error('[profile] 获取会员状态失败:', err)
@@ -181,6 +186,10 @@ function ProfilePage() {
             }),
             friendGetRequestsOverview().catch((err) => {
               console.error('[profile] 获取好友请求失败:', err)
+              return null
+            }),
+            getAnalyzeTaskStatusCount().catch((err) => {
+              console.error('[profile] 获取识别任务状态失败:', err)
               return null
             }),
           ])
@@ -199,6 +208,15 @@ function ProfilePage() {
             setExpiryDashboard(dashboardData as FoodExpiryDashboard)
           }
 
+          // 更新识别记录 waiting_record 数量
+          const waitingRecord = statusCount?.waiting_record ?? 0
+          setAnalyzeWaitingRecordCount(waitingRecord)
+          Taro.setStorageSync('analyze_waiting_record_count', waitingRecord)
+          if (statusCount?.has_unseen_waiting_record != null) {
+            setHasUnseenWaitingRecord(statusCount.has_unseen_waiting_record)
+            Taro.setStorageSync('analyze_has_unseen_waiting_record', statusCount.has_unseen_waiting_record)
+          }
+
           // 计算底部导航栏"我的"按钮 badge 总数
           try {
             const expiryTodo = dashboardData
@@ -206,9 +224,11 @@ function ProfilePage() {
                 + ((dashboardData as FoodExpiryDashboard).today_count || 0)
                 + ((dashboardData as FoodExpiryDashboard).soon_count || 0)
               : 0
-            const cachedAnalyze = Taro.getStorageSync(PROFILE_STATS_KEYS.analyze)
-            const analyzeNum = cachedAnalyze !== undefined && cachedAnalyze !== '' ? Number(cachedAnalyze) : 0
-            Taro.setStorageSync('profile_tab_badge_count', analyzeNum + expiryTodo)
+            // 食物保质期：如果今天已看过，不算未读
+            const today = new Date().toISOString().slice(0, 10)
+            const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
+            const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : expiryTodo
+            Taro.setStorageSync('profile_tab_badge_count', waitingRecord + foodExpiryBadge)
           } catch (_) { /* ignore */ }
 
           // 获取记录天数
@@ -462,8 +482,12 @@ function ProfilePage() {
           Taro.removeStorageSync('analyzeDebugPreview')
           Taro.removeStorageSync('analyzeShareData')
           Taro.removeStorageSync('analyze_waiting_record_count')
+          Taro.removeStorageSync('analyze_has_unseen_waiting_record')
           Taro.removeStorageSync('analyzeTaskIsRecorded')
           Taro.removeStorageSync('analyzeCommittedRecordId')
+
+          // 食物保质期已读标记
+          Taro.removeStorageSync('food_expiry_last_seen_date')
 
           // 朋友圈相关缓存
           Taro.removeStorageSync('community_feed_cache')
@@ -605,8 +629,12 @@ function ProfilePage() {
             >
               <View className='quick-action-num-wrap'>
                 <Text className='quick-action-num'>{analyzeCount}</Text>
-                {hasUnseenWaitingRecord && (
-                  <View className='quick-action-dot' />
+                {analyzeWaitingRecordCount > 0 && (
+                  <View className='quick-action-badge'>
+                    <Text className='quick-action-badge-text'>
+                      {analyzeWaitingRecordCount > 99 ? '99+' : analyzeWaitingRecordCount}
+                    </Text>
+                  </View>
                 )}
               </View>
               <Text className='quick-action-text'>识别记录</Text>

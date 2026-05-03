@@ -339,14 +339,19 @@ function AnalyzeHistoryPage() {
   })
 
   useDidHide(() => {
-    // 页面隐藏时标记已查看识别记录列表
+    // 页面隐藏时：识别记录 + 食物保质期 未读全部一笔勾销
     void (async () => {
       try {
         await markAnalyzeHistorySeen()
-        Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
       } catch {
         // 静默失败
       }
+      // 清零所有未读标记
+      const today = new Date().toISOString().slice(0, 10)
+      Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
+      Taro.setStorageSync('analyze_waiting_record_count', 0)
+      Taro.setStorageSync('food_expiry_last_seen_date', today)
+      Taro.setStorageSync('profile_tab_badge_count', 0)
     })()
   })
 

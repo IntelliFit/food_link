@@ -124,7 +124,20 @@
 
 ---
 
-### 3.6 其他杂项缓存
+### 3.6 Badge / 红点提醒模块
+
+| 缓存 Key | 存储内容 | 使用页面 | 关联后端接口 | 说明 |
+|---------|---------|---------|-------------|------|
+| `profile_tab_badge_count` | 底部导航栏「我的」按钮 badge 总数 | `custom-tab-bar` | `GET /api/analyze/tasks/status-count` + `GET /api/food-expiry/dashboard` | **Badge = waiting_record + food_expiry_todo**（expired + today + soon）。由首页、profile 页计算后写入，tab-bar 每 300ms 轮询读取。 |
+| `analyze_waiting_record_count` | 识别记录 waiting_record 数量 | `pages/index`, `pages/profile`, `custom-tab-bar` | `GET /api/analyze/tasks/status-count` | 排队中/识别中的任务数量，用于 profile 页快捷入口数字 badge 和 tab-bar 展示。 |
+| `analyze_has_unseen_waiting_record` | 是否有未查看的 waiting_record | `pages/index`, `pages/profile`, `custom-tab-bar` | `GET /api/analyze/tasks/status-count` | 布尔值。基于后端 `last_seen_analyze_history_at` 判断是否有新记录。 |
+| `food_expiry_last_seen_date` | 用户上次查看食物保质期页面的日期 | `pages/index`, `pages/profile`, `packageExtra/pages/expiry` | 无（纯前端） | 格式 `YYYY-MM-DD`。当天看过食物保质期页面后，该板块不计入 badge。次日如有新的待处理食物，badge 重新显示。 |
+
+**清理影响**：清除后所有 badge 计数重置，红点提醒恢复为最新服务端状态。
+
+---
+
+### 3.7 其他杂项缓存
 
 | 缓存 Key | 存储内容 | 使用页面 | 关联后端接口 | 说明 |
 |---------|---------|---------|-------------|------|
@@ -160,6 +173,7 @@
 
 - ✅ 首页 dashboard 相关（`home_dashboard_local_cache`, `body_metrics_storage`, `food_link_dashboard_targets_v1`, `home_poster_modal_visible`, `showRecordMenuModal`）
 - ✅ 朋友圈相关（`community_feed_cache`, `community_friends_cache`, `community_requests_cache`, `community_feed_timestamp`, `community_friends_timestamp`, `community_feed_filters_v2`, `community_priority_authors_v1`, `community_notification_target_v1`, `community_comment_bar_visible`）
+- ✅ Badge / 红点提醒（`analyze_waiting_record_count`, `analyze_has_unseen_waiting_record`, `food_expiry_last_seen_date`）
 - ✅ 动态 Key（`comment_draft_*`, `temp_comments_*`）
 
 ---
@@ -193,6 +207,11 @@ analyzeTextInput                 → analyze-loading/...   → (用户输入)
 analyzeMealType                  → analyze/result/...    → (用户选择)
 analyzeResult                    → result                → (接口返回)
 # ... (其余分析流程缓存同上)
+
+profile_tab_badge_count          → custom-tab-bar        → (计算值)
+analyze_waiting_record_count     → pages/index/profile   → GET  /api/analyze/tasks/status-count
+analyze_has_unseen_waiting_record→ pages/index/profile   → GET  /api/analyze/tasks/status-count
+food_expiry_last_seen_date       → pages/profile/expiry  → (纯前端)
 
 access_token / refresh_token     → 全局                  → POST /api/auth/login, /api/auth/refresh
 user_id / userInfo               → 全局                  → GET  /api/user/profile
