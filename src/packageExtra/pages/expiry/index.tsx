@@ -13,6 +13,7 @@ import {
 } from '../../../utils/api'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../../utils/food-expiry-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { IconExpand, IconCollapse } from '../../../components/iconfont'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -282,11 +283,7 @@ export default function ExpiryPage() {
                   <Text className='expiry-section-title'>
                     已处理 ({grouped.processed.length})
                   </Text>
-                  <Text
-                    className={`expiry-section-arrow ${processedExpanded ? 'expiry-section-arrow--expanded' : ''}`}
-                  >
-                    ▶
-                  </Text>
+                  {processedExpanded ? <IconCollapse size={24} color='#61756d' /> : <IconExpand size={24} color='#61756d' />}
                 </View>
                 {processedExpanded && grouped.processed.map(renderItemCard)}
               </View>

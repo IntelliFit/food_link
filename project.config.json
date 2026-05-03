@@ -37,11 +37,11 @@
     "ignore": [],
     "include": [
       {
-        "type": "folder",
-        "value": "custom-tab-bar"
+        "value": "custom-tab-bar",
+        "type": "folder"
       }
     ]
   },
   "editorSetting": {},
-  "libVersion": "3.14.1"
+  "libVersion": "3.15.0"
 }

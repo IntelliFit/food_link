@@ -129,39 +129,52 @@ export function getMembershipCreditSummary(status?: MembershipStatus | null): {
     (
       status.daily_credits_max != null ||
       status.daily_credits_used != null ||
-      status.daily_credits_remaining != null
+      status.daily_credits_remaining != null ||
+      status.total_credits_available != null
     )
   )
   const max = Math.max(Number(status?.daily_credits_max ?? 0), 0)
   const used = Math.max(Number(status?.daily_credits_used ?? 0), 0)
-  const remaining = Math.max(Number(status?.daily_credits_remaining ?? 0), 0)
+  const remaining = Math.max(Number(status?.total_credits_available ?? status?.daily_credits_remaining ?? 0), 0)
   return { hasInfo, max, used, remaining }
+}
+
+export function getSystemCreditsRemaining(status?: MembershipStatus | null): number {
+  return Math.max(Number(status?.system_credits_remaining ?? 0), 0)
+}
+
+export function getEarnedCreditsBalance(status?: MembershipStatus | null): number {
+  return Math.max(Number(status?.earned_credits_balance ?? 0), 0)
 }
 
 export function isFoodAnalysisCreditExhausted(status?: MembershipStatus | null): boolean {
   const { hasInfo, max, remaining } = getMembershipCreditSummary(status)
   if (!hasInfo) return false
+  if (remaining >= FOOD_ANALYSIS_CREDIT_COST) return false
   if (max <= 0) return true
   return remaining < FOOD_ANALYSIS_CREDIT_COST
 }
 
 export function getFoodAnalysisCreditBlockMessage(status?: MembershipStatus | null): string {
   const { hasInfo, max, used, remaining } = getMembershipCreditSummary(status)
+  const systemRemaining = getSystemCreditsRemaining(status)
+  const earnedBalance = getEarnedCreditsBalance(status)
+  const balanceSummary = `当前可用 ${remaining}（系统剩余 ${systemRemaining}，累计奖励 ${earnedBalance}）`
   if (!hasInfo) {
     return `当前积分不足，食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。`
   }
-  if (max <= 0) {
+  if (max <= 0 && remaining <= 0) {
     return status?.is_pro
       ? `当前套餐暂无可用积分，食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请升级更高套餐后继续。`
       : `当前暂无可用积分，食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请开通会员后继续。`
   }
   if (status?.is_pro) {
-    return `今日积分不足（已用 ${Math.min(used, max)}/${max}，剩余 ${remaining}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请明日再试，或升级更高套餐。`
+    return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
   }
   if (status?.trial_active) {
-    return `试用积分不足（已用 ${Math.min(used, max)}/${max}，剩余 ${remaining}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请明日再试，或开通会员继续。`
+    return `试用积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
   }
-  return `当前积分不足（已用 ${Math.min(used, max)}/${max}，剩余 ${remaining}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请开通会员后继续。`
+  return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请开通会员后继续。`
 }
 
 export function getFoodAnalysisBlockedActionText(status?: MembershipStatus | null): string {
@@ -171,27 +184,31 @@ export function getFoodAnalysisBlockedActionText(status?: MembershipStatus | nul
 export function isExerciseLogCreditExhausted(status?: MembershipStatus | null): boolean {
   const { hasInfo, max, remaining } = getMembershipCreditSummary(status)
   if (!hasInfo) return false
+  if (remaining >= EXERCISE_LOG_CREDIT_COST) return false
   if (max <= 0) return true
   return remaining < EXERCISE_LOG_CREDIT_COST
 }
 
 export function getExerciseLogCreditBlockMessage(status?: MembershipStatus | null): string {
   const { hasInfo, max, used, remaining } = getMembershipCreditSummary(status)
+  const systemRemaining = getSystemCreditsRemaining(status)
+  const earnedBalance = getEarnedCreditsBalance(status)
+  const balanceSummary = `当前可用 ${remaining}（系统剩余 ${systemRemaining}，累计奖励 ${earnedBalance}）`
   if (!hasInfo) {
     return `当前积分不足，运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。`
   }
-  if (max <= 0) {
+  if (max <= 0 && remaining <= 0) {
     return status?.is_pro
       ? `当前套餐暂无可用积分，运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。请升级更高套餐后继续。`
       : `当前暂无可用积分，运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。请开通会员后继续。`
   }
   if (status?.is_pro) {
-    return `今日积分不足（已用 ${Math.min(used, max)}/${max}，剩余 ${remaining}），运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。请明日再试，或升级更高套餐。`
+    return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
   }
   if (status?.trial_active) {
-    return `试用积分不足（已用 ${Math.min(used, max)}/${max}，剩余 ${remaining}），运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。请明日再试，或开通会员继续。`
+    return `试用积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
   }
-  return `当前积分不足（已用 ${Math.min(used, max)}/${max}，剩余 ${remaining}），运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。请开通会员后继续。`
+  return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），运动记录需 ${EXERCISE_LOG_CREDIT_COST} 积分/次。请开通会员后继续。`
 }
 
 export function getExerciseLogBlockedActionText(status?: MembershipStatus | null): string {

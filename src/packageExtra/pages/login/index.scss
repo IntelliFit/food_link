@@ -32,10 +32,48 @@
         }
     }
 
+    .dev-invite-code-banner {
+        margin: 0 40rpx 32rpx;
+        padding: 16rpx 24rpx;
+        background: #fef3c7;
+        border-radius: 16rpx;
+        border: 2rpx solid #f59e0b;
+
+        .dev-invite-code-text {
+            font-size: 26rpx;
+            color: #92400e;
+            text-align: center;
+            font-weight: 500;
+        }
+    }
+
     .login-actions {
         display: flex;
         flex-direction: column;
         gap: 32rpx;
+
+        .dev-test-input-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 12rpx;
+
+            .dev-test-label {
+                font-size: 24rpx;
+                color: #ef4444;
+            }
+
+            .dev-test-openid-input {
+                width: 100%;
+                height: 80rpx;
+                background: #fef2f2;
+                border-radius: 16rpx;
+                padding: 0 24rpx;
+                font-size: 28rpx;
+                color: #333;
+                border: 2rpx solid #fca5a5;
+                box-sizing: border-box;
+            }
+        }
 
         .wx-login-btn {
             width: 100%;

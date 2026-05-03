@@ -262,6 +262,9 @@ function ProMembershipPage() {
   const creditsMax = membership?.daily_credits_max ?? 0
   const creditsUsed = membership?.daily_credits_used ?? 0
   const creditsRemaining = membership?.daily_credits_remaining ?? 0
+  const systemCreditsRemaining = membership?.system_credits_remaining ?? Math.max(creditsMax - creditsUsed, 0)
+  const earnedCreditsBalance = membership?.earned_credits_balance ?? 0
+  const totalCreditsAvailable = membership?.total_credits_available ?? creditsRemaining
   const creditsBase = membership?.daily_credits_base ?? 0
   const bonusCredits = membership?.daily_bonus_credits ?? 0
   const inviteBonusCredits = membership?.invite_bonus_credits ?? 0
@@ -398,7 +401,7 @@ function ProMembershipPage() {
                   </View>
                   <View className='hero-credits-pill'>
                     <Text className='hero-credits-tip'>
-                      剩余 {creditsRemaining} 积分 · 次日清零{bonusCredits > 0 ? ` · 含奖励 +${bonusCredits}` : ''}{paidBonusActive ? ` · 创始翻倍 x${paidBonusMultiplier}` : ''}
+                      可用 {totalCreditsAvailable} 积分 · 系统剩余 {systemCreditsRemaining} 次日清零 · 累计奖励 {earnedCreditsBalance}{bonusCredits > 0 ? ` · 今日入账 +${bonusCredits}` : ''}{paidBonusActive ? ` · 创始翻倍 x${paidBonusMultiplier}` : ''}
                     </Text>
                   </View>
                 </>
@@ -409,7 +412,7 @@ function ProMembershipPage() {
                     <Text className='hero-credits-tip'>
                       {earlyUserEligible
                         ? `${founderBonusRankLabel || '你属于创始用户礼遇'}，开通后每日按套餐积分 x${paidBonusMultiplier} 发放`
-                        : '开通后每日按套餐发放积分，当天有效不累计'}
+                        : '开通后每日发放系统积分，次日刷新；邀请与分享奖励积分可累计'}
                     </Text>
                   </View>
                 </>
@@ -437,7 +440,7 @@ function ProMembershipPage() {
       <View className='tier-section'>
         <View className='section-title'>
           <Text className='section-title-text'>选择档位</Text>
-          <Text className='section-title-hint'>积分当天有效，次日清零</Text>
+          <Text className='section-title-hint'>系统积分次日刷新，奖励积分可累计</Text>
         </View>
         <View className='tier-grid'>
           {TIERS.map(t => {
@@ -521,8 +524,8 @@ function ProMembershipPage() {
           <Text className='plan-name'>{selectedPlan?.name || '食探会员'}</Text>
           <Text className='plan-desc'>
             {earlyUserEligible
-              ? `创始用户开通后每日 ${selectedTierCredits} 积分 · ${selectedTierMeta?.summary || selectedPlan?.description || '当天有效次日清零'}`
-              : (selectedTierMeta?.summary || selectedPlan?.description || '每日积分发放，当天有效次日清零')}
+              ? `创始用户开通后每日 ${selectedTierCredits} 系统积分 · ${selectedTierMeta?.summary || selectedPlan?.description || '系统积分次日刷新，奖励积分另计累计'}`
+              : (selectedTierMeta?.summary || selectedPlan?.description || '每日发放系统积分，次日刷新；奖励积分另计累计')}
           </Text>
           {perMonthDisplay && (
             <Text className='plan-permonth'>≈ ¥{perMonthDisplay} / 月</Text>
@@ -585,9 +588,9 @@ function ProMembershipPage() {
         <Text className='credits-hint-item'>· 创始用户礼遇：前 1000 名注册用户或前 100 名付费用户，开通会员后每日套餐积分翻倍</Text>
         <Text className='credits-hint-item'>· 运动记录：1 积分 / 次</Text>
         <Text className='credits-hint-item'>· 基础记录 / 基础分析：2 积分 / 次</Text>
-        <Text className='credits-hint-item credits-hint-item--muted'>积分每日发放，当天有效不累计</Text>
-        <Text className='credits-hint-item'>· 邀请好友：好友完成 1 次有效使用后，双方连续 3 天每天 +5 积分</Text>
-        <Text className='credits-hint-item'>· 生成分享海报：每日奖励 1 积分</Text>
+        <Text className='credits-hint-item credits-hint-item--muted'>· 系统积分每日发放，次日 00:00 刷新；邀请、分享等奖励积分累计不清零</Text>
+        <Text className='credits-hint-item'>· 邀请好友：好友在 7 天内完成 2 个自然日有效使用后，双方各得 15 积分并转入累计余额</Text>
+        <Text className='credits-hint-item'>· 生成分享海报：每日奖励 1 积分，转入累计余额</Text>
       </View>
 
       {/* 当前状态 */}
@@ -654,7 +657,7 @@ function ProMembershipPage() {
             </Text>
           </View>
           <View className='status-row'>
-            <Text className='status-label'>基础 / 奖励积分</Text>
+            <Text className='status-label'>系统积分 / 今日入账</Text>
             <Text className='status-value'>
               {creditsMax > 0 ? `${creditsBase} / ${bonusCredits}` : '—'}
             </Text>
@@ -668,9 +671,21 @@ function ProMembershipPage() {
             </View>
           )}
           <View className='status-row'>
-            <Text className='status-label'>今日剩余积分</Text>
+            <Text className='status-label'>系统剩余积分</Text>
             <Text className='status-value status-value--active'>
-              {creditsMax > 0 ? `${creditsRemaining}` : '—'}
+              {creditsMax > 0 ? `${systemCreditsRemaining}` : '—'}
+            </Text>
+          </View>
+          <View className='status-row'>
+            <Text className='status-label'>累计奖励余额</Text>
+            <Text className='status-value'>
+              {`${earnedCreditsBalance}`}
+            </Text>
+          </View>
+          <View className='status-row'>
+            <Text className='status-label'>当前总可用积分</Text>
+            <Text className='status-value status-value--active'>
+              {`${totalCreditsAvailable}`}
             </Text>
           </View>
         </View>

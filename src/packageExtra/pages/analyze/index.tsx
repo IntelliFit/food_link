@@ -38,6 +38,7 @@ import {
   getMembershipCreditSummary,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -338,6 +339,7 @@ function AnalyzePage() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
+    persistRecordTargetDate(String(params?.date || ''))
     if (nextSessionId) {
       setPrecisionSessionId(nextSessionId)
       setExecutionMode('strict')
@@ -575,6 +577,7 @@ function AnalyzePage() {
 
       Taro.showLoading({ title: '提交任务...', mask: true })
       const commonPayload = {
+        date: getStoredRecordTargetDate(),
         meal_type: mealType,
         diet_goal: dietGoal,
         activity_timing: activityTiming,

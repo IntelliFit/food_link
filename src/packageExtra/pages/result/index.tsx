@@ -36,6 +36,7 @@ import {
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
@@ -364,6 +365,11 @@ function ResultPage() {
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
   }, [scheme])
+
+  useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    persistRecordTargetDate(String(params?.date || ''))
+  }, [])
 
   /** 上滑进度 0~1：驱动头图高度与内层圆角 */
   const resultHeroShrinkT = useMemo(
@@ -1002,6 +1008,7 @@ function ResultPage() {
 
         const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
         const payload: SaveFoodRecordRequest = {
+          date: getStoredRecordTargetDate(),
           meal_type: mealType as MealType,
           image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
           image_paths: hasUploadableImage && imagePaths.length > 0 ? imagePaths : undefined,
@@ -1059,18 +1066,27 @@ function ResultPage() {
         }
 
         const saveResult = await saveFoodRecord(payload)
-        const todayDateKey = formatDateKey(new Date())
+        const targetDateKey = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
         if (!saveResult.already_saved) {
-          applyOptimisticFoodRecordToHomeDashboardSnapshot(todayDateKey, payload, saveResult.id)
+          applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
         }
         try {
-          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: todayDateKey })
+          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey })
         } catch {
           /* ignore */
         }
-        void refreshHomeDashboardLocalSnapshotFromCloud(todayDateKey)
-        // 标记当前识别任务为已记录，结果页按钮状态改为「查看结果」
-        Taro.setStorageSync('analyzeTaskIsRecorded', '1')
+        void refreshHomeDashboardLocalSnapshotFromCloud(targetDateKey)
+        const tidForCommit = sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
+        if (tidForCommit) {
+          try {
+            const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
+            const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string; at?: number }>) : {}
+            map[String(tidForCommit)] = { record_id: saveResult.id, at: Date.now() }
+            Taro.setStorageSync(ANALYZE_COMMITTED_SESSION_KEY, JSON.stringify(map))
+          } catch (e) {
+            console.error('写入已记录会话失败:', e)
+          }
+        }
         setCommittedRecordId(saveResult.id)
 
         if (saveOnly) {
@@ -1479,6 +1495,7 @@ function ResultPage() {
             const res = await submitAnalyzeTask({
               image_url: imagePaths[0] || imagePath,
               image_urls: imagePaths.length > 0 ? imagePaths : undefined,
+              date: getStoredRecordTargetDate(),
               additionalContext: finalCorrectionContext,
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
@@ -1501,6 +1518,7 @@ function ResultPage() {
             const textPayload = originalText || currentResultSummary
             const res = await submitTextAnalyzeTask({
               text: textPayload,
+              date: getStoredRecordTargetDate(),
               additionalContext: textContextParts.join('\n'),
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
