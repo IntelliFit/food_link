@@ -1349,6 +1349,68 @@ def _aggregate_water_daily(
     return daily_list
 
 
+async def _sync_profile_weight_from_latest(user_id: str) -> None:
+    """
+    用户记录新体重后调用：
+    1. 将最新体重同步到健康档案（无阈值，有变化就更新）
+    2. 根据近 28 天运动记录自动推算活动水平
+    3. 用最新体重 + 活动水平重算 BMR / TDEE
+    """
+    try:
+        now = datetime.now(CHINA_TZ)
+        extended_start = (now - timedelta(days=730)).date().isoformat()
+        extended_end = now.date().isoformat()
+        weight_rows = await list_user_weight_records(
+            user_id=user_id, start_date=extended_start, end_date=extended_end
+        )
+        if not weight_rows:
+            return
+        entries = _aggregate_weight_daily(weight_rows)
+        if not entries:
+            return
+        latest_entry = entries[-1]
+        latest_weight = float(latest_entry["value"])
+
+        user = await get_user_by_id(user_id)
+        if not user:
+            return
+        profile_weight = user.get("weight")
+        gender = user.get("gender") or "male"
+
+        # 根据运动记录推算活动水平（同步 DB 查询，放入线程池避免阻塞事件循环）
+        from database import _sync_activity_level_from_logs_sync
+        try:
+            await asyncio.to_thread(_sync_activity_level_from_logs_sync, user_id)
+        except Exception as e:
+            print(f"[_sync_profile_weight_from_latest] 活动水平同步失败（忽略）: {e}")
+
+        # 重新查用户以拿到最新的 activity_level
+        user = await get_user_by_id(user_id)
+        if not user:
+            return
+        activity_level = user.get("activity_level") or "sedentary"
+
+        bmr = calculate_bmr(
+            "male" if gender == "male" else "female",
+            latest_weight,
+            0.0,
+            0,
+        )
+        tdee = calculate_tdee(bmr, activity_level)
+        await update_user(user_id, {
+            "weight": latest_weight,
+            "bmr": bmr,
+            "tdee": tdee,
+        })
+        print(
+            f"[_sync_profile_weight_from_latest] user={user_id} "
+            f"weight {profile_weight} → {latest_weight}, "
+            f"activity={activity_level}, BMR={bmr}, TDEE={tdee}"
+        )
+    except Exception as e:
+        print(f"[_sync_profile_weight_from_latest] 同步失败: {e}")
+
+
 async def _build_body_metrics_summary(
     user_id: str,
     start_date: str,
@@ -2914,10 +2976,11 @@ ACTIVITY_LEVEL_LABELS = {
 }
 
 
-def _format_health_profile_for_analysis(user: Dict[str, Any]) -> str:
+def _format_health_profile_for_analysis(user: Dict[str, Any], latest_weight: Optional[Dict[str, Any]] = None) -> str:
     """
     将 weapp_user 健康档案格式化为供 AI 参考的简短摘要。
     用于在食物分析时结合体质、病史、过敏等给出更全面建议。
+    若传入 latest_weight（身体指标最新记录），优先使用其体重值。
     """
     parts = []
     gender = user.get("gender")
@@ -2926,7 +2989,12 @@ def _format_health_profile_for_analysis(user: Dict[str, Any]) -> str:
     height = user.get("height")
     if height is not None:
         parts.append(f"身高 {float(height):.0f} cm")
-    weight = user.get("weight")
+    # 优先用身体指标最新体重，fallback 到健康档案体重
+    weight = None
+    if latest_weight is not None:
+        weight = latest_weight.get("value") if isinstance(latest_weight, dict) else latest_weight
+    if weight is None:
+        weight = user.get("weight")
     if weight is not None:
         parts.append(f"体重 {float(weight):.1f} kg")
     birthday = user.get("birthday")
@@ -6935,6 +7003,10 @@ async def save_body_weight_record(
     body: BodyWeightUpsertRequest,
     user_info: dict = Depends(get_current_user_info),
 ):
+    """
+    保存一次体重测量。成功后自动同步到健康档案体重并重算 BMR / TDEE，
+    确保 AI 分析、统计洞察等始终参考最新体重。
+    """
     user_id = user_info["user_id"]
     recorded_on = _parse_date_string(body.date, "date") or datetime.now(CHINA_TZ).date().isoformat()
     source_type = _normalize_body_metric_source_type(body.source_type)
@@ -6947,6 +7019,12 @@ async def save_body_weight_record(
             source_type=source_type,
             client_record_id=client_id,
         )
+        # 自动同步最新体重到健康档案，并重算 BMR / TDEE
+        try:
+            await _sync_profile_weight_from_latest(user_id)
+        except Exception as sync_err:
+            print(f"[save_body_weight_record] 同步健康档案体重失败（非致命）: {sync_err}")
+
         return {"message": "体重已保存", "item": _normalize_weight_entry(row)}
     except HTTPException:
         raise
@@ -7761,13 +7839,16 @@ async def _generate_nutrition_insight(
     by_meal: Dict[str, float],
     daily_list: List[Dict[str, Any]],
     macro_percent: Dict[str, float],
+    body_metrics: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     调用大模型生成个性化营养洞察（200-300 字）。
-    使用 DashScope 千问 qwen-plus。
+    使用 DeepSeek V4 Flash。
     """
     range_label = "近一周" if range_type == "week" else "近一月"
-    health_summary = _format_health_profile_for_analysis(user) if user else ""
+    # 优先用身体指标最新体重，否则 fallback 到健康档案体重
+    latest_weight_from_metrics = body_metrics.get("latest_weight") if body_metrics else None
+    health_summary = _format_health_profile_for_analysis(user, latest_weight=latest_weight_from_metrics) if user else ""
     diet_goal = user.get("diet_goal") or "none"
     diet_goal_label = {"fat_loss": "减脂", "muscle_gain": "增肌", "maintain": "维持体重", "none": "无"}.get(diet_goal, diet_goal)
 
@@ -7789,6 +7870,31 @@ async def _generate_nutrition_insight(
         daily_trend = "、".join([f"{d['date'][5:]}({d['calories']:.0f})" for d in daily_list[-5:]])
         stats_str += f"- 每日热量趋势（最近5天）：{daily_trend}\n"
 
+    # 身体指标：最新体重与体重变化趋势
+    weight_block = ""
+    if body_metrics:
+        latest_w = body_metrics.get("latest_weight")
+        prev_w = body_metrics.get("previous_weight")
+        weight_change = body_metrics.get("weight_change")
+        weight_entries = body_metrics.get("weight_entries") or []
+        if latest_w is not None:
+            weight_block += f"- 本期最新体重：{float(latest_w['value'] if isinstance(latest_w, dict) else latest_w):.1f} kg"
+            if weight_change is not None:
+                direction = "上升" if weight_change > 0 else "下降" if weight_change < 0 else "持平"
+                weight_block += f"（较前一次{direction} {abs(weight_change):.1f} kg）"
+            weight_block += "\n"
+        if len(weight_entries) >= 3:
+            recent_weights = weight_entries[-7:]
+            weight_trend_str = " → ".join([f"{w['date'][5:]}({float(w['value']):.1f}kg)" for w in recent_weights])
+            weight_block += f"- 近期体重变化趋势：{weight_trend_str}\n"
+        if latest_w is not None and user.get("weight") is not None:
+            profile_weight = float(user["weight"])
+            metrics_weight = float(latest_w["value"] if isinstance(latest_w, dict) else latest_w)
+            if abs(profile_weight - metrics_weight) > 1.0:
+                weight_block += f"- ⚠️ 健康档案体重（{profile_weight:.1f} kg）与最新记录体重（{metrics_weight:.1f} kg）差异较大，请以最新记录为准\n"
+    if weight_block:
+        stats_str += "\n身体指标：\n" + weight_block
+
     prompt = f"""你是一位专业的营养师。请根据以下用户健康档案和饮食统计数据，生成一段 200-300 字的个性化营养洞察。
 
 {health_summary}
@@ -7800,34 +7906,37 @@ async def _generate_nutrition_insight(
 2. 分析本期热量摄入与 TDEE 的关系，给出建议
 3. 简要评价宏量营养素比例是否合理
 4. 若有连续打卡，给予肯定
-5. 输出纯中文，不要 JSON 或代码块，直接输出正文
+5. 如果提供了体重趋势数据，结合体重变化评价饮食计划效果
+6. 输出纯中文，不要 JSON 或代码块，直接输出正文
 """
-    dashscope_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not dashscope_key:
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not deepseek_key:
         return "本期日均摄入与 TDEE 接近，热量控制良好。请继续保持。"
 
-    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
     api_url = f"{base_url}/chat/completions"
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(
             api_url,
             headers={
-                "Authorization": f"Bearer {dashscope_key}",
+                "Authorization": f"Bearer {deepseek_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": "qwen-plus",
+                "model": "deepseek-v4-flash",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.6,
+                "max_tokens": 1024,
             },
         )
         if not response.is_success:
             error_data = response.json() if response.content else {}
-            raise Exception(error_data.get("error", {}).get("message") or f"DashScope API 错误: {response.status_code}")
+            error_msg = error_data.get("error", {}).get("message") or f"DeepSeek API 错误: {response.status_code}"
+            raise Exception(error_msg)
         data = response.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content")
         if not content or not content.strip():
-            raise Exception("千问返回了空响应")
+            raise Exception("DeepSeek 返回了空响应")
         return content.strip()
 
 
@@ -7979,6 +8088,12 @@ async def generate_stats_insight(
         tdee = (user.get("tdee") and float(user["tdee"])) or 2000
         records = await list_food_records_by_range(user_id=user_id, start_date=start_date, end_date=end_date)
         streak_days = await get_streak_days(user_id)
+        # 获取身体指标（体重记录）用于 AI 上下文
+        try:
+            body_metrics = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+        except Exception as body_err:
+            print(f"[generate_stats_insight] 身体指标获取失败，降级: {body_err}")
+            body_metrics = None
     except Exception as e:
         print(f"[generate_stats_insight] 准备数据失败: {e}")
         raise HTTPException(status_code=500, detail="生成 AI 洞察失败")
@@ -8033,6 +8148,7 @@ async def generate_stats_insight(
             by_meal=by_meal_out,
             daily_list=daily_list,
             macro_percent={"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+            body_metrics=body_metrics,
         )
         return {"analysis_summary": insight}
     except Exception as e:
@@ -8185,6 +8301,12 @@ async def _refresh_stats_insight_for_user(user_id: str) -> None:
 
             # 若 fingerprint 与已有缓存相同，可跳过生成；此处已确认 today 无缓存，直接生成即可
             try:
+                # 获取身体指标（体重记录）用于 AI 上下文
+                try:
+                    bm = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+                except Exception as bm_err:
+                    print(f"[_refresh_stats_insight_for_user] 身体指标获取失败，降级: {bm_err}")
+                    bm = None
                 insight = await _generate_nutrition_insight(
                     user=user,
                     range_type=stats_range,
@@ -8201,6 +8323,7 @@ async def _refresh_stats_insight_for_user(user_id: str) -> None:
                     by_meal=by_meal_out,
                     daily_list=[{"date": d, "calories": round(c, 1)} for d, c in sorted(daily_cal.items())],
                     macro_percent={"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+                    body_metrics=bm,
                 )
                 data_fingerprint = f"{total_cal:.0f}_{avg_cal_per_day:.1f}_{recorded_days}_{pct_p}_{pct_c}_{pct_f}"
                 await upsert_insight_cache(user_id, stats_range, today, data_fingerprint, insight)
@@ -8280,6 +8403,13 @@ async def ws_stats_insight(websocket: WebSocket):
             pct_c = round(total_carbs * 4 / total_macros * 100, 1)
             pct_f = round(total_fat * 9 / total_macros * 100, 1)
 
+        # 获取身体指标（体重记录）用于 AI 上下文
+        try:
+            bm = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
+        except Exception as bm_err:
+            print(f"[ws_stats_insight] 身体指标获取失败，降级: {bm_err}")
+            bm = None
+
         # 调用大模型生成完整洞察文本
         insight = await _generate_nutrition_insight(
             user=user,
@@ -8297,6 +8427,7 @@ async def ws_stats_insight(websocket: WebSocket):
             by_meal=by_meal_out,
             daily_list=daily_list,
             macro_percent={"protein": pct_p, "carbs": pct_c, "fat": pct_f},
+            body_metrics=bm,
         )
 
         # 以小块文本流式发给前端（前端负责汇总完整文本并保存）

@@ -754,7 +754,7 @@ function StatsPage() {
       summary: energyOverRatio > 0.08
         ? '平均摄入已经高于当前消耗，体重管理压力主要来自重复性超标。'
         : '热量总体接近目标，但餐次集中和加餐结构仍有优化空间。',
-      basis: `日均摄入 ${avgCaloriesPerDay.toFixed(0)} kcal，对比 TDEE ${tdee.toFixed(0)} kcal；连续记录 ${d.streak_days} 天。`,
+      basis: `日均摄入 ${avgCaloriesPerDay.toFixed(0)} kcal，对比 TDEE ${tdee.toFixed(0)} kcal；饮食打卡 ${d.streak_days} 天。`,
       action: energyOverRatio > 0.08
         ? '先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。'
         : '保持总量不大改，优先优化晚餐和加餐的时段分布。',

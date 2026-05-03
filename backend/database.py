@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
 from otel_compat import Status, StatusCode, trace
+from metabolic import calculate_bmr, calculate_tdee
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
@@ -680,24 +681,32 @@ async def list_food_records_by_range(
 
 async def get_streak_days(user_id: str) -> int:
     """
-    计算连续记录天数（从今天起往前，有记录的连续天数）。
+    计算连续记录天数（从今天或昨天起往前，有记录的连续天数）。
     某天至少有 1 条饮食记录即算「有记录」。
+    若今天尚无记录，则从昨天开始计算，避免当天未记录导致 streak 归零。
     """
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        # 使用中国时区的自然日计算连续天数
         today = datetime.now(CHINA_TZ).date()
-        streak = 0
-        d = today
-        while True:
-            day_str = d.strftime("%Y-%m-%d")
-            start_local = datetime.combine(d, datetime.min.time()).replace(tzinfo=CHINA_TZ)
-            end_local = datetime.combine(d + timedelta(days=1), datetime.min.time()).replace(tzinfo=CHINA_TZ)
+
+        def _has_records(day: date) -> bool:
+            start_local = datetime.combine(day, datetime.min.time()).replace(tzinfo=CHINA_TZ)
+            end_local = datetime.combine(day + timedelta(days=1), datetime.min.time()).replace(tzinfo=CHINA_TZ)
             start_ts = start_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
             end_ts = end_local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
             r = supabase.table("user_food_records").select("id").eq("user_id", user_id).gte("record_time", start_ts).lt("record_time", end_ts).limit(1).execute()
-            if not r.data or len(r.data) == 0:
+            return bool(r.data and len(r.data) > 0)
+
+        # 若今天尚无记录，从昨天开始作为锚点
+        if not _has_records(today):
+            d = today - timedelta(days=1)
+        else:
+            d = today
+
+        streak = 0
+        while True:
+            if not _has_records(d):
                 break
             streak += 1
             d -= timedelta(days=1)
@@ -6836,11 +6845,98 @@ def create_user_exercise_log_sync(
                 activate_pending_invite_referral_on_first_valid_use_sync(user_id, "exercise_log")
             except Exception as reward_err:
                 print(f"[create_user_exercise_log_sync] 邀请奖励激活失败（已忽略）: {reward_err}")
+            # 根据近 28 天运动记录自动更新活动水平与 TDEE
+            try:
+                _sync_activity_level_from_logs_sync(user_id)
+            except Exception as sync_err:
+                print(f"[create_user_exercise_log_sync] 活动水平同步失败（非致命）: {sync_err}")
             return created
         raise Exception("新增运动记录失败：返回数据为空")
     except Exception as e:
         print(f"[create_user_exercise_log_sync] 错误: {e}")
         raise
+
+
+def _sync_activity_level_from_logs_sync(user_id: str) -> bool:
+    """
+    根据近 28 天运动记录自动推算活动水平，若与当前档案不同则更新并重算 TDEE / BMR。
+    返回是否发生了更新。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
+    try:
+        # 统计近 28 天有运动的去重天数
+        end_date = (datetime.now(CHINA_TZ) - timedelta(days=1)).date().isoformat()
+        start_date = (datetime.now(CHINA_TZ) - timedelta(days=28)).date().isoformat()
+        logs = (
+            supabase.table("user_exercise_logs")
+            .select("recorded_on")
+            .eq("user_id", user_id)
+            .gte("recorded_on", start_date)
+            .lte("recorded_on", end_date)
+            .execute()
+        )
+        distinct_days = len(set(row["recorded_on"] for row in (logs.data or []) if row.get("recorded_on")))
+
+        # 无运动记录时不改动，保留用户手动设置的活动水平
+        if distinct_days == 0:
+            return False
+
+        if distinct_days <= 4:
+            suggested_level = "light"
+        elif distinct_days <= 10:
+            suggested_level = "moderate"
+        elif distinct_days <= 14:
+            suggested_level = "active"
+        else:
+            suggested_level = "very_active"
+
+        # 获取当前档案活动水平
+        user_resp = (
+            supabase.table("weapp_users")
+            .select("activity_level, weight, gender")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not user_resp.data:
+            return False
+        user = user_resp.data[0]
+        current_level = user.get("activity_level") or "sedentary"
+
+        if suggested_level == current_level:
+            return False
+
+        # 活动水平变了，重算 TDEE
+        weight = user.get("weight")
+        gender = user.get("gender")
+        if weight is None:
+            return False
+
+        bmr = calculate_bmr(
+            "male" if gender == "male" else "female",
+            float(weight),
+            0.0,
+            0,
+        )
+        tdee = calculate_tdee(bmr, suggested_level)
+
+        supabase.table("weapp_users").update({
+            "activity_level": suggested_level,
+            "bmr": bmr,
+            "tdee": tdee,
+        }).eq("id", user_id).execute()
+
+        print(
+            f"[_sync_activity_level_from_logs_sync] user={user_id} "
+            f"activity {current_level} → {suggested_level} "
+            f"(近28天运动 {distinct_days} 天), TDEE={tdee}"
+        )
+        return True
+    except Exception as e:
+        print(f"[_sync_activity_level_from_logs_sync] 同步失败（非致命）: {e}")
+        return False
 
 
 async def create_user_exercise_log(
