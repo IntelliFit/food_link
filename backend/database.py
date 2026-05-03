@@ -1417,6 +1417,9 @@ def list_analysis_tasks_by_user_sync(
             r = q.execute()
             rows = list(r.data or [])
 
+            # 过滤运动回退任务（payload.exercise = true，投递到 food_text* 队列的运动记录）
+            rows = [row for row in rows if not _is_exercise_fallback_task_payload(row.get("payload"))]
+
             # 批量查询哪些 done 任务已保存为饮食记录，同时取 record_id 供跳转
             done_task_ids = [row["id"] for row in rows if row.get("status") == "done"]
             if done_task_ids:
@@ -1468,13 +1471,15 @@ def count_analysis_tasks_by_user_sync(user_id: str) -> int:
         try:
             q = (
                 supabase.table("analysis_tasks")
-                .select("*", count="exact")
+                .select("id, payload")
                 .eq("user_id", user_id)
                 .in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
-                .limit(0)
+                .order("created_at", desc=True)
+                .limit(10000)
             )
             r = q.execute()
-            count = int(getattr(r, "count", 0) or 0)
+            rows = r.data or []
+            count = sum(1 for row in rows if not _is_exercise_fallback_task_payload(row.get("payload")))
             _safe_add_span_event("db.query.success", {"db.operation": "count_analysis_tasks_by_user_sync", "db.count": count})
             return count
         except Exception as e:
@@ -1495,7 +1500,7 @@ def count_analysis_tasks_by_status_sync(user_id: str) -> Dict[str, Any]:
             # 拉取近 500 条 food 类型任务（足够覆盖日常场景），在内存中统计
             q = (
                 supabase.table("analysis_tasks")
-                .select("id, status, created_at")
+                .select("id, status, created_at, payload")
                 .eq("user_id", user_id)
                 .in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
                 .order("created_at", desc=True)
@@ -1503,6 +1508,9 @@ def count_analysis_tasks_by_status_sync(user_id: str) -> Dict[str, Any]:
             )
             r = q.execute()
             tasks = list(r.data or [])
+
+            # 过滤运动回退任务（payload.exercise = true，投递到 food_text* 队列的运动记录）
+            tasks = [t for t in tasks if not _is_exercise_fallback_task_payload(t.get("payload"))]
 
             done_task_ids = [t["id"] for t in tasks if t.get("status") == "done"]
             if done_task_ids:

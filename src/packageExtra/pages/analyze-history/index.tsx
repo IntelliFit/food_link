@@ -309,6 +309,7 @@ function AnalyzeHistoryPage() {
         const allTasks = (res.tasks || []).filter((t) => {
           const payload = (t.payload || {}) as Record<string, unknown>
           if (payload.expiry_recognition) return false
+          if (payload.exercise) return false // 排除运动回退任务（payload.exercise=true）
           return isAnalyzeHistoryTaskType(t.task_type)
         })
       allTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())

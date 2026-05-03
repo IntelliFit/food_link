@@ -43,6 +43,7 @@ export default function ExpiryPage() {
   const [fetchFailed, setFetchFailed] = useState(false)
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)
   const [items, setItems] = useState<FoodExpiryItem[]>([])
+  const [processedExpanded, setProcessedExpanded] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -273,8 +274,20 @@ export default function ExpiryPage() {
 
             {!!grouped.processed.length && (
               <View className='expiry-section'>
-                <Text className='expiry-section-title'>已处理</Text>
-                {grouped.processed.map(renderItemCard)}
+                <View
+                  className='expiry-section-header'
+                  onClick={() => setProcessedExpanded(!processedExpanded)}
+                >
+                  <Text className='expiry-section-title'>
+                    已处理 ({grouped.processed.length})
+                  </Text>
+                  <Text
+                    className={`expiry-section-arrow ${processedExpanded ? 'expiry-section-arrow--expanded' : ''}`}
+                  >
+                    ▶
+                  </Text>
+                </View>
+                {processedExpanded && grouped.processed.map(renderItemCard)}
               </View>
             )}
           </>
