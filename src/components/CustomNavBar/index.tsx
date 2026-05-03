@@ -52,7 +52,12 @@ export default function CustomNavBar({
         const statusBarHeight = getStatusBarHeightSafe()
         // 导航栏内容区高度 = (胶囊按钮上边距 - 状态栏高度) * 2 + 胶囊按钮高度
         const navBarHeight = (menuBtn.top - statusBarHeight) * 2 + menuBtn.height
-        return { statusBarHeight, navBarHeight }
+        // 计算胶囊按钮占用的右侧安全区域，避免 rightContent 被遮挡
+        const sysInfo = Taro.getSystemInfoSync()
+        const capsuleRightGap = (menuBtn && menuBtn.left > 0)
+            ? sysInfo.windowWidth - menuBtn.left + 8
+            : 16
+        return { statusBarHeight, navBarHeight, capsuleRightGap }
     })
 
     const handleBack = () => {
@@ -84,7 +89,7 @@ export default function CustomNavBar({
                     {title}
                 </Text>
                 {rightContent && (
-                    <View className='custom-nav-bar__right'>
+                    <View className='custom-nav-bar__right' style={{ right: `${navInfo.capsuleRightGap}px` }}>
                         {rightContent}
                     </View>
                 )}
