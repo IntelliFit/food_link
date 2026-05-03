@@ -134,8 +134,8 @@ function HealthProfilePage() {
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
-    } catch {
-      await showUnifiedApiError(e, '获取档案失败')
+    } catch (err: any) {
+      await showUnifiedApiError(err, '获取档案失败')
     } finally {
       setLoading(false)
     }
@@ -406,8 +406,8 @@ function HealthProfilePage() {
         >
           {/* Step 0: 性别 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 1 题</Text>
-            <Text className='step-card-title'>你的性别是？</Text>
+            <Text className='step-card-title'>基础信息</Text>
+            <Text className='step-card-subtitle'>选择你的性别，让我们更了解你。</Text>
             <View className='choice-row choice-row-vertical'>
               <View
                 className={`option-card big ${gender === 'male' ? 'active' : ''}`}
@@ -426,15 +426,15 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer card-footer-single'>
               <Button block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 1: 出生日期 (Changed to Age Selection) */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 2 题</Text>
-            <Text className='step-card-title'>您的年龄是？</Text>
+            <Text className='step-card-title'>基础信息</Text>
+            <Text className='step-card-subtitle'>选择你的年龄，让我们更了解你。</Text>
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <AgePicker
                 value={age}
@@ -449,17 +449,17 @@ function HealthProfilePage() {
               />
             </View>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 2: 身高 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 3 题</Text>
-            <Text className='step-card-title'>你的身高是？</Text>
+            <Text className='step-card-title'>身体数据</Text>
+            <Text className='step-card-subtitle'>你的身高是多少？</Text>
             {/* 使用 HeightRuler 替换原有的输入 */}
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <HeightRuler
@@ -470,16 +470,17 @@ function HealthProfilePage() {
               />
             </View>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 3: 体重 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 4 题</Text>
+            <Text className='step-card-title'>身体数据</Text>
+            <Text className='step-card-subtitle'>你的体重是多少？</Text>
             {/* Title is handled inside WeightRuler for better layout */}
             <WeightRuler
               value={weight ? Number(weight) : 60}
@@ -489,17 +490,17 @@ function HealthProfilePage() {
               height={height ? Number(height) : 170}
             />
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 4: 目标选择 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 5 题</Text>
-            <Text className='step-card-title'>您的目标？</Text>
+            <Text className='step-card-title'>健康目标</Text>
+            <Text className='step-card-subtitle'>你希望达到什么样的身体状态？</Text>
             <View className='option-list'>
               {GOAL_OPTIONS.map((opt) => (
                 <View
@@ -516,17 +517,17 @@ function HealthProfilePage() {
               ))}
             </View>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${dietGoal ? 'ready' : ''}`} onClick={goNext} disabled={!dietGoal}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 5: 活动水平 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 6 题</Text>
-            <Text className='step-card-title'>日常活动水平？</Text>
+            <Text className='step-card-title'>活动水平</Text>
+            <Text className='step-card-subtitle'>你平时有多少运动量？</Text>
             <View className='option-list'>
               {ACTIVITY_OPTIONS.map((o) => (
                 <View
@@ -541,17 +542,17 @@ function HealthProfilePage() {
               ))}
             </View>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 6: 执行模式 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 7 题</Text>
-            <Text className='step-card-title'>选择你的执行模式</Text>
+            <Text className='step-card-title'>执行模式</Text>
+            <Text className='step-card-subtitle'>选择适合你的记录方式。</Text>
             <View className='option-list'>
               {EXECUTION_MODE_OPTIONS.map((mode) => (
                 <View
@@ -593,17 +594,17 @@ function HealthProfilePage() {
               当前推荐：{recommendExecutionMode(dietGoal || 'maintain') === 'strict' ? '精准模式' : '标准模式'}
             </Text>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${executionMode ? 'ready' : ''}`} onClick={goNext} disabled={!executionMode}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 7: 既往病史（多选） */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 8 题</Text>
-            <Text className='step-card-title'>是否有以下病史？（可多选）</Text>
+            <Text className='step-card-title'>既往病史</Text>
+            <Text className='step-card-subtitle'>是否有以下病史？（可多选）</Text>
             <View className='option-grid'>
               {MEDICAL_OPTIONS.map((o) => (
                 <View
@@ -640,17 +641,17 @@ function HealthProfilePage() {
               </View>
             </View>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 8: 特殊饮食（多选） */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 9 题</Text>
-            <Text className='step-card-title'>特殊饮食习惯？（可多选）</Text>
+            <Text className='step-card-title'>饮食习惯</Text>
+            <Text className='step-card-subtitle'>你有特殊的饮食习惯吗？（可多选）</Text>
             <View className='option-grid'>
               {DIET_OPTIONS.map((o) => (
                 <View
@@ -664,17 +665,17 @@ function HealthProfilePage() {
               ))}
             </View>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 9: 过敏源 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 10 题（选填）</Text>
-            <Text className='step-card-title'>有过敏源吗？</Text>
+            <Text className='step-card-title'>过敏源</Text>
+            <Text className='step-card-subtitle'>有过敏源吗？（选填）</Text>
             <View className='input-card'>
               <Textarea
                 className='card-textarea'
@@ -686,17 +687,17 @@ function HealthProfilePage() {
             </View>
             <Text className='skip-hint'>没有可留空</Text>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
 
           {/* Step 10: 特殊情况和问题补充 */}
           <View className='card step-card'>
-            <Text className='step-card-step'>第 11 题（选填）</Text>
-            <Text className='step-card-title'>特殊情况和补充？</Text>
+            <Text className='step-card-title'>补充信息</Text>
+            <Text className='step-card-subtitle'>有其他特殊情况需要补充吗？（选填）</Text>
             <View className='input-card'>
               {/* 这里使用 textarea 或者普通的 Input 都行。原项目设计风格用 Input 为主 */}
               <Textarea
@@ -709,9 +710,9 @@ function HealthProfilePage() {
             </View>
             <Text className='skip-hint'>记录身体的特殊情况，让分析更准确（没有可留空）</Text>
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                确认
+                下一步 〉
               </Button>
             </View>
           </View>
@@ -722,9 +723,8 @@ function HealthProfilePage() {
               <View className='hero-icon-wrapper'>
                 <Text className='hero-icon iconfont icon-yiliaohangyedeICON-'></Text>
               </View>
-              <Text className='step-card-step'>第 12 题（选填）</Text>
-              <Text className='step-card-title' style={{ marginBottom: '16rpx' }}>上传体检报告</Text>
-              <Text className='step-card-subtitle' style={{ textAlign: 'center', marginBottom: '0' }}>AI 深度分析关键指标，定制专属方案</Text>
+              <Text className='step-card-title' style={{ marginBottom: '16rpx' }}>体检报告</Text>
+              <Text className='step-card-subtitle' style={{ textAlign: 'center', marginBottom: '0' }}>上传体检报告，AI 深度分析关键指标，定制专属方案</Text>
             </View>
 
             <View
@@ -779,7 +779,7 @@ function HealthProfilePage() {
             </View>
 
             <View className='card-footer'>
-              <View className='card-prev-link' onClick={goPrev}>上一题</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
               <Button
                 block
                 color='primary'
