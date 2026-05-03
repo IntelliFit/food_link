@@ -338,12 +338,6 @@ function ProfilePage() {
       badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
     },
     {
-      id: 7,
-      icon: <ClockOutlined size='20' />,
-      title: '识别记录',
-      desc: '查看以往识别记录'
-    },
-    {
       id: 5,
       icon: <ShopOutlined size='20' />,
       title: '公共食物库',
