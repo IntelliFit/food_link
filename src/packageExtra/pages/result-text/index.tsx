@@ -8,6 +8,7 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 
 import './index.scss'
 
@@ -127,6 +128,8 @@ function ResultTextPage() {
   }
 
   useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    persistRecordTargetDate(String(params?.date || ''))
     try {
       const stored = Taro.getStorageSync('analyzeTextResult')
       if (!stored) {
@@ -260,6 +263,7 @@ function ResultTextPage() {
     setSaving(true)
     try {
       const payload = {
+        date: getStoredRecordTargetDate(),
         meal_type: mealType as MealType,
         description: description || undefined,
         insight: healthAdvice || undefined,
@@ -288,12 +292,13 @@ function ResultTextPage() {
       }
       // @ts-ignore
       const saveResult = await saveFoodRecord(payload)
+      const targetDate = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
       try {
-        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate })
       } catch {
         /* ignore */
       }
-      void refreshHomeDashboardLocalSnapshotFromCloud(formatDateKey(new Date()))
+      void refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
 
       if (saveOnly) {
         Taro.showToast({ title: '记录成功', icon: 'success' })

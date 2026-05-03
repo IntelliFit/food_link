@@ -1,5 +1,50 @@
 # DECISIONS
 
+- `2026-05-02`: Membership display and entitlement truth must prefer the latest real paid membership order over stale `user_pro_memberships` snapshots:
+  - If `user_pro_memberships.current_plan_code / status / expires_at / daily_credits` drifts from the latest paid membership order, backend `/api/membership/me` should auto-reconcile it before returning data.
+  - Non-membership orders such as `points_recharge` must not participate in membership-plan reconciliation.
+  - Preserved manual exceptions remain explicit (`锦恢`, `小马哥`) because they are developer accounts; other active memberships without any real paid membership order should be treated as data errors to clean up instead of as display truth.
+
+- `2026-05-02`: Invite rewards now use a higher-quality qualification rule:
+  - For new referrals, the invitee must complete valid usage on `2` distinct China dates within `7` days.
+  - Once qualified, inviter and invitee each receive `15` earned credits immediately.
+  - The reward goes directly into persistent `earned_credits_balance` instead of being split across 3 daily drops.
+  - Existing legacy referrals already in `reward_active` continue their old 3-day daily reward flow so in-flight rewards are not cut off.
+
+- `2026-05-03`: Invite-new-user should support dual product entry while keeping one reward rule:
+  - Poster/share content remains one invite path.
+  - `我的 -> 邀请有礼` is a second dedicated growth entry and should not require users to first share a check-in record.
+  - Both entry paths must converge on the same invite code and the same `7 days / 2 distinct valid-use days / both get 15 earned credits / inviter monthly cap 10` qualification rule.
+  - Unauthenticated QR scans carrying `fi=邀请码` should land on a public invite page first so users can see the reward proposition before logging in.
+  - Invite-facing copy should emphasize `新用户达标后双方各得15积分`, rather than only `成为好友`.
+
+- `2026-05-02`: The profile membership card should keep the paid area intentionally compact:
+  - Keep only `????????0?`, `?????????`, and when applicable a compact founder-benefit block.
+  - Reward points should map to a visible on-card level ladder (`Lv1+`) with playful titles instead of long explanatory copy.
+  - When double membership benefits apply, the card must keep that founder-benefit copy to a single line and express rank position as `33/1000`-style text instead of a second explanatory line.
+
+- `2026-05-02`: On the profile page, earned reward credits should not be hidden behind the membership detail page for non-members:
+  - If a user has `earned_credits_balance > 0`, the membership card on `src/pages/profile/index.tsx` should surface that value directly.
+  - Current UX uses an `已赚 X` badge plus free-card summary text so users can notice reward progress without tapping into the membership page first.
+
+- `2026-05-01`: Membership credits are now split into two pools:
+  - System credits from membership/trial still refresh the next day.
+  - User-earned invite/share rewards accumulate in a persistent balance.
+  - Consumption order is system credits first, then earned credits.
+  - Frontend/API fields are `system_credits_remaining`, `earned_credits_balance`, and `total_credits_available`.
+  - Daily reward detail remains visible for display, but is no longer merged into `daily_credits_max`.
+- `2026-05-01`: Historical backfill uses a date-aware credit priority:
+  - Spend the backfill target day's unused daily system credits first.
+  - If that target day is exhausted, spend today's unused daily system credits second.
+  - If both daily system-credit buckets are exhausted, spend earned persistent credits last.
+  - This applies to backfilled food and exercise records.
+- `2026-05-01`: Historical backfill is now limited to the recent `3` days and uses the homepage-selected date as the source of truth:
+  - Supported dates are today, yesterday, and the day before yesterday.
+  - Homepage date selection feeds both food and exercise record entry flows.
+  - Non-today entry should show an explicit backfill state such as `正在补录 YYYY-MM-DD`.
+  - Backend task payloads persist per-date credit usage so historical backfill can consume the target-day system credits before falling back to today and then earned credits.
+
+
 - `2026-04-30`: 后端 OpenTelemetry 依赖在本项目里不能再作为“本地必装硬依赖”阻塞启动。当前稳定口径是：
   - `backend/main.py`、`backend/database.py`、`backend/worker.py` 相关 OTel 能力必须通过兼容层接入
   - 本地/临时环境若未安装 `opentelemetry-*` 包，后端应自动降级为 no-op observability，并继续可启动

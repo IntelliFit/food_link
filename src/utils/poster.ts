@@ -512,7 +512,7 @@ export function drawRecordPoster(
 
   ctx.fillStyle = TEXT_SUB
   ctx.font = '12px sans-serif'
-  ctx.fillText('扫码登录食探，可一键成为好友', titleX, footerY + 36)
+  ctx.fillText('扫码注册食探，达标后各得15积分', titleX, footerY + 36)
 
   const qrSize = 72
   const qrX = cx + contentW - qrSize
@@ -1043,7 +1043,7 @@ export function drawDayRecordPoster(
 
   ctx.fillStyle = TEXT_SUB
   ctx.font = '12px sans-serif'
-  ctx.fillText('扫码登录食探，可一键成为好友', titleX, footerY + 36)
+  ctx.fillText('扫码注册食探，达标后各得15积分', titleX, footerY + 36)
 
   const qrSize = 72
   const qrX = cx + contentW - qrSize
@@ -1365,7 +1365,7 @@ export function drawDailySummaryPoster(
 
   ctx.fillStyle = '#6A9A8A'
   ctx.font = `11px ${DAILY_SUMMARY_SANS_FAMILY}`
-  ctx.fillText('扫码登录食探，可一键成为好友', titleX, qrMidY + 13)
+  ctx.fillText('扫码注册食探，达标后各得15积分', titleX, qrMidY + 13)
 
   const qrX = cx + contentW - qrSize
   if (qrCodeImage) {

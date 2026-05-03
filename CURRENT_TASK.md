@@ -1,42 +1,190 @@
+
+- 2026-05-03 update:
+  - Added `testOpenid` dev-environment bypass for testing invite-new-user flow without real WeChat accounts.
+  - Backend `LoginRequest` now accepts `testOpenid`; `/api/login` skips WeChat API and uses the fake openid when `NODE_ENV=development`.
+  - Frontend `login()` in `src/utils/api.ts` passes `testOpenid` to backend.
+  - Login page shows a red test-openid input field (dev mode only) so developers can simulate new user registration.
+  - `package.json` `dev:backend` script now injects `NODE_ENV=development` via `cross-env` to ensure the bypass works.
+  - Verification:
+    - `python -m py_compile backend/main.py` passed.
+    - TypeScript typecheck shows no new errors in modified files.
+    - `weapp-devtools` runtime verification remains blocked in this environment because `mrc` is not installed and the DevTools automation port is still unavailable.
+
+- 2026-05-03 update:
+  - Invite-new-user now has dual entry paths:
+    - record/share poster path
+    - dedicated `邀请有礼` entry from `我的`
+  - Added a new public invite landing page at `src/packageExtra/pages/invite-friends/index.tsx`.
+  - Added public backend endpoint `/api/friend/invite/profile-by-code` so invite pages opened from invite code alone can still resolve inviter info.
+  - Updated unauthenticated QR-scan behavior in `src/app.ts`: scanning `fi=邀请码` now lands on the public invite page before login instead of jumping straight into the login page.
+  - Updated invite-facing copy across record posters and invite cards to emphasize `达标后各得15积分`.
+  - Verification:
+    - `python -m py_compile backend/main.py` passed
+    - `npx eslint src/app.ts src/utils/api.ts src/utils/poster.ts src/pages/profile/index.tsx src/packageExtra/pages/record-detail/index.tsx src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/invite-friends/index.tsx --max-warnings 0` passed
+    - full `npx tsc --noEmit --pretty false` is still blocked by pre-existing repo errors in `expiry* / food-library* / health-profile*`
+    - invite-related files did not surface new type errors during targeted checking
+    - `weapp-devtools` runtime verification was attempted but remains blocked because `mrc` is missing and ports `3001` / `9420` were not listening even after trying `cli.bat auto --project D:\projects\food_link --port 3001 --trust-project`
+
+- 2026-05-03 discussion:
+  - User is validating the new invite-new-user reward flow and asked for a realistic verification path that follows the poster/QR-code entry instead of only backend simulation.
+  - Current product direction under discussion: keep poster/share-based invite-new-user flow, and also consider adding a dedicated invite entry on the `我的` page so inviting new users is not limited to the record-share scene.
+  - This is not a final product decision yet; next step is to confirm the desired dual-entry UX and then implement/runtime-verify it with `weapp-devtools`.
+
+- 2026-05-03 update:
+  - Compressed the profile membership-card founder-benefit copy to a single line.
+  - The rank portion now uses compact `33/1000` formatting instead of a second descriptive line.
+  - Verification update:
+    - `npm run lint -- src/pages/profile/index.tsx` passed.
+    - `weapp-devtools` runtime verification remains blocked in this environment because `mrc` is not installed and the DevTools automation port is still unavailable.
+
+- 2026-05-02 update:
+  - Simplified the profile-page membership card in `src/pages/profile/index.tsx` and `src/pages/profile/index.scss`.
+  - The paid area now keeps only two compact meters: `????????0?` and `?????????`.
+  - Reward points now surface a level ladder on the card itself: `Lv1-Lv6` with fun titles based on the earned-points range.
+  - Founder/double-benefit users still see a single compact `?????2` line instead of the previous long explanatory copy.
+  - Verification update:
+    - `npm run lint -- src/pages/profile/index.tsx` passed.
+    - `weapp-devtools` runtime verification is still blocked in this environment because `mrc` is not installed and `??????? cli auto --port 9420` did not bring the automation port up before timing out.
 # CURRENT_TASK
 
-- Task: 修复本地后端因缺少 `opentelemetry` 依赖而无法启动
-- Status: done（已将 OTel 改为可选依赖；当前环境未安装时自动降级，不再阻塞 `main.py / worker.py / database.py` 导入）
+- 2026-05-02 update:
+  - Fixed the membership-truth drift where monthly subscribers could appear as yearly members because `user_pro_memberships.current_plan_code` had become stale/incorrect.
+  - Backend `/api/membership/me` now auto-reconciles membership state from the latest real paid membership order before returning the membership snapshot.
+  - Added rerunnable repair script: `backend/scripts/reconcile_membership_truth.py`.
+  - Database correction executed on 2026-05-02:
+    - Reconciled paid-membership truth for `饭饭` (`standard_yearly -> standard_monthly`) and `魔法猫咪` (`standard_yearly -> light_monthly`).
+    - Reconfirmed and normalized related paid snapshot rows such as `myRan` / `ikura`.
+    - Expired two remaining active yearly memberships that had no real paid membership order and were not on the preserved manual-exception list.
+  - Verification update:
+    - `python -m py_compile backend\database.py backend\main.py backend\scripts\reconcile_membership_truth.py` passed.
+    - `python backend\scripts\reconcile_membership_truth.py` executed successfully against Supabase.
+
+- 2026-05-02 hotfix:
+  - Backend startup crash after the invite-reward refactor has been fixed.
+  - Root cause: `backend/database.py` introduced new helpers with `date` type annotations and top-level `json.loads(...)`, but the module import section still only imported `datetime/timedelta/timezone`.
+  - Fix applied:
+    - Added `import json`
+    - Added `from datetime import date, datetime, timedelta, timezone`
+  - Verification update:
+    - `python -m py_compile backend/database.py backend/worker.py backend/main.py backend/run_backend.py` passed.
+    - Direct module import passed: `database_import_ok`.
+
+- 2026-05-02 update:
+  - Invite reward rule has been upgraded from `1 valid use -> 3 days * +5` to `7 days / 2 distinct valid-use days -> both sides get 15 earned credits once`.
+  - Backend now qualifies invite rewards on 2 distinct China dates and credits both users directly into persistent earned-credit balance.
+  - Legacy `reward_active` invite referrals still keep their old daily materialization path so existing in-flight rewards are not interrupted.
+  - Frontend membership hint copy has been updated to match the new rule.
+  - Verification update:
+    - `python -m py_compile backend\database.py backend\main.py` passed.
+    - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx` passed.
+    - `weapp-devtools` runtime verification is still blocked because `mrc` is not installed and port `9420` is not listening.
+
+- 2026-05-02 update:
+  - Membership/profile UX refinement is in place.
+  - On `src/pages/profile/index.tsx`, non-members with earned reward credits now see an `已赚 X` badge directly on the membership card.
+  - The free-card summary now surfaces earned-credit availability on the profile page instead of requiring users to enter the membership detail page first.
+  - Verification update:
+    - `npm run lint -- src/pages/profile/index.tsx` passed.
+    - `weapp-devtools` runtime verification is still blocked because `mrc` is not installed and neither port `9420` nor `3001` is listening.
+    - WeChat DevTools CLI is present at `C:\Program Files (x86)\Tencent\微信web开发者工具\cli.bat`; its `auto` command exposes `--port` on this machine.
+
+- Task: 调整会员积分口径，改为“系统积分次日清零，用户活动赚取的奖励积分长期累计”
+- Status: implemented_pending_migration_and_runtime_validation
 - Scope:
-  - 根因：
-    - `backend/main.py`、`backend/database.py` 直接 `from opentelemetry ... import ...`
-    - 当前本地 Anaconda 环境没有安装 OTel 包，导致主进程与多个 worker 进程都在 import 阶段崩溃
-  - 修复：
-    - 新增 `backend/otel_compat.py`
-      - 有 OTel 包时走真实实现
-      - 无 OTel 包时提供 no-op `trace / tracer / exporter / instrumentation / logging handler / Status` 兼容实现
-    - `backend/database.py` 改为从 `otel_compat` 导入 `trace / Status / StatusCode`
-    - `backend/main.py` 改为统一从 `otel_compat` 导入全部 OTel 相关符号
-    - `_setup_otel_observability(...)` 新增 `OTEL_AVAILABLE` 判断：本地未装依赖时只打印 warning，不再抛异常
+  - 后端已拆分两类积分：
+    - 系统积分：会员/试用每日发放，次日刷新
+    - 奖励积分：邀请、分享海报等奖励进入累计余额，不再次日清零
+  - 当前扣减顺序已改为：
+    - 优先消耗当日系统积分
+    - 系统积分不足时，再从累计奖励余额扣减
+  - 已补齐的后端入口：
+    - 食物图片分析
+    - 食物文本分析
+    - 精准模式继续分析
+    - 运动记录
+    - 保质期图片识别
+  - 已补齐的前端口径：
+    - 会员页与“我的”页展示“系统剩余 / 累计奖励 / 当前总可用积分”
+    - 图片分析入口余额判断改为优先使用 `total_credits_available`
+    - 不足提示文案改为说明“系统积分次日刷新，奖励积分可继续累计”
+- Historical backfill credit rule clarified by user:
+  - For backfilled food or exercise records, spend the target day's unused daily system credits first.
+  - If the target day's daily system credits are exhausted, spend today's daily system credits next.
+  - If today's daily system credits are also exhausted, spend earned persistent credits last.
+- Historical backfill implementation status:
+  - Backend and frontend implementation is now in place for date-aware backfill.
+  - Backfill is limited to the recent 3 days.
+  - Homepage selected date now flows through food and exercise entry paths.
+  - Non-today homepage state shows an explicit backfill banner.
+  - Backend persists task-level credit usage snapshots for historical credit accounting.
+- Pending:
+  - 需要在线上 / Supabase 执行 `backend/sql/add_persistent_earned_reward_credits.sql`
+  - 需要在真实可用的微信开发者工具自动化环境中补一次 `weapp-devtools` 运行时验证与截图
 - Verification:
-  - `python -m py_compile backend\\otel_compat.py backend\\database.py backend\\main.py backend\\worker.py` 通过
-  - 进程内直接 `import backend/main.py` 成功，输出：
+  - `python -m py_compile backend\\main.py backend\\database.py` 通过
+  - `npm run lint -- src/pages/profile/index.tsx src/packageExtra/pages/pro-membership/index.tsx src/utils/membership.ts src/utils/api.ts src/utils/weapp-open-analyze-image.ts` 通过
+  - `npm run typecheck` 仍有仓库既存报错，集中在：
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+    - `src/packageExtra/pages/expiry/index.tsx`
+    - `src/packageExtra/pages/food-library-detail/index.tsx`
+    - `src/packageExtra/pages/food-library/index.tsx`
+    - `src/packageExtra/pages/health-profile-edit/index.tsx`
+    - `src/packageExtra/pages/health-profile/index.tsx`
+  - `weapp-devtools` 运行时验证受阻：
+    - 本机未安装 / 不在 PATH 中的 `mrc`
+    - 9420 自动化端口当前未监听
+    - 微信开发者工具 CLI 路径存在：`C:\\Program Files (x86)\\Tencent\\微信web开发者工具\\cli.bat`
+
+- Task: Evaluate backfill UX for past food and exercise records
+- Status: in_discussion
+- Scope:
+  - User asked whether the app should support backfilling yesterday's food or exercise records.
+  - Proposed option under review: let users switch the homepage date, then tap food record / exercise record to add data for that selected date.
+  - Initial product recommendation:
+    - Backfill is worth supporting because diet and exercise are often recorded late.
+    - Date switching on the homepage is reasonable as an entry, but it should be visually explicit that the user is editing a historical day instead of "today".
+    - Better UX is "today-first, history-second": keep today's quick entry unchanged, and provide a clear "selected date" state or dedicated day-record entry for historical edits.
+    - Food and exercise should both follow the selected date once the user enters a day context, while save-time confirmation should show the target date to avoid accidental backfill.
+  - Open questions:
+    - Whether the homepage should expose only recent days (for example today / yesterday / custom date) instead of a full calendar by default.
+    - Whether backfilled records should show a subtle tag such as "补录" in history for later audit and user confidence.
+- Task: 淇鏈湴鍚庣鍥犵己灏?`opentelemetry` 渚濊禆鑰屾棤娉曞惎鍔?
+- Status: done锛堝凡灏?OTel 鏀逛负鍙€変緷璧栵紱褰撳墠鐜鏈畨瑁呮椂鑷姩闄嶇骇锛屼笉鍐嶉樆濉?`main.py / worker.py / database.py` 瀵煎叆锛?
+- Scope:
+  - 鏍瑰洜锛?
+    - `backend/main.py`銆乣backend/database.py` 鐩存帴 `from opentelemetry ... import ...`
+    - 褰撳墠鏈湴 Anaconda 鐜娌℃湁瀹夎 OTel 鍖咃紝瀵艰嚧涓昏繘绋嬩笌澶氫釜 worker 杩涚▼閮藉湪 import 闃舵宕╂簝
+  - 淇锛?
+    - 鏂板 `backend/otel_compat.py`
+      - 鏈?OTel 鍖呮椂璧扮湡瀹炲疄鐜?
+      - 鏃?OTel 鍖呮椂鎻愪緵 no-op `trace / tracer / exporter / instrumentation / logging handler / Status` 鍏煎瀹炵幇
+    - `backend/database.py` 鏀逛负浠?`otel_compat` 瀵煎叆 `trace / Status / StatusCode`
+    - `backend/main.py` 鏀逛负缁熶竴浠?`otel_compat` 瀵煎叆鍏ㄩ儴 OTel 鐩稿叧绗﹀彿
+    - `_setup_otel_observability(...)` 鏂板 `OTEL_AVAILABLE` 鍒ゆ柇锛氭湰鍦版湭瑁呬緷璧栨椂鍙墦鍗?warning锛屼笉鍐嶆姏寮傚父
+- Verification:
+  - `python -m py_compile backend\\otel_compat.py backend\\database.py backend\\main.py backend\\worker.py` 閫氳繃
+  - 杩涚▼鍐呯洿鎺?`import backend/main.py` 鎴愬姛锛岃緭鍑猴細
     - `main_import_ok`
     - `OpenTelemetry packages are not installed in the current environment; observability is disabled.`
-  - 已进一步补齐 no-op span 兼容接口：
+  - 宸茶繘涓€姝ヨˉ榻?no-op span 鍏煎鎺ュ彛锛?
     - `set_attribute(...)`
     - `set_attributes(...)`
     - `is_recording()`
-  - 进程内最小调用验证通过：
+  - 杩涚▼鍐呮渶灏忚皟鐢ㄩ獙璇侀€氳繃锛?
     - `span.set_attribute('a', 1)`
     - `span.set_attributes({'b': 2})`
     - `span.is_recording() == False`
 - Notes:
-  - 这样处理后，本地开发环境即使没装 OTel 也能启动后端
-  - 若线上/正式环境安装了 OTel 依赖，观测能力会自动恢复，无需改代码
-  - 用户后续在本地实际运行时又发现一层兼容性问题：
-    - worker 与首页/统计接口持续报：`'_NoOpSpan' object has no attribute 'set_attribute'`
-    - 说明当前 no-op 兼容层虽然解决了 import 崩溃，但 `_NoOpSpan` 还缺 `set_attribute(...)`
-    - 由于 `backend/database.py` 中多处 `with _tracer.start_as_current_span(...) as span:` 后直接调用 `span.set_attribute(...)`，导致 tracing 本身把业务接口打成 `500`
-    - 这也解释了前端复制错误时只拿到 `no-trace-id`：当前没有真实有效 span，自然也不会注入 `x-trace-id`
-  - 现已补齐上述 no-op span 方法；当前需要用户重启本地后端进程后才会生效
-  - 用户随后明确要求直接在本地后端 Python 环境安装真实 OTel 依赖
-  - 已执行安装到当前后端实际使用的解释器：
+  - 杩欐牱澶勭悊鍚庯紝鏈湴寮€鍙戠幆澧冨嵆浣挎病瑁?OTel 涔熻兘鍚姩鍚庣
+  - 鑻ョ嚎涓?姝ｅ紡鐜瀹夎浜?OTel 渚濊禆锛岃娴嬭兘鍔涗細鑷姩鎭㈠锛屾棤闇€鏀逛唬鐮?
+  - 鐢ㄦ埛鍚庣画鍦ㄦ湰鍦板疄闄呰繍琛屾椂鍙堝彂鐜颁竴灞傚吋瀹规€ч棶棰橈細
+    - worker 涓庨椤?缁熻鎺ュ彛鎸佺画鎶ワ細`'_NoOpSpan' object has no attribute 'set_attribute'`
+    - 璇存槑褰撳墠 no-op 鍏煎灞傝櫧鐒惰В鍐充簡 import 宕╂簝锛屼絾 `_NoOpSpan` 杩樼己 `set_attribute(...)`
+    - 鐢变簬 `backend/database.py` 涓澶?`with _tracer.start_as_current_span(...) as span:` 鍚庣洿鎺ヨ皟鐢?`span.set_attribute(...)`锛屽鑷?tracing 鏈韩鎶婁笟鍔℃帴鍙ｆ墦鎴?`500`
+    - 杩欎篃瑙ｉ噴浜嗗墠绔鍒堕敊璇椂鍙嬁鍒?`no-trace-id`锛氬綋鍓嶆病鏈夌湡瀹炴湁鏁?span锛岃嚜鐒朵篃涓嶄細娉ㄥ叆 `x-trace-id`
+  - 鐜板凡琛ラ綈涓婅堪 no-op span 鏂规硶锛涘綋鍓嶉渶瑕佺敤鎴烽噸鍚湰鍦板悗绔繘绋嬪悗鎵嶄細鐢熸晥
+  - 鐢ㄦ埛闅忓悗鏄庣‘瑕佹眰鐩存帴鍦ㄦ湰鍦板悗绔?Python 鐜瀹夎鐪熷疄 OTel 渚濊禆
+  - 宸叉墽琛屽畨瑁呭埌褰撳墠鍚庣瀹為檯浣跨敤鐨勮В閲婂櫒锛?
     - `D:\software\anaconda\python.exe`
     - `opentelemetry-api==1.33.1`
     - `opentelemetry-sdk==1.33.1`
@@ -44,36 +192,36 @@
     - `opentelemetry-instrumentation-fastapi==0.54b1`
     - `opentelemetry-instrumentation-httpx==0.54b1`
     - `opentelemetry-instrumentation-logging==0.54b1`
-  - 校验结果：
+  - 鏍￠獙缁撴灉锛?
     - `OTEL_AVAILABLE=True`
-    - `import main` 成功
-    - 说明当前后端已走真实 OTel 实现，不再依赖 no-op 兼容层
-  - 当前剩余现象：
-    - `main.py` 已开始尝试向 `http://localhost:4318/v1/logs` 上报
-    - 若本机未起 collector / 未建立 SSH 隧道，就会继续看到 exporter `ConnectionRefused`
-    - 这不再是“缺依赖”问题，而是“本地 4318 没有接收端”的问题
+    - `import main` 鎴愬姛
+    - 璇存槑褰撳墠鍚庣宸茶蛋鐪熷疄 OTel 瀹炵幇锛屼笉鍐嶄緷璧?no-op 鍏煎灞?
+  - 褰撳墠鍓╀綑鐜拌薄锛?
+    - `main.py` 宸插紑濮嬪皾璇曞悜 `http://localhost:4318/v1/logs` 涓婃姤
+    - 鑻ユ湰鏈烘湭璧?collector / 鏈缓绔?SSH 闅ч亾锛屽氨浼氱户缁湅鍒?exporter `ConnectionRefused`
+    - 杩欎笉鍐嶆槸鈥滅己渚濊禆鈥濋棶棰橈紝鑰屾槸鈥滄湰鍦?4318 娌℃湁鎺ユ敹绔€濈殑闂
 
-- Task: 发布版本号更新到 `2.1.1`，确保「我的」页底部显示真实生效
-- Status: done（已按发布规则从 `package.json` / `package-lock.json` 源头升级到 `2.1.1`；页面代码确认读取 `__APP_VERSION__` 注入）
+- Task: 鍙戝竷鐗堟湰鍙锋洿鏂板埌 `2.1.1`锛岀‘淇濄€屾垜鐨勩€嶉〉搴曢儴鏄剧ず鐪熷疄鐢熸晥
+- Status: done锛堝凡鎸夊彂甯冭鍒欎粠 `package.json` / `package-lock.json` 婧愬ご鍗囩骇鍒?`2.1.1`锛涢〉闈唬鐮佺‘璁よ鍙?`__APP_VERSION__` 娉ㄥ叆锛?
 - Scope:
-  - 版本源头：
-    - 已执行 `npm version 2.1.1 --no-git-tag-version`
-    - `package.json` 已更新为 `2.1.1`
-    - `package-lock.json` 根级 `version` 与根包 `packages[""].version` 已同步为 `2.1.1`
-  - 页面代码核对：
-    - `config/index.ts` 继续通过 `readPackageVersion()` 从根目录 `package.json` 读取版本，并注入 `defineConstants.__APP_VERSION__`
-    - `src/pages/profile/index.tsx` 底部版本展示继续为 `版本号 v${__APP_VERSION__}`
-  - 说明：
-    - 这次不需要手改「我的」页硬编码字符串，当前链路本来就是正确的构建注入方案
+  - 鐗堟湰婧愬ご锛?
+    - 宸叉墽琛?`npm version 2.1.1 --no-git-tag-version`
+    - `package.json` 宸叉洿鏂颁负 `2.1.1`
+    - `package-lock.json` 鏍圭骇 `version` 涓庢牴鍖?`packages[""].version` 宸插悓姝ヤ负 `2.1.1`
+  - 椤甸潰浠ｇ爜鏍稿锛?
+    - `config/index.ts` 缁х画閫氳繃 `readPackageVersion()` 浠庢牴鐩綍 `package.json` 璇诲彇鐗堟湰锛屽苟娉ㄥ叆 `defineConstants.__APP_VERSION__`
+    - `src/pages/profile/index.tsx` 搴曢儴鐗堟湰灞曠ず缁х画涓?`鐗堟湰鍙?v${__APP_VERSION__}`
+  - 璇存槑锛?
+    - 杩欐涓嶉渶瑕佹墜鏀广€屾垜鐨勩€嶉〉纭紪鐮佸瓧绗︿覆锛屽綋鍓嶉摼璺湰鏉ュ氨鏄纭殑鏋勫缓娉ㄥ叆鏂规
 - Next step:
-  - 用 `npm run build:weapp:preview` 生成上传产物
-  - 按项目要求尝试 `weapp-devtools` 核对运行态版本显示；若自动化端口不可用，则以构建产物与代码链路核对为准并说明阻塞
+  - 鐢?`npm run build:weapp:preview` 鐢熸垚涓婁紶浜х墿
+  - 鎸夐」鐩姹傚皾璇?`weapp-devtools` 鏍稿杩愯鎬佺増鏈樉绀猴紱鑻ヨ嚜鍔ㄥ寲绔彛涓嶅彲鐢紝鍒欎互鏋勫缓浜х墿涓庝唬鐮侀摼璺牳瀵逛负鍑嗗苟璇存槑闃诲
 
-- Task: 全局静态替换“失败类 showToast”为统一错误弹窗（禁止运行时拦截）
-- Status: in_progress（已完成核心高频页面替换，仍剩登录页“复制失败”toast 作为复制动作提示保留）
+- Task: 鍏ㄥ眬闈欐€佹浛鎹⑩€滃け璐ョ被 showToast鈥濅负缁熶竴閿欒寮圭獥锛堢姝㈣繍琛屾椂鎷︽埅锛?
+- Status: in_progress锛堝凡瀹屾垚鏍稿績楂橀椤甸潰鏇挎崲锛屼粛鍓╃櫥褰曢〉鈥滃鍒跺け璐モ€漷oast 浣滀负澶嶅埗鍔ㄤ綔鎻愮ず淇濈暀锛?
 - Scope:
-  - 已移除 `src/app.ts` 全局 toast 拦截，彻底回到“源码静态替换”策略
-  - 已完成失败 toast -> `showUnifiedApiError(...)` 的页面（含高频）：
+  - 宸茬Щ闄?`src/app.ts` 鍏ㄥ眬 toast 鎷︽埅锛屽交搴曞洖鍒扳€滄簮鐮侀潤鎬佹浛鎹⑩€濈瓥鐣?
+  - 宸插畬鎴愬け璐?toast -> `showUnifiedApiError(...)` 鐨勯〉闈紙鍚珮棰戯級锛?
     - `src/pages/community/index.tsx`
     - `src/pages/index/index.tsx`
     - `src/pages/index/components/MealRecordEditModal.tsx`
@@ -97,161 +245,161 @@
     - `src/packageExtra/pages/location-search/index.tsx`
     - `src/packageExtra/pages/recipe-edit/index.tsx`
 - Verification:
-  - `rg` 校验：`title: .*message.* icon: 'none'` 已无残留
-  - `rg` 校验：`title: '...失败...' icon: 'none'` 仅剩登录页复制动作失败提示（非 API 失败）
-  - `ReadLints`：本轮改动文件无新增 lints
+  - `rg` 鏍￠獙锛歚title: .*message.* icon: 'none'` 宸叉棤娈嬬暀
+  - `rg` 鏍￠獙锛歚title: '...澶辫触...' icon: 'none'` 浠呭墿鐧诲綍椤靛鍒跺姩浣滃け璐ユ彁绀猴紙闈?API 澶辫触锛?
+  - `ReadLints`锛氭湰杞敼鍔ㄦ枃浠舵棤鏂板 lints
 
-- Task: 为数据库关键路径补充 Trace 埋点，定位“网络错误，稍后重试”
-- Status: done（已在 `backend/database.py` 关键函数补齐 trace event + exception 记录，并扩展到高频查询/统计路径）
+- Task: 涓烘暟鎹簱鍏抽敭璺緞琛ュ厖 Trace 鍩嬬偣锛屽畾浣嶁€滅綉缁滈敊璇紝绋嶅悗閲嶈瘯鈥?
+- Status: done锛堝凡鍦?`backend/database.py` 鍏抽敭鍑芥暟琛ラ綈 trace event + exception 璁板綍锛屽苟鎵╁睍鍒伴珮棰戞煡璇?缁熻璺緞锛?
 - Scope:
   - `backend/database.py`
-    - 新增轻量 trace helper：`_safe_add_span_event`、`_record_db_exception`
-    - 在 `get_supabase_client` / `check_supabase_configured` 记录配置态与异常
-    - 在 `create_analysis_task_sync` 记录任务创建成功/失败事件
-    - 在 `claim_next_pending_task_sync` 记录 `empty/success/lost_race/error` 事件，并保留原有“网络错误，稍后重试”输出
-    - 扩展到高频 API 相关路径：
+    - 鏂板杞婚噺 trace helper锛歚_safe_add_span_event`銆乣_record_db_exception`
+    - 鍦?`get_supabase_client` / `check_supabase_configured` 璁板綍閰嶇疆鎬佷笌寮傚父
+    - 鍦?`create_analysis_task_sync` 璁板綍浠诲姟鍒涘缓鎴愬姛/澶辫触浜嬩欢
+    - 鍦?`claim_next_pending_task_sync` 璁板綍 `empty/success/lost_race/error` 浜嬩欢锛屽苟淇濈暀鍘熸湁鈥滅綉缁滈敊璇紝绋嶅悗閲嶈瘯鈥濊緭鍑?
+    - 鎵╁睍鍒伴珮棰?API 鐩稿叧璺緞锛?
       - `list_food_records` / `list_food_records_by_range`
       - `get_cached_insight` / `get_latest_cached_insight` / `upsert_insight_cache`
       - `get_analysis_task_by_id_sync` / `get_analysis_tasks_by_ids` / `list_analysis_tasks_by_user_sync`
       - `get_today_food_analysis_count` / `get_today_exercise_log_count`
 - Verification:
-  - `python -m py_compile backend/database.py` 通过
-  - `ReadLints`（`backend/database.py`）无新增告警
+  - `python -m py_compile backend/database.py` 閫氳繃
+  - `ReadLints`锛坄backend/database.py`锛夋棤鏂板鍛婅
 
-- Task: 在业务层补充 Trace 埋点（非数据库）
-- Status: done（`backend/main.py` 已补关键入口的业务事件与异常埋点）
+- Task: 鍦ㄤ笟鍔″眰琛ュ厖 Trace 鍩嬬偣锛堥潪鏁版嵁搴擄級
+- Status: done锛坄backend/main.py` 宸茶ˉ鍏抽敭鍏ュ彛鐨勪笟鍔′簨浠朵笌寮傚父鍩嬬偣锛?
 - Scope:
-  - 新增业务 trace helper：`_trace_add_event`、`_trace_record_error`
-  - 新增业务 tracer：`_biz_tracer = trace.get_tracer("food_link.backend.main")`
-  - 已补埋点入口：
+  - 鏂板涓氬姟 trace helper锛歚_trace_add_event`銆乣_trace_record_error`
+  - 鏂板涓氬姟 tracer锛歚_biz_tracer = trace.get_tracer("food_link.backend.main")`
+  - 宸茶ˉ鍩嬬偣鍏ュ彛锛?
     - `/api/analyze/submit`
     - `/api/analyze/tasks/{task_id}`
     - `/api/food-record/save`
     - `/api/food-record/list`
     - `/api/food-record/{record_id}`
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
-  - `ReadLints`（`backend/main.py`）无新增告警
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - `ReadLints`锛坄backend/main.py`锛夋棤鏂板鍛婅
 
-- Task: 小程序错误提示链路统一并携带 traceId
-- Status: in_progress（`showUnifiedApiError` 无 traceId 时也统一 `showModal`；首页/公共食物库/好友/统计 AI 洞察等已改用统一弹窗，避免长 toast）
+- Task: 灏忕▼搴忛敊璇彁绀洪摼璺粺涓€骞舵惡甯?traceId
+- Status: in_progress锛坄showUnifiedApiError` 鏃?traceId 鏃朵篃缁熶竴 `showModal`锛涢椤?鍏叡椋熺墿搴?濂藉弸/缁熻 AI 娲炲療绛夊凡鏀圭敤缁熶竴寮圭獥锛岄伩鍏嶉暱 toast锛?
 - Scope:
-  - 新增统一能力：
-    - `showUnifiedApiError(error, fallback)`：统一弹窗且必须用户确认；确认按钮固定为「复制traceId并确认」，无 `traceId` 时也复制占位值 `no-trace-id`，不再降级 toast
-    - `getTraceIdFromError(error)`：从错误对象/消息提取 traceId（支持半角/全角冒号）
-    - `stripTraceSuffixFromUserMessage`：弹窗内去重已拼进 message 的 trace 后缀
-    - `throwHttpErrorWithStatus(..., headers)`：自动从响应头提取 `x-trace-id` 并拼接用户可见提示
-  - 已接入 traceId 错误包装的高频请求：
-    - 登录、上传分析图、图片分析、对比分析、文字分析、会员套餐获取、`authenticatedRequest` 非 2xx
-  - 已接入页面侧统一错误弹窗：
-    - `src/packageExtra/pages/expiry/index.tsx`（加载失败时 `fetchFailed` 区分空数据；避免误显示「还没有记录」）
+  - 鏂板缁熶竴鑳藉姏锛?
+    - `showUnifiedApiError(error, fallback)`锛氱粺涓€寮圭獥涓斿繀椤荤敤鎴风‘璁わ紱纭鎸夐挳鍥哄畾涓恒€屽鍒秚raceId骞剁‘璁ゃ€嶏紝鏃?`traceId` 鏃朵篃澶嶅埗鍗犱綅鍊?`no-trace-id`锛屼笉鍐嶉檷绾?toast
+    - `getTraceIdFromError(error)`锛氫粠閿欒瀵硅薄/娑堟伅鎻愬彇 traceId锛堟敮鎸佸崐瑙?鍏ㄨ鍐掑彿锛?
+    - `stripTraceSuffixFromUserMessage`锛氬脊绐楀唴鍘婚噸宸叉嫾杩?message 鐨?trace 鍚庣紑
+    - `throwHttpErrorWithStatus(..., headers)`锛氳嚜鍔ㄤ粠鍝嶅簲澶存彁鍙?`x-trace-id` 骞舵嫾鎺ョ敤鎴峰彲瑙佹彁绀?
+  - 宸叉帴鍏?traceId 閿欒鍖呰鐨勯珮棰戣姹傦細
+    - 鐧诲綍銆佷笂浼犲垎鏋愬浘銆佸浘鐗囧垎鏋愩€佸姣斿垎鏋愩€佹枃瀛楀垎鏋愩€佷細鍛樺椁愯幏鍙栥€乣authenticatedRequest` 闈?2xx
+  - 宸叉帴鍏ラ〉闈晶缁熶竴閿欒寮圭獥锛?
+    - `src/packageExtra/pages/expiry/index.tsx`锛堝姞杞藉け璐ユ椂 `fetchFailed` 鍖哄垎绌烘暟鎹紱閬垮厤璇樉绀恒€岃繕娌℃湁璁板綍銆嶏級
     - `src/packageExtra/pages/expiry-edit/index.tsx`
-    - `src/pages/stats/index.tsx`（并去掉 AI 洞察失败后的重复 toast）
+    - `src/pages/stats/index.tsx`锛堝苟鍘绘帀 AI 娲炲療澶辫触鍚庣殑閲嶅 toast锛?
     - `src/packageExtra/pages/day-record/index.tsx`
     - `src/packageExtra/pages/health-profile-view/index.tsx`
     - `src/packageExtra/pages/checkin-leaderboard/index.tsx`
-    - `src/pages/index/index.tsx`（首页 dashboard 加载失败）
+    - `src/pages/index/index.tsx`锛堥椤?dashboard 鍔犺浇澶辫触锛?
     - `src/packageExtra/pages/food-library/index.tsx`
     - `src/packageExtra/pages/friends/index.tsx`
-    - `src/packageExtra/pages/login/index.tsx`（登录页新增本地硬弹窗 `showLoginErrorModal`；登录/绑定/头像上传/资料保存失败全部改为“复制traceId并确认”）
-  - 全局兜底收口：
-    - `src/app.ts` 增加 `Taro.showToast` 失败类关键词拦截器；凡命中失败关键词（如“失败/错误/异常/重试”等）且非成功态的 toast，统一改为“请求失败”确认弹窗 + 复制 traceId（无 trace 时复制 `no-trace-id`）
+    - `src/packageExtra/pages/login/index.tsx`锛堢櫥褰曢〉鏂板鏈湴纭脊绐?`showLoginErrorModal`锛涚櫥褰?缁戝畾/澶村儚涓婁紶/璧勬枡淇濆瓨澶辫触鍏ㄩ儴鏀逛负鈥滃鍒秚raceId骞剁‘璁も€濓級
+  - 鍏ㄥ眬鍏滃簳鏀跺彛锛?
+    - `src/app.ts` 澧炲姞 `Taro.showToast` 澶辫触绫诲叧閿瘝鎷︽埅鍣紱鍑″懡涓け璐ュ叧閿瘝锛堝鈥滃け璐?閿欒/寮傚父/閲嶈瘯鈥濈瓑锛変笖闈炴垚鍔熸€佺殑 toast锛岀粺涓€鏀逛负鈥滆姹傚け璐モ€濈‘璁ゅ脊绐?+ 澶嶅埗 traceId锛堟棤 trace 鏃跺鍒?`no-trace-id`锛?
 - Verification:
-  - `eslint src/utils/api.ts src/packageExtra/pages/expiry/index.tsx src/packageExtra/pages/expiry-edit/index.tsx src/pages/stats/index.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/packageExtra/pages/checkin-leaderboard/index.tsx --max-warnings 0` 通过
-  - `weapp-devtools`：`mrc pageInfo -p 9420` 当前环境未连上开发者工具自动化（需本机开启服务端口），未做运行态截图
+  - `eslint src/utils/api.ts src/packageExtra/pages/expiry/index.tsx src/packageExtra/pages/expiry-edit/index.tsx src/pages/stats/index.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/packageExtra/pages/checkin-leaderboard/index.tsx --max-warnings 0` 閫氳繃
+  - `weapp-devtools`锛歚mrc pageInfo -p 9420` 褰撳墠鐜鏈繛涓婂紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲锛堥渶鏈満寮€鍚湇鍔＄鍙ｏ級锛屾湭鍋氳繍琛屾€佹埅鍥?
 
-- Task: 后端接入 OpenTelemetry 并回传 Trace ID
-- Status: done（已接通 OTLP HTTP trace/logs 上报；响应头支持返回 `x-trace-id` / `traceparent`，并新增实例标识头）
+- Task: 鍚庣鎺ュ叆 OpenTelemetry 骞跺洖浼?Trace ID
+- Status: done锛堝凡鎺ラ€?OTLP HTTP trace/logs 涓婃姤锛涘搷搴斿ご鏀寔杩斿洖 `x-trace-id` / `traceparent`锛屽苟鏂板瀹炰緥鏍囪瘑澶达級
 - Scope:
   - `backend/main.py`
-    - 新增 OTel 初始化：`TracerProvider + OTLPSpanExporter + FastAPIInstrumentor + HTTPXClientInstrumentor`
-    - 新增日志导出：`LoggerProvider + OTLPLogExporter + LoggingHandler`
-    - 通过 FastAPI `@app.middleware("http")` 在每个 HTTP 响应注入 `x-trace-id` 与 `traceparent`
-    - 新增实例标识头：`x-instance-id`（默认优先 `POD_NAME`，回退 `HOSTNAME`）
+    - 鏂板 OTel 鍒濆鍖栵細`TracerProvider + OTLPSpanExporter + FastAPIInstrumentor + HTTPXClientInstrumentor`
+    - 鏂板鏃ュ織瀵煎嚭锛歚LoggerProvider + OTLPLogExporter + LoggingHandler`
+    - 閫氳繃 FastAPI `@app.middleware("http")` 鍦ㄦ瘡涓?HTTP 鍝嶅簲娉ㄥ叆 `x-trace-id` 涓?`traceparent`
+    - 鏂板瀹炰緥鏍囪瘑澶达細`x-instance-id`锛堥粯璁や紭鍏?`POD_NAME`锛屽洖閫€ `HOSTNAME`锛?
   - `backend/requirements.txt`
-    - 新增 OTel 依赖（api/sdk/exporter/instrumentation）
+    - 鏂板 OTel 渚濊禆锛坅pi/sdk/exporter/instrumentation锛?
   - `backend/.env`
-    - 新增 OTel 环境变量：`OTEL_ENABLED / OTEL_LOGS_ENABLED / OTEL_SERVICE_NAME / OTEL_EXPORTER_OTLP_ENDPOINT`
-    - 新增实例头开关：`INSTANCE_HEADER_ENABLED / INSTANCE_HEADER_NAME`
+    - 鏂板 OTel 鐜鍙橀噺锛歚OTEL_ENABLED / OTEL_LOGS_ENABLED / OTEL_SERVICE_NAME / OTEL_EXPORTER_OTLP_ENDPOINT`
+    - 鏂板瀹炰緥澶村紑鍏筹細`INSTANCE_HEADER_ENABLED / INSTANCE_HEADER_NAME`
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
-  - IDE lints 仅提示本地解释器尚未安装 opentelemetry 依赖（安装依赖后消失）
-  - 后续修正：改为 FastAPI `@app.middleware("http")` 注入 trace 头，避免 instrumentor hook 参数兼容性导致响应头缺失
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - IDE lints 浠呮彁绀烘湰鍦拌В閲婂櫒灏氭湭瀹夎 opentelemetry 渚濊禆锛堝畨瑁呬緷璧栧悗娑堝け锛?
+  - 鍚庣画淇锛氭敼涓?FastAPI `@app.middleware("http")` 娉ㄥ叆 trace 澶达紝閬垮厤 instrumentor hook 鍙傛暟鍏煎鎬у鑷村搷搴斿ご缂哄け
 - Notes:
-  - 当前默认 Collector 地址为 `http://otel-collector.observability.svc.cluster.local:4318`
-  - 若需单独指定可覆盖：`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
-  - 实例标识头默认取 `POD_NAME`，标准 K8s 可用 Downward API 注入；未注入时会回退到容器 `HOSTNAME`
+  - 褰撳墠榛樿 Collector 鍦板潃涓?`http://otel-collector.observability.svc.cluster.local:4318`
+  - 鑻ラ渶鍗曠嫭鎸囧畾鍙鐩栵細`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`銆乣OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
+  - 瀹炰緥鏍囪瘑澶撮粯璁ゅ彇 `POD_NAME`锛屾爣鍑?K8s 鍙敤 Downward API 娉ㄥ叆锛涙湭娉ㄥ叆鏃朵細鍥為€€鍒板鍣?`HOSTNAME`
 
-- Task: 验证 `origin/main` 的 trace 错误链路是否覆盖食物分析核心失败场景
-- Status: done（已在 `origin/main` 快照上完成进程内失败测试；发现 `/api/analyze/submit` 在依赖层异常时仍会裸掉成 `500 Internal Server Error`）
+- Task: 楠岃瘉 `origin/main` 鐨?trace 閿欒閾捐矾鏄惁瑕嗙洊椋熺墿鍒嗘瀽鏍稿績澶辫触鍦烘櫙
+- Status: done锛堝凡鍦?`origin/main` 蹇収涓婂畬鎴愯繘绋嬪唴澶辫触娴嬭瘯锛涘彂鐜?`/api/analyze/submit` 鍦ㄤ緷璧栧眰寮傚父鏃朵粛浼氳８鎺夋垚 `500 Internal Server Error`锛?
 - Scope:
-  - 测试方式：
-    - 使用 `git worktree` 拉出 `D:\files\food_link_origin_main`
-    - 在快照 `backend/` 下创建临时虚拟环境 `.venv_test`
-    - 用 `fastapi.testclient.TestClient` 进程内调用接口，避免改业务代码和本地小程序环境
-    - 通过依赖覆盖伪造 `get_current_user_info`，专测接口失败响应
-    - 通过临时改坏 `SUPABASE_SERVICE_ROLE_KEY` 模拟数据库 / 存储依赖故障
-  - 已测核心接口：
+  - 娴嬭瘯鏂瑰紡锛?
+    - 浣跨敤 `git worktree` 鎷夊嚭 `D:\files\food_link_origin_main`
+    - 鍦ㄥ揩鐓?`backend/` 涓嬪垱寤轰复鏃惰櫄鎷熺幆澧?`.venv_test`
+    - 鐢?`fastapi.testclient.TestClient` 杩涚▼鍐呰皟鐢ㄦ帴鍙ｏ紝閬垮厤鏀逛笟鍔′唬鐮佸拰鏈湴灏忕▼搴忕幆澧?
+    - 閫氳繃渚濊禆瑕嗙洊浼€?`get_current_user_info`锛屼笓娴嬫帴鍙ｅけ璐ュ搷搴?
+    - 閫氳繃涓存椂鏀瑰潖 `SUPABASE_SERVICE_ROLE_KEY` 妯℃嫙鏁版嵁搴?/ 瀛樺偍渚濊禆鏁呴殰
+  - 宸叉祴鏍稿績鎺ュ彛锛?
     - `POST /api/upload-analyze-image`
     - `POST /api/upload-analyze-image-file`
     - `POST /api/analyze/submit`
     - `GET /api/analyze/tasks/{task_id}`
     - `POST /api/food-record/save`
-  - 已确认通过的点：
-    - 多数 `4xx/5xx` 失败响应都会带：
+  - 宸茬‘璁ら€氳繃鐨勭偣锛?
+    - 澶氭暟 `4xx/5xx` 澶辫触鍝嶅簲閮戒細甯︼細
       - `x-trace-id`
       - `x-instance-id`
       - `traceparent`
-    - `upload-analyze-image`、`get_analyze_task`、`save_food_record` 在依赖故障时能返回结构化错误体
-  - 关键发现：
-    - `POST /api/analyze/submit` 在“数据库依赖坏掉”这类异常里，没有稳定落到统一错误响应
-    - 现象是：
+    - `upload-analyze-image`銆乣get_analyze_task`銆乣save_food_record` 鍦ㄤ緷璧栨晠闅滄椂鑳借繑鍥炵粨鏋勫寲閿欒浣?
+  - 鍏抽敭鍙戠幇锛?
+    - `POST /api/analyze/submit` 鍦ㄢ€滄暟鎹簱渚濊禆鍧忔帀鈥濊繖绫诲紓甯搁噷锛屾病鏈夌ǔ瀹氳惤鍒扮粺涓€閿欒鍝嶅簲
+    - 鐜拌薄鏄細
       - HTTP `500`
-      - body 只有 `Internal Server Error`
-      - 缺少 `x-trace-id / x-instance-id / traceparent`
-    - 当前判断是：该接口前半段存在未被统一 `try/except` 接住的数据库调用，异常在生成标准响应前直接冒泡
-  - 其他观察：
-    - `POST /api/upload-analyze-image` 空 body 当前返回的是 `422`（Pydantic 缺字段），不是接口内部手写的 `400`
-    - 若本地未连 OTLP collector，trace header 仍能生成；只是 exporter 会在后台报连接拒绝，这不影响“前端拿 traceId”本身
+      - body 鍙湁 `Internal Server Error`
+      - 缂哄皯 `x-trace-id / x-instance-id / traceparent`
+    - 褰撳墠鍒ゆ柇鏄細璇ユ帴鍙ｅ墠鍗婃瀛樺湪鏈缁熶竴 `try/except` 鎺ヤ綇鐨勬暟鎹簱璋冪敤锛屽紓甯稿湪鐢熸垚鏍囧噯鍝嶅簲鍓嶇洿鎺ュ啋娉?
+  - 鍏朵粬瑙傚療锛?
+    - `POST /api/upload-analyze-image` 绌?body 褰撳墠杩斿洖鐨勬槸 `422`锛圥ydantic 缂哄瓧娈碉級锛屼笉鏄帴鍙ｅ唴閮ㄦ墜鍐欑殑 `400`
+    - 鑻ユ湰鍦版湭杩?OTLP collector锛宼race header 浠嶈兘鐢熸垚锛涘彧鏄?exporter 浼氬湪鍚庡彴鎶ヨ繛鎺ユ嫆缁濓紝杩欎笉褰卞搷鈥滃墠绔嬁 traceId鈥濇湰韬?
 - Next step:
-  - 优先补测真实小程序页面上的 3 条用户链路：
-    - 分析页提交失败
-    - 分析中页轮询失败
-    - 结果页保存失败
-  - 若要修主问题，优先检查 `origin/main` 的 `analyze_submit(...)` 中数据库访问与统一异常包装边界
+  - 浼樺厛琛ユ祴鐪熷疄灏忕▼搴忛〉闈笂鐨?3 鏉＄敤鎴烽摼璺細
+    - 鍒嗘瀽椤垫彁浜ゅけ璐?
+    - 鍒嗘瀽涓〉杞澶辫触
+    - 缁撴灉椤典繚瀛樺け璐?
+  - 鑻ヨ淇富闂锛屼紭鍏堟鏌?`origin/main` 鐨?`analyze_submit(...)` 涓暟鎹簱璁块棶涓庣粺涓€寮傚父鍖呰杈圭晫
 
-- Task: 创始会员双倍积分资格扩展到“前 1000 注册或前 100 付费”
-- Status: done（后端资格判定、付费快照、会员页/我的页文案已同步；未按用户要求执行运行态验证）
+- Task: 鍒涘浼氬憳鍙屽€嶇Н鍒嗚祫鏍兼墿灞曞埌鈥滃墠 1000 娉ㄥ唽鎴栧墠 100 浠樿垂鈥?
+- Status: done锛堝悗绔祫鏍煎垽瀹氥€佷粯璐瑰揩鐓с€佷細鍛橀〉/鎴戠殑椤垫枃妗堝凡鍚屾锛涙湭鎸夌敤鎴疯姹傛墽琛岃繍琛屾€侀獙璇侊級
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/database.py`
-      - 新增 `get_first_paid_membership_user_rank(...)`，按 `pro_membership_payment_records.status='paid'` 且会员套餐单过滤，计算前 `100` 名付费用户
+      - 鏂板 `get_first_paid_membership_user_rank(...)`锛屾寜 `pro_membership_payment_records.status='paid'` 涓斾細鍛樺椁愬崟杩囨护锛岃绠楀墠 `100` 鍚嶄粯璐圭敤鎴?
     - `backend/main.py`
-      - 创始付费翻倍资格改为：`前 1000 注册用户 OR 前 100 付费用户`
-      - 试用资格与付费翻倍资格拆开：试用仍只看注册顺序，避免前 `100` 付费用户误吃 `30` 天试用
-      - `/api/membership/me` 新增返回：
+      - 鍒涘浠樿垂缈诲€嶈祫鏍兼敼涓猴細`鍓?1000 娉ㄥ唽鐢ㄦ埛 OR 鍓?100 浠樿垂鐢ㄦ埛`
+      - 璇曠敤璧勬牸涓庝粯璐圭炕鍊嶈祫鏍兼媶寮€锛氳瘯鐢ㄤ粛鍙湅娉ㄥ唽椤哄簭锛岄伩鍏嶅墠 `100` 浠樿垂鐢ㄦ埛璇悆 `30` 澶╄瘯鐢?
+      - `/api/membership/me` 鏂板杩斿洖锛?
         - `early_paid_user_rank`
         - `early_paid_user_limit`
         - `early_user_paid_bonus_source`
-  - 前端：
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - `MembershipStatus` 类型补齐前 `100` 付费用户相关字段
+      - `MembershipStatus` 绫诲瀷琛ラ綈鍓?`100` 浠樿垂鐢ㄦ埛鐩稿叧瀛楁
     - `src/utils/membership.ts`
-      - 新增创始礼遇来源/名次文案辅助函数
+      - 鏂板鍒涘绀奸亣鏉ユ簮/鍚嶆鏂囨杈呭姪鍑芥暟
     - `src/packageExtra/pages/pro-membership/index.tsx`
-      - 会员页文案改为“前 1000 注册用户或前 100 付费用户”
-      - 创始编号展示兼容“注册序号 / 付费序号 / 同时满足”
+      - 浼氬憳椤垫枃妗堟敼涓衡€滃墠 1000 娉ㄥ唽鐢ㄦ埛鎴栧墠 100 浠樿垂鐢ㄦ埛鈥?
+      - 鍒涘缂栧彿灞曠ず鍏煎鈥滄敞鍐屽簭鍙?/ 浠樿垂搴忓彿 / 鍚屾椂婊¤冻鈥?
     - `src/pages/profile/index.tsx`
-      - 「我的」页会员卡与会员入口说明同步改为新口径
-  - Seed 注释：
-    - `backend/database/membership_plan_config_seed.sql` 已补创始付费礼遇说明
+      - 銆屾垜鐨勩€嶉〉浼氬憳鍗′笌浼氬憳鍏ュ彛璇存槑鍚屾鏀逛负鏂板彛寰?
+  - Seed 娉ㄩ噴锛?
+    - `backend/database/membership_plan_config_seed.sql` 宸茶ˉ鍒涘浠樿垂绀奸亣璇存槑
 - Notes:
-  - 本轮按用户要求只改代码，没有运行 `npm run dev:weapp`、后端服务或 `weapp-devtools`
+  - 鏈疆鎸夌敤鎴疯姹傚彧鏀逛唬鐮侊紝娌℃湁杩愯 `npm run dev:weapp`銆佸悗绔湇鍔℃垨 `weapp-devtools`
 
-- Task: 统计体验成员清理候选名单（按最近使用时间）
-- Status: done（已生成超过 7 天未使用观察名单与超过 37 天未使用优先移除名单）
+- Task: 缁熻浣撻獙鎴愬憳娓呯悊鍊欓€夊悕鍗曪紙鎸夋渶杩戜娇鐢ㄦ椂闂达級
+- Status: done锛堝凡鐢熸垚瓒呰繃 7 澶╂湭浣跨敤瑙傚療鍚嶅崟涓庤秴杩?37 澶╂湭浣跨敤浼樺厛绉婚櫎鍚嶅崟锛?
 - Scope:
-  - 数据来源：
+  - 鏁版嵁鏉ユ簮锛?
     - `weapp_user.create_time`
     - `user_food_records.record_time / created_at`
     - `analysis_tasks.created_at / updated_at`
@@ -259,254 +407,254 @@
     - `user_water_logs.recorded_at`
     - `user_weight_records.recorded_on / created_at / updated_at`
     - `food_expiry_items.updated_at / created_at`
-  - 输出文件：
+  - 杈撳嚭鏂囦欢锛?
     - `memory/2026-04-29_experience_member_inactive_report.csv`
     - `memory/2026-04-29_experience_member_inactive_summary.md`
-  - 当前统计口径：
-    - 由于项目库里没有单独存“体验成员名单”，本轮先按“全量真实用户（排除 `openid` 以 `seed_` 开头的种子测试号）”输出未活跃名单
-    - 由于项目库里没有用户手填“微信号”，名单中的“微信 id”当前使用登录唯一标识 `openid`
+  - 褰撳墠缁熻鍙ｅ緞锛?
+    - 鐢变簬椤圭洰搴撻噷娌℃湁鍗曠嫭瀛樷€滀綋楠屾垚鍛樺悕鍗曗€濓紝鏈疆鍏堟寜鈥滃叏閲忕湡瀹炵敤鎴凤紙鎺掗櫎 `openid` 浠?`seed_` 寮€澶寸殑绉嶅瓙娴嬭瘯鍙凤級鈥濊緭鍑烘湭娲昏穬鍚嶅崟
+    - 鐢变簬椤圭洰搴撻噷娌℃湁鐢ㄦ埛鎵嬪～鈥滃井淇″彿鈥濓紝鍚嶅崟涓殑鈥滃井淇?id鈥濆綋鍓嶄娇鐢ㄧ櫥褰曞敮涓€鏍囪瘑 `openid`
 - Result:
-  - 真实用户总数（排除 `seed_*`）：`670`
-  - 超过 `7` 天未使用：`599`
-  - 超过 `37` 天未使用：`249`
+  - 鐪熷疄鐢ㄦ埛鎬绘暟锛堟帓闄?`seed_*`锛夛細`670`
+  - 瓒呰繃 `7` 澶╂湭浣跨敤锛歚599`
+  - 瓒呰繃 `37` 澶╂湭浣跨敤锛歚249`
 - Notes:
-  - 这次“最近使用”是按“有落库行为”的最近时间估算，不包含纯浏览但未写库的行为
-  - 若后续用户提供微信后台当前体验成员名单，可再二次交叉筛出“当前体验成员里该移除的人”
+  - 杩欐鈥滄渶杩戜娇鐢ㄢ€濇槸鎸夆€滄湁钀藉簱琛屼负鈥濈殑鏈€杩戞椂闂翠及绠楋紝涓嶅寘鍚函娴忚浣嗘湭鍐欏簱鐨勮涓?
+  - 鑻ュ悗缁敤鎴锋彁渚涘井淇″悗鍙板綋鍓嶄綋楠屾垚鍛樺悕鍗曪紝鍙啀浜屾浜ゅ弶绛涘嚭鈥滃綋鍓嶄綋楠屾垚鍛橀噷璇ョЩ闄ょ殑浜衡€?
 
-- Task: 手动记录页面心智收口为“双库模式”
-- Status: done（前台展示正式收口为 `food_nutrition_library + public_food_library` 两类；静态校验通过；`weapp-devtools` 运行态验证仍受本机 `mrc.cmd` 权限阻塞）
+- Task: 鎵嬪姩璁板綍椤甸潰蹇冩櫤鏀跺彛涓衡€滃弻搴撴ā寮忊€?
+- Status: done锛堝墠鍙板睍绀烘寮忔敹鍙ｄ负 `food_nutrition_library + public_food_library` 涓ょ被锛涢潤鎬佹牎楠岄€氳繃锛沗weapp-devtools` 杩愯鎬侀獙璇佷粛鍙楁湰鏈?`mrc.cmd` 鏉冮檺闃诲锛?
 - Scope:
-  - 前端：
+  - 鍓嶇锛?
     - `src/packageExtra/pages/record-manual/index.tsx`
-      - 顶部副标题改为“双库模式：标准食物库 + 真实餐食库”
-      - 搜索占位文案改为“搜索标准食物、菜名、商家餐”
-      - 筛选 chip 文案收口为：`全部 / 最近常吃 / 收藏餐食 / 真实餐食 / 标准食物`
-      - 默认浏览分组文案统一收口：
-        - `收藏优先 -> 收藏餐食`
-        - `公共库推荐 -> 真实餐食库`
-        - `标准营养词典 -> 标准食物库`
-      - 库说明文案不再强调 `aliases`，改为只强调两张主库：`标准食物 + 真实餐食`
-      - 结果卡来源徽标 fallback 也同步改为 `真实餐食 / 标准食物`
-  - 后端：
+      - 椤堕儴鍓爣棰樻敼涓衡€滃弻搴撴ā寮忥細鏍囧噯椋熺墿搴?+ 鐪熷疄椁愰搴撯€?
+      - 鎼滅储鍗犱綅鏂囨鏀逛负鈥滄悳绱㈡爣鍑嗛鐗┿€佽彍鍚嶃€佸晢瀹堕鈥?
+      - 绛涢€?chip 鏂囨鏀跺彛涓猴細`鍏ㄩ儴 / 鏈€杩戝父鍚?/ 鏀惰棌椁愰 / 鐪熷疄椁愰 / 鏍囧噯椋熺墿`
+      - 榛樿娴忚鍒嗙粍鏂囨缁熶竴鏀跺彛锛?
+        - `鏀惰棌浼樺厛 -> 鏀惰棌椁愰`
+        - `鍏叡搴撴帹鑽?-> 鐪熷疄椁愰搴揱
+        - `鏍囧噯钀ュ吇璇嶅吀 -> 鏍囧噯椋熺墿搴揱
+      - 搴撹鏄庢枃妗堜笉鍐嶅己璋?`aliases`锛屾敼涓哄彧寮鸿皟涓ゅ紶涓诲簱锛歚鏍囧噯椋熺墿 + 鐪熷疄椁愰`
+      - 缁撴灉鍗℃潵婧愬窘鏍?fallback 涔熷悓姝ユ敼涓?`鐪熷疄椁愰 / 鏍囧噯椋熺墿`
+  - 鍚庣锛?
     - `backend/database.py`
-      - 手动记录搜索结果里的 `source_label` 改为 `真实餐食 / 标准食物`
+      - 鎵嬪姩璁板綍鎼滅储缁撴灉閲岀殑 `source_label` 鏀逛负 `鐪熷疄椁愰 / 鏍囧噯椋熺墿`
 - Product behavior:
-  - 前台只把 `food_nutrition_library` 视作标准食物主库，把 `public_food_library` 视作真实餐食补充库
-  - `food_nutrition_aliases` 继续只承担后台搜索召回角色，不再在页面文案里作为“可见库”出现
-  - `food_unresolved_logs` 继续只作为后台补词典日志，不进入手动记录展示层
+  - 鍓嶅彴鍙妸 `food_nutrition_library` 瑙嗕綔鏍囧噯椋熺墿涓诲簱锛屾妸 `public_food_library` 瑙嗕綔鐪熷疄椁愰琛ュ厖搴?
+  - `food_nutrition_aliases` 缁х画鍙壙鎷呭悗鍙版悳绱㈠彫鍥炶鑹诧紝涓嶅啀鍦ㄩ〉闈㈡枃妗堥噷浣滀负鈥滃彲瑙佸簱鈥濆嚭鐜?
+  - `food_unresolved_logs` 缁х画鍙綔涓哄悗鍙拌ˉ璇嶅吀鏃ュ織锛屼笉杩涘叆鎵嬪姩璁板綍灞曠ず灞?
 - Verification:
-  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\database.py backend\\main.py` 通过
-  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
-  - 已按项目要求尝试 `weapp-devtools`：
-    - `cmd /c where mrc` 可定位到 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
-    - 直接执行 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd where --port 9420` 当前返回 `Access is denied.`
-  - 因此本轮仍未能补运行态截图与页面交互验证
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\database.py backend\\main.py` 閫氳繃
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools`锛?
+    - `cmd /c where mrc` 鍙畾浣嶅埌 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
+    - 鐩存帴鎵ц `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd where --port 9420` 褰撳墠杩斿洖 `Access is denied.`
+  - 鍥犳鏈疆浠嶆湭鑳借ˉ杩愯鎬佹埅鍥句笌椤甸潰浜や簰楠岃瘉
 - Notes:
-  - 这次是“展示层心智收口”，没有改动 alias 搜索召回逻辑本身
+  - 杩欐鏄€滃睍绀哄眰蹇冩櫤鏀跺彛鈥濓紝娌℃湁鏀瑰姩 alias 鎼滅储鍙洖閫昏緫鏈韩
 
-- Task: 手动记录补强“标准营养库 + 大词典”利用率
-- Status: done（后端已确认当前实库存在 `11275` 条 `food_nutrition_library` 与 `9925` 条 `food_nutrition_aliases`；手动记录已接通更多营养字段与库规模提示；运行态自动化验证受 DevTools `9420` 端口未开启阻塞）
+- Task: 鎵嬪姩璁板綍琛ュ己鈥滄爣鍑嗚惀鍏诲簱 + 澶ц瘝鍏糕€濆埄鐢ㄧ巼
+- Status: done锛堝悗绔凡纭褰撳墠瀹炲簱瀛樺湪 `11275` 鏉?`food_nutrition_library` 涓?`9925` 鏉?`food_nutrition_aliases`锛涙墜鍔ㄨ褰曞凡鎺ラ€氭洿澶氳惀鍏诲瓧娈典笌搴撹妯℃彁绀猴紱杩愯鎬佽嚜鍔ㄥ寲楠岃瘉鍙?DevTools `9420` 绔彛鏈紑鍚樆濉烇級
 - Scope:
-  - 数据现状核对：
-    - 通过 Supabase 当前 `rest/v1` 实查，确认“手动记录”相关食物表当前量级为：
+  - 鏁版嵁鐜扮姸鏍稿锛?
+    - 閫氳繃 Supabase 褰撳墠 `rest/v1` 瀹炴煡锛岀‘璁も€滄墜鍔ㄨ褰曗€濈浉鍏抽鐗╄〃褰撳墠閲忕骇涓猴細
       - `food_nutrition_library = 11275`
       - `food_nutrition_aliases = 9925`
       - `public_food_library = 48`
       - `food_unresolved_logs = 40`
-    - 结论：用户感知到的“大量食物数据”主要来自标准营养库与别名库，而不是公共库
-  - 后端：
+    - 缁撹锛氱敤鎴锋劅鐭ュ埌鐨勨€滃ぇ閲忛鐗╂暟鎹€濅富瑕佹潵鑷爣鍑嗚惀鍏诲簱涓庡埆鍚嶅簱锛岃€屼笉鏄叕鍏卞簱
+  - 鍚庣锛?
     - `backend/database.py`
-      - 手动记录搜索/浏览从营养库补充读取 `fiber_per_100g / sugar_per_100g / sodium_mg_per_100g`
-      - 公共库结果会从 `items[].nutrients` 汇总 `fiber / sugar / sodium`
-      - 新增手动记录食物库规模统计缓存，浏览接口返回 `nutrition_food_count / nutrition_alias_count / public_food_count`
-      - 搜索结果补充 `extra_nutrients / nutrition_highlights`
+      - 鎵嬪姩璁板綍鎼滅储/娴忚浠庤惀鍏诲簱琛ュ厖璇诲彇 `fiber_per_100g / sugar_per_100g / sodium_mg_per_100g`
+      - 鍏叡搴撶粨鏋滀細浠?`items[].nutrients` 姹囨€?`fiber / sugar / sodium`
+      - 鏂板鎵嬪姩璁板綍椋熺墿搴撹妯＄粺璁＄紦瀛橈紝娴忚鎺ュ彛杩斿洖 `nutrition_food_count / nutrition_alias_count / public_food_count`
+      - 鎼滅储缁撴灉琛ュ厖 `extra_nutrients / nutrition_highlights`
     - `backend/main.py`
-      - `FoodRecordItemNutrients` 新增 `sodium_mg`
-      - 手动记录浏览接口说明更新为“返回浏览分组 + 库规模信息”
-  - 前端：
+      - `FoodRecordItemNutrients` 鏂板 `sodium_mg`
+      - 鎵嬪姩璁板綍娴忚鎺ュ彛璇存槑鏇存柊涓衡€滆繑鍥炴祻瑙堝垎缁?+ 搴撹妯′俊鎭€?
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - `Nutrients` 新增可选 `sodium_mg`
-      - 手动记录搜索结果类型补充 `fiber / sugar / sodium_mg`、`extra_nutrients`、`nutrition_highlights`
-      - 手动记录浏览结果新增 `stats`
+      - `Nutrients` 鏂板鍙€?`sodium_mg`
+      - 鎵嬪姩璁板綍鎼滅储缁撴灉绫诲瀷琛ュ厖 `fiber / sugar / sodium_mg`銆乣extra_nutrients`銆乣nutrition_highlights`
+      - 鎵嬪姩璁板綍娴忚缁撴灉鏂板 `stats`
     - `src/packageExtra/pages/record-manual/index.tsx`
-      - 选中项营养计算不再只算热量/蛋白/碳水/脂肪，也会保留 `fiber / sugar / sodium_mg`
-      - 保存手动记录时不再把 `fiber / sugar` 强制写成 `0`，同时把 `sodium_mg` 一并写入 `items[].nutrients`
-      - 搜索/推荐卡片会优先展示 `纤维 / 糖 / 钠` 营养亮点
-      - 默认浏览文案会明确提示“已接入 11275 种标准食物、9925 个别名”
-      - 页面加载 spinner 已去掉“加载中/搜索中”文字，符合项目加载态规范
+      - 閫変腑椤硅惀鍏昏绠椾笉鍐嶅彧绠楃儹閲?铔嬬櫧/纰虫按/鑴傝偑锛屼篃浼氫繚鐣?`fiber / sugar / sodium_mg`
+      - 淇濆瓨鎵嬪姩璁板綍鏃朵笉鍐嶆妸 `fiber / sugar` 寮哄埗鍐欐垚 `0`锛屽悓鏃舵妸 `sodium_mg` 涓€骞跺啓鍏?`items[].nutrients`
+      - 鎼滅储/鎺ㄨ崘鍗＄墖浼氫紭鍏堝睍绀?`绾ょ淮 / 绯?/ 閽燻 钀ュ吇浜偣
+      - 榛樿娴忚鏂囨浼氭槑纭彁绀衡€滃凡鎺ュ叆 11275 绉嶆爣鍑嗛鐗┿€?925 涓埆鍚嶁€?
+      - 椤甸潰鍔犺浇 spinner 宸插幓鎺夆€滃姞杞戒腑/鎼滅储涓€濇枃瀛楋紝绗﹀悎椤圭洰鍔犺浇鎬佽鑼?
 - Verification:
-  - `python -m py_compile backend/main.py backend/database.py` 通过
-  - `node .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
-  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
-  - 当前返回 `Failed connecting to ws://localhost:9420`，说明微信开发者工具自动化端口未开启，因此未能补运行态截图与交互验证
+  - `python -m py_compile backend/main.py backend/database.py` 閫氳繃
+  - `node .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\record-manual\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools`锛歚mrc where --port 9420`
+  - 褰撳墠杩斿洖 `Failed connecting to ws://localhost:9420`锛岃鏄庡井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛鏈紑鍚紝鍥犳鏈兘琛ヨ繍琛屾€佹埅鍥句笌浜や簰楠岃瘉
 - Notes:
-  - 当前手动记录其实早已接了 `public_food_library + food_nutrition_library + food_nutrition_aliases + food_unresolved_logs` 四层，但过去前端感知较弱，且额外营养字段没有被真正带到记录保存链路
-  - 本轮没有改动“搜索排序主逻辑”，而是先优先补足“库规模可见性 + 额外营养字段真正落记录”这两层
+  - 褰撳墠鎵嬪姩璁板綍鍏跺疄鏃╁凡鎺ヤ簡 `public_food_library + food_nutrition_library + food_nutrition_aliases + food_unresolved_logs` 鍥涘眰锛屼絾杩囧幓鍓嶇鎰熺煡杈冨急锛屼笖棰濆钀ュ吇瀛楁娌℃湁琚湡姝ｅ甫鍒拌褰曚繚瀛橀摼璺?
+  - 鏈疆娌℃湁鏀瑰姩鈥滄悳绱㈡帓搴忎富閫昏緫鈥濓紝鑰屾槸鍏堜紭鍏堣ˉ瓒斥€滃簱瑙勬ā鍙鎬?+ 棰濆钀ュ吇瀛楁鐪熸钀借褰曗€濊繖涓ゅ眰
 
-- Task: 保质期提醒新增“拍照识别预填”多食物录入能力
-- Status: done（前后端代码已落地；静态校验通过；`weapp-devtools` 运行态验证受本机 `mrc` shim 调用阻塞）
+- Task: 淇濊川鏈熸彁閱掓柊澧炩€滄媿鐓ц瘑鍒濉€濆椋熺墿褰曞叆鑳藉姏
+- Status: done锛堝墠鍚庣浠ｇ爜宸茶惤鍦帮紱闈欐€佹牎楠岄€氳繃锛沗weapp-devtools` 杩愯鎬侀獙璇佸彈鏈満 `mrc` shim 璋冪敤闃诲锛?
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/main.py`
-      - 新增 `POST /api/expiry/recognize`
-      - 复用现有视觉模型做“多食物保质期识别”，返回结构化预填字段
-      - 识别调用按现有食物分析口径计入 `2` 积分消耗，并以 `payload.expiry_recognition=true` 隐藏标记，避免混入普通分析历史
-  - 前端：
+      - 鏂板 `POST /api/expiry/recognize`
+      - 澶嶇敤鐜版湁瑙嗚妯″瀷鍋氣€滃椋熺墿淇濊川鏈熻瘑鍒€濓紝杩斿洖缁撴瀯鍖栭濉瓧娈?
+      - 璇嗗埆璋冪敤鎸夌幇鏈夐鐗╁垎鏋愬彛寰勮鍏?`2` 绉垎娑堣€楋紝骞朵互 `payload.expiry_recognition=true` 闅愯棌鏍囪锛岄伩鍏嶆贩鍏ユ櫘閫氬垎鏋愬巻鍙?
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - 新增 `recognizeManagedFoodExpiryItems(...)`
-      - 新增保质期 AI 识别响应类型
+      - 鏂板 `recognizeManagedFoodExpiryItems(...)`
+      - 鏂板淇濊川鏈?AI 璇嗗埆鍝嶅簲绫诲瀷
     - `src/packageExtra/pages/expiry-edit/index.tsx`
-      - 新增“拍照识别预填”区：支持最多 `5` 张图
-      - 识别后生成多个待确认食物卡片
-      - 每个卡片沿用原有保质期表单结构，用户只需补齐缺失信息
-      - 支持“手动再加一项”，兼容 AI 识别 + 手动补录混合流
-      - 多条目保存后复用现有订阅消息能力，一次性为新条目登记提醒
+      - 鏂板鈥滄媿鐓ц瘑鍒濉€濆尯锛氭敮鎸佹渶澶?`5` 寮犲浘
+      - 璇嗗埆鍚庣敓鎴愬涓緟纭椋熺墿鍗＄墖
+      - 姣忎釜鍗＄墖娌跨敤鍘熸湁淇濊川鏈熻〃鍗曠粨鏋勶紝鐢ㄦ埛鍙渶琛ラ綈缂哄け淇℃伅
+      - 鏀寔鈥滄墜鍔ㄥ啀鍔犱竴椤光€濓紝鍏煎 AI 璇嗗埆 + 鎵嬪姩琛ュ綍娣峰悎娴?
+      - 澶氭潯鐩繚瀛樺悗澶嶇敤鐜版湁璁㈤槄娑堟伅鑳藉姏锛屼竴娆℃€т负鏂版潯鐩櫥璁版彁閱?
     - `src/packageExtra/pages/expiry-edit/index.scss`
-      - 新增 AI 上传区、图片网格、多卡片编辑态、spinner 等样式
+      - 鏂板 AI 涓婁紶鍖恒€佸浘鐗囩綉鏍笺€佸鍗＄墖缂栬緫鎬併€乻pinner 绛夋牱寮?
     - `src/packageExtra/pages/analyze-history/index.tsx`
-      - 过滤 `payload.expiry_recognition=true` 的隐藏记账任务，避免出现在普通分析历史
+      - 杩囨护 `payload.expiry_recognition=true` 鐨勯殣钘忚璐︿换鍔★紝閬垮厤鍑虹幇鍦ㄦ櫘閫氬垎鏋愬巻鍙?
 - Product behavior:
-  - 一张图可识别多个食物，多张图也可一起识别
-  - 能识别出的字段自动预填；无法识别或低置信字段由用户继续补
-  - 若未识别到明确到期日，AI 可给“建议天数 + 默认到期日”，并在卡片中提示这是估计值
+  - 涓€寮犲浘鍙瘑鍒涓鐗╋紝澶氬紶鍥句篃鍙竴璧疯瘑鍒?
+  - 鑳借瘑鍒嚭鐨勫瓧娈佃嚜鍔ㄩ濉紱鏃犳硶璇嗗埆鎴栦綆缃俊瀛楁鐢辩敤鎴风户缁ˉ
+  - 鑻ユ湭璇嗗埆鍒版槑纭埌鏈熸棩锛孉I 鍙粰鈥滃缓璁ぉ鏁?+ 榛樿鍒版湡鏃モ€濓紝骞跺湪鍗＄墖涓彁绀鸿繖鏄及璁″€?
 - Verification:
-  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\expiry-edit\\index.tsx src\\packageExtra\\pages\\analyze-history\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 通过
-  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\main.py` 通过
-  - 已按项目要求尝试 `weapp-devtools`：
-    - `cmd /c where mrc` 可定位到 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
-    - 但当前会话直接执行 `mrc` / `mrc.cmd` 仍受本机 shim 调用与权限问题阻塞，未能继续拿到 `9420` 端口页面信息与截图
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe .\\node_modules\\eslint\\bin\\eslint.js src\\packageExtra\\pages\\expiry-edit\\index.tsx src\\packageExtra\\pages\\analyze-history\\index.tsx src\\utils\\api.ts --ext .ts,.tsx --max-warnings 0` 閫氳繃
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend\\main.py` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools`锛?
+    - `cmd /c where mrc` 鍙畾浣嶅埌 `C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc(.cmd)`
+    - 浣嗗綋鍓嶄細璇濈洿鎺ユ墽琛?`mrc` / `mrc.cmd` 浠嶅彈鏈満 shim 璋冪敤涓庢潈闄愰棶棰橀樆濉烇紝鏈兘缁х画鎷垮埌 `9420` 绔彛椤甸潰淇℃伅涓庢埅鍥?
 - Notes:
-  - 本轮未替用户启动 `npm run dev:weapp`；若本地未在 watch，需要用户手动重新编译后才能在微信开发者工具看到新交互
-  - 当前工作区存在与本任务无关的既有改动，未在本轮处理
+  - 鏈疆鏈浛鐢ㄦ埛鍚姩 `npm run dev:weapp`锛涜嫢鏈湴鏈湪 watch锛岄渶瑕佺敤鎴锋墜鍔ㄩ噸鏂扮紪璇戝悗鎵嶈兘鍦ㄥ井淇″紑鍙戣€呭伐鍏风湅鍒版柊浜や簰
+  - 褰撳墠宸ヤ綔鍖哄瓨鍦ㄤ笌鏈换鍔℃棤鍏崇殑鏃㈡湁鏀瑰姩锛屾湭鍦ㄦ湰杞鐞?
 
-- Task: 精准模式参考物改为“默认手掌 + 用户级尺寸记忆”
-- Status: done（默认参考物、尺寸持久化、自定义参考物记忆已接通；运行态自动化验证受本机 `mrc` 调用阻塞）
+- Task: 绮惧噯妯″紡鍙傝€冪墿鏀逛负鈥滈粯璁ゆ墜鎺?+ 鐢ㄦ埛绾у昂瀵歌蹇嗏€?
+- Status: done锛堥粯璁ゅ弬鑰冪墿銆佸昂瀵告寔涔呭寲銆佽嚜瀹氫箟鍙傝€冪墿璁板繂宸叉帴閫氾紱杩愯鎬佽嚜鍔ㄥ寲楠岃瘉鍙楁湰鏈?`mrc` 璋冪敤闃诲锛?
 - Scope:
-  - 前端：
+  - 鍓嶇锛?
     - `src/packageExtra/pages/result/index.tsx`
-      - 精准模式参考物默认值从“筷子”改为“手掌”
-      - 结果页会读取用户健康档案中的 `precision_reference_defaults`
-      - 当前选中的参考物名称与尺寸会在“继续精准估计”时自动保存为用户默认值，下次直接复用
-      - 参考物预设收口为 `手掌 / 常规卡片 / 大卡片 / 自定义`
-      - 保留并支持自定义参考物名称与尺寸
+      - 绮惧噯妯″紡鍙傝€冪墿榛樿鍊间粠鈥滅瀛愨€濇敼涓衡€滄墜鎺屸€?
+      - 缁撴灉椤典細璇诲彇鐢ㄦ埛鍋ュ悍妗ｆ涓殑 `precision_reference_defaults`
+      - 褰撳墠閫変腑鐨勫弬鑰冪墿鍚嶇О涓庡昂瀵镐細鍦ㄢ€滅户缁簿鍑嗕及璁♀€濇椂鑷姩淇濆瓨涓虹敤鎴烽粯璁ゅ€硷紝涓嬫鐩存帴澶嶇敤
+      - 鍙傝€冪墿棰勮鏀跺彛涓?`鎵嬫帉 / 甯歌鍗＄墖 / 澶у崱鐗?/ 鑷畾涔塦
+      - 淇濈暀骞舵敮鎸佽嚜瀹氫箟鍙傝€冪墿鍚嶇О涓庡昂瀵?
     - `src/packageExtra/pages/analyze/index.tsx`
-      - 图片分析入口页的参考物预设也已同步收口为 `手掌 / 常规卡片 / 大卡片 / 自定义`
-      - 入口页会读取并回填用户默认参考物，不再固定落到“筷子”
-      - 点击开始分析时会自动把当前参考物配置写回用户默认值
+      - 鍥剧墖鍒嗘瀽鍏ュ彛椤电殑鍙傝€冪墿棰勮涔熷凡鍚屾鏀跺彛涓?`鎵嬫帉 / 甯歌鍗＄墖 / 澶у崱鐗?/ 鑷畾涔塦
+      - 鍏ュ彛椤典細璇诲彇骞跺洖濉敤鎴烽粯璁ゅ弬鑰冪墿锛屼笉鍐嶅浐瀹氳惤鍒扳€滅瀛愨€?
+      - 鐐瑰嚮寮€濮嬪垎鏋愭椂浼氳嚜鍔ㄦ妸褰撳墠鍙傝€冪墿閰嶇疆鍐欏洖鐢ㄦ埛榛樿鍊?
     - `src/utils/api.ts`
-      - 新增 `PrecisionReferenceDefaults / PrecisionReferencePresetConfig / PrecisionReferencePresetKey` 类型
-      - `HealthCondition / HealthProfileUpdateRequest` 增加 `precision_reference_defaults`
-  - 后端：
+      - 鏂板 `PrecisionReferenceDefaults / PrecisionReferencePresetConfig / PrecisionReferencePresetKey` 绫诲瀷
+      - `HealthCondition / HealthProfileUpdateRequest` 澧炲姞 `precision_reference_defaults`
+  - 鍚庣锛?
     - `backend/main.py`
-      - 新增 `PrecisionReferenceDefaults` 相关 schema 与归一化逻辑
-      - `PUT /api/user/health-profile` 支持把默认参考物配置持久化到 `health_condition.precision_reference_defaults`
+      - 鏂板 `PrecisionReferenceDefaults` 鐩稿叧 schema 涓庡綊涓€鍖栭€昏緫
+      - `PUT /api/user/health-profile` 鏀寔鎶婇粯璁ゅ弬鑰冪墿閰嶇疆鎸佷箙鍖栧埌 `health_condition.precision_reference_defaults`
     - `backend/worker.py`
-      - 精准模式 planner 的默认参考物建议从“筷子/银行卡/易拉罐”收口为“手掌/常规卡片/大卡片”
+      - 绮惧噯妯″紡 planner 鐨勯粯璁ゅ弬鑰冪墿寤鸿浠庘€滅瀛?閾惰鍗?鏄撴媺缃愨€濇敹鍙ｄ负鈥滄墜鎺?甯歌鍗＄墖/澶у崱鐗団€?
 - Verification:
-  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend/main.py backend/worker.py` 通过
-  - 目标文件定向 TypeScript 检查：`src/packageExtra/pages/result/index.tsx`、`src/utils/api.ts` 无新增报错
-  - 已按项目要求尝试 `weapp-devtools`：
-    - 已确认 `mrc` 安装路径存在：`C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd`
-    - 但当前会话直接调用该 shim 时出现权限/调用阻塞，未能继续完成 `where --port 9420` 与截图
+  - `C:\\Users\\29454\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m py_compile backend/main.py backend/worker.py` 閫氳繃
+  - 鐩爣鏂囦欢瀹氬悜 TypeScript 妫€鏌ワ細`src/packageExtra/pages/result/index.tsx`銆乣src/utils/api.ts` 鏃犳柊澧炴姤閿?
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools`锛?
+    - 宸茬‘璁?`mrc` 瀹夎璺緞瀛樺湪锛歚C:\\Users\\29454\\AppData\\Roaming\\npm\\mrc.cmd`
+    - 浣嗗綋鍓嶄細璇濈洿鎺ヨ皟鐢ㄨ shim 鏃跺嚭鐜版潈闄?璋冪敤闃诲锛屾湭鑳界户缁畬鎴?`where --port 9420` 涓庢埅鍥?
 - Notes:
-  - 这次先采用“复用健康档案 JSON 存默认参考物”的轻量方案，没有新建独立数据表
-  - 当前是“每个预设参考物各自记住自己的尺寸”，并额外支持记住 1 个自定义参考物
-  - 摆放说明 `placement_note` 仍按单次会话输入，不做用户级默认持久化
+  - 杩欐鍏堥噰鐢ㄢ€滃鐢ㄥ仴搴锋。妗?JSON 瀛橀粯璁ゅ弬鑰冪墿鈥濈殑杞婚噺鏂规锛屾病鏈夋柊寤虹嫭绔嬫暟鎹〃
+  - 褰撳墠鏄€滄瘡涓璁惧弬鑰冪墿鍚勮嚜璁颁綇鑷繁鐨勫昂瀵糕€濓紝骞堕澶栨敮鎸佽浣?1 涓嚜瀹氫箟鍙傝€冪墿
+  - 鎽嗘斁璇存槑 `placement_note` 浠嶆寜鍗曟浼氳瘽杈撳叆锛屼笉鍋氱敤鎴风骇榛樿鎸佷箙鍖?
 
-- Task: 修复“保质期提醒”页打开后正文空白
-- Status: done（已定位并修复页面运行时错误；自动化截图验证受 DevTools 9420 端口未开启阻塞）
+- Task: 淇鈥滀繚璐ㄦ湡鎻愰啋鈥濋〉鎵撳紑鍚庢鏂囩┖鐧?
+- Status: done锛堝凡瀹氫綅骞朵慨澶嶉〉闈㈣繍琛屾椂閿欒锛涜嚜鍔ㄥ寲鎴浘楠岃瘉鍙?DevTools 9420 绔彛鏈紑鍚樆濉烇級
 - Scope:
   - `src/packageExtra/pages/expiry/index.tsx`
-    - 补上缺失的 `useEffect` 导入，修复页面首屏运行时白屏
-    - 将纯文字加载态改为可视化 spinner，符合项目加载态规范
+    - 琛ヤ笂缂哄け鐨?`useEffect` 瀵煎叆锛屼慨澶嶉〉闈㈤灞忚繍琛屾椂鐧藉睆
+    - 灏嗙函鏂囧瓧鍔犺浇鎬佹敼涓哄彲瑙嗗寲 spinner锛岀鍚堥」鐩姞杞芥€佽鑼?
   - `src/packageExtra/pages/expiry/index.scss`
-    - 新增 `expiry-loading-spinner` 与旋转动画样式
+    - 鏂板 `expiry-loading-spinner` 涓庢棆杞姩鐢绘牱寮?
 - Root cause:
-  - 页面组件内部调用了 `useEffect(...)`，但顶部只导入了 `useCallback / useMemo / useState`
-  - 小程序运行时进入页面后会直接命中 `useEffect is not defined`，表现为“导航栏正常、正文整页空白”
+  - 椤甸潰缁勪欢鍐呴儴璋冪敤浜?`useEffect(...)`锛屼絾椤堕儴鍙鍏ヤ簡 `useCallback / useMemo / useState`
+  - 灏忕▼搴忚繍琛屾椂杩涘叆椤甸潰鍚庝細鐩存帴鍛戒腑 `useEffect is not defined`锛岃〃鐜颁负鈥滃鑸爮姝ｅ父銆佹鏂囨暣椤电┖鐧解€?
 - Verification:
-  - `npm run lint -- src/packageExtra/pages/expiry/index.tsx` 通过
-  - 已确认 `dist/packageExtra/pages/expiry/index.js` 含 `taro.useEffect(...)` 与 `expiry-loading-spinner`
-  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
-  - 当前返回 `Failed connecting to ws://localhost:9420`，因此未能补运行态截图
+  - `npm run lint -- src/packageExtra/pages/expiry/index.tsx` 閫氳繃
+  - 宸茬‘璁?`dist/packageExtra/pages/expiry/index.js` 鍚?`taro.useEffect(...)` 涓?`expiry-loading-spinner`
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools`锛歚mrc where --port 9420`
+  - 褰撳墠杩斿洖 `Failed connecting to ws://localhost:9420`锛屽洜姝ゆ湭鑳借ˉ杩愯鎬佹埅鍥?
 - Notes:
-  - 当前 `src/app.config.ts` 里仍保留无效的 `permission.scope.camera`，这次没有顺手改动，因为它不是本次白屏根因
-  - 若用户本地 `npm run dev:weapp` 正在 watch，源码保存后 `dist` 已同步更新；否则需要用户重新触发一次开发编译
+  - 褰撳墠 `src/app.config.ts` 閲屼粛淇濈暀鏃犳晥鐨?`permission.scope.camera`锛岃繖娆℃病鏈夐『鎵嬫敼鍔紝鍥犱负瀹冧笉鏄湰娆＄櫧灞忔牴鍥?
+  - 鑻ョ敤鎴锋湰鍦?`npm run dev:weapp` 姝ｅ湪 watch锛屾簮鐮佷繚瀛樺悗 `dist` 宸插悓姝ユ洿鏂帮紱鍚﹀垯闇€瑕佺敤鎴烽噸鏂拌Е鍙戜竴娆″紑鍙戠紪璇?
 
-- Task: 调整分析历史页左滑“分享 / 删除”按钮对比度
-- Status: done（浅色主题下按钮底色已加深，文字与图标可读性已增强；运行态自动化截图受 DevTools 9420 端口未开启阻塞）
+- Task: 璋冩暣鍒嗘瀽鍘嗗彶椤靛乏婊戔€滃垎浜?/ 鍒犻櫎鈥濇寜閽姣斿害
+- Status: done锛堟祬鑹蹭富棰樹笅鎸夐挳搴曡壊宸插姞娣憋紝鏂囧瓧涓庡浘鏍囧彲璇绘€у凡澧炲己锛涜繍琛屾€佽嚜鍔ㄥ寲鎴浘鍙?DevTools 9420 绔彛鏈紑鍚樆濉烇級
 - Scope:
   - `src/packageExtra/pages/analyze-history/index.scss`
-    - 左滑操作按钮 `share / delete` 渐变底色改为更深的绿色 / 红色
-    - 图标字号从 `32rpx` 提到 `34rpx`
-    - 文字字号从 `22rpx` 提到 `24rpx`，字重从 `600` 提到 `700`
-    - 为图标和文字补充轻微阴影，提升浅底环境下的可读性
-    - disabled 分享按钮也同步改为更稳定的灰色渐变，避免发白
+    - 宸︽粦鎿嶄綔鎸夐挳 `share / delete` 娓愬彉搴曡壊鏀逛负鏇存繁鐨勭豢鑹?/ 绾㈣壊
+    - 鍥炬爣瀛楀彿浠?`32rpx` 鎻愬埌 `34rpx`
+    - 鏂囧瓧瀛楀彿浠?`22rpx` 鎻愬埌 `24rpx`锛屽瓧閲嶄粠 `600` 鎻愬埌 `700`
+    - 涓哄浘鏍囧拰鏂囧瓧琛ュ厖杞诲井闃村奖锛屾彁鍗囨祬搴曠幆澧冧笅鐨勫彲璇绘€?
+    - disabled 鍒嗕韩鎸夐挳涔熷悓姝ユ敼涓烘洿绋冲畾鐨勭伆鑹叉笎鍙橈紝閬垮厤鍙戠櫧
 - Verification:
-  - 已执行 `mrc where --port 9420`
-  - 当前返回 `Failed connecting to ws://localhost:9420`，说明微信开发者工具自动化端口未开启，未能补到运行态截图
+  - 宸叉墽琛?`mrc where --port 9420`
+  - 褰撳墠杩斿洖 `Failed connecting to ws://localhost:9420`锛岃鏄庡井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛鏈紑鍚紝鏈兘琛ュ埌杩愯鎬佹埅鍥?
 - Notes:
-  - 本轮只改了历史页左滑操作区的视觉对比度，没有调整交互宽度和删除/分享逻辑
+  - 鏈疆鍙敼浜嗗巻鍙查〉宸︽粦鎿嶄綔鍖虹殑瑙嗚瀵规瘮搴︼紝娌℃湁璋冩暣浜や簰瀹藉害鍜屽垹闄?鍒嗕韩閫昏緫
 
-- Task: 修复“收藏餐食”后在列表中不易查看，并收口「我的收藏」页面定义
-- Status: done（已改成单一“我的收藏”心智，并把首页记录弹层入口前移到和历史记录同层；运行态自动化验证受微信开发者工具端口未开启阻塞）
+- Task: 淇鈥滄敹钘忛椋熲€濆悗鍦ㄥ垪琛ㄤ腑涓嶆槗鏌ョ湅锛屽苟鏀跺彛銆屾垜鐨勬敹钘忋€嶉〉闈㈠畾涔?
+- Status: done锛堝凡鏀规垚鍗曚竴鈥滄垜鐨勬敹钘忊€濆績鏅猴紝骞舵妸棣栭〉璁板綍寮瑰眰鍏ュ彛鍓嶇Щ鍒板拰鍘嗗彶璁板綍鍚屽眰锛涜繍琛屾€佽嚜鍔ㄥ寲楠岃瘉鍙楀井淇″紑鍙戣€呭伐鍏风鍙ｆ湭寮€鍚樆濉烇級
 - Scope:
   - `src/pages/index/components/RecordMenu.tsx`
-    - 首页记录弹层底部快捷入口从“仅历史记录”扩展为“我的收藏 + 历史记录”
-    - “我的收藏”文案强调“快速记录常吃餐食”，缩短它与记录动作之间的心智距离
+    - 棣栭〉璁板綍寮瑰眰搴曢儴蹇嵎鍏ュ彛浠庘€滀粎鍘嗗彶璁板綍鈥濇墿灞曚负鈥滄垜鐨勬敹钘?+ 鍘嗗彶璁板綍鈥?
+    - 鈥滄垜鐨勬敹钘忊€濇枃妗堝己璋冣€滃揩閫熻褰曞父鍚冮椋熲€濓紝缂╃煭瀹冧笌璁板綍鍔ㄤ綔涔嬮棿鐨勫績鏅鸿窛绂?
   - `src/components/iconfont/index.tsx`
-    - 新增 `IconFavorite`
+    - 鏂板 `IconFavorite`
   - `src/pages/index/index.scss`
-    - 为弹层快捷入口补充标题 + 说明的双行排版
+    - 涓哄脊灞傚揩鎹峰叆鍙ｈˉ鍏呮爣棰?+ 璇存槑鐨勫弻琛屾帓鐗?
   - `src/packageExtra/pages/result/index.tsx`
-    - 分析结果页点击“收藏餐食”时，创建食谱默认写入 `is_favorite: true`
-    - 收藏成功提示文案改为“可在我的收藏中快速复用记录”
+    - 鍒嗘瀽缁撴灉椤电偣鍑烩€滄敹钘忛椋熲€濇椂锛屽垱寤洪璋遍粯璁ゅ啓鍏?`is_favorite: true`
+    - 鏀惰棌鎴愬姛鎻愮ず鏂囨鏀逛负鈥滃彲鍦ㄦ垜鐨勬敹钘忎腑蹇€熷鐢ㄨ褰曗€?
   - `src/packageExtra/pages/recipes/index.tsx`
-    - 页面收口为单列表“我的收藏”，不再保留“我的食谱 / 全部模板 / 已收藏”切换
-    - 列表拉取改为先取全部餐食模板，再由前端筛出 `is_favorite`，避免被后端 query 参数过滤差异卡空
-    - 空状态文案改为直接提示“分析结果页点击收藏后会显示在这里”
-    - 右下角 `+` 浮动按钮已删除，避免出现“点加号却提示先收藏”的反直觉交互
+    - 椤甸潰鏀跺彛涓哄崟鍒楄〃鈥滄垜鐨勬敹钘忊€濓紝涓嶅啀淇濈暀鈥滄垜鐨勯璋?/ 鍏ㄩ儴妯℃澘 / 宸叉敹钘忊€濆垏鎹?
+    - 鍒楄〃鎷夊彇鏀逛负鍏堝彇鍏ㄩ儴椁愰妯℃澘锛屽啀鐢卞墠绔瓫鍑?`is_favorite`锛岄伩鍏嶈鍚庣 query 鍙傛暟杩囨护宸紓鍗＄┖
+    - 绌虹姸鎬佹枃妗堟敼涓虹洿鎺ユ彁绀衡€滃垎鏋愮粨鏋滈〉鐐瑰嚮鏀惰棌鍚庝細鏄剧ず鍦ㄨ繖閲屸€?
+    - 鍙充笅瑙?`+` 娴姩鎸夐挳宸插垹闄わ紝閬垮厤鍑虹幇鈥滅偣鍔犲彿鍗存彁绀哄厛鏀惰棌鈥濈殑鍙嶇洿瑙変氦浜?
   - `src/packageExtra/pages/recipes/index.config.ts`
-    - 页面标题改为“我的收藏”
+    - 椤甸潰鏍囬鏀逛负鈥滄垜鐨勬敹钘忊€?
   - `src/pages/profile/index.tsx`
-    - 「我的」页服务入口标题改为“我的收藏”
+    - 銆屾垜鐨勩€嶉〉鏈嶅姟鍏ュ彛鏍囬鏀逛负鈥滄垜鐨勬敹钘忊€?
   - `src/packageExtra/pages/recipes/index.scss`
-    - 修复列表容器错误的高度写法，改为 `flex: 1 + min-height: 0`，避免内容被整体压没
+    - 淇鍒楄〃瀹瑰櫒閿欒鐨勯珮搴﹀啓娉曪紝鏀逛负 `flex: 1 + min-height: 0`锛岄伩鍏嶅唴瀹硅鏁翠綋鍘嬫病
   - `src/styles/fl-color-scheme-dark.scss`
-    - 配合新单列表头部收口浅色/深色样式
+    - 閰嶅悎鏂板崟鍒楄〃澶撮儴鏀跺彛娴呰壊/娣辫壊鏍峰紡
 - Verification:
-  - `npm run lint -- src/pages/index/components/RecordMenu.tsx src/components/iconfont/index.tsx` 通过
-  - `npm run lint -- src/packageExtra/pages/recipes/index.tsx src/pages/profile/index.tsx src/packageExtra/pages/result/index.tsx` 通过
-  - 已尝试 `weapp-devtools` 运行态验证：
-    - `mrc where --port 9420` 失败（未连接到已开启自动化的 DevTools）
+  - `npm run lint -- src/pages/index/components/RecordMenu.tsx src/components/iconfont/index.tsx` 閫氳繃
+  - `npm run lint -- src/packageExtra/pages/recipes/index.tsx src/pages/profile/index.tsx src/packageExtra/pages/result/index.tsx` 閫氳繃
+  - 宸插皾璇?`weapp-devtools` 杩愯鎬侀獙璇侊細
+    - `mrc where --port 9420` 澶辫触锛堟湭杩炴帴鍒板凡寮€鍚嚜鍔ㄥ寲鐨?DevTools锛?
 - Notes:
-  - 这次没有改后端接口，主要是修正“收藏动作默认没打星”和页面信息架构不清晰
-  - 用户这次反馈“明明收藏了却看不到”后，进一步定位到收藏页存在渲染层问题：`recipe-list` 容器接近 `height: 0`，会把空态和真实卡片一起压没
-  - 用户随后明确指出“我的收藏”入口离“记录”动作太远，因此首页记录弹层已补充直达收藏入口，作为快速复用记录链路的一部分
-  - 若用户稍后开启 DevTools 自动化端口，可继续补截图和切页交互验证
-- Task: 测试后台支持“多提示词同时测试”
-- Status: done（`custom` 模式已支持多选提示词；分析体验与批量测试都会按“模型 × 提示词”并跑）
+  - 杩欐娌℃湁鏀瑰悗绔帴鍙ｏ紝涓昏鏄慨姝ｂ€滄敹钘忓姩浣滈粯璁ゆ病鎵撴槦鈥濆拰椤甸潰淇℃伅鏋舵瀯涓嶆竻鏅?
+  - 鐢ㄦ埛杩欐鍙嶉鈥滄槑鏄庢敹钘忎簡鍗寸湅涓嶅埌鈥濆悗锛岃繘涓€姝ュ畾浣嶅埌鏀惰棌椤靛瓨鍦ㄦ覆鏌撳眰闂锛歚recipe-list` 瀹瑰櫒鎺ヨ繎 `height: 0`锛屼細鎶婄┖鎬佸拰鐪熷疄鍗＄墖涓€璧峰帇娌?
+  - 鐢ㄦ埛闅忓悗鏄庣‘鎸囧嚭鈥滄垜鐨勬敹钘忊€濆叆鍙ｇ鈥滆褰曗€濆姩浣滃お杩滐紝鍥犳棣栭〉璁板綍寮瑰眰宸茶ˉ鍏呯洿杈炬敹钘忓叆鍙ｏ紝浣滀负蹇€熷鐢ㄨ褰曢摼璺殑涓€閮ㄥ垎
+  - 鑻ョ敤鎴风◢鍚庡紑鍚?DevTools 鑷姩鍖栫鍙ｏ紝鍙户缁ˉ鎴浘鍜屽垏椤典氦浜掗獙璇?
+- Task: 娴嬭瘯鍚庡彴鏀寔鈥滃鎻愮ず璇嶅悓鏃舵祴璇曗€?
+- Status: done锛坄custom` 妯″紡宸叉敮鎸佸閫夋彁绀鸿瘝锛涘垎鏋愪綋楠屼笌鎵归噺娴嬭瘯閮戒細鎸夆€滄ā鍨?脳 鎻愮ず璇嶁€濆苟璺戯級
 - Scope:
   - `backend/static/test_backend/index.html`
-    - 分析体验、批量测试的自定义提示词选择器改为可多选
-    - 文案明确说明会按“所选模型 × 所选提示词”同时并跑
+    - 鍒嗘瀽浣撻獙銆佹壒閲忔祴璇曠殑鑷畾涔夋彁绀鸿瘝閫夋嫨鍣ㄦ敼涓哄彲澶氶€?
+    - 鏂囨鏄庣‘璇存槑浼氭寜鈥滄墍閫夋ā鍨?脳 鎵€閫夋彁绀鸿瘝鈥濆悓鏃跺苟璺?
   - `backend/static/test_backend/app.js`
-    - 前端提交参数新增 `prompt_ids`
-    - 结果卡、批量汇总、批量详情改为把“同模型不同提示词”拆开显示
+    - 鍓嶇鎻愪氦鍙傛暟鏂板 `prompt_ids`
+    - 缁撴灉鍗°€佹壒閲忔眹鎬汇€佹壒閲忚鎯呮敼涓烘妸鈥滃悓妯″瀷涓嶅悓鎻愮ず璇嶁€濇媶寮€鏄剧ず
   - `backend/main.py`
-    - 新增 `prompt_ids` 解析
-    - 单图分析与批量任务都支持 `custom` 模式下按“模型 × 提示词”笛卡尔积执行
+    - 鏂板 `prompt_ids` 瑙ｆ瀽
+    - 鍗曞浘鍒嗘瀽涓庢壒閲忎换鍔￠兘鏀寔 `custom` 妯″紡涓嬫寜鈥滄ā鍨?脳 鎻愮ず璇嶁€濈瑳鍗″皵绉墽琛?
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
-  - `node --check backend/static/test_backend/app.js` 通过
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - `node --check backend/static/test_backend/app.js` 閫氳繃
 - Notes:
-  - 本轮改的是后端静态测试后台，不涉及微信小程序页面
-  - 运行态页面验证仍需用户重启后端并刷新 `http://127.0.0.1:3010/test-backend`
+  - 鏈疆鏀圭殑鏄悗绔潤鎬佹祴璇曞悗鍙帮紝涓嶆秹鍙婂井淇″皬绋嬪簭椤甸潰
+  - 杩愯鎬侀〉闈㈤獙璇佷粛闇€鐢ㄦ埛閲嶅惎鍚庣骞跺埛鏂?`http://127.0.0.1:3010/test-backend`
 
-- Task: 对齐到最新 `main` 作为当前默认开发基线
-- Status: done（`2026-04-27` 已清理 7 个工作区噪音改动，并将本地 `main` 快进到 `eddf47b`）
+- Task: 瀵归綈鍒版渶鏂?`main` 浣滀负褰撳墠榛樿寮€鍙戝熀绾?
+- Status: done锛坄2026-04-27` 宸叉竻鐞?7 涓伐浣滃尯鍣煶鏀瑰姩锛屽苟灏嗘湰鍦?`main` 蹇繘鍒?`eddf47b`锛?
 - Scope:
-  - 已恢复的工作区噪音文件：
+  - 宸叉仮澶嶇殑宸ヤ綔鍖哄櫔闊虫枃浠讹細
     - `PROGRESS.md`
     - `backend/exercise_llm.py`
     - `memory/2026-04-10.md`
@@ -514,47 +662,47 @@
     - `src/pages/analyze/index.scss`
     - `src/pages/result/index.scss`
     - `src/pages/result/index.tsx`
-  - 这 7 个文件在恢复前的磁盘 `LastWriteTime` 均为 `2026-04-27 00:44:18`
-  - `git diff` 无正文差异，判断为一次性产生的换行符/编辑器噪音，而不是长期未提交的业务代码改动
-  - 已执行 `git pull --ff-only origin main`
-  - 当前本地 `main` = `origin/main` = `eddf47b`（`fix(home): 确保每餐蛋白质/脂肪/碳水被正确缓存，旧缓存缺失时自动刷新`）
+  - 杩?7 涓枃浠跺湪鎭㈠鍓嶇殑纾佺洏 `LastWriteTime` 鍧囦负 `2026-04-27 00:44:18`
+  - `git diff` 鏃犳鏂囧樊寮傦紝鍒ゆ柇涓轰竴娆℃€т骇鐢熺殑鎹㈣绗?缂栬緫鍣ㄥ櫔闊筹紝鑰屼笉鏄暱鏈熸湭鎻愪氦鐨勪笟鍔′唬鐮佹敼鍔?
+  - 宸叉墽琛?`git pull --ff-only origin main`
+  - 褰撳墠鏈湴 `main` = `origin/main` = `eddf47b`锛坄fix(home): 纭繚姣忛铔嬬櫧璐?鑴傝偑/纰虫按琚纭紦瀛橈紝鏃х紦瀛樼己澶辨椂鑷姩鍒锋柊`锛?
 - Notes:
-  - 当前仍有 2 个未跟踪文件：`docs/微信支付委托代扣_自动续费_申请材料.md`、`memory/2026-04-27.md`
-  - 后续默认以最新 `main` 为工作基线，除非用户再明确要求切到其它分支
-- Task: 食物分析提示词补充地理位置上下文
-- Status: done（已完成前后端主链路接入；运行态自动化验证受微信开发者工具 9420 端口未开启阻塞）
+  - 褰撳墠浠嶆湁 2 涓湭璺熻釜鏂囦欢锛歚docs/寰俊鏀粯濮旀墭浠ｆ墸_鑷姩缁垂_鐢宠鏉愭枡.md`銆乣memory/2026-04-27.md`
+  - 鍚庣画榛樿浠ユ渶鏂?`main` 涓哄伐浣滃熀绾匡紝闄ら潪鐢ㄦ埛鍐嶆槑纭姹傚垏鍒板叾瀹冨垎鏀?
+- Task: 椋熺墿鍒嗘瀽鎻愮ず璇嶈ˉ鍏呭湴鐞嗕綅缃笂涓嬫枃
+- Status: done锛堝凡瀹屾垚鍓嶅悗绔富閾捐矾鎺ュ叆锛涜繍琛屾€佽嚜鍔ㄥ寲楠岃瘉鍙楀井淇″紑鍙戣€呭伐鍏?9420 绔彛鏈紑鍚樆濉烇級
 - Scope:
-  - 前端：
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - 为图片分析、文字分析、继续精准模式统一补充 `province / city / district`
-      - 新增粗粒度位置缓存与静默解析：仅在小程序已授权 `scope.userLocation` 时调用定位 + 逆地理；未授权则直接跳过，不打断分析流程
-  - 后端：
+      - 涓哄浘鐗囧垎鏋愩€佹枃瀛楀垎鏋愩€佺户缁簿鍑嗘ā寮忕粺涓€琛ュ厖 `province / city / district`
+      - 鏂板绮楃矑搴︿綅缃紦瀛樹笌闈欓粯瑙ｆ瀽锛氫粎鍦ㄥ皬绋嬪簭宸叉巿鏉?`scope.userLocation` 鏃惰皟鐢ㄥ畾浣?+ 閫嗗湴鐞嗭紱鏈巿鏉冨垯鐩存帴璺宠繃锛屼笉鎵撴柇鍒嗘瀽娴佺▼
+  - 鍚庣锛?
     - `backend/main.py`
-      - 图片同步分析、异步图片分析、异步文字分析、继续精准模式请求体均补充 `province / city / district`
-      - 精准会话 `latest_inputs` 也会持久化位置上下文，避免多轮继续时丢失
+      - 鍥剧墖鍚屾鍒嗘瀽銆佸紓姝ュ浘鐗囧垎鏋愩€佸紓姝ユ枃瀛楀垎鏋愩€佺户缁簿鍑嗘ā寮忚姹備綋鍧囪ˉ鍏?`province / city / district`
+      - 绮惧噯浼氳瘽 `latest_inputs` 涔熶細鎸佷箙鍖栦綅缃笂涓嬫枃锛岄伩鍏嶅杞户缁椂涓㈠け
     - `backend/worker.py`
-      - 图片与文字两条标准/精准 prompt 都已加入“位置”辅助提示
-      - 位置只作为弱提示，用于帮助理解地域菜名、口味与常见分量；若与图片/文字冲突，仍以图片/文字本身为准
+      - 鍥剧墖涓庢枃瀛椾袱鏉℃爣鍑?绮惧噯 prompt 閮藉凡鍔犲叆鈥滀綅缃€濊緟鍔╂彁绀?
+      - 浣嶇疆鍙綔涓哄急鎻愮ず锛岀敤浜庡府鍔╃悊瑙ｅ湴鍩熻彍鍚嶃€佸彛鍛充笌甯歌鍒嗛噺锛涜嫢涓庡浘鐗?鏂囧瓧鍐茬獊锛屼粛浠ュ浘鐗?鏂囧瓧鏈韩涓哄噯
 - Verification:
-  - `python -m py_compile backend/main.py backend/worker.py` 通过
-  - `npx prettier --check src/utils/api.ts` 返回仅代码风格提示，说明 TS 文件可被 parser 正常解析
-  - 按 `weapp-devtools` 尝试运行 `mrc where --port 9420` 与截图命令，均因开发者工具未开启 9420 自动化端口而失败
+  - `python -m py_compile backend/main.py backend/worker.py` 閫氳繃
+  - `npx prettier --check src/utils/api.ts` 杩斿洖浠呬唬鐮侀鏍兼彁绀猴紝璇存槑 TS 鏂囦欢鍙 parser 姝ｅ父瑙ｆ瀽
+  - 鎸?`weapp-devtools` 灏濊瘯杩愯 `mrc where --port 9420` 涓庢埅鍥惧懡浠わ紝鍧囧洜寮€鍙戣€呭伐鍏锋湭寮€鍚?9420 鑷姩鍖栫鍙ｈ€屽け璐?
 - Notes:
-  - 本轮未新增分析页位置选择 UI，先采用“已有定位授权则静默带上粗粒度省市区”的最小侵入方案
-  - 当前不向模型透传原始经纬度，只透传 `province / city / district`
+  - 鏈疆鏈柊澧炲垎鏋愰〉浣嶇疆閫夋嫨 UI锛屽厛閲囩敤鈥滃凡鏈夊畾浣嶆巿鏉冨垯闈欓粯甯︿笂绮楃矑搴︾渷甯傚尯鈥濈殑鏈€灏忎镜鍏ユ柟妗?
+  - 褰撳墠涓嶅悜妯″瀷閫忎紶鍘熷缁忕含搴︼紝鍙€忎紶 `province / city / district`
 
-- Task: 会员数据治理（筛假会员 / 补异常丢资格 / 清历史 pending）
-- Status: in_progress（已完成名单审核；当前改为“只取消 4 个指定假会员、不做补偿”，并已关闭前后端临时会员开通入口）
+- Task: 浼氬憳鏁版嵁娌荤悊锛堢瓫鍋囦細鍛?/ 琛ュ紓甯镐涪璧勬牸 / 娓呭巻鍙?pending锛?
+- Status: in_progress锛堝凡瀹屾垚鍚嶅崟瀹℃牳锛涘綋鍓嶆敼涓衡€滃彧鍙栨秷 4 涓寚瀹氬亣浼氬憳銆佷笉鍋氳ˉ鍋库€濓紝骞跺凡鍏抽棴鍓嶅悗绔复鏃朵細鍛樺紑閫氬叆鍙ｏ級
 - Scope:
-  - 数据库：
-    - 新增 `backend/sql/review_membership_data_20260427.sql`
-      - 汇总真实有效会员 / paid 用户 / 当前试用用户 / 假会员候选 / 补偿候选 / pending 概览
-      - 单独列出“假会员候选明细”“异常丢资格补偿候选明细”“超过 1 天的会员 pending 明细”
-    - 新增 `backend/sql/fix_membership_data_20260427.sql`
-      - 取消“当前 active、无 paid、且不在试用期”的假会员
-      - 仅对“最近一次 paid 理论上仍未到期却失去会员资格”的用户补 1 个月会员
-      - 将超过 `1` 天的历史会员 `pending` 改成 `expired`，且保留/追加订单 `extra`
-    - 因 Supabase SQL Editor 存在 `200` 行限制，已额外拆分为可直接执行的小脚本：
+  - 鏁版嵁搴擄細
+    - 鏂板 `backend/sql/review_membership_data_20260427.sql`
+      - 姹囨€荤湡瀹炴湁鏁堜細鍛?/ paid 鐢ㄦ埛 / 褰撳墠璇曠敤鐢ㄦ埛 / 鍋囦細鍛樺€欓€?/ 琛ュ伩鍊欓€?/ pending 姒傝
+      - 鍗曠嫭鍒楀嚭鈥滃亣浼氬憳鍊欓€夋槑缁嗏€濃€滃紓甯镐涪璧勬牸琛ュ伩鍊欓€夋槑缁嗏€濃€滆秴杩?1 澶╃殑浼氬憳 pending 鏄庣粏鈥?
+    - 鏂板 `backend/sql/fix_membership_data_20260427.sql`
+      - 鍙栨秷鈥滃綋鍓?active銆佹棤 paid銆佷笖涓嶅湪璇曠敤鏈熲€濈殑鍋囦細鍛?
+      - 浠呭鈥滄渶杩戜竴娆?paid 鐞嗚涓婁粛鏈埌鏈熷嵈澶卞幓浼氬憳璧勬牸鈥濈殑鐢ㄦ埛琛?1 涓湀浼氬憳
+      - 灏嗚秴杩?`1` 澶╃殑鍘嗗彶浼氬憳 `pending` 鏀规垚 `expired`锛屼笖淇濈暀/杩藉姞璁㈠崟 `extra`
+    - 鍥?Supabase SQL Editor 瀛樺湪 `200` 琛岄檺鍒讹紝宸查澶栨媶鍒嗕负鍙洿鎺ユ墽琛岀殑灏忚剼鏈細
       - `membership_governance_review_01_summary.sql`
       - `membership_governance_review_02_fake_memberships.sql`
       - `membership_governance_review_03_compensation_candidates.sql`
@@ -563,362 +711,362 @@
       - `membership_governance_fix_02_compensate_existing_memberships.sql`
       - `membership_governance_fix_03_compensate_missing_memberships.sql`
       - `membership_governance_fix_04_expire_stale_pending.sql`
-      - `membership_governance_debug_weapp_user_columns.sql`（若注册时间字段名与预期不一致，先用它诊断）
-    - 新增 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
-      - 只取消用户明确确认的 4 个假会员：`凣凣尜尜 / 草！我要干俄挺 / kk / 条条`
-    - 新增 `membership_governance_fix_20260429_expire_active_but_past_due.sql`
-      - 只收口“`expires_at` 已经过期，但 `status` 仍为 `active`”的脏状态会员
-    - 新增 `membership_governance_fix_20260429_reconcile_paid_memberships_except_xmj_jh.sql`
-      - 排除 `小马哥 / 锦恢` 不动
-      - 其余存在真实 `paid` 会员订单的用户，统一按最近一次 `paid` 订单回写 `current_plan_code / status / expires_at / last_paid_at / daily_credits`
-      - 目的是修正“明明只付了月卡，却在 `user_pro_memberships` 里错挂成年卡”的脏状态
-  - 文档：
-    - 新增 `docs/public-schema-字段明细版-2026-04-27.md`
-    - 更新 `docs/数据库实库Schema分析报告.md`，补充“字段明细版”入口，并注明 `weapp_user` 当前注册时间字段为 `create_time`
+      - `membership_governance_debug_weapp_user_columns.sql`锛堣嫢娉ㄥ唽鏃堕棿瀛楁鍚嶄笌棰勬湡涓嶄竴鑷达紝鍏堢敤瀹冭瘖鏂級
+    - 鏂板 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
+      - 鍙彇娑堢敤鎴锋槑纭‘璁ょ殑 4 涓亣浼氬憳锛歚鍑ｅ嚕灏滃皽 / 鑽夛紒鎴戣骞蹭縿鎸?/ kk / 鏉℃潯`
+    - 鏂板 `membership_governance_fix_20260429_expire_active_but_past_due.sql`
+      - 鍙敹鍙ｂ€渀expires_at` 宸茬粡杩囨湡锛屼絾 `status` 浠嶄负 `active`鈥濈殑鑴忕姸鎬佷細鍛?
+    - 鏂板 `membership_governance_fix_20260429_reconcile_paid_memberships_except_xmj_jh.sql`
+      - 鎺掗櫎 `灏忛┈鍝?/ 閿︽仮` 涓嶅姩
+      - 鍏朵綑瀛樺湪鐪熷疄 `paid` 浼氬憳璁㈠崟鐨勭敤鎴凤紝缁熶竴鎸夋渶杩戜竴娆?`paid` 璁㈠崟鍥炲啓 `current_plan_code / status / expires_at / last_paid_at / daily_credits`
+      - 鐩殑鏄慨姝ｂ€滄槑鏄庡彧浠樹簡鏈堝崱锛屽嵈鍦?`user_pro_memberships` 閲岄敊鎸傛垚骞村崱鈥濈殑鑴忕姸鎬?
+  - 鏂囨。锛?
+    - 鏂板 `docs/public-schema-瀛楁鏄庣粏鐗?2026-04-27.md`
+    - 鏇存柊 `docs/鏁版嵁搴撳疄搴揝chema鍒嗘瀽鎶ュ憡.md`锛岃ˉ鍏呪€滃瓧娈垫槑缁嗙増鈥濆叆鍙ｏ紝骞舵敞鏄?`weapp_user` 褰撳墠娉ㄥ唽鏃堕棿瀛楁涓?`create_time`
 - Notes:
-  - 本轮按“先审名单，再执行修复”的安全顺序推进
-  - 用户最新决定：本轮先不做补偿会员；`ikura` 暂不处理
-  - `2026-04-29` 用户再次确认：当前实际要取消的仍然只有 `凣凣尜尜 / 草！我要干俄挺 / kk / 条条` 这 4 个，继续使用 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
-  - `points_recharge` 不在本轮清理范围内，不会被误伤
-  - `2026-04-27` 用户实际库中 `weapp_user.created_at` 不存在；治理 SQL 已按真实字段 `create_time` 收口，后端试用判定会优先识别 `create_time`
-  - 临时会员开通入口已关闭：前端会员页移除 `[DEV]` 测试区块；后端 `/api/dev/toggle-test-membership` 测试路由已删除
-  - `2026-04-29` 用户最新收口：本轮除已取消的 4 个指定假会员外，只继续处理“过期但 `status` 未收口”的脏状态，不再扩大到其他 active 假会员
-  - `2026-04-29` 用户随后继续收口：除 `小马哥 / 锦恢` 外，其余会员状态按真实 paid 记录修正；因此像 `饭饭` 这种“只付了月卡但被挂成年卡”的记录，会被回写成月卡
+  - 鏈疆鎸夆€滃厛瀹″悕鍗曪紝鍐嶆墽琛屼慨澶嶁€濈殑瀹夊叏椤哄簭鎺ㄨ繘
+  - 鐢ㄦ埛鏈€鏂板喅瀹氾細鏈疆鍏堜笉鍋氳ˉ鍋夸細鍛橈紱`ikura` 鏆備笉澶勭悊
+  - `2026-04-29` 鐢ㄦ埛鍐嶆纭锛氬綋鍓嶅疄闄呰鍙栨秷鐨勪粛鐒跺彧鏈?`鍑ｅ嚕灏滃皽 / 鑽夛紒鎴戣骞蹭縿鎸?/ kk / 鏉℃潯` 杩?4 涓紝缁х画浣跨敤 `membership_governance_fix_20260428_cancel_selected_fake_memberships.sql`
+  - `points_recharge` 涓嶅湪鏈疆娓呯悊鑼冨洿鍐咃紝涓嶄細琚浼?
+  - `2026-04-27` 鐢ㄦ埛瀹為檯搴撲腑 `weapp_user.created_at` 涓嶅瓨鍦紱娌荤悊 SQL 宸叉寜鐪熷疄瀛楁 `create_time` 鏀跺彛锛屽悗绔瘯鐢ㄥ垽瀹氫細浼樺厛璇嗗埆 `create_time`
+  - 涓存椂浼氬憳寮€閫氬叆鍙ｅ凡鍏抽棴锛氬墠绔細鍛橀〉绉婚櫎 `[DEV]` 娴嬭瘯鍖哄潡锛涘悗绔?`/api/dev/toggle-test-membership` 娴嬭瘯璺敱宸插垹闄?
+  - `2026-04-29` 鐢ㄦ埛鏈€鏂版敹鍙ｏ細鏈疆闄ゅ凡鍙栨秷鐨?4 涓寚瀹氬亣浼氬憳澶栵紝鍙户缁鐞嗏€滆繃鏈熶絾 `status` 鏈敹鍙ｂ€濈殑鑴忕姸鎬侊紝涓嶅啀鎵╁ぇ鍒板叾浠?active 鍋囦細鍛?
+  - `2026-04-29` 鐢ㄦ埛闅忓悗缁х画鏀跺彛锛氶櫎 `灏忛┈鍝?/ 閿︽仮` 澶栵紝鍏朵綑浼氬憳鐘舵€佹寜鐪熷疄 paid 璁板綍淇锛涘洜姝ゅ儚 `楗キ` 杩欑鈥滃彧浠樹簡鏈堝崱浣嗚鎸傛垚骞村崱鈥濈殑璁板綍锛屼細琚洖鍐欐垚鏈堝崱
 
-- Task: 会员奖励体系（邀请好友 + 分享海报）
-- Status: in_progress（数据库迁移与前后端代码已落地；等待用户自行执行 SQL 与验证）
+- Task: 浼氬憳濂栧姳浣撶郴锛堥個璇峰ソ鍙?+ 鍒嗕韩娴锋姤锛?
+- Status: in_progress锛堟暟鎹簱杩佺Щ涓庡墠鍚庣浠ｇ爜宸茶惤鍦帮紱绛夊緟鐢ㄦ埛鑷鎵ц SQL 涓庨獙璇侊級
 - Scope:
-  - 数据库：
-    - 新增 `backend/sql/add_membership_reward_system.sql`
-      - `user_invite_referrals`：记录邀请关系、首次有效使用、奖励起止日期、月度封顶阻断状态
-      - `user_credit_bonus_events`：记录分享海报奖励，当前口径每日限 1 次
-  - 后端：
+  - 鏁版嵁搴擄細
+    - 鏂板 `backend/sql/add_membership_reward_system.sql`
+      - `user_invite_referrals`锛氳褰曢個璇峰叧绯汇€侀娆℃湁鏁堜娇鐢ㄣ€佸鍔辫捣姝㈡棩鏈熴€佹湀搴﹀皝椤堕樆鏂姸鎬?
+      - `user_credit_bonus_events`锛氳褰曞垎浜捣鎶ュ鍔憋紝褰撳墠鍙ｅ緞姣忔棩闄?1 娆?
+  - 鍚庣锛?
     - `backend/database.py`
-      - 新增邀请关系绑定、首次有效使用激活奖励、每日奖励积分汇总、海报奖励领取
-      - `insert_food_record` / `create_user_exercise_log_sync` 在成功创建记录后会尝试激活邀请奖励，但失败不影响主链路
+      - 鏂板閭€璇峰叧绯荤粦瀹氥€侀娆℃湁鏁堜娇鐢ㄦ縺娲诲鍔便€佹瘡鏃ュ鍔辩Н鍒嗘眹鎬汇€佹捣鎶ュ鍔遍鍙?
+      - `insert_food_record` / `create_user_exercise_log_sync` 鍦ㄦ垚鍔熷垱寤鸿褰曞悗浼氬皾璇曟縺娲婚個璇峰鍔憋紝浣嗗け璐ヤ笉褰卞搷涓婚摼璺?
     - `backend/main.py`
-      - `/api/friend/invite/accept` 在发起好友申请后同步写入邀请绑定
-      - `/api/membership/me` 新增 `daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits`
-      - 新增 `POST /api/membership/rewards/share-poster/claim`
-  - 前端：
+      - `/api/friend/invite/accept` 鍦ㄥ彂璧峰ソ鍙嬬敵璇峰悗鍚屾鍐欏叆閭€璇风粦瀹?
+      - `/api/membership/me` 鏂板 `daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits`
+      - 鏂板 `POST /api/membership/rewards/share-poster/claim`
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - 新增 `claimSharePosterReward`
-      - `MembershipStatus` 增加奖励积分拆分字段
+      - 鏂板 `claimSharePosterReward`
+      - `MembershipStatus` 澧炲姞濂栧姳绉垎鎷嗗垎瀛楁
     - `src/pages/record-detail/index.tsx`
-      - 记录拥有者成功生成海报后自动领取当日 `+1` 积分奖励
+      - 璁板綍鎷ユ湁鑰呮垚鍔熺敓鎴愭捣鎶ュ悗鑷姩棰嗗彇褰撴棩 `+1` 绉垎濂栧姳
     - `src/pages/pro-membership/index.tsx`
-      - 页面新增邀请/海报奖励说明与奖励积分展示
+      - 椤甸潰鏂板閭€璇?娴锋姤濂栧姳璇存槑涓庡鍔辩Н鍒嗗睍绀?
     - `src/pages/profile/index.tsx`
-      - “我的”页会员卡和服务入口可显示“奖励 +x”
+      - 鈥滄垜鐨勨€濋〉浼氬憳鍗″拰鏈嶅姟鍏ュ彛鍙樉绀衡€滃鍔?+x鈥?
 - Notes:
-  - 当前“有效使用”口径采用：成功保存 1 次饮食记录，或成功写入 1 条运动记录
-  - 当前月度防刷上限先按 `10` 个有效邀请 / 月实现，后续如产品定新值再改
-  - 本轮只改代码，不代用户运行
+  - 褰撳墠鈥滄湁鏁堜娇鐢ㄢ€濆彛寰勯噰鐢細鎴愬姛淇濆瓨 1 娆￠ギ椋熻褰曪紝鎴栨垚鍔熷啓鍏?1 鏉¤繍鍔ㄨ褰?
+  - 褰撳墠鏈堝害闃插埛涓婇檺鍏堟寜 `10` 涓湁鏁堥個璇?/ 鏈堝疄鐜帮紝鍚庣画濡備骇鍝佸畾鏂板€煎啀鏀?
+  - 鏈疆鍙敼浠ｇ爜锛屼笉浠ｇ敤鎴疯繍琛?
 
-- Task: 会员体系线上止血（关闭 dev 开通口 + 减少 pending 堆积）
-- Status: in_progress（已完成后端默认关停 dev 会员切换接口，并在创建新订单/支付成功后自动清理当前用户旧 pending；等待用户自行重启验证）
+- Task: 浼氬憳浣撶郴绾夸笂姝㈣锛堝叧闂?dev 寮€閫氬彛 + 鍑忓皯 pending 鍫嗙Н锛?
+- Status: in_progress锛堝凡瀹屾垚鍚庣榛樿鍏冲仠 dev 浼氬憳鍒囨崲鎺ュ彛锛屽苟鍦ㄥ垱寤烘柊璁㈠崟/鏀粯鎴愬姛鍚庤嚜鍔ㄦ竻鐞嗗綋鍓嶇敤鎴锋棫 pending锛涚瓑寰呯敤鎴疯嚜琛岄噸鍚獙璇侊級
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/main.py`
-      - `/api/dev/toggle-test-membership` 现在默认返回 `404`，且已从 OpenAPI schema 隐藏；只有显式设置环境变量 `ENABLE_DEV_MEMBERSHIP_TOGGLE=1` 才能重新开启
-      - `POST /api/membership/pay/create` 在创建新订单前，会先把当前用户历史“会员类” `pending` 支付单改成 `expired`
-      - `POST /api/payment/wechat/notify/membership` 在某笔会员订单支付成功后，也会把该用户残留“会员类” `pending` 单改成 `expired`
+      - `/api/dev/toggle-test-membership` 鐜板湪榛樿杩斿洖 `404`锛屼笖宸蹭粠 OpenAPI schema 闅愯棌锛涘彧鏈夋樉寮忚缃幆澧冨彉閲?`ENABLE_DEV_MEMBERSHIP_TOGGLE=1` 鎵嶈兘閲嶆柊寮€鍚?
+      - `POST /api/membership/pay/create` 鍦ㄥ垱寤烘柊璁㈠崟鍓嶏紝浼氬厛鎶婂綋鍓嶇敤鎴峰巻鍙测€滀細鍛樼被鈥?`pending` 鏀粯鍗曟敼鎴?`expired`
+      - `POST /api/payment/wechat/notify/membership` 鍦ㄦ煇绗斾細鍛樿鍗曟敮浠樻垚鍔熷悗锛屼篃浼氭妸璇ョ敤鎴锋畫鐣欌€滀細鍛樼被鈥?`pending` 鍗曟敼鎴?`expired`
     - `backend/database.py`
-      - 新增 `list_pro_membership_payment_records(...)` 供 membership pending 精确清理复用
+      - 鏂板 `list_pro_membership_payment_records(...)` 渚?membership pending 绮剧‘娓呯悊澶嶇敤
 - Notes:
-  - 这是后端止血，不依赖前端审核发版
-  - 当前清理是“按当前用户清理旧 membership pending”，不会误伤同表里的 `points_recharge`
-  - 清理时会保留原订单 `extra`，只追加 `expire_reason / expired_at / superseded_by_order_no`
-  - 这还不是全库历史垃圾一次性清扫
+  - 杩欐槸鍚庣姝㈣锛屼笉渚濊禆鍓嶇瀹℃牳鍙戠増
+  - 褰撳墠娓呯悊鏄€滄寜褰撳墠鐢ㄦ埛娓呯悊鏃?membership pending鈥濓紝涓嶄細璇激鍚岃〃閲岀殑 `points_recharge`
+  - 娓呯悊鏃朵細淇濈暀鍘熻鍗?`extra`锛屽彧杩藉姞 `expire_reason / expired_at / superseded_by_order_no`
+  - 杩欒繕涓嶆槸鍏ㄥ簱鍘嗗彶鍨冨溇涓€娆℃€ф竻鎵?
 
-- Task: 创始用户试用策略（前 500 名 2 个月 / 501-1000 名 1 个月）
-- Status: in_progress（已完成后端试用策略三层分段、创始用户付费积分翻倍与前端编号展示；等待用户自行重启后验证）
+- Task: 鍒涘鐢ㄦ埛璇曠敤绛栫暐锛堝墠 500 鍚?2 涓湀 / 501-1000 鍚?1 涓湀锛?
+- Status: in_progress锛堝凡瀹屾垚鍚庣璇曠敤绛栫暐涓夊眰鍒嗘銆佸垱濮嬬敤鎴蜂粯璐圭Н鍒嗙炕鍊嶄笌鍓嶇缂栧彿灞曠ず锛涚瓑寰呯敤鎴疯嚜琛岄噸鍚悗楠岃瘉锛?
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/database.py`
-      - 新增 `is_user_in_first_membership_trial_batch(user_id, limit=1000)`，按 `weapp_user` 注册顺序判断是否属于最早 1000 名注册用户；注册时间字段自动识别
-      - 新增 `get_first_membership_trial_batch_rank(user_id, limit=1000)`，返回用户在首批 1000 名中的注册序号（1-based）
+      - 鏂板 `is_user_in_first_membership_trial_batch(user_id, limit=1000)`锛屾寜 `weapp_user` 娉ㄥ唽椤哄簭鍒ゆ柇鏄惁灞炰簬鏈€鏃?1000 鍚嶆敞鍐岀敤鎴凤紱娉ㄥ唽鏃堕棿瀛楁鑷姩璇嗗埆
+      - 鏂板 `get_first_membership_trial_batch_rank(user_id, limit=1000)`锛岃繑鍥炵敤鎴峰湪棣栨壒 1000 鍚嶄腑鐨勬敞鍐屽簭鍙凤紙1-based锛?
     - `backend/main.py`
-      - 会员积分试用口径从“统一 3 天”升级为“前 500 名 60 天、第 501-1000 名 30 天、其余用户 3 天”
-      - 新增 `EARLY_USER_TOP_500_LIMIT / EARLY_USER_TOP_500_TRIAL_DAYS / EARLY_USER_TRIAL_LIMIT / EARLY_USER_TRIAL_DAYS / REGULAR_USER_TRIAL_DAYS`
-      - 新增 `_resolve_user_trial_policy(...)`
-      - `/api/membership/me` 新增返回 `trial_days_total / trial_policy`
-      - 创始用户开通会员后，套餐基础积分按 `x2` 发放；`/api/membership/me` 额外返回 `early_user_rank / early_user_limit / early_user_paid_bonus_multiplier / early_user_paid_bonus_eligible / early_user_paid_bonus_active`
-      - 微信支付回调写入 `user_pro_memberships.daily_credits` 快照时，会对前 1000 名用户按翻倍后的积分落库
-  - 前端：
+      - 浼氬憳绉垎璇曠敤鍙ｅ緞浠庘€滅粺涓€ 3 澶┾€濆崌绾т负鈥滃墠 500 鍚?60 澶┿€佺 501-1000 鍚?30 澶┿€佸叾浣欑敤鎴?3 澶┾€?
+      - 鏂板 `EARLY_USER_TOP_500_LIMIT / EARLY_USER_TOP_500_TRIAL_DAYS / EARLY_USER_TRIAL_LIMIT / EARLY_USER_TRIAL_DAYS / REGULAR_USER_TRIAL_DAYS`
+      - 鏂板 `_resolve_user_trial_policy(...)`
+      - `/api/membership/me` 鏂板杩斿洖 `trial_days_total / trial_policy`
+      - 鍒涘鐢ㄦ埛寮€閫氫細鍛樺悗锛屽椁愬熀纭€绉垎鎸?`x2` 鍙戞斁锛沗/api/membership/me` 棰濆杩斿洖 `early_user_rank / early_user_limit / early_user_paid_bonus_multiplier / early_user_paid_bonus_eligible / early_user_paid_bonus_active`
+      - 寰俊鏀粯鍥炶皟鍐欏叆 `user_pro_memberships.daily_credits` 蹇収鏃讹紝浼氬鍓?1000 鍚嶇敤鎴锋寜缈诲€嶅悗鐨勭Н鍒嗚惤搴?
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - `MembershipStatus` 补充 `trial_days_total / trial_policy` 与创始用户编号/翻倍字段
+      - `MembershipStatus` 琛ュ厖 `trial_days_total / trial_policy` 涓庡垱濮嬬敤鎴风紪鍙?缈诲€嶅瓧娈?
     - `src/pages/pro-membership/index.tsx`
-      - 试用展示改为区分“前 500 用户免费 2 个月”“前 1000 用户免费 1 个月”与“新用户免费 3 天”
-      - 会员页显示“你是第 N / 1000 位用户”“创始用户礼遇：会员积分 x2”
-      - 对前 1000 名用户，档位卡/对比表/价格卡中的每日积分展示为翻倍后的 `16 / 40 / 80`
+      - 璇曠敤灞曠ず鏀逛负鍖哄垎鈥滃墠 500 鐢ㄦ埛鍏嶈垂 2 涓湀鈥濃€滃墠 1000 鐢ㄦ埛鍏嶈垂 1 涓湀鈥濅笌鈥滄柊鐢ㄦ埛鍏嶈垂 3 澶┾€?
+      - 浼氬憳椤垫樉绀衡€滀綘鏄 N / 1000 浣嶇敤鎴封€濃€滃垱濮嬬敤鎴风ぜ閬囷細浼氬憳绉垎 x2鈥?
+      - 瀵瑰墠 1000 鍚嶇敤鎴凤紝妗ｄ綅鍗?瀵规瘮琛?浠锋牸鍗′腑鐨勬瘡鏃ョН鍒嗗睍绀轰负缈诲€嶅悗鐨?`16 / 40 / 80`
     - `src/pages/profile/index.tsx`
-      - “食探会员”入口说明与会员卡试用文案同步改为按试用策略展示，并提示“从注册开始算 2 个月 / 1 个月”
-      - 若属于创始用户，个人页会员入口与会员卡会显示“创始第 N 位”“会员积分 x2”
+      - 鈥滈鎺細鍛樷€濆叆鍙ｈ鏄庝笌浼氬憳鍗¤瘯鐢ㄦ枃妗堝悓姝ユ敼涓烘寜璇曠敤绛栫暐灞曠ず锛屽苟鎻愮ず鈥滀粠娉ㄥ唽寮€濮嬬畻 2 涓湀 / 1 涓湀鈥?
+      - 鑻ュ睘浜庡垱濮嬬敤鎴凤紝涓汉椤典細鍛樺叆鍙ｄ笌浼氬憳鍗′細鏄剧ず鈥滃垱濮嬬 N 浣嶁€濃€滀細鍛樼Н鍒?x2鈥?
 - Notes:
-  - 本轮只改代码，不代用户运行
-  - 当前实现按注册顺序前 1000 名判定；其中前 500 名享受 60 天，501-1000 名享受 30 天；排序使用“自动识别到的注册时间字段”升序，时间相同再按 `id` 升序稳定打散
-  - 当前仍沿用“试用期每日 8 积分、当天清零”的积分规则
-  - 创始用户的“付费积分翻倍”只放大会员套餐基础积分，不放大奖励积分（邀请/海报）与免费试用积分
-  - 用户最新明确要求：额外积分仍可通过邀请/海报等其他途径正常获取；这条逻辑保持不变
-- Task: 圈子搜索优先匹配好友昵称，再加载该好友动态
-- Status: done（前端搜索框输入后先从好友列表匹配昵称，点击好友后按 `author_id` 拉取该用户动态）
+  - 鏈疆鍙敼浠ｇ爜锛屼笉浠ｇ敤鎴疯繍琛?
+  - 褰撳墠瀹炵幇鎸夋敞鍐岄『搴忓墠 1000 鍚嶅垽瀹氾紱鍏朵腑鍓?500 鍚嶄韩鍙?60 澶╋紝501-1000 鍚嶄韩鍙?30 澶╋紱鎺掑簭浣跨敤鈥滆嚜鍔ㄨ瘑鍒埌鐨勬敞鍐屾椂闂村瓧娈碘€濆崌搴忥紝鏃堕棿鐩稿悓鍐嶆寜 `id` 鍗囧簭绋冲畾鎵撴暎
+  - 褰撳墠浠嶆部鐢ㄢ€滆瘯鐢ㄦ湡姣忔棩 8 绉垎銆佸綋澶╂竻闆垛€濈殑绉垎瑙勫垯
+  - 鍒涘鐢ㄦ埛鐨勨€滀粯璐圭Н鍒嗙炕鍊嶁€濆彧鏀惧ぇ浼氬憳濂楅鍩虹绉垎锛屼笉鏀惧ぇ濂栧姳绉垎锛堥個璇?娴锋姤锛変笌鍏嶈垂璇曠敤绉垎
+  - 鐢ㄦ埛鏈€鏂版槑纭姹傦細棰濆绉垎浠嶅彲閫氳繃閭€璇?娴锋姤绛夊叾浠栭€斿緞姝ｅ父鑾峰彇锛涜繖鏉￠€昏緫淇濇寔涓嶅彉
+- Task: 鍦堝瓙鎼滅储浼樺厛鍖归厤濂藉弸鏄电О锛屽啀鍔犺浇璇ュソ鍙嬪姩鎬?
+- Status: done锛堝墠绔悳绱㈡杈撳叆鍚庡厛浠庡ソ鍙嬪垪琛ㄥ尮閰嶆樀绉帮紝鐐瑰嚮濂藉弸鍚庢寜 `author_id` 鎷夊彇璇ョ敤鎴峰姩鎬侊級
 - Scope:
   - `backend/database.py` / `backend/main.py`
-    - `list_friends_feed_records` 与 `/api/community/feed` 新增 `author_id` 参数
-    - 传入 `author_id` 时只查询该用户（必须是好友或自己）
+    - `list_friends_feed_records` 涓?`/api/community/feed` 鏂板 `author_id` 鍙傛暟
+    - 浼犲叆 `author_id` 鏃跺彧鏌ヨ璇ョ敤鎴凤紙蹇呴』鏄ソ鍙嬫垨鑷繁锛?
   - `src/utils/api.ts`
-    - `communityGetFeed` 与 `CommunityFeedQueryParams` 新增 `author_id`
-    - `normalizeHomeMealItem` / `stripMealFullRecordsFromDashboard` 明确保留 `protein/carbs/fat`
+    - `communityGetFeed` 涓?`CommunityFeedQueryParams` 鏂板 `author_id`
+    - `normalizeHomeMealItem` / `stripMealFullRecordsFromDashboard` 鏄庣‘淇濈暀 `protein/carbs/fat`
   - `src/pages/community/index.tsx`
-    - 新增 `feedSearchMatchedFriends` / `feedSearchAuthorId` 状态
-    - `useEffect` 监听 `feedSearchKeyword`，从 `friends` 中过滤昵称匹配项
-    - `handleSelectSearchFriend`：选中好友后设置 `author_id` 并刷新 feed
-    - `handleClearSearchAuthor`：清除筛选恢复全部 feed
-    - `buildFeedQueryParams` / `loadFeed` / `loadMoreFeed` 支持 `author_id`
+    - 鏂板 `feedSearchMatchedFriends` / `feedSearchAuthorId` 鐘舵€?
+    - `useEffect` 鐩戝惉 `feedSearchKeyword`锛屼粠 `friends` 涓繃婊ゆ樀绉板尮閰嶉」
+    - `handleSelectSearchFriend`锛氶€変腑濂藉弸鍚庤缃?`author_id` 骞跺埛鏂?feed
+    - `handleClearSearchAuthor`锛氭竻闄ょ瓫閫夋仮澶嶅叏閮?feed
+    - `buildFeedQueryParams` / `loadFeed` / `loadMoreFeed` 鏀寔 `author_id`
   - `src/pages/community/index.scss`
-    - `.feed-search-friends-panel` / `.feed-search-friend-item` 好友搜索结果样式
-    - `.feed-search-author-bar` 已选中作者标签栏样式
+    - `.feed-search-friends-panel` / `.feed-search-friend-item` 濂藉弸鎼滅储缁撴灉鏍峰紡
+    - `.feed-search-author-bar` 宸查€変腑浣滆€呮爣绛炬爮鏍峰紡
   - `src/pages/index/index.tsx`
-    - `useDidShow` 检测旧缓存缺少 PFC 时强制标记脏数据并刷新
+    - `useDidShow` 妫€娴嬫棫缂撳瓨缂哄皯 PFC 鏃跺己鍒舵爣璁拌剰鏁版嵁骞跺埛鏂?
   - `src/utils/home-dashboard-local-cache.ts`
-    - `stripMealFullRecords` 明确保留 `protein/carbs/fat`
+    - `stripMealFullRecords` 鏄庣‘淇濈暀 `protein/carbs/fat`
 - Verification:
-  - `npm run build:weapp`：通过
-  - `mrc exists .feed-search-friends-panel --port 9420`：输入 "alpa" 后存在 ✅
-  - `mrc exists .feed-search-friend-item --port 9420`：存在 ✅
-  - `mrc tap .feed-search-friend-item --port 9420`：点击成功 ✅
-  - `mrc exists .feed-search-author-bar --port 9420`：切换后存在 ✅
-  - `mrc logs error 10 --port 9420`：`0` 条错误 ✅
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc exists .feed-search-friends-panel --port 9420`锛氳緭鍏?"alpa" 鍚庡瓨鍦?鉁?
+  - `mrc exists .feed-search-friend-item --port 9420`锛氬瓨鍦?鉁?
+  - `mrc tap .feed-search-friend-item --port 9420`锛氱偣鍑绘垚鍔?鉁?
+  - `mrc exists .feed-search-author-bar --port 9420`锛氬垏鎹㈠悗瀛樺湪 鉁?
+  - `mrc logs error 10 --port 9420`锛歚0` 鏉￠敊璇?鉁?
 - Blocked / Notes:
-  - 后端进程 `run_backend.py` (PID 17254) 为 00:08 启动的旧进程，未加载本次新增的 `author_id` 参数
-  - 需要用户手动重启后端（`pkill -f run_backend.py` 或在新终端重新启动）后，"加载该好友动态" 才能按 `author_id` 正确筛选
-  - 前端好友匹配与 UI 交互已验证正常
+  - 鍚庣杩涚▼ `run_backend.py` (PID 17254) 涓?00:08 鍚姩鐨勬棫杩涚▼锛屾湭鍔犺浇鏈鏂板鐨?`author_id` 鍙傛暟
+  - 闇€瑕佺敤鎴锋墜鍔ㄩ噸鍚悗绔紙`pkill -f run_backend.py` 鎴栧湪鏂扮粓绔噸鏂板惎鍔級鍚庯紝"鍔犺浇璇ュソ鍙嬪姩鎬? 鎵嶈兘鎸?`author_id` 姝ｇ‘绛涢€?
+  - 鍓嶇濂藉弸鍖归厤涓?UI 浜や簰宸查獙璇佹甯?
 
-- Task: 更新应用版本到 `2.0.17`，并让「我的」页底部版本号跟随构建常量显示
-- Status: done（`package.json` / `package-lock.json` 已 bump 到 `2.0.17`，「我的」页不再写死版本字符串）
+- Task: 鏇存柊搴旂敤鐗堟湰鍒?`2.0.17`锛屽苟璁┿€屾垜鐨勩€嶉〉搴曢儴鐗堟湰鍙疯窡闅忔瀯寤哄父閲忔樉绀?
+- Status: done锛坄package.json` / `package-lock.json` 宸?bump 鍒?`2.0.17`锛屻€屾垜鐨勩€嶉〉涓嶅啀鍐欐鐗堟湰瀛楃涓诧級
 - Scope:
   - `package.json`
   - `package-lock.json`
-    - 通过 `npm version 2.0.17 --no-git-tag-version` 统一更新版本
+    - 閫氳繃 `npm version 2.0.17 --no-git-tag-version` 缁熶竴鏇存柊鐗堟湰
   - `src/pages/profile/index.tsx`
-    - 底部版本号改为读取 `__APP_VERSION__`
+    - 搴曢儴鐗堟湰鍙锋敼涓鸿鍙?`__APP_VERSION__`
 - Verification:
-  - `node -p "require('./package.json').version"`：`2.0.17`
-  - `node -p "require('./package-lock.json').version"`：`2.0.17`
-  - `npm run lint -- src/pages/profile/index.tsx`：通过
-  - `npm run build:weapp`：通过
-  - `mrc errors 20 --port 9420`：`0`
+  - `node -p "require('./package.json').version"`锛歚2.0.17`
+  - `node -p "require('./package-lock.json').version"`锛歚2.0.17`
+  - `npm run lint -- src/pages/profile/index.tsx`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
 
-- Task: 修复系统黑色模式误影响白色主题小程序，导致页面出现“上半黑下半白”的混合态
-- Status: done（已关闭宿主自动深色并移除全局 `prefers-color-scheme` 背景切换）
+- Task: 淇绯荤粺榛戣壊妯″紡璇奖鍝嶇櫧鑹蹭富棰樺皬绋嬪簭锛屽鑷撮〉闈㈠嚭鐜扳€滀笂鍗婇粦涓嬪崐鐧解€濈殑娣峰悎鎬?
+- Status: done锛堝凡鍏抽棴瀹夸富鑷姩娣辫壊骞剁Щ闄ゅ叏灞€ `prefers-color-scheme` 鑳屾櫙鍒囨崲锛?
 - Scope:
   - `src/app.config.ts`
-    - 将 `darkmode` 从 `true` 改为 `false`
+    - 灏?`darkmode` 浠?`true` 鏀逛负 `false`
   - `src/app.scss`
-    - 删除 `page` 上的 `@media (prefers-color-scheme: dark)` 背景覆盖
+    - 鍒犻櫎 `page` 涓婄殑 `@media (prefers-color-scheme: dark)` 鑳屾櫙瑕嗙洊
 - Verification:
-  - `npm run build:weapp`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `dist/app.json`：已确认 `"darkmode": false`
-  - `dist/app-origin.wxss`：已确认不再包含全局 `prefers-color-scheme` 深色背景逻辑
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `dist/app.json`锛氬凡纭 `"darkmode": false`
+  - `dist/app-origin.wxss`锛氬凡纭涓嶅啀鍖呭惈鍏ㄥ眬 `prefers-color-scheme` 娣辫壊鑳屾櫙閫昏緫
 - Blocked / Notes:
-  - DevTools 自动化本轮页面连接正常，但无法直接模拟系统级深色模式切换，因此验证以配置产物和运行时错误日志为主
+  - DevTools 鑷姩鍖栨湰杞〉闈㈣繛鎺ユ甯革紝浣嗘棤娉曠洿鎺ユā鎷熺郴缁熺骇娣辫壊妯″紡鍒囨崲锛屽洜姝ら獙璇佷互閰嶇疆浜х墿鍜岃繍琛屾椂閿欒鏃ュ織涓轰富
 
-- Task: 修复社区页搜索功能输入框在黑色主题下的颜色问题
-- Status: done（暗色模式下输入框本体已改回透明，避免在圆角搜索框内部出现一块单独的深色矩形）
+- Task: 淇绀惧尯椤垫悳绱㈠姛鑳借緭鍏ユ鍦ㄩ粦鑹蹭富棰樹笅鐨勯鑹查棶棰?
+- Status: done锛堟殫鑹叉ā寮忎笅杈撳叆妗嗘湰浣撳凡鏀瑰洖閫忔槑锛岄伩鍏嶅湪鍦嗚鎼滅储妗嗗唴閮ㄥ嚭鐜颁竴鍧楀崟鐙殑娣辫壊鐭╁舰锛?
 - Scope:
   - `src/styles/fl-color-scheme-dark.scss`
-    - `.feed-search-input` 的暗色背景由实底改为透明
-    - 新增 `.feed-search-placeholder` 的暗色文字色
+    - `.feed-search-input` 鐨勬殫鑹茶儗鏅敱瀹炲簳鏀逛负閫忔槑
+    - 鏂板 `.feed-search-placeholder` 鐨勬殫鑹叉枃瀛楄壊
 - Verification:
-  - `npm run lint -- src/pages/community/index.tsx`：通过
-  - `npm run build:weapp`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `dist/common.wxss` 已确认包含 `feed-search-input { background: transparent }` 和 `feed-search-placeholder` 暗色规则
+  - `npm run lint -- src/pages/community/index.tsx`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `dist/common.wxss` 宸茬‘璁ゅ寘鍚?`feed-search-input { background: transparent }` 鍜?`feed-search-placeholder` 鏆楄壊瑙勫垯
 - Blocked / Notes:
-  - 微信开发者工具自动化本轮能连通，但切到 `pages/community/index` 的页面回执不稳定，`where` 多次跳回首页，因此没有拿到社区页新截图
+  - 寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲鏈疆鑳借繛閫氾紝浣嗗垏鍒?`pages/community/index` 鐨勯〉闈㈠洖鎵т笉绋冲畾锛宍where` 澶氭璺冲洖棣栭〉锛屽洜姝ゆ病鏈夋嬁鍒扮ぞ鍖洪〉鏂版埅鍥?
 
-- Task: 恢复积分充值页 Hero 区“食探会员”文案，并将“选择档位”元素回退到上一版简洁样式
-- Status: done（Hero 标题说明已补回；档位区已从价格/能力点/CTA 卡片退回简洁积分档位卡）
+- Task: 鎭㈠绉垎鍏呭€奸〉 Hero 鍖衡€滈鎺細鍛樷€濇枃妗堬紝骞跺皢鈥滈€夋嫨妗ｄ綅鈥濆厓绱犲洖閫€鍒颁笂涓€鐗堢畝娲佹牱寮?
+- Status: done锛圚ero 鏍囬璇存槑宸茶ˉ鍥烇紱妗ｄ綅鍖哄凡浠庝环鏍?鑳藉姏鐐?CTA 鍗＄墖閫€鍥炵畝娲佺Н鍒嗘。浣嶅崱锛?
 - Scope:
   - `src/packageExtra/pages/pro-membership/index.tsx`
-    - Hero 区恢复 `hero-copy / hero-title / hero-subtitle`
-    - 档位区移除横向 `ScrollView`
-    - 删除价格、能力点和底部 CTA 元素，回退为积分数 + 简述结构
+    - Hero 鍖烘仮澶?`hero-copy / hero-title / hero-subtitle`
+    - 妗ｄ綅鍖虹Щ闄ゆí鍚?`ScrollView`
+    - 鍒犻櫎浠锋牸銆佽兘鍔涚偣鍜屽簳閮?CTA 鍏冪礌锛屽洖閫€涓虹Н鍒嗘暟 + 绠€杩扮粨鏋?
   - `src/packageExtra/pages/pro-membership/index.scss`
-    - 恢复 Hero 文案样式
-    - 档位卡片恢复上一版三列简洁布局
-    - 清理本轮新增的价格行、能力点、CTA 和对应暗色覆盖
+    - 鎭㈠ Hero 鏂囨鏍峰紡
+    - 妗ｄ綅鍗＄墖鎭㈠涓婁竴鐗堜笁鍒楃畝娲佸竷灞€
+    - 娓呯悊鏈疆鏂板鐨勪环鏍艰銆佽兘鍔涚偣銆丆TA 鍜屽搴旀殫鑹茶鐩?
 - Verification:
-  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
-  - `npm run build:weapp`：通过
-  - `mrc errors 20 --port 9420`：`0`
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - `mrc relaunch` 本轮仍在连接后等待回执中，尚未拿到新的页面截图
+  - `mrc relaunch` 鏈疆浠嶅湪杩炴帴鍚庣瓑寰呭洖鎵т腑锛屽皻鏈嬁鍒版柊鐨勯〉闈㈡埅鍥?
 
-- Task: 调整积分充值页“选择档位”UI，去掉参考图的紫色风格并改为应用自身绿色主题
-- Status: done（档位区已从拥挤三列改成横向卡片带，深浅色都回到品牌绿色体系）
+- Task: 璋冩暣绉垎鍏呭€奸〉鈥滈€夋嫨妗ｄ綅鈥漊I锛屽幓鎺夊弬鑰冨浘鐨勭传鑹查鏍煎苟鏀逛负搴旂敤鑷韩缁胯壊涓婚
+- Status: done锛堟。浣嶅尯宸蹭粠鎷ユ尋涓夊垪鏀规垚妯悜鍗＄墖甯︼紝娣辨祬鑹查兘鍥炲埌鍝佺墝缁胯壊浣撶郴锛?
 - Scope:
   - `src/packageExtra/pages/pro-membership/index.tsx`
-    - 档位卡容器改为横向 `ScrollView`
-    - 保留三档信息，但让手机端按卡片带滑动浏览，不再硬挤三列
+    - 妗ｄ綅鍗″鍣ㄦ敼涓烘í鍚?`ScrollView`
+    - 淇濈暀涓夋。淇℃伅锛屼絾璁╂墜鏈虹鎸夊崱鐗囧甫婊戝姩娴忚锛屼笉鍐嶇‖鎸や笁鍒?
   - `src/packageExtra/pages/pro-membership/index.scss`
-    - 档位卡整体改回品牌绿系深色卡面
-    - 去掉紫色选中态、紫色徽章和紫色按钮
-    - 重做卡片间距、价格字号、摘要高度、能力点排版与 CTA 层级
-    - 修正 `.membership-page--dark` 下对档位卡的覆盖，避免暗色模式把新卡面重新洗灰
+    - 妗ｄ綅鍗℃暣浣撴敼鍥炲搧鐗岀豢绯绘繁鑹插崱闈?
+    - 鍘绘帀绱壊閫変腑鎬併€佺传鑹插窘绔犲拰绱壊鎸夐挳
+    - 閲嶅仛鍗＄墖闂磋窛銆佷环鏍煎瓧鍙枫€佹憳瑕侀珮搴︺€佽兘鍔涚偣鎺掔増涓?CTA 灞傜骇
+    - 淇 `.membership-page--dark` 涓嬪妗ｄ綅鍗＄殑瑕嗙洊锛岄伩鍏嶆殫鑹叉ā寮忔妸鏂板崱闈㈤噸鏂版礂鐏?
 - Verification:
-  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
-  - `npm run build:weapp`：通过
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
-  - `mrc errors 20 --port 9420`：`0`
-  - `dist/packageExtra/pages/pro-membership/index.js/.wxss` 已确认包含 `tier-scroll`、绿色 CTA 渐变和新的暗色卡面规则
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `dist/packageExtra/pages/pro-membership/index.js/.wxss` 宸茬‘璁ゅ寘鍚?`tier-scroll`銆佺豢鑹?CTA 娓愬彉鍜屾柊鐨勬殫鑹插崱闈㈣鍒?
 - Blocked / Notes:
-  - `mrc screenshot` 仍返回 `fail to capture screenshot`，这轮没有拿到新的会员页截图
-  - 当前自动化 `relaunch` 偶尔会跳回首页，但本轮最终 `where` 已确认在会员页
+  - `mrc screenshot` 浠嶈繑鍥?`fail to capture screenshot`锛岃繖杞病鏈夋嬁鍒版柊鐨勪細鍛橀〉鎴浘
+  - 褰撳墠鑷姩鍖?`relaunch` 鍋跺皵浼氳烦鍥為椤碉紝浣嗘湰杞渶缁?`where` 宸茬‘璁ゅ湪浼氬憳椤?
 
-- Task: 将「我的」页左上角主题切换图标替换为 `icon-zaoshang / icon-wanshang`
-- Status: done（主题切换入口仍保留在左上角，仅将图标资源从字符改为 iconfont）
+- Task: 灏嗐€屾垜鐨勩€嶉〉宸︿笂瑙掍富棰樺垏鎹㈠浘鏍囨浛鎹负 `icon-zaoshang / icon-wanshang`
+- Status: done锛堜富棰樺垏鎹㈠叆鍙ｄ粛淇濈暀鍦ㄥ乏涓婅锛屼粎灏嗗浘鏍囪祫婧愪粠瀛楃鏀逛负 iconfont锛?
 - Scope:
   - `src/pages/profile/index.tsx`
-    - `.profile-theme-chip` 内的图标切换逻辑改为 iconfont 类名
-    - 暗色主题显示 `icon-zaoshang`
-    - 浅色主题显示 `icon-wanshang`
+    - `.profile-theme-chip` 鍐呯殑鍥炬爣鍒囨崲閫昏緫鏀逛负 iconfont 绫诲悕
+    - 鏆楄壊涓婚鏄剧ず `icon-zaoshang`
+    - 娴呰壊涓婚鏄剧ず `icon-wanshang`
 - Verification:
-  - `rg -n "icon-zaoshang|icon-wanshang" src/pages/profile/index.tsx src/assets/iconfont/iconfont.css`：确认页面已接入对应 iconfont，图标资源存在
-  - `mrc errors 20 --port 9420`：`0`
+  - `rg -n "icon-zaoshang|icon-wanshang" src/pages/profile/index.tsx src/assets/iconfont/iconfont.css`锛氱‘璁ら〉闈㈠凡鎺ュ叆瀵瑰簲 iconfont锛屽浘鏍囪祫婧愬瓨鍦?
+  - `mrc errors 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - `mrc relaunch /pages/profile/index` 与 `mrc exists .profile-theme-chip` 这轮仍停在连接后无页面回执，DevTools 自动化会话依旧不稳定
-  - `npm run build:weapp` 当前停在 `transforming...`，所以这次前端验证以源码、资源存在性和运行时错误日志为主
+  - `mrc relaunch /pages/profile/index` 涓?`mrc exists .profile-theme-chip` 杩欒疆浠嶅仠鍦ㄨ繛鎺ュ悗鏃犻〉闈㈠洖鎵э紝DevTools 鑷姩鍖栦細璇濅緷鏃т笉绋冲畾
+  - `npm run build:weapp` 褰撳墠鍋滃湪 `transforming...`锛屾墍浠ヨ繖娆″墠绔獙璇佷互婧愮爜銆佽祫婧愬瓨鍦ㄦ€у拰杩愯鏃堕敊璇棩蹇椾负涓?
 
-- Task: 将积分充值页“选择档位”改成参考图风格的定价卡 UI
-- Status: done（档位区已改为三张定价卡，包含徽章、标题、副标题、价格、能力点与底部 CTA）
+- Task: 灏嗙Н鍒嗗厖鍊奸〉鈥滈€夋嫨妗ｄ綅鈥濇敼鎴愬弬鑰冨浘椋庢牸鐨勫畾浠峰崱 UI
+- Status: done锛堟。浣嶅尯宸叉敼涓轰笁寮犲畾浠峰崱锛屽寘鍚窘绔犮€佹爣棰樸€佸壇鏍囬銆佷环鏍笺€佽兘鍔涚偣涓庡簳閮?CTA锛?
 - Scope:
   - `src/packageExtra/pages/pro-membership/index.tsx`
-    - 为三档卡片补充周期联动价格
-    - 新增每档能力点列表
-    - 新增底部 CTA 文案与“最受欢迎 / 当前套餐”徽章
+    - 涓轰笁妗ｅ崱鐗囪ˉ鍏呭懆鏈熻仈鍔ㄤ环鏍?
+    - 鏂板姣忔。鑳藉姏鐐瑰垪琛?
+    - 鏂板搴曢儴 CTA 鏂囨涓庘€滄渶鍙楁杩?/ 褰撳墠濂楅鈥濆窘绔?
   - `src/packageExtra/pages/pro-membership/index.scss`
-    - 档位卡整体改为深色定价卡风格
-    - 选中态改为更强的描边 + 浮起阴影
-    - 价格区、能力点列表、按钮区按参考图重构
+    - 妗ｄ綅鍗℃暣浣撴敼涓烘繁鑹插畾浠峰崱椋庢牸
+    - 閫変腑鎬佹敼涓烘洿寮虹殑鎻忚竟 + 娴捣闃村奖
+    - 浠锋牸鍖恒€佽兘鍔涚偣鍒楄〃銆佹寜閽尯鎸夊弬鑰冨浘閲嶆瀯
 - Verification:
-  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
-  - `npm run build:weapp`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `dist/packageExtra/pages/pro-membership/index.js` 已确认包含 `tier-card-price-row / tier-card-features / tier-card-cta / 最受欢迎`
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 宸茬‘璁ゅ寘鍚?`tier-card-price-row / tier-card-features / tier-card-cta / 鏈€鍙楁杩巂
 - Blocked / Notes:
-  - 这轮 `mrc relaunch` 回执不稳定，会员页自动化跳转最终落回了首页；因此没有拿到最新会员页截图，但构建产物与运行态错误日志都正常
+  - 杩欒疆 `mrc relaunch` 鍥炴墽涓嶇ǔ瀹氾紝浼氬憳椤佃嚜鍔ㄥ寲璺宠浆鏈€缁堣惤鍥炰簡棣栭〉锛涘洜姝ゆ病鏈夋嬁鍒版渶鏂颁細鍛橀〉鎴浘锛屼絾鏋勫缓浜х墿涓庤繍琛屾€侀敊璇棩蹇楅兘姝ｅ父
 
-- Task: 去掉积分充值页 Hero 区的标题和说明文案
-- Status: done（已移除“食探会员”标题与“按使用强度选套餐...”说明文案）
+- Task: 鍘绘帀绉垎鍏呭€奸〉 Hero 鍖虹殑鏍囬鍜岃鏄庢枃妗?
+- Status: done锛堝凡绉婚櫎鈥滈鎺細鍛樷€濇爣棰樹笌鈥滄寜浣跨敤寮哄害閫夊椁?..鈥濊鏄庢枃妗堬級
 - Scope:
   - `src/packageExtra/pages/pro-membership/index.tsx`
-    - 删除 `.hero-copy` 整块节点
+    - 鍒犻櫎 `.hero-copy` 鏁村潡鑺傜偣
   - `src/packageExtra/pages/pro-membership/index.scss`
-    - 删除 `.hero-copy / .hero-title / .hero-subtitle`
-    - 适度收紧 `hero-emblem-row` 底部间距，避免删文案后出现过大空白
+    - 鍒犻櫎 `.hero-copy / .hero-title / .hero-subtitle`
+    - 閫傚害鏀剁揣 `hero-emblem-row` 搴曢儴闂磋窛锛岄伩鍏嶅垹鏂囨鍚庡嚭鐜拌繃澶х┖鐧?
 - Verification:
-  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`：通过
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/pro-membership/index`
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
-  - `dist/packageExtra/pages/pro-membership/index.js` 已确认不再包含 `hero-title / hero-subtitle / hero-copy`
+  - `npm run lint -- src/packageExtra/pages/pro-membership/index.tsx`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/pro-membership/index`
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
+  - `dist/packageExtra/pages/pro-membership/index.js` 宸茬‘璁や笉鍐嶅寘鍚?`hero-title / hero-subtitle / hero-copy`
 
-- Task: 恢复「我的」页左上角主题切换入口
-- Status: done（样式未丢，实际是 JSX 节点在合并中被删；现已补回）
+- Task: 鎭㈠銆屾垜鐨勩€嶉〉宸︿笂瑙掍富棰樺垏鎹㈠叆鍙?
+- Status: done锛堟牱寮忔湭涓紝瀹為檯鏄?JSX 鑺傜偣鍦ㄥ悎骞朵腑琚垹锛涚幇宸茶ˉ鍥烇級
 - Scope:
   - `src/pages/profile/index.tsx`
-    - 重新接入 `useAppColorScheme`
-    - 在页面左上角恢复 `.profile-theme-chip`
-    - 点击后调用 `toggleScheme()`
-    - 图标按当前主题切换：暗色显示 `☀`，浅色显示 `☾`
+    - 閲嶆柊鎺ュ叆 `useAppColorScheme`
+    - 鍦ㄩ〉闈㈠乏涓婅鎭㈠ `.profile-theme-chip`
+    - 鐐瑰嚮鍚庤皟鐢?`toggleScheme()`
+    - 鍥炬爣鎸夊綋鍓嶄富棰樺垏鎹細鏆楄壊鏄剧ず `鈽€`锛屾祬鑹叉樉绀?`鈽綻
 - Verification:
-  - `npm run lint -- src/pages/profile/index.tsx`：通过
-  - `npm run build:weapp`：通过
-  - `dist/pages/profile/index.js` 已包含 `useAppColorScheme / toggleScheme / profile-theme-chip`
-  - `mrc errors 20 --port 9420`：`0`
+  - `npm run lint -- src/pages/profile/index.tsx`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `dist/pages/profile/index.js` 宸插寘鍚?`useAppColorScheme / toggleScheme / profile-theme-chip`
+  - `mrc errors 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - 当前 DevTools 自动化会话对 `pages/profile/index` 的节点查询仍回报旧运行态，`.profile-theme-chip` 没查到；但最新构建产物已确认包含该节点，说明代码修复已生效，运行端需要重新吃到最新包
+  - 褰撳墠 DevTools 鑷姩鍖栦細璇濆 `pages/profile/index` 鐨勮妭鐐规煡璇粛鍥炴姤鏃ц繍琛屾€侊紝`.profile-theme-chip` 娌℃煡鍒帮紱浣嗘渶鏂版瀯寤轰骇鐗╁凡纭鍖呭惈璇ヨ妭鐐癸紝璇存槑浠ｇ爜淇宸茬敓鏁堬紝杩愯绔渶瑕侀噸鏂板悆鍒版渶鏂板寘
 
-- Task: 修复 main 分支 GitHub Actions 后端自动部署失败
-- Status: done（`Deploy Backend` 最新 run `24941017274` 已成功）
+- Task: 淇 main 鍒嗘敮 GitHub Actions 鍚庣鑷姩閮ㄧ讲澶辫触
+- Status: done锛坄Deploy Backend` 鏈€鏂?run `24941017274` 宸叉垚鍔燂級
 - Scope:
   - `.github/workflows/deploy-backend.yml`
-    - `actions/checkout` 升级到 `v5`
-    - 增加 `DEPLOY_PORT`、`DEPLOY_BRANCH`、`DEPLOY_SERVICE`
-    - 远端执行改为 `bash` 显式调用，避免服务器上的 `deploy_backend.sh` 缺少可执行权限时报 `exit code 126`
-    - 增加脚本查找/回退顺序：
+    - `actions/checkout` 鍗囩骇鍒?`v5`
+    - 澧炲姞 `DEPLOY_PORT`銆乣DEPLOY_BRANCH`銆乣DEPLOY_SERVICE`
+    - 杩滅鎵ц鏀逛负 `bash` 鏄惧紡璋冪敤锛岄伩鍏嶆湇鍔″櫒涓婄殑 `deploy_backend.sh` 缂哄皯鍙墽琛屾潈闄愭椂鎶?`exit code 126`
+    - 澧炲姞鑴氭湰鏌ユ壘/鍥為€€椤哄簭锛?
       - `./deploy_backend.sh`
       - `./deploy/scripts/deploy_backend_v2.sh`
       - `./deploy/scripts/deploy_backend.sh`
 - Verification:
-  - `gh run view 24940832898 --log-failed`：确认旧失败原因为 `zsh:1: permission denied: ./deploy_backend.sh`
-  - 推送 `main` 提交 `30427c6 fix(ci): harden backend deploy workflow`
-  - `gh run watch 24941017274`：最新 `Deploy Backend` 成功，`deploy in 23s`
+  - `gh run view 24940832898 --log-failed`锛氱‘璁ゆ棫澶辫触鍘熷洜涓?`zsh:1: permission denied: ./deploy_backend.sh`
+  - 鎺ㄩ€?`main` 鎻愪氦 `30427c6 fix(ci): harden backend deploy workflow`
+  - `gh run watch 24941017274`锛氭渶鏂?`Deploy Backend` 鎴愬姛锛宍deploy in 23s`
 - Notes:
-  - 之前一次老失败 `24860907702` 另有 SSH 超时，但本轮修复后最新自动部署已成功完成
+  - 涔嬪墠涓€娆¤€佸け璐?`24860907702` 鍙︽湁 SSH 瓒呮椂锛屼絾鏈疆淇鍚庢渶鏂拌嚜鍔ㄩ儴缃插凡鎴愬姛瀹屾垚
 
-- Task: 修复当日代谢页图标漂移
-- Status: done（将该页 iconfont 收口为固定尺寸块级元素，避免文本基线导致返回箭头和指标图标漂移）
+- Task: 淇褰撴棩浠ｈ阿椤靛浘鏍囨紓绉?
+- Status: done锛堝皢璇ラ〉 iconfont 鏀跺彛涓哄浐瀹氬昂瀵稿潡绾у厓绱狅紝閬垮厤鏂囨湰鍩虹嚎瀵艰嚧杩斿洖绠ご鍜屾寚鏍囧浘鏍囨紓绉伙級
 - Scope:
   - `src/packageExtra/pages/stats-metabolic/metabolic-dynamics-report.scss`
     - `.metabolic-report__back-arrow`
     - `.metabolic-report__phys-btn-icon`
     - `.metabolic-report__title-icon`
     - `.metabolic-report__summary-label-icon`
-    - 统一改为固定 `width/height + line-height + text-align + display:block`
+    - 缁熶竴鏀逛负鍥哄畾 `width/height + line-height + text-align + display:block`
 - Verification:
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/stats-metabolic/index`
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/stats-metabolic/index`
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - `mrc screenshot` 这轮仍未稳定产出截图文件，所以未拿到新的 UI 截图证据；本次以运行态页面连接和错误日志为主
+  - `mrc screenshot` 杩欒疆浠嶆湭绋冲畾浜у嚭鎴浘鏂囦欢锛屾墍浠ユ湭鎷垮埌鏂扮殑 UI 鎴浘璇佹嵁锛涙湰娆′互杩愯鎬侀〉闈㈣繛鎺ュ拰閿欒鏃ュ織涓轰富
 
-- Task: 修复分享卡片多图角标未出现在海报图片区右上角
-- Status: done（角标已内绘到海报顶图右上角；详情/分享接口也会补回多图 `image_paths`）
+- Task: 淇鍒嗕韩鍗＄墖澶氬浘瑙掓爣鏈嚭鐜板湪娴锋姤鍥剧墖鍖哄彸涓婅
+- Status: done锛堣鏍囧凡鍐呯粯鍒版捣鎶ラ《鍥惧彸涓婅锛涜鎯?鍒嗕韩鎺ュ彛涔熶細琛ュ洖澶氬浘 `image_paths`锛?
 - Scope:
   - `src/utils/poster.ts`
-    - 海报绘制继续使用顶图右上角内绘 `共 N 张`
+    - 娴锋姤缁樺埗缁х画浣跨敤椤跺浘鍙充笂瑙掑唴缁?`鍏?N 寮燻
   - `backend/main.py`
-    - 新增 `_hydrate_food_record_image_paths(...)`
-    - `/api/food-record/{record_id}` 与 `/api/food-record/share/{record_id}` 统一补全 `image_paths`
-    - 当记录本身没有多图字段、但有 `source_task_id` 时，从来源分析任务回填多图
+    - 鏂板 `_hydrate_food_record_image_paths(...)`
+    - `/api/food-record/{record_id}` 涓?`/api/food-record/share/{record_id}` 缁熶竴琛ュ叏 `image_paths`
+    - 褰撹褰曟湰韬病鏈夊鍥惧瓧娈点€佷絾鏈?`source_task_id` 鏃讹紝浠庢潵婧愬垎鏋愪换鍔″洖濉鍥?
   - `backend/tests/integration/test_food_record_api.py`
-    - 新增分享详情补全多图测试，覆盖“记录缺少 `image_paths`，来源任务有多图”的场景
+    - 鏂板鍒嗕韩璇︽儏琛ュ叏澶氬浘娴嬭瘯锛岃鐩栤€滆褰曠己灏?`image_paths`锛屾潵婧愪换鍔℃湁澶氬浘鈥濈殑鍦烘櫙
 - Verification:
-  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_record_api.py -q`：`11 passed`
-  - `python -m py_compile backend/main.py`：通过
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_record_api.py -q`锛歚11 passed`
+  - `python -m py_compile backend/main.py`锛氶€氳繃
 - Blocked / Notes:
-  - 当前本地运行中的后端若还没重启，仍会是旧逻辑；需要重新启动后才会在分享卡片里看到新角标
+  - 褰撳墠鏈湴杩愯涓殑鍚庣鑻ヨ繕娌￠噸鍚紝浠嶄細鏄棫閫昏緫锛涢渶瑕侀噸鏂板惎鍔ㄥ悗鎵嶄細鍦ㄥ垎浜崱鐗囬噷鐪嬪埌鏂拌鏍?
 
-- Task: 分享卡片多图角标改为画在海报图片区右上角
-- Status: done（“共 N 张”已内绘到海报图片区域，不再漂浮在预览弹层右上角）
+- Task: 鍒嗕韩鍗＄墖澶氬浘瑙掓爣鏀逛负鐢诲湪娴锋姤鍥剧墖鍖哄彸涓婅
+- Status: done锛堚€滃叡 N 寮犫€濆凡鍐呯粯鍒版捣鎶ュ浘鐗囧尯鍩燂紝涓嶅啀婕傛诞鍦ㄩ瑙堝脊灞傚彸涓婅锛?
 - Scope:
   - `src/utils/poster.ts`
-    - `drawRecordPoster(...)` 新增多图计数角标绘制
-    - 角标位置固定在海报顶图右上角
-    - 背景改为更淡的浅绿色半透明底，文字改为深绿色
+    - `drawRecordPoster(...)` 鏂板澶氬浘璁℃暟瑙掓爣缁樺埗
+    - 瑙掓爣浣嶇疆鍥哄畾鍦ㄦ捣鎶ラ《鍥惧彸涓婅
+    - 鑳屾櫙鏀逛负鏇存贰鐨勬祬缁胯壊鍗婇€忔槑搴曪紝鏂囧瓧鏀逛负娣辩豢鑹?
   - `src/pages/index/components/MealRecordPosterModal.tsx`
   - `src/packageExtra/pages/record-detail/index.tsx`
-    - 删除弹层外置的 `.poster-batch-badge`，避免和海报内角标重复、错位
+    - 鍒犻櫎寮瑰眰澶栫疆鐨?`.poster-batch-badge`锛岄伩鍏嶅拰娴锋姤鍐呰鏍囬噸澶嶃€侀敊浣?
   - `src/pages/index/index.scss`
   - `src/pages/index/components/MealRecordPosterModal.scss`
   - `src/packageExtra/pages/record-detail/index.scss`
-    - 清理已失效的 `.poster-batch-badge` 样式
+    - 娓呯悊宸插け鏁堢殑 `.poster-batch-badge` 鏍峰紡
 - Verification:
-  - `npm run lint -- src/utils/poster.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/record-detail/index.tsx`：通过
-  - `mrc where --port 9420`：当前页为 `pages/index/index`
-  - `mrc errors 20 --port 9420`：`0`
+  - `npm run lint -- src/utils/poster.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/record-detail/index.tsx`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`pages/index/index`
+  - `mrc errors 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - 这轮没有直接拿到“分享弹层已打开后的新截图”，因为 DevTools 自动化当前只稳定支持页面级连接和日志读取；但海报绘制位置已经从根因上改成 canvas 内绘，首页和记录详情页会统一生效
+  - 杩欒疆娌℃湁鐩存帴鎷垮埌鈥滃垎浜脊灞傚凡鎵撳紑鍚庣殑鏂版埅鍥锯€濓紝鍥犱负 DevTools 鑷姩鍖栧綋鍓嶅彧绋冲畾鏀寔椤甸潰绾ц繛鎺ュ拰鏃ュ織璇诲彇锛涗絾娴锋姤缁樺埗浣嶇疆宸茬粡浠庢牴鍥犱笂鏀规垚 canvas 鍐呯粯锛岄椤靛拰璁板綍璇︽儏椤典細缁熶竴鐢熸晥
 
-- Task: 首页今日餐食 warning 卡片与相关错误态做黑色主题适配
-- Status: done（`meal-item.is-warning`、warning/error 面板已切到稳定深色，不再在暗色下发灰）
+- Task: 棣栭〉浠婃棩椁愰 warning 鍗＄墖涓庣浉鍏抽敊璇€佸仛榛戣壊涓婚閫傞厤
+- Status: done锛坄meal-item.is-warning`銆亀arning/error 闈㈡澘宸插垏鍒扮ǔ瀹氭繁鑹诧紝涓嶅啀鍦ㄦ殫鑹蹭笅鍙戠伆锛?
 - Scope:
   - `src/styles/fl-color-scheme-dark.scss`
-    - 为首页今日餐食 warning 卡片补齐真实类名覆盖：
+    - 涓洪椤典粖鏃ラ椋?warning 鍗＄墖琛ラ綈鐪熷疄绫诲悕瑕嗙洊锛?
       - `.meal-item.is-warning`
       - `.meal-desc`
       - `.meal-time-pill / .meal-time-pill-text`
@@ -926,167 +1074,167 @@
       - `.meal-macro-text`
       - `.meal-progress-percent`
       - `.meal-thumb-badge`
-    - warning 卡片统一收口为深红底 + 深红描边，文字改为高对比浅红
-    - `.analysis-status` / `.analysis-status.warning` / `.analysis-error` 从半透明底改成稳定实色深底，避免黑色主题下发灰
+    - warning 鍗＄墖缁熶竴鏀跺彛涓烘繁绾㈠簳 + 娣辩孩鎻忚竟锛屾枃瀛楁敼涓洪珮瀵规瘮娴呯孩
+    - `.analysis-status` / `.analysis-status.warning` / `.analysis-error` 浠庡崐閫忔槑搴曟敼鎴愮ǔ瀹氬疄鑹叉繁搴曪紝閬垮厤榛戣壊涓婚涓嬪彂鐏?
 - Verification:
-  - `npm run lint -- src/pages/index/index.tsx src/packageExtra/pages/result/index.tsx src/utils/home-dashboard-local-cache.ts`：通过
-  - `mrc where --port 9420`：当前页为 `pages/index/index`
-  - `mrc exists .meal-item --port 9420`：存在
-  - `mrc click .meal-item --port 9420`：成功
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint -- src/pages/index/index.tsx src/packageExtra/pages/result/index.tsx src/utils/home-dashboard-local-cache.ts`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`pages/index/index`
+  - `mrc exists .meal-item --port 9420`锛氬瓨鍦?
+  - `mrc click .meal-item --port 9420`锛氭垚鍔?
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - `mrc screenshot` 这轮回执持续挂起，没能稳定产出截图文件；因此本次运行态验证以页面连接、元素存在、点击成功和错误日志为主
+  - `mrc screenshot` 杩欒疆鍥炴墽鎸佺画鎸傝捣锛屾病鑳界ǔ瀹氫骇鍑烘埅鍥炬枃浠讹紱鍥犳鏈杩愯鎬侀獙璇佷互椤甸潰杩炴帴銆佸厓绱犲瓨鍦ㄣ€佺偣鍑绘垚鍔熷拰閿欒鏃ュ織涓轰富
 
-- Task: 记录饮食后立即同步本地首页缓存，并刷新当天首页的今日餐食
-- Status: done（保存成功后会先写本地 dashboard 快照，再触发首页即时回填；云端仍异步回刷兜底）
+- Task: 璁板綍楗鍚庣珛鍗冲悓姝ユ湰鍦伴椤电紦瀛橈紝骞跺埛鏂板綋澶╅椤电殑浠婃棩椁愰
+- Status: done锛堜繚瀛樻垚鍔熷悗浼氬厛鍐欐湰鍦?dashboard 蹇収锛屽啀瑙﹀彂棣栭〉鍗虫椂鍥炲～锛涗簯绔粛寮傛鍥炲埛鍏滃簳锛?
 - Scope:
   - `src/utils/home-dashboard-local-cache.ts`
-    - 新增 `applyOptimisticFoodRecordToHomeDashboardSnapshot(...)`
-    - 保存记录成功后，立即把今天的本地 dashboard 快照中的：
+    - 鏂板 `applyOptimisticFoodRecordToHomeDashboardSnapshot(...)`
+    - 淇濆瓨璁板綍鎴愬姛鍚庯紝绔嬪嵆鎶婁粖澶╃殑鏈湴 dashboard 蹇収涓殑锛?
       - `intakeData.current / macros`
       - `meals`
-      - 对应餐次的 `meal_record_entries / primary_record_id / 图片 / 热量 / 宏量`
-      同步更新
+      - 瀵瑰簲椁愭鐨?`meal_record_entries / primary_record_id / 鍥剧墖 / 鐑噺 / 瀹忛噺`
+      鍚屾鏇存柊
   - `src/packageExtra/pages/result/index.tsx`
-    - `saveFoodRecord(...)` 成功后，若不是 `already_saved`，先写本地 dashboard 快照
-    - 再触发 `HOME_INTAKE_DATA_CHANGED_EVENT`
-    - 最后继续异步 `refreshHomeDashboardLocalSnapshotFromCloud(...)` 作为服务端兜底同步
+    - `saveFoodRecord(...)` 鎴愬姛鍚庯紝鑻ヤ笉鏄?`already_saved`锛屽厛鍐欐湰鍦?dashboard 蹇収
+    - 鍐嶈Е鍙?`HOME_INTAKE_DATA_CHANGED_EVENT`
+    - 鏈€鍚庣户缁紓姝?`refreshHomeDashboardLocalSnapshotFromCloud(...)` 浣滀负鏈嶅姟绔厹搴曞悓姝?
   - `src/pages/index/index.tsx`
-    - 首页监听 `HOME_INTAKE_DATA_CHANGED_EVENT` 后，不再只标记 stale
-    - 若当前查看的是今天，先直接从本地 dashboard 快照回填 `intakeData / meals / achievement / weekHeatmap`
+    - 棣栭〉鐩戝惉 `HOME_INTAKE_DATA_CHANGED_EVENT` 鍚庯紝涓嶅啀鍙爣璁?stale
+    - 鑻ュ綋鍓嶆煡鐪嬬殑鏄粖澶╋紝鍏堢洿鎺ヤ粠鏈湴 dashboard 蹇収鍥炲～ `intakeData / meals / achievement / weekHeatmap`
 - Verification:
-  - `npm run lint -- src/packageExtra/pages/result/index.tsx src/pages/index/index.tsx src/utils/home-dashboard-local-cache.ts`：通过
-  - `python -m py_compile backend/main.py`：通过
+  - `npm run lint -- src/packageExtra/pages/result/index.tsx src/pages/index/index.tsx src/utils/home-dashboard-local-cache.ts`锛氶€氳繃
+  - `python -m py_compile backend/main.py`锛氶€氳繃
 - Notes:
-  - 当前这次是“先本地乐观更新，再云端回刷校正”的双层策略
-  - 若服务端返回 `already_saved=true`，则不再额外叠加本地 intake，避免重复累计
+  - 褰撳墠杩欐鏄€滃厛鏈湴涔愯鏇存柊锛屽啀浜戠鍥炲埛鏍℃鈥濈殑鍙屽眰绛栫暐
+  - 鑻ユ湇鍔＄杩斿洖 `already_saved=true`锛屽垯涓嶅啀棰濆鍙犲姞鏈湴 intake锛岄伩鍏嶉噸澶嶇疮璁?
 
-- Task: 修复分析结果页多图头图无法左右滑动的问题
-- Status: done（已修正头图层级，避免透明 `ScrollView` 覆盖 `Swiper` 触摸区域）
+- Task: 淇鍒嗘瀽缁撴灉椤靛鍥惧ご鍥炬棤娉曞乏鍙虫粦鍔ㄧ殑闂
+- Status: done锛堝凡淇澶村浘灞傜骇锛岄伩鍏嶉€忔槑 `ScrollView` 瑕嗙洊 `Swiper` 瑙︽懜鍖哄煙锛?
 - Scope:
   - `src/packageExtra/pages/result/index.scss`
-    - 将 `.scanner-hero-section` 的 `z-index` 从 `1` 提高到 `3`
-    - 给 `.scanner-hero-swiper` 显式补上 `pointer-events: auto`
-  - 根因判断：
-    - 结果页顶部图片区是固定层，但整页 `ScrollView` 透明覆盖在上面
-    - 视觉上能看到图片，实际横向手势先被滚动容器吃掉，导致 `Swiper` 看起来不能滑
+    - 灏?`.scanner-hero-section` 鐨?`z-index` 浠?`1` 鎻愰珮鍒?`3`
+    - 缁?`.scanner-hero-swiper` 鏄惧紡琛ヤ笂 `pointer-events: auto`
+  - 鏍瑰洜鍒ゆ柇锛?
+    - 缁撴灉椤甸《閮ㄥ浘鐗囧尯鏄浐瀹氬眰锛屼絾鏁撮〉 `ScrollView` 閫忔槑瑕嗙洊鍦ㄤ笂闈?
+    - 瑙嗚涓婅兘鐪嬪埌鍥剧墖锛屽疄闄呮í鍚戞墜鍔垮厛琚粴鍔ㄥ鍣ㄥ悆鎺夛紝瀵艰嚧 `Swiper` 鐪嬭捣鏉ヤ笉鑳芥粦
 - Verification:
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/result/index`
-  - `mrc errors 20 --port 9420`：`0`
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/result/index`
+  - `mrc errors 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - 当前 `dev:weapp` 仍卡在 `transforming...`，DevTools 运行态没有稳定吃到最新构建产物
-  - 当前 `mrc` 版本的 `swipe` 不可用（`mp.swipe is not a function`），因此没法在自动化里直接录到“1/2 -> 2/2”的横向手势证据
-  - 这次修复基于页面结构与层级问题直接下手，属于高置信度修复
+  - 褰撳墠 `dev:weapp` 浠嶅崱鍦?`transforming...`锛孌evTools 杩愯鎬佹病鏈夌ǔ瀹氬悆鍒版渶鏂版瀯寤轰骇鐗?
+  - 褰撳墠 `mrc` 鐗堟湰鐨?`swipe` 涓嶅彲鐢紙`mp.swipe is not a function`锛夛紝鍥犳娌℃硶鍦ㄨ嚜鍔ㄥ寲閲岀洿鎺ュ綍鍒扳€?/2 -> 2/2鈥濈殑妯悜鎵嬪娍璇佹嵁
+  - 杩欐淇鍩轰簬椤甸潰缁撴瀯涓庡眰绾ч棶棰樼洿鎺ヤ笅鎵嬶紝灞炰簬楂樼疆淇″害淇
 
-- Task: 修复多图实物分析交互为“提交后台任务后进入 loading 页”，并确认结果页多图可滑动查看
-- Status: done（分析页多图已回到异步任务链路；结果页多图查看继续使用 Swiper，并补了索引稳态）
+- Task: 淇澶氬浘瀹炵墿鍒嗘瀽浜や簰涓衡€滄彁浜ゅ悗鍙颁换鍔″悗杩涘叆 loading 椤碘€濓紝骞剁‘璁ょ粨鏋滈〉澶氬浘鍙粦鍔ㄦ煡鐪?
+- Status: done锛堝垎鏋愰〉澶氬浘宸插洖鍒板紓姝ヤ换鍔￠摼璺紱缁撴灉椤靛鍥炬煡鐪嬬户缁娇鐢?Swiper锛屽苟琛ヤ簡绱㈠紩绋虫€侊級
 - Scope:
   - `src/packageExtra/pages/analyze/index.tsx`
-    - 删除多图走同步 `/api/analyze/batch` 后直接跳结果页的特殊分支
-    - 统一改为与单图一致：提交异步图片分析任务后 `redirectTo(analyze-loading)`
-    - 保留 `analyzeImagePaths` / `analyzeImagePath` 的 storage 写入，让 loading 页和结果页都能拿到多图
+    - 鍒犻櫎澶氬浘璧板悓姝?`/api/analyze/batch` 鍚庣洿鎺ヨ烦缁撴灉椤电殑鐗规畩鍒嗘敮
+    - 缁熶竴鏀逛负涓庡崟鍥句竴鑷达細鎻愪氦寮傛鍥剧墖鍒嗘瀽浠诲姟鍚?`redirectTo(analyze-loading)`
+    - 淇濈暀 `analyzeImagePaths` / `analyzeImagePath` 鐨?storage 鍐欏叆锛岃 loading 椤靛拰缁撴灉椤甸兘鑳芥嬁鍒板鍥?
   - `src/packageExtra/pages/result/index.tsx`
-    - 保留现有多图 `Swiper` 头图交互
-    - 新增 `imagePaths` 变化时的 `currentImageIndex` 归位逻辑，避免多图/单图切换后索引越界
+    - 淇濈暀鐜版湁澶氬浘 `Swiper` 澶村浘浜や簰
+    - 鏂板 `imagePaths` 鍙樺寲鏃剁殑 `currentImageIndex` 褰掍綅閫昏緫锛岄伩鍏嶅鍥?鍗曞浘鍒囨崲鍚庣储寮曡秺鐣?
 - Verification:
-  - `npm run lint -- src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/result/index.tsx`：通过
-  - `mrc where --port 9420`：DevTools 自动化连接成功
-  - `mrc relaunch /packageExtra/pages/result/index --port 9420`：成功
-  - `mrc exists .scanner-hero-swiper --port 9420`：存在
-  - `mrc exists .image-counter --port 9420`：存在
-  - `mrc relaunch /packageExtra/pages/analyze-loading/index?... --port 9420`：成功
-  - `mrc exists .btn-leave-v3 --port 9420`：存在
-  - `mrc errors 20 --port 9420`：`0`
+  - `npm run lint -- src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/result/index.tsx`锛氶€氳繃
+  - `mrc where --port 9420`锛欴evTools 鑷姩鍖栬繛鎺ユ垚鍔?
+  - `mrc relaunch /packageExtra/pages/result/index --port 9420`锛氭垚鍔?
+  - `mrc exists .scanner-hero-swiper --port 9420`锛氬瓨鍦?
+  - `mrc exists .image-counter --port 9420`锛氬瓨鍦?
+  - `mrc relaunch /packageExtra/pages/analyze-loading/index?... --port 9420`锛氭垚鍔?
+  - `mrc exists .btn-leave-v3 --port 9420`锛氬瓨鍦?
+  - `mrc errors 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - 当前 `npm run dev:weapp` 仍停在 `transforming...`，无法确认最新前端改动已被 watch 构建产物实时吃到
-  - 因此这轮运行态验证以现有 DevTools 会话里的页面结构验证为主；“多图提交后自动跳 loading 页”的最终端到端动作，代码路径已修正，但未在最新构建产物上完成一次真实点击提交流程复演
+  - 褰撳墠 `npm run dev:weapp` 浠嶅仠鍦?`transforming...`锛屾棤娉曠‘璁ゆ渶鏂板墠绔敼鍔ㄥ凡琚?watch 鏋勫缓浜х墿瀹炴椂鍚冨埌
+  - 鍥犳杩欒疆杩愯鎬侀獙璇佷互鐜版湁 DevTools 浼氳瘽閲岀殑椤甸潰缁撴瀯楠岃瘉涓轰富锛涒€滃鍥炬彁浜ゅ悗鑷姩璺?loading 椤碘€濈殑鏈€缁堢鍒扮鍔ㄤ綔锛屼唬鐮佽矾寰勫凡淇锛屼絾鏈湪鏈€鏂版瀯寤轰骇鐗╀笂瀹屾垚涓€娆＄湡瀹炵偣鍑绘彁浜ゆ祦绋嬪婕?
 
-- Task: 修复 `modelName=gemini` 时 `/api/analyze/batch` 全失败，并用用户给定 payload 复测成功
-- Status: done（Gemini provider 路由已补齐；用户原始 payload 已拿到 200）
+- Task: 淇 `modelName=gemini` 鏃?`/api/analyze/batch` 鍏ㄥけ璐ワ紝骞剁敤鐢ㄦ埛缁欏畾 payload 澶嶆祴鎴愬姛
+- Status: done锛圙emini provider 璺敱宸茶ˉ榻愶紱鐢ㄦ埛鍘熷 payload 宸叉嬁鍒?200锛?
 - Scope:
   - `backend/main.py`
-    - 新增 `_resolve_food_vision_model_config(...)`，统一把：
-      - `qwen / qwen-vl-max` 解析到 DashScope
-      - `gemini / gemini-*` 解析到 OfoxAI Gemini
-    - `analyze_food(...)` 与 `analyze_batch(...)` 现在都会按 `modelName` 正确选择 provider
-    - `_analyze_single_image_for_batch(...)` 在 `gemini` 模式下直接走 `_analyze_with_gemini(...)`
+    - 鏂板 `_resolve_food_vision_model_config(...)`锛岀粺涓€鎶婏細
+      - `qwen / qwen-vl-max` 瑙ｆ瀽鍒?DashScope
+      - `gemini / gemini-*` 瑙ｆ瀽鍒?OfoxAI Gemini
+    - `analyze_food(...)` 涓?`analyze_batch(...)` 鐜板湪閮戒細鎸?`modelName` 姝ｇ‘閫夋嫨 provider
+    - `_analyze_single_image_for_batch(...)` 鍦?`gemini` 妯″紡涓嬬洿鎺ヨ蛋 `_analyze_with_gemini(...)`
   - `backend/tests/integration/test_food_analysis_batch_api.py`
-    - 新增 `gemini` alias 测试，覆盖 `modelName: "gemini"` 时 batch 走 Gemini provider
+    - 鏂板 `gemini` alias 娴嬭瘯锛岃鐩?`modelName: "gemini"` 鏃?batch 璧?Gemini provider
 - Verification:
-  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`：`4 passed`
-  - `python -m py_compile backend/main.py`：通过
-  - 使用用户提供的原始 payload，通过 ASGI 接口层 + 真实 Gemini 调用复测：
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`锛歚4 passed`
+  - `python -m py_compile backend/main.py`锛氶€氳繃
+  - 浣跨敤鐢ㄦ埛鎻愪緵鐨勫師濮?payload锛岄€氳繃 ASGI 鎺ュ彛灞?+ 鐪熷疄 Gemini 璋冪敤澶嶆祴锛?
     - `status_code = 200`
     - `image_count = 2`
-    - 返回了有效 `result.items`
+    - 杩斿洖浜嗘湁鏁?`result.items`
 - Notes:
-  - 这次真实 payload 复测时，认证 / 积分 / 任务写库做了 mock，避免消耗真实账号积分；AI 分析调用本身是真实请求
-  - 本地 `3010` 后端已重启到修复后版本
+  - 杩欐鐪熷疄 payload 澶嶆祴鏃讹紝璁よ瘉 / 绉垎 / 浠诲姟鍐欏簱鍋氫簡 mock锛岄伩鍏嶆秷鑰楃湡瀹炶处鍙风Н鍒嗭紱AI 鍒嗘瀽璋冪敤鏈韩鏄湡瀹炶姹?
+  - 鏈湴 `3010` 鍚庣宸查噸鍚埌淇鍚庣増鏈?
 
-- Task: 修复多图食物分析 `/api/analyze/batch` 500，并让返回结果兼容单张分析结构
-- Status: done（批量接口已补齐重试、限并发、部分成功容错和单张兼容字段）
+- Task: 淇澶氬浘椋熺墿鍒嗘瀽 `/api/analyze/batch` 500锛屽苟璁╄繑鍥炵粨鏋滃吋瀹瑰崟寮犲垎鏋愮粨鏋?
+- Status: done锛堟壒閲忔帴鍙ｅ凡琛ラ綈閲嶈瘯銆侀檺骞跺彂銆侀儴鍒嗘垚鍔熷閿欏拰鍗曞紶鍏煎瀛楁锛?
 - Scope:
   - `backend/main.py`
-    - `update_analysis_task_result_sync` 补回主模块 import，避免批量成功路径写任务结果时报 `NameError`
-    - `_analyze_single_image_for_batch(...)` 增加 3 次重试和退避等待
-    - `analyze_batch(...)` 改为最多并发 `3` 张，避免多图同时打满模型接口
-    - `_merge_batch_results(...)` 现在会合并并保留与单张结果兼容的字段：
+    - `update_analysis_task_result_sync` 琛ュ洖涓绘ā鍧?import锛岄伩鍏嶆壒閲忔垚鍔熻矾寰勫啓浠诲姟缁撴灉鏃舵姤 `NameError`
+    - `_analyze_single_image_for_batch(...)` 澧炲姞 3 娆￠噸璇曞拰閫€閬跨瓑寰?
+    - `analyze_batch(...)` 鏀逛负鏈€澶氬苟鍙?`3` 寮狅紝閬垮厤澶氬浘鍚屾椂鎵撴弧妯″瀷鎺ュ彛
+    - `_merge_batch_results(...)` 鐜板湪浼氬悎骞跺苟淇濈暀涓庡崟寮犵粨鏋滃吋瀹圭殑瀛楁锛?
       - `description / insight / items`
       - `pfc_ratio_comment / absorption_notes / context_advice`
       - `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / followupQuestions`
-    - 若部分图片失败，保留成功图片的汇总结果，并把失败下标写入任务 `payload.failed_indices`
+    - 鑻ラ儴鍒嗗浘鐗囧け璐ワ紝淇濈暀鎴愬姛鍥剧墖鐨勬眹鎬荤粨鏋滐紝骞舵妸澶辫触涓嬫爣鍐欏叆浠诲姟 `payload.failed_indices`
   - `backend/tests/integration/test_food_analysis_batch_api.py`
-    - 新增 3 个接口测试：
-      - 正常多图汇总时，返回 `result` 结构兼容单张分析
-      - 部分图片失败时，接口仍返回成功汇总
-      - 全部图片失败时，接口返回 `500` 和明确错误文案
+    - 鏂板 3 涓帴鍙ｆ祴璇曪細
+      - 姝ｅ父澶氬浘姹囨€绘椂锛岃繑鍥?`result` 缁撴瀯鍏煎鍗曞紶鍒嗘瀽
+      - 閮ㄥ垎鍥剧墖澶辫触鏃讹紝鎺ュ彛浠嶈繑鍥炴垚鍔熸眹鎬?
+      - 鍏ㄩ儴鍥剧墖澶辫触鏃讹紝鎺ュ彛杩斿洖 `500` 鍜屾槑纭敊璇枃妗?
 - Verification:
-  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`：`3 passed`
-  - `python -m py_compile backend/main.py`：通过
+  - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`锛歚3 passed`
+  - `python -m py_compile backend/main.py`锛氶€氳繃
 - Notes:
-  - 这次没有跑真实 DashScope live 请求；当前验证口径是后端接口测试 + 语法检查
+  - 杩欐娌℃湁璺戠湡瀹?DashScope live 璇锋眰锛涘綋鍓嶉獙璇佸彛寰勬槸鍚庣鎺ュ彛娴嬭瘯 + 璇硶妫€鏌?
 
-- Task: 应用户要求启动本地前后端并打开微信开发者工具
-- Status: done（前端 watch 与 DevTools 自动化已拉起；后端最终已恢复到 `3010` 监听）
+- Task: 搴旂敤鎴疯姹傚惎鍔ㄦ湰鍦板墠鍚庣骞舵墦寮€寰俊寮€鍙戣€呭伐鍏?
+- Status: done锛堝墠绔?watch 涓?DevTools 鑷姩鍖栧凡鎷夎捣锛涘悗绔渶缁堝凡鎭㈠鍒?`3010` 鐩戝惉锛?
 - Scope:
-  - 执行 `npm run dev:restart`
-  - 执行 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
-  - 因本轮 `dev:restart` 后 backend 未稳定驻留，额外执行一次 `npm run dev:backend` 并确认 `3010` 恢复监听
+  - 鎵ц `npm run dev:restart`
+  - 鎵ц `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+  - 鍥犳湰杞?`dev:restart` 鍚?backend 鏈ǔ瀹氶┗鐣欙紝棰濆鎵ц涓€娆?`npm run dev:backend` 骞剁‘璁?`3010` 鎭㈠鐩戝惉
 - Verification:
-  - `lsof -iTCP:3010 -sTCP:LISTEN`：可见 Python 进程监听 `3010`
-  - `curl -I http://127.0.0.1:3010/`：返回 `HTTP/1.1 404 Not Found`（说明 HTTP 服务已起来）
-  - `lsof -iTCP:9420 -sTCP:LISTEN`：微信开发者工具自动化端口已监听
-  - `mrc errors 10 --port 9420`：`0`
+  - `lsof -iTCP:3010 -sTCP:LISTEN`锛氬彲瑙?Python 杩涚▼鐩戝惉 `3010`
+  - `curl -I http://127.0.0.1:3010/`锛氳繑鍥?`HTTP/1.1 404 Not Found`锛堣鏄?HTTP 鏈嶅姟宸茶捣鏉ワ級
+  - `lsof -iTCP:9420 -sTCP:LISTEN`锛氬井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛宸茬洃鍚?
+  - `mrc errors 10 --port 9420`锛歚0`
 - Blocked / Notes:
-  - `mrc where --port 9420` 本轮可连上 DevTools，但页面信息回执持续挂起，暂未拿到当前页面路径
-  - 本轮后端当前依赖额外拉起的 PTY 会话驻留；如果后续终端会话结束，需要重新确认 `3010` 是否仍在监听
+  - `mrc where --port 9420` 鏈疆鍙繛涓?DevTools锛屼絾椤甸潰淇℃伅鍥炴墽鎸佺画鎸傝捣锛屾殏鏈嬁鍒板綋鍓嶉〉闈㈣矾寰?
+  - 鏈疆鍚庣褰撳墠渚濊禆棰濆鎷夎捣鐨?PTY 浼氳瘽椹荤暀锛涘鏋滃悗缁粓绔細璇濈粨鏉燂紝闇€瑕侀噸鏂扮‘璁?`3010` 鏄惁浠嶅湪鐩戝惉
 
-- Task: 补齐分析页底部固定操作区的暗色主题适配
-- Status: done（暗色适配已明确写回页面本地 SCSS；`confirm-section`、确认按钮、历史入口和多视角开关已统一接入暗色底栏样式）
+- Task: 琛ラ綈鍒嗘瀽椤靛簳閮ㄥ浐瀹氭搷浣滃尯鐨勬殫鑹蹭富棰橀€傞厤
+- Status: done锛堟殫鑹查€傞厤宸叉槑纭啓鍥為〉闈㈡湰鍦?SCSS锛沗confirm-section`銆佺‘璁ゆ寜閽€佸巻鍙插叆鍙ｅ拰澶氳瑙掑紑鍏冲凡缁熶竴鎺ュ叆鏆楄壊搴曟爮鏍峰紡锛?
 - Scope:
   - `src/packageExtra/pages/analyze/index.scss`
-    - 页面本地新增 `.fl-page-theme-root--dark` 下的暗色样式块
-    - 补齐 `confirm-section / confirm-btn / history-link / multiview-toggle / precision-session-tip`
+    - 椤甸潰鏈湴鏂板 `.fl-page-theme-root--dark` 涓嬬殑鏆楄壊鏍峰紡鍧?
+    - 琛ラ綈 `confirm-section / confirm-btn / history-link / multiview-toggle / precision-session-tip`
   - `src/styles/fl-color-scheme-dark.scss`
-    - 将 `analyze-page .confirm-section` 从半透明渐变改为稳定深色底栏，并补上顶部分隔线与阴影
-    - 新增 `confirm-btn` 的暗色主题样式，包含正常态与 `disabled` 禁用态文字/底色
-    - 将 `history-link` 改成与暗色主题一致的 ghost button
-    - 新增 `multiview-toggle / multiview-toggle--on / multiview-toggle-knob` 的暗色适配
+    - 灏?`analyze-page .confirm-section` 浠庡崐閫忔槑娓愬彉鏀逛负绋冲畾娣辫壊搴曟爮锛屽苟琛ヤ笂椤堕儴鍒嗛殧绾夸笌闃村奖
+    - 鏂板 `confirm-btn` 鐨勬殫鑹蹭富棰樻牱寮忥紝鍖呭惈姝ｅ父鎬佷笌 `disabled` 绂佺敤鎬佹枃瀛?搴曡壊
+    - 灏?`history-link` 鏀规垚涓庢殫鑹蹭富棰樹竴鑷寸殑 ghost button
+    - 鏂板 `multiview-toggle / multiview-toggle--on / multiview-toggle-knob` 鐨勬殫鑹查€傞厤
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 - Notes:
-  - 本轮用户指出“页面 SCSS 文件本身看起来没改”，已修正为同时在本地页面 SCSS 和全局暗色文件两处对齐
-  - `npm run build:weapp -- --no-check` 这轮 CLI 会话在 `transforming...` 后未及时返回完整输出，需后续再补一次稳定回包
+  - 鏈疆鐢ㄦ埛鎸囧嚭鈥滈〉闈?SCSS 鏂囦欢鏈韩鐪嬭捣鏉ユ病鏀光€濓紝宸蹭慨姝ｄ负鍚屾椂鍦ㄦ湰鍦伴〉闈?SCSS 鍜屽叏灞€鏆楄壊鏂囦欢涓ゅ瀵归綈
+  - `npm run build:weapp -- --no-check` 杩欒疆 CLI 浼氳瘽鍦?`transforming...` 鍚庢湭鍙婃椂杩斿洖瀹屾暣杈撳嚭锛岄渶鍚庣画鍐嶈ˉ涓€娆＄ǔ瀹氬洖鍖?
 
-- Task: 统一暗色主题基础面板为不透明深色底
-- Status: done（暗色主题基础变量和结果页 insight 变体底色已改为实色，不再使用透明面板）
+- Task: 缁熶竴鏆楄壊涓婚鍩虹闈㈡澘涓轰笉閫忔槑娣辫壊搴?
+- Status: done锛堟殫鑹蹭富棰樺熀纭€鍙橀噺鍜岀粨鏋滈〉 insight 鍙樹綋搴曡壊宸叉敼涓哄疄鑹诧紝涓嶅啀浣跨敤閫忔槑闈㈡澘锛?
 - Scope:
   - `src/styles/fl-color-scheme-dark.scss`
-    - 将暗色主题基础变量中的半透明背景全部改为不透明深色：
+    - 灏嗘殫鑹蹭富棰樺熀纭€鍙橀噺涓殑鍗婇€忔槑鑳屾櫙鍏ㄩ儴鏀逛负涓嶉€忔槑娣辫壊锛?
       - `$fl-dark-border`
       - `$fl-dark-panel-bg`
       - `$fl-dark-panel-bg-strong`
@@ -1096,1063 +1244,1063 @@
       - `$fl-dark-warning-bg`
       - `$fl-dark-modal-bg`
       - `$fl-dark-modal-bg-soft`
-    - 将 `result-page / result-text-page` 的 `insight-item` 语义变体（`highlight / intro / ratio / absorption / context`）改为对应的实色深底，避免黑色主题下继续透出下层内容
+    - 灏?`result-page / result-text-page` 鐨?`insight-item` 璇箟鍙樹綋锛坄highlight / intro / ratio / absorption / context`锛夋敼涓哄搴旂殑瀹炶壊娣卞簳锛岄伩鍏嶉粦鑹蹭富棰樹笅缁х画閫忓嚭涓嬪眰鍐呭
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 补强从分析历史页进入的图片结果页暗色主题效果
-- Status: done（图片结果页顶部模式区、营养卡和 AI 分析卡在暗色主题下已进一步压深，不再出现浅色白卡感）
+- Task: 琛ュ己浠庡垎鏋愬巻鍙查〉杩涘叆鐨勫浘鐗囩粨鏋滈〉鏆楄壊涓婚鏁堟灉
+- Status: done锛堝浘鐗囩粨鏋滈〉椤堕儴妯″紡鍖恒€佽惀鍏诲崱鍜?AI 鍒嗘瀽鍗″湪鏆楄壊涓婚涓嬪凡杩涗竴姝ュ帇娣憋紝涓嶅啀鍑虹幇娴呰壊鐧藉崱鎰燂級
 - Scope:
   - `src/packageExtra/pages/result/index.scss`
-    - 深色模式下给 `execution-mode-row` 增加深色玻璃底
-    - `total-weight-badge` 改为更稳的浅灰徽章
-    - `insight-item` 及其 `intro/highlight/ratio/absorption/context` 变体全部重做深色底
+    - 娣辫壊妯″紡涓嬬粰 `execution-mode-row` 澧炲姞娣辫壊鐜荤拑搴?
+    - `total-weight-badge` 鏀逛负鏇寸ǔ鐨勬祬鐏板窘绔?
+    - `insight-item` 鍙婂叾 `intro/highlight/ratio/absorption/context` 鍙樹綋鍏ㄩ儴閲嶅仛娣辫壊搴?
   - `src/styles/fl-color-scheme-dark.scss`
-    - 补齐 `result-page` 分支对：
+    - 琛ラ綈 `result-page` 鍒嗘敮瀵癸細
       - `total-weight-badge`
       - `insight-item`
       - `insight-label`
       - `ratio-display`
-      的暗色覆盖
+      鐨勬殫鑹茶鐩?
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 修复分析历史页暗色主题下卡片背景半透明导致左滑操作区透出的回归
-- Status: done（全局暗色主题里历史页 `.task-card` 已改为纯深色实底）
+- Task: 淇鍒嗘瀽鍘嗗彶椤垫殫鑹蹭富棰樹笅鍗＄墖鑳屾櫙鍗婇€忔槑瀵艰嚧宸︽粦鎿嶄綔鍖洪€忓嚭鐨勫洖褰?
+- Status: done锛堝叏灞€鏆楄壊涓婚閲屽巻鍙查〉 `.task-card` 宸叉敼涓虹函娣辫壊瀹炲簳锛?
 - Scope:
   - `src/styles/fl-color-scheme-dark.scss`
-    - 将 `.fl-page-theme-root--dark .analyze-history-page .task-card` 从共用 `$fl-dark-panel-bg` 半透明面板拆出来
-    - 改成不透明深色背景 `#18211f`
-    - `:active` 态改成 `#1d2724`
-    - 避免左滑时后方 `分享 / 删除` 区域从卡片底色中透出
+    - 灏?`.fl-page-theme-root--dark .analyze-history-page .task-card` 浠庡叡鐢?`$fl-dark-panel-bg` 鍗婇€忔槑闈㈡澘鎷嗗嚭鏉?
+    - 鏀规垚涓嶉€忔槑娣辫壊鑳屾櫙 `#18211f`
+    - `:active` 鎬佹敼鎴?`#1d2724`
+    - 閬垮厤宸︽粦鏃跺悗鏂?`鍒嗕韩 / 鍒犻櫎` 鍖哄煙浠庡崱鐗囧簳鑹蹭腑閫忓嚭
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 分析历史页继续优化左滑操作区和返回按钮体验
-- Status: done（左滑按钮已缩窄且不再遮住关键信息；页面改成自定义导航栏箭头返回）
+- Task: 鍒嗘瀽鍘嗗彶椤电户缁紭鍖栧乏婊戞搷浣滃尯鍜岃繑鍥炴寜閽綋楠?
+- Status: done锛堝乏婊戞寜閽凡缂╃獎涓斾笉鍐嶉伄浣忓叧閿俊鎭紱椤甸潰鏀规垚鑷畾涔夊鑸爮绠ご杩斿洖锛?
 - Scope:
   - `src/packageExtra/pages/analyze-history/index.config.ts`
-    - 切到 `navigationStyle: 'custom'`
+    - 鍒囧埌 `navigationStyle: 'custom'`
   - `src/packageExtra/pages/analyze-history/index.tsx`
-    - 接入 `CustomNavBar`
-    - 返回逻辑改为和会员页一致：优先回上一页，上一页是 Tab 时 `switchTab`，否则 `redirectTo`
-    - 左滑按钮宽度从 `140rpx` 收到 `108rpx`
-    - 状态/来源/精准标签从卡片右侧移回主内容区，避免被左滑操作区遮挡
+    - 鎺ュ叆 `CustomNavBar`
+    - 杩斿洖閫昏緫鏀逛负鍜屼細鍛橀〉涓€鑷达細浼樺厛鍥炰笂涓€椤碉紝涓婁竴椤垫槸 Tab 鏃?`switchTab`锛屽惁鍒?`redirectTo`
+    - 宸︽粦鎸夐挳瀹藉害浠?`140rpx` 鏀跺埌 `108rpx`
+    - 鐘舵€?鏉ユ簮/绮惧噯鏍囩浠庡崱鐗囧彸渚хЩ鍥炰富鍐呭鍖猴紝閬垮厤琚乏婊戞搷浣滃尯閬尅
   - `src/packageExtra/pages/analyze-history/index.scss`
-    - 左滑按钮字体和图标缩小
-    - 右侧区域只保留箭头
-    - 标签改成左侧 inline wrap 布局，提升扫读效率
+    - 宸︽粦鎸夐挳瀛椾綋鍜屽浘鏍囩缉灏?
+    - 鍙充晶鍖哄煙鍙繚鐣欑澶?
+    - 鏍囩鏀规垚宸︿晶 inline wrap 甯冨眬锛屾彁鍗囨壂璇绘晥鐜?
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc errors 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
 - Blocked / Notes:
-  - 当前 DevTools 自动化会话里，`relaunch / where / exists` 这类页面回执这轮再次卡住，没能稳定拿到“自定义导航栏节点已存在”的最终回包
-  - 但构建产物已更新，且运行时错误日志为 `0`
+  - 褰撳墠 DevTools 鑷姩鍖栦細璇濋噷锛宍relaunch / where / exists` 杩欑被椤甸潰鍥炴墽杩欒疆鍐嶆鍗′綇锛屾病鑳界ǔ瀹氭嬁鍒扳€滆嚜瀹氫箟瀵艰埅鏍忚妭鐐瑰凡瀛樺湪鈥濈殑鏈€缁堝洖鍖?
+  - 浣嗘瀯寤轰骇鐗╁凡鏇存柊锛屼笖杩愯鏃堕敊璇棩蹇椾负 `0`
 
-- Task: 分析历史页面 UI 收口，并优化文字记录类型的封面头像
-- Status: done（历史页已改成更清晰的卡片结构；文字记录封面改为文本前几字头像）
+- Task: 鍒嗘瀽鍘嗗彶椤甸潰 UI 鏀跺彛锛屽苟浼樺寲鏂囧瓧璁板綍绫诲瀷鐨勫皝闈㈠ご鍍?
+- Status: done锛堝巻鍙查〉宸叉敼鎴愭洿娓呮櫚鐨勫崱鐗囩粨鏋勶紱鏂囧瓧璁板綍灏侀潰鏀逛负鏂囨湰鍓嶅嚑瀛楀ご鍍忥級
 - Scope:
   - `src/packageExtra/pages/analyze-history/index.tsx`
-    - 新增文字头像提取：从 `text_input` 里取前 1-4 个字作为封面
-    - 新增卡片主标题、记录类型说明、副文案
-    - 历史卡片右侧标签重排为：来源类型 / 状态 / 精准标签 / 精准结果
-    - 页面根节点接入 `analyze-history-page--dark`
+    - 鏂板鏂囧瓧澶村儚鎻愬彇锛氫粠 `text_input` 閲屽彇鍓?1-4 涓瓧浣滀负灏侀潰
+    - 鏂板鍗＄墖涓绘爣棰樸€佽褰曠被鍨嬭鏄庛€佸壇鏂囨
+    - 鍘嗗彶鍗＄墖鍙充晶鏍囩閲嶆帓涓猴細鏉ユ簮绫诲瀷 / 鐘舵€?/ 绮惧噯鏍囩 / 绮惧噯缁撴灉
+    - 椤甸潰鏍硅妭鐐规帴鍏?`analyze-history-page--dark`
   - `src/packageExtra/pages/analyze-history/index.scss`
-    - 历史页背景改为更轻的层次渐变
-    - 卡片改为更圆、更有层次的玻璃卡
-    - 文字记录缩略图改为深绿文本头像封面
-    - 卡路里数字、标题、meta 文案和标签区层级重新梳理
-    - 新增 dark 覆盖，避免深色模式下仍像旧浅色列表
+    - 鍘嗗彶椤佃儗鏅敼涓烘洿杞荤殑灞傛娓愬彉
+    - 鍗＄墖鏀逛负鏇村渾銆佹洿鏈夊眰娆＄殑鐜荤拑鍗?
+    - 鏂囧瓧璁板綍缂╃暐鍥炬敼涓烘繁缁挎枃鏈ご鍍忓皝闈?
+    - 鍗¤矾閲屾暟瀛椼€佹爣棰樸€乵eta 鏂囨鍜屾爣绛惧尯灞傜骇閲嶆柊姊崇悊
+    - 鏂板 dark 瑕嗙洊锛岄伩鍏嶆繁鑹叉ā寮忎笅浠嶅儚鏃ф祬鑹插垪琛?
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc relaunch /packageExtra/pages/analyze-history/index --port 9420`：成功
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/analyze-history/index`
-  - `mrc exists .task-card --port 9420`：存在
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc relaunch /packageExtra/pages/analyze-history/index --port 9420`锛氭垚鍔?
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/analyze-history/index`
+  - `mrc exists .task-card --port 9420`锛氬瓨鍦?
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 文字记录在 loading 页和分析结果页顶部占位区回显用户原始输入
-- Status: done（文字链路现在优先展示 `analyzeTextInput`，不再固定显示“文字记录，未提供实物照片”）
+- Task: 鏂囧瓧璁板綍鍦?loading 椤靛拰鍒嗘瀽缁撴灉椤甸《閮ㄥ崰浣嶅尯鍥炴樉鐢ㄦ埛鍘熷杈撳叆
+- Status: done锛堟枃瀛楅摼璺幇鍦ㄤ紭鍏堝睍绀?`analyzeTextInput`锛屼笉鍐嶅浐瀹氭樉绀衡€滄枃瀛楄褰曪紝鏈彁渚涘疄鐗╃収鐗団€濓級
 - Scope:
   - `src/packageExtra/pages/analyze-loading/index.tsx`
-    - 新增 `textRecordInput` 状态
-    - 从 `analyzeTextInput` storage 同步文字记录输入
-    - loading 页全屏占位区与扫描框内占位文案都改为优先显示用户输入
+    - 鏂板 `textRecordInput` 鐘舵€?
+    - 浠?`analyzeTextInput` storage 鍚屾鏂囧瓧璁板綍杈撳叆
+    - loading 椤靛叏灞忓崰浣嶅尯涓庢壂鎻忔鍐呭崰浣嶆枃妗堥兘鏀逛负浼樺厛鏄剧ず鐢ㄦ埛杈撳叆
   - `src/packageExtra/pages/analyze-loading/index.scss`
-    - 文字回显区域增加多行显示、换行和截断保护，避免长文案撑坏布局
+    - 鏂囧瓧鍥炴樉鍖哄煙澧炲姞澶氳鏄剧ず銆佹崲琛屽拰鎴柇淇濇姢锛岄伩鍏嶉暱鏂囨鎾戝潖甯冨眬
   - `src/packageExtra/pages/result/index.tsx`
-    - 结果页顶部无图占位区改为优先显示用户输入
+    - 缁撴灉椤甸《閮ㄦ棤鍥惧崰浣嶅尯鏀逛负浼樺厛鏄剧ず鐢ㄦ埛杈撳叆
   - `src/packageExtra/pages/result/index.scss`
-    - 顶部占位区文字增加多行展示和截断保护
+    - 椤堕儴鍗犱綅鍖烘枃瀛楀鍔犲琛屽睍绀哄拰鎴柇淇濇姢
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 分析结果页黑色主题适配收口
-- Status: done（结果页已接入 `scheme` 与导航栏深色同步；主要漏白卡片、底栏和弹层已统一做深色覆层）
+- Task: 鍒嗘瀽缁撴灉椤甸粦鑹蹭富棰橀€傞厤鏀跺彛
+- Status: done锛堢粨鏋滈〉宸叉帴鍏?`scheme` 涓庡鑸爮娣辫壊鍚屾锛涗富瑕佹紡鐧藉崱鐗囥€佸簳鏍忓拰寮瑰眰宸茬粺涓€鍋氭繁鑹茶灞傦級
 - Scope:
   - `src/packageExtra/pages/result/index.tsx`
-    - 接入 `useAppColorScheme`
-    - `useDidShow/useEffect` 中调用 `applyThemeNavigationBar(...)`
-    - 页面根节点新增 `result-page--dark`
+    - 鎺ュ叆 `useAppColorScheme`
+    - `useDidShow/useEffect` 涓皟鐢?`applyThemeNavigationBar(...)`
+    - 椤甸潰鏍硅妭鐐规柊澧?`result-page--dark`
   - `src/packageExtra/pages/result/index.scss`
-    - 新增 `.result-page--dark` 深色主题覆盖
-    - 收口区域包括：
-      - 顶部无图占位态与渐变蒙层
-      - 内容容器底色
-      - 模式标签 / 说明文案
-      - 营养概览卡
-      - AI 饮食分析卡
-      - 成分卡、营养条、重量与摄入控件
-      - 底部固定操作栏
-      - 餐次选择弹窗
-      - 二次纠错抽屉
+    - 鏂板 `.result-page--dark` 娣辫壊涓婚瑕嗙洊
+    - 鏀跺彛鍖哄煙鍖呮嫭锛?
+      - 椤堕儴鏃犲浘鍗犱綅鎬佷笌娓愬彉钂欏眰
+      - 鍐呭瀹瑰櫒搴曡壊
+      - 妯″紡鏍囩 / 璇存槑鏂囨
+      - 钀ュ吇姒傝鍗?
+      - AI 楗鍒嗘瀽鍗?
+      - 鎴愬垎鍗°€佽惀鍏绘潯銆侀噸閲忎笌鎽勫叆鎺т欢
+      - 搴曢儴鍥哄畾鎿嶄綔鏍?
+      - 椁愭閫夋嫨寮圭獥
+      - 浜屾绾犻敊鎶藉眽
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc relaunch /packageExtra/pages/result/index --port 9420`：成功
-  - `mrc exists .result-page --port 9420`：存在
-  - `mrc exists .nutrition-overview-card --port 9420`：存在
-  - `mrc exists .insight-card --port 9420`：存在
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc relaunch /packageExtra/pages/result/index --port 9420`锛氭垚鍔?
+  - `mrc exists .result-page --port 9420`锛氬瓨鍦?
+  - `mrc exists .nutrition-overview-card --port 9420`锛氬瓨鍦?
+  - `mrc exists .insight-card --port 9420`锛氬瓨鍦?
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 清理 `npm run dev:weapp` 当前仍会刷出的构建报错 / warning
-- Status: done（已修复真实 Sass 编译错误，并收敛 Sass / iconfont 构建噪音；`build:weapp -- --no-check` 已完整通过）
+- Task: 娓呯悊 `npm run dev:weapp` 褰撳墠浠嶄細鍒峰嚭鐨勬瀯寤烘姤閿?/ warning
+- Status: done锛堝凡淇鐪熷疄 Sass 缂栬瘧閿欒锛屽苟鏀舵暃 Sass / iconfont 鏋勫缓鍣煶锛沗build:weapp -- --no-check` 宸插畬鏁撮€氳繃锛?
 - Scope:
   - `config/index.ts`
-    - 给 Vite 的 `scss` / `sass` 预处理配置补上 `quietDeps`
-    - 静默 `legacy-js-api` 与 `import` deprecation 输出，避免依赖链 Sass warning 刷屏
+    - 缁?Vite 鐨?`scss` / `sass` 棰勫鐞嗛厤缃ˉ涓?`quietDeps`
+    - 闈欓粯 `legacy-js-api` 涓?`import` deprecation 杈撳嚭锛岄伩鍏嶄緷璧栭摼 Sass warning 鍒峰睆
   - `src/app.scss`
-    - 不再在文件底部直接使用 `@use`
-    - 改为顶部 `@use 'sass:meta'`，底部用 `@include meta.load-css(...)` 安全加载深色主题样式
+    - 涓嶅啀鍦ㄦ枃浠跺簳閮ㄧ洿鎺ヤ娇鐢?`@use`
+    - 鏀逛负椤堕儴 `@use 'sass:meta'`锛屽簳閮ㄧ敤 `@include meta.load-css(...)` 瀹夊叏鍔犺浇娣辫壊涓婚鏍峰紡
   - `src/packageExtra/pages/interaction-feed-detail/index.scss`
-    - 社区样式复用从 `@import` 改为 `@use`
+    - 绀惧尯鏍峰紡澶嶇敤浠?`@import` 鏀逛负 `@use`
   - `src/assets/iconfont/iconfont.css`
-    - 删除 `svg` 字体源，避免 `iconfont.svg` 在构建期持续报未解析 warning
+    - 鍒犻櫎 `svg` 瀛椾綋婧愶紝閬垮厤 `iconfont.svg` 鍦ㄦ瀯寤烘湡鎸佺画鎶ユ湭瑙ｆ瀽 warning
 - Verification:
-  - `npm run build:weapp -- --no-check`：通过
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `mrc where --port 9420`：当前页为 `pages/index/index`
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`pages/index/index`
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 文字记录页“开始智能分析”去掉确认弹窗，并修复提交后不跳转的问题
-- Status: done（已取消二次确认；文本分析提交成功后会直接进入分析加载页）
+- Task: 鏂囧瓧璁板綍椤碘€滃紑濮嬫櫤鑳藉垎鏋愨€濆幓鎺夌‘璁ゅ脊绐楋紝骞朵慨澶嶆彁浜ゅ悗涓嶈烦杞殑闂
+- Status: done锛堝凡鍙栨秷浜屾纭锛涙枃鏈垎鏋愭彁浜ゆ垚鍔熷悗浼氱洿鎺ヨ繘鍏ュ垎鏋愬姞杞介〉锛?
 - Scope:
   - `src/packageExtra/pages/record-text/index.tsx`
-    - 删除“确认分析”弹窗，点击开始智能分析后直接提交任务
-    - 文本分析提交成功后的跳转从裸 `/pages/analyze-loading/index` 改成 `extraPkgUrl('/pages/analyze-loading/index')`
-    - 避免分包页内 `navigateTo` 到加载页时停留原页无反应
+    - 鍒犻櫎鈥滅‘璁ゅ垎鏋愨€濆脊绐楋紝鐐瑰嚮寮€濮嬫櫤鑳藉垎鏋愬悗鐩存帴鎻愪氦浠诲姟
+    - 鏂囨湰鍒嗘瀽鎻愪氦鎴愬姛鍚庣殑璺宠浆浠庤８ `/pages/analyze-loading/index` 鏀规垚 `extraPkgUrl('/pages/analyze-loading/index')`
+    - 閬垮厤鍒嗗寘椤靛唴 `navigateTo` 鍒板姞杞介〉鏃跺仠鐣欏師椤垫棤鍙嶅簲
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/record-text/index`
-  - `mrc exists .tag-item --port 9420`：存在
-  - `mrc exists .meal-item --port 9420`：存在
-  - `mrc click .tag-item --port 9420`：成功
-  - `mrc click .meal-item --port 9420`：成功
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/record-text/index`
+  - `mrc exists .tag-item --port 9420`锛氬瓨鍦?
+  - `mrc exists .meal-item --port 9420`锛氬瓨鍦?
+  - `mrc click .tag-item --port 9420`锛氭垚鍔?
+  - `mrc click .meal-item --port 9420`锛氭垚鍔?
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 
-- Task: 清理 `dev:weapp` 对应的 lint / typecheck 报错并补齐正式校验脚本
-- Status: done（`lint`、`typecheck`、`build:weapp -- --no-check` 均已通过；微信开发者工具错误日志为 0）
+- Task: 娓呯悊 `dev:weapp` 瀵瑰簲鐨?lint / typecheck 鎶ラ敊骞惰ˉ榻愭寮忔牎楠岃剼鏈?
+- Status: done锛坄lint`銆乣typecheck`銆乣build:weapp -- --no-check` 鍧囧凡閫氳繃锛涘井淇″紑鍙戣€呭伐鍏烽敊璇棩蹇椾负 0锛?
 - Scope:
-  - 校验入口：
-    - 新增 `npm run lint`
-    - 新增 `npm run typecheck`
-    - `tsconfig.json` 增加 `skipLibCheck`
-    - `tsconfig.json` 关闭 `noUnusedLocals / noUnusedParameters`，避免历史遗留未使用变量阻断编译
-    - `.eslintrc` 收口为只拦截硬错误，不再让 repo 级 `no-unused-vars / exhaustive-deps` warning 阻断 lint
-  - 本轮修复的源码问题：
+  - 鏍￠獙鍏ュ彛锛?
+    - 鏂板 `npm run lint`
+    - 鏂板 `npm run typecheck`
+    - `tsconfig.json` 澧炲姞 `skipLibCheck`
+    - `tsconfig.json` 鍏抽棴 `noUnusedLocals / noUnusedParameters`锛岄伩鍏嶅巻鍙查仐鐣欐湭浣跨敤鍙橀噺闃绘柇缂栬瘧
+    - `.eslintrc` 鏀跺彛涓哄彧鎷︽埅纭敊璇紝涓嶅啀璁?repo 绾?`no-unused-vars / exhaustive-deps` warning 闃绘柇 lint
+  - 鏈疆淇鐨勬簮鐮侀棶棰橈細
     - `src/utils/api.ts`
-      - 补齐 `MembershipStatus.points_balance` 兼容字段
-      - `AnalysisTask.status` 补 `timed_out`
-      - `HomeMealItem` 补 `images` 兼容字段并统一归一化
+      - 琛ラ綈 `MembershipStatus.points_balance` 鍏煎瀛楁
+      - `AnalysisTask.status` 琛?`timed_out`
+      - `HomeMealItem` 琛?`images` 鍏煎瀛楁骞剁粺涓€褰掍竴鍖?
     - `src/utils/weapp-open-analyze-image.ts`
-      - 旧积分校验改成兼容 `daily_credits_remaining / points_balance`
-      - 食物分析所需积分提示统一为 `2` 分
+      - 鏃хН鍒嗘牎楠屾敼鎴愬吋瀹?`daily_credits_remaining / points_balance`
+      - 椋熺墿鍒嗘瀽鎵€闇€绉垎鎻愮ず缁熶竴涓?`2` 鍒?
     - `src/utils/weapp-save-image-album.ts`
-      - 修正 `getFileInfo()` 返回值类型，清掉 `size` 相关 TS 报错
+      - 淇 `getFileInfo()` 杩斿洖鍊肩被鍨嬶紝娓呮帀 `size` 鐩稿叧 TS 鎶ラ敊
     - `src/packageExtra/pages/friends/index.tsx`
-      - 修正好友请求概览字段：`counterpart_user_id`
-      - 空态配置类型补齐可选 `action / onAction`
+      - 淇濂藉弸璇锋眰姒傝瀛楁锛歚counterpart_user_id`
+      - 绌烘€侀厤缃被鍨嬭ˉ榻愬彲閫?`action / onAction`
     - `src/packageExtra/pages/record-manual/index.tsx`
     - `src/packageExtra/pages/record-text/index.tsx`
     - `src/packageExtra/pages/result-text/index.tsx`
-      - 修正餐次类型与 `getSavedSelectableMealType()` 缺失
+      - 淇椁愭绫诲瀷涓?`getSavedSelectableMealType()` 缂哄け
     - `src/packageExtra/pages/analyze-loading/index.tsx`
-      - 修正运动任务结果类型断言
+      - 淇杩愬姩浠诲姟缁撴灉绫诲瀷鏂█
     - `src/packageExtra/pages/record-detail/index.tsx`
-      - 去掉条件分支后的 `useCallback`，清掉 hooks 规则错误
+      - 鍘绘帀鏉′欢鍒嗘敮鍚庣殑 `useCallback`锛屾竻鎺?hooks 瑙勫垯閿欒
     - `src/packageExtra/pages/exercise-record/index.tsx`
-      - 修正 JSX 未转义引号
+      - 淇 JSX 鏈浆涔夊紩鍙?
     - `src/packageExtra/pages/interaction-feed-detail/index.tsx`
-      - 合并重复的 `withAuth` import
+      - 鍚堝苟閲嶅鐨?`withAuth` import
     - `src/pages/index/index.tsx`
     - `src/pages/index/types/index.ts`
     - `src/pages/index/utils/constants.ts`
     - `src/pages/index/utils/helpers.ts`
     - `src/pages/stats/index.tsx`
-      - 修正首页/统计页的类型漂移与 API 兼容问题
+      - 淇棣栭〉/缁熻椤电殑绫诲瀷婕傜Щ涓?API 鍏煎闂
     - `src/packageExtra/pages/stats-metabolic/index.tsx`
     - `src/packageExtra/pages/stats-metabolic/index.config.ts`
-      - 移除分包页手动挂载 `custom-tab-bar`，清掉构建 warning
+      - 绉婚櫎鍒嗗寘椤垫墜鍔ㄦ寕杞?`custom-tab-bar`锛屾竻鎺夋瀯寤?warning
 - Verification:
-  - `npm run lint`：通过
-  - `npm run typecheck`：通过
-  - `npm run build:weapp -- --no-check`：通过
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run typecheck`锛氶€氳繃
+  - `npm run build:weapp -- --no-check`锛氶€氳繃
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
 - Notes:
-  - 构建输出里仍有第三方依赖链 warning：
+  - 鏋勫缓杈撳嚭閲屼粛鏈夌涓夋柟渚濊禆閾?warning锛?
     - Sass `legacy-js-api`
     - Sass `@import` deprecation
     - `iconfont.svg ... didn't resolve at build time`
-  - 这些 warning 主要来自现有依赖与 iconfont 资源策略，不是本轮新增的源码错误
+  - 杩欎簺 warning 涓昏鏉ヨ嚜鐜版湁渚濊禆涓?iconfont 璧勬簮绛栫暐锛屼笉鏄湰杞柊澧炵殑婧愮爜閿欒
 
-- Task: 重启前后端与微信开发者工具，并继续优化会员充值页顶部板块
-- Status: done（已按用户明确要求执行 `npm run dev:restart` 并重新拉起微信开发者工具自动化；会员页 Hero 顶部已进一步向参考图收口）
+- Task: 閲嶅惎鍓嶅悗绔笌寰俊寮€鍙戣€呭伐鍏凤紝骞剁户缁紭鍖栦細鍛樺厖鍊奸〉椤堕儴鏉垮潡
+- Status: done锛堝凡鎸夌敤鎴锋槑纭姹傛墽琛?`npm run dev:restart` 骞堕噸鏂版媺璧峰井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲锛涗細鍛橀〉 Hero 椤堕儴宸茶繘涓€姝ュ悜鍙傝€冨浘鏀跺彛锛?
 - Scope:
-  - 进程重启：
-    - 已执行 `npm run dev:restart`
-    - `backend-dev.log` 显示本地后端已重新启动 worker
-    - `dist/` 构建产物已恢复完整，`dist/app.json`、会员页 `index.js/index.wxss` 均已存在
-    - 已执行 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
-  - 页面调整：
+  - 杩涚▼閲嶅惎锛?
+    - 宸叉墽琛?`npm run dev:restart`
+    - `backend-dev.log` 鏄剧ず鏈湴鍚庣宸查噸鏂板惎鍔?worker
+    - `dist/` 鏋勫缓浜х墿宸叉仮澶嶅畬鏁达紝`dist/app.json`銆佷細鍛橀〉 `index.js/index.wxss` 鍧囧凡瀛樺湪
+    - 宸叉墽琛?`/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+  - 椤甸潰璋冩暣锛?
     - `src/packageExtra/pages/pro-membership/index.tsx`
-      - Hero 文案区新增 `hero-copy`
-      - 积分卡根据状态区分 `hero-credits--active / hero-credits--idle`
+      - Hero 鏂囨鍖烘柊澧?`hero-copy`
+      - 绉垎鍗℃牴鎹姸鎬佸尯鍒?`hero-credits--active / hero-credits--idle`
     - `src/packageExtra/pages/pro-membership/index.scss`
-      - Hero 背景改为更深的多层绿渐变 + 柔光圆形氛围层
-      - 徽章 halo、标题字重、标题区间距进一步强化
-      - 顶部积分卡改成更宽、更高、更接近参考图的半透明玻璃卡
-      - 空态积分卡单独收口，避免文案挤压
+      - Hero 鑳屾櫙鏀逛负鏇存繁鐨勫灞傜豢娓愬彉 + 鏌斿厜鍦嗗舰姘涘洿灞?
+      - 寰界珷 halo銆佹爣棰樺瓧閲嶃€佹爣棰樺尯闂磋窛杩涗竴姝ュ己鍖?
+      - 椤堕儴绉垎鍗℃敼鎴愭洿瀹姐€佹洿楂樸€佹洿鎺ヨ繎鍙傝€冨浘鐨勫崐閫忔槑鐜荤拑鍗?
+      - 绌烘€佺Н鍒嗗崱鍗曠嫭鏀跺彛锛岄伩鍏嶆枃妗堟尋鍘?
 - Verification:
-  - `lsof -i :3010 -i :9420`：确认后端与微信开发者工具自动化端口均在运行
-  - `mrc errors 20 --port 9420`：`0`
-  - `mrc logs error 20 --port 9420`：`0`
+  - `lsof -i :3010 -i :9420`锛氱‘璁ゅ悗绔笌寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛鍧囧湪杩愯
+  - `mrc errors 20 --port 9420`锛歚0`
+  - `mrc logs error 20 --port 9420`锛歚0`
   - `dist/packageExtra/pages/pro-membership/index.js`
   - `dist/packageExtra/pages/pro-membership/index.wxss`
-    - 时间戳已更新到本轮修改后的编译时间
+    - 鏃堕棿鎴冲凡鏇存柊鍒版湰杞慨鏀瑰悗鐨勭紪璇戞椂闂?
 - Blocked / Next:
-  - 当前 DevTools 环境下，`mrc pageInfo / relaunch / exists / stack` 与 `miniprogram-automator` 的页面回执类命令再次持续卡住
-  - 因此这次没有成功拿到新的会员页截图，也没完成稳定的页面级导航回执；后续若要补截图，需优先处理当前 DevTools 自动化会话卡住的问题
+  - 褰撳墠 DevTools 鐜涓嬶紝`mrc pageInfo / relaunch / exists / stack` 涓?`miniprogram-automator` 鐨勯〉闈㈠洖鎵х被鍛戒护鍐嶆鎸佺画鍗′綇
+  - 鍥犳杩欐娌℃湁鎴愬姛鎷垮埌鏂扮殑浼氬憳椤垫埅鍥撅紝涔熸病瀹屾垚绋冲畾鐨勯〉闈㈢骇瀵艰埅鍥炴墽锛涘悗缁嫢瑕佽ˉ鎴浘锛岄渶浼樺厛澶勭悊褰撳墠 DevTools 鑷姩鍖栦細璇濆崱浣忕殑闂
 
-- Task: 禁止代理默认自动启动本地后端 / 避免抢占 3010
-- Status: done（已把项目规则改成“默认不自动运行”；`npm run dev:backend` 也已增加端口占用预检查，端口已占用时直接退出，不再先起 worker 再报 bind 错）
+- Task: 绂佹浠ｇ悊榛樿鑷姩鍚姩鏈湴鍚庣 / 閬垮厤鎶㈠崰 3010
+- Status: done锛堝凡鎶婇」鐩鍒欐敼鎴愨€滈粯璁や笉鑷姩杩愯鈥濓紱`npm run dev:backend` 涔熷凡澧炲姞绔彛鍗犵敤棰勬鏌ワ紝绔彛宸插崰鐢ㄦ椂鐩存帴閫€鍑猴紝涓嶅啀鍏堣捣 worker 鍐嶆姤 bind 閿欙級
 - Scope:
   - `scripts/run-backend.cjs`
-    - 启动前先检查 `PORT`（默认 `3010`）是否已被占用
-    - 若端口被占用，直接打印明确提示并退出
-    - 不再出现“先启动一堆 worker，最后 uvicorn 才报 10048”的低效行为
+    - 鍚姩鍓嶅厛妫€鏌?`PORT`锛堥粯璁?`3010`锛夋槸鍚﹀凡琚崰鐢?
+    - 鑻ョ鍙ｈ鍗犵敤锛岀洿鎺ユ墦鍗版槑纭彁绀哄苟閫€鍑?
+    - 涓嶅啀鍑虹幇鈥滃厛鍚姩涓€鍫?worker锛屾渶鍚?uvicorn 鎵嶆姤 10048鈥濈殑浣庢晥琛屼负
   - `scripts/stop-backend.cjs`
-    - 新增一键停止脚本：优先尝试 `backend/backend.pid`，再兜底清理占用 `3010` 的进程
-    - `package.json` 已新增 `npm run stop:backend`
+    - 鏂板涓€閿仠姝㈣剼鏈細浼樺厛灏濊瘯 `backend/backend.pid`锛屽啀鍏滃簳娓呯悊鍗犵敤 `3010` 鐨勮繘绋?
+    - `package.json` 宸叉柊澧?`npm run stop:backend`
   - `AGENTS.md`
-    - 项目规则已改为：默认不要替用户自动启动或重启本地前后端
-    - 只有用户明确要求“你来启动/重启/运行”时才允许代理动本地常驻进程
+    - 椤圭洰瑙勫垯宸叉敼涓猴細榛樿涓嶈鏇跨敤鎴疯嚜鍔ㄥ惎鍔ㄦ垨閲嶅惎鏈湴鍓嶅悗绔?
+    - 鍙湁鐢ㄦ埛鏄庣‘瑕佹眰鈥滀綘鏉ュ惎鍔?閲嶅惎/杩愯鈥濇椂鎵嶅厑璁镐唬鐞嗗姩鏈湴甯搁┗杩涚▼
 - Notes:
-  - 用户明确要求：AI 永远不要自动运行；本地前后端统一由用户自己手动启动和关闭
-  - 已手动清理掉占用 `3010` 的残留 `python.exe backend\\run_backend.py`
+  - 鐢ㄦ埛鏄庣‘瑕佹眰锛欰I 姘歌繙涓嶈鑷姩杩愯锛涙湰鍦板墠鍚庣缁熶竴鐢辩敤鎴疯嚜宸辨墜鍔ㄥ惎鍔ㄥ拰鍏抽棴
+  - 宸叉墜鍔ㄦ竻鐞嗘帀鍗犵敤 `3010` 鐨勬畫鐣?`python.exe backend\\run_backend.py`
 
-- Task: 食物测试后台支持“可复用测试集”而不是每次重新上传 ZIP
-- Status: in_progress（代码已接入后端 API + 后台页面入口；按用户最新要求，本轮不做本地运行验证）
+- Task: 椋熺墿娴嬭瘯鍚庡彴鏀寔鈥滃彲澶嶇敤娴嬭瘯闆嗏€濊€屼笉鏄瘡娆￠噸鏂颁笂浼?ZIP
+- Status: in_progress锛堜唬鐮佸凡鎺ュ叆鍚庣 API + 鍚庡彴椤甸潰鍏ュ彛锛涙寜鐢ㄦ埛鏈€鏂拌姹傦紝鏈疆涓嶅仛鏈湴杩愯楠岃瘉锛?
 - Scope:
-  - 目标口径：
-    - 后台批量测试不再只依赖“临时上传 ZIP -> 当前浏览器内批次”
-    - 增加“可复用测试集”能力：可从服务器本机目录导入一个标准测试集，持久化到云端，之后在后台列表中反复载入为新批次
-    - ZIP 仍保留为兼容导入格式，但不再作为长期复用的主工作流
-    - 未标注样本既然在导入时已忽略，后台列表中的样本数也必须只显示“可测样本数”，不能再显示源目录总图数（例如 `33/37`）
-  - 已完成代码：
+  - 鐩爣鍙ｅ緞锛?
+    - 鍚庡彴鎵归噺娴嬭瘯涓嶅啀鍙緷璧栤€滀复鏃朵笂浼?ZIP -> 褰撳墠娴忚鍣ㄥ唴鎵规鈥?
+    - 澧炲姞鈥滃彲澶嶇敤娴嬭瘯闆嗏€濊兘鍔涳細鍙粠鏈嶅姟鍣ㄦ湰鏈虹洰褰曞鍏ヤ竴涓爣鍑嗘祴璇曢泦锛屾寔涔呭寲鍒颁簯绔紝涔嬪悗鍦ㄥ悗鍙板垪琛ㄤ腑鍙嶅杞藉叆涓烘柊鎵规
+    - ZIP 浠嶄繚鐣欎负鍏煎瀵煎叆鏍煎紡锛屼絾涓嶅啀浣滀负闀挎湡澶嶇敤鐨勪富宸ヤ綔娴?
+    - 鏈爣娉ㄦ牱鏈棦鐒跺湪瀵煎叆鏃跺凡蹇界暐锛屽悗鍙板垪琛ㄤ腑鐨勬牱鏈暟涔熷繀椤诲彧鏄剧ず鈥滃彲娴嬫牱鏈暟鈥濓紝涓嶈兘鍐嶆樉绀烘簮鐩綍鎬诲浘鏁帮紙渚嬪 `33/37`锛?
+  - 宸插畬鎴愪唬鐮侊細
     - `backend/sql/add_test_backend_datasets.sql`
-      - 新增 `test_backend_datasets`、`test_backend_dataset_items` 两张表
+      - 鏂板 `test_backend_datasets`銆乣test_backend_dataset_items` 涓ゅ紶琛?
     - `backend/database.py`
-      - 新增测试集增删查相关方法：`list/get/create/insert_items/list_items`
+      - 鏂板娴嬭瘯闆嗗鍒犳煡鐩稿叧鏂规硶锛歚list/get/create/insert_items/list_items`
     - `backend/main.py`
-      - 新增本地目录扫描：`_scan_test_backend_local_dataset_dir(...)`
-      - 新增测试集转批次：`_build_test_backend_batch_from_dataset(...)`
-      - 新增接口：
+      - 鏂板鏈湴鐩綍鎵弿锛歚_scan_test_backend_local_dataset_dir(...)`
+      - 鏂板娴嬭瘯闆嗚浆鎵规锛歚_build_test_backend_batch_from_dataset(...)`
+      - 鏂板鎺ュ彛锛?
         - `GET /api/test-backend/datasets`
         - `POST /api/test-backend/datasets/import-local`
         - `POST /api/test-backend/datasets/{dataset_id}/prepare`
     - `backend/static/test_backend/index.html`
-      - 批量测试页新增“可复用测试集”区域、导入按钮、测试集表格
+      - 鎵归噺娴嬭瘯椤垫柊澧炩€滃彲澶嶇敤娴嬭瘯闆嗏€濆尯鍩熴€佸鍏ユ寜閽€佹祴璇曢泦琛ㄦ牸
     - `backend/static/test_backend/app.js`
-      - 新增 `loadTestDatasets / renderDatasetsTable / importLocalDataset / prepareSavedDatasetBatch`
-  - 本轮暂不做的事：
-    - 不处理本地 `3010` 旧进程替换
-    - 不做本地页面验证、接口联调、端口排查
+      - 鏂板 `loadTestDatasets / renderDatasetsTable / importLocalDataset / prepareSavedDatasetBatch`
+  - 鏈疆鏆備笉鍋氱殑浜嬶細
+    - 涓嶅鐞嗘湰鍦?`3010` 鏃ц繘绋嬫浛鎹?
+    - 涓嶅仛鏈湴椤甸潰楠岃瘉銆佹帴鍙ｈ仈璋冦€佺鍙ｆ帓鏌?
 - Blocked / Next:
-  - 需要把 `backend/sql/add_test_backend_datasets.sql` 执行到 Supabase
-  - 导入完成后，建议把 `D:\创业\healthymax\food_test_sanitized_20260424` 注册成首个长期复用测试集
+  - 闇€瑕佹妸 `backend/sql/add_test_backend_datasets.sql` 鎵ц鍒?Supabase
+  - 瀵煎叆瀹屾垚鍚庯紝寤鸿鎶?`D:\鍒涗笟\healthymax\food_test_sanitized_20260424` 娉ㄥ唽鎴愰涓暱鏈熷鐢ㄦ祴璇曢泦
   - Latest:
-  - `food_test_20260424` 已成功导入为可复用测试集，ID=`46ccb0ef-0fa2-484a-b06e-595f0c05120f`
-  - 已从该测试集生成 pending 批次，批次 ID=`80bc6b6a92fe1b687430698c`
-  - 已修正展示与存储口径：该测试集现在显示 `itemCount=33`、`unlabeledCount=0`，不再显示 `33/37`
-  - 已新增第二个小型测试集 `food_test_20260424_mini10`，从 33 张已标注样本中按固定随机种子 `20260424` 抽取 10 张
-  - 小型测试集目录：`D:\创业\healthymax\food_test_sanitized_20260424_mini10`
-  - 小型测试集 ID：`c4b74960-d83a-4f05-a2d4-babfeb7886d3`
-  - 已从小型测试集生成 pending 批次，批次 ID=`894ecc623c4fd89068fcfdfb`
-  - 测试后台模型选项已收口为两个 Gemini 具体型号：`gemini-3-flash-preview`、`gemini-3.1-flash-lite-preview`
-  - 用户最新要求：测试后台做 prompt 实验时，暂时不要再走 `backend/worker.py` 主链路默认 prompt；分析体验 / 批量测试 / 可复用测试集批次应优先读取 `model_prompts` 中当前激活的 `gemini` 提示词
-  - 已完成代码切换：`backend/main.py::_run_test_backend_provider_analysis(...)` 现优先读取 `get_active_prompt("gemini")`，只有当激活提示词为空时才回退 `backend/worker.py::_build_food_prompt`
-  - 已继续收口 UI 与接口：测试后台保留 `standard / strict` 两种原有模式，并新增 `custom` 自定义模式；只有 `custom` 才读取“提示词管理”里的 Gemini 自定义提示词，后端新增 `prompt_id` 透传，若未选择或提示词为空才回退 `backend/worker.py::_build_food_prompt`
-  - `backend/static/test_backend/index.html` 与 `backend/static/test_backend/app.js` 已改成“三模式并存”：分析体验与批量测试都保留模式选择；自定义提示词选择器仅在 `custom` 模式下生效；结果区会展示本次实际使用的模式与提示词名称
-  - 已继续清理“提示词管理”页心智：去掉页内单独的模型切换按钮；提示词管理只维护 `custom` 模式会使用的 Gemini 自定义提示词，实际跑哪个模型一律以“分析体验 / 批量测试”页面的模型勾选为准
-  - 已修正单图多模型结果展示：此前前端摘要区会列出多个模型，但“AI 分析结果 / 识别食物明细”只渲染第一个成功模型，导致看起来像只返回了一份结果；现在改为按模型分别展示完整结果卡，摘要区也显示具体模型名
-  - 已把测试后台评测口径升级为两阶段 benchmark：
-    - `backend/test_backend/utils.py` 现先做食物匹配，再算匹配食物重量误差，最后保留总重量误差
-    - 新增指标：`Food Precision / Recall / F1`、`matchedWeightMaeGrams`、`matchedWeightRelativeError`（按 `max(gt, 50g)` 归一化）、`matchedWeightScore`、`weightedFoodRecall`、`finalCompositeScore`
-    - `2026-04-27` 继续升级：`items` 模式的食物匹配评估器已切到 DeepSeek（`deepseek-v4-flash`）主判定；代码继续负责最终算分，不把总分交给模型黑箱
-    - 当前仍保留 deterministic matcher 作为兜底；当 `DEEPSEEK_API_KEY` 缺失或 API 异常时，会回退到本地规则匹配，并在结果里显式返回 `evaluatorSource / evaluatorError`
-  - 已把 benchmark 展示接到测试后台 UI：
-    - 单图分析卡与批量详情都会展示 `综合分 + Food F1 + 匹配食物 MAE + 匹配食物相对误差 + 总重量误差`
-    - 批量页顶部会按模型显示“平均综合分”或“平均总重误差”，便于直接做模型/提示词对比
-    - 结果区会额外显示“匹配评估器”：`DeepSeek evaluator / 本地规则兜底 / 总重直算`
-  - `2026-04-28` 已继续收口结果展示口径：
-    - 单图页顶部“分析摘要”不再展示歧义性的共享 `估算总重量 / 估算总热量`，改为只展示全局信息：图片数、参与模型数、标签模式、标准总重量、最佳综合分模型/最低总重误差模型
-    - 每个模型结果卡单独展示自己的 `估重 / 热量 / 回答时长`
-    - 批量页顶部摘要新增“各模型平均回答时长”，便于直接比较生产可用性
-  - `2026-04-28` 已继续收口为“只测食物名称 + 重量”的 benchmark 页面：
-    - 后端测试链路不再为缺失的 `description / insight` 强塞占位默认文案
-    - 单图与批量详情页移除描述、建议、PFC、吸收率、情境建议、热量等主展示内容
-    - 结果页与批量列表改为突出 `识别结果摘要 / 识别食物明细 / benchmark 指标 / 回答时长`
-    - 提示词管理说明补充：`custom` 模式提示词可以只返回 `items[].name + items[].estimatedWeightGrams`
-  - `2026-04-28` 已修正 benchmark 报告的一个关键呈现问题：
-    - 对于“模型识别到了某个候选，但 DeepSeek 判定它和标准标签不匹配”的情况，评测表不再直接写成“未识别”
-    - 现在会保留该候选识别结果和重量，并显示对应匹配类型（如 `识别成其他食物 / 名称过泛 / 未匹配`）
-    - 这样像 `炖冬瓜（含虾米少量） -> 白萝卜` 这类错误，会明确显示成“识别错了什么”，而不是看起来像模型完全没看到
-  - `2026-04-28` 已继续修正 DeepSeek evaluator 的“未匹配候选回填”：
-    - DeepSeek prompt 现在明确要求：对每个 `expected_item` 都返回一条 assignment；即使 `accepted=false`，也要尽量给出最像的 `predicted_index`
-    - 若 DeepSeek 仍漏掉 rejected candidate，本地兜底会用更宽松的“主体食材候选”规则回填展示候选（如去掉 `清炒 / 炖 / 红烧` 等做法前缀后再比较）
-    - 这类回填只用于报告展示，不会改变评分；`status / Food F1 / Precision / Recall` 仍按未匹配处理
-  - `2026-04-28` 已继续适配新的 item-only prompt 结构：
-    - DeepSeek evaluator 现在会读取并透传 `isMixedDish / count / confidence` 到匹配 prompt
-    - 对标签侧没有显式 `isMixedDish` 的项，会基于名称做保守启发式推断（如带 `含...`、括号辅料说明、明显混合菜词）
-    - DeepSeek prompt 已新增“混合菜匹配规则”：混合菜优先匹配混合菜，单食物不要轻易匹配成明显混合菜
-    - 当前 `confidence / count / totalEstimatedWeightGrams` 仅用于辅助匹配，不进入正式 benchmark 主评分
-  - `2026-04-28` 已修复本地脱敏测试集标签的一处 benchmark 口径问题：
-    - `D:\创业\healthymax\food_test_sanitized_20260424\labels.txt` 与 `...\food_test_sanitized_20260424_mini10\labels.txt` 中，原先很多“单食物 / 单菜品”样本只有总重量、没有标准食物名
-    - 现已把可明确识别为单食物的样本改成单项 `items` 标签，如 `德芙巧克力=14g`、`黑咖啡=245g`、`牛油拌饭=204g`
-    - 多食物总重、未知食物、空包装 `0g` 样本仍先保留 `total`，避免硬猜错误标签
-    - 私有映射表 `D:\创业\healthymax\food_test_sanitized_20260424_private_mapping.csv` 也已同步更新
+  - `food_test_20260424` 宸叉垚鍔熷鍏ヤ负鍙鐢ㄦ祴璇曢泦锛孖D=`46ccb0ef-0fa2-484a-b06e-595f0c05120f`
+  - 宸蹭粠璇ユ祴璇曢泦鐢熸垚 pending 鎵规锛屾壒娆?ID=`80bc6b6a92fe1b687430698c`
+  - 宸蹭慨姝ｅ睍绀轰笌瀛樺偍鍙ｅ緞锛氳娴嬭瘯闆嗙幇鍦ㄦ樉绀?`itemCount=33`銆乣unlabeledCount=0`锛屼笉鍐嶆樉绀?`33/37`
+  - 宸叉柊澧炵浜屼釜灏忓瀷娴嬭瘯闆?`food_test_20260424_mini10`锛屼粠 33 寮犲凡鏍囨敞鏍锋湰涓寜鍥哄畾闅忔満绉嶅瓙 `20260424` 鎶藉彇 10 寮?
+  - 灏忓瀷娴嬭瘯闆嗙洰褰曪細`D:\鍒涗笟\healthymax\food_test_sanitized_20260424_mini10`
+  - 灏忓瀷娴嬭瘯闆?ID锛歚c4b74960-d83a-4f05-a2d4-babfeb7886d3`
+  - 宸蹭粠灏忓瀷娴嬭瘯闆嗙敓鎴?pending 鎵规锛屾壒娆?ID=`894ecc623c4fd89068fcfdfb`
+  - 娴嬭瘯鍚庡彴妯″瀷閫夐」宸叉敹鍙ｄ负涓や釜 Gemini 鍏蜂綋鍨嬪彿锛歚gemini-3-flash-preview`銆乣gemini-3.1-flash-lite-preview`
+  - 鐢ㄦ埛鏈€鏂拌姹傦細娴嬭瘯鍚庡彴鍋?prompt 瀹為獙鏃讹紝鏆傛椂涓嶈鍐嶈蛋 `backend/worker.py` 涓婚摼璺粯璁?prompt锛涘垎鏋愪綋楠?/ 鎵归噺娴嬭瘯 / 鍙鐢ㄦ祴璇曢泦鎵规搴斾紭鍏堣鍙?`model_prompts` 涓綋鍓嶆縺娲荤殑 `gemini` 鎻愮ず璇?
+  - 宸插畬鎴愪唬鐮佸垏鎹細`backend/main.py::_run_test_backend_provider_analysis(...)` 鐜颁紭鍏堣鍙?`get_active_prompt("gemini")`锛屽彧鏈夊綋婵€娲绘彁绀鸿瘝涓虹┖鏃舵墠鍥為€€ `backend/worker.py::_build_food_prompt`
+  - 宸茬户缁敹鍙?UI 涓庢帴鍙ｏ細娴嬭瘯鍚庡彴淇濈暀 `standard / strict` 涓ょ鍘熸湁妯″紡锛屽苟鏂板 `custom` 鑷畾涔夋ā寮忥紱鍙湁 `custom` 鎵嶈鍙栤€滄彁绀鸿瘝绠＄悊鈥濋噷鐨?Gemini 鑷畾涔夋彁绀鸿瘝锛屽悗绔柊澧?`prompt_id` 閫忎紶锛岃嫢鏈€夋嫨鎴栨彁绀鸿瘝涓虹┖鎵嶅洖閫€ `backend/worker.py::_build_food_prompt`
+  - `backend/static/test_backend/index.html` 涓?`backend/static/test_backend/app.js` 宸叉敼鎴愨€滀笁妯″紡骞跺瓨鈥濓細鍒嗘瀽浣撻獙涓庢壒閲忔祴璇曢兘淇濈暀妯″紡閫夋嫨锛涜嚜瀹氫箟鎻愮ず璇嶉€夋嫨鍣ㄤ粎鍦?`custom` 妯″紡涓嬬敓鏁堬紱缁撴灉鍖轰細灞曠ず鏈瀹為檯浣跨敤鐨勬ā寮忎笌鎻愮ず璇嶅悕绉?
+  - 宸茬户缁竻鐞嗏€滄彁绀鸿瘝绠＄悊鈥濋〉蹇冩櫤锛氬幓鎺夐〉鍐呭崟鐙殑妯″瀷鍒囨崲鎸夐挳锛涙彁绀鸿瘝绠＄悊鍙淮鎶?`custom` 妯″紡浼氫娇鐢ㄧ殑 Gemini 鑷畾涔夋彁绀鸿瘝锛屽疄闄呰窇鍝釜妯″瀷涓€寰嬩互鈥滃垎鏋愪綋楠?/ 鎵归噺娴嬭瘯鈥濋〉闈㈢殑妯″瀷鍕鹃€変负鍑?
+  - 宸蹭慨姝ｅ崟鍥惧妯″瀷缁撴灉灞曠ず锛氭鍓嶅墠绔憳瑕佸尯浼氬垪鍑哄涓ā鍨嬶紝浣嗏€淎I 鍒嗘瀽缁撴灉 / 璇嗗埆椋熺墿鏄庣粏鈥濆彧娓叉煋绗竴涓垚鍔熸ā鍨嬶紝瀵艰嚧鐪嬭捣鏉ュ儚鍙繑鍥炰簡涓€浠界粨鏋滐紱鐜板湪鏀逛负鎸夋ā鍨嬪垎鍒睍绀哄畬鏁寸粨鏋滃崱锛屾憳瑕佸尯涔熸樉绀哄叿浣撴ā鍨嬪悕
+  - 宸叉妸娴嬭瘯鍚庡彴璇勬祴鍙ｅ緞鍗囩骇涓轰袱闃舵 benchmark锛?
+    - `backend/test_backend/utils.py` 鐜板厛鍋氶鐗╁尮閰嶏紝鍐嶇畻鍖归厤椋熺墿閲嶉噺璇樊锛屾渶鍚庝繚鐣欐€婚噸閲忚宸?
+    - 鏂板鎸囨爣锛歚Food Precision / Recall / F1`銆乣matchedWeightMaeGrams`銆乣matchedWeightRelativeError`锛堟寜 `max(gt, 50g)` 褰掍竴鍖栵級銆乣matchedWeightScore`銆乣weightedFoodRecall`銆乣finalCompositeScore`
+    - `2026-04-27` 缁х画鍗囩骇锛歚items` 妯″紡鐨勯鐗╁尮閰嶈瘎浼板櫒宸插垏鍒?DeepSeek锛坄deepseek-v4-flash`锛変富鍒ゅ畾锛涗唬鐮佺户缁礋璐ｆ渶缁堢畻鍒嗭紝涓嶆妸鎬诲垎浜ょ粰妯″瀷榛戠
+    - 褰撳墠浠嶄繚鐣?deterministic matcher 浣滀负鍏滃簳锛涘綋 `DEEPSEEK_API_KEY` 缂哄け鎴?API 寮傚父鏃讹紝浼氬洖閫€鍒版湰鍦拌鍒欏尮閰嶏紝骞跺湪缁撴灉閲屾樉寮忚繑鍥?`evaluatorSource / evaluatorError`
+  - 宸叉妸 benchmark 灞曠ず鎺ュ埌娴嬭瘯鍚庡彴 UI锛?
+    - 鍗曞浘鍒嗘瀽鍗′笌鎵归噺璇︽儏閮戒細灞曠ず `缁煎悎鍒?+ Food F1 + 鍖归厤椋熺墿 MAE + 鍖归厤椋熺墿鐩稿璇樊 + 鎬婚噸閲忚宸甡
+    - 鎵归噺椤甸《閮ㄤ細鎸夋ā鍨嬫樉绀衡€滃钩鍧囩患鍚堝垎鈥濇垨鈥滃钩鍧囨€婚噸璇樊鈥濓紝渚夸簬鐩存帴鍋氭ā鍨?鎻愮ず璇嶅姣?
+    - 缁撴灉鍖轰細棰濆鏄剧ず鈥滃尮閰嶈瘎浼板櫒鈥濓細`DeepSeek evaluator / 鏈湴瑙勫垯鍏滃簳 / 鎬婚噸鐩寸畻`
+  - `2026-04-28` 宸茬户缁敹鍙ｇ粨鏋滃睍绀哄彛寰勶細
+    - 鍗曞浘椤甸《閮ㄢ€滃垎鏋愭憳瑕佲€濅笉鍐嶅睍绀烘涔夋€х殑鍏变韩 `浼扮畻鎬婚噸閲?/ 浼扮畻鎬荤儹閲廯锛屾敼涓哄彧灞曠ず鍏ㄥ眬淇℃伅锛氬浘鐗囨暟銆佸弬涓庢ā鍨嬫暟銆佹爣绛炬ā寮忋€佹爣鍑嗘€婚噸閲忋€佹渶浣崇患鍚堝垎妯″瀷/鏈€浣庢€婚噸璇樊妯″瀷
+    - 姣忎釜妯″瀷缁撴灉鍗″崟鐙睍绀鸿嚜宸辩殑 `浼伴噸 / 鐑噺 / 鍥炵瓟鏃堕暱`
+    - 鎵归噺椤甸《閮ㄦ憳瑕佹柊澧炩€滃悇妯″瀷骞冲潎鍥炵瓟鏃堕暱鈥濓紝渚夸簬鐩存帴姣旇緝鐢熶骇鍙敤鎬?
+  - `2026-04-28` 宸茬户缁敹鍙ｄ负鈥滃彧娴嬮鐗╁悕绉?+ 閲嶉噺鈥濈殑 benchmark 椤甸潰锛?
+    - 鍚庣娴嬭瘯閾捐矾涓嶅啀涓虹己澶辩殑 `description / insight` 寮哄鍗犱綅榛樿鏂囨
+    - 鍗曞浘涓庢壒閲忚鎯呴〉绉婚櫎鎻忚堪銆佸缓璁€丳FC銆佸惛鏀剁巼銆佹儏澧冨缓璁€佺儹閲忕瓑涓诲睍绀哄唴瀹?
+    - 缁撴灉椤典笌鎵归噺鍒楄〃鏀逛负绐佸嚭 `璇嗗埆缁撴灉鎽樿 / 璇嗗埆椋熺墿鏄庣粏 / benchmark 鎸囨爣 / 鍥炵瓟鏃堕暱`
+    - 鎻愮ず璇嶇鐞嗚鏄庤ˉ鍏咃細`custom` 妯″紡鎻愮ず璇嶅彲浠ュ彧杩斿洖 `items[].name + items[].estimatedWeightGrams`
+  - `2026-04-28` 宸蹭慨姝?benchmark 鎶ュ憡鐨勪竴涓叧閿憟鐜伴棶棰橈細
+    - 瀵逛簬鈥滄ā鍨嬭瘑鍒埌浜嗘煇涓€欓€夛紝浣?DeepSeek 鍒ゅ畾瀹冨拰鏍囧噯鏍囩涓嶅尮閰嶁€濈殑鎯呭喌锛岃瘎娴嬭〃涓嶅啀鐩存帴鍐欐垚鈥滄湭璇嗗埆鈥?
+    - 鐜板湪浼氫繚鐣欒鍊欓€夎瘑鍒粨鏋滃拰閲嶉噺锛屽苟鏄剧ず瀵瑰簲鍖归厤绫诲瀷锛堝 `璇嗗埆鎴愬叾浠栭鐗?/ 鍚嶇О杩囨硾 / 鏈尮閰峘锛?
+    - 杩欐牱鍍?`鐐栧啲鐡滐紙鍚櫨绫冲皯閲忥級 -> 鐧借悵鍗渀 杩欑被閿欒锛屼細鏄庣‘鏄剧ず鎴愨€滆瘑鍒敊浜嗕粈涔堚€濓紝鑰屼笉鏄湅璧锋潵鍍忔ā鍨嬪畬鍏ㄦ病鐪嬪埌
+  - `2026-04-28` 宸茬户缁慨姝?DeepSeek evaluator 鐨勨€滄湭鍖归厤鍊欓€夊洖濉€濓細
+    - DeepSeek prompt 鐜板湪鏄庣‘瑕佹眰锛氬姣忎釜 `expected_item` 閮借繑鍥炰竴鏉?assignment锛涘嵆浣?`accepted=false`锛屼篃瑕佸敖閲忕粰鍑烘渶鍍忕殑 `predicted_index`
+    - 鑻?DeepSeek 浠嶆紡鎺?rejected candidate锛屾湰鍦板厹搴曚細鐢ㄦ洿瀹芥澗鐨勨€滀富浣撻鏉愬€欓€夆€濊鍒欏洖濉睍绀哄€欓€夛紙濡傚幓鎺?`娓呯倰 / 鐐?/ 绾㈢儳` 绛夊仛娉曞墠缂€鍚庡啀姣旇緝锛?
+    - 杩欑被鍥炲～鍙敤浜庢姤鍛婂睍绀猴紝涓嶄細鏀瑰彉璇勫垎锛沗status / Food F1 / Precision / Recall` 浠嶆寜鏈尮閰嶅鐞?
+  - `2026-04-28` 宸茬户缁€傞厤鏂扮殑 item-only prompt 缁撴瀯锛?
+    - DeepSeek evaluator 鐜板湪浼氳鍙栧苟閫忎紶 `isMixedDish / count / confidence` 鍒板尮閰?prompt
+    - 瀵规爣绛句晶娌℃湁鏄惧紡 `isMixedDish` 鐨勯」锛屼細鍩轰簬鍚嶇О鍋氫繚瀹堝惎鍙戝紡鎺ㄦ柇锛堝甯?`鍚?..`銆佹嫭鍙疯緟鏂欒鏄庛€佹槑鏄炬贩鍚堣彍璇嶏級
+    - DeepSeek prompt 宸叉柊澧炩€滄贩鍚堣彍鍖归厤瑙勫垯鈥濓細娣峰悎鑿滀紭鍏堝尮閰嶆贩鍚堣彍锛屽崟椋熺墿涓嶈杞绘槗鍖归厤鎴愭槑鏄炬贩鍚堣彍
+    - 褰撳墠 `confidence / count / totalEstimatedWeightGrams` 浠呯敤浜庤緟鍔╁尮閰嶏紝涓嶈繘鍏ユ寮?benchmark 涓昏瘎鍒?
+  - `2026-04-28` 宸蹭慨澶嶆湰鍦拌劚鏁忔祴璇曢泦鏍囩鐨勪竴澶?benchmark 鍙ｅ緞闂锛?
+    - `D:\鍒涗笟\healthymax\food_test_sanitized_20260424\labels.txt` 涓?`...\food_test_sanitized_20260424_mini10\labels.txt` 涓紝鍘熷厛寰堝鈥滃崟椋熺墿 / 鍗曡彍鍝佲€濇牱鏈彧鏈夋€婚噸閲忋€佹病鏈夋爣鍑嗛鐗╁悕
+    - 鐜板凡鎶婂彲鏄庣‘璇嗗埆涓哄崟椋熺墿鐨勬牱鏈敼鎴愬崟椤?`items` 鏍囩锛屽 `寰疯姍宸у厠鍔?14g`銆乣榛戝挅鍟?245g`銆乣鐗涙补鎷岄キ=204g`
+    - 澶氶鐗╂€婚噸銆佹湭鐭ラ鐗┿€佺┖鍖呰 `0g` 鏍锋湰浠嶅厛淇濈暀 `total`锛岄伩鍏嶇‖鐚滈敊璇爣绛?
+    - 绉佹湁鏄犲皠琛?`D:\鍒涗笟\healthymax\food_test_sanitized_20260424_private_mapping.csv` 涔熷凡鍚屾鏇存柊
 - Notes:
-  - 用户已明确：本轮不需要本地运行验证，只要把代码写好即可
-  - 本轮改的是后端静态测试后台，不涉及微信小程序页面
+  - 鐢ㄦ埛宸叉槑纭細鏈疆涓嶉渶瑕佹湰鍦拌繍琛岄獙璇侊紝鍙鎶婁唬鐮佸啓濂藉嵆鍙?
+  - 鏈疆鏀圭殑鏄悗绔潤鎬佹祴璇曞悗鍙帮紝涓嶆秹鍙婂井淇″皬绋嬪簭椤甸潰
 
-- Task: 本地 `food_test` 脱敏数据集整理并上传测试后台
-- Status: done（已基于 `D:\创业\healthymax\food_test` 生成无标签文件名的新数据集目录；图片统一改为匿名 `sample_XXXX`，标签独立写入 `labels.txt`；已上传到本地测试后台 pending 批次）
+- Task: 鏈湴 `food_test` 鑴辨晱鏁版嵁闆嗘暣鐞嗗苟涓婁紶娴嬭瘯鍚庡彴
+- Status: done锛堝凡鍩轰簬 `D:\鍒涗笟\healthymax\food_test` 鐢熸垚鏃犳爣绛炬枃浠跺悕鐨勬柊鏁版嵁闆嗙洰褰曪紱鍥剧墖缁熶竴鏀逛负鍖垮悕 `sample_XXXX`锛屾爣绛剧嫭绔嬪啓鍏?`labels.txt`锛涘凡涓婁紶鍒版湰鍦版祴璇曞悗鍙?pending 鎵规锛?
 - Scope:
-  - 数据集整理：
-    - 原目录未改动：`D:\创业\healthymax\food_test`
-    - 新脱敏目录：`D:\创业\healthymax\food_test_sanitized_20260424`
-    - 上传 ZIP：`D:\创业\healthymax\food_test_sanitized_20260424_upload.zip`
-    - 私有映射表（不放进上传包）：`D:\创业\healthymax\food_test_sanitized_20260424_private_mapping.csv`
-  - 标签口径：
-    - 总样本 `37` 张，其中已标注 `33` 张、未标注 `4` 张
-    - 总重量样本写入 `labels.txt` 的 `total` 格式：`sample_0001.png 134g`
-    - 用户提供细分标签的 `4` 张工作餐样本写入 `items` 格式，逐项食物与克重已拆开记录
-    - 当前未标注样本（脱敏后文件名）记录在 `unlabeled_samples.txt`：`sample_0006.png`、`sample_0011.jpg`、`sample_0032.jpg`、`sample_0033.jpg`
-    - 用户最新确认：未标注样本目前直接忽略，不再作为本轮待补任务处理
-  - 上传结果：
-    - 本地测试后台 `POST /api/test-backend/batch/prepare` 已成功接收脱敏 ZIP
-    - 批次号：`6536d31ee0ec7103d7ea3ad1`
-    - 当前状态：`pending`
-    - 可处理样本数：`33`
-    - 跳过未标注样本数：`4`
+  - 鏁版嵁闆嗘暣鐞嗭細
+    - 鍘熺洰褰曟湭鏀瑰姩锛歚D:\鍒涗笟\healthymax\food_test`
+    - 鏂拌劚鏁忕洰褰曪細`D:\鍒涗笟\healthymax\food_test_sanitized_20260424`
+    - 涓婁紶 ZIP锛歚D:\鍒涗笟\healthymax\food_test_sanitized_20260424_upload.zip`
+    - 绉佹湁鏄犲皠琛紙涓嶆斁杩涗笂浼犲寘锛夛細`D:\鍒涗笟\healthymax\food_test_sanitized_20260424_private_mapping.csv`
+  - 鏍囩鍙ｅ緞锛?
+    - 鎬绘牱鏈?`37` 寮狅紝鍏朵腑宸叉爣娉?`33` 寮犮€佹湭鏍囨敞 `4` 寮?
+    - 鎬婚噸閲忔牱鏈啓鍏?`labels.txt` 鐨?`total` 鏍煎紡锛歚sample_0001.png 134g`
+    - 鐢ㄦ埛鎻愪緵缁嗗垎鏍囩鐨?`4` 寮犲伐浣滈鏍锋湰鍐欏叆 `items` 鏍煎紡锛岄€愰」椋熺墿涓庡厠閲嶅凡鎷嗗紑璁板綍
+    - 褰撳墠鏈爣娉ㄦ牱鏈紙鑴辨晱鍚庢枃浠跺悕锛夎褰曞湪 `unlabeled_samples.txt`锛歚sample_0006.png`銆乣sample_0011.jpg`銆乣sample_0032.jpg`銆乣sample_0033.jpg`
+    - 鐢ㄦ埛鏈€鏂扮‘璁わ細鏈爣娉ㄦ牱鏈洰鍓嶇洿鎺ュ拷鐣ワ紝涓嶅啀浣滀负鏈疆寰呰ˉ浠诲姟澶勭悊
+  - 涓婁紶缁撴灉锛?
+    - 鏈湴娴嬭瘯鍚庡彴 `POST /api/test-backend/batch/prepare` 宸叉垚鍔熸帴鏀惰劚鏁?ZIP
+    - 鎵规鍙凤細`6536d31ee0ec7103d7ea3ad1`
+    - 褰撳墠鐘舵€侊細`pending`
+    - 鍙鐞嗘牱鏈暟锛歚33`
+    - 璺宠繃鏈爣娉ㄦ牱鏈暟锛歚4`
 - Verification:
-  - 数据集脱敏复制完成，原目录未改动
-  - ZIP 体积约 `35.76 MB`，低于测试后台 `50 MB` 限制
-  - `sample_0014.png`、`sample_0015.png`、`sample_0016.png`、`sample_0017.png` 已在后台返回 `labelMode=items`
-  - 其余带总重量标签样本在后台返回 `labelMode=total`
+  - 鏁版嵁闆嗚劚鏁忓鍒跺畬鎴愶紝鍘熺洰褰曟湭鏀瑰姩
+  - ZIP 浣撶Н绾?`35.76 MB`锛屼綆浜庢祴璇曞悗鍙?`50 MB` 闄愬埗
+  - `sample_0014.png`銆乣sample_0015.png`銆乣sample_0016.png`銆乣sample_0017.png` 宸插湪鍚庡彴杩斿洖 `labelMode=items`
+  - 鍏朵綑甯︽€婚噸閲忔爣绛炬牱鏈湪鍚庡彴杩斿洖 `labelMode=total`
 - Notes:
-  - 本轮只做“上传准备”，没有启动批量分析，避免直接消耗上游模型额度
-  - 这是本地数据集整理与后台上传，不涉及微信小程序页面，因此未使用 `weapp-devtools`
+  - 鏈疆鍙仛鈥滀笂浼犲噯澶団€濓紝娌℃湁鍚姩鎵归噺鍒嗘瀽锛岄伩鍏嶇洿鎺ユ秷鑰椾笂娓告ā鍨嬮搴?
+  - 杩欐槸鏈湴鏁版嵁闆嗘暣鐞嗕笌鍚庡彴涓婁紶锛屼笉娑夊強寰俊灏忕▼搴忛〉闈紝鍥犳鏈娇鐢?`weapp-devtools`
 
-- Task: 食物识别测试后台改造（多模型对比 + 每食物标准标签）
-- Status: done（一期已落地：后台单图/批量均支持 Qwen/Gemini 同时测试；标准标签正式支持两种模式：整餐总重量 total、每种食物克重 items；批量 ZIP `labels.txt` 可混用两种格式）
+- Task: 椋熺墿璇嗗埆娴嬭瘯鍚庡彴鏀归€狅紙澶氭ā鍨嬪姣?+ 姣忛鐗╂爣鍑嗘爣绛撅級
+- Status: done锛堜竴鏈熷凡钀藉湴锛氬悗鍙板崟鍥?鎵归噺鍧囨敮鎸?Qwen/Gemini 鍚屾椂娴嬭瘯锛涙爣鍑嗘爣绛炬寮忔敮鎸佷袱绉嶆ā寮忥細鏁撮鎬婚噸閲?total銆佹瘡绉嶉鐗╁厠閲?items锛涙壒閲?ZIP `labels.txt` 鍙贩鐢ㄤ袱绉嶆牸寮忥級
 - Scope:
-  - 后端：
-    - `backend/test_backend/utils.py`：新增两类标签解析、BOM 兼容、JSON/inline/旧格式兼容；`calculate_item_weight_evaluation` 支持 total 模式只算整餐总偏差、items 模式计算逐项匹配/偏差
-    - `backend/main.py`：`/api/test-backend/analyze` 与 `/api/test-backend/batch/*` 新增 `models`、`execution_mode`、`expected_items_json`；同一输入可并发跑 `qwen/gemini`
-    - 测试后台模型调用改为复用 `backend/worker.py::_build_food_prompt` 生成主链路动态 prompt，不再用 `model_prompts` 旧提示词做评测
-    - 批量任务结果新增 `labelMode`、`expectedItems`、`modelResults`、逐项匹配/缺失/额外识别/总重量偏差
-  - 后台页面：
-    - `backend/static/test_backend/index.html|app.js|style.css`：新增模型勾选、standard/strict 模式选择、单图标准标签输入、批量标准测试集格式说明、多模型结果摘要；详情弹窗会按 total/items 模式展示不同评测口径
-    - 提示词管理页新增说明：`model_prompts` 不直接影响当前主链路测试
-  - 标准测试集说明：
-    - 新增 `backend/test_backend/fixtures/README.md`，约定 ZIP + `labels.txt` 两种格式：总重量 `图片名 500g` / `图片名 | 总重量=500g`；逐项 `图片名 | 食物=克重; 食物=克重`
+  - 鍚庣锛?
+    - `backend/test_backend/utils.py`锛氭柊澧炰袱绫绘爣绛捐В鏋愩€丅OM 鍏煎銆丣SON/inline/鏃ф牸寮忓吋瀹癸紱`calculate_item_weight_evaluation` 鏀寔 total 妯″紡鍙畻鏁撮鎬诲亸宸€乮tems 妯″紡璁＄畻閫愰」鍖归厤/鍋忓樊
+    - `backend/main.py`锛歚/api/test-backend/analyze` 涓?`/api/test-backend/batch/*` 鏂板 `models`銆乣execution_mode`銆乣expected_items_json`锛涘悓涓€杈撳叆鍙苟鍙戣窇 `qwen/gemini`
+    - 娴嬭瘯鍚庡彴妯″瀷璋冪敤鏀逛负澶嶇敤 `backend/worker.py::_build_food_prompt` 鐢熸垚涓婚摼璺姩鎬?prompt锛屼笉鍐嶇敤 `model_prompts` 鏃ф彁绀鸿瘝鍋氳瘎娴?
+    - 鎵归噺浠诲姟缁撴灉鏂板 `labelMode`銆乣expectedItems`銆乣modelResults`銆侀€愰」鍖归厤/缂哄け/棰濆璇嗗埆/鎬婚噸閲忓亸宸?
+  - 鍚庡彴椤甸潰锛?
+    - `backend/static/test_backend/index.html|app.js|style.css`锛氭柊澧炴ā鍨嬪嬀閫夈€乻tandard/strict 妯″紡閫夋嫨銆佸崟鍥炬爣鍑嗘爣绛捐緭鍏ャ€佹壒閲忔爣鍑嗘祴璇曢泦鏍煎紡璇存槑銆佸妯″瀷缁撴灉鎽樿锛涜鎯呭脊绐椾細鎸?total/items 妯″紡灞曠ず涓嶅悓璇勬祴鍙ｅ緞
+    - 鎻愮ず璇嶇鐞嗛〉鏂板璇存槑锛歚model_prompts` 涓嶇洿鎺ュ奖鍝嶅綋鍓嶄富閾捐矾娴嬭瘯
+  - 鏍囧噯娴嬭瘯闆嗚鏄庯細
+    - 鏂板 `backend/test_backend/fixtures/README.md`锛岀害瀹?ZIP + `labels.txt` 涓ょ鏍煎紡锛氭€婚噸閲?`鍥剧墖鍚?500g` / `鍥剧墖鍚?| 鎬婚噸閲?500g`锛涢€愰」 `鍥剧墖鍚?| 椋熺墿=鍏嬮噸; 椋熺墿=鍏嬮噸`
 - Verification:
-  - `python -m py_compile backend/main.py backend/test_backend/utils.py backend/test_backend/batch_processor.py backend/test_backend/single_processor.py` 通过
-  - `node --check backend/static/test_backend/app.js` 通过
-  - 纯函数样例验证：`labels.txt` 的 total/items 两种格式解析通过；total 模式不再被误判为“缺少总重量食物”，items 模式逐项偏差计算通过
-  - 已重启本地后端，`3010` 端口由新 server 监听
-  - `GET http://127.0.0.1:3010/test-backend/login` 返回 200
-  - 登录后调用 `/api/test-backend/batch/prepare` 上传测试 ZIP，成功返回 `labelMode=total/items`、`expectedItems` 与 pending 批次
+  - `python -m py_compile backend/main.py backend/test_backend/utils.py backend/test_backend/batch_processor.py backend/test_backend/single_processor.py` 閫氳繃
+  - `node --check backend/static/test_backend/app.js` 閫氳繃
+  - 绾嚱鏁版牱渚嬮獙璇侊細`labels.txt` 鐨?total/items 涓ょ鏍煎紡瑙ｆ瀽閫氳繃锛泃otal 妯″紡涓嶅啀琚鍒や负鈥滅己灏戞€婚噸閲忛鐗┾€濓紝items 妯″紡閫愰」鍋忓樊璁＄畻閫氳繃
+  - 宸查噸鍚湰鍦板悗绔紝`3010` 绔彛鐢辨柊 server 鐩戝惉
+  - `GET http://127.0.0.1:3010/test-backend/login` 杩斿洖 200
+  - 鐧诲綍鍚庤皟鐢?`/api/test-backend/batch/prepare` 涓婁紶娴嬭瘯 ZIP锛屾垚鍔熻繑鍥?`labelMode=total/items`銆乣expectedItems` 涓?pending 鎵规
 - Notes:
-  - `npm run dev:restart` 在当前 Windows/WSL 环境因 `scripts/restart-dev.sh` CRLF/`pipefail` 兼容问题失败；已改用 PowerShell 精确重启 3010 后端
-  - 本轮改的是后端静态测试后台，不是微信小程序页面，因此未使用 `weapp-devtools` 做小程序 UI 截图
-  - 真实模型分析接口未用假图片触发，以避免浪费上游模型额度；已验证到登录、静态资源和批量解析层
+  - `npm run dev:restart` 鍦ㄥ綋鍓?Windows/WSL 鐜鍥?`scripts/restart-dev.sh` CRLF/`pipefail` 鍏煎闂澶辫触锛涘凡鏀圭敤 PowerShell 绮剧‘閲嶅惎 3010 鍚庣
+  - 鏈疆鏀圭殑鏄悗绔潤鎬佹祴璇曞悗鍙帮紝涓嶆槸寰俊灏忕▼搴忛〉闈紝鍥犳鏈娇鐢?`weapp-devtools` 鍋氬皬绋嬪簭 UI 鎴浘
+  - 鐪熷疄妯″瀷鍒嗘瀽鎺ュ彛鏈敤鍋囧浘鐗囪Е鍙戯紝浠ラ伩鍏嶆氮璐逛笂娓告ā鍨嬮搴︼紱宸查獙璇佸埌鐧诲綍銆侀潤鎬佽祫婧愬拰鎵归噺瑙ｆ瀽灞?
 
 
-- Task: 定价策略整改 —— 三档 × 三周期 + 每日积分 + 新用户试用
-- Status: in_progress（数据库 / 后端 / 前端价格矩阵与积分展示已落地；邀请奖励 / 分享奖励已二期接入；自动续费留待后续阶段）
+- Task: 瀹氫环绛栫暐鏁存敼 鈥斺€?涓夋。 脳 涓夊懆鏈?+ 姣忔棩绉垎 + 鏂扮敤鎴疯瘯鐢?
+- Status: in_progress锛堟暟鎹簱 / 鍚庣 / 鍓嶇浠锋牸鐭╅樀涓庣Н鍒嗗睍绀哄凡钀藉湴锛涢個璇峰鍔?/ 鍒嗕韩濂栧姳宸蹭簩鏈熸帴鍏ワ紱鑷姩缁垂鐣欏緟鍚庣画闃舵锛?
 - Scope:
-  - 数据库：
-    - 新增 `backend/sql/add_tiered_membership_pricing.sql`：`membership_plan_config` 新增 `tier / period / daily_credits / original_amount / sort_order`；`user_pro_memberships` 新增 `daily_credits` 快照
-    - 更新 `backend/database/membership_plan_config_seed.sql`：停用旧 `pro_monthly`，插入 9 档（light / standard / advanced × monthly / quarterly / yearly），带 `daily_credits`、`original_amount`、`sort_order`
-  - 后端：
-    - `backend/database.py`：`list_active_membership_plans` 按 `sort_order` 排序；新增 `get_today_exercise_log_count`
-    - `backend/database.py`：修正积分试算口径，`get_today_food_analysis_count` 现会排除 `payload.exercise=true` 的 exercise fallback 任务，避免运动记录被误算成 `食物分析 2 分 + 运动 1 分 = 3 分`
-    - `backend/main.py`：
-      - `MembershipPlanResponse` 扩展 `tier / period / daily_credits / original_amount / savings / sort_order`
-      - `MembershipStatusResponse` 扩展 `daily_credits_max/used/remaining / daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits / credits_reset_at / trial_active / trial_expires_at`
-      - 新增 `_credits_reset_time_iso / _is_user_in_trial / _compute_daily_credits_status`；积分消耗口径：食物分析 2 / 运动记录 1
-      - 免费试用已升级为双层口径：前 `1000` 名注册用户 `30` 天试用，其余新用户 `3` 天试用；两类试用均按 `weapp_user` 注册顺序判定、每日 `8` 积分、不累计
-      - `/api/membership/plans` 返回扩展字段并计算 `savings`
-      - `/api/membership/me` 合并积分状态与试用信息
-      - `/api/payment/wechat/notify/membership` 成功回调时把所选套餐 `daily_credits` 快照写入 `user_pro_memberships`
-      - 邀请奖励已接入：用户通过现有好友邀请码链路进入后，完成 1 次有效使用（当前口径：饮食记录或运动记录成功写入）即可让双方连续 3 天每天 `+5` 积分；当前月度上限先按 `10` 个有效邀请 / 月实现
-      - 分享海报奖励已接入：记录拥有者在详情页成功生成海报后，可自动领取当日 `+1` 积分（每日上限 1 次）
-      - `2026-04-24` 继续收口：`/api/analyze`、`/api/analyze/submit`、`/api/analyze-text`、`/api/analyze-text/submit`、`/api/precision-sessions/{session_id}/continue` 已统一接入 `_validate_food_analysis_access(...)`
-        - 食物分析积分不足时统一返回 `402`
-        - 精准模式权限统一改为“仅 standard / advanced 可用”；light 会员若显式请求 strict，会收到“去升级”的 402，而不是继续放行
-        - 若用户档案默认还是 `strict`，但当前套餐已无权使用，后端会自动降回 `standard`，避免老状态穿透
-      - `2026-04-24` 继续收口：`/api/exercise-logs` 已接入运动积分校验；运动记录需 `1` 积分/次，积分不足时同样返回 `402`
-  - 前端：
-    - `src/utils/api.ts`：补 `MembershipTier / MembershipPeriod / MembershipPlan / MembershipStatus` 新字段
-    - `src/pages/pro-membership/index.tsx + index.scss`：完整重做
-      - Hero 区展示「今日剩余积分」或试用态胶囊
-      - 3 档卡片 + 3 周期 tab；tab 上显示「立省¥」标签
-      - 选中套餐大价格卡：折后单价、≈每月、立省标签
-      - 三档能力对比表 / 积分消耗说明 / 当前状态（生效中 / 试用中 / 未开通）
-      - 新增奖励机制说明与奖励积分展示（邀请好友 / 分享海报）
-    - `src/pages/profile/index.tsx`：「我的」会员卡从「今日拍照 x/y」改为「今日积分 x/y」；非会员区分「试用中」与「未开通」；服务入口「食探会员」描述同步为积分口径
-    - `src/pages/analyze/index.tsx + index.scss`：精准模式入口继续收口为档位判断而非 `is_pro` 一刀切；轻度版点击精准时提示“去升级”，并把会员页默认定位到标准版同周期；顶部提示条改为积分口径与升级提示
-    - `src/pages/pro-membership/index.tsx + index.scss`：积分展示改成「今日已用 / 今日剩余」双语义；当前套餐在档位卡与周期 tab 上增加标识；套餐差异表只保留真实已上线差异（每日积分、精准模式、适合频率）
-    - `src/pages/profile/index.tsx`：会员卡与服务入口文案统一改为「已用 x/y + 剩余 z」，会员徽标改为当前档位（轻度/标准/进阶）
-    - `src/utils/execution-mode.ts`、`src/pages/health-profile/index.tsx`、`src/pages/health-profile-edit/index.tsx`：精准模式权限判断继续统一到“standard / advanced 付费会员才可用”；轻度版不再因为 `is_pro=true` 被误判成可选 strict，档案页保存/编辑时也会提示“去升级”而不是“去开通会员”
-    - `backend/database/membership_plan_config_seed.sql`：套餐 seed 描述收口为真实已上线能力，移除轻度版“精准识别”和未上线能力的暗示性描述
-    - `2026-04-24` 继续收口：`src/pages/analyze/index.tsx`、`src/pages/record-text/index.tsx`、`src/pages/record/index.tsx`、`src/pages/index/components/RecordMenu.tsx` 不再看旧 `daily_limit / daily_remaining`
-      - 统一改为基于 `/api/membership/me` 的 `daily_credits_max / used / remaining`
-      - 本地预检查与按钮禁用统一用“食物分析需 2 积分/次”
-      - 超额提示统一从“今日次数已用完”改为“积分不足”，并根据当前状态给出“去开通 / 去升级”
-    - `2026-04-24` 继续收口：`src/pages/exercise-record/index.tsx` 已接入会员状态读取与运动积分预检查；当剩余积分 `< 1` 时，运动提交前会直接弹“积分不足”，不再继续创建任务
+  - 鏁版嵁搴擄細
+    - 鏂板 `backend/sql/add_tiered_membership_pricing.sql`锛歚membership_plan_config` 鏂板 `tier / period / daily_credits / original_amount / sort_order`锛沗user_pro_memberships` 鏂板 `daily_credits` 蹇収
+    - 鏇存柊 `backend/database/membership_plan_config_seed.sql`锛氬仠鐢ㄦ棫 `pro_monthly`锛屾彃鍏?9 妗ｏ紙light / standard / advanced 脳 monthly / quarterly / yearly锛夛紝甯?`daily_credits`銆乣original_amount`銆乣sort_order`
+  - 鍚庣锛?
+    - `backend/database.py`锛歚list_active_membership_plans` 鎸?`sort_order` 鎺掑簭锛涙柊澧?`get_today_exercise_log_count`
+    - `backend/database.py`锛氫慨姝ｇН鍒嗚瘯绠楀彛寰勶紝`get_today_food_analysis_count` 鐜颁細鎺掗櫎 `payload.exercise=true` 鐨?exercise fallback 浠诲姟锛岄伩鍏嶈繍鍔ㄨ褰曡璇畻鎴?`椋熺墿鍒嗘瀽 2 鍒?+ 杩愬姩 1 鍒?= 3 鍒哷
+    - `backend/main.py`锛?
+      - `MembershipPlanResponse` 鎵╁睍 `tier / period / daily_credits / original_amount / savings / sort_order`
+      - `MembershipStatusResponse` 鎵╁睍 `daily_credits_max/used/remaining / daily_credits_base / daily_bonus_credits / invite_bonus_credits / share_bonus_credits / credits_reset_at / trial_active / trial_expires_at`
+      - 鏂板 `_credits_reset_time_iso / _is_user_in_trial / _compute_daily_credits_status`锛涚Н鍒嗘秷鑰楀彛寰勶細椋熺墿鍒嗘瀽 2 / 杩愬姩璁板綍 1
+      - 鍏嶈垂璇曠敤宸插崌绾т负鍙屽眰鍙ｅ緞锛氬墠 `1000` 鍚嶆敞鍐岀敤鎴?`30` 澶╄瘯鐢紝鍏朵綑鏂扮敤鎴?`3` 澶╄瘯鐢紱涓ょ被璇曠敤鍧囨寜 `weapp_user` 娉ㄥ唽椤哄簭鍒ゅ畾銆佹瘡鏃?`8` 绉垎銆佷笉绱
+      - `/api/membership/plans` 杩斿洖鎵╁睍瀛楁骞惰绠?`savings`
+      - `/api/membership/me` 鍚堝苟绉垎鐘舵€佷笌璇曠敤淇℃伅
+      - `/api/payment/wechat/notify/membership` 鎴愬姛鍥炶皟鏃舵妸鎵€閫夊椁?`daily_credits` 蹇収鍐欏叆 `user_pro_memberships`
+      - 閭€璇峰鍔卞凡鎺ュ叆锛氱敤鎴烽€氳繃鐜版湁濂藉弸閭€璇风爜閾捐矾杩涘叆鍚庯紝瀹屾垚 1 娆℃湁鏁堜娇鐢紙褰撳墠鍙ｅ緞锛氶ギ椋熻褰曟垨杩愬姩璁板綍鎴愬姛鍐欏叆锛夊嵆鍙鍙屾柟杩炵画 3 澶╂瘡澶?`+5` 绉垎锛涘綋鍓嶆湀搴︿笂闄愬厛鎸?`10` 涓湁鏁堥個璇?/ 鏈堝疄鐜?
+      - 鍒嗕韩娴锋姤濂栧姳宸叉帴鍏ワ細璁板綍鎷ユ湁鑰呭湪璇︽儏椤垫垚鍔熺敓鎴愭捣鎶ュ悗锛屽彲鑷姩棰嗗彇褰撴棩 `+1` 绉垎锛堟瘡鏃ヤ笂闄?1 娆★級
+      - `2026-04-24` 缁х画鏀跺彛锛歚/api/analyze`銆乣/api/analyze/submit`銆乣/api/analyze-text`銆乣/api/analyze-text/submit`銆乣/api/precision-sessions/{session_id}/continue` 宸茬粺涓€鎺ュ叆 `_validate_food_analysis_access(...)`
+        - 椋熺墿鍒嗘瀽绉垎涓嶈冻鏃剁粺涓€杩斿洖 `402`
+        - 绮惧噯妯″紡鏉冮檺缁熶竴鏀逛负鈥滀粎 standard / advanced 鍙敤鈥濓紱light 浼氬憳鑻ユ樉寮忚姹?strict锛屼細鏀跺埌鈥滃幓鍗囩骇鈥濈殑 402锛岃€屼笉鏄户缁斁琛?
+        - 鑻ョ敤鎴锋。妗堥粯璁よ繕鏄?`strict`锛屼絾褰撳墠濂楅宸叉棤鏉冧娇鐢紝鍚庣浼氳嚜鍔ㄩ檷鍥?`standard`锛岄伩鍏嶈€佺姸鎬佺┛閫?
+      - `2026-04-24` 缁х画鏀跺彛锛歚/api/exercise-logs` 宸叉帴鍏ヨ繍鍔ㄧН鍒嗘牎楠岋紱杩愬姩璁板綍闇€ `1` 绉垎/娆★紝绉垎涓嶈冻鏃跺悓鏍疯繑鍥?`402`
+  - 鍓嶇锛?
+    - `src/utils/api.ts`锛氳ˉ `MembershipTier / MembershipPeriod / MembershipPlan / MembershipStatus` 鏂板瓧娈?
+    - `src/pages/pro-membership/index.tsx + index.scss`锛氬畬鏁撮噸鍋?
+      - Hero 鍖哄睍绀恒€屼粖鏃ュ墿浣欑Н鍒嗐€嶆垨璇曠敤鎬佽兌鍥?
+      - 3 妗ｅ崱鐗?+ 3 鍛ㄦ湡 tab锛泃ab 涓婃樉绀恒€岀珛鐪伮ャ€嶆爣绛?
+      - 閫変腑濂楅澶т环鏍煎崱锛氭姌鍚庡崟浠枫€佲増姣忔湀銆佺珛鐪佹爣绛?
+      - 涓夋。鑳藉姏瀵规瘮琛?/ 绉垎娑堣€楄鏄?/ 褰撳墠鐘舵€侊紙鐢熸晥涓?/ 璇曠敤涓?/ 鏈紑閫氾級
+      - 鏂板濂栧姳鏈哄埗璇存槑涓庡鍔辩Н鍒嗗睍绀猴紙閭€璇峰ソ鍙?/ 鍒嗕韩娴锋姤锛?
+    - `src/pages/profile/index.tsx`锛氥€屾垜鐨勩€嶄細鍛樺崱浠庛€屼粖鏃ユ媿鐓?x/y銆嶆敼涓恒€屼粖鏃ョН鍒?x/y銆嶏紱闈炰細鍛樺尯鍒嗐€岃瘯鐢ㄤ腑銆嶄笌銆屾湭寮€閫氥€嶏紱鏈嶅姟鍏ュ彛銆岄鎺細鍛樸€嶆弿杩板悓姝ヤ负绉垎鍙ｅ緞
+    - `src/pages/analyze/index.tsx + index.scss`锛氱簿鍑嗘ā寮忓叆鍙ｇ户缁敹鍙ｄ负妗ｄ綅鍒ゆ柇鑰岄潪 `is_pro` 涓€鍒€鍒囷紱杞诲害鐗堢偣鍑荤簿鍑嗘椂鎻愮ず鈥滃幓鍗囩骇鈥濓紝骞舵妸浼氬憳椤甸粯璁ゅ畾浣嶅埌鏍囧噯鐗堝悓鍛ㄦ湡锛涢《閮ㄦ彁绀烘潯鏀逛负绉垎鍙ｅ緞涓庡崌绾ф彁绀?
+    - `src/pages/pro-membership/index.tsx + index.scss`锛氱Н鍒嗗睍绀烘敼鎴愩€屼粖鏃ュ凡鐢?/ 浠婃棩鍓╀綑銆嶅弻璇箟锛涘綋鍓嶅椁愬湪妗ｄ綅鍗′笌鍛ㄦ湡 tab 涓婂鍔犳爣璇嗭紱濂楅宸紓琛ㄥ彧淇濈暀鐪熷疄宸蹭笂绾垮樊寮傦紙姣忔棩绉垎銆佺簿鍑嗘ā寮忋€侀€傚悎棰戠巼锛?
+    - `src/pages/profile/index.tsx`锛氫細鍛樺崱涓庢湇鍔″叆鍙ｆ枃妗堢粺涓€鏀逛负銆屽凡鐢?x/y + 鍓╀綑 z銆嶏紝浼氬憳寰芥爣鏀逛负褰撳墠妗ｄ綅锛堣交搴?鏍囧噯/杩涢樁锛?
+    - `src/utils/execution-mode.ts`銆乣src/pages/health-profile/index.tsx`銆乣src/pages/health-profile-edit/index.tsx`锛氱簿鍑嗘ā寮忔潈闄愬垽鏂户缁粺涓€鍒扳€渟tandard / advanced 浠樿垂浼氬憳鎵嶅彲鐢ㄢ€濓紱杞诲害鐗堜笉鍐嶅洜涓?`is_pro=true` 琚鍒ゆ垚鍙€?strict锛屾。妗堥〉淇濆瓨/缂栬緫鏃朵篃浼氭彁绀衡€滃幓鍗囩骇鈥濊€屼笉鏄€滃幓寮€閫氫細鍛樷€?
+    - `backend/database/membership_plan_config_seed.sql`锛氬椁?seed 鎻忚堪鏀跺彛涓虹湡瀹炲凡涓婄嚎鑳藉姏锛岀Щ闄よ交搴︾増鈥滅簿鍑嗚瘑鍒€濆拰鏈笂绾胯兘鍔涚殑鏆楃ず鎬ф弿杩?
+    - `2026-04-24` 缁х画鏀跺彛锛歚src/pages/analyze/index.tsx`銆乣src/pages/record-text/index.tsx`銆乣src/pages/record/index.tsx`銆乣src/pages/index/components/RecordMenu.tsx` 涓嶅啀鐪嬫棫 `daily_limit / daily_remaining`
+      - 缁熶竴鏀逛负鍩轰簬 `/api/membership/me` 鐨?`daily_credits_max / used / remaining`
+      - 鏈湴棰勬鏌ヤ笌鎸夐挳绂佺敤缁熶竴鐢ㄢ€滈鐗╁垎鏋愰渶 2 绉垎/娆♀€?
+      - 瓒呴鎻愮ず缁熶竴浠庘€滀粖鏃ユ鏁板凡鐢ㄥ畬鈥濇敼涓衡€滅Н鍒嗕笉瓒斥€濓紝骞舵牴鎹綋鍓嶇姸鎬佺粰鍑衡€滃幓寮€閫?/ 鍘诲崌绾р€?
+    - `2026-04-24` 缁х画鏀跺彛锛歚src/pages/exercise-record/index.tsx` 宸叉帴鍏ヤ細鍛樼姸鎬佽鍙栦笌杩愬姩绉垎棰勬鏌ワ紱褰撳墿浣欑Н鍒?`< 1` 鏃讹紝杩愬姩鎻愪氦鍓嶄細鐩存帴寮光€滅Н鍒嗕笉瓒斥€濓紝涓嶅啀缁х画鍒涘缓浠诲姟
 - Verification:
-  - `ReadLints` 检查新改动文件无新增报错
-  - 当前尚未执行 `npm run dev:weapp` 重编译与微信开发者工具运行态截图
-- Blocked / 待执行：
-  - 2026-04-24 代码复核新增状态：
-    - 当前本地 `dev` 工作区并非最新：已 `git fetch origin dev`，结果显示本地 `HEAD=14b5bea` 相比 `origin/dev=185be02` 落后 `54` 个提交，且当前工作树存在大量未提交改动，不能直接安全 `pull`
-    - `backend/database/membership_plan_config_seed.sql` 中的脏文本已修掉；当前文件仅做 seed 更新、不改 schema，可在已迁移库上重复执行
-    - `/api/dev/toggle-test-membership` 已改为“当前登录用户 + 指定/默认有效套餐”，不再写死测试用户和 `pro_monthly`；会员页 `[DEV]` 区块也会按当前选中的套餐做模拟开通
-  - 线上数据库执行 `backend/sql/add_tiered_membership_pricing.sql` 与 `backend/database/membership_plan_config_seed.sql`（seed 为 `ON CONFLICT (code) DO UPDATE`，可多次执行）
-  - 本机重启前后端跑一遍：套餐列表、`/api/membership/me`、付款通知写入 `daily_credits`
-  - 微信开发者工具跑一遍运行态验证（tier/period 切换、价格、积分胶囊、profile 展示）
-  - 2026-04-24 用户最新要求：运行与验证由用户自行执行；代理本轮后续只继续改代码，不再主动启动项目或执行运行态验证
-  - 2026-04-24 继续收口：会员购买页对轻度版会员增加显式升级提示与“去看标准版”入口；健康档案的执行模式选择也已和会员档位对齐，避免轻度版继续保存成 `strict`
-  - 2026-04-24 继续收口：积分 enforcement 已从“仅展示”推进到“后端真拦截 + 前端预拦截”
-    - 食物分析：`2` 积分/次
-    - 运动记录：`1` 积分/次
-    - 用户后续自测时，积分不足应直接在提交前被挡住，后端兜底返回 `402`
-- 后续阶段（本轮未做，需继续）：
-  - 积分“真扣减”仍是按“已发生行为计数”试算，而非提交时原子扣库存；当前已能拦截超额继续分析，但尚未实现单独的积分流水表与并发扣减
-  - 微信支付自动续费（包月 / 包季 / 包年）
-  - 「pending」支付记录清理：现 `user_membership_payments.pending` 长期堆积的问题尚未并入本轮整改
-  - Next 文档：`memory/2026-04-21.md` 本轮交接
+  - `ReadLints` 妫€鏌ユ柊鏀瑰姩鏂囦欢鏃犳柊澧炴姤閿?
+  - 褰撳墠灏氭湭鎵ц `npm run dev:weapp` 閲嶇紪璇戜笌寰俊寮€鍙戣€呭伐鍏疯繍琛屾€佹埅鍥?
+- Blocked / 寰呮墽琛岋細
+  - 2026-04-24 浠ｇ爜澶嶆牳鏂板鐘舵€侊細
+    - 褰撳墠鏈湴 `dev` 宸ヤ綔鍖哄苟闈炴渶鏂帮細宸?`git fetch origin dev`锛岀粨鏋滄樉绀烘湰鍦?`HEAD=14b5bea` 鐩告瘮 `origin/dev=185be02` 钀藉悗 `54` 涓彁浜わ紝涓斿綋鍓嶅伐浣滄爲瀛樺湪澶ч噺鏈彁浜ゆ敼鍔紝涓嶈兘鐩存帴瀹夊叏 `pull`
+    - `backend/database/membership_plan_config_seed.sql` 涓殑鑴忔枃鏈凡淇帀锛涘綋鍓嶆枃浠朵粎鍋?seed 鏇存柊銆佷笉鏀?schema锛屽彲鍦ㄥ凡杩佺Щ搴撲笂閲嶅鎵ц
+    - `/api/dev/toggle-test-membership` 宸叉敼涓衡€滃綋鍓嶇櫥褰曠敤鎴?+ 鎸囧畾/榛樿鏈夋晥濂楅鈥濓紝涓嶅啀鍐欐娴嬭瘯鐢ㄦ埛鍜?`pro_monthly`锛涗細鍛橀〉 `[DEV]` 鍖哄潡涔熶細鎸夊綋鍓嶉€変腑鐨勫椁愬仛妯℃嫙寮€閫?
+  - 绾夸笂鏁版嵁搴撴墽琛?`backend/sql/add_tiered_membership_pricing.sql` 涓?`backend/database/membership_plan_config_seed.sql`锛坰eed 涓?`ON CONFLICT (code) DO UPDATE`锛屽彲澶氭鎵ц锛?
+  - 鏈満閲嶅惎鍓嶅悗绔窇涓€閬嶏細濂楅鍒楄〃銆乣/api/membership/me`銆佷粯娆鹃€氱煡鍐欏叆 `daily_credits`
+  - 寰俊寮€鍙戣€呭伐鍏疯窇涓€閬嶈繍琛屾€侀獙璇侊紙tier/period 鍒囨崲銆佷环鏍笺€佺Н鍒嗚兌鍥娿€乸rofile 灞曠ず锛?
+  - 2026-04-24 鐢ㄦ埛鏈€鏂拌姹傦細杩愯涓庨獙璇佺敱鐢ㄦ埛鑷鎵ц锛涗唬鐞嗘湰杞悗缁彧缁х画鏀逛唬鐮侊紝涓嶅啀涓诲姩鍚姩椤圭洰鎴栨墽琛岃繍琛屾€侀獙璇?
+  - 2026-04-24 缁х画鏀跺彛锛氫細鍛樿喘涔伴〉瀵硅交搴︾増浼氬憳澧炲姞鏄惧紡鍗囩骇鎻愮ず涓庘€滃幓鐪嬫爣鍑嗙増鈥濆叆鍙ｏ紱鍋ュ悍妗ｆ鐨勬墽琛屾ā寮忛€夋嫨涔熷凡鍜屼細鍛樻。浣嶅榻愶紝閬垮厤杞诲害鐗堢户缁繚瀛樻垚 `strict`
+  - 2026-04-24 缁х画鏀跺彛锛氱Н鍒?enforcement 宸蹭粠鈥滀粎灞曠ず鈥濇帹杩涘埌鈥滃悗绔湡鎷︽埅 + 鍓嶇棰勬嫤鎴€?
+    - 椋熺墿鍒嗘瀽锛歚2` 绉垎/娆?
+    - 杩愬姩璁板綍锛歚1` 绉垎/娆?
+    - 鐢ㄦ埛鍚庣画鑷祴鏃讹紝绉垎涓嶈冻搴旂洿鎺ュ湪鎻愪氦鍓嶈鎸′綇锛屽悗绔厹搴曡繑鍥?`402`
+- 鍚庣画闃舵锛堟湰杞湭鍋氾紝闇€缁х画锛夛細
+  - 绉垎鈥滅湡鎵ｅ噺鈥濅粛鏄寜鈥滃凡鍙戠敓琛屼负璁℃暟鈥濊瘯绠楋紝鑰岄潪鎻愪氦鏃跺師瀛愭墸搴撳瓨锛涘綋鍓嶅凡鑳芥嫤鎴秴棰濈户缁垎鏋愶紝浣嗗皻鏈疄鐜板崟鐙殑绉垎娴佹按琛ㄤ笌骞跺彂鎵ｅ噺
+  - 寰俊鏀粯鑷姩缁垂锛堝寘鏈?/ 鍖呭 / 鍖呭勾锛?
+  - 銆宲ending銆嶆敮浠樿褰曟竻鐞嗭細鐜?`user_membership_payments.pending` 闀挎湡鍫嗙Н鐨勯棶棰樺皻鏈苟鍏ユ湰杞暣鏀?
+  - Next 鏂囨。锛歚memory/2026-04-21.md` 鏈疆浜ゆ帴
 
-- Task: 输出对外版《食探（智健食探）商业计划书》精简 PDF
-- Status: done（已将原始草稿收敛为更精简、更适合外部沟通的版本，弱化“尚未正式付费验证”的内部表达；首次 ReportLab CID 字体版在浏览器中显示为空白/乱码，已返工为 PIL + NotoSansSC 图片页封装 PDF，并用预览 PNG 抽查确认中文可读）
+- Task: 杈撳嚭瀵瑰鐗堛€婇鎺紙鏅哄仴椋熸帰锛夊晢涓氳鍒掍功銆嬬簿绠€ PDF
+- Status: done锛堝凡灏嗗師濮嬭崏绋挎敹鏁涗负鏇寸簿绠€銆佹洿閫傚悎澶栭儴娌熼€氱殑鐗堟湰锛屽急鍖栤€滃皻鏈寮忎粯璐归獙璇佲€濈殑鍐呴儴琛ㄨ揪锛涢娆?ReportLab CID 瀛椾綋鐗堝湪娴忚鍣ㄤ腑鏄剧ず涓虹┖鐧?涔辩爜锛屽凡杩斿伐涓?PIL + NotoSansSC 鍥剧墖椤靛皝瑁?PDF锛屽苟鐢ㄩ瑙?PNG 鎶芥煡纭涓枃鍙锛?
 - Deliverables:
-  - 文案源文件：`docs/食探-商业计划书-精简版.md`
-  - PDF 成品：`docs/shitan-business-plan-brief.pdf`
-  - 中文文件名副本：`docs/食探-商业计划书-精简版.pdf`
-  - 生成脚本：`scripts/generate_shitan_bp_pdf.py`
-  - 预览图目录：`docs/business_plan_preview/`
+  - 鏂囨婧愭枃浠讹細`docs/椋熸帰-鍟嗕笟璁″垝涔?绮剧畝鐗?md`
+  - PDF 鎴愬搧锛歚docs/shitan-business-plan-brief.pdf`
+  - 涓枃鏂囦欢鍚嶅壇鏈細`docs/椋熸帰-鍟嗕笟璁″垝涔?绮剧畝鐗?pdf`
+  - 鐢熸垚鑴氭湰锛歚scripts/generate_shitan_bp_pdf.py`
+  - 棰勮鍥剧洰褰曪細`docs/business_plan_preview/`
 - Notes:
-  - 对外品牌表达统一为：`食探（智健食探）`
-  - 文案保留真实数据支撑，但不再把早期自愿付费样本作为核心卖点
-  - 内容已按用户要求压缩为“抓核心痛点、不过长”的精简版，适合先发人看
-  - 当前 PDF 为图片页格式，优点是微信/浏览器/PDF 查看器中文显示更稳；缺点是正文不可复制检索，可编辑文本仍以 Markdown 文件为准
-  - 本轮未做小程序前端改动，因此未触发 `weapp-devtools` 运行态验证
+  - 瀵瑰鍝佺墝琛ㄨ揪缁熶竴涓猴細`椋熸帰锛堟櫤鍋ラ鎺級`
+  - 鏂囨淇濈暀鐪熷疄鏁版嵁鏀拺锛屼絾涓嶅啀鎶婃棭鏈熻嚜鎰夸粯璐规牱鏈綔涓烘牳蹇冨崠鐐?
+  - 鍐呭宸叉寜鐢ㄦ埛瑕佹眰鍘嬬缉涓衡€滄姄鏍稿績鐥涚偣銆佷笉杩囬暱鈥濈殑绮剧畝鐗堬紝閫傚悎鍏堝彂浜虹湅
+  - 褰撳墠 PDF 涓哄浘鐗囬〉鏍煎紡锛屼紭鐐规槸寰俊/娴忚鍣?PDF 鏌ョ湅鍣ㄤ腑鏂囨樉绀烘洿绋筹紱缂虹偣鏄鏂囦笉鍙鍒舵绱紝鍙紪杈戞枃鏈粛浠?Markdown 鏂囦欢涓哄噯
+  - 鏈疆鏈仛灏忕▼搴忓墠绔敼鍔紝鍥犳鏈Е鍙?`weapp-devtools` 杩愯鎬侀獙璇?
 
-- Task: 将《食探（智健食探）商业计划书》改为更紧凑的 Word/docx 版本
-- Status: done（用户反馈 PDF 内容太少、排版不够紧密；已改为可编辑 Word 文档，并按用户最新方案更新为“三档订阅 + 每日积分清零”：轻度/标准/进阶，保留精简外部口径但信息密度更高）
+- Task: 灏嗐€婇鎺紙鏅哄仴椋熸帰锛夊晢涓氳鍒掍功銆嬫敼涓烘洿绱у噾鐨?Word/docx 鐗堟湰
+- Status: done锛堢敤鎴峰弽棣?PDF 鍐呭澶皯銆佹帓鐗堜笉澶熺揣瀵嗭紱宸叉敼涓哄彲缂栬緫 Word 鏂囨。锛屽苟鎸夌敤鎴锋渶鏂版柟妗堟洿鏂颁负鈥滀笁妗ｈ闃?+ 姣忔棩绉垎娓呴浂鈥濓細杞诲害/鏍囧噯/杩涢樁锛屼繚鐣欑簿绠€澶栭儴鍙ｅ緞浣嗕俊鎭瘑搴︽洿楂橈級
 - Deliverables:
-  - Word 文档：`docs/食探（智健食探）商业计划书.docx`
-  - 生成脚本：`scripts/generate_shitan_bp_docx.py`
+  - Word 鏂囨。锛歚docs/椋熸帰锛堟櫤鍋ラ鎺級鍟嗕笟璁″垝涔?docx`
+  - 鐢熸垚鑴氭湰锛歚scripts/generate_shitan_bp_docx.py`
 - Verification:
-  - 使用 `python-docx` 读取校验通过：`42` 个段落、`14` 张表格
-  - 校验关键字：`轻度版 / 标准版 / 进阶版 / 免费 3 天` 均已写入文档
-  - 本轮仍未做小程序前端改动，因此未触发 `weapp-devtools` 运行态验证
+  - 浣跨敤 `python-docx` 璇诲彇鏍￠獙閫氳繃锛歚42` 涓钀姐€乣14` 寮犺〃鏍?
+  - 鏍￠獙鍏抽敭瀛楋細`杞诲害鐗?/ 鏍囧噯鐗?/ 杩涢樁鐗?/ 鍏嶈垂 3 澶ー 鍧囧凡鍐欏叆鏂囨。
+  - 鏈疆浠嶆湭鍋氬皬绋嬪簭鍓嶇鏀瑰姩锛屽洜姝ゆ湭瑙﹀彂 `weapp-devtools` 杩愯鎬侀獙璇?
 
-- Task: 修复小程序模拟器 `dist/app.json` 缺失报错，并验证会员页返回
-- Status: done（`dist/` 构建产物已恢复；会员页左上角返回已修复并做了自动化回归）
+- Task: 淇灏忕▼搴忔ā鎷熷櫒 `dist/app.json` 缂哄け鎶ラ敊锛屽苟楠岃瘉浼氬憳椤佃繑鍥?
+- Status: done锛坄dist/` 鏋勫缓浜х墿宸叉仮澶嶏紱浼氬憳椤靛乏涓婅杩斿洖宸蹭慨澶嶅苟鍋氫簡鑷姩鍖栧洖褰掞級
 - Scope:
-  - 模拟器启动失败：
-    - 现象：微信开发者工具报 `dist/app.json` 不存在，提示检查 `project.config.json -> miniprogramRoot`
-    - 结论：`project.config.json` 中 `miniprogramRoot: "dist/"` 无需修改，问题是上一次 `npm run dev:weapp` 中断后 `dist/` 只剩零散产物
-    - 当前状态：重新完成 `dev:weapp` 编译后，`dist/app.json` 已恢复
-  - 会员页返回修复：
+  - 妯℃嫙鍣ㄥ惎鍔ㄥけ璐ワ細
+    - 鐜拌薄锛氬井淇″紑鍙戣€呭伐鍏锋姤 `dist/app.json` 涓嶅瓨鍦紝鎻愮ず妫€鏌?`project.config.json -> miniprogramRoot`
+    - 缁撹锛歚project.config.json` 涓?`miniprogramRoot: "dist/"` 鏃犻渶淇敼锛岄棶棰樻槸涓婁竴娆?`npm run dev:weapp` 涓柇鍚?`dist/` 鍙墿闆舵暎浜х墿
+    - 褰撳墠鐘舵€侊細閲嶆柊瀹屾垚 `dev:weapp` 缂栬瘧鍚庯紝`dist/app.json` 宸叉仮澶?
+  - 浼氬憳椤佃繑鍥炰慨澶嶏細
     - `src/components/CustomNavBar/index.tsx`
-      - 自定义导航栏支持 `onBack`
+      - 鑷畾涔夊鑸爮鏀寔 `onBack`
     - `src/packageExtra/pages/pro-membership/index.tsx`
-      - 会员页返回改为读取上一页路由
-      - 上一页若为 Tab（如 `/pages/profile/index`）则走 `Taro.switchTab(...)`
-      - 非 Tab 页则走 `normalizeRedirectUrlForSubpackage(...) + Taro.redirectTo(...)`
-      - 兜底仍返回 `/pages/profile/index`
+      - 浼氬憳椤佃繑鍥炴敼涓鸿鍙栦笂涓€椤佃矾鐢?
+      - 涓婁竴椤佃嫢涓?Tab锛堝 `/pages/profile/index`锛夊垯璧?`Taro.switchTab(...)`
+      - 闈?Tab 椤靛垯璧?`normalizeRedirectUrlForSubpackage(...) + Taro.redirectTo(...)`
+      - 鍏滃簳浠嶈繑鍥?`/pages/profile/index`
 - Verification:
-  - `dist/app.json` 存在
-  - `dist/packageExtra/pages/pro-membership/index.js` 已包含 `MAIN_TAB_ROUTES` 与 `normalizeRedirectUrlForSubpackage` 返回逻辑
-  - `weapp-devtools` 自动化：
-    - `mrc pageInfo --port 9420`：进入会员卡后页面为 `packageExtra/pages/pro-membership/index`
-    - `mrc click .custom-nav-bar__back --port 9420` 后，`mrc pageInfo --port 9420`：页面回到 `pages/profile/index`
-    - `mrc stack --port 9420`：页面栈深度为 `1`，当前页为 `pages/profile/index`
-    - `mrc errors 20 --port 9420`：`0` 条错误
+  - `dist/app.json` 瀛樺湪
+  - `dist/packageExtra/pages/pro-membership/index.js` 宸插寘鍚?`MAIN_TAB_ROUTES` 涓?`normalizeRedirectUrlForSubpackage` 杩斿洖閫昏緫
+  - `weapp-devtools` 鑷姩鍖栵細
+    - `mrc pageInfo --port 9420`锛氳繘鍏ヤ細鍛樺崱鍚庨〉闈负 `packageExtra/pages/pro-membership/index`
+    - `mrc click .custom-nav-bar__back --port 9420` 鍚庯紝`mrc pageInfo --port 9420`锛氶〉闈㈠洖鍒?`pages/profile/index`
+    - `mrc stack --port 9420`锛氶〉闈㈡爤娣卞害涓?`1`锛屽綋鍓嶉〉涓?`pages/profile/index`
+    - `mrc errors 20 --port 9420`锛歚0` 鏉￠敊璇?
 - Blocked / Notes:
-  - 这次 `mrc screenshot` 与 `miniprogram-automator.screenshot()` 仍在当前 DevTools 环境卡住/超时，没能落下截图文件
+  - 杩欐 `mrc screenshot` 涓?`miniprogram-automator.screenshot()` 浠嶅湪褰撳墠 DevTools 鐜鍗′綇/瓒呮椂锛屾病鑳借惤涓嬫埅鍥炬枃浠?
 
-- Task: 会员页顶部导航与 Hero 继续按参考图优化
-- Status: done（返回按钮已从字符换成图标，顶部视觉已向参考图收口；运行态已验证进入与返回）
+- Task: 浼氬憳椤甸《閮ㄥ鑸笌 Hero 缁х画鎸夊弬鑰冨浘浼樺寲
+- Status: done锛堣繑鍥炴寜閽凡浠庡瓧绗︽崲鎴愬浘鏍囷紝椤堕儴瑙嗚宸插悜鍙傝€冨浘鏀跺彛锛涜繍琛屾€佸凡楠岃瘉杩涘叆涓庤繑鍥烇級
 - Scope:
   - `src/components/CustomNavBar/index.tsx`
-    - 返回按钮改为 `@taroify/icons` 的 `ArrowLeft`
-    - 不再使用字符 `‹`
+    - 杩斿洖鎸夐挳鏀逛负 `@taroify/icons` 鐨?`ArrowLeft`
+    - 涓嶅啀浣跨敤瀛楃 `鈥筦
   - `src/components/CustomNavBar/index.scss`
-    - 调整返回按钮点击区、图标尺寸、标题字重和导航栏通透感
+    - 璋冩暣杩斿洖鎸夐挳鐐瑰嚮鍖恒€佸浘鏍囧昂瀵搞€佹爣棰樺瓧閲嶅拰瀵艰埅鏍忛€氶€忔劅
   - `src/packageExtra/pages/pro-membership/index.tsx`
-    - Hero 改成 `hero-inner + hero-orb` 结构
-    - 保留自定义返回逻辑，顶部卡片文案继续按积分口径展示
-    - 去掉试用态积分标题里的 emoji，避免视觉噪音
+    - Hero 鏀规垚 `hero-inner + hero-orb` 缁撴瀯
+    - 淇濈暀鑷畾涔夎繑鍥為€昏緫锛岄《閮ㄥ崱鐗囨枃妗堢户缁寜绉垎鍙ｅ緞灞曠ず
+    - 鍘绘帀璇曠敤鎬佺Н鍒嗘爣棰橀噷鐨?emoji锛岄伩鍏嶈瑙夊櫔闊?
   - `src/packageExtra/pages/pro-membership/index.scss`
-    - 顶部 Hero 改成更接近参考图的深绿渐变、右上/左下柔光圆形背景
-    - `食探会员` 标题、说明、副卡片间距和透明度重新收口
-    - 积分卡改成更宽的半透明玻璃卡，强调 `0 / 40` 这类主数字层级
+    - 椤堕儴 Hero 鏀规垚鏇存帴杩戝弬鑰冨浘鐨勬繁缁挎笎鍙樸€佸彸涓?宸︿笅鏌斿厜鍦嗗舰鑳屾櫙
+    - `椋熸帰浼氬憳` 鏍囬銆佽鏄庛€佸壇鍗＄墖闂磋窛鍜岄€忔槑搴﹂噸鏂版敹鍙?
+    - 绉垎鍗℃敼鎴愭洿瀹界殑鍗婇€忔槑鐜荤拑鍗★紝寮鸿皟 `0 / 40` 杩欑被涓绘暟瀛楀眰绾?
 - Verification:
-  - 编译产物已更新：
-    - `dist/packageExtra/pages/pro-membership/index.js` 已包含 `hero-orb` / `hero-inner`
-  - `weapp-devtools` 自动化：
-    - 通过 automator 从 `pages/profile/index` 点击 `.member-card` 后，当前页为 `packageExtra/pages/pro-membership/index`
-    - 当前页检测到 `.custom-nav-bar__back`
-    - 当前页检测到 `.hero-title`、`.hero-subtitle`、`.hero-credits`
-    - 点击 `.custom-nav-bar__back` 后，页面回到 `pages/profile/index`
-    - `mrc errors 20 --port 9420`：`0` 条错误
+  - 缂栬瘧浜х墿宸叉洿鏂帮細
+    - `dist/packageExtra/pages/pro-membership/index.js` 宸插寘鍚?`hero-orb` / `hero-inner`
+  - `weapp-devtools` 鑷姩鍖栵細
+    - 閫氳繃 automator 浠?`pages/profile/index` 鐐瑰嚮 `.member-card` 鍚庯紝褰撳墠椤典负 `packageExtra/pages/pro-membership/index`
+    - 褰撳墠椤垫娴嬪埌 `.custom-nav-bar__back`
+    - 褰撳墠椤垫娴嬪埌 `.hero-title`銆乣.hero-subtitle`銆乣.hero-credits`
+    - 鐐瑰嚮 `.custom-nav-bar__back` 鍚庯紝椤甸潰鍥炲埌 `pages/profile/index`
+    - `mrc errors 20 --port 9420`锛歚0` 鏉￠敊璇?
 - Blocked / Notes:
-  - 本轮再次尝试 `mrc screenshot`，仍在当前 DevTools 环境卡住，未能生成截图文件
+  - 鏈疆鍐嶆灏濊瘯 `mrc screenshot`锛屼粛鍦ㄥ綋鍓?DevTools 鐜鍗′綇锛屾湭鑳界敓鎴愭埅鍥炬枃浠?
 
-- Task: 基于 Supabase 聚合数据评估 `food_link` 在中国的商业化与盈利可能
-- Status: done（已做匿名聚合分析，未读取/披露个人明细；结论是“有主需求和早期付费苗头，但当前不适合押社区，应先做 AI 饮食记录 + 体重管理订阅/积分验证”）
+- Task: 鍩轰簬 Supabase 鑱氬悎鏁版嵁璇勪及 `food_link` 鍦ㄤ腑鍥界殑鍟嗕笟鍖栦笌鐩堝埄鍙兘
+- Status: done锛堝凡鍋氬尶鍚嶈仛鍚堝垎鏋愶紝鏈鍙?鎶湶涓汉鏄庣粏锛涚粨璁烘槸鈥滄湁涓婚渶姹傚拰鏃╂湡浠樿垂鑻楀ご锛屼絾褰撳墠涓嶉€傚悎鎶肩ぞ鍖猴紝搴斿厛鍋?AI 楗璁板綍 + 浣撻噸绠＄悊璁㈤槄/绉垎楠岃瘉鈥濓級
 - Key data points:
-  - Supabase 当前聚合：`weapp_user=622`，近 30 天活跃用户约 `270`，近 30 天分析任务 `3408`，近 30 天饮食记录 `2278`
-  - 主链路使用：分析任务用户 `394`，饮食记录用户 `256`；完成分析后有饮食记录的用户约 `66.1%`
-  - 留存粗算：D1 exact `21.1%`，D7 后 7 日窗口 `17.1%`，D30 后 7 日窗口 `12.9%`
-  - 商业化：会员支付记录 `45`，其中 `paid=4`、`pending=41`；唯一付费用户 `3`，已付金额合计约 `20.81`
-  - 社区/公共库：公共食物库 `41` 条、发布者 `20`、评论 `2`、收藏 `4`，暂不足以支撑社区型商业化
+  - Supabase 褰撳墠鑱氬悎锛歚weapp_user=622`锛岃繎 30 澶╂椿璺冪敤鎴风害 `270`锛岃繎 30 澶╁垎鏋愪换鍔?`3408`锛岃繎 30 澶╅ギ椋熻褰?`2278`
+  - 涓婚摼璺娇鐢細鍒嗘瀽浠诲姟鐢ㄦ埛 `394`锛岄ギ椋熻褰曠敤鎴?`256`锛涘畬鎴愬垎鏋愬悗鏈夐ギ椋熻褰曠殑鐢ㄦ埛绾?`66.1%`
+  - 鐣欏瓨绮楃畻锛欴1 exact `21.1%`锛孌7 鍚?7 鏃ョ獥鍙?`17.1%`锛孌30 鍚?7 鏃ョ獥鍙?`12.9%`
+  - 鍟嗕笟鍖栵細浼氬憳鏀粯璁板綍 `45`锛屽叾涓?`paid=4`銆乣pending=41`锛涘敮涓€浠樿垂鐢ㄦ埛 `3`锛屽凡浠橀噾棰濆悎璁＄害 `20.81`
+  - 绀惧尯/鍏叡搴擄細鍏叡椋熺墿搴?`41` 鏉°€佸彂甯冭€?`20`銆佽瘎璁?`2`銆佹敹钘?`4`锛屾殏涓嶈冻浠ユ敮鎾戠ぞ鍖哄瀷鍟嗕笟鍖?
 - Recommended next step:
-  - 用户倾向重新回到“订阅制度”作为主商业模型；当前建议调整为“订阅会员对外主卖 + 后台额度/加量包控制 AI 成本”，不要把积分作为用户侧核心心智
-  - 不要继续以免费高额度拍照作为默认卖点
-  - 将盈利叙事从“AI 拍照次数”升级为“体重管理闭环：饮食记录、趋势洞察、执行计划、复盘提醒”
-  - 保持手动记录永久免费，AI 分析/精准模式/周报复盘作为消耗积分或会员权益
-  - 增加支付失败/取消原因与会员页曝光漏斗埋点，定位 `pending` 大量堆积的原因
+  - 鐢ㄦ埛鍊惧悜閲嶆柊鍥炲埌鈥滆闃呭埗搴︹€濅綔涓轰富鍟嗕笟妯″瀷锛涘綋鍓嶅缓璁皟鏁翠负鈥滆闃呬細鍛樺澶栦富鍗?+ 鍚庡彴棰濆害/鍔犻噺鍖呮帶鍒?AI 鎴愭湰鈥濓紝涓嶈鎶婄Н鍒嗕綔涓虹敤鎴蜂晶鏍稿績蹇冩櫤
+  - 涓嶈缁х画浠ュ厤璐归珮棰濆害鎷嶇収浣滀负榛樿鍗栫偣
+  - 灏嗙泩鍒╁彊浜嬩粠鈥淎I 鎷嶇収娆℃暟鈥濆崌绾т负鈥滀綋閲嶇鐞嗛棴鐜細楗璁板綍銆佽秼鍔挎礊瀵熴€佹墽琛岃鍒掋€佸鐩樻彁閱掆€?
+  - 淇濇寔鎵嬪姩璁板綍姘镐箙鍏嶈垂锛孉I 鍒嗘瀽/绮惧噯妯″紡/鍛ㄦ姤澶嶇洏浣滀负娑堣€楃Н鍒嗘垨浼氬憳鏉冪泭
+  - 澧炲姞鏀粯澶辫触/鍙栨秷鍘熷洜涓庝細鍛橀〉鏇濆厜婕忔枟鍩嬬偣锛屽畾浣?`pending` 澶ч噺鍫嗙Н鐨勫師鍥?
 
-- Task: 微信审核「先浏览后登录」整改
-- Status: done（Tab 可进、首页/分析引导、操作点统一跳转登录页并带 redirect；已 `npm run build:weapp`）
-- Scope: `src/pages/index|stats|profile|record|community|record-menu`、`src/pages/login/index.tsx`、`src/pages/index/components/RecordMenu.tsx`
+- Task: 寰俊瀹℃牳銆屽厛娴忚鍚庣櫥褰曘€嶆暣鏀?
+- Status: done锛圱ab 鍙繘銆侀椤?鍒嗘瀽寮曞銆佹搷浣滅偣缁熶竴璺宠浆鐧诲綍椤靛苟甯?redirect锛涘凡 `npm run build:weapp`锛?
+- Scope: `src/pages/index|stats|profile|record|community|record-menu`銆乣src/pages/login/index.tsx`銆乣src/pages/index/components/RecordMenu.tsx`
 
-- Task: 互动消息点击动态偶发跳转失败
-- Status: done（已改为“按 `record_id` 直接取动态上下文”，不再依赖当前社区 Feed 的筛选/分页状态碰运气）
+- Task: 浜掑姩娑堟伅鐐瑰嚮鍔ㄦ€佸伓鍙戣烦杞け璐?
+- Status: done锛堝凡鏀逛负鈥滄寜 `record_id` 鐩存帴鍙栧姩鎬佷笂涓嬫枃鈥濓紝涓嶅啀渚濊禆褰撳墠绀惧尯 Feed 鐨勭瓫閫?鍒嗛〉鐘舵€佺杩愭皵锛?
 - Scope:
-  - 根因定位：
-    - `src/pages/interaction-notifications/index.tsx` 点击通知后会缓存 `record_id/comment_id`，再 `switchTab` 回 `pages/community/index`
-    - `src/pages/community/index.tsx` 旧逻辑 `ensureFeedReadyForNotification(...)` 不是直接按 `record_id` 取动态，而是基于当前 Feed 列表继续翻页查找
-    - 该查找过程与社区页当前筛选、缓存列表和分页 offset 耦合；一旦社区页当前 Feed 不是“默认全量列表”，就可能把目标动态跳过去，因此表现成“有时成功、有时失败”
-  - 已修复：
-    - 后端 `backend/main.py`
-      - 新增 `GET /api/community/feed/{record_id}/context`
-      - 直接基于 `record_id` 返回该动态的互动上下文（权限校验、作者信息、点赞态、评论预览）
-    - 前端 `src/utils/api.ts`
-      - 新增 `communityGetFeedContext(recordId, commentsLimit)`
-    - 前端 `src/pages/community/index.tsx`
-      - `ensureFeedReadyForNotification(...)` 改为优先调用新接口获取目标动态
-      - 拿到目标动态后直接插入当前 Feed 顶部并滚动定位，再按需补拉完整评论列表
-      - 移除原先依赖当前 Feed 分页继续猜目标动态的实现
+  - 鏍瑰洜瀹氫綅锛?
+    - `src/pages/interaction-notifications/index.tsx` 鐐瑰嚮閫氱煡鍚庝細缂撳瓨 `record_id/comment_id`锛屽啀 `switchTab` 鍥?`pages/community/index`
+    - `src/pages/community/index.tsx` 鏃ч€昏緫 `ensureFeedReadyForNotification(...)` 涓嶆槸鐩存帴鎸?`record_id` 鍙栧姩鎬侊紝鑰屾槸鍩轰簬褰撳墠 Feed 鍒楄〃缁х画缈婚〉鏌ユ壘
+    - 璇ユ煡鎵捐繃绋嬩笌绀惧尯椤靛綋鍓嶇瓫閫夈€佺紦瀛樺垪琛ㄥ拰鍒嗛〉 offset 鑰﹀悎锛涗竴鏃︾ぞ鍖洪〉褰撳墠 Feed 涓嶆槸鈥滈粯璁ゅ叏閲忓垪琛ㄢ€濓紝灏卞彲鑳芥妸鐩爣鍔ㄦ€佽烦杩囧幓锛屽洜姝よ〃鐜版垚鈥滄湁鏃舵垚鍔熴€佹湁鏃跺け璐モ€?
+  - 宸蹭慨澶嶏細
+    - 鍚庣 `backend/main.py`
+      - 鏂板 `GET /api/community/feed/{record_id}/context`
+      - 鐩存帴鍩轰簬 `record_id` 杩斿洖璇ュ姩鎬佺殑浜掑姩涓婁笅鏂囷紙鏉冮檺鏍￠獙銆佷綔鑰呬俊鎭€佺偣璧炴€併€佽瘎璁洪瑙堬級
+    - 鍓嶇 `src/utils/api.ts`
+      - 鏂板 `communityGetFeedContext(recordId, commentsLimit)`
+    - 鍓嶇 `src/pages/community/index.tsx`
+      - `ensureFeedReadyForNotification(...)` 鏀逛负浼樺厛璋冪敤鏂版帴鍙ｈ幏鍙栫洰鏍囧姩鎬?
+      - 鎷垮埌鐩爣鍔ㄦ€佸悗鐩存帴鎻掑叆褰撳墠 Feed 椤堕儴骞舵粴鍔ㄥ畾浣嶏紝鍐嶆寜闇€琛ユ媺瀹屾暣璇勮鍒楄〃
+      - 绉婚櫎鍘熷厛渚濊禆褰撳墠 Feed 鍒嗛〉缁х画鐚滅洰鏍囧姩鎬佺殑瀹炵幇
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
-  - 已手动拉起本地前后端：
-    - `backend-dev.log` 显示 `Uvicorn running on http://0.0.0.0:3010`
-    - `weapp-dev.log` 显示 `built in 23161ms`
-    - `dist/pages/community/index.js` 时间戳已更新到本轮修改
-  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - 宸叉墜鍔ㄦ媺璧锋湰鍦板墠鍚庣锛?
+    - `backend-dev.log` 鏄剧ず `Uvicorn running on http://0.0.0.0:3010`
+    - `weapp-dev.log` 鏄剧ず `built in 23161ms`
+    - `dist/pages/community/index.js` 鏃堕棿鎴冲凡鏇存柊鍒版湰杞慨鏀?
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools` 杩愯鎬侀獙璇侊細
     - `mrc where --port 9420`
     - `mrc screenshot .\\interaction-notification-debug.png --port 9420`
     - `mrc logs error 20 --port 9420`
-  - 当前阻塞：三条命令均因 `ws://localhost:9420` 无法连接失败，说明微信开发者工具当前未对本项目开启自动化端口，因此本轮未拿到截图与点击证据
+  - 褰撳墠闃诲锛氫笁鏉″懡浠ゅ潎鍥?`ws://localhost:9420` 鏃犳硶杩炴帴澶辫触锛岃鏄庡井淇″紑鍙戣€呭伐鍏峰綋鍓嶆湭瀵规湰椤圭洰寮€鍚嚜鍔ㄥ寲绔彛锛屽洜姝ゆ湰杞湭鎷垮埌鎴浘涓庣偣鍑昏瘉鎹?
 
-- Task: 真机调试报错 `ERR_CONNECTION_REFUSED` + `tmpl_0_svg not found`
-- Status: diagnosed（未改代码）
+- Task: 鐪熸満璋冭瘯鎶ラ敊 `ERR_CONNECTION_REFUSED` + `tmpl_0_svg not found`
+- Status: diagnosed锛堟湭鏀逛唬鐮侊級
 - Scope:
-  - 真机日志里的 `[API] 构建时 API_BASE_URL: http://127.0.0.1:3010` 说明当前安装到手机/真机调试的仍是 `dev:weapp` 开发构建产物。
-  - `config/index.ts` 在 development 下会把 `__API_BASE_URL__` 注入为 `http://127.0.0.1:3010`；`.env.development` 当前也显式写死 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`。
-  - 该地址在真机上指向“手机自己”的回环地址，不是开发电脑，所以 `/api/home/dashboard`、`/api/user/profile`、`/api/membership/me`、`/api/expiry/*` 全部会报 `request:fail -102:net::ERR_CONNECTION_REFUSED`。
-  - `WXMLRT_$gwx ... Template tmpl_0_svg not found` 不是后端问题，源码里存在多处直接 JSX `<svg>`：如 `src/components/TabBarIcons/index.tsx`、`src/pages/community/index.tsx` 的 `FeedSearchGlyph()`、`src/pages/friends/index.tsx` 的多组图标；这类写法在小程序端会编译/运行不稳定，真机上更容易直接丢失对应模板。
-  - `not node js file system! path:/saaa_config.json` 与 `better_log_persist.log` / `wxfile://usr/miniprogramLog/log2` 更像微信开发者工具/日志插件自身噪音，不是当前业务主故障。
+  - 鐪熸満鏃ュ織閲岀殑 `[API] 鏋勫缓鏃?API_BASE_URL: http://127.0.0.1:3010` 璇存槑褰撳墠瀹夎鍒版墜鏈?鐪熸満璋冭瘯鐨勪粛鏄?`dev:weapp` 寮€鍙戞瀯寤轰骇鐗┿€?
+  - `config/index.ts` 鍦?development 涓嬩細鎶?`__API_BASE_URL__` 娉ㄥ叆涓?`http://127.0.0.1:3010`锛沗.env.development` 褰撳墠涔熸樉寮忓啓姝?`TARO_APP_API_BASE_URL=http://127.0.0.1:3010`銆?
+  - 璇ュ湴鍧€鍦ㄧ湡鏈轰笂鎸囧悜鈥滄墜鏈鸿嚜宸扁€濈殑鍥炵幆鍦板潃锛屼笉鏄紑鍙戠數鑴戯紝鎵€浠?`/api/home/dashboard`銆乣/api/user/profile`銆乣/api/membership/me`銆乣/api/expiry/*` 鍏ㄩ儴浼氭姤 `request:fail -102:net::ERR_CONNECTION_REFUSED`銆?
+  - `WXMLRT_$gwx ... Template tmpl_0_svg not found` 涓嶆槸鍚庣闂锛屾簮鐮侀噷瀛樺湪澶氬鐩存帴 JSX `<svg>`锛氬 `src/components/TabBarIcons/index.tsx`銆乣src/pages/community/index.tsx` 鐨?`FeedSearchGlyph()`銆乣src/pages/friends/index.tsx` 鐨勫缁勫浘鏍囷紱杩欑被鍐欐硶鍦ㄥ皬绋嬪簭绔細缂栬瘧/杩愯涓嶇ǔ瀹氾紝鐪熸満涓婃洿瀹规槗鐩存帴涓㈠け瀵瑰簲妯℃澘銆?
+  - `not node js file system! path:/saaa_config.json` 涓?`better_log_persist.log` / `wxfile://usr/miniprogramLog/log2` 鏇村儚寰俊寮€鍙戣€呭伐鍏?鏃ュ織鎻掍欢鑷韩鍣煶锛屼笉鏄綋鍓嶄笟鍔′富鏁呴殰銆?
 - Next step:
-  - 真机联调若要打本地后端，需把开发构建的 `TARO_APP_API_BASE_URL` 改成电脑局域网 IP（例如 `http://192.168.x.x:3010`），并确保手机与电脑同网、后端监听对外网卡、系统防火墙放通 `3010`。
-  - 真机预览/体验版若要稳定联调，直接用 `npm run build:weapp:preview` 或 `npm run dev:weapp:online`，走 `https://healthymax.cn`。
-  - 后续需要修掉 `tmpl_0_svg` 时，优先把小程序页面里的直接 `<svg>` 改成 iconfont / 图片资源 / CSS 绘制 / 小程序兼容组件。
+  - 鐪熸満鑱旇皟鑻ヨ鎵撴湰鍦板悗绔紝闇€鎶婂紑鍙戞瀯寤虹殑 `TARO_APP_API_BASE_URL` 鏀规垚鐢佃剳灞€鍩熺綉 IP锛堜緥濡?`http://192.168.x.x:3010`锛夛紝骞剁‘淇濇墜鏈轰笌鐢佃剳鍚岀綉銆佸悗绔洃鍚澶栫綉鍗°€佺郴缁熼槻鐏鏀鹃€?`3010`銆?
+  - 鐪熸満棰勮/浣撻獙鐗堣嫢瑕佺ǔ瀹氳仈璋冿紝鐩存帴鐢?`npm run build:weapp:preview` 鎴?`npm run dev:weapp:online`锛岃蛋 `https://healthymax.cn`銆?
+  - 鍚庣画闇€瑕佷慨鎺?`tmpl_0_svg` 鏃讹紝浼樺厛鎶婂皬绋嬪簭椤甸潰閲岀殑鐩存帴 `<svg>` 鏀规垚 iconfont / 鍥剧墖璧勬簮 / CSS 缁樺埗 / 灏忕▼搴忓吋瀹圭粍浠躲€?
 
-- Task: 运动热量估算 Instructor 结构化输出（已完成代码与单测）
-- Status: done（`backend/exercise_llm.py` 已切 Instructor；`pytest tests/unit/test_exercise_llm.py` 通过；部署需 `pip install -r backend/requirements.txt`）
-- Note: 可选环境变量 `EXERCISE_CALORIES_INSTRUCTOR_MODE=json|md_json|tools`（默认 `md_json`）
+- Task: 杩愬姩鐑噺浼扮畻 Instructor 缁撴瀯鍖栬緭鍑猴紙宸插畬鎴愪唬鐮佷笌鍗曟祴锛?
+- Status: done锛坄backend/exercise_llm.py` 宸插垏 Instructor锛沗pytest tests/unit/test_exercise_llm.py` 閫氳繃锛涢儴缃查渶 `pip install -r backend/requirements.txt`锛?
+- Note: 鍙€夌幆澧冨彉閲?`EXERCISE_CALORIES_INSTRUCTOR_MODE=json|md_json|tools`锛堥粯璁?`md_json`锛?
 
-- Task: 保质期订阅提醒功能落地
-- Status: in_progress（主链路代码已实现，旧 `user_food_expiry_items` 链路已移除，`dev:weapp` 已编译通过，待数据库建表与真机/开发者工具联调）
+- Task: 淇濊川鏈熻闃呮彁閱掑姛鑳借惤鍦?
+- Status: in_progress锛堜富閾捐矾浠ｇ爜宸插疄鐜帮紝鏃?`user_food_expiry_items` 閾捐矾宸茬Щ闄わ紝`dev:weapp` 宸茬紪璇戦€氳繃锛屽緟鏁版嵁搴撳缓琛ㄤ笌鐪熸満/寮€鍙戣€呭伐鍏疯仈璋冿級
 - Scope:
-## 本次实现
-- 圈子评论重复提交防护已落地：前端 `community` 评论发送增加 in-flight 锁与 2 秒同内容防连点；后端 `feed_comments` 写入前增加短时间同用户/同动态/同回复目标/同内容去重，重复命中时直接复用已有评论并跳过重复通知
-- `pages/expiry/*` 绑定 `/api/expiry/*` 新链路，并移除旧 `/api/food-expiry/*`
-  - 删除旧页面 `pages/food-expiry/*` 与对应前端 API 封装
-  - 首页“快到期食物”摘要与跳转入口已切到新链路 `pages/expiry/* + food_expiry_items`
-  - 新增小程序订阅提醒登记接口 `POST /api/expiry/items/{id}/subscribe`
-  - 新增保质期通知任务表 `food_expiry_notification_jobs`
-  - 新增独立保质期通知 Worker，按队列轮询并发送小程序订阅消息
-  - 新增后自动弹出“是否订阅到期提醒”弹窗，用户同意后登记当天提醒任务
-  - 修复 `src/utils/api.ts` 构建常量读取方式，避免 `ReferenceError` 且恢复开发环境 API 地址注入
-  - 修复首页动画 hook 在小程序环境下的 `performance` 兼容问题：`useAnimatedProgress/useAnimatedNumber` 改为 `performance.now` 不可用时回退 `Date.now`
-  - 修复开发脚本环境变量覆盖问题：`dev:weapp` 移除写死的 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`，改为由 `.env.development` 控制
-  - `npm run dev:weapp` 脚本已追加 `--no-check`，绕过当前机器上的 Taro doctor Rust panic
+## 鏈瀹炵幇
+- 鍦堝瓙璇勮閲嶅鎻愪氦闃叉姢宸茶惤鍦帮細鍓嶇 `community` 璇勮鍙戦€佸鍔?in-flight 閿佷笌 2 绉掑悓鍐呭闃茶繛鐐癸紱鍚庣 `feed_comments` 鍐欏叆鍓嶅鍔犵煭鏃堕棿鍚岀敤鎴?鍚屽姩鎬?鍚屽洖澶嶇洰鏍?鍚屽唴瀹瑰幓閲嶏紝閲嶅鍛戒腑鏃剁洿鎺ュ鐢ㄥ凡鏈夎瘎璁哄苟璺宠繃閲嶅閫氱煡
+- `pages/expiry/*` 缁戝畾 `/api/expiry/*` 鏂伴摼璺紝骞剁Щ闄ゆ棫 `/api/food-expiry/*`
+  - 鍒犻櫎鏃ч〉闈?`pages/food-expiry/*` 涓庡搴斿墠绔?API 灏佽
+  - 棣栭〉鈥滃揩鍒版湡椋熺墿鈥濇憳瑕佷笌璺宠浆鍏ュ彛宸插垏鍒版柊閾捐矾 `pages/expiry/* + food_expiry_items`
+  - 鏂板灏忕▼搴忚闃呮彁閱掔櫥璁版帴鍙?`POST /api/expiry/items/{id}/subscribe`
+  - 鏂板淇濊川鏈熼€氱煡浠诲姟琛?`food_expiry_notification_jobs`
+  - 鏂板鐙珛淇濊川鏈熼€氱煡 Worker锛屾寜闃熷垪杞骞跺彂閫佸皬绋嬪簭璁㈤槄娑堟伅
+  - 鏂板鍚庤嚜鍔ㄥ脊鍑衡€滄槸鍚﹁闃呭埌鏈熸彁閱掆€濆脊绐楋紝鐢ㄦ埛鍚屾剰鍚庣櫥璁板綋澶╂彁閱掍换鍔?
+  - 淇 `src/utils/api.ts` 鏋勫缓甯搁噺璇诲彇鏂瑰紡锛岄伩鍏?`ReferenceError` 涓旀仮澶嶅紑鍙戠幆澧?API 鍦板潃娉ㄥ叆
+  - 淇棣栭〉鍔ㄧ敾 hook 鍦ㄥ皬绋嬪簭鐜涓嬬殑 `performance` 鍏煎闂锛歚useAnimatedProgress/useAnimatedNumber` 鏀逛负 `performance.now` 涓嶅彲鐢ㄦ椂鍥為€€ `Date.now`
+  - 淇寮€鍙戣剼鏈幆澧冨彉閲忚鐩栭棶棰橈細`dev:weapp` 绉婚櫎鍐欐鐨?`TARO_APP_API_BASE_URL=http://127.0.0.1:3010`锛屾敼涓虹敱 `.env.development` 鎺у埗
+  - `npm run dev:weapp` 鑴氭湰宸茶拷鍔?`--no-check`锛岀粫杩囧綋鍓嶆満鍣ㄤ笂鐨?Taro doctor Rust panic
 
-  ## 当前阻塞
-  - 需要在数据库执行 `backend/database/food_expiry_notification_jobs.sql`
-  - 后端环境需配置 `EXPIRY_SUBSCRIBE_TEMPLATE_ID`
-  - 前端环境需将 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 替换为真正的小程序订阅消息模板 ID（当前 `.env.development` 里仍是旧服务通知模板 ID）
-  - 已确认 `expiry-notify-worker` 会正常抢占并处理 `food_expiry_notification_jobs`，当前“未提醒”不是 worker 未运行，而是微信发送阶段报错：`argument invalid! data.character_string5.value`
-  - 2026-04-07 已修复后端 `quantity_note -> character_string5` 的字符清洗：中文/空值不再直接发给微信，改为发送前统一收敛成 ASCII 安全值，旧队列快照在 worker 重试时也会自动清洗
-  - 若修复后仍报参错，需要继续核对真实模板 ID 与字段定义是否匹配，尤其第 5 个字段是否确实还是 `character_string`
-  - 微信开发者工具端口 `9420` 已监听，但 `mrc` 仍无法完成握手；本轮重启 CLI 自动化所需提权未获批准，暂未拿到截图证据
+  ## 褰撳墠闃诲
+  - 闇€瑕佸湪鏁版嵁搴撴墽琛?`backend/database/food_expiry_notification_jobs.sql`
+  - 鍚庣鐜闇€閰嶇疆 `EXPIRY_SUBSCRIBE_TEMPLATE_ID`
+  - 鍓嶇鐜闇€灏?`TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 鏇挎崲涓虹湡姝ｇ殑灏忕▼搴忚闃呮秷鎭ā鏉?ID锛堝綋鍓?`.env.development` 閲屼粛鏄棫鏈嶅姟閫氱煡妯℃澘 ID锛?
+  - 宸茬‘璁?`expiry-notify-worker` 浼氭甯告姠鍗犲苟澶勭悊 `food_expiry_notification_jobs`锛屽綋鍓嶁€滄湭鎻愰啋鈥濅笉鏄?worker 鏈繍琛岋紝鑰屾槸寰俊鍙戦€侀樁娈垫姤閿欙細`argument invalid! data.character_string5.value`
+  - 2026-04-07 宸蹭慨澶嶅悗绔?`quantity_note -> character_string5` 鐨勫瓧绗︽竻娲楋細涓枃/绌哄€间笉鍐嶇洿鎺ュ彂缁欏井淇★紝鏀逛负鍙戦€佸墠缁熶竴鏀舵暃鎴?ASCII 瀹夊叏鍊硷紝鏃ч槦鍒楀揩鐓у湪 worker 閲嶈瘯鏃朵篃浼氳嚜鍔ㄦ竻娲?
+  - 鑻ヤ慨澶嶅悗浠嶆姤鍙傞敊锛岄渶瑕佺户缁牳瀵圭湡瀹炴ā鏉?ID 涓庡瓧娈靛畾涔夋槸鍚﹀尮閰嶏紝灏ゅ叾绗?5 涓瓧娈垫槸鍚︾‘瀹炶繕鏄?`character_string`
+  - 寰俊寮€鍙戣€呭伐鍏风鍙?`9420` 宸茬洃鍚紝浣?`mrc` 浠嶆棤娉曞畬鎴愭彙鎵嬶紱鏈疆閲嶅惎 CLI 鑷姩鍖栨墍闇€鎻愭潈鏈幏鎵瑰噯锛屾殏鏈嬁鍒版埅鍥捐瘉鎹?
 
-### 近期本地完成项（恢复）
+### 杩戞湡鏈湴瀹屾垚椤癸紙鎭㈠锛?
 
-- Task: 圈子评论大量重复提交
-- Status: done（已定位为“前端缺少硬防抖 + 后端缺少幂等去重”，并已补双层防护）
+- Task: 鍦堝瓙璇勮澶ч噺閲嶅鎻愪氦
+- Status: done锛堝凡瀹氫綅涓衡€滃墠绔己灏戠‖闃叉姈 + 鍚庣缂哄皯骞傜瓑鍘婚噸鈥濓紝骞跺凡琛ュ弻灞傞槻鎶わ級
 - Scope:
-  - 前端：
+  - 鍓嶇锛?
     - `src/pages/community/index.tsx`
-      - `submitComment()` 新增 `commentSubmitting` / `in-flight ref` 双重拦截
-      - 新增 2 秒同内容提交保护，避免 `Input onConfirm` 与发送按钮或用户连点造成重复请求
-      - 本地列表追加评论时按 `comment.id` 去重，避免后端返回已存在评论时前端再次渲染一份
-  - 后端：
+      - `submitComment()` 鏂板 `commentSubmitting` / `in-flight ref` 鍙岄噸鎷︽埅
+      - 鏂板 2 绉掑悓鍐呭鎻愪氦淇濇姢锛岄伩鍏?`Input onConfirm` 涓庡彂閫佹寜閽垨鐢ㄦ埛杩炵偣閫犳垚閲嶅璇锋眰
+      - 鏈湴鍒楄〃杩藉姞璇勮鏃舵寜 `comment.id` 鍘婚噸锛岄伩鍏嶅悗绔繑鍥炲凡瀛樺湪璇勮鏃跺墠绔啀娆℃覆鏌撲竴浠?
+  - 鍚庣锛?
     - `backend/database.py`
-      - 新增最近重复评论检测：同用户、同动态、同内容、同回复目标在短时间窗口内只保留一条
-      - `add_feed_comment*` 命中重复时直接返回已有评论
+      - 鏂板鏈€杩戦噸澶嶈瘎璁烘娴嬶細鍚岀敤鎴枫€佸悓鍔ㄦ€併€佸悓鍐呭銆佸悓鍥炲鐩爣鍦ㄧ煭鏃堕棿绐楀彛鍐呭彧淇濈暀涓€鏉?
+      - `add_feed_comment*` 鍛戒腑閲嶅鏃剁洿鎺ヨ繑鍥炲凡鏈夎瘎璁?
     - `backend/main.py`
-      - 若本次评论被判定为重复提交，则跳过重复的互动通知写入
+      - 鑻ユ湰娆¤瘎璁鸿鍒ゅ畾涓洪噸澶嶆彁浜わ紝鍒欒烦杩囬噸澶嶇殑浜掑姩閫氱煡鍐欏叆
 - Verification:
-  - `python -m py_compile backend/main.py backend/database.py` 通过
-  - `npm run dev:weapp` 已触发开发编译，`dist/pages/community/index.*` 时间戳已更新到本轮修改
-  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
-    - `mrc where --port 9420` 可连接
-    - `mrc screenshot .\\comment-debug.png --port 9420` 成功
-  - 当前阻塞：9420 当前连接到另一套小程序页面 `training/today-training`，不是 `food_link`，因此本轮未能在正确的圈子页完成“发表评论/确认不重复”的点击验证
-  - 历史数据清理：
-    - 新增脚本 `backend/cleanup_duplicate_feed_comments.py`
-    - 先以 `--window-seconds 45` 预览，识别出 `13` 个重复簇、`22` 条待删重复评论
-    - 已执行 `python backend/cleanup_duplicate_feed_comments.py --window-seconds 45 --apply`
-    - 二次复查结果：总评论数从 `183 -> 157`，重复簇降为 `0`
-  - 2026-04-10 二次清理：
-    - 新增脚本 `backend/cleanup_duplicate_feed_notifications.py`
-    - 评论表再次预览识别出 `3` 个新重复簇、`10` 条待删重复评论（含 `你好` 与“炒饭很好吃啊”两组）
-    - 通知表预览识别出 `3` 个重复簇、`10` 条待删重复通知
-    - 已执行：
+  - `python -m py_compile backend/main.py backend/database.py` 閫氳繃
+  - `npm run dev:weapp` 宸茶Е鍙戝紑鍙戠紪璇戯紝`dist/pages/community/index.*` 鏃堕棿鎴冲凡鏇存柊鍒版湰杞慨鏀?
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools` 杩愯鎬侀獙璇侊細
+    - `mrc where --port 9420` 鍙繛鎺?
+    - `mrc screenshot .\\comment-debug.png --port 9420` 鎴愬姛
+  - 褰撳墠闃诲锛?420 褰撳墠杩炴帴鍒板彟涓€濂楀皬绋嬪簭椤甸潰 `training/today-training`锛屼笉鏄?`food_link`锛屽洜姝ゆ湰杞湭鑳藉湪姝ｇ‘鐨勫湀瀛愰〉瀹屾垚鈥滃彂琛ㄨ瘎璁?纭涓嶉噸澶嶁€濈殑鐐瑰嚮楠岃瘉
+  - 鍘嗗彶鏁版嵁娓呯悊锛?
+    - 鏂板鑴氭湰 `backend/cleanup_duplicate_feed_comments.py`
+    - 鍏堜互 `--window-seconds 45` 棰勮锛岃瘑鍒嚭 `13` 涓噸澶嶇皣銆乣22` 鏉″緟鍒犻噸澶嶈瘎璁?
+    - 宸叉墽琛?`python backend/cleanup_duplicate_feed_comments.py --window-seconds 45 --apply`
+    - 浜屾澶嶆煡缁撴灉锛氭€昏瘎璁烘暟浠?`183 -> 157`锛岄噸澶嶇皣闄嶄负 `0`
+  - 2026-04-10 浜屾娓呯悊锛?
+    - 鏂板鑴氭湰 `backend/cleanup_duplicate_feed_notifications.py`
+    - 璇勮琛ㄥ啀娆￠瑙堣瘑鍒嚭 `3` 涓柊閲嶅绨囥€乣10` 鏉″緟鍒犻噸澶嶈瘎璁猴紙鍚?`浣犲ソ` 涓庘€滅倰楗緢濂藉悆鍟娾€濅袱缁勶級
+    - 閫氱煡琛ㄩ瑙堣瘑鍒嚭 `3` 涓噸澶嶇皣銆乣10` 鏉″緟鍒犻噸澶嶉€氱煡
+    - 宸叉墽琛岋細
       - `python backend/cleanup_duplicate_feed_comments.py --window-seconds 45 --apply`
       - `python backend/cleanup_duplicate_feed_notifications.py --window-seconds 45 --apply`
-    - 定点复查：
-      - `feed_comments` 总数 `171`
-      - `feed_interaction_notifications` 总数 `187`
-      - 用户截图中的 `你好` 与“我靠马哥你这炒饭看着真的很好吃啊”重复评论/重复通知已查不到
-    - 额外修复：
-      - `backend/worker.py` 的旧评论 worker 现也会在 `add_feed_comment_sync()` 命中 `_deduped` 时跳过重复通知
-      - `backend/database.py` 的 `create_feed_interaction_notification_sync()` 已补短时间通知幂等，避免同一事件短时间重复插入
+    - 瀹氱偣澶嶆煡锛?
+      - `feed_comments` 鎬绘暟 `171`
+      - `feed_interaction_notifications` 鎬绘暟 `187`
+      - 鐢ㄦ埛鎴浘涓殑 `浣犲ソ` 涓庘€滄垜闈犻┈鍝ヤ綘杩欑倰楗湅鐫€鐪熺殑寰堝ソ鍚冨晩鈥濋噸澶嶈瘎璁?閲嶅閫氱煡宸叉煡涓嶅埌
+    - 棰濆淇锛?
+      - `backend/worker.py` 鐨勬棫璇勮 worker 鐜颁篃浼氬湪 `add_feed_comment_sync()` 鍛戒腑 `_deduped` 鏃惰烦杩囬噸澶嶉€氱煡
+      - `backend/database.py` 鐨?`create_feed_interaction_notification_sync()` 宸茶ˉ鐭椂闂撮€氱煡骞傜瓑锛岄伩鍏嶅悓涓€浜嬩欢鐭椂闂撮噸澶嶆彃鍏?
 
-- Task: 手动记录升级为“搜索优先单餐工作台”
-- Status: done（前端改成搜索优先工作台；后端搜索补收藏/最近常吃重排；保存补来源元数据并在保存后回到当天记录页）
+- Task: 鎵嬪姩璁板綍鍗囩骇涓衡€滄悳绱紭鍏堝崟椁愬伐浣滃彴鈥?
+- Status: done锛堝墠绔敼鎴愭悳绱紭鍏堝伐浣滃彴锛涘悗绔悳绱㈣ˉ鏀惰棌/鏈€杩戝父鍚冮噸鎺掞紱淇濆瓨琛ユ潵婧愬厓鏁版嵁骞跺湪淇濆瓨鍚庡洖鍒板綋澶╄褰曢〉锛?
 - Scope:
-  - 前端：
+  - 鍓嶇锛?
     - `src/pages/record-manual/index.tsx`
-      - 页面从“全量浏览 + 本地筛选”升级为“搜索优先 + 分层推荐”
-      - 空搜索时展示 `最近常吃 / 收藏优先 / 公共库推荐 / 标准营养词典`
-      - 搜索时接入真实 `/api/manual-food/search`，不再只做本地 includes 过滤
-      - 重复点击同食物改为直接累加份量/克重，不再弹“已添加”
-      - 已选食物支持 `-50/-10/+10/+50g` 快调；公共库条目支持 `0.5 / 1 / 1.5 / 2份`
-      - 保存成功后直接跳转 `pages/day-record/index?date=今天`
+      - 椤甸潰浠庘€滃叏閲忔祻瑙?+ 鏈湴绛涢€夆€濆崌绾т负鈥滄悳绱紭鍏?+ 鍒嗗眰鎺ㄨ崘鈥?
+      - 绌烘悳绱㈡椂灞曠ず `鏈€杩戝父鍚?/ 鏀惰棌浼樺厛 / 鍏叡搴撴帹鑽?/ 鏍囧噯钀ュ吇璇嶅吀`
+      - 鎼滅储鏃舵帴鍏ョ湡瀹?`/api/manual-food/search`锛屼笉鍐嶅彧鍋氭湰鍦?includes 杩囨护
+      - 閲嶅鐐瑰嚮鍚岄鐗╂敼涓虹洿鎺ョ疮鍔犱唤閲?鍏嬮噸锛屼笉鍐嶅脊鈥滃凡娣诲姞鈥?
+      - 宸查€夐鐗╂敮鎸?`-50/-10/+10/+50g` 蹇皟锛涘叕鍏卞簱鏉＄洰鏀寔 `0.5 / 1 / 1.5 / 2浠絗
+      - 淇濆瓨鎴愬姛鍚庣洿鎺ヨ烦杞?`pages/day-record/index?date=浠婂ぉ`
     - `src/pages/record-manual/index.scss`
-      - 重做搜索工作台、结果卡片、已选托盘和底部保存栏样式
+      - 閲嶅仛鎼滅储宸ヤ綔鍙般€佺粨鏋滃崱鐗囥€佸凡閫夋墭鐩樺拰搴曢儴淇濆瓨鏍忔牱寮?
     - `src/utils/api.ts`
-      - `searchManualFood` / `browseManualFood` 增加可选登录态透传
-      - 手动记录结果类型补 `recommend_reason / usage_count / collected / source_label / portion_label`
-      - 保存 payload 补手动来源字段
-  - 后端：
+      - `searchManualFood` / `browseManualFood` 澧炲姞鍙€夌櫥褰曟€侀€忎紶
+      - 鎵嬪姩璁板綍缁撴灉绫诲瀷琛?`recommend_reason / usage_count / collected / source_label / portion_label`
+      - 淇濆瓨 payload 琛ユ墜鍔ㄦ潵婧愬瓧娈?
+  - 鍚庣锛?
     - `backend/database.py`
-      - `search_manual_food(...)` 改为跨 `public_food_library + food_nutrition_library` 混排
-      - 新增基于 `user_food_records.items` 的近期使用统计，支持“最近常吃”与搜索加权
-      - `browse_manual_food_library(...)` 新增 `recent_items` 与 `collected_public_library`
+      - `search_manual_food(...)` 鏀逛负璺?`public_food_library + food_nutrition_library` 娣锋帓
+      - 鏂板鍩轰簬 `user_food_records.items` 鐨勮繎鏈熶娇鐢ㄧ粺璁★紝鏀寔鈥滄渶杩戝父鍚冣€濅笌鎼滅储鍔犳潈
+      - `browse_manual_food_library(...)` 鏂板 `recent_items` 涓?`collected_public_library`
     - `backend/main.py`
-      - `/api/manual-food/search` 与 `/api/manual-food/browse` 改为可选登录态
-      - `FoodRecordItem` / `save_food_record` 保留 `manual_source*` 元数据，供后续常吃/复用链路使用
+      - `/api/manual-food/search` 涓?`/api/manual-food/browse` 鏀逛负鍙€夌櫥褰曟€?
+      - `FoodRecordItem` / `save_food_record` 淇濈暀 `manual_source*` 鍏冩暟鎹紝渚涘悗缁父鍚?澶嶇敤閾捐矾浣跨敤
 - Verification:
-  - `ReadLints` 检查 `record-manual / api / backend` 最近修改文件，无新增报错
-  - `python -m py_compile backend/main.py backend/database.py` 通过
-  - `npm run build:weapp` 通过
-  - 已按项目要求尝试微信开发者工具自动化验证：`mrc where --port 9420`
-  - 当前阻塞：9420 端口连接到的仍是另一个小程序 `streetlifting/index/locations-map`，不是 `food_link`，因此本轮未在正确目标里完成截图与点击验证
+  - `ReadLints` 妫€鏌?`record-manual / api / backend` 鏈€杩戜慨鏀规枃浠讹紝鏃犳柊澧炴姤閿?
+  - `python -m py_compile backend/main.py backend/database.py` 閫氳繃
+  - `npm run build:weapp` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲楠岃瘉锛歚mrc where --port 9420`
+  - 褰撳墠闃诲锛?420 绔彛杩炴帴鍒扮殑浠嶆槸鍙︿竴涓皬绋嬪簭 `streetlifting/index/locations-map`锛屼笉鏄?`food_link`锛屽洜姝ゆ湰杞湭鍦ㄦ纭洰鏍囬噷瀹屾垚鎴浘涓庣偣鍑婚獙璇?
 
-- Task: 「我的」会员卡片今日次数误显 0/3
-- Status: done（后端限次关闭时仍返回今日分析次数；前端不再把 `null` 当成 `0/3`）
-- Scope: `backend/main.py` `GET /api/membership/me`，`src/pages/profile/index.tsx`，`src/pages/pro-membership/index.tsx`
-- Verification: `python -m py_compile backend/main.py`；ReadLints 通过；未跑 weapp-devtools（本环境常见 9420 阻塞）
+- Task: 銆屾垜鐨勩€嶄細鍛樺崱鐗囦粖鏃ユ鏁拌鏄?0/3
+- Status: done锛堝悗绔檺娆″叧闂椂浠嶈繑鍥炰粖鏃ュ垎鏋愭鏁帮紱鍓嶇涓嶅啀鎶?`null` 褰撴垚 `0/3`锛?
+- Scope: `backend/main.py` `GET /api/membership/me`锛宍src/pages/profile/index.tsx`锛宍src/pages/pro-membership/index.tsx`
+- Verification: `python -m py_compile backend/main.py`锛汻eadLints 閫氳繃锛涙湭璺?weapp-devtools锛堟湰鐜甯歌 9420 闃诲锛?
 
-- Task: 保质期「新增保质期」创建 422 修复
-- Status: done（`expiry-edit` 请求体已与 `POST /api/food-expiry` 对齐）
+- Task: 淇濊川鏈熴€屾柊澧炰繚璐ㄦ湡銆嶅垱寤?422 淇
+- Status: done锛坄expiry-edit` 璇锋眰浣撳凡涓?`POST /api/food-expiry` 瀵归綈锛?
 - Scope: `src/pages/expiry-edit/index.tsx`
-- Verification: 需在小程序端再点一次「创建提醒」确认 200；未在本环境跑 weapp-devtools
+- Verification: 闇€鍦ㄥ皬绋嬪簭绔啀鐐逛竴娆°€屽垱寤烘彁閱掋€嶇‘璁?200锛涙湭鍦ㄦ湰鐜璺?weapp-devtools
 
-- Task: 今日餐食布局优化：图片撑满容器、进度条超额红色警示
-- Status: done（已完成代码修改并通过构建）
+- Task: 浠婃棩椁愰甯冨眬浼樺寲锛氬浘鐗囨拺婊″鍣ㄣ€佽繘搴︽潯瓒呴绾㈣壊璀︾ず
+- Status: done锛堝凡瀹屾垚浠ｇ爜淇敼骞堕€氳繃鏋勫缓锛?
 - Scope:
   - `src/pages/index/components/MealsSection.tsx`
-    - 图片区域样式优化：添加 `max-width: 100%` 和 `object-fit: cover` 确保图片撑满容器
-    - 进度条颜色逻辑：超过 100% 时从绿色变为红色警示 (`#ef4444`)
-    - 新增 `is-warning` class 用于超额状态的额外样式（如红色阴影）
+    - 鍥剧墖鍖哄煙鏍峰紡浼樺寲锛氭坊鍔?`max-width: 100%` 鍜?`object-fit: cover` 纭繚鍥剧墖鎾戞弧瀹瑰櫒
+    - 杩涘害鏉￠鑹查€昏緫锛氳秴杩?100% 鏃朵粠缁胯壊鍙樹负绾㈣壊璀︾ず (`#ef4444`)
+    - 鏂板 `is-warning` class 鐢ㄤ簬瓒呴鐘舵€佺殑棰濆鏍峰紡锛堝绾㈣壊闃村奖锛?
   - `src/pages/index/index.scss`
-    - `.meal-thumb-image`: 添加 `max-width: 100%` 和 `object-fit: cover`
-    - `.meal-progress-bar-fill.is-warning`: 添加红色阴影效果
+    - `.meal-thumb-image`: 娣诲姞 `max-width: 100%` 鍜?`object-fit: cover`
+    - `.meal-progress-bar-fill.is-warning`: 娣诲姞绾㈣壊闃村奖鏁堟灉
 - Verification:
-  - 构建通过：`npm run build:weapp` 成功
-  - 待验证：在微信开发者工具中确认餐次缩略图撑满与超额红色进度条
+  - 鏋勫缓閫氳繃锛歚npm run build:weapp` 鎴愬姛
+  - 寰呴獙璇侊細鍦ㄥ井淇″紑鍙戣€呭伐鍏蜂腑纭椁愭缂╃暐鍥炬拺婊′笌瓒呴绾㈣壊杩涘害鏉?
 
-## 下一步
-  - 执行新表 SQL 并确认 Supabase 中 `food_expiry_items` / `food_expiry_notification_jobs` 可用
-  - 将前后端 `*_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 一并替换成真实的小程序订阅消息模板 ID，并核对该模板第 5 个字段是否确实是 `character_string`
-  - 用真实模板 ID 重新联调一次新增-订阅-入队-Worker 发送，重点确认修复后 `character_string5` 不再因中文/空值报错
-  - 配置小程序订阅消息模板 ID 后联调新增-订阅-入队-Worker 发送
-  - 如继续验证前端，优先排查开发者工具自动化握手失败，并在开发者工具内确认“自动化”已对当前项目窗口开启
+## 涓嬩竴姝?
+  - 鎵ц鏂拌〃 SQL 骞剁‘璁?Supabase 涓?`food_expiry_items` / `food_expiry_notification_jobs` 鍙敤
+  - 灏嗗墠鍚庣 `*_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 涓€骞舵浛鎹㈡垚鐪熷疄鐨勫皬绋嬪簭璁㈤槄娑堟伅妯℃澘 ID锛屽苟鏍稿璇ユā鏉跨 5 涓瓧娈垫槸鍚︾‘瀹炴槸 `character_string`
+  - 鐢ㄧ湡瀹炴ā鏉?ID 閲嶆柊鑱旇皟涓€娆℃柊澧?璁㈤槄-鍏ラ槦-Worker 鍙戦€侊紝閲嶇偣纭淇鍚?`character_string5` 涓嶅啀鍥犱腑鏂?绌哄€兼姤閿?
+  - 閰嶇疆灏忕▼搴忚闃呮秷鎭ā鏉?ID 鍚庤仈璋冩柊澧?璁㈤槄-鍏ラ槦-Worker 鍙戦€?
+  - 濡傜户缁獙璇佸墠绔紝浼樺厛鎺掓煡寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲鎻℃墜澶辫触锛屽苟鍦ㄥ紑鍙戣€呭伐鍏峰唴纭鈥滆嚜鍔ㄥ寲鈥濆凡瀵瑰綋鍓嶉」鐩獥鍙ｅ紑鍚?
 
 ---
 
-## 历史任务记录（本地恢复）
+## 鍘嗗彶浠诲姟璁板綍锛堟湰鍦版仮澶嶏級
 
-- Task: 修复普通模式下卡路里水池水位动效
-- Status: done（波动平面 + 透明度渐变 + 底部光晕，水池效果更生动）
+- Task: 淇鏅€氭ā寮忎笅鍗¤矾閲屾按姹犳按浣嶅姩鏁?
+- Status: done锛堟尝鍔ㄥ钩闈?+ 閫忔槑搴︽笎鍙?+ 搴曢儴鍏夋檿锛屾按姹犳晥鏋滄洿鐢熷姩锛?
 - Scope:
-  - 前端 `src/pages/index/index.tsx`：
-    - 添加 `.water-plane` 水面平面，周期性波动动画
-    - 添加 `.water-bottom-glow` 池底光晕呼吸效果
-    - 三层白色半透明波浪在顶部流动
-  - 样式 `src/pages/index/index.scss`：
-    - 水体背景改为从底到上的透明度渐变
-    - 底部不透明 (95%) → 中部 (85%) → 顶部较透明 (65%)
-    - 水面平面 `planeWave` 动画：3秒周期，波浪起伏
-    - 底部光晕 `bottomGlow` 动画：5秒周期，呼吸效果
+  - 鍓嶇 `src/pages/index/index.tsx`锛?
+    - 娣诲姞 `.water-plane` 姘撮潰骞抽潰锛屽懆鏈熸€ф尝鍔ㄥ姩鐢?
+    - 娣诲姞 `.water-bottom-glow` 姹犲簳鍏夋檿鍛煎惛鏁堟灉
+    - 涓夊眰鐧借壊鍗婇€忔槑娉㈡氮鍦ㄩ《閮ㄦ祦鍔?
+  - 鏍峰紡 `src/pages/index/index.scss`锛?
+    - 姘翠綋鑳屾櫙鏀逛负浠庡簳鍒颁笂鐨勯€忔槑搴︽笎鍙?
+    - 搴曢儴涓嶉€忔槑 (95%) 鈫?涓儴 (85%) 鈫?椤堕儴杈冮€忔槑 (65%)
+    - 姘撮潰骞抽潰 `planeWave` 鍔ㄧ敾锛?绉掑懆鏈燂紝娉㈡氮璧蜂紡
+    - 搴曢儴鍏夋檿 `bottomGlow` 鍔ㄧ敾锛?绉掑懆鏈燂紝鍛煎惛鏁堟灉
 - Verification:
-  - ✅ 构建通过：`npm run build:weapp` 成功
-  - ✅ 水面有周期性波动，像真实池水
-  - ✅ 从底到上透明度渐变，层次感更强
-  - ✅ 底部有呼吸光晕，增加深度感
-  - ✅ 低/中/高水位效果均正常展示
+  - 鉁?鏋勫缓閫氳繃锛歚npm run build:weapp` 鎴愬姛
+  - 鉁?姘撮潰鏈夊懆鏈熸€ф尝鍔紝鍍忕湡瀹炴睜姘?
+  - 鉁?浠庡簳鍒颁笂閫忔槑搴︽笎鍙橈紝灞傛鎰熸洿寮?
+  - 鉁?搴曢儴鏈夊懠鍚稿厜鏅曪紝澧炲姞娣卞害鎰?
+  - 鉁?浣?涓?楂樻按浣嶆晥鏋滃潎姝ｅ父灞曠ず
 
-- Task: 首页日期热力图染色 + 点击切换数据
-- Status: in_progress（已找到并修复问题）
+- Task: 棣栭〉鏃ユ湡鐑姏鍥炬煋鑹?+ 鐐瑰嚮鍒囨崲鏁版嵁
+- Status: in_progress锛堝凡鎵惧埌骞朵慨澶嶉棶棰橈級
 - Scope:
-  - 后端 `backend/main.py`：`/api/home/dashboard` 新增可选 `date` 参数，支持获取指定日期数据
-  - 前端 `src/utils/api.ts`：`getHomeDashboard()` 支持传入日期参数
-  - 前端 `src/pages/index/index.tsx`：
-    - 修改 `WeekHeatmapCell` 接口，添加 `target` 和 `intakeRatio` 字段
-    - 修改 `loadDashboard()` 支持加载指定日期数据
-    - 修改 `handleDateSelect()`，点击日期时加载该日期数据而不是跳转页面
-    - 日期渲染根据 `intakeRatio` 显示 5 级热力颜色（无记录/25%/50%/75%/100%+）
-  - 样式 `src/pages/index/index.scss`：新增 5 级热力颜色样式
-- 问题根因：
-  - `Taro.useDidShow()` 钩子会在页面每次显示时触发
-  - 它会调用 `loadDashboard()` 加载**今天**的数据（不带日期参数）
-  - 当用户点击30号后，`loadDashboard(date)` 加载了30号数据
-  - 但紧接着 `useDidShow` 又触发了，加载今天的数据（锦恢今天无记录，显示0）
-  - 导致30号的数据被今天的空数据覆盖
-- 修复方案：
-  - 修改 `useDidShow`，只在当前显示的是今天时才刷新数据
-  - 如果用户已选择其他日期，不自动刷新
+  - 鍚庣 `backend/main.py`锛歚/api/home/dashboard` 鏂板鍙€?`date` 鍙傛暟锛屾敮鎸佽幏鍙栨寚瀹氭棩鏈熸暟鎹?
+  - 鍓嶇 `src/utils/api.ts`锛歚getHomeDashboard()` 鏀寔浼犲叆鏃ユ湡鍙傛暟
+  - 鍓嶇 `src/pages/index/index.tsx`锛?
+    - 淇敼 `WeekHeatmapCell` 鎺ュ彛锛屾坊鍔?`target` 鍜?`intakeRatio` 瀛楁
+    - 淇敼 `loadDashboard()` 鏀寔鍔犺浇鎸囧畾鏃ユ湡鏁版嵁
+    - 淇敼 `handleDateSelect()`锛岀偣鍑绘棩鏈熸椂鍔犺浇璇ユ棩鏈熸暟鎹€屼笉鏄烦杞〉闈?
+    - 鏃ユ湡娓叉煋鏍规嵁 `intakeRatio` 鏄剧ず 5 绾х儹鍔涢鑹诧紙鏃犺褰?25%/50%/75%/100%+锛?
+  - 鏍峰紡 `src/pages/index/index.scss`锛氭柊澧?5 绾х儹鍔涢鑹叉牱寮?
+- 闂鏍瑰洜锛?
+  - `Taro.useDidShow()` 閽╁瓙浼氬湪椤甸潰姣忔鏄剧ず鏃惰Е鍙?
+  - 瀹冧細璋冪敤 `loadDashboard()` 鍔犺浇**浠婂ぉ**鐨勬暟鎹紙涓嶅甫鏃ユ湡鍙傛暟锛?
+  - 褰撶敤鎴风偣鍑?0鍙峰悗锛宍loadDashboard(date)` 鍔犺浇浜?0鍙锋暟鎹?
+  - 浣嗙揣鎺ョ潃 `useDidShow` 鍙堣Е鍙戜簡锛屽姞杞戒粖澶╃殑鏁版嵁锛堥敠鎭粖澶╂棤璁板綍锛屾樉绀?锛?
+  - 瀵艰嚧30鍙风殑鏁版嵁琚粖澶╃殑绌烘暟鎹鐩?
+- 淇鏂规锛?
+  - 淇敼 `useDidShow`锛屽彧鍦ㄥ綋鍓嶆樉绀虹殑鏄粖澶╂椂鎵嶅埛鏂版暟鎹?
+  - 濡傛灉鐢ㄦ埛宸查€夋嫨鍏朵粬鏃ユ湡锛屼笉鑷姩鍒锋柊
 - Verification:
-  - ✅ 后端 API 测试：`/api/home/dashboard?date=2026-03-30` 正确返回 1176 kcal
-  - ✅ 后端数据库：`list_food_records` 正确返回 2 条记录
-  - ✅ 后端日志确认：请求30号时返回2条记录
-  - ✅ UI 热力图颜色：30号日期圆圈显示绿色
-  - ✅ 问题定位并修复：发现微信小程序 GET 请求缓存导致前端收到旧数据（0 kcal）
-  - ✅ 修复方案：在 `getHomeDashboard` URL 中添加 `_t=${timestamp}` 参数禁用缓存
-  - 🔄 待验证：重新编译后点击30号数据是否正确显示
+  - 鉁?鍚庣 API 娴嬭瘯锛歚/api/home/dashboard?date=2026-03-30` 姝ｇ‘杩斿洖 1176 kcal
+  - 鉁?鍚庣鏁版嵁搴擄細`list_food_records` 姝ｇ‘杩斿洖 2 鏉¤褰?
+  - 鉁?鍚庣鏃ュ織纭锛氳姹?0鍙锋椂杩斿洖2鏉¤褰?
+  - 鉁?UI 鐑姏鍥鹃鑹诧細30鍙锋棩鏈熷渾鍦堟樉绀虹豢鑹?
+  - 鉁?闂瀹氫綅骞朵慨澶嶏細鍙戠幇寰俊灏忕▼搴?GET 璇锋眰缂撳瓨瀵艰嚧鍓嶇鏀跺埌鏃ф暟鎹紙0 kcal锛?
+  - 鉁?淇鏂规锛氬湪 `getHomeDashboard` URL 涓坊鍔?`_t=${timestamp}` 鍙傛暟绂佺敤缂撳瓨
+  - 馃攧 寰呴獙璇侊細閲嶆柊缂栬瘧鍚庣偣鍑?0鍙锋暟鎹槸鍚︽纭樉绀?
 
-- Task: 首页三大营养素极简改版（仪表盘中心显示摄入量）
+- Task: 棣栭〉涓夊ぇ钀ュ吇绱犳瀬绠€鏀圭増锛堜华琛ㄧ洏涓績鏄剧ず鎽勫叆閲忥級
 - Status: done
 
-- Task: 精准模式升级为“多轮会话 + 参考物 + 并行分项估计”
-- Status: done（已把旧 `strict` 单次识别改造成“规划 -> 追问/重拍 -> 并行子估计 -> 聚合结果”的精准会话链路）
+- Task: 绮惧噯妯″紡鍗囩骇涓衡€滃杞細璇?+ 鍙傝€冪墿 + 骞惰鍒嗛」浼拌鈥?
+- Status: done锛堝凡鎶婃棫 `strict` 鍗曟璇嗗埆鏀归€犳垚鈥滆鍒?-> 杩介棶/閲嶆媿 -> 骞惰瀛愪及璁?-> 鑱氬悎缁撴灉鈥濈殑绮惧噯浼氳瘽閾捐矾锛?
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/database.py`
-      - 新增 `precision_sessions / precision_session_rounds / precision_item_estimates` 的同步读写函数
+      - 鏂板 `precision_sessions / precision_session_rounds / precision_item_estimates` 鐨勫悓姝ヨ鍐欏嚱鏁?
     - `backend/database/precision_sessions.sql`
     - `backend/sql/add_precision_sessions.sql`
-      - 新增精准模式会话、轮次、分项估计三张表
+      - 鏂板绮惧噯妯″紡浼氳瘽銆佽疆娆°€佸垎椤逛及璁′笁寮犺〃
     - `backend/main.py`
-      - 图片/文字 `strict` 提交改为创建或续用精准会话
-      - 新增 `/api/precision-sessions/{session_id}/continue`
-      - 新增参考物结构化入参、精准模式中间态返回字段
+      - 鍥剧墖/鏂囧瓧 `strict` 鎻愪氦鏀逛负鍒涘缓鎴栫画鐢ㄧ簿鍑嗕細璇?
+      - 鏂板 `/api/precision-sessions/{session_id}/continue`
+      - 鏂板鍙傝€冪墿缁撴瀯鍖栧叆鍙傘€佺簿鍑嗘ā寮忎腑闂存€佽繑鍥炲瓧娈?
     - `backend/worker.py`
-      - 新增 `precision_plan / precision_item_estimate / precision_aggregate` 三类任务处理
-      - 首轮先做规划，按需进入 `needs_user_input / needs_retake / ready_for_estimate`
-      - 多食物场景会拆成子任务并行估计，最后聚合成一份最终结果
+      - 鏂板 `precision_plan / precision_item_estimate / precision_aggregate` 涓夌被浠诲姟澶勭悊
+      - 棣栬疆鍏堝仛瑙勫垝锛屾寜闇€杩涘叆 `needs_user_input / needs_retake / ready_for_estimate`
+      - 澶氶鐗╁満鏅細鎷嗘垚瀛愪换鍔″苟琛屼及璁★紝鏈€鍚庤仛鍚堟垚涓€浠芥渶缁堢粨鏋?
     - `backend/run_backend.py`
-      - 新增精准规划、精准子项估计、精准聚合 worker 进程
-  - 前端：
+      - 鏂板绮惧噯瑙勫垝銆佺簿鍑嗗瓙椤逛及璁°€佺簿鍑嗚仛鍚?worker 杩涚▼
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - 新增精准会话、参考物、继续精准会话相关类型与 API
+      - 鏂板绮惧噯浼氳瘽銆佸弬鑰冪墿銆佺户缁簿鍑嗕細璇濈浉鍏崇被鍨嬩笌 API
     - `src/pages/analyze/index.tsx`
     - `src/pages/analyze/index.scss`
-      - 分析页支持参考物录入，并支持带 `precision_session_id` 继续拍照
+      - 鍒嗘瀽椤垫敮鎸佸弬鑰冪墿褰曞叆锛屽苟鏀寔甯?`precision_session_id` 缁х画鎷嶇収
     - `src/pages/analyze-loading/index.tsx`
-      - loading 页支持跟随 `redirectTaskId` 接力追踪精准模式后续任务
+      - loading 椤垫敮鎸佽窡闅?`redirectTaskId` 鎺ュ姏杩借釜绮惧噯妯″紡鍚庣画浠诲姟
     - `src/pages/result/index.tsx`
     - `src/pages/result/index.scss`
-      - 结果页支持展示追问/重拍/待补充项，并可直接提交补充信息或重新拍照继续
+      - 缁撴灉椤垫敮鎸佸睍绀鸿拷闂?閲嶆媿/寰呰ˉ鍏呴」锛屽苟鍙洿鎺ユ彁浜よˉ鍏呬俊鎭垨閲嶆柊鎷嶇収缁х画
     - `src/pages/analyze-history/index.tsx`
-      - 历史页可识别精准模式任务并恢复到正确源类型
+      - 鍘嗗彶椤靛彲璇嗗埆绮惧噯妯″紡浠诲姟骞舵仮澶嶅埌姝ｇ‘婧愮被鍨?
 - Verification:
-  - `ReadLints` 检查最近修改文件无新增报错
-  - `python -m py_compile backend/main.py backend/worker.py backend/run_backend.py` 通过
-  - `npm run build:weapp` 通过
-  - 已按项目要求尝试微信开发者工具自动化验证：
+  - `ReadLints` 妫€鏌ユ渶杩戜慨鏀规枃浠舵棤鏂板鎶ラ敊
+  - `python -m py_compile backend/main.py backend/worker.py backend/run_backend.py` 閫氳繃
+  - `npm run build:weapp` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲楠岃瘉锛?
     - `mrc where --port 9420`
     - `mrc errors 20 --port 9420`
-  - 当前阻塞：仍无法连接 `ws://localhost:9420`，因此这轮未完成精准模式页面的运行态截图与点击验证
+  - 褰撳墠闃诲锛氫粛鏃犳硶杩炴帴 `ws://localhost:9420`锛屽洜姝よ繖杞湭瀹屾垚绮惧噯妯″紡椤甸潰鐨勮繍琛屾€佹埅鍥句笌鐐瑰嚮楠岃瘉
 - Next step:
-  - 在线上数据库执行 `backend/sql/add_precision_sessions.sql`
-  - 重启后端，让新的精准模式 worker 队列生效
-  - 在微信开发者工具里重点验证 4 条链路：
-    - 精准模式首轮命中追问时，结果页是否能直接提交补充说明继续
-    - 精准模式首轮命中重拍时，结果页是否能回到分析页带着 `precision_session_id` 继续拍
-    - 多食物样本是否进入并行分项估计，并最终聚合出一份结果
-    - 参考物输入是否能稳定透传到后端规划和估计链路
+  - 鍦ㄧ嚎涓婃暟鎹簱鎵ц `backend/sql/add_precision_sessions.sql`
+  - 閲嶅惎鍚庣锛岃鏂扮殑绮惧噯妯″紡 worker 闃熷垪鐢熸晥
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏烽噷閲嶇偣楠岃瘉 4 鏉￠摼璺細
+    - 绮惧噯妯″紡棣栬疆鍛戒腑杩介棶鏃讹紝缁撴灉椤垫槸鍚﹁兘鐩存帴鎻愪氦琛ュ厖璇存槑缁х画
+    - 绮惧噯妯″紡棣栬疆鍛戒腑閲嶆媿鏃讹紝缁撴灉椤垫槸鍚﹁兘鍥炲埌鍒嗘瀽椤靛甫鐫€ `precision_session_id` 缁х画鎷?
+    - 澶氶鐗╂牱鏈槸鍚﹁繘鍏ュ苟琛屽垎椤逛及璁★紝骞舵渶缁堣仛鍚堝嚭涓€浠界粨鏋?
+    - 鍙傝€冪墿杈撳叆鏄惁鑳界ǔ瀹氶€忎紶鍒板悗绔鍒掑拰浼拌閾捐矾
 
-- Task: 喝水弹层交互统一（快捷与自定义均需「确认记录」）
-- Status: done（`src/pages/index/index.tsx`：快捷量累加到输入框；主按钮文案「确认记录」；说明文案已同步）
-- Next step: 微信开发者工具内点快捷量后应只见输入框变化，点「确认记录」后才写入并关弹层；`npm run build:weapp` 已通过
+- Task: 鍠濇按寮瑰眰浜や簰缁熶竴锛堝揩鎹蜂笌鑷畾涔夊潎闇€銆岀‘璁よ褰曘€嶏級
+- Status: done锛坄src/pages/index/index.tsx`锛氬揩鎹烽噺绱姞鍒拌緭鍏ユ锛涗富鎸夐挳鏂囨銆岀‘璁よ褰曘€嶏紱璇存槑鏂囨宸插悓姝ワ級
+- Next step: 寰俊寮€鍙戣€呭伐鍏峰唴鐐瑰揩鎹烽噺鍚庡簲鍙杈撳叆妗嗗彉鍖栵紝鐐广€岀‘璁よ褰曘€嶅悗鎵嶅啓鍏ュ苟鍏冲脊灞傦紱`npm run build:weapp` 宸查€氳繃
 
-- Task: 修复首页体重/喝水记录逻辑与弹层交互
-- Status: done（体重已支持同一天多次记录；首页按“最近一次 / 上一次”展示；喝水弹层已改为快捷累加后需确认记录；体重/喝水弹层已整体上移避开自定义 tabBar）
+- Task: 淇棣栭〉浣撻噸/鍠濇按璁板綍閫昏緫涓庡脊灞備氦浜?
+- Status: done锛堜綋閲嶅凡鏀寔鍚屼竴澶╁娆¤褰曪紱棣栭〉鎸夆€滄渶杩戜竴娆?/ 涓婁竴娆♀€濆睍绀猴紱鍠濇按寮瑰眰宸叉敼涓哄揩鎹风疮鍔犲悗闇€纭璁板綍锛涗綋閲?鍠濇按寮瑰眰宸叉暣浣撲笂绉婚伩寮€鑷畾涔?tabBar锛?
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/database.py`
-      - 体重记录查询改为按 `recorded_on + created_at` 升序
-      - 体重写入改为“多条插入 + `client_record_id` 幂等兜底”，不再按日期覆盖
+      - 浣撻噸璁板綍鏌ヨ鏀逛负鎸?`recorded_on + created_at` 鍗囧簭
+      - 浣撻噸鍐欏叆鏀逛负鈥滃鏉℃彃鍏?+ `client_record_id` 骞傜瓑鍏滃簳鈥濓紝涓嶅啀鎸夋棩鏈熻鐩?
     - `backend/main.py`
-      - `/api/body-metrics/weight` 支持 `client_id`
-      - `/api/body-metrics/sync-local` 的体重同步补上 `client_id / recorded_at` 和重复导入去重
-      - 身体指标汇总改为：`latest_weight / previous_weight` 取真实最近两条记录；`weight_entries` 用于趋势时按“每天最后一次”聚合
-    - 数据库脚本：
+      - `/api/body-metrics/weight` 鏀寔 `client_id`
+      - `/api/body-metrics/sync-local` 鐨勪綋閲嶅悓姝ヨˉ涓?`client_id / recorded_at` 鍜岄噸澶嶅鍏ュ幓閲?
+      - 韬綋鎸囨爣姹囨€绘敼涓猴細`latest_weight / previous_weight` 鍙栫湡瀹炴渶杩戜袱鏉¤褰曪紱`weight_entries` 鐢ㄤ簬瓒嬪娍鏃舵寜鈥滄瘡澶╂渶鍚庝竴娆♀€濊仛鍚?
+    - 鏁版嵁搴撹剼鏈細
       - `backend/database/user_body_metrics.sql`
       - `backend/sql/add_user_body_metrics.sql`
-      - 已移除 `(user_id, recorded_on)` 唯一约束，改为 `client_record_id` 唯一索引方案
-  - 前端：
+      - 宸茬Щ闄?`(user_id, recorded_on)` 鍞竴绾︽潫锛屾敼涓?`client_record_id` 鍞竴绱㈠紩鏂规
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - 体重记录 API 类型补充 `client_id / recorded_at`
-      - `saveBodyWeightRecord(...)` 支持传客户端幂等 ID
+      - 浣撻噸璁板綍 API 绫诲瀷琛ュ厖 `client_id / recorded_at`
+      - `saveBodyWeightRecord(...)` 鏀寔浼犲鎴风骞傜瓑 ID
     - `src/pages/index/index.tsx`
-      - 本地体重记录结构补充 `clientId / recordedAt`
-      - 本地保存体重不再覆盖当天旧值，而是追加一条新记录
-      - 首页体重摘要改为基于“最近一次 / 上一次”而不是“今天 vs 昨天”
-      - 喝水弹层快捷量累加到自定义输入框，与手输统一，点击「确认记录」后写入并关闭
-      - 体重按钮文案改为 `去记 / 再记`
+      - 鏈湴浣撻噸璁板綍缁撴瀯琛ュ厖 `clientId / recordedAt`
+      - 鏈湴淇濆瓨浣撻噸涓嶅啀瑕嗙洊褰撳ぉ鏃у€硷紝鑰屾槸杩藉姞涓€鏉℃柊璁板綍
+      - 棣栭〉浣撻噸鎽樿鏀逛负鍩轰簬鈥滄渶杩戜竴娆?/ 涓婁竴娆♀€濊€屼笉鏄€滀粖澶?vs 鏄ㄥぉ鈥?
+      - 鍠濇按寮瑰眰蹇嵎閲忕疮鍔犲埌鑷畾涔夎緭鍏ユ锛屼笌鎵嬭緭缁熶竴锛岀偣鍑汇€岀‘璁よ褰曘€嶅悗鍐欏叆骞跺叧闂?
+      - 浣撻噸鎸夐挳鏂囨鏀逛负 `鍘昏 / 鍐嶈`
     - `src/pages/index/index.scss`
-      - 体重/喝水弹层改为浮起式卡片，底部抬高避开自定义 tabBar
-      - `清空今天` 按钮提高可见性
+      - 浣撻噸/鍠濇按寮瑰眰鏀逛负娴捣寮忓崱鐗囷紝搴曢儴鎶珮閬垮紑鑷畾涔?tabBar
+      - `娓呯┖浠婂ぉ` 鎸夐挳鎻愰珮鍙鎬?
 - Verification:
-  - `python -m py_compile backend/main.py backend/database.py` 通过
-  - `npm run build:weapp` 通过
-  - 已按项目要求再次尝试微信开发者工具自动化验证：
+  - `python -m py_compile backend/main.py backend/database.py` 閫氳繃
+  - `npm run build:weapp` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰鍐嶆灏濊瘯寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲楠岃瘉锛?
     - `mrc where --port 9420`
     - `mrc errors 20 --port 9420`
-  - 当前阻塞：仍无法连接 `ws://localhost:9420`，未拿到运行态截图与点击验证
+  - 褰撳墠闃诲锛氫粛鏃犳硶杩炴帴 `ws://localhost:9420`锛屾湭鎷垮埌杩愯鎬佹埅鍥句笌鐐瑰嚮楠岃瘉
 - Next step:
-  - 在线上数据库执行 `backend/sql/add_user_body_metrics.sql`
-  - 重启后端
-  - 在微信开发者工具里重点确认：
-    - 同一天是否可以连续记录多次体重，且首页显示最近一次与上一次变化
-    - 喝水弹层点快捷量后是否仅更新输入框，点「确认记录」后才写入并关闭
-    - 体重/喝水弹层底部按钮是否彻底不再被 tabBar 遮挡
+  - 鍦ㄧ嚎涓婃暟鎹簱鎵ц `backend/sql/add_user_body_metrics.sql`
+  - 閲嶅惎鍚庣
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏烽噷閲嶇偣纭锛?
+    - 鍚屼竴澶╂槸鍚﹀彲浠ヨ繛缁褰曞娆′綋閲嶏紝涓旈椤垫樉绀烘渶杩戜竴娆′笌涓婁竴娆″彉鍖?
+    - 鍠濇按寮瑰眰鐐瑰揩鎹烽噺鍚庢槸鍚︿粎鏇存柊杈撳叆妗嗭紝鐐广€岀‘璁よ褰曘€嶅悗鎵嶅啓鍏ュ苟鍏抽棴
+    - 浣撻噸/鍠濇按寮瑰眰搴曢儴鎸夐挳鏄惁褰诲簳涓嶅啀琚?tabBar 閬尅
 
-- Task: 首页“今日餐食”卡片补照片缩略图预览
-- Status: done（首页每个餐次卡片现在支持显示代表图，点缩略图可直接预览当餐照片）
+- Task: 棣栭〉鈥滀粖鏃ラ椋熲€濆崱鐗囪ˉ鐓х墖缂╃暐鍥鹃瑙?
+- Status: done锛堥椤垫瘡涓娆″崱鐗囩幇鍦ㄦ敮鎸佹樉绀轰唬琛ㄥ浘锛岀偣缂╃暐鍥惧彲鐩存帴棰勮褰撻鐓х墖锛?
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/main.py`
-      - `/api/home/dashboard` 的 `meals` 聚合结果新增 `image_path / image_paths`
-      - 同一餐次下会汇总去重后的图片列表，首页可直接拿到代表图与预览列表
-  - 前端：
+      - `/api/home/dashboard` 鐨?`meals` 鑱氬悎缁撴灉鏂板 `image_path / image_paths`
+      - 鍚屼竴椁愭涓嬩細姹囨€诲幓閲嶅悗鐨勫浘鐗囧垪琛紝棣栭〉鍙洿鎺ユ嬁鍒颁唬琛ㄥ浘涓庨瑙堝垪琛?
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - `HomeMealItem` 类型补充 `image_path / image_paths`
+      - `HomeMealItem` 绫诲瀷琛ュ厖 `image_path / image_paths`
     - `src/pages/index/index.tsx`
-      - 今日餐食卡片左侧改为“缩略图优先、餐次图标兜底”
-      - 有图时点缩略图可 `previewImage`
-      - 多图时显示 `N张` 角标
+      - 浠婃棩椁愰鍗＄墖宸︿晶鏀逛负鈥滅缉鐣ュ浘浼樺厛銆侀娆″浘鏍囧厹搴曗€?
+      - 鏈夊浘鏃剁偣缂╃暐鍥惧彲 `previewImage`
+      - 澶氬浘鏃舵樉绀?`N寮燻 瑙掓爣
     - `src/pages/index/index.scss`
-      - 新增首页餐次缩略图容器、角标与卡片对齐样式
+      - 鏂板棣栭〉椁愭缂╃暐鍥惧鍣ㄣ€佽鏍囦笌鍗＄墖瀵归綈鏍峰紡
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
-  - `npm run build:weapp` 通过
-  - 已按项目要求尝试微信开发者工具自动化验证：
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - `npm run build:weapp` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲楠岃瘉锛?
     - `mrc where --port 9420`
     - `mrc errors 20 --port 9420`
-  - 当前阻塞：`ws://localhost:9420` 连接失败，说明微信开发者工具未开启自动化端口或未打开目标项目，暂未拿到首页缩略图的运行态截图
+  - 褰撳墠闃诲锛歚ws://localhost:9420` 杩炴帴澶辫触锛岃鏄庡井淇″紑鍙戣€呭伐鍏锋湭寮€鍚嚜鍔ㄥ寲绔彛鎴栨湭鎵撳紑鐩爣椤圭洰锛屾殏鏈嬁鍒伴椤电缉鐣ュ浘鐨勮繍琛屾€佹埅鍥?
 - Next step:
-  - 在微信开发者工具中打开 `food_link` 项目并开启自动化端口 `9420`
-  - 重新确认首页“今日餐食”每个卡片是否已显示代表图，且点缩略图能否预览大图
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏蜂腑鎵撳紑 `food_link` 椤圭洰骞跺紑鍚嚜鍔ㄥ寲绔彛 `9420`
+  - 閲嶆柊纭棣栭〉鈥滀粖鏃ラ椋熲€濇瘡涓崱鐗囨槸鍚﹀凡鏄剧ず浠ｈ〃鍥撅紝涓旂偣缂╃暐鍥捐兘鍚﹂瑙堝ぇ鍥?
 
-- Task: 打通体重/喝水云端同步并接入统计页长期分析
-- Status: done（代码已落地：首页从本地记录升级为“云端优先、本地兜底”；统计页新增体重与喝水长期趋势区块；后端已补表结构与接口）
+- Task: 鎵撻€氫綋閲?鍠濇按浜戠鍚屾骞舵帴鍏ョ粺璁￠〉闀挎湡鍒嗘瀽
+- Status: done锛堜唬鐮佸凡钀藉湴锛氶椤典粠鏈湴璁板綍鍗囩骇涓衡€滀簯绔紭鍏堛€佹湰鍦板厹搴曗€濓紱缁熻椤垫柊澧炰綋閲嶄笌鍠濇按闀挎湡瓒嬪娍鍖哄潡锛涘悗绔凡琛ヨ〃缁撴瀯涓庢帴鍙ｏ級
 - Scope:
-  - 后端：
+  - 鍚庣锛?
     - `backend/database.py`
-      - 新增体重记录、喝水日志、身体指标设置的读写函数
+      - 鏂板浣撻噸璁板綍銆佸枬姘存棩蹇椼€佽韩浣撴寚鏍囪缃殑璇诲啓鍑芥暟
     - `backend/main.py`
-      - 新增 `/api/body-metrics/summary`
-      - 新增 `/api/body-metrics/weight`
-      - 新增 `/api/body-metrics/water`
-      - 新增 `/api/body-metrics/water/reset`
-      - 新增 `/api/body-metrics/sync-local`
-      - `GET /api/stats/summary` 返回 `body_metrics` 聚合结果
-    - 新增数据库脚本：
+      - 鏂板 `/api/body-metrics/summary`
+      - 鏂板 `/api/body-metrics/weight`
+      - 鏂板 `/api/body-metrics/water`
+      - 鏂板 `/api/body-metrics/water/reset`
+      - 鏂板 `/api/body-metrics/sync-local`
+      - `GET /api/stats/summary` 杩斿洖 `body_metrics` 鑱氬悎缁撴灉
+    - 鏂板鏁版嵁搴撹剼鏈細
       - `backend/database/user_body_metrics.sql`
       - `backend/sql/add_user_body_metrics.sql`
-  - 前端：
+  - 鍓嶇锛?
     - `src/utils/api.ts`
-      - 新增 body metrics 相关类型与 API 方法
+      - 鏂板 body metrics 鐩稿叧绫诲瀷涓?API 鏂规硶
     - `src/pages/index/index.tsx`
-      - 首页体重/喝水改为云端读写，失败时回退本地 storage
-      - 登录后会尝试把旧本地体重/喝水快照同步到云端
+      - 棣栭〉浣撻噸/鍠濇按鏀逛负浜戠璇诲啓锛屽け璐ユ椂鍥為€€鏈湴 storage
+      - 鐧诲綍鍚庝細灏濊瘯鎶婃棫鏈湴浣撻噸/鍠濇按蹇収鍚屾鍒颁簯绔?
     - `src/pages/stats/index.tsx`
     - `src/pages/stats/index.scss`
-      - 新增“体重与喝水”长期趋势模块
+      - 鏂板鈥滀綋閲嶄笌鍠濇按鈥濋暱鏈熻秼鍔挎ā鍧?
 - Verification:
-  - `python -m py_compile backend/main.py backend/database.py` 通过
-  - `npm run build:weapp` 通过
-  - 已尝试运行态验证：`mrc where --port 9420`
-  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成截图与点击验证
+  - `python -m py_compile backend/main.py backend/database.py` 閫氳繃
+  - `npm run build:weapp` 閫氳繃
+  - 宸插皾璇曡繍琛屾€侀獙璇侊細`mrc where --port 9420`
+  - 褰撳墠闃诲锛氬井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420` 鏈紑鍚紝鏃犳硶瀹屾垚鎴浘涓庣偣鍑婚獙璇?
 - Next step:
-  - 在线上数据库执行 `backend/sql/add_user_body_metrics.sql`
-  - 重启后端
-  - 在微信开发者工具里确认三条链路：
-    - 首页记录体重后，另一台设备能否看到同步结果
-    - 首页加水/清空今日后，统计页喝水趋势是否随之更新
-    - 统计页体重与喝水趋势的视觉层级是否合适
+  - 鍦ㄧ嚎涓婃暟鎹簱鎵ц `backend/sql/add_user_body_metrics.sql`
+  - 閲嶅惎鍚庣
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏烽噷纭涓夋潯閾捐矾锛?
+    - 棣栭〉璁板綍浣撻噸鍚庯紝鍙︿竴鍙拌澶囪兘鍚︾湅鍒板悓姝ョ粨鏋?
+    - 棣栭〉鍔犳按/娓呯┖浠婃棩鍚庯紝缁熻椤靛枬姘磋秼鍔挎槸鍚﹂殢涔嬫洿鏂?
+    - 缁熻椤典綋閲嶄笌鍠濇按瓒嬪娍鐨勮瑙夊眰绾ф槸鍚﹀悎閫?
 
-- Task: 实现“手动记录”模式 MVP
-- Status: done（记录页新增第三种方式“手动记录”，搜索公共食物库 + 标准食物营养词典，免费保存到 user_food_records）
+- Task: 瀹炵幇鈥滄墜鍔ㄨ褰曗€濇ā寮?MVP
+- Status: done锛堣褰曢〉鏂板绗笁绉嶆柟寮忊€滄墜鍔ㄨ褰曗€濓紝鎼滅储鍏叡椋熺墿搴?+ 鏍囧噯椋熺墿钀ュ吇璇嶅吀锛屽厤璐逛繚瀛樺埌 user_food_records锛?
 - Scope:
-  - 后端：
-    - `backend/database.py`：新增 `search_manual_food()` + `log_unresolved_food()`
-    - `backend/main.py`：新增 `GET /api/manual-food/search?q=&limit=`
-  - 前端：
-    - `src/utils/api.ts`：新增 `ManualFoodSearchResult` + `searchManualFood()`
-    - `src/pages/record/index.tsx`：第三种记录方式入口 + 搜索/选择/调重量/保存 UI
-    - `src/pages/record/index.scss`：手动记录样式（橙色渐变主题 + 永久免费徽标）
-  - 设计口径（积分制待后续实现）：
-    - 标准分析 `1 积分/次`、精准分析 `3 积分/次`、新用户赠送 `20` 积分
-    - 计费仅适用于 `拍照记录` 与 `文字记录`
-    - `手动记录` 永久免费
+  - 鍚庣锛?
+    - `backend/database.py`锛氭柊澧?`search_manual_food()` + `log_unresolved_food()`
+    - `backend/main.py`锛氭柊澧?`GET /api/manual-food/search?q=&limit=`
+  - 鍓嶇锛?
+    - `src/utils/api.ts`锛氭柊澧?`ManualFoodSearchResult` + `searchManualFood()`
+    - `src/pages/record/index.tsx`锛氱涓夌璁板綍鏂瑰紡鍏ュ彛 + 鎼滅储/閫夋嫨/璋冮噸閲?淇濆瓨 UI
+    - `src/pages/record/index.scss`锛氭墜鍔ㄨ褰曟牱寮忥紙姗欒壊娓愬彉涓婚 + 姘镐箙鍏嶈垂寰芥爣锛?
+  - 璁捐鍙ｅ緞锛堢Н鍒嗗埗寰呭悗缁疄鐜帮級锛?
+    - 鏍囧噯鍒嗘瀽 `1 绉垎/娆銆佺簿鍑嗗垎鏋?`3 绉垎/娆銆佹柊鐢ㄦ埛璧犻€?`20` 绉垎
+    - 璁¤垂浠呴€傜敤浜?`鎷嶇収璁板綍` 涓?`鏂囧瓧璁板綍`
+    - `鎵嬪姩璁板綍` 姘镐箙鍏嶈垂
 - Verification:
-  - TypeScript 类型检查通过（无新增错误）
-  - ReadLints 无新增报错
+  - TypeScript 绫诲瀷妫€鏌ラ€氳繃锛堟棤鏂板閿欒锛?
+  - ReadLints 鏃犳柊澧炴姤閿?
 - Next step:
-  - 部署后端、在微信开发者工具中测试完整链路
-  - 后续再做“积分制替换现有日配额”
+  - 閮ㄧ讲鍚庣銆佸湪寰俊寮€鍙戣€呭伐鍏蜂腑娴嬭瘯瀹屾暣閾捐矾
+  - 鍚庣画鍐嶅仛鈥滅Н鍒嗗埗鏇挎崲鐜版湁鏃ラ厤棰濃€?
 
-- Task: 将首页体重/喝水从“快捷条”重构为更小更精简的并排胶囊卡片
-- Status: done（已按用户最新要求再次重做，将两行快捷条合并为一行两个并排小卡片）
+- Task: 灏嗛椤典綋閲?鍠濇按浠庘€滃揩鎹锋潯鈥濋噸鏋勪负鏇村皬鏇寸簿绠€鐨勫苟鎺掕兌鍥婂崱鐗?
+- Status: done锛堝凡鎸夌敤鎴锋渶鏂拌姹傚啀娆￠噸鍋氾紝灏嗕袱琛屽揩鎹锋潯鍚堝苟涓轰竴琛屼袱涓苟鎺掑皬鍗＄墖锛?
 - Scope:
   - `src/pages/index/index.tsx`
-    - 移除原本上下排列的两行快捷条
-    - 改为更小的一行左右两列布局（体重、喝水并排）
-    - 喝水操作精简保留为 `+250ml`，点击面板其他区域唤起更多
+    - 绉婚櫎鍘熸湰涓婁笅鎺掑垪鐨勪袱琛屽揩鎹锋潯
+    - 鏀逛负鏇村皬鐨勪竴琛屽乏鍙充袱鍒楀竷灞€锛堜綋閲嶃€佸枬姘村苟鎺掞級
+    - 鍠濇按鎿嶄綔绮剧畝淇濈暀涓?`+250ml`锛岀偣鍑婚潰鏉垮叾浠栧尯鍩熷敜璧锋洿澶?
   - `src/pages/index/index.scss`
-    - 新增 `.body-status-grid` 与 `.body-status-card`
-    - 字号和 padding 进一步压缩，使整体所占垂直空间更小
+    - 鏂板 `.body-status-grid` 涓?`.body-status-card`
+    - 瀛楀彿鍜?padding 杩涗竴姝ュ帇缂╋紝浣挎暣浣撴墍鍗犲瀭鐩寸┖闂存洿灏?
 - Verification:
-  - `npm run build:weapp` 通过
-  - 当前仍未完成 DevTools 截图验证：`ws://localhost:9420` 无法连接
+  - `npm run build:weapp` 閫氳繃
+  - 褰撳墠浠嶆湭瀹屾垚 DevTools 鎴浘楠岃瘉锛歚ws://localhost:9420` 鏃犳硶杩炴帴
 - Next step:
-  - 用户确认这版并排胶囊卡片是否达到期望的紧凑程度
+  - 鐢ㄦ埛纭杩欑増骞舵帓鑳跺泭鍗＄墖鏄惁杈惧埌鏈熸湜鐨勭揣鍑戠▼搴?
 
-- Task: 首页信息架构：体重/喝水区块移到三大营养素下方
-- Status: done（热量总览与 PFC 营养素相邻，体重/喝水作为后续「身体习惯」区块）
+- Task: 棣栭〉淇℃伅鏋舵瀯锛氫綋閲?鍠濇按鍖哄潡绉诲埌涓夊ぇ钀ュ吇绱犱笅鏂?
+- Status: done锛堢儹閲忔€昏涓?PFC 钀ュ吇绱犵浉閭伙紝浣撻噸/鍠濇按浣滀负鍚庣画銆岃韩浣撲範鎯€嶅尯鍧楋級
 - Scope:
-  - `src/pages/index/index.tsx`：`body-status-section` 从「热量卡后」挪到「`macros-section` 后、今日餐食前」
+  - `src/pages/index/index.tsx`锛歚body-status-section` 浠庛€岀儹閲忓崱鍚庛€嶆尓鍒般€宍macros-section` 鍚庛€佷粖鏃ラ椋熷墠銆?
 - Verification:
-  - 本地 `ReadLints` 无报错；DevTools 截图仍受 9420 未开阻塞
+  - 鏈湴 `ReadLints` 鏃犳姤閿欙紱DevTools 鎴浘浠嶅彈 9420 鏈紑闃诲
 
-- Task: 实现“我的页保质期提醒”MVP
-- Status: done（已落一版手动录入 MVP：我的页会员卡下方新增保质期提醒入口卡片；新增保质期列表页与编辑页；后端补齐保质期条目 CRUD 和摘要接口）
+- Task: 瀹炵幇鈥滄垜鐨勯〉淇濊川鏈熸彁閱掆€滿VP
+- Status: done锛堝凡钀戒竴鐗堟墜鍔ㄥ綍鍏?MVP锛氭垜鐨勯〉浼氬憳鍗′笅鏂规柊澧炰繚璐ㄦ湡鎻愰啋鍏ュ彛鍗＄墖锛涙柊澧炰繚璐ㄦ湡鍒楄〃椤典笌缂栬緫椤碉紱鍚庣琛ラ綈淇濊川鏈熸潯鐩?CRUD 鍜屾憳瑕佹帴鍙ｏ級
 - Scope:
-  - 前端：
+  - 鍓嶇锛?
     - `src/pages/profile/index.tsx`
     - `src/pages/profile/index.scss`
     - `src/pages/expiry/*`
     - `src/pages/expiry-edit/*`
     - `src/app.config.ts`
     - `src/utils/api.ts`
-  - 后端：
+  - 鍚庣锛?
     - `backend/main.py`
     - `backend/database.py`
     - `backend/database/food_expiry_items.sql`
     - `backend/sql/add_food_expiry_items.sql`
 - Verification:
-  - `python -m py_compile backend/main.py backend/database.py` 通过
-  - `npm run build:weapp` 通过
-  - 已按项目要求尝试微信开发者工具自动化验证：`mrc where --port 9420`
-  - 当前阻塞：本机未开启微信开发者工具自动化端口 `9420`，无法完成截图与点击链路验证
+  - `python -m py_compile backend/main.py backend/database.py` 閫氳繃
+  - `npm run build:weapp` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲楠岃瘉锛歚mrc where --port 9420`
+  - 褰撳墠闃诲锛氭湰鏈烘湭寮€鍚井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420`锛屾棤娉曞畬鎴愭埅鍥句笌鐐瑰嚮閾捐矾楠岃瘉
 - Next step:
-  - 先执行 `backend/sql/add_food_expiry_items.sql`
-  - 重启后端
-  - 在“我的”页确认入口位置与视觉层级
-  - 进入保质期页验证新增、编辑、标记吃完/丢弃、恢复提醒四条链路
+  - 鍏堟墽琛?`backend/sql/add_food_expiry_items.sql`
+  - 閲嶅惎鍚庣
+  - 鍦ㄢ€滄垜鐨勨€濋〉纭鍏ュ彛浣嶇疆涓庤瑙夊眰绾?
+  - 杩涘叆淇濊川鏈熼〉楠岃瘉鏂板銆佺紪杈戙€佹爣璁板悆瀹?涓㈠純銆佹仮澶嶆彁閱掑洓鏉￠摼璺?
 
-- Task: 输出基于真实 Supabase 实库的 schema 分析报告
-- Status: done（已直接连接 `ocijuywmkalfmfxquzzf` 的线上 `public` schema，按真实表、字段、行数与活跃度生成正式文档）
+- Task: 杈撳嚭鍩轰簬鐪熷疄 Supabase 瀹炲簱鐨?schema 鍒嗘瀽鎶ュ憡
+- Status: done锛堝凡鐩存帴杩炴帴 `ocijuywmkalfmfxquzzf` 鐨勭嚎涓?`public` schema锛屾寜鐪熷疄琛ㄣ€佸瓧娈点€佽鏁颁笌娲昏穬搴︾敓鎴愭寮忔枃妗ｏ級
 - Scope:
-  - `docs/数据库实库Schema分析报告.md`
-    - 基于真实 `rest/v1` OpenAPI schema 输出 32 张表的线上结构盘点
-    - 补充核心业务链、旧表判断、重复语义分析与治理建议
+  - `docs/鏁版嵁搴撳疄搴揝chema鍒嗘瀽鎶ュ憡.md`
+    - 鍩轰簬鐪熷疄 `rest/v1` OpenAPI schema 杈撳嚭 32 寮犺〃鐨勭嚎涓婄粨鏋勭洏鐐?
+    - 琛ュ厖鏍稿績涓氬姟閾俱€佹棫琛ㄥ垽鏂€侀噸澶嶈涔夊垎鏋愪笌娌荤悊寤鸿
 - Verification:
-  - 已确认线上真实存在的表包括：
+  - 宸茬‘璁ょ嚎涓婄湡瀹炲瓨鍦ㄧ殑琛ㄥ寘鎷細
     - `analysis_tasks`
     - `user_food_records`
     - `public_food_library`
@@ -2160,1362 +2308,1362 @@
     - `food_nutrition_library`
     - `meal_items`
     - `public_food_library_likes`
-  - 已补查所有 `public` 表的真实行数，并对疑似旧表补查最近写入时间
+  - 宸茶ˉ鏌ユ墍鏈?`public` 琛ㄧ殑鐪熷疄琛屾暟锛屽苟瀵圭枒浼兼棫琛ㄨˉ鏌ユ渶杩戝啓鍏ユ椂闂?
 - Next step:
-  - 若后续要做数据库治理，可基于这份报告先补齐缺失迁移，再给旧表打“废弃/待清理”标签
+  - 鑻ュ悗缁鍋氭暟鎹簱娌荤悊锛屽彲鍩轰簬杩欎唤鎶ュ憡鍏堣ˉ榻愮己澶辫縼绉伙紝鍐嶇粰鏃ц〃鎵撯€滃簾寮?寰呮竻鐞嗏€濇爣绛?
 
-- Task: 收缩首页体重/喝水模块的视觉优先级
-- Status: done（已根据用户截图反馈收成轻量辅助卡，避免喧宾夺主影响热量总览）
+- Task: 鏀剁缉棣栭〉浣撻噸/鍠濇按妯″潡鐨勮瑙変紭鍏堢骇
+- Status: done锛堝凡鏍规嵁鐢ㄦ埛鎴浘鍙嶉鏀舵垚杞婚噺杈呭姪鍗★紝閬垮厤鍠у澶轰富褰卞搷鐑噺鎬昏锛?
 - Scope:
   - `src/pages/index/index.tsx`
-    - 热量总览卡重新放回体重/喝水模块之前，恢复首页主视觉优先级
-    - 体重卡与喝水卡保留首页直接可见，但整体文案更轻、更中性
-    - 去掉体重“每日 1 次”的强假设，改为“可随时补记 / 已记录，可修改”
-    - 体重趋势说明从“较昨日”收口为更稳妥的“较上次”
+    - 鐑噺鎬昏鍗￠噸鏂版斁鍥炰綋閲?鍠濇按妯″潡涔嬪墠锛屾仮澶嶉椤典富瑙嗚浼樺厛绾?
+    - 浣撻噸鍗′笌鍠濇按鍗′繚鐣欓椤电洿鎺ュ彲瑙侊紝浣嗘暣浣撴枃妗堟洿杞汇€佹洿涓€?
+    - 鍘绘帀浣撻噸鈥滄瘡鏃?1 娆♀€濈殑寮哄亣璁撅紝鏀逛负鈥滃彲闅忔椂琛ヨ / 宸茶褰曪紝鍙慨鏀光€?
+    - 浣撻噸瓒嬪娍璇存槑浠庘€滆緝鏄ㄦ棩鈥濇敹鍙ｄ负鏇寸ǔ濡ョ殑鈥滆緝涓婃鈥?
   - `src/pages/index/index.scss`
-    - 区块标题、卡片高度、字号、徽标、进度条、快捷按钮整体缩小
-    - 体重/喝水改成更弱化的二级信息卡，降低对首页主流程的视觉干扰
+    - 鍖哄潡鏍囬銆佸崱鐗囬珮搴︺€佸瓧鍙枫€佸窘鏍囥€佽繘搴︽潯銆佸揩鎹锋寜閽暣浣撶缉灏?
+    - 浣撻噸/鍠濇按鏀规垚鏇村急鍖栫殑浜岀骇淇℃伅鍗★紝闄嶄綆瀵归椤典富娴佺▼鐨勮瑙夊共鎵?
 - Verification:
-  - `npm run build:weapp` 通过
-  - 已再次尝试 DevTools 自动化验证：
+  - `npm run build:weapp` 閫氳繃
+  - 宸插啀娆″皾璇?DevTools 鑷姩鍖栭獙璇侊細
     - `mrc where --port 9420`
     - `mrc errors 20 --port 9420`
-  - 当前阻塞：仍无法连接 `ws://localhost:9420`，未完成运行态截图验证
+  - 褰撳墠闃诲锛氫粛鏃犳硶杩炴帴 `ws://localhost:9420`锛屾湭瀹屾垚杩愯鎬佹埅鍥鹃獙璇?
 - Next step:
-  - 用户在微信开发者工具中查看新版首页，确认体重/喝水是否已经足够“轻”
-  - 若还偏重，下一轮继续收成“更像摘要条、少一层卡片感”的版本
+  - 鐢ㄦ埛鍦ㄥ井淇″紑鍙戣€呭伐鍏蜂腑鏌ョ湅鏂扮増棣栭〉锛岀‘璁や綋閲?鍠濇按鏄惁宸茬粡瓒冲鈥滆交鈥?
+  - 鑻ヨ繕鍋忛噸锛屼笅涓€杞户缁敹鎴愨€滄洿鍍忔憳瑕佹潯銆佸皯涓€灞傚崱鐗囨劅鈥濈殑鐗堟湰
 
-- Task: 修复圈子回复评论时输入框难找且上下抖动
-- Status: done（已把回复提示从输入框同行拆出，并将底部评论框改成更稳定的单行输入结构；前端构建通过；运行态 DevTools 验证仍受 9420 端口未开启阻塞）
+- Task: 淇鍦堝瓙鍥炲璇勮鏃惰緭鍏ユ闅炬壘涓斾笂涓嬫姈鍔?
+- Status: done锛堝凡鎶婂洖澶嶆彁绀轰粠杈撳叆妗嗗悓琛屾媶鍑猴紝骞跺皢搴曢儴璇勮妗嗘敼鎴愭洿绋冲畾鐨勫崟琛岃緭鍏ョ粨鏋勶紱鍓嶇鏋勫缓閫氳繃锛涜繍琛屾€?DevTools 楠岃瘉浠嶅彈 9420 绔彛鏈紑鍚樆濉烇級
 - Scope:
   - `src/pages/community/index.tsx`
-    - 底部评论栏改为 `reply tip` 在上、输入框与发送按钮在下的两层结构
-    - 评论输入由 `Textarea` 改为更稳定的 `Input`
-    - 打开/关闭评论栏时显式重置 `commentInputFocus`，避免旧焦点状态叠加
+    - 搴曢儴璇勮鏍忔敼涓?`reply tip` 鍦ㄤ笂銆佽緭鍏ユ涓庡彂閫佹寜閽湪涓嬬殑涓ゅ眰缁撴瀯
+    - 璇勮杈撳叆鐢?`Textarea` 鏀逛负鏇寸ǔ瀹氱殑 `Input`
+    - 鎵撳紑/鍏抽棴璇勮鏍忔椂鏄惧紡閲嶇疆 `commentInputFocus`锛岄伩鍏嶆棫鐒︾偣鐘舵€佸彔鍔?
   - `src/pages/community/index.scss`
-    - 已进一步确认项目使用 `custom tabBar`，评论栏不是“没打开”，而是被底部 tabBar 挡住
-    - 评论栏与蒙层现已整体抬到自定义 tabBar 上方
-    - 回复提示条不再和输入框挤在同一行，避免回复态把输入框挤没
+    - 宸茶繘涓€姝ョ‘璁ら」鐩娇鐢?`custom tabBar`锛岃瘎璁烘爮涓嶆槸鈥滄病鎵撳紑鈥濓紝鑰屾槸琚簳閮?tabBar 鎸′綇
+    - 璇勮鏍忎笌钂欏眰鐜板凡鏁翠綋鎶埌鑷畾涔?tabBar 涓婃柟
+    - 鍥炲鎻愮ず鏉′笉鍐嶅拰杈撳叆妗嗘尋鍦ㄥ悓涓€琛岋紝閬垮厤鍥炲鎬佹妸杈撳叆妗嗘尋娌?
 - Verification:
-  - `npm run build:weapp` 通过
-  - 已尝试 DevTools 自动化验证：
+  - `npm run build:weapp` 閫氳繃
+  - 宸插皾璇?DevTools 鑷姩鍖栭獙璇侊細
     - `mrc where --port 9420`
     - `mrc errors 20 --port 9420`
-  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成真实点击“回复评论”后的截图与键盘联动验证
+  - 褰撳墠闃诲锛氬井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420` 鏈紑鍚紝鏃犳硶瀹屾垚鐪熷疄鐐瑰嚮鈥滃洖澶嶈瘎璁衡€濆悗鐨勬埅鍥句笌閿洏鑱斿姩楠岃瘉
 - Next step:
-  - 在微信开发者工具重新编译最新 `dist`
-  - 实测两条链路：
-    - 点击某条评论回复时，底部输入框是否稳定可见
-    - 键盘弹起时是否还会出现明显上下跳动
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏烽噸鏂扮紪璇戞渶鏂?`dist`
+  - 瀹炴祴涓ゆ潯閾捐矾锛?
+    - 鐐瑰嚮鏌愭潯璇勮鍥炲鏃讹紝搴曢儴杈撳叆妗嗘槸鍚︾ǔ瀹氬彲瑙?
+    - 閿洏寮硅捣鏃舵槸鍚﹁繕浼氬嚭鐜版槑鏄句笂涓嬭烦鍔?
 
-- Task: 设计“食物保质期记录与提醒”功能的工程方案
-- Status: in_progress（用户需要更详细的工程落地方案，重点比较手动录入、OCR、用户输入与大模型在保质期录入中的职责分工）
+- Task: 璁捐鈥滈鐗╀繚璐ㄦ湡璁板綍涓庢彁閱掆€濆姛鑳界殑宸ョ▼鏂规
+- Status: in_progress锛堢敤鎴烽渶瑕佹洿璇︾粏鐨勫伐绋嬭惤鍦版柟妗堬紝閲嶇偣姣旇緝鎵嬪姩褰曞叆銆丱CR銆佺敤鎴疯緭鍏ヤ笌澶фā鍨嬪湪淇濊川鏈熷綍鍏ヤ腑鐨勮亴璐ｅ垎宸ワ級
 - Scope:
-  - 结合现有 `food_link` 小程序架构，评估是否复用 `record/index`、`index/index`、通知与后端 API 骨架
-  - 输出面向工程实现的方案：数据表、接口、页面、提醒任务、OCR/规则/模型分层
+  - 缁撳悎鐜版湁 `food_link` 灏忕▼搴忔灦鏋勶紝璇勪及鏄惁澶嶇敤 `record/index`銆乣index/index`銆侀€氱煡涓庡悗绔?API 楠ㄦ灦
+  - 杈撳嚭闈㈠悜宸ョ▼瀹炵幇鐨勬柟妗堬細鏁版嵁琛ㄣ€佹帴鍙ｃ€侀〉闈€佹彁閱掍换鍔°€丱CR/瑙勫垯/妯″瀷鍒嗗眰
 - Next step:
-  - 向用户提交一版详细技术方案，明确推荐采用“手动录入为保底、OCR 为主识别、规则解析优先、小模型兜底”的混合方案
-  - 若用户认可，再进一步细化为 MVP 迭代顺序与具体表结构/接口草案
+  - 鍚戠敤鎴锋彁浜や竴鐗堣缁嗘妧鏈柟妗堬紝鏄庣‘鎺ㄨ崘閲囩敤鈥滄墜鍔ㄥ綍鍏ヤ负淇濆簳銆丱CR 涓轰富璇嗗埆銆佽鍒欒В鏋愪紭鍏堛€佸皬妯″瀷鍏滃簳鈥濈殑娣峰悎鏂规
+  - 鑻ョ敤鎴疯鍙紝鍐嶈繘涓€姝ョ粏鍖栦负 MVP 杩唬椤哄簭涓庡叿浣撹〃缁撴瀯/鎺ュ彛鑽夋
 
-- Task: 首页新增“今日身体状态”双卡（体重记录 + 喝水记录）
-- Status: done（已按用户要求做成首页一级可见模块，而不是放进健康档案/健康板块）
+- Task: 棣栭〉鏂板鈥滀粖鏃ヨ韩浣撶姸鎬佲€濆弻鍗★紙浣撻噸璁板綍 + 鍠濇按璁板綍锛?
+- Status: done锛堝凡鎸夌敤鎴疯姹傚仛鎴愰椤典竴绾у彲瑙佹ā鍧楋紝鑰屼笉鏄斁杩涘仴搴锋。妗?鍋ュ悍鏉垮潡锛?
 - Scope:
   - `src/pages/index/index.tsx`
-    - 在日期条下方、热量卡上方新增 `今日身体状态` 区块
-    - 新增 `今日体重` 卡：支持显示今日/最近一次体重、与昨日对比、最近 7 天迷你趋势、点击后弹层记录/修改
-    - 新增 `今日喝水` 卡：支持显示今日累计、目标进度、`+250 / +500` 快捷加水、更多弹层、自定义输入与清空今日
-    - 体重/喝水数据当前先走本地 storage 持久化
-    - 若已登录且健康档案里有 `weight`，体重弹层会把档案体重作为默认值来源
+    - 鍦ㄦ棩鏈熸潯涓嬫柟銆佺儹閲忓崱涓婃柟鏂板 `浠婃棩韬綋鐘舵€乣 鍖哄潡
+    - 鏂板 `浠婃棩浣撻噸` 鍗★細鏀寔鏄剧ず浠婃棩/鏈€杩戜竴娆′綋閲嶃€佷笌鏄ㄦ棩瀵规瘮銆佹渶杩?7 澶╄糠浣犺秼鍔裤€佺偣鍑诲悗寮瑰眰璁板綍/淇敼
+    - 鏂板 `浠婃棩鍠濇按` 鍗★細鏀寔鏄剧ず浠婃棩绱銆佺洰鏍囪繘搴︺€乣+250 / +500` 蹇嵎鍔犳按銆佹洿澶氬脊灞傘€佽嚜瀹氫箟杈撳叆涓庢竻绌轰粖鏃?
+    - 浣撻噸/鍠濇按鏁版嵁褰撳墠鍏堣蛋鏈湴 storage 鎸佷箙鍖?
+    - 鑻ュ凡鐧诲綍涓斿仴搴锋。妗堥噷鏈?`weight`锛屼綋閲嶅脊灞備細鎶婃。妗堜綋閲嶄綔涓洪粯璁ゅ€兼潵婧?
   - `src/pages/index/index.scss`
-    - 新增与首页现有视觉一致的双卡、进度条、迷你趋势条、弹层样式
+    - 鏂板涓庨椤电幇鏈夎瑙変竴鑷寸殑鍙屽崱銆佽繘搴︽潯銆佽糠浣犺秼鍔挎潯銆佸脊灞傛牱寮?
 - Verification:
-  - `npm run build:weapp` 通过
-  - 已按项目要求尝试微信开发者工具自动化验证：
-    - `mrc where --port 9420` 失败
-    - `mrc errors 20 --port 9420` 失败
-  - 当前阻塞：
-    - 本机未能连接到微信开发者工具自动化端口 `9420`
-    - 因此本轮未完成首页截图、点击 `记录体重`、点击 `+250ml` 的运行态验证
+  - `npm run build:weapp` 閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲楠岃瘉锛?
+    - `mrc where --port 9420` 澶辫触
+    - `mrc errors 20 --port 9420` 澶辫触
+  - 褰撳墠闃诲锛?
+    - 鏈満鏈兘杩炴帴鍒板井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420`
+    - 鍥犳鏈疆鏈畬鎴愰椤垫埅鍥俱€佺偣鍑?`璁板綍浣撻噸`銆佺偣鍑?`+250ml` 鐨勮繍琛屾€侀獙璇?
 - Next step:
-  - 在微信开发者工具中打开 `food_link` 项目并开启自动化端口 `9420`
-  - 复测三点：
-    - 首页是否在日期条下方直接显示“今日身体状态”双卡
-    - 点击体重卡是否能拉起弹层并保存今日体重
-    - 点击喝水卡 `+250 / +500` 后累计值和进度条是否即时变化
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏蜂腑鎵撳紑 `food_link` 椤圭洰骞跺紑鍚嚜鍔ㄥ寲绔彛 `9420`
+  - 澶嶆祴涓夌偣锛?
+    - 棣栭〉鏄惁鍦ㄦ棩鏈熸潯涓嬫柟鐩存帴鏄剧ず鈥滀粖鏃ヨ韩浣撶姸鎬佲€濆弻鍗?
+    - 鐐瑰嚮浣撻噸鍗℃槸鍚﹁兘鎷夎捣寮瑰眰骞朵繚瀛樹粖鏃ヤ綋閲?
+    - 鐐瑰嚮鍠濇按鍗?`+250 / +500` 鍚庣疮璁″€煎拰杩涘害鏉℃槸鍚﹀嵆鏃跺彉鍖?
 
-- Task: 评估体重记录与喝水记录如何融入当前产品信息架构
-- Status: in_progress（用户已明确否决放进“健康档案/健康板块”的方向，要求优先做成打开就能直接看到的入口）
+- Task: 璇勪及浣撻噸璁板綍涓庡枬姘磋褰曞浣曡瀺鍏ュ綋鍓嶄骇鍝佷俊鎭灦鏋?
+- Status: in_progress锛堢敤鎴峰凡鏄庣‘鍚﹀喅鏀捐繘鈥滃仴搴锋。妗?鍋ュ悍鏉垮潡鈥濈殑鏂瑰悜锛岃姹備紭鍏堝仛鎴愭墦寮€灏辫兘鐩存帴鐪嬪埌鐨勫叆鍙ｏ級
 - Scope:
-  - 当前 tab 结构为 `首页 / 分析 / 记录 / 圈子 / 我的`
-  - `record` 页当前已收口为新增饮食记录入口，不适合再承担体重/喝水主入口
-  - `health-profile` 当前更偏静态档案，不适合承载高频每日记录
+  - 褰撳墠 tab 缁撴瀯涓?`棣栭〉 / 鍒嗘瀽 / 璁板綍 / 鍦堝瓙 / 鎴戠殑`
+  - `record` 椤靛綋鍓嶅凡鏀跺彛涓烘柊澧為ギ椋熻褰曞叆鍙ｏ紝涓嶉€傚悎鍐嶆壙鎷呬綋閲?鍠濇按涓诲叆鍙?
+  - `health-profile` 褰撳墠鏇村亸闈欐€佹。妗堬紝涓嶉€傚悎鎵胯浇楂橀姣忔棩璁板綍
 - Next step:
-  - 基于“首页直出、用户立即可见”的要求，收敛一版更适合当前首页的信息架构方案
-  - 判断体重与喝水是做成首页顶部独立卡片、今日摘要条，还是作为首页核心数据区并列模块
+  - 鍩轰簬鈥滈椤电洿鍑恒€佺敤鎴风珛鍗冲彲瑙佲€濈殑瑕佹眰锛屾敹鏁涗竴鐗堟洿閫傚悎褰撳墠棣栭〉鐨勪俊鎭灦鏋勬柟妗?
+  - 鍒ゆ柇浣撻噸涓庡枬姘存槸鍋氭垚棣栭〉椤堕儴鐙珛鍗＄墖銆佷粖鏃ユ憳瑕佹潯锛岃繕鏄綔涓洪椤垫牳蹇冩暟鎹尯骞跺垪妯″潡
 
-- Task: 多视角辅助模式收口为严格方案
-- Status: done（未开启多视角时前端只允许单图，正式后端接口也会拒绝未开启多视角时的多图提交，并明确提醒“如果要拍多视角，请先开启多视角模式”）
+- Task: 澶氳瑙掕緟鍔╂ā寮忔敹鍙ｄ负涓ユ牸鏂规
+- Status: done锛堟湭寮€鍚瑙嗚鏃跺墠绔彧鍏佽鍗曞浘锛屾寮忓悗绔帴鍙ｄ篃浼氭嫆缁濇湭寮€鍚瑙嗚鏃剁殑澶氬浘鎻愪氦锛屽苟鏄庣‘鎻愰啋鈥滃鏋滆鎷嶅瑙嗚锛岃鍏堝紑鍚瑙嗚妯″紡鈥濓級
 - Scope:
   - `src/pages/analyze/index.tsx`
-    - 未开启多视角时，已改为只允许上传 `1` 张图片
-    - 若用户在单图模式下继续添加图片，或已选多图后尝试关闭多视角，会弹明确提示
-    - 页面文案已补充“未开启多视角时仅支持 1 张，开启后最多 3 张”
+    - 鏈紑鍚瑙嗚鏃讹紝宸叉敼涓哄彧鍏佽涓婁紶 `1` 寮犲浘鐗?
+    - 鑻ョ敤鎴峰湪鍗曞浘妯″紡涓嬬户缁坊鍔犲浘鐗囷紝鎴栧凡閫夊鍥惧悗灏濊瘯鍏抽棴澶氳瑙掞紝浼氬脊鏄庣‘鎻愮ず
+    - 椤甸潰鏂囨宸茶ˉ鍏呪€滄湭寮€鍚瑙嗚鏃朵粎鏀寔 1 寮狅紝寮€鍚悗鏈€澶?3 寮犫€?
   - `backend/main.py`
-    - 正式接口 `/api/analyze/submit` 已补上 `image_urls > 1 && !is_multi_view` 的 `400` 拒绝
+    - 姝ｅ紡鎺ュ彛 `/api/analyze/submit` 宸茶ˉ涓?`image_urls > 1 && !is_multi_view` 鐨?`400` 鎷掔粷
   - `backend/worker.py`
-    - 继续保留 `is_multi_view=true` 时的 prompt 提示，让多张图明确按“同一份食物不同角度”处理
+    - 缁х画淇濈暀 `is_multi_view=true` 鏃剁殑 prompt 鎻愮ず锛岃澶氬紶鍥炬槑纭寜鈥滃悓涓€浠介鐗╀笉鍚岃搴︹€濆鐞?
 - Verification:
-  - `npm run build:weapp` 通过
-  - `python -m py_compile backend/main.py` 通过
-  - 已尝试 DevTools 自动化验证：`mrc where --port 9420`、`mrc errors 20 --port 9420`
-  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成截图和点击验证
+  - `npm run build:weapp` 閫氳繃
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - 宸插皾璇?DevTools 鑷姩鍖栭獙璇侊細`mrc where --port 9420`銆乣mrc errors 20 --port 9420`
+  - 褰撳墠闃诲锛氬井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420` 鏈紑鍚紝鏃犳硶瀹屾垚鎴浘鍜岀偣鍑婚獙璇?
 - Next step:
-  - 用户在分析页手动验证两条链路：
-    - 未开启多视角时，上传第 2 张图片会被拦截并提示开启多视角
-    - 开启多视角后，最多可上传 3 张，并按同一食物多角度处理
+  - 鐢ㄦ埛鍦ㄥ垎鏋愰〉鎵嬪姩楠岃瘉涓ゆ潯閾捐矾锛?
+    - 鏈紑鍚瑙嗚鏃讹紝涓婁紶绗?2 寮犲浘鐗囦細琚嫤鎴苟鎻愮ず寮€鍚瑙嗚
+    - 寮€鍚瑙嗚鍚庯紝鏈€澶氬彲涓婁紶 3 寮狅紝骞舵寜鍚屼竴椋熺墿澶氳搴﹀鐞?
 
-- Task: 首页三大营养素超额时数字与百分比徽标重叠
-- Status: done（布局改为两行：第一行仅克数+g，第二行「当前/目标」+ 百分比徽标；略缩小主数字与徽标字号；≥100% 时徽标额外缩小）
+- Task: 棣栭〉涓夊ぇ钀ュ吇绱犺秴棰濇椂鏁板瓧涓庣櫨鍒嗘瘮寰芥爣閲嶅彔
+- Status: done锛堝竷灞€鏀逛负涓よ锛氱涓€琛屼粎鍏嬫暟+g锛岀浜岃銆屽綋鍓?鐩爣銆? 鐧惧垎姣斿窘鏍囷紱鐣ョ缉灏忎富鏁板瓧涓庡窘鏍囧瓧鍙凤紱鈮?00% 鏃跺窘鏍囬澶栫缉灏忥級
 - Scope:
-  - `src/pages/index/index.tsx`：百分比徽标从 `macro-row-first` 移到 `macro-row-second`；超额加 `is-over` class
-  - `src/pages/index/index.scss`：去掉第一行与徽标横向争抢；`macro-value-wrap` 不再 `overflow: hidden` 以免小数被裁成 `193.`
+  - `src/pages/index/index.tsx`锛氱櫨鍒嗘瘮寰芥爣浠?`macro-row-first` 绉诲埌 `macro-row-second`锛涜秴棰濆姞 `is-over` class
+  - `src/pages/index/index.scss`锛氬幓鎺夌涓€琛屼笌寰芥爣妯悜浜夋姠锛沗macro-value-wrap` 涓嶅啀 `overflow: hidden` 浠ュ厤灏忔暟琚鎴?`193.`
 - Verification:
-  - `npm run build:weapp` 通过
-  - `mrc where --port 9420` 失败：本机未开微信开发者工具自动化端口，未完成截图验证
+  - `npm run build:weapp` 閫氳繃
+  - `mrc where --port 9420` 澶辫触锛氭湰鏈烘湭寮€寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛锛屾湭瀹屾垚鎴浘楠岃瘉
 - Next step:
-  - 用户在真机/开发者工具首页确认超额场景下克数、比例、文案不再重叠
+  - 鐢ㄦ埛鍦ㄧ湡鏈?寮€鍙戣€呭伐鍏烽椤电‘璁よ秴棰濆満鏅笅鍏嬫暟銆佹瘮渚嬨€佹枃妗堜笉鍐嶉噸鍙?
 
-- Task: 暂时移除评论审核，评论改为直接发布
-- Status: done（圈子评论和公共食物库评论都不再创建审核任务；提交后直接入库并立即显示，前端去掉“已提交审核/审核中”这条主链路）
+- Task: 鏆傛椂绉婚櫎璇勮瀹℃牳锛岃瘎璁烘敼涓虹洿鎺ュ彂甯?
+- Status: done锛堝湀瀛愯瘎璁哄拰鍏叡椋熺墿搴撹瘎璁洪兘涓嶅啀鍒涘缓瀹℃牳浠诲姟锛涙彁浜ゅ悗鐩存帴鍏ュ簱骞剁珛鍗虫樉绀猴紝鍓嶇鍘绘帀鈥滃凡鎻愪氦瀹℃牳/瀹℃牳涓€濊繖鏉′富閾捐矾锛?
 - Scope:
   - `backend/main.py`
-    - `/api/community/feed/{record_id}/comments` 改为直接调用 `add_feed_comment_sync(...)`
-    - 圈子评论发布后，接口层直接补发 `comment_received / reply_received` 互动通知
-    - `/api/public-food-library/{item_id}/comments` 改为直接调用 `add_public_food_library_comment_sync(...)`
+    - `/api/community/feed/{record_id}/comments` 鏀逛负鐩存帴璋冪敤 `add_feed_comment_sync(...)`
+    - 鍦堝瓙璇勮鍙戝竷鍚庯紝鎺ュ彛灞傜洿鎺ヨˉ鍙?`comment_received / reply_received` 浜掑姩閫氱煡
+    - `/api/public-food-library/{item_id}/comments` 鏀逛负鐩存帴璋冪敤 `add_public_food_library_comment_sync(...)`
   - `src/utils/api.ts`
-    - 评论提交返回值从 `{ task_id, temp_comment }` 收口为 `{ comment }`
+    - 璇勮鎻愪氦杩斿洖鍊间粠 `{ task_id, temp_comment }` 鏀跺彛涓?`{ comment }`
   - `src/pages/community/index.tsx`
-    - 提交评论后直接插入真实评论，不再缓存临时评论
-    - 成功提示改为“评论成功”
+    - 鎻愪氦璇勮鍚庣洿鎺ユ彃鍏ョ湡瀹炶瘎璁猴紝涓嶅啀缂撳瓨涓存椂璇勮
+    - 鎴愬姛鎻愮ず鏀逛负鈥滆瘎璁烘垚鍔熲€?
   - `src/pages/food-library-detail/index.tsx`
-    - 提交评论后直接插入真实评论，不再缓存临时评论
-    - 加载评论时顺手清理旧的 `temp_library_comments_*` 缓存
+    - 鎻愪氦璇勮鍚庣洿鎺ユ彃鍏ョ湡瀹炶瘎璁猴紝涓嶅啀缂撳瓨涓存椂璇勮
+    - 鍔犺浇璇勮鏃堕『鎵嬫竻鐞嗘棫鐨?`temp_library_comments_*` 缂撳瓨
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
-  - `ReadLints` 检查 `src/pages/community/index.tsx`、`src/pages/food-library-detail/index.tsx`、`src/utils/api.ts` 无新增报错
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - `ReadLints` 妫€鏌?`src/pages/community/index.tsx`銆乣src/pages/food-library-detail/index.tsx`銆乣src/utils/api.ts` 鏃犳柊澧炴姤閿?
 - Next step:
-  - 重启 `backend/run_backend.py`
-  - 用户实际发一条圈子评论和一条公共食物库评论，确认都是即时显示、没有“审核中”
-- Task: 新增食物保质期管理功能（我的页入口 + 首页摘要 + 列表/编辑页）
-- Status: done（V1 已完成手动录入、首页摘要展示、列表管理、标记已吃完与后端 CRUD；服务号通知暂未实现）
+  - 閲嶅惎 `backend/run_backend.py`
+  - 鐢ㄦ埛瀹為檯鍙戜竴鏉″湀瀛愯瘎璁哄拰涓€鏉″叕鍏遍鐗╁簱璇勮锛岀‘璁ら兘鏄嵆鏃舵樉绀恒€佹病鏈夆€滃鏍镐腑鈥?
+- Task: 鏂板椋熺墿淇濊川鏈熺鐞嗗姛鑳斤紙鎴戠殑椤靛叆鍙?+ 棣栭〉鎽樿 + 鍒楄〃/缂栬緫椤碉級
+- Status: done锛圴1 宸插畬鎴愭墜鍔ㄥ綍鍏ャ€侀椤垫憳瑕佸睍绀恒€佸垪琛ㄧ鐞嗐€佹爣璁板凡鍚冨畬涓庡悗绔?CRUD锛涙湇鍔″彿閫氱煡鏆傛湭瀹炵幇锛?
 - Scope:
   - `backend/database/user_food_expiry_items.sql`
-    - 新增 `user_food_expiry_items` 表和更新时间触发器
+    - 鏂板 `user_food_expiry_items` 琛ㄥ拰鏇存柊鏃堕棿瑙﹀彂鍣?
   - `backend/database.py`
-    - 新增食物保质期增删改查与标记已吃完数据层方法
+    - 鏂板椋熺墿淇濊川鏈熷鍒犳敼鏌ヤ笌鏍囪宸插悆瀹屾暟鎹眰鏂规硶
   - `backend/main.py`
-    - 新增 `/api/food-expiry` CRUD 接口
-    - 新增截止时间解析、临期/过期派生字段序列化
-    - 首页 `/api/home/dashboard` 新增 `expirySummary`
+    - 鏂板 `/api/food-expiry` CRUD 鎺ュ彛
+    - 鏂板鎴鏃堕棿瑙ｆ瀽銆佷复鏈?杩囨湡娲剧敓瀛楁搴忓垪鍖?
+    - 棣栭〉 `/api/home/dashboard` 鏂板 `expirySummary`
   - `src/utils/api.ts`
-    - 新增 `FoodExpiryItem / FoodExpirySummary` 类型和前端 API 方法
+    - 鏂板 `FoodExpiryItem / FoodExpirySummary` 绫诲瀷鍜屽墠绔?API 鏂规硶
   - `src/pages/profile/index.tsx`
-    - 我的页服务网格新增 `食物保质期` 入口
+    - 鎴戠殑椤垫湇鍔＄綉鏍兼柊澧?`椋熺墿淇濊川鏈焋 鍏ュ彛
   - `src/pages/index/index.tsx`
   - `src/pages/index/index.scss`
-    - 首页新增“快到期食物”摘要卡片，仅展示已设置内容并可进入列表页
+    - 棣栭〉鏂板鈥滃揩鍒版湡椋熺墿鈥濇憳瑕佸崱鐗囷紝浠呭睍绀哄凡璁剧疆鍐呭骞跺彲杩涘叆鍒楄〃椤?
   - `src/pages/food-expiry/index.tsx`
   - `src/pages/food-expiry/index.scss`
   - `src/pages/food-expiry/index.config.ts`
-    - 新增保质期列表页，支持待吃完/已吃完切换、编辑、删除、标记已吃完
+    - 鏂板淇濊川鏈熷垪琛ㄩ〉锛屾敮鎸佸緟鍚冨畬/宸插悆瀹屽垏鎹€佺紪杈戙€佸垹闄ゃ€佹爣璁板凡鍚冨畬
   - `src/pages/food-expiry-edit/index.tsx`
   - `src/pages/food-expiry-edit/index.scss`
   - `src/pages/food-expiry-edit/index.config.ts`
-    - 新增保质期编辑页，支持日期/日期时间两种截止精度
+    - 鏂板淇濊川鏈熺紪杈戦〉锛屾敮鎸佹棩鏈?鏃ユ湡鏃堕棿涓ょ鎴绮惧害
   - `src/app.config.ts`
-    - 注册新页面
+    - 娉ㄥ唽鏂伴〉闈?
 - Verification:
-  - `python -m py_compile backend/main.py backend/database.py` 通过
-  - `eslint src/pages/food-expiry/index.tsx src/pages/food-expiry-edit/index.tsx src/pages/index/index.tsx src/pages/profile/index.tsx src/utils/api.ts` 通过
-  - 已按要求执行 `npm run dev:weapp`
-    - 当前仍命中 Taro/Rust `system-configuration` panic：`Attempted to create a NULL object`
-    - 暂未拿到正常 watch 编译完成结果，属于当前本机编译环境阻塞
+  - `python -m py_compile backend/main.py backend/database.py` 閫氳繃
+  - `eslint src/pages/food-expiry/index.tsx src/pages/food-expiry-edit/index.tsx src/pages/index/index.tsx src/pages/profile/index.tsx src/utils/api.ts` 閫氳繃
+  - 宸叉寜瑕佹眰鎵ц `npm run dev:weapp`
+    - 褰撳墠浠嶅懡涓?Taro/Rust `system-configuration` panic锛歚Attempted to create a NULL object`
+    - 鏆傛湭鎷垮埌姝ｅ父 watch 缂栬瘧瀹屾垚缁撴灉锛屽睘浜庡綋鍓嶆湰鏈虹紪璇戠幆澧冮樆濉?
 - Next step:
-  - 先在数据库执行 `backend/database/user_food_expiry_items.sql`
-  - 修复或绕过当前本机 `npm run dev:weapp` 的 Taro/Rust 编译环境问题后，再在微信开发者工具中验证：
-    - 我的页 `食物保质期` 入口
-    - 首页“快到期食物”摘要卡片
-    - 列表页新增/编辑/删除/标记已吃完流程
+  - 鍏堝湪鏁版嵁搴撴墽琛?`backend/database/user_food_expiry_items.sql`
+  - 淇鎴栫粫杩囧綋鍓嶆湰鏈?`npm run dev:weapp` 鐨?Taro/Rust 缂栬瘧鐜闂鍚庯紝鍐嶅湪寰俊寮€鍙戣€呭伐鍏蜂腑楠岃瘉锛?
+    - 鎴戠殑椤?`椋熺墿淇濊川鏈焋 鍏ュ彛
+    - 棣栭〉鈥滃揩鍒版湡椋熺墿鈥濇憳瑕佸崱鐗?
+    - 鍒楄〃椤垫柊澧?缂栬緫/鍒犻櫎/鏍囪宸插悆瀹屾祦绋?
 
-- Task: 移除个人页服务网格中的测试入口 Pro会员
+- Task: 绉婚櫎涓汉椤垫湇鍔＄綉鏍间腑鐨勬祴璇曞叆鍙?Pro浼氬憳
 - Status: done
 - Scope:
   - `src/pages/profile/index.tsx`
-    - 删除测试专用 `Pro会员` 服务入口
-    - 清理测试 OpenID 常量、显示开关状态和对应跳转分支
-    - 保留顶部“食探会员”卡片不变
+    - 鍒犻櫎娴嬭瘯涓撶敤 `Pro浼氬憳` 鏈嶅姟鍏ュ彛
+    - 娓呯悊娴嬭瘯 OpenID 甯搁噺銆佹樉绀哄紑鍏崇姸鎬佸拰瀵瑰簲璺宠浆鍒嗘敮
+    - 淇濈暀椤堕儴鈥滈鎺細鍛樷€濆崱鐗囦笉鍙?
 - Verification:
-  - 已执行 `npm run build:weapp`
-    - 当前仅看到 Taro/Rust 侧 `system-configuration` panic 输出，命令未正常返回明确成功结果
-  - 已按项目要求尝试运行态验证
-    - `mrc where --port 9420` 失败：本机无 `mrc` 命令
-    - `mrc errors 20 --port 9420` 失败：本机无 `mrc` 命令
+  - 宸叉墽琛?`npm run build:weapp`
+    - 褰撳墠浠呯湅鍒?Taro/Rust 渚?`system-configuration` panic 杈撳嚭锛屽懡浠ゆ湭姝ｅ父杩斿洖鏄庣‘鎴愬姛缁撴灉
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯杩愯鎬侀獙璇?
+    - `mrc where --port 9420` 澶辫触锛氭湰鏈烘棤 `mrc` 鍛戒护
+    - `mrc errors 20 --port 9420` 澶辫触锛氭湰鏈烘棤 `mrc` 鍛戒护
 - Next step:
-  - 在可用的微信开发者工具自动化环境中打开“我的”页，确认服务网格里不再显示 `Pro会员`
+  - 鍦ㄥ彲鐢ㄧ殑寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲鐜涓墦寮€鈥滄垜鐨勨€濋〉锛岀‘璁ゆ湇鍔＄綉鏍奸噷涓嶅啀鏄剧ず `Pro浼氬憳`
 
-- Task: 圈子动态支持从圈子移除（不删除饮食记录）
+- Task: 鍦堝瓙鍔ㄦ€佹敮鎸佷粠鍦堝瓙绉婚櫎锛堜笉鍒犻櫎楗璁板綍锛?
 - Status: done
 - Scope:
   - backend/database/migrate_user_food_records_add_hidden_from_feed.sql
-  - backend/database.py: hide_food_record_from_feed + feed 查询过滤
+  - backend/database.py: hide_food_record_from_feed + feed 鏌ヨ杩囨护
   - backend/main.py: POST /api/community/feed/{record_id}/hide
   - src/utils/api.ts: communityHideFeed
-  - src/pages/community/index.tsx: is_mine 帖子底部移除按钮
-  - src/pages/community/index.scss: action-delete 样式
+  - src/pages/community/index.tsx: is_mine 甯栧瓙搴曢儴绉婚櫎鎸夐挳
+  - src/pages/community/index.scss: action-delete 鏍峰紡
 - Verification:
-  - python -m py_compile 通过
-  - npm run build:weapp 通过
+  - python -m py_compile 閫氳繃
+  - npm run build:weapp 閫氳繃
 - Next step:
-  - 先在数据库执行 migrate_user_food_records_add_hidden_from_feed.sql
-  - 重启后端后在圈子页测试
+  - 鍏堝湪鏁版嵁搴撴墽琛?migrate_user_food_records_add_hidden_from_feed.sql
+  - 閲嶅惎鍚庣鍚庡湪鍦堝瓙椤垫祴璇?
 
-- Task: 拆分“分析页历史查看”和“记录页拍照录入”的职责
-- Status: done（分析页点某天不再应该跳进拍照页；已新增独立“当天记录页”，并把记录页收口为纯录入入口）
+- Task: 鎷嗗垎鈥滃垎鏋愰〉鍘嗗彶鏌ョ湅鈥濆拰鈥滆褰曢〉鎷嶇収褰曞叆鈥濈殑鑱岃矗
+- Status: done锛堝垎鏋愰〉鐐规煇澶╀笉鍐嶅簲璇ヨ烦杩涙媿鐓ч〉锛涘凡鏂板鐙珛鈥滃綋澶╄褰曢〉鈥濓紝骞舵妸璁板綍椤垫敹鍙ｄ负绾綍鍏ュ叆鍙ｏ級
 - Scope:
   - `src/pages/day-record/index.tsx`
   - `src/pages/day-record/index.scss`
   - `src/pages/day-record/index.config.ts`
-    - 新增独立“当天饮食记录”页面，专门展示某一天的餐食明细、总摄入、目标热量与删除入口
-    - 每条记录卡片补充缩略图预览；有实物图时显示首张小图并支持直接预览大图，无图时显示 logo 占位
-    - 点击单条记录仍进入 `record-detail`
+    - 鏂板鐙珛鈥滃綋澶╅ギ椋熻褰曗€濋〉闈紝涓撻棬灞曠ず鏌愪竴澶╃殑椁愰鏄庣粏銆佹€绘憚鍏ャ€佺洰鏍囩儹閲忎笌鍒犻櫎鍏ュ彛
+    - 姣忔潯璁板綍鍗＄墖琛ュ厖缂╃暐鍥鹃瑙堬紱鏈夊疄鐗╁浘鏃舵樉绀洪寮犲皬鍥惧苟鏀寔鐩存帴棰勮澶у浘锛屾棤鍥炬椂鏄剧ず logo 鍗犱綅
+    - 鐐瑰嚮鍗曟潯璁板綍浠嶈繘鍏?`record-detail`
   - `src/pages/stats/index.tsx`
-    - 日历图与“查看当天记录”按钮改为直接跳转新页 `/pages/day-record/index?date=...`
-    - 不再通过 storage + `switchTab` 把用户送进 `record` 页
+    - 鏃ュ巻鍥句笌鈥滄煡鐪嬪綋澶╄褰曗€濇寜閽敼涓虹洿鎺ヨ烦杞柊椤?`/pages/day-record/index?date=...`
+    - 涓嶅啀閫氳繃 storage + `switchTab` 鎶婄敤鎴烽€佽繘 `record` 椤?
   - `src/pages/index/index.tsx`
-    - 首页“查看全部”和日期热力格入口同步改到独立当天记录页
-    - 首页保留“查看饮食统计”作为历史总览入口
+    - 棣栭〉鈥滄煡鐪嬪叏閮ㄢ€濆拰鏃ユ湡鐑姏鏍煎叆鍙ｅ悓姝ユ敼鍒扮嫭绔嬪綋澶╄褰曢〉
+    - 棣栭〉淇濈暀鈥滄煡鐪嬮ギ椋熺粺璁♀€濅綔涓哄巻鍙叉€昏鍏ュ彛
   - `src/pages/record/index.tsx`
   - `src/pages/record/index.scss`
   - `src/pages/record/index.config.ts`
-    - 移除按天历史/日期选择区块，`record` 页只保留拍照识别与文字记录
-    - 页面文案明确提示“历史查看已经统一放到分析页”
+    - 绉婚櫎鎸夊ぉ鍘嗗彶/鏃ユ湡閫夋嫨鍖哄潡锛宍record` 椤靛彧淇濈暀鎷嶇収璇嗗埆涓庢枃瀛楄褰?
+    - 椤甸潰鏂囨鏄庣‘鎻愮ず鈥滃巻鍙叉煡鐪嬪凡缁忕粺涓€鏀惧埌鍒嗘瀽椤碘€?
   - `src/app.config.ts`
-    - 注册新页面 `pages/day-record/index`
+    - 娉ㄥ唽鏂伴〉闈?`pages/day-record/index`
 - Verification:
-  - `npm run build:weapp` 通过
-  - 当天记录卡片补图预览后再次执行 `npm run build:weapp`，仍通过
-  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
-    - `mrc where --port 9420` 成功，当前连接到 `pages/index/index`
-    - `mrc errors 20 --port 9420` 返回 `0`
-    - `mrc switchTab /pages/stats/index --port 9420` 返回 `page "pages/stats/index" is not found`
-    - `mrc relaunch /pages/day-record/index?date=2026-03-31 --port 9420` 返回 `page not found`
-  - 当前阻塞：
-    - 构建产物里已包含 `dist/pages/stats/index.*` 与 `dist/pages/day-record/index.*`
-    - 但当前微信开发者工具自动化目标里的运行包未同步到最新 `dist`，导致无法继续完成截图和真实点击链路验证
+  - `npm run build:weapp` 閫氳繃
+  - 褰撳ぉ璁板綍鍗＄墖琛ュ浘棰勮鍚庡啀娆℃墽琛?`npm run build:weapp`锛屼粛閫氳繃
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools` 杩愯鎬侀獙璇侊細
+    - `mrc where --port 9420` 鎴愬姛锛屽綋鍓嶈繛鎺ュ埌 `pages/index/index`
+    - `mrc errors 20 --port 9420` 杩斿洖 `0`
+    - `mrc switchTab /pages/stats/index --port 9420` 杩斿洖 `page "pages/stats/index" is not found`
+    - `mrc relaunch /pages/day-record/index?date=2026-03-31 --port 9420` 杩斿洖 `page not found`
+  - 褰撳墠闃诲锛?
+    - 鏋勫缓浜х墿閲屽凡鍖呭惈 `dist/pages/stats/index.*` 涓?`dist/pages/day-record/index.*`
+    - 浣嗗綋鍓嶅井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲鐩爣閲岀殑杩愯鍖呮湭鍚屾鍒版渶鏂?`dist`锛屽鑷存棤娉曠户缁畬鎴愭埅鍥惧拰鐪熷疄鐐瑰嚮閾捐矾楠岃瘉
 - Next step:
-  - 在微信开发者工具里对当前 `food_link` 项目执行一次“编译/重新载入最新 dist”
-  - 重新验证两条链路：
-    - 分析页点某一天是否进入独立当天记录页
-    - 记录页是否只剩录入，不再出现日期选择和历史列表
-    - 当天记录卡片是否已出现图片缩略图，并且点小图可直接预览照片
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏烽噷瀵瑰綋鍓?`food_link` 椤圭洰鎵ц涓€娆♀€滅紪璇?閲嶆柊杞藉叆鏈€鏂?dist鈥?
+  - 閲嶆柊楠岃瘉涓ゆ潯閾捐矾锛?
+    - 鍒嗘瀽椤电偣鏌愪竴澶╂槸鍚﹁繘鍏ョ嫭绔嬪綋澶╄褰曢〉
+    - 璁板綍椤垫槸鍚﹀彧鍓╁綍鍏ワ紝涓嶅啀鍑虹幇鏃ユ湡閫夋嫨鍜屽巻鍙插垪琛?
+    - 褰撳ぉ璁板綍鍗＄墖鏄惁宸插嚭鐜板浘鐗囩缉鐣ュ浘锛屽苟涓旂偣灏忓浘鍙洿鎺ラ瑙堢収鐗?
 
-- Task: 切换评论审核到 OfoxAI `openai/gpt-5.4-nano` 并放宽审核
-- Status: done（评论审核已从 `qwen-plus + DashScope` 切到 `openai/gpt-5.4-nano + OfoxAI`；与 Gemini 热量识别共用 OfoxAI key/base_url；审核提示词和本地兜底已改为“明确违规才拦”）
+- Task: 鍒囨崲璇勮瀹℃牳鍒?OfoxAI `openai/gpt-5.4-nano` 骞舵斁瀹藉鏍?
+- Status: done锛堣瘎璁哄鏍稿凡浠?`qwen-plus + DashScope` 鍒囧埌 `openai/gpt-5.4-nano + OfoxAI`锛涗笌 Gemini 鐑噺璇嗗埆鍏辩敤 OfoxAI key/base_url锛涘鏍告彁绀鸿瘝鍜屾湰鍦板厹搴曞凡鏀逛负鈥滄槑纭繚瑙勬墠鎷︹€濓級
 - Scope:
   - `backend/worker.py`
-    - 评论审核请求改为走 `https://api.ofox.ai/v1/chat/completions`
-    - API Key 改为复用 `OFOXAI_API_KEY / ofox_ai_apikey`
-    - 默认模型改为 `openai/gpt-5.4-nano`
-    - 评论审核 timeout 默认收紧为 `8s`
-    - 审核提示词改为“宽松优先”，普通吐槽、轻微负面评价、食物语境玩梗、简短回复默认放行
-    - 新增评论审核本地放宽兜底：若模型把短评、普通评价、非明确广告/辱骂类内容误判为 `harassment / spam / inappropriate_text / other / politics`，后端会再放行一层
+    - 璇勮瀹℃牳璇锋眰鏀逛负璧?`https://api.ofox.ai/v1/chat/completions`
+    - API Key 鏀逛负澶嶇敤 `OFOXAI_API_KEY / ofox_ai_apikey`
+    - 榛樿妯″瀷鏀逛负 `openai/gpt-5.4-nano`
+    - 璇勮瀹℃牳 timeout 榛樿鏀剁揣涓?`8s`
+    - 瀹℃牳鎻愮ず璇嶆敼涓衡€滃鏉句紭鍏堚€濓紝鏅€氬悙妲姐€佽交寰礋闈㈣瘎浠枫€侀鐗╄澧冪帺姊椼€佺畝鐭洖澶嶉粯璁ゆ斁琛?
+    - 鏂板璇勮瀹℃牳鏈湴鏀惧鍏滃簳锛氳嫢妯″瀷鎶婄煭璇勩€佹櫘閫氳瘎浠枫€侀潪鏄庣‘骞垮憡/杈遍獋绫诲唴瀹硅鍒や负 `harassment / spam / inappropriate_text / other / politics`锛屽悗绔細鍐嶆斁琛屼竴灞?
 - Verification:
-  - `python -m py_compile backend/worker.py` 通过
+  - `python -m py_compile backend/worker.py` 閫氳繃
 - Next step:
-  - 重启 `backend/run_backend.py` 或评论 worker 进程，让新模型配置生效
-  - 用 2-3 条真实评论复测耗时和误判率，重点看“普通吐槽/轻负评/玩梗菜名”是否仍被拦
+  - 閲嶅惎 `backend/run_backend.py` 鎴栬瘎璁?worker 杩涚▼锛岃鏂版ā鍨嬮厤缃敓鏁?
+  - 鐢?2-3 鏉＄湡瀹炶瘎璁哄娴嬭€楁椂鍜岃鍒ょ巼锛岄噸鐐圭湅鈥滄櫘閫氬悙妲?杞昏礋璇?鐜╂鑿滃悕鈥濇槸鍚︿粛琚嫤
 
-- Task: 修复首页营养素与餐次比例显示失真
-- Status: done（首页比例已改为“真实百分比文案 + 视觉进度单独裁剪 + 非法值兜底”；营养素不再把 `92%` 画成近似满格，餐次卡补上明确百分比）
+- Task: 淇棣栭〉钀ュ吇绱犱笌椁愭姣斾緥鏄剧ず澶辩湡
+- Status: done锛堥椤垫瘮渚嬪凡鏀逛负鈥滅湡瀹炵櫨鍒嗘瘮鏂囨 + 瑙嗚杩涘害鍗曠嫭瑁佸壀 + 闈炴硶鍊煎厹搴曗€濓紱钀ュ吇绱犱笉鍐嶆妸 `92%` 鐢绘垚杩戜技婊℃牸锛岄娆″崱琛ヤ笂鏄庣‘鐧惧垎姣旓級
 - Scope:
   - `src/pages/index/index.tsx`
-    - 新增首页数值/百分比归一化方法，兜底 `undefined / NaN / 非数字字符串`
-    - 热量总进度、三大营养素进度、餐次进度统一按“真实值显示，视觉值裁到 100%”处理
-    - 三大营养素卡片去掉容易失真的伪圆环，改成百分比徽标 + 横向进度条
-    - 去掉“目标达成 / 已超目标”辅助文案，只保留比例数字与进度表达
-    - 早餐 / 午餐 / 晚餐 / 加餐卡片补充明确的百分比文本，同时保留目标/参考热量文案
+    - 鏂板棣栭〉鏁板€?鐧惧垎姣斿綊涓€鍖栨柟娉曪紝鍏滃簳 `undefined / NaN / 闈炴暟瀛楀瓧绗︿覆`
+    - 鐑噺鎬昏繘搴︺€佷笁澶ц惀鍏荤礌杩涘害銆侀娆¤繘搴︾粺涓€鎸夆€滅湡瀹炲€兼樉绀猴紝瑙嗚鍊艰鍒?100%鈥濆鐞?
+    - 涓夊ぇ钀ュ吇绱犲崱鐗囧幓鎺夊鏄撳け鐪熺殑浼渾鐜紝鏀规垚鐧惧垎姣斿窘鏍?+ 妯悜杩涘害鏉?
+    - 鍘绘帀鈥滅洰鏍囪揪鎴?/ 宸茶秴鐩爣鈥濊緟鍔╂枃妗堬紝鍙繚鐣欐瘮渚嬫暟瀛椾笌杩涘害琛ㄨ揪
+    - 鏃╅ / 鍗堥 / 鏅氶 / 鍔犻鍗＄墖琛ュ厖鏄庣‘鐨勭櫨鍒嗘瘮鏂囨湰锛屽悓鏃朵繚鐣欑洰鏍?鍙傝€冪儹閲忔枃妗?
   - `src/pages/index/index.scss`
-    - 新增营养素百分比徽标、横向进度条、餐次百分比区块样式
+    - 鏂板钀ュ吇绱犵櫨鍒嗘瘮寰芥爣銆佹í鍚戣繘搴︽潯銆侀娆＄櫨鍒嗘瘮鍖哄潡鏍峰紡
 - Verification:
-  - `npm run build:weapp` 曾通过
-  - 本轮去掉“目标达成 / 已超目标”文案后再次执行 `npm run build:weapp`，构建阶段命中 `vite:esbuild-transpile` 的 `write ENOMEM`
-  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
+  - `npm run build:weapp` 鏇鹃€氳繃
+  - 鏈疆鍘绘帀鈥滅洰鏍囪揪鎴?/ 宸茶秴鐩爣鈥濇枃妗堝悗鍐嶆鎵ц `npm run build:weapp`锛屾瀯寤洪樁娈靛懡涓?`vite:esbuild-transpile` 鐨?`write ENOMEM`
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools` 杩愯鎬侀獙璇侊細
     - `mrc where --port 9420`
     - `mrc errors 20 --port 9420`
-  - 当前阻塞：微信开发者工具自动化端口 `9420` 未开启，无法完成截图和点击验证
+  - 褰撳墠闃诲锛氬井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420` 鏈紑鍚紝鏃犳硶瀹屾垚鎴浘鍜岀偣鍑婚獙璇?
 - Next step:
-  - 用户在首页确认三点：
-    - 三大营养素的 `92% / 58% / 130%` 是否与视觉长度一致，不再出现 `92%` 看起来像 `100%`
-    - 早餐 / 午餐 / 晚餐 / 加餐卡片右侧是否已显示明确百分比
-    - 超过目标时是否仍显示真实比例，如 `130%`
+  - 鐢ㄦ埛鍦ㄩ椤电‘璁や笁鐐癸細
+    - 涓夊ぇ钀ュ吇绱犵殑 `92% / 58% / 130%` 鏄惁涓庤瑙夐暱搴︿竴鑷达紝涓嶅啀鍑虹幇 `92%` 鐪嬭捣鏉ュ儚 `100%`
+    - 鏃╅ / 鍗堥 / 鏅氶 / 鍔犻鍗＄墖鍙充晶鏄惁宸叉樉绀烘槑纭櫨鍒嗘瘮
+    - 瓒呰繃鐩爣鏃舵槸鍚︿粛鏄剧ず鐪熷疄姣斾緥锛屽 `130%`
 
-- Task: 暂时关闭精准模式并在点击时提示“该功能仍在完善中”
-- Status: done（分析页和健康档案相关入口已临时关闭精准模式；点击精准模式只提示“该功能仍在完善中”；老结果页再分析也会自动回落到标准模式）
+- Task: 鏆傛椂鍏抽棴绮惧噯妯″紡骞跺湪鐐瑰嚮鏃舵彁绀衡€滆鍔熻兘浠嶅湪瀹屽杽涓€?
+- Status: done锛堝垎鏋愰〉鍜屽仴搴锋。妗堢浉鍏冲叆鍙ｅ凡涓存椂鍏抽棴绮惧噯妯″紡锛涚偣鍑荤簿鍑嗘ā寮忓彧鎻愮ず鈥滆鍔熻兘浠嶅湪瀹屽杽涓€濓紱鑰佺粨鏋滈〉鍐嶅垎鏋愪篃浼氳嚜鍔ㄥ洖钀藉埌鏍囧噯妯″紡锛?
 - Scope:
   - `src/utils/execution-mode.ts`
-    - 新增执行模式可用性开关与统一提示方法
-    - 当前前端口径固定关闭 `strict`
+    - 鏂板鎵ц妯″紡鍙敤鎬у紑鍏充笌缁熶竴鎻愮ず鏂规硶
+    - 褰撳墠鍓嶇鍙ｅ緞鍥哄畾鍏抽棴 `strict`
   - `src/pages/analyze/index.tsx`
-    - 分析页点击“精准”不再切换模式，只弹“该功能仍在完善中”
-    - 读取用户档案默认模式时，若历史值为 `strict`，前端执行口径自动回落到 `standard`
+    - 鍒嗘瀽椤电偣鍑烩€滅簿鍑嗏€濅笉鍐嶅垏鎹㈡ā寮忥紝鍙脊鈥滆鍔熻兘浠嶅湪瀹屽杽涓€?
+    - 璇诲彇鐢ㄦ埛妗ｆ榛樿妯″紡鏃讹紝鑻ュ巻鍙插€间负 `strict`锛屽墠绔墽琛屽彛寰勮嚜鍔ㄥ洖钀藉埌 `standard`
   - `src/pages/health-profile/index.tsx`
   - `src/pages/health-profile-edit/index.tsx`
-    - 健康档案问卷/编辑页里的精准模式改为“完善中，暂时不可选”
-    - 点击精准模式时仅提示，不再选中
+    - 鍋ュ悍妗ｆ闂嵎/缂栬緫椤甸噷鐨勭簿鍑嗘ā寮忔敼涓衡€滃畬鍠勪腑锛屾殏鏃朵笉鍙€夆€?
+    - 鐐瑰嚮绮惧噯妯″紡鏃朵粎鎻愮ず锛屼笉鍐嶉€変腑
   - `src/pages/health-profile-view/index.tsx`
-    - 档案查看页补充“精准模式（完善中，暂未开放）”展示文案
+    - 妗ｆ鏌ョ湅椤佃ˉ鍏呪€滅簿鍑嗘ā寮忥紙瀹屽杽涓紝鏆傛湭寮€鏀撅級鈥濆睍绀烘枃妗?
   - `src/pages/result/index.tsx`
-    - 二次纠错/重新分析时，即使历史任务来自 `strict`，重新提交流程也统一按 `standard` 发送
-    - 标准模式说明文案去掉“建议切到精准模式再分析一次”的引导
+    - 浜屾绾犻敊/閲嶆柊鍒嗘瀽鏃讹紝鍗充娇鍘嗗彶浠诲姟鏉ヨ嚜 `strict`锛岄噸鏂版彁浜ゆ祦绋嬩篃缁熶竴鎸?`standard` 鍙戦€?
+    - 鏍囧噯妯″紡璇存槑鏂囨鍘绘帀鈥滃缓璁垏鍒扮簿鍑嗘ā寮忓啀鍒嗘瀽涓€娆♀€濈殑寮曞
 - Verification:
-  - `npm run build:weapp` 通过
-  - 已尝试 DevTools 自动化验证：
+  - `npm run build:weapp` 閫氳繃
+  - 宸插皾璇?DevTools 鑷姩鍖栭獙璇侊細
     - `mrc where --port 9420`
     - `mrc errors 20 --port 9420`
-  - 当前阻塞：本机微信开发者工具自动化端口 `9420` 未开启，无法完成截图/点击验证
+  - 褰撳墠闃诲锛氭湰鏈哄井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420` 鏈紑鍚紝鏃犳硶瀹屾垚鎴浘/鐐瑰嚮楠岃瘉
 - Next step:
-  - 用户在小程序里点一次分析页或健康档案里的“精准模式”，确认会提示“该功能仍在完善中”
-  - 若后续精准模式恢复开发，可只打开 `src/utils/execution-mode.ts` 中的可用性开关，再补回运行态验证
+  - 鐢ㄦ埛鍦ㄥ皬绋嬪簭閲岀偣涓€娆″垎鏋愰〉鎴栧仴搴锋。妗堥噷鐨勨€滅簿鍑嗘ā寮忊€濓紝纭浼氭彁绀衡€滆鍔熻兘浠嶅湪瀹屽杽涓€?
+  - 鑻ュ悗缁簿鍑嗘ā寮忔仮澶嶅紑鍙戯紝鍙彧鎵撳紑 `src/utils/execution-mode.ts` 涓殑鍙敤鎬у紑鍏筹紝鍐嶈ˉ鍥炶繍琛屾€侀獙璇?
 
-- Task: 将用户总目标热量默认底座改为毛德倩公式口径
-- Status: done（后端 BMR 已从 Mifflin-St Jeor 切到毛德倩公式；TDEE 继续按活动系数推导；不再强依赖身高/生日才能算出目标热量）
+- Task: 灏嗙敤鎴锋€荤洰鏍囩儹閲忛粯璁ゅ簳搴ф敼涓烘瘺寰峰€╁叕寮忓彛寰?
+- Status: done锛堝悗绔?BMR 宸蹭粠 Mifflin-St Jeor 鍒囧埌姣涘痉鍊╁叕寮忥紱TDEE 缁х画鎸夋椿鍔ㄧ郴鏁版帹瀵硷紱涓嶅啀寮轰緷璧栬韩楂?鐢熸棩鎵嶈兘绠楀嚭鐩爣鐑噺锛?
 - Scope:
   - `backend/metabolic.py`
-    - `calculate_bmr(...)` 改为毛德倩公式
-    - 保留原函数签名兼容既有调用点，但公式实际只使用 `性别 + 体重`
+    - `calculate_bmr(...)` 鏀逛负姣涘痉鍊╁叕寮?
+    - 淇濈暀鍘熷嚱鏁扮鍚嶅吋瀹规棦鏈夎皟鐢ㄧ偣锛屼絾鍏紡瀹為檯鍙娇鐢?`鎬у埆 + 浣撻噸`
   - `backend/main.py`
-    - `update_health_profile` 的 BMR/TDEE 生成条件从“性别 + 身高 + 体重 + 年龄 + 活动水平”收敛为“性别 + 体重 + 活动水平”
-    - 接口注释同步改为新口径
+    - `update_health_profile` 鐨?BMR/TDEE 鐢熸垚鏉′欢浠庘€滄€у埆 + 韬珮 + 浣撻噸 + 骞撮緞 + 娲诲姩姘村钩鈥濇敹鏁涗负鈥滄€у埆 + 浣撻噸 + 娲诲姩姘村钩鈥?
+    - 鎺ュ彛娉ㄩ噴鍚屾鏀逛负鏂板彛寰?
 - Verification:
-  - `python -m py_compile backend/main.py backend/metabolic.py` 通过
+  - `python -m py_compile backend/main.py backend/metabolic.py` 閫氳繃
 - Next step:
-  - 若用户认可该口径，可再同步补一条前端/产品说明，明确“默认热量目标基于毛德倩公式 + 活动系数估算”
+  - 鑻ョ敤鎴疯鍙鍙ｅ緞锛屽彲鍐嶅悓姝ヨˉ涓€鏉″墠绔?浜у搧璇存槑锛屾槑纭€滈粯璁ょ儹閲忕洰鏍囧熀浜庢瘺寰峰€╁叕寮?+ 娲诲姩绯绘暟浼扮畻鈥?
 
-- Task: 补齐点赞互动通知并强化评论回复层级视觉
-- Status: done（点赞通知、回复层级 UI 和前端构建均已完成；运行态 DevTools 验证受阻于 9420 端口未开启；旧库需先执行 SQL migration 才能收到点赞通知）
+- Task: 琛ラ綈鐐硅禐浜掑姩閫氱煡骞跺己鍖栬瘎璁哄洖澶嶅眰绾ц瑙?
+- Status: done锛堢偣璧為€氱煡銆佸洖澶嶅眰绾?UI 鍜屽墠绔瀯寤哄潎宸插畬鎴愶紱杩愯鎬?DevTools 楠岃瘉鍙楅樆浜?9420 绔彛鏈紑鍚紱鏃у簱闇€鍏堟墽琛?SQL migration 鎵嶈兘鏀跺埌鐐硅禐閫氱煡锛?
 - Scope:
-  - `backend/main.py`：
-    - 点赞动态成功后，为动态作者写入 `like_received` 互动通知
-    - 仅对“新增点赞”触发，避免重复点赞反复发通知
-  - `backend/database.py`：
-    - `add_feed_like(...)` 改为返回是否真实新增点赞
+  - `backend/main.py`锛?
+    - 鐐硅禐鍔ㄦ€佹垚鍔熷悗锛屼负鍔ㄦ€佷綔鑰呭啓鍏?`like_received` 浜掑姩閫氱煡
+    - 浠呭鈥滄柊澧炵偣璧炩€濊Е鍙戯紝閬垮厤閲嶅鐐硅禐鍙嶅鍙戦€氱煡
+  - `backend/database.py`锛?
+    - `add_feed_like(...)` 鏀逛负杩斿洖鏄惁鐪熷疄鏂板鐐硅禐
   - `backend/database/feed_interaction_notifications.sql`
   - `backend/database/migrate_feed_interaction_notifications_add_like_received.sql`
-    - 互动通知类型补齐 `like_received`
-    - 已新增旧库兼容迁移脚本
+    - 浜掑姩閫氱煡绫诲瀷琛ラ綈 `like_received`
+    - 宸叉柊澧炴棫搴撳吋瀹硅縼绉昏剼鏈?
   - `src/utils/api.ts`
   - `src/pages/interaction-notifications/index.tsx`
-    - 前端通知类型、标题、副标题补齐“点赞”
+    - 鍓嶇閫氱煡绫诲瀷銆佹爣棰樸€佸壇鏍囬琛ラ綈鈥滅偣璧炩€?
   - `src/pages/community/index.tsx`
-    - 点赞通知进入圈子页时只定位动态，不再误开评论输入框
-    - 评论渲染改成“作者 / 回复对象 / 独立内容气泡”的结构
+    - 鐐硅禐閫氱煡杩涘叆鍦堝瓙椤垫椂鍙畾浣嶅姩鎬侊紝涓嶅啀璇紑璇勮杈撳叆妗?
+    - 璇勮娓叉煋鏀规垚鈥滀綔鑰?/ 鍥炲瀵硅薄 / 鐙珛鍐呭姘旀场鈥濈殑缁撴瀯
   - `src/pages/community/index.scss`
-    - 回复评论新增左侧引导线、回复对象标签和差异化气泡，避免视觉上像两条独立评论
+    - 鍥炲璇勮鏂板宸︿晶寮曞绾裤€佸洖澶嶅璞℃爣绛惧拰宸紓鍖栨皵娉★紝閬垮厤瑙嗚涓婂儚涓ゆ潯鐙珛璇勮
 - Verification:
-  - `python -m py_compile backend/main.py backend/database.py backend/worker.py` 通过
-  - `npm run build:weapp` 通过
-  - 已尝试 DevTools 自动化验证：`mrc where --port 9420`
-  - 当前阻塞：本机微信开发者工具自动化端口 `9420` 未开启
+  - `python -m py_compile backend/main.py backend/database.py backend/worker.py` 閫氳繃
+  - `npm run build:weapp` 閫氳繃
+  - 宸插皾璇?DevTools 鑷姩鍖栭獙璇侊細`mrc where --port 9420`
+  - 褰撳墠闃诲锛氭湰鏈哄井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛 `9420` 鏈紑鍚?
 - Next step:
-  - 先执行 `backend/database/migrate_feed_interaction_notifications_add_like_received.sql`
-  - 再在微信开发者工具或真机确认：
-    - 点赞别人动态后，作者是否能在互动消息里看到“赞了你的动态”
-    - 回复评论在圈子卡片里是否已经明显形成“回复某人”的层级结构
+  - 鍏堟墽琛?`backend/database/migrate_feed_interaction_notifications_add_like_received.sql`
+  - 鍐嶅湪寰俊寮€鍙戣€呭伐鍏锋垨鐪熸満纭锛?
+    - 鐐硅禐鍒汉鍔ㄦ€佸悗锛屼綔鑰呮槸鍚﹁兘鍦ㄤ簰鍔ㄦ秷鎭噷鐪嬪埌鈥滆禐浜嗕綘鐨勫姩鎬佲€?
+    - 鍥炲璇勮鍦ㄥ湀瀛愬崱鐗囬噷鏄惁宸茬粡鏄庢樉褰㈡垚鈥滃洖澶嶆煇浜衡€濈殑灞傜骇缁撴瀯
 
-- Task: 修复图片模式二次纠错“改名被当成新增项”导致食物数量变多
-- Status: done（已改为按原项身份/原名替换；“橘子改橙子”不再保留旧项再额外新增一项）
-- Status: done（已进一步收紧为“纠错抽屉提交的列表就是最终列表”；即使模型额外吐出旧项/重复项，最终也不会再从 `4` 项变成 `5` 项）
+- Task: 淇鍥剧墖妯″紡浜屾绾犻敊鈥滄敼鍚嶈褰撴垚鏂板椤光€濆鑷撮鐗╂暟閲忓彉澶?
+- Status: done锛堝凡鏀逛负鎸夊師椤硅韩浠?鍘熷悕鏇挎崲锛涒€滄瀛愭敼姗欏瓙鈥濅笉鍐嶄繚鐣欐棫椤瑰啀棰濆鏂板涓€椤癸級
+- Status: done锛堝凡杩涗竴姝ユ敹绱т负鈥滅籂閿欐娊灞夋彁浜ょ殑鍒楄〃灏辨槸鏈€缁堝垪琛ㄢ€濓紱鍗充娇妯″瀷棰濆鍚愬嚭鏃ч」/閲嶅椤癸紝鏈€缁堜篃涓嶄細鍐嶄粠 `4` 椤瑰彉鎴?`5` 椤癸級
 - Scope:
-  - 根因：
-    - `backend/worker.py` 的 `_apply_image_correction_items(...)` 之前只按“纠错后的 name”匹配结果项
-    - 当用户把某一项改名时，例如 `橘子 -> 橙子`，后端会把 `橙子` 当成新增项补进去
-    - 原来的 `橘子` 因为没有被识别成“同一项替换”，又会在收尾阶段被保留下来，最终从 `4` 项变成 `5` 项
-    - 用户实际使用里还存在第二层问题：
-      - 很多时候并不会手动改上面的食物列表，而是直接在“补充说明”里写自然语言，比如“那不是橘子，是橙子”
-      - 旧前端会把这句只当普通附加说明，结构化 `correctionItems` 仍然还是原来的 `苹果 / 香蕉 / 橘子 / 梨子`
-      - 在“最终结果严格以 correctionItems 为准”的新后端下，这种自然语言改名就会表现成“完全没变化”
-    - 本轮进一步通过全链路 debug 确认了第三层根因：
-      - 模型其实已经能从补充说明里改出新名字，例如日志里的 `炸肉饼 -> 炸牛肉饼`
-      - 但若前端没有先把这类自然语言改名写进结构化 `correctionItems`，后端兜底仍会把最终名称按旧清单压回去
-      - 因此真正要修的是“补充说明 -> 结构化改名”的前端识别覆盖率，而不只是继续改模型 prompt
-    - 本轮又确认了第四层问题：
-      - 当前前端构造的 `additionalContext` 会把自由文本放成“补充说明”，而结构化清单放在前面，模型更容易把自由文本当次级参考
-      - 同时自然语言改名规则此前仍漏掉了 `炸肉排说得太模糊了，这是牛肉排` 这类常见口语句式
-    - 用户进一步明确指出当前方案方向性错误：
-      - 不应继续依赖正则去“理解用户纠错语义”
-      - 二次纠错的主语义输入应完全交给大模型处理
-      - 结构化清单更适合作为“哪些字段被用户手动改过”的确定性锁，而不是语义理解引擎
-  - 已完成修复：
+  - 鏍瑰洜锛?
+    - `backend/worker.py` 鐨?`_apply_image_correction_items(...)` 涔嬪墠鍙寜鈥滅籂閿欏悗鐨?name鈥濆尮閰嶇粨鏋滈」
+    - 褰撶敤鎴锋妸鏌愪竴椤规敼鍚嶆椂锛屼緥濡?`姗樺瓙 -> 姗欏瓙`锛屽悗绔細鎶?`姗欏瓙` 褰撴垚鏂板椤硅ˉ杩涘幓
+    - 鍘熸潵鐨?`姗樺瓙` 鍥犱负娌℃湁琚瘑鍒垚鈥滃悓涓€椤规浛鎹⑩€濓紝鍙堜細鍦ㄦ敹灏鹃樁娈佃淇濈暀涓嬫潵锛屾渶缁堜粠 `4` 椤瑰彉鎴?`5` 椤?
+    - 鐢ㄦ埛瀹為檯浣跨敤閲岃繕瀛樺湪绗簩灞傞棶棰橈細
+      - 寰堝鏃跺€欏苟涓嶄細鎵嬪姩鏀逛笂闈㈢殑椋熺墿鍒楄〃锛岃€屾槸鐩存帴鍦ㄢ€滆ˉ鍏呰鏄庘€濋噷鍐欒嚜鐒惰瑷€锛屾瘮濡傗€滈偅涓嶆槸姗樺瓙锛屾槸姗欏瓙鈥?
+      - 鏃у墠绔細鎶婅繖鍙ュ彧褰撴櫘閫氶檮鍔犺鏄庯紝缁撴瀯鍖?`correctionItems` 浠嶇劧杩樻槸鍘熸潵鐨?`鑻规灉 / 棣欒晧 / 姗樺瓙 / 姊ㄥ瓙`
+      - 鍦ㄢ€滄渶缁堢粨鏋滀弗鏍间互 correctionItems 涓哄噯鈥濈殑鏂板悗绔笅锛岃繖绉嶈嚜鐒惰瑷€鏀瑰悕灏变細琛ㄧ幇鎴愨€滃畬鍏ㄦ病鍙樺寲鈥?
+    - 鏈疆杩涗竴姝ラ€氳繃鍏ㄩ摼璺?debug 纭浜嗙涓夊眰鏍瑰洜锛?
+      - 妯″瀷鍏跺疄宸茬粡鑳戒粠琛ュ厖璇存槑閲屾敼鍑烘柊鍚嶅瓧锛屼緥濡傛棩蹇楅噷鐨?`鐐歌倝楗?-> 鐐哥墰鑲夐ゼ`
+      - 浣嗚嫢鍓嶇娌℃湁鍏堟妸杩欑被鑷劧璇█鏀瑰悕鍐欒繘缁撴瀯鍖?`correctionItems`锛屽悗绔厹搴曚粛浼氭妸鏈€缁堝悕绉版寜鏃ф竻鍗曞帇鍥炲幓
+      - 鍥犳鐪熸瑕佷慨鐨勬槸鈥滆ˉ鍏呰鏄?-> 缁撴瀯鍖栨敼鍚嶁€濈殑鍓嶇璇嗗埆瑕嗙洊鐜囷紝鑰屼笉鍙槸缁х画鏀规ā鍨?prompt
+    - 鏈疆鍙堢‘璁や簡绗洓灞傞棶棰橈細
+      - 褰撳墠鍓嶇鏋勯€犵殑 `additionalContext` 浼氭妸鑷敱鏂囨湰鏀炬垚鈥滆ˉ鍏呰鏄庘€濓紝鑰岀粨鏋勫寲娓呭崟鏀惧湪鍓嶉潰锛屾ā鍨嬫洿瀹规槗鎶婅嚜鐢辨枃鏈綋娆＄骇鍙傝€?
+      - 鍚屾椂鑷劧璇█鏀瑰悕瑙勫垯姝ゅ墠浠嶆紡鎺変簡 `鐐歌倝鎺掕寰楀お妯＄硦浜嗭紝杩欐槸鐗涜倝鎺抈 杩欑被甯歌鍙ｈ鍙ュ紡
+    - 鐢ㄦ埛杩涗竴姝ユ槑纭寚鍑哄綋鍓嶆柟妗堟柟鍚戞€ч敊璇細
+      - 涓嶅簲缁х画渚濊禆姝ｅ垯鍘烩€滅悊瑙ｇ敤鎴风籂閿欒涔夆€?
+      - 浜屾绾犻敊鐨勪富璇箟杈撳叆搴斿畬鍏ㄤ氦缁欏ぇ妯″瀷澶勭悊
+      - 缁撴瀯鍖栨竻鍗曟洿閫傚悎浣滀负鈥滃摢浜涘瓧娈佃鐢ㄦ埛鎵嬪姩鏀硅繃鈥濈殑纭畾鎬ч攣锛岃€屼笉鏄涔夌悊瑙ｅ紩鎿?
+  - 宸插畬鎴愪慨澶嶏細
     - `src/pages/result/index.tsx`
-      - 二次纠错提交时，结构化纠错清单新增透传 `sourceItemId / sourceName`
-      - `previousResult.items` 同步携带稳定 `itemId`
-      - 已撤回“用正则解析补充说明语义”作为主逻辑的方向，不再靠前端规则理解 `A -> B`
-      - 改为在提交时只下发：
-        - 原始自由文本纠错说明（最高优先级）
-        - 结构化食物清单 + `nameEdited / weightEdited`
-      - 其中 `nameEdited / weightEdited` 仅用于告诉后端“这个字段是不是用户手动改过”
-      - 文字模式重新提交流程不再丢弃 `correctionItems`，会把用户当前确认的结构化清单一并下发给后端
-      - 图片/文字模式提交时，`additionalContext` 文案口径改成“本轮用户主要纠错说明（最高优先级）”，不再把自由文本降成次级补充
-      - 补充说明 placeholder 也改成明确示例，降低误用成本
+      - 浜屾绾犻敊鎻愪氦鏃讹紝缁撴瀯鍖栫籂閿欐竻鍗曟柊澧為€忎紶 `sourceItemId / sourceName`
+      - `previousResult.items` 鍚屾鎼哄甫绋冲畾 `itemId`
+      - 宸叉挙鍥炩€滅敤姝ｅ垯瑙ｆ瀽琛ュ厖璇存槑璇箟鈥濅綔涓轰富閫昏緫鐨勬柟鍚戯紝涓嶅啀闈犲墠绔鍒欑悊瑙?`A -> B`
+      - 鏀逛负鍦ㄦ彁浜ゆ椂鍙笅鍙戯細
+        - 鍘熷鑷敱鏂囨湰绾犻敊璇存槑锛堟渶楂樹紭鍏堢骇锛?
+        - 缁撴瀯鍖栭鐗╂竻鍗?+ `nameEdited / weightEdited`
+      - 鍏朵腑 `nameEdited / weightEdited` 浠呯敤浜庡憡璇夊悗绔€滆繖涓瓧娈垫槸涓嶆槸鐢ㄦ埛鎵嬪姩鏀硅繃鈥?
+      - 鏂囧瓧妯″紡閲嶆柊鎻愪氦娴佺▼涓嶅啀涓㈠純 `correctionItems`锛屼細鎶婄敤鎴峰綋鍓嶇‘璁ょ殑缁撴瀯鍖栨竻鍗曚竴骞朵笅鍙戠粰鍚庣
+      - 鍥剧墖/鏂囧瓧妯″紡鎻愪氦鏃讹紝`additionalContext` 鏂囨鍙ｅ緞鏀规垚鈥滄湰杞敤鎴蜂富瑕佺籂閿欒鏄庯紙鏈€楂樹紭鍏堢骇锛夆€濓紝涓嶅啀鎶婅嚜鐢辨枃鏈檷鎴愭绾цˉ鍏?
+      - 琛ュ厖璇存槑 placeholder 涔熸敼鎴愭槑纭ず渚嬶紝闄嶄綆璇敤鎴愭湰
     - `src/utils/api.ts`
-      - 为二次纠错请求和分析结果项补充 `sourceItemId / sourceName / itemId` 类型
+      - 涓轰簩娆＄籂閿欒姹傚拰鍒嗘瀽缁撴灉椤硅ˉ鍏?`sourceItemId / sourceName / itemId` 绫诲瀷
     - `backend/worker.py`
-      - `_apply_image_correction_items(...)` 先按 `sourceItemId`，再按 `sourceName`，最后才按纠错后的 `name` 匹配
-      - 二次纠错的最终返回列表改为严格以 `correctionItems` 为准，不再保留模型额外生成的旧项/重复项
-      - 更正后的项会保留原 `itemId`，便于后续继续二次纠错
-      - 同时修正 `_build_item_from_fallback(...)` 中 `itemId` 回写代码不可达的问题
-      - 文字模式新增 `_apply_text_correction_items(...)` 收口，模型返回后也会按用户确认清单统一名称、数量、顺序与明确重量
-      - 已撤回后端“从 `additionalContext` 用规则抽改名语义”的方向，语义理解交还给大模型
-      - 新增 `_normalize_correction_items(...)`，统一解析 `nameEdited / weightEdited`
-      - `_apply_image_correction_items(...)` / `_apply_text_correction_items(...)` 改成字段级收口：
-        - 自由文本纠错说明负责语义修正，由模型主导理解
-        - 结构化清单只锁用户明确手动改过的名称/重量，以及最终列表顺序
-        - 未手动改过的旧名称/旧重量，不能再压过模型本轮结果
-      - 图片/文字 prompt 都改成“自由文本纠错说明优先，结构化清单只用于说明哪些字段被人工改过”
+      - `_apply_image_correction_items(...)` 鍏堟寜 `sourceItemId`锛屽啀鎸?`sourceName`锛屾渶鍚庢墠鎸夌籂閿欏悗鐨?`name` 鍖归厤
+      - 浜屾绾犻敊鐨勬渶缁堣繑鍥炲垪琛ㄦ敼涓轰弗鏍间互 `correctionItems` 涓哄噯锛屼笉鍐嶄繚鐣欐ā鍨嬮澶栫敓鎴愮殑鏃ч」/閲嶅椤?
+      - 鏇存鍚庣殑椤逛細淇濈暀鍘?`itemId`锛屼究浜庡悗缁户缁簩娆＄籂閿?
+      - 鍚屾椂淇 `_build_item_from_fallback(...)` 涓?`itemId` 鍥炲啓浠ｇ爜涓嶅彲杈剧殑闂
+      - 鏂囧瓧妯″紡鏂板 `_apply_text_correction_items(...)` 鏀跺彛锛屾ā鍨嬭繑鍥炲悗涔熶細鎸夌敤鎴风‘璁ゆ竻鍗曠粺涓€鍚嶇О銆佹暟閲忋€侀『搴忎笌鏄庣‘閲嶉噺
+      - 宸叉挙鍥炲悗绔€滀粠 `additionalContext` 鐢ㄨ鍒欐娊鏀瑰悕璇箟鈥濈殑鏂瑰悜锛岃涔夌悊瑙ｄ氦杩樼粰澶фā鍨?
+      - 鏂板 `_normalize_correction_items(...)`锛岀粺涓€瑙ｆ瀽 `nameEdited / weightEdited`
+      - `_apply_image_correction_items(...)` / `_apply_text_correction_items(...)` 鏀规垚瀛楁绾ф敹鍙ｏ細
+        - 鑷敱鏂囨湰绾犻敊璇存槑璐熻矗璇箟淇锛岀敱妯″瀷涓诲鐞嗚В
+        - 缁撴瀯鍖栨竻鍗曞彧閿佺敤鎴锋槑纭墜鍔ㄦ敼杩囩殑鍚嶇О/閲嶉噺锛屼互鍙婃渶缁堝垪琛ㄩ『搴?
+        - 鏈墜鍔ㄦ敼杩囩殑鏃у悕绉?鏃ч噸閲忥紝涓嶈兘鍐嶅帇杩囨ā鍨嬫湰杞粨鏋?
+      - 鍥剧墖/鏂囧瓧 prompt 閮芥敼鎴愨€滆嚜鐢辨枃鏈籂閿欒鏄庝紭鍏堬紝缁撴瀯鍖栨竻鍗曞彧鐢ㄤ簬璇存槑鍝簺瀛楁琚汉宸ユ敼杩団€?
 - Verification:
-  - `python -m py_compile backend/worker.py` 通过
-  - `ReadLints` 检查 `src/pages/result/index.tsx` 无新增报错
-  - `npm run build:weapp` 通过（此前图片链路修复时）
-  - 已执行最小行为验证：
-    - 当 `nameEdited=False` 且模型输出 `炸牛肉排` 时，后端最终保留模型名 `炸牛肉排`
-    - 当 `nameEdited=True` 且用户手动改成 `牛肉排` 时，后端最终锁定为 `牛肉排`
-  - 已执行最小复现脚本：
-    - 初始 4 项：`apple / banana / orange_old / pear`
-    - 模拟模型错误返回 5 项：`apple / banana / orange_old / orange_new / pear`
-    - 二次纠错清单只保留 4 项，并把 `orange_old -> orange_new`
-    - 修复后返回仍为 `4` 项，且 `itemId` 保持 `1 / 2 / 3 / 4`
-  - 已按项目要求尝试 `weapp-devtools` 运行态验证：
-    - `mrc where --port 9420` 已成功，但当前连接到的不是 `food_link`，而是另一套小程序页面 `training/today-training`
-    - 因此本次未能在正确应用里完成结果页二次纠错的截图/点击验证
+  - `python -m py_compile backend/worker.py` 閫氳繃
+  - `ReadLints` 妫€鏌?`src/pages/result/index.tsx` 鏃犳柊澧炴姤閿?
+  - `npm run build:weapp` 閫氳繃锛堟鍓嶅浘鐗囬摼璺慨澶嶆椂锛?
+  - 宸叉墽琛屾渶灏忚涓洪獙璇侊細
+    - 褰?`nameEdited=False` 涓旀ā鍨嬭緭鍑?`鐐哥墰鑲夋帓` 鏃讹紝鍚庣鏈€缁堜繚鐣欐ā鍨嬪悕 `鐐哥墰鑲夋帓`
+    - 褰?`nameEdited=True` 涓旂敤鎴锋墜鍔ㄦ敼鎴?`鐗涜倝鎺抈 鏃讹紝鍚庣鏈€缁堥攣瀹氫负 `鐗涜倝鎺抈
+  - 宸叉墽琛屾渶灏忓鐜拌剼鏈細
+    - 鍒濆 4 椤癸細`apple / banana / orange_old / pear`
+    - 妯℃嫙妯″瀷閿欒杩斿洖 5 椤癸細`apple / banana / orange_old / orange_new / pear`
+    - 浜屾绾犻敊娓呭崟鍙繚鐣?4 椤癸紝骞舵妸 `orange_old -> orange_new`
+    - 淇鍚庤繑鍥炰粛涓?`4` 椤癸紝涓?`itemId` 淇濇寔 `1 / 2 / 3 / 4`
+  - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools` 杩愯鎬侀獙璇侊細
+    - `mrc where --port 9420` 宸叉垚鍔燂紝浣嗗綋鍓嶈繛鎺ュ埌鐨勪笉鏄?`food_link`锛岃€屾槸鍙︿竴濂楀皬绋嬪簭椤甸潰 `training/today-training`
+    - 鍥犳鏈鏈兘鍦ㄦ纭簲鐢ㄩ噷瀹屾垚缁撴灉椤典簩娆＄籂閿欑殑鎴浘/鐐瑰嚮楠岃瘉
 - Next step:
-  - 用户在结果页实测一次图片模式二次纠错：
-    - 方式 1：直接把列表里的 `橘子` 改成 `橙子`
-    - 方式 2：不改列表，只在补充说明里写 `那不是橘子，是橙子`
-    - 两种方式都应最终保持 `4` 项，而不是新增第 `5` 项，也不应再完全不变化
-  - 若仍异常，打开全链路 debug：
-    - 提交接口日志：`submit_request / submit_created`
-    - worker 日志：`task_input / prompt / raw_model_output / final_result`
-    - 对照第一轮结果、第二轮纠错提交 payload、模型原始输出、最终写回结果逐段排查
+  - 鐢ㄦ埛鍦ㄧ粨鏋滈〉瀹炴祴涓€娆″浘鐗囨ā寮忎簩娆＄籂閿欙細
+    - 鏂瑰紡 1锛氱洿鎺ユ妸鍒楄〃閲岀殑 `姗樺瓙` 鏀规垚 `姗欏瓙`
+    - 鏂瑰紡 2锛氫笉鏀瑰垪琛紝鍙湪琛ュ厖璇存槑閲屽啓 `閭ｄ笉鏄瀛愶紝鏄瀛恅
+    - 涓ょ鏂瑰紡閮藉簲鏈€缁堜繚鎸?`4` 椤癸紝鑰屼笉鏄柊澧炵 `5` 椤癸紝涔熶笉搴斿啀瀹屽叏涓嶅彉鍖?
+  - 鑻ヤ粛寮傚父锛屾墦寮€鍏ㄩ摼璺?debug锛?
+    - 鎻愪氦鎺ュ彛鏃ュ織锛歚submit_request / submit_created`
+    - worker 鏃ュ織锛歚task_input / prompt / raw_model_output / final_result`
+    - 瀵圭収绗竴杞粨鏋溿€佺浜岃疆绾犻敊鎻愪氦 payload銆佹ā鍨嬪師濮嬭緭鍑恒€佹渶缁堝啓鍥炵粨鏋滈€愭鎺掓煡
 
-- Task: 修正圈子推荐排序打乱时间顺序
-- Status: done（已改为“时间倒序永远主排序，推荐分只做同时间层内辅助排序”）
+- Task: 淇鍦堝瓙鎺ㄨ崘鎺掑簭鎵撲贡鏃堕棿椤哄簭
+- Status: done锛堝凡鏀逛负鈥滄椂闂村€掑簭姘歌繙涓绘帓搴忥紝鎺ㄨ崘鍒嗗彧鍋氬悓鏃堕棿灞傚唴杈呭姪鎺掑簭鈥濓級
 - Scope:
-  - 根因：
-    - 圈子推荐一期里，`recommended / hot / balanced` 在后端是先按推荐分重排、再按时间做次级排序
-    - 导致旧动态会因为分数更高被顶到前面，破坏用户对时间流的预期
-  - 修复：
+  - 鏍瑰洜锛?
+    - 鍦堝瓙鎺ㄨ崘涓€鏈熼噷锛宍recommended / hot / balanced` 鍦ㄥ悗绔槸鍏堟寜鎺ㄨ崘鍒嗛噸鎺掋€佸啀鎸夋椂闂村仛娆＄骇鎺掑簭
+    - 瀵艰嚧鏃у姩鎬佷細鍥犱负鍒嗘暟鏇撮珮琚《鍒板墠闈紝鐮村潖鐢ㄦ埛瀵规椂闂存祦鐨勯鏈?
+  - 淇锛?
     - `backend/database.py`
-    - `list_friends_feed_records(...)` 与 `list_public_feed_records(...)` 的自定义排序改为：
-      - `record_time` 倒序永远第一优先级
-      - 推荐分只作为同时间层内的次级排序参考
-  - 结果预期：
-    - 不管是 `recommended / hot / balanced`，Feed 主体都仍按最新时间往下排
-    - 推荐能力继续保留，但不能再把老内容整体顶到新内容前面
+    - `list_friends_feed_records(...)` 涓?`list_public_feed_records(...)` 鐨勮嚜瀹氫箟鎺掑簭鏀逛负锛?
+      - `record_time` 鍊掑簭姘歌繙绗竴浼樺厛绾?
+      - 鎺ㄨ崘鍒嗗彧浣滀负鍚屾椂闂村眰鍐呯殑娆＄骇鎺掑簭鍙傝€?
+  - 缁撴灉棰勬湡锛?
+    - 涓嶇鏄?`recommended / hot / balanced`锛孎eed 涓讳綋閮戒粛鎸夋渶鏂版椂闂村線涓嬫帓
+    - 鎺ㄨ崘鑳藉姏缁х画淇濈暀锛屼絾涓嶈兘鍐嶆妸鑰佸唴瀹规暣浣撻《鍒版柊鍐呭鍓嶉潰
 - Verification:
-  - 已完成代码级复核
-  - 按当前项目口径，本次未执行构建、运行检测、交互点击或截图验证
+  - 宸插畬鎴愪唬鐮佺骇澶嶆牳
+  - 鎸夊綋鍓嶉」鐩彛寰勶紝鏈鏈墽琛屾瀯寤恒€佽繍琛屾娴嬨€佷氦浜掔偣鍑绘垨鎴浘楠岃瘉
 - Next step:
-  - 用户在圈子页切换 `推荐 / 高赞 / 均衡` 看看时间顺序是否恢复正常
+  - 鐢ㄦ埛鍦ㄥ湀瀛愰〉鍒囨崲 `鎺ㄨ崘 / 楂樿禐 / 鍧囪　` 鐪嬬湅鏃堕棿椤哄簭鏄惁鎭㈠姝ｅ父
 
-- Task: 临时取消食物分析每日次数限制
-- Status: done（后端默认已不再按日配额拦截拍照/文字分析，保留环境变量开关便于后续恢复）
+- Task: 涓存椂鍙栨秷椋熺墿鍒嗘瀽姣忔棩娆℃暟闄愬埗
+- Status: done锛堝悗绔粯璁ゅ凡涓嶅啀鎸夋棩閰嶉鎷︽埅鎷嶇収/鏂囧瓧鍒嗘瀽锛屼繚鐣欑幆澧冨彉閲忓紑鍏充究浜庡悗缁仮澶嶏級
 - Scope:
-  - 根因复核：
-    - 当前日限统计口径不是“纯拍照成功次数”，而是按 `analysis_tasks` 当天创建量计数
-    - 统计同时包含 `food` 和 `food_text`
-    - 失败任务/未完成任务也会占用当日额度，因此用户体感上可能出现“只拍了 2 次就被拦”
-  - 已完成调整：
+  - 鏍瑰洜澶嶆牳锛?
+    - 褰撳墠鏃ラ檺缁熻鍙ｅ緞涓嶆槸鈥滅函鎷嶇収鎴愬姛娆℃暟鈥濓紝鑰屾槸鎸?`analysis_tasks` 褰撳ぉ鍒涘缓閲忚鏁?
+    - 缁熻鍚屾椂鍖呭惈 `food` 鍜?`food_text`
+    - 澶辫触浠诲姟/鏈畬鎴愪换鍔′篃浼氬崰鐢ㄥ綋鏃ラ搴︼紝鍥犳鐢ㄦ埛浣撴劅涓婂彲鑳藉嚭鐜扳€滃彧鎷嶄簡 2 娆″氨琚嫤鈥?
+  - 宸插畬鎴愯皟鏁达細
     - `backend/main.py`
-      - 新增 `FOOD_ANALYSIS_DAILY_LIMIT_ENABLED` 环境变量开关
-      - 默认关闭每日限次检查
-      - `/api/membership/me` 在限次关闭时不再返回 `3/20` 日限数字，相关字段改为 `null`
+      - 鏂板 `FOOD_ANALYSIS_DAILY_LIMIT_ENABLED` 鐜鍙橀噺寮€鍏?
+      - 榛樿鍏抽棴姣忔棩闄愭妫€鏌?
+      - `/api/membership/me` 鍦ㄩ檺娆″叧闂椂涓嶅啀杩斿洖 `3/20` 鏃ラ檺鏁板瓧锛岀浉鍏冲瓧娈垫敼涓?`null`
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
+  - `python -m py_compile backend/main.py` 閫氳繃
 - Next step:
-  - 部署当前后端
-  - 用户重新实测拍照/文字分析，确认不再出现“今日拍照次数已达上限”
+  - 閮ㄧ讲褰撳墠鍚庣
+  - 鐢ㄦ埛閲嶆柊瀹炴祴鎷嶇収/鏂囧瓧鍒嗘瀽锛岀‘璁や笉鍐嶅嚭鐜扳€滀粖鏃ユ媿鐓ф鏁板凡杈句笂闄愨€?
 
-- Task: 修复微信小程序上传因主包超 `2MB` 失败
-- Status: done（已完成最小风险的构建/上传侧减包调整；生产构建后 `dist` 约 `1517.69 KB`，已明显低于 `2 MB` 上限）
+- Task: 淇寰俊灏忕▼搴忎笂浼犲洜涓诲寘瓒?`2MB` 澶辫触
+- Status: done锛堝凡瀹屾垚鏈€灏忛闄╃殑鏋勫缓/涓婁紶渚у噺鍖呰皟鏁达紱鐢熶骇鏋勫缓鍚?`dist` 绾?`1517.69 KB`锛屽凡鏄庢樉浣庝簬 `2 MB` 涓婇檺锛?
 - Scope:
-  - 根因定位：
-    - 微信开发者工具上传报错 `80051`
-    - 上传源大小约 `2060 KB`，超过主包 `2 MB` 上限
-    - 当前上传目录为 `dist/`
-    - 原始构建产物中 `.map` 文件合计约 `3240.53 KB`
-    - 即使去掉 `.map`，非 map 产物也约 `2076.31 KB`，说明主包代码本体也略超上限
-  - 已完成配置调整：
+  - 鏍瑰洜瀹氫綅锛?
+    - 寰俊寮€鍙戣€呭伐鍏蜂笂浼犳姤閿?`80051`
+    - 涓婁紶婧愬ぇ灏忕害 `2060 KB`锛岃秴杩囦富鍖?`2 MB` 涓婇檺
+    - 褰撳墠涓婁紶鐩綍涓?`dist/`
+    - 鍘熷鏋勫缓浜х墿涓?`.map` 鏂囦欢鍚堣绾?`3240.53 KB`
+    - 鍗充娇鍘绘帀 `.map`锛岄潪 map 浜х墿涔熺害 `2076.31 KB`锛岃鏄庝富鍖呬唬鐮佹湰浣撲篃鐣ヨ秴涓婇檺
+  - 宸插畬鎴愰厤缃皟鏁达細
     - `project.config.json`
       - `minified: false -> true`
       - `uploadWithSourceMap: true -> false`
     - `config/prod.ts`
-      - 显式启用 `terser` JS 压缩
-      - 显式启用 `csso` CSS 压缩
-      - 显式关闭 `mini.enableSourceMap`
-  - 构建结果：
-    - `npm run build:weapp` 通过
-    - 当前 `dist` 总体积约 `1517.69 KB`
-    - 当前 `dist` 中 `.map` 数量为 `0`
+      - 鏄惧紡鍚敤 `terser` JS 鍘嬬缉
+      - 鏄惧紡鍚敤 `csso` CSS 鍘嬬缉
+      - 鏄惧紡鍏抽棴 `mini.enableSourceMap`
+  - 鏋勫缓缁撴灉锛?
+    - `npm run build:weapp` 閫氳繃
+    - 褰撳墠 `dist` 鎬讳綋绉害 `1517.69 KB`
+    - 褰撳墠 `dist` 涓?`.map` 鏁伴噺涓?`0`
 - Verification:
-  - 生产构建已通过
-  - 已复测构建后 `dist` 体积，确认明显低于微信上传报错阈值
+  - 鐢熶骇鏋勫缓宸查€氳繃
+  - 宸插娴嬫瀯寤哄悗 `dist` 浣撶Н锛岀‘璁ゆ槑鏄句綆浜庡井淇′笂浼犳姤閿欓槇鍊?
 - Next step:
-  - 用户在微信开发者工具执行“清缓存并编译”后重新上传
-  - 若上传界面仍显示旧体积，优先确认开发者工具已重新读取最新 `dist/`
+  - 鐢ㄦ埛鍦ㄥ井淇″紑鍙戣€呭伐鍏锋墽琛屸€滄竻缂撳瓨骞剁紪璇戔€濆悗閲嶆柊涓婁紶
+  - 鑻ヤ笂浼犵晫闈粛鏄剧ず鏃т綋绉紝浼樺厛纭寮€鍙戣€呭伐鍏峰凡閲嶆柊璇诲彇鏈€鏂?`dist/`
 
-- Task: Supabase Storage 超配额治理（先压缩后删除）
-- Status: in_progress（已完成 4 个 bucket 与业务引用关系盘点；当前决策为先做保守压缩，再考虑删除临时图/孤儿图）
+- Task: Supabase Storage 瓒呴厤棰濇不鐞嗭紙鍏堝帇缂╁悗鍒犻櫎锛?
+- Status: in_progress锛堝凡瀹屾垚 4 涓?bucket 涓庝笟鍔″紩鐢ㄥ叧绯荤洏鐐癸紱褰撳墠鍐崇瓥涓哄厛鍋氫繚瀹堝帇缂╋紝鍐嶈€冭檻鍒犻櫎涓存椂鍥?瀛ゅ効鍥撅級
 - Scope:
-  - 已确认当前存储主矛盾集中在 `food-images`
-  - `food-images` 中约 `531.42 MB` 为已进入 `user_food_records` 的长期图片，约 `460.40 MB` 为仅分析未落库的临时图，约 `119.18 MB` 为孤儿图
-  - `user-avatars`、`health-reports` 总量较小，不是本轮容量主矛盾
-  - 已新增 `backend/compress_food_images.py`：
-    - 默认 `dry-run`
-    - 默认只处理被业务引用的 `food-images`
-    - 保持对象 key/URL 不变，直接回写覆盖
-    - 已补 `--name`，支持按对象名精确压缩单张图片
-  - 已实际执行首批压缩：`python backend/compress_food_images.py --execute --limit 200`
-    - 处理 `200` 张被引用图片
-    - 实际替换 `141` 张，跳过 `59` 张，失败 `0`
-    - 报告估算从 `80.76 MB` 降到 `15.74 MB`，首批约释放 `65.01 MB`
-  - 已完成单文件验证：
+  - 宸茬‘璁ゅ綋鍓嶅瓨鍌ㄤ富鐭涚浘闆嗕腑鍦?`food-images`
+  - `food-images` 涓害 `531.42 MB` 涓哄凡杩涘叆 `user_food_records` 鐨勯暱鏈熷浘鐗囷紝绾?`460.40 MB` 涓轰粎鍒嗘瀽鏈惤搴撶殑涓存椂鍥撅紝绾?`119.18 MB` 涓哄鍎垮浘
+  - `user-avatars`銆乣health-reports` 鎬婚噺杈冨皬锛屼笉鏄湰杞閲忎富鐭涚浘
+  - 宸叉柊澧?`backend/compress_food_images.py`锛?
+    - 榛樿 `dry-run`
+    - 榛樿鍙鐞嗚涓氬姟寮曠敤鐨?`food-images`
+    - 淇濇寔瀵硅薄 key/URL 涓嶅彉锛岀洿鎺ュ洖鍐欒鐩?
+    - 宸茶ˉ `--name`锛屾敮鎸佹寜瀵硅薄鍚嶇簿纭帇缂╁崟寮犲浘鐗?
+  - 宸插疄闄呮墽琛岄鎵瑰帇缂╋細`python backend/compress_food_images.py --execute --limit 200`
+    - 澶勭悊 `200` 寮犺寮曠敤鍥剧墖
+    - 瀹為檯鏇挎崲 `141` 寮狅紝璺宠繃 `59` 寮狅紝澶辫触 `0`
+    - 鎶ュ憡浼扮畻浠?`80.76 MB` 闄嶅埌 `15.74 MB`锛岄鎵圭害閲婃斁 `65.01 MB`
+  - 宸插畬鎴愬崟鏂囦欢楠岃瘉锛?
     - `python backend/compress_food_images.py --execute --name "156d3b2c5a094fcf81b44f4229aade73.jpg"`
-    - 该图从 `2.14 MB` 压到 `0.18 MB`
+    - 璇ュ浘浠?`2.14 MB` 鍘嬪埌 `0.18 MB`
 - Next step:
-  - 等用户在 Supabase / 前端回看单图 `156d3b2c5a094fcf81b44f4229aade73.jpg`
-  - 若观感可接受，按同参数继续批量压缩被引用的长期图片
-  - 压缩收益稳定后，再评估是否删除 `analysis_only_temp` 与 `orphan`
+  - 绛夌敤鎴峰湪 Supabase / 鍓嶇鍥炵湅鍗曞浘 `156d3b2c5a094fcf81b44f4229aade73.jpg`
+  - 鑻ヨ鎰熷彲鎺ュ彈锛屾寜鍚屽弬鏁扮户缁壒閲忓帇缂╄寮曠敤鐨勯暱鏈熷浘鐗?
+  - 鍘嬬缉鏀剁泭绋冲畾鍚庯紝鍐嶈瘎浼版槸鍚﹀垹闄?`analysis_only_temp` 涓?`orphan`
 
-- Task: 精准模式收敛为“单食物 / 可拆分混合餐 / 复杂混合餐”简化方案
-- Status: done（已把精准模式从“过细 sceneTags + 白名单强心智”收敛成更经典的拆分精估模式）
+- Task: 绮惧噯妯″紡鏀舵暃涓衡€滃崟椋熺墿 / 鍙媶鍒嗘贩鍚堥 / 澶嶆潅娣峰悎椁愨€濈畝鍖栨柟妗?
+- Status: done锛堝凡鎶婄簿鍑嗘ā寮忎粠鈥滆繃缁?sceneTags + 鐧藉悕鍗曞己蹇冩櫤鈥濇敹鏁涙垚鏇寸粡鍏哥殑鎷嗗垎绮句及妯″紡锛?
 - Scope:
-  - `backend/worker.py`：
-    - 图片 `strict` prompt 改为只围绕 `sceneType / itemCountLevel / visibility / referencePresent` 四个核心信号做判断
-    - 图片 `strict` 后校验改成简单规则：单主体清晰可过、2-3 个清晰主体可分项估、4+ 主体或遮挡严重时建议拆拍
-    - 文字 `strict` 同步改成同口径简化，减少对旧 `sceneTags` 体系的依赖，只保留轻量追问
-  - `src/pages/analyze/index.tsx`、`src/pages/result/index.tsx`、`src/pages/analyze-loading/index.tsx`：
-    - 精准模式文案改为“单个食物最稳 / 混合餐最多 2-3 个主体 / 菜太多就拆拍”
-    - 结果态文案改成“符合精准模式 / 建议重拍 / 建议拆拍”
-  - `src/pages/health-profile/index.tsx`、`src/pages/health-profile-edit/index.tsx`、`src/pages/health-profile-view/index.tsx`、`src/pages/record/index.tsx`、`src/pages/analyze-history/index.tsx`：
-    - 同步更新精准模式说明，避免继续沿用“严格白名单”旧心智
-  - `backend/README.md`：
-    - 新增精准模式验证样本建议，固定单食物 / 可拆分混合餐 / 复杂混合餐三组评估口径
+  - `backend/worker.py`锛?
+    - 鍥剧墖 `strict` prompt 鏀逛负鍙洿缁?`sceneType / itemCountLevel / visibility / referencePresent` 鍥涗釜鏍稿績淇″彿鍋氬垽鏂?
+    - 鍥剧墖 `strict` 鍚庢牎楠屾敼鎴愮畝鍗曡鍒欙細鍗曚富浣撴竻鏅板彲杩囥€?-3 涓竻鏅颁富浣撳彲鍒嗛」浼般€?+ 涓讳綋鎴栭伄鎸′弗閲嶆椂寤鸿鎷嗘媿
+    - 鏂囧瓧 `strict` 鍚屾鏀规垚鍚屽彛寰勭畝鍖栵紝鍑忓皯瀵规棫 `sceneTags` 浣撶郴鐨勪緷璧栵紝鍙繚鐣欒交閲忚拷闂?
+  - `src/pages/analyze/index.tsx`銆乣src/pages/result/index.tsx`銆乣src/pages/analyze-loading/index.tsx`锛?
+    - 绮惧噯妯″紡鏂囨鏀逛负鈥滃崟涓鐗╂渶绋?/ 娣峰悎椁愭渶澶?2-3 涓富浣?/ 鑿滃お澶氬氨鎷嗘媿鈥?
+    - 缁撴灉鎬佹枃妗堟敼鎴愨€滅鍚堢簿鍑嗘ā寮?/ 寤鸿閲嶆媿 / 寤鸿鎷嗘媿鈥?
+  - `src/pages/health-profile/index.tsx`銆乣src/pages/health-profile-edit/index.tsx`銆乣src/pages/health-profile-view/index.tsx`銆乣src/pages/record/index.tsx`銆乣src/pages/analyze-history/index.tsx`锛?
+    - 鍚屾鏇存柊绮惧噯妯″紡璇存槑锛岄伩鍏嶇户缁部鐢ㄢ€滀弗鏍肩櫧鍚嶅崟鈥濇棫蹇冩櫤
+  - `backend/README.md`锛?
+    - 鏂板绮惧噯妯″紡楠岃瘉鏍锋湰寤鸿锛屽浐瀹氬崟椋熺墿 / 鍙媶鍒嗘贩鍚堥 / 澶嶆潅娣峰悎椁愪笁缁勮瘎浼板彛寰?
 - Verification:
-  - `python -m py_compile backend/worker.py` 通过
-  - `ReadLints` 检查最近修改文件无新增报错
+  - `python -m py_compile backend/worker.py` 閫氳繃
+  - `ReadLints` 妫€鏌ユ渶杩戜慨鏀规枃浠舵棤鏂板鎶ラ敊
 - Next step:
-  - 用固定样本集验证三类场景：单食物、2-3 个清晰主体、4+ 主体或遮挡重
-  - 重点观察精准模式“通过样本”的重量误差是否明显优于标准模式
+  - 鐢ㄥ浐瀹氭牱鏈泦楠岃瘉涓夌被鍦烘櫙锛氬崟椋熺墿銆?-3 涓竻鏅颁富浣撱€?+ 涓讳綋鎴栭伄鎸￠噸
+  - 閲嶇偣瑙傚療绮惧噯妯″紡鈥滈€氳繃鏍锋湰鈥濈殑閲嶉噺璇樊鏄惁鏄庢樉浼樹簬鏍囧噯妯″紡
 
-- Task: 修复本地调试时分析任务被外部 Worker 抢占，导致看不到 prompt/输出日志
-- Status: done（已完成本地 debug 队列隔离 + 标准模式结果强制裁字段）
+- Task: 淇鏈湴璋冭瘯鏃跺垎鏋愪换鍔¤澶栭儴 Worker 鎶㈠崰锛屽鑷寸湅涓嶅埌 prompt/杈撳嚭鏃ュ織
+- Status: done锛堝凡瀹屾垚鏈湴 debug 闃熷垪闅旂 + 鏍囧噯妯″紡缁撴灉寮哄埗瑁佸瓧娈碉級
 - Scope:
-  - `backend/main.py`：
-    - 新增 `_get_food_task_type(...)`，在 `FOOD_ANALYSIS_DEBUG=1` 时把异步任务类型从 `food / food_text` 改为 `food_debug / food_text_debug`
-  - `backend/run_backend.py`：
-    - `FOOD_ANALYSIS_DEBUG=1` 时，本地 worker 改为消费 `food_debug / food_text_debug`
-    - 启动日志新增当前消费队列类型提示
-  - `backend/worker.py`：
-    - 增加 `food_debug / food_text_debug` 任务类型映射
-    - 标准模式结果写回前强制清空 `pfc_ratio_comment / absorption_notes`
-    - 新增 `FOOD_ANALYSIS_DEBUG=1` 时的终端调试输出：`prompt / response_usage / raw_model_output / final_result`
+  - `backend/main.py`锛?
+    - 鏂板 `_get_food_task_type(...)`锛屽湪 `FOOD_ANALYSIS_DEBUG=1` 鏃舵妸寮傛浠诲姟绫诲瀷浠?`food / food_text` 鏀逛负 `food_debug / food_text_debug`
+  - `backend/run_backend.py`锛?
+    - `FOOD_ANALYSIS_DEBUG=1` 鏃讹紝鏈湴 worker 鏀逛负娑堣垂 `food_debug / food_text_debug`
+    - 鍚姩鏃ュ織鏂板褰撳墠娑堣垂闃熷垪绫诲瀷鎻愮ず
+  - `backend/worker.py`锛?
+    - 澧炲姞 `food_debug / food_text_debug` 浠诲姟绫诲瀷鏄犲皠
+    - 鏍囧噯妯″紡缁撴灉鍐欏洖鍓嶅己鍒舵竻绌?`pfc_ratio_comment / absorption_notes`
+    - 鏂板 `FOOD_ANALYSIS_DEBUG=1` 鏃剁殑缁堢璋冭瘯杈撳嚭锛歚prompt / response_usage / raw_model_output / final_result`
 - Verification:
-  - `python -m py_compile backend/main.py backend/worker.py backend/run_backend.py` 通过
-  - `ReadLints` 检查无新增报错
-  - 复核任务 `0b05db8a-bb9a-45af-a59c-ae7cb33bdab5`：`task_type=food`、`execution_mode=standard` 但仍出现 `pfc_ratio_comment/absorption_notes/recognitionOutcome`，进一步支持“任务被其他环境旧 Worker 抢占处理”的判断
+  - `python -m py_compile backend/main.py backend/worker.py backend/run_backend.py` 閫氳繃
+  - `ReadLints` 妫€鏌ユ棤鏂板鎶ラ敊
+  - 澶嶆牳浠诲姟 `0b05db8a-bb9a-45af-a59c-ae7cb33bdab5`锛歚task_type=food`銆乣execution_mode=standard` 浣嗕粛鍑虹幇 `pfc_ratio_comment/absorption_notes/recognitionOutcome`锛岃繘涓€姝ユ敮鎸佲€滀换鍔¤鍏朵粬鐜鏃?Worker 鎶㈠崰澶勭悊鈥濈殑鍒ゆ柇
 - Next step:
-  - 用户重启 `python backend/run_backend.py` 后再提一条新任务
-  - 确认日志出现 `[worker-*] 处理任务 ...` 与 `[food_debug] ...` 四段
-  - 再检查新任务 `task_type` 是否为 `food_debug`，以及结果中 `pfc_ratio_comment/absorption_notes` 是否为 `null`
+  - 鐢ㄦ埛閲嶅惎 `python backend/run_backend.py` 鍚庡啀鎻愪竴鏉℃柊浠诲姟
+  - 纭鏃ュ織鍑虹幇 `[worker-*] 澶勭悊浠诲姟 ...` 涓?`[food_debug] ...` 鍥涙
+  - 鍐嶆鏌ユ柊浠诲姟 `task_type` 鏄惁涓?`food_debug`锛屼互鍙婄粨鏋滀腑 `pfc_ratio_comment/absorption_notes` 鏄惁涓?`null`
 
-- Task: 去掉食物营养分析链路中的所有审核以追求最大速度
-- Status: done（已移除图片/文字食物分析的前置审核；当前食物分析提交后会直接进入主模型识别，不再先走千问审核）
+- Task: 鍘绘帀椋熺墿钀ュ吇鍒嗘瀽閾捐矾涓殑鎵€鏈夊鏍镐互杩芥眰鏈€澶ч€熷害
+- Status: done锛堝凡绉婚櫎鍥剧墖/鏂囧瓧椋熺墿鍒嗘瀽鐨勫墠缃鏍革紱褰撳墠椋熺墿鍒嗘瀽鎻愪氦鍚庝細鐩存帴杩涘叆涓绘ā鍨嬭瘑鍒紝涓嶅啀鍏堣蛋鍗冮棶瀹℃牳锛?
 - Scope:
-  - `backend/worker.py`：
-    - `process_one_food_task(...)` 不再调用 `run_content_moderation_sync(...)`
-    - `process_one_text_food_task(...)` 不再调用 `run_content_moderation_sync(...)`
-    - 图片/文字食物分析任务不再写入 `violated` 状态或 `food_analysis` 违规记录
-  - `backend/main.py`：
-    - `/api/analyze` 的同步分析 prompt 不再要求模型输出 `is_violation / violation_reason`
-    - `/api/analyze` 不再根据 `is_violation` 中断返回
-    - 测试/直连分析入口改为直接调用 `run_food_analysis_sync(...)`，不再先跑审核
+  - `backend/worker.py`锛?
+    - `process_one_food_task(...)` 涓嶅啀璋冪敤 `run_content_moderation_sync(...)`
+    - `process_one_text_food_task(...)` 涓嶅啀璋冪敤 `run_content_moderation_sync(...)`
+    - 鍥剧墖/鏂囧瓧椋熺墿鍒嗘瀽浠诲姟涓嶅啀鍐欏叆 `violated` 鐘舵€佹垨 `food_analysis` 杩濊璁板綍
+  - `backend/main.py`锛?
+    - `/api/analyze` 鐨勫悓姝ュ垎鏋?prompt 涓嶅啀瑕佹眰妯″瀷杈撳嚭 `is_violation / violation_reason`
+    - `/api/analyze` 涓嶅啀鏍规嵁 `is_violation` 涓柇杩斿洖
+    - 娴嬭瘯/鐩磋繛鍒嗘瀽鍏ュ彛鏀逛负鐩存帴璋冪敤 `run_food_analysis_sync(...)`锛屼笉鍐嶅厛璺戝鏍?
 - Verification:
-  - `python -m py_compile backend/main.py backend/worker.py` 通过
-  - `ReadLints` 检查 `backend/main.py`、`backend/worker.py` 无新增报错
-  - 已新增终端标记：图片/文字异步分析会打印 `MODERATION_SKIPPED`，同步直连分析也会打印同名标记
-  - 已新增主进程提交标记：`/api/analyze/submit` 和 `/api/analyze-text/submit` 成功后会打印 `MODERATION_SKIPPED_CONFIRMED`
+  - `python -m py_compile backend/main.py backend/worker.py` 閫氳繃
+  - `ReadLints` 妫€鏌?`backend/main.py`銆乣backend/worker.py` 鏃犳柊澧炴姤閿?
+  - 宸叉柊澧炵粓绔爣璁帮細鍥剧墖/鏂囧瓧寮傛鍒嗘瀽浼氭墦鍗?`MODERATION_SKIPPED`锛屽悓姝ョ洿杩炲垎鏋愪篃浼氭墦鍗板悓鍚嶆爣璁?
+  - 宸叉柊澧炰富杩涚▼鎻愪氦鏍囪锛歚/api/analyze/submit` 鍜?`/api/analyze-text/submit` 鎴愬姛鍚庝細鎵撳嵃 `MODERATION_SKIPPED_CONFIRMED`
 - Next step:
-  - 线上部署后观察图片分析与文字分析的平均耗时是否明显下降
-  - 若还要继续压缩成本，可再裁剪 `standard` 模式输出字段或降低默认模型规格
+  - 绾夸笂閮ㄧ讲鍚庤瀵熷浘鐗囧垎鏋愪笌鏂囧瓧鍒嗘瀽鐨勫钩鍧囪€楁椂鏄惁鏄庢樉涓嬮檷
+  - 鑻ヨ繕瑕佺户缁帇缂╂垚鏈紝鍙啀瑁佸壀 `standard` 妯″紡杈撳嚭瀛楁鎴栭檷浣庨粯璁ゆā鍨嬭鏍?
 
-- Task: 调整首页餐次目标为“三餐动态 + 加餐参考”
-- Status: done（已完成代码修改；按项目当前口径未做构建、运行检测、交互点击、截图或其他前端验证）
+- Task: 璋冩暣棣栭〉椁愭鐩爣涓衡€滀笁椁愬姩鎬?+ 鍔犻鍙傝€冣€?
+- Status: done锛堝凡瀹屾垚浠ｇ爜淇敼锛涙寜椤圭洰褰撳墠鍙ｅ緞鏈仛鏋勫缓銆佽繍琛屾娴嬨€佷氦浜掔偣鍑汇€佹埅鍥炬垨鍏朵粬鍓嶇楠岃瘉锛?
 - Scope:
-  - `backend/main.py`：
-    - 早餐 / 午餐 / 晚餐改为根据首页总热量目标动态分配
-    - 早加餐 / 午加餐 / 晚加餐改为统一参考值 `150 kcal`
-    - 加餐标签改为明确返回“加餐参考，不计入总目标”
-  - `src/pages/index/index.tsx`：
-    - 首页餐次卡片右侧文案从纯百分比改为“目标 xxx kcal / 参考 xxx kcal”
-    - 渲染后端返回的餐次标签，直观提示加餐不在总目标规划内
-  - `src/pages/index/index.scss`：
-    - 增加加餐提示标签样式
-    - 继续保留此前提高过的“未记录”灰色对比度样式
+  - `backend/main.py`锛?
+    - 鏃╅ / 鍗堥 / 鏅氶鏀逛负鏍规嵁棣栭〉鎬荤儹閲忕洰鏍囧姩鎬佸垎閰?
+    - 鏃╁姞椁?/ 鍗堝姞椁?/ 鏅氬姞椁愭敼涓虹粺涓€鍙傝€冨€?`150 kcal`
+    - 鍔犻鏍囩鏀逛负鏄庣‘杩斿洖鈥滃姞椁愬弬鑰冿紝涓嶈鍏ユ€荤洰鏍団€?
+  - `src/pages/index/index.tsx`锛?
+    - 棣栭〉椁愭鍗＄墖鍙充晶鏂囨浠庣函鐧惧垎姣旀敼涓衡€滅洰鏍?xxx kcal / 鍙傝€?xxx kcal鈥?
+    - 娓叉煋鍚庣杩斿洖鐨勯娆℃爣绛撅紝鐩磋鎻愮ず鍔犻涓嶅湪鎬荤洰鏍囪鍒掑唴
+  - `src/pages/index/index.scss`锛?
+    - 澧炲姞鍔犻鎻愮ず鏍囩鏍峰紡
+    - 缁х画淇濈暀姝ゅ墠鎻愰珮杩囩殑鈥滄湭璁板綍鈥濈伆鑹插姣斿害鏍峰紡
 - Verification:
-  - 已完成代码级检查
-  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+  - 宸插畬鎴愪唬鐮佺骇妫€鏌?
+  - 鎸夌敤鎴峰 `food_link` 鐨勬渶鏂伴」鐩骇瑕佹眰锛屾湰娆℃湭鎵ц鏋勫缓銆佽繍琛屾娴嬨€佷氦浜掔偣鍑绘垨鎴浘楠岃瘉
 - Next step:
-  - 用户查看首页餐次卡片是否符合“三餐规划、加餐仅参考”的产品预期
+  - 鐢ㄦ埛鏌ョ湅棣栭〉椁愭鍗＄墖鏄惁绗﹀悎鈥滀笁椁愯鍒掋€佸姞椁愪粎鍙傝€冣€濈殑浜у搧棰勬湡
 
-- Task: 去掉分析中页面的假进度步骤
-- Status: done（已移除分析中页的三步步骤卡，只保留转圈、模式说明和小知识，避免用循环动画伪装真实进度；按项目当前口径未做构建或运行态验证）
+- Task: 鍘绘帀鍒嗘瀽涓〉闈㈢殑鍋囪繘搴︽楠?
+- Status: done锛堝凡绉婚櫎鍒嗘瀽涓〉鐨勪笁姝ユ楠ゅ崱锛屽彧淇濈暀杞湀銆佹ā寮忚鏄庡拰灏忕煡璇嗭紝閬垮厤鐢ㄥ惊鐜姩鐢讳吉瑁呯湡瀹炶繘搴︼紱鎸夐」鐩綋鍓嶅彛寰勬湭鍋氭瀯寤烘垨杩愯鎬侀獙璇侊級
 - Scope:
-  - `src/pages/analyze-loading/index.tsx`：
-    - 删除步骤轮播状态与假进度渲染
-  - `src/pages/analyze-loading/index.scss`：
-    - 删除进度卡相关样式
+  - `src/pages/analyze-loading/index.tsx`锛?
+    - 鍒犻櫎姝ラ杞挱鐘舵€佷笌鍋囪繘搴︽覆鏌?
+  - `src/pages/analyze-loading/index.scss`锛?
+    - 鍒犻櫎杩涘害鍗＄浉鍏虫牱寮?
 - Verification:
-  - 已完成代码级检查
-  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+  - 宸插畬鎴愪唬鐮佺骇妫€鏌?
+  - 鎸夌敤鎴峰 `food_link` 鐨勬渶鏂伴」鐩骇瑕佹眰锛屾湰娆℃湭鎵ц鏋勫缓銆佽繍琛屾娴嬨€佷氦浜掔偣鍑绘垨鎴浘楠岃瘉
 - Next step:
-  - 用户在小程序里再看一次“分析中”页，确认视觉上更简洁且不再出现假进度
+  - 鐢ㄦ埛鍦ㄥ皬绋嬪簭閲屽啀鐪嬩竴娆♀€滃垎鏋愪腑鈥濋〉锛岀‘璁よ瑙変笂鏇寸畝娲佷笖涓嶅啀鍑虹幇鍋囪繘搴?
 
-- Task: 修复首页营养比例超过目标后仍只显示 100%
-- Status: done（首页三大营养素比例文案现按真实值显示，超过目标后可见 `120%` 等超额比例；未做运行态验证，遵循当前项目口径）
+- Task: 淇棣栭〉钀ュ吇姣斾緥瓒呰繃鐩爣鍚庝粛鍙樉绀?100%
+- Status: done锛堥椤典笁澶ц惀鍏荤礌姣斾緥鏂囨鐜版寜鐪熷疄鍊兼樉绀猴紝瓒呰繃鐩爣鍚庡彲瑙?`120%` 绛夎秴棰濇瘮渚嬶紱鏈仛杩愯鎬侀獙璇侊紝閬靛惊褰撳墠椤圭洰鍙ｅ緞锛?
 - Scope:
-  - `src/pages/index/index.tsx`：
-    - 将比例计算从“显示值封顶 100%”改为“真实百分比”
-    - 新增视觉进度封顶逻辑，仅限制圆环和进度条宽度，避免超过一圈时显示异常
+  - `src/pages/index/index.tsx`锛?
+    - 灏嗘瘮渚嬭绠椾粠鈥滄樉绀哄€煎皝椤?100%鈥濇敼涓衡€滅湡瀹炵櫨鍒嗘瘮鈥?
+    - 鏂板瑙嗚杩涘害灏侀《閫昏緫锛屼粎闄愬埗鍦嗙幆鍜岃繘搴︽潯瀹藉害锛岄伩鍏嶈秴杩囦竴鍦堟椂鏄剧ず寮傚父
 - Verification:
-  - `ReadLints` 检查 `src/pages/index/index.tsx` 无新增报错
+  - `ReadLints` 妫€鏌?`src/pages/index/index.tsx` 鏃犳柊澧炴姤閿?
 - Next step:
-  - 用户在首页确认三大营养素超过目标时，右侧比例是否已显示为 `120%` 一类真实值
+  - 鐢ㄦ埛鍦ㄩ椤电‘璁や笁澶ц惀鍏荤礌瓒呰繃鐩爣鏃讹紝鍙充晶姣斾緥鏄惁宸叉樉绀轰负 `120%` 涓€绫荤湡瀹炲€?
 
-- Task: 修复分析中页面进度步骤静态不动
-- Status: done（已将分析中页面的 3 步进度改为循环流转动画，不再长期停在第 1 步；按项目当前口径未做构建或运行态验证）
+- Task: 淇鍒嗘瀽涓〉闈㈣繘搴︽楠ら潤鎬佷笉鍔?
+- Status: done锛堝凡灏嗗垎鏋愪腑椤甸潰鐨?3 姝ヨ繘搴︽敼涓哄惊鐜祦杞姩鐢伙紝涓嶅啀闀挎湡鍋滃湪绗?1 姝ワ紱鎸夐」鐩綋鍓嶅彛寰勬湭鍋氭瀯寤烘垨杩愯鎬侀獙璇侊級
 - Scope:
-  - `src/pages/analyze-loading/index.tsx`：
-    - 新增加载态步骤轮播状态
-    - 让“校验图片质量 / 识别食物与克重 / 生成营养建议”按固定节奏循环高亮
-  - `src/pages/analyze-loading/index.scss`：
-    - 新增当前步骤位移动效、脉冲高亮与已完成态样式
+  - `src/pages/analyze-loading/index.tsx`锛?
+    - 鏂板鍔犺浇鎬佹楠よ疆鎾姸鎬?
+    - 璁┾€滄牎楠屽浘鐗囪川閲?/ 璇嗗埆椋熺墿涓庡厠閲?/ 鐢熸垚钀ュ吇寤鸿鈥濇寜鍥哄畾鑺傚寰幆楂樹寒
+  - `src/pages/analyze-loading/index.scss`锛?
+    - 鏂板褰撳墠姝ラ浣嶇Щ鍔ㄦ晥銆佽剦鍐查珮浜笌宸插畬鎴愭€佹牱寮?
 - Verification:
-  - 已完成代码级检查
-  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+  - 宸插畬鎴愪唬鐮佺骇妫€鏌?
+  - 鎸夌敤鎴峰 `food_link` 鐨勬渶鏂伴」鐩骇瑕佹眰锛屾湰娆℃湭鎵ц鏋勫缓銆佽繍琛屾娴嬨€佷氦浜掔偣鍑绘垨鎴浘楠岃瘉
 - Next step:
-  - 用户在小程序里再看一次“分析中”页，确认进度展示已不再像静态假进度
+  - 鐢ㄦ埛鍦ㄥ皬绋嬪簭閲屽啀鐪嬩竴娆♀€滃垎鏋愪腑鈥濋〉锛岀‘璁よ繘搴﹀睍绀哄凡涓嶅啀鍍忛潤鎬佸亣杩涘害
 
-- Task: 圈子推荐机制与高级筛选一期落地
-- Status: done（已完成后端轻量打分 + 圈子页筛选入口 + 本地“特别关注”优先推荐；按项目当前口径未做构建或运行态验证）
+- Task: 鍦堝瓙鎺ㄨ崘鏈哄埗涓庨珮绾х瓫閫変竴鏈熻惤鍦?
+- Status: done锛堝凡瀹屾垚鍚庣杞婚噺鎵撳垎 + 鍦堝瓙椤电瓫閫夊叆鍙?+ 鏈湴鈥滅壒鍒叧娉ㄢ€濅紭鍏堟帹鑽愶紱鎸夐」鐩綋鍓嶅彛寰勬湭鍋氭瀯寤烘垨杩愯鎬侀獙璇侊級
 - Scope:
-  - `backend/database.py`：
-    - 圈子 Feed 新增 `meal_type / diet_goal / sort_by / priority_author_ids / author_scope` 支持
-    - 新增轻量推荐分：综合特别关注、餐次匹配、目标匹配、热度、新鲜度、营养均衡度
-    - 公共食物库新增 `balanced / high_protein / low_calorie / recommended` 排序
-    - Feed 与食物库都补上 `recommend_reason`
-  - `backend/main.py`：
-    - `/api/community/feed`、`/api/community/public-feed` 新增推荐/筛选查询参数透传
-  - `src/utils/api.ts`：
-    - 新增圈子推荐查询类型与参数拼装
-    - 公共食物库排序枚举扩展
-  - `src/pages/community/index.tsx`：
-    - 新增圈子页两行轻筛选：排序 / 特别关注 / 餐次 / 目标
-    - 新增本地“特别关注”作者列表，点好友头像即可切换
-    - 推荐理由与目标标签展示到动态卡片
-    - 圈子页内嵌食物库推荐会跟随当前排序/目标自动调整
-  - `src/pages/community/index.scss`：
-    - 新增筛选条、特别关注头像标记、推荐标签样式
+  - `backend/database.py`锛?
+    - 鍦堝瓙 Feed 鏂板 `meal_type / diet_goal / sort_by / priority_author_ids / author_scope` 鏀寔
+    - 鏂板杞婚噺鎺ㄨ崘鍒嗭細缁煎悎鐗瑰埆鍏虫敞銆侀娆″尮閰嶃€佺洰鏍囧尮閰嶃€佺儹搴︺€佹柊椴滃害銆佽惀鍏诲潎琛″害
+    - 鍏叡椋熺墿搴撴柊澧?`balanced / high_protein / low_calorie / recommended` 鎺掑簭
+    - Feed 涓庨鐗╁簱閮借ˉ涓?`recommend_reason`
+  - `backend/main.py`锛?
+    - `/api/community/feed`銆乣/api/community/public-feed` 鏂板鎺ㄨ崘/绛涢€夋煡璇㈠弬鏁伴€忎紶
+  - `src/utils/api.ts`锛?
+    - 鏂板鍦堝瓙鎺ㄨ崘鏌ヨ绫诲瀷涓庡弬鏁版嫾瑁?
+    - 鍏叡椋熺墿搴撴帓搴忔灇涓炬墿灞?
+  - `src/pages/community/index.tsx`锛?
+    - 鏂板鍦堝瓙椤典袱琛岃交绛涢€夛細鎺掑簭 / 鐗瑰埆鍏虫敞 / 椁愭 / 鐩爣
+    - 鏂板鏈湴鈥滅壒鍒叧娉ㄢ€濅綔鑰呭垪琛紝鐐瑰ソ鍙嬪ご鍍忓嵆鍙垏鎹?
+    - 鎺ㄨ崘鐞嗙敱涓庣洰鏍囨爣绛惧睍绀哄埌鍔ㄦ€佸崱鐗?
+    - 鍦堝瓙椤靛唴宓岄鐗╁簱鎺ㄨ崘浼氳窡闅忓綋鍓嶆帓搴?鐩爣鑷姩璋冩暣
+  - `src/pages/community/index.scss`锛?
+    - 鏂板绛涢€夋潯銆佺壒鍒叧娉ㄥご鍍忔爣璁般€佹帹鑽愭爣绛炬牱寮?
 - Verification:
-  - 已完成代码级自查与 diff 复核
-  - 按用户对 `food_link` 的最新项目级要求，本次未执行构建、运行检测、交互点击或截图验证
+  - 宸插畬鎴愪唬鐮佺骇鑷煡涓?diff 澶嶆牳
+  - 鎸夌敤鎴峰 `food_link` 鐨勬渶鏂伴」鐩骇瑕佹眰锛屾湰娆℃湭鎵ц鏋勫缓銆佽繍琛屾娴嬨€佷氦浜掔偣鍑绘垨鎴浘楠岃瘉
 - Next step:
-  - 用户进入圈子页实际试用这版筛选与推荐
-  - 若要继续二期，可再补“完整关注系统 / 餐次化食物库 / 更多推荐理由与画像权重”
+  - 鐢ㄦ埛杩涘叆鍦堝瓙椤靛疄闄呰瘯鐢ㄨ繖鐗堢瓫閫変笌鎺ㄨ崘
+  - 鑻ヨ缁х画浜屾湡锛屽彲鍐嶈ˉ鈥滃畬鏁村叧娉ㄧ郴缁?/ 椁愭鍖栭鐗╁簱 / 鏇村鎺ㄨ崘鐞嗙敱涓庣敾鍍忔潈閲嶁€?
 
-- Task: 排查 3 月 11 日到当前食物识别算法成本上升原因
-- Status: done（已完成代码与历史版本比对，确认成本上升主要来自 3 月 22 日 `execution_mode` 引入和 3 月 28 日“精准模式/结构化判定/二次纠错”升级叠加）
+- Task: 鎺掓煡 3 鏈?11 鏃ュ埌褰撳墠椋熺墿璇嗗埆绠楁硶鎴愭湰涓婂崌鍘熷洜
+- Status: done锛堝凡瀹屾垚浠ｇ爜涓庡巻鍙茬増鏈瘮瀵癸紝纭鎴愭湰涓婂崌涓昏鏉ヨ嚜 3 鏈?22 鏃?`execution_mode` 寮曞叆鍜?3 鏈?28 鏃モ€滅簿鍑嗘ā寮?缁撴瀯鍖栧垽瀹?浜屾绾犻敊鈥濆崌绾у彔鍔狅級
 - Scope:
-  - `2026-03-11` 版本：
-    - 图片 prompt 仍是基础版，只要求返回 `items / description / insight / pfc_ratio_comment / absorption_notes / context_advice`
-    - 无 `recognitionOutcome / allowedFoodCategory / retakeGuidance / sceneTags / followupQuestions`
-    - 无二次纠错的 `previousResult / correctionItems / additionalContext` 大上下文
-  - `2026-03-22` 之后：
-    - 引入 `execution_mode`
-    - prompt 额外要求模型遵守标准/精准两套约束
-    - 输入 token 开始上升，但输出结构尚未明显膨胀
-  - `2026-03-28` 之后：
-    - prompt 新增精准模式结构化判定字段、场景标签枚举、拒识原因与重拍建议
-    - 二次纠错任务还会注入 `previousResult / correctionItems / additionalContext`
-    - 这是输出 token 和总成本继续明显放大的主因
+  - `2026-03-11` 鐗堟湰锛?
+    - 鍥剧墖 prompt 浠嶆槸鍩虹鐗堬紝鍙姹傝繑鍥?`items / description / insight / pfc_ratio_comment / absorption_notes / context_advice`
+    - 鏃?`recognitionOutcome / allowedFoodCategory / retakeGuidance / sceneTags / followupQuestions`
+    - 鏃犱簩娆＄籂閿欑殑 `previousResult / correctionItems / additionalContext` 澶т笂涓嬫枃
+  - `2026-03-22` 涔嬪悗锛?
+    - 寮曞叆 `execution_mode`
+    - prompt 棰濆瑕佹眰妯″瀷閬靛畧鏍囧噯/绮惧噯涓ゅ绾︽潫
+    - 杈撳叆 token 寮€濮嬩笂鍗囷紝浣嗚緭鍑虹粨鏋勫皻鏈槑鏄捐啫鑳€
+  - `2026-03-28` 涔嬪悗锛?
+    - prompt 鏂板绮惧噯妯″紡缁撴瀯鍖栧垽瀹氬瓧娈点€佸満鏅爣绛炬灇涓俱€佹嫆璇嗗師鍥犱笌閲嶆媿寤鸿
+    - 浜屾绾犻敊浠诲姟杩樹細娉ㄥ叆 `previousResult / correctionItems / additionalContext`
+    - 杩欐槸杈撳嚭 token 鍜屾€绘垚鏈户缁槑鏄炬斁澶х殑涓诲洜
 - Verification:
-  - 已比对 `050796e`、`7f63100`、`34398d1` 三个关键版本的 `backend/main.py`、`backend/worker.py`
-  - 已结合用户提供的 3 月 11 日与 3 月 29 日 usage 面板截图确认：
-    - 当前 `output tokens` 明显高于 3 月 11 日
-    - `input tokens` 也同步升高，但输出膨胀更明显
+  - 宸叉瘮瀵?`050796e`銆乣7f63100`銆乣34398d1` 涓変釜鍏抽敭鐗堟湰鐨?`backend/main.py`銆乣backend/worker.py`
+  - 宸茬粨鍚堢敤鎴锋彁渚涚殑 3 鏈?11 鏃ヤ笌 3 鏈?29 鏃?usage 闈㈡澘鎴浘纭锛?
+    - 褰撳墠 `output tokens` 鏄庢樉楂樹簬 3 鏈?11 鏃?
+    - `input tokens` 涔熷悓姝ュ崌楂橈紝浣嗚緭鍑鸿啫鑳€鏇存槑鏄?
 - Next step:
-  - 若优先降成本，先把默认链路退回“轻量返回”
-  - 仅在用户主动开启精准模式或发起二次纠错时，才启用结构化拒识字段和长上下文 prompt
+  - 鑻ヤ紭鍏堥檷鎴愭湰锛屽厛鎶婇粯璁ら摼璺€€鍥炩€滆交閲忚繑鍥炩€?
+  - 浠呭湪鐢ㄦ埛涓诲姩寮€鍚簿鍑嗘ā寮忔垨鍙戣捣浜屾绾犻敊鏃讹紝鎵嶅惎鐢ㄧ粨鏋勫寲鎷掕瘑瀛楁鍜岄暱涓婁笅鏂?prompt
 
-- Task: 严格拆分标准模式与精准模式识别链路
-- Status: done（已把异步图片/文字识别的 `standard` 与 `strict` prompt/返回结构分开；标准模式恢复轻量 schema，不再默认输出精准模式字段）
+- Task: 涓ユ牸鎷嗗垎鏍囧噯妯″紡涓庣簿鍑嗘ā寮忚瘑鍒摼璺?
+- Status: done锛堝凡鎶婂紓姝ュ浘鐗?鏂囧瓧璇嗗埆鐨?`standard` 涓?`strict` prompt/杩斿洖缁撴瀯鍒嗗紑锛涙爣鍑嗘ā寮忔仮澶嶈交閲?schema锛屼笉鍐嶉粯璁よ緭鍑虹簿鍑嗘ā寮忓瓧娈碉級
 - Scope:
-  - `backend/worker.py`：
-    - `_build_food_prompt(...)`：
-      - `standard` 改回轻量单流程 prompt
-      - 仅保留基础营养识别输出 `items / description / insight / pfc_ratio_comment / absorption_notes / context_advice`
-      - 不再要求模型输出 `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / sceneTags`
-    - `_build_text_food_prompt(...)`：
-      - `standard` 改回轻量文字识别 prompt
-      - 仍可带最小纠错上下文，但不再走精准模式结构化追问字段
-    - `run_food_analysis_sync(...)`：
-      - 仅在 `strict` 下追加 `_derive_recognition_fields(...)`
-    - `run_text_food_analysis_sync(...)`：
-      - 仅在 `strict` 下追加 `_derive_text_recognition_fields(...)`
-      - 同时修正文字链路此前误走图片识别派生函数的问题
+  - `backend/worker.py`锛?
+    - `_build_food_prompt(...)`锛?
+      - `standard` 鏀瑰洖杞婚噺鍗曟祦绋?prompt
+      - 浠呬繚鐣欏熀纭€钀ュ吇璇嗗埆杈撳嚭 `items / description / insight / pfc_ratio_comment / absorption_notes / context_advice`
+      - 涓嶅啀瑕佹眰妯″瀷杈撳嚭 `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / sceneTags`
+    - `_build_text_food_prompt(...)`锛?
+      - `standard` 鏀瑰洖杞婚噺鏂囧瓧璇嗗埆 prompt
+      - 浠嶅彲甯︽渶灏忕籂閿欎笂涓嬫枃锛屼絾涓嶅啀璧扮簿鍑嗘ā寮忕粨鏋勫寲杩介棶瀛楁
+    - `run_food_analysis_sync(...)`锛?
+      - 浠呭湪 `strict` 涓嬭拷鍔?`_derive_recognition_fields(...)`
+    - `run_text_food_analysis_sync(...)`锛?
+      - 浠呭湪 `strict` 涓嬭拷鍔?`_derive_text_recognition_fields(...)`
+      - 鍚屾椂淇鏂囧瓧閾捐矾姝ゅ墠璇蛋鍥剧墖璇嗗埆娲剧敓鍑芥暟鐨勯棶棰?
 - Verification:
-  - `ReadLints` 检查 `backend/worker.py` 无新增报错
-  - `python -m py_compile backend/worker.py` 通过
+  - `ReadLints` 妫€鏌?`backend/worker.py` 鏃犳柊澧炴姤閿?
+  - `python -m py_compile backend/worker.py` 閫氳繃
 - Next step:
-  - 线上部署后重点观察标准模式调用的 `output tokens` 是否回落
-  - 若仍偏高，再继续裁剪标准模式中的 `pfc_ratio_comment / absorption_notes / context_advice`
+  - 绾夸笂閮ㄧ讲鍚庨噸鐐硅瀵熸爣鍑嗘ā寮忚皟鐢ㄧ殑 `output tokens` 鏄惁鍥炶惤
+  - 鑻ヤ粛鍋忛珮锛屽啀缁х画瑁佸壀鏍囧噯妯″紡涓殑 `pfc_ratio_comment / absorption_notes / context_advice`
 
-- Task: 修复互动消息点击后应回到动态评论区而不是识别记录详情
-- Status: done（互动消息现改为回到圈子页对应动态，并自动展开评论输入区；未做运行态验证，按用户当前项目口径跳过）
+- Task: 淇浜掑姩娑堟伅鐐瑰嚮鍚庡簲鍥炲埌鍔ㄦ€佽瘎璁哄尯鑰屼笉鏄瘑鍒褰曡鎯?
+- Status: done锛堜簰鍔ㄦ秷鎭幇鏀逛负鍥炲埌鍦堝瓙椤靛搴斿姩鎬侊紝骞惰嚜鍔ㄥ睍寮€璇勮杈撳叆鍖猴紱鏈仛杩愯鎬侀獙璇侊紝鎸夌敤鎴峰綋鍓嶉」鐩彛寰勮烦杩囷級
 - Scope:
-  - `src/pages/interaction-notifications/index.tsx`：
-    - 不再点击后跳转 `/pages/record-detail/index`
-    - 改为把 `record_id / comment_id / parent_comment_id` 写入本地待处理跳转目标
-    - 再切回 tab 页 `/pages/community/index`
-  - `src/pages/community/index.tsx`：
-    - 新增“待处理互动消息跳转目标”读取/过期清理逻辑
-    - 从互动消息进入时，会尽量定位到对应动态卡片
-    - 若能拿到对应评论，则自动展开评论输入区并把该评论作为回复目标
-    - 若评论不在当前预览里，会先补拉该动态的完整评论列表
+  - `src/pages/interaction-notifications/index.tsx`锛?
+    - 涓嶅啀鐐瑰嚮鍚庤烦杞?`/pages/record-detail/index`
+    - 鏀逛负鎶?`record_id / comment_id / parent_comment_id` 鍐欏叆鏈湴寰呭鐞嗚烦杞洰鏍?
+    - 鍐嶅垏鍥?tab 椤?`/pages/community/index`
+  - `src/pages/community/index.tsx`锛?
+    - 鏂板鈥滃緟澶勭悊浜掑姩娑堟伅璺宠浆鐩爣鈥濊鍙?杩囨湡娓呯悊閫昏緫
+    - 浠庝簰鍔ㄦ秷鎭繘鍏ユ椂锛屼細灏介噺瀹氫綅鍒板搴斿姩鎬佸崱鐗?
+    - 鑻ヨ兘鎷垮埌瀵瑰簲璇勮锛屽垯鑷姩灞曞紑璇勮杈撳叆鍖哄苟鎶婅璇勮浣滀负鍥炲鐩爣
+    - 鑻ヨ瘎璁轰笉鍦ㄥ綋鍓嶉瑙堥噷锛屼細鍏堣ˉ鎷夎鍔ㄦ€佺殑瀹屾暣璇勮鍒楄〃
 - Verification:
-  - 按用户对 `food_link` 的最新项目级要求，本次未执行运行检测、交互点击、截图或构建校验
+  - 鎸夌敤鎴峰 `food_link` 鐨勬渶鏂伴」鐩骇瑕佹眰锛屾湰娆℃湭鎵ц杩愯妫€娴嬨€佷氦浜掔偣鍑汇€佹埅鍥炬垨鏋勫缓鏍￠獙
 - Next step:
-  - 用户在微信开发者工具或真机上点一条“评论了你的动态 / 回复了你的评论”的互动消息
-  - 确认是否进入圈子页并直接落到该动态评论区，可继续回复
+  - 鐢ㄦ埛鍦ㄥ井淇″紑鍙戣€呭伐鍏锋垨鐪熸満涓婄偣涓€鏉♀€滆瘎璁轰簡浣犵殑鍔ㄦ€?/ 鍥炲浜嗕綘鐨勮瘎璁衡€濈殑浜掑姩娑堟伅
+  - 纭鏄惁杩涘叆鍦堝瓙椤靛苟鐩存帴钀藉埌璇ュ姩鎬佽瘎璁哄尯锛屽彲缁х画鍥炲
 
-- Task: 修正首页餐次目标与“未记录”灰色对比度
-- Status: done（已完成代码修改；按用户最新明确要求，本次不做任何运行检测、交互点击、截图、构建校验或前端验证）
+- Task: 淇棣栭〉椁愭鐩爣涓庘€滄湭璁板綍鈥濈伆鑹插姣斿害
+- Status: done锛堝凡瀹屾垚浠ｇ爜淇敼锛涙寜鐢ㄦ埛鏈€鏂版槑纭姹傦紝鏈涓嶅仛浠讳綍杩愯妫€娴嬨€佷氦浜掔偣鍑汇€佹埅鍥俱€佹瀯寤烘牎楠屾垨鍓嶇楠岃瘉锛?
 - Scope:
-  - `backend/main.py`：
-    - 首页各餐次目标不再使用固定写死值
-    - 改为按用户首页总热量目标，基于既有餐次权重动态拆分到 6 餐次
-    - 这样底部各餐次隐含目标总和会与上方总目标保持一致
-  - `src/pages/index/index.scss`：
-    - 提高首页默认“未记录/未选中”日期灰底的对比度，避免在绿色主视觉里不明显
-  - `src/pages/stats/index.scss`：
-    - 提高“未记录”热图色块与图例灰色的对比度，增强与红/蓝状态的区分
+  - `backend/main.py`锛?
+    - 棣栭〉鍚勯娆＄洰鏍囦笉鍐嶄娇鐢ㄥ浐瀹氬啓姝诲€?
+    - 鏀逛负鎸夌敤鎴烽椤垫€荤儹閲忕洰鏍囷紝鍩轰簬鏃㈡湁椁愭鏉冮噸鍔ㄦ€佹媶鍒嗗埌 6 椁愭
+    - 杩欐牱搴曢儴鍚勯娆￠殣鍚洰鏍囨€诲拰浼氫笌涓婃柟鎬荤洰鏍囦繚鎸佷竴鑷?
+  - `src/pages/index/index.scss`锛?
+    - 鎻愰珮棣栭〉榛樿鈥滄湭璁板綍/鏈€変腑鈥濇棩鏈熺伆搴曠殑瀵规瘮搴︼紝閬垮厤鍦ㄧ豢鑹蹭富瑙嗚閲屼笉鏄庢樉
+  - `src/pages/stats/index.scss`锛?
+    - 鎻愰珮鈥滄湭璁板綍鈥濈儹鍥捐壊鍧椾笌鍥句緥鐏拌壊鐨勫姣斿害锛屽寮轰笌绾?钃濈姸鎬佺殑鍖哄垎
 - Verification:
-  - `python -m py_compile backend/main.py` 通过
-  - 用户在继续做前端构建/验证前，明确要求本项目默认不做任何运行检测或前端验证；因此已停止后续验证动作
+  - `python -m py_compile backend/main.py` 閫氳繃
+  - 鐢ㄦ埛鍦ㄧ户缁仛鍓嶇鏋勫缓/楠岃瘉鍓嶏紝鏄庣‘瑕佹眰鏈」鐩粯璁や笉鍋氫换浣曡繍琛屾娴嬫垨鍓嶇楠岃瘉锛涘洜姝ゅ凡鍋滄鍚庣画楠岃瘉鍔ㄤ綔
 - Next step:
-  - 用户直接查看首页与统计页效果；若还想继续微调灰色深浅或餐次分配比例，再按反馈细调
+  - 鐢ㄦ埛鐩存帴鏌ョ湅棣栭〉涓庣粺璁￠〉鏁堟灉锛涜嫢杩樻兂缁х画寰皟鐏拌壊娣辨祬鎴栭娆″垎閰嶆瘮渚嬶紝鍐嶆寜鍙嶉缁嗚皟
 
-- Task: 同步 `main` 与 `dev` 分支
-- Status: done（远端与本地都已安全同步到同一合并提交，且当前工作区未提交改动已完整保留）
+- Task: 鍚屾 `main` 涓?`dev` 鍒嗘敮
+- Status: done锛堣繙绔笌鏈湴閮藉凡瀹夊叏鍚屾鍒板悓涓€鍚堝苟鎻愪氦锛屼笖褰撳墠宸ヤ綔鍖烘湭鎻愪氦鏀瑰姩宸插畬鏁翠繚鐣欙級
 - Scope:
-  - 分支现状：
-    - `origin/dev` 相对 `origin/main` 额外包含 7 个 UI 相关提交（首页 / 我的页 / 自定义 tabbar）
-    - `origin/main` 相对 `origin/dev` 额外包含 2 个较新的主线提交（社区评论通知、图片识别 `text_input` 修复）
-  - 合并策略：
-    - 不在当前脏工作区直接切分支，避免污染用户未提交改动
-    - 使用独立 worktree `D:\files\food_link__merge_sync`
-    - 以 `origin/main` 为基线创建临时分支，再执行 `git merge --no-ff origin/dev`
-    - 合并结果提交：`6c22ed9 Merge remote-tracking branch 'origin/dev' into codex/merge-main-dev`
-  - 结果：
-    - 本次合并未出现手工冲突
-    - `src/app.config.ts` 自动合并，保留了 `main` 上的 `pages/interaction-notifications/index`，同时纳入 `dev` 的首页 / 我的页 / 自定义 tabbar UI 调整
+  - 鍒嗘敮鐜扮姸锛?
+    - `origin/dev` 鐩稿 `origin/main` 棰濆鍖呭惈 7 涓?UI 鐩稿叧鎻愪氦锛堥椤?/ 鎴戠殑椤?/ 鑷畾涔?tabbar锛?
+    - `origin/main` 鐩稿 `origin/dev` 棰濆鍖呭惈 2 涓緝鏂扮殑涓荤嚎鎻愪氦锛堢ぞ鍖鸿瘎璁洪€氱煡銆佸浘鐗囪瘑鍒?`text_input` 淇锛?
+  - 鍚堝苟绛栫暐锛?
+    - 涓嶅湪褰撳墠鑴忓伐浣滃尯鐩存帴鍒囧垎鏀紝閬垮厤姹℃煋鐢ㄦ埛鏈彁浜ゆ敼鍔?
+    - 浣跨敤鐙珛 worktree `D:\files\food_link__merge_sync`
+    - 浠?`origin/main` 涓哄熀绾垮垱寤轰复鏃跺垎鏀紝鍐嶆墽琛?`git merge --no-ff origin/dev`
+    - 鍚堝苟缁撴灉鎻愪氦锛歚6c22ed9 Merge remote-tracking branch 'origin/dev' into codex/merge-main-dev`
+  - 缁撴灉锛?
+    - 鏈鍚堝苟鏈嚭鐜版墜宸ュ啿绐?
+    - `src/app.config.ts` 鑷姩鍚堝苟锛屼繚鐣欎簡 `main` 涓婄殑 `pages/interaction-notifications/index`锛屽悓鏃剁撼鍏?`dev` 鐨勯椤?/ 鎴戠殑椤?/ 鑷畾涔?tabbar UI 璋冩暣
 - Verification:
-  - `npm run build:weapp` 通过（在独立 worktree 里复用主工作区 `node_modules` 后执行）
-  - 构建仅出现既有 Sass deprecation warning，无新增构建错误
-  - `2026-03-29` 再次核对确认：
-    - 远端 `origin/main` 与 `origin/dev` 都已指向 `6c22ed9`
-    - 本地 `main` 与本地 `dev` 现也都已指向 `6c22ed9`
-    - 当前本地 [src/app.config.ts](D:\files\food_link\src\app.config.ts) 已为 5 tab + `custom: true`
-    - 通过 `git stash push --include-untracked` 暂存当前本地修改后，先快进本地 `main`，再创建/同步本地 `dev`，最后成功 `git stash apply 'stash@{0}'` 恢复全部本地修改
-    - 恢复后当前工作区仍保留原有 16 个改动文件和 1 个未跟踪图片，未被覆盖
-  - `2026-03-29` 用户再次反馈“底部导航仍像 4 个”后复查确认：
-    - 源码 [src/app.config.ts](D:\files\food_link\src\app.config.ts) 与 [custom-tab-bar/index.js](D:\files\food_link\custom-tab-bar\index.js) 其实已经是 5 tab
-    - 真正落后的，是开发者工具读取的 `dist/app.json`
-    - 编译前 [dist/app.json](D:\files\food_link\dist\app.json) 仍是旧的 4 tab 非 custom 配置
-    - 重新执行 `npm run build:weapp`（首次因 Node 内存不足失败，追加 `NODE_OPTIONS=--max-old-space-size=8192` 后通过）后，`dist/app.json` 已更新为 5 tab + `custom: true`
-  - `2026-03-29` 用户继续反馈首页接口全部 `ERR_CONNECTION_REFUSED`：
-    - 当前前端开发产物确实在请求 `http://127.0.0.1:3010`
-    - 本机 `netstat` 未看到 `3010` 端口处于 `LISTEN`
-    - 用户的 `uvicorn main:app --reload --host 0.0.0.0 --port 3010` 只显示 `Started reloader process`，未看到 `Started server process` / `Application startup complete`
-    - 结论：当前本地联调的真实阻塞点是“后端没有真正监听成功”，不是前端地址配错
-  - `2026-03-29` 进一步确认：
-    - `uvicorn --reload` 相关父子进程分别为 `8360` 和 `1456`
-    - `Ctrl+C` 未能把它们一起结束
-    - 已通过 `Stop-Process -Id 8360,1456 -Force` 清理卡住的进程树
-  - `2026-03-29` 用户继续追问“本地运行端口在哪里”后再次确认：
-    - `http://127.0.0.1:3010/openapi.json` 返回 `200`
-    - 真实监听地址是 `0.0.0.0:3010`，占用 PID 为 `44584`
-    - 对应进程是 `D:\software\anaconda\python.exe`，启动时间 `2026/3/29 19:51:40`
-    - 因为监听在 `0.0.0.0`（所有网卡地址），用户若只盯 `127.0.0.1` 文本，容易误以为“没有本地 3010”
-    - 之后再执行第二次 `uvicorn ... --port 3010` 报 `WinError 10013`，本质是重复抢占同一端口
-  - `2026-03-29` 按用户要求清理 `3010`：
-    - 已强制结束当前监听 `3010` 的 PID `44584`
-    - 清理后 `http://127.0.0.1:3010/openapi.json` 已无法访问，说明 `3010` 监听已释放
+  - `npm run build:weapp` 閫氳繃锛堝湪鐙珛 worktree 閲屽鐢ㄤ富宸ヤ綔鍖?`node_modules` 鍚庢墽琛岋級
+  - 鏋勫缓浠呭嚭鐜版棦鏈?Sass deprecation warning锛屾棤鏂板鏋勫缓閿欒
+  - `2026-03-29` 鍐嶆鏍稿纭锛?
+    - 杩滅 `origin/main` 涓?`origin/dev` 閮藉凡鎸囧悜 `6c22ed9`
+    - 鏈湴 `main` 涓庢湰鍦?`dev` 鐜颁篃閮藉凡鎸囧悜 `6c22ed9`
+    - 褰撳墠鏈湴 [src/app.config.ts](D:\files\food_link\src\app.config.ts) 宸蹭负 5 tab + `custom: true`
+    - 閫氳繃 `git stash push --include-untracked` 鏆傚瓨褰撳墠鏈湴淇敼鍚庯紝鍏堝揩杩涙湰鍦?`main`锛屽啀鍒涘缓/鍚屾鏈湴 `dev`锛屾渶鍚庢垚鍔?`git stash apply 'stash@{0}'` 鎭㈠鍏ㄩ儴鏈湴淇敼
+    - 鎭㈠鍚庡綋鍓嶅伐浣滃尯浠嶄繚鐣欏師鏈?16 涓敼鍔ㄦ枃浠跺拰 1 涓湭璺熻釜鍥剧墖锛屾湭琚鐩?
+  - `2026-03-29` 鐢ㄦ埛鍐嶆鍙嶉鈥滃簳閮ㄥ鑸粛鍍?4 涓€濆悗澶嶆煡纭锛?
+    - 婧愮爜 [src/app.config.ts](D:\files\food_link\src\app.config.ts) 涓?[custom-tab-bar/index.js](D:\files\food_link\custom-tab-bar\index.js) 鍏跺疄宸茬粡鏄?5 tab
+    - 鐪熸钀藉悗鐨勶紝鏄紑鍙戣€呭伐鍏疯鍙栫殑 `dist/app.json`
+    - 缂栬瘧鍓?[dist/app.json](D:\files\food_link\dist\app.json) 浠嶆槸鏃х殑 4 tab 闈?custom 閰嶇疆
+    - 閲嶆柊鎵ц `npm run build:weapp`锛堥娆″洜 Node 鍐呭瓨涓嶈冻澶辫触锛岃拷鍔?`NODE_OPTIONS=--max-old-space-size=8192` 鍚庨€氳繃锛夊悗锛宍dist/app.json` 宸叉洿鏂颁负 5 tab + `custom: true`
+  - `2026-03-29` 鐢ㄦ埛缁х画鍙嶉棣栭〉鎺ュ彛鍏ㄩ儴 `ERR_CONNECTION_REFUSED`锛?
+    - 褰撳墠鍓嶇寮€鍙戜骇鐗╃‘瀹炲湪璇锋眰 `http://127.0.0.1:3010`
+    - 鏈満 `netstat` 鏈湅鍒?`3010` 绔彛澶勪簬 `LISTEN`
+    - 鐢ㄦ埛鐨?`uvicorn main:app --reload --host 0.0.0.0 --port 3010` 鍙樉绀?`Started reloader process`锛屾湭鐪嬪埌 `Started server process` / `Application startup complete`
+    - 缁撹锛氬綋鍓嶆湰鍦拌仈璋冪殑鐪熷疄闃诲鐐规槸鈥滃悗绔病鏈夌湡姝ｇ洃鍚垚鍔熲€濓紝涓嶆槸鍓嶇鍦板潃閰嶉敊
+  - `2026-03-29` 杩涗竴姝ョ‘璁わ細
+    - `uvicorn --reload` 鐩稿叧鐖跺瓙杩涚▼鍒嗗埆涓?`8360` 鍜?`1456`
+    - `Ctrl+C` 鏈兘鎶婂畠浠竴璧风粨鏉?
+    - 宸查€氳繃 `Stop-Process -Id 8360,1456 -Force` 娓呯悊鍗′綇鐨勮繘绋嬫爲
+  - `2026-03-29` 鐢ㄦ埛缁х画杩介棶鈥滄湰鍦拌繍琛岀鍙ｅ湪鍝噷鈥濆悗鍐嶆纭锛?
+    - `http://127.0.0.1:3010/openapi.json` 杩斿洖 `200`
+    - 鐪熷疄鐩戝惉鍦板潃鏄?`0.0.0.0:3010`锛屽崰鐢?PID 涓?`44584`
+    - 瀵瑰簲杩涚▼鏄?`D:\software\anaconda\python.exe`锛屽惎鍔ㄦ椂闂?`2026/3/29 19:51:40`
+    - 鍥犱负鐩戝惉鍦?`0.0.0.0`锛堟墍鏈夌綉鍗″湴鍧€锛夛紝鐢ㄦ埛鑻ュ彧鐩?`127.0.0.1` 鏂囨湰锛屽鏄撹浠ヤ负鈥滄病鏈夋湰鍦?3010鈥?
+    - 涔嬪悗鍐嶆墽琛岀浜屾 `uvicorn ... --port 3010` 鎶?`WinError 10013`锛屾湰璐ㄦ槸閲嶅鎶㈠崰鍚屼竴绔彛
+  - `2026-03-29` 鎸夌敤鎴疯姹傛竻鐞?`3010`锛?
+    - 宸插己鍒剁粨鏉熷綋鍓嶇洃鍚?`3010` 鐨?PID `44584`
+    - 娓呯悊鍚?`http://127.0.0.1:3010/openapi.json` 宸叉棤娉曡闂紝璇存槑 `3010` 鐩戝惉宸查噴鏀?
 - Next step:
-  - 远端与本地分支同步已完成
-  - 保险起见，当前保留 `stash@{0}` 作为额外备份；待用户确认无误后再决定是否删除
-  - 若开发者工具里底部导航仍未显示，优先在微信开发者工具执行“清缓存并编译”或重开项目，因为当前源码和 `dist` 已都是 5 tab，自定义 tabbar 缺失更像运行态缓存未刷新
-  - 本地联调优先不要继续依赖 `uvicorn --reload`，改用项目脚本 `python backend/run_backend.py` 或 `npm run dev:backend`，先让 `3010` 真正监听起来
-  - 若页面仍显示旧的 `ERR_CONNECTION_REFUSED`，先清空开发者工具 Console/Network 后再刷新；旧错误日志不会自动消失
+  - 杩滅涓庢湰鍦板垎鏀悓姝ュ凡瀹屾垚
+  - 淇濋櫓璧疯锛屽綋鍓嶄繚鐣?`stash@{0}` 浣滀负棰濆澶囦唤锛涘緟鐢ㄦ埛纭鏃犺鍚庡啀鍐冲畾鏄惁鍒犻櫎
+  - 鑻ュ紑鍙戣€呭伐鍏烽噷搴曢儴瀵艰埅浠嶆湭鏄剧ず锛屼紭鍏堝湪寰俊寮€鍙戣€呭伐鍏锋墽琛屸€滄竻缂撳瓨骞剁紪璇戔€濇垨閲嶅紑椤圭洰锛屽洜涓哄綋鍓嶆簮鐮佸拰 `dist` 宸查兘鏄?5 tab锛岃嚜瀹氫箟 tabbar 缂哄け鏇村儚杩愯鎬佺紦瀛樻湭鍒锋柊
+  - 鏈湴鑱旇皟浼樺厛涓嶈缁х画渚濊禆 `uvicorn --reload`锛屾敼鐢ㄩ」鐩剼鏈?`python backend/run_backend.py` 鎴?`npm run dev:backend`锛屽厛璁?`3010` 鐪熸鐩戝惉璧锋潵
+  - 鑻ラ〉闈粛鏄剧ず鏃х殑 `ERR_CONNECTION_REFUSED`锛屽厛娓呯┖寮€鍙戣€呭伐鍏?Console/Network 鍚庡啀鍒锋柊锛涙棫閿欒鏃ュ織涓嶄細鑷姩娑堝け
 
-- Task: 排查图片分析偶发卡在大模型请求前
-- Status: in_progress（最新线上日志已确认：至少部分失败任务已经进入 worker，并在 worker 请求上游模型接口时连续 3 次异常；当前最可能是服务器到上游模型服务的 HTTPS/TLS 连接被中途断开）
+- Task: 鎺掓煡鍥剧墖鍒嗘瀽鍋跺彂鍗″湪澶фā鍨嬭姹傚墠
+- Status: in_progress锛堟渶鏂扮嚎涓婃棩蹇楀凡纭锛氳嚦灏戦儴鍒嗗け璐ヤ换鍔″凡缁忚繘鍏?worker锛屽苟鍦?worker 璇锋眰涓婃父妯″瀷鎺ュ彛鏃惰繛缁?3 娆″紓甯革紱褰撳墠鏈€鍙兘鏄湇鍔″櫒鍒颁笂娓告ā鍨嬫湇鍔＄殑 HTTPS/TLS 杩炴帴琚腑閫旀柇寮€锛?
 - Scope:
-  - 前端链路 `src/pages/analyze/index.tsx`：
-    - `persistImagePathIfNeeded(...)`：本地临时文件持久化
-    - `compressImagePathForUpload(...)`：上传前压缩
-    - `uploadAnalyzeImageFile(...)` / `uploadAnalyzeImage(...)`：图片上传
-    - `submitAnalyzeTask(...)`：提交异步分析任务
-  - 后端链路 `backend/worker.py`：
-    - `process_one_food_task(...)` 已确认任务会进入第二步 `run_food_analysis_sync(...)`
-    - `run_food_analysis_sync(...)` 中第 `983-1029` 行会对上游模型接口最多重试 3 次
-    - 用户提供的线上日志 `Food analysis attempt 3 exception: API 请求失败` 对应“3 次请求都没拿到成功响应”
-    - 若线上 `LLM_PROVIDER=gemini`，则该请求目标是 `https://api.ofox.ai/v1/chat/completions`
-    - 若线上 `LLM_PROVIDER=qwen`，则该请求目标是 DashScope `.../chat/completions`
-  - 当前优先排查顺序：
-    - 先区分失败停在“上传/提交前”还是“worker 调模型时”
-    - 对于这批最新失败样本，优先看后端 worker stdout/stderr 是否出现 `SSL` / `EOF` / `ConnectError` / `ReadError`
-    - 确认线上 `LLM_PROVIDER` 当前实际值，以及对应上游（OfoxAI 或 DashScope）在失败时段是否有波动
-    - 若失败时 `/api/analyze/submit` 已成功且模型 usage 无新增，继续核对该 usage 面板是否真对应 worker 当前使用的上游平台
+  - 鍓嶇閾捐矾 `src/pages/analyze/index.tsx`锛?
+    - `persistImagePathIfNeeded(...)`锛氭湰鍦颁复鏃舵枃浠舵寔涔呭寲
+    - `compressImagePathForUpload(...)`锛氫笂浼犲墠鍘嬬缉
+    - `uploadAnalyzeImageFile(...)` / `uploadAnalyzeImage(...)`锛氬浘鐗囦笂浼?
+    - `submitAnalyzeTask(...)`锛氭彁浜ゅ紓姝ュ垎鏋愪换鍔?
+  - 鍚庣閾捐矾 `backend/worker.py`锛?
+    - `process_one_food_task(...)` 宸茬‘璁や换鍔′細杩涘叆绗簩姝?`run_food_analysis_sync(...)`
+    - `run_food_analysis_sync(...)` 涓 `983-1029` 琛屼細瀵逛笂娓告ā鍨嬫帴鍙ｆ渶澶氶噸璇?3 娆?
+    - 鐢ㄦ埛鎻愪緵鐨勭嚎涓婃棩蹇?`Food analysis attempt 3 exception: API 璇锋眰澶辫触` 瀵瑰簲鈥? 娆¤姹傞兘娌℃嬁鍒版垚鍔熷搷搴斺€?
+    - 鑻ョ嚎涓?`LLM_PROVIDER=gemini`锛屽垯璇ヨ姹傜洰鏍囨槸 `https://api.ofox.ai/v1/chat/completions`
+    - 鑻ョ嚎涓?`LLM_PROVIDER=qwen`锛屽垯璇ヨ姹傜洰鏍囨槸 DashScope `.../chat/completions`
+  - 褰撳墠浼樺厛鎺掓煡椤哄簭锛?
+    - 鍏堝尯鍒嗗け璐ュ仠鍦ㄢ€滀笂浼?鎻愪氦鍓嶁€濊繕鏄€渨orker 璋冩ā鍨嬫椂鈥?
+    - 瀵逛簬杩欐壒鏈€鏂板け璐ユ牱鏈紝浼樺厛鐪嬪悗绔?worker stdout/stderr 鏄惁鍑虹幇 `SSL` / `EOF` / `ConnectError` / `ReadError`
+    - 纭绾夸笂 `LLM_PROVIDER` 褰撳墠瀹為檯鍊硷紝浠ュ強瀵瑰簲涓婃父锛圤foxAI 鎴?DashScope锛夊湪澶辫触鏃舵鏄惁鏈夋尝鍔?
+    - 鑻ュけ璐ユ椂 `/api/analyze/submit` 宸叉垚鍔熶笖妯″瀷 usage 鏃犳柊澧烇紝缁х画鏍稿璇?usage 闈㈡澘鏄惁鐪熷搴?worker 褰撳墠浣跨敤鐨勪笂娓稿钩鍙?
 - Verification:
-  - 已重新阅读状态文件与当前实现代码，未做代码修改
-  - 已核对 `backend/worker.py`：
-    - `Food analysis attempt N exception: ...` 来自 `run_food_analysis_sync(...)` 内部 `httpx.Client(...).post(...)` 这一层
-    - `Food analysis attempt 3 exception: API 请求失败` 说明 worker 已执行到“请求上游模型”阶段，而不是卡在上传前
+  - 宸查噸鏂伴槄璇荤姸鎬佹枃浠朵笌褰撳墠瀹炵幇浠ｇ爜锛屾湭鍋氫唬鐮佷慨鏀?
+  - 宸叉牳瀵?`backend/worker.py`锛?
+    - `Food analysis attempt N exception: ...` 鏉ヨ嚜 `run_food_analysis_sync(...)` 鍐呴儴 `httpx.Client(...).post(...)` 杩欎竴灞?
+    - `Food analysis attempt 3 exception: API 璇锋眰澶辫触` 璇存槑 worker 宸叉墽琛屽埌鈥滆姹備笂娓告ā鍨嬧€濋樁娈碉紝鑰屼笉鏄崱鍦ㄤ笂浼犲墠
 - Next step:
-  - 让用户确认线上 `LLM_PROVIDER`
-  - 在服务器失败时段 grep worker 日志里的 `SSL|EOF|ConnectError|ReadError|Food analysis attempt`
-  - 若当前走 `gemini -> api.ofox.ai`，优先怀疑 OfoxAI 链路波动或服务器到该域名的 TLS 连接异常
-  - 若当前走 `qwen -> dashscope`，则改查 DashScope 链路
+  - 璁╃敤鎴风‘璁ょ嚎涓?`LLM_PROVIDER`
+  - 鍦ㄦ湇鍔″櫒澶辫触鏃舵 grep worker 鏃ュ織閲岀殑 `SSL|EOF|ConnectError|ReadError|Food analysis attempt`
+  - 鑻ュ綋鍓嶈蛋 `gemini -> api.ofox.ai`锛屼紭鍏堟€€鐤?OfoxAI 閾捐矾娉㈠姩鎴栨湇鍔″櫒鍒拌鍩熷悕鐨?TLS 杩炴帴寮傚父
+  - 鑻ュ綋鍓嶈蛋 `qwen -> dashscope`锛屽垯鏀规煡 DashScope 閾捐矾
 
-- Task: 记录时不再重复弹出餐次选择
-- Status: done（结果页“记录”会优先使用分析前已选餐次直接保存；只有拿不到餐次缓存时才兜底弹窗）
+- Task: 璁板綍鏃朵笉鍐嶉噸澶嶅脊鍑洪娆￠€夋嫨
+- Status: done锛堢粨鏋滈〉鈥滆褰曗€濅細浼樺厛浣跨敤鍒嗘瀽鍓嶅凡閫夐娆＄洿鎺ヤ繚瀛橈紱鍙湁鎷夸笉鍒伴娆＄紦瀛樻椂鎵嶅厹搴曞脊绐楋級
 - Scope:
-  - `src/pages/result/index.tsx`：
-    - 新增 `getSavedSelectableMealType()`
-    - `handleConfirmAndShare()` 改为优先读取 `analyzeMealType`
-    - 严格模式 hard/soft reject 下，用户确认“仍要记录”后也优先直接按已选餐次保存
-    - 仅当分析前没有餐次缓存时，才继续显示“选择餐次”弹窗
+  - `src/pages/result/index.tsx`锛?
+    - 鏂板 `getSavedSelectableMealType()`
+    - `handleConfirmAndShare()` 鏀逛负浼樺厛璇诲彇 `analyzeMealType`
+    - 涓ユ牸妯″紡 hard/soft reject 涓嬶紝鐢ㄦ埛纭鈥滀粛瑕佽褰曗€濆悗涔熶紭鍏堢洿鎺ユ寜宸查€夐娆′繚瀛?
+    - 浠呭綋鍒嗘瀽鍓嶆病鏈夐娆＄紦瀛樻椂锛屾墠缁х画鏄剧ず鈥滈€夋嫨椁愭鈥濆脊绐?
 - Verification:
-  - 按用户最新要求，本次未运行项目、未跑构建、未做截图或交互验证
+  - 鎸夌敤鎴锋渶鏂拌姹傦紝鏈鏈繍琛岄」鐩€佹湭璺戞瀯寤恒€佹湭鍋氭埅鍥炬垨浜や簰楠岃瘉
 - Next step:
-  - 用户直接在结果页点“记录”，确认不再重复出现餐次选择弹窗
+  - 鐢ㄦ埛鐩存帴鍦ㄧ粨鏋滈〉鐐光€滆褰曗€濓紝纭涓嶅啀閲嶅鍑虹幇椁愭閫夋嫨寮圭獥
 
-- Task: 恢复分析/结果页餐次选择为 6 餐次
-- Status: done（分析页、结果页、文字结果页已从“早中晚+加餐”恢复为“早餐 / 早加餐 / 午餐 / 午加餐 / 晚餐 / 晚加餐”；legacy `snack` 继续兼容映射到 `午加餐`）
+- Task: 鎭㈠鍒嗘瀽/缁撴灉椤甸娆￠€夋嫨涓?6 椁愭
+- Status: done锛堝垎鏋愰〉銆佺粨鏋滈〉銆佹枃瀛楃粨鏋滈〉宸蹭粠鈥滄棭涓櫄+鍔犻鈥濇仮澶嶄负鈥滄棭椁?/ 鏃╁姞椁?/ 鍗堥 / 鍗堝姞椁?/ 鏅氶 / 鏅氬姞椁愨€濓紱legacy `snack` 缁х画鍏煎鏄犲皠鍒?`鍗堝姞椁恅锛?
 - Scope:
-  - `src/pages/analyze/index.tsx`：恢复分析页餐次选项为 6 个
-  - `src/pages/result/index.tsx`：恢复保存记录弹窗为 6 个餐次，并兼容旧 `snack` 缓存
-  - `src/pages/result-text/index.tsx`：恢复文字结果页保存弹窗为 6 个餐次
+  - `src/pages/analyze/index.tsx`锛氭仮澶嶅垎鏋愰〉椁愭閫夐」涓?6 涓?
+  - `src/pages/result/index.tsx`锛氭仮澶嶄繚瀛樿褰曞脊绐椾负 6 涓娆★紝骞跺吋瀹规棫 `snack` 缂撳瓨
+  - `src/pages/result-text/index.tsx`锛氭仮澶嶆枃瀛楃粨鏋滈〉淇濆瓨寮圭獥涓?6 涓娆?
 - Verification:
-  - `npm run build:weapp` 通过
-  - 用户已明确说明：这个窗口以及整个 `food_link` 项目默认都不需要运行项目，也不需要做前端截图/交互验证
+  - `npm run build:weapp` 閫氳繃
+  - 鐢ㄦ埛宸叉槑纭鏄庯細杩欎釜绐楀彛浠ュ強鏁翠釜 `food_link` 椤圭洰榛樿閮戒笉闇€瑕佽繍琛岄」鐩紝涔熶笉闇€瑕佸仛鍓嶇鎴浘/浜や簰楠岃瘉
 - Next step:
-  - 用户重新打开“选择餐次”弹窗确认是否恢复 6 项
-  - 若微信开发者工具仍显示旧的 4 项，优先重新编译当前 `dist`
+  - 鐢ㄦ埛閲嶆柊鎵撳紑鈥滈€夋嫨椁愭鈥濆脊绐楃‘璁ゆ槸鍚︽仮澶?6 椤?
+  - 鑻ュ井淇″紑鍙戣€呭伐鍏蜂粛鏄剧ず鏃х殑 4 椤癸紝浼樺厛閲嶆柊缂栬瘧褰撳墠 `dist`
 
-- Task: 修复图片识别偶发失败 `"'list' object has no attribute 'get'"`
-- Status: done（已为图片/文字识别结果解析补上数组响应兜底与类型过滤，后端编译通过；等待用户复测同类样本）
+- Task: 淇鍥剧墖璇嗗埆鍋跺彂澶辫触 `"'list' object has no attribute 'get'"`
+- Status: done锛堝凡涓哄浘鐗?鏂囧瓧璇嗗埆缁撴灉瑙ｆ瀽琛ヤ笂鏁扮粍鍝嶅簲鍏滃簳涓庣被鍨嬭繃婊わ紝鍚庣缂栬瘧閫氳繃锛涚瓑寰呯敤鎴峰娴嬪悓绫绘牱鏈級
 - Scope:
-  - 根因：
-    - `backend/worker.py` 的异步识别结果解析默认假设模型返回顶层 `dict`
-    - 当模型偶发直接返回 `list`，或 `items` 内混入非 `dict` 项时，worker 在 `.get(...)` 处抛出 `AttributeError: 'list' object has no attribute 'get'`
-    - 前端历史页只是把 `task.error_message` 原样展示出来，所以用户直接看到了 Python 异常
-  - 修复：
-    - `backend/worker.py` 新增 `_normalize_analysis_response_payload(...)`，把“顶层直接返回食物数组”的情况归一化成 `{"items": [...]}`，无法识别时改为抛出用户可读的 `识别结果格式异常，请重试`
-    - `backend/worker.py` 新增 `_parse_analysis_result_items(...)`，仅解析合法 `dict` item，避免单个脏元素把整条任务打崩
-    - `backend/main.py` 同步补相同归一化/过滤逻辑，避免同步识别接口也踩到同类问题
+  - 鏍瑰洜锛?
+    - `backend/worker.py` 鐨勫紓姝ヨ瘑鍒粨鏋滆В鏋愰粯璁ゅ亣璁炬ā鍨嬭繑鍥為《灞?`dict`
+    - 褰撴ā鍨嬪伓鍙戠洿鎺ヨ繑鍥?`list`锛屾垨 `items` 鍐呮贩鍏ラ潪 `dict` 椤规椂锛寃orker 鍦?`.get(...)` 澶勬姏鍑?`AttributeError: 'list' object has no attribute 'get'`
+    - 鍓嶇鍘嗗彶椤靛彧鏄妸 `task.error_message` 鍘熸牱灞曠ず鍑烘潵锛屾墍浠ョ敤鎴风洿鎺ョ湅鍒颁簡 Python 寮傚父
+  - 淇锛?
+    - `backend/worker.py` 鏂板 `_normalize_analysis_response_payload(...)`锛屾妸鈥滈《灞傜洿鎺ヨ繑鍥為鐗╂暟缁勨€濈殑鎯呭喌褰掍竴鍖栨垚 `{"items": [...]}`锛屾棤娉曡瘑鍒椂鏀逛负鎶涘嚭鐢ㄦ埛鍙鐨?`璇嗗埆缁撴灉鏍煎紡寮傚父锛岃閲嶈瘯`
+    - `backend/worker.py` 鏂板 `_parse_analysis_result_items(...)`锛屼粎瑙ｆ瀽鍚堟硶 `dict` item锛岄伩鍏嶅崟涓剰鍏冪礌鎶婃暣鏉′换鍔℃墦宕?
+    - `backend/main.py` 鍚屾琛ョ浉鍚屽綊涓€鍖?杩囨护閫昏緫锛岄伩鍏嶅悓姝ヨ瘑鍒帴鍙ｄ篃韪╁埌鍚岀被闂
 - Verification:
-  - `python -m py_compile backend/worker.py backend/main.py` 通过
+  - `python -m py_compile backend/worker.py backend/main.py` 閫氳繃
 - Next step:
-  - 用户重新用失败样本发起一次图片识别
-  - 若仍失败，优先抓该任务对应的 AI 原始返回 JSON，确认是顶层数组还是 `items` 内部结构异常
+  - 鐢ㄦ埛閲嶆柊鐢ㄥけ璐ユ牱鏈彂璧蜂竴娆″浘鐗囪瘑鍒?
+  - 鑻ヤ粛澶辫触锛屼紭鍏堟姄璇ヤ换鍔″搴旂殑 AI 鍘熷杩斿洖 JSON锛岀‘璁ゆ槸椤跺眰鏁扮粍杩樻槸 `items` 鍐呴儴缁撴瀯寮傚父
 
-- Task: 修复本地调试默认未走“实时编译 + 本地后端”的问题
-- Status: done（已补开发环境 API 地址与本地后端启动脚本；开发模式编译后确认 `dist` 已切到 `http://127.0.0.1:3010`；开发者工具自动化端口未开，未完成运行态点击验证）
+- Task: 淇鏈湴璋冭瘯榛樿鏈蛋鈥滃疄鏃剁紪璇?+ 鏈湴鍚庣鈥濈殑闂
+- Status: done锛堝凡琛ュ紑鍙戠幆澧?API 鍦板潃涓庢湰鍦板悗绔惎鍔ㄨ剼鏈紱寮€鍙戞ā寮忕紪璇戝悗纭 `dist` 宸插垏鍒?`http://127.0.0.1:3010`锛涘紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛鏈紑锛屾湭瀹屾垚杩愯鎬佺偣鍑婚獙璇侊級
 - Scope:
-  - `project.config.json` 的 `miniprogramRoot` 指向 `dist/`
-  - `package.json` 里的 `dev:weapp` 本质是 `taro build --type weapp --watch`，只是“持续编译”，不是提供页面的本地 Web 服务
-  - 此前缺少 `.env.development`，`config/dev.ts` 也为空，导致开发态没有独立后端地址配置
-  - `src/utils/api.ts`、`src/pages/location-search/index.tsx` 已改为：优先读取 `TARO_APP_API_BASE_URL`；未配置时，development 默认走 `http://127.0.0.1:3010`，production 保持 `https://healthymax.cn`
-  - 已新增 `.env.development` 与 `.env.development.example`
-  - `package.json` 已新增 `npm run dev:backend`，直接启动 `backend/run_backend.py`
-  - `backend/README.md` 与 `backend/run_backend.py` 本地启动端口已统一为 `3010`
+  - `project.config.json` 鐨?`miniprogramRoot` 鎸囧悜 `dist/`
+  - `package.json` 閲岀殑 `dev:weapp` 鏈川鏄?`taro build --type weapp --watch`锛屽彧鏄€滄寔缁紪璇戔€濓紝涓嶆槸鎻愪緵椤甸潰鐨勬湰鍦?Web 鏈嶅姟
+  - 姝ゅ墠缂哄皯 `.env.development`锛宍config/dev.ts` 涔熶负绌猴紝瀵艰嚧寮€鍙戞€佹病鏈夌嫭绔嬪悗绔湴鍧€閰嶇疆
+  - `src/utils/api.ts`銆乣src/pages/location-search/index.tsx` 宸叉敼涓猴細浼樺厛璇诲彇 `TARO_APP_API_BASE_URL`锛涙湭閰嶇疆鏃讹紝development 榛樿璧?`http://127.0.0.1:3010`锛宲roduction 淇濇寔 `https://healthymax.cn`
+  - 宸叉柊澧?`.env.development` 涓?`.env.development.example`
+  - `package.json` 宸叉柊澧?`npm run dev:backend`锛岀洿鎺ュ惎鍔?`backend/run_backend.py`
+  - `backend/README.md` 涓?`backend/run_backend.py` 鏈湴鍚姩绔彛宸茬粺涓€涓?`3010`
 - Verification:
-  - 已核对 `project.config.json`
-  - 已核对 `project.private.config.json`
-  - 已核对 `package.json`
-  - 已核对 `src/utils/api.ts`
-  - 已核对 `src/pages/location-search/index.tsx`
-  - `npm run build:weapp` 通过
-  - `npm run dev:weapp` 已触发初始开发编译（watch 进程按超时截断）
-  - `2026-03-29 15:01` 检查 `npm run build:weapp` 产物：`dist/common.js` 仍为 `https://healthymax.cn`，说明 `build:weapp` 是生产构建
-  - `2026-03-29 15:04` 检查 `npm run dev:weapp` 首轮产物：`dist/common.js` 已切到 `http://127.0.0.1:3010`
-  - `2026-03-29` 检查本机监听端口：`3010`、`8888`、`9420` 均未监听；因此“微信开发者工具里还能打开页面”并不是本地后端或自动化服务在运行
-  - 已核对开发者工具私有配置：`useStaticServer=false`、`useLanDebug=false`，没有发现“偷偷起本地服务”的配置；`compileHotReLoad=true` 只负责热刷新已有 `dist` 产物，不负责代替 `npm run dev:weapp`
-  - 尝试 `mrc where --port 9420` 失败：本机当前未开启微信开发者工具自动化端口，未完成运行态截图/交互验证
+  - 宸叉牳瀵?`project.config.json`
+  - 宸叉牳瀵?`project.private.config.json`
+  - 宸叉牳瀵?`package.json`
+  - 宸叉牳瀵?`src/utils/api.ts`
+  - 宸叉牳瀵?`src/pages/location-search/index.tsx`
+  - `npm run build:weapp` 閫氳繃
+  - `npm run dev:weapp` 宸茶Е鍙戝垵濮嬪紑鍙戠紪璇戯紙watch 杩涚▼鎸夎秴鏃舵埅鏂級
+  - `2026-03-29 15:01` 妫€鏌?`npm run build:weapp` 浜х墿锛歚dist/common.js` 浠嶄负 `https://healthymax.cn`锛岃鏄?`build:weapp` 鏄敓浜ф瀯寤?
+  - `2026-03-29 15:04` 妫€鏌?`npm run dev:weapp` 棣栬疆浜х墿锛歚dist/common.js` 宸插垏鍒?`http://127.0.0.1:3010`
+  - `2026-03-29` 妫€鏌ユ湰鏈虹洃鍚鍙ｏ細`3010`銆乣8888`銆乣9420` 鍧囨湭鐩戝惉锛涘洜姝も€滃井淇″紑鍙戣€呭伐鍏烽噷杩樿兘鎵撳紑椤甸潰鈥濆苟涓嶆槸鏈湴鍚庣鎴栬嚜鍔ㄥ寲鏈嶅姟鍦ㄨ繍琛?
+  - 宸叉牳瀵瑰紑鍙戣€呭伐鍏风鏈夐厤缃細`useStaticServer=false`銆乣useLanDebug=false`锛屾病鏈夊彂鐜扳€滃伔鍋疯捣鏈湴鏈嶅姟鈥濈殑閰嶇疆锛沗compileHotReLoad=true` 鍙礋璐ｇ儹鍒锋柊宸叉湁 `dist` 浜х墿锛屼笉璐熻矗浠ｆ浛 `npm run dev:weapp`
+  - 灏濊瘯 `mrc where --port 9420` 澶辫触锛氭湰鏈哄綋鍓嶆湭寮€鍚井淇″紑鍙戣€呭伐鍏疯嚜鍔ㄥ寲绔彛锛屾湭瀹屾垚杩愯鎬佹埅鍥?浜や簰楠岃瘉
 - Next step:
-  - 本地联调时先运行 `npm run dev:backend`，再运行 `npm run dev:weapp`
-  - 微信开发者工具重新编译/刷新后，在 Network 中确认请求已切到 `http://127.0.0.1:3010`
-  - 若要真机调试，把 `.env.development` 中的 `127.0.0.1` 改成电脑局域网 IP
-  - 若要排除“旧 `dist` 干扰”，不要用 `npm run build:weapp` 的生产产物判断本地联调结果，应以 `npm run dev:weapp` 刚产出的 `dist/common.js` 为准
+  - 鏈湴鑱旇皟鏃跺厛杩愯 `npm run dev:backend`锛屽啀杩愯 `npm run dev:weapp`
+  - 寰俊寮€鍙戣€呭伐鍏烽噸鏂扮紪璇?鍒锋柊鍚庯紝鍦?Network 涓‘璁よ姹傚凡鍒囧埌 `http://127.0.0.1:3010`
+  - 鑻ヨ鐪熸満璋冭瘯锛屾妸 `.env.development` 涓殑 `127.0.0.1` 鏀规垚鐢佃剳灞€鍩熺綉 IP
+  - 鑻ヨ鎺掗櫎鈥滄棫 `dist` 骞叉壈鈥濓紝涓嶈鐢?`npm run build:weapp` 鐨勭敓浜т骇鐗╁垽鏂湰鍦拌仈璋冪粨鏋滐紝搴斾互 `npm run dev:weapp` 鍒氫骇鍑虹殑 `dist/common.js` 涓哄噯
 
-- Task: 修复分析页本地图片临时路径失效导致 `compressImage:fail file doesn't exist`
-- Status: done（已做最小前端修复；构建通过；运行态自动化目标不是 food_link，未能在正确小程序里完成选图验证）
+- Task: 淇鍒嗘瀽椤垫湰鍦板浘鐗囦复鏃惰矾寰勫け鏁堝鑷?`compressImage:fail file doesn't exist`
+- Status: done锛堝凡鍋氭渶灏忓墠绔慨澶嶏紱鏋勫缓閫氳繃锛涜繍琛屾€佽嚜鍔ㄥ寲鐩爣涓嶆槸 food_link锛屾湭鑳藉湪姝ｇ‘灏忕▼搴忛噷瀹屾垚閫夊浘楠岃瘉锛?
 - Scope:
-  - 根因：
-    - `src/pages/analyze/index.tsx` 注释写的是“选图后立刻持久化临时图”，但实际代码是等到点击“分析”时才调用 `persistImagePathIfNeeded(...)`
-    - 微信小程序临时文件路径会被回收，因此到了 `compressImagePathForUpload(...)` 时文件已不存在，触发 `compressImage:fail file doesn't exist`，随后 `uploadFile:fail file not found`
-    - 这是小程序本地文件生命周期问题，请求尚未到后端，无法只靠后端修复
-  - 修复：
-    - `src/pages/analyze/index.tsx` 新增 `persistImagePathsImmediately(...)`
-    - 在 `handleChooseImage` 选图完成后立即把临时图保存到 `USER_DATA_PATH`
-    - 在读取 `analyzeImagePath` 本地缓存恢复图片时，也先立即做一次持久化
+  - 鏍瑰洜锛?
+    - `src/pages/analyze/index.tsx` 娉ㄩ噴鍐欑殑鏄€滈€夊浘鍚庣珛鍒绘寔涔呭寲涓存椂鍥锯€濓紝浣嗗疄闄呬唬鐮佹槸绛夊埌鐐瑰嚮鈥滃垎鏋愨€濇椂鎵嶈皟鐢?`persistImagePathIfNeeded(...)`
+    - 寰俊灏忕▼搴忎复鏃舵枃浠惰矾寰勪細琚洖鏀讹紝鍥犳鍒颁簡 `compressImagePathForUpload(...)` 鏃舵枃浠跺凡涓嶅瓨鍦紝瑙﹀彂 `compressImage:fail file doesn't exist`锛岄殢鍚?`uploadFile:fail file not found`
+    - 杩欐槸灏忕▼搴忔湰鍦版枃浠剁敓鍛藉懆鏈熼棶棰橈紝璇锋眰灏氭湭鍒板悗绔紝鏃犳硶鍙潬鍚庣淇
+  - 淇锛?
+    - `src/pages/analyze/index.tsx` 鏂板 `persistImagePathsImmediately(...)`
+    - 鍦?`handleChooseImage` 閫夊浘瀹屾垚鍚庣珛鍗虫妸涓存椂鍥句繚瀛樺埌 `USER_DATA_PATH`
+    - 鍦ㄨ鍙?`analyzeImagePath` 鏈湴缂撳瓨鎭㈠鍥剧墖鏃讹紝涔熷厛绔嬪嵆鍋氫竴娆℃寔涔呭寲
 - Verification:
-  - `npm run build:weapp` 通过
-  - 尝试连接微信开发者工具自动化成功，但当前 9420 端口连接到的目标页面为 `coach/profile/[id]`，不是 `food_link` 小程序，无法在正确应用里完成“选图 -> 分析”运行态验证
+  - `npm run build:weapp` 閫氳繃
+  - 灏濊瘯杩炴帴寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲鎴愬姛锛屼絾褰撳墠 9420 绔彛杩炴帴鍒扮殑鐩爣椤甸潰涓?`coach/profile/[id]`锛屼笉鏄?`food_link` 灏忕▼搴忥紝鏃犳硶鍦ㄦ纭簲鐢ㄩ噷瀹屾垚鈥滈€夊浘 -> 鍒嗘瀽鈥濊繍琛屾€侀獙璇?
 - Next step:
-  - 让微信开发者工具切到 `food_link` 项目后，再复测“选图 -> 立即分析”链路
-  - 若仍报错，继续抓 `persistImagePathIfNeeded(...)` 的 console warn 和真实 `path` 值
+  - 璁╁井淇″紑鍙戣€呭伐鍏峰垏鍒?`food_link` 椤圭洰鍚庯紝鍐嶅娴嬧€滈€夊浘 -> 绔嬪嵆鍒嗘瀽鈥濋摼璺?
+  - 鑻ヤ粛鎶ラ敊锛岀户缁姄 `persistImagePathIfNeeded(...)` 鐨?console warn 鍜岀湡瀹?`path` 鍊?
 
 ---
 
-- Previous Task: 运动记录功能 UI 实现
+- Previous Task: 杩愬姩璁板綍鍔熻兘 UI 瀹炵幇
 - Previous Status: done
 
 ---
 
-## 2026-04-07 运动记录 API（补充）
+## 2026-04-07 杩愬姩璁板綍 API锛堣ˉ鍏咃級
 
-- **根因**：远端库缺少 `public.user_exercise_logs`；`analysis_tasks_task_type_check` 未包含 `exercise`（及 debug 队列类型）。
-- **已做**：`backend/sql/migrate_exercise_logs_and_task_type.sql`；`POST` 在 CHECK 失败时回退 `food_text*` + `payload.exercise`，文字 Worker 开头转 `process_one_exercise_task`；`GET` 表未就绪时返回空列表；后端已重启，`curl` 验证 `GET/POST` 200。
-- **待办（一次性）**：在 Supabase SQL Editor 执行上述 SQL（或配置 `SUPABASE_DB_URL` 后 `python backend/scripts/apply_exercise_migration.py`），否则运动结果落库仍依赖回退路径且需文字 Worker 消费。
+- **鏍瑰洜**锛氳繙绔簱缂哄皯 `public.user_exercise_logs`锛沗analysis_tasks_task_type_check` 鏈寘鍚?`exercise`锛堝強 debug 闃熷垪绫诲瀷锛夈€?
+- **宸插仛**锛歚backend/sql/migrate_exercise_logs_and_task_type.sql`锛沗POST` 鍦?CHECK 澶辫触鏃跺洖閫€ `food_text*` + `payload.exercise`锛屾枃瀛?Worker 寮€澶磋浆 `process_one_exercise_task`锛沗GET` 琛ㄦ湭灏辩华鏃惰繑鍥炵┖鍒楄〃锛涘悗绔凡閲嶅惎锛宍curl` 楠岃瘉 `GET/POST` 200銆?
+- **寰呭姙锛堜竴娆℃€э級**锛氬湪 Supabase SQL Editor 鎵ц涓婅堪 SQL锛堟垨閰嶇疆 `SUPABASE_DB_URL` 鍚?`python backend/scripts/apply_exercise_migration.py`锛夛紝鍚﹀垯杩愬姩缁撴灉钀藉簱浠嶄緷璧栧洖閫€璺緞涓旈渶鏂囧瓧 Worker 娑堣垂銆?
 
-## 本地补充（与远端合并后保留）
+## 鏈湴琛ュ厖锛堜笌杩滅鍚堝苟鍚庝繚鐣欙級
 
-- Task: 运动记录出现“成功落库但显示 0 kcal”
-- Status: done（已修复旧 `0 kcal` 与部分高强度动作失败；2026-04-10 已补“后台自动拆分多项目运动 + 数字/规则兜底”）
+- Task: 杩愬姩璁板綍鍑虹幇鈥滄垚鍔熻惤搴撲絾鏄剧ず 0 kcal鈥?
+- Status: done锛堝凡淇鏃?`0 kcal` 涓庨儴鍒嗛珮寮哄害鍔ㄤ綔澶辫触锛?026-04-10 宸茶ˉ鈥滃悗鍙拌嚜鍔ㄦ媶鍒嗗椤圭洰杩愬姩 + 鏁板瓧/瑙勫垯鍏滃簳鈥濓級
 - Scope:
-  - 已确认当前工作区基线就是远端最新 `origin/dev`，并非旧代码未同步。
-  - 真实根因在 `backend/exercise_llm.py`：
-    - 模型若未严格只返回纯数字，旧逻辑会静默解析失败后落成 `0`
-    - `worker` 随后仍会把 `0 kcal` 写入 `user_exercise_logs`
-    - 前端 `exercise-record` 读取正式记录后就会显示“1次记录 / 0 kcal”
-  - 已修复：
-    - 运动热量估算改为要求模型输出结构化 JSON：`reasoning + calories_kcal`
-    - 提交任务时会写入当前用户运动估算画像快照：优先 `最新体重记录`，再回退 `weapp_user.weight`；同时带上 `height / gender / age / activity_level / bmr / tdee`
-    - worker 执行时优先使用 task payload 里的 `profile_snapshot`，缺失字段再回源补齐
-    - 无法可靠解析时不再写 `0`，改为任务失败
-    - `user_exercise_logs` 新增可选列 `ai_reasoning`（需执行 SQL）
-    - `exercise-record` 列表已支持展示 `ai_reasoning`
-    - 本地 `backend/.env` 已开启 `FOOD_DEBUG_TASK_QUEUE=1`，避免共享 Supabase 时被外部旧 worker 抢任务
-    - `POST /api/exercise-logs` 在本地调试队列开启时，改为直接投递 `food_text_debug + payload.exercise=true`，由本地 `food_text_debug` worker 路由到 `process_one_exercise_task`
-    - `backend/exercise_llm.py` 已补“无外层花括号 / 半残 JSON”兜底解析，降低模型轻微格式漂移导致整条失败的概率
-    - `backend/exercise_llm.py` 已进一步收紧主提示词与 `reasoning` schema 上限，避免输出长推导
-    - `backend/exercise_llm.py` 已新增“主链路因 `max_tokens length limit` 截断时，自动切换短 JSON fallback”逻辑；同类高强度动作 + 完整画像快照已可本地复现成功
+  - 宸茬‘璁ゅ綋鍓嶅伐浣滃尯鍩虹嚎灏辨槸杩滅鏈€鏂?`origin/dev`锛屽苟闈炴棫浠ｇ爜鏈悓姝ャ€?
+  - 鐪熷疄鏍瑰洜鍦?`backend/exercise_llm.py`锛?
+    - 妯″瀷鑻ユ湭涓ユ牸鍙繑鍥炵函鏁板瓧锛屾棫閫昏緫浼氶潤榛樿В鏋愬け璐ュ悗钀芥垚 `0`
+    - `worker` 闅忓悗浠嶄細鎶?`0 kcal` 鍐欏叆 `user_exercise_logs`
+    - 鍓嶇 `exercise-record` 璇诲彇姝ｅ紡璁板綍鍚庡氨浼氭樉绀衡€?娆¤褰?/ 0 kcal鈥?
+  - 宸蹭慨澶嶏細
+    - 杩愬姩鐑噺浼扮畻鏀逛负瑕佹眰妯″瀷杈撳嚭缁撴瀯鍖?JSON锛歚reasoning + calories_kcal`
+    - 鎻愪氦浠诲姟鏃朵細鍐欏叆褰撳墠鐢ㄦ埛杩愬姩浼扮畻鐢诲儚蹇収锛氫紭鍏?`鏈€鏂颁綋閲嶈褰昤锛屽啀鍥為€€ `weapp_user.weight`锛涘悓鏃跺甫涓?`height / gender / age / activity_level / bmr / tdee`
+    - worker 鎵ц鏃朵紭鍏堜娇鐢?task payload 閲岀殑 `profile_snapshot`锛岀己澶卞瓧娈靛啀鍥炴簮琛ラ綈
+    - 鏃犳硶鍙潬瑙ｆ瀽鏃朵笉鍐嶅啓 `0`锛屾敼涓轰换鍔″け璐?
+    - `user_exercise_logs` 鏂板鍙€夊垪 `ai_reasoning`锛堥渶鎵ц SQL锛?
+    - `exercise-record` 鍒楄〃宸叉敮鎸佸睍绀?`ai_reasoning`
+    - 鏈湴 `backend/.env` 宸插紑鍚?`FOOD_DEBUG_TASK_QUEUE=1`锛岄伩鍏嶅叡浜?Supabase 鏃惰澶栭儴鏃?worker 鎶换鍔?
+    - `POST /api/exercise-logs` 鍦ㄦ湰鍦拌皟璇曢槦鍒楀紑鍚椂锛屾敼涓虹洿鎺ユ姇閫?`food_text_debug + payload.exercise=true`锛岀敱鏈湴 `food_text_debug` worker 璺敱鍒?`process_one_exercise_task`
+    - `backend/exercise_llm.py` 宸茶ˉ鈥滄棤澶栧眰鑺辨嫭鍙?/ 鍗婃畫 JSON鈥濆厹搴曡В鏋愶紝闄嶄綆妯″瀷杞诲井鏍煎紡婕傜Щ瀵艰嚧鏁存潯澶辫触鐨勬鐜?
+    - `backend/exercise_llm.py` 宸茶繘涓€姝ユ敹绱т富鎻愮ず璇嶄笌 `reasoning` schema 涓婇檺锛岄伩鍏嶈緭鍑洪暱鎺ㄥ
+    - `backend/exercise_llm.py` 宸叉柊澧炩€滀富閾捐矾鍥?`max_tokens length limit` 鎴柇鏃讹紝鑷姩鍒囨崲鐭?JSON fallback鈥濋€昏緫锛涘悓绫婚珮寮哄害鍔ㄤ綔 + 瀹屾暣鐢诲儚蹇収宸插彲鏈湴澶嶇幇鎴愬姛
 - Verification:
-  - `python -m py_compile backend/exercise_llm.py backend/worker.py backend/main.py backend/database.py` 通过
-  - `ReadLints` 检查 `exercise-record / api` 相关前端文件，无新增报错
-  - `mrc where --port 9420` 可连接，但当前目标页是另一套小程序 `training/today-training`，不是 `food_link`
-  - 2026-04-08 晚直接查库确认：同一用户最新运动任务里既出现“带 `ai_reasoning` 的 702 kcal 新记录”，也出现“`ai_reasoning=null` 的 0 kcal 旧记录”，说明共享库中确有旧 worker 在消费 `exercise` 主队列
-  - 2026-04-10 代码复核补充：前端展示的文案“运动热量估算失败，请稍后重试”并不是前端兜底文案，而是后端 `backend/exercise_llm.py` 在捕获 `InstructorError / OpenAIAPIError` 后主动回写到任务错误信息；这说明失败点已经进入“调用上游 AI 结构化估算”阶段，而不是用户这句运动描述本身为空。
-  - 已精确复现截图对应失败任务 `68e994ad-73ba-42be-9cc3-8c7e36e3a061`：同一条描述 + 同一份 `profile_snapshot` 在本地直接调用 `estimate_exercise_calories_sync()` 时连续 3 次命中 `IncompleteOutputException: The output is incomplete due to a max_tokens length limit.`，随后被 Instructor 包装成 `InstructorRetryException`，最终落成“运动热量估算失败，请稍后重试”。
-  - 该问题更像当前 `gemini-3-flash-preview + Instructor MD_JSON + max_tokens=900` 组合在部分高强度动作描述下触发的“输出被截断”问题；不是接口鉴权缺失，因为本地同环境可成功调用多数其他运动描述。
-  - 2026-04-10 修复后验证：
-    - `python -m pytest backend/tests/unit/test_exercise_llm.py -q` 10 通过
-    - 直接复现同类高强度描述 + 完整画像快照，已成功返回 `165 kcal`
-    - 本地后端与 `dev:weapp` 已重新拉起，`backend-dev.log` 显示 `run_backend.py` 已在 `3010` 监听
-  - 2026-04-10 继续修复与复测补充：
-    - 已新增“后台自动拆分多项目运动”链路：按换行/分号/句号拆段后逐项估算并求和
-    - 分项估算新增三层兜底：`短 JSON -> 纯数字 -> 规则估算（运动关键词 + 时长 + 体重）`
-    - 用用户提供的多项目样本
-      - 晨跑 20 分钟
-      - 跳绳 15 分钟
-      - 俯卧撑 10 分钟
-      - 深蹲 15 分钟
-      - 拉伸 10 分钟
-      做 UTF-8 本地复测，已成功返回总计 `518 kcal`，不再直接报错
-    - 按用户要求，运动热量估算模型已改为在 `backend/exercise_llm.py` 内直接写死 `google/gemini-3.1-flash-lite-preview`，并撤回了 `backend/.env` 中新增的模型环境变量
+  - `python -m py_compile backend/exercise_llm.py backend/worker.py backend/main.py backend/database.py` 閫氳繃
+  - `ReadLints` 妫€鏌?`exercise-record / api` 鐩稿叧鍓嶇鏂囦欢锛屾棤鏂板鎶ラ敊
+  - `mrc where --port 9420` 鍙繛鎺ワ紝浣嗗綋鍓嶇洰鏍囬〉鏄彟涓€濂楀皬绋嬪簭 `training/today-training`锛屼笉鏄?`food_link`
+  - 2026-04-08 鏅氱洿鎺ユ煡搴撶‘璁わ細鍚屼竴鐢ㄦ埛鏈€鏂拌繍鍔ㄤ换鍔￠噷鏃㈠嚭鐜扳€滃甫 `ai_reasoning` 鐨?702 kcal 鏂拌褰曗€濓紝涔熷嚭鐜扳€渀ai_reasoning=null` 鐨?0 kcal 鏃ц褰曗€濓紝璇存槑鍏变韩搴撲腑纭湁鏃?worker 鍦ㄦ秷璐?`exercise` 涓婚槦鍒?
+  - 2026-04-10 浠ｇ爜澶嶆牳琛ュ厖锛氬墠绔睍绀虹殑鏂囨鈥滆繍鍔ㄧ儹閲忎及绠楀け璐ワ紝璇风◢鍚庨噸璇曗€濆苟涓嶆槸鍓嶇鍏滃簳鏂囨锛岃€屾槸鍚庣 `backend/exercise_llm.py` 鍦ㄦ崟鑾?`InstructorError / OpenAIAPIError` 鍚庝富鍔ㄥ洖鍐欏埌浠诲姟閿欒淇℃伅锛涜繖璇存槑澶辫触鐐瑰凡缁忚繘鍏モ€滆皟鐢ㄤ笂娓?AI 缁撴瀯鍖栦及绠椻€濋樁娈碉紝鑰屼笉鏄敤鎴疯繖鍙ヨ繍鍔ㄦ弿杩版湰韬负绌恒€?
+  - 宸茬簿纭鐜版埅鍥惧搴斿け璐ヤ换鍔?`68e994ad-73ba-42be-9cc3-8c7e36e3a061`锛氬悓涓€鏉℃弿杩?+ 鍚屼竴浠?`profile_snapshot` 鍦ㄦ湰鍦扮洿鎺ヨ皟鐢?`estimate_exercise_calories_sync()` 鏃惰繛缁?3 娆″懡涓?`IncompleteOutputException: The output is incomplete due to a max_tokens length limit.`锛岄殢鍚庤 Instructor 鍖呰鎴?`InstructorRetryException`锛屾渶缁堣惤鎴愨€滆繍鍔ㄧ儹閲忎及绠楀け璐ワ紝璇风◢鍚庨噸璇曗€濄€?
+  - 璇ラ棶棰樻洿鍍忓綋鍓?`gemini-3-flash-preview + Instructor MD_JSON + max_tokens=900` 缁勫悎鍦ㄩ儴鍒嗛珮寮哄害鍔ㄤ綔鎻忚堪涓嬭Е鍙戠殑鈥滆緭鍑鸿鎴柇鈥濋棶棰橈紱涓嶆槸鎺ュ彛閴存潈缂哄け锛屽洜涓烘湰鍦板悓鐜鍙垚鍔熻皟鐢ㄥ鏁板叾浠栬繍鍔ㄦ弿杩般€?
+  - 2026-04-10 淇鍚庨獙璇侊細
+    - `python -m pytest backend/tests/unit/test_exercise_llm.py -q` 10 閫氳繃
+    - 鐩存帴澶嶇幇鍚岀被楂樺己搴︽弿杩?+ 瀹屾暣鐢诲儚蹇収锛屽凡鎴愬姛杩斿洖 `165 kcal`
+    - 鏈湴鍚庣涓?`dev:weapp` 宸查噸鏂版媺璧凤紝`backend-dev.log` 鏄剧ず `run_backend.py` 宸插湪 `3010` 鐩戝惉
+  - 2026-04-10 缁х画淇涓庡娴嬭ˉ鍏咃細
+    - 宸叉柊澧炩€滃悗鍙拌嚜鍔ㄦ媶鍒嗗椤圭洰杩愬姩鈥濋摼璺細鎸夋崲琛?鍒嗗彿/鍙ュ彿鎷嗘鍚庨€愰」浼扮畻骞舵眰鍜?
+    - 鍒嗛」浼扮畻鏂板涓夊眰鍏滃簳锛歚鐭?JSON -> 绾暟瀛?-> 瑙勫垯浼扮畻锛堣繍鍔ㄥ叧閿瘝 + 鏃堕暱 + 浣撻噸锛塦
+    - 鐢ㄧ敤鎴锋彁渚涚殑澶氶」鐩牱鏈?
+      - 鏅ㄨ窇 20 鍒嗛挓
+      - 璺崇怀 15 鍒嗛挓
+      - 淇崸鎾?10 鍒嗛挓
+      - 娣辫共 15 鍒嗛挓
+      - 鎷変几 10 鍒嗛挓
+      鍋?UTF-8 鏈湴澶嶆祴锛屽凡鎴愬姛杩斿洖鎬昏 `518 kcal`锛屼笉鍐嶇洿鎺ユ姤閿?
+    - 鎸夌敤鎴疯姹傦紝杩愬姩鐑噺浼扮畻妯″瀷宸叉敼涓哄湪 `backend/exercise_llm.py` 鍐呯洿鎺ュ啓姝?`google/gemini-3.1-flash-lite-preview`锛屽苟鎾ゅ洖浜?`backend/.env` 涓柊澧炵殑妯″瀷鐜鍙橀噺
 - Next step:
-  - 统一执行数据库 SQL：
-    - `backend/sql/migrate_exercise_logs_and_task_type.sql`（若线上还未执行）
+  - 缁熶竴鎵ц鏁版嵁搴?SQL锛?
+    - `backend/sql/migrate_exercise_logs_and_task_type.sql`锛堣嫢绾夸笂杩樻湭鎵ц锛?
     - `backend/sql/add_exercise_ai_reasoning.sql`
-  - 让用户在小程序里直接复测“多项目详细清单”是否已不再报错
-  - 若后续要继续提准确率，再单独优化规则估算对“组数 / 每组时长 / 每组次数 / 负重”的理解，当前版本优先解决稳定性
-  - 旧的 `0 kcal` 历史记录仍需手动删除后重提，旧数据不会自动回填
+  - 璁╃敤鎴峰湪灏忕▼搴忛噷鐩存帴澶嶆祴鈥滃椤圭洰璇︾粏娓呭崟鈥濇槸鍚﹀凡涓嶅啀鎶ラ敊
+  - 鑻ュ悗缁缁х画鎻愬噯纭巼锛屽啀鍗曠嫭浼樺寲瑙勫垯浼扮畻瀵光€滅粍鏁?/ 姣忕粍鏃堕暱 / 姣忕粍娆℃暟 / 璐熼噸鈥濈殑鐞嗚В锛屽綋鍓嶇増鏈紭鍏堣В鍐崇ǔ瀹氭€?
+  - 鏃х殑 `0 kcal` 鍘嗗彶璁板綍浠嶉渶鎵嬪姩鍒犻櫎鍚庨噸鎻愶紝鏃ф暟鎹笉浼氳嚜鍔ㄥ洖濉?
 
-- Task: 微信开发者工具启动时报错 `scope.camera` + `ENOENT dist/pages/food-expiry/*`
-- Status: in_progress（已定位根因，待用户在 DevTools 清理启动页缓存并确认是否需要提交配置修复）
+- Task: 寰俊寮€鍙戣€呭伐鍏峰惎鍔ㄦ椂鎶ラ敊 `scope.camera` + `ENOENT dist/pages/food-expiry/*`
+- Status: in_progress锛堝凡瀹氫綅鏍瑰洜锛屽緟鐢ㄦ埛鍦?DevTools 娓呯悊鍚姩椤电紦瀛樺苟纭鏄惁闇€瑕佹彁浜ら厤缃慨澶嶏級
 - Scope:
-  - 已确认当前源码与编译产物都不再包含 `pages/food-expiry/index`：
-    - `src/app.config.ts` 与 `dist/app.json` 仅保留 `pages/expiry/index` / `pages/expiry-edit/index`
-    - `dist/pages/food-expiry` 目录实际不存在（与“旧页面已删除”决策一致）
-  - 已确认 `app.json permission["scope.camera"]` 警告来自当前配置：
-    - `src/app.config.ts` 第 81 行仍声明 `'scope.camera'`
-    - `dist/app.json` 第 80 行仍包含 `"scope.camera"`
-  - 综合判断：
-    - `scope.camera` 是无效 `permission` 键，导致显式 warning
-    - `ENOENT dist/pages/food-expiry/index.wxml|wxss` 更像 DevTools 仍在尝试打开历史启动页（或旧编译模式）`pages/food-expiry/index`
+  - 宸茬‘璁ゅ綋鍓嶆簮鐮佷笌缂栬瘧浜х墿閮戒笉鍐嶅寘鍚?`pages/food-expiry/index`锛?
+    - `src/app.config.ts` 涓?`dist/app.json` 浠呬繚鐣?`pages/expiry/index` / `pages/expiry-edit/index`
+    - `dist/pages/food-expiry` 鐩綍瀹為檯涓嶅瓨鍦紙涓庘€滄棫椤甸潰宸插垹闄も€濆喅绛栦竴鑷达級
+  - 宸茬‘璁?`app.json permission["scope.camera"]` 璀﹀憡鏉ヨ嚜褰撳墠閰嶇疆锛?
+    - `src/app.config.ts` 绗?81 琛屼粛澹版槑 `'scope.camera'`
+    - `dist/app.json` 绗?80 琛屼粛鍖呭惈 `"scope.camera"`
+  - 缁煎悎鍒ゆ柇锛?
+    - `scope.camera` 鏄棤鏁?`permission` 閿紝瀵艰嚧鏄惧紡 warning
+    - `ENOENT dist/pages/food-expiry/index.wxml|wxss` 鏇村儚 DevTools 浠嶅湪灏濊瘯鎵撳紑鍘嗗彶鍚姩椤碉紙鎴栨棫缂栬瘧妯″紡锛塦pages/food-expiry/index`
 - Verification:
-  - 已读取并核对：
+  - 宸茶鍙栧苟鏍稿锛?
     - `src/app.config.ts`
     - `dist/app.json`
-    - `dist/pages` 目录
-  - 当前未做代码改动，仅完成定位
+    - `dist/pages` 鐩綍
+  - 褰撳墠鏈仛浠ｇ爜鏀瑰姩锛屼粎瀹屾垚瀹氫綅
 - Next step:
-  - 在微信开发者工具中将启动页/编译模式切到 `pages/expiry/index` 或首页后重新编译
-  - 清缓存并重新编译，确认不再请求 `dist/pages/food-expiry/*`
-  - 若用户确认需要，我再提交代码修复：从 `src/app.config.ts` 移除 `permission.scope.camera`
+  - 鍦ㄥ井淇″紑鍙戣€呭伐鍏蜂腑灏嗗惎鍔ㄩ〉/缂栬瘧妯″紡鍒囧埌 `pages/expiry/index` 鎴栭椤靛悗閲嶆柊缂栬瘧
+  - 娓呯紦瀛樺苟閲嶆柊缂栬瘧锛岀‘璁や笉鍐嶈姹?`dist/pages/food-expiry/*`
+  - 鑻ョ敤鎴风‘璁ら渶瑕侊紝鎴戝啀鎻愪氦浠ｇ爜淇锛氫粠 `src/app.config.ts` 绉婚櫎 `permission.scope.camera`
 
-- Task: 继续修复 DevTools `scope.camera` + `ENOENT dist/pages/food-expiry/*`
-- Status: done（已完成代码修复并触发 `dev:weapp` 开发编译产物更新；运行态由用户自行验证）
+- Task: 缁х画淇 DevTools `scope.camera` + `ENOENT dist/pages/food-expiry/*`
+- Status: done锛堝凡瀹屾垚浠ｇ爜淇骞惰Е鍙?`dev:weapp` 寮€鍙戠紪璇戜骇鐗╂洿鏂帮紱杩愯鎬佺敱鐢ㄦ埛鑷楠岃瘉锛?
 - Scope:
-  - 前端配置修复：
-    - `src/app.config.ts` 删除无效 `permission.scope.camera`
-  - 兼容旧启动页缓存：
-    - `src/app.config.ts` 增加兼容路由 `pages/food-expiry/index`
-    - 新增 `src/pages/food-expiry/index.tsx`（进入后自动跳转 `/pages/expiry/index`）
-    - 新增 `src/pages/food-expiry/index.config.ts`
-    - 新增 `src/pages/food-expiry/index.scss`
-  - 编译产物确认：
-    - `dist/app.json` 已包含 `pages/food-expiry/index`，且不再包含 `scope.camera`
-    - `dist/pages/food-expiry/*` 已生成（`index.wxml / index.wxss` 存在）
+  - 鍓嶇閰嶇疆淇锛?
+    - `src/app.config.ts` 鍒犻櫎鏃犳晥 `permission.scope.camera`
+  - 鍏煎鏃у惎鍔ㄩ〉缂撳瓨锛?
+    - `src/app.config.ts` 澧炲姞鍏煎璺敱 `pages/food-expiry/index`
+    - 鏂板 `src/pages/food-expiry/index.tsx`锛堣繘鍏ュ悗鑷姩璺宠浆 `/pages/expiry/index`锛?
+    - 鏂板 `src/pages/food-expiry/index.config.ts`
+    - 鏂板 `src/pages/food-expiry/index.scss`
+  - 缂栬瘧浜х墿纭锛?
+    - `dist/app.json` 宸插寘鍚?`pages/food-expiry/index`锛屼笖涓嶅啀鍖呭惈 `scope.camera`
+    - `dist/pages/food-expiry/*` 宸茬敓鎴愶紙`index.wxml / index.wxss` 瀛樺湪锛?
 - Verification:
-  - 已触发 `npm run dev:weapp`（watch 进程超时被截断，但 `dist` 已按修复结果更新）
-  - 已本地核对：
-    - `dist/app.json`：不存在 `scope.camera`
-    - `dist/pages/food-expiry/index.wxss`：文件存在
-  - 按用户最新指示“我来运行”，本轮未继续执行 `weapp-devtools` 自动化命令
+  - 宸茶Е鍙?`npm run dev:weapp`锛坵atch 杩涚▼瓒呮椂琚埅鏂紝浣?`dist` 宸叉寜淇缁撴灉鏇存柊锛?
+  - 宸叉湰鍦版牳瀵癸細
+    - `dist/app.json`锛氫笉瀛樺湪 `scope.camera`
+    - `dist/pages/food-expiry/index.wxss`锛氭枃浠跺瓨鍦?
+  - 鎸夌敤鎴锋渶鏂版寚绀衡€滄垜鏉ヨ繍琛屸€濓紝鏈疆鏈户缁墽琛?`weapp-devtools` 鑷姩鍖栧懡浠?
 - Next step:
-  - 用户在微信开发者工具中重新编译并观察是否清除上述两条报错
-  - 若仍存在缓存导致的旧页报错，可先关闭项目并重开 `D:/files/food_link`
+  - 鐢ㄦ埛鍦ㄥ井淇″紑鍙戣€呭伐鍏蜂腑閲嶆柊缂栬瘧骞惰瀵熸槸鍚︽竻闄や笂杩颁袱鏉℃姤閿?
+  - 鑻ヤ粛瀛樺湪缂撳瓨瀵艰嚧鐨勬棫椤垫姤閿欙紝鍙厛鍏抽棴椤圭洰骞堕噸寮€ `D:/files/food_link`
 
-- Task: 统计页后端 200 但前端显示“获取统计失败”
-- Status: done（已完成前端容错修复并更新 `dist/pages/stats`；运行态验证尝试受 9420 自动化端口未就绪阻塞）
+- Task: 缁熻椤靛悗绔?200 浣嗗墠绔樉绀衡€滆幏鍙栫粺璁″け璐モ€?
+- Status: done锛堝凡瀹屾垚鍓嶇瀹归敊淇骞舵洿鏂?`dist/pages/stats`锛涜繍琛屾€侀獙璇佸皾璇曞彈 9420 鑷姩鍖栫鍙ｆ湭灏辩华闃诲锛?
 - Scope:
-  - 根因定位：
-    - `src/pages/stats/index.tsx` 的 `fetchStats` 在拿到云端 200 后，仍会无条件解析本地 `body_metrics_storage`
-    - 当本地缓存结构脏数据（缺字段/旧结构）时，会在 `weightEntries.map` 或 `Object.values(waterByDate)` 阶段抛错，最终落到 `setError('获取统计失败')`
-  - 修复内容：
-    - `src/pages/stats/index.tsx` 新增 `normalizeStoredBodyMetrics(...)`，对本地缓存做强校验/清洗
-    - `fetchStats` 改为“仅在云端缺数据时才读取本地缓存兜底”，不再让本地解析影响云端主链路
-    - 水分/体重趋势计算增加数值兜底，避免 `undefined` 参与运算
-    - `statsRes.body_metrics` 补 `today_water` 默认值，避免后续渲染链路空值波动
-    - catch 中新增 `console.error('[stats] fetchStats failed:', e)` 便于下次快速定位真实异常
-  - 编译产物确认：
-    - `dist/pages/stats/index.js` 已包含 `normalizeStoredBodyMetrics` 与 `fetchStats failed` 日志语句
-    - `dist/pages/stats/index.js` 已包含 `today_water` 兜底写入逻辑
+  - 鏍瑰洜瀹氫綅锛?
+    - `src/pages/stats/index.tsx` 鐨?`fetchStats` 鍦ㄦ嬁鍒颁簯绔?200 鍚庯紝浠嶄細鏃犳潯浠惰В鏋愭湰鍦?`body_metrics_storage`
+    - 褰撴湰鍦扮紦瀛樼粨鏋勮剰鏁版嵁锛堢己瀛楁/鏃х粨鏋勶級鏃讹紝浼氬湪 `weightEntries.map` 鎴?`Object.values(waterByDate)` 闃舵鎶涢敊锛屾渶缁堣惤鍒?`setError('鑾峰彇缁熻澶辫触')`
+  - 淇鍐呭锛?
+    - `src/pages/stats/index.tsx` 鏂板 `normalizeStoredBodyMetrics(...)`锛屽鏈湴缂撳瓨鍋氬己鏍￠獙/娓呮礂
+    - `fetchStats` 鏀逛负鈥滀粎鍦ㄤ簯绔己鏁版嵁鏃舵墠璇诲彇鏈湴缂撳瓨鍏滃簳鈥濓紝涓嶅啀璁╂湰鍦拌В鏋愬奖鍝嶄簯绔富閾捐矾
+    - 姘村垎/浣撻噸瓒嬪娍璁＄畻澧炲姞鏁板€煎厹搴曪紝閬垮厤 `undefined` 鍙備笌杩愮畻
+    - `statsRes.body_metrics` 琛?`today_water` 榛樿鍊硷紝閬垮厤鍚庣画娓叉煋閾捐矾绌哄€兼尝鍔?
+    - catch 涓柊澧?`console.error('[stats] fetchStats failed:', e)` 渚夸簬涓嬫蹇€熷畾浣嶇湡瀹炲紓甯?
+  - 缂栬瘧浜х墿纭锛?
+    - `dist/pages/stats/index.js` 宸插寘鍚?`normalizeStoredBodyMetrics` 涓?`fetchStats failed` 鏃ュ織璇彞
+    - `dist/pages/stats/index.js` 宸插寘鍚?`today_water` 鍏滃簳鍐欏叆閫昏緫
 - Verification:
-  - 已触发 `npm run dev:weapp`（watch 进程超时截断，但 `dist/pages/stats/index.js` 时间戳与内容均已更新）
-  - 已尝试 `weapp-devtools` 运行态验证：`mrc where --port 9420`，当前返回连接失败（目标窗口未开启自动化端口）
+  - 宸茶Е鍙?`npm run dev:weapp`锛坵atch 杩涚▼瓒呮椂鎴柇锛屼絾 `dist/pages/stats/index.js` 鏃堕棿鎴充笌鍐呭鍧囧凡鏇存柊锛?
+  - 宸插皾璇?`weapp-devtools` 杩愯鎬侀獙璇侊細`mrc where --port 9420`锛屽綋鍓嶈繑鍥炶繛鎺ュけ璐ワ紙鐩爣绐楀彛鏈紑鍚嚜鍔ㄥ寲绔彛锛?
 - Next step:
-  - 用户在微信开发者工具手动复测“分析页 -> 统计页”
-  - 若仍报错，优先把控制台里 `[stats] fetchStats failed:` 后面的真实异常贴出来继续定位
+  - 鐢ㄦ埛鍦ㄥ井淇″紑鍙戣€呭伐鍏锋墜鍔ㄥ娴嬧€滃垎鏋愰〉 -> 缁熻椤碘€?
+  - 鑻ヤ粛鎶ラ敊锛屼紭鍏堟妸鎺у埗鍙伴噷 `[stats] fetchStats failed:` 鍚庨潰鐨勭湡瀹炲紓甯歌创鍑烘潵缁х画瀹氫綅
 
-- Task: 「我的」页进入时报错 `ReferenceError: extraPkgUrl is not defined`
-- Status: done（已修复运行时引用错误；`weapp-devtools` 已完成日志级验证，截图命令在当前 DevTools 自动化环境下卡住未落盘）
+- Task: 銆屾垜鐨勩€嶉〉杩涘叆鏃舵姤閿?`ReferenceError: extraPkgUrl is not defined`
+- Status: done锛堝凡淇杩愯鏃跺紩鐢ㄩ敊璇紱`weapp-devtools` 宸插畬鎴愭棩蹇楃骇楠岃瘉锛屾埅鍥惧懡浠ゅ湪褰撳墠 DevTools 鑷姩鍖栫幆澧冧笅鍗′綇鏈惤鐩橈級
 - Scope:
-  - 根因定位：
-    - `src/pages/profile/index.tsx` 在会员入口处直接调用 `extraPkgUrl('/pages/pro-membership/index')`
-    - 该文件遗漏了 `../../utils/subpackage-extra` 的 `extraPkgUrl` 导入，导致进入「我的」页渲染时直接抛 `ReferenceError`
-  - 修复内容：
-    - `src/pages/profile/index.tsx` 新增 `extraPkgUrl` import
-    - 同页里原本仍写死为主包路径的分包跳转一并收口到 `extraPkgUrl(...)`
-      - 健康档案 / 健康档案查看
-      - 收藏餐食
-      - 食物保质期
-      - 关于我们
-      - 好友管理
-      - 隐私设置
-      - 个人设置
-  - 影响面：
-    - 修复「我的」页首屏渲染崩溃
-    - 同时避免该页内后续点击分包页面时再出现错误路由
+  - 鏍瑰洜瀹氫綅锛?
+    - `src/pages/profile/index.tsx` 鍦ㄤ細鍛樺叆鍙ｅ鐩存帴璋冪敤 `extraPkgUrl('/pages/pro-membership/index')`
+    - 璇ユ枃浠堕仐婕忎簡 `../../utils/subpackage-extra` 鐨?`extraPkgUrl` 瀵煎叆锛屽鑷磋繘鍏ャ€屾垜鐨勩€嶉〉娓叉煋鏃剁洿鎺ユ姏 `ReferenceError`
+  - 淇鍐呭锛?
+    - `src/pages/profile/index.tsx` 鏂板 `extraPkgUrl` import
+    - 鍚岄〉閲屽師鏈粛鍐欐涓轰富鍖呰矾寰勭殑鍒嗗寘璺宠浆涓€骞舵敹鍙ｅ埌 `extraPkgUrl(...)`
+      - 鍋ュ悍妗ｆ / 鍋ュ悍妗ｆ鏌ョ湅
+      - 鏀惰棌椁愰
+      - 椋熺墿淇濊川鏈?
+      - 鍏充簬鎴戜滑
+      - 濂藉弸绠＄悊
+      - 闅愮璁剧疆
+      - 涓汉璁剧疆
+  - 褰卞搷闈細
+    - 淇銆屾垜鐨勩€嶉〉棣栧睆娓叉煋宕╂簝
+    - 鍚屾椂閬垮厤璇ラ〉鍐呭悗缁偣鍑诲垎鍖呴〉闈㈡椂鍐嶅嚭鐜伴敊璇矾鐢?
 - Verification:
-  - 已执行 `npm run dev:weapp`，`dist/` 已重新生成
-  - 已按项目要求使用 `weapp-devtools`
+  - 宸叉墽琛?`npm run dev:weapp`锛宍dist/` 宸查噸鏂扮敓鎴?
+  - 宸叉寜椤圭洰瑕佹眰浣跨敤 `weapp-devtools`
     - `cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
-    - `mrc errors 20 --port 9420` 返回 `0`
-    - `mrc logs error 20 --port 9420` 返回 `0`
-  - 阻塞：
-    - `mrc pageInfo`、`mrc screenshot` 以及 `miniprogram-automator` 的页面回执类命令在当前宿主环境持续卡住，未能拿到截图文件
+    - `mrc errors 20 --port 9420` 杩斿洖 `0`
+    - `mrc logs error 20 --port 9420` 杩斿洖 `0`
+  - 闃诲锛?
+    - `mrc pageInfo`銆乣mrc screenshot` 浠ュ強 `miniprogram-automator` 鐨勯〉闈㈠洖鎵х被鍛戒护鍦ㄥ綋鍓嶅涓荤幆澧冩寔缁崱浣忥紝鏈兘鎷垮埌鎴浘鏂囦欢
 - Next step:
-  - 用户如需补截图证据，可在当前已连通的 DevTools 自动化会话里再试一次手动截图，或待宿主截图能力恢复后补跑 `mrc screenshot`
+  - 鐢ㄦ埛濡傞渶琛ユ埅鍥捐瘉鎹紝鍙湪褰撳墠宸茶繛閫氱殑 DevTools 鑷姩鍖栦細璇濋噷鍐嶈瘯涓€娆℃墜鍔ㄦ埅鍥撅紝鎴栧緟瀹夸富鎴浘鑳藉姏鎭㈠鍚庤ˉ璺?`mrc screenshot`
 
-- Task: 会员充值页适配黑色主题 + 给锦恢补进阶版半年会员
-- Status: done（页面深色主题已落地并重新编译；数据库已完成手动会员追加；`weapp-devtools` 已做运行态尝试但截图仍受宿主自动化阻塞）
+- Task: 浼氬憳鍏呭€奸〉閫傞厤榛戣壊涓婚 + 缁欓敠鎭㈣ˉ杩涢樁鐗堝崐骞翠細鍛?
+- Status: done锛堥〉闈㈡繁鑹蹭富棰樺凡钀藉湴骞堕噸鏂扮紪璇戯紱鏁版嵁搴撳凡瀹屾垚鎵嬪姩浼氬憳杩藉姞锛沗weapp-devtools` 宸插仛杩愯鎬佸皾璇曚絾鎴浘浠嶅彈瀹夸富鑷姩鍖栭樆濉烇級
 - Scope:
-  - 前端：
+  - 鍓嶇锛?
     - `src/packageExtra/pages/pro-membership/index.tsx`
-      - 接入 `useAppColorScheme`
-      - 页面进入与主题切换时同步调用 `applyThemeNavigationBar(...)`
-      - 页面根节点追加 `membership-page--dark` class
+      - 鎺ュ叆 `useAppColorScheme`
+      - 椤甸潰杩涘叆涓庝富棰樺垏鎹㈡椂鍚屾璋冪敤 `applyThemeNavigationBar(...)`
+      - 椤甸潰鏍硅妭鐐硅拷鍔?`membership-page--dark` class
     - `src/packageExtra/pages/pro-membership/index.scss`
-      - 新增整页深色主题覆盖：Hero、升级提示、档位卡、周期卡、价格卡、对比表、积分说明、状态卡、按钮、测试区
-      - 目标是把原先白卡强对比样式收成暗底玻璃卡 + 绿色高亮，更贴合黑色主题
-  - 数据库：
-    - 已定位用户 `锦恢`
+      - 鏂板鏁撮〉娣辫壊涓婚瑕嗙洊锛欻ero銆佸崌绾ф彁绀恒€佹。浣嶅崱銆佸懆鏈熷崱銆佷环鏍煎崱銆佸姣旇〃銆佺Н鍒嗚鏄庛€佺姸鎬佸崱銆佹寜閽€佹祴璇曞尯
+      - 鐩爣鏄妸鍘熷厛鐧藉崱寮哄姣旀牱寮忔敹鎴愭殫搴曠幓鐠冨崱 + 缁胯壊楂樹寒锛屾洿璐村悎榛戣壊涓婚
+  - 鏁版嵁搴擄細
+    - 宸插畾浣嶇敤鎴?`閿︽仮`
       - `user_id=8826bc8d-81ad-40a4-bc42-6cc30506b8c3`
-    - 已读取到该用户原有会员记录：
-      - 原 `current_plan_code=pro_monthly`
-      - 原 `expires_at=2027-04-03T13:09:25.426678+00:00`
-      - 原 `daily_credits=0`
-    - 因系统当前没有正式的“半年卡”套餐编码，为避免缩短原权益，按“在现有权益基础上追加 6 个月，并切到进阶版权益”处理：
-      - 更新为 `current_plan_code=advanced_yearly`
+    - 宸茶鍙栧埌璇ョ敤鎴峰師鏈変細鍛樿褰曪細
+      - 鍘?`current_plan_code=pro_monthly`
+      - 鍘?`expires_at=2027-04-03T13:09:25.426678+00:00`
+      - 鍘?`daily_credits=0`
+    - 鍥犵郴缁熷綋鍓嶆病鏈夋寮忕殑鈥滃崐骞村崱鈥濆椁愮紪鐮侊紝涓洪伩鍏嶇缉鐭師鏉冪泭锛屾寜鈥滃湪鐜版湁鏉冪泭鍩虹涓婅拷鍔?6 涓湀锛屽苟鍒囧埌杩涢樁鐗堟潈鐩娾€濆鐞嗭細
+      - 鏇存柊涓?`current_plan_code=advanced_yearly`
       - `daily_credits=40`
       - `expires_at=2027-10-03T13:09:25.426678+00:00`
       - `updated_at/last_paid_at=2026-04-24T19:51:22.409101+00:00`
 - Verification:
-  - 静态检查：
-    - `eslint src/packageExtra/pages/pro-membership/index.tsx` 通过
-  - 编译验证：
-    - `npm run dev:weapp` 已重新生成会员页产物
-    - `dist/packageExtra/pages/pro-membership/index.js|index.wxss` 已包含本轮深色主题与导航栏主题切换代码
-  - 运行态验证（按项目要求使用 `weapp-devtools`）：
-    - `mrc errors 20 --port 9420` 返回 `0`
-    - 已尝试 `mrc relaunch` / `switchTab` / `pageInfo` / `screenshot`
-    - 已尝试 `miniprogram-automator` 直连 9420 导航 + 截图
-    - 当前宿主环境仍会在页面回执/截图阶段超时，未成功产出截图文件
+  - 闈欐€佹鏌ワ細
+    - `eslint src/packageExtra/pages/pro-membership/index.tsx` 閫氳繃
+  - 缂栬瘧楠岃瘉锛?
+    - `npm run dev:weapp` 宸查噸鏂扮敓鎴愪細鍛橀〉浜х墿
+    - `dist/packageExtra/pages/pro-membership/index.js|index.wxss` 宸插寘鍚湰杞繁鑹蹭富棰樹笌瀵艰埅鏍忎富棰樺垏鎹唬鐮?
+  - 杩愯鎬侀獙璇侊紙鎸夐」鐩姹備娇鐢?`weapp-devtools`锛夛細
+    - `mrc errors 20 --port 9420` 杩斿洖 `0`
+    - 宸插皾璇?`mrc relaunch` / `switchTab` / `pageInfo` / `screenshot`
+    - 宸插皾璇?`miniprogram-automator` 鐩磋繛 9420 瀵艰埅 + 鎴浘
+    - 褰撳墠瀹夸富鐜浠嶄細鍦ㄩ〉闈㈠洖鎵?鎴浘闃舵瓒呮椂锛屾湭鎴愬姛浜у嚭鎴浘鏂囦欢
 - Next step:
-  - 若需要留视觉证据，建议在当前 DevTools 已连通状态下手动打开会员页截一张，或等自动化截图恢复后补跑
+  - 鑻ラ渶瑕佺暀瑙嗚璇佹嵁锛屽缓璁湪褰撳墠 DevTools 宸茶繛閫氱姸鎬佷笅鎵嬪姩鎵撳紑浼氬憳椤垫埅涓€寮狅紝鎴栫瓑鑷姩鍖栨埅鍥炬仮澶嶅悗琛ヨ窇
 
-- Task: 继续优化会员充值页“选择档位 / 选择周期 / 定价卡”视觉
-- Status: done（已按参考图进一步优化结构与层级；`weapp-devtools` 日志验证通过，但本轮 `dev:weapp` 首轮完整产物仍未等到落盘）
+- Task: 缁х画浼樺寲浼氬憳鍏呭€奸〉鈥滈€夋嫨妗ｄ綅 / 閫夋嫨鍛ㄦ湡 / 瀹氫环鍗♀€濊瑙?
+- Status: done锛堝凡鎸夊弬鑰冨浘杩涗竴姝ヤ紭鍖栫粨鏋勪笌灞傜骇锛沗weapp-devtools` 鏃ュ織楠岃瘉閫氳繃锛屼絾鏈疆 `dev:weapp` 棣栬疆瀹屾暣浜х墿浠嶆湭绛夊埌钀界洏锛?
 - Scope:
   - `src/packageExtra/pages/pro-membership/index.tsx`
-    - 档位卡新增标题图标（轻度/标准/进阶）
-    - 周期卡新增：
-      - 年卡“推荐”角标
-      - 更强的价格排版（`¥` / 主价格 / 单位分层）
-      - 底部 `30 / 90 / 365` 水印
-      - 标题区右侧辅助提示文案
-    - 已选套餐价格卡新增原价行（当 `original_amount > amount` 时展示）
+    - 妗ｄ綅鍗℃柊澧炴爣棰樺浘鏍囷紙杞诲害/鏍囧噯/杩涢樁锛?
+    - 鍛ㄦ湡鍗℃柊澧烇細
+      - 骞村崱鈥滄帹鑽愨€濊鏍?
+      - 鏇村己鐨勪环鏍兼帓鐗堬紙`楼` / 涓讳环鏍?/ 鍗曚綅鍒嗗眰锛?
+      - 搴曢儴 `30 / 90 / 365` 姘村嵃
+      - 鏍囬鍖哄彸渚ц緟鍔╂彁绀烘枃妗?
+    - 宸查€夊椁愪环鏍煎崱鏂板鍘熶环琛岋紙褰?`original_amount > amount` 鏃跺睍绀猴級
   - `src/packageExtra/pages/pro-membership/index.scss`
-    - 收紧档位卡比例、标题头部、数字大小、摘要区留白
-    - 周期卡改为更接近参考图的暗色大卡结构、推荐角标和底部水印
-    - 定价总览卡增加原价删除线层级
-    - 深色主题下同步适配新增结构
+    - 鏀剁揣妗ｄ綅鍗℃瘮渚嬨€佹爣棰樺ご閮ㄣ€佹暟瀛楀ぇ灏忋€佹憳瑕佸尯鐣欑櫧
+    - 鍛ㄦ湡鍗℃敼涓烘洿鎺ヨ繎鍙傝€冨浘鐨勬殫鑹插ぇ鍗＄粨鏋勩€佹帹鑽愯鏍囧拰搴曢儴姘村嵃
+    - 瀹氫环鎬昏鍗″鍔犲師浠峰垹闄ょ嚎灞傜骇
+    - 娣辫壊涓婚涓嬪悓姝ラ€傞厤鏂板缁撴瀯
 - Verification:
-  - `eslint src/packageExtra/pages/pro-membership/index.tsx` 未返回报错
-  - `weapp-devtools`：
-    - `mrc errors 20 --port 9420` 返回 `0`
-    - `mrc logs error 20 --port 9420` 返回 `0`
-  - 阻塞：
-    - 本轮 `npm run dev:weapp` 启动后，长时间停留在 `transforming...`
-    - 当前 `dist/` 仅见 `project.config.json`，未能在本轮等待窗口内拿到完整会员页产物与截图文件
+  - `eslint src/packageExtra/pages/pro-membership/index.tsx` 鏈繑鍥炴姤閿?
+  - `weapp-devtools`锛?
+    - `mrc errors 20 --port 9420` 杩斿洖 `0`
+    - `mrc logs error 20 --port 9420` 杩斿洖 `0`
+  - 闃诲锛?
+    - 鏈疆 `npm run dev:weapp` 鍚姩鍚庯紝闀挎椂闂村仠鐣欏湪 `transforming...`
+    - 褰撳墠 `dist/` 浠呰 `project.config.json`锛屾湭鑳藉湪鏈疆绛夊緟绐楀彛鍐呮嬁鍒板畬鏁翠細鍛橀〉浜х墿涓庢埅鍥炬枃浠?
 
-- Task: 公共食物库页面深度改版
-- Status: done（已提交 dev 分支）
+- Task: 鍏叡椋熺墿搴撻〉闈㈡繁搴︽敼鐗?
+- Status: done锛堝凡鎻愪氦 dev 鍒嗘敮锛?
 - Scope:
   - `src/packageExtra/pages/food-library/index.tsx`
-    - Tab 布局改为 space-around + Swiper 左右滑动切换
-    - 筛选按钮增加 iconfont 图标（`icon-filter-filling`）
-    - 点击筛选按钮展开下拉浮层（绝对定位 + 阴影），选项：全部 / 适合减脂
-    - 列表页底部新增「结果如果不准确的话，可以点击向我们提交反馈」入口
+    - Tab 甯冨眬鏀逛负 space-around + Swiper 宸﹀彸婊戝姩鍒囨崲
+    - 绛涢€夋寜閽鍔?iconfont 鍥炬爣锛坄icon-filter-filling`锛?
+    - 鐐瑰嚮绛涢€夋寜閽睍寮€涓嬫媺娴眰锛堢粷瀵瑰畾浣?+ 闃村奖锛夛紝閫夐」锛氬叏閮?/ 閫傚悎鍑忚剛
+    - 鍒楄〃椤靛簳閮ㄦ柊澧炪€岀粨鏋滃鏋滀笉鍑嗙‘鐨勮瘽锛屽彲浠ョ偣鍑诲悜鎴戜滑鎻愪氦鍙嶉銆嶅叆鍙?
   - `src/packageExtra/pages/food-library/index.scss`
-    - 全部绿色统一为首页低饱和绿 `#5cb896`（替换原来的 `#00bc7d` / `#4a9e7f`）
-    - 卡片改为左图右文横向布局
-    - 筛选下拉浮层样式：absolute 定位、圆角、阴影
-    - sort-item active 下划线同步为 `#5cb896`
+    - 鍏ㄩ儴缁胯壊缁熶竴涓洪椤典綆楗卞拰缁?`#5cb896`锛堟浛鎹㈠師鏉ョ殑 `#00bc7d` / `#4a9e7f`锛?
+    - 鍗＄墖鏀逛负宸﹀浘鍙虫枃妯悜甯冨眬
+    - 绛涢€変笅鎷夋诞灞傛牱寮忥細absolute 瀹氫綅銆佸渾瑙掋€侀槾褰?
+    - sort-item active 涓嬪垝绾垮悓姝ヤ负 `#5cb896`
   - `src/packageExtra/pages/food-library-detail/index.tsx`
-    - 底部操作栏下方新增「信息有误？点击修正」入口
-    - 点击后弹出修正内容输入框，提交到 `submitPublicFoodLibraryFeedback`（带 libraryItemId）
+    - 搴曢儴鎿嶄綔鏍忎笅鏂规柊澧炪€屼俊鎭湁璇紵鐐瑰嚮淇銆嶅叆鍙?
+    - 鐐瑰嚮鍚庡脊鍑轰慨姝ｅ唴瀹硅緭鍏ユ锛屾彁浜ゅ埌 `submitPublicFoodLibraryFeedback`锛堝甫 libraryItemId锛?
   - `src/packageExtra/pages/food-library-detail/index.scss`
-    - correction-bar 样式：fixed 定位、居中对齐
-    - correction-link 颜色为 `#5cb896`
+    - correction-bar 鏍峰紡锛歠ixed 瀹氫綅銆佸眳涓榻?
+    - correction-link 棰滆壊涓?`#5cb896`
   - `src/styles/fl-color-scheme-dark.scss`
-    - 新增 filter-dropdown-panel、filter-dropdown-option、correction-bar 暗色覆盖
+    - 鏂板 filter-dropdown-panel銆乫ilter-dropdown-option銆乧orrection-bar 鏆楄壊瑕嗙洊
 - Verification:
-  - `npm run build:weapp`：通过
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
-  - `mrc errors 20 --port 9420`：`0`
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/food-library/index`
+  - `mrc errors 20 --port 9420`锛歚0`
 - Notes:
-  - 微信开发者工具自动化 `mrc screenshot` 当前环境中偶发超时，本轮截图验证以列表页 + 筛选面板为主；详情页修正入口截图待后续补
-  - 提交记录：`189880b`
+  - 寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲 `mrc screenshot` 褰撳墠鐜涓伓鍙戣秴鏃讹紝鏈疆鎴浘楠岃瘉浠ュ垪琛ㄩ〉 + 绛涢€夐潰鏉夸负涓伙紱璇︽儏椤典慨姝ｅ叆鍙ｆ埅鍥惧緟鍚庣画琛?
+  - 鎻愪氦璁板綍锛歚189880b`
 
-- Task: 搜索/排序/筛选切换时清空列表并显示 spinner
-- Status: done（已提交 dev 分支）
+- Task: 鎼滅储/鎺掑簭/绛涢€夊垏鎹㈡椂娓呯┖鍒楄〃骞舵樉绀?spinner
+- Status: done锛堝凡鎻愪氦 dev 鍒嗘敮锛?
 - Scope:
   - `src/packageExtra/pages/food-library/index.tsx`
-    - 新增 `refreshList()` 函数：先 `setList([])` 清空列表 + `setLoading(true)` 显示 spinner + `clearCache()` 清除缓存，再请求数据
-    - `handleSearch` 搜索后直接调用 `refreshList`
-    - 排序点击（最新/最热/评分）设置状态后直接调用 `refreshList`
-    - 筛选点击（全部/适合减脂）设置状态 + 关闭面板后直接调用 `refreshList`
-    - `useEffect` 依赖从 `[sortBy, filterFatLoss, searchMerchant, loggedIn, tabMode]` 收敛为 `[loggedIn, tabMode]`，避免与用户主动操作重复触发加载
+    - 鏂板 `refreshList()` 鍑芥暟锛氬厛 `setList([])` 娓呯┖鍒楄〃 + `setLoading(true)` 鏄剧ず spinner + `clearCache()` 娓呴櫎缂撳瓨锛屽啀璇锋眰鏁版嵁
+    - `handleSearch` 鎼滅储鍚庣洿鎺ヨ皟鐢?`refreshList`
+    - 鎺掑簭鐐瑰嚮锛堟渶鏂?鏈€鐑?璇勫垎锛夎缃姸鎬佸悗鐩存帴璋冪敤 `refreshList`
+    - 绛涢€夌偣鍑伙紙鍏ㄩ儴/閫傚悎鍑忚剛锛夎缃姸鎬?+ 鍏抽棴闈㈡澘鍚庣洿鎺ヨ皟鐢?`refreshList`
+    - `useEffect` 渚濊禆浠?`[sortBy, filterFatLoss, searchMerchant, loggedIn, tabMode]` 鏀舵暃涓?`[loggedIn, tabMode]`锛岄伩鍏嶄笌鐢ㄦ埛涓诲姩鎿嶄綔閲嶅瑙﹀彂鍔犺浇
 - Verification:
-  - `npm run lint`：通过
-  - `npm run build:weapp`：通过
-  - `mrc where --port 9420`：当前页为 `packageExtra/pages/food-library/index`
-  - `mrc tap .sort-filter-btn --port 9420`：点击成功
-  - `mrc tap .filter-dropdown-option --port 9420`：点击成功
-  - `mrc errors 10 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc where --port 9420`锛氬綋鍓嶉〉涓?`packageExtra/pages/food-library/index`
+  - `mrc tap .sort-filter-btn --port 9420`锛氱偣鍑绘垚鍔?
+  - `mrc tap .filter-dropdown-option --port 9420`锛氱偣鍑绘垚鍔?
+  - `mrc errors 10 --port 9420`锛歚0`
 - Notes:
-  - 提交记录：`296af07`
+  - 鎻愪氦璁板綍锛歚296af07`
 
-- Task: 优化圈子社区接口性能（好友排名、互动消息、好友动态）
-- Status: done（已提交 dev 分支）
+- Task: 浼樺寲鍦堝瓙绀惧尯鎺ュ彛鎬ц兘锛堝ソ鍙嬫帓鍚嶃€佷簰鍔ㄦ秷鎭€佸ソ鍙嬪姩鎬侊級
+- Status: done锛堝凡鎻愪氦 dev 鍒嗘敮锛?
 - Scope:
   - `backend/database.py`
-    - `get_friend_ids`：合并两次查询为一次（`or_` 条件），减少一次网络往返；增加 5 分钟内存缓存
-    - `get_friend_circle_week_checkin_leaderboard`：去掉 while 循环分页，改为一次批量拉取；增加 5 分钟内存缓存（按周起始时间作为 key）
-    - `get_feed_likes_for_records`：合并两次查询为一次（同时获取 record_id + user_id，Python 中同时统计点赞数和当前用户是否点赞）
-    - `list_feed_interaction_notifications`：使用外键关联查询 `actor:weapp_user!actor_user_id(id, nickname, avatar)` 一次性获取通知 + 用户信息
-    - `count_unread_feed_interaction_notifications`：使用 `select("*", count="exact").limit(0)` 直接获取计数，避免传输行数据
+    - `get_friend_ids`锛氬悎骞朵袱娆℃煡璇负涓€娆★紙`or_` 鏉′欢锛夛紝鍑忓皯涓€娆＄綉缁滃線杩旓紱澧炲姞 5 鍒嗛挓鍐呭瓨缂撳瓨
+    - `get_friend_circle_week_checkin_leaderboard`锛氬幓鎺?while 寰幆鍒嗛〉锛屾敼涓轰竴娆℃壒閲忔媺鍙栵紱澧炲姞 5 鍒嗛挓鍐呭瓨缂撳瓨锛堟寜鍛ㄨ捣濮嬫椂闂翠綔涓?key锛?
+    - `get_feed_likes_for_records`锛氬悎骞朵袱娆℃煡璇负涓€娆★紙鍚屾椂鑾峰彇 record_id + user_id锛孭ython 涓悓鏃剁粺璁＄偣璧炴暟鍜屽綋鍓嶇敤鎴锋槸鍚︾偣璧烇級
+    - `list_feed_interaction_notifications`锛氫娇鐢ㄥ閿叧鑱旀煡璇?`actor:weapp_user!actor_user_id(id, nickname, avatar)` 涓€娆℃€ц幏鍙栭€氱煡 + 鐢ㄦ埛淇℃伅
+    - `count_unread_feed_interaction_notifications`锛氫娇鐢?`select("*", count="exact").limit(0)` 鐩存帴鑾峰彇璁℃暟锛岄伩鍏嶄紶杈撹鏁版嵁
   - `backend/tests/benchmark_community_apis.py`
-    - 新增基准测试脚本，分别调用原始版本和优化版本函数，各跑 10 次取平均
-    - 每次测试前清除缓存，确保公平对比
+    - 鏂板鍩哄噯娴嬭瘯鑴氭湰锛屽垎鍒皟鐢ㄥ師濮嬬増鏈拰浼樺寲鐗堟湰鍑芥暟锛屽悇璺?10 娆″彇骞冲潎
+    - 姣忔娴嬭瘯鍓嶆竻闄ょ紦瀛橈紝纭繚鍏钩瀵规瘮
 - Verification:
-  - `python -m py_compile backend/database.py`：通过
-  - `python tests/benchmark_community_apis.py`：运行成功，结果稳定
-- 优化前后速度差异（表格）：
+  - `python -m py_compile backend/database.py`锛氶€氳繃
+  - `python tests/benchmark_community_apis.py`锛氳繍琛屾垚鍔燂紝缁撴灉绋冲畾
+- 浼樺寲鍓嶅悗閫熷害宸紓锛堣〃鏍硷級锛?
 
-| 接口 | 优化前(ms) | 优化后(ms) | 节省(ms) | 提升幅度 |
+| 鎺ュ彛 | 浼樺寲鍓?ms) | 浼樺寲鍚?ms) | 鑺傜渷(ms) | 鎻愬崌骞呭害 |
 |------|-----------|-----------|---------|---------|
-| 好友排名 | 1523.33 | 1131.11 | 392.22 | 25.7% |
-| 点赞查询 | 716.70 | 362.17 | 354.52 | 49.5% |
-| 互动消息列表 | 739.08 | 384.67 | 354.41 | 48.0% |
-| 未读通知计数 | 380.48 | 392.23 | -11.76 | -3.1% |
-| **合计** | **3359.59** | **2270.18** | **1089.41** | **32.4%** |
+| 濂藉弸鎺掑悕 | 1523.33 | 1131.11 | 392.22 | 25.7% |
+| 鐐硅禐鏌ヨ | 716.70 | 362.17 | 354.52 | 49.5% |
+| 浜掑姩娑堟伅鍒楄〃 | 739.08 | 384.67 | 354.41 | 48.0% |
+| 鏈閫氱煡璁℃暟 | 380.48 | 392.23 | -11.76 | -3.1% |
+| **鍚堣** | **3359.59** | **2270.18** | **1089.41** | **32.4%** |
 
 - Notes:
-  - 测试数据：好友排名测试用户有 110 个好友，一周内 114 条记录；互动消息测试用户有 90 条通知
-  - 未读通知计数提升不明显，原因是数据量小（90 条），网络往返时间主导，SQL 层面优化收益有限
-  - 三个核心接口（好友排名、点赞查询、互动消息列表）均有显著提速，合计提升约 1.1 秒
-  - 提交记录：`c688f33`
+  - 娴嬭瘯鏁版嵁锛氬ソ鍙嬫帓鍚嶆祴璇曠敤鎴锋湁 110 涓ソ鍙嬶紝涓€鍛ㄥ唴 114 鏉¤褰曪紱浜掑姩娑堟伅娴嬭瘯鐢ㄦ埛鏈?90 鏉￠€氱煡
+  - 鏈閫氱煡璁℃暟鎻愬崌涓嶆槑鏄撅紝鍘熷洜鏄暟鎹噺灏忥紙90 鏉★級锛岀綉缁滃線杩旀椂闂翠富瀵硷紝SQL 灞傞潰浼樺寲鏀剁泭鏈夐檺
+  - 涓変釜鏍稿績鎺ュ彛锛堝ソ鍙嬫帓鍚嶃€佺偣璧炴煡璇€佷簰鍔ㄦ秷鎭垪琛級鍧囨湁鏄捐憲鎻愰€燂紝鍚堣鎻愬崌绾?1.1 绉?
+  - 鎻愪氦璁板綍锛歚c688f33`
 
-- Task: 调整公共食物库反馈入口位置
-- Status: done（已提交 dev 分支）
+- Task: 璋冩暣鍏叡椋熺墿搴撳弽棣堝叆鍙ｄ綅缃?
+- Status: done锛堝凡鎻愪氦 dev 鍒嗘敮锛?
 - Scope:
   - `src/packageExtra/pages/food-library/index.tsx`
-    - 删除列表页底部 `feedback-bar`（"结果如果不准确的话，可以点击向我们提交反馈"）
-    - `handleFeedback` 函数保留（详情页修正弹窗仍在使用）
+    - 鍒犻櫎鍒楄〃椤靛簳閮?`feedback-bar`锛?缁撴灉濡傛灉涓嶅噯纭殑璇濓紝鍙互鐐瑰嚮鍚戞垜浠彁浜ゅ弽棣?锛?
+    - `handleFeedback` 鍑芥暟淇濈暀锛堣鎯呴〉淇寮圭獥浠嶅湪浣跨敤锛?
   - `src/packageExtra/pages/food-library-detail/index.tsx`
-    - 将 `correction-bar` 从 `bottom-bar` 外部移入内部，放在 `comment-btn` 下方
-    - 新增 `comment-section` 容器包裹 `comment-btn` + `correction-bar`
+    - 灏?`correction-bar` 浠?`bottom-bar` 澶栭儴绉诲叆鍐呴儴锛屾斁鍦?`comment-btn` 涓嬫柟
+    - 鏂板 `comment-section` 瀹瑰櫒鍖呰９ `comment-btn` + `correction-bar`
   - `src/packageExtra/pages/food-library-detail/index.scss`
-    - 新增 `.comment-section`：flex 垂直布局，占满剩余空间
-    - `.correction-bar`：从 `position: fixed` 改为普通流布局，字号微调为 22rpx
+    - 鏂板 `.comment-section`锛歠lex 鍨傜洿甯冨眬锛屽崰婊″墿浣欑┖闂?
+    - `.correction-bar`锛氫粠 `position: fixed` 鏀逛负鏅€氭祦甯冨眬锛屽瓧鍙峰井璋冧负 22rpx
 - Verification:
-  - `npm run lint`：通过
-  - `npm run build:weapp`：通过
-  - `mrc errors 10 --port 9420`：`0`
+  - `npm run lint`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc errors 10 --port 9420`锛歚0`
 - Notes:
-  - 提交记录：`885fb59`
+  - 鎻愪氦璁板綍锛歚885fb59`
 
-- Task: 修复公共食物库详情页评论区交互及后端数据一致性
-- Status: done（已提交 dev 分支）
+- Task: 淇鍏叡椋熺墿搴撹鎯呴〉璇勮鍖轰氦浜掑強鍚庣鏁版嵁涓€鑷存€?
+- Status: done锛堝凡鎻愪氦 dev 鍒嗘敮锛?
 - Scope:
   - `src/packageExtra/pages/food-library-detail/index.tsx`
-    - Textarea 增加 `autoFocus` + `fixed` 属性，弹窗打开后自动聚焦
+    - Textarea 澧炲姞 `autoFocus` + `fixed` 灞炴€э紝寮圭獥鎵撳紑鍚庤嚜鍔ㄨ仛鐒?
   - `src/packageExtra/pages/food-library-detail/index.scss`
-    - `.comment-input` 边框从 `transparent` 改为 `#e5e7eb`，提高输入框可见性
+    - `.comment-input` 杈规浠?`transparent` 鏀逛负 `#e5e7eb`锛屾彁楂樿緭鍏ユ鍙鎬?
   - `backend/database.py`
-    - 新增 `_update_public_food_library_comment_stats_sync()`：在插入评论后自动更新 `public_food_library` 表的 `comment_count` 和 `avg_rating`
-    - `list_public_food_library_comments()`：排序从 `created_at ASC` 改为 `DESC`，与前端乐观更新顺序一致
+    - 鏂板 `_update_public_food_library_comment_stats_sync()`锛氬湪鎻掑叆璇勮鍚庤嚜鍔ㄦ洿鏂?`public_food_library` 琛ㄧ殑 `comment_count` 鍜?`avg_rating`
+    - `list_public_food_library_comments()`锛氭帓搴忎粠 `created_at ASC` 鏀逛负 `DESC`锛屼笌鍓嶇涔愯鏇存柊椤哄簭涓€鑷?
 - Verification:
-  - `python -m py_compile backend/database.py`：通过
-  - `npm run lint`：通过
-  - `npm run build:weapp`：通过
+  - `python -m py_compile backend/database.py`锛氶€氳繃
+  - `npm run lint`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
 - Notes:
-  - 后端评论接口此前已实现完整（POST / GET），但缺少主表统计字段的自动更新，导致列表页评论数/评分显示不准确
-  - 提交记录：`516d1ea`
+  - 鍚庣璇勮鎺ュ彛姝ゅ墠宸插疄鐜板畬鏁达紙POST / GET锛夛紝浣嗙己灏戜富琛ㄧ粺璁″瓧娈电殑鑷姩鏇存柊锛屽鑷村垪琛ㄩ〉璇勮鏁?璇勫垎鏄剧ず涓嶅噯纭?
+  - 鎻愪氦璁板綍锛歚516d1ea`
 
-- Task: 首页编辑目标按钮改为 stats 页 hero-badge 风格
-- Status: done（已提交 dev 分支）
+- Task: 棣栭〉缂栬緫鐩爣鎸夐挳鏀逛负 stats 椤?hero-badge 椋庢牸
+- Status: done锛堝凡鎻愪氦 dev 鍒嗘敮锛?
 - Scope:
   - `src/pages/index/index.scss`
-    - `.target-edit-btn`：背景从 `#f3f4f6` 灰色改为 `rgb(255 255 255 / 94%)` 白色半透明；去掉边框；增加 box-shadow 胶囊阴影
-    - `.target-edit-icon`：从 `#6b7280` 灰色改为 `#5cb896` 品牌绿
-    - `.target-edit-text`：从 `#6b7280` 灰色 `#6b7280` 改为 `#2f7f62` 深绿；字重从 400 改为 600
+    - `.target-edit-btn`锛氳儗鏅粠 `#f3f4f6` 鐏拌壊鏀逛负 `rgb(255 255 255 / 94%)` 鐧借壊鍗婇€忔槑锛涘幓鎺夎竟妗嗭紱澧炲姞 box-shadow 鑳跺泭闃村奖
+    - `.target-edit-icon`锛氫粠 `#6b7280` 鐏拌壊鏀逛负 `#5cb896` 鍝佺墝缁?
+    - `.target-edit-text`锛氫粠 `#6b7280` 鐏拌壊 `#6b7280` 鏀逛负 `#2f7f62` 娣辩豢锛涘瓧閲嶄粠 400 鏀逛负 600
   - `src/styles/fl-color-scheme-dark.scss`
-    - `.target-edit-btn`：暗色下改为 `rgb(30 40 36 / 85%)` 深半透明底
-    - `.target-edit-icon`：暗色下改为 `$fl-dark-accent`
-    - `.target-edit-text`：暗色下改为 `#7dd3b0`
+    - `.target-edit-btn`锛氭殫鑹蹭笅鏀逛负 `rgb(30 40 36 / 85%)` 娣卞崐閫忔槑搴?
+    - `.target-edit-icon`锛氭殫鑹蹭笅鏀逛负 `$fl-dark-accent`
+    - `.target-edit-text`锛氭殫鑹蹭笅鏀逛负 `#7dd3b0`
 - Verification:
-  - `npm run build:weapp`：通过
-  - `mrc errors 10 --port 9420`：`0`
+  - `npm run build:weapp`锛氶€氳繃
+  - `mrc errors 10 --port 9420`锛歚0`
 - Notes:
-  - 提交记录：`f2e908c`
+  - 鎻愪氦璁板綍锛歚f2e908c`
 
-- Task: 我的页用户信息与会员状态先读本地缓存再异步更新
-- Status: done（已提交 dev 分支）
+- Task: 鎴戠殑椤电敤鎴蜂俊鎭笌浼氬憳鐘舵€佸厛璇绘湰鍦扮紦瀛樺啀寮傛鏇存柊
+- Status: done锛堝凡鎻愪氦 dev 鍒嗘敮锛?
 - Scope:
   - `src/pages/profile/index.tsx`
-    - `loadUserInfo()` 重构为两步加载：
-      1. **零延迟读缓存**：先读取 `userInfo`、`membershipStatus`、`userRegisterTime` 本地缓存并立即 setState，用户立刻看到旧数据
-      2. **异步请求更新**：再发起 `getUserProfile` / `getMyMembership` / `getFoodExpiryDashboard` / `friendGetRequestsOverview` 请求，获取最新数据后更新状态并回写缓存
-    - 新增 `membershipStatus` 的 storage 缓存读写（JSON 序列化）
-    - 网络失败时，本地缓存已先行展示，不再出现白屏/空白
+    - `loadUserInfo()` 閲嶆瀯涓轰袱姝ュ姞杞斤細
+      1. **闆跺欢杩熻缂撳瓨**锛氬厛璇诲彇 `userInfo`銆乣membershipStatus`銆乣userRegisterTime` 鏈湴缂撳瓨骞剁珛鍗?setState锛岀敤鎴风珛鍒荤湅鍒版棫鏁版嵁
+      2. **寮傛璇锋眰鏇存柊**锛氬啀鍙戣捣 `getUserProfile` / `getMyMembership` / `getFoodExpiryDashboard` / `friendGetRequestsOverview` 璇锋眰锛岃幏鍙栨渶鏂版暟鎹悗鏇存柊鐘舵€佸苟鍥炲啓缂撳瓨
+    - 鏂板 `membershipStatus` 鐨?storage 缂撳瓨璇诲啓锛圝SON 搴忓垪鍖栵級
+    - 缃戠粶澶辫触鏃讹紝鏈湴缂撳瓨宸插厛琛屽睍绀猴紝涓嶅啀鍑虹幇鐧藉睆/绌虹櫧
 - Verification:
-  - `npm run lint`：通过
-  - `npm run build:weapp`：通过
+  - `npm run lint`锛氶€氳繃
+  - `npm run build:weapp`锛氶€氳繃
 - Notes:
-  - 提交记录：`7cf0813`
+  - 鎻愪氦璁板綍锛歚7cf0813`
 
-- Task: 重构底部导航「分析」页定位，探索从“营养统计看板”升级为“疾病风险可视化报告”
-- Status: in_progress（已落地第一版前端信息架构草案；运行态自动化验证受 DevTools 9420 端口未开启阻塞）
+- Task: 閲嶆瀯搴曢儴瀵艰埅銆屽垎鏋愩€嶉〉瀹氫綅锛屾帰绱粠鈥滆惀鍏荤粺璁＄湅鏉库€濆崌绾т负鈥滅柧鐥呴闄╁彲瑙嗗寲鎶ュ憡鈥?
+- Status: in_progress锛堝凡钀藉湴绗竴鐗堝墠绔俊鎭灦鏋勮崏妗堬紱杩愯鎬佽嚜鍔ㄥ寲楠岃瘉鍙?DevTools 9420 绔彛鏈紑鍚樆濉烇級
 - Scope:
-  - 当前目标页：`src/pages/stats/index.tsx`
-  - 用户希望弱化“泛营养报告 / 热量统计”心智，强化“疾病预防指数 / 健康寿命趋势 / 可逆转改善动作”表达
-  - 方向上优先评估以下风险维度是否适合作为 MVP：
-    - 高血压预防指数
-    - 糖尿病预防指数
-    - 心血管保护指数
-    - 结直肠癌饮食风险指数
-    - 体重管理友好度
-    - 健康寿命趋势分
+  - 褰撳墠鐩爣椤碉細`src/pages/stats/index.tsx`
+  - 鐢ㄦ埛甯屾湜寮卞寲鈥滄硾钀ュ吇鎶ュ憡 / 鐑噺缁熻鈥濆績鏅猴紝寮哄寲鈥滅柧鐥呴闃叉寚鏁?/ 鍋ュ悍瀵垮懡瓒嬪娍 / 鍙€嗚浆鏀瑰杽鍔ㄤ綔鈥濊〃杈?
+  - 鏂瑰悜涓婁紭鍏堣瘎浼颁互涓嬮闄╃淮搴︽槸鍚﹂€傚悎浣滀负 MVP锛?
+    - 楂樿鍘嬮闃叉寚鏁?
+    - 绯栧翱鐥呴闃叉寚鏁?
+    - 蹇冭绠′繚鎶ゆ寚鏁?
+    - 缁撶洿鑲犵檶楗椋庨櫓鎸囨暟
+    - 浣撻噸绠＄悊鍙嬪ソ搴?
+    - 鍋ュ悍瀵垮懡瓒嬪娍鍒?
 - Notes:
-  - 用户明确要求：不要把页面做成“治疗建议”或“医学诊断”，而应表述为“饮食相关风险趋势”
-  - 用户给出的核心定位是“从卡路里工具升级为疾病预防和健康寿命管理工具”
-  - 当前已实现的草案形态：
-    - 第一屏改为“疾病预防指数总分 + 4 张风险卡 + 最小改善动作 + AI 风险解读”
-    - 原有热力图、热量趋势、宏量占比、餐次结构、体重喝水、连续记录统一下沉为“支撑证据”
-    - 风险卡改为更小的双列卡片，点击后再展开详情
-    - 所有疾病卡当前默认折叠
-    - `AI 风险解读` 与各项证据模块改为折叠卡，避免页面默认展开过长
-    - 已删除“当前版本先基于……估计”这类开发者视角文案
-    - 4 个风险维度当前先用现有 `stats` 数据前端推导：高血压预防、糖尿病预防、心血管保护、体重管理友好度
-    - 新增“我的关注”管理卡，支持添加 / 移除疾病方向，并把当前选择持久化到本地 storage
-    - `我的关注` 本轮继续产品化收口：默认折叠时直接展示“已关注 X 项”，展开后按“已关注优先”的顺序管理疾病卡片
-    - 风险卡折叠态继续压缩为“标题 + 分数 + 一句很短的判断”，展开后再看依据、最小改善动作和预计提升
-    - 页面语气继续柔化：总分标题改为“饮食健康参考指数”，并补充“结果仅供参考”；“疾病方向”统一改成更委婉的“健康方向 / 友好度 / 长期状态趋势”
-  - 当前这版仍是前端原型，不是最终科学模型：
-    - 还没有接入钠、膳食纤维、加工肉、全谷物、含糖饮料等真实风险因子
-    - 分数与“预计提升”目前是基于热量、宏量比例、餐次分布、超标频率的前端启发式映射
+  - 鐢ㄦ埛鏄庣‘瑕佹眰锛氫笉瑕佹妸椤甸潰鍋氭垚鈥滄不鐤楀缓璁€濇垨鈥滃尰瀛﹁瘖鏂€濓紝鑰屽簲琛ㄨ堪涓衡€滈ギ椋熺浉鍏抽闄╄秼鍔库€?
+  - 鐢ㄦ埛缁欏嚭鐨勬牳蹇冨畾浣嶆槸鈥滀粠鍗¤矾閲屽伐鍏峰崌绾т负鐤剧梾棰勯槻鍜屽仴搴峰鍛界鐞嗗伐鍏封€?
+  - 褰撳墠宸插疄鐜扮殑鑽夋褰㈡€侊細
+    - 绗竴灞忔敼涓衡€滅柧鐥呴闃叉寚鏁版€诲垎 + 4 寮犻闄╁崱 + 鏈€灏忔敼鍠勫姩浣?+ AI 椋庨櫓瑙ｈ鈥?
+    - 鍘熸湁鐑姏鍥俱€佺儹閲忚秼鍔裤€佸畯閲忓崰姣斻€侀娆＄粨鏋勩€佷綋閲嶅枬姘淬€佽繛缁褰曠粺涓€涓嬫矇涓衡€滄敮鎾戣瘉鎹€?
+    - 椋庨櫓鍗℃敼涓烘洿灏忕殑鍙屽垪鍗＄墖锛岀偣鍑诲悗鍐嶅睍寮€璇︽儏
+    - 鎵€鏈夌柧鐥呭崱褰撳墠榛樿鎶樺彔
+    - `AI 椋庨櫓瑙ｈ` 涓庡悇椤硅瘉鎹ā鍧楁敼涓烘姌鍙犲崱锛岄伩鍏嶉〉闈㈤粯璁ゅ睍寮€杩囬暱
+    - 宸插垹闄も€滃綋鍓嶇増鏈厛鍩轰簬鈥︹€︿及璁♀€濊繖绫诲紑鍙戣€呰瑙掓枃妗?
+    - 4 涓闄╃淮搴﹀綋鍓嶅厛鐢ㄧ幇鏈?`stats` 鏁版嵁鍓嶇鎺ㄥ锛氶珮琛€鍘嬮闃层€佺硸灏跨梾棰勯槻銆佸績琛€绠′繚鎶ゃ€佷綋閲嶇鐞嗗弸濂藉害
+    - 鏂板鈥滄垜鐨勫叧娉ㄢ€濈鐞嗗崱锛屾敮鎸佹坊鍔?/ 绉婚櫎鐤剧梾鏂瑰悜锛屽苟鎶婂綋鍓嶉€夋嫨鎸佷箙鍖栧埌鏈湴 storage
+    - `鎴戠殑鍏虫敞` 鏈疆缁х画浜у搧鍖栨敹鍙ｏ細榛樿鎶樺彔鏃剁洿鎺ュ睍绀衡€滃凡鍏虫敞 X 椤光€濓紝灞曞紑鍚庢寜鈥滃凡鍏虫敞浼樺厛鈥濈殑椤哄簭绠＄悊鐤剧梾鍗＄墖
+    - 椋庨櫓鍗℃姌鍙犳€佺户缁帇缂╀负鈥滄爣棰?+ 鍒嗘暟 + 涓€鍙ュ緢鐭殑鍒ゆ柇鈥濓紝灞曞紑鍚庡啀鐪嬩緷鎹€佹渶灏忔敼鍠勫姩浣滃拰棰勮鎻愬崌
+    - 椤甸潰璇皵缁х画鏌斿寲锛氭€诲垎鏍囬鏀逛负鈥滈ギ椋熷仴搴峰弬鑰冩寚鏁扳€濓紝骞惰ˉ鍏呪€滅粨鏋滀粎渚涘弬鑰冣€濓紱鈥滅柧鐥呮柟鍚戔€濈粺涓€鏀规垚鏇村濠夌殑鈥滃仴搴锋柟鍚?/ 鍙嬪ソ搴?/ 闀挎湡鐘舵€佽秼鍔库€?
+  - 褰撳墠杩欑増浠嶆槸鍓嶇鍘熷瀷锛屼笉鏄渶缁堢瀛︽ā鍨嬶細
+    - 杩樻病鏈夋帴鍏ラ挔銆佽喅椋熺氦缁淬€佸姞宸ヨ倝銆佸叏璋风墿銆佸惈绯栭ギ鏂欑瓑鐪熷疄椋庨櫓鍥犲瓙
+    - 鍒嗘暟涓庘€滈璁℃彁鍗団€濈洰鍓嶆槸鍩轰簬鐑噺銆佸畯閲忔瘮渚嬨€侀娆″垎甯冦€佽秴鏍囬鐜囩殑鍓嶇鍚彂寮忔槧灏?
   - Verification:
-    - `npm run lint -- src/pages/stats/index.tsx` 通过
-    - `npx tsc --noEmit --pretty false` 仍被项目既有历史类型错误阻塞，未发现本次 `stats` 页新增报错
-    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420`
-    - 当前环境这轮返回 `Access is denied.`，此前同样尝试过 `Failed connecting to ws://localhost:9420`；两者都说明微信开发者工具自动化链路当前不可用，未能完成分析页截图与交互验证
-  - 下一步建议：
-    - 决定这版“风险感”是否是你想要的方向
-    - 再决定“我的关注”是否继续升级为独立设置页，还是维持页面内轻量管理
-    - 若方向成立，再补真实风险因子与证据卡片，避免长期停留在前端启发式打分
-  - 发布安排：
-    - `2026-04-29` 用户已明确要求先把当前工作区全部改动整体提交到远端
-    - 顺序为：先提交并推送 `dev`，再合并到 `main` 并推送，然后再回头复查线上会员页与支付问题
-  - 线上支付排查新增结论：
-    - 体验版登录域名问题已与支付问题拆开
-    - 当前支付“签名错误”更像是运行中的后端微信支付配置问题，而不是前端包本身
-    - 现有后端自动部署 GitHub Actions 处于停用状态，且 Docker/K8s 运行配置由集群 `ConfigMap` 注入
-    - `foodlink-main` 生产 Deployment 使用 `envFrom -> configMapRef -> foodlink-main-env`
-    - 因此若支付证书/商户号/appid 有误，优先应检查并更新集群中的 `foodlink-main-env`，而不是只改前端或只推镜像
+    - `npm run lint -- src/pages/stats/index.tsx` 閫氳繃
+    - `npx tsc --noEmit --pretty false` 浠嶈椤圭洰鏃㈡湁鍘嗗彶绫诲瀷閿欒闃诲锛屾湭鍙戠幇鏈 `stats` 椤垫柊澧炴姤閿?
+    - 宸叉寜椤圭洰瑕佹眰灏濊瘯 `weapp-devtools`锛歚mrc where --port 9420`
+    - 褰撳墠鐜杩欒疆杩斿洖 `Access is denied.`锛屾鍓嶅悓鏍峰皾璇曡繃 `Failed connecting to ws://localhost:9420`锛涗袱鑰呴兘璇存槑寰俊寮€鍙戣€呭伐鍏疯嚜鍔ㄥ寲閾捐矾褰撳墠涓嶅彲鐢紝鏈兘瀹屾垚鍒嗘瀽椤垫埅鍥句笌浜や簰楠岃瘉
+  - 涓嬩竴姝ュ缓璁細
+    - 鍐冲畾杩欑増鈥滈闄╂劅鈥濇槸鍚︽槸浣犳兂瑕佺殑鏂瑰悜
+    - 鍐嶅喅瀹氣€滄垜鐨勫叧娉ㄢ€濇槸鍚︾户缁崌绾т负鐙珛璁剧疆椤碉紝杩樻槸缁存寔椤甸潰鍐呰交閲忕鐞?
+    - 鑻ユ柟鍚戞垚绔嬶紝鍐嶈ˉ鐪熷疄椋庨櫓鍥犲瓙涓庤瘉鎹崱鐗囷紝閬垮厤闀挎湡鍋滅暀鍦ㄥ墠绔惎鍙戝紡鎵撳垎
+  - 鍙戝竷瀹夋帓锛?
+    - `2026-04-29` 鐢ㄦ埛宸叉槑纭姹傚厛鎶婂綋鍓嶅伐浣滃尯鍏ㄩ儴鏀瑰姩鏁翠綋鎻愪氦鍒拌繙绔?
+    - 椤哄簭涓猴細鍏堟彁浜ゅ苟鎺ㄩ€?`dev`锛屽啀鍚堝苟鍒?`main` 骞舵帹閫侊紝鐒跺悗鍐嶅洖澶村鏌ョ嚎涓婁細鍛橀〉涓庢敮浠橀棶棰?
+  - 绾夸笂鏀粯鎺掓煡鏂板缁撹锛?
+    - 浣撻獙鐗堢櫥褰曞煙鍚嶉棶棰樺凡涓庢敮浠橀棶棰樻媶寮€
+    - 褰撳墠鏀粯鈥滅鍚嶉敊璇€濇洿鍍忔槸杩愯涓殑鍚庣寰俊鏀粯閰嶇疆闂锛岃€屼笉鏄墠绔寘鏈韩
+    - 鐜版湁鍚庣鑷姩閮ㄧ讲 GitHub Actions 澶勪簬鍋滅敤鐘舵€侊紝涓?Docker/K8s 杩愯閰嶇疆鐢遍泦缇?`ConfigMap` 娉ㄥ叆
+    - `foodlink-main` 鐢熶骇 Deployment 浣跨敤 `envFrom -> configMapRef -> foodlink-main-env`
+    - 鍥犳鑻ユ敮浠樿瘉涔?鍟嗘埛鍙?appid 鏈夎锛屼紭鍏堝簲妫€鏌ュ苟鏇存柊闆嗙兢涓殑 `foodlink-main-env`锛岃€屼笉鏄彧鏀瑰墠绔垨鍙帹闀滃儚

@@ -4,8 +4,10 @@ import { redirectToLogin } from './withAuth'
 import { extraPkgUrl } from './subpackage-extra'
 
 function showFoodAnalysisQuotaModalLikeRecordMenu(ms: Awaited<ReturnType<typeof getMyMembership>>): void {
-  const creditBalance = typeof ms.daily_credits_remaining === 'number'
-    ? ms.daily_credits_remaining
+  const creditBalance = typeof ms.total_credits_available === 'number'
+    ? ms.total_credits_available
+    : typeof ms.daily_credits_remaining === 'number'
+      ? ms.daily_credits_remaining
     : ms.points_balance
   if (typeof creditBalance === 'number') {
     Taro.showModal({
@@ -46,8 +48,10 @@ export async function pickImageAndOpenAnalyze(sourceType: Array<'album' | 'camer
   }
   try {
     const membershipStatus = await getMyMembership()
-    const creditBalance = typeof membershipStatus.daily_credits_remaining === 'number'
-      ? membershipStatus.daily_credits_remaining
+    const creditBalance = typeof membershipStatus.total_credits_available === 'number'
+      ? membershipStatus.total_credits_available
+      : typeof membershipStatus.daily_credits_remaining === 'number'
+        ? membershipStatus.daily_credits_remaining
       : membershipStatus.points_balance
     if (typeof creditBalance === 'number') {
       if (creditBalance < 2) {

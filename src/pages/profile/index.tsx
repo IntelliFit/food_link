@@ -65,6 +65,34 @@ function formatExpiry(value?: string | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+type RewardLevelMeta = {
+  level: number
+  title: string
+  min: number
+  max: number | null
+}
+
+const REWARD_LEVELS: RewardLevelMeta[] = [
+  { level: 1, title: '探味新芽', min: 0, max: 10 },
+  { level: 2, title: '零食巡逻队', min: 10, max: 50 },
+  { level: 3, title: '风味侦察员', min: 50, max: 200 },
+  { level: 4, title: '菜单收藏家', min: 200, max: 1000 },
+  { level: 5, title: '热量驯龙师', min: 1000, max: 3000 },
+  { level: 6, title: '传说食探长', min: 3000, max: null },
+]
+
+function getRewardLevelMeta(points: number): RewardLevelMeta {
+  const normalized = Math.max(Number(points || 0), 0)
+  return REWARD_LEVELS.find(level => level.max == null ? normalized >= level.min : (normalized >= level.min && normalized < level.max)) || REWARD_LEVELS[0]
+}
+
+function getRewardLevelProgress(points: number, meta: RewardLevelMeta): number {
+  const normalized = Math.max(Number(points || 0), 0)
+  if (meta.max == null) return 100
+  const span = Math.max(meta.max - meta.min, 1)
+  return Math.max(0, Math.min(((normalized - meta.min) / span) * 100, 100))
+}
+
 function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
   if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
   if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
@@ -212,6 +240,11 @@ function ProfilePage() {
   }
 
   // 我的服务
+  const membershipTotalAvailable = membershipStatus?.total_credits_available ?? membershipStatus?.daily_credits_remaining ?? 0
+  const membershipSystemRemaining = membershipStatus?.system_credits_remaining
+    ?? Math.max((membershipStatus?.daily_credits_max ?? 0) - (membershipStatus?.daily_credits_used ?? 0), 0)
+  const membershipEarnedBalance = membershipStatus?.earned_credits_balance ?? 0
+
   const services = [
     {
       id: 0,
@@ -241,6 +274,13 @@ function ProfilePage() {
       desc: '日历图查看每天吃多吃少'
     },
     {
+      id: 4,
+      icon: <LocationOutlined size='20' />,
+      title: '邀请有礼',
+      desc: '邀请新用户，达标后双方各得 15 积分',
+      path: extraPkgUrl('/pages/invite-friends/index')
+    },
+    {
       id: 5,
       icon: <ShopOutlined size='20' />,
       title: '公共食物库',
@@ -253,13 +293,13 @@ function ProfilePage() {
       title: '食探会员',
       desc: membershipStatus?.is_pro
         ? (membershipStatus?.daily_credits_max ?? 0) > 0
-          ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))}${membershipStatus?.early_user_paid_bonus_active ? ` · 创始 x${membershipStatus?.early_user_paid_bonus_multiplier ?? 2}` : ''} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
+          ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))}${membershipStatus?.early_user_paid_bonus_active ? ` · 创始 x${membershipStatus?.early_user_paid_bonus_multiplier ?? 2}` : ''} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 可用 ${membershipTotalAvailable} · 系统 ${membershipSystemRemaining} · 奖励 ${membershipEarnedBalance}`
           : `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 不限次数`
         : membershipStatus?.trial_active
-          ? `${membershipStatus?.trial_policy === 'founding_top_500_bonus_month' ? `前 500 #${membershipStatus?.early_user_rank ?? '--'} 免费 2 个月` : (membershipStatus?.trial_policy === 'early_first_1000' || (membershipStatus?.trial_days_total ?? 0) >= 30) ? `前 1000 #${membershipStatus?.early_user_rank ?? '--'} 免费月` : '免费 3 天试用'} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 剩余 ${membershipStatus?.daily_credits_remaining ?? 0}${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}`
+          ? `${membershipStatus?.trial_policy === 'founding_top_500_bonus_month' ? `前 500 #${membershipStatus?.early_user_rank ?? '--'} 免费 2 个月` : (membershipStatus?.trial_policy === 'early_first_1000' || (membershipStatus?.trial_days_total ?? 0) >= 30) ? `前 1000 #${membershipStatus?.early_user_rank ?? '--'} 免费月` : '免费 3 天试用'} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 可用 ${membershipTotalAvailable} · 系统 ${membershipSystemRemaining} · 奖励 ${membershipEarnedBalance}`
           : membershipStatus?.early_user_paid_bonus_eligible
             ? `创始礼遇 · ${getFounderPaidBonusSourceLabel(membershipStatus) || '前 1000 注册 / 前 100 付费'}开通后积分翻倍`
-            : '3 档会员 · 每日积分领取',
+            : '3 档会员 · 每日系统积分发放',
       path: extraPkgUrl('/pages/pro-membership/index')
     }
   ]
@@ -300,6 +340,10 @@ function ProfilePage() {
     // 饮食记录（整合日历图和数据统计）
     if (service.id === 3) {
       Taro.switchTab({ url: '/pages/stats/index' })
+      return
+    }
+    if (service.id === 4) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/invite-friends/index') })
       return
     }
     // 公共食物库
@@ -393,6 +437,7 @@ function ProfilePage() {
       1: '#f59e0b', // 收藏餐食 - 橙
       2: '#8b5cf6', // 食物管理 - 紫
       3: '#3b82f6', // 饮食记录 - 蓝
+      4: '#f59e0b', // 邀请有礼 - 金
       5: '#10b981', // 公共食物库 - 绿
       6: '#f59e0b'  // 食探会员 - 金
     }
@@ -447,87 +492,55 @@ function ProfilePage() {
           {(() => {
             const cMax = membershipStatus?.daily_credits_max ?? 0
             const cUsed = membershipStatus?.daily_credits_used ?? 0
-            const cRemain = membershipStatus?.daily_credits_remaining ?? 0
-            const progressPct = cMax > 0 ? Math.min((cUsed / cMax) * 100, 100) : 0
+            const cSystemRemain = membershipStatus?.system_credits_remaining ?? Math.max(cMax - cUsed, 0)
+            const cEarned = membershipStatus?.earned_credits_balance ?? 0
+            const systemProgressPct = cMax > 0 ? Math.min((cSystemRemain / cMax) * 100, 100) : 0
+            const rewardLevel = getRewardLevelMeta(cEarned)
+            const rewardProgressPct = getRewardLevelProgress(cEarned, rewardLevel)
             const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
-            const trialPolicy = membershipStatus?.trial_policy ?? null
-            const isTop500Trial = isTrial && trialPolicy === 'founding_top_500_bonus_month'
-            const isEarlyTrial = isTrial && (trialPolicy === 'founding_top_500_bonus_month' || trialPolicy === 'early_first_1000' || (membershipStatus?.trial_days_total ?? 0) >= 30)
+            const hasDoubleBenefits = !!membershipStatus?.early_user_paid_bonus_active || !!membershipStatus?.early_user_paid_bonus_eligible
+            const currentTier = getCurrentMembershipTier(membershipStatus)
             const earlyUserRank = membershipStatus?.early_user_rank ?? null
             const earlyUserLimit = membershipStatus?.early_user_limit ?? 1000
-            const earlyUserEligible = !!membershipStatus?.early_user_paid_bonus_eligible
-            const paidBonusMultiplier = membershipStatus?.early_user_paid_bonus_multiplier ?? 1
-            const founderBonusSourceLabel = getFounderPaidBonusSourceLabel(membershipStatus)
-            const founderBonusRankLabel = getFounderPaidBonusRankLabel(membershipStatus)
-            const paidBonusActive = !!membershipStatus?.early_user_paid_bonus_active
-            const currentTier = getCurrentMembershipTier(membershipStatus)
-            if (membershipStatus?.is_pro) {
-              return (
-                <>
-                  <View className='card-header'>
-                    <View>
-                      <Text className='card-validity'>
-                        {earlyUserEligible
-                          ? `${founderBonusRankLabel || `注册第 ${earlyUserRank || '--'} / ${earlyUserLimit} 位`} · 到期 ${formatExpiry(membershipStatus.expires_at)}`
-                          : `到期 ${formatExpiry(membershipStatus.expires_at)}`}
-                      </Text>
-                      <View className='card-title-row'>
-                        <Text className='card-title'>食探会员</Text>
-                        <Text className='card-pro-badge'>{getMembershipTierShortLabel(currentTier)}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View className='card-body'>
-                    <View className='progress-info'>
-                      <Text className='progress-text'>{cMax > 0 ? `今日已用 ${cUsed}/${cMax}` : '不限次数'}</Text>
-                      {cMax > 0 && (
-                        <View className='progress-bar'>
-                          <View className='progress-inner' style={{ width: `${progressPct}%` }} />
-                        </View>
-                      )}
-                    </View>
-                  <Text className='card-tip'>
-                    {cMax > 0
-                        ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${paidBonusActive ? ` · ${founderBonusSourceLabel || '创始会员'} x${paidBonusMultiplier}` : ''}${currentTier === 'light' ? ' · 轻度版不含精准模式' : ''}`
-                        : '会员权益已激活'}
-                  </Text>
-                  </View>
-                </>
-              )
-            }
+            const tierText = membershipStatus?.is_pro
+              ? getMembershipTierShortLabel(currentTier)
+              : isTrial
+                ? '试用中'
+                : '未开通'
+            const founderBenefitText = earlyUserRank
+              ? `会员权益×2（前${earlyUserLimit}名用户优惠政策） ${earlyUserRank}/${earlyUserLimit}`
+              : `会员权益×2（前${earlyUserLimit}名用户优惠政策）`
+
             return (
               <>
                 <View className='card-header'>
-                  <View>
-                    <Text className='card-validity'>
-                      {isTrial
-                        ? `${isTop500Trial ? `前 500 #${earlyUserRank || '--'} 免费 2 个月到期` : isEarlyTrial ? `前 1000 #${earlyUserRank || '--'} 免费月到期` : '试用到期'} ${formatExpiry(membershipStatus?.trial_expires_at)}`
-                        : `注册时间 ${registerDate}`}
-                    </Text>
-                    <Text className='card-title'>食探会员</Text>
-                  </View>
-                  <View className='card-upgrade-btn'>
-                    <Text className='card-upgrade-text'>{isTrial ? '立即升级' : '立即开通'}</Text>
-                  </View>
+                  <Text className='card-title'>食探会员</Text>
+                  <Text className='card-badge'>{tierText}</Text>
                 </View>
                 <View className='card-body'>
-                  <View className='progress-info'>
-                    <Text className='progress-text'>
-                      {isTrial
-                        ? `${isTop500Trial ? '前 500 免费 2 个月' : isEarlyTrial ? '前 1000 免费月' : '免费试用'}已用 ${cUsed}/${cMax}`
-                        : '未开通 · 开通后每日发放积分'}
-                    </Text>
-                    {isTrial && cMax > 0 && (
-                      <View className='progress-bar'>
-                        <View className='progress-inner' style={{ width: `${progressPct}%` }} />
-                      </View>
-                    )}
+                  <View className='member-meter'>
+                    <View className='member-meter__head'>
+                      <Text className='member-meter__label'>系统分配（次日清0）</Text>
+                      <Text className='member-meter__value'>{cMax > 0 ? `${cSystemRemain}/${cMax}` : `${cSystemRemain}`}</Text>
+                    </View>
+                    <View className='progress-bar'>
+                      <View className='progress-inner' style={{ width: `${systemProgressPct}%` }} />
+                    </View>
                   </View>
-                  <Text className='card-tip'>
-                    {isTrial
-                      ? `剩余 ${cRemain} 积分 · 次日清零${(membershipStatus?.daily_bonus_credits ?? 0) > 0 ? ` · 奖励 +${membershipStatus?.daily_bonus_credits ?? 0}` : ''}${isEarlyTrial ? ` · 从注册开始算${isTop500Trial ? '2 个月' : '1 个月'} · 开通后会员积分 x${paidBonusMultiplier}` : ''}`
-                      : `${earlyUserEligible ? `${founderBonusSourceLabel || '创始礼遇'} · ` : ''}轻度 ${earlyUserEligible ? 16 : 8} · 标准 ${earlyUserEligible ? 40 : 20} · 进阶 ${earlyUserEligible ? 80 : 40} 积分 / 日`}
-                  </Text>
+
+                  <View className='member-meter'>
+                    <View className='member-meter__head'>
+                      <Text className='member-meter__label'>奖励分（一直持有）</Text>
+                      <Text className='member-meter__value'>{`${cEarned} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
+                    </View>
+                    <View className='progress-bar progress-bar--reward'>
+                      <View className='progress-inner progress-inner--reward' style={{ width: `${rewardProgressPct}%` }} />
+                    </View>
+                  </View>
+
+                  {hasDoubleBenefits && (
+                    <Text className='card-benefit card-benefit--single-line'>{founderBenefitText}</Text>
+                  )}
                 </View>
               </>
             )

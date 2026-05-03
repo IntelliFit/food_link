@@ -3,8 +3,8 @@
 -- 日期：2026-04-27
 --
 -- 变更说明：
---   1. user_invite_referrals：记录邀请关系与“首次有效使用后连续 3 天奖励”状态
---   2. user_credit_bonus_events：记录每日一次的分享海报奖励等额外积分事件
+--   1. user_invite_referrals：记录邀请关系与后续邀请奖励资格状态
+--   2. user_credit_bonus_events：分享海报奖励等（每条记录每日最多 1 次，每用户每日最多 3 次）
 
 create table if not exists public.user_invite_referrals (
   id uuid primary key default gen_random_uuid(),
@@ -40,9 +40,13 @@ create table if not exists public.user_credit_bonus_events (
   source_record_id uuid null references public.user_food_records(id) on delete set null,
   meta jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (user_id, bonus_type, bonus_date)
+  updated_at timestamptz not null default now()
 );
 
 create index if not exists idx_user_credit_bonus_events_user_date
   on public.user_credit_bonus_events(user_id, bonus_type, bonus_date);
+
+-- 分享海报：同一用户同一天同一记录仅一条；每日总条数由应用层限制为 3
+create unique index if not exists uq_user_credit_bonus_share_poster_record
+  on public.user_credit_bonus_events (user_id, bonus_type, bonus_date, source_record_id)
+  where bonus_type = 'share_poster' and source_record_id is not null;

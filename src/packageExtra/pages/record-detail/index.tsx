@@ -235,7 +235,7 @@ function RecordDetailPage() {
   const sharePath = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
 
   useShareAppMessage(() => {
-    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
+    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得15积分` : '加入食探并完成2天打卡，双方各得15积分'
     return {
       title,
       path: sharePath,
@@ -244,7 +244,7 @@ function RecordDetailPage() {
   })
 
   useShareTimeline(() => {
-    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
+    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得15积分` : '加入食探并完成2天打卡，双方各得15积分'
     return {
       title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
@@ -834,12 +834,12 @@ function RecordDetailPage() {
             <View className='friend-invite-header'>
               {ownerAvatar ? <Image className='friend-invite-avatar' src={ownerAvatar} mode='aspectFill' /> : null}
               <Text className='friend-invite-title'>
-                {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
+                {ownerNickname ? `${ownerNickname} 邀你来食探，达标后各得15积分` : '注册食探并完成2天打卡，双方各得15积分'}
               </Text>
             </View>
-            <Text className='friend-invite-desc'>未注册会先登录，登录后发送申请，需对方同意</Text>
+            <Text className='friend-invite-desc'>新用户注册后，7天内完成2个自然日饮食或运动记录即可到账；老用户也能直接加好友</Text>
             <Button className='friend-invite-btn' onClick={handleAcceptInvite} disabled={inviteLoading}>
-              {inviteLoading ? <View className='btn-spinner' /> : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
+              {inviteLoading ? <View className='btn-spinner' /> : (getAccessToken() ? '直接加好友' : '登录注册并领取邀请')}
             </Button>
           </View>
         )}

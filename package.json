@@ -14,7 +14,7 @@
     "new": "taro new",
     "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
     "typecheck": "tsc --noEmit --pretty false",
-    "dev:backend": "node scripts/run-backend.cjs",
+    "dev:backend": "cross-env NODE_ENV=development node scripts/run-backend.cjs",
     "stop:backend": "node scripts/stop-backend.cjs",
     "dev:restart": "bash scripts/restart-dev.sh",
     "test": "jest",

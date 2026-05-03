@@ -11,6 +11,7 @@ import {
 } from '../../../utils/membership'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -60,6 +61,8 @@ function RecordTextPage() {
   })
 
   useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    persistRecordTargetDate(String(params?.date || ''))
     refreshMembership()
   }, [])
 
@@ -135,6 +138,7 @@ function RecordTextPage() {
       Taro.setStorageSync('analyzeTextInput', inputText)
       const { task_id } = await submitTextAnalyzeTask({
         text: inputText,
+        date: getStoredRecordTargetDate(),
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any
