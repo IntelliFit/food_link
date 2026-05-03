@@ -380,14 +380,16 @@ function AnalyzeHistoryPage() {
   }
 
   const handleDiscardUnrecorded = () => {
-    const discardableTasks = tasks.filter(t => t.status === 'pending' || t.status === 'failed')
+    const discardableTasks = tasks.filter(
+      t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed'
+    )
     if (discardableTasks.length === 0) {
       Taro.showToast({ title: '没有可丢弃的未记录', icon: 'none' })
       return
     }
     Taro.showModal({
       title: '确认丢弃',
-      content: `确定丢弃 ${discardableTasks.length} 条排队中/识别失败的记录吗？丢弃后不可恢复。`,
+      content: `确定丢弃 ${discardableTasks.length} 条排队中/识别中/识别失败的记录吗？丢弃后不可恢复。`,
       confirmText: '丢弃',
       confirmColor: '#e57373',
       cancelText: '取消',
@@ -398,7 +400,14 @@ function AnalyzeHistoryPage() {
             const results = await Promise.allSettled(
               discardableTasks.map(t => deleteAnalysisTask(t.id))
             )
-            const successCount = results.filter(r => r.status === 'fulfilled').length
+            // 收集成功删除的任务 ID
+            const deletedIds: string[] = []
+            results.forEach((r, idx) => {
+              if (r.status === 'fulfilled') {
+                deletedIds.push(discardableTasks[idx].id)
+              }
+            })
+            const successCount = deletedIds.length
             const failCount = results.length - successCount
             Taro.hideLoading()
             if (failCount > 0) {
@@ -406,8 +415,8 @@ function AnalyzeHistoryPage() {
             } else {
               Taro.showToast({ title: `已丢弃 ${successCount} 条记录`, icon: 'success' })
             }
-            // 从列表中移除已删除的任务
-            setTasks(prev => prev.filter(t => !(t.status === 'pending' || t.status === 'failed')))
+            // 只从列表中移除后端确认删除成功的任务
+            setTasks(prev => prev.filter(t => !deletedIds.includes(t.id)))
             // 更新 profile 页识别记录统计缓存
             try {
               const cached = Taro.getStorageSync('profile_stats_analyze_count')
@@ -416,10 +425,18 @@ function AnalyzeHistoryPage() {
                 Taro.setStorageSync('profile_stats_analyze_count', String(next))
               }
             } catch (_) { /* ignore */ }
-            // 刷新 waiting_record badge 计数
+            // 刷新 waiting_record badge 计数并清除未读消息
             try {
               const sc = await getAnalyzeTaskStatusCount()
               Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
+              Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
+              // 清零 profile tab badge
+              const today = new Date().toISOString().slice(0, 10)
+              const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
+              const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : (
+                (sc.waiting_record || 0) + (Taro.getStorageSync('profile_tab_badge_count') || 0)
+              )
+              Taro.setStorageSync('profile_tab_badge_count', (sc.waiting_record || 0) + foodExpiryBadge)
             } catch {
               // 静默失败
             }
@@ -591,20 +608,6 @@ function AnalyzeHistoryPage() {
         onBack={handleBack}
         color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
         background={scheme === 'dark' ? '#101716' : '#f6faf8'}
-        rightContent={
-          <View
-            className='discard-unrecorded-btn'
-            onClick={(e) => {
-              e.stopPropagation()
-              handleDiscardUnrecorded()
-            }}
-          >
-            <Text
-              className='iconfont icon-shanchu'
-              style={{ fontSize: '36rpx', color: scheme === 'dark' ? '#f3f7f4' : '#0f172a' }}
-            />
-          </View>
-        }
       />
       <ScrollView className='list' scrollY style={{ height: `calc(100vh - ${navBarHeight}px)` }}>
         {loading ? (

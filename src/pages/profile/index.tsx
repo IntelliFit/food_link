@@ -236,6 +236,7 @@ function ProfilePage() {
           try {
             const recordDaysData = await getUserRecordDays()
             days = recordDaysData.record_days
+            console.log('[Profile] getUserRecordDays 返回:', recordDaysData)
             setRecordDays(days)
           } catch (error) {
             console.error('获取记录天数失败:', error)
@@ -577,12 +578,6 @@ function ProfilePage() {
 
   return (
     <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
-      {/* 后台静默同步中：左上角微型 spinner */}
-      {dataSyncing ? (
-        <View className='profile-page__data-sync'>
-          <View className='profile-page__data-sync-spinner' />
-        </View>
-      ) : null}
       {/* 顶部用户信息区域（仿知乎风格） */}
       <View className='profile-header-section'>
         <View className='user-card'>
