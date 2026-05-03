@@ -433,6 +433,10 @@ export interface HomeMealRecordEntry {
   total_calories?: number
   /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
   title?: string
+  /** 记录图片（单图），供弹层面板直接展示 */
+  image_path?: string | null
+  /** 记录图片列表 */
+  image_paths?: string[] | null
   /** 完整记录数据，用于首页直接编辑而无需二次请求 */
   full_record?: FoodRecord
 }

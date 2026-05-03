@@ -67,8 +67,11 @@ export function MealRecordsDialog({ visible, meal, onClose, onSelectRecord }: Me
         <View className='meal-record-entries'>
           {sortedEntries.map((entry) => {
             const cachedFull = getCachedMealFullRecord(entry.id)
-            // 每条记录只使用自己的图片，不 fallback 到餐次级别图片，避免同餐多条记录显示同一张图
-            const imageUrl = cachedFull?.image_path || ''
+            // 优先从 entry 直接取图（后端已下发），避免缓存未命中导致图片缺失；fallback 到缓存与餐次级别图片
+            const imageUrl = entry.image_path
+              || cachedFull?.image_path
+              || cachedFull?.image_paths?.[0]
+              || ''
             const hasImage = !!imageUrl
             const time = formatEntryTime(entry.record_time)
             const totalCalories = entry.total_calories ?? 0

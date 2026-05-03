@@ -9,16 +9,9 @@ import {
   uploadReportImage,
   submitReportExtractionTask,
   imageToBase64,
-  getMyMembership,
   showUnifiedApiError,
   type HealthProfileUpdateRequest,
-  type ExecutionMode,
-  type MembershipStatus,
 } from '../../../utils/api'
-import {
-  canUseStrictModeForMembership,
-  getStrictModeUpgradeDialog,
-} from '../../../utils/execution-mode'
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -47,6 +40,20 @@ const MEDICAL_OPTIONS = [
   { label: '无', value: 'none' }
 ]
 
+/** 过敏源选项 */
+const ALLERGY_OPTIONS = [
+  { label: '海鲜', value: 'seafood' },
+  { label: '花生', value: 'peanut' },
+  { label: '牛奶', value: 'milk' },
+  { label: '鸡蛋', value: 'egg' },
+  { label: '芒果', value: 'mango' },
+  { label: '酒精', value: 'alcohol' },
+  { label: '花粉', value: 'pollen' },
+  { label: '尘螨', value: 'dust_mite' },
+  { label: '猫毛', value: 'cat_hair' },
+  { label: '无', value: 'none' }
+]
+
 /** 特殊饮食选项 */
 const DIET_OPTIONS = [
   { label: '生酮', value: 'keto', icon: '🥑' },
@@ -59,17 +66,12 @@ const DIET_OPTIONS = [
 
 /** 目标选项 */
 const GOAL_OPTIONS = [
-  { label: '减重', desc: '健康瘦身', value: 'fat_loss', icon: 'icon-huore' },
-  { label: '保持', desc: '维持当前体重', value: 'maintain', icon: 'icon-tianpingzuo' },
-  { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: 'icon-zengji' }
+  { label: '减重', desc: '健康瘦身', value: 'fat_loss', icon: '🔥' },
+  { label: '保持', desc: '维持当前体重', value: 'maintain', icon: '⚖️' },
+  { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: '💪' }
 ]
 
-const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
-  { value: 'strict', title: '精准模式', desc: '更准确的分项估算，适合减脂/增肌。标准版及以上可用。' },
-  { value: 'standard', title: '标准模式', desc: '记录更快，但估算波动更大，适合先建立习惯。' }
-]
-
-const TOTAL_STEPS = 12 // 性别、生日、身高、体重、目标、活动、执行模式、病史、饮食、过敏、特殊情况、体检报告
+const TOTAL_STEPS = 11 // 性别、生日、身高、体重、目标、活动、病史、饮食、过敏、特殊情况、体检报告
 
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
@@ -84,26 +86,21 @@ function HealthProfilePage() {
   const [weight, setWeight] = useState<string>('')
   const [dietGoal, setDietGoal] = useState<string>('')
   const [activityLevel, setActivityLevel] = useState<string>('')
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
-  const [executionModeTouched, setExecutionModeTouched] = useState(false)
   const [medicalHistory, setMedicalHistory] = useState<string[]>([])
   const [dietPreference, setDietPreference] = useState<string[]>([])
-  const [allergies, setAllergies] = useState<string>('')
+  const [allergyList, setAllergyList] = useState<string[]>([])
   const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
-  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([]) // 被选中的自定义病史
+  const [addingMedical, setAddingMedical] = useState(false) // 是否正在添加自定义病史
+
+  const [customAllergyList, setCustomAllergyList] = useState<string[]>([]) // 用户添加的自定义过敏源
+  const [selectedCustomAllergy, setSelectedCustomAllergy] = useState<string[]>([]) // 被选中的自定义过敏源
+  const [addingAllergy, setAddingAllergy] = useState(false) // 是否正在添加自定义过敏源
 
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
-  const strictModeAvailable = canUseStrictModeForMembership(membershipStatus)
-
-  useEffect(() => {
-    if (membershipStatus && executionMode === 'strict' && !strictModeAvailable) {
-      setExecutionMode('standard')
-    }
-  }, [membershipStatus, executionMode, strictModeAvailable])
 
   const loadProfile = async () => {
     try {
@@ -125,14 +122,10 @@ function HealthProfilePage() {
       if (profile.weight != null) setWeight(String(profile.weight))
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (profile.activity_level) setActivityLevel(profile.activity_level)
-      if (profile.execution_mode) {
-        setExecutionMode(profile.execution_mode)
-        setExecutionModeTouched(true)
-      }
       const hc = profile.health_condition
       if (hc?.medical_history?.length) setMedicalHistory(hc.medical_history)
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
-      if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
+      if (hc?.allergies?.length) setAllergyList(hc.allergies as string[])
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
     } catch (err: any) {
       await showUnifiedApiError(err, '获取档案失败')
@@ -147,7 +140,6 @@ function HealthProfilePage() {
 
   useEffect(() => {
     loadProfile()
-    getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
   }, [])
 
   const goNext = () => {
@@ -226,6 +218,58 @@ function HealthProfilePage() {
     })
   }
 
+  // 过敏源操作
+  const toggleAllergy = (value: string) => {
+    if (value === 'none') {
+      setAllergyList(['none'])
+      setSelectedCustomAllergy([])
+      return
+    }
+    setAllergyList((prev) => {
+      const next = prev.filter((v) => v !== 'none')
+      if (next.includes(value)) return next.filter((v) => v !== value)
+      return [...next, value]
+    })
+  }
+
+  const handleAddCustomAllergy = () => {
+    const trimmed = customMedical.trim() // 复用 customMedical 作为输入
+    if (!trimmed) {
+      Taro.showToast({ title: '请输入过敏源名称', icon: 'none' })
+      return
+    }
+    if (customAllergyList.includes(trimmed)) {
+      Taro.showToast({ title: '该过敏源已添加', icon: 'none' })
+      return
+    }
+    setCustomAllergyList((prev) => [...prev, trimmed])
+    setSelectedCustomAllergy((prev) => [...prev, trimmed])
+    setAllergyList((prev) => prev.filter((v) => v !== 'none'))
+    setCustomMedical('')
+    setAddingAllergy(false)
+  }
+
+  const toggleCustomAllergy = (item: string) => {
+    setSelectedCustomAllergy((prev) => {
+      if (prev.includes(item)) return prev.filter((v) => v !== item)
+      return [...prev, item]
+    })
+    setAllergyList((prev) => prev.filter((v) => v !== 'none'))
+  }
+
+  const handleRemoveCustomAllergy = (item: string) => {
+    Taro.showModal({
+      title: '删除确认',
+      content: `确定要删除「${item}」吗？`,
+      success: (res) => {
+        if (res.confirm) {
+          setCustomAllergyList((prev) => prev.filter((v) => v !== item))
+          setSelectedCustomAllergy((prev) => prev.filter((v) => v !== item))
+        }
+      }
+    })
+  }
+
   const toggleDiet = (value: string) => {
     if (value === 'none') {
       setDietPreference(['none'])
@@ -246,16 +290,8 @@ function HealthProfilePage() {
     setActivityLevel(value)
   }
 
-  const recommendExecutionMode = (goal: string): ExecutionMode => {
-    if (goal === 'fat_loss' || goal === 'muscle_gain') return 'strict'
-    return 'standard'
-  }
-
   const handleSelectDietGoal = (value: string) => {
     setDietGoal(value)
-    if (!executionModeTouched) {
-      setExecutionMode(recommendExecutionMode(value))
-    }
   }
 
   const canProceed = () => {
@@ -268,16 +304,14 @@ function HealthProfilePage() {
         return !!height && Number(height) >= 100 && Number(height) <= 250
       case 3:
         return !!weight && Number(weight) >= 30 && Number(weight) <= 200
-      case 4: // New step for dietGoal
+      case 4:
         return !!dietGoal
       case 5:
         return !!activityLevel
       case 6:
-        return !!executionMode
       case 7:
       case 8:
       case 9:
-      case 10:
         return true
       default:
         return true
@@ -287,7 +321,7 @@ function HealthProfilePage() {
   const handleSubmit = async () => {
     // 合并预设病史和选中的自定义病史
     const allMedicalHistory = [...medicalHistory.filter(v => v !== 'none'), ...selectedCustomMedical]
-    let effectiveMode = executionMode
+    const allAllergies = [...allergyList.filter(v => v !== 'none'), ...selectedCustomAllergy]
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
@@ -295,34 +329,16 @@ function HealthProfilePage() {
       weight: weight ? Number(weight) : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
-      execution_mode: effectiveMode,
+      execution_mode: 'standard',
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
-      allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : undefined,
+      allergies: allAllergies.length ? allAllergies : undefined,
       health_notes: healthNotes || undefined,
       report_image_url: reportImageUrl || undefined
     }
-    if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level || !req.execution_mode) {
+    if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
       Taro.showToast({ title: '请完成前几项必填', icon: 'none' })
       return
-    }
-
-    // 精准模式需要会员：填写完档案后提示
-    if (effectiveMode === 'strict' && !strictModeAvailable) {
-      const dialog = getStrictModeUpgradeDialog(membershipStatus, 'profile_execution_mode')
-      const { confirm } = await Taro.showModal({
-        title: '解锁精准模式',
-        content: `${dialog.content}\n若取消则自动切换至标准模式保存。`,
-        confirmText: dialog.confirmText,
-        cancelText: '标准模式保存',
-      })
-      if (confirm) {
-        Taro.navigateTo({ url: dialog.url })
-        return
-      }
-      effectiveMode = 'standard'
-      setExecutionMode('standard')
-      req.execution_mode = 'standard'
     }
 
     const { confirm } = await Taro.showModal({
@@ -371,7 +387,7 @@ function HealthProfilePage() {
   if (loading) {
     return (
       <View className='health-profile-page'>
-        <View className='card step-card'>
+        <View className='loading-container-center' style={{ flex: 1 }}>
           <View className='loading-spinner-md' />
         </View>
       </View>
@@ -426,7 +442,7 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer card-footer-single'>
               <Button block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
@@ -449,9 +465,9 @@ function HealthProfilePage() {
               />
             </View>
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
@@ -470,9 +486,9 @@ function HealthProfilePage() {
               />
             </View>
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
@@ -490,9 +506,9 @@ function HealthProfilePage() {
               height={height ? Number(height) : 170}
             />
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
@@ -508,7 +524,7 @@ function HealthProfilePage() {
                   className={`option-card with-desc ${dietGoal === opt.value ? 'active' : ''}`}
                   onClick={() => handleSelectDietGoal(opt.value)}
                 >
-                  <Text className={`option-icon iconfont ${opt.icon}`}></Text>
+                  <Text className='option-icon'>{opt.icon}</Text>
                   <View className='option-info'>
                     <Text className='option-label'>{opt.label}</Text>
                     <Text className='option-desc'>{opt.desc}</Text>
@@ -517,9 +533,9 @@ function HealthProfilePage() {
               ))}
             </View>
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${dietGoal ? 'ready' : ''}`} onClick={goNext} disabled={!dietGoal}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
@@ -542,66 +558,14 @@ function HealthProfilePage() {
               ))}
             </View>
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
 
-          {/* Step 6: 执行模式 */}
-          <View className='card step-card'>
-            <Text className='step-card-title'>执行模式</Text>
-            <Text className='step-card-subtitle'>选择适合你的记录方式。</Text>
-            <View className='option-list'>
-              {EXECUTION_MODE_OPTIONS.map((mode) => (
-                <View
-                  key={mode.value}
-                  className={`option-card with-desc ${executionMode === mode.value ? 'active' : ''}`}
-                  onClick={() => {
-                    if (mode.value === 'strict') {
-                      if (!strictModeAvailable) {
-                        const dialog = getStrictModeUpgradeDialog(membershipStatus, 'profile_execution_mode')
-                        Taro.showModal({
-                          title: '解锁精准模式',
-                          content: `${dialog.content}\n若取消则保持当前模式。`,
-                          confirmText: dialog.confirmText,
-                          cancelText: '取消',
-                          success: (res) => {
-                            if (res.confirm) {
-                              Taro.navigateTo({ url: dialog.url })
-                            }
-                          }
-                        })
-                        return
-                      }
-                      setExecutionMode('strict')
-                      setExecutionModeTouched(true)
-                      return
-                    }
-                    setExecutionMode(mode.value)
-                    setExecutionModeTouched(true)
-                  }}
-                >
-                  <View className='option-info'>
-                    <Text className='option-label'>{mode.title}</Text>
-                    <Text className='option-desc'>{mode.desc}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-            <Text className='skip-hint'>
-              当前推荐：{recommendExecutionMode(dietGoal || 'maintain') === 'strict' ? '精准模式' : '标准模式'}
-            </Text>
-            <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${executionMode ? 'ready' : ''}`} onClick={goNext} disabled={!executionMode}>
-                下一步 〉
-              </Button>
-            </View>
-          </View>
-
-          {/* Step 7: 既往病史（多选） */}
+          {/* Step 6: 既往病史（多选） */}
           <View className='card step-card'>
             <Text className='step-card-title'>既往病史</Text>
             <Text className='step-card-subtitle'>是否有以下病史？（可多选）</Text>
@@ -627,28 +591,39 @@ function HealthProfilePage() {
                 </View>
               ))}
             </View>
-            {/* 自定义病史输入 */}
-            <View className='custom-input-wrap'>
-              <Input
-                className='custom-input'
-                placeholder='其他病史，输入后点击添加'
-                value={customMedical}
-                onInput={(e) => setCustomMedical(e.detail.value)}
-                onConfirm={handleAddCustomMedical}
-              />
-              <View className='custom-input-btn' onClick={handleAddCustomMedical}>
-                <Text>添加</Text>
+            {/* 自定义病史添加 */}
+            {addingMedical ? (
+              <View className='custom-input-wrap'>
+                <Input
+                  className='custom-input'
+                  placeholder='输入病史名称'
+                  value={customMedical}
+                  onInput={(e) => setCustomMedical(e.detail.value)}
+                  onConfirm={handleAddCustomMedical}
+                  focus
+                />
+                <View className='custom-input-btn' onClick={handleAddCustomMedical}>
+                  <Text>确认</Text>
+                </View>
+                <View className='custom-input-cancel' onClick={() => { setAddingMedical(false); setCustomMedical('') }}>
+                  <Text className='cancel-icon-text'>×</Text>
+                </View>
               </View>
-            </View>
+            ) : (
+              <View className='add-btn-round' onClick={() => setAddingMedical(true)}>
+                <Text className='add-btn-icon'>+</Text>
+                <Text className='add-btn-label'>添加其他</Text>
+              </View>
+            )}
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
 
-          {/* Step 8: 特殊饮食（多选） */}
+          {/* Step 7: 特殊饮食（多选） */}
           <View className='card step-card'>
             <Text className='step-card-title'>饮食习惯</Text>
             <Text className='step-card-subtitle'>你有特殊的饮食习惯吗？（可多选）</Text>
@@ -665,36 +640,72 @@ function HealthProfilePage() {
               ))}
             </View>
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
 
-          {/* Step 9: 过敏源 */}
+          {/* Step 8: 过敏源 */}
           <View className='card step-card'>
             <Text className='step-card-title'>过敏源</Text>
-            <Text className='step-card-subtitle'>有过敏源吗？（选填）</Text>
-            <View className='input-card'>
-              <Textarea
-                className='card-textarea'
-                placeholder='如：海鲜、花生，多个用顿号分隔'
-                value={allergies}
-                onInput={(e) => setAllergies(e.detail.value)}
-                maxlength={200}
-              />
+            <Text className='step-card-subtitle'>有过敏源吗？（可多选）</Text>
+            <View className='option-grid'>
+              {ALLERGY_OPTIONS.map((o) => (
+                <View
+                  key={o.value}
+                  className={`option-card small ${allergyList.includes(o.value) ? 'active' : ''}`}
+                  onClick={() => toggleAllergy(o.value)}
+                >
+                  <Text className='option-label'>{o.label}</Text>
+                </View>
+              ))}
+              {/* 显示用户添加的自定义过敏源 */}
+              {customAllergyList.map((item) => (
+                <View
+                  key={item}
+                  className={`option-card small custom-tag ${selectedCustomAllergy.includes(item) ? 'active' : ''}`}
+                  onClick={() => toggleCustomAllergy(item)}
+                  onLongPress={() => handleRemoveCustomAllergy(item)}
+                >
+                  <Text className='option-label'>{item}</Text>
+                </View>
+              ))}
             </View>
-            <Text className='skip-hint'>没有可留空</Text>
+            {/* 自定义过敏源添加 */}
+            {addingAllergy ? (
+              <View className='custom-input-wrap'>
+                <Input
+                  className='custom-input'
+                  placeholder='输入过敏源名称'
+                  value={customMedical}
+                  onInput={(e) => setCustomMedical(e.detail.value)}
+                  onConfirm={handleAddCustomAllergy}
+                  focus
+                />
+                <View className='custom-input-btn' onClick={handleAddCustomAllergy}>
+                  <Text>确认</Text>
+                </View>
+                <View className='custom-input-cancel' onClick={() => { setAddingAllergy(false); setCustomMedical('') }}>
+                  <Text className='cancel-icon-text'>×</Text>
+                </View>
+              </View>
+            ) : (
+              <View className='add-btn-round' onClick={() => setAddingAllergy(true)}>
+                <Text className='add-btn-icon'>+</Text>
+                <Text className='add-btn-label'>添加其他</Text>
+              </View>
+            )}
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
 
-          {/* Step 10: 特殊情况和问题补充 */}
+          {/* Step 9: 特殊情况和问题补充 */}
           <View className='card step-card'>
             <Text className='step-card-title'>补充信息</Text>
             <Text className='step-card-subtitle'>有其他特殊情况需要补充吗？（选填）</Text>
@@ -710,14 +721,14 @@ function HealthProfilePage() {
             </View>
             <Text className='skip-hint'>记录身体的特殊情况，让分析更准确（没有可留空）</Text>
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
-                下一步 〉
+                下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
           </View>
 
-          {/* Step 11: 体检报告上传 */}
+          {/* Step 10: 体检报告上传 */}
           <View className='card step-card upload-step'>
             <View className='upload-hero'>
               <View className='hero-icon-wrapper'>
@@ -779,7 +790,7 @@ function HealthProfilePage() {
             </View>
 
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow'>〈</Text>上一步</View>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button
                 block
                 color='primary'

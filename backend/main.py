@@ -7328,11 +7328,22 @@ async def get_home_dashboard(
                     if len(first_line) > 30:
                         first_line = first_line[:30] + "…"
                     record_title = first_line
+            record_image_urls: List[str] = []
+            rec_image_paths = rec.get("image_paths") or []
+            if not isinstance(rec_image_paths, list):
+                rec_image_paths = []
+            if not rec_image_paths and rec.get("image_path"):
+                rec_image_paths = [rec.get("image_path")]
+            for img_url in rec_image_paths:
+                if isinstance(img_url, str) and img_url.strip():
+                    record_image_urls.append(img_url.strip())
             meal_record_entries.append({
                 "id": str(rid),
                 "record_time": rec.get("record_time"),
                 "total_calories": float(rec.get("total_calories") or 0),
                 "title": record_title,
+                "image_path": record_image_urls[0] if record_image_urls else None,
+                "image_paths": record_image_urls if record_image_urls else None,
                 "full_record": rec,
             })
 
