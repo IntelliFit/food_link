@@ -22,11 +22,13 @@ import {
 import {
   openAnalyzePageFromMenu,
   openDebugAnalyzeLoadingFromMenu,
+  openDebugHealthProfileFromMenu,
   openDebugRecordDetailPosterFromMenu,
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
 import { persistRecordTargetDate } from '../../../utils/record-date'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 interface RecordMenuProps {
   visible: boolean
@@ -86,6 +88,8 @@ const QUICK_ACCESS_ITEMS = [
 ] as const
 
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
+  const { scheme } = useAppColorScheme()
+  const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
   const [previewImageUrl, setPreviewImageUrl] = useState('')
@@ -202,7 +206,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   return (
     <View className='record-menu-modal' catchMove>
       <View className='record-menu-mask' onClick={onClose} />
-      <View className='record-menu-content'>
+      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}`}>
         {/* 顶部圆角指示条 */}
         <View className='record-menu-handle-bar' />
 
@@ -332,11 +336,18 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                       <Text className='record-menu-dev-item-desc'>本地预览，不调保存接口</Text>
                     </View>
                     <View
-                      className='record-menu-dev-item record-menu-dev-item-last'
+                      className='record-menu-dev-item'
                       onClick={() => runDevTool(openAnalyzePageFromMenu)}
                     >
                       <Text className='record-menu-dev-item-label'>打开拍照分析页</Text>
                       <Text className='record-menu-dev-item-desc'>正常实拍分析流程</Text>
+                    </View>
+                    <View
+                      className='record-menu-dev-item record-menu-dev-item-last'
+                      onClick={() => runDevTool(openDebugHealthProfileFromMenu)}
+                    >
+                      <Text className='record-menu-dev-item-label'>进入画像引导</Text>
+                      <Text className='record-menu-dev-item-desc'>健康档案问卷调试入口</Text>
                     </View>
                   </View>
                 </View>

@@ -403,6 +403,50 @@ function ProfilePage() {
     redirectToLogin()
   }
 
+  // 处理清除缓存
+  const handleClearCache = () => {
+    Taro.showModal({
+      title: '提示',
+      content: '确定要清除缓存吗？这将重置首页和朋友圈的本地数据，下次进入时会重新加载。',
+      success: (res) => {
+        if (!res.confirm) return
+        try {
+          // 首页相关缓存
+          Taro.removeStorageSync('home_dashboard_local_cache')
+          Taro.removeStorageSync('body_metrics_storage')
+          Taro.removeStorageSync('food_link_dashboard_targets_v1')
+          Taro.removeStorageSync('home_poster_modal_visible')
+          Taro.removeStorageSync('showRecordMenuModal')
+
+          // 朋友圈相关缓存
+          Taro.removeStorageSync('community_feed_cache')
+          Taro.removeStorageSync('community_friends_cache')
+          Taro.removeStorageSync('community_requests_cache')
+          Taro.removeStorageSync('community_feed_timestamp')
+          Taro.removeStorageSync('community_friends_timestamp')
+          Taro.removeStorageSync('community_feed_filters_v2')
+          Taro.removeStorageSync('community_priority_authors_v1')
+          Taro.removeStorageSync('community_notification_target_v1')
+          Taro.removeStorageSync('community_comment_bar_visible')
+
+          // 动态 key：评论草稿和临时评论（遍历所有 storage key 匹配前缀删除）
+          const storageInfo = Taro.getStorageInfoSync()
+          const keys = storageInfo.keys || []
+          keys.forEach((key: string) => {
+            if (key.startsWith('comment_draft_') || key.startsWith('temp_comments_')) {
+              try { Taro.removeStorageSync(key) } catch (_) {}
+            }
+          })
+
+          Taro.showToast({ title: '缓存已清除', icon: 'success' })
+        } catch (error) {
+          console.error('清除缓存失败:', error)
+          Taro.showToast({ title: '清除失败', icon: 'none' })
+        }
+      }
+    })
+  }
+
   // 处理退出登录
   const handleLogout = () => {
     Taro.showModal({
@@ -597,6 +641,11 @@ function ProfilePage() {
             </View>
           </View>
         ))}
+      </View>
+
+      {/* 清除缓存 */}
+      <View className='profile-card clear-cache-card' onClick={handleClearCache}>
+        <Text className='clear-cache-text'>清除缓存</Text>
       </View>
 
       {/* 登录/退出登录 */}

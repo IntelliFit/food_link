@@ -102,55 +102,78 @@
 
 ## 部署
 
-### 生产服务器
 
-- **主机**: `coachlink.fit`
-- **SSH**: `ssh root@coachlink.fit`（本地已配置免密登录）
-- **项目路径**: `/www/wwwroot/food/food_link/`
-- **后端路径**: `/www/wwwroot/food/food_link/backend/`
-- **服务名**: `food-backend.service`
-- **Python 虚拟环境**: `/www/wwwroot/food/food_link/backend/venv/bin/python`
+### 后端部署
 
-### 手动后端部署命令
-
-```bash
-ssh root@coachlink.fit "cd /www/wwwroot/food/food_link && git fetch origin && git reset --hard origin/main && cd backend && ./venv/bin/python -m pip install -q -r requirements.txt && systemctl restart food-backend.service"
-```
-
-### Docker 镜像推送（腾讯云 CCR）
-
-当后端有变更需要更新线上容器时，在本机构建并推送 Docker 镜像到腾讯云 CCR：
+部署后端统一通过以下命令执行（在仓库根目录）：
 
 ```bash
 npm run push-docker-ccr
 ```
 
+- 该命令会调用：`backend/scripts/push-docker-ccr.mjs`
 - 镜像路径：`ccr.ccs.tencentyun.com/littlehorse/foodlink`
 - 构建上下文：`backend/`（使用 `backend/Dockerfile`）
+- 默认构建平台：`linux/amd64`（避免 ARM 开发机构建后在 AMD64 服务器不可运行）
+- 如需覆盖平台（例如构建多架构清单），可设置环境变量：
+  - PowerShell：`$env:DOCKER_BUILD_PLATFORM="linux/amd64,linux/arm64"; npm run push-docker-ccr`
+  - Bash：`DOCKER_BUILD_PLATFORM=linux/amd64,linux/arm64 npm run push-docker-ccr`
 - 分支与标签映射：
   - `main` → `:latest`、`:main`、`:<7位 commit sha>`
   - `dev` → `:dev`、`:<7位 commit sha>`
   - 其他分支 → 脚本会提示先切换到 `main` 或 `dev`
 - 脚本位置：`backend/scripts/push-docker-ccr.mjs`
+- 依赖要求：
+  - 本机已安装并启动 Docker（`docker version` 可用）
+  - 本机可用 Buildx（`docker buildx version` 可用）
+- 若推送报鉴权或权限错误，先执行 `docker login ccr.ccs.tencentyun.com` 完成登录，再重新执行推送。
+- 部署端已配置自动更新脚本；镜像推送成功后，服务会在 5 分钟内自动完成更新。
+
+#### 后端部署标准操作（一步步）
+
+1. 确认当前分支为 `main` 或 `dev`，并完成需要发布的提交
+2. 本机确认 Docker/Buildx 可用：
+   - `docker version`
+   - `docker buildx version`
+3. 登录腾讯云镜像仓库（如未登录）：
+   - `docker login ccr.ccs.tencentyun.com`
+4. 执行推送：
+   - `npm run push-docker-ccr`
+5. 等待部署端自动拉取并更新（约 5 分钟）
+6. 如需上机确认，可 SSH 到服务器检查服务状态：
+   - `ssh root@coachlink.fit`
+   - `systemctl status food-backend.service`
+
+#### 常见故障与排查
+
+- `no matching manifest for linux/amd64` / `exec format error`
+  - 通常是镜像平台不匹配；确认脚本输出里 `构建平台` 是否为 `linux/amd64`
+- `unauthorized` / `denied: requested access`
+  - 重新执行 `docker login ccr.ccs.tencentyun.com`
+- `docker buildx` 不可用
+  - 升级或重装 Docker Desktop，确保 Buildx 启用
+- 推送成功但线上未生效
+  - 等待自动更新窗口（约 5 分钟）后，再检查 `food-backend.service` 状态与镜像拉取日志
 
 ### 前端部署
 
 微信小程序前端**不通过此服务器部署**，需使用微信开发者工具上传。
 
-### 后端 Docker 镜像部署流程（腾讯云 CCR）
-
-- 在仓库根目录执行 `npm run push-docker-ccr`。
-- 镜像源与 namespace 保持不变：`ccr.ccs.tencentyun.com/littlehorse`，当前仓库名为 `foodlink`。
-- 若推送报鉴权或权限错误，先执行 `docker login ccr.ccs.tencentyun.com` 完成登录，再重新执行推送。
-- 部署端已配置自动更新脚本；镜像推送成功后，服务会在 5 分钟内自动完成更新。
-
-```bash
-npm run push-docker-ccr
-```
-
 ## 图标更新
 
 当前项目使用iconfont作为图标系统。更新图标的命令为 python scripts/update-icon.py
+
+## 前端缓存与数据不一致排查
+
+当用户反馈「前端渲染数据不及时」「数据看起来不对」时，按以下顺序排查：
+
+1. **先确认服务端数据是否正确** — 直接查数据库或调用对应接口验证
+2. **检查是否为本地缓存导致** — 引导用户进入 **「我的」→「清除缓存」**，然后下拉刷新或重新进入页面
+3. **若清除缓存后仍不一致** — 问题在服务端，继续按接口维度排查
+
+完整的缓存字段清单、对应页面与后端接口关系，详见 `docs/frontend-cache-design.md`。
+
+> 新增涉及用户感知数据的本地缓存时，须同步更新 `src/pages/profile/index.tsx` 的 `handleClearCache`，确保用户可通过「清除缓存」重置。
 
 ## 调试规范（必须遵守 jinhui-stack-debug）
 

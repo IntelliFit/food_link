@@ -7860,7 +7860,7 @@ async def get_stats_summary(
 
     try:
         body_metrics_summary = await _build_body_metrics_summary(user_id=user_id, start_date=start_date, end_date=end_date)
-        print(f"[get_stats_summary] body_metrics_summary: {body_metrics_summary}")
+        # print(f"[get_stats_summary] body_metrics_summary: {body_metrics_summary}")
     except Exception as body_metrics_error:
         print(f"[get_stats_summary] 身体指标降级为空摘要: {body_metrics_error}")
         body_metrics_summary = _empty_body_metrics_summary(start_date=start_date, end_date=end_date)

@@ -64,3 +64,8 @@ export function openDebugRecordDetailPosterFromMenu(): void {
 export function openAnalyzePageFromMenu(): void {
   Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
 }
+
+/** 调试：快捷进入画像引导页（健康档案问卷） */
+export function openDebugHealthProfileFromMenu(): void {
+  Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+}
