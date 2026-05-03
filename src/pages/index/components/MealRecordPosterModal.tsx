@@ -98,7 +98,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
       const oid = record.user_id || ''
       const ic = ownerInviteCode || getInviteCodeFromUserId(oid)
       const path = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}${oid ? `&from_user_id=${encodeURIComponent(oid)}` : ''}${ic ? `&invite_code=${encodeURIComponent(ic)}` : ''}`
-      const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
+      const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得15积分` : '加入食探并完成2天打卡，双方各得15积分'
       onShareContextChange({ imageUrl: posterImageUrl, path, title })
     } else {
       onShareContextChange(null)

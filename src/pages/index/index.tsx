@@ -58,6 +58,7 @@ import {
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { isTodayRecordDate } from '../../utils/record-date'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -2031,6 +2032,11 @@ function IndexPage() {
           selectedDate={selectedDate} 
           onSelect={handleDateSelect} 
         />
+        {!isTodayRecordDate(selectedDate) && (
+          <View className='home-login-banner' style={{ marginTop: '16rpx' }}>
+            <Text className='home-login-banner-text'>{`正在补录 ${selectedDate}`}</Text>
+          </View>
+        )}
 
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
         <View className='main-card combined-card'>
@@ -2658,7 +2664,7 @@ function IndexPage() {
       )}
 
       {/* 记录菜单弹窗 */}
-      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} />
+      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} />
 
       <View className='poster-canvas-wrap'>
         <Canvas

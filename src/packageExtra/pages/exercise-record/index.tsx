@@ -22,6 +22,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { showUnifiedApiError } from '../../../utils/error-modal'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
+import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -100,6 +101,9 @@ type DisplayRow =
   | { key: string; kind: 'pending'; item: PendingExerciseCard }
 
 export default function ExerciseRecordPage() {
+  const [recordDate, setRecordDate] = useState(() =>
+    normalizeRecordDate(String(Taro.getCurrentInstance().router?.params?.date || ''))
+  )
   const [inputValue, setInputValue] = useState('')
   const [records, setRecords] = useState<ExerciseRecord[]>([])
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
@@ -113,13 +117,12 @@ export default function ExerciseRecordPage() {
       return
     }
     try {
-      const today = formatDateKey(new Date())
-      const { logs } = await getExerciseLogs({ date: today })
+      const { logs } = await getExerciseLogs({ date: recordDate })
       setRecords(logs.map(mapLogToRecord))
     } catch (e) {
       console.error('[exercise-record] load logs', e)
     }
-  }, [])
+  }, [recordDate])
 
   const persistPendingOnly = useCallback((items: PendingExerciseCard[]) => {
     try {
@@ -225,9 +228,13 @@ export default function ExerciseRecordPage() {
   )
 
   useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    const nextDate = normalizeRecordDate(String(params?.date || ''))
+    persistRecordTargetDate(nextDate)
+    setRecordDate(nextDate)
     void loadTodayRecords()
     loadPendingFromStorage()
-  }, [loadPendingFromStorage])
+  }, [loadPendingFromStorage, loadTodayRecords])
 
   useEffect(() => {
     pendingItems.filter((p) => p.status === 'pending').forEach((p) => {
@@ -236,6 +243,10 @@ export default function ExerciseRecordPage() {
   }, [pendingItems, pollForTask])
 
   useDidShow(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    const nextDate = normalizeRecordDate(String(params?.date || ''))
+    persistRecordTargetDate(nextDate)
+    setRecordDate(nextDate)
     void loadTodayRecords()
     if (getAccessToken()) {
       getMyMembership().then(setMembershipStatus).catch(() => {})
@@ -264,6 +275,7 @@ export default function ExerciseRecordPage() {
 
   const totalCalories = records.reduce((sum, r) => sum + r.calories, 0)
   const recordCount = records.length + pendingItems.filter((p) => p.status === 'pending').length
+  const statsLabel = recordDate === getTodayRecordDateKey() ? '今日消耗' : `${recordDate} 消耗`
 
   const runSubmitFlow = async (): Promise<void> => {
     const content = inputValue.trim()
@@ -320,7 +332,7 @@ export default function ExerciseRecordPage() {
           return
         }
       }
-      const { task_id: taskId } = await createExerciseLog({ exercise_desc: content })
+      const { task_id: taskId } = await createExerciseLog({ exercise_desc: content, date: recordDate })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
       setInputValue('')
@@ -405,7 +417,7 @@ export default function ExerciseRecordPage() {
             <View className='exercise-header-stats-icon' />
           </View>
           <View className='stats-info'>
-            <Text className='stats-label'>今日消耗</Text>
+            <Text className='stats-label'>{statsLabel}</Text>
             <View className='stats-value-wrap'>
               <Text className='stats-value'>{totalCalories}</Text>
               <Text className='stats-unit'>kcal</Text>

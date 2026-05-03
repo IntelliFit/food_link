@@ -370,6 +370,8 @@ export interface SaveFoodRecordRequest {
   context_advice?: string
   /** 来源识别任务 ID（从分析历史保存而来时传入） */
   source_task_id?: string
+  /** 记录日期 YYYY-MM-DD，仅支持近 3 天内补录 */
+  date?: string
 }
 
 /** 单条偏差样本（标记样本接口请求项） */
@@ -694,6 +696,8 @@ export interface LoginRequestParams {
   phoneCode?: string
   /** 注册时填写邀请人码，双方各得积分（后端校验） */
   inviteCode?: string
+  /** 开发环境测试用：模拟新用户的 openid */
+  testOpenid?: string
 }
 
 // 登录响应接口
@@ -788,6 +792,14 @@ export interface MembershipStatus {
   invite_bonus_credits?: number
   /** 今日海报奖励积分 */
   share_bonus_credits?: number
+  /** 今日剩余系统积分，次日清零 */
+  system_credits_remaining?: number
+  /** 用户累计奖励积分余额，不次日清零 */
+  earned_credits_balance?: number
+  /** 今日从累计奖励积分中消耗的额度 */
+  earned_credits_consumed_today?: number
+  /** 当前总可用积分 = 系统剩余 + 累计奖励余额 */
+  total_credits_available?: number
   /** 次日 00:00+08:00 的 ISO 字符串，用于倒计时 */
   credits_reset_at?: string | null
   /** 是否在免费试用期内 */
@@ -820,9 +832,15 @@ export interface MembershipStatus {
 export interface ClaimSharePosterRewardResponse {
   claimed: boolean
   already_claimed: boolean
+  /** 今日是否已达海报分享领奖次数上限（与 share_poster_claims_today 配合） */
+  daily_cap_reached?: boolean
+  /** 今日已成功领取海报分享奖励的次数（含本次） */
+  share_poster_claims_today?: number
   credits: number
   daily_credits_max?: number
   daily_credits_remaining?: number
+  earned_credits_balance?: number | null
+  total_credits_available?: number | null
   message: string
   points_balance?: number | null
 }
@@ -1687,6 +1705,7 @@ export interface AnalyzeTaskSubmitParams {
   image_url: string
   image_urls?: string[]
   meal_type?: MealType
+  date?: string
   timezone_offset_minutes?: number
   province?: string
   city?: string
@@ -1804,6 +1823,7 @@ export async function submitAnalyzeBatch(body: AnalyzeBatchSubmitParams): Promis
 export interface AnalyzeTextTaskSubmitParams {
   text: string
   meal_type?: MealType
+  date?: string
   timezone_offset_minutes?: number
   province?: string
   city?: string
@@ -1854,6 +1874,7 @@ export interface ContinuePrecisionSessionParams {
   image_url?: string
   image_urls?: string[]
   text?: string
+  date?: string
   additionalContext?: string
   meal_type?: MealType
   timezone_offset_minutes?: number
@@ -2544,7 +2565,7 @@ export async function authenticatedRequest(
  * @param phoneCode 获取手机号的 code（可选）
  * @returns Promise<LoginResponse> 登录结果
  */
-export async function login(code: string, phoneCode?: string, inviteCode?: string): Promise<LoginResponse> {
+export async function login(code: string, phoneCode?: string, inviteCode?: string, testOpenid?: string): Promise<LoginResponse> {
   try {
     const requestData: LoginRequestParams = {
       code: code
@@ -2555,6 +2576,9 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     }
     if (inviteCode?.trim()) {
       requestData.inviteCode = inviteCode.trim()
+    }
+    if (testOpenid?.trim()) {
+      requestData.testOpenid = testOpenid.trim()
     }
 
     const response = await Taro.request({
@@ -2702,12 +2726,16 @@ export async function getMyMembership(): Promise<MembershipStatus> {
   return _membershipPending
 }
 
-export async function claimSharePosterReward(recordId?: string): Promise<ClaimSharePosterRewardResponse> {
+export async function claimSharePosterReward(recordId: string): Promise<ClaimSharePosterRewardResponse> {
+  const rid = (recordId || '').trim()
+  if (!rid) {
+    throw new Error('缺少记录 ID，无法领取海报奖励')
+  }
   try {
     const response = await authenticatedRequest('/api/membership/rewards/share-poster/claim', {
       method: 'POST',
       data: {
-        record_id: recordId || undefined
+        record_id: rid
       }
     })
 
@@ -3229,7 +3257,7 @@ export interface CheckinLeaderboardItem {
 }
 
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
-export type CommunityAuthorScope = 'all' | 'priority'
+export type CommunityAuthorScope = 'all' | 'priority' | 'public'
 
 export interface CommunityFeedQueryParams {
   meal_type?: MealType
@@ -3388,6 +3416,19 @@ export async function friendGetRequestsOverview(): Promise<FriendRequestsOvervie
 export async function getFriendInviteProfile(userId: string): Promise<FriendInviteProfile> {
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile/${encodeURIComponent(userId)}`,
+    method: 'GET',
+    header: withNgrokBypassHeaders(),
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取邀请资料失败')
+  }
+  return response.data as FriendInviteProfile
+}
+
+export async function getFriendInviteProfileByCode(code: string): Promise<FriendInviteProfile> {
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/friend/invite/profile-by-code?code=${encodeURIComponent(code.trim())}`,
     method: 'GET',
     header: withNgrokBypassHeaders(),
     timeout: 10000

@@ -74,7 +74,7 @@ export function createWeekHeatmapCells(): WeekHeatmapCell[] {
   const today = new Date()
   const cells: WeekHeatmapCell[] = []
   
-  for (let i = -3; i <= 3; i++) {
+  for (let i = 0; i > -3; i -= 1) {
     const d = new Date(today)
     d.setDate(today.getDate() + i)
     

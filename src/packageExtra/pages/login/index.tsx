@@ -108,6 +108,10 @@ export default function LoginPage() {
     const [tempAvatar, setTempAvatar] = useState('')
     const [tempNickname, setTempNickname] = useState('')
 
+    /** 开发环境测试：模拟新用户 openid */
+    const [testOpenid, setTestOpenid] = useState('')
+    const isDev = process.env.NODE_ENV === 'development'
+
     const inviteCodeFromQuery = (router.params?.invite_code || '').trim()
     const redirectFromQuery = safeDecodeURIComponent((router.params?.redirect || '').trim())
 
@@ -154,7 +158,7 @@ export default function LoginPage() {
         try {
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
-            const loginData: LoginResponse = await login(loginRes.code)
+            const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCodeFromQuery, isDev ? testOpenid : undefined)
             await handleLoginSuccess(loginData)
         } catch (error: any) {
             console.error('登录失败:', error)
@@ -316,7 +320,26 @@ export default function LoginPage() {
                 <Text className='app-slogan'>记录饮食，连接健康</Text>
             </View>
 
+            {isDev && inviteCodeFromQuery && (
+                <View className='dev-invite-code-banner'>
+                    <Text className='dev-invite-code-text'>
+                        【测试模式】邀请码：{inviteCodeFromQuery}
+                    </Text>
+                </View>
+            )}
+
             <View className='login-actions'>
+                {isDev && (
+                    <View className='dev-test-input-wrapper'>
+                        <Text className='dev-test-label'>测试 OpenID（留空则走正常流程）</Text>
+                        <Input
+                            className='dev-test-openid-input'
+                            value={testOpenid}
+                            onInput={(e) => setTestOpenid(e.detail.value)}
+                            placeholder='输入测试 openid 模拟新用户'
+                        />
+                    </View>
+                )}
                 <TaroifyButton
                   className='wx-login-btn'
                   shape='round'

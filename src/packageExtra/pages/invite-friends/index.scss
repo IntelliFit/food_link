@@ -1,0 +1,263 @@
+.invite-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 32rpx 24rpx 48rpx;
+  background:
+    radial-gradient(circle at top right, rgb(16 185 129 / 14%) 0, transparent 30%),
+    linear-gradient(180deg, #f7faf8 0%, #f3f7f4 100%);
+}
+
+.invite-hero {
+  margin-bottom: 24rpx;
+  padding: 16rpx 8rpx 8rpx;
+}
+
+.invite-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #047857;
+  background: rgb(16 185 129 / 12%);
+}
+
+.invite-title {
+  display: block;
+  margin-top: 20rpx;
+  font-size: 48rpx;
+  line-height: 1.22;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.invite-subtitle {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.invite-card {
+  margin-bottom: 24rpx;
+  padding: 28rpx;
+  border-radius: 28rpx;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 16rpx 40rpx rgb(15 23 42 / 6%);
+  backdrop-filter: blur(12rpx);
+}
+
+.inviter-card {
+  border: 1rpx solid rgb(16 185 129 / 10%);
+}
+
+.inviter-card__main {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.inviter-avatar {
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 28rpx;
+  background: #ecfdf5;
+  flex-shrink: 0;
+}
+
+.inviter-avatar--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inviter-avatar-text {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.inviter-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.inviter-name {
+  display: block;
+  font-size: 34rpx;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.inviter-desc {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.invite-code-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-top: 24rpx;
+  padding: 20rpx 22rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+}
+
+.invite-code-chip__label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #047857;
+}
+
+.invite-code-chip__value {
+  font-size: 30rpx;
+  letter-spacing: 4rpx;
+  font-weight: 700;
+  color: #065f46;
+}
+
+.rules-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.rule-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+}
+
+.rule-item__index {
+  width: 56rpx;
+  height: 56rpx;
+  flex-shrink: 0;
+  border-radius: 18rpx;
+  background: #0f172a;
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rule-item__text {
+  flex: 1;
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: #1f2937;
+}
+
+.qr-card__head {
+  margin-bottom: 20rpx;
+}
+
+.qr-card__title {
+  display: block;
+  font-size: 32rpx;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.qr-card__desc {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.qr-box {
+  width: 100%;
+  min-height: 420rpx;
+  border-radius: 28rpx;
+  background:
+    linear-gradient(135deg, rgb(16 185 129 / 8%) 0%, rgb(255 255 255 / 96%) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx dashed rgb(16 185 129 / 18%);
+}
+
+.qr-box__image {
+  width: 320rpx;
+  height: 320rpx;
+}
+
+.qr-box__loading {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  border: 8rpx solid rgb(16 185 129 / 16%);
+  border-top-color: #10b981;
+  animation: invite-spin 0.9s linear infinite;
+}
+
+.qr-box__fallback {
+  font-size: 24rpx;
+  color: #94a3b8;
+}
+
+.invite-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  margin-top: 8rpx;
+}
+
+.invite-btn {
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 999rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  border: none;
+}
+
+.invite-btn::after {
+  border: none;
+}
+
+.invite-btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, #10b981 0%, #0f766e 100%);
+  box-shadow: 0 16rpx 32rpx rgb(16 185 129 / 24%);
+}
+
+.invite-btn--ghost {
+  color: #0f766e;
+  background: rgb(255 255 255 / 92%);
+  border: 2rpx solid rgb(15 118 110 / 14%);
+}
+
+.invite-empty {
+  padding: 40rpx 0 10rpx;
+  display: flex;
+  justify-content: center;
+}
+
+.invite-empty__text {
+  font-size: 24rpx;
+  color: #94a3b8;
+}
+
+@keyframes invite-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

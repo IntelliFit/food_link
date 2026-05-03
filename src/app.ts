@@ -44,9 +44,9 @@ function App({ children }: PropsWithChildren<any>) {
       return
     }
 
-    // 扫码未登录时先进入登录页，登录后会自动处理邀请码并建立好友关系
+    // 扫码未登录时先进入公开邀请页，用户可以先看到奖励规则，再决定登录/注册
     Taro.navigateTo({
-      url: `${extraPkgUrl('/pages/login/index')}?invite_code=${encodeURIComponent(inviteCode)}&redirect=${encodeURIComponent('/pages/community/index')}`,
+      url: `${extraPkgUrl('/pages/invite-friends/index')}?invite_code=${encodeURIComponent(inviteCode)}`,
     })
   })
 

@@ -27,11 +27,13 @@ import {
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
+import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 interface RecordMenuProps {
   visible: boolean
   onClose: () => void
+  selectedDate: string
 }
 
 // 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
@@ -85,7 +87,7 @@ const QUICK_ACCESS_ITEMS = [
   },
 ] as const
 
-export function RecordMenu({ visible, onClose }: RecordMenuProps) {
+export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)
@@ -111,6 +113,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
 
   const handleGridClick = (modeId: string) => {
     onClose()
+    const recordDate = persistRecordTargetDate(selectedDate)
 
     switch (modeId) {
       case 'camera':
@@ -155,7 +158,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                 Taro.setStorageSync('analyzeImagePath', tempPaths[0])
                 Taro.setStorageSync('analyzeImagePaths', tempPaths)
               }
-              Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
+              Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
             },
             fail: (err) => {
               if (err.errMsg?.includes('cancel')) return
@@ -166,10 +169,10 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         break
       }
       case 'text':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })
+        Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-text/index')}?date=${encodeURIComponent(recordDate)}` })
         break
       case 'manual':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/record-manual/index') })
+        Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?date=${encodeURIComponent(recordDate)}` })
         break
     }
   }

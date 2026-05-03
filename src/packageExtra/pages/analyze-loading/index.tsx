@@ -12,6 +12,7 @@ import {
 import { showUnifiedApiError } from '../../../utils/error-modal'
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 
 /** 与记运动页一致，用于完成后清除「待同步」状态 */
@@ -372,7 +373,8 @@ function AnalyzeLoadingPage() {
             Taro.removeStorageSync(EXERCISE_PENDING_TASK_KEY)
             const kcal = exResult.estimated_calories ?? exResult.exercise_log.calories_burned
             Taro.showToast({ title: `已记录 ${kcal} kcal`, icon: 'success' })
-            Taro.redirectTo({ url: extraPkgUrl('/pages/exercise-record/index') })
+            const exerciseDate = persistRecordTargetDate(String(((task.payload as Record<string, unknown>)?.recorded_on as string) || ''))
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(exerciseDate)}` })
             return
           }
 
@@ -397,6 +399,7 @@ function AnalyzeLoadingPage() {
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzePendingCorrectionItems')
           const payload = task.payload || {}
+          const targetDate = persistRecordTargetDate(String((payload.recorded_on as string) || getStoredRecordTargetDate()))
           const settledMode = taskMode || executionMode
           Taro.setStorageSync('analyzeExecutionMode', settledMode)
           if (result.precisionSessionId) {
@@ -421,7 +424,7 @@ function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food_text')
-            Taro.redirectTo({ url: extraPkgUrl('/pages/result/index') })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
           } else {
             Taro.removeStorageSync('analyzeTextInput')
             Taro.removeStorageSync('analyzeTextAdditionalContext')
@@ -434,7 +437,7 @@ function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food')
-            Taro.redirectTo({ url: extraPkgUrl('/pages/result/index') })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
           }
           return
         }
@@ -503,7 +506,7 @@ function AnalyzeLoadingPage() {
         cancelText: '留在此页',
         success: res => {
           if (res.confirm) {
-            Taro.redirectTo({ url: extraPkgUrl('/pages/exercise-record/index') })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(getStoredRecordTargetDate())}` })
           }
         }
       })
@@ -562,7 +565,7 @@ function AnalyzeLoadingPage() {
             className='btn-history'
             onClick={() =>
               taskType === 'exercise'
-                ? Taro.redirectTo({ url: extraPkgUrl('/pages/exercise-record/index') })
+                ? Taro.redirectTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(getStoredRecordTargetDate())}` })
                 : handleGoHistory()
             }
           >

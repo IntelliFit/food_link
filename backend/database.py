@@ -8,7 +8,8 @@ import base64
 import uuid
 import re
 import logging
-from datetime import datetime, timedelta, timezone
+import json
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from collections import Counter
 from otel_compat import Status, StatusCode, trace
@@ -25,11 +26,16 @@ FOOD_ANALYZE_BUCKET = "food-images"
 # 用户头像存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
 USER_AVATARS_BUCKET = "user-avatars"
 
-# 会员奖励体系（2026-04-27）
-INVITE_REWARD_CREDITS_PER_DAY = 5
-INVITE_REWARD_DAYS = 3
+# 会员奖励体系（2026-05-02）
+INVITE_REWARD_REQUIRED_DAYS = 2
+INVITE_REWARD_WINDOW_DAYS = 7
+INVITE_REWARD_CREDITS_ON_QUALIFY = 15
 INVITE_REWARD_MONTHLY_LIMIT = 10
+INVITE_REWARD_LEGACY_CREDITS_PER_DAY = 5
+INVITE_REWARD_LEGACY_DAYS = 3
 SHARE_POSTER_REWARD_CREDITS = 1
+# 分享海报奖励：每条记录每日最多 1 次，每用户每日最多领取次数（通常对应三餐）
+SHARE_POSTER_DAILY_MAX_EVENTS = 3
 
 # 延迟初始化 Supabase 客户端
 _supabase_client = None
@@ -529,6 +535,7 @@ async def insert_food_record(
     absorption_notes: Optional[str] = None,
     context_advice: Optional[str] = None,
     source_task_id: Optional[str] = None,
+    record_time: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     插入用户饮食记录（拍照识别后确认记录）。
@@ -581,6 +588,8 @@ async def insert_food_record(
         row["context_advice"] = context_advice
     if source_task_id is not None:
         row["source_task_id"] = source_task_id
+    if record_time is not None:
+        row["record_time"] = record_time
     try:
         result = supabase.table("user_food_records").insert(row).execute()
         if result.data and len(result.data) > 0:
@@ -2625,12 +2634,72 @@ async def create_invite_referral_binding(
         raise
 
 
-def activate_pending_invite_referral_on_first_valid_use_sync(
+def _count_monthly_completed_invite_rewards_sync(
+    supabase: Any,
+    inviter_user_id: str,
+    month_start: date,
+    next_month_start: date,
+) -> int:
+    result = (
+        supabase.table("user_invite_referrals")
+        .select("id")
+        .eq("inviter_user_id", inviter_user_id)
+        .in_("status", ["reward_active", "reward_completed"])
+        .gte("reward_start_date", month_start.isoformat())
+        .lt("reward_start_date", next_month_start.isoformat())
+        .execute()
+    )
+    return len(result.data or [])
+
+
+def _award_invite_referral_qualified_reward_sync(
+    referral: Dict[str, Any],
+    qualified_on: date,
+) -> Dict[str, Any]:
+    referral_id = str(referral.get("id") or "").strip()
+    inviter_user_id = str(referral.get("inviter_user_id") or "").strip()
+    invitee_user_id = str(referral.get("invitee_user_id") or "").strip()
+    qualified_date = qualified_on.isoformat()
+    base_meta = {
+        "referral_id": referral_id,
+        "inviter_user_id": inviter_user_id,
+        "invitee_user_id": invitee_user_id,
+        "qualified_date": qualified_date,
+        "rule": f"{INVITE_REWARD_WINDOW_DAYS}d/{INVITE_REWARD_REQUIRED_DAYS}days/{INVITE_REWARD_CREDITS_ON_QUALIFY}credits",
+    }
+    inviter_result = add_user_earned_credits_sync(
+        inviter_user_id,
+        INVITE_REWARD_CREDITS_ON_QUALIFY,
+        "invite_qualified_reward",
+        source_key=f"invite-qualified:{referral_id}:inviter",
+        related_date=qualified_date,
+        meta={**base_meta, "role": "inviter"},
+    )
+    invitee_result = add_user_earned_credits_sync(
+        invitee_user_id,
+        INVITE_REWARD_CREDITS_ON_QUALIFY,
+        "invite_qualified_reward",
+        source_key=f"invite-qualified:{referral_id}:invitee",
+        related_date=qualified_date,
+        meta={**base_meta, "role": "invitee"},
+    )
+    return {
+        "inviter": inviter_result,
+        "invitee": invitee_result,
+    }
+
+
+def record_invite_referral_valid_use_sync(
     invitee_user_id: str,
     effective_action: str,
     monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
 ) -> Optional[Dict[str, Any]]:
-    """当被邀请人完成首次有效使用后，激活双方连续 3 天的邀请奖励。"""
+    """Record a valid-use event for invite qualification.
+
+    New rule: the invitee must complete valid usage on 2 distinct China dates within
+    7 days after the referral is created. Once qualified, inviter and invitee each
+    receive 15 persistent earned credits immediately.
+    """
     if not invitee_user_id:
         return None
     check_supabase_configured()
@@ -2647,49 +2716,90 @@ def activate_pending_invite_referral_on_first_valid_use_sync(
         if not rows:
             return None
         referral = rows[0]
-        if str(referral.get("status") or "") != "pending_qualified":
+        status = str(referral.get("status") or "").strip()
+        if status in {"reward_completed", "reward_blocked", "cancelled", "reward_active"}:
+            return referral
+        if status != "pending_qualified":
             return referral
 
         now_utc = datetime.now(timezone.utc)
         today_cn = datetime.now(CHINA_TZ).date()
+        created_at = _parse_possible_datetime(referral.get("created_at")) or now_utc
+        deadline_cn = created_at.astimezone(CHINA_TZ).date() + timedelta(days=INVITE_REWARD_WINDOW_DAYS - 1)
+        if today_cn > deadline_cn:
+            update_data = {
+                "status": "reward_blocked",
+                "blocked_reason": "qualification_window_expired",
+                "updated_at": now_utc.isoformat(),
+            }
+            updated = (
+                supabase.table("user_invite_referrals")
+                .update(update_data)
+                .eq("id", referral["id"])
+                .execute()
+            )
+            if updated.data and len(updated.data) > 0:
+                return updated.data[0]
+            return {**referral, **update_data}
+
+        first_effective_at = _parse_possible_datetime(referral.get("first_effective_action_at"))
+        first_effective_day = first_effective_at.astimezone(CHINA_TZ).date() if first_effective_at else None
+        if first_effective_day is None:
+            update_data = {
+                "first_effective_action_at": now_utc.isoformat(),
+                "first_effective_action_type": effective_action,
+                "updated_at": now_utc.isoformat(),
+            }
+            updated = (
+                supabase.table("user_invite_referrals")
+                .update(update_data)
+                .eq("id", referral["id"])
+                .execute()
+            )
+            if updated.data and len(updated.data) > 0:
+                return updated.data[0]
+            return {**referral, **update_data}
+
+        if today_cn == first_effective_day:
+            return referral
+
         month_start = today_cn.replace(day=1)
         if month_start.month == 12:
             next_month_start = month_start.replace(year=month_start.year + 1, month=1)
         else:
             next_month_start = month_start.replace(month=month_start.month + 1)
-
         inviter_user_id = str(referral.get("inviter_user_id") or "")
-        qualified_result = (
-            supabase.table("user_invite_referrals")
-            .select("id")
-            .eq("inviter_user_id", inviter_user_id)
-            .in_("status", ["reward_active", "reward_completed"])
-            .gte("reward_start_date", month_start.isoformat())
-            .lt("reward_start_date", next_month_start.isoformat())
-            .execute()
+        qualified_count = _count_monthly_completed_invite_rewards_sync(
+            supabase,
+            inviter_user_id,
+            month_start,
+            next_month_start,
         )
-        qualified_count = len(qualified_result.data or [])
 
         if qualified_count >= max(int(monthly_limit or 0), 0):
             update_data = {
                 "status": "reward_blocked",
-                "first_effective_action_at": now_utc.isoformat(),
-                "first_effective_action_type": effective_action,
                 "blocked_reason": "monthly_limit_reached",
                 "updated_at": now_utc.isoformat(),
             }
-        else:
-            reward_end = today_cn + timedelta(days=INVITE_REWARD_DAYS - 1)
-            update_data = {
-                "status": "reward_active",
-                "first_effective_action_at": now_utc.isoformat(),
-                "first_effective_action_type": effective_action,
-                "reward_start_date": today_cn.isoformat(),
-                "reward_end_date": reward_end.isoformat(),
-                "blocked_reason": None,
-                "updated_at": now_utc.isoformat(),
-            }
+            updated = (
+                supabase.table("user_invite_referrals")
+                .update(update_data)
+                .eq("id", referral["id"])
+                .execute()
+            )
+            if updated.data and len(updated.data) > 0:
+                return updated.data[0]
+            return {**referral, **update_data}
 
+        _award_invite_referral_qualified_reward_sync(referral, today_cn)
+        update_data = {
+            "status": "reward_completed",
+            "reward_start_date": today_cn.isoformat(),
+            "reward_end_date": today_cn.isoformat(),
+            "blocked_reason": None,
+            "updated_at": now_utc.isoformat(),
+        }
         updated = (
             supabase.table("user_invite_referrals")
             .update(update_data)
@@ -2700,11 +2810,38 @@ def activate_pending_invite_referral_on_first_valid_use_sync(
             return updated.data[0]
         return {**referral, **update_data}
     except Exception as e:
-        if _is_table_not_ready_error(e, ["user_invite_referrals"]):
-            print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 奖励表未就绪，跳过: {e}")
+        if _is_table_not_ready_error(e, ["user_invite_referrals", "user_earned_credit_ledger"]):
+            print(f"[record_invite_referral_valid_use_sync] ?????????: {e}")
             return None
-        print(f"[activate_pending_invite_referral_on_first_valid_use_sync] 错误: {e}")
+        if _is_earned_credit_schema_not_ready_error(e):
+            print(f"[record_invite_referral_valid_use_sync] ??????????????: {e}")
+            return None
+        print(f"[record_invite_referral_valid_use_sync] ??: {e}")
         raise
+
+
+async def record_invite_referral_valid_use(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    return record_invite_referral_valid_use_sync(
+        invitee_user_id,
+        effective_action,
+        monthly_limit=monthly_limit,
+    )
+
+
+def activate_pending_invite_referral_on_first_valid_use_sync(
+    invitee_user_id: str,
+    effective_action: str,
+    monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
+) -> Optional[Dict[str, Any]]:
+    return record_invite_referral_valid_use_sync(
+        invitee_user_id,
+        effective_action,
+        monthly_limit=monthly_limit,
+    )
 
 
 async def activate_pending_invite_referral_on_first_valid_use(
@@ -2712,7 +2849,7 @@ async def activate_pending_invite_referral_on_first_valid_use(
     effective_action: str,
     monthly_limit: int = INVITE_REWARD_MONTHLY_LIMIT,
 ) -> Optional[Dict[str, Any]]:
-    return activate_pending_invite_referral_on_first_valid_use_sync(
+    return await record_invite_referral_valid_use(
         invitee_user_id,
         effective_action,
         monthly_limit=monthly_limit,
@@ -2720,47 +2857,37 @@ async def activate_pending_invite_referral_on_first_valid_use(
 
 
 async def get_daily_membership_bonus_breakdown(user_id: str, china_date_str: str) -> Dict[str, int]:
-    """获取用户某天的额外奖励积分明细。"""
-    check_supabase_configured()
-    supabase = get_supabase_client()
+    """获取用户某天的额外奖励积分明细，并确保当天奖励已入累计余额。"""
     try:
-        inviter_rows = (
-            supabase.table("user_invite_referrals")
-            .select("id")
-            .eq("inviter_user_id", user_id)
-            .eq("status", "reward_active")
-            .lte("reward_start_date", china_date_str)
-            .gte("reward_end_date", china_date_str)
-            .execute()
-        )
-        invitee_rows = (
-            supabase.table("user_invite_referrals")
-            .select("id")
-            .eq("invitee_user_id", user_id)
-            .eq("status", "reward_active")
-            .lte("reward_start_date", china_date_str)
-            .gte("reward_end_date", china_date_str)
-            .execute()
-        )
-        share_rows = (
-            supabase.table("user_credit_bonus_events")
-            .select("credits")
-            .eq("user_id", user_id)
-            .eq("bonus_type", "share_poster")
-            .eq("bonus_date", china_date_str)
-            .execute()
-        )
+        await materialize_daily_invite_reward_credits(user_id, china_date_str)
+        await materialize_daily_share_poster_reward_credits(user_id, china_date_str)
 
-        invite_bonus_count = len(inviter_rows.data or []) + len(invitee_rows.data or [])
-        invite_bonus_credits = invite_bonus_count * INVITE_REWARD_CREDITS_PER_DAY
-        share_bonus_credits = sum(int(row.get("credits") or 0) for row in (share_rows.data or []))
+        check_supabase_configured()
+        supabase = get_supabase_client()
+        rows = (
+            supabase.table("user_earned_credit_ledger")
+            .select("reason,delta")
+            .eq("user_id", user_id)
+            .eq("related_date", china_date_str)
+            .gt("delta", 0)
+            .execute()
+        )
+        invite_bonus_credits = 0
+        share_bonus_credits = 0
+        for row in rows.data or []:
+            reason = str(row.get("reason") or "").strip()
+            delta = int(row.get("delta") or 0)
+            if reason in {"invite_daily_reward", "invite_qualified_reward"}:
+                invite_bonus_credits += delta
+            elif reason == "share_poster_reward":
+                share_bonus_credits += delta
         return {
             "invite_bonus_credits": invite_bonus_credits,
             "share_bonus_credits": share_bonus_credits,
             "daily_bonus_credits": invite_bonus_credits + share_bonus_credits,
         }
     except Exception as e:
-        if _is_table_not_ready_error(e, ["user_invite_referrals", "user_credit_bonus_events"]):
+        if _is_table_not_ready_error(e, ["user_invite_referrals", "user_credit_bonus_events", "user_earned_credit_ledger"]):
             print(f"[get_daily_membership_bonus_breakdown] 奖励表未就绪，返回 0: {e}")
             return {
                 "invite_bonus_credits": 0,
@@ -2771,30 +2898,389 @@ async def get_daily_membership_bonus_breakdown(user_id: str, china_date_str: str
         raise
 
 
+def _is_earned_credit_schema_not_ready_error(err: Exception) -> bool:
+    err_s = str(err)
+    lower = err_s.lower()
+    if _is_table_not_ready_error(err, ["user_earned_credit_ledger"]):
+        return True
+    return "earned_credits_balance" in err_s and ("column" in lower or "schema cache" in lower)
+
+
+def get_user_earned_credits_balance_sync(user_id: str) -> int:
+    user = get_user_by_id_sync(user_id)
+    if not user:
+        return 0
+    try:
+        return max(int(user.get("earned_credits_balance") or 0), 0)
+    except Exception:
+        return 0
+
+
+async def get_user_earned_credits_balance(user_id: str) -> int:
+    return get_user_earned_credits_balance_sync(user_id)
+
+
+def _get_existing_earned_credit_ledger_entry_sync(
+    user_id: str,
+    reason: str,
+    source_key: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    if not source_key:
+        return None
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("user_earned_credit_ledger")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("reason", reason)
+        .eq("source_key", source_key)
+        .limit(1)
+        .execute()
+    )
+    rows = result.data or []
+    return rows[0] if rows else None
+
+
+async def _get_existing_earned_credit_ledger_entry(
+    user_id: str,
+    reason: str,
+    source_key: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    return _get_existing_earned_credit_ledger_entry_sync(user_id, reason, source_key)
+
+
+def _change_user_earned_credits_balance_sync(
+    user_id: str,
+    delta: int,
+    reason: str,
+    *,
+    source_key: Optional[str] = None,
+    related_date: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    if delta == 0:
+        return {
+            "applied": False,
+            "delta": 0,
+            "balance_after": get_user_earned_credits_balance_sync(user_id),
+            "entry": None,
+        }
+
+    existing = _get_existing_earned_credit_ledger_entry_sync(user_id, reason, source_key)
+    if existing:
+        return {
+            "applied": False,
+            "delta": int(existing.get("delta") or 0),
+            "balance_after": int(existing.get("balance_after") or 0),
+            "entry": existing,
+        }
+
+    user = get_user_by_id_sync(user_id)
+    if not user:
+        raise ValueError("user not found")
+
+    current_balance = max(int(user.get("earned_credits_balance") or 0), 0)
+    next_balance = current_balance + int(delta)
+    if next_balance < 0:
+        raise ValueError("earned credits balance is insufficient")
+
+    update_result = update_user_sync(user_id, {"earned_credits_balance": next_balance})
+    print(f"[_change_earned_credits] user={user_id} delta={delta} current={current_balance} next={next_balance} update_result={update_result is not None}")
+
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    row: Dict[str, Any] = {
+        "user_id": user_id,
+        "delta": int(delta),
+        "balance_after": next_balance,
+        "reason": reason,
+    }
+    if source_key:
+        row["source_key"] = source_key
+    if related_date:
+        row["related_date"] = related_date
+    if meta is not None:
+        row["meta"] = meta
+    result = supabase.table("user_earned_credit_ledger").insert(row).execute()
+    entry = (result.data or [None])[0]
+    return {
+        "applied": True,
+        "delta": int(delta),
+        "balance_after": next_balance,
+        "entry": entry,
+    }
+
+
+async def _change_user_earned_credits_balance(
+    user_id: str,
+    delta: int,
+    reason: str,
+    *,
+    source_key: Optional[str] = None,
+    related_date: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return _change_user_earned_credits_balance_sync(
+        user_id,
+        delta,
+        reason,
+        source_key=source_key,
+        related_date=related_date,
+        meta=meta,
+    )
+
+
+def add_user_earned_credits_sync(
+    user_id: str,
+    amount: int,
+    reason: str,
+    *,
+    source_key: Optional[str] = None,
+    related_date: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    if amount <= 0:
+        return {
+            "applied": False,
+            "delta": 0,
+            "balance_after": get_user_earned_credits_balance_sync(user_id),
+            "entry": None,
+        }
+    return _change_user_earned_credits_balance_sync(
+        user_id,
+        int(amount),
+        reason,
+        source_key=source_key,
+        related_date=related_date,
+        meta=meta,
+    )
+
+
+async def add_user_earned_credits(
+    user_id: str,
+    amount: int,
+    reason: str,
+    *,
+    source_key: Optional[str] = None,
+    related_date: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return add_user_earned_credits_sync(
+        user_id,
+        amount,
+        reason,
+        source_key=source_key,
+        related_date=related_date,
+        meta=meta,
+    )
+
+
+def deduct_user_earned_credits_sync(
+    user_id: str,
+    amount: int,
+    reason: str,
+    *,
+    source_key: Optional[str] = None,
+    related_date: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    if amount <= 0:
+        return {
+            "applied": False,
+            "delta": 0,
+            "balance_after": get_user_earned_credits_balance_sync(user_id),
+            "entry": None,
+        }
+    return _change_user_earned_credits_balance_sync(
+        user_id,
+        -int(amount),
+        reason,
+        source_key=source_key,
+        related_date=related_date,
+        meta=meta,
+    )
+
+
+async def deduct_user_earned_credits(
+    user_id: str,
+    amount: int,
+    reason: str,
+    *,
+    source_key: Optional[str] = None,
+    related_date: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return deduct_user_earned_credits_sync(
+        user_id,
+        amount,
+        reason,
+        source_key=source_key,
+        related_date=related_date,
+        meta=meta,
+    )
+
+
+async def materialize_daily_invite_reward_credits(user_id: str, china_date_str: str) -> Dict[str, int]:
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        inviter_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id, inviter_user_id, invitee_user_id")
+            .eq("inviter_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+        invitee_rows = (
+            supabase.table("user_invite_referrals")
+            .select("id, inviter_user_id, invitee_user_id")
+            .eq("invitee_user_id", user_id)
+            .eq("status", "reward_active")
+            .lte("reward_start_date", china_date_str)
+            .gte("reward_end_date", china_date_str)
+            .execute()
+        )
+
+        awarded = 0
+        count = 0
+        for role, rows in (("inviter", inviter_rows.data or []), ("invitee", invitee_rows.data or [])):
+            for row in rows:
+                referral_id = str(row.get("id") or "").strip()
+                if not referral_id:
+                    continue
+                result = await add_user_earned_credits(
+                    user_id,
+                    INVITE_REWARD_LEGACY_CREDITS_PER_DAY,
+                    "invite_daily_reward",
+                    source_key=f"invite:{referral_id}:{role}:{china_date_str}",
+                    related_date=china_date_str,
+                    meta={
+                        "role": role,
+                        "referral_id": referral_id,
+                        "inviter_user_id": row.get("inviter_user_id"),
+                        "invitee_user_id": row.get("invitee_user_id"),
+                    },
+                )
+                if result.get("applied"):
+                    awarded += INVITE_REWARD_LEGACY_CREDITS_PER_DAY
+                    count += 1
+        return {"awarded_credits": awarded, "awarded_count": count}
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_invite_referrals", "user_earned_credit_ledger"]):
+            print(f"[materialize_daily_invite_reward_credits] 奖励表未就绪，跳过: {e}")
+            return {"awarded_credits": 0, "awarded_count": 0}
+        if _is_earned_credit_schema_not_ready_error(e):
+            print(f"[materialize_daily_invite_reward_credits] 累计奖励积分字段未就绪，跳过: {e}")
+            return {"awarded_credits": 0, "awarded_count": 0}
+        print(f"[materialize_daily_invite_reward_credits] 错误: {e}")
+        raise
+
+
+async def materialize_daily_share_poster_reward_credits(user_id: str, china_date_str: str) -> Dict[str, int]:
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        share_rows = (
+            supabase.table("user_credit_bonus_events")
+            .select("id, credits, source_record_id")
+            .eq("user_id", user_id)
+            .eq("bonus_type", "share_poster")
+            .eq("bonus_date", china_date_str)
+            .execute()
+        )
+        rows = share_rows.data or []
+        print(f"[materialize_share_poster] user={user_id} date={china_date_str} events={len(rows)}")
+
+        awarded = 0
+        count = 0
+        for row in rows:
+            event_id = str(row.get("id") or "").strip()
+            if not event_id:
+                continue
+            credits = max(int(row.get("credits") or 0), 0)
+            if credits <= 0:
+                continue
+            result = await add_user_earned_credits(
+                user_id,
+                credits,
+                "share_poster_reward",
+                source_key=f"share:{event_id}",
+                related_date=china_date_str,
+                meta={
+                    "bonus_event_id": event_id,
+                    "source_record_id": row.get("source_record_id"),
+                },
+            )
+            print(f"[materialize_share_poster] user={user_id} event={event_id} credits={credits} applied={result.get('applied')} balance_after={result.get('balance_after')}")
+            if result.get("applied"):
+                awarded += credits
+                count += 1
+        print(f"[materialize_share_poster] user={user_id} awarded={awarded} count={count}")
+        return {"awarded_credits": awarded, "awarded_count": count}
+    except Exception as e:
+        if _is_table_not_ready_error(e, ["user_credit_bonus_events", "user_earned_credit_ledger"]):
+            print(f"[materialize_daily_share_poster_reward_credits] 奖励表未就绪，跳过: {e}")
+            return {"awarded_credits": 0, "awarded_count": 0}
+        if _is_earned_credit_schema_not_ready_error(e):
+            print(f"[materialize_daily_share_poster_reward_credits] 累计奖励积分字段未就绪，跳过: {e}")
+            return {"awarded_credits": 0, "awarded_count": 0}
+        print(f"[materialize_daily_share_poster_reward_credits] 错误: {e}")
+        raise
+
+
 async def claim_share_poster_bonus(
     user_id: str,
     china_date_str: str,
     source_record_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """领取“生成分享海报”奖励。每天最多一次。"""
+    """领取「生成分享海报」奖励：每条记录每日最多 1 次，每用户每日最多 SHARE_POSTER_DAILY_MAX_EVENTS 次。"""
+    rid = (source_record_id or "").strip()
+    if not rid:
+        return {
+            "claimed": False,
+            "already_claimed": False,
+            "daily_cap_reached": False,
+            "credits": 0,
+            "event": None,
+            "share_poster_claims_today": 0,
+            "error": "record_id_required",
+        }
+
     check_supabase_configured()
     supabase = get_supabase_client()
+    claims_before_insert = 0
     try:
-        existing = (
+        today_rows = (
             supabase.table("user_credit_bonus_events")
-            .select("*")
+            .select("id, source_record_id")
             .eq("user_id", user_id)
             .eq("bonus_type", "share_poster")
             .eq("bonus_date", china_date_str)
-            .limit(1)
             .execute()
         )
-        if existing.data and len(existing.data) > 0:
+        rows = list(today_rows.data or [])
+        claims_today = len(rows)
+        for r in rows:
+            if str(r.get("source_record_id") or "").strip() == rid:
+                return {
+                    "claimed": False,
+                    "already_claimed": True,
+                    "daily_cap_reached": False,
+                    "credits": 0,
+                    "event": r,
+                    "share_poster_claims_today": claims_today,
+                }
+        if claims_today >= SHARE_POSTER_DAILY_MAX_EVENTS:
             return {
                 "claimed": False,
-                "already_claimed": True,
+                "already_claimed": False,
+                "daily_cap_reached": True,
                 "credits": 0,
-                "event": existing.data[0],
+                "event": None,
+                "share_poster_claims_today": claims_today,
             }
 
         row = {
@@ -2802,27 +3288,41 @@ async def claim_share_poster_bonus(
             "bonus_type": "share_poster",
             "bonus_date": china_date_str,
             "credits": SHARE_POSTER_REWARD_CREDITS,
+            "source_record_id": rid,
             "meta": {"trigger": "record_detail_poster"},
         }
-        if source_record_id:
-            row["source_record_id"] = source_record_id
 
+        claims_before_insert = claims_today
         result = supabase.table("user_credit_bonus_events").insert(row).execute()
         event = (result.data or [None])[0]
         return {
             "claimed": bool(event),
             "already_claimed": False,
+            "daily_cap_reached": False,
             "credits": SHARE_POSTER_REWARD_CREDITS if event else 0,
             "event": event,
+            "share_poster_claims_today": claims_before_insert + (1 if event else 0),
         }
     except Exception as e:
+        err_s = str(e).lower()
+        if "duplicate" in err_s or "23505" in err_s:
+            return {
+                "claimed": False,
+                "already_claimed": True,
+                "daily_cap_reached": False,
+                "credits": 0,
+                "event": None,
+                "share_poster_claims_today": claims_before_insert,
+            }
         if _is_table_not_ready_error(e, ["user_credit_bonus_events"]):
             print(f"[claim_share_poster_bonus] 奖励表未就绪，跳过: {e}")
             return {
                 "claimed": False,
                 "already_claimed": False,
+                "daily_cap_reached": False,
                 "credits": 0,
                 "event": None,
+                "share_poster_claims_today": 0,
             }
         print(f"[claim_share_poster_bonus] 错误: {e}")
         raise
@@ -3160,6 +3660,37 @@ async def list_friends_feed_records(
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
+        # author_scope == "public": 查询所有公开记录的用户 + 自己
+        if author_scope == "public" and not (author_id and str(author_id).strip()):
+            # 只取最近有打卡的公开用户（最多 50 个），避免加载全部用户导致请求过多
+            recent_records = supabase.table("user_food_records").select("user_id").neq("hidden_from_feed", True).order("record_time", desc=True).limit(200).execute()
+            recent_user_ids = []
+            seen = set()
+            for r in (recent_records.data or []):
+                uid = r.get("user_id")
+                if uid and uid not in seen:
+                    seen.add(uid)
+                    recent_user_ids.append(uid)
+                    if len(recent_user_ids) >= 50:
+                        break
+            public_user_ids = []
+            if recent_user_ids:
+                try:
+                    public_users = supabase.table("weapp_user").select("id").in_("id", recent_user_ids).eq("public_records", "true").execute()
+                    public_user_ids = [u["id"] for u in (public_users.data or []) if u.get("id")]
+                except Exception as e:
+                    print(f"[list_friends_feed_records] public_records query failed: {e}", flush=True)
+            author_ids = list(set(public_user_ids) | {user_id})
+            normalized_priority_ids = [
+                aid for aid in normalized_priority_ids
+                if aid in author_ids
+            ]
+
+        custom_rank = sort_by in {"recommended", "hot", "balanced"}
+        candidate_limit = max(offset + limit + 40, limit * 3, 60) if custom_rank else limit
+        range_start = 0 if custom_rank else offset
+        range_end = candidate_limit - 1 if custom_rank else offset + limit - 1
+
         q = supabase.table("user_food_records").select("*").in_("user_id", author_ids)
         q = q.neq("hidden_from_feed", True)
         
@@ -3173,11 +3704,6 @@ async def list_friends_feed_records(
             q = q.eq("meal_type", meal_type)
         if diet_goal:
             q = q.eq("diet_goal", diet_goal)
-
-        custom_rank = sort_by in {"recommended", "hot", "balanced"}
-        candidate_limit = max(offset + limit + 40, limit * 3, 60) if custom_rank else limit
-        range_start = 0 if custom_rank else offset
-        range_end = candidate_limit - 1 if custom_rank else offset + limit - 1
 
         q = q.order("record_time", desc=True).range(range_start, range_end)
         records = q.execute()
@@ -3468,9 +3994,26 @@ async def list_public_feed_records(
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
-        # 找出 public_records=true 的用户
-        public_users = supabase.table("weapp_user").select("id").eq("public_records", True).execute()
-        public_user_ids = [u["id"] for u in (public_users.data or [])]
+        # 只取最近有打卡的公开用户（最多 50 个），避免加载全部用户导致请求过多
+        recent_records = supabase.table("user_food_records").select("user_id").neq("hidden_from_feed", True).order("record_time", desc=True).limit(200).execute()
+        recent_user_ids = []
+        seen = set()
+        for r in (recent_records.data or []):
+            uid = r.get("user_id")
+            if uid and uid not in seen:
+                seen.add(uid)
+                recent_user_ids.append(uid)
+                if len(recent_user_ids) >= 50:
+                    break
+
+        public_user_ids = []
+        if recent_user_ids:
+            try:
+                public_users = supabase.table("weapp_user").select("id").in_("id", recent_user_ids).eq("public_records", "true").execute()
+                public_user_ids = [u["id"] for u in (public_users.data or []) if u.get("id")]
+            except Exception as e:
+                print(f"[list_public_feed_records] public_records query failed: {e}", flush=True)
+
         if not public_user_ids:
             return []
 
@@ -5206,11 +5749,98 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
 # 计入「每日分析配额」的任务类型：与 create_analysis_task_sync 写入的类型一致。
 # 开发环境若开启 FOOD_DEBUG_TASK_QUEUE，任务为 food_debug / food_text_debug，须一并统计，否则会员页 daily_used 恒为 0。
 _FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA = ("food", "food_text", "food_debug", "food_text_debug")
+_FOOD_ANALYSIS_CREDIT_COST = 2
+_EXERCISE_LOG_CREDIT_COST = 1
 
 
 def _is_exercise_fallback_task_payload(payload: Any) -> bool:
     """判断 analysis_tasks.payload 是否是“运动记录回退投递到 food_text* 队列”的任务。"""
     return isinstance(payload, dict) and bool(payload.get("exercise"))
+
+
+def _normalize_task_payload(payload: Any) -> Dict[str, Any]:
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str):
+        try:
+            parsed = json.loads(payload)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _get_analysis_task_created_china_date(row: Dict[str, Any]) -> Optional[str]:
+    raw = row.get("created_at")
+    if not raw:
+        return None
+    try:
+        dt = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone(timedelta(hours=8))).date().isoformat()
+    except Exception:
+        return None
+
+
+def _get_task_system_credit_usage_units(row: Dict[str, Any], china_date_str: str) -> int:
+    payload = _normalize_task_payload(row.get("payload"))
+    credit_usage = payload.get("credit_usage")
+    if isinstance(credit_usage, dict):
+        system_by_date = credit_usage.get("system_by_date")
+        if isinstance(system_by_date, dict):
+            try:
+                return max(int(system_by_date.get(china_date_str) or 0), 0)
+            except Exception:
+                return 0
+
+    created_date = _get_analysis_task_created_china_date(row)
+    if created_date != china_date_str:
+        return 0
+
+    task_type = str(row.get("task_type") or "").strip()
+    if task_type == "exercise" or _is_exercise_fallback_task_payload(payload):
+        return _EXERCISE_LOG_CREDIT_COST
+    if task_type in _FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA:
+        return _FOOD_ANALYSIS_CREDIT_COST
+    return 0
+
+
+async def get_daily_system_credit_usage(user_id: str, china_date_str: str) -> int:
+    """统计某个中国自然日已占用的系统积分额度。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.get_daily_system_credit_usage") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.china_date", china_date_str)
+        try:
+            china_date = datetime.strptime(china_date_str, "%Y-%m-%d").date()
+            window_start = f"{china_date_str}T00:00:00+08:00"
+            window_end = f"{(china_date + timedelta(days=3)).strftime('%Y-%m-%d')}T00:00:00+08:00"
+            result = (
+                supabase.table("analysis_tasks")
+                .select("id, task_type, payload, created_at")
+                .eq("user_id", user_id)
+                .gte("created_at", window_start)
+                .lt("created_at", window_end)
+                .execute()
+            )
+            rows = result.data or []
+            used_units = sum(_get_task_system_credit_usage_units(row or {}, china_date_str) for row in rows)
+            _safe_add_span_event(
+                "db.count.success",
+                {
+                    "db.operation": "get_daily_system_credit_usage",
+                    "db.rows": len(rows),
+                    "db.count": used_units,
+                },
+            )
+            return max(int(used_units), 0)
+        except Exception as e:
+            _record_db_exception("get_daily_system_credit_usage", e, **{"db.table": "analysis_tasks"})
+            return 0
 
 
 async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
@@ -5543,6 +6173,30 @@ async def list_pro_membership_payment_records(
         return list(result.data or [])
     except Exception as e:
         print(f"[list_pro_membership_payment_records] 错误: {e}")
+        raise
+
+
+async def get_latest_paid_membership_payment_record(user_id: str) -> Optional[Dict[str, Any]]:
+    """获取用户最近一次已支付的会员订阅订单，排除积分充值等非会员单。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    try:
+        result = (
+            supabase.table("pro_membership_payment_records")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("status", "paid")
+            .order("paid_at", desc=True)
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+        for row in list(result.data or []):
+            if _is_membership_subscription_plan_code(row.get("plan_code")):
+                return row
+        return None
+    except Exception as e:
+        print(f"[get_latest_paid_membership_payment_record] 閿欒: {e}")
         raise
 
 

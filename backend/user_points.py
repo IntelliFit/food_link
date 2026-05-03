@@ -11,9 +11,11 @@ from typing import Any, Dict, Optional, Tuple
 
 from database import (
     check_supabase_configured,
+    create_invite_referral_binding,
     create_user,
     get_supabase_client,
     get_user_by_id,
+    resolve_user_by_friend_invite_code,
     update_user,
 )
 
@@ -180,11 +182,14 @@ async def create_new_user_with_points(
     invite_code_from_client: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    创建新用户：初始积分 + 邀请码；若填写有效邀请码则双方 +REFERRAL_BONUS。
+    创建新用户：初始试用资格 + 邀请码绑定。
+    若填写有效注册邀请码，则在 user_invite_referrals 建立待达标关系；
+    被邀请人 7 天内跨 2 个自然日完成有效使用后，双方 earned_credits_balance 各 +15。
+    （旧 points_balance 邀请奖励已废弃。）
     """
     user_data = {**user_data}
     user_data.setdefault("points_balance", float(INITIAL_POINTS))
-    # 先插入带积分的用户；邀请码在插入后生成，避免唯一冲突
+    # 先插入用户；邀请码在插入后生成，避免唯一冲突
     user = await create_user(user_data)
     uid = user["id"]
     try:
@@ -194,12 +199,22 @@ async def create_new_user_with_points(
 
     code = (invite_code_from_client or "").strip().upper()
     if code:
+        # 先尝试注册邀请码，再尝试好友邀请码（用户ID前缀）
         inviter = await get_user_by_registration_invite_code(code)
+        if not inviter:
+            inviter = await resolve_user_by_friend_invite_code(code)
         if inviter and inviter.get("id") and inviter["id"] != uid:
             try:
                 await update_user(uid, {"referred_by_user_id": inviter["id"]})
-                await add_user_points(uid, REFERRAL_BONUS, "referral_welcome", {"inviter_id": inviter["id"]})
-                await add_user_points(inviter["id"], REFERRAL_BONUS, "referral_reward", {"invitee_id": uid})
             except Exception as e:
-                print(f"[create_new_user_with_points] referral bonus failed: {e}")
+                print(f"[create_new_user_with_points] update referred_by failed: {e}")
+            try:
+                # 建立新的邀请奖励关系（earned_credits_balance 体系）
+                await create_invite_referral_binding(
+                    inviter_user_id=inviter["id"],
+                    invitee_user_id=uid,
+                    invite_code=code,
+                )
+            except Exception as e:
+                print(f"[create_new_user_with_points] invite referral binding failed: {e}")
     return await get_user_by_id(uid) or user
