@@ -42,16 +42,14 @@ const MEDICAL_OPTIONS = [
 
 /** 过敏源选项 */
 const ALLERGY_OPTIONS = [
-  { label: '海鲜', value: 'seafood' },
-  { label: '花生', value: 'peanut' },
-  { label: '牛奶', value: 'milk' },
-  { label: '鸡蛋', value: 'egg' },
-  { label: '芒果', value: 'mango' },
-  { label: '酒精', value: 'alcohol' },
-  { label: '花粉', value: 'pollen' },
-  { label: '尘螨', value: 'dust_mite' },
-  { label: '猫毛', value: 'cat_hair' },
-  { label: '无', value: 'none' }
+  { label: '海鲜', value: 'seafood', icon: '🦐' },
+  { label: '花生', value: 'peanut', icon: '🥜' },
+  { label: '牛奶', value: 'milk', icon: '🥛' },
+  { label: '鸡蛋', value: 'egg', icon: '🥚' },
+  { label: '芒果', value: 'mango', icon: '🥭' },
+  { label: '酒精', value: 'alcohol', icon: '🍺' },
+  { label: '辣', value: 'spicy', icon: '🌶️' },
+  { label: '无', value: 'none', icon: '' }
 ]
 
 /** 特殊饮食选项 */
@@ -658,6 +656,7 @@ function HealthProfilePage() {
                   className={`option-card small ${allergyList.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleAllergy(o.value)}
                 >
+                  <Text className='option-icon'>{o.icon}</Text>
                   <Text className='option-label'>{o.label}</Text>
                 </View>
               ))}
