@@ -1417,8 +1417,8 @@ def list_analysis_tasks_by_user_sync(
             r = q.execute()
             rows = list(r.data or [])
 
-            # 过滤运动回退任务（payload.exercise = true，投递到 food_text* 队列的运动记录）
-            rows = [row for row in rows if not _is_exercise_fallback_task_payload(row.get("payload"))]
+            # 过滤不应出现在识别记录中的任务（运动回退 + 保质期识别）
+            rows = [row for row in rows if not _is_excluded_from_analyze_history(row.get("payload"))]
 
             # 批量查询哪些 done 任务已保存为饮食记录，同时取 record_id 供跳转
             done_task_ids = [row["id"] for row in rows if row.get("status") == "done"]
@@ -1479,7 +1479,7 @@ def count_analysis_tasks_by_user_sync(user_id: str) -> int:
             )
             r = q.execute()
             rows = r.data or []
-            count = sum(1 for row in rows if not _is_exercise_fallback_task_payload(row.get("payload")))
+            count = sum(1 for row in rows if not _is_excluded_from_analyze_history(row.get("payload")))
             _safe_add_span_event("db.query.success", {"db.operation": "count_analysis_tasks_by_user_sync", "db.count": count})
             return count
         except Exception as e:
@@ -1509,8 +1509,8 @@ def count_analysis_tasks_by_status_sync(user_id: str) -> Dict[str, Any]:
             r = q.execute()
             tasks = list(r.data or [])
 
-            # 过滤运动回退任务（payload.exercise = true，投递到 food_text* 队列的运动记录）
-            tasks = [t for t in tasks if not _is_exercise_fallback_task_payload(t.get("payload"))]
+            # 过滤不应出现在识别记录中的任务（运动回退 + 保质期识别）
+            tasks = [t for t in tasks if not _is_excluded_from_analyze_history(t.get("payload"))]
 
             done_task_ids = [t["id"] for t in tasks if t.get("status") == "done"]
             if done_task_ids:
@@ -2744,7 +2744,7 @@ async def create_invite_referral_binding(
     invite_code: Optional[str] = None,
     source_request_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """记录邀请关系，供后续“完成 1 次有效使用后发奖励”使用。"""
+    """记录邀请关系，供后续"完成 1 次有效使用后发奖励"使用。"""
     if not inviter_user_id or not invitee_user_id or inviter_user_id == invitee_user_id:
         return None
     check_supabase_configured()
@@ -2933,7 +2933,7 @@ async def claim_share_poster_bonus(
     china_date_str: str,
     source_record_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """领取“生成分享海报”奖励。每天最多一次。"""
+    """领取"生成分享海报"奖励。每天最多一次。"""
     check_supabase_configured()
     supabase = get_supabase_client()
     try:
@@ -5366,8 +5366,19 @@ _FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA = ("food", "food_text", "food_debug", "food_
 
 
 def _is_exercise_fallback_task_payload(payload: Any) -> bool:
-    """判断 analysis_tasks.payload 是否是“运动记录回退投递到 food_text* 队列”的任务。"""
+    """判断 analysis_tasks.payload 是否是运动记录回退投递到 food_text* 队列的任务。"""
     return isinstance(payload, dict) and bool(payload.get("exercise"))
+
+
+def _is_expiry_recognition_task_payload(payload: Any) -> bool:
+    """判断 analysis_tasks.payload 是否是食物保质期识别任务。
+    这类任务在识别记录页面不展示、不计入 badge，只在食物管理页查看。"""
+    return isinstance(payload, dict) and bool(payload.get("expiry_recognition"))
+
+
+def _is_excluded_from_analyze_history(payload: Any) -> bool:
+    """排除不应出现在识别记录列表/计数中的任务：运动回退 + 保质期识别。"""
+    return _is_exercise_fallback_task_payload(payload) or _is_expiry_recognition_task_payload(payload)
 
 
 async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
