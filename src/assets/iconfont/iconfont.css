@@ -1,9 +1,9 @@
 @font-face {
   font-family: "iconfont"; /* Project id 5122763 */
-  src: url('iconfont.woff2?t=1777541275327') format('woff2'),
-       url('iconfont.woff?t=1777541275327') format('woff'),
-       url('iconfont.ttf?t=1777541275327') format('truetype'),
-       url('iconfont.svg?t=1777541275327#iconfont') format('svg');
+  src: url('iconfont.woff2?t=1777815271495') format('woff2'),
+       url('iconfont.woff?t=1777815271495') format('woff'),
+       url('iconfont.ttf?t=1777815271495') format('truetype'),
+       url('iconfont.svg?t=1777815271495#iconfont') format('svg');
 }
 
 .iconfont {
@@ -12,6 +12,14 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-left:before {
+  content: "\e681";
+}
+
+.icon-right:before {
+  content: "\e683";
 }
 
 .icon-pengyouquan:before {

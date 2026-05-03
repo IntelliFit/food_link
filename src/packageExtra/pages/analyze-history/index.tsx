@@ -381,7 +381,8 @@ function AnalyzeHistoryPage() {
 
   const handleDiscardUnrecorded = () => {
     const discardableTasks = tasks.filter(
-      t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed'
+      t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed' ||
+        (t.status === 'done' && t.is_recorded === false)
     )
     if (discardableTasks.length === 0) {
       Taro.showToast({ title: '没有可丢弃的未记录', icon: 'none' })
@@ -389,7 +390,7 @@ function AnalyzeHistoryPage() {
     }
     Taro.showModal({
       title: '确认丢弃',
-      content: `确定丢弃 ${discardableTasks.length} 条排队中/识别中/识别失败的记录吗？丢弃后不可恢复。`,
+      content: `确定丢弃 ${discardableTasks.length} 条未记录的识别结果吗？丢弃后不可恢复。`,
       confirmText: '丢弃',
       confirmColor: '#e57373',
       cancelText: '取消',
