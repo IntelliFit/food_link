@@ -617,14 +617,23 @@ function AnalyzeHistoryPage() {
             <Text className='empty-text'>暂时没有记录，快去拍一张吧~</Text>
           </View>
         ) : (
-          tasks.map(t => (
-            <TaskCard
-              key={t.id}
-              task={t}
-              onTap={onTaskTap}
-              onMore={handleMore}
-            />
-          ))
+          <>
+            <View className='list-header'>
+              <View className='list-header-spacer' />
+              <View className='bulk-delete-btn' onClick={handleDiscardUnrecorded}>
+                <Text className='iconfont icon-shanchu bulk-delete-icon' />
+                <Text className='bulk-delete-text'>一键删除未记录</Text>
+              </View>
+            </View>
+            {tasks.map(t => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                onTap={onTaskTap}
+                onMore={handleMore}
+              />
+            ))}
+          </>
         )}
       </ScrollView>
 

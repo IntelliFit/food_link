@@ -11,6 +11,50 @@
   box-sizing: border-box;
 }
 
+// 列表头部：右侧放置一键删除按钮
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 20rpx;
+}
+
+.list-header-spacer {
+  flex: 1;
+}
+
+// 一键删除未记录按钮（仿照首页编辑目标按钮样式）
+.bulk-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 8rpx 20rpx;
+  background: rgb(255 255 255 / 94%);
+  border-radius: 999rpx;
+  box-shadow:
+    0 4rpx 16rpx rgb(0 0 0 / 10%),
+    inset 0 1rpx 0 rgb(255 255 255 / 55%);
+
+  &:active {
+    background: rgb(255 255 255 / 100%);
+    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 12%);
+  }
+}
+
+.bulk-delete-icon {
+  font-size: 22rpx;
+  color: #5cb896;
+  line-height: 1;
+}
+
+.bulk-delete-text {
+  font-size: 24rpx;
+  color: #2f7f62;
+  line-height: 34rpx;
+  font-weight: 600;
+}
+
 // 卡片容器
 .task-card-wrapper {
   position: relative;
