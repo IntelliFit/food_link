@@ -1409,6 +1409,9 @@ def list_analysis_tasks_by_user_sync(
             q = supabase.table("analysis_tasks").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit)
             if task_type:
                 q = q.eq("task_type", task_type)
+            else:
+                # 识别记录页面：默认只返回食物相关任务，排除运动/健康报告等
+                q = q.in_("task_type", ["food", "food_debug", "food_text", "food_text_debug"])
             if status:
                 q = q.eq("status", status)
             r = q.execute()
