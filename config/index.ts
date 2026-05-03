@@ -14,6 +14,10 @@ function readPackageVersion(): string {
 
 const packageVersion = readPackageVersion()
 
+// fix: @taroify/icons 字体文件 base64 内联，避免小程序环境中路径解析失败
+const vantIconWoff2Base64 = readFileSync(join(process.cwd(), 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
+const vantIconWoffBase64 = readFileSync(join(process.cwd(), 'src/assets/vant-icon/vant-icon.woff')).toString('base64')
+
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
   const apiBaseUrl =
@@ -100,14 +104,18 @@ export default defineConfig<'vite'>(async (merge) => {
           }
         },
         // fix: @taroify/icons 使用的 iconfont CDN (at.alicdn.com) 在小程序环境中
-        // 无法加载，替换为本地托管的 vant-icon 字体文件
+        // 无法加载，改为 base64 内联，彻底避免路径解析问题
         {
           name: 'taro-fix-vant-icon-font',
           transform(code, id) {
             if (/@taroify[\\/]icons/.test(id) && /\.(css|scss|less|wxss)$/.test(id)) {
               return code.replace(
                 /url\(['"]?\/\/at\.alicdn\.com\/t\/c\/font_2553510_\w+\.(woff2|woff)\?t=\d+['"]?\)/g,
-                (match, format) => `url("/assets/vant-icon/vant-icon.${format}")`
+                (match, format) => {
+                  const b64 = format === 'woff2' ? vantIconWoff2Base64 : vantIconWoffBase64
+                  const mime = format === 'woff2' ? 'font/woff2' : 'font/woff'
+                  return `url("data:${mime};base64,${b64}")`
+                }
               )
             }
             return null

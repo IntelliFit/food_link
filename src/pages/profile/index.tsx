@@ -371,34 +371,11 @@ function ProfilePage() {
       badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
     },
     {
-      id: 4,
-      icon: <LocationOutlined size='20' />,
-      title: '邀请有礼',
-      desc: '邀请新用户，达标后双方各得 15 积分',
-      path: extraPkgUrl('/pages/invite-friends/index')
-    },
-    {
       id: 5,
       icon: <ShopOutlined size='20' />,
       title: '公共食物库',
       desc: '浏览公共食物营养数据',
       path: extraPkgUrl('/pages/food-library/index')
-    },
-    {
-      id: 6,
-      icon: <ShieldOutlined size='20' />,
-      title: '食探会员',
-      desc: membershipStatus?.is_pro
-        ? (membershipStatus?.daily_credits_max ?? 0) > 0
-          ? `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))}${membershipStatus?.early_user_paid_bonus_active ? ` · 创始 x${membershipStatus?.early_user_paid_bonus_multiplier ?? 2}` : ''} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 可用 ${membershipTotalAvailable} · 系统 ${membershipSystemRemaining} · 奖励 ${membershipEarnedBalance}`
-          : `${getMembershipTierLabel(getCurrentMembershipTier(membershipStatus))} · 不限次数`
-        : membershipStatus?.trial_active
-          ? `${membershipStatus?.trial_policy === 'founding_top_500_bonus_month' ? `前 500 #${membershipStatus?.early_user_rank ?? '--'} 免费 2 个月` : (membershipStatus?.trial_policy === 'early_first_1000' || (membershipStatus?.trial_days_total ?? 0) >= 30) ? `前 1000 #${membershipStatus?.early_user_rank ?? '--'} 免费月` : '免费 3 天试用'} · 已用 ${membershipStatus?.daily_credits_used ?? 0}/${membershipStatus?.daily_credits_max ?? 0} · 可用 ${membershipTotalAvailable} · 系统 ${membershipSystemRemaining} · 奖励 ${membershipEarnedBalance}`
-          : membershipStatus?.early_user_paid_bonus_eligible
-            ? `创始礼遇 · ${getFounderPaidBonusSourceLabel(membershipStatus) || '前 1000 注册 / 前 100 付费'}开通后积分翻倍`
-            : '3 档会员 · 每日系统积分发放',
-      path: extraPkgUrl('/pages/pro-membership/index')
-    }
     }
   ]
 

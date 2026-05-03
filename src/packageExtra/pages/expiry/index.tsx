@@ -283,7 +283,7 @@ export default function ExpiryPage() {
                   <Text className='expiry-section-title'>
                     已处理 ({grouped.processed.length})
                   </Text>
-                  {processedExpanded ? <IconCollapse size={24} color='#61756d' /> : <IconExpand size={24} color='#61756d' />}
+                  {processedExpanded ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}
                 </View>
                 {processedExpanded && grouped.processed.map(renderItemCard)}
               </View>
