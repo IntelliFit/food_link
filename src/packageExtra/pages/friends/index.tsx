@@ -1,6 +1,6 @@
 import { withAuth } from '../../../utils/withAuth'
 import { View, Text, Image, Button, Input } from '@tarojs/components'
-import Taro, { useDidShow, useRouter } from '@tarojs/taro'
+import Taro, { useDidShow, useDidHide, useRouter } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
 import {
   friendCancelSentRequest,
@@ -166,6 +166,14 @@ function FriendsPage() {
       setActiveTab('received')
     }
     loadData()
+  })
+
+  useDidHide(() => {
+    // 离开好友页时，已查看的好友请求不再计入未读 badge
+    const oldFriend = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+    Taro.setStorageSync('profile_tab_badge_friend_count', 0)
+    const oldBadge = Number(Taro.getStorageSync('profile_tab_badge_count') || 0)
+    Taro.setStorageSync('profile_tab_badge_count', Math.max(0, oldBadge - oldFriend))
   })
 
   const handleDeleteFriend = async (friend: FriendListItem) => {

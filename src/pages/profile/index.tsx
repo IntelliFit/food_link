@@ -195,9 +195,14 @@ function ProfilePage() {
           ])
 
           // 计算待处理的好友请求数量
+          let pendingFriendCount = 0
           if (friendRequestsData?.received) {
-            const pendingCount = friendRequestsData.received.filter(r => r.status === 'pending').length
-            setFriendRequestCount(pendingCount)
+            pendingFriendCount = friendRequestsData.received.filter(r => r.status === 'pending').length
+            setFriendRequestCount(pendingFriendCount)
+            Taro.setStorageSync('profile_tab_badge_friend_count', pendingFriendCount)
+          } else {
+            // 保持旧值，避免网络抖动导致清零
+            pendingFriendCount = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
           }
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
@@ -217,7 +222,7 @@ function ProfilePage() {
             Taro.setStorageSync('analyze_has_unseen_waiting_record', statusCount.has_unseen_waiting_record)
           }
 
-          // 计算底部导航栏"我的"按钮 badge 总数
+          // 计算底部导航栏"我的"按钮 badge 总数 = 识别记录 + 食物保质期 + 好友请求
           try {
             const expiryTodo = dashboardData
               ? ((dashboardData as FoodExpiryDashboard).expired_count || 0)
@@ -228,7 +233,7 @@ function ProfilePage() {
             const today = new Date().toISOString().slice(0, 10)
             const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
             const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : expiryTodo
-            Taro.setStorageSync('profile_tab_badge_count', waitingRecord + foodExpiryBadge)
+            Taro.setStorageSync('profile_tab_badge_count', waitingRecord + foodExpiryBadge + pendingFriendCount)
           } catch (_) { /* ignore */ }
 
           // 获取记录天数
@@ -489,6 +494,10 @@ function ProfilePage() {
 
           // 食物保质期已读标记
           Taro.removeStorageSync('food_expiry_last_seen_date')
+
+          // 底部导航栏 badge 计数
+          Taro.removeStorageSync('profile_tab_badge_count')
+          Taro.removeStorageSync('profile_tab_badge_friend_count')
 
           // 朋友圈相关缓存
           Taro.removeStorageSync('community_feed_cache')

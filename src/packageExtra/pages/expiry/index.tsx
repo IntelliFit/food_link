@@ -83,7 +83,8 @@ export default function ExpiryPage() {
       Taro.setStorageSync('food_expiry_last_seen_date', today)
       Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
       Taro.setStorageSync('analyze_waiting_record_count', 0)
-      Taro.setStorageSync('profile_tab_badge_count', 0)
+      const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+      Taro.setStorageSync('profile_tab_badge_count', friendBadge)
     })()
   })
 

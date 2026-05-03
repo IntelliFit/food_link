@@ -102,6 +102,14 @@ Component({
 
     updateWaitingBadge() {
       try {
+        // 未登录不显示 badge
+        const token = wx.getStorageSync('access_token')
+        if (!token) {
+          if (this.data.profileTabBadgeCount !== 0 || this.data.hasUnseenWaitingRecord) {
+            this.setData({ profileTabBadgeCount: 0, hasUnseenWaitingRecord: false })
+          }
+          return
+        }
         const count = wx.getStorageSync('analyze_waiting_record_count') || 0
         const num = Number(count)
         const hasUnseen = wx.getStorageSync('analyze_has_unseen_waiting_record') === true ||

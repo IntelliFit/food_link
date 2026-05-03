@@ -917,7 +917,7 @@ function IndexPage() {
         setHasUnseenWaitingRecord(sc.has_unseen_waiting_record || false)
         Taro.setStorageSync('analyze_waiting_record_count', count)
         Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
-        // 计算 profile tab badge 总数：waiting_record + 食物保质期待办 (expired + today + soon)
+        // 计算 profile tab badge 总数：waiting_record + 食物保质期待办 + 好友请求
         const expiryTodo = expiry
           ? (expiry.expired_count || 0) + (expiry.today_count || 0) + (expiry.soon_count || 0)
           : 0
@@ -925,7 +925,8 @@ function IndexPage() {
         const todayStr = new Date().toISOString().slice(0, 10)
         const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
         const foodExpiryBadge = lastSeenFoodExpiry === todayStr ? 0 : expiryTodo
-        Taro.setStorageSync('profile_tab_badge_count', count + foodExpiryBadge)
+        const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+        Taro.setStorageSync('profile_tab_badge_count', count + foodExpiryBadge + friendBadge)
       } catch {
         // 静默失败，保留旧值
       }
