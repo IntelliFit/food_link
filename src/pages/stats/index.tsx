@@ -1108,17 +1108,6 @@ function StatsPage() {
               <Text className='card-subtitle'>用于把统计结果翻译成更容易理解的长期趋势结论</Text>
             </View>
             <View className='card-header-actions'>
-              <View
-                className={`analysis-action-btn${insightActionLoading ? ' disabled' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!insightActionLoading) handleGenerateInsight()
-                }}
-              >
-                <Text className='analysis-action-btn-text'>
-                  {insightActionLoading ? '生成中...' : hasInsight ? '更新' : '生成'}
-                </Text>
-              </View>
               <View className='card-header-arrow'>{expandedSections.ai ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
             </View>
           </View>

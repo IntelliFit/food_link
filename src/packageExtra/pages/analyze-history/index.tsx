@@ -432,12 +432,13 @@ function AnalyzeHistoryPage() {
               const sc = await getAnalyzeTaskStatusCount()
               Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
               Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
-              // 清零 profile tab badge
+              // 更新 profile tab badge：只替换 waiting_record 部分，保留食物保质期部分
               const today = new Date().toISOString().slice(0, 10)
               const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
-              const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : (
-                (sc.waiting_record || 0) + (Taro.getStorageSync('profile_tab_badge_count') || 0)
-              )
+              const oldProfileBadge = Number(Taro.getStorageSync('profile_tab_badge_count') || 0)
+              const oldWaitingRecord = Number(Taro.getStorageSync('analyze_waiting_record_count') || 0)
+              const oldFoodExpiryBadge = Math.max(0, oldProfileBadge - oldWaitingRecord)
+              const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : oldFoodExpiryBadge
               Taro.setStorageSync('profile_tab_badge_count', (sc.waiting_record || 0) + foodExpiryBadge)
             } catch {
               // 静默失败
