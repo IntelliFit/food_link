@@ -135,6 +135,25 @@
   }
 }
 
+.delete-account-section {
+  margin-top: 32rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24rpx 0;
+}
+
+.delete-account-text {
+  font-size: 28rpx;
+  color: #ef4444;
+  line-height: 40rpx;
+  transition: opacity 0.2s ease;
+
+  &:active {
+    opacity: 0.6;
+  }
+}
+
 
 /* Dark mode */
 .profile-settings-page--dark {
@@ -179,5 +198,9 @@
 
   .save-btn {
     background: linear-gradient(135deg, #00a870 0%, #00bc7d 100%);
+  }
+
+  .delete-account-text {
+    color: #f87171;
   }
 }

@@ -2706,7 +2706,7 @@ function IndexPage() {
       )}
 
       {/* 记录菜单弹窗 */}
-      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} />
+      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} hasUnseenWaitingRecord={hasUnseenWaitingRecord} />
 
       <View className='poster-canvas-wrap'>
         <Canvas

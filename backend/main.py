@@ -411,7 +411,9 @@ EXPIRY_RECOGNITION_MISSING_FIELDS = {
     "note",
 }
 EXPIRY_SUBSCRIBE_ACCEPT_STATUSES = {"accept", "acceptwithalert", "acceptwithaudio"}
+ANALYSIS_SUBSCRIBE_ACCEPT_STATUSES = {"accept", "acceptwithalert", "acceptwithaudio"}
 EXPIRY_NOTIFICATION_TEMPLATE_ID = str(os.getenv("EXPIRY_SUBSCRIBE_TEMPLATE_ID") or "").strip()
+ANALYSIS_SUBSCRIBE_TEMPLATE_ID = str(os.getenv("ANALYSIS_SUBSCRIBE_TEMPLATE_ID") or "").strip()
 EXPIRY_NOTIFICATION_PAGE = "/pages/expiry/index"
 EXPIRY_NOTIFICATION_DEFAULT_HOUR = 9
 EXPIRY_NOTIFICATION_MAX_RETRY = 3
@@ -3964,6 +3966,7 @@ class AnalyzeSubmitRequest(BaseModel):
     correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
     precision_session_id: Optional[str] = Field(default=None, description="精准模式会话 ID（继续多轮交互时传入）")
     reference_objects: Optional[List[PrecisionReferenceObjectInput]] = Field(default=None, description="参考物列表")
+    subscribe_status: Optional[str] = Field(default=None, description="用户对分析完成订阅消息的授权状态")
 
 
 @app.post("/api/analyze/submit")
@@ -4027,6 +4030,7 @@ async def analyze_submit(
         "previousResult": body.previousResult,
         "correctionItems": body.correctionItems,
         "reference_objects": _serialize_reference_objects(body.reference_objects),
+        "subscribe_status": body.subscribe_status,
     }
 
     if effective_mode == "strict" or body.precision_session_id:
@@ -4742,6 +4746,7 @@ class AnalyzeTextSubmitRequest(BaseModel):
     correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
     precision_session_id: Optional[str] = Field(default=None, description="精准模式会话 ID（继续多轮交互时传入）")
     reference_objects: Optional[List[PrecisionReferenceObjectInput]] = Field(default=None, description="参考物列表")
+    subscribe_status: Optional[str] = Field(default=None, description="用户对分析完成订阅消息的授权状态")
 
 
 class ContinuePrecisionSessionRequest(BaseModel):
@@ -4810,6 +4815,7 @@ async def analyze_text_submit(
         "previousResult": body.previousResult,
         "correctionItems": body.correctionItems,
         "reference_objects": _serialize_reference_objects(body.reference_objects),
+        "subscribe_status": body.subscribe_status,
     }
 
     if effective_mode == "strict" or body.precision_session_id:

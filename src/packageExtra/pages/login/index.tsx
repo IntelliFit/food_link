@@ -375,6 +375,16 @@ export default function LoginPage() {
                         >
                             《用户服务协议》
                         </Text>
+                        、
+                        <Text
+                          className='agreement-link'
+                          onClick={(e) => {
+                                e.stopPropagation()
+                                Taro.navigateTo({ url: extraPkgUrl('/pages/membership-agreement/index') })
+                            }}
+                        >
+                            《会员服务协议》
+                        </Text>
                         和
                         <Text
                           className='agreement-link'

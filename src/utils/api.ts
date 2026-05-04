@@ -24,6 +24,10 @@ export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
   ''
 )
+export const ANALYSIS_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
+  () => __ANALYSIS_SUBSCRIBE_TEMPLATE_ID__,
+  ''
+)
 
 // 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
 if (process.env.NODE_ENV !== 'production') {
@@ -1709,6 +1713,7 @@ export interface AnalyzeTaskSubmitParams {
   image_url: string
   image_urls?: string[]
   meal_type?: MealType
+  subscribe_status?: string
   date?: string
   timezone_offset_minutes?: number
   province?: string
@@ -1867,6 +1872,7 @@ export interface AnalyzeTextTaskSubmitParams {
   previousResult?: AnalyzeResponse
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
+  subscribe_status?: string
   correctionItems?: Array<{
     name: string
     weight: number

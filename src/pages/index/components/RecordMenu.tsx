@@ -34,6 +34,7 @@ interface RecordMenuProps {
   visible: boolean
   onClose: () => void
   selectedDate: string
+  hasUnseenWaitingRecord: boolean
 }
 
 // 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
@@ -87,7 +88,7 @@ const QUICK_ACCESS_ITEMS = [
   },
 ] as const
 
-export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
+export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRecord }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)

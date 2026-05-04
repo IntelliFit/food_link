@@ -1,7 +1,7 @@
 import { View, Text, Textarea, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type CanonicalMealType, type MembershipStatus } from '../../../utils/api'
+import { getAccessToken, submitTextAnalyzeTask, getMyMembership, ANALYSIS_SUBSCRIBE_TEMPLATE_ID, type CanonicalMealType, type MembershipStatus } from '../../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import {
   getFoodAnalysisBlockedActionText,
@@ -128,6 +128,19 @@ function RecordTextPage() {
     let inputText = trimmed
     if (foodAmount.trim()) inputText += `\n数量：${foodAmount.trim()}`
 
+    // 请求订阅消息授权
+    let subscribeStatus: string | undefined
+    if (ANALYSIS_SUBSCRIBE_TEMPLATE_ID) {
+      try {
+        const subscribeRes = await (Taro as any).requestSubscribeMessage({
+          tmplIds: [ANALYSIS_SUBSCRIBE_TEMPLATE_ID],
+        })
+        subscribeStatus = String((subscribeRes as any)?.[ANALYSIS_SUBSCRIBE_TEMPLATE_ID] || '')
+      } catch (_) {
+        // 静默失败
+      }
+    }
+
     setLoading(true)
     Taro.showLoading({ title: '提交任务中...', mask: true })
 
@@ -141,7 +154,8 @@ function RecordTextPage() {
         date: getStoredRecordTargetDate(),
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
-        activity_timing: activityTiming as any
+        activity_timing: activityTiming as any,
+        subscribe_status: subscribeStatus,
       })
       Taro.hideLoading()
       Taro.navigateTo({

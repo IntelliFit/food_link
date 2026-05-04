@@ -62,6 +62,7 @@ from database import (
     claim_next_pending_food_expiry_notification_job_sync,
     update_food_expiry_notification_job_sync,
     get_food_expiry_item_v2_sync,
+    get_user_openid_by_id_sync,
 )
 from metabolic import get_age_from_birthday
 from image_compressor import compress_task_images
@@ -89,6 +90,9 @@ CHINA_TZ = timezone(timedelta(hours=8))
 EXPIRY_NOTIFICATION_PAGE = "/pages/expiry/index"
 EXPIRY_NOTIFICATION_DEFAULT_HOUR = 9
 EXPIRY_NOTIFICATION_RETRY_DELAYS_MINUTES = [5, 30, 120]
+ANALYSIS_SUBSCRIBE_ACCEPT_STATUSES = {"accept", "acceptwithalert", "acceptwithaudio"}
+ANALYSIS_SUBSCRIBE_TEMPLATE_ID = str(os.getenv("ANALYSIS_SUBSCRIBE_TEMPLATE_ID") or "").strip()
+ANALYSIS_SUBSCRIBE_PAGE = "/pages/result/index"
 _wechat_access_token_cache: Dict[str, Any] = {
     "token": None,
     "fetched_at": 0,
@@ -310,6 +314,108 @@ def _send_food_expiry_subscribe_message(job: Dict[str, Any], item: Dict[str, Any
     if result.get("errcode") not in (None, 0):
         raise RuntimeError(f"微信通知发送失败: {result.get('errmsg') or result.get('errcode')}")
     return result
+
+
+def _build_analysis_summary(result: Dict[str, Any]) -> str:
+    """从分析结果构建 30 字以内的摘要，包含食物名称、热量及三大营养素占比。"""
+    items = result.get("items") or []
+    if not items:
+        return str(result.get("description", "分析完成"))[:30]
+
+    total_cal = 0.0
+    total_protein = 0.0
+    total_carbs = 0.0
+    total_fat = 0.0
+    names: List[str] = []
+    for item in items:
+        name = str(item.get("name") or "").strip()
+        w = float(item.get("estimatedWeightGrams") or 0)
+        label = f"{name}{int(w)}g" if name and w > 0 else name
+        if label:
+            names.append(label)
+        n = item.get("nutrients") or {}
+        total_cal += float(n.get("calories") or 0)
+        total_protein += float(n.get("protein") or 0)
+        total_carbs += float(n.get("carbs") or 0)
+        total_fat += float(n.get("fat") or 0)
+
+    name_part = "、".join(names[:2])
+    if len(names) > 2:
+        name_part += "等"
+
+    cal_kcal = int(round(total_cal))
+    total_macro = total_protein * 4 + total_carbs * 4 + total_fat * 9
+    if total_macro > 0:
+        pct_p = int(round(total_protein * 4 / total_macro * 100))
+        pct_c = int(round(total_carbs * 4 / total_macro * 100))
+        pct_f = int(round(total_fat * 9 / total_macro * 100))
+        summary = f"{name_part}·{cal_kcal}kcal·P{pct_p}%/C{pct_c}%/F{pct_f}%"
+    else:
+        summary = f"{name_part}·{cal_kcal}kcal"
+
+    return summary[:30]
+
+
+def _build_analysis_subscribe_payload(task: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+    """根据任务信息和分析结果构建微信订阅消息模板 data。"""
+    payload = task.get("payload") or {}
+    meal_type = str(payload.get("meal_type") or "")
+    meal_names = {
+        "breakfast": "早餐", "morning_snack": "早加餐", "lunch": "午餐",
+        "afternoon_snack": "午加餐", "dinner": "晚餐", "evening_snack": "晚加餐",
+    }
+    meal_label = meal_names.get(meal_type, "食物分析" if not meal_type else meal_type)
+    analysis_type = f"{meal_label}分析"
+
+    summary = _build_analysis_summary(result)
+    return {
+        "thing1": {"value": analysis_type},
+        "thing3": {"value": summary},
+    }
+
+
+def _send_analysis_complete_subscribe_message(task: Dict[str, Any], result: Dict[str, Any]) -> None:
+    """分析完成后向已订阅用户发送微信服务通知。"""
+    if not ANALYSIS_SUBSCRIBE_TEMPLATE_ID:
+        return
+    payload = task.get("payload") or {}
+    subscribe_status = str(payload.get("subscribe_status") or "").strip()
+    if subscribe_status not in ANALYSIS_SUBSCRIBE_ACCEPT_STATUSES:
+        return
+    user_id = str(task.get("user_id") or "").strip()
+    if not user_id:
+        return
+    openid = get_user_openid_by_id_sync(user_id) or ""
+    if not openid:
+        print(f"[analysis_subscribe] 用户 {user_id} 无 openid，跳过通知", flush=True)
+        return
+
+    access_token = _get_wechat_access_token_sync()
+    data = _build_analysis_subscribe_payload(task, result)
+    recorded_on = str(payload.get("recorded_on") or "")
+    meal_type = str(payload.get("meal_type") or "")
+    page = f"{ANALYSIS_SUBSCRIBE_PAGE}?date={recorded_on}&meal_type={meal_type}"
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(
+                f"https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token={access_token}",
+                json={
+                    "touser": openid,
+                    "template_id": ANALYSIS_SUBSCRIBE_TEMPLATE_ID,
+                    "page": page,
+                    "data": data,
+                    "miniprogram_state": "formal",
+                    "lang": "zh_CN",
+                },
+            )
+        result_json = response.json()
+        if result_json.get("errcode") not in (None, 0):
+            print(f"[analysis_subscribe] 发送失败: {result_json.get('errmsg')} task_id={task.get('id')}", flush=True)
+        else:
+            print(f"[analysis_subscribe] 发送成功 task_id={task.get('id')}", flush=True)
+    except Exception as e:
+        print(f"[analysis_subscribe] 发送异常: {e} task_id={task.get('id')}", flush=True)
 
 
 def process_one_food_expiry_notification_job(job: Dict[str, Any]) -> None:
@@ -2167,6 +2273,12 @@ def process_one_food_task(task: Dict[str, Any]) -> None:
             print(f"[food_analysis] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
             return
 
+        # 发送分析完成订阅消息通知
+        try:
+            _send_analysis_complete_subscribe_message(task, result)
+        except Exception:
+            pass
+
         try:
             compress_task_images(_get_task_image_urls(task))
         except Exception:
@@ -2505,6 +2617,11 @@ def process_one_text_food_task(task: Dict[str, Any]) -> None:
         updated = update_analysis_task_result_sync(task_id, status="done", result=result)
         if not updated:
             print(f"[food_analysis] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
+            return
+        try:
+            _send_analysis_complete_subscribe_message(task, result)
+        except Exception:
+            pass
     except Exception as e:
         err_msg = str(e) or type(e).__name__
         updated = update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
