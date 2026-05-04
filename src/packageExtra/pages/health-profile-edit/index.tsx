@@ -53,11 +53,23 @@ const DIET_OPTIONS = [
   { label: '无', value: 'none', icon: '' }
 ]
 
+/** 过敏源选项 */
+const ALLERGY_OPTIONS = [
+  { label: '海鲜', value: 'seafood', icon: '🦐' },
+  { label: '花生', value: 'peanut', icon: '🥜' },
+  { label: '牛奶', value: 'milk', icon: '🥛' },
+  { label: '鸡蛋', value: 'egg', icon: '🥚' },
+  { label: '芒果', value: 'mango', icon: '🥭' },
+  { label: '酒精', value: 'alcohol', icon: '🍺' },
+  { label: '辣', value: 'spicy', icon: '🌶️' },
+  { label: '无', value: 'none', icon: '' }
+]
+
 /** 目标选项 */
 const GOAL_OPTIONS = [
-  { label: '减重', desc: '健康瘦身', value: 'fat_loss', icon: 'icon-huore' },
-  { label: '保持', desc: '维持当前体重', value: 'maintain', icon: 'icon-tianpingzuo' },
-  { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: 'icon-zengji' }
+  { label: '减重', desc: '健康瘦身', value: 'fat_loss', icon: '🔥' },
+  { label: '保持', desc: '维持当前体重', value: 'maintain', icon: '⚖️' },
+  { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: '💪' }
 ]
 
 const EXECUTION_MODE_OPTIONS: Array<{ value: ExecutionMode; title: string; desc: string }> = [
@@ -80,12 +92,18 @@ function HealthProfileEditPage() {
   const [originalExecutionMode, setOriginalExecutionMode] = useState<ExecutionMode>('standard')
   const [medicalHistory, setMedicalHistory] = useState<string[]>(['none'])
   const [dietPreference, setDietPreference] = useState<string[]>([])
-  const [allergies, setAllergies] = useState<string>('')
   const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
 
   const [customMedical, setCustomMedical] = useState<string>('')
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([])
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([])
+
+  // 过敏源状态（仿照引导页）
+  const [allergyList, setAllergyList] = useState<string[]>(['none'])
+  const [customAllergyList, setCustomAllergyList] = useState<string[]>([])
+  const [selectedCustomAllergy, setSelectedCustomAllergy] = useState<string[]>([])
+  const [addingAllergy, setAddingAllergy] = useState(false)
+  const [customAllergyInput, setCustomAllergyInput] = useState<string>('')
 
   const [healthNotes, setHealthNotes] = useState<string>('')
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
@@ -140,7 +158,22 @@ function HealthProfileEditPage() {
         setMedicalHistory(['none'])
       }
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
-      if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
+      if (hc?.allergies?.length) {
+        const predefinedValues = ALLERGY_OPTIONS.map(opt => opt.value)
+        const preset: string[] = []
+        const custom: string[] = []
+        ;(hc.allergies as string[]).forEach((item: string) => {
+          if (predefinedValues.includes(item)) preset.push(item)
+          else custom.push(item)
+        })
+        setAllergyList(preset.length ? preset : ['none'])
+        setCustomAllergyList(custom)
+        setSelectedCustomAllergy(custom)
+      } else {
+        setAllergyList(['none'])
+        setCustomAllergyList([])
+        setSelectedCustomAllergy([])
+      }
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
     } catch (e: any) {
       await showUnifiedApiError(e, '获取档案失败')
@@ -206,6 +239,58 @@ function HealthProfileEditPage() {
     })
   }
 
+  // 过敏源操作（仿照引导页）
+  const toggleAllergy = (value: string) => {
+    if (value === 'none') {
+      setAllergyList(['none'])
+      setSelectedCustomAllergy([])
+      return
+    }
+    setAllergyList((prev) => {
+      const next = prev.filter((v) => v !== 'none')
+      if (next.includes(value)) return next.filter((v) => v !== value)
+      return [...next, value]
+    })
+  }
+
+  const handleAddCustomAllergy = () => {
+    const trimmed = customAllergyInput.trim()
+    if (!trimmed) {
+      Taro.showToast({ title: '请输入过敏源名称', icon: 'none' })
+      return
+    }
+    if (customAllergyList.includes(trimmed)) {
+      Taro.showToast({ title: '该过敏源已添加', icon: 'none' })
+      return
+    }
+    setCustomAllergyList((prev) => [...prev, trimmed])
+    setSelectedCustomAllergy((prev) => [...prev, trimmed])
+    setAllergyList((prev) => prev.filter((v) => v !== 'none'))
+    setCustomAllergyInput('')
+    setAddingAllergy(false)
+  }
+
+  const toggleCustomAllergy = (item: string) => {
+    setSelectedCustomAllergy((prev) => {
+      if (prev.includes(item)) return prev.filter((v) => v !== item)
+      return [...prev, item]
+    })
+    setAllergyList((prev) => prev.filter((v) => v !== 'none'))
+  }
+
+  const handleRemoveCustomAllergy = (item: string) => {
+    Taro.showModal({
+      title: '删除确认',
+      content: `确定要删除「${item}」吗？`,
+      success: (res) => {
+        if (res.confirm) {
+          setCustomAllergyList((prev) => prev.filter((v) => v !== item))
+          setSelectedCustomAllergy((prev) => prev.filter((v) => v !== item))
+        }
+      }
+    })
+  }
+
   const toggleDiet = (value: string) => {
     if (value === 'none') {
       setDietPreference(['none'])
@@ -231,7 +316,7 @@ function HealthProfileEditPage() {
       execution_mode: executionMode,
       medical_history: allMedicalHistory,
       diet_preference: dietPreference.filter(v => v !== 'none'),
-      allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : [],
+      allergies: [...allergyList.filter(v => v !== 'none'), ...selectedCustomAllergy],
       health_notes: healthNotes,
       report_image_url: reportImageUrls.length > 0 ? reportImageUrls[reportImageUrls.length - 1] : undefined
     }
@@ -420,7 +505,7 @@ function HealthProfileEditPage() {
                   className={`option-card with-desc ${dietGoal === opt.value ? 'active' : ''}`}
                   onClick={() => setDietGoal(opt.value)}
                 >
-                  <Text className={`option-icon iconfont ${opt.icon}`}></Text>
+                  <Text className='option-icon'>{opt.icon}</Text>
                   <View className='option-info'>
                     <Text className='option-label'>{opt.label}</Text>
                     <Text className='option-desc'>{opt.desc}</Text>
@@ -552,13 +637,54 @@ function HealthProfileEditPage() {
 
           <View className='form-item'>
             <Text className='form-label-inline'>过敏源</Text>
-            <Textarea
-              className='text-input textarea-input'
-              placeholder='如：海鲜、花生，多个用顿号分隔'
-              value={allergies}
-              onInput={(e) => setAllergies(e.detail.value)}
-              maxlength={200}
-            />
+            <View className='option-grid'>
+              {ALLERGY_OPTIONS.map((o) => (
+                <View
+                  key={o.value}
+                  className={`option-card small ${allergyList.includes(o.value) ? 'active' : ''}`}
+                  onClick={() => toggleAllergy(o.value)}
+                >
+                  <Text className='option-icon'>{o.icon}</Text>
+                  <Text className='option-label'>{o.label}</Text>
+                </View>
+              ))}
+              {customAllergyList.map((item) => (
+                <View
+                  key={item}
+                  className={`option-card small custom-tag ${selectedCustomAllergy.includes(item) ? 'active' : ''}`}
+                  onClick={() => toggleCustomAllergy(item)}
+                  onLongPress={() => handleRemoveCustomAllergy(item)}
+                >
+                  <Text className='option-label'>{item}</Text>
+                </View>
+              ))}
+            </View>
+            {addingAllergy ? (
+              <View className='custom-input-wrap'>
+                <Input
+                  className='custom-input'
+                  placeholder='输入过敏源名称'
+                  value={customAllergyInput}
+                  onInput={(e) => setCustomAllergyInput(e.detail.value)}
+                  onConfirm={handleAddCustomAllergy}
+                  focus
+                />
+                <View className='custom-input-btn' onClick={handleAddCustomAllergy}>
+                  <Text>确认</Text>
+                </View>
+                <View
+                  className='custom-input-cancel'
+                  onClick={() => { setAddingAllergy(false); setCustomAllergyInput('') }}
+                >
+                  <Text className='cancel-icon-text'>×</Text>
+                </View>
+              </View>
+            ) : (
+              <View className='add-btn-round' onClick={() => setAddingAllergy(true)}>
+                <Text className='add-btn-icon'>+</Text>
+                <Text className='add-btn-label'>添加其他</Text>
+              </View>
+            )}
           </View>
 
           <View className='form-item'>
