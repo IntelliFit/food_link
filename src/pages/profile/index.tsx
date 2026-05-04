@@ -142,10 +142,7 @@ function ProfilePage() {
 
   // 快捷入口统计数字
   const [analyzeCount, setAnalyzeCount] = useState(0)
-  const [analyzeWaitingRecordCount, setAnalyzeWaitingRecordCount] = useState(() => {
-    try { return Number(Taro.getStorageSync('analyze_waiting_record_count') || 0) }
-    catch { return 0 }
-  })
+  const [analyzeWaitingRecordCount, setAnalyzeWaitingRecordCount] = useState(0)
   const [friendCount, setFriendCount] = useState(0)
   const [favoriteCount, setFavoriteCount] = useState(0)
 
