@@ -2923,13 +2923,20 @@ def _ocr_report_prompt() -> str:
 
 
 def _ocr_extract_single_sync(image_url: str) -> Dict[str, Any]:
-    """单张图片 OCR：调 DashScope 多模态模型，返回解析后的 JSON。"""
-    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not api_key:
-        raise RuntimeError("缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量")
-
-    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    api_url = f"{base_url}/chat/completions"
+    """单张图片 OCR：支持 DashScope 或 Gemini（通过 LLM_PROVIDER 切换）。"""
+    llm_provider = os.getenv("LLM_PROVIDER", "qwen").lower()
+    if llm_provider == "gemini":
+        api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+        if not api_key:
+            raise RuntimeError("缺少 OFOXAI_API_KEY 环境变量")
+        api_url = "https://api.ofox.ai/v1/chat/completions"
+        model = OFOX_VISION_MODEL_NAME
+    else:
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+        if not api_key:
+            raise RuntimeError("缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量")
+        api_url = f"{DASHSCOPE_BASE_URL}/chat/completions"
+        model = os.getenv("ANALYZE_MODEL", QWEN_VL_MODEL)
 
     with httpx.Client(timeout=60.0) as client:
         response = client.post(
@@ -2939,7 +2946,7 @@ def _ocr_extract_single_sync(image_url: str) -> Dict[str, Any]:
                 "Content-Type": "application/json",
             },
             json={
-                "model": os.getenv("ANALYZE_MODEL", "qwen-vl-max"),
+                "model": model,
                 "messages": [
                     {
                         "role": "user",
@@ -2956,7 +2963,7 @@ def _ocr_extract_single_sync(image_url: str) -> Dict[str, Any]:
 
         if not response.is_success:
             err = response.json() if response.content else {}
-            msg = err.get("error", {}).get("message") or f"DashScope API 错误: {response.status_code}"
+            msg = err.get("error", {}).get("message") or f"API 错误: {response.status_code}"
             raise RuntimeError(msg)
 
         data = response.json()

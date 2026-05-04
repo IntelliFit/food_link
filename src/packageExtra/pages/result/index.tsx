@@ -556,7 +556,7 @@ function ResultPage() {
   }, [hydrateCommittedRecord])
 
   const handleDefaultModeEdit = () => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-edit/index') })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
   }
 
   const isStrictMode = executionMode === 'strict'

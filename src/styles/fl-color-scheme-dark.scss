@@ -2192,7 +2192,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .result-text-page,
 .fl-page-theme-root--dark .health-profile-page,
 .fl-page-theme-root--dark .health-profile-view-page,
-.fl-page-theme-root--dark .health-profile-edit-page,
 .fl-page-theme-root--dark .food-library-page,
 .fl-page-theme-root--dark .food-detail-page,
 .fl-page-theme-root--dark .share-page,
@@ -2232,7 +2231,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .health-profile-page .report-result-block,
 .fl-page-theme-root--dark .health-profile-page .benefit-item,
 .fl-page-theme-root--dark .health-profile-view-page .block,
-.fl-page-theme-root--dark .health-profile-edit-page .form-card,
 .fl-page-theme-root--dark .food-library-page .food-card,
 .fl-page-theme-root--dark .food-library-page .pick-mode-tip,
 .fl-page-theme-root--dark .food-library-page .login-tip,
@@ -3435,11 +3433,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .profile-settings-page .form-label,
 .fl-page-theme-root--dark .health-profile-view-page .value,
 .fl-page-theme-root--dark .health-profile-view-page .btn-secondary .btn-text,
-.fl-page-theme-root--dark .health-profile-edit-page .section-title,
-.fl-page-theme-root--dark .health-profile-edit-page .form-label,
-.fl-page-theme-root--dark .health-profile-edit-page .choice-text,
-.fl-page-theme-root--dark .health-profile-edit-page .option-label,
-.fl-page-theme-root--dark .health-profile-edit-page .tag-text,
 .fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__title,
 .fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__right-icon,
 .fl-page-theme-root--dark .login-page .agreement-link,
@@ -3453,8 +3446,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .profile-settings-page .avatar-placeholder-text,
 .fl-page-theme-root--dark .about-page .app-version,
 .fl-page-theme-root--dark .about-page .cell-value,
-.fl-page-theme-root--dark .health-profile-edit-page .loading-text,
-.fl-page-theme-root--dark .health-profile-edit-page .option-desc,
 .fl-page-theme-root--dark .privacy-settings-page .loading-container,
 .fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__brief,
 .fl-page-theme-root--dark .login-page .skip-login-btn,
@@ -3473,7 +3464,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .about-page .content-section .cell-group,
 .fl-page-theme-root--dark .agreement-page .document-content,
 .fl-page-theme-root--dark .document-page .document-content,
-.fl-page-theme-root--dark .health-profile-edit-page .section,
 .fl-page-theme-root--dark .privacy-settings-page .setting-group,
 .fl-page-theme-root--dark .profile-form-content,
 .fl-page-theme-root--dark .exercise-record-page .stats-card,
@@ -3491,26 +3481,16 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .profile-settings-page .nickname-input,
-.fl-page-theme-root--dark .health-profile-edit-page .custom-input-wrap,
-.fl-page-theme-root--dark .health-profile-edit-page .custom-input,
-.fl-page-theme-root--dark .health-profile-edit-page input,
-.fl-page-theme-root--dark .health-profile-edit-page textarea,
 .fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .profile-settings-page .nickname-input::placeholder,
-.fl-page-theme-root--dark .health-profile-edit-page input::placeholder,
-.fl-page-theme-root--dark .health-profile-edit-page textarea::placeholder {
+.fl-page-theme-root--dark .profile-settings-page .nickname-input::placeholder {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .health-profile-edit-page .choice-btn,
-.fl-page-theme-root--dark .health-profile-edit-page .option-card,
-.fl-page-theme-root--dark .health-profile-edit-page .tag-btn,
-.fl-page-theme-root--dark .health-profile-edit-page .quick-num,
 .fl-page-theme-root--dark .health-profile-view-page .btn-secondary,
 .fl-page-theme-root--dark .profile-form-cancel,
 .fl-page-theme-root--dark .phone-bind-secondary {
@@ -3519,23 +3499,12 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .health-profile-edit-page .choice-btn.active,
-.fl-page-theme-root--dark .health-profile-edit-page .option-card.active,
-.fl-page-theme-root--dark .health-profile-edit-page .tag-btn.active,
-.fl-page-theme-root--dark .health-profile-edit-page .quick-num.active {
-  background: rgb(125 211 176 / 12%) !important;
-  border-color: rgb(125 211 176 / 32%) !important;
-  box-shadow: 0 6rpx 16rpx rgb(0 0 0 / 20%) !important;
-}
-
 .fl-page-theme-root--dark .health-profile-page .progress-wrap,
-.fl-page-theme-root--dark .health-profile-edit-page .scroll-wrap,
 .fl-page-theme-root--dark .exercise-record-page .header-stats {
   background: transparent !important;
 }
 
 .fl-page-theme-root--dark .health-profile-view-page .row,
-.fl-page-theme-root--dark .health-profile-edit-page .section-title,
 .fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell::after {
   border-color: $fl-dark-border !important;
 }

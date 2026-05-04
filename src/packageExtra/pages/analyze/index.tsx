@@ -518,7 +518,7 @@ function AnalyzePage() {
   }
 
   const handleDefaultModeEdit = () => {
-    Taro.navigateTo({ url: '/pages/health-profile-edit/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
   }
 
   const handleStrictModeTap = () => {

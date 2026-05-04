@@ -179,10 +179,6 @@ function HealthProfileViewPage() {
     getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
   })
 
-  const handleEdit = () => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-edit/index') })
-  }
-
   const handleRefill = () => {
     Taro.showModal({
       title: '重新填写',
@@ -193,6 +189,34 @@ function HealthProfileViewPage() {
         }
       }
     })
+  }
+
+  const handleDirectReportUpload = async () => {
+    try {
+      const res = await Taro.chooseImage({ count: 9, sizeType: ['compressed'] })
+      const tempPaths = res.tempFilePaths || []
+      if (tempPaths.length === 0) return
+      Taro.showLoading({ title: '上传中...', mask: true })
+      const urls: string[] = []
+      for (const path of tempPaths) {
+        const base64 = await imageToBase64(path)
+        const { imageUrl } = await uploadReportImage(base64)
+        urls.push(imageUrl)
+      }
+      Taro.hideLoading()
+      const combinedUrl = urls.join(',')
+      console.log('[direct upload] urls:', urls)
+      const taskRes = await submitReportExtractionTask(combinedUrl)
+      console.log('[direct upload] task submitted:', taskRes)
+      Taro.showToast({ title: `上传成功 ${urls.length} 张，后台识别中`, icon: 'success' })
+      // 刷新页面以显示"后台识别中"状态
+      setTimeout(() => {
+        getHealthProfile().then(setProfile).catch(() => {})
+      }, 1500)
+    } catch (e: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '上传失败')
+    }
   }
 
   const formatList = (list: string[], map: Record<string, string>) => {
@@ -992,19 +1016,24 @@ function HealthProfileViewPage() {
         {/* 体检/病例识别结果 */}
         <View className='block'>
           <Text className='block-title'>体检/病例识别结果</Text>
-          <EditableRow
-            label=''
-            field='report_extract'
-            value={isProcessing ? '后台识别中...' : hasReportData ? '查看结果' : '无'}
-          />
+          {hasReportData || isProcessing ? (
+            <EditableRow
+              label=''
+              field='report_extract'
+              value={isProcessing ? '后台识别中...' : '查看结果'}
+            />
+          ) : (
+            <View className='report-upload-trigger' onClick={handleDirectReportUpload}>
+              <Text className='iconfont icon-paizhao-xianxing report-upload-icon'></Text>
+              <Text className='report-upload-title'>点击上传体检报告</Text>
+              <Text className='report-upload-desc'>支持 JPG / PNG 格式，可多选</Text>
+            </View>
+          )}
         </View>
 
         <View className='footer-actions'>
           <View className='btn-secondary' onClick={handleRefill}>
             <Text className='btn-text'>重新填写</Text>
-          </View>
-          <View className='btn-primary' onClick={handleEdit}>
-            <Text className='btn-text'>编辑全部</Text>
           </View>
         </View>
       </ScrollView>

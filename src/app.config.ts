@@ -26,7 +26,6 @@ const extraSubpackagePages = [
   'pages/recipe-edit/index',
   'pages/health-profile/index',
   'pages/health-profile-view/index',
-  'pages/health-profile-edit/index',
   'pages/day-record/index',
   'pages/stats-metabolic/index',
   'pages/record-detail/index',
