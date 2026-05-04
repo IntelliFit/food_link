@@ -3033,13 +3033,20 @@ def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]
 def process_one_health_report_task(task: Dict[str, Any]) -> None:
     """处理单条病历提取任务：执行 OCR、写库、更新用户档案。"""
     task_id = task["id"]
+    user_id = task.get("user_id", "unknown")
+    image_url = task.get("image_url", "")
+    print(f"[health_report] 开始处理任务 {task_id}, user={user_id}, url={image_url[:80]}...", flush=True)
     try:
         extracted = run_health_report_ocr_sync(task)
+        print(f"[health_report] 任务 {task_id} OCR 完成, indicators={len(extracted.get('indicators', []))}", flush=True)
         updated = update_analysis_task_result_sync(task_id, status="done", result={"extracted_content": extracted})
         if not updated:
             print(f"[health_report] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
+        else:
+            print(f"[health_report] 任务 {task_id} 完成", flush=True)
     except Exception as e:
         err_msg = str(e) or type(e).__name__
+        print(f"[health_report] 任务 {task_id} 失败: {err_msg}", flush=True)
         updated = update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
         if not updated:
             print(f"[health_report] 任务 {task_id} 已被取消，放弃错误写入", flush=True)

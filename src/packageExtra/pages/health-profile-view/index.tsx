@@ -686,9 +686,12 @@ function HealthProfileViewPage() {
             }
             Taro.hideLoading()
             const combinedUrl = urls.join(',')
-            await submitReportExtractionTask(combinedUrl)
+            console.log('[report upload] urls:', urls)
+            console.log('[report upload] combinedUrl:', combinedUrl)
+            const taskRes = await submitReportExtractionTask(combinedUrl)
+            console.log('[report upload] task submitted:', taskRes)
             Taro.showToast({ title: `上传成功 ${urls.length} 张，后台识别中`, icon: 'success' })
-            closeEditor()
+            setTimeout(() => closeEditor(), 1500)
           } catch (e: any) {
             Taro.hideLoading()
             await showUnifiedApiError(e, '上传失败')
@@ -895,6 +898,8 @@ function HealthProfileViewPage() {
   const hasSuggestions = reportExtract?.suggestions && reportExtract.suggestions.length > 0
   const hasMedicalNotes = !!reportExtract?.medical_notes
   const hasReportData = hasIndicators || hasConclusions || hasSuggestions || hasMedicalNotes
+  const hasImageUrls = (reportExtract?._image_urls as string[])?.length > 0
+  const isProcessing = hasImageUrls && !hasReportData
 
   return (
     <View className='health-profile-view-page'>
@@ -990,7 +995,7 @@ function HealthProfileViewPage() {
           <EditableRow
             label=''
             field='report_extract'
-            value={hasReportData ? '查看结果' : '无'}
+            value={isProcessing ? '后台识别中...' : hasReportData ? '查看结果' : '无'}
           />
         </View>
 

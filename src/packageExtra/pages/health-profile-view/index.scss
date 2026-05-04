@@ -50,7 +50,7 @@
 /* ========== 行样式 ========== */
 .row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   padding: 20rpx 0;
   border-bottom: 1rpx solid #f3f4f6;
@@ -85,13 +85,15 @@
   font-size: 28rpx;
   color: #6a7282;
   flex-shrink: 0;
+  width: 140rpx;
   margin-right: 24rpx;
 }
 
 .value {
   font-size: 28rpx;
   color: #1a1a1a;
-  text-align: right;
+  text-align: left;
+  flex: 1;
   word-break: break-all;
 
   .row.column & {
