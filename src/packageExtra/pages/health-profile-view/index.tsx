@@ -54,6 +54,16 @@ const DIET_PREF_MAP: Record<string, string> = {
   gluten_free: '无麸质',
   none: '无'
 }
+const ALLERGY_MAP: Record<string, string> = {
+  seafood: '海鲜',
+  peanut: '花生',
+  milk: '牛奶',
+  egg: '鸡蛋',
+  mango: '芒果',
+  alcohol: '酒精',
+  spicy: '辣',
+  none: '无'
+}
 
 /* ========== 编辑选项常量 ========== */
 const GOAL_OPTIONS = [
@@ -88,6 +98,16 @@ const DIET_OPTIONS = [
   { label: '无麸质', value: 'gluten_free' },
   { label: '无', value: 'none' }
 ]
+const ALLERGY_OPTIONS = [
+  { label: '海鲜', value: 'seafood' },
+  { label: '花生', value: 'peanut' },
+  { label: '牛奶', value: 'milk' },
+  { label: '鸡蛋', value: 'egg' },
+  { label: '芒果', value: 'mango' },
+  { label: '酒精', value: 'alcohol' },
+  { label: '辣', value: 'spicy' },
+  { label: '无', value: 'none' }
+]
 
 /* ========== 字段配置 ========== */
 interface FieldConfig {
@@ -110,7 +130,7 @@ const FIELD_CONFIG: Record<string, FieldConfig> = {
   execution_mode: { title: '执行模式', type: 'radio', options: EXECUTION_MODE_OPTIONS.map(o => ({ label: o.label, value: o.value })) },
   medical_history: { title: '既往病史', type: 'multi', options: MEDICAL_OPTIONS },
   diet_preference: { title: '饮食偏好', type: 'multi', options: DIET_OPTIONS },
-  allergies: { title: '过敏源', type: 'text', placeholder: '如：海鲜、花生，多个用顿号分隔' },
+  allergies: { title: '过敏源', type: 'multi', options: ALLERGY_OPTIONS },
   health_notes: { title: '特殊情况和补充', type: 'text', placeholder: '例如：孕期、哺乳期、手术恢复期等' },
 }
 
@@ -134,6 +154,12 @@ function HealthProfileViewPage() {
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([])
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([])
   const [addingMedical, setAddingMedical] = useState(false)
+
+  /* 过敏源编辑状态 */
+  const [customAllergyList, setCustomAllergyList] = useState<string[]>([])
+  const [selectedCustomAllergy, setSelectedCustomAllergy] = useState<string[]>([])
+  const [customAllergyInput, setCustomAllergyInput] = useState<string>('')
+  const [addingAllergy, setAddingAllergy] = useState(false)
 
   const strictModeAvailable = canUseStrictModeForMembership(membershipStatus)
 
@@ -201,6 +227,36 @@ function HealthProfileViewPage() {
     })
   }
 
+  /* ========== 过敏源辅助函数（仿照引导页） ========== */
+  const handleAddCustomAllergy = () => {
+    const trimmed = customAllergyInput.trim()
+    if (!trimmed) {
+      Taro.showToast({ title: '请输入过敏源名称', icon: 'none' })
+      return
+    }
+    if (customAllergyList.includes(trimmed)) {
+      Taro.showToast({ title: '该过敏源已添加', icon: 'none' })
+      return
+    }
+    setCustomAllergyList((prev) => [...prev, trimmed])
+    setSelectedCustomAllergy((prev) => [...prev, trimmed])
+    setEditValue((prev: string[]) => (prev || []).filter((v: string) => v !== 'none'))
+    setCustomAllergyInput('')
+  }
+
+  const handleRemoveCustomAllergy = (item: string) => {
+    Taro.showModal({
+      title: '删除确认',
+      content: `确定要删除「${item}」吗？`,
+      success: (res) => {
+        if (res.confirm) {
+          setCustomAllergyList((prev) => prev.filter((v) => v !== item))
+          setSelectedCustomAllergy((prev) => prev.filter((v) => v !== item))
+        }
+      }
+    })
+  }
+
   /* ========== 编辑器 ========== */
   const openEditor = (field: string) => {
     const config = FIELD_CONFIG[field]
@@ -263,7 +319,21 @@ function HealthProfileViewPage() {
       }
       case 'allergies': {
         const list = (profile?.health_condition?.allergies as string[]) || []
-        currentValue = list.join('、')
+        const predefinedValues = ALLERGY_OPTIONS.map(opt => opt.value)
+        const presetAllergy: string[] = []
+        const customItems: string[] = []
+        list.forEach((item: string) => {
+          if (predefinedValues.includes(item)) {
+            presetAllergy.push(item)
+          } else {
+            customItems.push(item)
+          }
+        })
+        currentValue = presetAllergy.length ? presetAllergy : ['none']
+        setCustomAllergyList(customItems)
+        setSelectedCustomAllergy(customItems)
+        setAddingAllergy(false)
+        setCustomAllergyInput('')
         break
       }
       case 'health_notes': currentValue = profile?.health_condition?.health_notes || ''; break
@@ -282,6 +352,10 @@ function HealthProfileViewPage() {
     setCustomMedicalList([])
     setSelectedCustomMedical([])
     setAddingMedical(false)
+    setCustomAllergyInput('')
+    setCustomAllergyList([])
+    setSelectedCustomAllergy([])
+    setAddingAllergy(false)
   }
 
   const handleSaveEdit = async () => {
@@ -336,7 +410,12 @@ function HealthProfileViewPage() {
         break
       }
       case 'diet_preference': req.diet_preference = (value as string[]).filter((v: string) => v !== 'none'); break
-      case 'allergies': req.allergies = value ? String(value).split(/[、,，\s]+/).filter(Boolean) : []; break
+      case 'allergies': {
+        const preset = (value as string[]).filter((v: string) => v !== 'none')
+        const custom = selectedCustomAllergy || []
+        req.allergies = [...preset, ...custom]
+        break
+      }
       case 'health_notes': req.health_notes = value || undefined; break
     }
 
@@ -419,6 +498,7 @@ function HealthProfileViewPage() {
 
       case 'multi': {
         const isMedical = editingField === 'medical_history'
+        const isAllergy = editingField === 'allergies'
         return (
           <View>
             <View className='editor-option-grid'>
@@ -433,6 +513,7 @@ function HealthProfileViewPage() {
                       if (opt.value === 'none') {
                         setEditValue(['none'])
                         if (isMedical) setSelectedCustomMedical([])
+                        if (isAllergy) setSelectedCustomAllergy([])
                         return
                       }
                       const next = (editValue as string[]).filter((v: string) => v !== 'none')
@@ -465,8 +546,26 @@ function HealthProfileViewPage() {
                   <Text className='editor-option-label'>{item}</Text>
                 </View>
               ))}
+              {/* 自定义过敏源（仅 allergies） */}
+              {isAllergy && customAllergyList.map((item) => (
+                <View
+                  key={item}
+                  className={`editor-option-card small custom-tag ${selectedCustomAllergy.includes(item) ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCustomAllergy((prev) => {
+                      const arr = prev || []
+                      if (arr.includes(item)) return arr.filter((v) => v !== item)
+                      return [...arr, item]
+                    })
+                    setEditValue((prev: string[]) => (prev || []).filter((v: string) => v !== 'none'))
+                  }}
+                  onLongPress={() => handleRemoveCustomAllergy(item)}
+                >
+                  <Text className='editor-option-label'>{item}</Text>
+                </View>
+              ))}
             </View>
-            {/* 自定义病史输入区（仅 medical_history） */}
+            {/* 自定义输入区 */}
             {isMedical && (
               addingMedical ? (
                 <View className='editor-custom-input-wrap'>
@@ -490,6 +589,34 @@ function HealthProfileViewPage() {
                 </View>
               ) : (
                 <View className='editor-add-btn-round' onClick={() => setAddingMedical(true)}>
+                  <Text className='editor-add-btn-icon'>+</Text>
+                  <Text className='editor-add-btn-label'>添加其他</Text>
+                </View>
+              )
+            )}
+            {isAllergy && (
+              addingAllergy ? (
+                <View className='editor-custom-input-wrap'>
+                  <Input
+                    className='editor-custom-input'
+                    placeholder='输入过敏源名称'
+                    value={customAllergyInput}
+                    onInput={(e) => setCustomAllergyInput(e.detail.value)}
+                    onConfirm={handleAddCustomAllergy}
+                    focus
+                  />
+                  <View className='editor-custom-input-btn' onClick={handleAddCustomAllergy}>
+                    <Text>确认</Text>
+                  </View>
+                  <View
+                    className='editor-custom-input-cancel'
+                    onClick={() => { setAddingAllergy(false); setCustomAllergyInput('') }}
+                  >
+                    <Text className='cancel-icon-text'>×</Text>
+                  </View>
+                </View>
+              ) : (
+                <View className='editor-add-btn-round' onClick={() => setAddingAllergy(true)}>
                   <Text className='editor-add-btn-icon'>+</Text>
                   <Text className='editor-add-btn-label'>添加其他</Text>
                 </View>
@@ -739,9 +866,9 @@ function HealthProfileViewPage() {
             column
           />
           <EditableRow
-            label='过敏'
+            label='过敏源'
             field='allergies'
-            value={allergies.length > 0 ? allergies.join('、') : '无'}
+            value={formatList(allergies, ALLERGY_MAP)}
             column
           />
           <EditableRow
