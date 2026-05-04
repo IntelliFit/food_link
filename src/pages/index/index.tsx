@@ -2074,11 +2074,7 @@ function IndexPage() {
           selectedDate={selectedDate} 
           onSelect={handleDateSelect} 
         />
-        {!isTodayRecordDate(selectedDate) && (
-          <View className='home-login-banner' style={{ marginTop: '16rpx' }}>
-            <Text className='home-login-banner-text'>{`正在补录 ${selectedDate}`}</Text>
-          </View>
-        )}
+        {/* 补录提示已移除 */}
 
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
         <View className='main-card combined-card'>

@@ -129,6 +129,12 @@ function HealthProfileViewPage() {
   /* 日期选择器索引 */
   const [datePickVal, setDatePickVal] = useState<number[]>([0, 0, 0])
 
+  /* 自定义病史编辑状态 */
+  const [customMedical, setCustomMedical] = useState<string>('')
+  const [customMedicalList, setCustomMedicalList] = useState<string[]>([])
+  const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([])
+  const [addingMedical, setAddingMedical] = useState(false)
+
   const strictModeAvailable = canUseStrictModeForMembership(membershipStatus)
 
   useDidShow(() => {
@@ -163,6 +169,36 @@ function HealthProfileViewPage() {
     const validItems = list.filter(x => x !== 'none')
     if (validItems.length === 0) return '无'
     return validItems.map(item => map[item] || item).join('、')
+  }
+
+  /* ========== 自定义病史辅助函数（仿照引导页） ========== */
+  const handleAddCustomMedical = () => {
+    const trimmed = customMedical.trim()
+    if (!trimmed) {
+      Taro.showToast({ title: '请输入病史名称', icon: 'none' })
+      return
+    }
+    if (customMedicalList.includes(trimmed)) {
+      Taro.showToast({ title: '该病史已添加', icon: 'none' })
+      return
+    }
+    setCustomMedicalList((prev) => [...prev, trimmed])
+    setSelectedCustomMedical((prev) => [...prev, trimmed])
+    setEditValue((prev: string[]) => (prev || []).filter((v: string) => v !== 'none'))
+    setCustomMedical('')
+  }
+
+  const handleRemoveCustomMedical = (item: string) => {
+    Taro.showModal({
+      title: '删除确认',
+      content: `确定要删除「${item}」吗？`,
+      success: (res) => {
+        if (res.confirm) {
+          setCustomMedicalList((prev) => prev.filter((v) => v !== item))
+          setSelectedCustomMedical((prev) => prev.filter((v) => v !== item))
+        }
+      }
+    })
   }
 
   /* ========== 编辑器 ========== */
@@ -203,7 +239,21 @@ function HealthProfileViewPage() {
       case 'execution_mode': currentValue = profile?.execution_mode || 'standard'; break
       case 'medical_history': {
         const list = (profile?.health_condition?.medical_history as string[]) || []
-        currentValue = list.length ? list : ['none']
+        const predefinedValues = MEDICAL_OPTIONS.map(opt => opt.value)
+        const presetMedical: string[] = []
+        const customItems: string[] = []
+        list.forEach((item: string) => {
+          if (predefinedValues.includes(item)) {
+            presetMedical.push(item)
+          } else {
+            customItems.push(item)
+          }
+        })
+        currentValue = presetMedical.length ? presetMedical : ['none']
+        setCustomMedicalList(customItems)
+        setSelectedCustomMedical(customItems)
+        setAddingMedical(false)
+        setCustomMedical('')
         break
       }
       case 'diet_preference': {
@@ -228,6 +278,10 @@ function HealthProfileViewPage() {
     setEditingField(null)
     setEditValue(null)
     setDatePickVal([0, 0, 0])
+    setCustomMedical('')
+    setCustomMedicalList([])
+    setSelectedCustomMedical([])
+    setAddingMedical(false)
   }
 
   const handleSaveEdit = async () => {
@@ -275,7 +329,12 @@ function HealthProfileViewPage() {
       case 'diet_goal': req.diet_goal = value || undefined; break
       case 'activity_level': req.activity_level = value || undefined; break
       case 'execution_mode': req.execution_mode = value; break
-      case 'medical_history': req.medical_history = (value as string[]).filter((v: string) => v !== 'none'); break
+      case 'medical_history': {
+        const preset = (value as string[]).filter((v: string) => v !== 'none')
+        const custom = selectedCustomMedical || []
+        req.medical_history = [...preset, ...custom]
+        break
+      }
       case 'diet_preference': req.diet_preference = (value as string[]).filter((v: string) => v !== 'none'); break
       case 'allergies': req.allergies = value ? String(value).split(/[、,，\s]+/).filter(Boolean) : []; break
       case 'health_notes': req.health_notes = value || undefined; break
@@ -358,20 +417,22 @@ function HealthProfileViewPage() {
           </View>
         )
 
-      case 'multi':
+      case 'multi': {
+        const isMedical = editingField === 'medical_history'
         return (
           <View>
-            <View className='editor-tag-grid'>
+            <View className='editor-option-grid'>
               {config.options?.map((opt) => {
                 const list = (editValue as string[]) || []
                 const isActive = list.includes(opt.value)
                 return (
                   <View
                     key={opt.value}
-                    className={`editor-tag-btn ${isActive ? 'active' : ''}`}
+                    className={`editor-option-card small ${isActive ? 'active' : ''}`}
                     onClick={() => {
                       if (opt.value === 'none') {
                         setEditValue(['none'])
+                        if (isMedical) setSelectedCustomMedical([])
                         return
                       }
                       const next = (editValue as string[]).filter((v: string) => v !== 'none')
@@ -382,13 +443,61 @@ function HealthProfileViewPage() {
                       }
                     }}
                   >
-                    <Text className='editor-tag-text'>{opt.label}</Text>
+                    <Text className='editor-option-label'>{opt.label}</Text>
                   </View>
                 )
               })}
+              {/* 自定义病史（仅 medical_history） */}
+              {isMedical && customMedicalList.map((item) => (
+                <View
+                  key={item}
+                  className={`editor-option-card small custom-tag ${selectedCustomMedical.includes(item) ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCustomMedical((prev) => {
+                      const arr = prev || []
+                      if (arr.includes(item)) return arr.filter((v) => v !== item)
+                      return [...arr, item]
+                    })
+                    setEditValue((prev: string[]) => (prev || []).filter((v: string) => v !== 'none'))
+                  }}
+                  onLongPress={() => handleRemoveCustomMedical(item)}
+                >
+                  <Text className='editor-option-label'>{item}</Text>
+                </View>
+              ))}
             </View>
+            {/* 自定义病史输入区（仅 medical_history） */}
+            {isMedical && (
+              addingMedical ? (
+                <View className='editor-custom-input-wrap'>
+                  <Input
+                    className='editor-custom-input'
+                    placeholder='输入病史名称'
+                    value={customMedical}
+                    onInput={(e) => setCustomMedical(e.detail.value)}
+                    onConfirm={handleAddCustomMedical}
+                    focus
+                  />
+                  <View className='editor-custom-input-btn' onClick={handleAddCustomMedical}>
+                    <Text>确认</Text>
+                  </View>
+                  <View
+                    className='editor-custom-input-cancel'
+                    onClick={() => { setAddingMedical(false); setCustomMedical('') }}
+                  >
+                    <Text className='cancel-icon-text'>×</Text>
+                  </View>
+                </View>
+              ) : (
+                <View className='editor-add-btn-round' onClick={() => setAddingMedical(true)}>
+                  <Text className='editor-add-btn-icon'>+</Text>
+                  <Text className='editor-add-btn-label'>添加其他</Text>
+                </View>
+              )
+            )}
           </View>
         )
+      }
 
       case 'number':
         return (
