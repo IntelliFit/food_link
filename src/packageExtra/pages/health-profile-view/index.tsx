@@ -5,6 +5,9 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getHealthProfile,
   updateHealthProfile,
+  uploadReportImage,
+  submitReportExtractionTask,
+  imageToBase64,
   getMyMembership,
   showUnifiedApiError,
   type HealthProfile,
@@ -112,7 +115,7 @@ const ALLERGY_OPTIONS = [
 /* ========== 字段配置 ========== */
 interface FieldConfig {
   title: string
-  type: 'radio' | 'multi' | 'number' | 'text' | 'date'
+  type: 'radio' | 'multi' | 'number' | 'text' | 'date' | 'report'
   options?: Array<{ label: string; value: string }>
   unit?: string
   min?: number
@@ -132,6 +135,7 @@ const FIELD_CONFIG: Record<string, FieldConfig> = {
   diet_preference: { title: '饮食偏好', type: 'multi', options: DIET_OPTIONS },
   allergies: { title: '过敏源', type: 'multi', options: ALLERGY_OPTIONS },
   health_notes: { title: '特殊情况和补充', type: 'text', placeholder: '例如：孕期、哺乳期、手术恢复期等' },
+  report_extract: { title: '体检/病例识别结果', type: 'report' },
 }
 
 function HealthProfileViewPage() {
@@ -337,6 +341,7 @@ function HealthProfileViewPage() {
         break
       }
       case 'health_notes': currentValue = profile?.health_condition?.health_notes || ''; break
+      case 'report_extract': currentValue = profile?.health_condition?.report_extract || null; break
       default: currentValue = ''
     }
     setEditValue(currentValue)
@@ -417,6 +422,11 @@ function HealthProfileViewPage() {
         break
       }
       case 'health_notes': req.health_notes = value || undefined; break
+      case 'report_extract': {
+        // 报告查看/上传是独立操作，不通过 updateHealthProfile 保存
+        closeEditor()
+        return
+      }
     }
 
     setSaving(true)
@@ -653,6 +663,85 @@ function HealthProfileViewPage() {
           />
         )
 
+      case 'report': {
+        const report = editValue as any
+        const rHasIndicators = report?.indicators && report.indicators.length > 0
+        const rHasConclusions = report?.conclusions && report.conclusions.length > 0
+        const rHasSuggestions = report?.suggestions && report.suggestions.length > 0
+        const rHasMedicalNotes = !!report?.medical_notes
+        const rHasData = rHasIndicators || rHasConclusions || rHasSuggestions || rHasMedicalNotes
+
+        const handleReportUpload = async () => {
+          try {
+            const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })
+            const base64 = await imageToBase64(res.tempFilePaths[0])
+            Taro.showLoading({ title: '上传中...', mask: true })
+            const { imageUrl } = await uploadReportImage(base64)
+            Taro.hideLoading()
+            await submitReportExtractionTask(imageUrl)
+            Taro.showToast({ title: '上传成功，后台识别中', icon: 'success' })
+            closeEditor()
+          } catch (e: any) {
+            Taro.hideLoading()
+            await showUnifiedApiError(e, '上传失败')
+          }
+        }
+
+        return (
+          <View className='editor-report-body'>
+            {rHasData ? (
+              <ScrollView className='editor-report-scroll' scrollY enhanced showScrollbar={false}>
+                {rHasConclusions && (
+                  <View className='editor-report-section'>
+                    <Text className='editor-report-section-title'>诊断结论</Text>
+                    {report.conclusions.map((c: string, i: number) => (
+                      <Text key={i} className='editor-report-section-text'>• {c}</Text>
+                    ))}
+                  </View>
+                )}
+                {rHasIndicators && (
+                  <View className='editor-report-section'>
+                    <Text className='editor-report-section-title'>提取指标</Text>
+                    <View className='editor-report-indicators'>
+                      {report.indicators.map((ind: any, idx: number) => (
+                        <View key={idx} className='editor-report-indicator-row'>
+                          <Text className='editor-report-indicator-name'>{ind.name}</Text>
+                          <Text className={`editor-report-indicator-val ${ind.flag ? 'abnormal' : ''}`}>
+                            {ind.value} {ind.unit} {ind.flag}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+                {rHasSuggestions && (
+                  <View className='editor-report-section'>
+                    <Text className='editor-report-section-title'>医学建议</Text>
+                    {report.suggestions.map((s: string, i: number) => (
+                      <Text key={i} className='editor-report-section-text'>• {s}</Text>
+                    ))}
+                  </View>
+                )}
+                {rHasMedicalNotes && (
+                  <View className='editor-report-section'>
+                    <Text className='editor-report-section-title'>其他记录</Text>
+                    <Text className='editor-report-section-text'>{report.medical_notes}</Text>
+                  </View>
+                )}
+              </ScrollView>
+            ) : (
+              <View className='editor-report-empty'>
+                <Text className='editor-report-empty-text'>暂无识别结果</Text>
+                <Text className='editor-report-empty-hint'>上传体检报告后，AI 将自动识别关键指标</Text>
+              </View>
+            )}
+            <View className='editor-report-upload-btn' onClick={handleReportUpload}>
+              <Text className='editor-report-upload-text'>上传新报告</Text>
+            </View>
+          </View>
+        )
+      }
+
       case 'date': {
         const currentYear = new Date().getFullYear()
         const years = Array.from({ length: currentYear - 1900 + 1 }, (_, i) => 1900 + i)
@@ -879,55 +968,15 @@ function HealthProfileViewPage() {
           />
         </View>
 
-        {/* 体检/病例识别结果 — 只读 */}
+        {/* 体检/病例识别结果 */}
         <View className='block'>
           <Text className='block-title'>体检/病例识别结果</Text>
-          {!hasReportData ? (
-            <ReadOnlyRow
-              label=''
-              value='无'
-              column
-            />
-          ) : (
-            <>
-              {hasConclusions && (
-                <ReadOnlyRow
-                  label='诊断结论'
-                  value={reportExtract!.conclusions!.join('、')}
-                  column
-                />
-              )}
-              {hasIndicators && (
-                <View className='row column'>
-                  <Text className='label'>提取指标</Text>
-                  <View className='indicators-list'>
-                    {reportExtract!.indicators!.map((ind, idx) => (
-                      <View key={idx} className='indicator-item'>
-                        <Text className='ind-name'>{ind.name}</Text>
-                        <Text className={`ind-val ${ind.flag ? 'abnormal' : ''}`}>
-                          {ind.value} {ind.unit} {ind.flag}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-              {hasSuggestions && (
-                <ReadOnlyRow
-                  label='医学建议'
-                  value={reportExtract!.suggestions!.join('、')}
-                  column
-                />
-              )}
-              {hasMedicalNotes && (
-                <ReadOnlyRow
-                  label='其他记录'
-                  value={reportExtract!.medical_notes}
-                  column
-                />
-              )}
-            </>
-          )}
+          <EditableRow
+            label=''
+            field='report_extract'
+            value={hasReportData ? '查看结果' : '无'}
+            column
+          />
         </View>
 
         <View className='footer-actions'>

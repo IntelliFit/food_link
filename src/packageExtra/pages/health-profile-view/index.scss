@@ -562,3 +562,107 @@
     }
   }
 }
+/* ========== 报告查看器 ========== */
+.editor-report-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+
+  .editor-report-scroll {
+    max-height: 600rpx;
+  }
+
+  .editor-report-section {
+    margin-bottom: 24rpx;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .editor-report-section-title {
+      display: block;
+      font-size: 28rpx;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 12rpx;
+    }
+
+    .editor-report-section-text {
+      display: block;
+      font-size: 26rpx;
+      color: #4b5563;
+      line-height: 1.6;
+      margin-bottom: 8rpx;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    .editor-report-indicators {
+      display: flex;
+      flex-direction: column;
+      gap: 8rpx;
+
+      .editor-report-indicator-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12rpx 16rpx;
+        background: #f8fafc;
+        border-radius: 12rpx;
+
+        .editor-report-indicator-name {
+          font-size: 26rpx;
+          color: #374151;
+        }
+
+        .editor-report-indicator-val {
+          font-size: 26rpx;
+          color: #6b7280;
+
+          &.abnormal {
+            color: #ef4444;
+            font-weight: 600;
+          }
+        }
+      }
+    }
+  }
+
+  .editor-report-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48rpx 32rpx;
+    gap: 12rpx;
+
+    .editor-report-empty-text {
+      font-size: 30rpx;
+      color: #9ca3af;
+    }
+
+    .editor-report-empty-hint {
+      font-size: 24rpx;
+      color: #cbd5e1;
+      text-align: center;
+    }
+  }
+
+  .editor-report-upload-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 80rpx;
+    background: linear-gradient(135deg, #00bc7d 0%, #00a86e 100%);
+    border-radius: 16rpx;
+    margin-top: 8rpx;
+
+    .editor-report-upload-text {
+      font-size: 28rpx;
+      color: #fff;
+      font-weight: 600;
+    }
+  }
+}
