@@ -81,7 +81,7 @@ function HealthProfileEditPage() {
   const [medicalHistory, setMedicalHistory] = useState<string[]>(['none'])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergies, setAllergies] = useState<string>('')
-  const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
+  const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
 
   const [customMedical, setCustomMedical] = useState<string>('')
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([])
@@ -233,7 +233,7 @@ function HealthProfileEditPage() {
       diet_preference: dietPreference.filter(v => v !== 'none'),
       allergies: allergies ? allergies.split(/[、,，\s]+/).filter(Boolean) : [],
       health_notes: healthNotes,
-      report_image_url: reportImageUrl || undefined
+      report_image_url: reportImageUrls.length > 0 ? reportImageUrls[reportImageUrls.length - 1] : undefined
     }
 
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
@@ -264,7 +264,7 @@ function HealthProfileEditPage() {
 
     const { confirm } = await Taro.showModal({
       title: '确认保存',
-      content: reportImageUrl
+      content: reportImageUrls.length > 0
         ? '确定保存健康档案吗？体检报告将在后台自动识别，完成后会更新到档案中。'
         : '确定将修改后的健康信息保存到个人档案吗？'
     })
@@ -274,8 +274,9 @@ function HealthProfileEditPage() {
     try {
       await updateHealthProfile(req)
       // 若有上传的体检报告图片，提交后台病历提取任务
-      if (reportImageUrl) {
-        submitReportExtractionTask(reportImageUrl).catch(() => {
+      if (reportImageUrls.length > 0) {
+        const combinedUrl = reportImageUrls.join(',')
+        submitReportExtractionTask(combinedUrl).catch(() => {
           // 静默失败
         })
       }
@@ -292,17 +293,27 @@ function HealthProfileEditPage() {
 
   const handleReportUpload = async () => {
     try {
-      const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })
-      const base64 = await imageToBase64(res.tempFilePaths[0])
+      const res = await Taro.chooseImage({ count: 9, sizeType: ['compressed'] })
+      const tempPaths = res.tempFilePaths || []
+      if (tempPaths.length === 0) return
       Taro.showLoading({ title: '上传中...', mask: true })
-      const { imageUrl } = await uploadReportImage(base64)
+      const urls: string[] = []
+      for (const path of tempPaths) {
+        const base64 = await imageToBase64(path)
+        const { imageUrl } = await uploadReportImage(base64)
+        urls.push(imageUrl)
+      }
       Taro.hideLoading()
-      setReportImageUrl(imageUrl)
-      Taro.showToast({ title: '上传成功，保存时将自动识别', icon: 'success' })
+      setReportImageUrls(prev => [...prev, ...urls])
+      Taro.showToast({ title: `上传成功 ${urls.length} 张，保存时将自动识别`, icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
       await showUnifiedApiError(e, '上传失败')
     }
+  }
+
+  const handleRemoveReportImage = (idx: number) => {
+    setReportImageUrls(prev => prev.filter((_, i) => i !== idx))
   }
 
   if (loading) {
@@ -565,26 +576,31 @@ function HealthProfileEditPage() {
         {/* 体检报告 */}
         <View className='section'>
           <Text className='section-title'>体检报告（选填）</Text>
-          <View
-            className={`upload-area ${reportImageUrl ? 'has-image' : ''}`}
-            onClick={handleReportUpload}
-          >
-            {reportImageUrl ? (
-              <>
-                <Image src={reportImageUrl} mode='aspectFit' className='preview-image' />
-                <View className='reupload-mask'>
-                  <Text className='iconfont icon-xiangji' style={{ fontSize: '48rpx', color: '#fff' }}></Text>
-                  <Text className='reupload-text'>点击更换图片</Text>
+          {reportImageUrls.length > 0 ? (
+            <View className='report-image-grid'>
+              {reportImageUrls.map((url, idx) => (
+                <View key={url} className='report-image-thumb'>
+                  <Image src={url} mode='aspectFill' className='report-image-img' />
+                  <View className='report-image-remove' onClick={() => handleRemoveReportImage(idx)}>
+                    <Text className='report-image-remove-text'>×</Text>
+                  </View>
                 </View>
-              </>
-            ) : (
+              ))}
+            </View>
+          ) : (
+            <View className='upload-area' onClick={handleReportUpload}>
               <View className='upload-placeholder'>
                 <Text className='upload-icon iconfont icon-paizhao-xianxing'></Text>
                 <Text className='upload-title'>点击上传报告</Text>
-                <Text className='upload-desc'>支持 JPG / PNG 格式图片</Text>
+                <Text className='upload-desc'>支持 JPG / PNG 格式图片，可多选</Text>
               </View>
-            )}
-          </View>
+            </View>
+          )}
+          {reportImageUrls.length > 0 && (
+            <View className='upload-area-add' onClick={handleReportUpload}>
+              <Text className='upload-area-add-text'>+ 继续添加</Text>
+            </View>
+          )}
           <Text className='upload-hint'>AI 将自动识别血糖、血脂等关键指标</Text>
         </View>
 

@@ -670,16 +670,24 @@ function HealthProfileViewPage() {
         const rHasSuggestions = report?.suggestions && report.suggestions.length > 0
         const rHasMedicalNotes = !!report?.medical_notes
         const rHasData = rHasIndicators || rHasConclusions || rHasSuggestions || rHasMedicalNotes
+        const existingImageUrls = (report?._image_urls as string[]) || []
 
         const handleReportUpload = async () => {
           try {
-            const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })
-            const base64 = await imageToBase64(res.tempFilePaths[0])
+            const res = await Taro.chooseImage({ count: 9, sizeType: ['compressed'] })
+            const tempPaths = res.tempFilePaths || []
+            if (tempPaths.length === 0) return
             Taro.showLoading({ title: '上传中...', mask: true })
-            const { imageUrl } = await uploadReportImage(base64)
+            const urls: string[] = []
+            for (const path of tempPaths) {
+              const base64 = await imageToBase64(path)
+              const { imageUrl } = await uploadReportImage(base64)
+              urls.push(imageUrl)
+            }
             Taro.hideLoading()
-            await submitReportExtractionTask(imageUrl)
-            Taro.showToast({ title: '上传成功，后台识别中', icon: 'success' })
+            const combinedUrl = urls.join(',')
+            await submitReportExtractionTask(combinedUrl)
+            Taro.showToast({ title: `上传成功 ${urls.length} 张，后台识别中`, icon: 'success' })
             closeEditor()
           } catch (e: any) {
             Taro.hideLoading()
@@ -733,6 +741,18 @@ function HealthProfileViewPage() {
               <View className='editor-report-empty'>
                 <Text className='editor-report-empty-text'>暂无识别结果</Text>
                 <Text className='editor-report-empty-hint'>上传体检报告后，AI 将自动识别关键指标</Text>
+              </View>
+            )}
+            {existingImageUrls.length > 0 && (
+              <View className='editor-report-thumb-section'>
+                <Text className='editor-report-section-title'>已上传图片</Text>
+                <View className='editor-report-thumb-grid'>
+                  {existingImageUrls.map((url: string, idx: number) => (
+                    <View key={idx} className='editor-report-thumb-item'>
+                      <Image src={url} mode='aspectFill' className='editor-report-thumb-img' />
+                    </View>
+                  ))}
+                </View>
               </View>
             )}
             <View className='editor-report-upload-btn' onClick={handleReportUpload}>
