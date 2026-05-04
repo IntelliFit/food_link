@@ -77,6 +77,7 @@
       display: flex;
       align-items: center;
       gap: 12rpx;
+      flex: 1;
     }
   }
 }
@@ -109,7 +110,7 @@
 .row-arrow {
   font-size: 24rpx;
   flex-shrink: 0;
-  margin-left: 8rpx;
+  margin-left: auto;
 }
 
 /* ========== 底部操作按钮 ========== */
