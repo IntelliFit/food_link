@@ -966,25 +966,21 @@ function HealthProfileViewPage() {
             label='既往病史'
             field='medical_history'
             value={formatList(medicalHistory, MEDICAL_MAP)}
-            column
           />
           <EditableRow
             label='饮食偏好'
             field='diet_preference'
             value={formatList(dietPreference, DIET_PREF_MAP)}
-            column
           />
           <EditableRow
             label='过敏源'
             field='allergies'
             value={formatList(allergies, ALLERGY_MAP)}
-            column
           />
           <EditableRow
             label='特殊情况和补充'
             field='health_notes'
             value={healthNotes ? healthNotes : '无'}
-            column
           />
         </View>
 
@@ -995,7 +991,6 @@ function HealthProfileViewPage() {
             label=''
             field='report_extract'
             value={hasReportData ? '查看结果' : '无'}
-            column
           />
         </View>
 
