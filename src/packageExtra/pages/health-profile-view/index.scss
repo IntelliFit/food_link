@@ -47,6 +47,7 @@
   border-bottom: 1rpx solid #e5e7eb;
 }
 
+/* ========== 行样式 ========== */
 .row {
   display: flex;
   justify-content: space-between;
@@ -62,6 +63,21 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 12rpx;
+  }
+
+  /* 可点击行 */
+  &.editable {
+    cursor: pointer;
+
+    &:active {
+      opacity: 0.7;
+    }
+
+    .value-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12rpx;
+    }
   }
 }
 
@@ -81,8 +97,20 @@
   .row.column & {
     text-align: left;
   }
+
+  &.highlight {
+    color: #00bc7d;
+    font-weight: 500;
+  }
 }
 
+.row-arrow {
+  font-size: 24rpx;
+  flex-shrink: 0;
+  margin-left: 8rpx;
+}
+
+/* ========== 底部操作按钮 ========== */
 .footer-actions {
   padding: 48rpx 24rpx 32rpx;
   display: flex;
@@ -136,7 +164,7 @@
   margin-top: 24rpx;
 }
 
-/* 提取指标列表 */
+/* ========== 提取指标列表 ========== */
 .indicators-list {
   width: 100%;
   display: flex;
@@ -168,7 +196,267 @@
 
   &.abnormal {
     color: #ef4444;
+  }
+}
 
-    /* 异常标红 */
+/* ========== 底部编辑弹窗 ========== */
+.editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 48rpx 24rpx calc(env(safe-area-inset-bottom) + 24rpx);
+}
+
+.editor-modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.editor-modal-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100vh - 48rpx - env(safe-area-inset-bottom) - 128rpx);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 32rpx;
+  padding: 32rpx 24rpx 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+
+  .editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 24rpx;
+    border-bottom: 1rpx solid #f0f0f0;
+    flex-shrink: 0;
+
+    .editor-cancel {
+      font-size: 28rpx;
+      color: #666;
+      min-width: 80rpx;
+    }
+
+    .editor-title {
+      font-size: 32rpx;
+      font-weight: 600;
+      color: #1a1a1a;
+      text-align: center;
+      flex: 1;
+    }
+
+    .editor-confirm {
+      font-size: 28rpx;
+      color: #00bc7d;
+      font-weight: 500;
+      min-width: 80rpx;
+      text-align: right;
+
+      &.disabled {
+        color: #ccc;
+      }
+    }
+
+    .editor-confirm-spinner {
+      width: 32rpx;
+      height: 32rpx;
+      flex-shrink: 0;
+      border: 3rpx solid #e8eaed;
+      border-top-color: #00bc7d;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-left: auto;
+    }
+  }
+
+  .editor-body {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 24rpx;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== 单选列表 ========== */
+.editor-radio-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-radio-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:active {
+    opacity: 0.7;
+  }
+
+  &.active {
+    .editor-radio-label {
+      color: #00bc7d;
+      font-weight: 600;
+    }
+
+    .editor-radio-check {
+      color: #00bc7d;
+    }
+  }
+
+  .editor-radio-label {
+    font-size: 30rpx;
+    color: #333;
+  }
+
+  .editor-radio-check {
+    font-size: 32rpx;
+    color: #ccc;
+  }
+}
+
+/* ========== 多选标签网格 ========== */
+.editor-tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+
+  .editor-tag-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16rpx 28rpx;
+    background: #f5f7fa;
+    border: 3rpx solid #e8eaed;
+    border-radius: 32rpx;
+    transition: all 0.3s;
+    box-sizing: border-box;
+
+    &:active {
+      opacity: 0.7;
+    }
+
+    &.active {
+      background: linear-gradient(135deg, #00bc7d 0%, #00a86e 100%);
+      border-color: #00bc7d;
+
+      .editor-tag-text {
+        color: #fff;
+      }
+    }
+
+    .editor-tag-text {
+      font-size: 26rpx;
+      color: #666;
+      white-space: nowrap;
+    }
+  }
+}
+
+/* ========== 数字输入框 ========== */
+.editor-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+
+  .editor-number-input {
+    flex: 1;
+    height: 88rpx;
+    padding: 0 24rpx;
+    background: #f5f7fa;
+    border: 2rpx solid #e8eaed;
+    border-radius: 12rpx;
+    font-size: 32rpx;
+    color: #333;
+    box-sizing: border-box;
+  }
+
+  .editor-input-unit {
+    font-size: 28rpx;
+    color: #666;
+    flex-shrink: 0;
+  }
+}
+
+/* ========== 文本输入框 ========== */
+.editor-textarea {
+  width: 100%;
+  min-height: 200rpx;
+  padding: 20rpx 24rpx;
+  background: #f5f7fa;
+  border: 2rpx solid #e8eaed;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  color: #333;
+  line-height: 1.6;
+  box-sizing: border-box;
+}
+
+/* ========== 日期选择器 ========== */
+.editor-date-picker {
+  .editor-date-labels {
+    display: flex;
+    justify-content: space-around;
+    padding: 16rpx 0;
+    border-bottom: 1rpx solid #f0f0f0;
+
+    .editor-date-label {
+      font-size: 26rpx;
+      color: #999;
+      text-align: center;
+      flex: 1;
+    }
+  }
+
+  .editor-picker-view {
+    height: 400rpx;
+    width: 100%;
+
+    .editor-picker-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 80rpx;
+    }
+
+    .editor-picker-text {
+      font-size: 32rpx;
+      color: #333;
+    }
   }
 }

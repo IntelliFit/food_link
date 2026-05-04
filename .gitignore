@@ -14,6 +14,9 @@ hkh/
 # 本地一次性生成的孤儿对象扫描报告（勿提交）
 backend/reports/orphan-report-*.json
 
+# 本地下载的体检报告等文件（勿提交）
+/reports/
+
 # 环境变量（重要：包含敏感信息）
 .env
 .env.local

@@ -22,9 +22,7 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 
 import './index.scss'
-import HeightRuler from '../../../components/HeightRuler'
-import AgePicker from '../../../components/AgePicker'
-import WeightRuler from '../../../components/WeightRuler'
+// HeightRuler, AgePicker, WeightRuler removed — using simple Input instead
 
 /** 活动水平选项 */
 const ACTIVITY_OPTIONS = [
@@ -144,7 +142,7 @@ function HealthProfileEditPage() {
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergies((hc.allergies as string[]).join('、'))
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
-    } catch {
+    } catch (e: any) {
       await showUnifiedApiError(e, '获取档案失败')
     } finally {
       setLoading(false)
@@ -307,18 +305,6 @@ function HealthProfileEditPage() {
     }
   }
 
-  const handleRefillQuestionnaire = () => {
-    Taro.showModal({
-      title: '重新填写',
-      content: '将前往答题页面重新填写健康档案，当前编辑内容将不会保存。确定继续吗？',
-      success: (res) => {
-        if (res.confirm) {
-          Taro.redirectTo({ url: '/pages/health-profile/index' })
-        }
-      }
-    })
-  }
-
   if (loading) {
     return (
       <View className='health-profile-edit-page'>
@@ -336,82 +322,91 @@ function HealthProfileEditPage() {
         <View className='section'>
           <Text className='section-title'>基础信息</Text>
 
-          <View className='form-item'>
-            <Text className='form-label'>
+          <View className='form-item form-item-inline'>
+            <Text className='form-label-inline'>
               性别 <Text className='required'>*</Text>
             </Text>
-            <View className='choice-row'>
+            <View className='choice-row choice-row-vertical'>
               <View
-                className={`choice-btn ${gender === 'male' ? 'active' : ''}`}
+                className={`option-card big ${gender === 'male' ? 'active' : ''}`}
                 onClick={() => setGender('male')}
               >
-                <Text className='choice-icon iconfont icon-nannv-nan' />
-                <Text className='choice-text'>男</Text>
+                <Text className='option-icon iconfont icon-nannv-nan' />
+                <Text className='option-label'>男</Text>
               </View>
               <View
-                className={`choice-btn ${gender === 'female' ? 'active' : ''}`}
+                className={`option-card big ${gender === 'female' ? 'active' : ''}`}
                 onClick={() => setGender('female')}
               >
-                <Text className='choice-icon iconfont icon-nannv-nv' />
-                <Text className='choice-text'>女</Text>
+                <Text className='option-icon iconfont icon-nannv-nv' />
+                <Text className='option-label'>女</Text>
               </View>
             </View>
           </View>
 
-          <View className='form-item'>
-            <Text className='form-label'>
+          <View className='form-item form-item-inline'>
+            <Text className='form-label-inline'>
               年龄 <Text className='required'>*</Text>
             </Text>
-            <AgePicker
-              value={age}
-              onChange={(val) => {
-                setAge(val)
-                const year = new Date().getFullYear() - val
-                setBirthday(`${year}-01-01`)
-              }}
-              min={1}
-              max={100}
-            />
+            <View className='input-with-unit'>
+              <Input
+                className='text-input number-input'
+                type='number'
+                placeholder='请输入年龄'
+                value={String(age)}
+                onInput={(e) => {
+                  const val = parseInt(e.detail.value, 10)
+                  if (!isNaN(val) && val >= 1 && val <= 100) {
+                    setAge(val)
+                    setBirthday(`${new Date().getFullYear() - val}-01-01`)
+                  }
+                }}
+              />
+              <Text className='input-unit'>岁</Text>
+            </View>
           </View>
 
-          <View className='form-item'>
-            <Text className='form-label'>
+          <View className='form-item form-item-inline'>
+            <Text className='form-label-inline'>
               身高 <Text className='required'>*</Text>
             </Text>
-            <View className='ruler-container'>
-              <HeightRuler
-                value={height ? Number(height) : 170}
-                onChange={(val) => setHeight(String(val))}
-                min={100}
-                max={250}
+            <View className='input-with-unit'>
+              <Input
+                className='text-input number-input'
+                type='number'
+                placeholder='100-250'
+                value={height}
+                onInput={(e) => setHeight(e.detail.value)}
               />
+              <Text className='input-unit'>cm</Text>
             </View>
           </View>
 
-          <View className='form-item'>
-            <Text className='form-label'>
+          <View className='form-item form-item-inline'>
+            <Text className='form-label-inline'>
               体重 <Text className='required'>*</Text>
             </Text>
-            <View className='ruler-container'>
-              <WeightRuler
-                value={weight ? Number(weight) : 60}
-                onChange={(val) => setWeight(String(val))}
-                min={30}
-                max={200}
-                height={height ? Number(height) : 170}
+            <View className='input-with-unit'>
+              <Input
+                className='text-input number-input'
+                type='digit'
+                placeholder='30-200'
+                value={weight}
+                onInput={(e) => setWeight(e.detail.value)}
               />
+              <Text className='input-unit'>kg</Text>
             </View>
           </View>
 
           <View className='form-item'>
-            <Text className='form-label'>
+            <Text className='form-label-inline'>
               饮食目标 <Text className='required'>*</Text>
             </Text>
             <View className='option-list'>
               {GOAL_OPTIONS.map((opt) => (
                 <View
                   key={opt.value}
-                  className={`option-card ${dietGoal === opt.value ? 'active' : ''}`}
+                  className={`option-card with-desc ${dietGoal === opt.value ? 'active' : ''}`}
                   onClick={() => setDietGoal(opt.value)}
                 >
                   <Text className={`option-icon iconfont ${opt.icon}`}></Text>
@@ -425,33 +420,35 @@ function HealthProfileEditPage() {
           </View>
 
           <View className='form-item'>
-            <Text className='form-label'>
+            <Text className='form-label-inline'>
               活动水平 <Text className='required'>*</Text>
             </Text>
             <View className='option-list'>
               {ACTIVITY_OPTIONS.map((o) => (
                 <View
                   key={o.value}
-                  className={`option-card ${activityLevel === o.value ? 'active' : ''}`}
+                  className={`option-card with-desc ${activityLevel === o.value ? 'active' : ''}`}
                   onClick={() => setActivityLevel(o.value)}
                 >
                   <Text className='option-icon'>{o.icon}</Text>
-                  <Text className='option-label'>{o.label}</Text>
-                  <Text className='option-desc'>{o.desc}</Text>
+                  <View className='option-info'>
+                    <Text className='option-label'>{o.label}</Text>
+                    <Text className='option-desc'>{o.desc}</Text>
+                  </View>
                 </View>
               ))}
             </View>
           </View>
 
           <View className='form-item'>
-            <Text className='form-label'>
+            <Text className='form-label-inline'>
               执行模式 <Text className='required'>*</Text>
             </Text>
             <View className='option-list'>
               {EXECUTION_MODE_OPTIONS.map((opt) => (
                 <View
                   key={opt.value}
-                  className={`option-card ${executionMode === opt.value ? 'active' : ''}`}
+                  className={`option-card with-desc ${executionMode === opt.value ? 'active' : ''}`}
                   onClick={() => {
                     if (opt.value === 'strict') {
                       if (strictModeAvailable) {
@@ -490,25 +487,25 @@ function HealthProfileEditPage() {
           <Text className='section-title'>健康状况</Text>
 
           <View className='form-item'>
-            <Text className='form-label'>既往病史（可多选）</Text>
+            <Text className='form-label-inline'>既往病史（可多选）</Text>
             <View className='option-grid'>
               {MEDICAL_OPTIONS.map((o) => (
                 <View
                   key={o.value}
-                  className={`tag-btn ${medicalHistory.includes(o.value) ? 'active' : ''}`}
+                  className={`option-card small ${medicalHistory.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleMedical(o.value)}
                 >
-                  <Text className='tag-text'>{o.label}</Text>
+                  <Text className='option-label'>{o.label}</Text>
                 </View>
               ))}
               {customMedicalList.map((item) => (
                 <View
                   key={item}
-                  className={`tag-btn custom ${selectedCustomMedical.includes(item) ? 'active' : ''}`}
+                  className={`option-card small custom-tag ${selectedCustomMedical.includes(item) ? 'active' : ''}`}
                   onClick={() => toggleCustomMedical(item)}
                   onLongPress={() => handleRemoveCustomMedical(item)}
                 >
-                  <Text className='tag-text'>{item}</Text>
+                  <Text className='option-label'>{item}</Text>
                 </View>
               ))}
             </View>
@@ -527,23 +524,23 @@ function HealthProfileEditPage() {
           </View>
 
           <View className='form-item'>
-            <Text className='form-label'>特殊饮食习惯（可多选）</Text>
+            <Text className='form-label-inline'>特殊饮食习惯（可多选）</Text>
             <View className='option-grid'>
               {DIET_OPTIONS.map((o) => (
                 <View
                   key={o.value}
-                  className={`tag-btn ${dietPreference.includes(o.value) ? 'active' : ''}`}
+                  className={`option-card small ${dietPreference.includes(o.value) ? 'active' : ''}`}
                   onClick={() => toggleDiet(o.value)}
                 >
-                  <Text className='tag-icon'>{o.icon}</Text>
-                  <Text className='tag-text'>{o.label}</Text>
+                  <Text className='option-icon'>{o.icon}</Text>
+                  <Text className='option-label'>{o.label}</Text>
                 </View>
               ))}
             </View>
           </View>
 
           <View className='form-item'>
-            <Text className='form-label'>过敏源</Text>
+            <Text className='form-label-inline'>过敏源</Text>
             <Textarea
               className='text-input textarea-input'
               placeholder='如：海鲜、花生，多个用顿号分隔'
@@ -554,7 +551,7 @@ function HealthProfileEditPage() {
           </View>
 
           <View className='form-item'>
-            <Text className='form-label'>特殊情况和补充</Text>
+            <Text className='form-label-inline'>特殊情况和补充</Text>
             <Textarea
               className='text-input textarea-input'
               placeholder='例如：孕期、哺乳期、手术恢复期等'
@@ -593,9 +590,6 @@ function HealthProfileEditPage() {
 
         {/* 底部操作按钮 */}
         <View className='footer-actions'>
-          <View className='refill-link' onClick={handleRefillQuestionnaire}>
-            <Text className='refill-text'>或前往答题页面重新填写</Text>
-          </View>
           <Button
             block
             color='primary'

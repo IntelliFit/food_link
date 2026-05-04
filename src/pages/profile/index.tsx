@@ -598,25 +598,9 @@ function ProfilePage() {
     })
   }
 
-  const getServiceColor = (id: number) => {
-    const colors: Record<number, string> = {
-      0: '#10b981', // 健康档案 - 绿
-      2: '#8b5cf6', // 食物管理 - 紫
-      3: '#3b82f6', // 饮食记录 - 蓝
-      4: '#f59e0b', // 邀请有礼 - 金
-      5: '#10b981', // 公共食物库 - 绿
-      7: '#6b7280'  // 识别历史 - 灰
-    }
-    return colors[id] || '#6b7280'
-  }
+  const getServiceColor = (_id: number) => '#5cb896'
 
-  const getSettingColor = (id: number) => {
-    const colors: Record<number, string> = {
-      3: '#10b981', // 隐私设置 - 绿
-      5: '#8b5cf6'  // 关于我们 - 紫
-    }
-    return colors[id] || '#6b7280'
-  }
+  const getSettingColor = (_id: number) => '#5cb896'
 
   return (
     <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
