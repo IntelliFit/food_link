@@ -332,10 +332,10 @@ export default function LoginPage() {
                     <View className='dev-test-input-wrapper'>
                         <Text className='dev-test-label'>测试 OpenID（留空则走正常流程）</Text>
                         <Input
-                            className='dev-test-openid-input'
-                            value={testOpenid}
-                            onInput={(e) => setTestOpenid(e.detail.value)}
-                            placeholder='输入测试 openid 模拟新用户'
+                          className='dev-test-openid-input'
+                          value={testOpenid}
+                          onInput={(e) => setTestOpenid(e.detail.value)}
+                          placeholder='输入测试 openid 模拟新用户'
                         />
                     </View>
                 )}
