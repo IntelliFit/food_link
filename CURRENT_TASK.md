@@ -2,6 +2,20 @@
 
 ## 状态：进行中 - 等待用户反馈调试日志
 
+- 2026-05-05 update:
+  - Reviewed latest divergent `dev` / `main` commits and synced both branches to the same local HEAD.
+  - Merge path:
+    - Preserved local `main` history by merging `origin/main` into `main` first.
+    - Merged `dev` into `main`, resolving the only code conflict in `backend/worker.py` by keeping both notification and food-recognition helper imports.
+    - Fast-forwarded `dev` to the final `main` HEAD.
+  - Synced code HEAD before state-record commit: `f84a321` (`fix: resolve merge lint issues`).
+  - Verification:
+    - `python -m py_compile backend/main.py backend/database.py backend/worker.py` passed.
+    - Targeted `npm run lint -- ...` for merged frontend files passed.
+    - `weapp-devtools` automation was enabled through `D:\software\微信web开发者工具\cli.bat auto --project D:\files\food_link --auto-port 9420`.
+    - `mrc where --port 9420` connected successfully; `mrc switchTab /pages/profile/index --port 9420` succeeded; `mrc errors 10 --port 9420` returned 0 errors.
+    - Runtime validation of the newly added `packageExtra/pages/membership-agreement/index` page was blocked because current DevTools `dist` did not contain the page (`page ... is not found`). No production `build:weapp` was run.
+
 - 2026-05-03 update:
   - Added `testOpenid` dev-environment bypass for testing invite-new-user flow without real WeChat accounts.
   - Backend `LoginRequest` now accepts `testOpenid`; `/api/login` skips WeChat API and uses the fake openid when `NODE_ENV=development`.
