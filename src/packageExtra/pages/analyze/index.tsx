@@ -21,7 +21,7 @@ import {
   PrecisionReferencePresetConfig,
   PrecisionReferencePresetKey
 } from '../../../utils/api'
-import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
+import type { AnalyzeResponse, AnalysisEngine, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
 import { showUnifiedApiError } from '../../../utils/error-modal'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
@@ -82,6 +82,11 @@ const REFERENCE_PRESETS: Array<{
 ]
 
 const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
+const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+
+const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
+  value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
+)
 
 const normalizePositiveReferenceDimension = (value: unknown): number | undefined => {
   const num = Number(value)
@@ -290,6 +295,7 @@ function AnalyzePage() {
   const [referencePlacementNote, setReferencePlacementNote] = useState('')
 
   const imagePathsRef = useRef<string[]>([])
+  const routeSessionSignatureRef = useRef('')
   imagePathsRef.current = imagePaths
 
   const canUseStrictMode = canUseStrictModeForMembership(membershipStatus)
@@ -307,7 +313,7 @@ function AnalyzePage() {
     })
   }
 
-  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus)
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode)
 
   useEffect(() => {
     if (!membershipStatus) return
@@ -328,6 +334,24 @@ function AnalyzePage() {
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
   useDidShow(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    const nextSessionId = String(params?.precision_session_id || '').trim()
+    const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
+    const nextSignature = `${nextSessionId}|${requestedAnalysisEngine}`
+    if (routeSessionSignatureRef.current !== nextSignature) {
+      routeSessionSignatureRef.current = nextSignature
+      console.info('[analyze] sync route session', {
+        precision_session_id: nextSessionId || '(none)',
+        analysis_engine: requestedAnalysisEngine || '(from storage)',
+      })
+      setPrecisionSessionId(nextSessionId)
+      if (nextSessionId) {
+        setExecutionMode('strict')
+      }
+      if (requestedAnalysisEngine) {
+        Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
+      }
+    }
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
     }
@@ -340,9 +364,14 @@ function AnalyzePage() {
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
     persistRecordTargetDate(String(params?.date || ''))
+    const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
+    routeSessionSignatureRef.current = `${nextSessionId}|${requestedAnalysisEngine}`
+    setPrecisionSessionId(nextSessionId)
     if (nextSessionId) {
-      setPrecisionSessionId(nextSessionId)
       setExecutionMode('strict')
+    }
+    if (requestedAnalysisEngine) {
+      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
     }
 
     // 1. 获取饮食目标
@@ -595,6 +624,8 @@ function AnalyzePage() {
       Taro.setStorageSync('analyzeDietGoal', dietGoal)
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
+      const analysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
+      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, analysisEngine)
       setSavedReferenceDefaults(nextReferenceDefaults)
       updateHealthProfile({
         precision_reference_defaults: nextReferenceDefaults,
@@ -616,6 +647,7 @@ function AnalyzePage() {
             image_urls: imageUrls,
             modelName: 'gemini',
             execution_mode: executionMode,
+            analysis_engine: analysisEngine,
             ...commonPayload,
           })
       const task_id = String(
@@ -629,7 +661,7 @@ function AnalyzePage() {
       Taro.setStorageSync('analyzeTaskType', 'food')
       Taro.hideLoading()
       setIsAnalyzing(false)
-      const q = `task_id=${encodeURIComponent(task_id)}&execution_mode=${encodeURIComponent(executionMode)}&task_type=food`
+      const q = `task_id=${encodeURIComponent(task_id)}&execution_mode=${encodeURIComponent(executionMode)}&task_type=food&analysis_engine=${encodeURIComponent(analysisEngine)}`
       Taro.redirectTo({
         url: `${extraPkgUrl('/pages/analyze-loading/index')}?${q}`
       })
@@ -669,7 +701,7 @@ function AnalyzePage() {
   const handleAnalyzePress = () => {
     if (isAnalyzing) return
     if (isQuotaExhausted) {
-      const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
       const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
       const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
@@ -722,7 +754,7 @@ function AnalyzePage() {
         >
           <Text className='quota-bar-text'>
             {isQuotaExhausted
-              ? getFoodAnalysisCreditBlockMessage(membershipStatus)
+              ? getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
               : hasCreditsInfo
                 ? `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
                 : `今日积分信息加载中${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`}

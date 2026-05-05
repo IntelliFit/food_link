@@ -16,6 +16,7 @@ import {
   submitTextAnalyzeTask,
   continuePrecisionSession,
   type ExecutionMode,
+  type AnalysisEngine,
   type AnalyzeRecognitionOutcome,
   type AllowedFoodCategory,
   type PrecisionReferenceDefaults,
@@ -44,9 +45,13 @@ import './index.scss'
 
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
+const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 /** 判断当前识别会话是否已保存为饮食记录。
  * 优先读取 analyze-history 列表传入的 analyzeTaskIsRecorded 标记；
  * 不再依赖本地 analyze_committed_session 缓存，状态由后端返回。 */
+/** 按 analyzeSourceTaskId 记录已保存的 food record id，用于返回结果页时显示「查看结果」 */
+const ANALYZE_COMMITTED_SESSION_KEY = 'analyze_committed_session'
+
 function isAnalyzeSessionCommitted(): boolean {
   try {
     return Taro.getStorageSync('analyzeTaskIsRecorded') === '1'
@@ -67,6 +72,10 @@ type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => (
   value === 'strict' ? 'strict' : 'standard'
+)
+
+const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
+  value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
 )
 
 const normalizeTaskType = (value: unknown): 'food' | 'food_text' => (
@@ -334,6 +343,7 @@ function ResultPage() {
   const [resultScrollTop, setResultScrollTop] = useState(0)
   const resultScrollRafRef = useRef<number | null>(null)
   const pendingResultScrollTopRef = useRef(0)
+  const precisionDefaultsLoadedRef = useRef(false)
 
   const handleResultScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
     const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
@@ -560,14 +570,10 @@ function ResultPage() {
   }
 
   const isStrictMode = executionMode === 'strict'
-  const isStrictHardReject = isStrictMode && recognitionOutcome === 'hard_reject'
-  const isStrictSoftReject = isStrictMode && recognitionOutcome === 'soft_reject'
-  const shouldShowRecognitionCard = isStrictMode
-  const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0
+  const shouldShowRecognitionCard = false
+  const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0 && !isStrictMode
   const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
-  const shouldShowPrecisionContinueCard = Boolean(
-    precisionSessionId && precisionStatus && precisionStatus !== 'done'
-  )
+  const shouldShowPrecisionContinueCard = false
 
   const getPrecisionReferencePresetConfig = useCallback((
     value: PrecisionReferencePresetValue,
@@ -634,6 +640,7 @@ function ResultPage() {
 
   useEffect(() => {
     if (precisionDefaultsLoadedRef.current) return
+    precisionDefaultsLoadedRef.current = true
     let active = true
     ;(async () => {
       try {
@@ -1155,48 +1162,6 @@ function ResultPage() {
       handleViewCommittedResult()
       return
     }
-    if (shouldShowPrecisionContinueCard) {
-      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
-      return
-    }
-    if (isStrictHardReject) {
-      Taro.showModal({
-        title: '当前结果不建议直接用于精准执行',
-        content: `${rejectionReason || '这餐更适合拆开拍后再估。'}\n如果你只是想先记一笔，也可以继续保存。`,
-        confirmText: '仍要记录',
-        cancelText: '先去拆拍',
-        success: (res) => {
-          if (!res.confirm) return
-          const savedMealType = getSavedSelectableMealType()
-          if (savedMealType) {
-            saveRecord(false, savedMealType)
-            return
-          }
-          setSelectedMealType(inferDefaultMealTypeFromLocalTime())
-          setShowMealSelector(true)
-        }
-      })
-      return
-    }
-    if (isStrictSoftReject) {
-      Taro.showModal({
-        title: '本次结果不建议直接用于精准执行',
-        content: `${rejectionReason || '当前边界或参照物不够理想，建议补拍后再确认。'}\n如果你只是想先记一笔，也可以继续保存。`,
-        confirmText: '仍要记录',
-        cancelText: '先去重拍',
-        success: (res) => {
-          if (!res.confirm) return
-          const savedMealType = getSavedSelectableMealType()
-          if (savedMealType) {
-            saveRecord(false, savedMealType)
-            return
-          }
-          setSelectedMealType(inferDefaultMealTypeFromLocalTime())
-          setShowMealSelector(true)
-        }
-      })
-      return
-    }
     const savedMealType = getSavedSelectableMealType()
     if (savedMealType) {
       saveRecord(false, savedMealType)
@@ -1207,38 +1172,10 @@ function ResultPage() {
   }
 
   const handleOpenLibraryUpload = () => {
-    if (shouldShowPrecisionContinueCard) {
-      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
-      return
-    }
     if (!hasUploadableImage) {
       Taro.showToast({ title: '当前结果没有可上传的实物图片', icon: 'none' })
       return
     }
-    if (isStrictHardReject) {
-      Taro.showModal({
-        title: '当前结果不建议上传',
-        content: rejectionReason || '这餐更适合拆开拍后再上传。',
-        showCancel: false,
-        confirmText: '我知道了',
-      })
-      return
-    }
-
-    if (isStrictSoftReject) {
-      Taro.showModal({
-        title: '当前图片条件一般',
-        content: `${rejectionReason || '建议补拍后再确认。'}\n如果你确认这次样本也要上传到公共库，可以继续。`,
-        confirmText: '继续上传',
-        cancelText: '先去重拍',
-        success: (res) => {
-          if (!res.confirm) return
-          openQuickUpload()
-        }
-      })
-      return
-    }
-
     openQuickUpload()
   }
 
@@ -1250,14 +1187,6 @@ function ResultPage() {
 
   // 收藏食物（保存为可复用模板）
   const handleSaveAsRecipe = () => {
-    if (shouldShowPrecisionContinueCard) {
-      Taro.showToast({ title: '请先完成精准模式的补充或重拍', icon: 'none' })
-      return
-    }
-    if (isStrictHardReject) {
-      Taro.showToast({ title: '请先重拍后再收藏', icon: 'none' })
-      return
-    }
     // 检查登录
     const token = getAccessToken()
     if (!token) {
@@ -1425,6 +1354,7 @@ function ResultPage() {
           const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
           const savedExecutionMode = normalizeAvailableExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
+          const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,
@@ -1501,6 +1431,7 @@ function ResultPage() {
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
               execution_mode: savedExecutionMode,
+              analysis_engine: savedAnalysisEngine,
               previousResult,
             })
             taskId = res.task_id
@@ -1711,10 +1642,13 @@ function ResultPage() {
                 <View className='followup-question-title-wrap'>
                   <Text className='followup-question-label'>精准模式下一步</Text>
                   <Text className='followup-question-title'>
-                    {precisionStatus === 'needs_retake' ? '这轮建议先重拍再继续' : '这轮还需要你补充更多信息'}
+                    {precisionStatus === 'needs_retake' ? '这轮可以先重拍再继续' : '这轮也可以继续补充更多信息'}
                   </Text>
                 </View>
               </View>
+              <Text className='followup-question-desc'>
+                不补充也可以直接记录当前结果，下面这些只是可选增强。
+              </Text>
               {detectedItemsSummary.length > 0 && (
                 <Text className='followup-question-desc'>
                   当前识别到的主体：{detectedItemsSummary.join('、')}
@@ -2073,13 +2007,13 @@ function ResultPage() {
         <View className='pba-safe-area'>
           <View className='action-grid'>
             <View
-              className={`secondary-btn ${isStrictHardReject ? 'disabled' : ''}`}
-              onClick={isStrictHardReject ? undefined : handleSaveAsRecipe}
+              className='secondary-btn'
+              onClick={handleSaveAsRecipe}
             >
               <Text className='btn-text'>收藏餐食</Text>
             </View>
             <View
-              className={`primary-btn ${saving ? 'loading' : ''} ${!isAnalyzeSessionCommitted() && !committedRecordId && (isStrictSoftReject || isStrictHardReject) ? 'soft-warning' : ''} ${isAnalyzeSessionCommitted() || committedRecordId ? 'is-committed' : ''}`}
+              className={`primary-btn ${saving ? 'loading' : ''} ${isAnalyzeSessionCommitted() || committedRecordId ? 'is-committed' : ''}`}
               onClick={handleConfirmAndShare}
             >
               {saving ? (
@@ -2088,9 +2022,7 @@ function ResultPage() {
                 <Text className='btn-text'>
                   {isAnalyzeSessionCommitted() || committedRecordId
                     ? '查看结果'
-                    : (isStrictSoftReject || isStrictHardReject)
-                      ? '仍要记录'
-                      : '记录'}
+                    : '记录'}
                 </Text>
               )}
             </View>

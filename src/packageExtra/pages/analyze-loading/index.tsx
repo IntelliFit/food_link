@@ -5,6 +5,7 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAnalyzeTask,
   type AnalysisTask,
+  type AnalysisEngine,
   type AnalyzeResponse,
   type ExecutionMode,
   type ExerciseTaskResultPayload
@@ -17,6 +18,11 @@ import './index.scss'
 
 /** 与记运动页一致，用于完成后清除「待同步」状态 */
 const EXERCISE_PENDING_TASK_KEY = 'exercise_pending_task_id'
+const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+
+const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
+  value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
+)
 
 // 健康小知识
 const HEALTH_TIPS = [
@@ -163,6 +169,38 @@ const pickSourceTaskTypeFromTask = (task: AnalysisTask): 'food' | 'food_text' =>
   return payload?.source_type === 'text' ? 'food_text' : 'food'
 }
 
+const persistResultImageFromTask = (task: AnalysisTask) => {
+  const taskImagePaths = Array.isArray(task.image_paths)
+    ? task.image_paths.filter((path) => typeof path === 'string' && path.trim())
+    : []
+  const taskImageUrl = typeof task.image_url === 'string' && task.image_url.trim()
+    ? task.image_url.trim()
+    : ''
+
+  if (taskImagePaths.length > 0) {
+    Taro.setStorageSync('analyzeImagePath', taskImagePaths[0])
+    Taro.setStorageSync('analyzeImagePaths', taskImagePaths)
+    return
+  }
+
+  if (taskImageUrl) {
+    Taro.setStorageSync('analyzeImagePath', taskImageUrl)
+    Taro.setStorageSync('analyzeImagePaths', [taskImageUrl])
+  }
+}
+
+const persistAnalyzeContextFromPayload = (payload: Record<string, unknown>) => {
+  if (typeof payload.meal_type === 'string' && payload.meal_type.trim()) {
+    Taro.setStorageSync('analyzeMealType', payload.meal_type)
+  }
+  if (typeof payload.diet_goal === 'string' && payload.diet_goal.trim()) {
+    Taro.setStorageSync('analyzeDietGoal', payload.diet_goal)
+  }
+  if (typeof payload.activity_timing === 'string' && payload.activity_timing.trim()) {
+    Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing)
+  }
+}
+
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
   if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'standard') {
@@ -197,6 +235,7 @@ function AnalyzeLoadingPage() {
   const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(Date.now())
+  const routeSignatureRef = useRef<string>('')
 
   const syncImagePathFromStorage = useCallback(() => {
     try {
@@ -239,19 +278,14 @@ function AnalyzeLoadingPage() {
     syncTextRecordInputFromStorage()
   }, [syncImagePathFromStorage, syncTextRecordInputFromStorage])
 
-  useDidShow(() => {
-    syncImagePathFromStorage()
-    syncTextRecordInputFromStorage()
-    // 切后台再回前台：补一次任务拉取（与 setInterval 互补）
-    void pollFnRef.current?.()
-  })
-
-  useEffect(() => {
+  const syncRouteTaskFromParams = useCallback(() => {
     const params = Taro.getCurrentInstance().router?.params
     const id = params?.task_id
     const type = normalizeTaskType(params?.task_type)
     const modeFromStorage = Taro.getStorageSync('analyzeExecutionMode')
     const mode = normalizeExecutionMode(params?.execution_mode || modeFromStorage)
+    const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
+    const nextSignature = `${String(id || '')}|${type}|${mode}|${requestedAnalysisEngine}`
 
     const isDebug = id?.startsWith('debug-') || false
     setIsDebugMode(isDebug)
@@ -261,11 +295,29 @@ function AnalyzeLoadingPage() {
       setTimeout(() => Taro.navigateBack(), 1500)
       return
     }
+    if (routeSignatureRef.current !== nextSignature) {
+      routeSignatureRef.current = nextSignature
+      console.info('[analyze-loading] sync route task', {
+        task_id: id,
+        task_type: type,
+        execution_mode: mode,
+        analysis_engine: requestedAnalysisEngine || '(from storage)',
+      })
+      setStatus('loading')
+      setErrorMessage('')
+      setViolationReason('')
+      setCurrentStep(1)
+      setTipIndex(getNextTipIndex())
+      startTimeRef.current = Date.now()
+    }
     setTaskId(id)
     setTaskType(type)
     setExecutionMode(mode)
     Taro.setStorageSync('analyzeExecutionMode', mode)
     Taro.setStorageSync('analyzeTaskType', type)
+    if (requestedAnalysisEngine) {
+      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
+    }
     if (type === 'exercise') {
       Taro.setNavigationBarTitle({ title: '分析中' })
     }
@@ -278,6 +330,18 @@ function AnalyzeLoadingPage() {
       })
     }
   }, [])
+
+  useDidShow(() => {
+    syncRouteTaskFromParams()
+    syncImagePathFromStorage()
+    syncTextRecordInputFromStorage()
+    // 切后台再回前台：补一次任务拉取（与 setInterval 互补）
+    void pollFnRef.current?.()
+  })
+
+  useEffect(() => {
+    syncRouteTaskFromParams()
+  }, [syncRouteTaskFromParams])
 
   // 步骤动画 - 循环展示分析进度
   useEffect(() => {
@@ -401,7 +465,11 @@ function AnalyzeLoadingPage() {
           const payload = task.payload || {}
           const targetDate = persistRecordTargetDate(String((payload.recorded_on as string) || getStoredRecordTargetDate()))
           const settledMode = taskMode || executionMode
+          const settledAnalysisEngine = normalizeAnalysisEngine(
+            result.analysis_engine || (payload as Record<string, unknown>).analysis_engine
+          )
           Taro.setStorageSync('analyzeExecutionMode', settledMode)
+          Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, settledAnalysisEngine)
           if (result.precisionSessionId) {
             Taro.setStorageSync('analyzePrecisionSessionId', result.precisionSessionId)
           } else {
@@ -419,22 +487,17 @@ function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeTextAdditionalContext', (payload.additionalContext as string) || '')
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
             Taro.setStorageSync('analyzeCompareMode', false)
-            Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
-            Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
-            Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
+            persistAnalyzeContextFromPayload(payload)
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food_text')
             Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
           } else {
             Taro.removeStorageSync('analyzeTextInput')
             Taro.removeStorageSync('analyzeTextAdditionalContext')
-            Taro.setStorageSync('analyzeImagePath', task.image_url)
-            Taro.setStorageSync('analyzeImagePaths', task.image_paths || (task.image_url ? [task.image_url] : []))
+            persistResultImageFromTask(task)
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
             Taro.setStorageSync('analyzeCompareMode', false)
-            Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
-            Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
-            Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
+            persistAnalyzeContextFromPayload(payload)
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food')
             Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })

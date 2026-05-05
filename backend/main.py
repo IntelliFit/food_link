@@ -192,6 +192,8 @@ from database import (
     list_test_backend_dataset_items,
     search_manual_food,
     log_unresolved_food,
+    get_food_unresolved_top_sync,
+    search_food_nutrition_candidates_sync,
     browse_manual_food_library,
     # 运动记录
     list_user_exercise_logs,
@@ -328,6 +330,8 @@ def _setup_otel_observability(target_app: FastAPI) -> None:
 CHINA_TZ = timezone(timedelta(hours=8))
 VALID_EXECUTION_MODES = {"standard", "strict"}
 DEFAULT_EXECUTION_MODE = "standard"
+VALID_ANALYSIS_ENGINES = {"legacy_direct", "db_first"}
+DEFAULT_ANALYSIS_ENGINE = "db_first"
 VALID_MODE_SET_BY = {"system", "user_manual", "coach_manual"}
 
 
@@ -465,8 +469,24 @@ def _parse_execution_mode_or_raise(value: Optional[str]) -> Optional[str]:
     return mode
 
 
+def _parse_analysis_engine_or_raise(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    engine = str(value).strip().lower()
+    if not engine:
+        return None
+    if engine not in VALID_ANALYSIS_ENGINES:
+        raise HTTPException(status_code=400, detail="analysis_engine 必须为 legacy_direct 或 db_first")
+    return engine
+
+
 def _is_food_debug_queue_enabled() -> bool:
     return str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _food_debug_queue_suffix() -> str:
+    raw = str(os.getenv("FOOD_DEBUG_TASK_QUEUE_SUFFIX") or "").strip().lower()
+    return re.sub(r"[^a-z0-9_]+", "_", raw).strip("_")
 
 
 def _is_food_analysis_debug_enabled() -> bool:
@@ -493,7 +513,10 @@ def _debug_log_food_submit(stage: str, payload: Any) -> None:
 
 def _get_food_task_type(base_task_type: str) -> str:
     """调试模式下使用专用任务队列，避免被其他环境 Worker 抢占。"""
-    return f"{base_task_type}_debug" if _is_food_debug_queue_enabled() else base_task_type
+    if not _is_food_debug_queue_enabled():
+        return base_task_type
+    suffix = _food_debug_queue_suffix()
+    return f"{base_task_type}_debug_{suffix}" if suffix else f"{base_task_type}_debug"
 
 
 def _should_use_exercise_debug_queue() -> bool:
@@ -635,6 +658,56 @@ def _build_precision_continue_payload(
         "is_multi_view": bool(is_multi_view),
         "reference_objects": reference_objects or [],
     }
+
+
+def _is_precision_schema_missing_error(exc: Exception) -> bool:
+    message = str(exc or "")
+    if not message:
+        return False
+    precision_tables = ("precision_sessions", "precision_session_rounds", "precision_item_estimates")
+    return any(table in message for table in precision_tables) and (
+        "PGRST205" in message or "schema cache" in message
+    )
+
+
+def _raise_precision_schema_not_ready(exc: Exception) -> None:
+    if _is_precision_schema_missing_error(exc):
+        raise HTTPException(
+            status_code=503,
+            detail="精准模式数据库未初始化，请先执行 backend/database/precision_sessions.sql",
+        ) from exc
+    raise exc
+
+
+def _is_analysis_tasks_schema_mismatch_error(exc: Exception) -> bool:
+    message = str(exc or "")
+    lowered = message.lower()
+    if not message:
+        return False
+    if "analysis_tasks_task_type_check" in message:
+        return True
+    return (
+        "analysis_tasks" in lowered
+        and "23514" in message
+        and ("task_type" in lowered or "check constraint" in lowered)
+    )
+
+
+def _raise_analysis_tasks_schema_not_ready(exc: Exception) -> None:
+    if _is_analysis_tasks_schema_mismatch_error(exc):
+        raise HTTPException(
+            status_code=503,
+            detail="analysis_tasks 表约束未升级，请先执行 backend/database/migrate_analysis_tasks_for_precision_and_debug.sql",
+        ) from exc
+    raise exc
+
+
+def _raise_analysis_related_schema_not_ready(exc: Exception) -> None:
+    if _is_precision_schema_missing_error(exc):
+        _raise_precision_schema_not_ready(exc)
+    if _is_analysis_tasks_schema_mismatch_error(exc):
+        _raise_analysis_tasks_schema_not_ready(exc)
+    raise exc
 
 
 def _create_precision_plan_task_payload(
@@ -1553,7 +1626,8 @@ def _get_food_analysis_daily_limit(is_pro: bool) -> Optional[int]:
 # 食探会员 · 积分体系（2026-04-21 上线）
 # ------------------------------------------------------------
 # 积分消耗：
-#   - 食物分析（拍照/文字/精准）：2 积分/次
+#   - 标准食物分析（拍照/文字）：2 积分/次
+#   - 精准食物分析：4 积分/次
 #   - 运动记录：1 积分/次
 # 积分发放：
 #   - 付费套餐：每日按套餐 daily_credits 发放，当天清零
@@ -1566,7 +1640,9 @@ def _get_food_analysis_daily_limit(is_pro: bool) -> Optional[int]:
 #   - 分享海报：记录拥有者按记录生成海报后，每条记录每日 +1 积分，每人每日最多 3 条记录（共 3 分）
 # ============================================================
 
-CREDIT_COST_PER_FOOD_ANALYSIS = 2
+CREDIT_COST_PER_STANDARD_FOOD_ANALYSIS = 2
+CREDIT_COST_PER_PRECISION_FOOD_ANALYSIS = 4
+CREDIT_COST_PER_FOOD_ANALYSIS = CREDIT_COST_PER_STANDARD_FOOD_ANALYSIS
 CREDIT_COST_PER_EXERCISE_LOG = 1
 
 TRIAL_DAILY_CREDITS = 8
@@ -1585,6 +1661,12 @@ SHARE_POSTER_REWARD_CREDITS = 1
 
 LEGACY_PRECISION_ENABLED_PLAN_CODES = {"pro_monthly"}
 LEGACY_MEMBERSHIP_PLAN_CODES = {"pro_monthly"}
+
+
+def _get_food_analysis_credit_cost(execution_mode: Optional[str]) -> int:
+    return CREDIT_COST_PER_PRECISION_FOOD_ANALYSIS if _normalize_execution_mode(execution_mode) == "strict" else CREDIT_COST_PER_STANDARD_FOOD_ANALYSIS
+
+
 def _credits_reset_time_iso() -> str:
     """返回当日中国时区 24:00（= 次日 00:00+08:00）ISO 字符串，供前端倒计时。"""
     now_cn = datetime.now(CHINA_TZ)
@@ -2066,6 +2148,7 @@ async def _can_use_precision_mode(
 
 async def _raise_if_food_analysis_credits_insufficient(
     user_id: str,
+    execution_mode: str = DEFAULT_EXECUTION_MODE,
     user_row: Optional[Dict[str, Any]] = None,
     membership: Optional[Dict[str, Any]] = None,
     membership_resp: Optional[Dict[str, Any]] = None,
@@ -2083,43 +2166,25 @@ async def _raise_if_food_analysis_credits_insufficient(
         membership=resolved_membership,
         user_row=resolved_user,
     )
+    credit_cost = _get_food_analysis_credit_cost(execution_mode)
+    analysis_label = "精准分析" if _normalize_execution_mode(execution_mode) == "strict" else "食物分析"
     spend_plan = await _build_credit_spend_plan(
         user_id=user_id,
-        cost=CREDIT_COST_PER_FOOD_ANALYSIS,
+        cost=credit_cost,
         recorded_on=target_date,
         membership=resolved_membership,
         user_row=resolved_user,
     )
     credits_info["credit_spend_plan"] = spend_plan
     remaining = int(spend_plan.get("total_available") or 0)
-    if remaining >= CREDIT_COST_PER_FOOD_ANALYSIS:
+    if remaining >= credit_cost:
         return credits_info
     detail = (
         f"{target_date} 可用于补录的积分不足。系统会先用该日剩余积分，再用今日积分，最后才用长期奖励积分；"
-        f"当前仍不足以支付 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分。"
+        f"当前仍不足以支付 {credit_cost} 积分。"
         if target_date != _get_china_today_str()
-        else f"当前可用积分不足，食物分析需要 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。"
+        else f"当前可用积分不足，{analysis_label}需要 {credit_cost} 积分/次。"
     )
-    raise HTTPException(status_code=402, detail=detail)
-
-    if resolved_resp.get("is_pro"):
-        detail = (
-            f"今日积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
-            f"食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请明日再试，或升级更高套餐。"
-        )
-    elif credits_info.get("trial_active"):
-        detail = (
-            f"试用积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
-            f"食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请明日再试，或开通会员继续。"
-        )
-    elif daily_max > 0:
-        detail = (
-            f"当前积分不足（已用 {min(used, daily_max)}/{daily_max}，剩余 {remaining}），"
-            f"食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请明日再试，或开通会员继续。"
-        )
-    else:
-        detail = f"当前暂无可用积分，食物分析需 {CREDIT_COST_PER_FOOD_ANALYSIS} 积分/次。请开通会员后继续。"
-
     raise HTTPException(status_code=402, detail=detail)
 
 
@@ -2198,14 +2263,6 @@ async def _validate_food_analysis_access(
         resolved_membership = await _get_effective_membership(user_id)
     resolved_resp = membership_resp or _format_membership_response(resolved_membership)
 
-    credits_info = await _raise_if_food_analysis_credits_insufficient(
-        user_id=user_id,
-        user_row=resolved_user,
-        membership=resolved_membership,
-        membership_resp=resolved_resp,
-        recorded_on=recorded_on,
-    )
-
     resolved_mode = effective_mode
     if resolved_mode == "strict":
         can_use_precision = await _can_use_precision_mode(resolved_membership, resolved_resp)
@@ -2216,6 +2273,15 @@ async def _validate_food_analysis_access(
             raise HTTPException(status_code=402, detail="精准模式仅对标准版和进阶版开放，请升级或开通后再试。")
         if not can_use_precision:
             resolved_mode = "standard"
+
+    credits_info = await _raise_if_food_analysis_credits_insufficient(
+        user_id=user_id,
+        execution_mode=resolved_mode,
+        user_row=resolved_user,
+        membership=resolved_membership,
+        membership_resp=resolved_resp,
+        recorded_on=recorded_on,
+    )
 
     return resolved_user, resolved_resp, resolved_membership, resolved_mode, credits_info
 
@@ -2353,6 +2419,53 @@ class Nutrients(BaseModel):
     fat: float = 0
     fiber: float = 0
     sugar: float = 0
+    saturatedFat: float = 0
+    cholesterolMg: float = 0
+    sodiumMg: float = 0
+    potassiumMg: float = 0
+    calciumMg: float = 0
+    ironMg: float = 0
+    magnesiumMg: float = 0
+    zincMg: float = 0
+    vitaminARaeMcg: float = 0
+    vitaminCMg: float = 0
+    vitaminDMcg: float = 0
+    vitaminEMg: float = 0
+    vitaminKMcg: float = 0
+    thiaminMg: float = 0
+    riboflavinMg: float = 0
+    niacinMg: float = 0
+    vitaminB6Mg: float = 0
+    folateMcg: float = 0
+    vitaminB12Mcg: float = 0
+
+
+class UnitNutritionPer100g(BaseModel):
+    calories: float = 0
+    protein: float = 0
+    carbs: float = 0
+    fat: float = 0
+    fiber: float = 0
+    sugar: float = 0
+    saturatedFat: float = 0
+    cholesterolMg: float = 0
+    sodiumMg: float = 0
+    potassiumMg: float = 0
+    calciumMg: float = 0
+    ironMg: float = 0
+    magnesiumMg: float = 0
+    zincMg: float = 0
+    vitaminARaeMcg: float = 0
+    vitaminCMg: float = 0
+    vitaminDMcg: float = 0
+    vitaminEMg: float = 0
+    vitaminKMcg: float = 0
+    thiaminMg: float = 0
+    riboflavinMg: float = 0
+    niacinMg: float = 0
+    vitaminB6Mg: float = 0
+    folateMcg: float = 0
+    vitaminB12Mcg: float = 0
 
 
 class FoodItemResponse(BaseModel):
@@ -2360,6 +2473,12 @@ class FoodItemResponse(BaseModel):
     estimatedWeightGrams: float
     originalWeightGrams: float
     nutrients: Nutrients
+    unit_nutrition_per_100g: Optional[UnitNutritionPer100g] = None
+    matched_food_name: Optional[str] = None
+    is_unresolved: Optional[bool] = None
+    resolve_status: Optional[str] = None
+    resolve_score: Optional[float] = None
+    nutrition_source: Optional[str] = None
 
 
 class PrecisionReferenceDimensions(BaseModel):
@@ -2441,7 +2560,8 @@ class AnalyzeRequest(BaseModel):
     image_url: Optional[str] = Field(None, description="Supabase 等公网图片 URL（与 base64Image 二选一，分析时用此 URL 获取图片）")
     image_urls: Optional[List[str]] = Field(None, description="多图 URL 列表（新版支持）")
     additionalContext: Optional[str] = Field(default="", description="用户补充的上下文信息")
-    modelName: Optional[str] = Field(default="qwen-vl-max", description="使用的模型名称")
+    modelName: Optional[str] = Field(default="gemini-3-flash-preview", description="使用的模型名称")
+    modelNames: Optional[List[str]] = Field(default=None, description="批量对比时使用的模型名称列表")
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain，用于 PFC 评价")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss(减脂期) / muscle_gain(增肌期) / maintain(维持体重) / none(无)")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout(练后) / daily(日常) / before_sleep(睡前) / none(无)")
@@ -2461,6 +2581,10 @@ class AnalyzeResponse(BaseModel):
     pfc_ratio_comment: Optional[str] = Field(default=None, description="PFC 比例评价（蛋白质/脂肪/碳水占比）")
     absorption_notes: Optional[str] = Field(default=None, description="吸收率与生物利用度简要说明")
     context_advice: Optional[str] = Field(default=None, description="情境感知建议（结合用户状态）")
+    analysis_engine: Optional[str] = Field(default=None, description="分析引擎: legacy_direct / db_first")
+    analysis_duration_ms: Optional[float] = Field(default=None, description="Worker 实际分析耗时（毫秒）")
+    resolved_count: Optional[int] = Field(default=None, description="db_first 成功命中的食物项数量")
+    unresolved_count: Optional[int] = Field(default=None, description="db_first 未命中的食物项数量")
     recognitionOutcome: Optional[str] = Field(default=None, description="精准模式结构化识别结果: ok / soft_reject / hard_reject")
     rejectionReason: Optional[str] = Field(default=None, description="精准模式拒识或降级原因")
     retakeGuidance: Optional[List[str]] = Field(default=None, description="精准模式下的重拍/拆拍建议")
@@ -2486,6 +2610,10 @@ class ModelAnalyzeResult(BaseModel):
     model_name: str = Field(..., description="模型名称")
     success: bool = Field(..., description="是否成功")
     error: Optional[str] = Field(default=None, description="错误信息（失败时）")
+    analysis_engine: Optional[str] = Field(default=None, description="分析引擎: legacy_direct / db_first")
+    duration_ms: Optional[float] = Field(default=None, description="单次分析耗时（毫秒）")
+    resolved_count: Optional[int] = Field(default=None, description="命中的食物项数量（db_first）")
+    unresolved_count: Optional[int] = Field(default=None, description="未命中的食物项数量（db_first）")
     description: Optional[str] = Field(default=None)
     insight: Optional[str] = Field(default=None)
     items: List[FoodItemResponse] = Field(default_factory=list)
@@ -2503,6 +2631,134 @@ class CompareAnalyzeResponse(BaseModel):
     """双模型对比分析响应"""
     qwen_result: ModelAnalyzeResult = Field(..., description="千问模型分析结果")
     gemini_result: ModelAnalyzeResult = Field(..., description="Gemini 模型分析结果")
+
+
+class CompareAnalyzeEnginesModelGroup(BaseModel):
+    """单个视觉模型下的新旧算法对比结果"""
+    model_name: str = Field(..., description="本组使用的视觉模型名称")
+    legacy_result: ModelAnalyzeResult = Field(..., description="旧算法结果（模型直接输出营养）")
+    db_first_result: ModelAnalyzeResult = Field(..., description="新算法结果（数据库优先）")
+
+
+class CompareAnalyzeEnginesResponse(BaseModel):
+    """同一模型下的新旧算法对比响应"""
+    model_name: Optional[str] = Field(default=None, description="兼容字段：当仅对比单个模型时返回该模型名")
+    legacy_result: Optional[ModelAnalyzeResult] = Field(default=None, description="兼容字段：单模型时的旧算法结果")
+    db_first_result: Optional[ModelAnalyzeResult] = Field(default=None, description="兼容字段：单模型时的新算法结果")
+    requested_model_names: List[str] = Field(default_factory=list, description="本次请求的模型列表")
+    results: List[CompareAnalyzeEnginesModelGroup] = Field(default_factory=list, description="按模型分组的算法对比结果")
+
+
+async def _run_engine_compare_once(
+    *,
+    request: AnalyzeRequest,
+    task_payload: Dict[str, Any],
+    profile_block: str,
+    execution_mode: str,
+    analysis_engine: str,
+    image_url_for_api: str,
+    base64_for_gemini: Optional[str],
+) -> ModelAnalyzeResult:
+    try:
+        from worker import (
+            _build_food_prompt as worker_build_food_prompt,
+            _build_food_prompt_db_first as worker_build_food_prompt_db_first,
+            _build_result_items_with_lookup as worker_build_result_items_with_lookup,
+            _derive_recognition_fields as worker_derive_recognition_fields,
+            _normalize_analysis_response_payload as worker_normalize_analysis_response_payload,
+            _parse_analysis_result_items as worker_parse_analysis_result_items,
+            _strip_standard_mode_extra_fields as worker_strip_standard_mode_extra_fields,
+            _summarize_db_first_items as worker_summarize_db_first_items,
+        )
+    except Exception as e:
+        return ModelAnalyzeResult(
+            model_name=str(request.modelName or "gemini-3-flash-preview"),
+            analysis_engine=analysis_engine,
+            success=False,
+            error=f"加载 worker 分析模块失败: {str(e)}",
+        )
+
+    task = {
+        "task_type": "food",
+        "image_url": request.image_url or image_url_for_api,
+        "image_paths": request.image_urls or ([request.image_url] if request.image_url else None),
+        "payload": {
+            **task_payload,
+            "analysis_engine": analysis_engine,
+            "execution_mode": execution_mode,
+        },
+    }
+    prompt_builder = worker_build_food_prompt_db_first if analysis_engine == "db_first" else worker_build_food_prompt
+    prompt = prompt_builder(task, profile_block)
+    model_config = _resolve_food_vision_model_config(request.modelName)
+    started_at = time.perf_counter()
+
+    try:
+        if model_config["provider"] == "gemini":
+            parsed = await _analyze_with_gemini(
+                image_url=request.image_url,
+                base64_image=base64_for_gemini,
+                image_mime_type="image/jpeg",
+                prompt=prompt,
+                model_name=model_config["model"],
+            )
+        else:
+            api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+            if not api_key:
+                raise RuntimeError("缺少 DASHSCOPE_API_KEY 环境变量")
+            base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+            parsed = await _analyze_with_qwen(request, prompt, image_url_for_api, api_key, base_url)
+
+        parsed = worker_normalize_analysis_response_payload(parsed)
+        if analysis_engine == "db_first":
+            items_raw = worker_build_result_items_with_lookup(task, parsed.get("items") or [])
+            items = [FoodItemResponse(**item) for item in items_raw]
+            resolved_summary = worker_summarize_db_first_items(items_raw)
+        else:
+            items_raw = worker_parse_analysis_result_items(parsed)
+            items = [FoodItemResponse(**item) for item in items_raw]
+            resolved_summary = {}
+
+        result_dict = {
+            "description": str(parsed.get("description", "无法获取描述")),
+            "insight": str(parsed.get("insight", "保持健康饮食！")),
+            "items": [item.dict() for item in items],
+            "pfc_ratio_comment": (parsed.get("pfc_ratio_comment") or "").strip() or None,
+            "absorption_notes": (parsed.get("absorption_notes") or "").strip() or None,
+            "context_advice": (parsed.get("context_advice") or "").strip() or None,
+        }
+        result_dict = worker_strip_standard_mode_extra_fields(result_dict, execution_mode)
+        if execution_mode == "strict":
+            result_dict.update(worker_derive_recognition_fields(parsed or {}, items_raw, execution_mode))
+
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        return ModelAnalyzeResult(
+            model_name=model_config["model"],
+            analysis_engine=analysis_engine,
+            duration_ms=duration_ms,
+            resolved_count=resolved_summary.get("resolved_count"),
+            unresolved_count=resolved_summary.get("unresolved_count"),
+            success=True,
+            description=result_dict.get("description"),
+            insight=result_dict.get("insight"),
+            items=[FoodItemResponse(**item) if isinstance(item, dict) else item for item in result_dict.get("items", [])],
+            pfc_ratio_comment=result_dict.get("pfc_ratio_comment"),
+            absorption_notes=result_dict.get("absorption_notes"),
+            context_advice=result_dict.get("context_advice"),
+            recognitionOutcome=result_dict.get("recognitionOutcome"),
+            rejectionReason=result_dict.get("rejectionReason"),
+            retakeGuidance=result_dict.get("retakeGuidance"),
+            allowedFoodCategory=result_dict.get("allowedFoodCategory"),
+            followupQuestions=result_dict.get("followupQuestions"),
+        )
+    except Exception as e:
+        return ModelAnalyzeResult(
+            model_name=model_config["model"],
+            analysis_engine=analysis_engine,
+            duration_ms=round((time.perf_counter() - started_at) * 1000, 2),
+            success=False,
+            error=str(e),
+        )
 
 
 # ---------- Gemini 分析函数 ----------
@@ -2716,7 +2972,7 @@ async def _analyze_with_qwen(
                 "Content-Type": "application/json",
             },
             json={
-                "model": request.modelName or "qwen-vl-max",
+                "model": request.modelName or "gemini-3-flash-preview",
                 "messages": [
                     {
                         "role": "user",
@@ -3164,7 +3420,7 @@ async def analyze_food(
     user_info: Optional[dict] = Depends(get_optional_user_info),
 ):
     """
-    分析食物图片，返回营养成分和健康建议。使用 DashScope 千问 qwen-vl-max 模型。
+    分析食物图片，返回营养成分和健康建议。默认使用 Gemini 模型。
     """
     try:
         model_config = _resolve_food_vision_model_config(request.modelName)
@@ -3246,6 +3502,67 @@ async def analyze_food(
         mode_hint = _build_execution_mode_hint(execution_mode)
         compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
 
+        # 普通模式：使用 worker.py 的 db_first 算法
+        if execution_mode != "strict":
+            # 构建图片输入
+            image_urls_for_api = []
+            if request.image_urls:
+                image_urls_for_api = request.image_urls
+            elif request.image_url:
+                image_urls_for_api = [request.image_url]
+            base64_image_for_api = None
+            if request.base64Image:
+                image_data = request.base64Image.split(",")[1] if "," in request.base64Image else request.base64Image
+                base64_image_for_api = image_data
+
+            task = {
+                "id": f"api-{uuid.uuid4()}",
+                "user_id": user_info["user_id"] if user_info else None,
+                "task_type": "food",
+                "image_url": request.image_url,
+                "image_paths": request.image_urls,
+                "base64_image": base64_image_for_api,
+                "payload": {
+                    "meal_type": request.meal_type,
+                    "timezone_offset_minutes": request.timezone_offset_minutes,
+                    "province": request.province,
+                    "city": request.city,
+                    "district": request.district,
+                    "diet_goal": request.diet_goal,
+                    "activity_timing": request.activity_timing,
+                    "user_goal": request.user_goal,
+                    "remaining_calories": request.remaining_calories,
+                    "additionalContext": request.additionalContext,
+                    "is_multi_view": request.is_multi_view,
+                    "modelName": request.modelName,
+                    "execution_mode": "standard",
+                },
+            }
+
+            from worker import run_food_analysis_sync
+            result = await asyncio.to_thread(run_food_analysis_sync, task)
+
+            def _opt_str(v):
+                if v is None or v == "":
+                    return None
+                s = str(v).strip()
+                return s if s else None
+
+            return AnalyzeResponse(
+                description=result["description"],
+                insight=result["insight"],
+                items=[FoodItemResponse(**item) for item in result["items"]],
+                pfc_ratio_comment=_opt_str(result.get("pfc_ratio_comment")),
+                absorption_notes=_opt_str(result.get("absorption_notes")),
+                context_advice=_opt_str(result.get("context_advice")),
+                recognitionOutcome=_opt_str(result.get("recognitionOutcome")),
+                rejectionReason=_opt_str(result.get("rejectionReason")),
+                retakeGuidance=result.get("retakeGuidance") if isinstance(result.get("retakeGuidance"), list) else None,
+                allowedFoodCategory=_opt_str(result.get("allowedFoodCategory")),
+                followupQuestions=result.get("followupQuestions") if isinstance(result.get("followupQuestions"), list) else None,
+            )
+
+        # 精准模式：保留原有内联逻辑（后续将改为异步任务队列）
         prompt = _build_gemini_prompt(
             additional_context=request.additionalContext or "",
             goal_hint=goal_hint,
@@ -3373,7 +3690,7 @@ class AnalyzeBatchRequest(BaseModel):
     user_goal: Optional[str] = Field(default=None, description="用户目标")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算")
     additionalContext: Optional[str] = Field(default=None, description="用户补充上下文")
-    modelName: Optional[str] = Field(default="qwen-vl-max", description="模型名称")
+    modelName: Optional[str] = Field(default="gemini-3-flash-preview", description="模型名称")
     execution_mode: Optional[str] = Field(default=None, description="执行模式")
     reference_objects: Optional[List[PrecisionReferenceObjectInput]] = Field(default=None, description="参考物列表")
 
@@ -3956,10 +4273,11 @@ class AnalyzeSubmitRequest(BaseModel):
     user_goal: Optional[str] = Field(default=None, description="用户目标: muscle_gain / fat_loss / maintain")
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
     additionalContext: Optional[str] = Field(default=None, description="用户补充上下文")
-    modelName: Optional[str] = Field(default="qwen-vl-max", description="模型名称")
+    modelName: Optional[str] = Field(default="gemini-3-flash-preview", description="模型名称")
     is_multi_view: Optional[bool] = Field(default=False, description="是否开启多视角辅助模式")
     execution_mode: Optional[str] = Field(default=None, description="执行模式: standard / strict")
     date: Optional[str] = Field(default=None, description="记录日期 YYYY-MM-DD，仅支持近 3 天内补录")
+    analysis_engine: Optional[str] = Field(default=None, description="分析引擎: legacy_direct / db_first")
     previousResult: Optional[Dict[str, Any]] = Field(default=None, description="上一轮分析结果")
     correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
     precision_session_id: Optional[str] = Field(default=None, description="精准模式会话 ID（继续多轮交互时传入）")
@@ -3984,6 +4302,7 @@ async def analyze_submit(
                 "biz.image_urls.count": len(body.image_urls or []),
                 "biz.multi_view": bool(body.is_multi_view),
                 "biz.execution_mode.requested": body.execution_mode or "",
+                "biz.analysis_engine.requested": body.analysis_engine or "",
                 "biz.has_precision_session": bool(body.precision_session_id),
             },
         )
@@ -3992,6 +4311,7 @@ async def analyze_submit(
             raise HTTPException(status_code=400, detail="image_url 或 image_urls 不能为空")
 
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
+    requested_analysis_engine = _parse_analysis_engine_or_raise(body.analysis_engine) if body.analysis_engine is not None else None
     user = await get_user_by_id(user_info["user_id"])
     profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
     effective_mode = requested_mode or profile_mode
@@ -4024,6 +4344,7 @@ async def analyze_submit(
         "execution_mode": effective_mode,
         "recorded_on": recorded_on,
         "credit_usage": dict((credits_info.get("credit_spend_plan") or {})),
+        "analysis_engine": "db_first" if effective_mode == "standard" else (requested_analysis_engine or DEFAULT_ANALYSIS_ENGINE),
         "previousResult": body.previousResult,
         "correctionItems": body.correctionItems,
         "reference_objects": _serialize_reference_objects(body.reference_objects),
@@ -4034,7 +4355,10 @@ async def analyze_submit(
         session = None
         source_type = "image"
         if body.precision_session_id:
-            session = await asyncio.to_thread(get_precision_session_by_id_sync, body.precision_session_id)
+            try:
+                session = await asyncio.to_thread(get_precision_session_by_id_sync, body.precision_session_id)
+            except Exception as e:
+                _raise_precision_schema_not_ready(e)
             if not session:
                 raise HTTPException(status_code=404, detail="精准模式会话不存在")
             if session.get("user_id") != user_info["user_id"]:
@@ -4064,48 +4388,51 @@ async def analyze_submit(
             "image_urls": body.image_urls or [],
         }
 
-        if session:
-            next_round_index = int(session.get("round_index") or 1) + 1
-            await asyncio.to_thread(
-                update_precision_session_sync,
-                session["id"],
-                {
-                    "status": "collecting",
-                    "round_index": next_round_index,
-                    "latest_inputs": latest_inputs,
-                    "reference_objects": payload["reference_objects"] or (session.get("reference_objects") or []),
-                    "last_error": None,
-                },
-            )
-            await asyncio.to_thread(
-                create_precision_session_round_sync,
-                session["id"],
-                next_round_index,
-                "user",
-                latest_inputs,
-                None,
-            )
-            current_session_id = session["id"]
-            current_round_index = next_round_index
-        else:
-            session = await asyncio.to_thread(
-                create_precision_session_sync,
-                user_info["user_id"],
-                source_type,
-                "strict",
-                latest_inputs,
-                payload["reference_objects"],
-            )
-            await asyncio.to_thread(
-                create_precision_session_round_sync,
-                session["id"],
-                int(session.get("round_index") or 1),
-                "user",
-                latest_inputs,
-                None,
-            )
-            current_session_id = session["id"]
-            current_round_index = int(session.get("round_index") or 1)
+        try:
+            if session:
+                next_round_index = int(session.get("round_index") or 1) + 1
+                await asyncio.to_thread(
+                    update_precision_session_sync,
+                    session["id"],
+                    {
+                        "status": "collecting",
+                        "round_index": next_round_index,
+                        "latest_inputs": latest_inputs,
+                        "reference_objects": payload["reference_objects"] or (session.get("reference_objects") or []),
+                        "last_error": None,
+                    },
+                )
+                await asyncio.to_thread(
+                    create_precision_session_round_sync,
+                    session["id"],
+                    next_round_index,
+                    "user",
+                    latest_inputs,
+                    None,
+                )
+                current_session_id = session["id"]
+                current_round_index = next_round_index
+            else:
+                session = await asyncio.to_thread(
+                    create_precision_session_sync,
+                    user_info["user_id"],
+                    source_type,
+                    "strict",
+                    latest_inputs,
+                    payload["reference_objects"],
+                )
+                await asyncio.to_thread(
+                    create_precision_session_round_sync,
+                    session["id"],
+                    int(session.get("round_index") or 1),
+                    "user",
+                    latest_inputs,
+                    None,
+                )
+                current_session_id = session["id"]
+                current_round_index = int(session.get("round_index") or 1)
+        except Exception as e:
+            _raise_precision_schema_not_ready(e)
 
         precision_payload = _create_precision_plan_task_payload(
             current_session_id,
@@ -4115,14 +4442,17 @@ async def analyze_submit(
                 "round_index": current_round_index,
             },
         )
-        precision_task = await asyncio.to_thread(
-            create_analysis_task_sync,
-            user_id=user_info["user_id"],
-            task_type=_get_food_task_type("precision_plan"),
-            image_url=body.image_url.strip() if body.image_url else None,
-            image_urls=body.image_urls,
-            payload=precision_payload,
-        )
+        try:
+            precision_task = await asyncio.to_thread(
+                create_analysis_task_sync,
+                user_id=user_info["user_id"],
+                task_type=_get_food_task_type("precision_plan"),
+                image_url=body.image_url.strip() if body.image_url else None,
+                image_urls=body.image_urls,
+                payload=precision_payload,
+            )
+        except Exception as e:
+            _raise_analysis_related_schema_not_ready(e)
         await asyncio.to_thread(
             update_precision_session_sync,
             current_session_id,
@@ -4134,7 +4464,7 @@ async def analyze_submit(
         await _consume_earned_credits_after_success(
             user_info["user_id"],
             credits_info,
-            cost=CREDIT_COST_PER_FOOD_ANALYSIS,
+            cost=_get_food_analysis_credit_cost(effective_mode),
             reason="food_analysis_reward_spend",
             source_key=f"food_analysis:{precision_task['id']}",
             meta={"task_id": precision_task["id"], "task_type": precision_task.get("task_type")},
@@ -4180,7 +4510,7 @@ async def analyze_submit(
         await _consume_earned_credits_after_success(
             user_info["user_id"],
             credits_info,
-            cost=CREDIT_COST_PER_FOOD_ANALYSIS,
+            cost=CREDIT_COST_PER_PRECISION_FOOD_ANALYSIS,
             reason="food_analysis_reward_spend",
             source_key=f"food_analysis:{task['id']}",
             meta={"task_id": task["id"], "task_type": task.get("task_type")},
@@ -4192,6 +4522,7 @@ async def analyze_submit(
         )
         return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
     except Exception as e:
+        _raise_analysis_related_schema_not_ready(e)
         _trace_record_error("analyze_submit", e, **{"biz.user_id": user_info["user_id"]})
         print(f"[analyze/submit] 错误: {e}")
         raise HTTPException(status_code=500, detail="提交任务失败")
@@ -4293,6 +4624,37 @@ async def get_analyze_task(
         except Exception as e:
             _trace_record_error("get_analyze_task", e, **{"biz.task_id": task_id})
             raise HTTPException(status_code=500, detail="查询任务详情失败")
+
+
+@app.get("/api/food-nutrition/unresolved/top")
+async def get_food_unresolved_top(
+    limit: int = 50,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """查询未收录食物高频列表（用于补库运营）。"""
+    try:
+        rows = await asyncio.to_thread(get_food_unresolved_top_sync, limit)
+        return {"items": rows}
+    except Exception as e:
+        print(f"[food-nutrition/unresolved/top] 错误: {e}")
+        raise HTTPException(status_code=500, detail="查询未收录食物失败")
+
+
+@app.get("/api/food-nutrition/search")
+async def search_food_nutrition(
+    query: str,
+    limit: int = 5,
+    user_info: dict = Depends(get_current_user_info),
+):
+    """按食物名称搜索标准食物库候选。"""
+    if not query or not query.strip():
+        raise HTTPException(status_code=400, detail="query 不能为空")
+    try:
+        items = await asyncio.to_thread(search_food_nutrition_candidates_sync, query, limit)
+        return {"items": items}
+    except Exception as e:
+        print(f"[food-nutrition/search] 错误: {e}")
+        raise HTTPException(status_code=500, detail="查询食物候选失败")
 
 
 class UpdateAnalysisResultRequest(BaseModel):
@@ -4564,6 +4926,148 @@ async def analyze_food_compare(
     )
 
 
+@app.post("/api/analyze-compare-engines", response_model=CompareAnalyzeEnginesResponse)
+async def analyze_food_compare_engines(
+    request: AnalyzeRequest,
+    user_info: Optional[dict] = Depends(get_optional_user_info),
+):
+    """
+    同一张食物图片在同一视觉模型下分别使用旧算法与新算法分析。
+
+    - legacy_direct: 模型直接输出重量与营养
+    - db_first: 模型输出名称与重量，营养由食物库解析/查表
+    """
+    if not request.base64Image and not request.image_url:
+        raise HTTPException(status_code=400, detail="请提供 base64Image 或 image_url 之一")
+    if request.image_urls and len(request.image_urls) > 0:
+        raise HTTPException(status_code=400, detail="算法对比当前仅支持单张图片，请传 image_url 或 base64Image")
+
+    requested_mode = _parse_execution_mode_or_raise(request.execution_mode) if request.execution_mode is not None else None
+    execution_mode = requested_mode or _normalize_execution_mode(None)
+    if execution_mode != "standard":
+        raise HTTPException(status_code=400, detail="算法对比当前仅支持 standard 模式")
+
+    goal_hint = ""
+    if request.user_goal:
+        goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
+        goal_hint = f"\n用户目标为「{goal_map.get(request.user_goal, request.user_goal)}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标。"
+
+    state_parts: List[str] = []
+    if request.diet_goal or request.activity_timing:
+        diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
+        activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无特殊"}
+        diet_text = diet_map.get(request.diet_goal, request.diet_goal) if request.diet_goal and request.diet_goal != "none" else ""
+        activity_text = activity_map.get(request.activity_timing, request.activity_timing) if request.activity_timing and request.activity_timing != "none" else ""
+        state_parts = [s for s in [diet_text, activity_text] if s]
+
+    meal_name = _meal_name(request.meal_type, timezone_offset_minutes=request.timezone_offset_minutes) if request.meal_type else ""
+    compact_tags_list: List[str] = []
+    if request.meal_type:
+        compact_tags_list.append(f"餐次:{meal_name}")
+    if state_parts:
+        compact_tags_list.append("状态:" + "/".join(state_parts))
+    if request.remaining_calories is not None:
+        compact_tags_list.append(f"剩余:{float(request.remaining_calories):g}kcal")
+
+    profile_block = ""
+    if user_info:
+        user = await get_user_by_id(user_info["user_id"])
+        if user:
+            profile_summary = _format_health_risk_summary_for_analysis(user)
+            if profile_summary:
+                compact_tags_list.append(profile_summary)
+
+    compact_tags = ("\n".join(compact_tags_list) + "\n") if compact_tags_list else ""
+    raw_model_names = request.modelNames or ([request.modelName] if request.modelName else None) or [GEMINI_MODEL_NAME]
+    requested_model_names: List[str] = []
+    seen_model_names: set[str] = set()
+    for raw_name in raw_model_names:
+        name = str(raw_name or "").strip()
+        if not name:
+            continue
+        normalized = name.lower()
+        if normalized in seen_model_names:
+            continue
+        seen_model_names.add(normalized)
+        requested_model_names.append(name)
+    if not requested_model_names:
+        requested_model_names = [GEMINI_MODEL_NAME]
+    if len(requested_model_names) > 4:
+        raise HTTPException(status_code=400, detail="算法对比当前最多支持 4 个模型")
+
+    base_task_payload = {
+        "additionalContext": request.additionalContext or "",
+        "user_goal": request.user_goal,
+        "diet_goal": request.diet_goal,
+        "activity_timing": request.activity_timing,
+        "remaining_calories": request.remaining_calories,
+        "meal_type": request.meal_type,
+        "timezone_offset_minutes": request.timezone_offset_minutes,
+        "province": request.province,
+        "city": request.city,
+        "district": request.district,
+        "image_urls": request.image_urls,
+        "is_multi_view": bool(request.image_urls and len(request.image_urls) > 1),
+        "compact_tags": compact_tags,
+        "goal_hint": goal_hint,
+    }
+
+    if request.image_url:
+        image_url_for_api = request.image_url
+        base64_for_gemini = None
+    else:
+        image_data = request.base64Image.split(",")[1] if "," in request.base64Image else request.base64Image
+        image_url_for_api = f"data:image/jpeg;base64,{image_data}"
+        base64_for_gemini = request.base64Image
+
+    async def run_compare_for_model(model_name: str) -> CompareAnalyzeEnginesModelGroup:
+        model_request = request.copy(update={"modelName": model_name, "modelNames": None})
+        task_payload = {
+            **base_task_payload,
+            "modelName": model_name,
+        }
+        legacy_result, db_first_result = await asyncio.gather(
+            _run_engine_compare_once(
+                request=model_request,
+                task_payload=task_payload,
+                profile_block=profile_block,
+                execution_mode=execution_mode,
+                analysis_engine="legacy_direct",
+                image_url_for_api=image_url_for_api,
+                base64_for_gemini=base64_for_gemini,
+            ),
+            _run_engine_compare_once(
+                request=model_request,
+                task_payload=task_payload,
+                profile_block=profile_block,
+                execution_mode=execution_mode,
+                analysis_engine="db_first",
+                image_url_for_api=image_url_for_api,
+                base64_for_gemini=base64_for_gemini,
+            ),
+        )
+        model_config = _resolve_food_vision_model_config(model_name)
+        return CompareAnalyzeEnginesModelGroup(
+            model_name=model_config["model"],
+            legacy_result=legacy_result,
+            db_first_result=db_first_result,
+        )
+
+    grouped_results = await asyncio.gather(*[
+        run_compare_for_model(model_name) for model_name in requested_model_names
+    ])
+
+    response = CompareAnalyzeEnginesResponse(
+        requested_model_names=[group.model_name for group in grouped_results],
+        results=grouped_results,
+    )
+    if len(grouped_results) == 1:
+        response.model_name = grouped_results[0].model_name
+        response.legacy_result = grouped_results[0].legacy_result
+        response.db_first_result = grouped_results[0].db_first_result
+    return response
+
+
 class AnalyzeTextRequest(BaseModel):
     """文字描述食物，请求营养成分分析"""
     text: str = Field(..., description="用户描述的食物内容，如：一碗米饭、一个苹果、200g 鸡胸肉")
@@ -4816,7 +5320,10 @@ async def analyze_text_submit(
         session = None
         source_type = "text"
         if body.precision_session_id:
-            session = await asyncio.to_thread(get_precision_session_by_id_sync, body.precision_session_id)
+            try:
+                session = await asyncio.to_thread(get_precision_session_by_id_sync, body.precision_session_id)
+            except Exception as e:
+                _raise_precision_schema_not_ready(e)
             if not session:
                 raise HTTPException(status_code=404, detail="精准模式会话不存在")
             if session.get("user_id") != user_info["user_id"]:
@@ -4845,48 +5352,51 @@ async def analyze_text_submit(
             "text": body.text.strip(),
         }
 
-        if session:
-            next_round_index = int(session.get("round_index") or 1) + 1
-            await asyncio.to_thread(
-                update_precision_session_sync,
-                session["id"],
-                {
-                    "status": "collecting",
-                    "round_index": next_round_index,
-                    "latest_inputs": latest_inputs,
-                    "reference_objects": payload["reference_objects"] or (session.get("reference_objects") or []),
-                    "last_error": None,
-                },
-            )
-            await asyncio.to_thread(
-                create_precision_session_round_sync,
-                session["id"],
-                next_round_index,
-                "user",
-                latest_inputs,
-                None,
-            )
-            current_session_id = session["id"]
-            current_round_index = next_round_index
-        else:
-            session = await asyncio.to_thread(
-                create_precision_session_sync,
-                user_info["user_id"],
-                source_type,
-                "strict",
-                latest_inputs,
-                payload["reference_objects"],
-            )
-            await asyncio.to_thread(
-                create_precision_session_round_sync,
-                session["id"],
-                int(session.get("round_index") or 1),
-                "user",
-                latest_inputs,
-                None,
-            )
-            current_session_id = session["id"]
-            current_round_index = int(session.get("round_index") or 1)
+        try:
+            if session:
+                next_round_index = int(session.get("round_index") or 1) + 1
+                await asyncio.to_thread(
+                    update_precision_session_sync,
+                    session["id"],
+                    {
+                        "status": "collecting",
+                        "round_index": next_round_index,
+                        "latest_inputs": latest_inputs,
+                        "reference_objects": payload["reference_objects"] or (session.get("reference_objects") or []),
+                        "last_error": None,
+                    },
+                )
+                await asyncio.to_thread(
+                    create_precision_session_round_sync,
+                    session["id"],
+                    next_round_index,
+                    "user",
+                    latest_inputs,
+                    None,
+                )
+                current_session_id = session["id"]
+                current_round_index = next_round_index
+            else:
+                session = await asyncio.to_thread(
+                    create_precision_session_sync,
+                    user_info["user_id"],
+                    source_type,
+                    "strict",
+                    latest_inputs,
+                    payload["reference_objects"],
+                )
+                await asyncio.to_thread(
+                    create_precision_session_round_sync,
+                    session["id"],
+                    int(session.get("round_index") or 1),
+                    "user",
+                    latest_inputs,
+                    None,
+                )
+                current_session_id = session["id"]
+                current_round_index = int(session.get("round_index") or 1)
+        except Exception as e:
+            _raise_precision_schema_not_ready(e)
 
         precision_payload = _create_precision_plan_task_payload(
             current_session_id,
@@ -4896,13 +5406,16 @@ async def analyze_text_submit(
                 "round_index": current_round_index,
             },
         )
-        precision_task = await asyncio.to_thread(
-            create_analysis_task_sync,
-            user_id=user_info["user_id"],
-            task_type=_get_food_task_type("precision_plan"),
-            text_input=body.text.strip(),
-            payload=precision_payload,
-        )
+        try:
+            precision_task = await asyncio.to_thread(
+                create_analysis_task_sync,
+                user_id=user_info["user_id"],
+                task_type=_get_food_task_type("precision_plan"),
+                text_input=body.text.strip(),
+                payload=precision_payload,
+            )
+        except Exception as e:
+            _raise_analysis_related_schema_not_ready(e)
         await asyncio.to_thread(
             update_precision_session_sync,
             current_session_id,
@@ -4914,7 +5427,7 @@ async def analyze_text_submit(
         await _consume_earned_credits_after_success(
             user_info["user_id"],
             credits_info,
-            cost=CREDIT_COST_PER_FOOD_ANALYSIS,
+            cost=_get_food_analysis_credit_cost(effective_mode),
             reason="food_analysis_reward_spend",
             source_key=f"food_analysis:{precision_task['id']}",
             meta={"task_id": precision_task["id"], "task_type": precision_task.get("task_type")},
@@ -4954,7 +5467,7 @@ async def analyze_text_submit(
         await _consume_earned_credits_after_success(
             user_info["user_id"],
             credits_info,
-            cost=CREDIT_COST_PER_FOOD_ANALYSIS,
+            cost=CREDIT_COST_PER_PRECISION_FOOD_ANALYSIS,
             reason="food_analysis_reward_spend",
             source_key=f"food_analysis:{task['id']}",
             meta={"task_id": task["id"], "task_type": task.get("task_type")},
@@ -4965,6 +5478,7 @@ async def analyze_text_submit(
         )
         return {"task_id": task["id"], "message": "任务已提交，可稍后在识别历史中查看结果"}
     except Exception as e:
+        _raise_analysis_related_schema_not_ready(e)
         print(f"[analyze-text/submit] 错误: {e}")
         raise HTTPException(status_code=500, detail="提交任务失败")
 
@@ -4979,7 +5493,10 @@ async def continue_precision_session(
     if source_type not in PRECISION_SOURCE_TYPES:
         raise HTTPException(status_code=400, detail="source_type 必须为 image 或 text")
 
-    session = await asyncio.to_thread(get_precision_session_by_id_sync, session_id)
+    try:
+        session = await asyncio.to_thread(get_precision_session_by_id_sync, session_id)
+    except Exception as e:
+        _raise_precision_schema_not_ready(e)
     if not session:
         raise HTTPException(status_code=404, detail="精准模式会话不存在")
     if session.get("user_id") != user_info["user_id"]:
@@ -5063,25 +5580,28 @@ async def continue_precision_session(
             raise HTTPException(status_code=400, detail="请至少补充说明、参考物或新的文字描述")
 
     next_round_index = int(session.get("round_index") or 1) + 1
-    await asyncio.to_thread(
-        update_precision_session_sync,
-        session_id,
-        {
-            "status": "collecting",
-            "round_index": next_round_index,
-            "latest_inputs": latest_inputs,
-            "reference_objects": reference_objects or (session.get("reference_objects") or []),
-            "last_error": None,
-        },
-    )
-    await asyncio.to_thread(
-        create_precision_session_round_sync,
-        session_id,
-        next_round_index,
-        "user",
-        latest_inputs,
-        None,
-    )
+    try:
+        await asyncio.to_thread(
+            update_precision_session_sync,
+            session_id,
+            {
+                "status": "collecting",
+                "round_index": next_round_index,
+                "latest_inputs": latest_inputs,
+                "reference_objects": reference_objects or (session.get("reference_objects") or []),
+                "last_error": None,
+            },
+        )
+        await asyncio.to_thread(
+            create_precision_session_round_sync,
+            session_id,
+            next_round_index,
+            "user",
+            latest_inputs,
+            None,
+        )
+    except Exception as e:
+        _raise_precision_schema_not_ready(e)
     try:
         task = await asyncio.to_thread(create_analysis_task_sync, **task_kwargs)
         await asyncio.to_thread(
@@ -5095,13 +5615,14 @@ async def continue_precision_session(
         await _consume_earned_credits_after_success(
             user_info["user_id"],
             credits_info,
-            cost=CREDIT_COST_PER_FOOD_ANALYSIS,
+            cost=CREDIT_COST_PER_PRECISION_FOOD_ANALYSIS,
             reason="food_analysis_reward_spend",
             source_key=f"food_analysis:{task['id']}",
             meta={"task_id": task["id"], "task_type": task.get("task_type")},
         )
         return {"task_id": task["id"], "message": "精准模式已继续，系统正在重新规划本轮估计"}
     except Exception as e:
+        _raise_analysis_related_schema_not_ready(e)
         print(f"[precision/continue] 错误: {e}")
         raise HTTPException(status_code=500, detail="继续精准模式失败")
 
@@ -6417,7 +6938,7 @@ async def _ocr_extract_report_image(base64_image: str) -> Dict[str, Any]:
             api_url,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "model": os.getenv("ANALYZE_MODEL", "qwen-vl-max"),
+                "model": os.getenv("ANALYZE_MODEL", "gemini-3-flash-preview"),
                 "messages": [
                     {
                         "role": "user",
@@ -6454,7 +6975,7 @@ async def _ocr_extract_report_by_url(image_url: str) -> Dict[str, Any]:
             api_url,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "model": os.getenv("ANALYZE_MODEL", "qwen-vl-max"),
+                "model": os.getenv("ANALYZE_MODEL", "gemini-3-flash-preview"),
                 "messages": [
                     {
                         "role": "user",
@@ -10436,10 +10957,10 @@ def _build_test_backend_batch_from_dataset(dataset: Dict[str, Any], dataset_item
         "status": "pending",
         "notes": "",
         "is_multi_view": False,
-        "execution_mode": "standard",
         "prompt_id": None,
         "prompt_ids": [],
         "models": [TEST_BACKEND_MODEL_FLASH],
+        "analysis_modes": list(DEFAULT_TEST_BACKEND_ANALYSIS_MODES),
         "datasetId": dataset.get("id"),
         "datasetName": dataset.get("name"),
         "items": items,
@@ -10476,6 +10997,73 @@ def _parse_test_backend_execution_mode(raw_mode: Optional[str]) -> str:
     if mode == "custom":
         return "custom"
     return _parse_execution_mode_or_raise(mode) or "standard"
+
+
+TEST_BACKEND_ANALYSIS_MODE_CONFIG: Dict[str, Dict[str, str]] = {
+    "custom": {"execution_mode": "custom", "analysis_engine": "legacy_direct"},
+    "legacy_direct": {"execution_mode": "standard", "analysis_engine": "legacy_direct"},
+    "db_first": {"execution_mode": "standard", "analysis_engine": "db_first"},
+}
+DEFAULT_TEST_BACKEND_ANALYSIS_MODES: List[str] = ["custom", "legacy_direct", "db_first"]
+
+
+def _resolve_test_backend_analysis_mode_config(analysis_mode: str) -> Dict[str, str]:
+    normalized_mode = str(analysis_mode or "").strip().lower()
+    config = TEST_BACKEND_ANALYSIS_MODE_CONFIG.get(normalized_mode)
+    if not config:
+        raise HTTPException(status_code=400, detail=f"不支持的识别模式: {analysis_mode}")
+    return {
+        "analysis_mode": normalized_mode,
+        "execution_mode": config["execution_mode"],
+        "analysis_engine": config["analysis_engine"],
+    }
+
+
+def _parse_test_backend_analysis_modes(raw_modes: Optional[str]) -> List[str]:
+    modes = [
+        item.strip().lower()
+        for item in str(raw_modes or "").split(",")
+        if item.strip()
+    ]
+    if not modes:
+        return list(DEFAULT_TEST_BACKEND_ANALYSIS_MODES)
+    parsed: List[str] = []
+    for mode in modes:
+        normalized_mode = _resolve_test_backend_analysis_mode_config(mode)["analysis_mode"]
+        if normalized_mode not in parsed:
+            parsed.append(normalized_mode)
+    return parsed or list(DEFAULT_TEST_BACKEND_ANALYSIS_MODES)
+
+
+def _parse_test_backend_analysis_engines(raw_engines: Optional[str], execution_mode: str) -> List[str]:
+    engines = [
+        item.strip().lower()
+        for item in str(raw_engines or "").split(",")
+        if item.strip()
+    ]
+    if execution_mode == "strict":
+        return ["legacy_direct"]
+    if not engines:
+        return ["legacy_direct", "db_first"] if execution_mode == "standard" else ["legacy_direct"]
+    parsed: List[str] = []
+    for engine in engines:
+        parsed_engine = _parse_analysis_engine_or_raise(engine)
+        if parsed_engine and parsed_engine not in parsed:
+            parsed.append(parsed_engine)
+    return parsed or ["legacy_direct"]
+
+
+def _resolve_test_backend_analysis_modes(
+    raw_modes: Optional[str],
+    raw_execution_mode: Optional[str],
+    raw_analysis_engines: Optional[str],
+) -> List[str]:
+    if str(raw_modes or "").strip():
+        return _parse_test_backend_analysis_modes(raw_modes)
+    mode = _parse_test_backend_execution_mode(raw_execution_mode)
+    if mode == "custom":
+        return ["custom"]
+    return _parse_test_backend_analysis_engines(raw_analysis_engines, mode)
 
 
 def _parse_test_backend_prompt_ids(
@@ -10561,7 +11149,7 @@ async def _run_test_backend_provider_analysis(
     provider: str,
     notes: str = "",
     is_multi_view: bool = False,
-    execution_mode: str = "standard",
+    analysis_mode: str = "legacy_direct",
     prompt_id: Optional[int] = None,
     expected_items: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
@@ -10569,6 +11157,9 @@ async def _run_test_backend_provider_analysis(
     provider = provider.strip().lower()
     if provider not in TEST_BACKEND_SUPPORTED_MODELS:
         raise RuntimeError(f"不支持的模型: {provider}")
+    mode_config = _resolve_test_backend_analysis_mode_config(analysis_mode)
+    execution_mode = mode_config["execution_mode"]
+    analysis_engine = mode_config["analysis_engine"]
     task = {
         "task_type": "food",
         "image_url": image_urls[0] if image_urls else None,
@@ -10576,17 +11167,21 @@ async def _run_test_backend_provider_analysis(
         "payload": {
             "additionalContext": (notes or "").strip(),
             "is_multi_view": is_multi_view,
-            "execution_mode": _normalize_execution_mode(execution_mode),
+            "execution_mode": _normalize_execution_mode(execution_mode) if execution_mode != "custom" else "standard",
+            "analysis_engine": analysis_engine,
         },
     }
 
     try:
         from worker import (
             _build_food_prompt as worker_build_food_prompt,
+            _build_food_prompt_db_first as worker_build_food_prompt_db_first,
+            _build_result_items_with_lookup as worker_build_result_items_with_lookup,
             _derive_recognition_fields as worker_derive_recognition_fields,
             _normalize_analysis_response_payload as worker_normalize_analysis_response_payload,
             _parse_analysis_result_items as worker_parse_analysis_result_items,
             _strip_standard_mode_extra_fields as worker_strip_standard_mode_extra_fields,
+            _summarize_db_first_items as worker_summarize_db_first_items,
             OFOX_BASE_URL as WORKER_OFOX_BASE_URL,
         )
     except Exception as e:
@@ -10596,9 +11191,11 @@ async def _run_test_backend_provider_analysis(
         mode: str,
         selected_prompt_id: Optional[int] = None,
     ) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+        prompt_builder = worker_build_food_prompt_db_first if analysis_engine == "db_first" else worker_build_food_prompt
+        builder_name = "_build_food_prompt_db_first" if analysis_engine == "db_first" else "_build_food_prompt"
         if mode != "custom":
-            prompt_content = worker_build_food_prompt(task, "")
-            return prompt_content, f"backend/worker.py::_build_food_prompt({mode})", None
+            prompt_content = prompt_builder(task, "")
+            return prompt_content, f"backend/worker.py::{builder_name}({mode})", None
 
         selected_prompt: Optional[Dict[str, Any]] = None
         if selected_prompt_id:
@@ -10622,8 +11219,8 @@ async def _run_test_backend_provider_analysis(
                 return prompt_content, f"model_prompts.id({selected_prompt.get('id')})", active_prompt
             return prompt_content, "model_prompts.active(gemini)", active_prompt
 
-        prompt_content = worker_build_food_prompt(task, "")
-        return prompt_content, "backend/worker.py::_build_food_prompt(custom-fallback)", None
+        prompt_content = prompt_builder(task, "")
+        return prompt_content, f"backend/worker.py::{builder_name}(custom-fallback)", None
 
     api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
     if not api_key:
@@ -10638,9 +11235,11 @@ async def _run_test_backend_provider_analysis(
         content_parts.append({"type": "image_url", "image_url": {"url": url}})
 
     parsed = None
+    api_duration_ms = None
     for attempt in range(3):
         try:
             async with httpx.AsyncClient(timeout=90.0) as client:
+                api_started_at = time.perf_counter()
                 response = await client.post(
                     api_url,
                     headers={
@@ -10654,6 +11253,7 @@ async def _run_test_backend_provider_analysis(
                         "temperature": 0.7,
                     },
                 )
+                api_duration_ms = round((time.perf_counter() - api_started_at) * 1000, 1)
             if not response.is_success:
                 err = response.json() if response.content else {}
                 msg = err.get("error", {}).get("message") or f"API 错误: {response.status_code}"
@@ -10684,7 +11284,12 @@ async def _run_test_backend_provider_analysis(
         text = str(value or "").strip()
         return text or None
 
-    parsed_items = worker_parse_analysis_result_items(parsed)
+    if analysis_engine == "db_first":
+        parsed_items = worker_build_result_items_with_lookup(task, parsed.get("items") or [])
+        resolved_summary = worker_summarize_db_first_items(parsed_items)
+    else:
+        parsed_items = worker_parse_analysis_result_items(parsed)
+        resolved_summary = {}
     result = {
         "description": _optional_text(parsed.get("description")),
         "insight": _optional_text(parsed.get("insight")),
@@ -10692,6 +11297,9 @@ async def _run_test_backend_provider_analysis(
         "pfc_ratio_comment": _optional_text(parsed.get("pfc_ratio_comment")),
         "absorption_notes": _optional_text(parsed.get("absorption_notes")),
         "context_advice": _optional_text(parsed.get("context_advice")),
+        "analysis_engine": analysis_engine,
+        "resolved_count": resolved_summary.get("resolved_count"),
+        "unresolved_count": resolved_summary.get("unresolved_count"),
     }
     if normalized_mode != "custom":
         result = worker_strip_standard_mode_extra_fields(result, _normalize_execution_mode(execution_mode))
@@ -10703,10 +11311,14 @@ async def _run_test_backend_provider_analysis(
         "success": True,
         "provider": "gemini",
         "model": model_name,
+        "analysis_mode": mode_config["analysis_mode"],
+        "analysis_engine": analysis_engine,
         "data": result,
         "meta": {
             "provider": "gemini",
             "model": model_name,
+            "analysis_mode": mode_config["analysis_mode"],
+            "analysis_engine": analysis_engine,
             "image_count": len(image_urls),
             "image_urls": image_urls,
             "is_multi_view": is_multi_view,
@@ -10718,6 +11330,9 @@ async def _run_test_backend_provider_analysis(
             "prompt_source": prompt_source,
             "prompt_id": (active_prompt or {}).get("id"),
             "prompt_name": (active_prompt or {}).get("prompt_name"),
+            "resolved_count": resolved_summary.get("resolved_count"),
+            "unresolved_count": resolved_summary.get("unresolved_count"),
+            "api_duration_ms": api_duration_ms,
         },
         "evaluation": evaluation,
     }
@@ -10729,7 +11344,7 @@ async def _run_test_backend_multi_model_analysis(
     models: List[str],
     notes: str = "",
     is_multi_view: bool = False,
-    execution_mode: str = "standard",
+    analysis_modes: Optional[List[str]] = None,
     prompt_id: Optional[int] = None,
     prompt_ids: Optional[List[int]] = None,
     expected_items: Optional[List[Dict[str, Any]]] = None,
@@ -10737,10 +11352,10 @@ async def _run_test_backend_multi_model_analysis(
     custom_prompt_ids = [int(item) for item in (prompt_ids or []) if int(item) > 0]
     if prompt_id and prompt_id not in custom_prompt_ids:
         custom_prompt_ids.append(int(prompt_id))
-    run_prompt_ids: List[Optional[int]] = custom_prompt_ids if execution_mode == "custom" and custom_prompt_ids else [None]
+    run_analysis_modes = analysis_modes or list(DEFAULT_TEST_BACKEND_ANALYSIS_MODES)
 
-    async def _resolve_failure_prompt_meta(selected_prompt_id: Optional[int]) -> Dict[str, Any]:
-        if execution_mode != "custom":
+    async def _resolve_failure_prompt_meta(analysis_mode: str, selected_prompt_id: Optional[int]) -> Dict[str, Any]:
+        if analysis_mode != "custom":
             return {}
         if selected_prompt_id:
             prompt_row = await get_prompt_by_id(selected_prompt_id)
@@ -10754,8 +11369,9 @@ async def _run_test_backend_multi_model_analysis(
             "prompt_name": (active_prompt or {}).get("prompt_name"),
         }
 
-    async def run_one(provider: str, selected_prompt_id: Optional[int]) -> Dict[str, Any]:
+    async def run_one(provider: str, analysis_mode: str, selected_prompt_id: Optional[int]) -> Dict[str, Any]:
         started_at = time.perf_counter()
+        mode_config = _resolve_test_backend_analysis_mode_config(analysis_mode)
         try:
             result = await _run_test_backend_provider_analysis(
                 image_urls=image_urls,
@@ -10763,7 +11379,7 @@ async def _run_test_backend_multi_model_analysis(
                 provider=provider,
                 notes=notes,
                 is_multi_view=is_multi_view,
-                execution_mode=execution_mode,
+                analysis_mode=analysis_mode,
                 prompt_id=selected_prompt_id,
                 expected_items=expected_items,
             )
@@ -10772,23 +11388,35 @@ async def _run_test_backend_multi_model_analysis(
             return result
         except Exception as e:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
-            prompt_meta = await _resolve_failure_prompt_meta(selected_prompt_id)
+            prompt_meta = await _resolve_failure_prompt_meta(analysis_mode, selected_prompt_id)
             return {
                 "success": False,
                 "provider": "gemini",
                 "model": provider,
+                "analysis_mode": analysis_mode,
+                "analysis_engine": mode_config["analysis_engine"],
                 "data": None,
                 "meta": {
                     "provider": "gemini",
                     "model": provider,
+                    "analysis_mode": analysis_mode,
+                    "analysis_engine": mode_config["analysis_engine"],
                     "image_count": len(image_urls),
                     "is_multi_view": is_multi_view,
-                    "execution_mode": execution_mode if execution_mode == "custom" else _normalize_execution_mode(execution_mode),
+                    "execution_mode": (
+                        mode_config["execution_mode"]
+                        if mode_config["execution_mode"] == "custom"
+                        else _normalize_execution_mode(mode_config["execution_mode"])
+                    ),
                     "notes": (notes or "").strip(),
                     "prompt_source": (
                         "model_prompts.active(gemini)"
-                        if execution_mode == "custom"
-                        else f"backend/worker.py::_build_food_prompt({_normalize_execution_mode(execution_mode)})"
+                        if analysis_mode == "custom"
+                        else (
+                            f"backend/worker.py::_build_food_prompt_db_first({_normalize_execution_mode(mode_config['execution_mode'])})"
+                            if mode_config["analysis_engine"] == "db_first"
+                            else f"backend/worker.py::_build_food_prompt({_normalize_execution_mode(mode_config['execution_mode'])})"
+                        )
                     ),
                     "response_duration_ms": duration_ms,
                     **prompt_meta,
@@ -10797,7 +11425,14 @@ async def _run_test_backend_multi_model_analysis(
                 "error": str(e),
             }
 
-    return await asyncio.gather(*(run_one(model, selected_prompt_id) for selected_prompt_id in run_prompt_ids for model in models))
+    return await asyncio.gather(*(
+        run_one(model, analysis_mode, selected_prompt_id)
+        for model in models
+        for analysis_mode in run_analysis_modes
+        for selected_prompt_id in (
+            custom_prompt_ids if analysis_mode == "custom" and custom_prompt_ids else [None]
+        )
+    ))
 
 
 def _build_test_backend_batch_progress(batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -10824,8 +11459,8 @@ def _serialize_test_backend_batch(batch: Dict[str, Any]) -> Dict[str, Any]:
         "status": batch["status"],
         "datasetId": batch.get("datasetId"),
         "datasetName": batch.get("datasetName"),
-        "executionMode": batch.get("execution_mode", "standard"),
         "models": batch.get("models") or [],
+        "analysisModes": batch.get("analysis_modes") or [],
         "promptId": batch.get("prompt_id"),
         "promptIds": batch.get("prompt_ids") or ([] if batch.get("prompt_id") is None else [batch.get("prompt_id")]),
         "promptNames": list(dict.fromkeys(
@@ -10881,7 +11516,7 @@ async def _process_test_backend_batch(batch_id: str) -> None:
                 models=batch.get("models") or ["qwen"],
                 notes=batch.get("notes", ""),
                 is_multi_view=batch.get("is_multi_view", False),
-                execution_mode=batch.get("execution_mode", "standard"),
+                analysis_modes=batch.get("analysis_modes") or list(DEFAULT_TEST_BACKEND_ANALYSIS_MODES),
                 prompt_id=batch.get("prompt_id"),
                 prompt_ids=batch.get("prompt_ids") or [],
                 expected_items=item.get("expectedItems") or [],
@@ -10919,7 +11554,9 @@ async def test_backend_analyze(
     reference_weight: Optional[float] = Form(default=None),
     expected_items_json: Optional[str] = Form(default=""),
     models: Optional[str] = Form(default=""),
+    analysis_modes: Optional[str] = Form(default=""),
     execution_mode: Optional[str] = Form(default="standard"),
+    analysis_engines: Optional[str] = Form(default=""),
     prompt_id: Optional[int] = Form(default=None),
     prompt_ids: Optional[str] = Form(default=""),
     is_multi_view: bool = Form(default=False),
@@ -10938,7 +11575,11 @@ async def test_backend_analyze(
         raise HTTPException(status_code=400, detail="多张图片分析请开启多视角辅助模式")
 
     selected_models = _parse_test_backend_models(models)
-    mode = _parse_test_backend_execution_mode(execution_mode)
+    selected_analysis_modes = _resolve_test_backend_analysis_modes(
+        analysis_modes,
+        execution_mode,
+        analysis_engines,
+    )
     selected_prompt_ids = _parse_test_backend_prompt_ids(prompt_ids, prompt_id)
     expected_items = _parse_expected_items_input(expected_items_json, reference_weight=reference_weight)
     image_urls, _image_bytes, first_name = await _upload_test_backend_images(images)
@@ -10950,7 +11591,7 @@ async def test_backend_analyze(
             models=selected_models,
             notes=notes or "",
             is_multi_view=is_multi_view,
-            execution_mode=mode,
+            analysis_modes=selected_analysis_modes,
             prompt_id=prompt_id,
             prompt_ids=selected_prompt_ids,
             expected_items=expected_items,
@@ -10961,10 +11602,11 @@ async def test_backend_analyze(
             "data": (first_success or {}).get("data"),
             "meta": (first_success or {}).get("meta") or {
                 "image_count": len(images),
-                "execution_mode": mode,
+                "analysis_mode": selected_analysis_modes[0] if selected_analysis_modes else "legacy_direct",
                 "prompt_source": "model_prompts.active(gemini)",
             },
             "models": model_results,
+            "analysisModes": selected_analysis_modes,
             "promptIds": selected_prompt_ids,
             "labelMode": _infer_test_backend_label_mode(expected_items),
             "expectedItems": expected_items,
@@ -11142,10 +11784,10 @@ async def test_backend_batch_prepare(
         "status": "pending",
         "notes": "",
         "is_multi_view": False,
-        "execution_mode": "standard",
         "prompt_id": None,
         "prompt_ids": [],
         "models": [TEST_BACKEND_MODEL_FLASH],
+        "analysis_modes": list(DEFAULT_TEST_BACKEND_ANALYSIS_MODES),
         "items": items,
         "summary": {
             "total": len(items),
@@ -11163,7 +11805,9 @@ async def test_backend_batch_start(
     notes: Optional[str] = Form(default=""),
     is_multi_view: bool = Form(default=False),
     models: Optional[str] = Form(default=""),
+    analysis_modes: Optional[str] = Form(default=""),
     execution_mode: Optional[str] = Form(default="standard"),
+    analysis_engines: Optional[str] = Form(default=""),
     prompt_id: Optional[int] = Form(default=None),
     prompt_ids: Optional[str] = Form(default=""),
     _auth: None = Depends(require_test_backend_auth),
@@ -11180,7 +11824,11 @@ async def test_backend_batch_start(
     batch["notes"] = (notes or "").strip()
     batch["is_multi_view"] = is_multi_view
     batch["models"] = _parse_test_backend_models(models)
-    batch["execution_mode"] = _parse_test_backend_execution_mode(execution_mode)
+    batch["analysis_modes"] = _resolve_test_backend_analysis_modes(
+        analysis_modes,
+        execution_mode,
+        analysis_engines,
+    )
     batch["prompt_id"] = prompt_id
     batch["prompt_ids"] = _parse_test_backend_prompt_ids(prompt_ids, prompt_id)
     batch["status"] = "running"

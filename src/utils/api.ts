@@ -59,11 +59,18 @@ export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode = 'standard' | 'strict'
+export type AnalysisEngine = 'legacy_direct' | 'db_first'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
 export type PrecisionSourceType = 'image' | 'text'
 export type PrecisionStatus = 'needs_user_input' | 'needs_retake' | 'estimating' | 'done'
-export type PrecisionSplitStrategy = 'single_item' | 'multi_item_parallel' | 'retake_required' | 'user_annotation_required'
+export type PrecisionSplitStrategy =
+  | 'single_item'
+  | 'multi_item_parallel'
+  | 'single_shot'
+  | 'grouped_parallel'
+  | 'retake_required'
+  | 'user_annotation_required'
 
 export interface PrecisionReferenceDimensions {
   length?: number
@@ -117,6 +124,7 @@ export interface AnalyzeRequest {
   image_urls?: string[]
   additionalContext?: string
   modelName?: string
+  modelNames?: string[]
   user_goal?: UserGoal
   diet_goal?: DietGoal
   activity_timing?: ActivityTiming
@@ -138,9 +146,28 @@ export interface Nutrients {
   fat: number
   fiber: number
   sugar: number
-  sodium_mg?: number
+  saturatedFat?: number
+  cholesterolMg?: number
+  sodiumMg?: number
+  potassiumMg?: number
+  calciumMg?: number
+  ironMg?: number
+  magnesiumMg?: number
+  zincMg?: number
+  vitaminARaeMcg?: number
+  vitaminCMg?: number
+  vitaminDMcg?: number
+  vitaminEMg?: number
+  vitaminKMcg?: number
+  thiaminMg?: number
+  riboflavinMg?: number
+  niacinMg?: number
+  vitaminB6Mg?: number
+  folateMcg?: number
+  vitaminB12Mcg?: number
 }
 
+export interface UnitNutritionPer100g extends Nutrients {}
 
 // 食物项接口
 export interface FoodItem {
@@ -149,6 +176,12 @@ export interface FoodItem {
   estimatedWeightGrams: number
   originalWeightGrams: number
   nutrients: Nutrients
+  unit_nutrition_per_100g?: UnitNutritionPer100g
+  matched_food_name?: string | null
+  is_unresolved?: boolean
+  resolve_status?: string | null
+  resolve_score?: number
+  nutrition_source?: string | null
 }
 
 // 分析响应接口（含专业营养分析）
@@ -159,6 +192,10 @@ export interface AnalyzeResponse {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
+  analysis_engine?: AnalysisEngine
+  analysis_duration_ms?: number
+  resolved_count?: number
+  unresolved_count?: number
   recognitionOutcome?: AnalyzeRecognitionOutcome
   rejectionReason?: string
   retakeGuidance?: string[]
@@ -318,6 +355,10 @@ export interface ModelAnalyzeResult {
   model_name: string
   success: boolean
   error?: string
+  analysis_engine?: AnalysisEngine
+  duration_ms?: number
+  resolved_count?: number
+  unresolved_count?: number
   description?: string
   insight?: string
   items: FoodItem[]
@@ -1553,7 +1594,7 @@ export async function analyzeFoodImage(
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
         ...(request.image_urls != null && { image_urls: request.image_urls }),
         additionalContext: request.additionalContext || '',
-        modelName: request.modelName || 'qwen-vl-max',
+        modelName: request.modelName || 'gemini-3-flash-preview',
         ...(request.user_goal != null && { user_goal: request.user_goal }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
         ...(request.meal_type != null && { meal_type: request.meal_type }),
@@ -1604,7 +1645,7 @@ export async function analyzeFoodImageCompare(
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
         ...(request.image_urls != null && { image_urls: request.image_urls }),
         additionalContext: request.additionalContext || '',
-        modelName: request.modelName || 'qwen-vl-max',
+        modelName: request.modelName || 'gemini-3-flash-preview',
         ...(request.user_goal != null && { user_goal: request.user_goal }),
         ...(request.diet_goal != null && { diet_goal: request.diet_goal }),
         ...(request.activity_timing != null && { activity_timing: request.activity_timing }),
@@ -1722,6 +1763,7 @@ export interface AnalyzeTaskSubmitParams {
   modelName?: string
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
+  analysis_engine?: AnalysisEngine
   previousResult?: AnalyzeResponse
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
@@ -3195,6 +3237,51 @@ export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
     throw new Error((response.data as any)?.detail || '获取食物库失败')
   }
   return response.data as ManualFoodBrowseResult
+}
+
+export interface UnresolvedFoodLog {
+  id: string
+  raw_name: string
+  normalized_name: string
+  hit_count: number
+  first_seen_at?: string
+  last_seen_at?: string
+  task_id?: string | null
+  sample_payload?: Record<string, unknown> | null
+}
+
+export interface FoodNutritionSearchCandidate {
+  food_id: string
+  canonical_name: string
+  match_source: 'canonical' | 'alias'
+  score: number
+  source?: string
+  unit_nutrition_per_100g: UnitNutritionPer100g
+}
+
+export async function fetchTopUnresolvedFoods(limit: number = 50): Promise<UnresolvedFoodLog[]> {
+  const res = await authenticatedRequest(`/api/food-nutrition/unresolved/top?limit=${encodeURIComponent(String(limit))}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取未收录食物失败')
+  }
+  return (((res.data as any) || {}).items || []) as UnresolvedFoodLog[]
+}
+
+export async function searchFoodNutritionCandidates(query: string, limit: number = 5): Promise<FoodNutritionSearchCandidate[]> {
+  const q = query.trim()
+  if (!q) return []
+  const params = new URLSearchParams({ query: q, limit: String(limit) })
+  const res = await authenticatedRequest(`/api/food-nutrition/search?${params.toString()}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '查询标准食物候选失败')
+  }
+  return (((res.data as any) || {}).items || []) as FoodNutritionSearchCandidate[]
 }
 
 // ---------- 好友与圈子 ----------
