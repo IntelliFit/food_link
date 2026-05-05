@@ -5,6 +5,7 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAnalyzeTask,
   type AnalysisTask,
+  type AnalysisEngine,
   type AnalyzeResponse,
   type ExecutionMode,
   type ExerciseTaskResultPayload
@@ -17,6 +18,11 @@ import './index.scss'
 
 /** 与记运动页一致，用于完成后清除「待同步」状态 */
 const EXERCISE_PENDING_TASK_KEY = 'exercise_pending_task_id'
+const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+
+const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
+  value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
+)
 
 // 健康小知识
 const HEALTH_TIPS = [
@@ -74,6 +80,64 @@ const HEALTH_TIPS = [
 
 const SHOWN_TIPS_KEY = 'analyze_shown_health_tips'
 
+type WaitingInteractionCard =
+  | {
+      type: 'quiz'
+      eyebrow: string
+      title: string
+      options: [string, string]
+      answerIndex: 0 | 1
+      reveal: string
+    }
+  | {
+      type: 'fact'
+      eyebrow: string
+      title: string
+      reveal: string
+      actionText: string
+    }
+
+const WAITING_INTERACTION_CARDS: WaitingInteractionCard[] = [
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '同样 100g，哪个通常热量更高？',
+    options: ['米饭', '油条'],
+    answerIndex: 1,
+    reveal: '油条更高。油炸会让食物吸入不少油脂，热量密度会明显上去。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想让饭后血糖更平稳，哪种顺序更友好？',
+    options: ['先菜肉后主食', '先主食后菜肉'],
+    answerIndex: 0,
+    reveal: '先菜肉后主食通常更友好。蔬菜纤维和蛋白质能帮主食吸收节奏慢一点。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '减脂期更应该盯住哪个长期指标？',
+    options: ['单餐完美', '周平均趋势'],
+    answerIndex: 1,
+    reveal: '周平均趋势更重要。偶尔一餐波动正常，长期能量平衡才决定方向。'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '这次结果出来后，优先看什么？',
+    reveal: '先看总热量是否离目标太远，再看蛋白质够不够。三大营养素比单个数字更有参考价值。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '饮料和酱料常是隐藏热量',
+    reveal: '奶茶、果汁、沙拉酱、拌面酱这类东西体积不大，但很容易把一餐热量往上推。',
+    actionText: '再看一条'
+  }
+]
+
 const getNextTipIndex = (current?: number) => {
   try {
     let shown: number[] = Taro.getStorageSync(SHOWN_TIPS_KEY) || []
@@ -107,45 +171,10 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
   }
 }
 
-// 分析步骤配置
-/** 文字饮食分析步骤（与结果页「无图占位」同属文字记录链路） */
-const FOOD_TEXT_ANALYSIS_STEPS = [
-  { id: 't1', title: '文字已接收', desc: '已收到你的饮食描述' },
-  { id: 't2', title: '解析食物信息', desc: '结合餐次与饮食目标' },
-  { id: 't3', title: '估算营养', desc: '估算热量与三大营养素' },
-  { id: 't4', title: '生成分析', desc: '汇总本轮文字记录' }
-]
-
-const ANALYSIS_STEPS = [
-  {
-    id: 'image',
-    title: '图片已接收',
-    desc: '已收到照片，准备分析'
-  },
-  {
-    id: 'ingredients',
-    title: '识别食材',
-    desc: '正在识别食物成分'
-  },
-  {
-    id: 'portions',
-    title: '估算分量',
-    desc: '估算各类食物重量'
-  },
-  {
-    id: 'nutrition',
-    title: '生成营养分析',
-    desc: '汇总热量与营养素'
-  }
-]
-
-/** 运动热量异步任务步骤（与食物分析页同一套 UI 结构） */
-const EXERCISE_ANALYSIS_STEPS = [
-  { id: 'ex1', title: '描述已接收', desc: '已收到你的运动描述' },
-  { id: 'ex2', title: '理解运动类型', desc: '结合时长与强度' },
-  { id: 'ex3', title: '估算消耗', desc: '大模型估算千卡' },
-  { id: 'ex4', title: '写入记录', desc: '保存到今日运动' }
-]
+const FOOD_STANDARD_STAGE_LABELS = ['识别食物/份量', '匹配营养库', '整理结果']
+const FOOD_STRICT_STAGE_LABELS = ['拆分食物', '精估份量', '匹配营养库']
+const FOOD_TEXT_STAGE_LABELS = ['解析文字', '匹配营养库', '整理结果']
+const EXERCISE_STAGE_LABELS = ['理解运动', '估算消耗', '写入记录']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => (
   value === 'strict' ? 'strict' : 'standard'
@@ -161,6 +190,38 @@ const pickSourceTaskTypeFromTask = (task: AnalysisTask): 'food' | 'food_text' =>
   if (task.task_type === 'food_text') return 'food_text'
   const payload = task.payload as Record<string, unknown> | undefined
   return payload?.source_type === 'text' ? 'food_text' : 'food'
+}
+
+const persistResultImageFromTask = (task: AnalysisTask) => {
+  const taskImagePaths = Array.isArray(task.image_paths)
+    ? task.image_paths.filter((path) => typeof path === 'string' && path.trim())
+    : []
+  const taskImageUrl = typeof task.image_url === 'string' && task.image_url.trim()
+    ? task.image_url.trim()
+    : ''
+
+  if (taskImagePaths.length > 0) {
+    Taro.setStorageSync('analyzeImagePath', taskImagePaths[0])
+    Taro.setStorageSync('analyzeImagePaths', taskImagePaths)
+    return
+  }
+
+  if (taskImageUrl) {
+    Taro.setStorageSync('analyzeImagePath', taskImageUrl)
+    Taro.setStorageSync('analyzeImagePaths', [taskImageUrl])
+  }
+}
+
+const persistAnalyzeContextFromPayload = (payload: Record<string, unknown>) => {
+  if (typeof payload.meal_type === 'string' && payload.meal_type.trim()) {
+    Taro.setStorageSync('analyzeMealType', payload.meal_type)
+  }
+  if (typeof payload.diet_goal === 'string' && payload.diet_goal.trim()) {
+    Taro.setStorageSync('analyzeDietGoal', payload.diet_goal)
+  }
+  if (typeof payload.activity_timing === 'string' && payload.activity_timing.trim()) {
+    Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing)
+  }
 }
 
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
@@ -188,6 +249,10 @@ function AnalyzeLoadingPage() {
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [violationReason, setViolationReason] = useState<string>('')
   const [tipIndex, setTipIndex] = useState(() => getNextTipIndex())
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [lastTaskStatusText, setLastTaskStatusText] = useState('已提交')
+  const [interactionIndex, setInteractionIndex] = useState(0)
+  const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [imagePath, setImagePath] = useState<string>('')
   const [currentStep, setCurrentStep] = useState(1) // 当前进行的步骤索引
@@ -196,7 +261,9 @@ function AnalyzeLoadingPage() {
   const tipTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(Date.now())
+  const routeSignatureRef = useRef<string>('')
 
   const syncImagePathFromStorage = useCallback(() => {
     try {
@@ -239,19 +306,14 @@ function AnalyzeLoadingPage() {
     syncTextRecordInputFromStorage()
   }, [syncImagePathFromStorage, syncTextRecordInputFromStorage])
 
-  useDidShow(() => {
-    syncImagePathFromStorage()
-    syncTextRecordInputFromStorage()
-    // 切后台再回前台：补一次任务拉取（与 setInterval 互补）
-    void pollFnRef.current?.()
-  })
-
-  useEffect(() => {
+  const syncRouteTaskFromParams = useCallback(() => {
     const params = Taro.getCurrentInstance().router?.params
     const id = params?.task_id
     const type = normalizeTaskType(params?.task_type)
     const modeFromStorage = Taro.getStorageSync('analyzeExecutionMode')
     const mode = normalizeExecutionMode(params?.execution_mode || modeFromStorage)
+    const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
+    const nextSignature = `${String(id || '')}|${type}|${mode}|${requestedAnalysisEngine}`
 
     const isDebug = id?.startsWith('debug-') || false
     setIsDebugMode(isDebug)
@@ -261,11 +323,33 @@ function AnalyzeLoadingPage() {
       setTimeout(() => Taro.navigateBack(), 1500)
       return
     }
+    if (routeSignatureRef.current !== nextSignature) {
+      routeSignatureRef.current = nextSignature
+      console.info('[analyze-loading] sync route task', {
+        task_id: id,
+        task_type: type,
+        execution_mode: mode,
+        analysis_engine: requestedAnalysisEngine || '(from storage)',
+      })
+      setStatus('loading')
+      setErrorMessage('')
+      setViolationReason('')
+      setCurrentStep(1)
+      setElapsedSeconds(0)
+      setLastTaskStatusText('已提交')
+      setInteractionIndex((prev) => (prev + 1) % WAITING_INTERACTION_CARDS.length)
+      setSelectedQuizOption(null)
+      setTipIndex(getNextTipIndex())
+      startTimeRef.current = Date.now()
+    }
     setTaskId(id)
     setTaskType(type)
     setExecutionMode(mode)
     Taro.setStorageSync('analyzeExecutionMode', mode)
     Taro.setStorageSync('analyzeTaskType', type)
+    if (requestedAnalysisEngine) {
+      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
+    }
     if (type === 'exercise') {
       Taro.setNavigationBarTitle({ title: '分析中' })
     }
@@ -279,23 +363,43 @@ function AnalyzeLoadingPage() {
     }
   }, [])
 
-  // 步骤动画 - 循环展示分析进度
+  useDidShow(() => {
+    syncRouteTaskFromParams()
+    syncImagePathFromStorage()
+    syncTextRecordInputFromStorage()
+    // 切后台再回前台：补一次任务拉取（与 setInterval 互补）
+    void pollFnRef.current?.()
+  })
+
+  useEffect(() => {
+    syncRouteTaskFromParams()
+  }, [syncRouteTaskFromParams])
+
+  // 阶段提示：后端目前只暴露 pending/processing，因此前端做单向推进，不倒退、不假装百分比。
   useEffect(() => {
     if (status !== 'loading') return
 
-    // 步骤循环：每2.5秒推进一个步骤，完成后再回到第1步循环
     stepTimerRef.current = setInterval(() => {
-      setCurrentStep(prev => {
-        if (prev >= 3) {
-          // 完成一轮后重置
-          return 1
-        }
-        return prev + 1
-      })
-    }, 2500)
+      setCurrentStep(prev => Math.min(prev + 1, 3))
+    }, 7000)
 
     return () => {
       if (stepTimerRef.current) clearInterval(stepTimerRef.current)
+    }
+  }, [status])
+
+  useEffect(() => {
+    if (status !== 'loading') return
+
+    elapsedTimerRef.current = setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000)))
+    }, 1000)
+
+    return () => {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current)
+        elapsedTimerRef.current = null
+      }
     }
   }, [status])
 
@@ -340,6 +444,10 @@ function AnalyzeLoadingPage() {
     const poll = async () => {
       try {
         const task: AnalysisTask = await getAnalyzeTask(taskId)
+        setLastTaskStatusText(task.status === 'processing' ? '处理中' : task.status === 'pending' ? '排队中' : '收尾中')
+        if (task.status === 'processing') {
+          setCurrentStep(prev => Math.max(prev, 1))
+        }
         const taskMode = pickExecutionModeFromTask(task)
         const effectiveTaskType = pickSourceTaskTypeFromTask(task)
         if (taskMode) {
@@ -365,6 +473,10 @@ function AnalyzeLoadingPage() {
             if (stepTimerRef.current) {
               clearInterval(stepTimerRef.current)
               stepTimerRef.current = null
+            }
+            if (elapsedTimerRef.current) {
+              clearInterval(elapsedTimerRef.current)
+              elapsedTimerRef.current = null
             }
             if (tipTimerRef.current) {
               clearInterval(tipTimerRef.current)
@@ -396,12 +508,20 @@ function AnalyzeLoadingPage() {
             clearInterval(stepTimerRef.current)
             stepTimerRef.current = null
           }
+          if (elapsedTimerRef.current) {
+            clearInterval(elapsedTimerRef.current)
+            elapsedTimerRef.current = null
+          }
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzePendingCorrectionItems')
           const payload = task.payload || {}
           const targetDate = persistRecordTargetDate(String((payload.recorded_on as string) || getStoredRecordTargetDate()))
           const settledMode = taskMode || executionMode
+          const settledAnalysisEngine = normalizeAnalysisEngine(
+            result.analysis_engine || (payload as Record<string, unknown>).analysis_engine
+          )
           Taro.setStorageSync('analyzeExecutionMode', settledMode)
+          Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, settledAnalysisEngine)
           if (result.precisionSessionId) {
             Taro.setStorageSync('analyzePrecisionSessionId', result.precisionSessionId)
           } else {
@@ -419,22 +539,17 @@ function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeTextAdditionalContext', (payload.additionalContext as string) || '')
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
             Taro.setStorageSync('analyzeCompareMode', false)
-            Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
-            Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
-            Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
+            persistAnalyzeContextFromPayload(payload)
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food_text')
             Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
           } else {
             Taro.removeStorageSync('analyzeTextInput')
             Taro.removeStorageSync('analyzeTextAdditionalContext')
-            Taro.setStorageSync('analyzeImagePath', task.image_url)
-            Taro.setStorageSync('analyzeImagePaths', task.image_paths || (task.image_url ? [task.image_url] : []))
+            persistResultImageFromTask(task)
             Taro.setStorageSync('analyzeResult', JSON.stringify(result))
             Taro.setStorageSync('analyzeCompareMode', false)
-            Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
-            Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
-            Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
+            persistAnalyzeContextFromPayload(payload)
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food')
             Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
@@ -456,6 +571,10 @@ function AnalyzeLoadingPage() {
             clearInterval(stepTimerRef.current)
             stepTimerRef.current = null
           }
+          if (elapsedTimerRef.current) {
+            clearInterval(elapsedTimerRef.current)
+            elapsedTimerRef.current = null
+          }
         }
         if (task.status === 'violated' || task.is_violated) {
           setStatus('violated')
@@ -471,6 +590,10 @@ function AnalyzeLoadingPage() {
           if (stepTimerRef.current) {
             clearInterval(stepTimerRef.current)
             stepTimerRef.current = null
+          }
+          if (elapsedTimerRef.current) {
+            clearInterval(elapsedTimerRef.current)
+            elapsedTimerRef.current = null
           }
         }
       } catch (e: any) {
@@ -529,11 +652,16 @@ function AnalyzeLoadingPage() {
     Taro.redirectTo({ url: extraPkgUrl('/pages/analyze-history/index') })
   }
 
-  // 判断步骤状态: 0=已完成, 1=进行中, 2=待进行
-  const getStepStatus = (stepIndex: number): 'done' | 'active' | 'pending' => {
-    if (stepIndex < currentStep) return 'done'
-    if (stepIndex === currentStep) return 'active'
-    return 'pending'
+  const handleNextInteraction = () => {
+    setInteractionIndex(prev => (prev + 1) % WAITING_INTERACTION_CARDS.length)
+    setSelectedQuizOption(null)
+  }
+
+  const formatElapsed = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    const rest = seconds % 60
+    return `${minutes}m ${rest}s`
   }
 
   if (status === 'violated') {
@@ -579,6 +707,15 @@ function AnalyzeLoadingPage() {
 
   const isTextFoodTask = taskType === 'food_text'
   const textRecordPreview = textRecordInput || '文字记录，未提供实物照片'
+  const interactionCard = WAITING_INTERACTION_CARDS[interactionIndex]
+  const compactStageLabels = taskType === 'exercise'
+    ? EXERCISE_STAGE_LABELS
+    : taskType === 'food_text'
+      ? FOOD_TEXT_STAGE_LABELS
+      : executionMode === 'strict'
+        ? FOOD_STRICT_STAGE_LABELS
+        : FOOD_STANDARD_STAGE_LABELS
+  const currentCompactStage = compactStageLabels[Math.min(currentStep, compactStageLabels.length - 1)]
 
   return (
     <View className='analyze-loading-page-v3'>
@@ -639,33 +776,54 @@ function AnalyzeLoadingPage() {
         </View>
 
         <View className='steps-panel'>
-          {(taskType === 'exercise'
-            ? EXERCISE_ANALYSIS_STEPS
-            : taskType === 'food_text'
-              ? FOOD_TEXT_ANALYSIS_STEPS
-              : ANALYSIS_STEPS
-          ).map((step, index) => {
-            const stepStatus = getStepStatus(index)
-            return (
-              <View key={step.id} className={`analysis-step ${stepStatus}`}>
-                <View className='step-left'>
-                  <View className='step-status-icon'>
-                    {stepStatus === 'done' ? (
-                      <Text className='status-check'>✓</Text>
-                    ) : stepStatus === 'active' ? (
-                      <View className='status-spinner' />
-                    ) : (
-                      <Text className='status-pending'>○</Text>
-                    )}
+          <View className='stage-summary'>
+            <Text className='stage-summary-title'>
+              {currentCompactStage}
+            </Text>
+            <Text className='stage-summary-time'>已等待 {formatElapsed(elapsedSeconds)}</Text>
+          </View>
+          <View className='compact-stage-row'>
+            <Text className='compact-stage-status'>任务{lastTaskStatusText}</Text>
+            <Text className='compact-stage-flow'>{compactStageLabels.join(' → ')}</Text>
+          </View>
+        </View>
+
+        <View className='waiting-interaction-card'>
+          <View className='waiting-interaction-head'>
+            <Text className='waiting-interaction-eyebrow'>{interactionCard.eyebrow}</Text>
+            <Text className='waiting-interaction-skip' onClick={handleNextInteraction}>
+              换一个
+            </Text>
+          </View>
+          <Text className='waiting-interaction-title'>{interactionCard.title}</Text>
+          {interactionCard.type === 'quiz' ? (
+            <View className='waiting-quiz-options'>
+              {interactionCard.options.map((option, index) => {
+                const chosen = selectedQuizOption === index
+                const correct = interactionCard.answerIndex === index
+                const revealed = selectedQuizOption !== null
+                return (
+                  <View
+                    key={option}
+                    className={`waiting-quiz-option${chosen ? ' chosen' : ''}${revealed && correct ? ' correct' : ''}`}
+                    onClick={() => setSelectedQuizOption(index)}
+                  >
+                    <Text className='waiting-quiz-option-text'>{option}</Text>
                   </View>
-                  <View className='step-text-wrap'>
-                    <Text className='step-title-v3'>{step.title}</Text>
-                    <Text className='step-desc-v3'>{step.desc}</Text>
-                  </View>
-                </View>
+                )
+              })}
+              {selectedQuizOption !== null && (
+                <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
+              )}
+            </View>
+          ) : (
+            <View className='waiting-fact-body'>
+              <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
+              <View className='waiting-fact-next' onClick={handleNextInteraction}>
+                <Text className='waiting-fact-next-text'>{interactionCard.actionText}</Text>
               </View>
-            )
-          })}
+            </View>
+          )}
         </View>
 
         {taskType !== 'exercise' && (

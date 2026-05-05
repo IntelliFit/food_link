@@ -1,9 +1,54 @@
 # DECISIONS
 
+- `2026-05-05`: 「我的」页底部版本号继续以 `package.json` 为唯一版本源：
+  - `src/pages/profile/index.tsx` 通过构建常量 `__APP_VERSION__` 展示版本号。
+  - `config/index.ts` 从根目录 `package.json` 读取 `version` 并注入 `__APP_VERSION__`。
+  - 以后若只需要更新页面版本号，优先 bump `package.json` / `package-lock.json`，不要手改页面硬编码字符串。
+
+- `2026-05-05`: 后端重构采用增量迁移，不做一次性大爆炸拆分：
+  - 先以 `main.py / database.py / worker.py` 三个超大文件为主线建立模块边界。
+  - 每次只拆一个低耦合业务域，保持 API 行为不变，完成后用 `py_compile`、目标测试或基准脚本验证。
+  - 路由层优先拆出 `APIRouter` 模块；schema、service、repository 随业务域逐步下沉。
+  - 性能问题不能只靠“拆文件”判断，必须结合接口基准、数据库调用次数、缓存和 Supabase 查询结构定位。
+  - 当前已有未提交功能改动时，后端重构应尽量单独提交，避免和业务修复混在一起。
+
+- `2026-05-05`: 当用户要求“提交当前工作区全部改动并合并到 main”时，默认发布顺序保持为：
+  - 先在 `dev` 提交并推送当前工作区改动
+  - 再把同一提交同步到 `main` 并推送
+  - 若远端分支在发布前已前进，先同步远端再继续，避免静默覆盖
+
+- `2026-05-05`: Food analysis waiting-page interactions must not change the analysis input after task submission:
+  - Do not add supplemental-info buttons whose answers would require a second model pass.
+  - Waiting-page improvements should stay local or navigational: real task status/stages, elapsed time, leave-and-check-later, health tips, quiz/fact cards, and similar no-reanalysis interactions.
+  - If a future interaction affects nutrition estimation, it should be designed as an explicit correction/re-analysis flow after the first result, not hidden inside the waiting page.
+
+- `2026-05-05`: User-group QR entry should be a low-interruption profile service entry:
+  - Add `加入用户群` under the `我的` page service list instead of using homepage popups or analysis-flow interruptions.
+  - The entry opens a dedicated lightweight QR page in `packageExtra`.
+  - The page should show one recommended current group first and keep other supplied QR codes as switchable backups.
+  - Group QR metadata and image imports should stay centralized so future weekly QR replacement touches one config file.
+  - Because WeChat group QR codes expire, a future backend/remote-config path is preferred before treating this as a long-term operational solution.
+
+- `2026-05-05`: Text food analysis should follow the same database-first nutrition strategy as standard photo analysis:
+  - In standard mode, the text model should parse natural-language input into structured food names and estimated weights only.
+  - Nutrition values should be calculated by backend lookup against `food_nutrition_library` / `food_nutrition_aliases`.
+  - Unknown foods may use the existing DeepSeek per-100g fallback and be written back for future reuse.
+  - `legacy_direct` remains available as an explicit compatibility analysis engine, but standard text submissions default to `db_first`.
+
+- `2026-05-05`: Login skip-browse must not use `navigateBack()` as its primary behavior:
+  - `暂不登录，随便看看` should switch to the public homepage tab (`/pages/index/index`).
+  - This avoids a loop where skipping login returns to a protected route (for example a circle record detail), and the auth guard immediately sends the user back to login.
+  - Development/test OpenID helpers may remain in backend compatibility code, but the login page frontend must not expose the test OpenID input unless the user explicitly asks to restore a dev-only testing affordance.
+
 - `2026-05-02`: Membership display and entitlement truth must prefer the latest real paid membership order over stale `user_pro_memberships` snapshots:
   - If `user_pro_memberships.current_plan_code / status / expires_at / daily_credits` drifts from the latest paid membership order, backend `/api/membership/me` should auto-reconcile it before returning data.
   - Non-membership orders such as `points_recharge` must not participate in membership-plan reconciliation.
   - Preserved manual exceptions remain explicit (`锦恢`, `小马哥`) because they are developer accounts; other active memberships without any real paid membership order should be treated as data errors to clean up instead of as display truth.
+- `2026-05-05`: Membership reconciliation should keep paid-order truth by default; manual service upgrades are allowed only for an explicit whitelist:
+  - For normal users, `/api/membership/me` should repair `current_plan_code`, status, period timestamps, expiry, last paid time, and `daily_credits` back to the latest real paid membership order.
+  - Only users in `MANUAL_MEMBERSHIP_UPGRADE_USER_IDS` may keep a manually higher `current_plan_code` and manually boosted `daily_credits`.
+  - Current whitelist includes `cafa4614-9453-4eb0-bf60-51f442ce0f4a`（倒数第二位用户）, upgraded to `standard_monthly` with `daily_credits=200`.
+  - `backend/scripts/reconcile_membership_truth.py` must follow the same rule as `/api/membership/me`.
 
 - `2026-05-02`: Invite rewards now use a higher-quality qualification rule:
   - For new referrals, the invitee must complete valid usage on `2` distinct China dates within `7` days.

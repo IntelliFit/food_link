@@ -1,4 +1,4 @@
-import type { MembershipPeriod, MembershipStatus, MembershipTier } from './api'
+import type { ExecutionMode, MembershipPeriod, MembershipStatus, MembershipTier } from './api'
 
 const MEMBERSHIP_TIER_LABELS: Record<MembershipTier, string> = {
   light: '轻度版',
@@ -24,8 +24,17 @@ const TIER_ORDER: Record<MembershipTier, number> = {
   advanced: 3,
 }
 
-const FOOD_ANALYSIS_CREDIT_COST = 2
+const STANDARD_FOOD_ANALYSIS_CREDIT_COST = 2
+const PRECISION_FOOD_ANALYSIS_CREDIT_COST = 4
 const EXERCISE_LOG_CREDIT_COST = 1
+
+export function getFoodAnalysisCreditCost(executionMode?: ExecutionMode | string | null): number {
+  return executionMode === 'strict' ? PRECISION_FOOD_ANALYSIS_CREDIT_COST : STANDARD_FOOD_ANALYSIS_CREDIT_COST
+}
+
+function getFoodAnalysisCreditLabel(executionMode?: ExecutionMode | string | null): string {
+  return executionMode === 'strict' ? '精准分析' : '食物分析'
+}
 
 export function getMembershipTierFromPlanCode(planCode?: string | null): MembershipTier | null {
   const code = String(planCode || '').trim()
@@ -147,34 +156,43 @@ export function getEarnedCreditsBalance(status?: MembershipStatus | null): numbe
   return Math.max(Number(status?.earned_credits_balance ?? 0), 0)
 }
 
-export function isFoodAnalysisCreditExhausted(status?: MembershipStatus | null): boolean {
+export function isFoodAnalysisCreditExhausted(
+  status?: MembershipStatus | null,
+  executionMode?: ExecutionMode | string | null,
+): boolean {
   const { hasInfo, max, remaining } = getMembershipCreditSummary(status)
+  const creditCost = getFoodAnalysisCreditCost(executionMode)
   if (!hasInfo) return false
-  if (remaining >= FOOD_ANALYSIS_CREDIT_COST) return false
+  if (remaining >= creditCost) return false
   if (max <= 0) return true
-  return remaining < FOOD_ANALYSIS_CREDIT_COST
+  return remaining < creditCost
 }
 
-export function getFoodAnalysisCreditBlockMessage(status?: MembershipStatus | null): string {
+export function getFoodAnalysisCreditBlockMessage(
+  status?: MembershipStatus | null,
+  executionMode?: ExecutionMode | string | null,
+): string {
   const { hasInfo, max, used, remaining } = getMembershipCreditSummary(status)
   const systemRemaining = getSystemCreditsRemaining(status)
   const earnedBalance = getEarnedCreditsBalance(status)
   const balanceSummary = `当前可用 ${remaining}（系统剩余 ${systemRemaining}，累计奖励 ${earnedBalance}）`
+  const creditCost = getFoodAnalysisCreditCost(executionMode)
+  const analysisLabel = getFoodAnalysisCreditLabel(executionMode)
   if (!hasInfo) {
-    return `当前积分不足，食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。`
+    return `当前积分不足，${analysisLabel}需 ${creditCost} 积分/次。`
   }
   if (max <= 0 && remaining <= 0) {
     return status?.is_pro
-      ? `当前套餐暂无可用积分，食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请升级更高套餐后继续。`
-      : `当前暂无可用积分，食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请开通会员后继续。`
+      ? `当前套餐暂无可用积分，${analysisLabel}需 ${creditCost} 积分/次。请升级更高套餐后继续。`
+      : `当前暂无可用积分，${analysisLabel}需 ${creditCost} 积分/次。请开通会员后继续。`
   }
   if (status?.is_pro) {
-    return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
+    return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），${analysisLabel}需 ${creditCost} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
   }
   if (status?.trial_active) {
-    return `试用积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
+    return `试用积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），${analysisLabel}需 ${creditCost} 积分/次。系统积分次日刷新，奖励积分可继续累计。`
   }
-  return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），食物分析需 ${FOOD_ANALYSIS_CREDIT_COST} 积分/次。请开通会员后继续。`
+  return `当前积分不足（已用 ${Math.min(used, max)}/${max}，${balanceSummary}），${analysisLabel}需 ${creditCost} 积分/次。请开通会员后继续。`
 }
 
 export function getFoodAnalysisBlockedActionText(status?: MembershipStatus | null): string {

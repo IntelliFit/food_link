@@ -19,7 +19,10 @@ create table public.analysis_tasks (
           'pending'::text,
           'processing'::text,
           'done'::text,
-          'failed'::text
+          'failed'::text,
+          'cancelled'::text,
+          'timed_out'::text,
+          'violated'::text
         ]
       )
     )
@@ -30,9 +33,15 @@ create table public.analysis_tasks (
         array[
           'food'::text,
           'food_text'::text,
-          'health_report'::text
+          'precision_plan'::text,
+          'precision_item_estimate'::text,
+          'precision_aggregate'::text,
+          'health_report'::text,
+          'public_food_library_text'::text,
+          'exercise'::text
         ]
       )
+      OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate)_debug(_[a-z0-9_]+)?$'
     )
   )
 ) TABLESPACE pg_default;

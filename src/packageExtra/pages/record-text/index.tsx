@@ -163,6 +163,7 @@ function RecordTextPage() {
       })
     } catch (e: any) {
       Taro.hideLoading()
+      console.error('[record-text] submitTextAnalyzeTask failed', e)
       const statusCode = (e as { statusCode?: number })?.statusCode
       const errMsg = e?.message || '提交任务失败'
       const isQuota =

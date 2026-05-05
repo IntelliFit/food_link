@@ -8,7 +8,8 @@ import {
   ShieldOutlined,
   InfoOutlined,
   Arrow,
-  ClockOutlined
+  ClockOutlined,
+  ChatOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -93,6 +94,12 @@ function getRewardLevelProgress(points: number, meta: RewardLevelMeta): number {
   return Math.max(0, Math.min(((normalized - meta.min) / span) * 100, 100))
 }
 
+function formatRewardLevelRange(points: number, meta: RewardLevelMeta): string {
+  const normalized = Math.max(Number(points || 0), 0)
+  if (meta.max == null) return `${normalized}+`
+  return `${normalized}/${meta.max}`
+}
+
 function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
   if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
   if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
@@ -142,7 +149,10 @@ function ProfilePage() {
 
   // 快捷入口统计数字
   const [analyzeCount, setAnalyzeCount] = useState(0)
-  const [analyzeWaitingRecordCount, setAnalyzeWaitingRecordCount] = useState(0)
+  const [analyzeWaitingRecordCount, setAnalyzeWaitingRecordCount] = useState(() => {
+    try { return Number(Taro.getStorageSync('analyze_waiting_record_count') || 0) }
+    catch { return 0 }
+  })
   const [friendCount, setFriendCount] = useState(0)
   const [favoriteCount, setFavoriteCount] = useState(0)
 
@@ -373,6 +383,13 @@ function ProfilePage() {
       title: '公共食物库',
       desc: '浏览公共食物营养数据',
       path: extraPkgUrl('/pages/food-library/index')
+    },
+    {
+      id: 8,
+      icon: <ChatOutlined size='20' />,
+      title: '加入用户群',
+      desc: '反馈问题、提建议，一起共创食探',
+      path: extraPkgUrl('/pages/user-group/index')
     }
   ]
 
@@ -415,6 +432,10 @@ function ProfilePage() {
     // 公共食物库
     if (service.id === 5) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/food-library/index') })
+      return
+    }
+    if (service.id === 8) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/user-group/index') })
       return
     }
     const path = (service as { path?: string }).path
@@ -595,9 +616,26 @@ function ProfilePage() {
     })
   }
 
-  const getServiceColor = (_id: number) => '#5cb896'
+  const getServiceColor = (id: number) => {
+    const colors: Record<number, string> = {
+      0: '#10b981', // 健康档案 - 绿
+      2: '#8b5cf6', // 食物管理 - 紫
+      3: '#3b82f6', // 饮食记录 - 蓝
+      4: '#f59e0b', // 邀请有礼 - 金
+      5: '#10b981', // 公共食物库 - 绿
+      7: '#6b7280', // 识别历史 - 灰
+      8: '#22c55e'  // 用户群 - 绿
+    }
+    return colors[id] || '#6b7280'
+  }
 
-  const getSettingColor = (_id: number) => '#5cb896'
+  const getSettingColor = (id: number) => {
+    const colors: Record<number, string> = {
+      3: '#10b981', // 隐私设置 - 绿
+      5: '#8b5cf6'  // 关于我们 - 紫
+    }
+    return colors[id] || '#6b7280'
+  }
 
   return (
     <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
@@ -707,6 +745,8 @@ function ProfilePage() {
             const systemProgressPct = cMax > 0 ? Math.min((cSystemRemain / cMax) * 100, 100) : 0
             const rewardLevel = getRewardLevelMeta(cEarned)
             const rewardProgressPct = getRewardLevelProgress(cEarned, rewardLevel)
+            const rewardRangeText = formatRewardLevelRange(cEarned, rewardLevel)
+            const systemAvailableText = cMax > 0 ? `可用 ${cSystemRemain}/${cMax}` : `可用 ${cSystemRemain}`
             const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
             const hasDoubleBenefits = !!membershipStatus?.early_user_paid_bonus_active || !!membershipStatus?.early_user_paid_bonus_eligible
             const currentTier = getCurrentMembershipTier(membershipStatus)
@@ -730,8 +770,8 @@ function ProfilePage() {
                 <View className='card-body'>
                   <View className='member-meter'>
                     <View className='member-meter__head'>
-                      <Text className='member-meter__label'>系统分配（次日清0）</Text>
-                      <Text className='member-meter__value'>{cMax > 0 ? `${cSystemRemain}/${cMax}` : `${cSystemRemain}`}</Text>
+                      <Text className='member-meter__label'>系统可用（次日清0）</Text>
+                      <Text className='member-meter__value'>{systemAvailableText}</Text>
                     </View>
                     <View className='progress-bar'>
                       <View className='progress-inner' style={{ width: `${systemProgressPct}%` }} />
@@ -740,8 +780,8 @@ function ProfilePage() {
 
                   <View className='member-meter'>
                     <View className='member-meter__head'>
-                      <Text className='member-meter__label'>奖励分（一直持有）</Text>
-                      <Text className='member-meter__value'>{`${cEarned} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
+                      <Text className='member-meter__label'>奖励可用（一直持有）</Text>
+                      <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
                     </View>
                     <View className='progress-bar progress-bar--reward'>
                       <View className='progress-inner progress-inner--reward' style={{ width: `${rewardProgressPct}%` }} />

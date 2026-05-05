@@ -13,7 +13,7 @@ export default function MembershipAgreementPage() {
                 <View className='section'>
                     <Text className='section-title'>一、服务说明</Text>
                     <Text className='paragraph'>
-                        1. 本协议是您（以下简称"用户"）与"智健食探"微信小程序（以下简称"本小程序"）运营方之间，就您购买和使用本小程序会员服务所订立的协议。请您在购买前仔细阅读本协议的全部内容。
+                        1. 本协议是您（以下简称「用户」）与「智健食探」微信小程序（以下简称「本小程序」）运营方之间，就您购买和使用本小程序会员服务所订立的协议。请您在购买前仔细阅读本协议的全部内容。
                     </Text>
                     <Text className='paragraph'>
                         2. 会员服务是本小程序向用户提供的增值订阅服务，购买会员后您可享受相应的每日积分额度和功能权益。会员服务不影响本小程序免费基础功能的使用。
@@ -100,7 +100,7 @@ export default function MembershipAgreementPage() {
                         1. 会员服务属于虚拟订阅服务，支付成功后原则上不支持退款。如存在支付异常、重复扣款等特殊情况，请联系客服核实处理。
                     </Text>
                     <Text className='paragraph'>
-                        2. 由于本小程序所有套餐均为到期不自动续费，您无需主动"取消订阅"，到期后如不手动续费即自动终止。
+                        2. 由于本小程序所有套餐均为到期不自动续费，您无需主动「取消订阅」，到期后如不手动续费即自动终止。
                     </Text>
                 </View>
 

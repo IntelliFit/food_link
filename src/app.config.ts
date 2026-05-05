@@ -43,6 +43,7 @@ const extraSubpackagePages = [
   'pages/privacy-settings/index',
   'pages/friends/index',
   'pages/invite-friends/index',
+  'pages/user-group/index',
   'pages/profile-settings/index',
   'pages/exercise-record/index',
 ]

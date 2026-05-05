@@ -10,6 +10,7 @@ import re
 import logging
 import json
 from datetime import date, datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from typing import Optional, Dict, Any, List
 from collections import Counter
 from otel_compat import Status, StatusCode, trace
@@ -17,6 +18,16 @@ from metabolic import calculate_bmr, calculate_tdee
 
 # 中国时区（UTC+8），用于按本地自然日统计
 CHINA_TZ = timezone(timedelta(hours=8))
+
+FOOD_LIBRARY_NUTRITION_SELECT = (
+    "kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, "
+    "fiber_per_100g, sugar_per_100g, saturated_fat_per_100g, cholesterol_mg_per_100g, "
+    "sodium_mg_per_100g, potassium_mg_per_100g, calcium_mg_per_100g, iron_mg_per_100g, "
+    "magnesium_mg_per_100g, zinc_mg_per_100g, vitamin_a_rae_mcg_per_100g, vitamin_c_mg_per_100g, "
+    "vitamin_d_mcg_per_100g, vitamin_e_mg_per_100g, vitamin_k_mcg_per_100g, thiamin_mg_per_100g, "
+    "riboflavin_mg_per_100g, niacin_mg_per_100g, vitamin_b6_mg_per_100g, folate_mcg_per_100g, "
+    "vitamin_b12_mcg_per_100g"
+)
 
 # 体检报告图片存储桶名，需在 Supabase Dashboard → Storage 中创建并设为 Public
 HEALTH_REPORTS_BUCKET = "health-reports"
@@ -96,6 +107,36 @@ def _cache_set(cache_dict: Dict, key: str, value: Any):
     cache_dict[key] = {"value": value, "ts": datetime.now(timezone.utc).timestamp()}
 
 
+def _food_row_to_unit_nutrition(food: Dict[str, Any]) -> Dict[str, float]:
+    return {
+        "calories": float(food.get("kcal_per_100g") or 0),
+        "protein": float(food.get("protein_per_100g") or 0),
+        "carbs": float(food.get("carbs_per_100g") or 0),
+        "fat": float(food.get("fat_per_100g") or 0),
+        "fiber": float(food.get("fiber_per_100g") or 0),
+        "sugar": float(food.get("sugar_per_100g") or 0),
+        "saturatedFat": float(food.get("saturated_fat_per_100g") or 0),
+        "cholesterolMg": float(food.get("cholesterol_mg_per_100g") or 0),
+        "sodiumMg": float(food.get("sodium_mg_per_100g") or 0),
+        "potassiumMg": float(food.get("potassium_mg_per_100g") or 0),
+        "calciumMg": float(food.get("calcium_mg_per_100g") or 0),
+        "ironMg": float(food.get("iron_mg_per_100g") or 0),
+        "magnesiumMg": float(food.get("magnesium_mg_per_100g") or 0),
+        "zincMg": float(food.get("zinc_mg_per_100g") or 0),
+        "vitaminARaeMcg": float(food.get("vitamin_a_rae_mcg_per_100g") or 0),
+        "vitaminCMg": float(food.get("vitamin_c_mg_per_100g") or 0),
+        "vitaminDMcg": float(food.get("vitamin_d_mcg_per_100g") or 0),
+        "vitaminEMg": float(food.get("vitamin_e_mg_per_100g") or 0),
+        "vitaminKMcg": float(food.get("vitamin_k_mcg_per_100g") or 0),
+        "thiaminMg": float(food.get("thiamin_mg_per_100g") or 0),
+        "riboflavinMg": float(food.get("riboflavin_mg_per_100g") or 0),
+        "niacinMg": float(food.get("niacin_mg_per_100g") or 0),
+        "vitaminB6Mg": float(food.get("vitamin_b6_mg_per_100g") or 0),
+        "folateMcg": float(food.get("folate_mcg_per_100g") or 0),
+        "vitaminB12Mcg": float(food.get("vitamin_b12_mcg_per_100g") or 0),
+    }
+
+
 def get_supabase_client():
     """
     获取 Supabase 客户端（延迟初始化）
@@ -144,7 +185,12 @@ def exercise_fallback_task_type() -> str:
     与 run_backend.py 中 TEXT_FOOD_TASK_TYPE / food_text_debug 逻辑一致。
     """
     if str(os.getenv("FOOD_DEBUG_TASK_QUEUE") or "").strip().lower() in {"1", "true", "yes", "on"}:
-        return "food_text_debug"
+        suffix = re.sub(
+            r"[^a-z0-9_]+",
+            "_",
+            str(os.getenv("FOOD_DEBUG_TASK_QUEUE_SUFFIX") or "").strip().lower(),
+        ).strip("_")
+        return f"food_text_debug_{suffix}" if suffix else "food_text_debug"
     return "food_text"
 
 
@@ -1196,6 +1242,7 @@ def claim_next_pending_task_sync(task_type: str) -> Optional[Dict[str, Any]]:
                 .execute()
             )
             rows = list(r.data or [])
+            print(f"[claim_pending] task_type={task_type}, pending_count={len(rows)}")
             if not rows:
                 _safe_add_span_event("db.claim.empty", {"db.task_type": task_type})
                 return None
@@ -5913,8 +5960,11 @@ async def get_prompt_history(prompt_id: int) -> List[Dict[str, Any]]:
 
 # 计入「每日分析配额」的任务类型：与 create_analysis_task_sync 写入的类型一致。
 # 开发环境若开启 FOOD_DEBUG_TASK_QUEUE，任务为 food_debug / food_text_debug，须一并统计，否则会员页 daily_used 恒为 0。
-_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA = ("food", "food_text", "food_debug", "food_text_debug")
-_FOOD_ANALYSIS_CREDIT_COST = 2
+_FOOD_ANALYSIS_STANDARD_TASK_TYPES = {"food", "food_text"}
+_FOOD_ANALYSIS_STANDARD_DEBUG_PREFIXES = ("food_debug", "food_text_debug")
+_FOOD_ANALYSIS_PRECISION_PLAN_PREFIX = "precision_plan"
+_FOOD_ANALYSIS_STANDARD_CREDIT_COST = 2
+_FOOD_ANALYSIS_PRECISION_CREDIT_COST = 4
 _EXERCISE_LOG_CREDIT_COST = 1
 
 
@@ -5932,6 +5982,28 @@ def _is_expiry_recognition_task_payload(payload: Any) -> bool:
 def _is_excluded_from_analyze_history(payload: Any) -> bool:
     """排除不应出现在识别记录列表/计数中的任务：运动回退 + 保质期识别。"""
     return _is_exercise_fallback_task_payload(payload) or _is_expiry_recognition_task_payload(payload)
+
+
+def _is_standard_food_analysis_task_type(task_type: Any) -> bool:
+    raw = str(task_type or "").strip()
+    if raw in _FOOD_ANALYSIS_STANDARD_TASK_TYPES:
+        return True
+    if raw in {
+        exercise_fallback_task_type().replace("food_text", "food", 1),
+        exercise_fallback_task_type(),
+    }:
+        return True
+    return raw.startswith(_FOOD_ANALYSIS_STANDARD_DEBUG_PREFIXES)
+
+
+def _is_precision_plan_task_type(task_type: Any) -> bool:
+    return str(task_type or "").strip().startswith(_FOOD_ANALYSIS_PRECISION_PLAN_PREFIX)
+
+
+def _is_food_analysis_task_type_for_quota(task_type: Any, payload: Any) -> bool:
+    if _is_exercise_fallback_task_payload(payload):
+        return False
+    return _is_standard_food_analysis_task_type(task_type) or _is_precision_plan_task_type(task_type)
 
 
 def _normalize_task_payload(payload: Any) -> Dict[str, Any]:
@@ -5978,8 +6050,10 @@ def _get_task_system_credit_usage_units(row: Dict[str, Any], china_date_str: str
     task_type = str(row.get("task_type") or "").strip()
     if task_type == "exercise" or _is_exercise_fallback_task_payload(payload):
         return _EXERCISE_LOG_CREDIT_COST
-    if task_type in _FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA:
-        return _FOOD_ANALYSIS_CREDIT_COST
+    if _is_precision_plan_task_type(task_type):
+        return _FOOD_ANALYSIS_PRECISION_CREDIT_COST
+    if _is_standard_food_analysis_task_type(task_type):
+        return _FOOD_ANALYSIS_STANDARD_CREDIT_COST
     return 0
 
 
@@ -6022,10 +6096,11 @@ async def get_daily_system_credit_usage(user_id: str, china_date_str: str) -> in
 async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> int:
     """统计用户今日（中国时区）的食物分析次数。
 
-    只统计真实食物分析任务：
-    - 计入：food / food_text / food_debug / food_text_debug
+    只统计真实食物分析入口任务：
+    - 计入：food / food_text / food_debug* / food_text_debug* / precision_plan*
     - 排除：因数据库尚未支持 task_type=exercise，而回退投递到 food_text* 的运动任务
       （其 payload.exercise=true，积分应按运动记录 1 分计算，不能再额外算成食物分析 2 分）
+    - 不统计：precision_item_estimate* / precision_aggregate*，避免多食物拆分后重复计数
     """
     check_supabase_configured()
     supabase = get_supabase_client()
@@ -6041,9 +6116,8 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
             day_end_excl = f"{next_date.strftime('%Y-%m-%d')}T00:00:00+08:00"
 
             result = supabase.table("analysis_tasks")\
-                .select("id, payload")\
+                .select("id, task_type, payload")\
                 .eq("user_id", user_id)\
-                .in_("task_type", list(_FOOD_ANALYSIS_TASK_TYPES_FOR_QUOTA))\
                 .gte("created_at", day_start)\
                 .lt("created_at", day_end_excl)\
                 .execute()
@@ -6052,7 +6126,10 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
             count = sum(
                 1
                 for row in rows
-                if not _is_exercise_fallback_task_payload((row or {}).get("payload"))
+                if _is_food_analysis_task_type_for_quota(
+                    (row or {}).get("task_type"),
+                    (row or {}).get("payload"),
+                )
             )
             _safe_add_span_event(
                 "db.count.success",
@@ -6062,6 +6139,73 @@ async def get_today_food_analysis_count(user_id: str, china_date_str: str) -> in
             return count
         except Exception as e:
             _record_db_exception("get_today_food_analysis_count", e, **{"db.table": "analysis_tasks"})
+            return 0
+
+
+async def get_today_food_analysis_credit_usage(
+    user_id: str,
+    china_date_str: str,
+    *,
+    standard_cost: int,
+    precision_cost: int,
+) -> int:
+    """按任务入口类型计算今日食物分析积分消耗。
+
+    标准模式 food/food_text 按 standard_cost 计；精准模式只按 precision_plan* 入口按
+    precision_cost 计，后续 item_estimate/aggregate 子任务不重复扣分。
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    with _tracer.start_as_current_span("db.get_today_food_analysis_credit_usage") as span:
+        span.set_attribute("db.table", "analysis_tasks")
+        span.set_attribute("db.user_id", user_id)
+        span.set_attribute("db.china_date", china_date_str)
+        try:
+            from datetime import date as _date, timedelta as _timedelta
+            china_date = _date.fromisoformat(china_date_str)
+            next_date = china_date + _timedelta(days=1)
+            day_start = f"{china_date_str}T00:00:00+08:00"
+            day_end_excl = f"{next_date.strftime('%Y-%m-%d')}T00:00:00+08:00"
+
+            result = supabase.table("analysis_tasks")\
+                .select("id, task_type, payload")\
+                .eq("user_id", user_id)\
+                .gte("created_at", day_start)\
+                .lt("created_at", day_end_excl)\
+                .execute()
+
+            rows = result.data or []
+            standard_count = 0
+            precision_count = 0
+            for row in rows:
+                task_type = (row or {}).get("task_type")
+                payload = (row or {}).get("payload")
+                if _is_exercise_fallback_task_payload(payload):
+                    continue
+                if _is_precision_plan_task_type(task_type):
+                    precision_count += 1
+                elif _is_standard_food_analysis_task_type(task_type):
+                    standard_count += 1
+
+            used = standard_count * standard_cost + precision_count * precision_cost
+            _safe_add_span_event(
+                "db.count.success",
+                {
+                    "db.operation": "get_today_food_analysis_credit_usage",
+                    "db.rows": len(rows),
+                    "db.standard_count": standard_count,
+                    "db.precision_count": precision_count,
+                    "db.credits_used": used,
+                },
+            )
+            print(
+                "[get_today_food_analysis_credit_usage] "
+                f"user={user_id} date={china_date_str} standard={standard_count} "
+                f"precision={precision_count} used={used}"
+            )
+            return used
+        except Exception as e:
+            _record_db_exception("get_today_food_analysis_credit_usage", e, **{"db.table": "analysis_tasks"})
             return 0
 
 
@@ -6409,6 +6553,472 @@ async def update_pro_membership_payment_record(order_no: str, data: Dict[str, An
     except Exception as e:
         print(f"[update_pro_membership_payment_record] 错误: {e}")
         raise
+
+
+# ---------- 食物营养库（标准库 + 别名 + 未命中） ----------
+
+def normalize_food_name(name: str) -> str:
+    """
+    规范化食物名称，用于别名与模糊匹配。
+    - 转小写
+    - 去空白
+    - 去常见标点与括号
+    """
+    raw = str(name or "").strip().lower()
+    if not raw:
+        return ""
+    normalized = re.sub(r"[\s\r\n\t]+", "", raw)
+    normalized = re.sub(r"[()（）【】\[\]{}·,，。.!！:：;；'\"`~\-_/\\|]+", "", normalized)
+    return normalized
+
+
+def _food_similarity(a: str, b: str) -> float:
+    """简单相似度，范围 [0, 1]。"""
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b).ratio()
+
+
+# 内置同义词映射：常见别称 → 标准名称列表（归一化后）
+# 命中时会用标准名称重新查库，提高 DeepSeek 沉淀后的复用率
+_FOOD_SYNONYM_MAP: Dict[str, List[str]] = {
+    "红烧肉": ["红烧五花肉", "东坡肉", "红烧猪肉", "五花红烧肉"],
+    "白米饭": ["米饭", "大米饭", "白饭", "蒸米饭", "白米饭"],
+    "西红柿炒鸡蛋": ["番茄炒蛋", "西红柿炒蛋", "番茄炒鸡蛋", "西红柿鸡蛋"],
+    "炒青菜": ["清炒蔬菜", "炒蔬菜", "炒时蔬", "清炒时蔬"],
+    "土豆丝": ["炒土豆丝", "酸辣土豆丝", "醋溜土豆丝"],
+    "牛肉面": ["红烧牛肉面", "兰州牛肉面", "牛肉拉面"],
+    "炸鸡": ["炸鸡翅", "炸鸡腿", "香酥鸡", "油炸鸡"],
+    "清蒸鱼": ["蒸鱼", "清蒸鲈鱼", "清蒸草鱼"],
+    "豆浆": ["黄豆浆", "现磨豆浆", "大豆浆"],
+    "豆腐脑": ["豆花", "嫩豆腐脑"],
+}
+
+
+def _try_resolve_by_synonyms(supabase: Any, raw_name: str, normalized: str, fuzzy_threshold: float) -> Optional[Dict[str, Any]]:
+    """通过同义词映射尝试解析食物名称。"""
+    # 直接映射
+    synonyms = _FOOD_SYNONYM_MAP.get(normalized)
+    if not synonyms:
+        # 反向映射：检查输入是否是某个标准名称的同义词
+        for canonical, alias_list in _FOOD_SYNONYM_MAP.items():
+            if normalized in [normalize_food_name(a) for a in alias_list]:
+                synonyms = [canonical] + alias_list
+                break
+    if not synonyms:
+        return None
+
+    # 用同义词列表重新查询别名表
+    for syn in synonyms:
+        syn_normalized = normalize_food_name(syn)
+        alias_res = (
+            supabase.table("food_nutrition_aliases")
+            .select(
+                f"normalized_alias, food_id, food_nutrition_library!inner(id, canonical_name, source, {FOOD_LIBRARY_NUTRITION_SELECT}, is_active)"
+            )
+            .eq("normalized_alias", syn_normalized)
+            .limit(1)
+            .execute()
+        )
+        alias_rows = list(alias_res.data or [])
+        if alias_rows:
+            row = alias_rows[0]
+            food = row.get("food_nutrition_library") or {}
+            if food and food.get("is_active", True):
+                return {
+                    "resolved": True,
+                    "resolve_status": "exact_alias",
+                    "matched_food_id": str(food.get("id")),
+                    "matched_food_name": str(food.get("canonical_name") or raw_name),
+                    "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
+                    "score": 1.0,
+                    "raw_name": raw_name,
+                    "normalized_name": normalized,
+                }
+
+        # 查询 canonical 表
+        food_res = (
+            supabase.table("food_nutrition_library")
+            .select(f"id, canonical_name, normalized_name, source, {FOOD_LIBRARY_NUTRITION_SELECT}")
+            .eq("is_active", True)
+            .eq("normalized_name", syn_normalized)
+            .limit(1)
+            .execute()
+        )
+        food_rows = list(food_res.data or [])
+        if food_rows:
+            food = food_rows[0]
+            return {
+                "resolved": True,
+                "resolve_status": "exact_canonical",
+                "matched_food_id": str(food.get("id")),
+                "matched_food_name": str(food.get("canonical_name") or raw_name),
+                "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
+                "score": 1.0,
+                "raw_name": raw_name,
+                "normalized_name": normalized,
+            }
+    return None
+
+
+def resolve_food_sync(name: str, fuzzy_threshold: float = 0.72) -> Dict[str, Any]:
+    """
+    解析食物名称到标准食物库。
+    返回示例：
+    {
+      "resolved": True/False,
+      "resolve_status": "exact_alias" | "exact_canonical" | "fuzzy" | "unresolved",
+      "matched_food_id": "...",
+      "matched_food_name": "...",
+      "unit_nutrition_per_100g": {...},
+      "score": 0.0~1.0
+    }
+    """
+    check_supabase_configured()
+    supabase = get_supabase_client()
+
+    raw_name = str(name or "").strip()
+    normalized = normalize_food_name(raw_name)
+    unresolved = {
+        "resolved": False,
+        "resolve_status": "unresolved",
+        "matched_food_id": None,
+        "matched_food_name": None,
+        "unit_nutrition_per_100g": None,
+        "score": 0.0,
+        "raw_name": raw_name,
+        "normalized_name": normalized,
+    }
+    if not normalized:
+        return unresolved
+
+    try:
+        alias_res = (
+            supabase.table("food_nutrition_aliases")
+            .select(
+                f"normalized_alias, food_id, food_nutrition_library!inner(id, canonical_name, {FOOD_LIBRARY_NUTRITION_SELECT}, is_active)"
+            )
+            .eq("normalized_alias", normalized)
+            .limit(1)
+            .execute()
+        )
+        alias_rows = list(alias_res.data or [])
+        if alias_rows:
+            row = alias_rows[0]
+            food = row.get("food_nutrition_library") or {}
+            if food and food.get("is_active", True):
+                return {
+                    "resolved": True,
+                    "resolve_status": "exact_alias",
+                    "matched_food_id": str(food.get("id")),
+                    "matched_food_name": str(food.get("canonical_name") or raw_name),
+                    "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
+                    "score": 1.0,
+                    "raw_name": raw_name,
+                    "normalized_name": normalized,
+                }
+
+        food_res = (
+            supabase.table("food_nutrition_library")
+            .select(f"id, canonical_name, normalized_name, {FOOD_LIBRARY_NUTRITION_SELECT}")
+            .eq("is_active", True)
+            .eq("normalized_name", normalized)
+            .limit(1)
+            .execute()
+        )
+        food_rows = list(food_res.data or [])
+        if food_rows:
+            food = food_rows[0]
+            return {
+                "resolved": True,
+                "resolve_status": "exact_canonical",
+                "matched_food_id": str(food.get("id")),
+                "matched_food_name": str(food.get("canonical_name") or raw_name),
+                "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
+                "score": 1.0,
+                "raw_name": raw_name,
+                "normalized_name": normalized,
+            }
+
+        all_foods_res = (
+            supabase.table("food_nutrition_library")
+            .select(f"id, canonical_name, normalized_name, {FOOD_LIBRARY_NUTRITION_SELECT}")
+            .eq("is_active", True)
+            .limit(500)
+            .execute()
+        )
+        candidates = list(all_foods_res.data or [])
+        best = None
+        best_score = 0.0
+        for food in candidates:
+            score = _food_similarity(normalized, str(food.get("normalized_name") or ""))
+            if score > best_score:
+                best_score = score
+                best = food
+        if best and best_score >= fuzzy_threshold:
+            return {
+                "resolved": True,
+                "resolve_status": "fuzzy",
+                "matched_food_id": str(best.get("id")),
+                "matched_food_name": str(best.get("canonical_name") or raw_name),
+                "unit_nutrition_per_100g": _food_row_to_unit_nutrition(best),
+                "score": round(float(best_score), 4),
+                "raw_name": raw_name,
+                "normalized_name": normalized,
+            }
+
+        # 同义词匹配：内置同义词表 + 反向映射
+        synonym_result = _try_resolve_by_synonyms(supabase, raw_name, normalized, fuzzy_threshold)
+        if synonym_result:
+            synonym_result["resolve_status"] = "synonym"
+            return synonym_result
+
+        return unresolved
+    except Exception as e:
+        print(f"[resolve_food_sync] 错误: {e}")
+        return unresolved
+
+
+def batch_resolve_foods_sync(names: List[str], fuzzy_threshold: float = 0.72) -> Dict[str, Dict[str, Any]]:
+    """批量解析食物名，返回 name -> resolve_result。"""
+    out: Dict[str, Dict[str, Any]] = {}
+    for name in names or []:
+        key = str(name or "").strip()
+        if key in out:
+            continue
+        out[key] = resolve_food_sync(key, fuzzy_threshold=fuzzy_threshold)
+    return out
+
+
+def log_unresolved_food_sync(
+    task_id: Optional[str],
+    raw_name: str,
+    normalized_name: str,
+    sample_payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    """记录未收录食物，按 normalized_name 累计频次。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    raw = str(raw_name or "").strip()
+    normalized = normalize_food_name(normalized_name or raw)
+    if not normalized:
+        return
+    try:
+        exists = (
+            supabase.table("food_unresolved_logs")
+            .select("id, hit_count")
+            .eq("normalized_name", normalized)
+            .limit(1)
+            .execute()
+        )
+        rows = list(exists.data or [])
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payload = sample_payload or {}
+        if rows:
+            row = rows[0]
+            next_count = int(row.get("hit_count") or 0) + 1
+            supabase.table("food_unresolved_logs").update({
+                "hit_count": next_count,
+                "last_seen_at": now_iso,
+                "raw_name": raw,
+                "sample_payload": payload,
+                "updated_at": now_iso,
+                "task_id": task_id,
+            }).eq("id", row.get("id")).execute()
+            return
+        supabase.table("food_unresolved_logs").insert({
+            "task_id": task_id,
+            "raw_name": raw,
+            "normalized_name": normalized,
+            "hit_count": 1,
+            "sample_payload": payload,
+            "first_seen_at": now_iso,
+            "last_seen_at": now_iso,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }).execute()
+    except Exception as e:
+        print(f"[log_unresolved_food_sync] 错误: {e}")
+
+
+def upsert_food_nutrition_from_deepseek_sync(
+    raw_name: str,
+    unit_nutrition: Dict[str, float],
+) -> Optional[str]:
+    """将 DeepSeek fallback 生成的 per-100g 营养数据写入 food_nutrition_library，方便下次命中。同一 normalized_name 不重复写入。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    raw = str(raw_name or "").strip()
+    normalized = normalize_food_name(raw)
+    if not normalized or not unit_nutrition:
+        return None
+
+    field_map = {
+        "calories": "kcal_per_100g",
+        "protein": "protein_per_100g",
+        "carbs": "carbs_per_100g",
+        "fat": "fat_per_100g",
+        "fiber": "fiber_per_100g",
+        "sugar": "sugar_per_100g",
+        "saturatedFat": "saturated_fat_per_100g",
+        "cholesterolMg": "cholesterol_mg_per_100g",
+        "sodiumMg": "sodium_mg_per_100g",
+        "potassiumMg": "potassium_mg_per_100g",
+        "calciumMg": "calcium_mg_per_100g",
+        "ironMg": "iron_mg_per_100g",
+        "magnesiumMg": "magnesium_mg_per_100g",
+        "zincMg": "zinc_mg_per_100g",
+        "vitaminARaeMcg": "vitamin_a_rae_mcg_per_100g",
+        "vitaminCMg": "vitamin_c_mg_per_100g",
+        "vitaminDMcg": "vitamin_d_mcg_per_100g",
+        "vitaminEMg": "vitamin_e_mg_per_100g",
+        "vitaminKMcg": "vitamin_k_mcg_per_100g",
+        "thiaminMg": "thiamin_mg_per_100g",
+        "riboflavinMg": "riboflavin_mg_per_100g",
+        "niacinMg": "niacin_mg_per_100g",
+        "vitaminB6Mg": "vitamin_b6_mg_per_100g",
+        "folateMcg": "folate_mcg_per_100g",
+        "vitaminB12Mcg": "vitamin_b12_mcg_per_100g",
+    }
+
+    try:
+        exists = (
+            supabase.table("food_nutrition_library")
+            .select("id")
+            .eq("normalized_name", normalized)
+            .limit(1)
+            .execute()
+        )
+        if exists.data and len(exists.data) > 0:
+            return None
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        row = {
+            "canonical_name": raw,
+            "normalized_name": normalized,
+            "source": "deepseek_auto",
+            "is_active": True,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        for src_key, db_key in field_map.items():
+            row[db_key] = float(unit_nutrition.get(src_key) or 0)
+
+        result = supabase.table("food_nutrition_library").insert(row).execute()
+        if not result.data or len(result.data) == 0:
+            return None
+
+        food_id = result.data[0].get("id")
+        supabase.table("food_nutrition_aliases").insert({
+            "food_id": food_id,
+            "normalized_alias": normalized,
+            "created_at": now_iso,
+        }).execute()
+        print(f"[deepseek_auto] 已入库: {raw} (normalized={normalized})")
+        return str(food_id)
+    except Exception as e:
+        print(f"[upsert_food_nutrition_from_deepseek_sync] 错误: {e}")
+        return None
+
+
+def get_food_unresolved_top_sync(limit: int = 50) -> List[Dict[str, Any]]:
+    """按出现频次倒序返回未收录食物。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    size = max(1, min(int(limit or 50), 200))
+    try:
+        res = (
+            supabase.table("food_unresolved_logs")
+            .select("id, raw_name, normalized_name, hit_count, first_seen_at, last_seen_at, task_id, sample_payload")
+            .order("hit_count", desc=True)
+            .order("last_seen_at", desc=True)
+            .limit(size)
+            .execute()
+        )
+        return list(res.data or [])
+    except Exception as e:
+        print(f"[get_food_unresolved_top_sync] 错误: {e}")
+        return []
+
+
+def search_food_nutrition_candidates_sync(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """按名称搜索食物库候选（用于未收录项人工确认）。"""
+    check_supabase_configured()
+    supabase = get_supabase_client()
+    raw_query = str(query or "").strip()
+    normalized_query = normalize_food_name(raw_query)
+    if not normalized_query:
+        return []
+
+    max_limit = max(1, min(int(limit or 5), 20))
+    by_food_id: Dict[str, Dict[str, Any]] = {}
+
+    def _score(a: str, b: str) -> float:
+        sim = _food_similarity(a, b)
+        if a in b or b in a:
+            sim = min(1.0, sim + 0.15)
+        return round(sim, 4)
+
+    try:
+        foods_res = (
+            supabase.table("food_nutrition_library")
+            .select(f"id, canonical_name, normalized_name, source, {FOOD_LIBRARY_NUTRITION_SELECT}")
+            .eq("is_active", True)
+            .limit(600)
+            .execute()
+        )
+        for row in list(foods_res.data or []):
+            food_id = str(row.get("id") or "")
+            if not food_id:
+                continue
+            normalized_name = str(row.get("normalized_name") or "")
+            score = _score(normalized_query, normalized_name)
+            if score < 0.42:
+                continue
+            by_food_id[food_id] = {
+                "food_id": food_id,
+                "canonical_name": str(row.get("canonical_name") or ""),
+                "match_source": "canonical",
+                "score": score,
+                "source": str(row.get("source") or ""),
+                "unit_nutrition_per_100g": _food_row_to_unit_nutrition(row),
+            }
+
+        alias_res = (
+            supabase.table("food_nutrition_aliases")
+            .select(
+                f"normalized_alias, food_nutrition_library!inner(id, canonical_name, source, {FOOD_LIBRARY_NUTRITION_SELECT}, is_active)"
+            )
+            .limit(1200)
+            .execute()
+        )
+        for row in list(alias_res.data or []):
+            food = row.get("food_nutrition_library") or {}
+            if not food or not food.get("is_active", True):
+                continue
+            food_id = str(food.get("id") or "")
+            if not food_id:
+                continue
+            normalized_alias = str(row.get("normalized_alias") or "")
+            score = _score(normalized_query, normalized_alias)
+            if score < 0.42:
+                continue
+            prev = by_food_id.get(food_id)
+            if prev is None or score > float(prev.get("score") or 0):
+                by_food_id[food_id] = {
+                    "food_id": food_id,
+                    "canonical_name": str(food.get("canonical_name") or ""),
+                    "match_source": "alias",
+                    "score": score,
+                    "source": str(food.get("source") or ""),
+                    "unit_nutrition_per_100g": _food_row_to_unit_nutrition(food),
+                }
+
+        ranked = sorted(by_food_id.values(), key=lambda x: float(x.get("score") or 0), reverse=True)
+        return ranked[:max_limit]
+    except Exception as e:
+        print(f"[search_food_nutrition_candidates_sync] 错误: {e}")
+        return []
 
 
 # ---------- 手动记录：食物搜索 ----------
