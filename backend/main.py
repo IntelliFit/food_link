@@ -6465,7 +6465,24 @@ async def create_membership_payment(
         if not openid:
             raise HTTPException(status_code=400, detail="当前用户缺少 openid，无法发起微信支付")
 
+        # 年龄合规校验
+        birthday = (user.get("birthday") or "").strip()
+        age = get_age_from_birthday(birthday) if birthday else None
         amount = _to_decimal_amount(plan.get("amount") or "0")
+        amount_float = float(amount)
+        if age is not None:
+            if age < 8:
+                raise HTTPException(status_code=403, detail="未满 8 周岁用户暂不支持付费订阅")
+            if age < 16 and amount_float > 50:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"你当前健康档案年龄为 {age} 岁，根据相关规定，该年龄段单次消费金额不得超过 50 元。"
+                )
+            if age < 18 and amount_float > 100:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"你当前健康档案年龄为 {age} 岁，根据相关规定，该年龄段单次消费金额不得超过 100 元。"
+                )
         duration_months = int(plan.get("duration_months") or 1)
         order_no = _generate_membership_order_no()
         canonical_url = "/v3/pay/transactions/jsapi"
