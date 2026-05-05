@@ -1685,6 +1685,9 @@ SHARE_POSTER_REWARD_CREDITS = 1
 
 LEGACY_PRECISION_ENABLED_PLAN_CODES = {"pro_monthly"}
 LEGACY_MEMBERSHIP_PLAN_CODES = {"pro_monthly"}
+MANUAL_MEMBERSHIP_UPGRADE_USER_IDS = {
+    "cafa4614-9453-4eb0-bf60-51f442ce0f4a",  # 倒数第二位用户：人工升级到标准版 + 200/日
+}
 
 
 def _get_food_analysis_credit_cost(execution_mode: Optional[str]) -> int:
@@ -6203,9 +6206,14 @@ async def _reconcile_membership_from_latest_paid_order(
 
     paid_plan_code = str(latest_paid.get("plan_code") or "")
     existing_plan_code = str((membership or {}).get("current_plan_code") or "")
+    manual_upgrade_allowed = user_id in MANUAL_MEMBERSHIP_UPGRADE_USER_IDS
     paid_tier_order = _get_membership_tier_order(_get_membership_tier_from_plan_code(paid_plan_code))
     existing_tier_order = _get_membership_tier_order(_get_membership_tier_from_plan_code(existing_plan_code))
-    effective_plan_code = existing_plan_code if existing_tier_order > paid_tier_order else paid_plan_code
+    effective_plan_code = (
+        existing_plan_code
+        if manual_upgrade_allowed and existing_tier_order > paid_tier_order
+        else paid_plan_code
+    )
 
     plan_daily_credits = 0
     plan = await get_membership_plan_by_code(paid_plan_code)
@@ -6216,18 +6224,21 @@ async def _reconcile_membership_from_latest_paid_order(
         plan_daily_credits *= int(early_user_meta.get("early_user_paid_bonus_multiplier") or 1)
 
     effective_plan_daily_credits = plan_daily_credits
-    if effective_plan_code and effective_plan_code != paid_plan_code:
+    if manual_upgrade_allowed and effective_plan_code and effective_plan_code != paid_plan_code:
         effective_plan = await get_membership_plan_by_code(effective_plan_code)
         effective_plan_daily_credits = int((effective_plan or {}).get("daily_credits") or 0)
         if bool(early_user_meta.get("early_user_paid_bonus_eligible")) and effective_plan_daily_credits > 0:
             effective_plan_daily_credits *= int(early_user_meta.get("early_user_paid_bonus_multiplier") or 1)
 
     existing_daily_credits = int((membership or {}).get("daily_credits") or 0)
-    effective_daily_credits = max(
-        existing_daily_credits,
-        int(plan_daily_credits or 0),
-        int(effective_plan_daily_credits or 0),
-    )
+    if manual_upgrade_allowed:
+        effective_daily_credits = max(
+            existing_daily_credits,
+            int(plan_daily_credits or 0),
+            int(effective_plan_daily_credits or 0),
+        )
+    else:
+        effective_daily_credits = int(plan_daily_credits or 0)
 
     expected_membership = {
         "current_plan_code": effective_plan_code,
@@ -6253,7 +6264,7 @@ async def _reconcile_membership_from_latest_paid_order(
         not _datetimes_match(membership_period_start, paid_at),
         not _datetimes_match(membership_expires_at, expected_expires_at),
         not _datetimes_match(membership_last_paid_at, paid_at),
-        int(membership.get("daily_credits") or 0) < int(effective_daily_credits or 0),
+        int(membership.get("daily_credits") or 0) != int(effective_daily_credits or 0),
     ))
     if not needs_repair:
         return membership

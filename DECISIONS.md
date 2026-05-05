@@ -4,11 +4,10 @@
   - If `user_pro_memberships.current_plan_code / status / expires_at / daily_credits` drifts from the latest paid membership order, backend `/api/membership/me` should auto-reconcile it before returning data.
   - Non-membership orders such as `points_recharge` must not participate in membership-plan reconciliation.
   - Preserved manual exceptions remain explicit (`锦恢`, `小马哥`) because they are developer accounts; other active memberships without any real paid membership order should be treated as data errors to clean up instead of as display truth.
-- `2026-05-05`: Membership reconciliation treats the latest paid order as a lower bound, not a cap, for manual service upgrades:
-  - Payment truth still repairs paid period fields: status, first/current period timestamps, expiry, and last paid time.
-  - If `user_pro_memberships.current_plan_code` has been manually upgraded to a higher tier than the latest paid order, keep the higher tier so features such as precision mode unlock correctly.
-  - If `user_pro_memberships.daily_credits` has been manually boosted above the paid/effective plan default, keep the boosted value.
-  - Values below the paid/effective plan default should still be repaired upward.
+- `2026-05-05`: Membership reconciliation should keep paid-order truth by default; manual service upgrades are allowed only for an explicit whitelist:
+  - For normal users, `/api/membership/me` should repair `current_plan_code`, status, period timestamps, expiry, last paid time, and `daily_credits` back to the latest real paid membership order.
+  - Only users in `MANUAL_MEMBERSHIP_UPGRADE_USER_IDS` may keep a manually higher `current_plan_code` and manually boosted `daily_credits`.
+  - Current whitelist includes `cafa4614-9453-4eb0-bf60-51f442ce0f4a`（倒数第二位用户）, upgraded to `standard_monthly` with `daily_credits=200`.
   - `backend/scripts/reconcile_membership_truth.py` must follow the same rule as `/api/membership/me`.
 
 - `2026-05-02`: Invite rewards now use a higher-quality qualification rule:
