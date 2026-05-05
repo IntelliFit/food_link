@@ -1,5 +1,120 @@
 # 当前任务
 
+## 状态：进行中 - Go backend 初始化与 PRD 驱动迁移底座
+
+- 2026-05-05 update:
+  - 已在 `backend/` 下建立新的 Go 后端初始化底座，方向为：
+    - 以 `docs/backend-api-prd/` 为第一真相
+    - 以 `.kimi/skills/ddd-go-backend` 为项目结构和基础设施参考
+    - 以 `backend_bak/` 作为旧 Python 逻辑/SQL/边界行为补源
+  - 当前已完成：
+    - Go module 初始化：`backend/go.mod`
+    - DDD / infra 基础目录：`cmd/`、`internal/`、`pkg/`、`migrations/`、`docs/`
+    - 配置层：
+      - `pkg/config` 支持 `config.yaml` + `.env` + 旧 33 个环境变量键名绑定
+      - 已复制 `backend_bak/.env` 到 `backend/.env`
+      - 已新增 `backend/.env.example`
+    - 数据库层：
+      - `pkg/database` 已可连接 PostgreSQL、执行 `Ping()`、做 schema readiness 检查
+    - 鉴权层：
+      - 已落地 JWT 签发/解析
+      - 已支持 `jwt_required` / `jwt_optional` / `test_backend_cookie` 三类中间件
+    - 路由层：
+      - 新服务会读取 `backend/docs/backend-api-prd/ROUTE_MAP.md`
+      - 自动注册全量 PRD 路由为“兼容占位 handler”
+      - 当前 route map 解析测试验证数量为 `143`（138 API + 1 WS + 4 non-api）
+    - 已真实实现的兼容链路：
+      - `POST /api/login`
+      - `GET /api`
+      - `GET /api/health`
+      - `GET /map-picker`
+      - `GET /test-backend`
+      - `GET /test-backend/login`
+      - `GET /ws/stats/insight`（当前为 websocket 占位响应）
+      - `GET /api/user/profile`
+      - `GET /api/home/dashboard`
+      - `GET /api/food-record/{record_id}/poster-calorie-compare`
+      - `DELETE /api/community/feed/{record_id}/comments/{comment_id}`
+    - 档案迁移：
+      - 已复制 `docs/backend-api-prd/` 到 `backend/docs/backend-api-prd/`
+      - 已归档旧 SQL 到：
+        - `backend/migrations/archive/database/`
+        - `backend/migrations/archive/sql/`
+      - 已新增 `backend/migrations/MANIFEST.md`
+    - 验证：
+      - `cd backend && GOSUMDB=off GOPROXY=https://goproxy.cn,direct go test ./...` 通过
+  - 重要事实：
+    - 当前 Git 工作树里，`backend/` 原先仍是被跟踪的旧 Python 后端路径
+    - 本次改动等价于“用新的 Go backend 替换 `backend/` 路径”
+    - 旧 Python 后端源代码当前仍完整保存在 `backend_bak/`
+  - Remaining work:
+    - 绝大多数 PRD 路由当前仍为已注册但未迁移的兼容占位，需要继续按业务域补真实 service/repo/handler
+    - worker / async task runtime 目前仅完成入口骨架，尚未把旧任务链路迁完
+    - 微信支付回调、位置检索、OCR、会员、社区、公共食物库等复杂域尚未落成真实逻辑
+  - Progress snapshot:
+    - 已将当前 PRD 对账结果沉淀到：
+      - `docs/go-backend-migration-status.md`
+    - 文档内容包括：
+      - 按模块统计 PRD 路由总数
+      - 当前已真实迁移数量
+      - 已实现接口清单
+      - 当前主要风险与建议迁移顺序
+
+
+## 状态：进行中 - 新分支初始化 Go 后端重构准备
+
+- 2026-05-05 update:
+  - User要求在当前新分支中为后端跨语言重构做准备：
+    - 旧 Python 后端后续将移动到 `backend_bak/`
+    - 计划基于既有重构文档初始化新的 Go `backend/`
+  - 本次已先完成 skill 安装准备工作：
+    - 新增项目内 skill 目录：`.kimi/skills/ddd-go-backend/`
+    - 从 `https://raw.githubusercontent.com/LSTM-Kirigaya/jinhui-skills/main/skills/ddd-go-backend/SKILL.md` 对应仓库内容安装 `ddd-go-backend`
+    - 已连同 `SKILL.md` 内部相对引用的文档资源一并落地，包括：
+      - `project-structure/PROJECT_STRUCTURE.md`
+      - `config/CONFIG.md`
+      - `database/DATABASE.md`
+      - `storage/STORAGE.md`
+      - `auth/AUTH.md`
+      - `observability/OBSERVABILITY.md`
+      - `architecture/ARCHITECTURE.md`
+      - `middleware/MIDDLEWARE.md`
+      - `api/API.md`
+      - `.skill-examples.json`
+    - 已校验当前 markdown 相对链接均可在本地解析成功
+  - 同步动作：
+    - 已按用户要求把 `ddd-go-backend` 入口写入 `AGENTS.md`
+  - Next step:
+    - 等待继续执行 `backend -> backend_bak` 迁移与新的 Go `backend/` 初始化
+
+## 状态：完成 - 后端接口实现 PRD 文档集合生成
+
+- 2026-05-05 update:
+  - 为后端跨语言重写准备了一套按子路由层次组织的接口实现 Markdown 集合。
+  - 产物路径：
+    - `docs/backend-api-prd/`
+  - 主要产物：
+    - `docs/backend-api-prd/ROUTE_MAP.md`
+    - `docs/backend-api-prd/COVERAGE_MATRIX.md`
+    - `docs/backend-api-prd/_shared/credits-system.md`
+    - `docs/backend-api-prd/_shared/health-report-ocr.md`
+    - `docs/backend-api-prd/_shared/*`
+    - `docs/backend-api-prd/api/*`
+    - `docs/backend-api-prd/internal/test-backend/*`
+    - `docs/backend-api-prd/non-api/*`
+  - 当前文档集合特性：
+    - 以后端真实实现为准，从 `backend/main.py`、`backend/database.py`、`backend/worker.py`、`backend/middleware.py` 抽取事实
+    - 结合小程序请求面进行交叉校对，前端请求面以 `src/utils/api.ts` 为主，并补充页面内直接 `Taro.request(...)`
+    - 每个路由文档都包含统一 front matter 和固定章节：Purpose、Route Matrix、Request/Response、Main Flow、Dependencies、Data Reads/Writes、Error Cases、Frontend Usage、Migration Notes、Open Questions / Drift
+  - 已显式记录的前后端漂移 gap：
+    - `GET /api/food-record/{record_id}/poster-calorie-compare`
+    - `DELETE /api/community/feed/{record_id}/comments/{comment_id}`
+  - 远程分支同步补充：
+    - 检查到 `origin/dev` 上健康档案 OCR worker 有进一步收口倾向；已在迁移文档中把该 branch drift 标注到健康档案识别相关文档里。
+    - 积分系统已额外补成独立专题文档，便于后续跨语言重写时集中查看。
+  - 备注：
+    - 文档数量当前为 133 个，因为多方法同路径和部分内部接口按专题文档聚合，而不是一条路由一个文件。
+
 ## 状态：完成 - “我的”页版本号更新为 2.2.0
 
 - 2026-05-05 update:

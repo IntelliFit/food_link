@@ -1,0 +1,53 @@
+app:
+  name: "food_link-backend"
+  env: "development"
+  host: "0.0.0.0"
+  port: 3010
+
+database:
+  driver: "postgres"
+  host: "127.0.0.1"
+  port: 5432
+  name: "food-link"
+  user: "app_user"
+  password: ""
+  sslmode: "disable"
+  schema: "public"
+
+jwt:
+  secret: "change-me"
+  access_token_ttl_seconds: 3153600000
+  refresh_token_ttl_seconds: 3153600000
+
+otel:
+  enabled: false
+  collector_endpoint: "localhost:4317"
+  insecure: true
+  host_name: "food-link-local"
+
+storage:
+  cos_region: "ap-beijing"
+  food_images_bucket: ""
+  health_reports_bucket: ""
+  user_avatars_bucket: ""
+  icon_bucket: ""
+  food_images_cdn_base_url: ""
+  user_avatars_cdn_base_url: ""
+  icon_cdn_base_url: ""
+
+external:
+  llm_provider: ""
+  tianditu_tk: ""
+  ofoxai_api_key: ""
+  dashscope_api_key: ""
+  appid: ""
+  secret: ""
+
+wechat_pay:
+  mchid: ""
+  notify_url: ""
+  serial_no: ""
+  api_v3_key: ""
+  private_key: ""
+  public_key: ""
+

@@ -3,7 +3,7 @@
 ## 📋 部署前检查
 
 ### 环境准备
-- [ ] 确认 Supabase 数据库连接正常
+- [ ] 确认 PostgreSQL 数据库连接正常
 - [ ] 确认 `DASHSCOPE_API_KEY` 已配置
 - [ ] 确认后端服务运行正常
 - [ ] 备份当前数据库（可选但推荐）
@@ -16,8 +16,8 @@
 ## 🗄️ 数据库迁移
 
 ### 步骤 1: 执行迁移脚本
-- [ ] 登录 Supabase Dashboard
-- [ ] 进入 SQL Editor
+- [ ] 打开 PostgreSQL 客户端/SQL 工具
+- [ ] 进入查询窗口
 - [ ] 复制 `backend/database/migrate_analysis_tasks_for_text.sql` 内容
 - [ ] 执行 SQL 脚本
 - [ ] 验证执行结果（无错误）

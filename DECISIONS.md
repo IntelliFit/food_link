@@ -1,5 +1,41 @@
 # DECISIONS
 
+- `2026-05-05`: 新 Go 后端第一阶段迁移底座采用“全量路由占位 + 核心链路优先真实实现”的落地方式：
+  - `backend/docs/backend-api-prd/ROUTE_MAP.md` 作为全量路由注册源
+  - 所有 PRD 路由先在 Go 服务中完成路径/方法/鉴权层面的注册覆盖
+  - 未迁移完成的路由统一返回明确的“已注册但尚未迁移”兼容占位响应
+  - 已知前端 gap 路由优先真实补齐：
+    - `GET /api/food-record/{record_id}/poster-calorie-compare`
+    - `DELETE /api/community/feed/{record_id}/comments/{comment_id}`
+
+- `2026-05-05`: 当前分支中的 `backend/` 已被视为新 Go 后端目标路径：
+  - 旧 Python 后端历史代码以 `backend_bak/` 为保留基准
+  - `backend/` 下原被 Git 跟踪的 Python 文件允许在本次迁移中被新的 Go 目录结构取代
+  - SQL 与 PRD 文档需要在新 `backend/` 内另行归档，避免后续会话只依赖根目录版本
+
+- `2026-05-05`: 为当前分支的 Go 后端重构准备，项目内新增第一优先级本地 skill：
+  - 路径：`.kimi/skills/ddd-go-backend/SKILL.md`
+  - 来源仓库：`LSTM-Kirigaya/jinhui-skills`
+  - 安装口径：不仅保存 `SKILL.md`，还要把其相对引用的配套文档递归落地到同一 skill 目录，确保离线可读和后续会话可复用
+  - `AGENTS.md` 需显式登记该 skill，便于后续新会话优先使用
+
+- `2026-05-05`: 为后端跨语言重写准备的接口实现文档集合固定放在 `docs/backend-api-prd/`。该集合不是 Swagger 导出副本，而是迁移蓝图：既记录路由/鉴权/请求响应，也记录数据库依赖、worker/异步链路、外部依赖、前端调用面和已知 drift。
+
+- `2026-05-05`: 后端接口 PRD 文档的覆盖范围按“全量后端 surface”执行，不只包含小程序主业务 API，也包含测试后台 API、WebSocket、后端直出页面和运维/回调类接口；但文档中必须显式区分 `miniapp-used`、`backend-only`、`internal-only`、`frontend-missing-backend`。
+
+- `2026-05-05`: 后端迁移文档中，积分系统与健康档案报告识别链路需要保留独立专题文档，当前固定为：
+  - `docs/backend-api-prd/_shared/credits-system.md`
+  - `docs/backend-api-prd/_shared/health-report-ocr.md`
+
+- `2026-05-05`: 当前确认需要在重写阶段特别关注的两个前后端缺口为：
+  - `GET /api/food-record/{record_id}/poster-calorie-compare`
+  - `DELETE /api/community/feed/{record_id}/comments/{comment_id}`
+
+- `2026-05-05`: 健康档案 OCR 目前属于 branch drift 区域：
+  - 本地 `main` 仍体现较宽的多图 / provider-switch worker 路径
+  - `origin/dev` 已出现更收口的单图 DashScope 导向实现
+  - 正式重写前必须先选定以哪条链路为准
+
 - `2026-05-05`: 「我的」页底部版本号继续以 `package.json` 为唯一版本源：
   - `src/pages/profile/index.tsx` 通过构建常量 `__APP_VERSION__` 展示版本号。
   - `config/index.ts` 从根目录 `package.json` 读取 `version` 并注入 `__APP_VERSION__`。

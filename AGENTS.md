@@ -35,6 +35,14 @@
   - 调试时必须按照依赖层级逐层排查：数据依赖 → 环境依赖 → 版本依赖 → 配置依赖 → 状态依赖 → 网络依赖 → 权限依赖 → 缓存依赖 → 构建依赖 → 运行时依赖
   - 详细规范请参考 `.agents/skills/jinhui-stack-debug/SKILL.md`
 
+## 可用 SKILL（第一优先级）
+- Build production-ready Go backend services following DDD-layered architecture.
+  Covers project scaffolding, config (Viper), database (GORM + MySQL/PostgreSQL),
+  object storage (S3/MinIO), OAuth2 + JWT auth, OpenTelemetry tracing + Jaeger
+  visualization, Zap logging, middleware patterns, and API routing. Use when
+  creating a new Go backend service or adding features to an existing one that
+  follows this architecture.：[ddd-go-backend](.kimi/skills/ddd-go-backend/SKILL.md)
+
 ## 持久化状态
 
 - 不要仅依赖对话记录来维持项目连续性。
