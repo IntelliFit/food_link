@@ -1,0 +1,158 @@
+        # Coverage Matrix
+
+        This matrix cross-checks the backend surface against the mini program request surface gathered from `src/utils/api.ts` and direct `Taro.request(...)` callers.
+
+        ## Backend Surfaces
+
+        | Method | Path | Backend Exists | Frontend Usage | Mini Program Callers | Auth | Async Task | Internal Only | Doc |
+        | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+        | `GET` | `/api` | yes | `backend-only` | - | `public` | no | no | [non-api/api-root.md](non-api/api-root.md) |
+| `POST` | `/api/analyze-compare-engines` | yes | `backend-only` | - | `jwt_optional` | no | no | [api/analyze/compare-engines.md](api/analyze/compare-engines.md) |
+| `POST` | `/api/analyze/tasks/cleanup-timeout` | yes | `backend-only` | - | `public` | no | no | [api/analyze/tasks/cleanup-timeout.md](api/analyze/tasks/cleanup-timeout.md) |
+| `GET` | `/api/health` | yes | `backend-only` | - | `public` | no | no | [non-api/health.md](non-api/health.md) |
+| `POST` | `/api/payment/wechat/notify/membership` | yes | `backend-only` | - | `public` | no | no | [api/payment/wechat-notify-membership.md](api/payment/wechat-notify-membership.md) |
+| `GET` | `/map-picker` | yes | `backend-only` | - | `public` | no | no | [non-api/map-picker.md](non-api/map-picker.md) |
+| `GET` | `/test-backend` | yes | `backend-only` | - | `public` | no | no | [internal/test-backend/html-pages.md](internal/test-backend/html-pages.md) |
+| `GET` | `/test-backend/login` | yes | `backend-only` | - | `public` | no | no | [internal/test-backend/html-pages.md](internal/test-backend/html-pages.md) |
+| `WEBSOCKET` | `/ws/stats/insight` | yes | `backend-only` | - | `public` | no | no | [api/stats/websocket-insight.md](api/stats/websocket-insight.md) |
+| `GET` | `/api/prompts` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `POST` | `/api/prompts` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `GET` | `/api/prompts/active/{model_type}` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `DELETE` | `/api/prompts/{prompt_id}` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `GET` | `/api/prompts/{prompt_id}` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `PUT` | `/api/prompts/{prompt_id}` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `POST` | `/api/prompts/{prompt_id}/activate` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `GET` | `/api/prompts/{prompt_id}/history` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/prompts.md](internal/test-backend/prompts.md) |
+| `POST` | `/api/test-backend/analyze` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/analyze.md](internal/test-backend/analyze.md) |
+| `POST` | `/api/test-backend/batch/prepare` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/batches.md](internal/test-backend/batches.md) |
+| `POST` | `/api/test-backend/batch/start` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/batches.md](internal/test-backend/batches.md) |
+| `GET` | `/api/test-backend/batch/{batch_id}` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/batches.md](internal/test-backend/batches.md) |
+| `GET` | `/api/test-backend/datasets` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/datasets.md](internal/test-backend/datasets.md) |
+| `POST` | `/api/test-backend/datasets/import-local` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/datasets.md](internal/test-backend/datasets.md) |
+| `POST` | `/api/test-backend/datasets/{dataset_id}/prepare` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/datasets.md](internal/test-backend/datasets.md) |
+| `POST` | `/api/test-backend/login` | yes | `internal-only` | - | `public` | no | yes | [internal/test-backend/auth.md](internal/test-backend/auth.md) |
+| `POST` | `/api/test-backend/logout` | yes | `internal-only` | - | `public` | no | yes | [internal/test-backend/auth.md](internal/test-backend/auth.md) |
+| `POST` | `/api/test/batch-upload` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/legacy-test-api.md](internal/test-backend/legacy-test-api.md) |
+| `POST` | `/api/test/single-image` | yes | `internal-only` | - | `test_backend_cookie` | no | yes | [internal/test-backend/legacy-test-api.md](internal/test-backend/legacy-test-api.md) |
+| `POST` | `/api/analyze` | yes | `miniapp-used` | src/utils/api.ts:analyzeFoodImage | `jwt_optional` | no | no | [api/analyze/index.md](api/analyze/index.md) |
+| `POST` | `/api/analyze-compare` | yes | `miniapp-used` | src/utils/api.ts:analyzeFoodImageCompare | `jwt_optional` | no | no | [api/analyze/compare.md](api/analyze/compare.md) |
+| `POST` | `/api/analyze-text` | yes | `miniapp-used` | src/utils/api.ts:analyzeFoodText | `jwt_optional` | no | no | [api/analyze-text/index.md](api/analyze-text/index.md) |
+| `POST` | `/api/analyze-text/submit` | yes | `miniapp-used` | src/utils/api.ts:submitTextAnalyzeTask | `jwt_required` | yes | no | [api/analyze-text/submit.md](api/analyze-text/submit.md) |
+| `POST` | `/api/analyze/batch` | yes | `miniapp-used` | src/utils/api.ts:submitAnalyzeBatch | `jwt_required` | yes | no | [api/analyze/batch.md](api/analyze/batch.md) |
+| `POST` | `/api/analyze/submit` | yes | `miniapp-used` | src/utils/api.ts:submitAnalyzeTask | `jwt_required` | yes | no | [api/analyze/submit.md](api/analyze/submit.md) |
+| `GET` | `/api/analyze/tasks` | yes | `miniapp-used` | src/utils/api.ts:listAnalyzeTasks | `jwt_required` | yes | no | [api/analyze/tasks/index.md](api/analyze/tasks/index.md) |
+| `GET` | `/api/analyze/tasks/count` | yes | `miniapp-used` | src/utils/api.ts:getAnalyzeTaskCount | `jwt_required` | yes | no | [api/analyze/tasks/count.md](api/analyze/tasks/count.md) |
+| `GET` | `/api/analyze/tasks/status-count` | yes | `miniapp-used` | src/utils/api.ts:getAnalyzeTaskStatusCount | `jwt_required` | yes | no | [api/analyze/tasks/status-count.md](api/analyze/tasks/status-count.md) |
+| `DELETE` | `/api/analyze/tasks/{task_id}` | yes | `miniapp-used` | src/utils/api.ts:deleteAnalysisTask | `jwt_required` | no | no | [api/analyze/tasks/[task_id]/index.md](api/analyze/tasks/[task_id]/index.md) |
+| `GET` | `/api/analyze/tasks/{task_id}` | yes | `miniapp-used` | src/utils/api.ts:getAnalyzeTask | `jwt_required` | no | no | [api/analyze/tasks/[task_id]/index.md](api/analyze/tasks/[task_id]/index.md) |
+| `PATCH` | `/api/analyze/tasks/{task_id}/result` | yes | `miniapp-used` | src/utils/api.ts:updateAnalysisTaskResult | `jwt_required` | no | no | [api/analyze/tasks/[task_id]/result.md](api/analyze/tasks/[task_id]/result.md) |
+| `GET` | `/api/body-metrics/summary` | yes | `miniapp-used` | src/utils/api.ts:getBodyMetricsSummary | `jwt_required` | no | no | [api/body-metrics/summary.md](api/body-metrics/summary.md) |
+| `POST` | `/api/body-metrics/sync-local` | yes | `miniapp-used` | src/utils/api.ts:syncLocalBodyMetrics | `jwt_required` | no | no | [api/body-metrics/sync-local.md](api/body-metrics/sync-local.md) |
+| `POST` | `/api/body-metrics/water` | yes | `miniapp-used` | src/utils/api.ts:addBodyWaterLog | `jwt_required` | no | no | [api/body-metrics/water.md](api/body-metrics/water.md) |
+| `POST` | `/api/body-metrics/water/reset` | yes | `miniapp-used` | src/utils/api.ts:resetBodyWaterLogs | `jwt_required` | no | no | [api/body-metrics/water-reset.md](api/body-metrics/water-reset.md) |
+| `POST` | `/api/body-metrics/weight` | yes | `miniapp-used` | src/utils/api.ts:saveBodyWeightRecord | `jwt_required` | no | no | [api/body-metrics/weight.md](api/body-metrics/weight.md) |
+| `GET` | `/api/community/checkin-leaderboard` | yes | `miniapp-used` | src/utils/api.ts:communityGetCheckinLeaderboard | `jwt_required` | no | no | [api/community/checkin-leaderboard.md](api/community/checkin-leaderboard.md) |
+| `GET` | `/api/community/comment-tasks` | yes | `miniapp-used` | src/utils/api.ts:communityGetCommentTasks | `jwt_required` | no | no | [api/community/comment-tasks.md](api/community/comment-tasks.md) |
+| `GET` | `/api/community/feed` | yes | `miniapp-used` | src/utils/api.ts:communityGetFeed | `jwt_required` | no | no | [api/community/feed.md](api/community/feed.md) |
+| `GET` | `/api/community/feed/{record_id}/comments` | yes | `miniapp-used` | src/utils/api.ts:communityGetComments | `jwt_required` | no | no | [api/community/feed/[record_id]-comments.md](api/community/feed/[record_id]-comments.md) |
+| `POST` | `/api/community/feed/{record_id}/comments` | yes | `miniapp-used` | src/utils/api.ts:communityPostComment | `jwt_required` | no | no | [api/community/feed/[record_id]-comments.md](api/community/feed/[record_id]-comments.md) |
+| `GET` | `/api/community/feed/{record_id}/context` | yes | `miniapp-used` | src/utils/api.ts:communityGetFeedContext | `jwt_required` | no | no | [api/community/feed/[record_id]-context.md](api/community/feed/[record_id]-context.md) |
+| `POST` | `/api/community/feed/{record_id}/hide` | yes | `miniapp-used` | src/utils/api.ts:communityHideFeed | `jwt_required` | no | no | [api/community/feed/[record_id]-hide.md](api/community/feed/[record_id]-hide.md) |
+| `DELETE` | `/api/community/feed/{record_id}/like` | yes | `miniapp-used` | src/utils/api.ts:communityUnlike | `jwt_required` | no | no | [api/community/feed/[record_id]-like.md](api/community/feed/[record_id]-like.md) |
+| `POST` | `/api/community/feed/{record_id}/like` | yes | `miniapp-used` | src/utils/api.ts:communityLike | `jwt_required` | no | no | [api/community/feed/[record_id]-like.md](api/community/feed/[record_id]-like.md) |
+| `GET` | `/api/community/notifications` | yes | `miniapp-used` | src/utils/api.ts:communityGetNotifications | `jwt_required` | no | no | [api/community/notifications.md](api/community/notifications.md) |
+| `POST` | `/api/community/notifications/read` | yes | `miniapp-used` | src/utils/api.ts:communityMarkNotificationsRead | `jwt_required` | no | no | [api/community/notifications.md](api/community/notifications.md) |
+| `GET` | `/api/community/public-feed` | yes | `miniapp-used` | src/utils/api.ts:communityGetPublicFeed | `public` | no | no | [api/community/public-feed.md](api/community/public-feed.md) |
+| `POST` | `/api/critical-samples` | yes | `miniapp-used` | src/utils/api.ts:saveCriticalSamples | `jwt_required` | no | no | [api/food-record/critical-samples.md](api/food-record/critical-samples.md) |
+| `GET` | `/api/exercise-calories/daily` | yes | `miniapp-used` | src/utils/api.ts:getExerciseDailyCalories | `jwt_required` | no | no | [api/exercise-calories/daily.md](api/exercise-calories/daily.md) |
+| `GET` | `/api/exercise-logs` | yes | `miniapp-used` | src/utils/api.ts:getExerciseLogs | `jwt_required` | no | no | [api/exercise-logs/index.md](api/exercise-logs/index.md) |
+| `POST` | `/api/exercise-logs` | yes | `miniapp-used` | src/utils/api.ts:createExerciseLog | `jwt_required` | yes | no | [api/exercise-logs/index.md](api/exercise-logs/index.md) |
+| `POST` | `/api/exercise-logs/estimate-calories` | yes | `miniapp-used` | src/utils/api.ts:estimateExerciseCalories | `jwt_required` | no | no | [api/exercise-logs/estimate-calories.md](api/exercise-logs/estimate-calories.md) |
+| `DELETE` | `/api/exercise-logs/{log_id}` | yes | `miniapp-used` | src/utils/api.ts:deleteExerciseLog | `jwt_required` | no | no | [api/exercise-logs/[log_id].md](api/exercise-logs/[log_id].md) |
+| `GET` | `/api/expiry/dashboard` | yes | `miniapp-used` | src/utils/api.ts:getFoodExpiryDashboard | `jwt_required` | no | no | [api/expiry/dashboard.md](api/expiry/dashboard.md) |
+| `GET` | `/api/expiry/items` | yes | `miniapp-used` | src/utils/api.ts:listManagedFoodExpiryItems | `jwt_required` | no | no | [api/expiry/items/index.md](api/expiry/items/index.md) |
+| `POST` | `/api/expiry/items` | yes | `miniapp-used` | src/utils/api.ts:createManagedFoodExpiryItem | `jwt_required` | no | no | [api/expiry/items/index.md](api/expiry/items/index.md) |
+| `GET` | `/api/expiry/items/{item_id}` | yes | `miniapp-used` | src/utils/api.ts:getManagedFoodExpiryItem | `jwt_required` | no | no | [api/expiry/items/[item_id].md](api/expiry/items/[item_id].md) |
+| `PUT` | `/api/expiry/items/{item_id}` | yes | `miniapp-used` | src/utils/api.ts:updateManagedFoodExpiryItem | `jwt_required` | no | no | [api/expiry/items/[item_id].md](api/expiry/items/[item_id].md) |
+| `POST` | `/api/expiry/items/{item_id}/status` | yes | `miniapp-used` | src/utils/api.ts:updateManagedFoodExpiryStatus | `jwt_required` | no | no | [api/expiry/items/[item_id]-status.md](api/expiry/items/[item_id]-status.md) |
+| `POST` | `/api/expiry/items/{item_id}/subscribe` | yes | `miniapp-used` | src/utils/api.ts:subscribeManagedFoodExpiryItem | `jwt_required` | no | no | [api/expiry/items/[item_id]-subscribe.md](api/expiry/items/[item_id]-subscribe.md) |
+| `POST` | `/api/expiry/recognize` | yes | `miniapp-used` | src/utils/api.ts:recognizeManagedFoodExpiryItems | `jwt_required` | yes | no | [api/expiry/recognize.md](api/expiry/recognize.md) |
+| `GET` | `/api/food-nutrition/search` | yes | `miniapp-used` | src/utils/api.ts:searchFoodNutritionCandidates | `jwt_required` | no | no | [api/food-nutrition/search.md](api/food-nutrition/search.md) |
+| `GET` | `/api/food-nutrition/unresolved/top` | yes | `miniapp-used` | src/utils/api.ts:fetchTopUnresolvedFoods | `jwt_required` | no | no | [api/food-nutrition/unresolved-top.md](api/food-nutrition/unresolved-top.md) |
+| `GET` | `/api/food-record/list` | yes | `miniapp-used` | src/utils/api.ts:getFoodRecordList | `jwt_required` | yes | no | [api/food-record/list.md](api/food-record/list.md) |
+| `POST` | `/api/food-record/save` | yes | `miniapp-used` | src/utils/api.ts:saveFoodRecord | `jwt_required` | no | no | [api/food-record/save.md](api/food-record/save.md) |
+| `GET` | `/api/food-record/share/{record_id}` | yes | `miniapp-used` | src/utils/api.ts:getSharedFoodRecord | `public` | no | no | [api/food-record/share/[record_id].md](api/food-record/share/[record_id].md) |
+| `DELETE` | `/api/food-record/{record_id}` | yes | `miniapp-used` | src/utils/api.ts:deleteFoodRecord | `jwt_required` | no | no | [api/food-record/[record_id].md](api/food-record/[record_id].md) |
+| `GET` | `/api/food-record/{record_id}` | yes | `miniapp-used` | src/utils/api.ts:getFoodRecordById | `jwt_required` | no | no | [api/food-record/[record_id].md](api/food-record/[record_id].md) |
+| `PUT` | `/api/food-record/{record_id}` | yes | `miniapp-used` | src/utils/api.ts:updateFoodRecord | `jwt_required` | no | no | [api/food-record/[record_id].md](api/food-record/[record_id].md) |
+| `POST` | `/api/friend/cleanup-duplicates` | yes | `miniapp-used` | src/utils/api.ts:friendCleanupDuplicates | `jwt_required` | no | no | [api/friend/cleanup-duplicates.md](api/friend/cleanup-duplicates.md) |
+| `GET` | `/api/friend/count` | yes | `miniapp-used` | src/utils/api.ts:getFriendCount | `jwt_required` | no | no | [api/friend/count.md](api/friend/count.md) |
+| `POST` | `/api/friend/invite/accept` | yes | `miniapp-used` | src/utils/api.ts:acceptFriendInvite | `jwt_required` | no | no | [api/friend/invite/accept.md](api/friend/invite/accept.md) |
+| `GET` | `/api/friend/invite/profile-by-code` | yes | `miniapp-used` | src/utils/api.ts:getFriendInviteProfileByCode | `public` | no | no | [api/friend/invite/profile-by-code.md](api/friend/invite/profile-by-code.md) |
+| `GET` | `/api/friend/invite/profile/{user_id}` | yes | `miniapp-used` | src/utils/api.ts:getFriendInviteProfile | `public` | no | no | [api/friend/invite/profile-[user_id].md](api/friend/invite/profile-[user_id].md) |
+| `GET` | `/api/friend/invite/resolve` | yes | `miniapp-used` | src/utils/api.ts:resolveFriendInvite | `jwt_required` | no | no | [api/friend/invite/resolve.md](api/friend/invite/resolve.md) |
+| `GET` | `/api/friend/list` | yes | `miniapp-used` | src/utils/api.ts:friendGetList | `jwt_required` | no | no | [api/friend/list.md](api/friend/list.md) |
+| `POST` | `/api/friend/request` | yes | `miniapp-used` | src/utils/api.ts:friendSendRequest | `jwt_required` | no | no | [api/friend/request.md](api/friend/request.md) |
+| `DELETE` | `/api/friend/request/{request_id}` | yes | `miniapp-used` | src/utils/api.ts:friendCancelSentRequest | `jwt_required` | no | no | [api/friend/request/[request_id].md](api/friend/request/[request_id].md) |
+| `POST` | `/api/friend/request/{request_id}/respond` | yes | `miniapp-used` | src/utils/api.ts:friendRespondRequest | `jwt_required` | no | no | [api/friend/request/[request_id]-respond.md](api/friend/request/[request_id]-respond.md) |
+| `GET` | `/api/friend/requests` | yes | `miniapp-used` | src/utils/api.ts:friendGetRequests | `jwt_required` | no | no | [api/friend/requests.md](api/friend/requests.md) |
+| `GET` | `/api/friend/requests/all` | yes | `miniapp-used` | src/utils/api.ts:friendGetRequestsOverview | `jwt_required` | no | no | [api/friend/requests-all.md](api/friend/requests-all.md) |
+| `GET` | `/api/friend/search` | yes | `miniapp-used` | src/utils/api.ts:friendSearch | `jwt_required` | no | no | [api/friend/search.md](api/friend/search.md) |
+| `DELETE` | `/api/friend/{friend_id}` | yes | `miniapp-used` | src/utils/api.ts:friendDelete | `jwt_required` | no | no | [api/friend/[friend_id].md](api/friend/[friend_id].md) |
+| `GET` | `/api/home/dashboard` | yes | `miniapp-used` | src/utils/api.ts:getHomeDashboard | `jwt_required` | no | no | [api/home/dashboard.md](api/home/dashboard.md) |
+| `POST` | `/api/location/reverse` | yes | `miniapp-used` | src/packageExtra/pages/location-search/index.tsx:handleMapTap<br>src/utils/api.ts:resolveAnalyzeGeoContext | `public` | no | no | [api/location/reverse.md](api/location/reverse.md) |
+| `POST` | `/api/location/search` | yes | `miniapp-used` | src/packageExtra/pages/location-search/index.tsx:doSearch | `public` | no | no | [api/location/search.md](api/location/search.md) |
+| `POST` | `/api/login` | yes | `miniapp-used` | src/utils/api.ts:login | `public` | no | no | [api/login/index.md](api/login/index.md) |
+| `GET` | `/api/manual-food/browse` | yes | `miniapp-used` | src/utils/api.ts:browseManualFood | `jwt_optional` | no | no | [api/manual-food/browse.md](api/manual-food/browse.md) |
+| `GET` | `/api/manual-food/search` | yes | `miniapp-used` | src/utils/api.ts:searchManualFood | `jwt_optional` | no | no | [api/manual-food/search.md](api/manual-food/search.md) |
+| `GET` | `/api/membership/me` | yes | `miniapp-used` | src/utils/api.ts:getMyMembership | `jwt_required` | no | no | [api/membership/me.md](api/membership/me.md) |
+| `POST` | `/api/membership/pay/create` | yes | `miniapp-used` | src/utils/api.ts:createMembershipPayment | `jwt_required` | no | no | [api/membership/pay-create.md](api/membership/pay-create.md) |
+| `GET` | `/api/membership/plans` | yes | `miniapp-used` | src/utils/api.ts:getMembershipPlans | `public` | no | no | [api/membership/plans.md](api/membership/plans.md) |
+| `POST` | `/api/membership/rewards/share-poster/claim` | yes | `miniapp-used` | src/utils/api.ts:claimSharePosterReward<br>src/utils/api.ts:rid | `jwt_required` | no | no | [api/membership/rewards-share-poster-claim.md](api/membership/rewards-share-poster-claim.md) |
+| `POST` | `/api/precision-sessions/{session_id}/continue` | yes | `miniapp-used` | src/utils/api.ts:continuePrecisionSession | `jwt_required` | yes | no | [api/precision-sessions/[session_id]/continue.md](api/precision-sessions/[session_id]/continue.md) |
+| `GET` | `/api/public-food-library` | yes | `miniapp-used` | src/utils/api.ts:getPublicFoodLibraryList | `jwt_required` | no | no | [api/public-food-library/index.md](api/public-food-library/index.md) |
+| `POST` | `/api/public-food-library` | yes | `miniapp-used` | src/utils/api.ts:createPublicFoodLibraryItem | `jwt_required` | yes | no | [api/public-food-library/index.md](api/public-food-library/index.md) |
+| `GET` | `/api/public-food-library/collections` | yes | `miniapp-used` | src/utils/api.ts:getPublicFoodLibraryCollections | `jwt_required` | no | no | [api/public-food-library/collections.md](api/public-food-library/collections.md) |
+| `POST` | `/api/public-food-library/feedback` | yes | `miniapp-used` | src/utils/api.ts:submitPublicFoodLibraryFeedback | `jwt_required` | no | no | [api/public-food-library/feedback.md](api/public-food-library/feedback.md) |
+| `GET` | `/api/public-food-library/mine` | yes | `miniapp-used` | src/utils/api.ts:getMyPublicFoodLibrary | `jwt_required` | no | no | [api/public-food-library/mine.md](api/public-food-library/mine.md) |
+| `GET` | `/api/public-food-library/{item_id}` | yes | `miniapp-used` | src/utils/api.ts:getPublicFoodLibraryItem | `jwt_required` | no | no | [api/public-food-library/[item_id].md](api/public-food-library/[item_id].md) |
+| `DELETE` | `/api/public-food-library/{item_id}/collect` | yes | `miniapp-used` | src/utils/api.ts:uncollectPublicFoodLibraryItem | `jwt_required` | no | no | [api/public-food-library/[item_id]-collect.md](api/public-food-library/[item_id]-collect.md) |
+| `POST` | `/api/public-food-library/{item_id}/collect` | yes | `miniapp-used` | src/utils/api.ts:collectPublicFoodLibraryItem | `jwt_required` | no | no | [api/public-food-library/[item_id]-collect.md](api/public-food-library/[item_id]-collect.md) |
+| `GET` | `/api/public-food-library/{item_id}/comments` | yes | `miniapp-used` | src/utils/api.ts:getPublicFoodLibraryComments | `jwt_required` | no | no | [api/public-food-library/[item_id]-comments.md](api/public-food-library/[item_id]-comments.md) |
+| `POST` | `/api/public-food-library/{item_id}/comments` | yes | `miniapp-used` | src/utils/api.ts:postPublicFoodLibraryComment | `jwt_required` | no | no | [api/public-food-library/[item_id]-comments.md](api/public-food-library/[item_id]-comments.md) |
+| `DELETE` | `/api/public-food-library/{item_id}/like` | yes | `miniapp-used` | src/utils/api.ts:unlikePublicFoodLibraryItem | `jwt_required` | no | no | [api/public-food-library/[item_id]-like.md](api/public-food-library/[item_id]-like.md) |
+| `POST` | `/api/public-food-library/{item_id}/like` | yes | `miniapp-used` | src/utils/api.ts:likePublicFoodLibraryItem | `jwt_required` | no | no | [api/public-food-library/[item_id]-like.md](api/public-food-library/[item_id]-like.md) |
+| `POST` | `/api/qrcode` | yes | `miniapp-used` | src/utils/api.ts:getUnlimitedQRCode | `public` | no | no | [api/qrcode/index.md](api/qrcode/index.md) |
+| `GET` | `/api/recipes` | yes | `miniapp-used` | src/utils/api.ts:getUserRecipes | `jwt_required` | no | no | [api/recipes/index.md](api/recipes/index.md) |
+| `POST` | `/api/recipes` | yes | `miniapp-used` | src/utils/api.ts:createUserRecipe | `jwt_required` | no | no | [api/recipes/index.md](api/recipes/index.md) |
+| `GET` | `/api/recipes/count` | yes | `miniapp-used` | src/utils/api.ts:getFavoriteCount | `jwt_required` | no | no | [api/recipes/count.md](api/recipes/count.md) |
+| `DELETE` | `/api/recipes/{recipe_id}` | yes | `miniapp-used` | src/utils/api.ts:deleteUserRecipe | `jwt_required` | no | no | [api/recipes/[recipe_id].md](api/recipes/[recipe_id].md) |
+| `GET` | `/api/recipes/{recipe_id}` | yes | `miniapp-used` | src/utils/api.ts:getUserRecipe | `jwt_required` | no | no | [api/recipes/[recipe_id].md](api/recipes/[recipe_id].md) |
+| `PUT` | `/api/recipes/{recipe_id}` | yes | `miniapp-used` | src/utils/api.ts:updateUserRecipe | `jwt_required` | no | no | [api/recipes/[recipe_id].md](api/recipes/[recipe_id].md) |
+| `POST` | `/api/recipes/{recipe_id}/use` | yes | `miniapp-used` | src/utils/api.ts:applyUserRecipe | `jwt_required` | no | no | [api/recipes/[recipe_id]-use.md](api/recipes/[recipe_id]-use.md) |
+| `POST` | `/api/stats/insight/generate` | yes | `miniapp-used` | src/utils/api.ts:generateStatsInsight | `jwt_required` | no | no | [api/stats/insight-generate.md](api/stats/insight-generate.md) |
+| `POST` | `/api/stats/insight/save` | yes | `miniapp-used` | src/utils/api.ts:saveStatsInsight | `jwt_required` | no | no | [api/stats/insight-save.md](api/stats/insight-save.md) |
+| `GET` | `/api/stats/summary` | yes | `miniapp-used` | src/utils/api.ts:getStatsSummary | `jwt_required` | no | no | [api/stats/summary.md](api/stats/summary.md) |
+| `POST` | `/api/upload-analyze-image` | yes | `miniapp-used` | src/utils/api.ts:uploadAnalyzeImage | `public` | no | no | [api/upload-analyze-image/index.md](api/upload-analyze-image/index.md) |
+| `POST` | `/api/upload-analyze-image-file` | yes | `miniapp-used` | src/utils/api.ts:uploadAnalyzeImageFile | `public` | no | no | [api/upload-analyze-image-file/index.md](api/upload-analyze-image-file/index.md) |
+| `POST` | `/api/user/bind-phone` | yes | `miniapp-used` | src/utils/api.ts:bindPhone | `jwt_required` | no | no | [api/user/bind-phone.md](api/user/bind-phone.md) |
+| `GET` | `/api/user/dashboard-targets` | yes | `miniapp-used` | src/utils/api.ts:getDashboardTargets | `jwt_required` | no | no | [api/user/dashboard-targets.md](api/user/dashboard-targets.md) |
+| `PUT` | `/api/user/dashboard-targets` | yes | `miniapp-used` | src/utils/api.ts:updateDashboardTargets | `jwt_required` | no | no | [api/user/dashboard-targets.md](api/user/dashboard-targets.md) |
+| `GET` | `/api/user/health-profile` | yes | `miniapp-used` | src/utils/api.ts:getHealthProfile | `jwt_required` | no | no | [api/user/health-profile/index.md](api/user/health-profile/index.md) |
+| `PUT` | `/api/user/health-profile` | yes | `miniapp-used` | src/utils/api.ts:anonymous<br>src/utils/api.ts:updateDashboardTargets<br>src/utils/api.ts:updateHealthProfile | `jwt_required` | no | no | [api/user/health-profile/index.md](api/user/health-profile/index.md) |
+| `POST` | `/api/user/health-profile/ocr` | yes | `miniapp-used` | src/utils/api.ts:uploadHealthReportOcr | `jwt_required` | no | no | [api/user/health-profile/ocr.md](api/user/health-profile/ocr.md) |
+| `POST` | `/api/user/health-profile/ocr-extract` | yes | `miniapp-used` | src/utils/api.ts:extractHealthReportOcr | `jwt_required` | no | no | [api/user/health-profile/ocr-extract.md](api/user/health-profile/ocr-extract.md) |
+| `POST` | `/api/user/health-profile/submit-report-extraction-task` | yes | `miniapp-used` | src/utils/api.ts:submitReportExtractionTask | `jwt_required` | yes | no | [api/user/health-profile/submit-report-extraction-task.md](api/user/health-profile/submit-report-extraction-task.md) |
+| `POST` | `/api/user/health-profile/upload-report-image` | yes | `miniapp-used` | src/utils/api.ts:uploadReportImage | `jwt_required` | no | no | [api/user/health-profile/upload-report-image.md](api/user/health-profile/upload-report-image.md) |
+| `POST` | `/api/user/last-seen-analyze-history` | yes | `miniapp-used` | src/utils/api.ts:markAnalyzeHistorySeen | `jwt_required` | no | no | [api/user/last-seen-analyze-history.md](api/user/last-seen-analyze-history.md) |
+| `GET` | `/api/user/profile` | yes | `miniapp-used` | src/utils/api.ts:getUserProfile | `jwt_required` | no | no | [api/user/profile.md](api/user/profile.md) |
+| `PUT` | `/api/user/profile` | yes | `miniapp-used` | src/packageExtra/pages/privacy-settings/index.tsx:updateSetting<br>src/utils/api.ts:updateUserInfo | `jwt_required` | no | no | [api/user/profile.md](api/user/profile.md) |
+| `GET` | `/api/user/record-days` | yes | `miniapp-used` | src/utils/api.ts:getUserRecordDays | `jwt_required` | no | no | [api/user/record-days.md](api/user/record-days.md) |
+| `POST` | `/api/user/upload-avatar` | yes | `miniapp-used` | src/utils/api.ts:uploadUserAvatar | `jwt_required` | no | no | [api/user/upload-avatar.md](api/user/upload-avatar.md) |
+
+        ## Frontend Calls Without Matching Backend Route
+
+        | Method | Path | Backend Exists | Frontend Usage | Mini Program Caller | Auth | Async Task | Internal Only | Doc |
+        | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+        | `GET` | `/api/food-record/{record_id}/poster-calorie-compare` | no | `frontend-missing-backend` | `src/utils/api.ts:getPosterCalorieCompare` | n/a | n/a | no | gap |
+| `DELETE` | `/api/community/feed/{record_id}/comments/{comment_id}` | no | `frontend-missing-backend` | `src/utils/api.ts:communityDeleteComment` | n/a | n/a | no | gap |

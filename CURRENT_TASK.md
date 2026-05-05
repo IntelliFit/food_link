@@ -1,5 +1,33 @@
 # 当前任务
 
+## 状态：完成 - 后端接口实现 PRD 文档集合生成
+
+- 2026-05-05 update:
+  - 为后端跨语言重写准备了一套按子路由层次组织的接口实现 Markdown 集合。
+  - 产物路径：
+    - `docs/backend-api-prd/`
+  - 主要产物：
+    - `docs/backend-api-prd/ROUTE_MAP.md`
+    - `docs/backend-api-prd/COVERAGE_MATRIX.md`
+    - `docs/backend-api-prd/_shared/credits-system.md`
+    - `docs/backend-api-prd/_shared/health-report-ocr.md`
+    - `docs/backend-api-prd/_shared/*`
+    - `docs/backend-api-prd/api/*`
+    - `docs/backend-api-prd/internal/test-backend/*`
+    - `docs/backend-api-prd/non-api/*`
+  - 当前文档集合特性：
+    - 以后端真实实现为准，从 `backend/main.py`、`backend/database.py`、`backend/worker.py`、`backend/middleware.py` 抽取事实
+    - 结合小程序请求面进行交叉校对，前端请求面以 `src/utils/api.ts` 为主，并补充页面内直接 `Taro.request(...)`
+    - 每个路由文档都包含统一 front matter 和固定章节：Purpose、Route Matrix、Request/Response、Main Flow、Dependencies、Data Reads/Writes、Error Cases、Frontend Usage、Migration Notes、Open Questions / Drift
+  - 已显式记录的前后端漂移 gap：
+    - `GET /api/food-record/{record_id}/poster-calorie-compare`
+    - `DELETE /api/community/feed/{record_id}/comments/{comment_id}`
+  - 远程分支同步补充：
+    - 检查到 `origin/dev` 上健康档案 OCR worker 有进一步收口倾向；已在迁移文档中把该 branch drift 标注到健康档案识别相关文档里。
+    - 积分系统已额外补成独立专题文档，便于后续跨语言重写时集中查看。
+  - 备注：
+    - 文档数量当前为 133 个，因为多方法同路径和部分内部接口按专题文档聚合，而不是一条路由一个文件。
+
 ## 状态：完成 - “我的”页版本号更新为 2.2.0
 
 - 2026-05-05 update:
