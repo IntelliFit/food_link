@@ -1,5 +1,18 @@
 # 当前任务
 
+## 状态：完成 - “我的”页版本号更新为 2.2.0
+
+- 2026-05-05 update:
+  - User asked to change the bottom version number on the profile page (`我的`) to `2.2.0`.
+  - Confirmed `src/pages/profile/index.tsx` displays the version through build constant `__APP_VERSION__`.
+  - Confirmed `config/index.ts` reads `package.json` version and injects it into `__APP_VERSION__`.
+  - Updated project version source with `npm version 2.2.0 --no-git-tag-version`, which synced:
+    - `package.json`
+    - `package-lock.json`
+  - Verification note:
+    - DevTools automation was initially attempted, but the user then explicitly said no verification was needed and would verify manually.
+    - At that time, current `dist/pages/profile/index.js` still showed `2.1.2`, indicating the running build artifact had not yet been refreshed from the updated source version.
+
 ## 状态：待启动 - 后端大文件拆分与性能整理
 
 - 2026-05-05 discussion:

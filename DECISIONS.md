@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-05`: 「我的」页底部版本号继续以 `package.json` 为唯一版本源：
+  - `src/pages/profile/index.tsx` 通过构建常量 `__APP_VERSION__` 展示版本号。
+  - `config/index.ts` 从根目录 `package.json` 读取 `version` 并注入 `__APP_VERSION__`。
+  - 以后若只需要更新页面版本号，优先 bump `package.json` / `package-lock.json`，不要手改页面硬编码字符串。
+
 - `2026-05-05`: 后端重构采用增量迁移，不做一次性大爆炸拆分：
   - 先以 `main.py / database.py / worker.py` 三个超大文件为主线建立模块边界。
   - 每次只拆一个低耦合业务域，保持 API 行为不变，完成后用 `py_compile`、目标测试或基准脚本验证。
