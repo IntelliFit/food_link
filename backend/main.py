@@ -2137,6 +2137,14 @@ def _get_membership_tier_from_plan_code(plan_code: Optional[str]) -> Optional[st
     return None
 
 
+def _get_membership_tier_order(tier: Optional[str]) -> int:
+    return {
+        "light": 1,
+        "standard": 2,
+        "advanced": 3,
+    }.get(str(tier or "").strip(), 0)
+
+
 def _is_precision_supported_tier(tier: Optional[str]) -> bool:
     return tier in {"standard", "advanced"}
 
@@ -6193,19 +6201,36 @@ async def _reconcile_membership_from_latest_paid_order(
     expected_status = "active" if expected_expires_at > datetime.now(timezone.utc) else "expired"
     existing_first_activated_at = _parse_datetime((membership or {}).get("first_activated_at"))
 
+    paid_plan_code = str(latest_paid.get("plan_code") or "")
+    existing_plan_code = str((membership or {}).get("current_plan_code") or "")
+    paid_tier_order = _get_membership_tier_order(_get_membership_tier_from_plan_code(paid_plan_code))
+    existing_tier_order = _get_membership_tier_order(_get_membership_tier_from_plan_code(existing_plan_code))
+    effective_plan_code = existing_plan_code if existing_tier_order > paid_tier_order else paid_plan_code
+
     plan_daily_credits = 0
-    plan = await get_membership_plan_by_code(latest_paid.get("plan_code") or "")
+    plan = await get_membership_plan_by_code(paid_plan_code)
     if plan:
         plan_daily_credits = int(plan.get("daily_credits") or 0)
     early_user_meta = await _resolve_early_user_membership_meta(user_id, user_row)
     if bool(early_user_meta.get("early_user_paid_bonus_eligible")) and plan_daily_credits > 0:
         plan_daily_credits *= int(early_user_meta.get("early_user_paid_bonus_multiplier") or 1)
 
+    effective_plan_daily_credits = plan_daily_credits
+    if effective_plan_code and effective_plan_code != paid_plan_code:
+        effective_plan = await get_membership_plan_by_code(effective_plan_code)
+        effective_plan_daily_credits = int((effective_plan or {}).get("daily_credits") or 0)
+        if bool(early_user_meta.get("early_user_paid_bonus_eligible")) and effective_plan_daily_credits > 0:
+            effective_plan_daily_credits *= int(early_user_meta.get("early_user_paid_bonus_multiplier") or 1)
+
     existing_daily_credits = int((membership or {}).get("daily_credits") or 0)
-    effective_daily_credits = max(existing_daily_credits, int(plan_daily_credits or 0))
+    effective_daily_credits = max(
+        existing_daily_credits,
+        int(plan_daily_credits or 0),
+        int(effective_plan_daily_credits or 0),
+    )
 
     expected_membership = {
-        "current_plan_code": latest_paid.get("plan_code"),
+        "current_plan_code": effective_plan_code,
         "status": expected_status,
         "first_activated_at": _build_json_datetime(existing_first_activated_at or paid_at),
         "current_period_start": _build_json_datetime(paid_at),
@@ -6228,7 +6253,7 @@ async def _reconcile_membership_from_latest_paid_order(
         not _datetimes_match(membership_period_start, paid_at),
         not _datetimes_match(membership_expires_at, expected_expires_at),
         not _datetimes_match(membership_last_paid_at, paid_at),
-        int(membership.get("daily_credits") or 0) < int(plan_daily_credits or 0),
+        int(membership.get("daily_credits") or 0) < int(effective_daily_credits or 0),
     ))
     if not needs_repair:
         return membership

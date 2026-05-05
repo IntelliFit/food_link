@@ -56,6 +56,27 @@ def is_membership_subscription_plan_code(plan_code: Optional[str]) -> bool:
     return code.startswith(MEMBERSHIP_PLAN_PREFIXES)
 
 
+def get_membership_tier_from_plan_code(plan_code: Optional[str]) -> Optional[str]:
+    code = str(plan_code or "").strip().lower()
+    if code.startswith("light_"):
+        return "light"
+    if code.startswith("standard_"):
+        return "standard"
+    if code.startswith("advanced_"):
+        return "advanced"
+    if code in LEGACY_MEMBERSHIP_PLAN_CODES:
+        return "standard"
+    return None
+
+
+def get_membership_tier_order(plan_code: Optional[str]) -> int:
+    return {
+        "light": 1,
+        "standard": 2,
+        "advanced": 3,
+    }.get(get_membership_tier_from_plan_code(plan_code) or "", 0)
+
+
 def trial_days_for_rank(rank: Optional[int]) -> int:
     if rank is None:
         return REGULAR_USER_TRIAL_DAYS
@@ -149,12 +170,24 @@ def main() -> None:
         multiplier = EARLY_USER_PAID_CREDITS_MULTIPLIER if (
             user_id in registration_rank or user_id in paid_rank
         ) else 1
-        plan_expected_daily_credits = int(plan_daily_credits.get(str(latest_paid.get("plan_code") or ""), 0)) * multiplier
         existing = memberships.get(user_id)
+        paid_plan_code = str(latest_paid.get("plan_code") or "")
+        existing_plan_code = str((existing or {}).get("current_plan_code") or "")
+        effective_plan_code = (
+            existing_plan_code
+            if get_membership_tier_order(existing_plan_code) > get_membership_tier_order(paid_plan_code)
+            else paid_plan_code
+        )
+        plan_expected_daily_credits = int(plan_daily_credits.get(paid_plan_code, 0)) * multiplier
+        effective_plan_expected_daily_credits = int(plan_daily_credits.get(effective_plan_code, 0)) * multiplier
         existing_daily_credits = int((existing or {}).get("daily_credits") or 0)
-        expected_daily_credits = max(existing_daily_credits, plan_expected_daily_credits)
+        expected_daily_credits = max(
+            existing_daily_credits,
+            plan_expected_daily_credits,
+            effective_plan_expected_daily_credits,
+        )
         payload = {
-            "current_plan_code": latest_paid.get("plan_code"),
+            "current_plan_code": effective_plan_code,
             "status": expected_status,
             "first_activated_at": existing.get("first_activated_at") if existing and existing.get("first_activated_at") else paid_at.isoformat(),
             "current_period_start": paid_at.isoformat(),
@@ -172,7 +205,7 @@ def main() -> None:
             or str(existing.get("current_period_start") or "") != str(payload["current_period_start"] or "")
             or str(existing.get("expires_at") or "") != str(payload["expires_at"] or "")
             or str(existing.get("last_paid_at") or "") != str(payload["last_paid_at"] or "")
-            or int(existing.get("daily_credits") or 0) < int(plan_expected_daily_credits or 0)
+            or int(existing.get("daily_credits") or 0) < int(expected_daily_credits or 0)
         )
         if not changed:
             continue

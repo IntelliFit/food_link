@@ -4,6 +4,12 @@
   - If `user_pro_memberships.current_plan_code / status / expires_at / daily_credits` drifts from the latest paid membership order, backend `/api/membership/me` should auto-reconcile it before returning data.
   - Non-membership orders such as `points_recharge` must not participate in membership-plan reconciliation.
   - Preserved manual exceptions remain explicit (`锦恢`, `小马哥`) because they are developer accounts; other active memberships without any real paid membership order should be treated as data errors to clean up instead of as display truth.
+- `2026-05-05`: Membership reconciliation treats the latest paid order as a lower bound, not a cap, for manual service upgrades:
+  - Payment truth still repairs paid period fields: status, first/current period timestamps, expiry, and last paid time.
+  - If `user_pro_memberships.current_plan_code` has been manually upgraded to a higher tier than the latest paid order, keep the higher tier so features such as precision mode unlock correctly.
+  - If `user_pro_memberships.daily_credits` has been manually boosted above the paid/effective plan default, keep the boosted value.
+  - Values below the paid/effective plan default should still be repaired upward.
+  - `backend/scripts/reconcile_membership_truth.py` must follow the same rule as `/api/membership/me`.
 
 - `2026-05-02`: Invite rewards now use a higher-quality qualification rule:
   - For new referrals, the invitee must complete valid usage on `2` distinct China dates within `7` days.

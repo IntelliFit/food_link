@@ -3,6 +3,20 @@
 ## 状态：进行中 - 等待用户反馈调试日志
 
 - 2026-05-05 update:
+  - Extended manual membership upgrade support beyond daily credits.
+  - Backend reconciliation now preserves manually upgraded higher `current_plan_code` tiers:
+    - Latest paid order remains the lower-bound truth.
+    - If existing `current_plan_code` is higher than the paid order tier, keep it instead of downgrading.
+    - Effective daily credits are now the max of existing manual credits, paid-plan default, and effective higher-plan default.
+  - Updated `backend/scripts/reconcile_membership_truth.py` to match `/api/membership/me`.
+  - Applied the requested database change for user `cafa4614-9453-4eb0-bf60-51f442ce0f4a`:
+    - `current_plan_code='standard_monthly'`
+    - `daily_credits=200`
+  - Verification:
+    - `python -m py_compile backend/main.py backend/scripts/reconcile_membership_truth.py` passed.
+    - Direct Supabase update returned the updated membership row with `standard_monthly` and `daily_credits=200`.
+
+- 2026-05-05 update:
   - Optimized profile membership card credit-meter semantics after user clarified that bar color should consistently represent available credits.
   - Both membership-card bars now use the same "available asset" meaning:
     - System-credit label: `系统可用（次日清0）`
