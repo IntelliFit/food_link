@@ -139,6 +139,7 @@ image.tab-icon {
   margin-left: -55rpx;
   margin-top: -55rpx;
   transform: translateY(-18rpx);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .center-icon {
@@ -146,6 +147,27 @@ image.tab-icon {
   color: #ffffff;
   font-weight: 500;
   line-height: 1;
+}
+
+/* 我的按钮上的红点提醒 */
+.profile-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 60rpx;
+  height: 52rpx;
+}
+
+.tab-badge {
+  position: absolute;
+  top: -4rpx;
+  right: -4rpx;
+  width: 20rpx;
+  height: 20rpx;
+  background: #ef4444;
+  border-radius: 50%;
+  z-index: 10;
 }
 
 /* ===== 文字样式 ===== */

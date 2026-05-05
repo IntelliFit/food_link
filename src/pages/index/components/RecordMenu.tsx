@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
-import { getAccessToken, getMyMembership, showUnifiedApiError } from '../../../utils/api'
+import { getAccessToken, getMyMembership, showUnifiedApiError, type MembershipStatus } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   getFoodAnalysisBlockedActionText,
@@ -22,14 +22,19 @@ import {
 import {
   openAnalyzePageFromMenu,
   openDebugAnalyzeLoadingFromMenu,
+  openDebugHealthProfileFromMenu,
   openDebugRecordDetailPosterFromMenu,
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
+import { persistRecordTargetDate } from '../../../utils/record-date'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 interface RecordMenuProps {
   visible: boolean
   onClose: () => void
+  selectedDate: string
+  hasUnseenWaitingRecord: boolean
 }
 
 // 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
@@ -76,32 +81,40 @@ const QUICK_ACCESS_ITEMS = [
   },
   {
     id: 'history',
-    label: '历史记录',
+    label: '识别记录',
     desc: '查看以往识别记录',
     Icon: IconHistory,
     color: '#6b7280',
   },
 ] as const
 
-export function RecordMenu({ visible, onClose }: RecordMenuProps) {
+export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRecord }: RecordMenuProps) {
+  const { scheme } = useAppColorScheme()
+  const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
   const [previewImageUrl, setPreviewImageUrl] = useState('')
+  /** 弹窗打开时预取会员状态，点击「相册上传」时直接使用缓存结果 */
+  const membershipPromiseRef = useRef<Promise<MembershipStatus | null> | null>(null)
 
   useEffect(() => {
     if (!visible) {
       setDevToolsOpen(false)
+      membershipPromiseRef.current = null
       return
     }
     if (__ENABLE_DEV_DEBUG_UI__) {
       setPreviewImageUrl(getDevDebugUiTestImageUrl())
     }
+    // 弹窗打开即预取会员状态，减少点击后的等待时间
+    membershipPromiseRef.current = getMyMembership().catch(() => null)
   }, [visible])
 
   if (!visible) return null
 
   const handleGridClick = (modeId: string) => {
     onClose()
+    const recordDate = persistRecordTargetDate(selectedDate)
 
     switch (modeId) {
       case 'camera':
@@ -113,8 +126,9 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         }
         void (async () => {
           try {
-            const membershipStatus = await getMyMembership()
-            if (isFoodAnalysisCreditExhausted(membershipStatus)) {
+            // 优先使用弹窗打开时预取的结果，未命中则降级发起新请求
+            const membershipStatus = await (membershipPromiseRef.current ?? getMyMembership())
+            if (membershipStatus && isFoodAnalysisCreditExhausted(membershipStatus)) {
               const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
               const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
               const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus.is_pro
@@ -145,7 +159,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                 Taro.setStorageSync('analyzeImagePath', tempPaths[0])
                 Taro.setStorageSync('analyzeImagePaths', tempPaths)
               }
-              Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
+              Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
             },
             fail: (err) => {
               if (err.errMsg?.includes('cancel')) return
@@ -156,10 +170,10 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
         break
       }
       case 'text':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })
+        Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-text/index')}?date=${encodeURIComponent(recordDate)}` })
         break
       case 'manual':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/record-manual/index') })
+        Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?date=${encodeURIComponent(recordDate)}` })
         break
     }
   }
@@ -193,7 +207,7 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
   return (
     <View className='record-menu-modal' catchMove>
       <View className='record-menu-mask' onClick={onClose} />
-      <View className='record-menu-content'>
+      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}`}>
         {/* 顶部圆角指示条 */}
         <View className='record-menu-handle-bar' />
 
@@ -245,6 +259,9 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                   </View>
                 </View>
                 <View className='record-menu-list-right'>
+                  {item.id === 'history' && hasUnseenWaitingRecord && (
+                    <View className='record-menu-dot' />
+                  )}
                   <IconChevronRight size={16} color='#d1d5db' />
                 </View>
               </View>
@@ -323,11 +340,18 @@ export function RecordMenu({ visible, onClose }: RecordMenuProps) {
                       <Text className='record-menu-dev-item-desc'>本地预览，不调保存接口</Text>
                     </View>
                     <View
-                      className='record-menu-dev-item record-menu-dev-item-last'
+                      className='record-menu-dev-item'
                       onClick={() => runDevTool(openAnalyzePageFromMenu)}
                     >
                       <Text className='record-menu-dev-item-label'>打开拍照分析页</Text>
                       <Text className='record-menu-dev-item-desc'>正常实拍分析流程</Text>
+                    </View>
+                    <View
+                      className='record-menu-dev-item record-menu-dev-item-last'
+                      onClick={() => runDevTool(openDebugHealthProfileFromMenu)}
+                    >
+                      <Text className='record-menu-dev-item-label'>进入画像引导</Text>
+                      <Text className='record-menu-dev-item-desc'>健康档案问卷调试入口</Text>
                     </View>
                   </View>
                 </View>

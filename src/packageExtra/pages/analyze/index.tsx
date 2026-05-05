@@ -19,7 +19,8 @@ import {
   PrecisionReferenceDefaults,
   PrecisionReferenceDimensions,
   PrecisionReferencePresetConfig,
-  PrecisionReferencePresetKey
+  PrecisionReferencePresetKey,
+  ANALYSIS_SUBSCRIBE_TEMPLATE_ID
 } from '../../../utils/api'
 import type { AnalyzeResponse, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
 import { showUnifiedApiError } from '../../../utils/error-modal'
@@ -38,6 +39,7 @@ import {
   getMembershipCreditSummary,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -338,6 +340,7 @@ function AnalyzePage() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
+    persistRecordTargetDate(String(params?.date || ''))
     if (nextSessionId) {
       setPrecisionSessionId(nextSessionId)
       setExecutionMode('strict')
@@ -543,6 +546,19 @@ function AnalyzePage() {
       return
     }
 
+    // 请求订阅消息授权（在图片上传前调用，避免上传耗时导致弹窗时机不佳）
+    let subscribeStatus: string | undefined
+    if (ANALYSIS_SUBSCRIBE_TEMPLATE_ID) {
+      try {
+        const subscribeRes = await (Taro as any).requestSubscribeMessage({
+          tmplIds: [ANALYSIS_SUBSCRIBE_TEMPLATE_ID],
+        })
+        subscribeStatus = String((subscribeRes as any)?.[ANALYSIS_SUBSCRIBE_TEMPLATE_ID] || '')
+      } catch (_) {
+        // 用户拒绝或接口调用失败，静默继续
+      }
+    }
+
     setIsAnalyzing(true)
     Taro.showLoading({ title: '上传图片...', mask: true })
 
@@ -575,12 +591,14 @@ function AnalyzePage() {
 
       Taro.showLoading({ title: '提交任务...', mask: true })
       const commonPayload = {
+        date: getStoredRecordTargetDate(),
         meal_type: mealType,
         diet_goal: dietGoal,
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
         is_multi_view: isMultiView,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
+        subscribe_status: subscribeStatus,
       }
 
       // 保存图片路径供后续页面使用
@@ -810,7 +828,7 @@ function AnalyzePage() {
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>开启后才可上传多张，并按同一食物的不同角度处理</Text>
+            <Text className='multiview-compact-hint'>将多张图片视为同一食物的不同角度，关闭则每张分别识别后累加</Text>
           </View>
           <View
             className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
@@ -1031,7 +1049,7 @@ function AnalyzePage() {
           onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })}
         >
           <Text className='iconfont icon-history' />
-          <Text className='history-link-text'>查看分析历史</Text>
+          <Text className='history-link-text'>查看识别记录</Text>
         </View>
       </View>
     </View>

@@ -2,6 +2,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { View, Text, ScrollView, Image, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { Popup, AreaPicker } from '@taroify/core'
 import '@taroify/core/popup/style'
 import '@taroify/core/picker/style'
@@ -155,6 +156,46 @@ function FoodLibrarySharePage() {
       Taro.removeStorageSync(FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY)
     }
   }, [quickUploadMode, sourceRecordId])
+
+  // 从识别记录分享：自动填充 analyzeShareData
+  useEffect(() => {
+    if (routerParams?.from_analyze !== '1') return
+
+    try {
+      const raw = Taro.getStorageSync('analyzeShareData')
+      if (!raw) return
+
+      const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+      const urls = Array.isArray(data?.imageUrls)
+        ? data.imageUrls.map((item: string) => `${item || ''}`.trim()).filter(Boolean)
+        : (data?.imageUrl ? [data.imageUrl] : [])
+
+      if (urls.length > 0) {
+        setSourceType('upload')
+        setSelectedRecord(null)
+        setImagePaths([])
+        setImageUrls(urls)
+        setImageUrl(urls[0] || '')
+      }
+
+      setTotalCalories(Number(data?.totalCalories) || 0)
+      setTotalProtein(Number(data?.totalProtein) || 0)
+      setTotalCarbs(Number(data?.totalCarbs) || 0)
+      setTotalFat(Number(data?.totalFat) || 0)
+      setItems(Array.isArray(data?.items) ? data.items : [])
+      setDescription(data?.description || '')
+      setInsight(data?.insight || '')
+
+      const inferredName = inferFoodName(null, data?.items || [], data?.description || '')
+      if (inferredName) {
+        setFoodName(prev => prev.trim() || inferredName)
+      }
+    } catch (e) {
+      console.error('加载识别记录分享数据失败:', e)
+    } finally {
+      Taro.removeStorageSync('analyzeShareData')
+    }
+  }, [routerParams?.from_analyze])
 
   const inferFoodName = (record?: FoodRecord | null, nextItems?: Array<{ name: string }>, nextDescription?: string) => {
     const itemNames = (nextItems || record?.items || [])
@@ -539,8 +580,10 @@ function FoodLibrarySharePage() {
   const canSubmit = hasImages && !submitting && !analyzing && !loadingSourceRecord
   const displayLength = Math.max(imagePaths.length, imageUrls.length)
 
+  const { scheme } = useAppColorScheme()
+
   return (
-    <View className='share-page'>
+    <View className={`share-page ${scheme === 'dark' ? 'share-page--dark' : ''}`}>
       {quickUploadMode && (
         <View className='quick-upload-tip'>
           <Text className='quick-upload-title'>上传到公共食物库</Text>

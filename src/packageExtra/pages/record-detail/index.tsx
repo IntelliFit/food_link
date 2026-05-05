@@ -21,6 +21,8 @@ import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 import './index.scss'
 
@@ -139,6 +141,7 @@ async function fetchPosterCalorieCompareForRecord(record: FoodRecord): Promise<P
 }
 
 function RecordDetailPage() {
+  const { scheme } = useAppColorScheme()
   const router = useRouter()
   const [record, setRecord] = React.useState<FoodRecord | null>(null)
   const [posterGenerating, setPosterGenerating] = React.useState(false)
@@ -234,7 +237,7 @@ function RecordDetailPage() {
   const sharePath = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
 
   useShareAppMessage(() => {
-    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
+    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得15积分` : '加入食探并完成2天打卡，双方各得15积分'
     return {
       title,
       path: sharePath,
@@ -243,7 +246,7 @@ function RecordDetailPage() {
   })
 
   useShareTimeline(() => {
-    const title = ownerNickname ? `${ownerNickname}的饮食记录，邀你一起健康打卡` : '来看看我的健康饮食记录吧！'
+    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得15积分` : '加入食探并完成2天打卡，双方各得15积分'
     return {
       title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
@@ -412,7 +415,14 @@ function RecordDetailPage() {
 
   if (loading || !record) {
     return (
-      <View className='record-detail-root'>
+      <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
+        <CustomNavBar
+          title='识别记录详情'
+          showBack
+          onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+          color={scheme === 'dark' ? '#ffffff' : '#000000'}
+          background={scheme === 'dark' ? '#101716' : '#f8fafc'}
+        />
         <View className='record-detail-below-nav record-detail-loading-placeholder'>
           <View className='empty-tip'>
             {loading ? <View className='loading-spinner-md' /> : '记录不存在'}
@@ -693,14 +703,23 @@ function RecordDetailPage() {
     })
   }
 
+  const navBarHeight = getNavBarHeight()
+
   return (
-    <View className='record-detail-root'>
+    <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
+      <CustomNavBar
+        title='识别记录详情'
+        showBack
+        onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+        color={scheme === 'dark' ? '#ffffff' : '#000000'}
+        background={scheme === 'dark' ? '#101716' : '#f8fafc'}
+      />
       {/*
         海报预览/离屏 Canvas 勿放在 ScrollView 内：真机上 fixed 全屏层会相对滚动容器错位；
         与首页「今日小结」分享层结构一致（根节点下独立一层）
       */}
       <View className='record-detail-below-nav'>
-      <ScrollView className='record-detail-page' scrollY>
+      <ScrollView className='record-detail-page' scrollY style={{ height: `calc(100vh - ${navBarHeight}px)` }}>
       <View className='record-detail-body'>
         <View className='detail-header'>
           <View className='meal-badge'>
@@ -821,12 +840,12 @@ function RecordDetailPage() {
             <View className='friend-invite-header'>
               {ownerAvatar ? <Image className='friend-invite-avatar' src={ownerAvatar} mode='aspectFill' /> : null}
               <Text className='friend-invite-title'>
-                {ownerNickname ? `${ownerNickname} 邀请你成为食探好友` : '邀请你成为食探好友'}
+                {ownerNickname ? `${ownerNickname} 邀你来食探，达标后各得15积分` : '注册食探并完成2天打卡，双方各得15积分'}
               </Text>
             </View>
-            <Text className='friend-invite-desc'>未注册会先登录，登录后发送申请，需对方同意</Text>
+            <Text className='friend-invite-desc'>新用户注册后，7天内完成2个自然日饮食或运动记录即可到账；老用户也能直接加好友</Text>
             <Button className='friend-invite-btn' onClick={handleAcceptInvite} disabled={inviteLoading}>
-              {inviteLoading ? <View className='btn-spinner' /> : (getAccessToken() ? '发送好友申请' : '登录并发送申请')}
+              {inviteLoading ? <View className='btn-spinner' /> : (getAccessToken() ? '直接加好友' : '登录注册并领取邀请')}
             </Button>
           </View>
         )}

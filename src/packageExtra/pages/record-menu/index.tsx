@@ -45,7 +45,7 @@ const MAIN_MODES = [
 const OTHER_MODES = [
   {
     id: 'history',
-    label: '历史记录',
+    label: '识别记录',
     desc: '查看以往识别记录',
     color: '#6b7280',
     Icon: IconHistory,

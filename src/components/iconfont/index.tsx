@@ -209,3 +209,43 @@ export const IconMicrophone = ({ size = 48, color = '#000000', className = '' }:
     />
   )
 }
+
+/** 展开图标（下箭头） */
+export const IconExpand = ({ size = 32, color = '#94a3b8', className = '' }: IconProps) => {
+  const s = Math.round(size * 0.5)
+  const b = Math.round(size * 0.42)
+  return (
+    <View
+      className={className}
+      style={{
+        width: 0,
+        height: 0,
+        borderLeft: `${b}rpx solid transparent`,
+        borderRight: `${b}rpx solid transparent`,
+        borderTop: `${s}rpx solid ${color}`,
+        display: 'inline-block',
+        verticalAlign: 'middle',
+      }}
+    />
+  )
+}
+
+/** 收起图标（上箭头） */
+export const IconCollapse = ({ size = 32, color = '#94a3b8', className = '' }: IconProps) => {
+  const s = Math.round(size * 0.5)
+  const b = Math.round(size * 0.42)
+  return (
+    <View
+      className={className}
+      style={{
+        width: 0,
+        height: 0,
+        borderLeft: `${b}rpx solid transparent`,
+        borderRight: `${b}rpx solid transparent`,
+        borderBottom: `${s}rpx solid ${color}`,
+        display: 'inline-block',
+        verticalAlign: 'middle',
+      }}
+    />
+  )
+}

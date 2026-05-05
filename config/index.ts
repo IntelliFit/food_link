@@ -14,6 +14,10 @@ function readPackageVersion(): string {
 
 const packageVersion = readPackageVersion()
 
+// fix: @taroify/icons 字体文件 base64 内联，避免小程序环境中路径解析失败
+const vantIconWoff2Base64 = readFileSync(join(process.cwd(), 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
+const vantIconWoffBase64 = readFileSync(join(process.cwd(), 'src/assets/vant-icon/vant-icon.woff')).toString('base64')
+
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
   const apiBaseUrl =
@@ -22,6 +26,7 @@ export default defineConfig<'vite'>(async (merge) => {
       ? 'http://127.0.0.1:3010'
       : 'https://healthymax.cn')
   const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
+  const analysisSubscribeTemplateId = process.env.TARO_APP_ANALYSIS_SUBSCRIBE_TEMPLATE_ID || ''
 
   const baseConfig: UserConfigExport<'vite'> = {
     projectName: 'food_link',
@@ -41,6 +46,7 @@ export default defineConfig<'vite'>(async (merge) => {
     defineConstants: {
       __API_BASE_URL__: JSON.stringify(apiBaseUrl),
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
+      __ANALYSIS_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(analysisSubscribeTemplateId),
       /** 仅 development 构建为 true；上传/体验版等走 production 构建为 false，用于隐藏调试 UI 与调试保存分支 */
       __ENABLE_DEV_DEBUG_UI__: JSON.stringify(process.env.NODE_ENV === 'development'),
       /** 与 package.json version 同步，发布新版本时随 npm version 一并更新 */
@@ -63,6 +69,10 @@ export default defineConfig<'vite'>(async (merge) => {
         {
           from: 'src/assets/iconfont',
           to: 'assets/iconfont'
+        },
+        {
+          from: 'src/assets/vant-icon',
+          to: 'assets/vant-icon'
         },
 
       ],
@@ -93,6 +103,24 @@ export default defineConfig<'vite'>(async (merge) => {
           name: 'taro-fix-target',
           configResolved(config) {
             config.build.target = 'es2018'
+          }
+        },
+        // fix: @taroify/icons 使用的 iconfont CDN (at.alicdn.com) 在小程序环境中
+        // 无法加载，改为 base64 内联，彻底避免路径解析问题
+        {
+          name: 'taro-fix-vant-icon-font',
+          transform(code, id) {
+            if (/@taroify[\\/]icons/.test(id) && /\.(css|scss|less|wxss)$/.test(id)) {
+              return code.replace(
+                /url\(['"]?\/\/at\.alicdn\.com\/t\/c\/font_2553510_\w+\.(woff2|woff)\?t=\d+['"]?\)/g,
+                (match, format) => {
+                  const b64 = format === 'woff2' ? vantIconWoff2Base64 : vantIconWoffBase64
+                  const mime = format === 'woff2' ? 'font/woff2' : 'font/woff'
+                  return `url("data:${mime};base64,${b64}")`
+                }
+              )
+            }
+            return null
           }
         },
         // debug: 开发构建时关闭压缩、保留 sourcemap，便于真机调试定位完整错误栈

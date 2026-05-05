@@ -12,6 +12,7 @@ import {
 import { showUnifiedApiError } from '../../../utils/error-modal'
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 
 /** 与记运动页一致，用于完成后清除「待同步」状态 */
@@ -372,7 +373,8 @@ function AnalyzeLoadingPage() {
             Taro.removeStorageSync(EXERCISE_PENDING_TASK_KEY)
             const kcal = exResult.estimated_calories ?? exResult.exercise_log.calories_burned
             Taro.showToast({ title: `已记录 ${kcal} kcal`, icon: 'success' })
-            Taro.redirectTo({ url: extraPkgUrl('/pages/exercise-record/index') })
+            const exerciseDate = persistRecordTargetDate(String(((task.payload as Record<string, unknown>)?.recorded_on as string) || ''))
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(exerciseDate)}` })
             return
           }
 
@@ -397,6 +399,7 @@ function AnalyzeLoadingPage() {
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzePendingCorrectionItems')
           const payload = task.payload || {}
+          const targetDate = persistRecordTargetDate(String((payload.recorded_on as string) || getStoredRecordTargetDate()))
           const settledMode = taskMode || executionMode
           Taro.setStorageSync('analyzeExecutionMode', settledMode)
           if (result.precisionSessionId) {
@@ -421,7 +424,7 @@ function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food_text')
-            Taro.redirectTo({ url: extraPkgUrl('/pages/result/index') })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
           } else {
             Taro.removeStorageSync('analyzeTextInput')
             Taro.removeStorageSync('analyzeTextAdditionalContext')
@@ -434,7 +437,7 @@ function AnalyzeLoadingPage() {
             Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food')
-            Taro.redirectTo({ url: extraPkgUrl('/pages/result/index') })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
           }
           return
         }
@@ -503,7 +506,7 @@ function AnalyzeLoadingPage() {
         cancelText: '留在此页',
         success: res => {
           if (res.confirm) {
-            Taro.redirectTo({ url: extraPkgUrl('/pages/exercise-record/index') })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(getStoredRecordTargetDate())}` })
           }
         }
       })
@@ -511,7 +514,7 @@ function AnalyzeLoadingPage() {
     }
     Taro.showModal({
       title: '稍后查看',
-      content: '分析将在后台继续，完成后可在「分析历史」中查看结果。',
+      content: '分析将在后台继续，完成后可在「识别记录」中查看结果。',
       showCancel: true,
       confirmText: '去历史',
       success: res => {
@@ -543,7 +546,7 @@ function AnalyzeLoadingPage() {
           <Text className='violated-title'>内容审核未通过</Text>
           <Text className='violated-reason'>{violationReason}</Text>
           <Text className='violated-hint'>您提交的内容不符合平台使用规范，请确保上传与食物相关的图片或文字描述。</Text>
-          <Text className='btn-history' onClick={handleGoHistory}>返回分析历史</Text>
+          <Text className='btn-history' onClick={handleGoHistory}>返回识别记录</Text>
           <Text className='ai-notice'> 食探 - 您的智能健康管理助手</Text>
         </View>
       </View>
@@ -562,11 +565,11 @@ function AnalyzeLoadingPage() {
             className='btn-history'
             onClick={() =>
               taskType === 'exercise'
-                ? Taro.redirectTo({ url: extraPkgUrl('/pages/exercise-record/index') })
+                ? Taro.redirectTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(getStoredRecordTargetDate())}` })
                 : handleGoHistory()
             }
           >
-            {taskType === 'exercise' ? '返回记运动' : '去分析历史'}
+            {taskType === 'exercise' ? '返回记运动' : '去识别记录'}
           </Text>
           <Text className='ai-notice'> 食探 - 您的智能健康管理助手</Text>
         </View>

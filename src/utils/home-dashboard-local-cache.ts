@@ -17,8 +17,8 @@ import {
   type SaveFoodRecordRequest
 } from './api'
 
-export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache_v4'
-export const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 60
+export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache'
+export const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 14
 
 export interface HomeDashboardLocalSnapshot {
   date: string
@@ -136,8 +136,9 @@ export function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot):
     .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
   try {
     Taro.setStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY, next)
-  } catch {
-    // ignore
+    console.log('[DEBUG] saveHomeDashboardSnapshot success, key=', HOME_DASHBOARD_LOCAL_CACHE_KEY, 'items=', next.length, 'bytes≈', JSON.stringify(next).length)
+  } catch (err: any) {
+    console.error('[DEBUG] saveHomeDashboardSnapshot FAILED:', err?.message || err, 'key=', HOME_DASHBOARD_LOCAL_CACHE_KEY, 'items=', next.length, 'bytes≈', JSON.stringify(next).length)
   }
 }
 

@@ -39,9 +39,11 @@ const extraSubpackagePages = [
   'pages/login/index',
   'pages/about/index',
   'pages/agreement/index',
+  'pages/membership-agreement/index',
   'pages/privacy/index',
   'pages/privacy-settings/index',
   'pages/friends/index',
+  'pages/invite-friends/index',
   'pages/profile-settings/index',
   'pages/exercise-record/index',
 ]

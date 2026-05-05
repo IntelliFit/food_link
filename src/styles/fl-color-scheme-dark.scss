@@ -365,8 +365,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 /* ---------- 我的 ---------- */
 .fl-page-theme-root--dark .profile-card {
   background: $fl-dark-panel-bg !important;
-  border: 1rpx solid $fl-dark-border;
-  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 30%);
 }
 
 .fl-page-theme-root--dark .user-name {
@@ -648,6 +646,294 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .water-trend-bar-wrap {
   background: rgb(255 255 255 / 5%) !important;
   border: 1rpx solid rgb(255 255 255 / 6%) !important;
+}
+
+/* ---------- 分析 Tab：健康友好度评分卡片 ---------- */
+.fl-page-theme-root--dark .risk-card.stats-card {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 32%) !important;
+}
+
+.fl-page-theme-root--dark .risk-card.tone-positive {
+  border-color: rgb(92 184 150 / 32%) !important;
+}
+
+.fl-page-theme-root--dark .risk-card.tone-neutral {
+  border-color: rgb(100 160 220 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .risk-card.tone-warning {
+  border-color: rgb(200 160 60 / 38%) !important;
+}
+
+.fl-page-theme-root--dark .risk-card.tone-danger {
+  border-color: rgb(220 110 110 / 42%) !important;
+}
+
+.fl-page-theme-root--dark .risk-card-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-card-summary {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-card-score {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-card.tone-warning .risk-card-score {
+  color: #fbbf24 !important;
+}
+
+.fl-page-theme-root--dark .risk-card.tone-danger .risk-card-score {
+  color: #f87171 !important;
+}
+
+.fl-page-theme-root--dark .risk-card-score-unit,
+.fl-page-theme-root--dark .risk-card-expand {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-card-summary-expanded {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-card-basis {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-card-divider {
+  background: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .risk-card-action-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-card-action {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-card-delta {
+  background: rgb(92 184 150 / 14%) !important;
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .risk-card-more-btn {
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .risk-card-more-text {
+  color: $fl-dark-accent !important;
+}
+
+/* ---------- 分析 Tab：友好度详情底部弹窗 ---------- */
+.fl-page-theme-root--dark .risk-detail-panel {
+  background: $fl-dark-home-solid-bg !important;
+  box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-handle {
+  background: #4b5563 !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-score {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-score-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-badge.tone-positive {
+  background: rgb(134 239 172 / 14%) !important;
+  color: #4ade80 !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-badge.tone-neutral {
+  background: rgb(100 160 220 / 16%) !important;
+  color: #60a5fa !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-badge.tone-warning {
+  background: rgb(253 224 71 / 14%) !important;
+  color: #fbbf24 !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-badge.tone-danger {
+  background: rgb(248 113 113 / 16%) !important;
+  color: #f87171 !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-divider {
+  background: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-section-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-section-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-delta {
+  background: rgb(92 184 150 / 14%) !important;
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-close-btn {
+  background: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .risk-detail-close-text {
+  color: #fff !important;
+}
+
+/* ---------- 分析 Tab：风险选择器（chip 多选） ---------- */
+.fl-page-theme-root--dark .risk-picker-summary {
+  background: rgb(92 184 150 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .risk-picker-summary__count {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .risk-picker-summary__text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-picker-chip {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .risk-picker-chip.active {
+  background: rgb(92 184 150 / 12%) !important;
+  border-color: rgb(92 184 150 / 36%) !important;
+  box-shadow: inset 0 0 0 1rpx rgb(92 184 150 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .risk-picker-chip__title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .risk-picker-chip__action {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .risk-picker-chip.active .risk-picker-chip__action {
+  color: $fl-dark-accent !important;
+}
+
+/* ---------- 分析 Tab：风险概览徽章 ---------- */
+.fl-page-theme-root--dark .risk-overview-badge {
+  background: rgb(255 255 255 / 8%) !important;
+  border-color: rgb(255 255 255 / 10%) !important;
+}
+
+.fl-page-theme-root--dark .risk-overview-badge.tone-positive {
+  background: rgb(134 239 172 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .risk-overview-badge.tone-neutral {
+  background: rgb(255 255 255 / 8%) !important;
+}
+
+.fl-page-theme-root--dark .risk-overview-badge.tone-warning {
+  background: rgb(251 191 36 / 14%) !important;
+}
+
+.fl-page-theme-root--dark .risk-overview-badge.tone-danger {
+  background: rgb(248 113 113 / 15%) !important;
+}
+
+.fl-page-theme-root--dark .risk-overview-badge-label {
+  color: $fl-dark-text !important;
+}
+
+/* ---------- 分析 Tab：行动方案卡片 ---------- */
+.fl-page-theme-root--dark .risk-manage-card .card-collapsed-preview {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .action-plan-card__score-before {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .action-plan-card__score-after {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .action-plan-card__arrow {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .action-plan-panel {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .action-plan-panel--green {
+  background: rgb(92 184 150 / 12%) !important;
+  border-color: rgb(92 184 150 / 28%) !important;
+}
+
+.fl-page-theme-root--dark .action-plan-panel__title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .action-plan-panel__empty {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .action-plan-item__bullet {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .action-plan-item__title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .action-plan-item__detail {
+  color: $fl-dark-text2 !important;
+}
+
+/* ---------- 分析 Tab：支撑证据 ---------- */
+.fl-page-theme-root--dark .stats-section-head__title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .stats-section-head__subtitle {
+  color: $fl-dark-text2 !important;
+}
+
+/* ---------- 分析 Tab：AI 风险解读卡片细节 ---------- */
+.fl-page-theme-root--dark .analysis-loading-icon {
+  color: #7eb8e8 !important;
+}
+
+.fl-page-theme-root--dark .analysis-empty-action {
+  background: linear-gradient(135deg, #4a7594 0%, #3d6b94 100%) !important;
+  box-shadow: 0 10rpx 24rpx rgb(12 24 36 / 40%) !important;
+}
+
+.fl-page-theme-root--dark .analysis-empty-action-text {
+  color: #fff !important;
+}
+
+.fl-page-theme-root--dark .analysis-error-text {
+  color: #f4a0a0 !important;
+}
+
+.fl-page-theme-root--dark .card-collapsed-preview__text {
+  color: $fl-dark-text2 !important;
 }
 
 .fl-page-theme-root--dark .analysis-status {
@@ -1231,6 +1517,22 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-text2 !important;
 }
 
+.fl-page-theme-root--dark .record-menu-dev-url-block,
+.fl-page-theme-root--dark .record-menu-dev-items {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-url-input {
+  background: $fl-dark-input-bg !important;
+  border-color: $fl-dark-border !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .record-menu-dev-url-placeholder {
+  color: $fl-dark-text2 !important;
+}
+
 /* ---------- 分包：记录详情（识别/保存后进入） ---------- */
 .fl-page-theme-root--dark .record-detail-root,
 .fl-page-theme-root--dark .record-detail-page {
@@ -1545,6 +1847,18 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .day-record-food-calorie {
   color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .day-record-food-macro.macro-protein {
+  color: #7eb8e8 !important;
+}
+
+.fl-page-theme-root--dark .day-record-food-macro.macro-carbs {
+  color: #e0c078 !important;
+}
+
+.fl-page-theme-root--dark .day-record-food-macro.macro-fat {
+  color: #f5a870 !important;
 }
 
 .fl-page-theme-root--dark .day-record-empty-title {
@@ -3347,4 +3661,48 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-page-theme-root--dark .interaction-feed-detail-page .interaction-feed-detail-loading,
 .fl-page-theme-root--dark .interaction-feed-detail-page .interaction-feed-detail-empty {
   color: $fl-dark-text2 !important;
+}
+
+// ==================== 多记录选择面板（MealRecordsDialog） ====================
+
+// 面板标题
+.fl-page-theme-root--dark .meal-records-dialog-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .meal-records-dialog-count {
+  color: $fl-dark-text2 !important;
+}
+
+// 单条记录行
+.fl-page-theme-root--dark .meal-record-entry {
+  background: $fl-dark-panel-bg-soft !important;
+
+  &:active {
+    background: $fl-dark-ghost-bg !important;
+  }
+}
+
+// 记录缩略图（无图片时的 fallback icon 背景）
+.fl-page-theme-root--dark .meal-record-entry-thumb.is-photo {
+  background: $fl-dark-ghost-bg !important;
+}
+
+// 记录标题文本
+.fl-page-theme-root--dark .meal-record-entry-title {
+  color: $fl-dark-text !important;
+}
+
+// 记录卡路里数值
+.fl-page-theme-root--dark .meal-record-entry-cal {
+  color: $fl-dark-text !important;
+}
+
+// 餐食卡片上的计数徽章
+.fl-page-theme-root--dark .meal-count-badge {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .meal-count-badge-text {
+  color: $fl-dark-accent !important;
 }

@@ -18,11 +18,12 @@ import {
   mapCalendarDateToApi,
   resolveHomeMealPrimaryRecordId,
   deleteFoodRecord,
+  getAnalyzeTaskStatusCount,
+  getFoodExpiryDashboard,
   type DashboardTargets,
   type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
-  type HomeMealRecordEntry,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
@@ -59,6 +60,7 @@ import {
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { isTodayRecordDate } from '../../utils/record-date'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -72,51 +74,7 @@ import {
 } from './utils/constants'
 import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
-
-/** 微信操作面板单行不宜过长，总长度含「 · 」分隔符一并限制 */
-const HOME_MEAL_PICKER_LINE_MAX_CHARS = 34
-
-function truncatePickerText(text: string, maxLen: number): string {
-  const t = text.replace(/\s+/g, ' ').trim()
-  if (t.length <= maxLen) return t
-  if (maxLen <= 1) return '…'
-  return `${t.slice(0, maxLen - 1)}…`
-}
-
-/** 首页同一餐多条记录时，操作面板单行：名称（可截断）· 时间（不展示热量） */
-function formatHomeMealPickerEntry(entry: HomeMealRecordEntry): string {
-  let timePart = ''
-  if (entry.record_time) {
-    try {
-      const d = new Date(entry.record_time)
-      if (!Number.isNaN(d.getTime())) {
-        const h = d.getHours()
-        const m = d.getMinutes()
-        timePart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  const timeSuffix = timePart ? ` · ${timePart}` : ''
-
-  const rawTitle = (entry.title || '').trim()
-  if (!rawTitle) {
-    return timePart || '饮食记录'
-  }
-  if (!timePart) {
-    return truncatePickerText(rawTitle, HOME_MEAL_PICKER_LINE_MAX_CHARS)
-  }
-
-  const maxTitle = Math.max(4, HOME_MEAL_PICKER_LINE_MAX_CHARS - timeSuffix.length)
-  const titleShort = truncatePickerText(rawTitle, maxTitle)
-  const line = `${titleShort}${timeSuffix}`
-  if (line.length <= HOME_MEAL_PICKER_LINE_MAX_CHARS) return line
-  return truncatePickerText(line, HOME_MEAL_PICKER_LINE_MAX_CHARS)
-}
-
-const HOME_MEAL_ACTION_SHEET_MAX = 6
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
 
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
 function getInviteCodeFromUserId(userId: string): string {
@@ -606,6 +564,18 @@ function IndexPage() {
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
+  // 等待记录的识别任务数量（用于 RecordMenu badge 和 custom-tab-bar badge）
+  const [waitingRecordCount, setWaitingRecordCount] = useState(() => {
+    try { return Number(Taro.getStorageSync('analyze_waiting_record_count') || 0) }
+    catch { return 0 }
+  })
+  // 是否有未查看的 waiting_record 任务（用于红点提醒）
+  const [hasUnseenWaitingRecord, setHasUnseenWaitingRecord] = useState(() => {
+    try {
+      const raw = Taro.getStorageSync('analyze_has_unseen_waiting_record')
+      return raw === true || raw === 'true' || raw === 1
+    } catch { return false }
+  })
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
@@ -619,6 +589,9 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = useState<FoodRecord | null>(null)
   const [showRecordEditModal, setShowRecordEditModal] = useState(false)
   const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
+  /** 同一餐次多条记录时的选择面板 */
+  const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = useState(false)
+  const [mealRecordsDialogMeal, setMealRecordsDialogMeal] = useState<HomeMealItem | null>(null)
 
   const showRecordPosterModalRef = useRef(false)
   const showDailyPosterModalRef = useRef(false)
@@ -684,16 +657,39 @@ function IndexPage() {
     }
     try {
       const exerciseLogParams = { date: resolvedDate }
-      const [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
-        getHomeDashboard(resolvedDate),
-        getStatsSummary('week'),
-        fetchBodyMetricsSummaryRetry(),
-        getExerciseLogs(exerciseLogParams).catch(() => null)
-      ])
+      console.log('[DEBUG] loadDashboard start, date=', resolvedDate, 'seq=', seq)
+      let res, stats, bodyMetricsRes, exerciseLogsRes
+      try {
+        [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
+          getHomeDashboard(resolvedDate),
+          getStatsSummary('week'),
+          fetchBodyMetricsSummaryRetry(),
+          getExerciseLogs(exerciseLogParams).catch((err) => {
+            console.error('[DEBUG] getExerciseLogs FAILED:', err)
+            return null
+          })
+        ])
+        console.log('[DEBUG] loadDashboard Promise.all success')
+      } catch (err: any) {
+        console.error('[DEBUG] loadDashboard Promise.all FAILED:', err)
+        throw err
+      }
       if (seq !== loadDashboardSeqRef.current) {
         return
       }
       const intake = res.intakeData
+      // DEBUG: 打印首页餐食原始数据，排查 description / meal_record_entries 是否为空
+      console.log('[DEBUG] getHomeDashboard meals raw:', JSON.stringify(res.meals || [], null, 2))
+      if (Array.isArray(res.meals)) {
+        res.meals.forEach((m, i) => {
+          console.log(`[DEBUG] meal[${i}] type=${m.type} name=${m.name} description=${m.description} entriesCount=${Array.isArray(m.meal_record_entries) ? m.meal_record_entries.length : 'N/A'}`)
+          if (Array.isArray(m.meal_record_entries)) {
+            m.meal_record_entries.forEach((e, j) => {
+              console.log(`[DEBUG]   entry[${j}] id=${e.id} title=${e.title} total_calories=${e.total_calories}`)
+            })
+          }
+        })
+      }
       setIntakeData(intake)
       setMeals(res.meals || [])
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
@@ -715,6 +711,7 @@ function IndexPage() {
         achievement: nextAchievement
       }
       const currentSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
+      console.log('[DEBUG] about to save snapshot, date=', normalizedDate, 'currentSnapshotExists=', !!currentSnapshot)
       if (!currentSnapshot || JSON.stringify({
         intakeData: currentSnapshot.intakeData,
         meals: currentSnapshot.meals,
@@ -756,71 +753,11 @@ function IndexPage() {
           isToday: offset === 0
         })
       }
+      console.log('[DEBUG] weekHeatmapCells built:', nextWeekHeatmapCells.map(c => ({ date: c.date, state: c.state, calories: c.calories })))
       setWeekHeatmapCells(nextWeekHeatmapCells)
 
       homeLastLoadRef.current = { date: resolvedDate, ts: Date.now() }
       homeDataStaleRef.current = false
-
-      // 若本地缓存不足 7 天，后台异步补齐近 7 天数据
-      void (async () => {
-        try {
-          const snapshots = getStoredHomeDashboardSnapshots()
-          if (snapshots.length >= 7) return
-          const today = new Date()
-          const missingDates: string[] = []
-          // 用 Array.from + forEach 替代 for 循环，规避 Terser 对带闭包 for 循环的已知优化 bug
-          Array.from({ length: 7 }).forEach((_, idx) => {
-            const offset = idx - 6
-            const d = new Date(today)
-            d.setDate(today.getDate() + offset)
-            const dateKey = formatDateKey(d)
-            if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
-              missingDates.push(dateKey)
-            }
-          })
-          if (missingDates.length === 0) return
-          console.log('[dashboard-backfill] missing dates:', missingDates)
-          const results = await Promise.all(
-            missingDates.map(async (date) => {
-              try {
-                const dayRes = await getHomeDashboard(date)
-                const normDate = mapCalendarDateToApi(date) || date
-                return {
-                  date: normDate,
-                  updatedAt: Date.now(),
-                  intakeData: dayRes.intakeData,
-                  meals: dayRes.meals || [],
-                  expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
-                  exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
-                  achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
-                } as HomeDashboardLocalSnapshot
-              } catch (err) {
-                console.error('[dashboard-backfill] fetch failed for', date, err)
-                return null
-              }
-            })
-          )
-          results.forEach((snapshot) => {
-            if (snapshot) saveHomeDashboardSnapshot(snapshot)
-          })
-          // 完成后从缓存刷新热图 UI
-          setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
-          // 若当前选中日期已补齐，同步刷新首页数据
-          const currentDate = selectedDateRef.current || formatDateKey(new Date())
-          const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
-          if (refreshed) {
-            setIntakeData(refreshed.intakeData)
-            setMeals(refreshed.meals || [])
-            setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-            setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
-            setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
-            setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
-          }
-          console.log('[dashboard-backfill] done')
-        } catch (err) {
-          console.error('[dashboard-backfill] unhandled error', err)
-        }
-      })()
 
       // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
       if (bodyMetricsRes) {
@@ -877,6 +814,67 @@ function IndexPage() {
     }
   }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading, setIsSwitchingDate])
 
+  // 独立的后台缓存补齐逻辑：与主请求并行，互不干扰
+  async function ensureHomeDashboardCache(): Promise<void> {
+    if (!getAccessToken()) return
+    try {
+      const snapshots = getStoredHomeDashboardSnapshots()
+      if (snapshots.length >= 7) return
+      const today = new Date()
+      const missingDates: string[] = []
+      Array.from({ length: 7 }).forEach((_, idx) => {
+        const offset = idx - 6
+        const d = new Date(today)
+        d.setDate(today.getDate() + offset)
+        const dateKey = formatDateKey(d)
+        if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
+          missingDates.push(dateKey)
+        }
+      })
+      if (missingDates.length === 0) return
+      console.log('[dashboard-backfill] missing dates:', missingDates)
+      const results = await Promise.all(
+        missingDates.map(async (date) => {
+          try {
+            const dayRes = await getHomeDashboard(date)
+            const normDate = mapCalendarDateToApi(date) || date
+            return {
+              date: normDate,
+              updatedAt: Date.now(),
+              intakeData: dayRes.intakeData,
+              meals: dayRes.meals || [],
+              expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
+              exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
+              achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
+            } as HomeDashboardLocalSnapshot
+          } catch (err) {
+            console.error('[dashboard-backfill] fetch failed for', date, err)
+            return null
+          }
+        })
+      )
+      results.forEach((snapshot) => {
+        if (snapshot) saveHomeDashboardSnapshot(snapshot)
+      })
+      // 完成后从缓存刷新热图 UI
+      setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+      // 若当前选中日期已补齐，同步刷新首页数据
+      const currentDate = selectedDateRef.current || formatDateKey(new Date())
+      const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
+      if (refreshed) {
+        setIntakeData(refreshed.intakeData)
+        setMeals(refreshed.meals || [])
+        setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+        setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
+        setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
+        setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
+      }
+      console.log('[dashboard-backfill] done')
+    } catch (err) {
+      console.error('[dashboard-backfill] unhandled error', err)
+    }
+  }
+
   // 每次显示页面时刷新数据
   const selectedDateRef = useRef(selectedDate)
   selectedDateRef.current = selectedDate
@@ -907,6 +905,34 @@ function IndexPage() {
     if (!getAccessToken()) {
       return
     }
+
+    // 刷新识别任务 waiting_record badge 计数 + 食物保质期待办数量
+    void (async () => {
+      try {
+        const [sc, expiry] = await Promise.all([
+          getAnalyzeTaskStatusCount(),
+          getFoodExpiryDashboard().catch(() => null),
+        ])
+        const count = sc.waiting_record || 0
+        setWaitingRecordCount(count)
+        setHasUnseenWaitingRecord(sc.has_unseen_waiting_record || false)
+        Taro.setStorageSync('analyze_waiting_record_count', count)
+        Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
+        // 计算 profile tab badge 总数：waiting_record + 食物保质期待办 + 好友请求
+        const expiryTodo = expiry
+          ? (expiry.expired_count || 0) + (expiry.today_count || 0) + (expiry.soon_count || 0)
+          : 0
+        // 食物保质期：如果今天已看过，不算未读
+        const todayStr = new Date().toISOString().slice(0, 10)
+        const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
+        const foodExpiryBadge = lastSeenFoodExpiry === todayStr ? 0 : expiryTodo
+        const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+        Taro.setStorageSync('profile_tab_badge_count', count + foodExpiryBadge + friendBadge)
+      } catch {
+        // 静默失败，保留旧值
+      }
+    })()
+
     const targetDate = currentSelected || today
 
     // 若本地缓存的 meals 缺少蛋白质/脂肪/碳水，视为脏数据，强制走云端刷新
@@ -916,6 +942,10 @@ function IndexPage() {
     )) {
       homeDataStaleRef.current = true
     }
+
+    // 独立启动缓存补齐，与主请求并行，互不干扰
+    // 放在 canCache 判断之前，确保即使主请求被跳过也会检查缓存
+    void ensureHomeDashboardCache()
 
     const last = homeLastLoadRef.current
     const canCache =
@@ -1282,19 +1312,16 @@ function IndexPage() {
       openActionSheet(entries[0].id)
       return
     }
-    const slice = entries.slice(0, HOME_MEAL_ACTION_SHEET_MAX)
-    const itemList = slice.map((e) => formatHomeMealPickerEntry(e))
-    Taro.showActionSheet({
-      itemList,
-      alertText: meal.name || '选择记录',
-      success: (res) => {
-        const idx = res.tapIndex
-        if (idx < 0 || idx >= slice.length) return
-        const picked = slice[idx]
-        openActionSheet(picked.id)
-      },
-      fail: () => {}
-    })
+    // 多条记录 → 弹出自定义面板
+    setMealRecordsDialogMeal(meal)
+    setMealRecordsDialogVisible(true)
+  }, [])
+
+  /** 从多记录面板中选择一条 → 关闭面板 → 打开操作菜单 */
+  const handleSelectMealRecord = useCallback((recordId: string) => {
+    setMealRecordsDialogVisible(false)
+    setMealActionRecordId(recordId)
+    setMealActionSheetVisible(true)
   }, [])
 
   const handleMealEdit = async () => {
@@ -2047,6 +2074,11 @@ function IndexPage() {
           selectedDate={selectedDate} 
           onSelect={handleDateSelect} 
         />
+        {!isTodayRecordDate(selectedDate) && (
+          <View className='home-login-banner' style={{ marginTop: '16rpx' }}>
+            <Text className='home-login-banner-text'>{`正在补录 ${selectedDate}`}</Text>
+          </View>
+        )}
 
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
         <View className='main-card combined-card'>
@@ -2359,6 +2391,17 @@ function IndexPage() {
                         <Text className='meal-desc' numberOfLines={1}>
                           {meal.description || meal.meal_record_entries?.map((e) => e.title).filter(Boolean).join('、') || meal.name || label}
                         </Text>
+                        {(() => {
+                          const entryCount = Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()).length : 0
+                          if (entryCount > 1) {
+                            return (
+                              <View className='meal-count-badge'>
+                                <Text className='meal-count-badge-text'>{entryCount}次</Text>
+                              </View>
+                            )
+                          }
+                          return null
+                        })()}
                         {meal.time ? (
                           <View className='meal-time-pill'>
                             <Text className='meal-time-pill-text'>{meal.time}</Text>
@@ -2663,7 +2706,7 @@ function IndexPage() {
       )}
 
       {/* 记录菜单弹窗 */}
-      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} />
+      <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} hasUnseenWaitingRecord={hasUnseenWaitingRecord} />
 
       <View className='poster-canvas-wrap'>
         <Canvas
@@ -2715,6 +2758,14 @@ function IndexPage() {
           </View>
         </View>
       )}
+
+      {/* 同一餐次多条记录选择面板 */}
+      <MealRecordsDialog
+        visible={mealRecordsDialogVisible}
+        meal={mealRecordsDialogMeal}
+        onClose={() => setMealRecordsDialogVisible(false)}
+        onSelectRecord={handleSelectMealRecord}
+      />
 
       {/* 餐食卡片操作菜单 */}
       <MealActionSheet

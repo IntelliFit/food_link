@@ -642,9 +642,10 @@ $stats-blue-soft: #7aa9ce;
 
 .risk-card-score-wrap {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row;
+  align-items: baseline;
   gap: 4rpx;
+  flex-shrink: 0;
 }
 
 .risk-card-score {
@@ -680,63 +681,194 @@ $stats-blue-soft: #7aa9ce;
   text-overflow: ellipsis;
 }
 
-.risk-card-expand {
-  font-size: 20rpx;
-  line-height: 28rpx;
+.risk-card-more-btn {
+  margin-top: 16rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid rgb(226 232 240 / 80%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.risk-card-more-text {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 500;
+  color: $stats-primary-deep;
+}
+
+/* ---------- 友好度详情底部弹窗（与首页编辑目标弹窗同款圆角底卡） ---------- */
+.risk-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 48rpx 24rpx calc(env(safe-area-inset-bottom) + 24rpx);
+}
+
+.risk-detail-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.risk-detail-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100vh - 48rpx - env(safe-area-inset-bottom) - 24rpx);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 32rpx;
+  padding: 32rpx 24rpx 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 14%);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.risk-detail-handle {
+  width: 48rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: #d1d5db;
+  margin: 0 auto 24rpx;
+  flex-shrink: 0;
+}
+
+.risk-detail-header {
+  margin-bottom: 24rpx;
+  flex-shrink: 0;
+}
+
+.risk-detail-title {
+  display: block;
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 700;
+  color: #1e2939;
+}
+
+.risk-detail-score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-top: 12rpx;
+}
+
+.risk-detail-score {
+  font-size: 56rpx;
+  line-height: 1;
+  font-weight: 800;
+  color: $stats-primary-deep;
+}
+
+.risk-detail-score-unit {
+  font-size: 24rpx;
+  line-height: 32rpx;
   color: #94a3b8;
 }
 
-.risk-card-summary-expanded {
-  display: block;
-  margin-top: 12rpx;
-  font-size: 22rpx;
-  line-height: 34rpx;
-  color: #475569;
-}
-
-.risk-card-basis {
-  display: block;
-  margin-top: 12rpx;
-  font-size: 22rpx;
-  line-height: 34rpx;
-  color: #64748b;
-}
-
-.risk-card-divider {
-  margin: 18rpx 0 16rpx;
-  height: 1rpx;
-  background: rgb(226 232 240 / 90%);
-}
-
-.risk-card-action-label {
-  display: block;
-  font-size: 20rpx;
-  line-height: 28rpx;
-  color: #94a3b8;
-}
-
-.risk-card-action {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  line-height: 34rpx;
-  color: #0f172a;
-}
-
-.risk-card-delta {
-  display: inline-flex;
-  margin-top: 14rpx;
-  padding: 8rpx 14rpx;
+.risk-detail-badge {
+  margin-left: 8rpx;
+  padding: 6rpx 14rpx;
   border-radius: 999rpx;
-  background: rgb(92 184 150 / 10%);
   font-size: 20rpx;
   line-height: 28rpx;
   font-weight: 600;
-  color: #2f7f62;
+
+  &.tone-positive {
+    background: rgb(134 239 172 / 18%);
+    color: #16a34a;
+  }
+
+  &.tone-neutral {
+    background: rgb(191 219 254 / 22%);
+    color: #2563eb;
+  }
+
+  &.tone-warning {
+    background: rgb(253 224 71 / 22%);
+    color: #b45309;
+  }
+
+  &.tone-danger {
+    background: rgb(252 165 165 / 22%);
+    color: #dc2626;
+  }
 }
 
-.risk-card-body {
-  margin-top: 14rpx;
+.risk-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.risk-detail-divider {
+  height: 1rpx;
+  background: rgb(226 232 240 / 90%);
+  flex-shrink: 0;
+}
+
+.risk-detail-section-label {
+  display: block;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 600;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.risk-detail-section-text {
+  display: block;
+  font-size: 26rpx;
+  line-height: 42rpx;
+  color: #334155;
+}
+
+.risk-detail-delta {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 4rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 600;
+  color: #2f7f62;
+  flex-shrink: 0;
+}
+
+.risk-detail-close-btn {
+  margin-top: 24rpx;
+  padding: 24rpx;
+  border-radius: 999rpx;
+  background: $stats-primary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .action-plan-card__header {
@@ -1840,3 +1972,147 @@ $stats-blue-soft: #7aa9ce;
   color: #64748b;
 }
 
+
+/* ---------- AI 风险解读卡片（仿照 risk-card） ---------- */
+.ai-insight-card {
+  margin: 0 32rpx 28rpx;
+  padding: 24rpx;
+  background: linear-gradient(135deg, rgb(92 158 212 / 10%) 0%, #fff 100%);
+  border: 1rpx solid rgb(92 158 212 / 14%);
+}
+
+.ai-insight-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.ai-insight-card-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-insight-card-title {
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 700;
+  color: #3d6b94;
+}
+
+.ai-insight-card-summary {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  line-height: 30rpx;
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-insight-card-more-btn {
+  margin-top: 16rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid rgb(226 232 240 / 80%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-insight-card-more-text {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 500;
+  color: $stats-primary-deep;
+}
+
+/* ---------- AI 风险解读详情底部弹窗 ---------- */
+.ai-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 48rpx 24rpx calc(env(safe-area-inset-bottom) + 24rpx);
+}
+
+.ai-detail-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.ai-detail-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100vh - 48rpx - env(safe-area-inset-bottom) - 24rpx);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 32rpx;
+  padding: 32rpx 24rpx 28rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20rpx 60rpx rgb(15 23 42 / 14%);
+  animation: slideUp 0.3s ease;
+}
+
+.ai-detail-handle {
+  width: 48rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: #d1d5db;
+  margin: 0 auto 24rpx;
+  flex-shrink: 0;
+}
+
+.ai-detail-header {
+  margin-bottom: 24rpx;
+  flex-shrink: 0;
+}
+
+.ai-detail-title {
+  display: block;
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 700;
+  color: #1e2939;
+}
+
+.ai-detail-subtitle {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
+}
+
+.ai-detail-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.ai-detail-close-btn {
+  margin-top: 24rpx;
+  padding: 24rpx;
+  border-radius: 999rpx;
+  background: $stats-primary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ai-detail-close-text {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 600;
+  color: #fff;
+}

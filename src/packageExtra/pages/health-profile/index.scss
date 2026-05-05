@@ -1,7 +1,7 @@
 /* 健康档案 - 分步卡片答题式 */
 .health-profile-page {
   height: 100vh;
-  background: #fff;
+  background: #f8f9fa;
   padding: 0;
   box-sizing: border-box;
   display: flex;
@@ -9,42 +9,44 @@
   overflow: hidden;
 }
 
-/* 进度条 */
+/* 进度条 - 圆点样式 */
 .progress-wrap {
-  padding: 32rpx 40rpx 24rpx;
+  padding: 40rpx 40rpx 24rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  background: #fff;
+  background: transparent;
 }
 
 .progress-dots {
   display: flex;
-  gap: 12rpx;
+  gap: 16rpx;
   flex: 1;
+  justify-content: center;
 }
 
 .progress-dot {
-  flex: 1;
-  height: 8rpx;
-  border-radius: 4rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
   background: #e2e8f0;
-  transition: all 0.25s ease;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
 
   &.active {
-    background: #99f6e4;
+    background: #00bc7d;
   }
 
   &.current {
     background: #00bc7d;
-    transform: scaleY(1.2);
+    transform: scale(1.3);
   }
 }
 
 .progress-text {
   font-size: 24rpx;
-  color: #64748b;
+  color: #94a3b8;
   margin-left: 24rpx;
   min-width: 64rpx;
   text-align: right;
@@ -71,9 +73,9 @@
   flex: 0 0 750rpx;
   width: 750rpx;
   height: 100%;
-  background: #fff;
+  background: transparent;
   border-radius: 0;
-  padding: 48rpx 40rpx 80rpx;
+  padding: 32rpx 40rpx 80rpx;
   box-shadow: none;
   margin-right: 0;
   box-sizing: border-box;
@@ -84,43 +86,44 @@
 }
 
 .step-card-step {
-  font-size: 24rpx;
-  color: #00bc7d;
-  letter-spacing: 0.5px;
-  margin-bottom: 16rpx;
+  display: none;
 }
 
 .step-card-title {
-  font-size: 36rpx;
-  font-weight: 600;
+  font-size: 44rpx;
+  font-weight: 700;
   color: #1a1a1a;
-  margin-bottom: 40rpx;
-  line-height: 1.4;
+  margin-bottom: 12rpx;
+  line-height: 1.3;
 }
 
-/* 单选项 - 大卡片（性别） */
+.step-card-subtitle {
+  font-size: 28rpx;
+  color: #94a3b8;
+  margin-bottom: 48rpx;
+  line-height: 1.5;
+}
+
+/* 单选项 - 纵向列表 */
 .choice-row {
   display: flex;
-  gap: 24rpx;
-  flex: 1;
+  flex-direction: column;
+  gap: 20rpx;
   align-items: stretch;
 }
 
-/* 性别选项上下摆放，宽度仅比文字略宽 */
 .choice-row-vertical {
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 20rpx;
 
   .option-card.big {
-    flex: none;
-    width: auto;
-    min-width: 180rpx;
+    width: 100%;
     min-height: 100rpx;
     flex-direction: row;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
-    gap: 16rpx;
+    gap: 24rpx;
     padding: 28rpx 36rpx;
 
     .option-icon {
@@ -135,47 +138,69 @@
   }
 }
 
-/* 所有带图标的选项：图标在文字前（横向），宽度仅比内容略宽 */
+/* 选项卡片 - 参考图风格：白色背景+灰色边框+左侧单选圆圈 */
 .option-card {
-  flex: 0 0 auto;
+  width: 100%;
   border-radius: 20rpx;
-  background: #f8fafc;
-  border: 2rpx solid transparent;
+  background: #fff;
+  border: 2rpx solid #e2e8f0;
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  padding: 24rpx 32rpx;
+  justify-content: flex-start;
+  padding: 28rpx 32rpx;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  gap: 16rpx;
-  box-shadow: 0 2rpx 4rpx rgb(0 0 0 / 2%);
+  gap: 20rpx;
+  box-sizing: border-box;
+  position: relative;
 
   &.big {
     min-height: 100rpx;
   }
 
+  /* 左侧单选圆圈 - 未选中 */
+  &::before {
+    content: '';
+    width: 36rpx;
+    height: 36rpx;
+    border-radius: 50%;
+    border: 3rpx solid #d1d5db;
+    background: #fff;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+  }
+
   &.active,
   &:active {
-    background: #e6fffa !important;
+    background: #fff !important;
     border-color: #00bc7d !important;
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 10%);
+    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 10%);
+
+    /* 左侧单选圆圈 - 选中 */
+    &::before {
+      border-color: #00bc7d;
+      background: #00bc7d;
+      box-shadow: inset 0 0 0 4rpx #fff;
+    }
 
     .option-icon {
       transform: scale(1.1);
+      color: #00bc7d;
     }
 
     .option-label {
-      color: #00bc7d !important;
+      color: #1a1a1a !important;
       font-weight: 600;
     }
 
     .option-desc {
-      color: #34d399 !important;
+      color: #64748b !important;
     }
   }
 
   .option-icon {
-    font-size: 48rpx;
+    font-size: 44rpx;
     margin-bottom: 0;
     margin-right: 0;
     line-height: 1;
@@ -209,62 +234,80 @@
   max-width: 100%;
 }
 
-/* 活动水平/目标：图标在文字前，描述换行，不超出容器 */
+/* 活动水平/目标：纵向列表样式 */
 .option-card.with-desc {
   width: 100%;
   max-width: 100%;
   min-width: 0;
   flex-direction: row;
   justify-content: flex-start;
-  padding: 32rpx 36rpx;
+  padding: 28rpx 32rpx;
   text-align: left;
   min-height: auto;
-  gap: 28rpx;
+  gap: 20rpx;
   box-sizing: border-box;
 
   .option-icon {
-    font-size: 52rpx;
+    font-size: 44rpx;
   }
 
   .option-info {
     display: flex;
     flex-direction: column;
-    gap: 8rpx;
+    gap: 6rpx;
     flex: 1;
     min-width: 0;
     overflow: hidden;
   }
 
   .option-label {
-    font-size: 32rpx;
-    font-weight: 600;
+    font-size: 30rpx;
+    font-weight: 500;
     line-height: 1.2;
   }
 
   .option-desc {
     margin-top: 0;
-    font-size: 26rpx;
+    font-size: 24rpx;
     line-height: 1.4;
   }
 }
 
-/* 多选 - 小卡片网格，选项宽度仅比文字略宽 */
+/* 多选 - 纵向列表 */
 .option-grid {
   display: flex;
-  flex-wrap: wrap;
-  gap: 20rpx;
+  flex-direction: column;
+  gap: 16rpx;
   margin-bottom: 32rpx;
 }
 
-/* 多选小卡片：图标在文字前，宽度随内容 */
+/* 多选小卡片：改为纵向列表+复选圆圈样式 */
 .option-card.small {
-  flex: 0 0 auto;
+  width: 100%;
   min-width: auto;
-  border-radius: 40rpx;
-  padding: 18rpx 32rpx;
-  justify-content: center;
-  background: #f1f5f9;
-  border: 1px solid transparent;
+  border-radius: 20rpx;
+  padding: 24rpx 32rpx;
+  justify-content: flex-start;
+  background: #fff;
+  border: 2rpx solid #e2e8f0;
+  box-shadow: none;
+  gap: 20rpx;
+
+  &::before {
+    content: '';
+    width: 36rpx;
+    height: 36rpx;
+    border-radius: 50%;
+    border: 3rpx solid #d1d5db;
+    background: #fff;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+  }
+
+  .option-icon {
+    font-size: 36rpx;
+  }
 
   .option-label {
     font-size: 28rpx;
@@ -280,12 +323,19 @@
   }
 
   &.active {
-    background: #00bc7d;
+    background: #fff;
     border-color: #00bc7d;
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 25%);
+    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 10%);
+
+    &::before {
+      border-color: #00bc7d;
+      background: #00bc7d;
+      box-shadow: inset 0 0 0 4rpx #fff;
+    }
 
     .option-label {
-      color: #fff;
+      color: #1a1a1a;
+      font-weight: 600;
     }
   }
 }
@@ -297,9 +347,10 @@
   gap: 16rpx;
   margin-bottom: 24rpx;
   padding: 16rpx 20rpx;
-  background: #f8fafc;
+  background: #fff;
   border-radius: 16rpx;
   border: 2rpx solid #e2e8f0;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 3%);
 
   .custom-input {
     flex: 1;
@@ -313,7 +364,7 @@
     padding: 12rpx 24rpx;
     font-size: 26rpx;
     color: #fff;
-    background: #00bc7d;
+    background: linear-gradient(135deg, #00bc7d 0%, #0d9488 100%);
     border-radius: 12rpx;
     transition: opacity 0.2s ease;
 
@@ -321,16 +372,71 @@
       opacity: 0.8;
     }
   }
+
+  .custom-input-cancel {
+    flex-shrink: 0;
+    width: 48rpx;
+    height: 48rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .cancel-icon-text {
+      font-size: 36rpx;
+      color: #94a3b8;
+      line-height: 1;
+    }
+
+    &:active .cancel-icon-text {
+      color: #64748b;
+    }
+  }
+}
+
+/* 大加号添加按钮 */
+.add-btn-round {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 20rpx 0;
+  margin-bottom: 24rpx;
+  border-radius: 16rpx;
+  border: 2rpx dashed #cbd5e1;
+  transition: all 0.2s ease;
+
+  &:active {
+    background: #f8fafc;
+    border-color: #94a3b8;
+  }
+
+  .add-btn-icon {
+    width: 56rpx;
+    height: 56rpx;
+    line-height: 52rpx;
+    text-align: center;
+    font-size: 40rpx;
+    font-weight: 300;
+    color: #94a3b8;
+    border: 2rpx dashed #cbd5e1;
+    border-radius: 50%;
+  }
+
+  .add-btn-label {
+    font-size: 26rpx;
+    color: #94a3b8;
+  }
 }
 
 /* 日期选择卡片 */
 .picker-card {
   padding: 36rpx;
-  background: #f8fafc;
-  border-radius: 20rpx;
+  background: #fff;
+  border-radius: 24rpx;
   border: 2rpx dashed #cbd5e1;
   margin-bottom: 32rpx;
   text-align: center;
+  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 4%);
 }
 
 .picker-card-value {
@@ -357,31 +463,38 @@
 .quick-num {
   flex: 0 0 calc(20% - 16rpx);
   padding: 24rpx 12rpx;
-  background: #f8fafc;
+  background: #fff;
   border-radius: 16rpx;
   border: 2rpx solid transparent;
   text-align: center;
   transition: all 0.2s ease;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 4%);
 
   &.active {
-    background: #e6fffa;
+    background: #00bc7d;
     border-color: #00bc7d;
-    color: #0d9488;
+    color: #fff;
+    box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 25%);
   }
 
   .quick-num-unit {
     display: block;
     font-size: 22rpx;
-    color: #64748b;
+    color: #94a3b8;
     margin-top: 4rpx;
+  }
+
+  &.active .quick-num-unit {
+    color: rgba(255, 255, 255, 0.8);
   }
 }
 
 .input-card {
   padding: 20rpx 24rpx;
-  background: #f8fafc;
+  background: #fff;
   border-radius: 16rpx;
   margin-bottom: 32rpx;
+  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 3%);
 }
 
 .card-input {
@@ -400,14 +513,14 @@
   box-sizing: border-box;
 }
 
-/* 卡片底部：上一题 + 确认 同一行（方案 D） */
+/* 卡片底部：上一步 + 下一步 参考图风格 */
 .card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
   padding-top: 32rpx;
-  gap: 24rpx;
+  gap: 20rpx;
   flex-shrink: 0;
 }
 
@@ -415,51 +528,81 @@
   justify-content: flex-end;
 }
 
-.card-prev-link {
+/* 上一步按钮 */
+.card-prev-btn {
+  flex: 1;
+  height: 92rpx;
+  line-height: 92rpx;
+  text-align: center;
   font-size: 28rpx;
-  color: #0d9488;
-  padding: 16rpx 0;
-  flex-shrink: 0;
+  font-weight: 500;
+  color: #64748b;
+  background: #fff;
+  border-radius: 46rpx;
+  border: 2rpx solid #e2e8f0;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+
+  &:active {
+    background: #f8fafc;
+    border-color: #d1d5db;
+  }
 }
 
-/* 下一题 / 保存按钮：紧贴选项/文本框下方 */
+.card-prev-arrow {
+  font-size: 32rpx;
+  color: #94a3b8;
+}
 
-/* Taroify Button 覆盖：移除默认边框 */
+.card-next-btn .iconfont {
+  font-size: 28rpx;
+  margin-left: 6rpx;
+}
+
+/* 下一步 / 保存按钮 */
 .health-profile-page .taroify-button::after {
   border: none;
 }
 
 .card-next-btn {
   flex: 1;
-  max-width: 420rpx;
-  margin-top: 0;
-  height: 88rpx;
-  line-height: 88rpx;
+  height: 92rpx;
+  line-height: 92rpx;
   text-align: center;
   font-size: 30rpx;
   font-weight: 600;
   color: #00bc7d;
-  background: #e6fffa;
-  border-radius: 44rpx;
-  border: none;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  background: #fff;
+  border-radius: 46rpx;
+  border: 2rpx solid #e2e8f0;
+  transition: all 0.2s ease;
+  box-shadow: none;
 
   &.ready {
-    box-shadow: 0 4rpx 20rpx rgb(0 188 125 / 25%);
+    background: #00bc7d;
+    border-color: #00bc7d;
+    color: #fff;
+    box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 25%);
   }
 
   &.primary {
     flex: 1;
     max-width: none;
     color: #fff;
-    background: linear-gradient(135deg, #00bc7d 0%, #0d9488 100%);
+    background: #00bc7d;
+    border-color: #00bc7d;
     margin-bottom: 0;
+    box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 25%);
   }
 
   &[disabled] {
     opacity: 0.5;
     color: #94a3b8;
     background: #e2e8f0;
+    border-color: #e2e8f0;
     box-shadow: none;
   }
 }

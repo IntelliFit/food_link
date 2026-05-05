@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import py_compile; py_compile.compile\\('main.py', doraise=True\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('D:/projects/food_link/backend/main.py', doraise=True\\)\")",
+      "Bash(python *)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git pull *)",
+      "Bash(git push *)",
+      "Bash(git stash *)"
+    ]
+  }
+}

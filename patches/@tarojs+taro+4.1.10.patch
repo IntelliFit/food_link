@@ -1,0 +1,15 @@
+diff --git a/node_modules/@tarojs/taro/index.js b/node_modules/@tarojs/taro/index.js
+index a9921eb..3d5d2b8 100644
+--- a/node_modules/@tarojs/taro/index.js
++++ b/node_modules/@tarojs/taro/index.js
+@@ -5,5 +5,8 @@ if (hooks.isExist('initNativeApi')) {
+   hooks.call('initNativeApi', taro)
+ }
+ 
+-module.exports = taro
+-module.exports.default = module.exports
++// fix: 避免覆盖 module.exports 导致 react API 丢失
++// Taro 4 将 react 与 taro 打包到同一文件，直接覆盖 module.exports 会使
++// react 的 createContext/useState 等 API 无法通过 require('react') 访问
++Object.assign(module.exports, taro)
++module.exports.default = taro

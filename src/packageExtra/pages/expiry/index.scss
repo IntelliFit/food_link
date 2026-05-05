@@ -115,6 +115,21 @@
   margin-bottom: 20rpx;
 }
 
+.expiry-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.expiry-section-header:active {
+  opacity: 0.7;
+}
+
+.expiry-section-header .expiry-section-title {
+  margin-bottom: 0;
+}
+
 .expiry-item-card {
   padding: 28rpx;
   margin-bottom: 20rpx;

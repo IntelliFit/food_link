@@ -24,6 +24,10 @@ export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
   ''
 )
+export const ANALYSIS_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
+  () => __ANALYSIS_SUBSCRIBE_TEMPLATE_ID__,
+  ''
+)
 
 // 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
 if (process.env.NODE_ENV !== 'production') {
@@ -368,8 +372,10 @@ export interface SaveFoodRecordRequest {
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
-  /** 来源识别任务 ID（从分析历史保存而来时传入） */
+  /** 来源识别任务 ID（从识别记录保存而来时传入） */
   source_task_id?: string
+  /** 记录日期 YYYY-MM-DD，仅支持近 3 天内补录 */
+  date?: string
 }
 
 /** 单条偏差样本（标记样本接口请求项） */
@@ -433,6 +439,10 @@ export interface HomeMealRecordEntry {
   total_calories?: number
   /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
   title?: string
+  /** 记录图片（单图），供弹层面板直接展示 */
+  image_path?: string | null
+  /** 记录图片列表 */
+  image_paths?: string[] | null
   /** 完整记录数据，用于首页直接编辑而无需二次请求 */
   full_record?: FoodRecord
 }
@@ -694,6 +704,8 @@ export interface LoginRequestParams {
   phoneCode?: string
   /** 注册时填写邀请人码，双方各得积分（后端校验） */
   inviteCode?: string
+  /** 开发环境测试用：模拟新用户的 openid */
+  testOpenid?: string
 }
 
 // 登录响应接口
@@ -788,6 +800,14 @@ export interface MembershipStatus {
   invite_bonus_credits?: number
   /** 今日海报奖励积分 */
   share_bonus_credits?: number
+  /** 今日剩余系统积分，次日清零 */
+  system_credits_remaining?: number
+  /** 用户累计奖励积分余额，不次日清零 */
+  earned_credits_balance?: number
+  /** 今日从累计奖励积分中消耗的额度 */
+  earned_credits_consumed_today?: number
+  /** 当前总可用积分 = 系统剩余 + 累计奖励余额 */
+  total_credits_available?: number
   /** 次日 00:00+08:00 的 ISO 字符串，用于倒计时 */
   credits_reset_at?: string | null
   /** 是否在免费试用期内 */
@@ -820,9 +840,15 @@ export interface MembershipStatus {
 export interface ClaimSharePosterRewardResponse {
   claimed: boolean
   already_claimed: boolean
+  /** 今日是否已达海报分享领奖次数上限（与 share_poster_claims_today 配合） */
+  daily_cap_reached?: boolean
+  /** 今日已成功领取海报分享奖励的次数（含本次） */
+  share_poster_claims_today?: number
   credits: number
   daily_credits_max?: number
   daily_credits_remaining?: number
+  earned_credits_balance?: number | null
+  total_credits_available?: number | null
   message: string
   points_balance?: number | null
 }
@@ -1681,12 +1707,14 @@ export async function saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{
   }
 }
 
-// ---------- 异步分析任务（提交后 Worker 执行，可稍后在分析历史查看） ----------
+// ---------- 异步分析任务（提交后 Worker 执行，可稍后在识别记录查看） ----------
 
 export interface AnalyzeTaskSubmitParams {
   image_url: string
   image_urls?: string[]
   meal_type?: MealType
+  subscribe_status?: string
+  date?: string
   timezone_offset_minutes?: number
   province?: string
   city?: string
@@ -1719,14 +1747,40 @@ export interface AnalysisTask {
   image_url?: string | null  // 图片分析时有值，文字分析时为空
   image_paths?: string[] | null // 多图分析时有值
   text_input?: string | null  // 文字分析时有值，图片分析时为空
-  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out'
+  status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out' | 'cancelled'
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
   is_violated?: boolean          // AI 审核是否违规
   violation_reason?: string | null // 违规原因
+  is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
+  record_id?: string              // 已保存时对应的饮食记录 ID，供跳转详情页
   created_at: string
   updated_at: string
+}
+
+export interface AnalyzeTaskStatusCount {
+  recognizing: number
+  waiting_record: number
+  recorded: number
+  has_unseen_waiting_record: boolean
+}
+
+export async function getAnalyzeTaskStatusCount(): Promise<AnalyzeTaskStatusCount> {
+  const res = await authenticatedRequest('/api/analyze/tasks/status-count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取任务状态数量失败')
+  }
+  return res.data as AnalyzeTaskStatusCount
+}
+
+/** 标记用户已查看识别记录列表 */
+export async function markAnalyzeHistorySeen(): Promise<{ success: boolean }> {
+  const res = await authenticatedRequest('/api/user/last-seen-analyze-history', { method: 'POST' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '标记查看状态失败')
+  }
+  return res.data as { success: boolean }
 }
 
 /** 提交食物分析任务，立即返回 task_id */
@@ -1804,6 +1858,7 @@ export async function submitAnalyzeBatch(body: AnalyzeBatchSubmitParams): Promis
 export interface AnalyzeTextTaskSubmitParams {
   text: string
   meal_type?: MealType
+  date?: string
   timezone_offset_minutes?: number
   province?: string
   city?: string
@@ -1817,6 +1872,7 @@ export interface AnalyzeTextTaskSubmitParams {
   previousResult?: AnalyzeResponse
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
+  subscribe_status?: string
   correctionItems?: Array<{
     name: string
     weight: number
@@ -1854,6 +1910,7 @@ export interface ContinuePrecisionSessionParams {
   image_url?: string
   image_urls?: string[]
   text?: string
+  date?: string
   additionalContext?: string
   meal_type?: MealType
   timezone_offset_minutes?: number
@@ -2167,24 +2224,38 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   console.log('[DEBUG API] 转换后日期:', apiDate)
   console.log('[DEBUG API] 请求 URL:', url)
   
-  const res = await authenticatedRequest(url, { 
-    method: 'GET', 
-    timeout: 10000,
-    header: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache'
-    }
-  })
+  let res
+  try {
+    res = await authenticatedRequest(url, { 
+      method: 'GET', 
+      timeout: 30000,
+      header: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    })
+  } catch (err) {
+    console.error('[DEBUG API] authenticatedRequest 抛出异常:', err)
+    throw err
+  }
   console.log('[DEBUG API] 响应状态:', res.statusCode)
+  console.log('[DEBUG API] 响应数据类型:', typeof res.data)
   console.log('[DEBUG API] 响应数据 intakeData:', res.data?.intakeData)
   console.log('[DEBUG API] ====== 请求结束 ======')
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取首页数据失败'
     throw new Error(msg)
   }
-  const data = res.data as HomeDashboard
-  const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
-  return stripMealFullRecordsFromDashboard({ ...data, meals })
+  let data: HomeDashboard
+  try {
+    data = res.data as HomeDashboard
+    const meals = Array.isArray(data.meals) ? data.meals.map(normalizeHomeMealItem) : []
+    return stripMealFullRecordsFromDashboard({ ...data, meals })
+  } catch (parseErr) {
+    console.error('[DEBUG API] 解析响应数据失败:', parseErr)
+    console.error('[DEBUG API] 原始数据:', JSON.stringify(res.data).slice(0, 500))
+    throw parseErr
+  }
 }
 
 /**
@@ -2486,6 +2557,7 @@ export async function authenticatedRequest(
     throw new Error('未登录，请先登录')
   }
 
+  console.log(`[DEBUG AUTH] 请求开始: ${url}`)
   const res = await Taro.request({
     url: `${API_BASE_URL}${url}`,
     ...options,
@@ -2495,6 +2567,7 @@ export async function authenticatedRequest(
       ...(options.header || {})
     })
   })
+  console.log(`[DEBUG AUTH] 请求完成: ${url}, statusCode=${res.statusCode}, dataType=${typeof res.data}, dataKeys=${res.data && typeof res.data === 'object' ? Object.keys(res.data).join(',') : 'N/A'}`)
 
   if (res.statusCode === 401 || res.statusCode === 403) {
     redirectToLogin('登录已失效，请重新登录')
@@ -2528,7 +2601,7 @@ export async function authenticatedRequest(
  * @param phoneCode 获取手机号的 code（可选）
  * @returns Promise<LoginResponse> 登录结果
  */
-export async function login(code: string, phoneCode?: string, inviteCode?: string): Promise<LoginResponse> {
+export async function login(code: string, phoneCode?: string, inviteCode?: string, testOpenid?: string): Promise<LoginResponse> {
   try {
     const requestData: LoginRequestParams = {
       code: code
@@ -2539,6 +2612,9 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     }
     if (inviteCode?.trim()) {
       requestData.inviteCode = inviteCode.trim()
+    }
+    if (testOpenid?.trim()) {
+      requestData.testOpenid = testOpenid.trim()
     }
 
     const response = await Taro.request({
@@ -2644,34 +2720,58 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
   }
 }
 
+// 会员状态短缓存：避免短时间内（如菜单弹窗→点击）重复请求
+let _membershipCache: { data: MembershipStatus; expiresAt: number } | null = null
+let _membershipPending: Promise<MembershipStatus> | null = null
+const MEMBERSHIP_CACHE_TTL_MS = 30_000
+
 /**
- * 获取当前用户会员状态
+ * 获取当前用户会员状态（带 30s 缓存，复用 in-flight 请求）
  */
 export async function getMyMembership(): Promise<MembershipStatus> {
-  try {
-    const response = await authenticatedRequest('/api/membership/me', {
-      method: 'GET',
-      timeout: 15000
-    })
-
-    if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '获取会员状态失败'
-      throw new Error(errorMsg)
-    }
-
-    return response.data as MembershipStatus
-  } catch (error: any) {
-    console.error('获取会员状态失败:', error)
-    throw new Error(error.message || '获取会员状态失败')
+  if (_membershipCache && Date.now() < _membershipCache.expiresAt) {
+    return _membershipCache.data
   }
+  if (_membershipPending) {
+    return _membershipPending
+  }
+
+  _membershipPending = (async () => {
+    try {
+      const response = await authenticatedRequest('/api/membership/me', {
+        method: 'GET',
+        timeout: 15000
+      })
+
+      if (response.statusCode !== 200) {
+        const errorMsg = (response.data as any)?.detail || '获取会员状态失败'
+        throw new Error(errorMsg)
+      }
+
+      const data = response.data as MembershipStatus
+      _membershipCache = { data, expiresAt: Date.now() + MEMBERSHIP_CACHE_TTL_MS }
+      return data
+    } catch (error: any) {
+      console.error('获取会员状态失败:', error)
+      throw new Error(error.message || '获取会员状态失败')
+    } finally {
+      _membershipPending = null
+    }
+  })()
+
+  return _membershipPending
 }
 
-export async function claimSharePosterReward(recordId?: string): Promise<ClaimSharePosterRewardResponse> {
+export async function claimSharePosterReward(recordId: string): Promise<ClaimSharePosterRewardResponse> {
+  const rid = (recordId || '').trim()
+  if (!rid) {
+    throw new Error('缺少记录 ID，无法领取海报奖励')
+  }
   try {
     const response = await authenticatedRequest('/api/membership/rewards/share-poster/claim', {
       method: 'POST',
       data: {
-        record_id: recordId || undefined
+        record_id: rid
       }
     })
 
@@ -3193,7 +3293,7 @@ export interface CheckinLeaderboardItem {
 }
 
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
-export type CommunityAuthorScope = 'all' | 'priority'
+export type CommunityAuthorScope = 'all' | 'priority' | 'public'
 
 export interface CommunityFeedQueryParams {
   meal_type?: MealType
@@ -3316,6 +3416,15 @@ export async function friendCancelSentRequest(requestId: string): Promise<void> 
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '撤销失败')
 }
 
+/** 获取食物分析任务数量 */
+export async function getAnalyzeTaskCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/analyze/tasks/count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取任务数量失败')
+  }
+  return res.data as { count: number }
+}
+
 /** 好友列表 */
 export async function friendGetList(): Promise<{ list: FriendListItem[] }> {
   const response = await authenticatedRequest('/api/friend/list', { method: 'GET' })
@@ -3343,6 +3452,19 @@ export async function friendGetRequestsOverview(): Promise<FriendRequestsOvervie
 export async function getFriendInviteProfile(userId: string): Promise<FriendInviteProfile> {
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile/${encodeURIComponent(userId)}`,
+    method: 'GET',
+    header: withNgrokBypassHeaders(),
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取邀请资料失败')
+  }
+  return response.data as FriendInviteProfile
+}
+
+export async function getFriendInviteProfileByCode(code: string): Promise<FriendInviteProfile> {
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/friend/invite/profile-by-code?code=${encodeURIComponent(code.trim())}`,
     method: 'GET',
     header: withNgrokBypassHeaders(),
     timeout: 10000
@@ -3904,6 +4026,15 @@ export async function createUserRecipe(data: CreateRecipeRequest): Promise<{ id:
   return response.data as { id: string; message: string }
 }
 
+/** 获取好友数量 */
+export async function getFriendCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/friend/count', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取好友数量失败')
+  }
+  return res.data as { count: number }
+}
+
 /** 获取私人食谱列表 */
 export async function getUserRecipes(params?: { meal_type?: string; is_favorite?: boolean }): Promise<{ recipes: UserRecipe[] }> {
   const q = new URLSearchParams()
@@ -3916,6 +4047,15 @@ export async function getUserRecipes(params?: { meal_type?: string; is_favorite?
     throw new Error((response.data as any)?.detail || '获取食谱列表失败')
   }
   return response.data as { recipes: UserRecipe[] }
+}
+
+/** 获取收藏/食谱数量 */
+export async function getFavoriteCount(): Promise<{ count: number }> {
+  const res = await authenticatedRequest('/api/recipes/count?is_favorite=true', { method: 'GET' })
+  if (res.statusCode !== 200) {
+    throw new Error((res.data as any)?.detail || '获取收藏数量失败')
+  }
+  return res.data as { count: number }
 }
 
 /** 获取单个食谱详情 */

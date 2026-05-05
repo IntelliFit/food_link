@@ -17,6 +17,7 @@ import {
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
+import loginLogo from '../../../assets/login-logo.png'
 import './index.scss'
 
 interface UserInfo {
@@ -24,8 +25,6 @@ interface UserInfo {
     name: string
     meta: string
 }
-
-const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
 
 /** 安全返回：若当前是第一个页面则跳转首页 */
 function safeNavigateBack() {
@@ -108,6 +107,10 @@ export default function LoginPage() {
     const [tempAvatar, setTempAvatar] = useState('')
     const [tempNickname, setTempNickname] = useState('')
 
+    /** 开发环境测试：模拟新用户 openid */
+    const [testOpenid, setTestOpenid] = useState('')
+    const isDev = process.env.NODE_ENV === 'development'
+
     const inviteCodeFromQuery = (router.params?.invite_code || '').trim()
     const redirectFromQuery = safeDecodeURIComponent((router.params?.redirect || '').trim())
 
@@ -154,7 +157,7 @@ export default function LoginPage() {
         try {
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
-            const loginData: LoginResponse = await login(loginRes.code)
+            const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCodeFromQuery, isDev ? testOpenid : undefined)
             await handleLoginSuccess(loginData)
         } catch (error: any) {
             console.error('登录失败:', error)
@@ -311,19 +314,38 @@ export default function LoginPage() {
         <FlPageThemeRoot>
         <View className='login-page'>
             <View className='login-header'>
-                <Image src={APP_LOGO_URL} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
+                <Image src={loginLogo} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
                 <Text className='app-name'>智健食探</Text>
                 <Text className='app-slogan'>记录饮食，连接健康</Text>
             </View>
 
+            {isDev && inviteCodeFromQuery && (
+                <View className='dev-invite-code-banner'>
+                    <Text className='dev-invite-code-text'>
+                        【测试模式】邀请码：{inviteCodeFromQuery}
+                    </Text>
+                </View>
+            )}
+
             <View className='login-actions'>
+                {isDev && (
+                    <View className='dev-test-input-wrapper'>
+                        <Text className='dev-test-label'>测试 OpenID（留空则走正常流程）</Text>
+                        <Input
+                            className='dev-test-openid-input'
+                            value={testOpenid}
+                            onInput={(e) => setTestOpenid(e.detail.value)}
+                            placeholder='输入测试 openid 模拟新用户'
+                        />
+                    </View>
+                )}
                 <TaroifyButton
                   className='wx-login-btn'
                   shape='round'
                   onClick={handleWxLogin}
                   loading={loading && !showProfileForm}
                 >
-                    微信一键登录
+                    手机号快捷登录
                 </TaroifyButton>
                 <TaroifyButton
                   className='skip-login-btn'
@@ -352,6 +374,16 @@ export default function LoginPage() {
                             }}
                         >
                             《用户服务协议》
+                        </Text>
+                        、
+                        <Text
+                          className='agreement-link'
+                          onClick={(e) => {
+                                e.stopPropagation()
+                                Taro.navigateTo({ url: extraPkgUrl('/pages/membership-agreement/index') })
+                            }}
+                        >
+                            《会员服务协议》
                         </Text>
                         和
                         <Text

@@ -17,6 +17,7 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import './index.scss'
@@ -141,6 +142,8 @@ function RecordManualPage() {
   const normalizedQuery = searchText.trim()
 
   useEffect(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    persistRecordTargetDate(String(params?.date || ''))
     const storedMeal = Taro.getStorageSync('analyzeMealType')
     const matchedMeal = typeof storedMeal === 'string'
       ? MEALS.find((meal) => meal.id === storedMeal)
@@ -422,6 +425,7 @@ function RecordManualPage() {
       const totalWeight = selectedItems.reduce((s, i) => s + i.weight, 0)
       
       await saveFoodRecord({
+        date: getStoredRecordTargetDate(),
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
@@ -439,13 +443,13 @@ function RecordManualPage() {
       } catch {
         /* ignore */
       }
-      const today = formatDateKey(new Date())
-      void refreshHomeDashboardLocalSnapshotFromCloud(today)
+      const targetDate = getStoredRecordTargetDate()
+      void refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
 
       Taro.showToast({ title: '记录成功', icon: 'success' })
       setTimeout(() => {
-        Taro.redirectTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${today}` }).catch(() => {
-          Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${today}` })
+        Taro.redirectTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${targetDate}` }).catch(() => {
+          Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${targetDate}` })
         })
       }, 600)
     } catch (e: any) {

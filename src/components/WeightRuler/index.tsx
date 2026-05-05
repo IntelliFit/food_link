@@ -115,15 +115,11 @@ export default function WeightRuler({
                 </View>
             </View>
 
-            <View className='bmi-card'>
-                <View className='bmi-header'>
-                    <Text className='bmi-label'>您的BMI:</Text>
-                    <Text className={`bmi-value status-${bmiStatus}`}>{bmi}</Text>
-                    <View className={`bmi-tag status-${bmiStatus}`}>
-                        <Text>{bmiLabel}</Text>
-                    </View>
-                </View>
-                <Text className='bmi-desc'>您的身材{bmiLabel === '健康' ? '很棒，请保持！' : '需要注意哦'}</Text>
+            <View className='bmi-row'>
+              <Text className='bmi-value-standalone'>BMI {bmi}</Text>
+              <Text className={`bmi-status-dot status-${bmiStatus}`}>·</Text>
+              <Text className={`bmi-label-mini status-${bmiStatus}`}>{bmiLabel}</Text>
+              <Text className='bmi-hint'>{bmiLabel === '健康' ? '身材很棒，请保持' : '需要注意哦'}</Text>
             </View>
 
             <View className='ruler-container' style={{ width: '100%' }}>

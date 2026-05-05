@@ -456,21 +456,21 @@ function FoodLibraryDetailPage() {
 
       {/* 底部操作栏 */}
       <View className='bottom-bar'>
-        <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
-          {item.liked ? <Like size='20' /> : <LikeOutlined size='20' />}
-        </View>
-        <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
-          {item.collected ? <Star size='20' className='star-filled' /> : <StarOutlined size='20' />}
-        </View>
-        <View className='comment-section'>
+        <View className='bottom-bar-row1'>
+          <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
+            {item.liked ? <Like size='20' /> : <LikeOutlined size='20' />}
+          </View>
+          <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
+            {item.collected ? <Star size='20' className='star-filled' /> : <StarOutlined size='20' />}
+          </View>
           <View className='action-btn comment-btn' onClick={() => setShowCommentModal(true)}>
             <CommentOutlined size='20' />
             <Text className='action-text'>写评论</Text>
           </View>
-          <View className='correction-bar'>
-            <Text className='correction-hint'>信息有误？</Text>
-            <Text className='correction-link' onClick={handleCorrection}>点击修正</Text>
-          </View>
+        </View>
+        <View className='correction-bar'>
+          <Text className='correction-hint'>信息有误？</Text>
+          <Text className='correction-link' onClick={handleCorrection}>点击修正</Text>
         </View>
       </View>
 

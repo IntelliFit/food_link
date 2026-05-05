@@ -1,4 +1,4 @@
-import { Image, ScrollView, Text, View } from '@tarojs/components'
+import { Canvas, Image, ScrollView, Text, View } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useCallback, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
@@ -6,13 +6,24 @@ import {
   deleteFoodRecord,
   getAccessToken,
   getFoodRecordList,
+  getFriendInviteProfile,
   getHomeDashboard,
+  getUnlimitedQRCode,
   mapCalendarDateToApi,
   showUnifiedApiError,
   type FoodRecord,
 } from '../../../utils/api'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type DayRecordPosterMeal } from '../../../utils/poster'
+import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+
+/** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
 
 import './index.scss'
 
@@ -73,12 +84,16 @@ type DayRecordCard = {
   id: string
   mealType: string
   mealName: string
+  foodName: string
   time: string
   imageUrls: string[]
   previewImage: string
   hasRealImage: boolean
-  foods: Array<{ name: string; amount: string; calorie: number }>
+  foods: Array<{ name: string; amount: string; calorie: number; protein: number; carbs: number; fat: number }>
   totalCalorie: number
+  totalProtein: number
+  totalCarbs: number
+  totalFat: number
 }
 
 function DayRecordPage() {
@@ -92,6 +107,12 @@ function DayRecordPage() {
   const [targetCalories, setTargetCalories] = useState(2000)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [yesterdayIntake, setYesterdayIntake] = useState<number | null>(null)
+
+  /** 分享海报 */
+  const [posterVisible, setPosterVisible] = useState(false)
+  const [posterGenerating, setPosterGenerating] = useState(false)
+  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
 
   const loadDayRecords = useCallback(async () => {
     if (!getAccessToken()) {
@@ -110,41 +131,64 @@ function DayRecordPage() {
     setLoading(true)
     setError(null)
     try {
-      const [recordRes, dashboardRes] = await Promise.all([
+      // 计算昨天日期用于较昨对比
+      const todayDate = new Date(`${listDate}T12:00:00`)
+      const yesterdayDate = new Date(todayDate)
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+      const yesterdayStr = formatDateKey(yesterdayDate)
+
+      const [recordRes, dashboardRes, yesterdayDashboardRes] = await Promise.all([
         getFoodRecordList(listDate),
         getHomeDashboard(listDate).catch(() => null),
+        getHomeDashboard(yesterdayStr).catch(() => null),
       ])
       const nextRecords = (recordRes.records || []).map((record: FoodRecord) => {
         const imageUrls = (record.image_paths && record.image_paths.length > 0)
           ? record.image_paths.filter(Boolean)
           : (record.image_path ? [record.image_path] : [])
 
+        const foodItems = (record.items || []).map((item) => {
+          const ratio = item.ratio ?? 100
+          const fullCalorie = item.nutrients?.calories ?? 0
+          const consumedCalorie = fullCalorie * (ratio / 100)
+          const fullProtein = item.nutrients?.protein ?? 0
+          const fullCarbs = item.nutrients?.carbs ?? 0
+          const fullFat = item.nutrients?.fat ?? 0
+          return {
+            name: item.name,
+            amount: `${item.intake ?? 0}g`,
+            calorie: Math.round(consumedCalorie * 10) / 10,
+            protein: Math.round(fullProtein * (ratio / 100) * 10) / 10,
+            carbs: Math.round(fullCarbs * (ratio / 100) * 10) / 10,
+            fat: Math.round(fullFat * (ratio / 100) * 10) / 10,
+          }
+        })
+        const foodName = foodItems.map(f => f.name).filter(Boolean).join('、') || '未命名食物'
+
         return {
           id: record.id,
           mealType: record.meal_type,
           mealName: MEAL_TYPE_NAMES[record.meal_type] || record.meal_type,
+          foodName,
           time: formatRecordTime(record.record_time),
           imageUrls,
           previewImage: imageUrls[0] || '',
           hasRealImage: imageUrls.length > 0,
-          foods: (record.items || []).map((item) => {
-            const ratio = item.ratio ?? 100
-            const fullCalorie = item.nutrients?.calories ?? 0
-            const consumedCalorie = fullCalorie * (ratio / 100)
-            return {
-              name: item.name,
-              amount: `${item.intake ?? 0}g`,
-              calorie: Math.round(consumedCalorie * 10) / 10,
-            }
-          }),
+          foods: foodItems,
           totalCalorie: Math.round((record.total_calories ?? 0) * 10) / 10,
+          totalProtein: Math.round((record.total_protein ?? 0) * 10) / 10,
+          totalCarbs: Math.round((record.total_carbs ?? 0) * 10) / 10,
+          totalFat: Math.round((record.total_fat ?? 0) * 10) / 10,
         }
       })
 
       setRecords(nextRecords)
-      setHistoryTotalCalorie(nextRecords.reduce((sum, item) => sum + item.totalCalorie, 0))
+      setHistoryTotalCalorie(Math.round(nextRecords.reduce((sum, item) => sum + item.totalCalorie, 0) * 10) / 10)
       if (dashboardRes?.intakeData?.target) {
         setTargetCalories(dashboardRes.intakeData.target)
+      }
+      if (yesterdayDashboardRes?.intakeData?.current != null) {
+        setYesterdayIntake(yesterdayDashboardRes.intakeData.current)
       }
     } catch (e: any) {
       setError('获取当天记录失败，请稍后重试')
@@ -210,21 +254,232 @@ function DayRecordPage() {
     Taro.switchTab({ url: '/pages/record/index' })
   }
 
+  // ---- 分享海报 ----
+
+  const handleShareDayRecord = useCallback(() => {
+    if (posterGenerating) return
+    setPosterVisible(true)
+    // 延迟触发生成，让弹窗先出现
+    setTimeout(() => {
+      handleGenerateDayRecordPoster()
+    }, 100)
+  }, [posterGenerating, records, historyTotalCalorie, targetCalories])
+
+  const handleGenerateDayRecordPoster = useCallback(() => {
+    if (posterGenerating || records.length === 0) return
+    setPosterGenerating(true)
+    Taro.showLoading({ title: '生成海报中...' })
+
+    const query = Taro.createSelectorQuery()
+    query
+      .select('#dayRecordPosterCanvas')
+      .fields({ node: true, size: true })
+      .exec(async (res) => {
+        if (!res?.[0]?.node) {
+          Taro.hideLoading()
+          setPosterGenerating(false)
+          Taro.showToast({ title: '画布未就绪，请重试', icon: 'none' })
+          return
+        }
+        const canvas = res[0].node as HTMLCanvasElement & { createImage?: () => { src: string; onload: () => void; onerror: (err?: any) => void; width: number; height: number } }
+        const dpr = 2
+
+        const loadImage = async (src: string): Promise<{ width: number; height: number } | null> => {
+          if (!src || !canvas.createImage) return null
+          let localSrc: string
+          try {
+            localSrc = await resolveCanvasImageSrc(src)
+          } catch (e) {
+            console.error('resolveCanvasImageSrc fail', src, e)
+            return null
+          }
+          return new Promise<{ width: number; height: number } | null>((resolve) => {
+            const img = canvas.createImage!()
+            img.onload = () => resolve(img)
+            img.onerror = (e) => {
+              console.error('Load image fail', localSrc, e)
+              resolve(null)
+            }
+            img.src = localSrc
+          })
+        }
+
+        try {
+          // 并行加载：餐次图片 + 用户资料 + 二维码
+          const mealImagePromises = records.map((meal) =>
+            meal.hasRealImage ? loadImage(meal.previewImage) : Promise.resolve(null)
+          )
+          const uid = (Taro.getStorageSync('user_id') as string) || ''
+
+          const [mealImages, profile, qrImg] = await Promise.all([
+            Promise.all(mealImagePromises),
+            (async () => {
+              if (!uid) return { nickname: '', avatar: '', invite_code: '' }
+              try {
+                return await getFriendInviteProfile(uid)
+              } catch {
+                return { nickname: '', avatar: '', invite_code: '' }
+              }
+            })(),
+            (async () => {
+              const inviteCode = uid ? uid.replace(/-/g, '').toLowerCase().slice(0, 8) : ''
+              const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
+              const isDev = typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
+              const envCandidates: Array<'develop' | 'trial' | 'release'> = isDev
+                ? ['develop', 'trial', 'release']
+                : ['release', 'trial', 'develop']
+              for (const envVersion of envCandidates) {
+                try {
+                  const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
+                  const img = await loadImage(base64)
+                  if (img) return img
+                } catch { /* try next env */ }
+              }
+              return null
+            })(),
+          ])
+
+          const avatarImg = profile.avatar ? await loadImage(profile.avatar).catch(() => null) : null
+
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            Taro.hideLoading()
+            setPosterGenerating(false)
+            Taro.showToast({ title: '画布不可用', icon: 'none' })
+            return
+          }
+
+          const totalProtein = records.reduce((s, m) => s + m.totalProtein, 0)
+          const totalCarbs = records.reduce((s, m) => s + m.totalCarbs, 0)
+          const totalFat = records.reduce((s, m) => s + m.totalFat, 0)
+
+          const dynamicHeight = computeDayRecordPosterHeight(records.length)
+          canvas.width = POSTER_WIDTH * dpr
+          canvas.height = dynamicHeight * dpr
+          ctx.scale(dpr, dpr)
+
+          const posterMeals: DayRecordPosterMeal[] = records.map((meal) => ({
+            foodName: meal.foodName,
+            mealType: meal.mealName,  // "早餐"/"午餐" 等中文标签
+            mealTime: meal.time,
+            imageUrl: meal.previewImage,
+            hasImage: meal.hasRealImage,
+            calorie: meal.totalCalorie,
+            protein: meal.totalProtein,
+            carbs: meal.totalCarbs,
+            fat: meal.totalFat,
+          }))
+
+          drawDayRecordPoster(ctx, {
+            width: POSTER_WIDTH,
+            height: dynamicHeight,
+            data: {
+              dateLabel: formatDisplayDate(selectedDate),
+              totalIntake: historyTotalCalorie,
+              targetIntake: targetCalories,
+              recordCount: records.length,
+              totalProtein,
+              totalCarbs,
+              totalFat,
+              deltaKcal: yesterdayIntake != null ? historyTotalCalorie - yesterdayIntake : undefined,
+              meals: posterMeals,
+            },
+            mealImages,
+            qrCodeImage: qrImg,
+            sharerNickname: profile.nickname || '',
+            sharerAvatarImage: avatarImg,
+          })
+
+          Taro.canvasToTempFilePath({
+            canvas: canvas as any,
+            destWidth: POSTER_WIDTH * 2,
+            destHeight: dynamicHeight * 2,
+            fileType: 'jpg',
+            quality: 0.95,
+            success: (resp) => {
+              Taro.hideLoading()
+              setPosterGenerating(false)
+              setPosterImageUrl(resp.tempFilePath)
+            },
+            fail: (err) => {
+              Taro.hideLoading()
+              setPosterGenerating(false)
+              Taro.showToast({ title: '生成失败', icon: 'none' })
+              console.error('canvasToTempFilePath fail', err)
+            }
+          })
+        } catch (e) {
+          Taro.hideLoading()
+          setPosterGenerating(false)
+          Taro.showToast({ title: '生成失败，请重试', icon: 'none' })
+          console.error('drawDayRecordPoster error', e)
+        }
+      })
+  }, [records, historyTotalCalorie, targetCalories, selectedDate, yesterdayIntake, posterGenerating])
+
+  const closeDayRecordPoster = useCallback(() => {
+    setPosterVisible(false)
+    setPosterImageUrl(null)
+    setPosterGenerating(false)
+  }, [])
+
+  const handleShareDayRecordPosterImage = useCallback(() => {
+    if (!posterImageUrl) return
+    Taro.showShareImageMenu({
+      path: posterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        console.error('showShareImageMenu fail', err)
+        Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
+      }
+    })
+  }, [posterImageUrl])
+
+  const handleSaveDayRecordPoster = useCallback(() => {
+    if (!posterImageUrl) return
+    Taro.saveImageToPhotosAlbum({
+      filePath: posterImageUrl,
+      success: () => {
+        Taro.showToast({ title: '已保存到相册', icon: 'success' })
+        closeDayRecordPoster()
+      },
+      fail: (err) => {
+        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
+          Taro.showModal({
+            title: '提示',
+            content: '需要您授权保存图片到相册',
+            confirmText: '去设置',
+            success: (r) => {
+              if (r.confirm) Taro.openSetting()
+            }
+          })
+        } else {
+          Taro.showToast({ title: '保存失败', icon: 'none' })
+        }
+      }
+    })
+  }, [posterImageUrl, closeDayRecordPoster])
+
   return (
     <View className='day-record-page'>
       <ScrollView className='day-record-scroll' scrollY enhanced showScrollbar={false}>
         <View className='day-record-top'>
           <Text className='day-record-date-line'>{formatDisplayDate(selectedDate)}</Text>
+          {records.length > 0 && (
+            <View className='day-record-share-btn' onClick={handleShareDayRecord}>
+              <Text className='iconfont icon-fenxiang1 day-record-share-icon' />
+              <Text className='day-record-share-text'>分享今日饮食</Text>
+            </View>
+          )}
         </View>
 
         <View className='day-record-summary'>
           <View className='summary-card'>
             <Text className='summary-label'>总摄入</Text>
-            <Text className='summary-value'>{historyTotalCalorie} kcal</Text>
+            <Text className='summary-value'>{formatNumber(historyTotalCalorie)} kcal</Text>
           </View>
           <View className='summary-card'>
             <Text className='summary-label'>目标</Text>
-            <Text className='summary-value'>{targetCalories} kcal</Text>
+            <Text className='summary-value'>{formatNumber(targetCalories)} kcal</Text>
           </View>
           <View className='summary-card'>
             <Text className='summary-label'>记录数</Text>
@@ -284,7 +539,7 @@ function DayRecordPage() {
                     </View>
                   </View>
                   <View className='day-record-card-actions'>
-                    <Text className='day-record-card-calorie'>{meal.totalCalorie} kcal</Text>
+                    <Text className='day-record-card-calorie'>{formatNumber(meal.totalCalorie)} kcal</Text>
                     <View
                       className='day-record-card-delete'
                       onClick={(e) => handleDeleteRecord(e as any, meal.id)}
@@ -301,7 +556,12 @@ function DayRecordPage() {
                         <Text className='day-record-food-name'>{food.name}</Text>
                         <Text className='day-record-food-amount'>{food.amount}</Text>
                       </View>
-                      <Text className='day-record-food-calorie'>{food.calorie} kcal</Text>
+                      <Text className='day-record-food-calorie'>{formatNumber(food.calorie)} kcal</Text>
+                      <View className='day-record-food-macros'>
+                        <Text className='day-record-food-macro macro-protein'>蛋白质 {Math.round(food.protein)}g</Text>
+                        <Text className='day-record-food-macro macro-carbs'>碳水 {Math.round(food.carbs)}g</Text>
+                        <Text className='day-record-food-macro macro-fat'>脂肪 {Math.round(food.fat)}g</Text>
+                      </View>
                     </View>
                   ))}
                 </View>
@@ -321,6 +581,80 @@ function DayRecordPage() {
 
         <View className='day-record-footer-space' />
       </ScrollView>
+
+      {/* 海报隐藏 Canvas */}
+      <View className='poster-canvas-wrap'>
+        <Canvas
+          type='2d'
+          id='dayRecordPosterCanvas'
+          className='poster-canvas'
+          style={{ width: `${POSTER_WIDTH}px`, height: '800px' }}
+        />
+      </View>
+
+      {/* 海报弹窗 */}
+      {posterVisible && posterImageUrl && (() => {
+        // 计算海报显示尺寸：等比缩放适配视窗高度
+        const sysInfo = Taro.getSystemInfoSync()
+        const windowHeight = sysInfo.windowHeight || 800
+        const windowWidth = sysInfo.windowWidth || 375
+        // 顶部标题栏 ~88rpx + 关闭区 ~100rpx + 底部操作栏 ~220rpx = ~408rpx ≈ 204px
+        const chromeH = Math.round(windowHeight * 0.28)
+        const availH = windowHeight - chromeH
+        // 海报原生宽高比：POSTER_WIDTH / computedHeight
+        const posterHeight = computeDayRecordPosterHeight(records.length)
+        const posterAspect = POSTER_WIDTH / posterHeight
+        // 可用区内等比缩放
+        const maxDisplayW = Math.min(windowWidth - 40, 640 * (windowWidth / 750))
+        let displayW = maxDisplayW
+        let displayH = displayW / posterAspect
+        if (displayH > availH) {
+          displayH = availH
+          displayW = displayH * posterAspect
+        }
+        return (
+        <View className='poster-modal poster-modal--sheet' catchMove>
+          <View className='poster-modal-shell' catchMove>
+            <View className='poster-modal-topbar poster-modal-topbar--light poster-modal-topbar--title-only'>
+              <Text className='poster-modal-title poster-modal-title--light'>分享饮食记录</Text>
+            </View>
+            <View className='poster-modal-dark-body'>
+              <View className='poster-modal-inline-back' onClick={closeDayRecordPoster}>
+                <View className='poster-modal-close poster-modal-inline-close-hit'>
+                  <Text className='poster-modal-close-x'>×</Text>
+                </View>
+              </View>
+              <View className='poster-scroll-area'>
+                <View className='poster-modal-scroll-inner'>
+                  <View className='poster-modal-card-wrap' style={{ width: `${displayW}px`, height: `${displayH}px` }}>
+                    <Image
+                      src={posterImageUrl}
+                      mode='aspectFit'
+                      className='poster-modal-image'
+                      style={{ width: `${displayW}px`, height: `${displayH}px` }}
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View className='poster-modal-bottom-bar'>
+              <View className='poster-share-channel' onClick={handleShareDayRecordPosterImage}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
+                  <Text className='iconfont icon-wechat poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>微信</Text>
+              </View>
+              <View className='poster-share-channel' onClick={handleSaveDayRecordPoster}>
+                <View className='poster-share-channel-icon poster-share-channel-icon-save'>
+                  <Text className='iconfont icon-download poster-share-channel-glyph' />
+                </View>
+                <Text className='poster-share-channel-label'>保存图片</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        )
+      })()}
     </View>
   )
 }

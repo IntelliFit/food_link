@@ -265,7 +265,7 @@
   margin: 0 0 20rpx;
   padding: 0;
   border-radius: 20rpx;
-  overflow: hidden;
+  overflow: visible;
   background: rgb(248 250 252 / 90%);
   border: 1rpx solid rgb(148 163 184 / 12%);
   display: flex;
@@ -274,9 +274,8 @@
   align-items: flex-start;
   flex-shrink: 0;
   box-sizing: border-box;
-  /* 仅建立定位上下文；勿用 transform，部分微信基础库下会导致 type=2d 画布原生层贴顶与 DOM 脱节 */
-  position: relative;
   z-index: 0;
+  contain: layout style;
 }
 
 /* 子页：不再用负 margin 拉宽（部分基础库下会触发与上方块的纵向叠层）；宽度随页面内边距 */
@@ -299,7 +298,8 @@
   flex-shrink: 0;
   font-size: 0;
   line-height: 0;
-  overflow: hidden;
+  overflow: visible;
+  border-radius: 20rpx;
 }
 
 /* 弹层打开时不再挂载 Canvas，占位保持布局；见 metabolic-dynamics-report.tsx */
@@ -311,6 +311,9 @@
 
 .metabolic-report__canvas {
   display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .metabolic-report__legend-row {

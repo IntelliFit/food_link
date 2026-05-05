@@ -11,69 +11,59 @@
   box-sizing: border-box;
 }
 
-// 左滑卡片容器
-.swipeable-card-wrapper {
-  position: relative;
+// 列表头部：右侧放置一键删除按钮
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   margin-bottom: 20rpx;
-  overflow: hidden;
-  border-radius: 28rpx;
 }
 
-// 背景操作按钮
-.action-buttons {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
+.list-header-spacer {
+  flex: 1;
 }
 
-.action-btn {
-  width: 108rpx;
+// 一键删除未记录按钮（仿照首页编辑目标按钮样式）
+.bulk-delete-btn {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8rpx;
-  position: relative;
-  box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
-
-  .iconfont {
-    font-size: 34rpx;
-    color: #fff;
-    text-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.14);
-  }
-
-  .action-text {
-    font-size: 24rpx;
-    color: #fff;
-    font-weight: 700;
-    text-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.14);
-  }
-
-  &.share {
-    background: linear-gradient(180deg, #39b774 0%, #1f9d5d 100%);
-
-    &.disabled {
-      background: linear-gradient(180deg, #c7cdd4 0%, #b5bcc5 100%);
-      pointer-events: none;
-    }
-  }
-
-  &.delete {
-    background: linear-gradient(180deg, #ef6b6b 0%, #de4b4b 100%);
-  }
+  gap: 6rpx;
+  padding: 8rpx 20rpx;
+  background: rgb(255 255 255 / 94%);
+  border-radius: 999rpx;
+  box-shadow:
+    0 4rpx 16rpx rgb(0 0 0 / 10%),
+    inset 0 1rpx 0 rgb(255 255 255 / 55%);
 
   &:active {
-    opacity: 0.8;
+    background: rgb(255 255 255 / 100%);
+    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 12%);
   }
+}
+
+.bulk-delete-icon {
+  font-size: 22rpx;
+  color: #5cb896;
+  line-height: 1;
+}
+
+.bulk-delete-text {
+  font-size: 24rpx;
+  color: #2f7f62;
+  line-height: 34rpx;
+  font-weight: 600;
+}
+
+// 卡片容器
+.task-card-wrapper {
+  position: relative;
+  margin-bottom: 20rpx;
 }
 
 // 任务卡片 - 紧凑设计
 .task-card {
-  background: rgba(255, 255, 255, 0.92);
+  background: #ffffff;
   border-radius: 28rpx;
   padding: 24rpx;
   display: flex;
@@ -81,7 +71,6 @@
   gap: 22rpx;
   box-shadow: 0 12rpx 28rpx rgb(15 23 42 / 6%);
   border: 1rpx solid rgba(92, 184, 150, 0.14);
-  transition: transform 0.2s ease;
   position: relative;
   z-index: 1;
 
@@ -179,11 +168,18 @@
     align-self: stretch;
   }
 
+  .time-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12rpx;
+  }
+
   .tag-row-inline {
     display: flex;
     flex-wrap: wrap;
     gap: 10rpx 8rpx;
-    margin-top: 4rpx;
+    margin-top: 2rpx;
   }
 
   .headline {
@@ -223,7 +219,6 @@
     line-height: 30rpx;
   }
 
-  .source-badge,
   .status-badge {
     display: inline-flex;
     align-items: center;
@@ -235,31 +230,10 @@
     border: 1rpx solid transparent;
   }
 
-  .source-badge-text,
   .status-text {
     font-size: 20rpx;
     font-weight: 600;
     letter-spacing: 1rpx;
-  }
-
-  .source-badge {
-    &.source-food_text {
-      background: #ecfdf5;
-      border-color: #b7ebcf;
-
-      .source-badge-text {
-        color: #0f8a58;
-      }
-    }
-
-    &.source-food {
-      background: #eff6ff;
-      border-color: #bfdbfe;
-
-      .source-badge-text {
-        color: #2563eb;
-      }
-    }
   }
 
   .status-badge {
@@ -276,6 +250,25 @@
     }
 
     &.status-done {
+      background: #d1fae5;
+      border-color: #86efac;
+      .status-text { color: #00bc7d; }
+    }
+
+    /* 三态展示：正在识别 / 等待记录 / 已经记录 */
+    &.status-recognizing {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      .status-text { color: #2563eb; }
+    }
+
+    &.status-waiting {
+      background: #fef3c7;
+      border-color: #fcd34d;
+      .status-text { color: #d97706; }
+    }
+
+    &.status-recorded {
       background: #d1fae5;
       border-color: #86efac;
       .status-text { color: #00bc7d; }
@@ -384,11 +377,149 @@
     background: linear-gradient(135deg, #fef8f8 0%, #fef2f2 100%);
   }
 
-  .arrow {
-    font-size: 34rpx;
-    color: #b9c3be;
-    margin-left: 4rpx;
-    line-height: 1;
+  .more-btn {
+    width: 68rpx;
+    height: 68rpx;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.04);
+    z-index: 2;
+
+    .more-dots {
+      font-size: 32rpx;
+      color: #6b7280;
+      line-height: 1;
+      font-weight: 700;
+      letter-spacing: 1rpx;
+    }
+
+    &:active {
+      background: rgba(0, 0, 0, 0.1);
+    }
+  }
+}
+
+// 底部操作弹窗
+.action-sheet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.action-sheet-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.action-sheet-content {
+  position: relative;
+  z-index: 1;
+  padding: 0 16rpx 32rpx;
+  animation: action-sheet-slide-up 0.25s ease;
+}
+
+@keyframes action-sheet-slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.action-sheet-handle-bar {
+  width: 64rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: rgba(255, 255, 255, 0.5);
+  margin: 0 auto 16rpx;
+}
+
+.action-sheet-actions {
+  background: #fff;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+
+.action-sheet-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  padding: 32rpx 24rpx;
+  position: relative;
+
+  &:active {
+    background: #f3f4f6;
+  }
+
+  .action-sheet-icon {
+    font-size: 32rpx;
+    color: #1f2937;
+  }
+
+  .action-sheet-label {
+    font-size: 30rpx;
+    color: #1f2937;
+    font-weight: 500;
+  }
+
+  &--disabled {
+    opacity: 0.4;
+    pointer-events: none;
+
+    .action-sheet-icon,
+    .action-sheet-label {
+      color: #9ca3af;
+    }
+  }
+
+  &--danger {
+    .action-sheet-icon,
+    .action-sheet-label {
+      color: #ef4444;
+    }
+  }
+}
+
+.action-sheet-divider {
+  height: 1rpx;
+  background: #e5e7eb;
+  margin: 0 24rpx;
+}
+
+.action-sheet-cancel {
+  margin-top: 16rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 28rpx 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    background: #f3f4f6;
+  }
+
+  .action-sheet-cancel-text {
+    font-size: 30rpx;
+    color: #6b7280;
+    font-weight: 500;
   }
 }
 
@@ -428,20 +559,32 @@
     linear-gradient(180deg, #101716 0%, #0d1312 100%);
 
   .task-card {
-    background: rgba(24, 31, 29, 0.96);
+    background: #181f1d;
     border-color: rgba(112, 196, 149, 0.18);
     box-shadow: 0 14rpx 30rpx rgba(0, 0, 0, 0.2);
 
     &:active {
-      background: rgba(28, 36, 33, 0.98);
+      background: #1c2421;
     }
 
     &.task-card-violated {
       border-color: rgba(248, 113, 113, 0.22);
-      background: rgba(42, 24, 24, 0.94);
+      background: #2a1818;
 
       &:active {
-        background: rgba(47, 26, 26, 0.97);
+        background: #2f1a1a;
+      }
+    }
+
+    .more-btn {
+      background: rgba(255, 255, 255, 0.06);
+
+      .more-dots {
+        color: rgba(214, 226, 220, 0.6);
+      }
+
+      &:active {
+        background: rgba(255, 255, 255, 0.12);
       }
     }
   }
@@ -449,6 +592,8 @@
   .task-card .thumb {
     background: rgba(37, 47, 45, 0.96);
     border-color: rgba(112, 196, 149, 0.16);
+    width: 150rpx;
+    height: 150rpx;
   }
 
   .task-card .thumb-placeholder {
@@ -474,12 +619,53 @@
     color: rgba(214, 226, 220, 0.58);
   }
 
-  .task-card .arrow {
-    color: rgba(214, 226, 220, 0.34);
-  }
-
   .empty .empty-text,
   .loading-wrap {
     color: rgba(214, 226, 220, 0.58);
+  }
+
+  .action-sheet-actions,
+  .action-sheet-cancel {
+    background: #1e2624;
+  }
+
+  .action-sheet-item {
+    &:active {
+      background: #2a3330;
+    }
+
+    .action-sheet-icon,
+    .action-sheet-label {
+      color: #f2f7f4;
+    }
+
+    &--disabled {
+      .action-sheet-icon,
+      .action-sheet-label {
+        color: rgba(214, 226, 220, 0.4);
+      }
+    }
+  }
+
+  .action-sheet-divider {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .action-sheet-cancel-text {
+    color: rgba(214, 226, 220, 0.6);
+  }
+}
+
+// 导航栏右侧丢弃未记录按钮
+.discard-unrecorded-btn {
+  width: 68rpx;
+  height: 68rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+
+  &:active {
+    background: rgba(0, 0, 0, 0.06);
   }
 }

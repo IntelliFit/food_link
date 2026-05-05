@@ -1058,8 +1058,10 @@ function CommunityPage() {
     const sortLabel = FEED_SORT_OPTIONS.find(o => o.value === feedSortBy)?.label ?? ''
     const mealLabel = FEED_MEAL_OPTIONS.find(o => o.value === feedMealType)?.label ?? ''
     const goalLabel = FEED_GOAL_OPTIONS.find(o => o.value === feedDietGoal)?.label ?? ''
-    const priority = loggedIn && feedAuthorScope === 'priority' ? '特别关注' : ''
-    return [sortLabel, mealLabel, goalLabel, priority].filter(Boolean).join(' · ')
+    const scopeLabel = loggedIn
+      ? (feedAuthorScope === 'priority' ? '特别关注' : feedAuthorScope === 'all' ? '仅好友' : '')
+      : ''
+    return [sortLabel, mealLabel, goalLabel, scopeLabel].filter(Boolean).join(' · ')
   }, [feedSortBy, feedMealType, feedDietGoal, feedAuthorScope, loggedIn])
 
   /** 筛选图标：展开面板或任一筛选项非默认时为主题色 */
@@ -1069,7 +1071,7 @@ function CommunityPage() {
       feedSortBy !== 'recommended' ||
       feedMealType !== 'all' ||
       feedDietGoal !== 'all' ||
-      (loggedIn && feedAuthorScope === 'priority'),
+      (loggedIn && feedAuthorScope !== 'all'),
     [feedFilterExpanded, feedSortBy, feedMealType, feedDietGoal, feedAuthorScope, loggedIn]
   )
 
@@ -1717,19 +1719,38 @@ function CommunityPage() {
                               <Text className='feed-filter-chip-text'>{opt.label}</Text>
                             </View>
                           ))}
-                          {loggedIn ? (
+                        </View>
+                      </ScrollView>
+                    </View>
+                    {loggedIn ? (
+                      <View className='feed-filter-labeled-row'>
+                        <Text className='feed-filter-label'>来源</Text>
+                        <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
+                          <View className='feed-filter-row-inner'>
+                            <View
+                              className={`feed-filter-chip ${feedAuthorScope === 'public' ? 'active' : ''}`}
+                              onClick={() => setFeedAuthorScope('public')}
+                            >
+                              <Text className='feed-filter-chip-text'>全部公开</Text>
+                            </View>
+                            <View
+                              className={`feed-filter-chip ${feedAuthorScope === 'all' ? 'active' : ''}`}
+                              onClick={() => setFeedAuthorScope('all')}
+                            >
+                              <Text className='feed-filter-chip-text'>仅好友</Text>
+                            </View>
                             <View
                               className={`feed-filter-chip ${feedAuthorScope === 'priority' ? 'active' : ''}`}
-                              onClick={() => setFeedAuthorScope(feedAuthorScope === 'priority' ? 'all' : 'priority')}
+                              onClick={() => setFeedAuthorScope('priority')}
                             >
                               <Text className='feed-filter-chip-text'>
                                 {feedAuthorScope === 'priority' ? '特别关注中' : '特别关注'}
                               </Text>
                             </View>
-                          ) : null}
-                        </View>
-                      </ScrollView>
-                    </View>
+                          </View>
+                        </ScrollView>
+                      </View>
+                    ) : null}
                     <View className='feed-filter-labeled-row'>
                       <Text className='feed-filter-label'>餐次</Text>
                       <ScrollView className='feed-filter-chips-scroll' scrollX enhanced showScrollbar={false}>
@@ -1846,7 +1867,9 @@ function CommunityPage() {
                       {loggedIn
                         ? (feedAuthorScope === 'priority'
                           ? '你还没有特别关注的人，先点好友头像设置吧'
-                          : '暂无符合当前筛选条件的好友动态')
+                          : feedAuthorScope === 'all'
+                            ? '暂无符合当前筛选条件的好友动态'
+                            : '暂无符合当前筛选条件的动态')
                         : '暂无符合当前筛选条件的动态'}
                     </Text>
                   </View>
