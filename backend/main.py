@@ -4547,7 +4547,7 @@ async def analyze_submit(
         await _consume_earned_credits_after_success(
             user_info["user_id"],
             credits_info,
-            cost=CREDIT_COST_PER_PRECISION_FOOD_ANALYSIS,
+            cost=_get_food_analysis_credit_cost(effective_mode),
             reason="food_analysis_reward_spend",
             source_key=f"food_analysis:{task['id']}",
             meta={"task_id": task["id"], "task_type": task.get("task_type")},
@@ -5112,6 +5112,7 @@ class AnalyzeTextRequest(BaseModel):
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
     diet_goal: Optional[str] = Field(default=None, description="饮食目标: fat_loss / muscle_gain / maintain / none")
     activity_timing: Optional[str] = Field(default=None, description="运动时机: post_workout / daily / before_sleep / none")
+    analysis_engine: Optional[str] = Field(default=None, description="分析引擎: legacy_direct / db_first")
 
 
 @app.post("/api/analyze-text", response_model=AnalyzeResponse)
@@ -5145,6 +5146,7 @@ async def analyze_food_text(
         remain_hint = f" 当日剩余热量预算约 {request.remaining_calories} kcal，可在 context_advice 中提示。" if request.remaining_calories is not None else ""
         profile_block = ""
         execution_mode = _normalize_execution_mode(None)
+        requested_analysis_engine = _parse_analysis_engine_or_raise(request.analysis_engine) if request.analysis_engine is not None else None
         if user_info:
             user = await get_user_by_id(user_info["user_id"])
             membership = await _get_effective_membership(user_info["user_id"])
@@ -5164,24 +5166,39 @@ async def analyze_food_text(
                     profile_fields = "insight、absorption_notes、context_advice" if execution_mode == "strict" else "insight、context_advice"
                     profile_block = f" 若以下存在「用户健康档案」，请结合档案在 {profile_fields} 中给出更贴合该用户体质与健康状况的建议。\n\n" + profile_block
 
-        prompt = f"""
-请作为专业营养师，根据用户对食物的**文字描述**，分析营养成分。
-用户描述内容：
-"{request.text.strip()}"
+        analysis_engine = (requested_analysis_engine or "db_first") if execution_mode == "standard" else (requested_analysis_engine or DEFAULT_ANALYSIS_ENGINE)
+        try:
+            from worker import (
+                _build_result_items_with_lookup as worker_build_result_items_with_lookup,
+                _build_text_food_prompt as worker_build_text_food_prompt,
+                _build_text_food_prompt_db_first as worker_build_text_food_prompt_db_first,
+                _normalize_analysis_response_payload as worker_normalize_analysis_response_payload,
+                _parse_analysis_result_items as worker_parse_analysis_result_items,
+                _summarize_db_first_items as worker_summarize_db_first_items,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"加载文字分析模块失败: {e}")
 
-请完成：
-1. 从描述中识别出所有食物单品（若有多项请分别列出）。
-2. 估算每种食物的重量（克）和详细营养成分（热量、蛋白质、碳水、脂肪、纤维、糖分）。
-3. description: 用一句简短中文概括这餐/这些食物。
-4. insight: 用一句话给出健康建议。
-5. pfc_ratio_comment: 本餐 P/F/C 占比的简要评价（是否均衡、适合增肌/减脂/维持）。{goal_hint}
-6. absorption_notes: 食物组合或烹饪对吸收率、生物利用度的简要说明（一两句话）。
-7. context_advice: 结合用户状态或剩余热量的情境建议（若无则空字符串）。{state_hint}{remain_hint}{profile_block}
-
-重要：请务必使用**简体中文**返回所有文本。请**严格按照**以下 JSON 格式返回，不要包含任何其他文字：
-
-{{"items": [{{"name": "食物名称（简体中文）", "estimatedWeightGrams": 重量数字, "nutrients": {{"calories", "protein", "carbs", "fat", "fiber", "sugar"}}], "description": "餐食描述", "insight": "健康建议", "pfc_ratio_comment": "PFC 比例评价", "absorption_notes": "吸收率说明", "context_advice": "情境建议"}}
-""".strip()
+        task_payload = {
+            "user_goal": request.user_goal,
+            "remaining_calories": request.remaining_calories,
+            "diet_goal": request.diet_goal,
+            "activity_timing": request.activity_timing,
+            "execution_mode": execution_mode,
+            "analysis_engine": analysis_engine,
+        }
+        task = {
+            "task_type": "food_text",
+            "text_input": request.text.strip(),
+            "payload": task_payload,
+            "user_id": user_info["user_id"] if user_info else None,
+        }
+        prompt_builder = (
+            worker_build_text_food_prompt_db_first
+            if execution_mode == "standard" and analysis_engine == "db_first"
+            else worker_build_text_food_prompt
+        )
+        prompt = prompt_builder(task, profile_block)
 
         # 使用 DashScope 千问 qwen-plus 进行文本分析
         base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
@@ -5209,28 +5226,15 @@ async def analyze_food_text(
                 raise Exception("千问返回了空响应")
             json_str = re.sub(r"```json", "", content_str)
             json_str = re.sub(r"```", "", json_str).strip()
-            parsed = json.loads(json_str)
+            parsed = worker_normalize_analysis_response_payload(json.loads(json_str))
 
-        valid_items = []
-        if isinstance(parsed.get("items"), list):
-            for item in parsed["items"]:
-                n = item.get("nutrients") or {}
-                weight = float(item.get("estimatedWeightGrams", 0) or 0)
-                valid_items.append(
-                    FoodItemResponse(
-                        name=str(item.get("name", "未知食物")),
-                        estimatedWeightGrams=weight,
-                        originalWeightGrams=weight,
-                        nutrients=Nutrients(
-                            calories=float(n.get("calories", 0) or 0),
-                            protein=float(n.get("protein", 0) or 0),
-                            carbs=float(n.get("carbs", 0) or 0),
-                            fat=float(n.get("fat", 0) or 0),
-                            fiber=float(n.get("fiber", 0) or 0),
-                            sugar=float(n.get("sugar", 0) or 0),
-                        ),
-                    )
-                )
+        if execution_mode == "standard" and analysis_engine == "db_first":
+            items_raw = worker_build_result_items_with_lookup(task, parsed.get("items") or [])
+            resolved_summary = worker_summarize_db_first_items(items_raw)
+        else:
+            items_raw = worker_parse_analysis_result_items(parsed)
+            resolved_summary = {}
+        valid_items = [FoodItemResponse(**item) for item in items_raw]
 
         def _opt_str(v):
             if v is None or v == "":
@@ -5251,6 +5255,9 @@ async def analyze_food_text(
             pfc_ratio_comment=pfc_ratio_comment,
             absorption_notes=absorption_notes,
             context_advice=_opt_str(parsed.get("context_advice")),
+            analysis_engine=analysis_engine,
+            resolved_count=resolved_summary.get("resolved_count"),
+            unresolved_count=resolved_summary.get("unresolved_count"),
             recognitionOutcome=_opt_str(parsed.get("recognitionOutcome")),
             rejectionReason=_opt_str(parsed.get("rejectionReason")),
             retakeGuidance=parsed.get("retakeGuidance") if isinstance(parsed.get("retakeGuidance"), list) else None,
@@ -5278,6 +5285,7 @@ class AnalyzeTextSubmitRequest(BaseModel):
     remaining_calories: Optional[float] = Field(default=None, description="当日剩余热量预算 kcal")
     additionalContext: Optional[str] = Field(default=None, description="用户补充上下文或纠错说明")
     execution_mode: Optional[str] = Field(default=None, description="执行模式: standard / strict")
+    analysis_engine: Optional[str] = Field(default=None, description="分析引擎: legacy_direct / db_first")
     date: Optional[str] = Field(default=None, description="记录日期 YYYY-MM-DD，仅支持近 3 天内补录")
     previousResult: Optional[Dict[str, Any]] = Field(default=None, description="上一轮分析结果")
     correctionItems: Optional[List[Dict[str, Any]]] = Field(default=None, description="本轮结构化纠错清单")
@@ -5319,6 +5327,7 @@ async def analyze_text_submit(
         raise HTTPException(status_code=400, detail="text 不能为空")
 
     requested_mode = _parse_execution_mode_or_raise(body.execution_mode) if body.execution_mode is not None else None
+    requested_analysis_engine = _parse_analysis_engine_or_raise(body.analysis_engine) if body.analysis_engine is not None else None
     user = await get_user_by_id(user_info["user_id"])
     profile_mode = _normalize_execution_mode((user or {}).get("execution_mode"))
     effective_mode = requested_mode or profile_mode
@@ -5347,6 +5356,7 @@ async def analyze_text_submit(
         "remaining_calories": body.remaining_calories,
         "additionalContext": body.additionalContext,
         "execution_mode": effective_mode,
+        "analysis_engine": (requested_analysis_engine or "db_first") if effective_mode == "standard" else (requested_analysis_engine or DEFAULT_ANALYSIS_ENGINE),
         "recorded_on": recorded_on,
         "credit_usage": dict((credits_info.get("credit_spend_plan") or {})),
         "previousResult": body.previousResult,
@@ -5506,7 +5516,7 @@ async def analyze_text_submit(
         await _consume_earned_credits_after_success(
             user_info["user_id"],
             credits_info,
-            cost=CREDIT_COST_PER_PRECISION_FOOD_ANALYSIS,
+            cost=_get_food_analysis_credit_cost(effective_mode),
             reason="food_analysis_reward_spend",
             source_key=f"food_analysis:{task['id']}",
             meta={"task_id": task["id"], "task_type": task.get("task_type")},

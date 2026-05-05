@@ -8,7 +8,8 @@ import {
   ShieldOutlined,
   InfoOutlined,
   Arrow,
-  ClockOutlined
+  ClockOutlined,
+  ChatOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -382,6 +383,13 @@ function ProfilePage() {
       title: '公共食物库',
       desc: '浏览公共食物营养数据',
       path: extraPkgUrl('/pages/food-library/index')
+    },
+    {
+      id: 8,
+      icon: <ChatOutlined size='20' />,
+      title: '加入用户群',
+      desc: '反馈问题、提建议，一起共创食探',
+      path: extraPkgUrl('/pages/user-group/index')
     }
   ]
 
@@ -424,6 +432,10 @@ function ProfilePage() {
     // 公共食物库
     if (service.id === 5) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/food-library/index') })
+      return
+    }
+    if (service.id === 8) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/user-group/index') })
       return
     }
     const path = (service as { path?: string }).path
@@ -611,7 +623,8 @@ function ProfilePage() {
       3: '#3b82f6', // 饮食记录 - 蓝
       4: '#f59e0b', // 邀请有礼 - 金
       5: '#10b981', // 公共食物库 - 绿
-      7: '#6b7280'  // 识别历史 - 灰
+      7: '#6b7280', // 识别历史 - 灰
+      8: '#22c55e'  // 用户群 - 绿
     }
     return colors[id] || '#6b7280'
   }

@@ -26,16 +26,6 @@ interface UserInfo {
     meta: string
 }
 
-/** 安全返回：若当前是第一个页面则跳转首页 */
-function safeNavigateBack() {
-    const pages = Taro.getCurrentPages()
-    if (pages.length > 1) {
-        Taro.navigateBack()
-    } else {
-        Taro.switchTab({ url: '/pages/index/index' })
-    }
-}
-
 function normalizePath(path: string): string {
     const raw = (path || '').trim()
     if (!raw) return ''
@@ -107,8 +97,6 @@ export default function LoginPage() {
     const [tempAvatar, setTempAvatar] = useState('')
     const [tempNickname, setTempNickname] = useState('')
 
-    /** 开发环境测试：模拟新用户 openid */
-    const [testOpenid, setTestOpenid] = useState('')
     const isDev = process.env.NODE_ENV === 'development'
 
     const inviteCodeFromQuery = (router.params?.invite_code || '').trim()
@@ -140,7 +128,7 @@ export default function LoginPage() {
             }
             return
         }
-        safeNavigateBack()
+        Taro.switchTab({ url: '/pages/index/index' })
     }
 
     /** 微信一键登录：仅用 code，后端若已有手机号会直接带回，无需再授权 */
@@ -157,7 +145,7 @@ export default function LoginPage() {
         try {
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
-            const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCodeFromQuery, isDev ? testOpenid : undefined)
+            const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCodeFromQuery)
             await handleLoginSuccess(loginData)
         } catch (error: any) {
             console.error('登录失败:', error)
@@ -246,7 +234,7 @@ export default function LoginPage() {
 
     // 跳过登录
     const handleSkip = () => {
-        safeNavigateBack()
+        Taro.switchTab({ url: '/pages/index/index' })
     }
 
     // 处理头像选择
@@ -328,17 +316,6 @@ export default function LoginPage() {
             )}
 
             <View className='login-actions'>
-                {isDev && (
-                    <View className='dev-test-input-wrapper'>
-                        <Text className='dev-test-label'>测试 OpenID（留空则走正常流程）</Text>
-                        <Input
-                          className='dev-test-openid-input'
-                          value={testOpenid}
-                          onInput={(e) => setTestOpenid(e.detail.value)}
-                          placeholder='输入测试 openid 模拟新用户'
-                        />
-                    </View>
-                )}
                 <TaroifyButton
                   className='wx-login-btn'
                   shape='round'

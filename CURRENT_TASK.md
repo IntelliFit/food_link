@@ -1,5 +1,156 @@
 # 当前任务
 
+## 状态：待启动 - 后端大文件拆分与性能整理
+
+- 2026-05-05 discussion:
+  - User指出当前后端代码存在明显结构问题：
+    - 代码大量集中在少数超大文件中，一个文件接近或超过上万行。
+    - 后端代码继续变慢，问题定位和维护成本越来越高。
+  - 初步体检结果：
+    - `backend/main.py`: 12444 行，约 529KB，混合 FastAPI 路由、Pydantic schema、会员/支付、分析、测试后台、prompt 管理等。
+    - `backend/database.py`: 7839 行，约 297KB，混合用户、记录、社区、会员、食物库、任务、运动等数据访问逻辑。
+    - `backend/worker.py`: 4655 行，约 205KB，混合食物分析、文字分析、精准模式、审核、OCR、运动、通知 worker。
+    - `backend/main.py` 当前约 142 个路由，其中最多的业务域是 food_library_records、social_community、user_health_stats、analysis。
+    - `backend/*.py` 中约 289 次 `.execute()`、288 次 `supabase.table(...)`、55 次 `asyncio.to_thread`，后续需要用基准测试和接口分组定位真实慢点。
+  - Proposed approach:
+    - 不做一次性大爆炸重构。
+    - 先冻结行为，补基准，再按业务域拆 router / schema / service / repository。
+    - 优先拆 `main.py` 中低耦合路由：prompts、exercise、recipes、expiry、test_backend。
+    - 第二阶段拆 `database.py` 为按域 repository，例如 analysis_tasks、food_records、community、membership、manual_food、expiry、exercise。
+    - 第三阶段拆 `worker.py` 为 food_analysis、text_analysis、precision、moderation、notifications、ocr、exercise worker 模块。
+    - 每一步必须至少跑 `python -m py_compile`，高风险域再跑对应 pytest 或 benchmark。
+  - Notes:
+    - 当前工作区已有大量未提交改动；正式拆分前应避免和已有功能改动混在一个提交里。
+    - 这次是后端结构/性能任务，不涉及小程序 UI；不需要 weapp-devtools，除非后续改动影响前端交互。
+
+## 状态：进行中 - 汇总当前工作区改动并发布到 dev/main
+
+- 2026-05-05 15:26:
+  - User asked to submit the current workspace changes to the remote and merge them into `main`.
+  - Current git baseline before publishing:
+    - local `dev`, local `main`, `origin/dev`, and `origin/main` are all at `9b59ba0`
+    - the workspace has uncommitted frontend/backend/product-state updates, including waiting-page UX, user-group entry/page, login skip-flow cleanup, and text-submit timeout hardening
+  - Planned publish order:
+    - stage and commit the current workspace changes on `dev`
+    - push `dev` to `origin/dev`
+    - fast-forward or merge the same commit into local `main`
+    - push `main` to `origin/main`
+  - Note:
+    - The user message ended with `且`, so no extra trailing requirement is confirmed yet; proceed with the explicit publish-and-merge portion first.
+
+## 状态：完成 - 食物热量分析等待页体验优化
+
+- 2026-05-05 discussion:
+  - User feels food calorie analysis is slow and wants to improve the waiting experience.
+  - Current product direction:
+    - Do not add "补充信息按钮" that changes analysis inputs, because using those answers would require a second analysis pass and make the flow slower.
+    - Prefer `真实阶段 + 可离开等待 + 健康小知识`.
+    - Also consider stronger lightweight interactions that do not require re-analysis, such as quiz/cards/progress collectibles/history review/goal preview.
+  - 2026-05-05 implementation:
+    - Updated `src/packageExtra/pages/analyze-loading/index.tsx` and `.scss`.
+    - Added elapsed wait time and backend task status summary (`排队中 / 处理中 / 收尾中`) above the stage list.
+    - Changed stage animation from looping progress to one-way stage advancement so the UI does not appear to regress.
+    - Added lightweight waiting interactions:
+      - quiz cards with immediate reveal
+      - fact cards with `换一个` / next action
+    - These interactions are purely local UI and do not change analysis inputs or trigger a second analysis pass.
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze-loading/index.tsx --max-warnings 0` passed.
+    - WeApp DevTools automation on port `9420` connected.
+    - Relaunched `packageExtra/pages/analyze-loading/index` in debug mode.
+    - `.stage-summary` and `.waiting-interaction-card` existed.
+    - Tapped `.waiting-interaction-skip` successfully.
+    - `mrc errors 10 --port 9420` returned 0 errors.
+    - Screenshot attempt failed with DevTools-side `fail to capture screenshot`.
+  - 2026-05-05 compact follow-up:
+    - User feedback: the full multi-step list squeezed the interaction card downward, and the previous wording did not match the database-first algorithm closely enough.
+    - Replaced the 4-row stage list with a compact 2-line status block:
+      - current stage + elapsed wait time
+      - task status + short flow
+    - Standard food analysis flow copy now uses `识别食物/份量 → 匹配营养库 → 整理结果`.
+    - Text flow uses `解析文字 → 匹配营养库 → 整理结果`.
+    - Strict flow uses `拆分食物 → 精估份量 → 匹配营养库`.
+    - Verification:
+      - `npx eslint src/packageExtra/pages/analyze-loading/index.tsx --max-warnings 0` passed.
+      - DevTools relaunch to debug waiting page succeeded.
+      - `.compact-stage-row` and `.waiting-interaction-card` existed.
+      - `.waiting-interaction-skip` tap succeeded.
+      - `mrc errors 10 --port 9420` returned 0 errors.
+
+## 状态：完成源码实现 - 产品内加入用户群二维码入口
+
+- 2026-05-05 discussion:
+  - User wants to place WeChat user-group QR codes inside the mini program and provided two temporary group QR images:
+    - `食探种子群`
+    - `食探用户群-2`
+  - Initial product recommendation:
+    - Primary entry should live on `我的` page as a low-interruption service item such as `加入用户群` / `反馈交流群`.
+    - Tapping the entry should open a dedicated lightweight page or modal showing the current QR code, not a homepage popup.
+    - Because WeChat group QR codes expire after 7 days, avoid hardcoding the images into the app package as a long-term solution. Prefer remote-config / backend-served current QR image plus expiry copy.
+    - If two groups are active, show one recommended current group first and keep the second as backup or rotation, rather than making users choose between two nearly identical group names.
+  - Pending:
+    - Current source implementation bundles the two provided QR images for this short-term release.
+    - Before this becomes a long-term operational workflow, move the current QR image to backend/remote config so weekly QR replacement does not require a mini-program release.
+  - 2026-05-05 implementation:
+    - Added `我的 -> 加入用户群` service entry.
+    - Registered `packageExtra/pages/user-group/index` in `src/app.config.ts`.
+    - Added the new user-group page with current recommended group, QR preview, copy-group-name action, long-press QR support, dark-mode styles, and switchable backup QR.
+    - Added centralized QR config at `src/packageExtra/pages/user-group/group-config.ts`.
+    - Added bundled QR assets:
+      - `src/assets/community/foodlink-user-group-2-20260512.png`
+      - `src/assets/community/foodlink-seed-group-20260512.png`
+    - Verification:
+      - `eslint` passed for `src/pages/profile/index.tsx`, `src/packageExtra/pages/user-group/index.tsx`, and `src/packageExtra/pages/user-group/group-config.ts`.
+      - `tsc --noEmit --pretty false` remains blocked by existing unrelated repo errors in expiry / food-library / health-profile-edit / record-manual / api constants; no new `user-group` errors were reported.
+      - WeApp DevTools automation connected on port `9420`, switched to `pages/profile/index`, found the `加入用户群` text, and reported 0 runtime errors.
+      - Runtime opening of `packageExtra/pages/user-group/index` was blocked because current `dist` does not yet contain the new route (`page ... is not found`). Per project workflow, no dev watch or build process was started by the agent.
+
+## 状态：完成 - 文字食物分析改为数据库先行
+
+- 2026-05-05 update:
+  - Standard text food analysis now uses the same database-first nutrition strategy as standard photo analysis.
+  - Backend worker changes:
+    - Added a text db-first prompt where the model only parses food names and estimated weights.
+    - Standard text tasks now run `_build_result_items_with_lookup(...)` so nutrients come from `food_nutrition_library` / aliases.
+    - Unresolved text foods continue to use the existing DeepSeek per-100g fallback and auto-upsert path.
+    - Result metadata now includes `analysis_engine`, duration, and db hit summary for text tasks.
+  - API changes:
+    - `/api/analyze-text/submit` accepts/persists `analysis_engine`; standard mode defaults to `db_first`.
+    - Synchronous `/api/analyze-text` also uses db-first for standard mode.
+    - Frontend text-analysis API types now expose optional `analysis_engine`.
+  - Credit fix:
+    - Standard image and standard text async submissions now use `_get_food_analysis_credit_cost(effective_mode)` instead of always using precision cost.
+  - Verification:
+    - `python -m py_compile backend\main.py backend\worker.py backend\database.py` passed.
+    - `npx eslint src/utils/api.ts --max-warnings 0` passed.
+
+- 2026-05-05 follow-up:
+  - User reported text analysis showed `提交任务失败` while worker logs showed the `food_text` task completed successfully.
+  - This indicates the async task was created and processed, but the frontend submit request likely timed out or failed before navigating to the loading page.
+  - Increased `submitTextAnalyzeTask` request timeout from `10000ms` to `30000ms`.
+  - Added `[record-text] submitTextAnalyzeTask failed` console logging on the text record page to expose the real error if it recurs.
+  - Verification:
+    - `npx eslint src/utils/api.ts src/packageExtra/pages/record-text/index.tsx --max-warnings 0` passed.
+    - `python -m py_compile backend\main.py backend\worker.py backend\database.py` passed.
+    - `mrc where --port 9420` connected successfully.
+    - `mrc relaunch /packageExtra/pages/record-text/index --port 9420` succeeded and `mrc pageInfo --port 9420` confirmed `packageExtra/pages/record-text/index`.
+    - `mrc errors 10 --port 9420` and `mrc warnings 10 --port 9420` returned 0 entries.
+    - `mrc screenshot record-text-timeout-fix.png --port 9420` was attempted but failed with DevTools-side `fail to capture screenshot`.
+    - Element-level typing verification was blocked because MRC could not find `.food-textarea` in the current DevTools DOM even though the page route loaded.
+
+## 状态：完成 - 登录页前端去除测试 OpenID，修复游客跳过登录循环
+
+- 2026-05-05 update:
+  - Login page frontend no longer renders the development `测试 OpenID` input.
+  - `src/packageExtra/pages/login/index.tsx` no longer passes `testOpenid` from the frontend login page into `login(...)`.
+  - Backend/API compatibility for `testOpenid` was intentionally left untouched per user request: "仅仅从前端去掉先".
+  - `暂不登录，随便看看` now uses `Taro.switchTab({ url: '/pages/index/index' })` instead of `navigateBack()`.
+  - Reason: when login was opened from a protected page (for example after browsing circle content and entering a record detail), `navigateBack()` could return to that protected page, whose auth guard redirected back to login, making skip-browse appear impossible.
+  - Verification:
+    - `cmd /c ".\node_modules\.bin\eslint.cmd src/packageExtra/pages/login/index.tsx --max-warnings 0"` passed.
+    - `rg` confirmed no login-page frontend `testOpenid` / test-openid UI remnants.
+    - WeApp DevTools runtime verification was attempted but blocked because `mrc` is not installed or on PATH, and the expected WeChat DevTools CLI paths were not accessible/found in this environment.
+
 ## 状态：进行中 - 等待用户反馈调试日志
 
 - 2026-05-05 update:

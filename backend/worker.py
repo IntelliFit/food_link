@@ -3547,11 +3547,134 @@ def _build_text_food_prompt(task: Dict[str, Any], profile_block: str) -> str:
 """.strip()
 
 
+def _build_text_food_prompt_db_first(task: Dict[str, Any], profile_block: str) -> str:
+    """文字数据库优先模式：模型只解析食物名称和重量，营养值由后端查库。"""
+    text_input = task.get("text_input") or ""
+    payload = task.get("payload") or {}
+
+    goal_map = {"muscle_gain": "增肌", "fat_loss": "减脂", "maintain": "维持体重"}
+    diet_map = {"fat_loss": "减脂期", "muscle_gain": "增肌期", "maintain": "维持体重", "none": "无特殊目标"}
+    activity_map = {"post_workout": "练后", "daily": "日常", "before_sleep": "睡前", "none": "无"}
+
+    user_goal = payload.get("user_goal")
+    goal_hint = (
+        f"\n用户目标为「{goal_map.get(user_goal, user_goal or '')}」，请在 pfc_ratio_comment 中评价本餐 P/C/F 占比是否适合该目标（请忽略健康档案中的任何目标设定，以此为准）。"
+        if user_goal else ""
+    )
+
+    diet_goal = payload.get("diet_goal")
+    activity_timing = payload.get("activity_timing")
+    state_parts = []
+    if diet_goal and diet_goal != "none":
+        state_parts.append(diet_map.get(diet_goal, diet_goal))
+    if activity_timing and activity_timing != "none":
+        state_parts.append(activity_map.get(activity_timing, activity_timing))
+    state_hint = f"\n用户当前状态: {' + '.join(state_parts)}，请在 context_advice 中给出针对性进食建议。" if state_parts else ""
+
+    remaining = payload.get("remaining_calories")
+    remain_hint = f"\n用户当日剩余热量预算约 {remaining} kcal，可在 context_advice 中提示本餐占比或下一餐建议。" if remaining is not None else ""
+
+    meal_type = payload.get("meal_type")
+    meal_name = _meal_name_for_hint(meal_type, payload.get("timezone_offset_minutes"))
+    meal_hint = f"\n用户选择的是「{meal_name}」，请结合餐次特点在 insight 或 context_advice 中给出建议。" if meal_name else ""
+    location_tag, location_hint = _build_location_hints(payload)
+
+    def _fmt_weight(value: Any) -> str:
+        try:
+            return f"{float(value or 0):g}g"
+        except Exception:
+            return "0g"
+
+    previous_result = payload.get("previousResult") or {}
+    previous_items = previous_result.get("items") or []
+    previous_items_text = "；".join(
+        f"{idx + 1}. {str(item.get('name') or '').strip()} {_fmt_weight(item.get('estimatedWeightGrams'))}"
+        for idx, item in enumerate(previous_items)
+        if str(item.get("name") or "").strip()
+    )
+    previous_result_block = ""
+    if previous_result:
+        prev_desc = str(previous_result.get("description") or "").strip()
+        prev_insight = str(previous_result.get("insight") or "").strip()
+        parts = []
+        if prev_desc:
+            parts.append(f"上一轮餐食描述：{prev_desc}")
+        if previous_items_text:
+            parts.append(f"上一轮识别结果：{previous_items_text}")
+        if prev_insight:
+            parts.append(f"上一轮健康建议：{prev_insight}")
+        if parts:
+            previous_result_block = "\n上一轮分析输出 / 当前结果页基线（可能已包含用户手动修改后的名称与重量，请优先参考）：\n- " + "\n- ".join(parts)
+
+    additional = str(payload.get("additionalContext") or "").strip()
+    additional_line = f'\n用户本轮纠错说明: "{additional}"。请严格按照此说明修正名称和重量。' if additional else ""
+
+    compact_tags = []
+    if meal_name:
+        compact_tags.append(f"餐次:{meal_name}")
+    if state_parts:
+        compact_tags.append("状态:" + "/".join(state_parts))
+    if remaining is not None:
+        try:
+            compact_tags.append(f"剩余:{float(remaining):g}kcal")
+        except Exception:
+            compact_tags.append(f"剩余:{remaining}kcal")
+    if location_tag:
+        compact_tags.append(location_tag)
+    if profile_block:
+        compact_tags.append(profile_block)
+    compact_tag_block = ("\n".join(compact_tags) + "\n") if compact_tags else ""
+
+    return f"""
+你是食物文字解析助手。请把用户的自然语言饮食描述解析成可查营养数据库的结构化食物名称和重量。
+
+用户描述:
+{text_input}
+{previous_result_block}
+{additional_line}
+
+解析规则：
+1. 只输出用户明确描述或上一轮基线中保留的食物，不要补充没有出现的食物。
+2. 如果用户写了明确重量、个数、半份、一碗、一杯等份量，请换算为克；如果没有明确重量，请按日常熟食份量保守估算。
+3. 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库：
+   - 能确定是白米饭，不要写“主食”
+   - 能确定是番茄炒蛋，不要拆成不可见比例的番茄和鸡蛋
+   - 混合菜无法可靠拆分时，作为一道常见菜名输出
+4. 相同食物合并为一项，重量为合计重量。
+5. 不要输出营养成分，营养值由后端数据库统一计算。
+
+{compact_tag_block}输出要求：
+- 简体中文
+- description <= 16字
+- insight 1-2句，<= 32字{meal_hint}
+- pfc_ratio_comment 可根据食物结构简要评价，不要编具体营养数值{goal_hint}
+- absorption_notes 可简述烹饪/搭配影响，不要编具体营养数值
+- context_advice 1-2句，<= 32字，无需则空字符串{state_hint}{remain_hint}{location_hint}
+- 只返回 JSON
+
+JSON:
+{{
+  "items": [
+    {{
+      "name": "食物名称",
+      "estimatedWeightGrams": 重量（数字）
+    }}
+  ],
+  "description": "餐食描述",
+  "insight": "一句话建议",
+  "pfc_ratio_comment": "PFC 比例评价",
+  "absorption_notes": "吸收率/搭配说明",
+  "context_advice": ""
+}}
+""".strip()
+
+
 def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     同步执行文字食物分析：使用配置的模型，解析 JSON，返回与 /api/analyze 一致结构的 result。
     失败时抛出异常，由调用方捕获并写 failed。
     """
+    analysis_started = time.perf_counter()
     llm_provider = os.getenv("LLM_PROVIDER", "gemini").lower()
     if llm_provider == "gemini":
         api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
@@ -3572,6 +3695,7 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
     execution_mode = str(payload.get("execution_mode") or "standard").strip().lower()
     if execution_mode not in {"standard", "strict"}:
         execution_mode = "standard"
+    analysis_engine = _normalize_analysis_engine(payload.get("analysis_engine"), execution_mode=execution_mode)
     _debug_log_analysis(
         task,
         execution_mode,
@@ -3580,6 +3704,7 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
             "task_type": task.get("task_type"),
             "text_input": text_input,
             "payload": payload,
+            "analysis_engine": analysis_engine,
         },
     )
 
@@ -3589,7 +3714,12 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
     if user:
         profile_block = _format_health_profile_sync(user) if execution_mode == "strict" else _format_health_risk_summary_sync(user)
 
-    prompt = _build_text_food_prompt(task, profile_block)
+    prompt_builder = (
+        _build_text_food_prompt_db_first
+        if execution_mode == "standard" and analysis_engine == "db_first"
+        else _build_text_food_prompt
+    )
+    prompt = prompt_builder(task, profile_block)
     _debug_log_analysis(
         task,
         execution_mode,
@@ -3598,6 +3728,7 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
             "provider": llm_provider,
             "model": model,
             "text_input": text_input,
+            "analysis_engine": analysis_engine,
             "prompt": prompt,
         },
     )
@@ -3656,7 +3787,10 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
                 raise RuntimeError("系统繁忙，请稍后重试")
 
     # 转为与 API 一致的 result 结构
-    items = _parse_analysis_result_items(parsed)
+    if execution_mode == "standard" and analysis_engine == "db_first":
+        items = _build_result_items_with_lookup(task, parsed.get("items") or [])
+    else:
+        items = _parse_analysis_result_items(parsed)
     # 二次纠错完全信任模型输出，不做后处理覆盖
 
     result = {
@@ -3666,7 +3800,25 @@ def run_text_food_analysis_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]
         "pfc_ratio_comment": (parsed.get("pfc_ratio_comment") or "").strip() or None,
         "absorption_notes": (parsed.get("absorption_notes") or "").strip() or None,
         "context_advice": (parsed.get("context_advice") or "").strip() or None,
+        "analysis_engine": analysis_engine,
+        "analysis_duration_ms": round((time.perf_counter() - analysis_started) * 1000, 2),
     }
+    if execution_mode == "standard" and analysis_engine == "db_first":
+        result.update(_summarize_db_first_items(items))
+        resolved = result.get("resolved_count", 0)
+        unresolved = result.get("unresolved_count", 0)
+        total_db = resolved + unresolved
+        print(
+            f"[analyze_summary] provider:{llm_provider}, model:{model}, engine:{analysis_engine}, "
+            f"mode:{execution_mode}, type:text, duration:{result['analysis_duration_ms']}ms, db_hit:{resolved}/{total_db}",
+            flush=True,
+        )
+    else:
+        print(
+            f"[analyze_summary] provider:{llm_provider}, model:{model}, engine:{analysis_engine}, "
+            f"mode:{execution_mode}, type:text, duration:{result['analysis_duration_ms']}ms",
+            flush=True,
+        )
     result = _strip_standard_mode_extra_fields(result, execution_mode)
     if execution_mode == "strict":
         result.update(_derive_text_recognition_fields(parsed or {}, items, execution_mode, text_input))

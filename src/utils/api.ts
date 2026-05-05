@@ -1684,6 +1684,7 @@ export interface AnalyzeTextParams {
   diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
   activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
   remaining_calories?: number
+  analysis_engine?: AnalysisEngine
 }
 
 /**
@@ -1697,7 +1698,8 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
     ...(params.user_goal != null && { user_goal: params.user_goal }),
     ...(params.diet_goal != null && { diet_goal: params.diet_goal }),
     ...(params.activity_timing != null && { activity_timing: params.activity_timing }),
-    ...(params.remaining_calories != null && { remaining_calories: params.remaining_calories })
+    ...(params.remaining_calories != null && { remaining_calories: params.remaining_calories }),
+    ...(params.analysis_engine != null && { analysis_engine: params.analysis_engine })
   }
   try {
     const response = await Taro.request({
@@ -1911,6 +1913,7 @@ export interface AnalyzeTextTaskSubmitParams {
   remaining_calories?: number
   additionalContext?: string
   execution_mode?: ExecutionMode
+  analysis_engine?: AnalysisEngine
   previousResult?: AnalyzeResponse
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
@@ -1931,7 +1934,7 @@ export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): 
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
     data: payload,
-    timeout: 10000
+    timeout: 30000
   })
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '提交任务失败')
