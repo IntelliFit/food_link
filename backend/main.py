@@ -6201,6 +6201,9 @@ async def _reconcile_membership_from_latest_paid_order(
     if bool(early_user_meta.get("early_user_paid_bonus_eligible")) and plan_daily_credits > 0:
         plan_daily_credits *= int(early_user_meta.get("early_user_paid_bonus_multiplier") or 1)
 
+    existing_daily_credits = int((membership or {}).get("daily_credits") or 0)
+    effective_daily_credits = max(existing_daily_credits, int(plan_daily_credits or 0))
+
     expected_membership = {
         "current_plan_code": latest_paid.get("plan_code"),
         "status": expected_status,
@@ -6209,7 +6212,7 @@ async def _reconcile_membership_from_latest_paid_order(
         "expires_at": _build_json_datetime(expected_expires_at),
         "last_paid_at": paid_at.isoformat(),
         "auto_renew": False,
-        "daily_credits": plan_daily_credits,
+        "daily_credits": effective_daily_credits,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -6225,7 +6228,7 @@ async def _reconcile_membership_from_latest_paid_order(
         not _datetimes_match(membership_period_start, paid_at),
         not _datetimes_match(membership_expires_at, expected_expires_at),
         not _datetimes_match(membership_last_paid_at, paid_at),
-        int(membership.get("daily_credits") or 0) != int(plan_daily_credits or 0),
+        int(membership.get("daily_credits") or 0) < int(plan_daily_credits or 0),
     ))
     if not needs_repair:
         return membership

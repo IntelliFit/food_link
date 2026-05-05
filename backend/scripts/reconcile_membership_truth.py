@@ -149,8 +149,10 @@ def main() -> None:
         multiplier = EARLY_USER_PAID_CREDITS_MULTIPLIER if (
             user_id in registration_rank or user_id in paid_rank
         ) else 1
-        expected_daily_credits = int(plan_daily_credits.get(str(latest_paid.get("plan_code") or ""), 0)) * multiplier
+        plan_expected_daily_credits = int(plan_daily_credits.get(str(latest_paid.get("plan_code") or ""), 0)) * multiplier
         existing = memberships.get(user_id)
+        existing_daily_credits = int((existing or {}).get("daily_credits") or 0)
+        expected_daily_credits = max(existing_daily_credits, plan_expected_daily_credits)
         payload = {
             "current_plan_code": latest_paid.get("plan_code"),
             "status": expected_status,
@@ -170,7 +172,7 @@ def main() -> None:
             or str(existing.get("current_period_start") or "") != str(payload["current_period_start"] or "")
             or str(existing.get("expires_at") or "") != str(payload["expires_at"] or "")
             or str(existing.get("last_paid_at") or "") != str(payload["last_paid_at"] or "")
-            or int(existing.get("daily_credits") or 0) != int(payload["daily_credits"] or 0)
+            or int(existing.get("daily_credits") or 0) < int(plan_expected_daily_credits or 0)
         )
         if not changed:
             continue

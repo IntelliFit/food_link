@@ -2,6 +2,20 @@
 
 ## 状态：进行中 - 等待用户反馈调试日志
 
+- 2026-05-05 update:
+  - Clarified two membership-credit details after user feedback.
+  - Backend membership reconciliation now preserves manual daily-credit upgrades:
+    - `/api/membership/me` still repairs plan/status/period fields from the latest real paid membership order.
+    - If `user_pro_memberships.daily_credits` is manually set above the paid-plan expected amount, it is treated as an intentional manual boost and is no longer overwritten downward.
+    - The repair script `backend/scripts/reconcile_membership_truth.py` follows the same rule.
+  - Profile membership card copy was clarified:
+    - `系统分配（次日清0）` -> `系统剩余（次日清0）` so `0/16` is not mistaken for "used 0".
+    - Reward balance now shows level progress as `当前奖励分/本级上限 · LvN 标题`, e.g. `1/10 · Lv1 探味新芽`.
+  - Verification:
+    - `python -m py_compile backend/main.py backend/scripts/reconcile_membership_truth.py` passed.
+    - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed.
+    - `mrc where --port 9420` connected successfully; `mrc errors 10 --port 9420` returned 0 errors.
+
 - 2026-05-05 hotfix:
   - Fixed post-merge frontend build failure in `src/packageExtra/pages/result/index.tsx`.
   - Root cause: merge kept two `const precisionDefaultsLoadedRef = useRef(false)` declarations in the same component scope.

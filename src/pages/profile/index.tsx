@@ -93,6 +93,12 @@ function getRewardLevelProgress(points: number, meta: RewardLevelMeta): number {
   return Math.max(0, Math.min(((normalized - meta.min) / span) * 100, 100))
 }
 
+function formatRewardLevelRange(points: number, meta: RewardLevelMeta): string {
+  const normalized = Math.max(Number(points || 0), 0)
+  if (meta.max == null) return `${normalized}+`
+  return `${normalized}/${meta.max}`
+}
+
 function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
   if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
   if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
@@ -726,6 +732,7 @@ function ProfilePage() {
             const systemProgressPct = cMax > 0 ? Math.min((cSystemRemain / cMax) * 100, 100) : 0
             const rewardLevel = getRewardLevelMeta(cEarned)
             const rewardProgressPct = getRewardLevelProgress(cEarned, rewardLevel)
+            const rewardRangeText = formatRewardLevelRange(cEarned, rewardLevel)
             const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
             const hasDoubleBenefits = !!membershipStatus?.early_user_paid_bonus_active || !!membershipStatus?.early_user_paid_bonus_eligible
             const currentTier = getCurrentMembershipTier(membershipStatus)
@@ -749,7 +756,7 @@ function ProfilePage() {
                 <View className='card-body'>
                   <View className='member-meter'>
                     <View className='member-meter__head'>
-                      <Text className='member-meter__label'>系统分配（次日清0）</Text>
+                      <Text className='member-meter__label'>系统剩余（次日清0）</Text>
                       <Text className='member-meter__value'>{cMax > 0 ? `${cSystemRemain}/${cMax}` : `${cSystemRemain}`}</Text>
                     </View>
                     <View className='progress-bar'>
@@ -760,7 +767,7 @@ function ProfilePage() {
                   <View className='member-meter'>
                     <View className='member-meter__head'>
                       <Text className='member-meter__label'>奖励分（一直持有）</Text>
-                      <Text className='member-meter__value'>{`${cEarned} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
+                      <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
                     </View>
                     <View className='progress-bar progress-bar--reward'>
                       <View className='progress-inner progress-inner--reward' style={{ width: `${rewardProgressPct}%` }} />
