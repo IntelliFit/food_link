@@ -15,6 +15,7 @@ import {
     formatApiErrorModalBody,
 } from '../../../utils/api'
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
+import { isPublicPage } from '../../../utils/withAuth'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
 import loginLogo from '../../../assets/login-logo.png'
@@ -26,10 +27,24 @@ interface UserInfo {
     meta: string
 }
 
-/** 安全返回：若当前是第一个页面则跳转首页 */
+/** 安全返回：若当前是第一个页面则跳转首页；若上一页是受保护页面也跳首页，避免循环跳转 */
 function safeNavigateBack() {
     const pages = Taro.getCurrentPages()
     if (pages.length > 1) {
+        const prevPage = pages[pages.length - 2]
+        const prevRoute = `/${prevPage.route || ''}`
+        // 如果上一页是登录页本身，避免循环
+        if (prevRoute === extraPkgUrl('/pages/login/index')) {
+            Taro.switchTab({ url: '/pages/index/index' })
+            return
+        }
+        // 如果上一页不是公共页面且不是主 Tab 页，说明需要登录才能访问
+        // navigateBack 会再次触发登录跳转，形成循环，因此直接去首页
+        const isSafe = isPublicPage(prevRoute) || MAIN_TAB_ROUTES.has(prevRoute)
+        if (!isSafe) {
+            Taro.switchTab({ url: '/pages/index/index' })
+            return
+        }
         Taro.navigateBack()
     } else {
         Taro.switchTab({ url: '/pages/index/index' })
