@@ -319,6 +319,11 @@
       box-shadow: 0 0 12rpx rgba(251, 191, 36, 0.4);
     }
 
+    .progress-inner--reward {
+      background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+      box-shadow: 0 0 12rpx rgba(251, 191, 36, 0.4);
+    }
+
     .card-pro-badge {
       background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
       color: #1a1a2e;
@@ -367,6 +372,11 @@
     }
 
     .progress-inner {
+      background: linear-gradient(90deg, #fff 0%, #ecfdf5 100%);
+      box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+    }
+
+    .progress-inner--reward {
       background: linear-gradient(90deg, #fff 0%, #ecfdf5 100%);
       box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
     }
@@ -438,6 +448,7 @@
   }
 
   .member-meter__label {
+    flex-shrink: 0;
     font-size: 24rpx;
     color: rgba(255, 255, 255, 0.94);
     line-height: 1.4;
@@ -446,7 +457,9 @@
   }
 
   .member-meter__value {
-    font-size: 24rpx;
+    flex: 1;
+    min-width: 0;
+    font-size: 23rpx;
     color: #fff;
     line-height: 1.4;
     font-weight: 700;
@@ -523,7 +536,7 @@
   }
 
   .progress-inner--reward {
-    background: linear-gradient(90deg, #fbbf24 0%, #fb7185 100%);
+    background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%);
     box-shadow: 0 0 10rpx rgba(251, 191, 36, 0.28);
   }
 

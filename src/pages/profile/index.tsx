@@ -733,6 +733,7 @@ function ProfilePage() {
             const rewardLevel = getRewardLevelMeta(cEarned)
             const rewardProgressPct = getRewardLevelProgress(cEarned, rewardLevel)
             const rewardRangeText = formatRewardLevelRange(cEarned, rewardLevel)
+            const systemAvailableText = cMax > 0 ? `可用 ${cSystemRemain}/${cMax}` : `可用 ${cSystemRemain}`
             const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
             const hasDoubleBenefits = !!membershipStatus?.early_user_paid_bonus_active || !!membershipStatus?.early_user_paid_bonus_eligible
             const currentTier = getCurrentMembershipTier(membershipStatus)
@@ -756,8 +757,8 @@ function ProfilePage() {
                 <View className='card-body'>
                   <View className='member-meter'>
                     <View className='member-meter__head'>
-                      <Text className='member-meter__label'>系统剩余（次日清0）</Text>
-                      <Text className='member-meter__value'>{cMax > 0 ? `${cSystemRemain}/${cMax}` : `${cSystemRemain}`}</Text>
+                      <Text className='member-meter__label'>系统可用（次日清0）</Text>
+                      <Text className='member-meter__value'>{systemAvailableText}</Text>
                     </View>
                     <View className='progress-bar'>
                       <View className='progress-inner' style={{ width: `${systemProgressPct}%` }} />
@@ -766,7 +767,7 @@ function ProfilePage() {
 
                   <View className='member-meter'>
                     <View className='member-meter__head'>
-                      <Text className='member-meter__label'>奖励分（一直持有）</Text>
+                      <Text className='member-meter__label'>奖励可用（一直持有）</Text>
                       <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
                     </View>
                     <View className='progress-bar progress-bar--reward'>

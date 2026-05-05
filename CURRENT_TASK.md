@@ -3,6 +3,21 @@
 ## 状态：进行中 - 等待用户反馈调试日志
 
 - 2026-05-05 update:
+  - Optimized profile membership card credit-meter semantics after user clarified that bar color should consistently represent available credits.
+  - Both membership-card bars now use the same "available asset" meaning:
+    - System-credit label: `系统可用（次日清0）`
+    - System-credit value: `可用 X/Y`
+    - System bar fill uses `system_credits_remaining / daily_credits_max`.
+    - Reward-credit label: `奖励可用（一直持有）`
+    - Reward-credit value keeps level progress, e.g. `1/10 · Lv1 探味新芽`.
+  - Within the same membership card state, system and reward bars now share the same fill color to avoid mixed semantics.
+  - Verification:
+    - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed.
+    - `mrc switchTab /pages/profile/index --port 9420` succeeded.
+    - `mrc errors 10 --port 9420` returned 0 errors.
+    - `mrc screenshot .\profile-credit-available-bars.png --port 9420` was attempted but failed with DevTools-side `fail to capture screenshot`.
+
+- 2026-05-05 update:
   - Clarified two membership-credit details after user feedback.
   - Backend membership reconciliation now preserves manual daily-credit upgrades:
     - `/api/membership/me` still repairs plan/status/period fields from the latest real paid membership order.
