@@ -636,8 +636,6 @@ function ResultPage() {
     savedPrecisionReferenceDefaults,
   ])
 
-  const precisionDefaultsLoadedRef = useRef(false)
-
   useEffect(() => {
     if (precisionDefaultsLoadedRef.current) return
     precisionDefaultsLoadedRef.current = true

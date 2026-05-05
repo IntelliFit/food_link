@@ -2,6 +2,20 @@
 
 ## 状态：进行中 - 等待用户反馈调试日志
 
+- 2026-05-05 hotfix:
+  - Fixed post-merge frontend build failure in `src/packageExtra/pages/result/index.tsx`.
+  - Root cause: merge kept two `const precisionDefaultsLoadedRef = useRef(false)` declarations in the same component scope.
+  - Fix: removed the later duplicate declaration and kept the original ref used by the precision-default loading effect.
+  - Backend local-dev log noise was also reduced:
+    - Local `backend/.env` had `OTEL_ENABLED=1` and `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`.
+    - When `NODE_ENV=development` and the local collector port is unreachable, `backend/main.py` now skips OTel initialization for that run instead of repeatedly exporting to a refused local endpoint.
+  - Verification:
+    - `python -m py_compile backend/main.py` passed.
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed.
+    - `mrc where --port 9420` connected successfully; `mrc errors 10 --port 9420` returned 0 errors.
+  - Note:
+    - Existing running backend/frontend watch processes need a restart or rebuild cycle to pick up this source change; no long-running process was restarted by the agent.
+
 - 2026-05-05 update:
   - Reviewed latest divergent `dev` / `main` commits and synced both branches to the same local HEAD.
   - Merge path:

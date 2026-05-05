@@ -30,6 +30,8 @@ import math
 import mimetypes
 import calendar
 import logging
+import socket
+from urllib.parse import urlparse
 from datetime import timedelta, datetime, timezone, date
 from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
@@ -252,6 +254,19 @@ def _normalize_otlp_http_endpoint(value: Optional[str], signal_path: str) -> str
     return endpoint.rstrip("/") + signal_path
 
 
+def _is_local_otlp_endpoint_reachable(endpoint: str) -> bool:
+    parsed = urlparse(endpoint)
+    host = (parsed.hostname or "").strip().lower()
+    if host not in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=0.2):
+            return True
+    except OSError:
+        return False
+
+
 def _build_traceparent(trace_id_hex: str, span_id_hex: str, sampled: bool) -> str:
     return f"00-{trace_id_hex}-{span_id_hex}-{'01' if sampled else '00'}"
 
@@ -302,6 +317,13 @@ def _setup_otel_observability(target_app: FastAPI) -> None:
         os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", otlp_endpoint),
         "/v1/logs",
     )
+    if os.getenv("NODE_ENV", "").strip().lower() == "development":
+        local_endpoint = otlp_endpoint or traces_endpoint or logs_endpoint
+        if local_endpoint and not _is_local_otlp_endpoint_reachable(local_endpoint):
+            logging.getLogger(__name__).warning(
+                "OpenTelemetry local collector is not reachable; observability is disabled for this dev run."
+            )
+            return
 
     resource = Resource.create({SERVICE_NAME: OTEL_SERVICE_NAME})
     tracer_provider = TracerProvider(resource=resource)
