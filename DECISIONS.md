@@ -734,5 +734,13 @@
 - `2026-03-28`: 精准模式不再只是提示词差异；分析结果统一新增 `recognitionOutcome`、`rejectionReason`、`retakeGuidance`、`allowedFoodCategory`，由后端在严格模式下做 hard/soft reject 后校验，前端结果页和历史页按结构化状态展示。
 - `2026-03-28`: 文字异步分析任务的 `execution_mode` 必须和图片任务一样做"请求优先、档案回退"的统一合并，避免未传模式时默认掉回 `standard`。
 - `2026-03-29`: 结果页的"上传公共库"必须是独立入口，点击后应直接进入公共库上传页并沿用当前拍照分析结果作为草稿；不要先走"记录餐次/保存记录"链路，也不要在"记录"成功后再弹上传提醒。
+- `2026-05-06`: Supabase 技术栈迁移正式切换为独立 PostgreSQL + 腾讯云 COS + CDN：
+  - 旧 Python 后端归档至 `backend_bak/`，新 Go 后端接管 `backend/`
+  - 数据迁移通过 `backend_bak/scripts/` 下的三套脚本完成：数据库全量迁移、Storage 图片迁移、URL 清洗为 COS key
+  - 数据库只存 COS key，不存完整 URL；CDN 前缀由 `backend/config.yaml` 按 bucket 维度配置
+- `2026-05-06`: 图片存储查询返回口径统一为"数据库只存 key，后端负责拼接 CDN URL"：
+  - 上传链路：`storage.UploadBytes` / `UploadBase64` 内部通过 `BuildAccessURL` 返回完整 CDN URL
+  - 查询链路：Go 后端 service/handler 层必须调用 `BuildAccessURL` 把 key 拼接为完整 CDN URL 后再返回前端
+  - 禁止直接把数据库中的纯 key 透传给前端
 - `2026-05-09`: 智能饮食推荐第一版采用“即时生成、不落库、不改 schema”的保守口径，适配 Python/Supabase -> Go/PostgreSQL 过渡期。前端把当天剩余热量、三大营养素缺口、目标、已吃餐次摘要和场景（`eat_out` / `cook_home`）传给 Go 后端；Go 后端用 DeepSeek `deepseek-v4-flash` 生成结构化 JSON，失败或缺少 `DEEPSEEK_API_KEY` 时返回规则兜底推荐。后续若要引入推荐历史、用户口味画像、外食商家库或收藏替换项，涉及新增表/字段时必须先写正式 migration，并明确 Supabase 源库与最终 PostgreSQL 的应用顺序。
 - `2026-05-09`: 首页「今日餐食」卡片右侧的 `N次` 固定表示该餐次下有 N 条饮食记录，不表示照片数量。照片数量仍只在餐次缩略图角标中用「共 N 张」表达。多记录弹层里的每条 entry 必须展示该记录自己的 `image_path/image_paths`，不能复用餐次级聚合图片。

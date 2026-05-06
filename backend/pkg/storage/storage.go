@@ -22,6 +22,30 @@ func New(cfg config.StorageConfig) *Client {
 	return &Client{cfg: cfg}
 }
 
+func (c *Client) NormalizeURL(bucketAlias, raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	return c.BuildAccessURL(bucketAlias, raw)
+}
+
+func (c *Client) NormalizeURLs(bucketAlias string, raws []string) []string {
+	if len(raws) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(raws))
+	for _, raw := range raws {
+		if raw == "" {
+			continue
+		}
+		out = append(out, c.NormalizeURL(bucketAlias, raw))
+	}
+	return out
+}
+
 func (c *Client) BuildAccessURL(bucketAlias, key string) string {
 	key = strings.TrimLeft(key, "/")
 	var base string

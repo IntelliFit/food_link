@@ -40,7 +40,7 @@ func TestFriendService_SearchUsers(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	// Make u1 and u2 friends
@@ -70,7 +70,7 @@ func TestFriendService_SendFriendRequest(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	// cannot add self
@@ -100,7 +100,7 @@ func TestFriendService_GetFriendRequestsReceived(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	_, _ = friendRepo.SendFriendRequest(ctx, "u2", "u1")
@@ -117,7 +117,7 @@ func TestFriendService_RespondFriendRequest(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	fr, _ := friendRepo.SendFriendRequest(ctx, "u2", "u1")
@@ -145,7 +145,7 @@ func TestFriendService_CancelSentFriendRequest(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	fr, _ := friendRepo.SendFriendRequest(ctx, "u1", "u2")
@@ -164,7 +164,7 @@ func TestFriendService_GetFriendList(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	_ = friendRepo.AddFriendPair(ctx, "u1", "u2")
@@ -181,7 +181,7 @@ func TestFriendService_CountFriends(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	count, _ := svc.CountFriends(ctx, "u1")
@@ -199,7 +199,7 @@ func TestFriendService_DeleteFriend(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	// cannot delete self
@@ -226,7 +226,7 @@ func TestFriendService_GetFriendRequestsOverview(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	_, _ = friendRepo.SendFriendRequest(ctx, "u2", "u1")
@@ -247,7 +247,7 @@ func TestFriendService_CleanupDuplicateFriends(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	// Insert duplicate
@@ -265,7 +265,7 @@ func TestFriendService_GetInviteProfile(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	profile, err := svc.GetInviteProfile(ctx, "u1")
@@ -283,7 +283,7 @@ func TestFriendService_ResolveUserByInviteCode(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	profile, err := svc.ResolveUserByInviteCode(ctx, "550e8400")
@@ -300,7 +300,7 @@ func TestFriendService_ResolveInviteWithRelation(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	profile, err := svc.ResolveInviteWithRelation(ctx, "550e8400-e29b-41d4-a716-446655440001", "550e8400")
@@ -316,7 +316,7 @@ func TestFriendService_AcceptInvite(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	res, err := svc.AcceptInvite(ctx, "u2", "550e8400")
@@ -335,7 +335,7 @@ func TestFriendService_Cache(t *testing.T) {
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewFriendService(friendRepo, userRepo)
+	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
 	_ = friendRepo.AddFriendPair(ctx, "u1", "u2")

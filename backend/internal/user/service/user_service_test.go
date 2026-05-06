@@ -92,7 +92,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func TestUserService_GetProfile(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1", Nickname: "Test"}
@@ -134,7 +134,7 @@ func TestUserService_ProfileAvatarUsesCDNForLegacySupabaseURL(t *testing.T) {
 
 func TestUserService_GetProfile_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	_, err := svc.GetProfile(ctx, "non-existent")
@@ -144,7 +144,7 @@ func TestUserService_GetProfile_NotFound(t *testing.T) {
 func TestUserService_GetProfile_Error(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	patches := ApplyMethod(reflect.TypeOf(userRepo), "FindByID", func(_ *repo.UserRepo, _ context.Context, _ string) (*repo.User, error) {
@@ -161,7 +161,7 @@ func TestUserService_UpdateProfile(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1", Nickname: "Old"}
@@ -176,7 +176,7 @@ func TestUserService_UpdateProfile(t *testing.T) {
 func TestUserService_UpdateProfile_NotFound(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	patches := ApplyMethod(reflect.TypeOf(userRepo), "UpdateFields", func(_ *repo.UserRepo, _ context.Context, _ string, _ map[string]any) (*repo.User, error) {
@@ -192,7 +192,7 @@ func TestUserService_UpdateProfile_NotFound(t *testing.T) {
 func TestUserService_UpdateProfile_EmptyUpdates(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1", Nickname: "Old"}
@@ -205,7 +205,7 @@ func TestUserService_UpdateProfile_EmptyUpdates(t *testing.T) {
 func TestUserService_UpdateProfile_UpdateFieldsError(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	patches := ApplyMethod(reflect.TypeOf(userRepo), "UpdateFields", func(_ *repo.UserRepo, _ context.Context, _ string, _ map[string]any) (*repo.User, error) {
@@ -223,7 +223,7 @@ func TestUserService_GetDashboardTargets(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -236,7 +236,7 @@ func TestUserService_GetDashboardTargets(t *testing.T) {
 
 func TestUserService_GetDashboardTargets_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	_, err := svc.GetDashboardTargets(ctx, "nonexistent")
@@ -246,7 +246,7 @@ func TestUserService_GetDashboardTargets_NotFound(t *testing.T) {
 func TestUserService_GetDashboardTargets_Error(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	patches := ApplyMethod(reflect.TypeOf(userRepo), "FindByID", func(_ *repo.UserRepo, _ context.Context, _ string) (*repo.User, error) {
@@ -280,7 +280,7 @@ func TestUserService_UpdateDashboardTargets(t *testing.T) {
 	})
 	defer patches.Reset()
 
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 
 	result, err := svc.UpdateDashboardTargets(ctx, user.ID, UpdateDashboardTargetsInput{CalorieTarget: 1800, ProteinTarget: 100, CarbsTarget: 200, FatTarget: 60})
 	assert.NoError(t, err)
@@ -289,7 +289,7 @@ func TestUserService_UpdateDashboardTargets(t *testing.T) {
 
 func TestUserService_UpdateDashboardTargets_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	_, err := svc.UpdateDashboardTargets(ctx, "nonexistent", UpdateDashboardTargetsInput{CalorieTarget: 1800})
@@ -299,7 +299,7 @@ func TestUserService_UpdateDashboardTargets_NotFound(t *testing.T) {
 func TestUserService_UpdateDashboardTargets_UpdateError(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -319,7 +319,7 @@ func TestUserService_GetHealthProfile(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	weight := 70.0
@@ -333,7 +333,7 @@ func TestUserService_GetHealthProfile(t *testing.T) {
 
 func TestUserService_GetHealthProfile_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	_, err := svc.GetHealthProfile(ctx, "nonexistent")
@@ -343,7 +343,7 @@ func TestUserService_GetHealthProfile_NotFound(t *testing.T) {
 func TestUserService_GetHealthProfile_Error(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	patches := ApplyMethod(reflect.TypeOf(userRepo), "FindByID", func(_ *repo.UserRepo, _ context.Context, _ string) (*repo.User, error) {
@@ -360,7 +360,7 @@ func TestUserService_UpdateHealthProfile(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	gender := "male"
@@ -406,7 +406,7 @@ func TestUserService_UpdateHealthProfile_ModeChange(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	mode := "standard"
@@ -433,7 +433,7 @@ func TestUserService_UpdateHealthProfile_ModeChange(t *testing.T) {
 func TestUserService_UpdateHealthProfile_InvalidModeSetBy(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	mode := "standard"
@@ -450,7 +450,7 @@ func TestUserService_UpdateHealthProfile_InvalidModeSetBy(t *testing.T) {
 
 func TestUserService_UpdateHealthProfile_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(repo.NewUserRepo(db), userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	_, err := svc.UpdateHealthProfile(ctx, "nonexistent", UpdateHealthProfileInput{})
@@ -460,7 +460,7 @@ func TestUserService_UpdateHealthProfile_NotFound(t *testing.T) {
 func TestUserService_UpdateHealthProfile_EmptyUpdates(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -473,7 +473,7 @@ func TestUserService_UpdateHealthProfile_EmptyUpdates(t *testing.T) {
 func TestUserService_UpdateHealthProfile_WithDashboardTargets(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -497,7 +497,7 @@ func TestUserService_UpdateHealthProfile_WithReportExtract(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -519,7 +519,7 @@ func TestUserService_UpdateHealthProfile_WithReportExtract(t *testing.T) {
 func TestUserService_UpdateHealthProfile_UpdateFieldsError(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -538,7 +538,7 @@ func TestUserService_UpdateHealthProfile_UpdateFieldsError(t *testing.T) {
 func TestUserService_UpdateHealthProfile_FindError(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	patches := ApplyMethod(reflect.TypeOf(userRepo), "FindByID", func(_ *repo.UserRepo, _ context.Context, _ string) (*repo.User, error) {
@@ -553,7 +553,7 @@ func TestUserService_UpdateHealthProfile_FindError(t *testing.T) {
 func TestUserService_UpdateHealthProfile_SameMode(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db))
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
 
 	mode := "strict"
@@ -578,7 +578,7 @@ func TestUserService_GetRecordDays(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -594,7 +594,7 @@ func TestUserService_UpdateLastSeenAnalyzeHistory(t *testing.T) {
 	userRepo := repo.NewUserRepo(db)
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchRepo := userrepo.NewModeSwitchLogRepo(db)
-	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo)
+	svc := NewUserService(userRepo, healthDocRepo, modeSwitchRepo, nil)
 	ctx := context.Background()
 
 	user := &repo.User{OpenID: "o1"}
@@ -652,7 +652,8 @@ func TestBuildHealthProfileResponse(t *testing.T) {
 
 func TestBuildProfileResponse(t *testing.T) {
 	user := &repo.User{OpenID: "o1", Nickname: "Test"}
-	resp := buildProfileResponse(user)
+	svc := &UserService{}
+	resp := svc.buildProfileResponse(user)
 	assert.Equal(t, "Test", resp["nickname"])
 }
 

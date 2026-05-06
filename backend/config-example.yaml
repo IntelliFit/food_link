@@ -53,4 +53,3 @@ wechat_pay:
   api_v3_key: ""
   private_key: ""
   public_key: ""
-

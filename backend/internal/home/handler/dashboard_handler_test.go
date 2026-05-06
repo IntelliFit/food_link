@@ -48,7 +48,7 @@ func TestDashboardHandler_HomeDashboard(t *testing.T) {
 	db.Create(&userrepo.User{ID: userID, OpenID: "openid"})
 	db.Create(&repo.FoodRecord{ID: uuid.New().String(), UserID: userID, MealType: "lunch", TotalCalories: 500, RecordTime: &now})
 
-	svc := service.NewDashboardService(userRepo, homeRepo)
+	svc := service.NewDashboardService(userRepo, homeRepo, nil)
 	h := NewDashboardHandler(svc)
 	r := setupDashboardRouter(h)
 
@@ -127,7 +127,7 @@ func TestDashboardHandler_HomeDashboardMealEntriesKeepOwnImages(t *testing.T) {
 func TestDashboardHandler_HomeDashboardError(t *testing.T) {
 	_, userRepo, homeRepo := setupDashboardTestDB(t)
 
-	svc := service.NewDashboardService(userRepo, homeRepo)
+	svc := service.NewDashboardService(userRepo, homeRepo, nil)
 	h := NewDashboardHandler(svc)
 	r := setupDashboardRouter(h)
 
@@ -147,7 +147,7 @@ func TestDashboardHandler_PosterCalorieCompare(t *testing.T) {
 	db.Create(&userrepo.User{ID: "test-user-id", OpenID: "openid"})
 	db.Create(&repo.FoodRecord{ID: recordID, UserID: "test-user-id", MealType: "lunch", TotalCalories: 500, RecordTime: &now})
 
-	svc := service.NewDashboardService(userRepo, homeRepo)
+	svc := service.NewDashboardService(userRepo, homeRepo, nil)
 	h := NewDashboardHandler(svc)
 	r := setupDashboardRouter(h)
 
@@ -164,7 +164,7 @@ func TestDashboardHandler_PosterCalorieCompare(t *testing.T) {
 func TestDashboardHandler_PosterCalorieCompareNotFound(t *testing.T) {
 	_, userRepo, homeRepo := setupDashboardTestDB(t)
 
-	svc := service.NewDashboardService(userRepo, homeRepo)
+	svc := service.NewDashboardService(userRepo, homeRepo, nil)
 	h := NewDashboardHandler(svc)
 	r := setupDashboardRouter(h)
 

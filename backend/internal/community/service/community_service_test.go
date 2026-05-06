@@ -152,7 +152,7 @@ func (m *mockUserRepo) CountFoodRecordDays(ctx context.Context, userID string) (
 }
 
 func newTestService(feed FeedRepo, notif NotificationRepo, user UserFinder) *CommunityService {
-	return NewCommunityService(feed, notif, user)
+	return NewCommunityService(feed, notif, user, nil)
 }
 
 func TestPublicFeed(t *testing.T) {
