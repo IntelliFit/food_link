@@ -75,7 +75,7 @@ func (r *UserRepo) Create(ctx context.Context, user *User) error {
 }
 
 func (r *UserRepo) UpdateFields(ctx context.Context, userID string, updates map[string]any) (*User, error) {
-	if err := r.db.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Updates(updates).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return nil, err
 	}
 	return r.FindByID(ctx, userID)

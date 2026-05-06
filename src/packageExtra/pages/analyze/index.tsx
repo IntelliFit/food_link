@@ -20,10 +20,10 @@ import {
   PrecisionReferenceDimensions,
   PrecisionReferencePresetConfig,
   PrecisionReferencePresetKey,
-  ANALYSIS_SUBSCRIBE_TEMPLATE_ID
+  ANALYSIS_SUBSCRIBE_TEMPLATE_ID,
+  showUnifiedApiError,
 } from '../../../utils/api'
 import type { AnalyzeResponse, AnalysisEngine, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,

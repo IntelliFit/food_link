@@ -238,13 +238,145 @@ func TestRecognizeNoImages(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestDashboardError(t *testing.T) {
-	mockSvc := &mockExpiryService{dashboardErr: errors.New("db error")}
+func TestListItemsError(t *testing.T) {
+	mockSvc := &mockExpiryService{listErr: errors.New("db error")}
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/expiry/dashboard", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/expiry/items?status=active", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestCreateItemBindError(t *testing.T) {
+	mockSvc := &mockExpiryService{}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/items", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCreateItemError(t *testing.T) {
+	mockSvc := &mockExpiryService{createErr: errors.New("db error")}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"name": "bread"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/items", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetItemError(t *testing.T) {
+	mockSvc := &mockExpiryService{getErr: errors.New("db error")}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/expiry/items/i1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUpdateItemBindError(t *testing.T) {
+	mockSvc := &mockExpiryService{}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/expiry/items/i1", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateItemError(t *testing.T) {
+	mockSvc := &mockExpiryService{updateErr: errors.New("db error")}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"name": "sourdough"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/expiry/items/i1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUpdateStatusBindError(t *testing.T) {
+	mockSvc := &mockExpiryService{}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/items/i1/status", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateStatusError(t *testing.T) {
+	mockSvc := &mockExpiryService{updateStatusErr: errors.New("db error")}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"status": "consumed"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/items/i1/status", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSubscribeError(t *testing.T) {
+	mockSvc := &mockExpiryService{subscribeErr: errors.New("db error")}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/items/i1/subscribe", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestRecognizeBindError(t *testing.T) {
+	mockSvc := &mockExpiryService{}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/recognize", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRecognizeError(t *testing.T) {
+	mockSvc := &mockExpiryService{recognizeErr: errors.New("recognize error")}
+	h := NewExpiryHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string][]string{"image_urls": {"https://example.com/img.jpg"}})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/recognize", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)

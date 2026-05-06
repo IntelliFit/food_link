@@ -902,7 +902,11 @@ function IndexPage() {
       return
     }
 
+    const targetDate = currentSelected || today
+
     if (!getAccessToken()) {
+      // 未登录时也需要 loadDashboard 来设置默认值并关闭 loading
+      void loadDashboard(targetDate, false)
       return
     }
 
@@ -932,8 +936,6 @@ function IndexPage() {
         // 静默失败，保留旧值
       }
     })()
-
-    const targetDate = currentSelected || today
 
     // 若本地缓存的 meals 缺少蛋白质/脂肪/碳水，视为脏数据，强制走云端刷新
     const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
@@ -1732,6 +1734,8 @@ function IndexPage() {
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
   /** 登录用户展示食物保质期区块（无数据时显示引导） */
   const showFoodExpiryBlock = Boolean(getAccessToken())
+  /** 未登录访客态 */
+  const isGuest = !getAccessToken()
 
   // 体重/喝水计算
   const weightSummary = useMemo(() => 
@@ -2088,6 +2092,8 @@ function IndexPage() {
                   <Text className='card-value' style={{ fontSize: '36rpx', color: '#9ca3af' }}>--</Text>
                   <View className='loading-spinner' style={{ width: '24rpx', height: '24rpx', borderWidth: '3rpx' }} />
                 </View>
+              ) : isGuest ? (
+                <Text className='card-value' style={{ color: '#9ca3af' }}>--</Text>
               ) : (
                 <Text className={`card-value${isCalorieOver ? ' is-over' : ''}`}>
                   {isCalorieOver
@@ -2095,10 +2101,10 @@ function IndexPage() {
                     : formatNumberWithComma(Math.round(animatedHeadlineCalories))}
                 </Text>
               )}
-              {!dashboardBusy && <Text className='card-unit'>kcal</Text>}
+              {!dashboardBusy && !isGuest && <Text className='card-unit'>kcal</Text>}
             </View>
             <View className='target-section'>
-              {dashboardBusy ? (
+              {dashboardBusy || isGuest ? (
                 <View className='target-energy-nums-only'>
                   <Text className='target-energy-num-muted'>--</Text>
                   <Text className='target-energy-slash-only'>/</Text>
@@ -2213,6 +2219,8 @@ function IndexPage() {
                   <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
                   <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
                 </View>
+              ) : isGuest ? (
+                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
               ) : weightSummary.latestWeight ? (
                 <>
                   <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
@@ -2228,9 +2236,11 @@ function IndexPage() {
               )}
             </View>
             <Text className='body-status-hint'>
-              {weightSummary.latestWeight 
-                ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
-                : '记录体重，追踪变化'}
+              {isGuest 
+                ? '记录体重，追踪变化'
+                : weightSummary.latestWeight 
+                  ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
+                  : '记录体重，追踪变化'}
             </Text>
           </View>
 
@@ -2248,6 +2258,8 @@ function IndexPage() {
                   <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
                   <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
                 </View>
+              ) : isGuest ? (
+                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
               ) : (
                 <>
                   <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
@@ -2256,7 +2268,7 @@ function IndexPage() {
               )}
             </View>
             <Text className='body-status-hint'>
-              {dashboardBusy ? '记录喝水，保持水分' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+              {dashboardBusy || isGuest ? '记录喝水，保持水分' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
             </Text>
           </View>
 
@@ -2274,6 +2286,8 @@ function IndexPage() {
                   <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
                   <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
                 </View>
+              ) : isGuest ? (
+                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
               ) : (
                 <>
                   <Text className='body-status-value'>

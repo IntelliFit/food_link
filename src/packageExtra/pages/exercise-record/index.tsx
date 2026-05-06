@@ -9,6 +9,7 @@ import {
   deleteExerciseLog,
   getAnalyzeTask,
   getMyMembership,
+  showUnifiedApiError,
   type ExerciseLogItem,
   type ExerciseTaskResultPayload,
   type MembershipStatus,
@@ -19,7 +20,6 @@ import {
   isExerciseLogCreditExhausted,
 } from '../../../utils/membership'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'

@@ -4,13 +4,13 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAnalyzeTask,
+  showUnifiedApiError,
   type AnalysisTask,
   type AnalysisEngine,
   type AnalyzeResponse,
   type ExecutionMode,
   type ExerciseTaskResultPayload
 } from '../../../utils/api'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'

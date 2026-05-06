@@ -350,3 +350,298 @@ func TestGetStatsSummaryError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+
+func TestSyncLocalBodyMetricsBindError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/sync-local", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSyncLocalBodyMetricsError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{err: errors.New("db error")}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"weight_entries": []map[string]any{{"date": "2024-06-15", "value": 70.5, "client_id": "w1"}},
+		"water_by_date":  map[string]any{"2024-06-15": map[string]any{"total": 500, "logs": []int{250, 250}}},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/sync-local", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSaveBodyWaterLogBindError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/water", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSaveBodyWaterLogError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{err: errors.New("db error")}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"amount_ml": 300, "recorded_on": "2024-06-15"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/water", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestResetBodyWaterLogsBindError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/water/reset", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestResetBodyWaterLogsError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{err: errors.New("db error")}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"recorded_on": "2024-06-15"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/water/reset", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSaveBodyWeightRecordBindError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/weight", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSaveBodyWeightRecordError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{err: errors.New("db error")}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"weight_kg": 72.5, "recorded_on": "2024-06-15"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/weight", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetStatsSummaryWithMonthRange(t *testing.T) {
+	mockSvc := &mockStatsSvc{
+		summary: &service.StatsSummary{
+			Range:             "month",
+			TotalCalories:     3500,
+			AvgCaloriesPerDay: 500,
+			StreakDays:        7,
+		},
+	}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/stats/summary?range=month", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGetStatsSummaryWithInvalidRange(t *testing.T) {
+	mockSvc := &mockStatsSvc{
+		summary: &service.StatsSummary{
+			Range:             "week",
+			TotalCalories:     3500,
+			AvgCaloriesPerDay: 500,
+		},
+	}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/stats/summary?range=invalid", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "week", data["range"])
+}
+func TestGenerateStatsInsightError(t *testing.T) {
+	mockSvc := &mockStatsSvc{err: errors.New("db error")}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"date_range": "week"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/stats/insight/generate", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSaveStatsInsightBindError(t *testing.T) {
+	mockSvc := &mockStatsSvc{}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/stats/insight/save", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSaveStatsInsightError(t *testing.T) {
+	mockSvc := &mockStatsSvc{saveErr: errors.New("db error")}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"content": "Test insight", "date_range": "week"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/stats/insight/save", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetExerciseCaloriesDailyError(t *testing.T) {
+	mockSvc := &mockExerciseSvc{err: errors.New("db error")}
+	h := NewHealthHandler(nil, mockSvc, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/exercise-calories/daily?date=2024-06-15", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetExerciseLogsError(t *testing.T) {
+	mockSvc := &mockExerciseSvc{err: errors.New("db error")}
+	h := NewHealthHandler(nil, mockSvc, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/exercise-logs?date=2024-06-15", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestCreateExerciseLogBindError(t *testing.T) {
+	mockSvc := &mockExerciseSvc{}
+	h := NewHealthHandler(nil, mockSvc, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/exercise-logs", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCreateExerciseLogError(t *testing.T) {
+	mockSvc := &mockExerciseSvc{err: errors.New("db error")}
+	h := NewHealthHandler(nil, mockSvc, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"exercise_desc": "跑步30分钟"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/exercise-logs", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestEstimateExerciseCaloriesBindError(t *testing.T) {
+	mockSvc := &mockExerciseSvc{}
+	h := NewHealthHandler(nil, mockSvc, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/exercise-logs/estimate-calories", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestEstimateExerciseCaloriesError(t *testing.T) {
+	mockSvc := &mockExerciseSvc{err: errors.New("db error")}
+	h := NewHealthHandler(nil, mockSvc, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"exercise_desc": "走路20分钟"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/exercise-logs/estimate-calories", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestDeleteExerciseLogError(t *testing.T) {
+	mockSvc := &mockExerciseSvc{deleteErr: errors.New("db error")}
+	h := NewHealthHandler(nil, mockSvc, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/exercise-logs/log-1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetBodyMetricsSummaryError(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{err: errors.New("db error")}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/body-metrics/summary", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

@@ -73,6 +73,7 @@ func New(cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	logger.SetGlobal(log)
 	if cfg.App.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -87,6 +88,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	engine := gin.New()
+	engine.Use(gin.Logger())
 	engine.Use(gin.Recovery())
 	if cfg.OTel.Enabled {
 		engine.Use(otelgin.Middleware(cfg.App.Name))

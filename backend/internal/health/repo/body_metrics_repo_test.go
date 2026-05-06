@@ -14,7 +14,7 @@ import (
 )
 
 func setupBodyMetricsTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&domain.BodyWeightRecord{},

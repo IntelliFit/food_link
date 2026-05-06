@@ -1,10 +1,32 @@
 package service
 
 import (
+	"context"
 	"testing"
 
+	authrepo "food_link/backend/internal/auth/repo"
+
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+type mockLLMClient struct {
+	result map[string]any
+	err    error
+}
+
+func (m *mockLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	return m.result, m.err
+}
+
+func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
+	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&authrepo.User{}))
+	return db, authrepo.NewUserRepo(db)
+}
 
 func TestNormalizeExecutionMode(t *testing.T) {
 	strict := "strict"
@@ -158,6 +180,110 @@ func TestModelResultFrom(t *testing.T) {
 	errResult := modelResultFrom(nil, assert.AnError, "qwen")
 	assert.Equal(t, false, errResult["success"])
 	assert.NotEmpty(t, errResult["error"])
+}
+
+func TestAnalyzeService_Analyze(t *testing.T) {
+	_, userRepo := setupAnalyzeServiceTestDB(t)
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{map[string]any{"name": "rice", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 130.0}}}}}
+	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	ctx := context.Background()
+
+	result, err := svc.Analyze(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
+	require.NoError(t, err)
+	assert.Equal(t, "test", result["description"])
+}
+
+func TestAnalyzeService_AnalyzeText(t *testing.T) {
+	_, userRepo := setupAnalyzeServiceTestDB(t)
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{}}}
+	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	ctx := context.Background()
+
+	result, err := svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "一碗米饭"})
+	require.NoError(t, err)
+	assert.Equal(t, "text test", result["description"])
+}
+
+func TestAnalyzeService_AnalyzeCompare(t *testing.T) {
+	_, userRepo := setupAnalyzeServiceTestDB(t)
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen result", "items": []any{}}}
+	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini result", "items": []any{}}}
+	svc := NewAnalyzeService(dashScopeClient, ofoxClient, userRepo)
+	ctx := context.Background()
+
+	result, err := svc.AnalyzeCompare(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
+	require.NoError(t, err)
+	assert.NotNil(t, result["qwen_result"])
+	assert.NotNil(t, result["gemini_result"])
+}
+
+func TestAnalyzeService_AnalyzeCompareEngines(t *testing.T) {
+	_, userRepo := setupAnalyzeServiceTestDB(t)
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{}}}
+	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	ctx := context.Background()
+
+	result, err := svc.AnalyzeCompareEngines(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
+	require.NoError(t, err)
+	assert.NotNil(t, result["legacy_result"])
+	assert.NotNil(t, result["db_first_result"])
+}
+
+func TestAnalyzeService_AnalyzeBatch(t *testing.T) {
+	_, userRepo := setupAnalyzeServiceTestDB(t)
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "batch", "items": []any{map[string]any{"name": "apple", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 50.0}}}}}
+	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	ctx := context.Background()
+
+	_, err := svc.AnalyzeBatch(ctx, "", AnalyzeInput{ImageURLs: []string{}})
+	assert.Error(t, err)
+
+	result, err := svc.AnalyzeBatch(ctx, "", AnalyzeInput{ImageURLs: []string{"https://example.com/1.jpg", "https://example.com/2.jpg"}})
+	require.NoError(t, err)
+	assert.NotNil(t, result["description"])
+}
+
+func TestAnalyzeService_AnalyzeBatch_TooMany(t *testing.T) {
+	_, userRepo := setupAnalyzeServiceTestDB(t)
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo)
+	ctx := context.Background()
+
+	_, err := svc.AnalyzeBatch(ctx, "", AnalyzeInput{ImageURLs: []string{"1", "2", "3", "4", "5", "6"}})
+	assert.Error(t, err)
+}
+
+func TestAnalyzeService_ResolveExecutionMode(t *testing.T) {
+	_, userRepo := setupAnalyzeServiceTestDB(t)
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo)
+	ctx := context.Background()
+
+	mode := svc.resolveExecutionMode(ctx, "", nil)
+	assert.Equal(t, "standard", mode)
+
+	strict := "strict"
+	mode = svc.resolveExecutionMode(ctx, "", &strict)
+	assert.Equal(t, "strict", mode)
+}
+
+func TestBuildAnalyzeResponse(t *testing.T) {
+	resp := buildAnalyzeResponse(map[string]any{"description": "d", "items": []any{}}, "standard", "qwen", "qwen-vl-max", 100)
+	assert.Equal(t, "d", resp["description"])
+	assert.Equal(t, "db_first", resp["analysis_engine"])
+
+	resp2 := buildAnalyzeResponse(map[string]any{"description": "d", "items": []any{}, "pfc_ratio_comment": "good"}, "strict", "qwen", "qwen-vl-max", 100)
+	assert.Equal(t, "good", *resp2["pfc_ratio_comment"].(*string))
+}
+
+func TestParseItems_Empty(t *testing.T) {
+	items := parseItems(map[string]any{})
+	assert.Len(t, items, 0)
+}
+
+func TestToItems(t *testing.T) {
+	arr := []map[string]any{{"name": "a"}}
+	assert.Len(t, toItems(arr), 1)
+	assert.Len(t, toItems([]any{map[string]any{"name": "a"}}), 1)
+	assert.Nil(t, toItems("string"))
 }
 
 func floatPtr(v float64) *float64 {

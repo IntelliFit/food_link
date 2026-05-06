@@ -10,6 +10,7 @@ node_modules/
 
 # 项目特定文件夹（不上传）
 hkh/
+backend_bak/
 
 # 本地一次性生成的孤儿对象扫描报告（勿提交）
 backend/reports/orphan-report-*.json
@@ -21,6 +22,7 @@ backend/reports/orphan-report-*.json
 .env
 .env.local
 .env.*.local
+.env.production
 *.env
 
 # Python

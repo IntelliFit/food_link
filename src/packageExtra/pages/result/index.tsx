@@ -23,10 +23,10 @@ import {
   type PrecisionReferenceDimensions,
   type PrecisionReferenceObjectInput,
   type PrecisionReferencePresetConfig,
-  type PrecisionReferencePresetKey
+  type PrecisionReferencePresetKey,
+  showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../../utils/execution-mode'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { withAuth } from '../../../utils/withAuth'

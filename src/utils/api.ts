@@ -18,7 +18,7 @@ function readInjectedString(
 // config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
 export const API_BASE_URL = readInjectedString(
   () => __API_BASE_URL__,
-  'https://healthymax.cn'
+  'https://v2.healthymax.cn'
 )
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
@@ -49,6 +49,14 @@ function withNgrokBypassHeaders(
 }
 
 // 基础类型定义
+
+/** 后端标准响应信封 */
+export interface ApiResponse<T = unknown> {
+  code: number
+  message: string
+  data: T
+}
+
 export type CanonicalMealType =
   | 'breakfast'
   | 'morning_snack'
@@ -309,7 +317,7 @@ async function resolveAnalyzeGeoContext(): Promise<AnalyzeGeoContext | undefined
       return cached
     }
 
-    const data = reverse.data as Record<string, unknown>
+    const data = unwrapResponse<Record<string, unknown>>(reverse)
     const raw = data.address ?? data.formatted_address ?? data.result
     let address = ''
     if (typeof raw === 'string') {
@@ -1331,6 +1339,23 @@ function normalizeTaroResponseJson(raw: unknown): Record<string, unknown> | null
   return null
 }
 
+/**
+ * 解包后端标准响应 (ApiResponse<T>) {code, message, data}
+ * 当后端返回 {code: 0, data: ...} 时提取 data
+ * 当 code !== 0 时抛出包含 message 的错误
+ * 当响应没有 code 字段时（兼容旧后端/透传接口）原样返回
+ */
+export function unwrapResponse<T>(res: Taro.request.SuccessCallbackResult<any>): T {
+  const parsed = normalizeTaroResponseJson(res.data)
+  if (!parsed) return res.data as T
+  if (typeof parsed.code !== 'number') return res.data as T
+  if (parsed.code !== 0) {
+    const msg = typeof parsed.message === 'string' ? parsed.message : '请求失败'
+    throw new Error(msg)
+  }
+  return parsed.data as T
+}
+
 /** 解析 FastAPI `detail`（字符串或校验错误数组） */
 function parseFastApiDetail(data: unknown): string | undefined {
   const obj = normalizeTaroResponseJson(data)
@@ -1574,7 +1599,7 @@ export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUr
       response.header as Record<string, any> | undefined
     )
   }
-  return response.data as { imageUrl: string }
+  return unwrapResponse<{ imageUrl: string }>(response)
 }
 
 export async function analyzeFoodImage(
@@ -1616,7 +1641,7 @@ export async function analyzeFoodImage(
       )
     }
 
-    return response.data as AnalyzeResponse
+    return unwrapResponse<AnalyzeResponse>(response)
   } catch (error: any) {
     console.error('API调用失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
@@ -1669,7 +1694,7 @@ export async function analyzeFoodImageCompare(
       )
     }
 
-    return response.data as CompareAnalyzeResponse
+    return unwrapResponse<CompareAnalyzeResponse>(response)
   } catch (error: any) {
     console.error('双模型对比分析失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
@@ -1717,7 +1742,7 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
         response.header as Record<string, any> | undefined
       )
     }
-    return response.data as AnalyzeResponse
+    return unwrapResponse<AnalyzeResponse>(response)
   } catch (error: any) {
     console.error('analyzeFoodText 失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
@@ -2113,7 +2138,7 @@ export async function getPosterCalorieCompare(recordId: string): Promise<PosterC
     }),
     timeout: 10000,
   })
-  if (res.statusCode === 200) return res.data as PosterCalorieCompareResponse
+  if (res.statusCode === 200) return unwrapResponse<PosterCalorieCompareResponse>(res)
   return null
 }
 
@@ -2217,7 +2242,7 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
     const msg = (res.data as any)?.detail || '获取记录详情失败'
     throw new Error(msg)
   }
-  return res.data as { record: FoodRecord }
+  return unwrapResponse<{ record: FoodRecord }>(res)
 }
 
 /**
@@ -2637,6 +2662,16 @@ export async function authenticatedRequest(
     )
   }
 
+  // 解包后端标准响应 {code: 0, message: "ok", data: ...}
+  const parsed = normalizeTaroResponseJson(res.data)
+  if (parsed && typeof parsed.code === 'number') {
+    if (parsed.code !== 0) {
+      const msg = typeof parsed.message === 'string' ? parsed.message : '请求失败'
+      throw new Error(msg)
+    }
+    res.data = parsed.data
+  }
+
   return res
 }
 
@@ -2681,7 +2716,7 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
       )
     }
 
-    const loginData = response.data as LoginResponse
+    const loginData = unwrapResponse<LoginResponse>(response)
 
     // 保存 token 到本地存储
     saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
@@ -2758,7 +2793,7 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
       )
     }
 
-    return ((response.data as MembershipPlansResponse)?.list || []) as MembershipPlan[]
+    return ((unwrapResponse<MembershipPlansResponse>(response))?.list || []) as MembershipPlan[]
   } catch (error: any) {
     console.error('获取会员套餐失败:', error)
     throw new Error(error.message || '获取会员套餐失败')
@@ -3217,7 +3252,7 @@ export async function searchManualFood(q: string, limit: number = 20): Promise<M
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '搜索失败')
   }
-  return ((response.data as any)?.results || []) as ManualFoodSearchResult[]
+  return ((unwrapResponse<any>(response))?.results || []) as ManualFoodSearchResult[]
 }
 
 export interface ManualFoodBrowseResult {
@@ -3245,7 +3280,7 @@ export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取食物库失败')
   }
-  return response.data as ManualFoodBrowseResult
+  return unwrapResponse<ManualFoodBrowseResult>(response)
 }
 
 export interface UnresolvedFoodLog {
@@ -3549,7 +3584,7 @@ export async function getFriendInviteProfile(userId: string): Promise<FriendInvi
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取邀请资料失败')
   }
-  return response.data as FriendInviteProfile
+  return unwrapResponse<FriendInviteProfile>(response)
 }
 
 export async function getFriendInviteProfileByCode(code: string): Promise<FriendInviteProfile> {
@@ -3562,7 +3597,7 @@ export async function getFriendInviteProfileByCode(code: string): Promise<Friend
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取邀请资料失败')
   }
-  return response.data as FriendInviteProfile
+  return unwrapResponse<FriendInviteProfile>(response)
 }
 
 /** 登录后解析邀请码 */
@@ -3687,7 +3722,7 @@ export async function communityGetPublicFeed(
     timeout: 10000
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
-  return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
+  return unwrapResponse<{ list: CommunityFeedItem[]; has_more?: boolean }>(response)
 }
 
 /** 点赞某条动态 */

@@ -358,3 +358,255 @@ func TestFriendHandler_Error(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+
+func TestFriendHandler_SendRequestBindError(t *testing.T) {
+	mockSvc := &mockFriendService{}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/request", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFriendHandler_SendRequestMissingToUserID(t *testing.T) {
+	mockSvc := &mockFriendService{}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFriendHandler_SendRequestError(t *testing.T) {
+	mockSvc := &mockFriendService{sendFriendRequestErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"to_user_id": "u2"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_GetRequestsError(t *testing.T) {
+	mockSvc := &mockFriendService{getFriendRequestsErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/requests", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_RespondRequestBindError(t *testing.T) {
+	mockSvc := &mockFriendService{}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/request/req-1/respond", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFriendHandler_RespondRequestMissingAction(t *testing.T) {
+	mockSvc := &mockFriendService{}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/request/req-1/respond", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFriendHandler_RespondRequestError(t *testing.T) {
+	mockSvc := &mockFriendService{respondFriendRequestErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"action": "accept"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/request/req-1/respond", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_CancelRequestError(t *testing.T) {
+	mockSvc := &mockFriendService{cancelSentFriendRequestErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/friend/request/req-1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_ListError(t *testing.T) {
+	mockSvc := &mockFriendService{getFriendListErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/list", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_CountError(t *testing.T) {
+	mockSvc := &mockFriendService{countFriendsErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/count", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_DeleteFriendError(t *testing.T) {
+	mockSvc := &mockFriendService{deleteFriendErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/friend/u2", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_RequestsOverviewError(t *testing.T) {
+	mockSvc := &mockFriendService{getFriendRequestsOverviewErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/requests/all", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_CleanupDuplicatesError(t *testing.T) {
+	mockSvc := &mockFriendService{cleanupDuplicateFriendsErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/cleanup-duplicates", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_InviteProfileError(t *testing.T) {
+	mockSvc := &mockFriendService{getInviteProfileErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/invite/profile/u1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_InviteProfileByCodeMissingCode(t *testing.T) {
+	mockSvc := &mockFriendService{}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/invite/profile-by-code", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFriendHandler_InviteProfileByCodeError(t *testing.T) {
+	mockSvc := &mockFriendService{resolveUserByInviteCodeErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/invite/profile-by-code?code=abcd1234", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_InviteResolveMissingCode(t *testing.T) {
+	mockSvc := &mockFriendService{}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/invite/resolve", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFriendHandler_InviteResolveError(t *testing.T) {
+	mockSvc := &mockFriendService{resolveInviteWithRelationErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/invite/resolve?code=abcd1234", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFriendHandler_InviteAcceptBindError(t *testing.T) {
+	mockSvc := &mockFriendService{}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/friend/invite/accept", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestFriendHandler_SearchError(t *testing.T) {
+	mockSvc := &mockFriendService{searchUsersErr: errors.New("db error")}
+	h := NewFriendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/friend/search?nickname=Ali", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

@@ -34,7 +34,7 @@ func (r *ExpiryRepo) ListByUser(ctx context.Context, userID, status string, limi
 	if limit > 0 {
 		q = q.Limit(limit)
 	}
-	err := q.Order("expiry_date asc, created_at desc").Find(&items).Error
+	err := q.Order("expire_date asc, created_at desc").Find(&items).Error
 	return items, err
 }
 
@@ -82,10 +82,10 @@ func (r *ExpiryRepo) CountByStatus(ctx context.Context, userID string) (map[stri
 func (r *ExpiryRepo) ListExpiringSoon(ctx context.Context, userID string, days int, limit int) ([]domain.ExpiryItem, error) {
 	var items []domain.ExpiryItem
 	cutoff := time.Now().AddDate(0, 0, days)
-	q := r.db.WithContext(ctx).Where("user_id = ? AND status = ? AND expiry_date <= ?", userID, "active", cutoff)
+	q := r.db.WithContext(ctx).Where("user_id = ? AND status = ? AND expire_date <= ?", userID, "active", cutoff)
 	if limit > 0 {
 		q = q.Limit(limit)
 	}
-	err := q.Order("expiry_date asc").Find(&items).Error
+	err := q.Order("expire_date asc").Find(&items).Error
 	return items, err
 }

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
@@ -69,7 +71,7 @@ func (s *ExpiryService) Dashboard(ctx context.Context, userID string) (*Dashboar
 	return &DashboardResult{
 		ActiveCount:   counts["active"],
 		ConsumedCount: counts["consumed"],
-		ExpiredCount:  counts["expired"],
+		ExpiredCount:  counts["discarded"],
 		ExpiringSoon:  expiringSoon,
 	}, nil
 }
@@ -86,16 +88,22 @@ func (s *ExpiryService) CreateItem(ctx context.Context, userID string, input Cre
 	if status == "" {
 		status = "active"
 	}
+	storageType := mapLocationToStorageType(input.Location)
+	var quantityNote *string
+	if input.Quantity != nil {
+		s := strconv.Itoa(*input.Quantity)
+		quantityNote = &s
+	}
 	item := &domain.ExpiryItem{
-		UserID:     userID,
-		Name:       input.Name,
-		Category:   input.Category,
-		ExpiryDate: input.ExpiryDate,
-		Quantity:   input.Quantity,
-		Location:   input.Location,
-		Notes:      input.Notes,
-		ImageURL:   input.ImageURL,
-		Status:     status,
+		UserID:       userID,
+		FoodName:     input.Name,
+		Category:     input.Category,
+		StorageType:  storageType,
+		QuantityNote: quantityNote,
+		ExpireDate:   ptrTimeValue(input.ExpiryDate),
+		Note:         input.Notes,
+		SourceType:   "manual",
+		Status:       status,
 	}
 	if err := s.expiryRepo.Create(ctx, item); err != nil {
 		return nil, err
@@ -123,25 +131,22 @@ func (s *ExpiryService) UpdateItem(ctx context.Context, userID, itemID string, i
 		if *input.Name == "" {
 			return nil, &commonerrors.AppError{Code: 10002, Message: "name 不能为空", HTTPStatus: 400}
 		}
-		updates["name"] = *input.Name
+		updates["food_name"] = *input.Name
 	}
 	if input.Category != nil {
 		updates["category"] = *input.Category
 	}
 	if input.ExpiryDate != nil {
-		updates["expiry_date"] = *input.ExpiryDate
+		updates["expire_date"] = *input.ExpiryDate
 	}
 	if input.Quantity != nil {
-		updates["quantity"] = *input.Quantity
+		updates["quantity_note"] = strconv.Itoa(*input.Quantity)
 	}
 	if input.Location != nil {
-		updates["location"] = *input.Location
+		updates["storage_type"] = mapLocationToStorageType(input.Location)
 	}
 	if input.Notes != nil {
-		updates["notes"] = *input.Notes
-	}
-	if input.ImageURL != nil {
-		updates["image_url"] = *input.ImageURL
+		updates["note"] = *input.Notes
 	}
 	if input.Status != nil {
 		updates["status"] = *input.Status
@@ -202,4 +207,26 @@ func (s *ExpiryService) Recognize(ctx context.Context, userID string, imageURLs 
 		TaskID:  task.ID,
 		Message: "识别任务已创建",
 	}, nil
+}
+
+
+func mapLocationToStorageType(location *string) string {
+	if location == nil || *location == "" {
+		return "refrigerated"
+	}
+	l := strings.ToLower(*location)
+	if strings.Contains(l, "冷冻") || strings.Contains(l, "freez") {
+		return "frozen"
+	}
+	if strings.Contains(l, "常温") || strings.Contains(l, "room") {
+		return "room_temp"
+	}
+	return "refrigerated"
+}
+
+func ptrTimeValue(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
 }

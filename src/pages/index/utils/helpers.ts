@@ -73,15 +73,14 @@ export function createTargetForm(intake: HomeIntakeData): TargetFormState {
 export function createWeekHeatmapCells(): WeekHeatmapCell[] {
   const today = new Date()
   const cells: WeekHeatmapCell[] = []
-  
-  for (let i = 0; i > -3; i -= 1) {
+
+  for (let offset = -3; offset <= 3; offset++) {
     const d = new Date(today)
-    d.setDate(today.getDate() + i)
-    
+    d.setDate(today.getDate() + offset)
+
     const dateKey = formatDateKey(d)
     const dayIndex = d.getDay()
-    const offset = i
-    
+
     cells.push({
       date: dateKey,
       dayName: SHORT_DAY_NAMES[dayIndex],
@@ -90,10 +89,10 @@ export function createWeekHeatmapCells(): WeekHeatmapCell[] {
       target: 2000,
       intakeRatio: 0,
       state: 'none',
-      isToday: offset === 0
+      isToday: offset === 0,
     })
   }
-  
+
   return cells
 }
 

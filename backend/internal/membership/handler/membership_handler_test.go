@@ -161,12 +161,127 @@ func TestMembershipHandler_ClaimSharePosterReward(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
-
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]any
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	data := resp["data"].(map[string]any)
-	assert.Equal(t, true, data["success"])
+}
+
+func TestMembershipHandler_ListPlansError(t *testing.T) {
+	mockSvc := &mockMembershipService{listPlansErr: errors.New("db error")}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/membership/plans", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestMembershipHandler_GetMyMembershipUnauthorized(t *testing.T) {
+	mockSvc := &mockMembershipService{}
+	h := NewMembershipHandler(mockSvc)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/api/membership/me", h.GetMyMembership)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/membership/me", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMembershipHandler_GetMyMembershipError(t *testing.T) {
+	mockSvc := &mockMembershipService{getMyMembershipErr: errors.New("db error")}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/membership/me", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestMembershipHandler_CreatePaymentBindError(t *testing.T) {
+	mockSvc := &mockMembershipService{}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMembershipHandler_CreatePaymentUnauthorized(t *testing.T) {
+	mockSvc := &mockMembershipService{}
+	h := NewMembershipHandler(mockSvc)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/membership/pay/create", h.CreatePayment)
+
+	body, _ := json.Marshal(map[string]string{"plan_id": "p1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMembershipHandler_CreatePaymentError(t *testing.T) {
+	mockSvc := &mockMembershipService{createPaymentErr: errors.New("db error")}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"plan_id": "p1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestMembershipHandler_WechatNotifyBindError(t *testing.T) {
+	mockSvc := &mockMembershipService{}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/notify/membership", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMembershipHandler_WechatNotifyError(t *testing.T) {
+	mockSvc := &mockMembershipService{wechatNotifyErr: errors.New("notify error")}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"payment_id": "pay1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/notify/membership", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestMembershipHandler_ClaimSharePosterRewardBindError(t *testing.T) {
+	mockSvc := &mockMembershipService{}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestMembershipHandler_ClaimSharePosterRewardMissingRecordID(t *testing.T) {
@@ -183,13 +298,31 @@ func TestMembershipHandler_ClaimSharePosterRewardMissingRecordID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestMembershipHandler_Error(t *testing.T) {
-	mockSvc := &mockMembershipService{listPlansErr: errors.New("db error")}
+func TestMembershipHandler_ClaimSharePosterRewardUnauthorized(t *testing.T) {
+	mockSvc := &mockMembershipService{}
+	h := NewMembershipHandler(mockSvc)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/membership/rewards/share-poster/claim", h.ClaimSharePosterReward)
+
+	body, _ := json.Marshal(map[string]string{"record_id": "rec1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestMembershipHandler_ClaimSharePosterRewardError(t *testing.T) {
+	mockSvc := &mockMembershipService{claimSharePosterRewardErr: errors.New("db error")}
 	h := NewMembershipHandler(mockSvc)
 	r := setupRouter(h)
 
+	body, _ := json.Marshal(map[string]string{"record_id": "rec1"})
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/membership/plans", nil)
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)

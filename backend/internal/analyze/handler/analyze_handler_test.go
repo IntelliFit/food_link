@@ -382,3 +382,438 @@ func TestAnalyzeHandler_CleanupTimeoutTasks_Forbidden(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+
+func TestAnalyzeHandler_AnalyzeBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeEmptyImage(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"model_name": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{analyzeErr: errors.New("analyze error")}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"image_url": "https://example.com/food.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeTextBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-text", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeTextEmpty(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"model_name": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-text", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeTextError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{analyzeTextErr: errors.New("analyze error")}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"text": "I ate an apple"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-text", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeCompareBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-compare", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeCompareEmptyImage(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"model_name": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-compare", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeCompareError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{analyzeCompareErr: errors.New("compare error")}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"image_url": "https://example.com/food.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-compare", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeCompareEnginesBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-compare-engines", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeCompareEnginesEmptyImage(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"model_name": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-compare-engines", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeCompareEnginesError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{analyzeEnginesErr: errors.New("engines error")}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"image_url": "https://example.com/food.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-compare-engines", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeBatchBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/batch", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeBatchEmptyImages(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"model_name": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeBatchError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{analyzeBatchErr: errors.New("batch error")}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"image_urls": []string{"https://example.com/1.jpg"}})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_AnalyzeBatchCreateTaskError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{analyzeBatchResult: map[string]any{"description": "batch result"}}
+	mockTask := &mockTaskService{batchTaskErr: errors.New("task error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"image_urls": []string{"https://example.com/1.jpg"}})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_SubmitAnalyzeTaskBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/submit", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_SubmitAnalyzeTaskEmptyImage(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"model_name": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/submit", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_SubmitAnalyzeTaskError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{submitErr: errors.New("submit error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"image_url": "https://example.com/food.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/submit", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_SubmitTextTaskBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-text/submit", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_SubmitTextTaskEmptyText(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"model_name": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-text/submit", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_SubmitTextTaskError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{submitErr: errors.New("submit error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"text_input": "I ate rice"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze-text/submit", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_ListTasksError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{listErr: errors.New("db error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/analyze/tasks", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_CountTasksError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{countErr: errors.New("db error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/analyze/tasks/count", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_CountTasksByStatusError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{statusCountErr: errors.New("db error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/analyze/tasks/status-count", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_GetTaskError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{getErr: errors.New("db error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/analyze/tasks/t1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_UpdateTaskResultBindError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPatch, "/api/analyze/tasks/t1/result", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeHandler_UpdateTaskResultError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{updateErr: errors.New("db error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"result": map[string]any{"description": "updated"}})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPatch, "/api/analyze/tasks/t1/result", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_DeleteTaskError(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{deleteErr: errors.New("db error")}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/analyze/tasks/t1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeHandler_CleanupTimeoutTasksDefaultTimeout(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{cleanupAffected: 3}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/tasks/cleanup-timeout?admin_key=admin-key", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, float64(3), data["affected"])
+}

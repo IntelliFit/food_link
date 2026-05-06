@@ -160,3 +160,68 @@ func TestLocationReverseError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestLocationSearchError(t *testing.T) {
+	mockLoc := &mockLocationService{searchErr: errors.New("timeout")}
+	h := NewUtilityHandler(mockLoc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"keyword": "restaurant"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/location/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestQRCodeBindError(t *testing.T) {
+	mockQR := &mockQRCodeService{}
+	h := NewUtilityHandler(nil, mockQR, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/qrcode", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestQRCodeError(t *testing.T) {
+	mockQR := &mockQRCodeService{err: errors.New("qr error")}
+	h := NewUtilityHandler(nil, mockQR, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"scene": "test", "page": "pages/index"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/qrcode", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestManualFoodBrowseError(t *testing.T) {
+	mockFood := &mockManualFoodService{browseErr: errors.New("db error")}
+	h := NewUtilityHandler(nil, nil, mockFood)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/browse?category=fruit&limit=10", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestManualFoodSearchError(t *testing.T) {
+	mockFood := &mockManualFoodService{searchErr: errors.New("db error")}
+	h := NewUtilityHandler(nil, nil, mockFood)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/search?keyword=apple&limit=5", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

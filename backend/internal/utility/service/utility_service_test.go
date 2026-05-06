@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupTestDB(t *testing.T) (*gorm.DB, *repo.ManualFoodRepo) {
+func setupUtilityTestDB(t *testing.T) (*gorm.DB, *repo.ManualFoodRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.ManualFood{}))
@@ -21,7 +21,7 @@ func setupTestDB(t *testing.T) (*gorm.DB, *repo.ManualFoodRepo) {
 }
 
 func TestManualFoodService_Browse(t *testing.T) {
-	db, foodRepo := setupTestDB(t)
+	db, foodRepo := setupUtilityTestDB(t)
 	svc := NewManualFoodService(foodRepo)
 	ctx := context.Background()
 
@@ -36,10 +36,15 @@ func TestManualFoodService_Browse(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, fruitItems, 1)
 	assert.Equal(t, "apple", fruitItems[0].Name)
+
+	// Test limit clamping
+	limited, err := svc.Browse(ctx, "", 5)
+	require.NoError(t, err)
+	assert.Len(t, limited, 2)
 }
 
 func TestManualFoodService_Search(t *testing.T) {
-	db, foodRepo := setupTestDB(t)
+	db, foodRepo := setupUtilityTestDB(t)
 	svc := NewManualFoodService(foodRepo)
 	ctx := context.Background()
 

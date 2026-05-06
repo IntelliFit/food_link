@@ -301,3 +301,201 @@ func TestPostCommentBadRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+
+func TestPublicFeedError(t *testing.T) {
+	mockSvc := &mockCommunityService{publicFeedErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/public-feed", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFeedError(t *testing.T) {
+	mockSvc := &mockCommunityService{friendFeedErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/feed", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestFeedWithParams(t *testing.T) {
+	mockSvc := &mockCommunityService{friendFeed: []service.FeedItem{{LikeCount: 3}}}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/feed?offset=10&limit=5&sort_by=hot&meal_type=lunch", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestCheckinLeaderboardError(t *testing.T) {
+	mockSvc := &mockCommunityService{leaderboardErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/checkin-leaderboard", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestLikeFeedError(t *testing.T) {
+	mockSvc := &mockCommunityService{likeErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/community/feed/r1/like", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUnlikeFeedError(t *testing.T) {
+	mockSvc := &mockCommunityService{unlikeErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/community/feed/r1/like", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHideFeedError(t *testing.T) {
+	mockSvc := &mockCommunityService{hideErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/community/feed/r1/hide", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListCommentsError(t *testing.T) {
+	mockSvc := &mockCommunityService{commentsErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/feed/r1/comments", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListCommentsWithLimit(t *testing.T) {
+	mockSvc := &mockCommunityService{comments: []service.CommentItem{{ID: "c1", Content: "nice"}}}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/feed/r1/comments?limit=10", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestPostCommentError(t *testing.T) {
+	mockSvc := &mockCommunityService{postCommentErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"content": "test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/community/feed/r1/comments", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListCommentTasksError(t *testing.T) {
+	mockSvc := &mockCommunityService{commentTasksErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/comment-tasks", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListCommentTasksWithLimit(t *testing.T) {
+	mockSvc := &mockCommunityService{commentTasks: []domain.CommentTask{{ID: "t1", Status: "pending"}}}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/comment-tasks?limit=10", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestListNotificationsError(t *testing.T) {
+	mockSvc := &mockCommunityService{notificationsErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/notifications", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListNotificationsWithLimit(t *testing.T) {
+	mockSvc := &mockCommunityService{notifications: &service.NotificationListResult{UnreadCount: 2, List: []service.NotificationItem{}}}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/notifications?limit=10", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestMarkNotificationsReadBindError(t *testing.T) {
+	mockSvc := &mockCommunityService{}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/community/notifications/read", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMarkNotificationsReadError(t *testing.T) {
+	mockSvc := &mockCommunityService{markReadErr: errors.New("db error")}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	body, _ := json.Marshal(map[string][]string{"notification_ids": {"n1", "n2"}})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/community/notifications/read", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

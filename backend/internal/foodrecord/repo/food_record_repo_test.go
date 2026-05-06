@@ -14,7 +14,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.FoodRecord{}, &domain.CriticalSample{}))
 	return db
@@ -106,4 +106,90 @@ func TestFoodRecordRepo_InsertCriticalSamples(t *testing.T) {
 	var count int64
 	db.Model(&domain.CriticalSample{}).Count(&count)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestFoodRecordRepo_ListByUser_NoDate(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	err := r.Create(ctx, &domain.FoodRecord{UserID: "u1", MealType: "lunch", RecordTime: &now})
+	require.NoError(t, err)
+
+	list, err := r.ListByUser(ctx, "u1", "", 10)
+	require.NoError(t, err)
+	assert.Len(t, list, 1)
+}
+
+func TestFoodRecordRepo_ListByUser_LimitZero(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	err := r.Create(ctx, &domain.FoodRecord{UserID: "u1", MealType: "lunch", RecordTime: &now})
+	require.NoError(t, err)
+
+	list, err := r.ListByUser(ctx, "u1", "", 0)
+	require.NoError(t, err)
+	assert.Len(t, list, 1)
+}
+
+func TestFoodRecordRepo_ListByUser_InvalidDate(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	_, err := r.ListByUser(ctx, "u1", "invalid-date", 10)
+	require.Error(t, err)
+}
+
+func TestFoodRecordRepo_GetByID_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	found, err := r.GetByID(ctx, "nonexistent")
+	require.NoError(t, err)
+	assert.Nil(t, found)
+}
+
+func TestFoodRecordRepo_Update_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	updated, err := r.Update(ctx, "u1", "nonexistent", map[string]any{"total_calories": 600})
+	require.NoError(t, err)
+	assert.Nil(t, updated)
+}
+
+func TestFoodRecordRepo_Delete_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	err := r.Delete(ctx, "u1", "nonexistent")
+	require.Error(t, err)
+}
+
+func TestFoodRecordRepo_InsertCriticalSamples_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	err := r.InsertCriticalSamples(ctx, "u1", []domain.CriticalSample{})
+	require.NoError(t, err)
+}
+
+func TestFoodRecordRepo_Create_WithID(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+
+	record := &domain.FoodRecord{ID: "custom-id", UserID: "u1", MealType: "lunch"}
+	err := r.Create(ctx, record)
+	require.NoError(t, err)
+	assert.Equal(t, "custom-id", record.ID)
 }

@@ -461,3 +461,355 @@ func TestListPromptsError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+
+func TestCreatePromptBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/prompts", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestCreatePromptError(t *testing.T) {
+	mockSvc := &mockTestBackendService{createPromptErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"name": "test", "content": "c", "model_type": "vision"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/prompts", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetPromptError(t *testing.T) {
+	mockSvc := &mockTestBackendService{getPromptErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/prompts/p1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetActivePromptError(t *testing.T) {
+	mockSvc := &mockTestBackendService{getActivePromptErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/prompts/active/qwen", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUpdatePromptBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/prompts/p1", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdatePromptError(t *testing.T) {
+	mockSvc := &mockTestBackendService{updatePromptErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"name": "updated"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/prompts/p1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestDeletePromptError(t *testing.T) {
+	mockSvc := &mockTestBackendService{deletePromptErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/prompts/p1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestActivatePromptError(t *testing.T) {
+	mockSvc := &mockTestBackendService{activatePromptErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/prompts/p1/activate", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetPromptHistoryError(t *testing.T) {
+	mockSvc := &mockTestBackendService{getPromptHistoryErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/prompts/p1/history", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestAnalyzeBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/analyze", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAnalyzeError(t *testing.T) {
+	mockSvc := &mockTestBackendService{analyzeErr: errors.New("analyze error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"image_url": "https://example.com/img.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/analyze", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPrepareBatchBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/batch/prepare", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestPrepareBatchError(t *testing.T) {
+	mockSvc := &mockTestBackendService{prepareBatchErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"dataset_id": "ds-1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/batch/prepare", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestStartBatchBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/batch/start", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestStartBatchError(t *testing.T) {
+	mockSvc := &mockTestBackendService{startBatchErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"batch_id": "b1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/batch/start", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetBatchError(t *testing.T) {
+	mockSvc := &mockTestBackendService{getBatchErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/test-backend/batch/b1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListDatasetsError(t *testing.T) {
+	mockSvc := &mockTestBackendService{listDatasetsErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/test-backend/datasets", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestImportLocalDatasetBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/datasets/import-local", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImportLocalDatasetError(t *testing.T) {
+	mockSvc := &mockTestBackendService{importDatasetErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"name": "test", "image_paths": []string{"/a.jpg"}})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/datasets/import-local", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPrepareDatasetError(t *testing.T) {
+	mockSvc := &mockTestBackendService{prepareDatasetErr: errors.New("db error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/datasets/d1/prepare", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestLoginBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/login", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLoginError(t *testing.T) {
+	mockSvc := &mockTestBackendService{loginErr: errors.New("auth error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"password": "secret"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestLogoutError(t *testing.T) {
+	mockSvc := &mockTestBackendService{logoutErr: errors.New("auth error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/logout", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestLegacyBatchUploadBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test/batch-upload", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLegacyBatchUploadError(t *testing.T) {
+	mockSvc := &mockTestBackendService{legacyBatchErr: errors.New("batch error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"image_urls": []string{"/a.jpg"}})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test/batch-upload", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestLegacySingleImageBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test/single-image", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestLegacySingleImageError(t *testing.T) {
+	mockSvc := &mockTestBackendService{legacySingleErr: errors.New("single error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"image_url": "/a.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test/single-image", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

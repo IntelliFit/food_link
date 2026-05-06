@@ -2,11 +2,8 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -88,11 +85,6 @@ type WechatPayConfig struct {
 }
 
 func Load(baseDir string) (*Config, error) {
-	envPath := filepath.Join(baseDir, ".env")
-	if _, err := os.Stat(envPath); err == nil {
-		_ = godotenv.Overload(envPath)
-	}
-
 	v := viper.New()
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")

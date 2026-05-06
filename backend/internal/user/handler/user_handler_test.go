@@ -303,3 +303,251 @@ func TestUpdateLastSeenAnalyzeHistory(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, true, data["success"])
 }
+
+
+func TestUpdateDashboardTargets(t *testing.T) {
+	mockSvc := &mockUserService{dashboardTargets: map[string]float64{"calorie_target": 2200}}
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]float64{"calorie_target": 2200})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/user/dashboard-targets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, float64(2200), data["calorie_target"])
+}
+
+func TestUpdateDashboardTargetsError(t *testing.T) {
+	mockSvc := &mockUserService{dashboardTargetsErr: errors.New("db error")}
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]float64{"calorie_target": 2200})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/user/dashboard-targets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUpdateHealthProfile(t *testing.T) {
+	mockSvc := &mockUserService{healthProfile: map[string]any{"height": 180.0}}
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]float64{"height": 180})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/user/health-profile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, float64(180), data["height"])
+}
+
+func TestUpdateHealthProfileError(t *testing.T) {
+	mockSvc := &mockUserService{healthProfileErr: errors.New("db error")}
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]float64{"height": 180})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/user/health-profile", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestHealthReportOCR(t *testing.T) {
+	mockSvc := &mockOCRService{result: map[string]any{"indicators": []any{}}}
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/ocr", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.NotNil(t, data["extracted"])
+}
+
+func TestHealthReportOCREmptyImage(t *testing.T) {
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": ""})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/ocr", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHealthReportOCRExtractWithBase64(t *testing.T) {
+	mockSvc := &mockOCRService{result: map[string]any{"indicators": []any{}}}
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/ocr-extract", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestHealthReportOCRExtractEmpty(t *testing.T) {
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"imageUrl": "", "base64Image": ""})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/ocr-extract", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHealthReportOCRExtractError(t *testing.T) {
+	mockSvc := &mockOCRService{err: errors.New("ocr error")}
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"imageUrl": "https://example.com/report.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/ocr-extract", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUploadReportImage(t *testing.T) {
+	mockSvc := &mockUploadService{url: "https://cdn.example.com/report.jpg"}
+	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/upload-report-image", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "https://cdn.example.com/report.jpg", data["imageUrl"])
+}
+
+func TestUploadReportImageEmpty(t *testing.T) {
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": ""})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/upload-report-image", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUploadReportImageError(t *testing.T) {
+	mockSvc := &mockUploadService{err: errors.New("upload error")}
+	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/upload-report-image", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSubmitReportExtractionTaskEmptyImageURL(t *testing.T) {
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"imageUrl": ""})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/submit-report-extraction-task", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSubmitReportExtractionTaskError(t *testing.T) {
+	mockSvc := &mockAnalysisTaskService{err: errors.New("task error")}
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"imageUrl": "https://example.com/report.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/submit-report-extraction-task", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetRecordDaysError(t *testing.T) {
+	mockSvc := &mockUserService{recordDaysErr: errors.New("db error")}
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/user/record-days", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUploadAvatarEmptyImage(t *testing.T) {
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": ""})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/upload-avatar", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUploadAvatarError(t *testing.T) {
+	mockSvc := &mockUploadService{err: errors.New("upload error")}
+	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/upload-avatar", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}

@@ -274,3 +274,209 @@ func TestSaveFoodRecordValidationError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+
+func TestUploadAnalyzeImageFile(t *testing.T) {
+	mockSvc := &mockUploadService{url: "https://cdn.example.com/file.jpg"}
+	h := NewFoodRecordHandler(nil, mockSvc, nil)
+	r := setupRouter(h)
+
+	body := "--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.jpg\"\r\nContent-Type: image/jpeg\r\n\r\ntestdata\r\n--boundary--\r\n"
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/upload-analyze-image-file", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "https://cdn.example.com/file.jpg", data["imageUrl"])
+}
+
+func TestUploadAnalyzeImageFileMissingFile(t *testing.T) {
+	h := NewFoodRecordHandler(nil, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/upload-analyze-image-file", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUploadAnalyzeImageFileNonImage(t *testing.T) {
+	h := NewFoodRecordHandler(nil, nil, nil)
+	r := setupRouter(h)
+
+	body := "--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.txt\"\r\nContent-Type: text/plain\r\n\r\ntestdata\r\n--boundary--\r\n"
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/upload-analyze-image-file", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=boundary")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUploadAnalyzeImageEmpty(t *testing.T) {
+	h := NewFoodRecordHandler(nil, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": ""})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/upload-analyze-image", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUploadAnalyzeImageError(t *testing.T) {
+	mockSvc := &mockUploadService{err: errors.New("upload error")}
+	h := NewFoodRecordHandler(nil, mockSvc, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/upload-analyze-image", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSaveFoodRecordBindError(t *testing.T) {
+	h := NewFoodRecordHandler(nil, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/food-record/save", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateFoodRecordBindError(t *testing.T) {
+	h := NewFoodRecordHandler(nil, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/food-record/r1", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestGetFoodRecordError(t *testing.T) {
+	mockSvc := &mockFoodRecordService{getErr: errors.New("db error")}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/r1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestDeleteFoodRecordError(t *testing.T) {
+	mockSvc := &mockFoodRecordService{deleteErr: errors.New("db error")}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/food-record/r1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestListFoodRecordsError(t *testing.T) {
+	mockSvc := &mockFoodRecordService{listErr: errors.New("db error")}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/list", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestShareFoodRecordError(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareErr: errors.New("db error")}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/share/r1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSearchFoodNutritionError(t *testing.T) {
+	mockSvc := &mockNutritionService{err: errors.New("db error")}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-nutrition/search?query=apple", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSearchFoodNutritionWithLimit(t *testing.T) {
+	mockSvc := &mockNutritionService{items: []map[string]any{{"food_id": "f1", "canonical_name": "apple"}}}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-nutrition/search?query=apple&limit=10", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGetUnresolvedTopError(t *testing.T) {
+	mockSvc := &mockNutritionService{err: errors.New("db error")}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-nutrition/unresolved/top", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetUnresolvedTopWithLimit(t *testing.T) {
+	mockSvc := &mockNutritionService{logs: []domain.FoodUnresolvedLog{{ID: "u1", RawName: "foo", HitCount: 5}}}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-nutrition/unresolved/top?limit=10", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestSaveCriticalSamplesError(t *testing.T) {
+	mockSvc := &mockFoodRecordService{saveCriticalSamplesErr: errors.New("db error")}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"items": []map[string]any{{"food_name": "apple", "ai_weight": 100, "user_weight": 120, "deviation_percent": 20}},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/critical-samples", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
