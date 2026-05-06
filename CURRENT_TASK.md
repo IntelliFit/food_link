@@ -1,5 +1,55 @@
 # 当前任务
 
+## 状态：完成 - 恢复 Go backend CCR 推送脚本并固定 v2 标签
+
+- 2026-05-06 update:
+  - 用户确认后端已迁移为 Go，但部署辅助脚本继续使用 mjs，不改写为 Go。
+  - 已恢复 `backend/scripts/push-docker-ccr.mjs`，继续由根目录 `npm run push-docker-ccr` 调用。
+  - 新脚本构建上下文固定为 `backend/`，使用当前 `backend/Dockerfile`。
+  - 镜像路径固定为 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`。
+  - 已取消旧的分支标签映射：
+    - 不再按 `main -> latest/main/sha`
+    - 不再按 `dev -> dev/sha`
+    - 当前阶段任意分支执行脚本都会推送 `:v2`
+  - 脚本仍会打印当前 Git 分支和 7 位短 SHA，便于发布前人工确认来源。
+  - 已同步更新 `AGENTS.md` 的后端部署说明。
+  - Verification:
+    - `node --check backend/scripts/push-docker-ccr.mjs` 通过。
+    - 未执行真实 `docker buildx build --push`，避免在本次脚本编写中直接触发镜像构建和推送。
+
+## 状态：完成 - 删除 Go backend cmd/worker 占位入口
+
+- 2026-05-06 update:
+  - 用户明确要求删除 `backend/cmd/worker`。
+  - 已删除当前仅作占位的 worker 入口：
+    - `backend/cmd/worker/main.go`
+    - `backend/cmd/worker/main_test.go`
+  - `backend/Dockerfile` 已收口为固定构建 `./cmd/server`，不再保留 `BUILD_TARGET=worker` 的构建口径。
+  - 后续若需要独立异步任务 runtime，应按真实任务消费模型重新创建入口。
+  - Verification:
+    - `go build -o %TEMP%\\food-link-server-test.exe ./cmd/server` 通过（使用项目内临时 `GOCACHE`，已清理）。
+    - `go test ./...` 已尝试，但被既有测试环境/测试断言问题阻塞：当前环境 `CGO_ENABLED=0` 下 sqlite 测试不可运行，expiry domain 相关测试引用了已不存在的 `Name/ExpiryDate` 字段，另有 LLM/OCR/location 测试访问真实外部服务失败。
+
+## 状态：完成 - Go backend Dockerfile 镜像构建入口
+
+- 2026-05-06 update:
+  - 用户要求完成 `backend/Dockerfile`，将当前 Go backend 编译成 Docker 镜像。
+  - 已新增多阶段 Dockerfile：
+    - build stage 使用 `golang:${GO_VERSION}-bookworm`
+    - 默认 `GO_VERSION=1.26`
+    - 固定构建 `./cmd/server`
+    - 默认支持 BuildKit 注入的 `TARGETOS/TARGETARCH`，线上脚本仍可构建 `linux/amd64`
+    - runtime stage 使用 `scratch`，只复制静态二进制、CA 证书、zoneinfo 和 `docs/backend-api-prd/ROUTE_MAP.md`
+    - 不复制本地 `config.yaml` 或 `.env`，继续遵守运行时由环境变量/ConfigMap 注入敏感配置的部署口径
+  - 已新增 `backend/.dockerignore`：
+    - 排除 `.env`、`config.yaml`、测试文件、测试图片、迁移归档、构建缓存等
+    - 仅保留 runtime 需要的 `docs/backend-api-prd/ROUTE_MAP.md`
+  - Verification:
+    - Windows 本地普通 `go build` 起初被用户目录 Go build cache 异常阻塞，改用项目内临时 `GOCACHE` 后通过。
+    - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o bin/food-link-linux-test ./cmd/server` 通过。
+    - 已清理本次生成的临时二进制和 `.gocache`。
+    - `docker version` 显示 Docker CLI 可用，但 Docker daemon 未启动：无法连接 `npipe:////./pipe/docker_engine`，因此未能实际执行 `docker build`。
+
 ## 状态：进行中 - Go backend 初始化与 PRD 驱动迁移底座
 
 - 2026-05-05 update:

@@ -1,5 +1,21 @@
 # DECISIONS
 
+- `2026-05-06`: Go backend CCR 推送脚本继续使用 mjs：
+  - 该脚本属于仓库级部署辅助工具，不属于 Go 后端 runtime。
+  - 继续通过根目录 `npm run push-docker-ccr` 调用 `backend/scripts/push-docker-ccr.mjs`。
+  - 当前 Go 后端迁移阶段，镜像标签固定为 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`。
+  - 暂不再按 `main` / `dev` 分支生成 `latest/main/dev/sha` 标签；脚本只打印当前分支和短 SHA 作为人工确认信息。
+  - 以后只有当部署工具需要成为可分发 CLI、需要复用 Go 内部配置/代码、或需要复杂 CCR/Kubernetes API 编排时，再考虑用 Go 重写。
+
+- `2026-05-06`: Go backend Docker 镜像构建口径：
+  - `backend/Dockerfile` 采用多阶段构建，固定编译 `./cmd/server`。
+  - runtime 镜像不复制本地 `config.yaml` 或 `.env`；业务敏感配置继续通过运行时环境变量 / ConfigMap 注入。
+  - runtime 需要保留 `docs/backend-api-prd/ROUTE_MAP.md`，因为当前 Go 服务启动时会读取它来注册尚未迁移完成的兼容占位路由。
+- `2026-05-06`: 用户明确决定删除 Go backend 的 `cmd/worker` 占位入口：
+  - 当前 `cmd/worker` 只加载配置、打印日志并无限 sleep，没有实际消费队列或执行任务。
+  - `backend/Dockerfile` 收口为固定构建 `./cmd/server`，不再保留 `BUILD_TARGET` 切换到 worker 的口径。
+  - 后续若需要独立异步任务 runtime，应重新按真实任务消费模型创建入口，而不是保留空壳 worker。
+
 - `2026-05-05`: 新 Go 后端第一阶段迁移底座采用“全量路由占位 + 核心链路优先真实实现”的落地方式：
   - `backend/docs/backend-api-prd/ROUTE_MAP.md` 作为全量路由注册源
   - 所有 PRD 路由先在 Go 服务中完成路径/方法/鉴权层面的注册覆盖

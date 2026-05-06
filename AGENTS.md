@@ -123,15 +123,16 @@ npm run push-docker-ccr
 
 - 该命令会调用：`backend/scripts/push-docker-ccr.mjs`
 - 镜像路径：`ccr.ccs.tencentyun.com/littlehorse/foodlink`
+- 镜像标签：当前 Go 后端迁移阶段固定推送 `:v2`
 - 构建上下文：`backend/`（使用 `backend/Dockerfile`）
 - 默认构建平台：`linux/amd64`（避免 ARM 开发机构建后在 AMD64 服务器不可运行）
 - 如需覆盖平台（例如构建多架构清单），可设置环境变量：
   - PowerShell：`$env:DOCKER_BUILD_PLATFORM="linux/amd64,linux/arm64"; npm run push-docker-ccr`
   - Bash：`DOCKER_BUILD_PLATFORM=linux/amd64,linux/arm64 npm run push-docker-ccr`
-- 分支与标签映射：
-  - `main` → `:latest`、`:main`、`:<7位 commit sha>`
-  - `dev` → `:dev`、`:<7位 commit sha>`
-  - 其他分支 → 脚本会提示先切换到 `main` 或 `dev`
+- 标签规则：
+  - 暂不再按 `main` / `dev` 分支映射镜像标签
+  - 任意当前分支执行脚本都会推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
+  - 脚本仍会打印当前分支和 7 位 commit sha，便于人工确认来源
 - 脚本位置：`backend/scripts/push-docker-ccr.mjs`
 - 依赖要求：
   - 本机已安装并启动 Docker（`docker version` 可用）
@@ -141,7 +142,7 @@ npm run push-docker-ccr
 
 #### 后端部署标准操作（一步步）
 
-1. 确认当前分支为 `main` 或 `dev`，并完成需要发布的提交
+1. 确认当前分支和 commit 是需要发布的 Go 后端版本
 2. 本机确认 Docker/Buildx 可用：
    - `docker version`
    - `docker buildx version`

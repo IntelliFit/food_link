@@ -1,0 +1,13 @@
+.env
+config.yaml
+bin/
+.gocache/
+
+**/*_test.go
+testdata/
+migrations/
+
+docs/**
+!docs/
+!docs/backend-api-prd/
+!docs/backend-api-prd/ROUTE_MAP.md
