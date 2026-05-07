@@ -936,6 +936,54 @@
   margin-top: 20rpx;
 }
 
+/* ==================== 年龄合规提示 ==================== */
+.age-compliance-banner {
+  margin: 24rpx 32rpx 0;
+  padding: 24rpx 28rpx;
+  border-radius: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+
+  &--forbidden {
+    background: linear-gradient(180deg, #fef2f2 0%, #fff5f5 100%);
+    border: 1rpx solid #fecaca;
+  }
+
+  &--warning {
+    background: linear-gradient(180deg, #fffbeb 0%, #fffbf0 100%);
+    border: 1rpx solid #fde68a;
+  }
+}
+
+.age-compliance-icon {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.age-compliance-text {
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: #451a03;
+}
+
+.age-compliance-actions {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 4rpx;
+}
+
+.age-compliance-action {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #00a86b;
+
+  &--dismiss {
+    color: #9ca3af;
+    font-weight: 400;
+  }
+}
+
 /* ============================================================ */
 
 /* TODO: [TEST] 以下测试样式在正式上线前必须删除 */
@@ -1178,6 +1226,30 @@
 
   .subscribe-btn {
     box-shadow: 0 16rpx 30rpx rgb(0 0 0 / 32%);
+  }
+
+  .age-compliance-banner {
+    &--forbidden {
+      background: linear-gradient(180deg, rgb(254 242 242 / 10%) 0%, rgb(255 245 245 / 6%) 100%);
+      border-color: rgb(252 165 165 / 28%);
+    }
+
+    &--warning {
+      background: linear-gradient(180deg, rgb(255 251 235 / 10%) 0%, rgb(255 251 240 / 6%) 100%);
+      border-color: rgb(253 230 138 / 28%);
+    }
+  }
+
+  .age-compliance-text {
+    color: #fde68a;
+  }
+
+  .age-compliance-action {
+    color: #6ee7b7;
+
+    &--dismiss {
+      color: #93a39b;
+    }
   }
 
   .test-section {

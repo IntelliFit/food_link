@@ -4173,25 +4173,21 @@ def _ocr_report_prompt() -> str:
 """.strip()
 
 
-def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """
-    同步执行体检报告 OCR：调 DashScope 多模态模型，返回 extracted_content。
-    完成后写入 user_health_documents，并更新 weapp_user.health_condition.report_extract。
-    失败时抛出异常。
-    """
-    api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
-    if not api_key:
-        raise RuntimeError("缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量")
-
-    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    api_url = f"{base_url}/chat/completions"
-    image_url = task.get("image_url") or ""
-    if not image_url:
-        raise ValueError("任务缺少 image_url")
-
-    user_id = task.get("user_id")
-    if not user_id:
-        raise ValueError("任务缺少 user_id")
+def _ocr_extract_single_sync(image_url: str) -> Dict[str, Any]:
+    """单张图片 OCR：支持 DashScope 或 Gemini（通过 LLM_PROVIDER 切换）。"""
+    llm_provider = os.getenv("LLM_PROVIDER", "qwen").lower()
+    if llm_provider == "gemini":
+        api_key = os.getenv("OFOXAI_API_KEY") or os.getenv("ofox_ai_apikey")
+        if not api_key:
+            raise RuntimeError("缺少 OFOXAI_API_KEY 环境变量")
+        api_url = "https://api.ofox.ai/v1/chat/completions"
+        model = OFOX_VISION_MODEL_NAME
+    else:
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("API_KEY")
+        if not api_key:
+            raise RuntimeError("缺少 DASHSCOPE_API_KEY（或 API_KEY）环境变量")
+        api_url = f"{DASHSCOPE_BASE_URL}/chat/completions"
+        model = os.getenv("ANALYZE_MODEL", QWEN_VL_MODEL)
 
     with httpx.Client(timeout=60.0) as client:
         response = client.post(
@@ -4201,7 +4197,7 @@ def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]
                 "Content-Type": "application/json",
             },
             json={
-                "model": os.getenv("ANALYZE_MODEL", "qwen-vl-max"),
+                "model": model,
                 "messages": [
                     {
                         "role": "user",
@@ -4218,7 +4214,7 @@ def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
         if not response.is_success:
             err = response.json() if response.content else {}
-            msg = err.get("error", {}).get("message") or f"DashScope API 错误: {response.status_code}"
+            msg = err.get("error", {}).get("message") or f"API 错误: {response.status_code}"
             raise RuntimeError(msg)
 
         data = response.json()
@@ -4228,36 +4224,87 @@ def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
         json_str = re.sub(r"```json", "", content)
         json_str = re.sub(r"```", "", json_str).strip()
-        extracted = json.loads(json_str)
+        return json.loads(json_str)
+
+
+def run_health_report_ocr_sync(task: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    同步执行体检报告 OCR：支持单张或多张图片（逗号分隔的 URL）。
+    多张图片时依次 OCR 并合并结果。
+    完成后写入 user_health_documents，并更新 weapp_user.health_condition.report_extract。
+    失败时抛出异常。
+    """
+    image_url_raw = task.get("image_url") or ""
+    if not image_url_raw:
+        raise ValueError("任务缺少 image_url")
+
+    user_id = task.get("user_id")
+    if not user_id:
+        raise ValueError("任务缺少 user_id")
+
+    # 解析逗号分隔的 URL（支持多张图片）
+    image_urls = [u.strip() for u in image_url_raw.split(",") if u.strip()]
+    if not image_urls:
+        raise ValueError("任务 image_url 解析后为空")
+
+    all_indicators: list = []
+    all_conclusions: list = []
+    all_suggestions: list = []
+    all_medical_notes: list = []
+
+    for url in image_urls:
+        extracted = _ocr_extract_single_sync(url)
+        all_indicators.extend(extracted.get("indicators", []))
+        all_conclusions.extend(extracted.get("conclusions", []))
+        all_suggestions.extend(extracted.get("suggestions", []))
+        notes = extracted.get("medical_notes", "")
+        if notes:
+            all_medical_notes.append(str(notes))
+
+    # 合并结果（去重保序）
+    merged: Dict[str, Any] = {
+        "indicators": all_indicators,
+        "conclusions": list(dict.fromkeys(all_conclusions)),
+        "suggestions": list(dict.fromkeys(all_suggestions)),
+        "medical_notes": "\n".join(all_medical_notes),
+        "_image_urls": image_urls,
+    }
 
     # 写入 user_health_documents
     insert_health_document_sync(
         user_id=user_id,
         document_type="report",
-        image_url=image_url,
-        extracted_content=extracted,
+        image_url=image_url_raw,
+        extracted_content=merged,
     )
 
     # 更新 weapp_user.health_condition.report_extract
     user = get_user_by_id_sync(user_id)
     if user:
         hc = dict(user.get("health_condition") or {})
-        hc["report_extract"] = extracted
+        hc["report_extract"] = merged
         update_user_sync(user_id, {"health_condition": hc})
 
-    return extracted
+    return merged
 
 
 def process_one_health_report_task(task: Dict[str, Any]) -> None:
     """处理单条病历提取任务：执行 OCR、写库、更新用户档案。"""
     task_id = task["id"]
+    user_id = task.get("user_id", "unknown")
+    image_url = task.get("image_url", "")
+    print(f"[health_report] 开始处理任务 {task_id}, user={user_id}, url={image_url[:80]}...", flush=True)
     try:
         extracted = run_health_report_ocr_sync(task)
+        print(f"[health_report] 任务 {task_id} OCR 完成, indicators={len(extracted.get('indicators', []))}", flush=True)
         updated = update_analysis_task_result_sync(task_id, status="done", result={"extracted_content": extracted})
         if not updated:
             print(f"[health_report] 任务 {task_id} 已被取消，放弃结果写入", flush=True)
+        else:
+            print(f"[health_report] 任务 {task_id} 完成", flush=True)
     except Exception as e:
         err_msg = str(e) or type(e).__name__
+        print(f"[health_report] 任务 {task_id} 失败: {err_msg}", flush=True)
         updated = update_analysis_task_result_sync(task_id, status="failed", error_message=err_msg)
         if not updated:
             print(f"[health_report] 任务 {task_id} 已被取消，放弃错误写入", flush=True)

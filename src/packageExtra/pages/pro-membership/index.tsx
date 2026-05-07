@@ -9,11 +9,13 @@ import {
   getAccessToken,
   getMembershipPlans,
   getMyMembership,
+  getHealthProfile,
   showUnifiedApiError,
   MembershipPeriod,
   MembershipPlan,
   MembershipStatus,
   MembershipTier,
+  HealthProfile,
 } from '../../../utils/api'
 import {
   compareMembershipTier,
@@ -98,6 +100,8 @@ function ProMembershipPage() {
   const [pageLoading, setPageLoading] = useState(false)
   const [selectedTier, setSelectedTier] = useState<MembershipTier>('standard')
   const [selectedPeriod, setSelectedPeriod] = useState<MembershipPeriod>('yearly')
+  const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null)
+  const [ageWarningDismissed, setAgeWarningDismissed] = useState(false)
 
   const handleBack = useCallback(() => {
     const pages = Taro.getCurrentPages()
@@ -124,6 +128,56 @@ function ProMembershipPage() {
     Taro.switchTab({ url: '/pages/profile/index' })
   }, [])
 
+  function calculateAge(birthday?: string | null): number | null {
+    if (!birthday) return null
+    try {
+      const birth = new Date(birthday)
+      if (Number.isNaN(birth.getTime())) return null
+      const today = new Date()
+      let age = today.getFullYear() - birth.getFullYear()
+      const m = today.getMonth() - birth.getMonth()
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+        age -= 1
+      }
+      return age
+    } catch {
+      return null
+    }
+  }
+
+  type AgeCompliance = { ok: true } | { ok: false; severity: 'forbidden' | 'warning'; message: string }
+
+  function checkAgeCompliance(age: number | null, amount: number): AgeCompliance {
+    if (age == null) return { ok: true }
+    if (age < 8) {
+      return {
+        ok: false,
+        severity: 'forbidden',
+        message: '根据相关法律规定，未满 8 周岁用户暂不支持付费订阅。请前往健康档案核对年龄信息。',
+      }
+    }
+    if (age < 16 && amount > 50) {
+      return {
+        ok: false,
+        severity: 'warning',
+        message: `你当前健康档案年龄为 ${age} 岁，根据相关规定，该年龄段单次消费金额不得超过 50 元。建议切换至轻度版月卡/季卡，或修改年龄信息。`,
+      }
+    }
+    if (age < 18 && amount > 100) {
+      return {
+        ok: false,
+        severity: 'warning',
+        message: `你当前健康档案年龄为 ${age} 岁，根据相关规定，该年龄段单次消费金额不得超过 100 元。建议选择合适的套餐，或修改年龄信息。`,
+      }
+    }
+    return { ok: true }
+  }
+
+  const ageCompliance = useMemo<AgeCompliance>(() => {
+    const age = calculateAge(healthProfile?.birthday)
+    return checkAgeCompliance(age, selectedPlan?.amount ?? 0)
+  }, [healthProfile, selectedPlan])
+
   const loadData = useCallback(async () => {
     const token = getAccessToken()
     if (!token) {
@@ -136,12 +190,14 @@ function ProMembershipPage() {
       const params = Taro.getCurrentInstance().router?.params
       const targetTier = normalizeTierParam(params?.target_tier)
       const targetPeriod = normalizePeriodParam(params?.target_period)
-      const [planList, currentMembership] = await Promise.all([
+      const [planList, currentMembership, profile] = await Promise.all([
         getMembershipPlans(),
-        getMyMembership()
+        getMyMembership(),
+        getHealthProfile().catch(() => null),
       ])
       setPlans(planList)
       setMembership(currentMembership)
+      if (profile) setHealthProfile(profile)
       if (targetTier) {
         setSelectedTier(targetTier)
       }
@@ -203,6 +259,33 @@ function ProMembershipPage() {
       return
     }
     if (!selectedPlan || loading) return
+
+    // 年龄合规校验
+    if (!ageCompliance.ok) {
+      if (ageCompliance.severity === 'forbidden') {
+        await Taro.showModal({
+          title: '年龄限制',
+          content: ageCompliance.message,
+          confirmText: '去修改年龄',
+          cancelText: '我知道了',
+          confirmColor: '#00bc7d',
+        }).then((res) => {
+          if (res.confirm) {
+            Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+          }
+        })
+        return
+      }
+      // warning：弹窗提示，用户确认后才继续
+      const modalRes = await Taro.showModal({
+        title: '年龄提示',
+        content: ageCompliance.message,
+        confirmText: '仍要支付',
+        cancelText: '取消',
+        confirmColor: '#00bc7d',
+      })
+      if (!modalRes.confirm) return
+    }
 
     const confirmContent = `订阅 ${selectedPlan.name}，¥${selectedPlan.amount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
 
@@ -687,6 +770,28 @@ function ProMembershipPage() {
             <Text className='status-label'>当前总可用积分</Text>
             <Text className='status-value status-value--active'>
               {`${totalCreditsAvailable}`}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* 年龄合规提示 */}
+      {!ageCompliance.ok && !ageWarningDismissed && (
+        <View className={`age-compliance-banner age-compliance-banner--${ageCompliance.severity}`}>
+          <Text className='age-compliance-icon'>{ageCompliance.severity === 'forbidden' ? '⚠️' : '💡'}</Text>
+          <Text className='age-compliance-text'>{ageCompliance.message}</Text>
+          <View className='age-compliance-actions'>
+            <Text
+              className='age-compliance-action'
+              onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
+            >
+              去修改年龄
+            </Text>
+            <Text
+              className='age-compliance-action age-compliance-action--dismiss'
+              onClick={() => setAgeWarningDismissed(true)}
+            >
+              我知道了
             </Text>
           </View>
         </View>
