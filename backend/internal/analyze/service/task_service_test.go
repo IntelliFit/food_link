@@ -7,6 +7,8 @@ import (
 	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
 	authrepo "food_link/backend/internal/auth/repo"
+	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,15 +83,19 @@ func TestTaskService_SubmitTextTask_Success(t *testing.T) {
 
 func TestTaskService_ListTasks(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
-	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	storageClient := storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"})
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo, storageClient)
 	ctx := context.Background()
 
-	require.NoError(t, taskRepo.CreateTask(ctx, &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending"}))
+	legacyURL := "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/legacy.jpg"
+	require.NoError(t, taskRepo.CreateTask(ctx, &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending", ImageURL: &legacyURL}))
 	require.NoError(t, taskRepo.CreateTask(ctx, &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}))
 
 	tasks, err := svc.ListTasks(ctx, "user1", "food", "", 10)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 2)
+	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", *tasks[0].ImageURL)
+	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, tasks[0].ImagePaths)
 }
 
 func TestTaskService_CountTasks(t *testing.T) {
@@ -118,15 +124,19 @@ func TestTaskService_CountTasksByStatus(t *testing.T) {
 
 func TestTaskService_GetTask(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
-	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	storageClient := storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"})
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo, storageClient)
 	ctx := context.Background()
 
-	task := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending"}
+	legacyURL := "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/legacy.jpg"
+	task := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending", ImageURL: &legacyURL}
 	require.NoError(t, taskRepo.CreateTask(ctx, task))
 
 	found, err := svc.GetTask(ctx, task.ID, "user1")
 	require.NoError(t, err)
 	assert.Equal(t, task.ID, found.ID)
+	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", *found.ImageURL)
+	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, found.ImagePaths)
 
 	_, err = svc.GetTask(ctx, task.ID, "user2")
 	assert.Error(t, err)

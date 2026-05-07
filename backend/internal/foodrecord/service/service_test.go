@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
+	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
-	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/foodrecord/domain"
 	foodrepo "food_link/backend/internal/foodrecord/repo"
+	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
 	. "github.com/agiledragon/gomonkey/v2"
@@ -343,7 +344,8 @@ func TestFoodRecordService_hydrateRecord(t *testing.T) {
 	r := foodrepo.NewFoodRecordRepo(db)
 	tr := foodrepo.NewAnalysisTaskRepo(db)
 	ur := repo.NewUserRepo(db)
-	svc := NewFoodRecordService(r, tr, ur)
+	storageClient := storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"})
+	svc := NewFoodRecordService(r, tr, ur, storageClient)
 
 	// nil record
 	assert.Nil(t, svc.hydrateRecord(nil))
@@ -354,19 +356,21 @@ func TestFoodRecordService_hydrateRecord(t *testing.T) {
 	assert.Equal(t, []string{"img.jpg"}, result.ImagePaths)
 
 	// with source task id
-	imagePaths := []string{"task_img.jpg"}
+	imagePaths := []string{"https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/task_img.jpg"}
 	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "analyze", ImagePaths: imagePaths}
 	require.NoError(t, db.Create(task).Error)
 
 	record2 := &domain.FoodRecord{SourceTaskID: &task.ID}
 	result2 := svc.hydrateRecord(record2)
-	assert.Equal(t, []string{"task_img.jpg"}, result2.ImagePaths)
+	assert.Equal(t, []string{"https://cdn.example.com/food/task_img.jpg"}, result2.ImagePaths)
+	require.NotNil(t, result2.ImagePath)
+	assert.Equal(t, "https://cdn.example.com/food/task_img.jpg", *result2.ImagePath)
 
 	// with image path fallback
-	imgPath := "fallback.jpg"
+	imgPath := "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/fallback.jpg"
 	record3 := &domain.FoodRecord{ImagePath: &imgPath}
 	result3 := svc.hydrateRecord(record3)
-	assert.Equal(t, []string{"fallback.jpg"}, result3.ImagePaths)
+	assert.Equal(t, []string{"https://cdn.example.com/food/fallback.jpg"}, result3.ImagePaths)
 }
 
 func TestNewUploadService(t *testing.T) {

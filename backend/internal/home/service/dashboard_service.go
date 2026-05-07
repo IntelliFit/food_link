@@ -9,6 +9,7 @@ import (
 
 	userrepo "food_link/backend/internal/auth/repo"
 	homerepo "food_link/backend/internal/home/repo"
+	"food_link/backend/pkg/storage"
 )
 
 var mealDisplayOrder = []string{"breakfast", "morning_snack", "lunch", "afternoon_snack", "dinner", "evening_snack"}
@@ -24,12 +25,17 @@ var mealNames = map[string]string{
 var mealWeights = map[string]float64{"breakfast": 3, "lunch": 4, "dinner": 3}
 
 type DashboardService struct {
-	users *userrepo.UserRepo
-	home  *homerepo.HomeRepo
+	users   *userrepo.UserRepo
+	home    *homerepo.HomeRepo
+	storage *storage.Client
 }
 
-func NewDashboardService(users *userrepo.UserRepo, home *homerepo.HomeRepo) *DashboardService {
-	return &DashboardService{users: users, home: home}
+func NewDashboardService(users *userrepo.UserRepo, home *homerepo.HomeRepo, storageClient ...*storage.Client) *DashboardService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
+	return &DashboardService{users: users, home: home, storage: client}
 }
 
 func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date string) (map[string]any, error) {
@@ -69,7 +75,7 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 		if len(items) == 0 {
 			continue
 		}
-		meal := buildMealItem(mealType, items, mealTargets[mealType])
+		meal := s.buildMealItem(mealType, items, mealTargets[mealType])
 		meals = append(meals, meal)
 	}
 
@@ -203,7 +209,7 @@ func normalizeMealType(mealType string, recordTime *time.Time) string {
 	return "afternoon_snack"
 }
 
-func buildMealItem(mealType string, records []homerepo.FoodRecord, mealTarget float64) map[string]any {
+func (s *DashboardService) buildMealItem(mealType string, records []homerepo.FoodRecord, mealTarget float64) map[string]any {
 	mealCal, mealProtein, mealCarbs, mealFat := 0.0, 0.0, 0.0, 0.0
 	imagePaths := make([]string, 0)
 	seen := map[string]bool{}
@@ -222,14 +228,18 @@ func buildMealItem(mealType string, records []homerepo.FoodRecord, mealTarget fl
 		mealCarbs += record.TotalCarbs
 		mealFat += record.TotalFat
 		for _, imagePath := range record.ImagePaths {
+			imagePath = s.resolveFoodImageURL(imagePath)
 			if imagePath != "" && !seen[imagePath] {
 				imagePaths = append(imagePaths, imagePath)
 				seen[imagePath] = true
 			}
 		}
-		if record.ImagePath != nil && *record.ImagePath != "" && !seen[*record.ImagePath] {
-			imagePaths = append(imagePaths, *record.ImagePath)
-			seen[*record.ImagePath] = true
+		if record.ImagePath != nil {
+			resolved := s.resolveFoodImageURL(*record.ImagePath)
+			if resolved != "" && !seen[resolved] {
+				imagePaths = append(imagePaths, resolved)
+				seen[resolved] = true
+			}
 		}
 		title := ""
 		if len(record.Items) > 0 {
@@ -281,6 +291,13 @@ func buildMealItem(mealType string, records []homerepo.FoodRecord, mealTarget fl
 		"description":         strings.Join(titles, "、"),
 		"meal_record_entries": entries,
 	}
+}
+
+func (s *DashboardService) resolveFoodImageURL(path string) string {
+	if s.storage == nil {
+		return strings.TrimSpace(path)
+	}
+	return s.storage.ResolveReferenceURL("food-images", path)
 }
 
 func buildExpirySummary(items []homerepo.ExpiryItem) map[string]any {

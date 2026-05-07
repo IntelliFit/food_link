@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	analyzehandler "food_link/backend/internal/analyze/handler"
+	analyzerepo "food_link/backend/internal/analyze/repo"
+	analyzeservice "food_link/backend/internal/analyze/service"
 	authmw "food_link/backend/internal/auth"
 	authhandler "food_link/backend/internal/auth/handler"
 	authrepo "food_link/backend/internal/auth/repo"
@@ -16,21 +19,21 @@ import (
 	communityhandler "food_link/backend/internal/community/handler"
 	communityrepo "food_link/backend/internal/community/repo"
 	communityservice "food_link/backend/internal/community/service"
-	friendhandler "food_link/backend/internal/friend/handler"
-	friendrepo "food_link/backend/internal/friend/repo"
-	friendservice "food_link/backend/internal/friend/service"
+	expiryhandler "food_link/backend/internal/expiry/handler"
+	expiryrepo "food_link/backend/internal/expiry/repo"
+	expiryservice "food_link/backend/internal/expiry/service"
 	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	foodrecordservice "food_link/backend/internal/foodrecord/service"
+	friendhandler "food_link/backend/internal/friend/handler"
+	friendrepo "food_link/backend/internal/friend/repo"
+	friendservice "food_link/backend/internal/friend/service"
 	healthhandler "food_link/backend/internal/health/handler"
 	healthrepo "food_link/backend/internal/health/repo"
 	healthservice "food_link/backend/internal/health/service"
 	homehandler "food_link/backend/internal/home/handler"
 	homerepo "food_link/backend/internal/home/repo"
 	homeservice "food_link/backend/internal/home/service"
-	analyzehandler "food_link/backend/internal/analyze/handler"
-	analyzerepo "food_link/backend/internal/analyze/repo"
-	analyzeservice "food_link/backend/internal/analyze/service"
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
@@ -40,14 +43,11 @@ import (
 	testbackendrepo "food_link/backend/internal/testbackend/repo"
 	testbackendservice "food_link/backend/internal/testbackend/service"
 	userhandler "food_link/backend/internal/user/handler"
-	expiryhandler "food_link/backend/internal/expiry/handler"
-	expiryrepo "food_link/backend/internal/expiry/repo"
-	expiryservice "food_link/backend/internal/expiry/service"
+	userrepo "food_link/backend/internal/user/repo"
+	userservice "food_link/backend/internal/user/service"
 	utilityhandler "food_link/backend/internal/utility/handler"
 	utilityrepo "food_link/backend/internal/utility/repo"
 	utilityservice "food_link/backend/internal/utility/service"
-	userrepo "food_link/backend/internal/user/repo"
-	userservice "food_link/backend/internal/user/service"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
 	"food_link/backend/pkg/logger"
@@ -119,7 +119,7 @@ func New(cfg *config.Config) (*App, error) {
 	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "gemini-3-flash-preview")
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview")
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo)
-	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo)
+	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	analyzeHandler := analyzehandler.NewAnalyzeHandler(analyzeSvc, analyzeTaskSvc, adminKey)
 
@@ -127,13 +127,13 @@ func New(cfg *config.Config) (*App, error) {
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 	frTaskRepo := foodrecordrepo.NewAnalysisTaskRepo(db)
 	frNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
-	frSvc := foodrecordservice.NewFoodRecordService(frRepo, frTaskRepo, userRepo)
+	frSvc := foodrecordservice.NewFoodRecordService(frRepo, frTaskRepo, userRepo, storageClient)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
 
 	homeRepo := homerepo.NewHomeRepo(db)
-	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo)
+	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo, storageClient)
 	dashboardHandler := homehandler.NewDashboardHandler(dashboardService)
 	// Friend module DI
 	friendRepo := friendrepo.NewFriendRepo(db)

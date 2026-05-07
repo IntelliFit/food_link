@@ -50,6 +50,53 @@ func TestBuildAccessURL_EmptyBase(t *testing.T) {
 	assert.Equal(t, "key.jpg", client.BuildAccessURL("food-images", "key.jpg"))
 }
 
+func TestResolveReferenceURL(t *testing.T) {
+	cfg := config.StorageConfig{
+		CDNFoodImagesBaseURL: "https://cdn.example.com/food",
+		COSFoodImagesBucket:  "food-bucket",
+		COSRegion:            "ap-shanghai",
+	}
+	client := New(cfg)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "raw key",
+			input:    "08bf6bc862384f0888fbf25958d0501b.jpg",
+			expected: "https://cdn.example.com/food/08bf6bc862384f0888fbf25958d0501b.jpg",
+		},
+		{
+			name:     "supabase public url",
+			input:    "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/08bf6bc862384f0888fbf25958d0501b.jpg",
+			expected: "https://cdn.example.com/food/08bf6bc862384f0888fbf25958d0501b.jpg",
+		},
+		{
+			name:     "cdn url",
+			input:    "https://cdn.example.com/food/08bf6bc862384f0888fbf25958d0501b.jpg",
+			expected: "https://cdn.example.com/food/08bf6bc862384f0888fbf25958d0501b.jpg",
+		},
+		{
+			name:     "cos origin url",
+			input:    "https://food-bucket.cos.ap-shanghai.myqcloud.com/08bf6bc862384f0888fbf25958d0501b.jpg",
+			expected: "https://cdn.example.com/food/08bf6bc862384f0888fbf25958d0501b.jpg",
+		},
+		{
+			name:     "untrusted public url",
+			input:    "https://images.example.com/other.jpg",
+			expected: "https://images.example.com/other.jpg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, client.ResolveReferenceURL("food-images", tt.input))
+		})
+	}
+}
+
 func TestBucketName(t *testing.T) {
 	cfg := config.StorageConfig{
 		COSFoodImagesBucket:    "food-bucket",
@@ -87,8 +134,8 @@ func TestUploadBytes_UnknownBucket(t *testing.T) {
 
 func TestUploadBase64_InvalidData(t *testing.T) {
 	cfg := config.StorageConfig{
-		COSSecretID:  "test-id",
-		COSSecretKey: "test-key",
+		COSSecretID:         "test-id",
+		COSSecretKey:        "test-key",
 		COSFoodImagesBucket: "food-bucket",
 	}
 	client := New(cfg)
@@ -99,8 +146,8 @@ func TestUploadBase64_InvalidData(t *testing.T) {
 
 func TestUploadBase64_WithPrefix(t *testing.T) {
 	cfg := config.StorageConfig{
-		COSSecretID:  "test-id",
-		COSSecretKey: "test-key",
+		COSSecretID:         "test-id",
+		COSSecretKey:        "test-key",
 		COSFoodImagesBucket: "food-bucket",
 	}
 	client := New(cfg)

@@ -8,35 +8,41 @@ import (
 	"food_link/backend/internal/analyze/repo"
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/errors"
+	"food_link/backend/pkg/storage"
 )
 
 type TaskService struct {
 	tasks     *repo.TaskRepo
 	precision *repo.PrecisionRepo
 	users     *authrepo.UserRepo
+	storage   *storage.Client
 }
 
-func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *authrepo.UserRepo) *TaskService {
-	return &TaskService{tasks: tasks, precision: precision, users: users}
+func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *authrepo.UserRepo, storageClient ...*storage.Client) *TaskService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
+	return &TaskService{tasks: tasks, precision: precision, users: users, storage: client}
 }
 
 type SubmitTaskInput struct {
-	ImageURL          string   `json:"image_url"`
-	ImageURLs         []string `json:"image_urls"`
-	TextInput         string   `json:"text_input"`
-	MealType          string   `json:"meal_type"`
-	Province          string   `json:"province"`
-	City              string   `json:"city"`
-	District          string   `json:"district"`
-	DietGoal          string   `json:"diet_goal"`
-	ActivityTiming    string   `json:"activity_timing"`
-	UserGoal          string   `json:"user_goal"`
-	RemainingCalories *float64 `json:"remaining_calories"`
-	AdditionalContext string   `json:"additionalContext"`
-	ModelName         string   `json:"modelName"`
-	ExecutionMode     *string  `json:"execution_mode"`
-	PrecisionSessionID *string `json:"precision_session_id"`
-	AnalysisEngine    string   `json:"analysis_engine"`
+	ImageURL           string   `json:"image_url"`
+	ImageURLs          []string `json:"image_urls"`
+	TextInput          string   `json:"text_input"`
+	MealType           string   `json:"meal_type"`
+	Province           string   `json:"province"`
+	City               string   `json:"city"`
+	District           string   `json:"district"`
+	DietGoal           string   `json:"diet_goal"`
+	ActivityTiming     string   `json:"activity_timing"`
+	UserGoal           string   `json:"user_goal"`
+	RemainingCalories  *float64 `json:"remaining_calories"`
+	AdditionalContext  string   `json:"additionalContext"`
+	ModelName          string   `json:"modelName"`
+	ExecutionMode      *string  `json:"execution_mode"`
+	PrecisionSessionID *string  `json:"precision_session_id"`
+	AnalysisEngine     string   `json:"analysis_engine"`
 }
 
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
@@ -53,13 +59,13 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	}
 
 	payload := map[string]any{
-		"meal_type":       input.MealType,
-		"province":        input.Province,
-		"city":            input.City,
-		"district":        input.District,
-		"diet_goal":       input.DietGoal,
-		"activity_timing": input.ActivityTiming,
-		"user_goal":       input.UserGoal,
+		"meal_type":          input.MealType,
+		"province":           input.Province,
+		"city":               input.City,
+		"district":           input.District,
+		"diet_goal":          input.DietGoal,
+		"activity_timing":    input.ActivityTiming,
+		"user_goal":          input.UserGoal,
 		"remaining_calories": input.RemainingCalories,
 		"additionalContext":  input.AdditionalContext,
 		"modelName":          input.ModelName,
@@ -220,7 +226,14 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 }
 
 func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error) {
-	return s.tasks.ListTasksByUser(ctx, userID, taskType, status, limit)
+	tasks, err := s.tasks.ListTasksByUser(ctx, userID, taskType, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	for i := range tasks {
+		s.normalizeTaskImages(&tasks[i])
+	}
+	return tasks, nil
 }
 
 func (s *TaskService) CountTasks(ctx context.Context, userID string) (int64, error) {
@@ -242,6 +255,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 	if task.UserID != userID {
 		return nil, errors.ErrForbidden
 	}
+	s.normalizeTaskImages(task)
 	return task, nil
 }
 
@@ -319,6 +333,47 @@ func (s *TaskService) CreateBatchTask(ctx context.Context, userID string, imageU
 		return "", err
 	}
 	return task.ID, nil
+}
+
+func (s *TaskService) normalizeTaskImages(task *domain.AnalysisTask) {
+	if task == nil {
+		return
+	}
+	normalized := make([]string, 0, len(task.ImagePaths))
+	seen := make(map[string]struct{}, len(task.ImagePaths))
+	for _, path := range task.ImagePaths {
+		resolved := s.resolveFoodImageURL(path)
+		if resolved == "" {
+			continue
+		}
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		normalized = append(normalized, resolved)
+	}
+	task.ImagePaths = normalized
+	if len(task.ImagePaths) > 0 {
+		first := task.ImagePaths[0]
+		task.ImageURL = &first
+		return
+	}
+	if task.ImageURL != nil {
+		resolved := s.resolveFoodImageURL(*task.ImageURL)
+		if resolved == "" {
+			task.ImageURL = nil
+			return
+		}
+		task.ImageURL = &resolved
+		task.ImagePaths = []string{resolved}
+	}
+}
+
+func (s *TaskService) resolveFoodImageURL(path string) string {
+	if s.storage == nil {
+		return path
+	}
+	return s.storage.ResolveReferenceURL("food-images", path)
 }
 
 // ValidateQuota is a stub for membership/quota validation.

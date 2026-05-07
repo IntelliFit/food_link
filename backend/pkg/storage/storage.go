@@ -43,6 +43,121 @@ func (c *Client) BuildAccessURL(bucketAlias, key string) string {
 	return fmt.Sprintf("%s/%s", base, key)
 }
 
+func (c *Client) ResolveObjectKey(bucketAlias, value string) string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		return strings.TrimLeft(raw, "/")
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	path := strings.TrimSpace(parsed.EscapedPath())
+	if decoded, decodeErr := url.PathUnescape(path); decodeErr == nil {
+		path = decoded
+	}
+	path = strings.TrimSpace(path)
+	netloc := strings.ToLower(strings.TrimSpace(parsed.Host))
+	bucketName := c.bucketName(bucketAlias)
+	trustedHosts := c.trustedBucketHosts(bucketAlias)
+
+	baseURL := c.bucketBaseURL(bucketAlias)
+	if baseURL != "" && strings.HasPrefix(raw, baseURL+"/") {
+		return strings.TrimLeft(strings.SplitN(strings.TrimPrefix(raw, baseURL+"/"), "?", 2)[0], "/")
+	}
+
+	if _, ok := trustedHosts[netloc]; ok && strings.HasPrefix(path, "/"+bucketAlias+"/") {
+		return strings.TrimLeft(strings.TrimPrefix(path, "/"+bucketAlias+"/"), "/")
+	}
+	if bucketName != "" {
+		if _, ok := trustedHosts[netloc]; ok && strings.HasPrefix(path, "/"+bucketName+"/") {
+			return strings.TrimLeft(strings.TrimPrefix(path, "/"+bucketName+"/"), "/")
+		}
+		if strings.Contains(netloc, bucketName+".cos.") {
+			return strings.TrimLeft(path, "/")
+		}
+	}
+	publicPrefix := "/storage/v1/object/public/"
+	if strings.HasPrefix(path, publicPrefix+bucketAlias+"/") {
+		return strings.TrimLeft(strings.TrimPrefix(path, publicPrefix+bucketAlias+"/"), "/")
+	}
+	if bucketName != "" && strings.HasPrefix(path, publicPrefix+bucketName+"/") {
+		return strings.TrimLeft(strings.TrimPrefix(path, publicPrefix+bucketName+"/"), "/")
+	}
+	if _, ok := trustedHosts[netloc]; ok {
+		return strings.TrimLeft(strings.SplitN(path, "?", 2)[0], "/")
+	}
+
+	return ""
+}
+
+func (c *Client) ResolveReferenceURL(bucketAlias, value string) string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		return c.BuildAccessURL(bucketAlias, raw)
+	}
+	if key := c.ResolveObjectKey(bucketAlias, raw); key != "" {
+		return c.BuildAccessURL(bucketAlias, key)
+	}
+	if c.isPrivateBucket(bucketAlias) {
+		return ""
+	}
+	return raw
+}
+
+func (c *Client) bucketBaseURL(bucketAlias string) string {
+	var base string
+	switch bucketAlias {
+	case "food-images":
+		base = c.cfg.CDNFoodImagesBaseURL
+	case "user-avatars":
+		base = c.cfg.CDNUserAvatarsBaseURL
+	case "health-reports":
+		base = c.cfg.CDNHealthReportsBaseURL
+	case "icon":
+		base = c.cfg.CDNIconBaseURL
+	}
+	return strings.TrimRight(strings.TrimSpace(base), "/")
+}
+
+func (c *Client) trustedBucketHosts(bucketAlias string) map[string]struct{} {
+	hosts := map[string]struct{}{}
+	if base := c.bucketBaseURL(bucketAlias); base != "" {
+		if parsed, err := url.Parse(base); err == nil && parsed.Host != "" {
+			hosts[strings.ToLower(strings.TrimSpace(parsed.Host))] = struct{}{}
+		}
+	}
+	if origin := c.cosOriginBaseURL(bucketAlias); origin != "" {
+		if parsed, err := url.Parse(origin); err == nil && parsed.Host != "" {
+			hosts[strings.ToLower(strings.TrimSpace(parsed.Host))] = struct{}{}
+		}
+	}
+	return hosts
+}
+
+func (c *Client) cosOriginBaseURL(bucketAlias string) string {
+	bucket := c.bucketName(bucketAlias)
+	if bucket == "" {
+		return ""
+	}
+	region := strings.TrimSpace(c.cfg.COSRegion)
+	if region == "" {
+		region = "ap-beijing"
+	}
+	return fmt.Sprintf("https://%s.cos.%s.myqcloud.com", bucket, region)
+}
+
+func (c *Client) isPrivateBucket(bucketAlias string) bool {
+	return bucketAlias == "health-reports"
+}
+
 func (c *Client) cosClient(bucket string) (*cos.Client, error) {
 	if c.cfg.COSSecretID == "" || c.cfg.COSSecretKey == "" {
 		return nil, fmt.Errorf("missing COS credentials")

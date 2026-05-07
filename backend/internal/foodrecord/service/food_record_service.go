@@ -6,10 +6,11 @@ import (
 	"time"
 
 	authrepo "food_link/backend/internal/auth/repo"
-	"gorm.io/gorm"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/repo"
+	"food_link/backend/pkg/storage"
+	"gorm.io/gorm"
 )
 
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -27,17 +28,24 @@ type FoodRecordService struct {
 	recordRepo *repo.FoodRecordRepo
 	taskRepo   *repo.AnalysisTaskRepo
 	userRepo   *authrepo.UserRepo
+	storage    *storage.Client
 }
 
 func NewFoodRecordService(
 	recordRepo *repo.FoodRecordRepo,
 	taskRepo *repo.AnalysisTaskRepo,
 	userRepo *authrepo.UserRepo,
+	storageClient ...*storage.Client,
 ) *FoodRecordService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
 	return &FoodRecordService{
 		recordRepo: recordRepo,
 		taskRepo:   taskRepo,
 		userRepo:   userRepo,
+		storage:    client,
 	}
 }
 
@@ -263,20 +271,52 @@ func (s *FoodRecordService) hydrateRecord(record *domain.FoodRecord) *domain.Foo
 	if record == nil {
 		return nil
 	}
-	if len(record.ImagePaths) > 0 {
-		return record
-	}
-	if record.SourceTaskID != nil {
+	if len(record.ImagePaths) == 0 && record.SourceTaskID != nil {
 		paths, err := s.taskRepo.GetImagePathsByID(context.Background(), *record.SourceTaskID)
 		if err == nil && len(paths) > 0 {
 			record.ImagePaths = paths
-			return record
 		}
 	}
-	if record.ImagePath != nil && *record.ImagePath != "" {
+	if len(record.ImagePaths) == 0 && record.ImagePath != nil && *record.ImagePath != "" {
 		record.ImagePaths = []string{*record.ImagePath}
 	}
+	record.ImagePaths = s.normalizeImagePaths(record.ImagePaths)
+	if len(record.ImagePaths) > 0 {
+		record.ImagePath = &record.ImagePaths[0]
+	} else {
+		record.ImagePath = nil
+	}
 	return record
+}
+
+func (s *FoodRecordService) normalizeImagePaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(paths))
+	seen := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		resolved := s.resolveFoodImageURL(path)
+		if resolved == "" {
+			continue
+		}
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		normalized = append(normalized, resolved)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
+
+func (s *FoodRecordService) resolveFoodImageURL(path string) string {
+	if s.storage == nil {
+		return strings.TrimSpace(path)
+	}
+	return s.storage.ResolveReferenceURL("food-images", path)
 }
 
 func validMealType(mealType string) bool {

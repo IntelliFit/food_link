@@ -7,6 +7,8 @@ import (
 
 	authrepo "food_link/backend/internal/auth/repo"
 	homerepo "food_link/backend/internal/home/repo"
+	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -142,12 +144,17 @@ func TestNormalizeMealType(t *testing.T) {
 func TestBuildMealItem(t *testing.T) {
 	now := time.Now()
 	records := []homerepo.FoodRecord{
-		{ID: "r1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &now},
+		{
+			ID: "r1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &now,
+			ImagePaths: []string{"https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/legacy.jpg"},
+		},
 	}
-	meal := buildMealItem("lunch", records, 800)
+	svc := NewDashboardService(nil, nil, storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"}))
+	meal := svc.buildMealItem("lunch", records, 800)
 	assert.Equal(t, "lunch", meal["type"])
 	assert.Equal(t, 500.0, meal["calorie"])
 	assert.Equal(t, 800.0, meal["target"])
+	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", meal["image_path"])
 }
 
 func TestBuildExpirySummary(t *testing.T) {
