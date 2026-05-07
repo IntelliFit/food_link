@@ -4544,23 +4544,27 @@ def process_one_exercise_task(task: Dict[str, Any]) -> None:
     task_id = task["id"]
     user_id = task["user_id"]
     text = (task.get("text_input") or "").strip()
+    image_url = (task.get("image_url") or "").strip()
     payload = task.get("payload") or {}
     recorded_on = payload.get("recorded_on")
 
-    if not text:
-        update_analysis_task_result_sync(task_id, "failed", error_message="运动描述为空")
+    if not text and not image_url:
+        update_analysis_task_result_sync(task_id, "failed", error_message="运动描述和图片不能同时为空")
         return
 
     try:
         profile_snapshot = _build_exercise_profile_snapshot_sync(user_id, payload)
         print(
             f"[process_one_exercise_task] start task_id={task_id} user_id={user_id} text={text!r} "
-            f"recorded_on={recorded_on} profile_snapshot={json.dumps(profile_snapshot, ensure_ascii=False)}",
+            f"image_url={bool(image_url)} recorded_on={recorded_on} "
+            f"profile_snapshot={json.dumps(profile_snapshot, ensure_ascii=False)}",
             flush=True,
         )
-        calories, ai_raw, reasoning = estimate_exercise_calories_sync(text, profile_snapshot)
+        calories, ai_raw, reasoning = estimate_exercise_calories_sync(
+            text, profile_snapshot, image_url=image_url
+        )
         row = create_user_exercise_log_sync(
-            user_id, text, calories, recorded_on, ai_reasoning=reasoning
+            user_id, text or "图片识别运动", calories, recorded_on, ai_reasoning=reasoning
         )
         day = row.get("recorded_on") or recorded_on
         total = get_exercise_calories_by_date_sync(user_id, day) if day else 0

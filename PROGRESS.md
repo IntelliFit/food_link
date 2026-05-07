@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-05-08
+
+- 🐛 fix: 统计 Tab「AI 风险解读」详情弹窗在缓存需刷新（`insightNeedsRefresh`）时补回「手动更新」按钮，沿用 `handleGenerateInsight` 流程；加载中切换为 spinner，深色主题同步配色 `src/pages/stats/index.tsx` `src/pages/stats/index.scss` `src/styles/fl-color-scheme-dark.scss`
+
 ## 2026-05-01
 
 - 📝 docs: 完善 `AGENTS.md` 的部署章节，补充 buildx/平台覆盖、标准操作步骤和常见故障排查，确保跨架构部署口径清晰 `AGENTS.md`

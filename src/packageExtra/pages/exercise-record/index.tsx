@@ -1,4 +1,4 @@
-import { View, Text, Input, ScrollView } from '@tarojs/components'
+import { View, Text, Input, ScrollView, Image } from '@tarojs/components'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { IconExercise } from '../../../components/iconfont'
@@ -9,6 +9,8 @@ import {
   deleteExerciseLog,
   getAnalyzeTask,
   getMyMembership,
+  uploadAnalyzeImageFile,
+  compressImagePathForUpload,
   type ExerciseLogItem,
   type ExerciseTaskResultPayload,
   type MembershipStatus,
@@ -109,6 +111,8 @@ export default function ExerciseRecordPage() {
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [selectedImagePath, setSelectedImagePath] = useState('')
+  const [selectedImageUrl, setSelectedImageUrl] = useState('')
   const pollingTaskIdsRef = useRef<Set<string>>(new Set())
 
   const loadTodayRecords = useCallback(async (): Promise<void> => {
@@ -277,10 +281,44 @@ export default function ExerciseRecordPage() {
   const recordCount = records.length + pendingItems.filter((p) => p.status === 'pending').length
   const statsLabel = recordDate === getTodayRecordDateKey() ? '今日消耗' : `${recordDate} 消耗`
 
+  const handleAddImage = (): void => {
+    if (!getAccessToken()) {
+      Taro.navigateTo({ url: '/pages/login/index' })
+      return
+    }
+    Taro.showActionSheet({
+      itemList: ['拍照', '从相册选择'],
+      success: (res) => {
+        const sourceType: Array<'album' | 'camera'> = res.tapIndex === 0 ? ['camera'] : ['album']
+        Taro.chooseImage({
+          count: 1,
+          sizeType: ['compressed'],
+          sourceType,
+          success: (chooseRes) => {
+            const paths = chooseRes.tempFilePaths || []
+            if (paths.length > 0) {
+              setSelectedImagePath(paths[0])
+            }
+          },
+          fail: (err) => {
+            if (err.errMsg?.includes('cancel')) return
+            console.error('[exercise-record] chooseImage', err)
+          }
+        })
+      }
+    })
+  }
+
+  const clearSelectedImage = (): void => {
+    setSelectedImagePath('')
+    setSelectedImageUrl('')
+  }
+
   const runSubmitFlow = async (): Promise<void> => {
     const content = inputValue.trim()
-    if (!content) {
-      Taro.showToast({ title: '请输入运动描述', icon: 'none' })
+    const hasImage = !!selectedImagePath
+    if (!content && !hasImage) {
+      Taro.showToast({ title: '请输入运动描述或选择图片', icon: 'none' })
       return
     }
     if (!getAccessToken()) {
@@ -288,12 +326,12 @@ export default function ExerciseRecordPage() {
       return
     }
     if (isExerciseLogCreditExhausted(membershipStatus)) {
-      const content = getExerciseLogCreditBlockMessage(membershipStatus)
+      const blockContent = getExerciseLogCreditBlockMessage(membershipStatus)
       const confirmText = getExerciseLogBlockedActionText(membershipStatus)
-      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
+      const showUpgrade = blockContent.includes('开通') || blockContent.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
         title: '积分不足',
-        content,
+        content: blockContent,
         showCancel: showUpgrade,
         confirmText: showUpgrade ? confirmText : '知道了',
         cancelText: '取消',
@@ -309,17 +347,27 @@ export default function ExerciseRecordPage() {
 
     setSubmitting(true)
     Taro.showLoading({ title: '提交中...', mask: true })
+
+    let uploadedImageUrl = ''
     try {
+      // 如果有图片，先上传
+      if (hasImage) {
+        const compressedPath = await compressImagePathForUpload(selectedImagePath)
+        const { imageUrl } = await uploadAnalyzeImageFile(compressedPath)
+        uploadedImageUrl = imageUrl
+        setSelectedImageUrl(imageUrl)
+      }
+
       const membership = await getMyMembership().catch(() => null)
       if (membership) {
         setMembershipStatus(membership)
         if (isExerciseLogCreditExhausted(membership)) {
-          const content = getExerciseLogCreditBlockMessage(membership)
+          const blockContent = getExerciseLogCreditBlockMessage(membership)
           const confirmText = getExerciseLogBlockedActionText(membership)
-          const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
+          const showUpgrade = blockContent.includes('开通') || blockContent.includes('升级') || membership.is_pro
           Taro.showModal({
             title: '积分不足',
-            content,
+            content: blockContent,
             showCancel: showUpgrade,
             confirmText: showUpgrade ? confirmText : '知道了',
             cancelText: '取消',
@@ -332,13 +380,21 @@ export default function ExerciseRecordPage() {
           return
         }
       }
-      const { task_id: taskId } = await createExerciseLog({ exercise_desc: content, date: recordDate })
+
+      const displayContent = content || '图片识别运动'
+      const { task_id: taskId } = await createExerciseLog({
+        exercise_desc: content,
+        image_url: uploadedImageUrl || undefined,
+        date: recordDate
+      })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
       setInputValue('')
+      setSelectedImagePath('')
+      setSelectedImageUrl('')
       setPendingItems((prev) => [
         ...prev,
-        { clientId, taskId, content, status: 'pending', createdAt }
+        { clientId, taskId, content: displayContent, status: 'pending', createdAt }
       ])
       void pollForTask(taskId, clientId)
     } catch (e) {
@@ -441,7 +497,7 @@ export default function ExerciseRecordPage() {
               <IconExercise size={80} color='#d1d5db' />
             </View>
             <Text className='empty-title'>还没有运动记录</Text>
-            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如：&quot;跑步30分钟&quot; 或 &quot;游泳1小时&quot;</Text>
+            <Text className='empty-desc'>在下方输入你今天做了什么运动，或拍照识别{'\n'}例如：&quot;跑步30分钟&quot; 或 &quot;游泳1小时&quot;</Text>
           </View>
         ) : (
           <View className='records-list'>
@@ -532,19 +588,37 @@ export default function ExerciseRecordPage() {
             </View>
           </ScrollView>
         </View>
+        {selectedImagePath ? (
+          <View className='image-preview-wrap'>
+            <Image
+              className='image-preview-thumb'
+              src={selectedImagePath}
+              mode='aspectFill'
+            />
+            <View className='image-preview-remove' onClick={clearSelectedImage}>
+              <Text className='image-preview-remove-text'>×</Text>
+            </View>
+          </View>
+        ) : null}
         <View className='input-wrap'>
+          <View
+            className='exercise-image-trigger'
+            onClick={handleAddImage}
+          >
+            <Text className='exercise-image-trigger-text'>+</Text>
+          </View>
           <Input
             className='chat-input'
             value={inputValue}
             onInput={(e) => setInputValue(e.detail.value)}
-            placeholder='今天做了什么运动？'
+            placeholder={selectedImagePath ? '补充描述（可选）' : '今天做了什么运动？'}
             placeholderClass='input-placeholder'
             confirmType='send'
             onConfirm={runSubmitFlow}
             disabled={submitting}
           />
           <View
-            className={`exercise-send-trigger ${!inputValue.trim() || submitting ? 'is-disabled' : ''}`}
+            className={`exercise-send-trigger ${(!inputValue.trim() && !selectedImagePath) || submitting ? 'is-disabled' : ''}`}
             onClick={runSubmitFlow}
           >
             {submitting ? (

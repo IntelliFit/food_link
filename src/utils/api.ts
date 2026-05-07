@@ -4272,10 +4272,14 @@ export interface ExerciseTaskResultPayload {
 /** 提交运动分析任务（后台 Worker 调用大模型并落库；返回 task_id，需轮询 getAnalyzeTask） */
 export async function createExerciseLog(data: {
   exercise_desc: string
+  image_url?: string
   date?: string
 }): Promise<{ task_id: string; message: string }> {
   const trimmed = data.exercise_desc.trim()
   const parts: string[] = [`exercise_desc=${encodeURIComponent(trimmed)}`]
+  if (data.image_url) {
+    parts.push(`image_url=${encodeURIComponent(data.image_url)}`)
+  }
   if (data.date) {
     parts.push(`date=${encodeURIComponent(data.date)}`)
   }

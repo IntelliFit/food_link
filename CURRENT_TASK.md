@@ -1,5 +1,37 @@
 # 当前任务
 
+## 状态：完成 - 7 日活跃与成功付费用户口径核对
+
+- 2026-05-08 update:
+  - User asked to estimate:
+    - recent 7-day users who are still actively using the product
+    - users who have successfully paid
+    - whether the ratio between them is meaningful
+  - This round used a read-only Supabase query against production data.
+  - Window used for “最近 7 天”:
+    - `2026-05-02 00:00:00` to `2026-05-08` current time, Asia/Shanghai
+    - i.e. 7 natural days including today
+  - “7 日还在用” current working definition:
+    - distinct users with at least one core behavior in the window
+    - union of:
+      - `analysis_tasks.created_at`
+      - `user_food_records.record_time`
+      - `user_exercise_logs.recorded_on`
+  - “成功付费用户” current working definition:
+    - distinct users with at least one `pro_membership_payment_records.status='paid'`
+    - count by paid order truth rather than only `user_pro_memberships` snapshot
+  - Result snapshot:
+    - 7-day active core users: `35`
+    - ever successful paid membership users: `12`
+    - paid users active in the same 7-day window: `7`
+    - active membership snapshot users in `user_pro_memberships`: `13`
+  - Ratio notes:
+    - `12 / 35 = 34.3%` can be read as paid-user penetration inside the recent active base, but it mixes current activity with cumulative historical payment and is not a clean retention metric.
+    - `7 / 12 = 58.3%` is more meaningful as a rough “paid users still active in the last 7 days” indicator.
+    - `10 / 13 = 76.9%` can describe recent activity among current membership snapshots, but snapshot truth can include manual/legacy repaired memberships and is weaker than paid-order truth for “成功付费”.
+  - Data caveat found during validation:
+    - `user_pro_memberships` currently has `3` active paid-like snapshot users without matching paid membership order rows, so “成功付费” should continue to prefer payment-order truth.
+
 ## 状态：完成 - “我的”页版本号更新为 2.2.0
 
 - 2026-05-05 update:
@@ -14,6 +46,134 @@
     - At that time, current `dist/pages/profile/index.js` still showed `2.1.2`, indicating the running build artifact had not yet been refreshed from the updated source version.
 
 ## 状态：待启动 - 后端大文件拆分与性能整理
+
+- 2026-05-08 latest update:
+  - Continued backend route split after user asked to keep splitting aggressively while preserving business logic.
+  - Added and registered these additional router modules:
+    - `backend/routers/health_profile.py` for `/api/user/health-profile*`.
+    - `backend/routers/stats.py` for `/api/stats*` and `/ws/stats/insight`.
+    - `backend/routers/membership.py` for `/api/membership*` and `/api/payment/wechat/notify/membership`.
+    - `backend/routers/wechat_auth.py` for `/api/qrcode` and `/api/login`.
+    - `backend/routers/system.py` for `/api` and `/api/health`.
+    - `backend/routers/uploads.py` for `/api/upload-analyze-image*`.
+    - `backend/routers/analyze_compare.py` for `/api/analyze-compare*`.
+    - `backend/routers/precision_sessions.py` for `/api/precision-sessions/{session_id}/continue`.
+    - `backend/routers/analyze_text.py` for `/api/analyze-text*`.
+    - `backend/routers/analyze_submit.py` for `/api/analyze/submit`.
+  - `backend/main.py` is now 4307 lines, down from the original 12444 lines.
+  - All files under `backend/routers/` are currently below 2000 lines; largest router is `test_backend.py` at 1267 lines.
+  - Remaining direct `@app` routes in `backend/main.py`:
+    - HTTP middleware.
+    - `/api/analyze`.
+    - `/api/analyze/batch`.
+  - Verification:
+    - `python -m py_compile backend\main.py backend\routers\*.py backend\database.py` equivalent command passed for the touched router set.
+    - Runtime import route check confirmed each moved route is registered exactly once, including upload, compare, text analyze, image submit, precision continue, login/qrcode, membership, stats, health profile, and analysis task routes.
+  - No frontend/UI changes were made; no dev server was started.
+  - Next safe direction:
+    - To push `main.py` below 2000 lines, the next phase should split image-analysis core helpers/schemas/services, not just route decorators.
+    - That phase has higher business risk and should be paired with targeted tests or endpoint smoke tests for `/api/analyze`, `/api/analyze/batch`, and `/api/analyze/submit`.
+
+- 2026-05-08 update:
+  - User clarified that Go rewrite is not needed for now.
+  - Current direction is to first apply the simplest practical optimizations to the existing Python backend.
+  - Recommended first batch should focus on measurable, low-risk changes:
+    - Add/standardize slow endpoint timing and query-count visibility.
+    - Benchmark the hottest endpoints before changing logic.
+    - Reduce repeated Supabase calls and obvious N+1 paths.
+    - Add tiny in-process TTL caches only for stable, read-heavy data.
+    - Extract the lowest-risk route modules only when it makes future fixes easier, not as a big rewrite.
+  - First low-risk split implemented:
+    - Added `backend/routers/__init__.py`.
+    - Added `backend/routers/prompts.py` with the 8 prompt-management endpoints.
+    - `backend/main.py` now imports `create_prompts_router(...)` and registers it with `app.include_router(...)`.
+    - Kept test-backend auth in `main.py` and passed it into the router factory to avoid circular imports.
+    - Kept `get_active_prompt` / `get_prompt_by_id` imported in `main.py` because test-backend analysis helpers still use them.
+    - `backend/main.py` line count reduced from 12444 to 12275; new prompt router is 177 lines.
+  - Continued backend route split after user said the first change was too small:
+    - Added `backend/routers/recipes.py` for 7 `/api/recipes*` routes.
+    - Added `backend/routers/exercise.py` for 4 `/api/exercise-logs*` routes.
+    - Added `backend/routers/test_backend.py` for 13 test-backend routes/pages and shared `require_test_backend_auth`.
+    - Added `backend/routers/public_food_library.py` for 12 `/api/public-food-library*` routes.
+    - Added `backend/routers/expiry.py` for 8 `/api/expiry*` routes.
+    - `backend/main.py` is now 9882 lines, down from the original 12444 lines.
+    - New router sizes:
+      - `test_backend.py`: 1267 lines
+      - `public_food_library.py`: 445 lines
+      - `expiry.py`: 435 lines
+      - `exercise.py`: 247 lines
+      - `recipes.py`: 199 lines
+      - `prompts.py`: 177 lines
+  - Verification:
+    - `python -m py_compile backend\main.py backend\routers\__init__.py backend\routers\expiry.py backend\routers\public_food_library.py backend\routers\test_backend.py backend\routers\prompts.py backend\routers\recipes.py backend\routers\exercise.py backend\database.py` passed.
+    - Runtime import checks confirmed migrated route counts are still registered:
+      - `/api/expiry`: 8
+      - `/api/public-food-library`: 12
+      - `/api/test-backend`: 9
+      - `/api/test/`: 2
+      - `/test-backend`: 2
+      - `/api/prompts`: 8
+      - `/api/recipes`: 7
+      - `/api/exercise-logs`: 4
+  - Further route split after user asked to continue without affecting business logic:
+    - Added `backend/routers/social.py` for 14 `/api/friend*` routes and 12 `/api/community*` routes.
+    - Added `backend/routers/body_metrics.py` for 5 `/api/body-metrics*` routes.
+    - Added `backend/routers/location.py` for 2 `/api/location*` routes and `/map-picker`.
+    - Added `backend/routers/manual_food.py` for 2 `/api/food-nutrition*` routes and 2 `/api/manual-food*` routes.
+    - `backend/main.py` is now 8530 lines, down from the original 12444 lines.
+    - Current extracted router sizes:
+      - `test_backend.py`: 1267 lines
+      - `social.py`: 785 lines
+      - `public_food_library.py`: 445 lines
+      - `expiry.py`: 435 lines
+      - `body_metrics.py`: 289 lines
+      - `location.py`: 277 lines
+      - `exercise.py`: 247 lines
+      - `recipes.py`: 199 lines
+      - `prompts.py`: 177 lines
+      - `manual_food.py`: 95 lines
+    - Verification:
+      - `python -m py_compile backend\main.py backend\routers\manual_food.py backend\routers\location.py backend\routers\body_metrics.py backend\routers\social.py backend\routers\expiry.py backend\routers\public_food_library.py backend\routers\test_backend.py backend\routers\prompts.py backend\routers\recipes.py backend\routers\exercise.py backend\database.py` passed.
+      - Runtime import checks confirmed migrated route counts are still registered:
+        - `/api/body-metrics`: 5
+        - `/api/location`: 2
+        - `/map-picker`: 1
+        - `/api/food-nutrition`: 2
+        - `/api/manual-food`: 2
+        - `/api/expiry`: 8
+        - `/api/public-food-library`: 12
+        - `/api/friend`: 14
+        - `/api/community`: 12
+        - `/api/recipes`: 7
+        - `/api/exercise-logs`: 4
+        - `/api/test-backend`: 9
+        - `/api/test/`: 2
+        - `/test-backend`: 2
+        - `/api/prompts`: 8
+  - Continued split after user asked to reduce files toward <2000 lines:
+    - Added `backend/routers/food_records.py` for 6 `/api/food-record*` routes and `/api/critical-samples`.
+    - Added `backend/routers/dashboard.py` for `/api/user/dashboard-targets`, `/api/home/dashboard`, and `/api/exercise-calories/daily`.
+    - Added `backend/routers/user_profile.py` for basic user profile, record days, phone binding, and avatar upload.
+    - Added `backend/routers/analysis_tasks.py` for analysis task list/count/status/detail/result/delete/timeout cleanup and `/api/user/last-seen-analyze-history`.
+    - `backend/main.py` is now 7537 lines, down from the original 12444 lines.
+    - All extracted router files are currently below 2000 lines:
+      - `test_backend.py`: 1267 lines
+      - `social.py`: 785 lines
+      - `public_food_library.py`: 445 lines
+      - `expiry.py`: 435 lines
+      - `food_records.py`: 409 lines
+      - `body_metrics.py`: 289 lines
+      - `dashboard.py`: 281 lines
+      - `location.py`: 277 lines
+      - `exercise.py`: 247 lines
+      - `analysis_tasks.py`: 204 lines
+      - `user_profile.py`: 200 lines
+      - `recipes.py`: 199 lines
+      - `prompts.py`: 177 lines
+      - `manual_food.py`: 95 lines
+    - Verification:
+      - `python -m py_compile backend\main.py backend\routers\analysis_tasks.py backend\routers\user_profile.py backend\routers\dashboard.py backend\routers\food_records.py backend\routers\manual_food.py backend\routers\location.py backend\routers\body_metrics.py backend\routers\social.py backend\routers\expiry.py backend\routers\public_food_library.py backend\routers\test_backend.py backend\routers\prompts.py backend\routers\recipes.py backend\routers\exercise.py backend\database.py` passed.
+      - Runtime import checks confirmed migrated route counts are still registered, including `/api/analyze/tasks`: 7, `/api/user/last-seen-analyze-history`: 1, `/api/user/profile`: 2, `/api/user/record-days`: 1, `/api/user/bind-phone`: 1, `/api/user/upload-avatar`: 1, `/api/user/dashboard-targets`: 2, `/api/home/dashboard`: 1, `/api/exercise-calories/daily`: 1, `/api/food-record`: 6, and `/api/critical-samples`: 1.
 
 - 2026-05-05 discussion:
   - User指出当前后端代码存在明显结构问题：

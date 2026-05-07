@@ -1,5 +1,15 @@
 # DECISIONS
 
+- `2026-05-08`: 用户/付费口径的稳定统计优先级暂定为：
+  - “最近 7 天还在用”优先按核心行为表去重统计，而不是直接看 `weapp_user.update_time`
+  - 当前核心行为并集口径为：
+    - `analysis_tasks.created_at`
+    - `user_food_records.record_time`
+    - `user_exercise_logs.recorded_on`
+  - “成功付费用户”优先以 `pro_membership_payment_records.status='paid'` 的真实支付订单为准
+  - `user_pro_memberships` 更适合表示当前权益快照，不应单独作为“成功付费人数”的唯一真源
+  - 若要衡量这个群体是否还在使用，优先看 “最近 7 天活跃的付费用户 / 累计成功付费用户”，不要直接把 “累计付费用户 / 最近 7 天活跃总用户” 当成留存指标
+
 - `2026-05-05`: 「我的」页底部版本号继续以 `package.json` 为唯一版本源：
   - `src/pages/profile/index.tsx` 通过构建常量 `__APP_VERSION__` 展示版本号。
   - `config/index.ts` 从根目录 `package.json` 读取 `version` 并注入 `__APP_VERSION__`。
@@ -11,6 +21,18 @@
   - 路由层优先拆出 `APIRouter` 模块；schema、service、repository 随业务域逐步下沉。
   - 性能问题不能只靠“拆文件”判断，必须结合接口基准、数据库调用次数、缓存和 Supabase 查询结构定位。
   - 当前已有未提交功能改动时，后端重构应尽量单独提交，避免和业务修复混在一起。
+- `2026-05-08`: 后端 `main.py` 继续拆分时优先搬低耦合路由，暂不硬拆分析、用户、会员、支付、统计这些核心链路：
+  - 已拆出的 router 应尽量保持原函数体和错误处理不变，只把 `@app` 改为 `APIRouter` 注册。
+  - 每次拆完至少执行 `py_compile` 和运行时 route registration check。
+  - 对计费、登录、支付、分析任务状态流等高风险路由，除非同时补目标测试或专项验证，否则不要为了降低行数强行搬动。
+- `2026-05-08`: 后端拆文件本身不作为性能优化收益来承诺：
+  - 路由拆分主要改善可维护性、定位速度、代码所有权边界和后续性能优化的落点。
+  - 单个 API 的运行速度主要取决于数据库查询次数、外部模型/支付/存储请求、缓存策略、序列化和同步阻塞调用。
+  - 后续真正提速时应先用 benchmark/日志定位慢接口，再做查询合并、TTL 缓存、N+1 消除和异步化。
+- `2026-05-08`: 后端高耦合分析路由拆分采用 router factory + `globals()` 过渡方案：
+  - 对 `/api/analyze-compare*`、`/api/analyze-text*`、`/api/analyze/submit`、`/api/precision-sessions/{session_id}/continue` 这类依赖大量 `main.py` helper 的路由，先迁移到独立 router 文件，保留原函数体与依赖调用方式。
+  - 该方案用于避免循环 import，并把行为变化降到最低；后续若继续压缩 `main.py`，应再把共享 schema/helper/service 正式下沉到独立模块，而不是长期扩大 `globals()` 依赖。
+  - `/api/analyze` 与 `/api/analyze/batch` 暂留 `main.py`，直到有更完整的图片分析 smoke test 或专项验证。
 
 - `2026-05-05`: 当用户要求“提交当前工作区全部改动并合并到 main”时，默认发布顺序保持为：
   - 先在 `dev` 提交并推送当前工作区改动

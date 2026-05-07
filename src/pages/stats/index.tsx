@@ -1148,6 +1148,21 @@ function StatsPage() {
                         ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
                         : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
                     </Text>
+                    {insightNeedsRefresh ? (
+                      <View
+                        className={`analysis-status-action${insightActionLoading ? ' is-loading' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (!insightActionLoading) handleGenerateInsight()
+                        }}
+                      >
+                        {insightActionLoading ? (
+                          <Text className='iconfont icon-jiazaixiao analysis-status-action-icon' />
+                        ) : (
+                          <Text className='analysis-status-action-text'>手动更新</Text>
+                        )}
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
                 {insightError ? (
