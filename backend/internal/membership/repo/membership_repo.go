@@ -197,8 +197,8 @@ func (r *MembershipRepo) GetFirstMembershipTrialBatchRank(ctx context.Context, u
 	err := r.db.WithContext(ctx).
 		Table("weapp_user").
 		Select("id").
-		Order("COALESCE(create_time, created_at) IS NULL ASC").
-		Order("COALESCE(create_time, created_at) ASC").
+		Order("create_time IS NULL ASC").
+		Order("create_time ASC").
 		Order("id ASC").
 		Limit(limit).
 		Find(&rows).Error
@@ -514,8 +514,7 @@ type User struct {
 	ID                   string     `gorm:"column:id"`
 	OpenID               string     `gorm:"column:openid"`
 	EarnedCreditsBalance int        `gorm:"column:earned_credits_balance"`
-	CreateTime           *time.Time `gorm:"column:create_time"`
-	CreatedAt            *time.Time `gorm:"column:created_at"`
+	CreatedAt            *time.Time `gorm:"column:create_time"`
 }
 
 func (User) TableName() string { return "weapp_user" }

@@ -997,9 +997,6 @@ func userRegistrationTime(user *membershiprepo.User) *time.Time {
 	if user == nil {
 		return nil
 	}
-	if user.CreateTime != nil {
-		return user.CreateTime
-	}
 	return user.CreatedAt
 }
 
