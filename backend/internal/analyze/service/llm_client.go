@@ -48,10 +48,10 @@ func (c *DashScopeClient) Analyze(ctx context.Context, prompt, imageURL string) 
 		})
 	}
 	body := map[string]any{
-		"model":    c.Model,
-		"messages": []map[string]any{{"role": "user", "content": content}},
+		"model":           c.Model,
+		"messages":        []map[string]any{{"role": "user", "content": content}},
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature": 0.3,
+		"temperature":     0.3,
 	}
 	return c.doRequest(ctx, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", body)
 }
@@ -94,19 +94,25 @@ func (c *DashScopeClient) doRequest(ctx context.Context, url string, body map[st
 
 // OfoxAIClient calls OfoxAI/Gemini compatible API.
 type OfoxAIClient struct {
-	APIKey string
-	Model  string
-	client *http.Client
+	APIKey  string
+	Model   string
+	BaseURL string
+	client  *http.Client
 }
 
-func NewOfoxAIClient(apiKey, model string) *OfoxAIClient {
+func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
 	if model == "" {
 		model = "gemini-3-flash-preview"
 	}
+	baseURL := "https://api.ofox.ai/v1"
+	if len(baseURLs) > 0 && strings.TrimSpace(baseURLs[0]) != "" {
+		baseURL = strings.TrimRight(strings.TrimSpace(baseURLs[0]), "/")
+	}
 	return &OfoxAIClient{
-		APIKey: apiKey,
-		Model:  model,
-		client: &http.Client{Timeout: 90 * time.Second},
+		APIKey:  apiKey,
+		Model:   model,
+		BaseURL: baseURL,
+		client:  &http.Client{Timeout: 90 * time.Second},
 	}
 }
 
@@ -123,12 +129,12 @@ func (c *OfoxAIClient) Analyze(ctx context.Context, prompt, imageURL string) (ma
 		})
 	}
 	body := map[string]any{
-		"model":    c.Model,
-		"messages": []map[string]any{{"role": "user", "content": content}},
+		"model":           c.Model,
+		"messages":        []map[string]any{{"role": "user", "content": content}},
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature": 0.3,
+		"temperature":     0.3,
 	}
-	return c.doRequest(ctx, "https://ofoxai.com/v1/chat/completions", body)
+	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
 }
 
 func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, error) {
@@ -145,10 +151,17 @@ func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[strin
 		return nil, err
 	}
 	defer resp.Body.Close()
+	data, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, readErr
+	}
 
 	if resp.StatusCode != http.StatusOK {
-		data, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ofoxai api error %d: %s", resp.StatusCode, string(data))
+		return nil, fmt.Errorf("ofoxai api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
+	}
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if looksLikeHTMLResponse(data, contentType) {
+		return nil, fmt.Errorf("ofoxai api returned html instead of json; check OFOXAI_BASE_URL, current base URL: %s", c.BaseURL)
 	}
 
 	var result struct {
@@ -158,13 +171,39 @@ func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[strin
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("decode ofoxai response failed: %w", err)
 	}
 	if len(result.Choices) == 0 {
 		return nil, fmt.Errorf("empty response from ofoxai")
 	}
 	return parseLLMJSON(result.Choices[0].Message.Content)
+}
+
+func summarizeUpstreamBody(data []byte, contentType string) string {
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return "empty response"
+	}
+	if looksLikeHTMLResponse(data, strings.ToLower(contentType)) {
+		return "html response received; check API base URL"
+	}
+	runes := []rune(text)
+	if len(runes) > 300 {
+		return string(runes[:300]) + "..."
+	}
+	return text
+}
+
+func looksLikeHTMLResponse(data []byte, contentType string) bool {
+	if strings.Contains(strings.ToLower(contentType), "text/html") {
+		return true
+	}
+	text := strings.TrimSpace(strings.ToLower(string(data)))
+	return strings.HasPrefix(text, "<!doctype html") ||
+		strings.HasPrefix(text, "<html") ||
+		strings.Contains(text, "<head") ||
+		strings.Contains(text, "<body")
 }
 
 var codeFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")

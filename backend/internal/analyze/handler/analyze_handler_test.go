@@ -17,16 +17,16 @@ import (
 )
 
 type mockAnalyzeService struct {
-	analyzeResult         map[string]any
-	analyzeErr            error
-	analyzeTextResult     map[string]any
-	analyzeTextErr        error
-	analyzeCompareResult  map[string]any
-	analyzeCompareErr     error
-	analyzeEnginesResult  map[string]any
-	analyzeEnginesErr     error
-	analyzeBatchResult    map[string]any
-	analyzeBatchErr       error
+	analyzeResult        map[string]any
+	analyzeErr           error
+	analyzeTextResult    map[string]any
+	analyzeTextErr       error
+	analyzeCompareResult map[string]any
+	analyzeCompareErr    error
+	analyzeEnginesResult map[string]any
+	analyzeEnginesErr    error
+	analyzeBatchResult   map[string]any
+	analyzeBatchErr      error
 }
 
 func (m *mockAnalyzeService) Analyze(ctx context.Context, userID string, input service.AnalyzeInput) (map[string]any, error) {
@@ -46,21 +46,21 @@ func (m *mockAnalyzeService) AnalyzeBatch(ctx context.Context, userID string, in
 }
 
 type mockTaskService struct {
-	submitTaskID   string
-	submitErr      error
-	batchTaskID    string
-	batchTaskErr   error
-	tasks          []domain.AnalysisTask
-	listErr        error
-	count          int64
-	countErr       error
-	statusCounts   map[string]int64
-	statusCountErr error
-	task           *domain.AnalysisTask
-	getErr         error
-	updateErr      error
-	deleteResult   map[string]any
-	deleteErr      error
+	submitTaskID    string
+	submitErr       error
+	batchTaskID     string
+	batchTaskErr    error
+	tasks           []domain.AnalysisTask
+	listErr         error
+	count           int64
+	countErr        error
+	statusCounts    map[string]any
+	statusCountErr  error
+	task            *domain.AnalysisTask
+	getErr          error
+	updateErr       error
+	deleteResult    map[string]any
+	deleteErr       error
 	cleanupAffected int64
 	cleanupErr      error
 }
@@ -80,7 +80,7 @@ func (m *mockTaskService) ListTasks(ctx context.Context, userID, taskType, statu
 func (m *mockTaskService) CountTasks(ctx context.Context, userID string) (int64, error) {
 	return m.count, m.countErr
 }
-func (m *mockTaskService) CountTasksByStatus(ctx context.Context, userID string) (map[string]int64, error) {
+func (m *mockTaskService) CountTasksByStatus(ctx context.Context, userID string) (map[string]any, error) {
 	return m.statusCounts, m.statusCountErr
 }
 func (m *mockTaskService) GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error) {
@@ -284,7 +284,7 @@ func TestAnalyzeHandler_CountTasks(t *testing.T) {
 
 func TestAnalyzeHandler_CountTasksByStatus(t *testing.T) {
 	mockSvc := &mockAnalyzeService{}
-	mockTask := &mockTaskService{statusCounts: map[string]int64{"pending": 2, "done": 10}}
+	mockTask := &mockTaskService{statusCounts: map[string]any{"pending": int64(2), "done": int64(10)}}
 	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
 	r := setupRouter(h)
 
@@ -314,7 +314,7 @@ func TestAnalyzeHandler_GetTask(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "t1", data["ID"])
+	assert.Equal(t, "t1", data["id"])
 }
 
 func TestAnalyzeHandler_UpdateTaskResult(t *testing.T) {
@@ -382,7 +382,6 @@ func TestAnalyzeHandler_CleanupTimeoutTasks_Forbidden(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
-
 
 func TestAnalyzeHandler_AnalyzeBindError(t *testing.T) {
 	mockSvc := &mockAnalyzeService{}

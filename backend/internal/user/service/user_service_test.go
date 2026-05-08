@@ -47,7 +47,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		mode_switch_count_30d INTEGER,
 		searchable BOOLEAN,
 		public_records BOOLEAN,
-		last_seen_analyze_history TIMESTAMP
+		last_seen_analyze_history_at TIMESTAMP
 	)`)
 	db.Exec(`CREATE TABLE user_health_documents (
 		id TEXT PRIMARY KEY,

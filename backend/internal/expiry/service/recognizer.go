@@ -99,9 +99,12 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 		return nil, err
 	}
 	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("保质期识别服务请求失败 %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return nil, fmt.Errorf("保质期识别服务请求失败 %d: %s", resp.StatusCode, summarizeExpiryUpstreamBody(respBody, resp.Header.Get("Content-Type")))
+	}
+	if looksLikeExpiryHTMLResponse(respBody, resp.Header.Get("Content-Type")) {
+		return nil, fmt.Errorf("保质期识别服务返回了网页而不是 JSON，请检查 OFOXAI_BASE_URL")
 	}
 	var result struct {
 		Choices []struct {
@@ -110,8 +113,8 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("保质期识别服务响应解析失败: %w", err)
 	}
 	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
 		return nil, fmt.Errorf("AI 返回了空响应")
@@ -129,16 +132,46 @@ func (r *Recognizer) llmConfig() (apiURL, model, apiKey string, err error) {
 	if provider == "" {
 		provider = "gemini"
 	}
+	ofoxBaseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.OfoxAIBaseURL), "/")
+	if ofoxBaseURL == "" {
+		ofoxBaseURL = "https://api.ofox.ai/v1"
+	}
 	if provider == "gemini" && r.cfg.External.OfoxAIAPIKey != "" {
-		return "https://ofoxai.com/v1/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
+		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
 	}
 	if r.cfg.External.DashscopeAPIKey != "" {
 		return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-vl-max", r.cfg.External.DashscopeAPIKey, nil
 	}
 	if r.cfg.External.OfoxAIAPIKey != "" {
-		return "https://ofoxai.com/v1/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
+		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
 	}
 	return "", "", "", fmt.Errorf("缺少 OFOXAI_API_KEY 或 DASHSCOPE_API_KEY")
+}
+
+func summarizeExpiryUpstreamBody(data []byte, contentType string) string {
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return "empty response"
+	}
+	if looksLikeExpiryHTMLResponse(data, contentType) {
+		return "html response received; check API base URL"
+	}
+	runes := []rune(text)
+	if len(runes) > 300 {
+		return string(runes[:300]) + "..."
+	}
+	return text
+}
+
+func looksLikeExpiryHTMLResponse(data []byte, contentType string) bool {
+	if strings.Contains(strings.ToLower(contentType), "text/html") {
+		return true
+	}
+	text := strings.TrimSpace(strings.ToLower(string(data)))
+	return strings.HasPrefix(text, "<!doctype html") ||
+		strings.HasPrefix(text, "<html") ||
+		strings.Contains(text, "<head") ||
+		strings.Contains(text, "<body")
 }
 
 func buildFoodExpiryRecognitionPrompt(todayStr, additionalContext string) string {

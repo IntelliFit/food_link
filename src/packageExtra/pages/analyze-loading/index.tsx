@@ -186,6 +186,21 @@ const normalizeTaskType = (value: unknown): 'food' | 'food_text' | 'exercise' =>
   return 'food'
 }
 
+const normalizeAnalyzeTaskErrorMessage = (value: unknown): string => {
+  const raw = String(value || '').trim()
+  if (!raw) return '识别失败，请稍后重试'
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes('<html') ||
+    lower.includes('<!doctype html') ||
+    lower.includes('<head') ||
+    lower.includes('<body')
+  ) {
+    return 'AI 服务返回异常网页，请检查模型 API 配置后重试'
+  }
+  return raw.length > 160 ? `${raw.slice(0, 160)}…` : raw
+}
+
 const pickSourceTaskTypeFromTask = (task: AnalysisTask): 'food' | 'food_text' => {
   if (task.task_type === 'food_text') return 'food_text'
   const payload = task.payload as Record<string, unknown> | undefined
@@ -558,7 +573,7 @@ function AnalyzeLoadingPage() {
         }
         if (task.status === 'failed' || task.status === 'timed_out') {
           setStatus('failed')
-          setErrorMessage(task.error_message || (task.status === 'timed_out' ? '分析超时，请重试' : '识别失败'))
+          setErrorMessage(normalizeAnalyzeTaskErrorMessage(task.error_message || (task.status === 'timed_out' ? '分析超时，请重试' : '识别失败')))
           if (timeoutTimerRef.current) {
             clearTimeout(timeoutTimerRef.current)
             timeoutTimerRef.current = null

@@ -4,6 +4,7 @@ deploy_versions/
 .temp/
 .rn_temp/
 .swc
+backend/*.exe
 
 # 依赖
 node_modules/

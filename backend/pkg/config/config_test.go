@@ -12,6 +12,7 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("SUPABASE_SERVICE_ROLE_KEY", "d")
 	t.Setenv("TIANDITU_TK", "e")
 	t.Setenv("OFOXAI_API_KEY", "f")
+	t.Setenv("OFOXAI_BASE_URL", "https://proxy.example.com/v1")
 	t.Setenv("LLM_PROVIDER", "g")
 	t.Setenv("WECHAT_PAY_MCHID", "h")
 	t.Setenv("WECHAT_PAY_NOTIFY_URL", "i")
@@ -41,5 +42,8 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	}
 	if cfg.App.Port != 3010 || cfg.Database.Host != "x" || cfg.Database.Name != "db" || cfg.JWT.Secret != "b" {
 		t.Fatalf("legacy env binding failed: %+v", cfg)
+	}
+	if cfg.External.OfoxAIBaseURL != "https://proxy.example.com/v1" {
+		t.Fatalf("ofox base url env binding failed: %+v", cfg.External)
 	}
 }

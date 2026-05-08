@@ -1,5 +1,253 @@
 # 当前任务
 
+## 状态：进行中 - Go 重构后端功能测试与问题修复
+
+- 2026-05-09 issue #4 / expiry data source:
+  - 测试问题：用户在线上版本新增/修改的食物保质期数据，在本地 Go 重构测试版看不到。
+  - 定位：
+    - 当前 `dev/main` Python 后端保质期链路通过 Supabase client 读写 `food_expiry_items` / `food_expiry_notification_jobs`。
+    - 当前 Go 后端保质期链路通过 GORM 直连 PostgreSQL，`/api/expiry/*` 读写同名表 `food_expiry_items` / `food_expiry_notification_jobs`。
+    - 本地前端 `npm run dev:weapp` 默认 API 为 `http://127.0.0.1:3010`；生产/线上构建默认 API 为 `https://v2.healthymax.cn`。
+    - 本地 `backend/config.yaml` 当前数据库配置指向独立 PostgreSQL 主机，而不是 Supabase REST/SDK。
+  - 结论：如果线上仍运行 Python/Supabase，而本地测试运行 Go/PostgreSQL，那么新写入线上 Supabase 的保质期数据不会自动出现在本地 Go 连接的 PostgreSQL 中。这是数据源分叉/环境差异，不是保质期列表页本地缓存导致；保质期列表页进入时会直接请求 `/api/expiry/dashboard` 和 `/api/expiry/items`。
+  - 后续选择：
+    - 若要测试 Go 行为，用本地小程序在 Go 后端里重新创建同一条数据，或把本地 Go 配置临时指向与线上同一套 PostgreSQL。
+    - 若要对比线上历史/最新 Supabase 数据，需要先执行一次 Supabase -> PostgreSQL 的迁移/同步；当前 Go 服务不会自动同步 Supabase 新变更。
+  - 迁移脚本口径：
+    - `backend/scripts/migrate_supabase_db_to_postgres.py` 是全量 schema/data 同步脚本，默认会 dump Supabase 源库、drop/recreate 目标 schema、restore 并做对象/行数校验。
+    - 该脚本适合迁移前、切流前或测试前手动同步，不适合在 Go 目标库已经承接真实写入后继续定期全量覆盖，否则可能覆盖/丢失 Go 侧新写数据。
+    - 正式生产应采用“一次最终同步 + 切流到 Go/PostgreSQL”的口径；如果需要长期双环境并行，则要另做增量同步/双写/CDC，而不是使用当前 destructive 全量脚本。
+  - Schema drift 处理口径：
+    - 迁移期若 Supabase/Python 侧或 Go/PostgreSQL 侧 schema 发生变化，不能直接带着差异切流。
+    - 切流前先冻结 Python/Supabase schema 变更，只允许必要数据写入；执行迁移脚本 dry-run/verify-only/测试库恢复，脚本会对表、字段、约束、索引、视图、序列、触发器、RLS、policy、函数、enum 和行数做比对。
+    - 如果发现 schema 不一致，先判断“谁是 schema 真源”：切流前通常以 Supabase 当前生产 schema 为源，Go 代码/迁移/结构体必须跟它对齐；Go 侧新增但生产未存在的表或字段必须整理成正式 SQL migration，再应用到 Supabase 源库或纳入最终目标库变更计划。
+    - 处理顺序固定为：在临时目标库演练恢复 -> 修 Go domain/repo/migration 或补 SQL migration -> 重跑自动化和迁移校验 -> 最终同步 -> 切流。不要在生产目标库上边失败边手工热修。
+  - 切流窗口解释：
+    - “新版本刚上有一小段时间用户发现旧数据丢失”通常不是数据真的删除，而是最后一次同步后的旧库新增数据尚未进入新 PostgreSQL，导致新 Go 版暂时读不到。
+    - 示例：T0 执行 Supabase -> PostgreSQL 同步；T1 用户继续在旧 Python/Supabase 写入新保质期数据；T2 小程序/API 切到 Go/PostgreSQL；T1-T2 之间写入的数据不在 T0 快照里，因此新版本暂时不可见。
+    - 当前全量 destructive 同步脚本如果在 T2 后再跑，要避免覆盖 T2 后 Go/PostgreSQL 新写入的数据；更安全口径是短暂停写/维护窗口：停旧写入 -> 最终同步 -> 校验 -> 切流 -> 开新写入。
+  - 双版本/体验版并行口径：
+    - 若体验版写 Go/PostgreSQL、正式线上旧版仍写 Python/Supabase，则数据会分散到两个库。
+    - 在这种并行期，不能再把当前 destructive 全量脚本直接跑到“已经承接体验版写入”的 PostgreSQL 上，否则可能把体验版/本地 Go 侧新写入覆盖掉。
+    - 无丢失流程应采用“单写入真源优先”：正式切流前普通用户继续写 Supabase，Go/PostgreSQL 仅做测试库，测试数据可丢弃或单独备份；最终切流时停写旧库、从 Supabase 全量同步到干净目标库、校验、切流。
+    - 如果体验版期间产生了必须保留的真实用户数据，则最终同步不能只做 Supabase -> PostgreSQL 全量覆盖；必须先备份 PostgreSQL，再执行双源合并/增量 upsert，把 Supabase 最终数据和 Go 侧 delta 都合并进最终目标库。
+
+- 2026-05-09 issue #6:
+  - 测试问题：5 月 9 日首页/dashboard 显示运动消耗 `585 kcal`，但点进运动记录详情页为空，显示 `0 次记录`。
+  - 定位：
+    - 首页 `GetExerciseBurned` 用 `user_exercise_logs.recorded_on = ?` 精确日期匹配，因此能统计到当天 `585 kcal`。
+    - 运动详情 `ListExerciseLogsByDate` 和 `/api/exercise-calories/daily` 用中国时区 UTC 时间窗口查询 `recorded_on >= startTime AND recorded_on < endTime`。
+    - 生产 schema 中 `user_exercise_logs.recorded_on` 是 `date` 字段，迁移后列表接口把 date 字段当 timestamp 窗口查，导致统计和列表口径不一致。
+  - 修复：
+    - `backend/internal/health/repo/exercise_repo.go` 中运动列表改为 date 语义：`recorded_on >= startDate` 且 `recorded_on <= endDate`。
+    - 当日运动总消耗改为 `recorded_on = recordedOn`，与首页 dashboard 统计口径一致。
+    - 新增 repo 测试用例覆盖同一天两条运动合计 `585 kcal` 时，列表必须返回两条记录。
+  - Verification:
+    - `C:\Program Files\Go\bin\gofmt.exe -w backend/internal/health/repo/exercise_repo.go backend/internal/health/repo/exercise_repo_test.go` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service ./internal/health/handler ./internal/app` 通过；合并命令中 `home/repo`、`home/service` 仍被既有 sqlite CGO 阻塞。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-server-exercise-date-fix.exe ./cmd/server` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-worker-exercise-date-fix.exe ./cmd/worker` 通过。
+    - `go test ./internal/health/repo` 和单跑 `TestExerciseRepo` 仍被本机环境阻塞：默认 `CGO_ENABLED=0` 下 `go-sqlite3 requires cgo`，开启 `CGO_ENABLED=1` 后又缺少 `gcc`。
+  - 复测要求：用户需要重启 Go server 后再打开 5 月 9 日运动记录详情页；worker 只影响新提交的运动任务消费，列表口径修复本身只需要 server 生效。
+
+- 2026-05-09 issue #3:
+  - 测试问题：两个「识别记录」入口（「我的」页底部快捷入口、拍照分析页按钮下方入口）进入后看不到实际识别内容或内容不完整。
+  - 定位：
+    - 两个入口最终都进入 `src/packageExtra/pages/analyze-history/index.tsx`。
+    - 前端只调用 `GET /api/analyze/tasks` 读取 `analysis_tasks`，不是读取已保存饮食记录表。
+    - Go 后端迁移时 `/api/analyze/tasks` / `count` / `status-count` 少迁了 Python 版业务口径：默认列表没有限制为识别记录相关任务，没有补 `is_recorded/record_id`，`status-count` 没有返回前端需要的业务状态，精准模式聚合任务没有继承原始图片/文字上下文，已读字段名也与 Python 生产字段不一致。
+  - 修复：
+    - `AnalysisTask` 补齐 snake_case JSON 字段、违规字段、非持久化 `is_recorded/record_id`。
+    - 默认任务列表只查询识别记录相关 task type，并通过 `user_food_records.source_task_id` 批量补齐已记录状态。
+    - `status-count` 返回 `recognizing/waiting_record/recorded/has_unseen_waiting_record`。
+    - 过滤不应展示的内部/保质期/运动任务，并隐藏已重定向到聚合任务的 `precision_plan`。
+    - `precision_aggregate` 继承 `source_type/image_url/image_paths/text`。
+    - 已读字段统一为 `last_seen_analyze_history_at`。
+  - 验证：
+    - `gofmt` 已执行。
+    - `go test ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go build -o %TEMP%\food-link-history-fix-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-history-fix-worker.exe ./cmd/worker` 通过。
+    - `go test ./internal/analyze/service -run 'TestTaskService|TestBuild|TestParse|TestAnalyze'` 仍被既有 `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 阻塞；尝试 `CGO_ENABLED=1` 后又被本机缺少 `gcc` 阻塞。
+    - `go test ./internal/worker ./internal/auth/repo ./internal/user/service` 中 `internal/auth/repo` / `internal/user/service` 仍被同类 sqlite CGO 和既有 OCR 外部服务测试阻塞；server/worker build 已通过。
+    - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，当前微信开发者工具自动化未开启，无法截图/交互验证。
+  - 后续：
+    - 用户需重启/重新部署 Go server 和 worker 后，再复测两个「识别记录」入口。
+
+- 2026-05-09 live testing checkpoint:
+  - 用户说明当前分支是基于最新 `dev` 和 `main` 的 Python 后端能力，用 Go 重构后的测试分支。
+  - 当前阶段以功能测试和缺陷修复为主，暂不插入新功能开发。
+  - 测试中发现问题后，与用户一起按依赖层级定位：优先确认数据、环境、版本、配置、状态、网络、权限、缓存、构建、运行时，再修改业务代码。
+  - 涉及小程序页面、组件、样式、路由或交互变更后，按项目规则尝试 `weapp-devtools` 运行态验证；若工具链不可用，需要在最终回复说明阻塞原因。
+  - 本轮仅记录测试协作口径，未改业务代码。
+- 2026-05-09 backfill record capability check:
+  - 用户询问 Go 重构版本是否仍支持 Python 旧版的补录能力：补录昨天和前天的饮食内容。
+  - 代码检查结论：当前 Go 版保留了“近 3 天”补录窗口，即今天、昨天、前天。
+  - 前端链路：
+    - `src/utils/record-date.ts` 中 `RECORD_BACKFILL_WINDOW_DAYS = 3`，只允许今天、昨天、前天，非法日期会回退到今天。
+    - 首页 `RecordMenu` 会把当前选中的 `selectedDate` 通过 `persistRecordTargetDate(selectedDate)` 保存，并带 `?date=` 跳转到拍照、文字记录、手动补录入口。
+    - 拍照分析、文字记录、手动补录、结果保存页都会读取 `getStoredRecordTargetDate()` 并随提交/保存请求传给后端。
+  - Go 后端链路：
+    - `backend/internal/common/dateutil.ResolveRecordedOnDate` 用 `backfillRecordWindowDays = 3` 校验日期，允许今天/昨天/前天，拒绝未来日期和三天前及更早日期。
+    - 食物分析提交、文字分析提交、`POST /api/food-record/save`、运动记录提交都接入该日期解析口径。
+    - 食物记录保存会使用 `dateutil.BuildRecordTime` 把目标自然日与当前中国时区时分秒组合后写入 `user_food_records.record_time`。
+  - Verification:
+    - `go test ./internal/common/dateutil` 通过，覆盖前天允许、未来日期和三天前拒绝。
+    - `go test ./internal/foodrecord/service -run ...` 与 `go test ./internal/analyze/service -run TestTaskService` 仍被本机 `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 既有环境问题阻塞，不代表补录逻辑失败。
+- 2026-05-09 issue #2:
+  - 测试问题：拍照分析食物时，`POST /api/upload-analyze-image-file` 上传图片失败，Gin recovery 捕获 panic。
+  - 根因：`backend/pkg/storage/storage.go` 中腾讯云 COS SDK `client.Object.Put(nil, ...)` 传入了 `nil` context；当前 SDK 版本在 `addHeaderOptions` 内调用 `ctx.Value(...)`，导致 nil pointer dereference。
+  - 修复：`UploadBytes` 改为传入 `context.Background()`，所有经 storage 客户端走 COS 的上传链路都不再触发 nil context panic。
+  - 验证：
+    - `C:\Program Files\Go\bin\gofmt.exe -w backend/pkg/storage/storage.go` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./pkg/storage ./internal/foodrecord/handler` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/foodrecord/service -run 'TestUploadService'` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-upload-fix.exe ./cmd/server` 通过。
+  - 备注：
+    - 合并跑 `go test ./pkg/storage ./internal/foodrecord/handler ./internal/foodrecord/service` 时，`internal/foodrecord/service` 中非上传相关 sqlite 测试仍被既有 `CGO_ENABLED=0` / `go-sqlite3 requires cgo` 阻塞；上传专项测试已通过。
+    - 本轮只改 Go 后端 storage 基础设施，不涉及小程序页面、组件、样式、路由或交互，因此未触发 `weapp-devtools` 运行态验证。
+- 2026-05-09 issue #2 follow-up:
+  - 用户复测后上传接口已不 panic，后端日志显示 `POST /api/upload-analyze-image-file` 返回 200，但小程序仍提示“服务端未返回图片地址”。
+  - 根因：`Taro.uploadFile` 返回的 `response.data` 被解析成 Go 标准响应信封 `{code:0,message:"ok",data:{imageUrl:"..."}}` 后，前端 `uploadAnalyzeImageFile` 只从顶层读取 `imageUrl`，没有解包 `data`。
+  - 修复：`src/utils/api.ts` 新增文件上传响应解包逻辑，兼容 Go 标准信封和旧直出响应，并兼容 `imageUrl / image_url / url` 字段。
+  - 验证：
+    - `.\node_modules\.bin\eslint.cmd src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `npm run lint -- src/utils/api.ts` 仍会触发项目脚本固定 lint 全量 `src`，被既有 `health-profile-view` / `pro-membership` 历史 lint 错误阻塞，非本次改动引入。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化或端口不可用；本轮未能获得运行态截图/交互验证。
+  - 备注：前端源码变更需要当前 `npm run dev:weapp` watch 重新编译到 `dist/` 后，微信开发者工具里复测才会生效；不要使用 `npm run build:weapp` 做开发迭代验证。
+- 2026-05-09 issue #3:
+  - 测试问题：运动历史时间显示 `NaN:NaN`；输入 `跑步疯了30分钟` 后前端轮询到“分析超时，请稍后下拉刷新”；Python 旧版的拍照/相册运动热量分析入口在 Go 迁移后缺失。
+  - 根因：
+    - Go `GET /api/exercise-logs` 未返回前端读取的 `recorded_at`。
+    - Go `AnalysisTask` 未声明 JSON tag，任务详情接口输出 `ID/Status/Result`，而前端轮询读取 `id/status/result`，因此可能看不到已完成状态。
+    - Go exercise worker 与前端只保留了文字路径，遗漏 Python 旧版 `image_url` 运动分析链路。
+  - 修复：
+    - `user_exercise_logs` domain 增加 `recorded_at` 映射；列表接口返回 `recorded_at`，前端按 `recorded_at -> created_at -> recorded_on -> now` 兜底，非法时间显示 `--:--`。
+    - `backend/internal/analyze/domain.AnalysisTask` 增加 lowercase JSON tag，恢复前端任务轮询契约。
+    - `POST /api/exercise-logs`、worker、运动估算 service 恢复 `image_url`；支持纯图片或文字+图片，图片任务走 OfoxAI 多模态，失败时仍规则兜底。
+    - `src/packageExtra/pages/exercise-record` 恢复“拍照 / 从相册选择”、图片预览、清除图片、上传后创建运动任务。
+  - Verification:
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service ./internal/health/handler ./internal/worker ./internal/analyze/handler ./internal/analyze/domain ./internal/app` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-server-exercise-fix.exe ./cmd/server` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-worker-exercise-fix.exe ./cmd/worker` 通过。
+    - `npx eslint src/packageExtra/pages/exercise-record/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被既有历史类型错误阻塞，未发现本次运动页新增类型错误。
+    - 已尝试 `weapp-devtools`：`mrc where/logs/screenshot --port 3001` 和 `mrc where/errors --port 9420` 均连接失败，当前开发者工具自动化端口不可用，未能完成截图与交互验证。
+  - 复测要求：用户需重启 Go server 和 Go worker 后再测；只重启 server 不够，运动任务仍需要 worker 消费。
+- 2026-05-09 issue #4:
+  - 用户继续测试发现：非今天的运动记录仍留在页面；今天刚记录的运动反而没有显示。
+  - 根因：运动记录页前端在 `setRecordDate(nextDate)` 后立即调用旧闭包 `loadTodayRecords()`，实际请求仍可能使用上一个 `recordDate`；同时本地 pending/failed 运动卡片没有保存所属日期，导致其它日期的本地任务卡混入当前日期页面。
+  - 修复：
+    - 运动记录页改为显式 `loadRecordsForDate(targetDate)`，日期切换和页面显示时都用 `nextDate` 直接请求，避免 React state 异步更新导致拉错日期。
+    - pending 任务新增 `recordDate` 字段并写入本地缓存；旧缓存按 `createdAt` 推导日期。
+    - 页面只展示当前 `recordDate` 的服务端记录和 pending 卡片，统计卡的次数/热量也只统计当前日期。
+    - 列表排序改为新记录在前，避免刚记录的运动落在列表底部不明显。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/exercise-record/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service ./internal/health/handler ./internal/app` 通过。
+    - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，当前自动化端口不可用，未能完成截图与交互验证。
+  - 复测要求：需要 `npm run dev:weapp` watch 重新编译到 `dist` 后，在小程序里重新进入运动记录页测试今天/非今天切换。
+- 2026-05-09 issue #5:
+  - 测试问题：拍照分析食物提交任务成功后一直卡在识别中，页面出现 Ofox 官网 HTML 片段乱码。
+  - 根因：
+    - Go 食物分析 `OfoxAIClient` 写死请求 `https://ofoxai.com/v1/chat/completions`，这是官网域名，会返回 HTML 页面；正确 API 域名应走 `https://api.ofox.ai/v1/chat/completions`。
+    - 保质期识别也存在同类 Ofox 官网域名写死问题。
+    - worker 失败落库时直接保存上游原始错误，导致小程序错误页展示大段 HTML。
+  - 修复：
+    - 新增 `external.ofoxai_base_url` 配置与 `OFOXAI_BASE_URL` / `OFOX_BASE_URL` 环境变量绑定，默认 base URL 为 `https://api.ofox.ai/v1`。
+    - `OfoxAIClient` 改为使用可配置 base URL，并默认请求 `https://api.ofox.ai/v1/chat/completions`。
+    - server / worker 装配均传入 `cfg.External.OfoxAIBaseURL`。
+    - 保质期识别同样改用 `OfoxAIBaseURL` 默认 API 域名。
+    - Ofox client / expiry recognizer 对 HTML 响应和上游错误体做摘要，不再把网页原文作为错误返回。
+    - worker `failTask` 增加错误清洗和截断，前端 `analyze-loading` 也对任务错误做 HTML/长度兜底清洗。
+  - Verification:
+    - `gofmt` 已执行。
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/analyze-loading/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `go test ./internal/analyze/service -run 'TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./internal/worker -run 'TestSanitizeTaskErrorMessage'` 通过。
+    - `go test ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-ofox-fix-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-ofox-fix-worker.exe ./cmd/worker` 通过。
+    - 组合跑 `go test ./internal/analyze/service ./internal/worker ./pkg/config ./internal/expiry/service` 时，`analyze/service` 与 `expiry/service` 仍被既有 `CGO_ENABLED=0` + sqlite/go-sqlite3 测试阻塞；本次相关专项测试已通过。
+    - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成运行态截图/交互验证。
+  - 复测要求：
+    - 需要重启 Go server 和 Go worker。
+    - 旧的卡住/失败任务可能仍保留旧错误或 processing 状态；请重新发起一条新的拍照分析任务验证。
+    - 如果运行环境显式配置过错误的 `OFOXAI_BASE_URL` / `OFOX_BASE_URL`，需要改为 `https://api.ofox.ai/v1` 或移除该变量使用默认值。
+- 2026-05-09 db_first diagnostics:
+  - 用户询问拍照识别是否走数据库算法，以及是否有命中率输出。
+  - 确认当前默认流程为“AI 识别食物和克重 + `db_first` 数据库优先回算营养”，不是纯数据库看图。
+  - 用户明确不希望把数据库命中率展示到结果页；该信息只用于测试诊断，输出到后端终端日志。
+  - 已在 `backend/internal/analyze/service/analyze_service.go` 的 `applyDBFirstNutrition` 后处理末尾增加 `db_first nutrition lookup summary` 日志。
+  - 日志字段：
+    - `total`
+    - `resolved`
+    - `unresolved`
+    - `hit_rate_percent`
+    - `items`：包含 `name / weight_g / matched_food_name / resolve_status / resolve_score / nutrition_source / is_unresolved`
+  - Verification:
+    - `gofmt` 已执行。
+    - `go build -o %TEMP%\food-link-dbfirst-log-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-dbfirst-log-worker.exe ./cmd/worker` 通过。
+  - 备注：本轮只改 Go 后端日志，不涉及小程序页面、组件、样式、路由或交互，未触发 `weapp-devtools` 运行态验证。
+
+## 状态：完成 - 商业化代码成熟度快速体检
+
+- 2026-05-09 commercial readiness review:
+  - 用户要求分析当前代码是否达到商业化程度。
+  - 结论：当前项目已经具备商业化试运营/小范围付费验证的工程基础，但尚未达到可放心大规模商业化上线的程度。
+  - 已确认的正向基础：
+    - Go 后端已形成 DDD 分层、server/worker 双入口、Docker 镜像、PostgreSQL/GORM、JWT、支付、积分、对象存储、外部 AI/OCR 等核心架构。
+    - 核心小程序业务面较完整，包含登录、食物分析、记录、统计、会员支付、保质期、社区/好友、公共食物库、食谱和测试后台。
+    - 已有上线前 P0/P1/P2 清单 `docs/go-backend-prelaunch-checklist-2026-05-08.md`。
+  - 当前商业化阻断：
+    - 本地 `npm run typecheck` 失败，涉及 expiry、food-library、health-profile-view、pro-membership、record-manual、`src/utils/api.ts` 等类型错误。
+    - 本地 `npm run lint` 失败，涉及 `health-profile-view` 的 `isNaN` 和未定义 `Image`，以及 `pro-membership` 的 use-before-define warning。
+    - 当前环境 `go` 不在 PATH，无法重新跑 Go 目标测试和 server/worker build；此前状态文件记录过多轮 Go 测试/构建通过，但本轮未能复验。
+    - `docs/go-backend-prelaunch-checklist-2026-05-08.md` 仍全部 TODO，真实环境 smoke test、支付回调、worker 部署、回滚、监控等上线证据未闭环。
+    - 安全边界需收口：`/ws/stats/insight` 目前通过 query `user_id` 使用数据且 websocket origin 全放行；测试后台 cookie 校验只检查 cookie 存在，且未配置 `TEST_BACKEND_PASSWORD` 时仍接受 `123456` fallback。
+    - 前端仍有少量未落地 TODO，例如 `src/packageExtra/pages/recipe-edit/index.tsx` 中加载/保存/删除食谱 API 尚未接入。
+  - 建议商业化分级：
+    - 可做：内部测试、小范围白名单试运营、有限付费验证。
+    - 暂不建议：面向陌生用户大规模投放、正式承诺 SLA、扩大支付规模。
+  - 下一步优先级：
+    - 先修复 typecheck/lint。
+    - 安装/恢复 Go 工具链并重新跑 P0 Go tests 与 server/worker build。
+    - 修复 stats websocket 鉴权与测试后台 cookie/session/password 策略。
+    - 按 prelaunch checklist 完成真实环境 smoke test、支付闭环、worker 部署、监控和回滚证据。
+
+## 状态：完成 - 本地分支同步远端最新代码
+
+- 2026-05-09 git sync checkpoint:
+  - 已执行 `git fetch --all --prune`。
+  - 当前分支 `backend-refactor-sync-migrate-tencent` 已通过 `git pull --ff-only` 更新到 `origin/backend-refactor-sync-migrate-tencent` 的 `94f0649 feat(backend): add gorm migration command`。
+  - 已检查并同步有 upstream 的本地分支；`dev`、`main`、`feat/food-database`、`feature/friend-merge-handoff` 均已与对应远端一致。
+  - 未自动处理的分支：
+    - `codex/food-db-on-dev`：相对 `origin/dev` ahead 1 / behind 81，且在另一个 worktree `D:/files/food_link_devmerge` 中被检出；需人工决定 merge/rebase。
+    - `xry-dev`：相对 `origin/xry-dev` ahead 1 / behind 42；需人工决定 merge/rebase。
+    - `codex/merge-main-dev`、`test/history-calendar-marker-5c7f8582`：无 upstream。
+    - `test/custom-food-reuse-20260318`、`test/custom-nutrition-targets-20260318`、`test/history-calendar-marker-5c7f8582-final`：对应 upstream 已被远端删除。
+  - 同步前工作区已有本地未提交/未跟踪文件：`CURRENT_TASK.md`、`memory/2026-05-09.md`、`backend/food-link.exe`；本轮未清理或覆盖这些内容。
+  - 本轮只做 git 同步和状态记录，没有改前端 UI，不触发 `weapp-devtools` 验证。
+
+## 状态：准备中 - Go 后端全面测试与新功能开发前验收
+
+- 2026-05-09 testing checkpoint:
+  - 用户准备对当前 Go 后端迁移版本做全面测试，测试结束后再继续开发新功能。
+  - 推荐测试顺序：
+    - 先保证本地环境稳定：server、worker、前端 watch 都启动，且 3010 端口无旧进程占用。
+    - 再跑自动化与构建：Go 目标包测试、server/worker build、静态页语法和脚本语法检查。
+    - 再按 `docs/go-backend-prelaunch-checklist-2026-05-08.md` 跑 P0 smoke test。
+    - 最后做 P1/P2、体验版/生产配置与回滚演练。
+  - 已新增更细的手工测试清单：`docs/go-backend-manual-test-checklist-2026-05-09.md`。
+    - 覆盖环境、登录、首页、图片/文字/精准分析、记录、会员支付积分、运动、保质期、健康档案、统计、社区、公共食物库、菜谱、测试后台、安全权限和异常恢复。
+  - 原则：全面测试期间先不插入新功能开发；测试发现问题按 P0/P1/P2 记录，P0 立即修，P1 评估后修或明确风险接受，P2 可排到上线后或新功能前。
+  - 本轮为测试策略讨论和状态记录，未改前端 UI，不触发 `weapp-devtools` 验证。
+- 2026-05-09 update:
+  - 用户已完成第二步自动化测试，进入第三步 P0 主链路手工 smoke test。
+  - 当前建议按真实用户路径逐项测试：登录 -> 首页 -> 图片/文字/精准分析 -> 保存记录 -> 会员/积分 -> 运动 -> 保质期 -> 统计 -> 社区 -> 公共食物库 -> 菜谱 -> 测试后台。
+  - 手工测试发现第一个 P0 问题时应停下来记录并优先修复，不继续往后糊流程。
+
 ## 状态：完成 - Go 后端上线前万无一失清单
 
 - 2026-05-08 prelaunch checklist checkpoint:

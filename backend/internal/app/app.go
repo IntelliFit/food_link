@@ -125,7 +125,7 @@ func New(cfg *config.Config) (*App, error) {
 	analyzePrecisionRepo := analyzerepo.NewPrecisionRepo(db)
 	analyzeNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "gemini-3-flash-preview")
-	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview")
+	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL, cfg.External.DeepSeekModel)
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)

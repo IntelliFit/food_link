@@ -4,18 +4,22 @@ import "time"
 
 // AnalysisTask — table: analysis_tasks
 type AnalysisTask struct {
-	ID           string         `gorm:"column:id"`
-	UserID       string         `gorm:"column:user_id"`
-	TaskType     string         `gorm:"column:task_type"` // food, food_text, precision_plan, health_report
-	Status       string         `gorm:"column:status"`    // pending, processing, done, failed, cancelled, timed_out
-	ImageURL     *string        `gorm:"column:image_url"`
-	ImagePaths   []string       `gorm:"column:image_paths;serializer:json"`
-	TextInput    *string        `gorm:"column:text_input"`
-	Payload      map[string]any `gorm:"column:payload;serializer:json"`
-	Result       map[string]any `gorm:"column:result;serializer:json"`
-	ErrorMessage *string        `gorm:"column:error_message"`
-	CreatedAt    *time.Time     `gorm:"column:created_at"`
-	UpdatedAt    *time.Time     `gorm:"column:updated_at"`
+	ID              string         `json:"id" gorm:"column:id"`
+	UserID          string         `json:"user_id" gorm:"column:user_id"`
+	TaskType        string         `json:"task_type" gorm:"column:task_type"` // food, food_text, precision_plan, health_report
+	Status          string         `json:"status" gorm:"column:status"`       // pending, processing, done, failed, cancelled, timed_out
+	ImageURL        *string        `json:"image_url,omitempty" gorm:"column:image_url"`
+	ImagePaths      []string       `json:"image_paths,omitempty" gorm:"column:image_paths;serializer:json"`
+	TextInput       *string        `json:"text_input,omitempty" gorm:"column:text_input"`
+	Payload         map[string]any `json:"payload,omitempty" gorm:"column:payload;serializer:json"`
+	Result          map[string]any `json:"result,omitempty" gorm:"column:result;serializer:json"`
+	ErrorMessage    *string        `json:"error_message,omitempty" gorm:"column:error_message"`
+	IsViolated      bool           `json:"is_violated,omitempty" gorm:"column:is_violated"`
+	ViolationReason *string        `json:"violation_reason,omitempty" gorm:"column:violation_reason"`
+	IsRecorded      bool           `json:"is_recorded" gorm:"-"`
+	RecordID        string         `json:"record_id,omitempty" gorm:"-"`
+	CreatedAt       *time.Time     `json:"created_at,omitempty" gorm:"column:created_at"`
+	UpdatedAt       *time.Time     `json:"updated_at,omitempty" gorm:"column:updated_at"`
 }
 
 func (AnalysisTask) TableName() string { return "analysis_tasks" }

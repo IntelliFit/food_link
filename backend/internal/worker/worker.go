@@ -324,12 +324,25 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		"round_index":          roundIndex,
 		"split_strategy":       splitStrategyForGroups(groups),
 		"child_task_ids":       childTaskIDs,
+		"source_type":          sourceType,
+	}
+	if task.ImageURL != nil && *task.ImageURL != "" {
+		aggregatePayload["image_url"] = *task.ImageURL
+	}
+	if len(task.ImagePaths) > 0 {
+		aggregatePayload["image_urls"] = task.ImagePaths
+	}
+	if task.TextInput != nil && strings.TrimSpace(*task.TextInput) != "" {
+		aggregatePayload["text"] = strings.TrimSpace(*task.TextInput)
 	}
 	aggregateTask := &domain.AnalysisTask{
-		UserID:   task.UserID,
-		TaskType: "precision_aggregate",
-		Status:   "pending",
-		Payload:  aggregatePayload,
+		UserID:     task.UserID,
+		TaskType:   "precision_aggregate",
+		Status:     "pending",
+		ImageURL:   task.ImageURL,
+		ImagePaths: task.ImagePaths,
+		TextInput:  task.TextInput,
+		Payload:    aggregatePayload,
 	}
 	if err := r.tasks.CreateTask(ctx, aggregateTask); err != nil {
 		return err
@@ -879,10 +892,17 @@ func (r *Runner) processExercise(ctx context.Context, task *domain.AnalysisTask)
 	if desc == "" {
 		desc = stringFromMap(task.Payload, "exercise_desc")
 	}
-	if desc == "" {
-		return fmt.Errorf("exercise task missing text_input")
+	imageURL := ""
+	if task.ImageURL != nil {
+		imageURL = strings.TrimSpace(*task.ImageURL)
 	}
-	result, err := r.exercise.ProcessExerciseTask(ctx, task.UserID, desc, stringFromMap(task.Payload, "recorded_on"), task.Payload)
+	if imageURL == "" {
+		imageURL = stringFromMap(task.Payload, "image_url")
+	}
+	if desc == "" && imageURL == "" {
+		return fmt.Errorf("exercise task missing text_input/image_url")
+	}
+	result, err := r.exercise.ProcessExerciseTask(ctx, task.UserID, desc, imageURL, stringFromMap(task.Payload, "recorded_on"), task.Payload)
 	if err != nil {
 		return err
 	}
@@ -983,7 +1003,7 @@ func (r *Runner) processExpiryRecognize(ctx context.Context, task *domain.Analys
 }
 
 func (r *Runner) failTask(ctx context.Context, taskID string, taskErr error) {
-	msg := strings.TrimSpace(taskErr.Error())
+	msg := sanitizeTaskErrorMessage(taskErr)
 	if msg == "" {
 		msg = fmt.Sprintf("%T", taskErr)
 	}
@@ -993,6 +1013,28 @@ func (r *Runner) failTask(ctx context.Context, taskID string, taskErr error) {
 		return
 	}
 	r.log.Error("task failed", zap.String("task_id", taskID), zap.String("error", msg))
+}
+
+func sanitizeTaskErrorMessage(taskErr error) string {
+	if taskErr == nil {
+		return ""
+	}
+	msg := strings.TrimSpace(taskErr.Error())
+	if msg == "" {
+		return ""
+	}
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "<html") ||
+		strings.Contains(lower, "<!doctype html") ||
+		strings.Contains(lower, "<head") ||
+		strings.Contains(lower, "<body") {
+		return "AI 服务返回了网页而不是 JSON，请检查模型 API base URL 或网关配置"
+	}
+	runes := []rune(msg)
+	if len(runes) > 300 {
+		return strings.TrimSpace(string(runes[:300])) + "..."
+	}
+	return msg
 }
 
 func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput {

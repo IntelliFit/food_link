@@ -1,5 +1,30 @@
 # DECISIONS
 
+- `2026-05-09`: Go 重构版本必须保留 Python 旧版的补录日期口径：记录相关入口只允许近 3 天，即今天、昨天、前天。前端用 `src/utils/record-date.ts` 的 `RECORD_BACKFILL_WINDOW_DAYS = 3` 约束入口日期，后端用 `backend/internal/common/dateutil.ResolveRecordedOnDate` 做最终校验；食物记录保存必须通过 `BuildRecordTime` 把目标中国自然日写入 `user_food_records.record_time`，不能默默落到当天。
+
+- `2026-05-09`: 运动记录的 `user_exercise_logs.recorded_on` 按 PostgreSQL `date` 字段处理，详情列表、当日运动消耗和首页 dashboard 必须使用同一日期口径。查询单日总量用 `recorded_on = YYYY-MM-DD`；查询日期范围用 `recorded_on >= start_date AND recorded_on <= end_date`。不要再把该字段当 `timestamptz` 做中国时区 UTC 窗口查询，否则会出现首页有 kcal、详情列表为空的矛盾。
+
+- `2026-05-09`: Go 后端识别记录接口必须保持 Python 版业务口径：
+  - `GET /api/analyze/tasks` 默认只返回食物识别历史相关任务，排除运动、健康报告、公共食物库审核、保质期识别和精准模式内部子任务。
+  - 完成任务必须通过 `user_food_records.source_task_id` 补齐 `is_recorded` 与 `record_id`，前端据此显示“已经记录/等待记录”并跳转已保存记录详情。
+  - `GET /api/analyze/tasks/status-count` 返回业务状态 `recognizing / waiting_record / recorded / has_unseen_waiting_record`，不是数据库原始状态分组。
+  - 精准模式最终展示与保存应以 `precision_aggregate` 为准；完成后带 `redirectTaskId` 的 `precision_plan` 不应作为一条可点击历史结果展示。
+  - `precision_aggregate` 任务必须继承原始 `source_type / image_url / image_paths / text` 上下文，否则历史页点开会缺少图片或文字输入。
+  - 用户查看识别记录的已读时间字段与 Python 生产 schema 对齐为 `weapp_user.last_seen_analyze_history_at`。
+
+- `2026-05-09`: Go `analysis_tasks` 对外 JSON 契约必须保持 Python/前端使用的 snake_case 字段（`id/status/result/error_message/task_type` 等），不能让 Gin 默认输出 Go 结构体字段名（`ID/Status/Result`）。否则前端轮询会读不到任务完成状态，表现为异步任务一直“分析中”直到超时。
+
+- `2026-05-09`: 运动记录迁移必须保留 Python 旧版的文字与图片双入口：`POST /api/exercise-logs` 允许 `exercise_desc` 或 `image_url` 任一存在；worker 应同时读取 `text_input/payload.exercise_desc` 和 `image_url`；列表响应必须提供 `recorded_at`，前端需对旧数据时间字段做兜底，避免 `NaN:NaN`。
+
+- `2026-05-09`: 运动记录页的前端状态必须按记录日期隔离。服务端记录、pending/failed 本地卡片、统计卡次数与热量都只能展示当前 `recordDate`；日期切换后请求必须显式传入目标日期，不能依赖刚 `setState` 后的旧闭包状态。
+
+- `2026-05-09`: Go 后端调用腾讯云 COS SDK 上传对象时必须传入非 nil `context.Context`。当前 SDK 在 header option 处理里会调用 `ctx.Value(...)`，传 `nil` 会导致 `POST /api/upload-analyze-image-file` 等上传链路 panic；storage 基础设施层统一使用 `context.Background()` 作为当前兼容口径，后续如需请求取消语义，可再把 request context 从 handler/service 逐层传入 storage。
+- `2026-05-09`: 小程序 `Taro.uploadFile` 返回的 `response.data` 在微信端通常是 JSON 字符串；Go 后端标准响应为 `{code,message,data}` 信封。前端文件上传解析必须先 JSON parse，再兼容解包 `data`，不能只从顶层读取业务字段。拍照分析、保质期识别、运动图片上传等复用 `uploadAnalyzeImageFile` 的入口都遵守这个口径。
+
+- `2026-05-09`: Go 后端 Ofox / Gemini 兼容 API 默认 base URL 固定为 `https://api.ofox.ai/v1`，并允许通过 `external.ofoxai_base_url`、`OFOXAI_BASE_URL` 或 `OFOX_BASE_URL` 覆盖。不要再写死 `https://ofoxai.com/v1`，该域名会返回官网 HTML，导致食物识别任务失败或页面展示乱码。所有 worker 落库错误必须清洗 HTML/超长上游响应，不能把外部网页原文返回给小程序。
+
+- `2026-05-09`: `db_first` 数据库命中率属于开发/测试诊断信息，不展示在小程序结果页给用户看。Go 后端应把命中统计输出到 server/worker 终端日志，字段包括总项数、命中数、未命中数、命中率、每个 item 的匹配食物名、匹配状态、匹配分数和营养来源。
+
 - `2026-05-08`: Go 后端 `v2` 上线前必须执行 `docs/go-backend-prelaunch-checklist-2026-05-08.md`：
   - P0 项是上线阻断项，任何 P0 未完成、证据缺失或结果不确定时，不发布生产流量。
   - P1 项是强建议项，若上线前未完成，必须记录明确风险接受人和补偿措施。

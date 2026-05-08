@@ -35,6 +35,7 @@ type ExerciseLog struct {
 	CaloriesBurned *float64   `gorm:"column:calories_burned"`
 	DurationMin    *int       `gorm:"column:duration_min"`
 	RecordedOn     *time.Time `gorm:"column:recorded_on"`
+	RecordedAt     *time.Time `gorm:"column:recorded_at"`
 	AIReasoning    *string    `gorm:"column:ai_reasoning"`
 	CreatedAt      *time.Time `gorm:"column:created_at"`
 }
@@ -125,6 +126,7 @@ type AnalysisTask struct {
 	UserID    string         `gorm:"column:user_id"`
 	TaskType  string         `gorm:"column:task_type"`
 	Status    string         `gorm:"column:status"`
+	ImageURL  *string        `gorm:"column:image_url"`
 	TextInput *string        `gorm:"column:text_input"`
 	Payload   map[string]any `gorm:"column:payload;serializer:json"`
 	CreatedAt *time.Time     `gorm:"column:created_at"`

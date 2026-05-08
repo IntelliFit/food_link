@@ -28,20 +28,18 @@ func (r *ExerciseRepo) ListExerciseLogsByDate(ctx context.Context, userID string
 	var rows []domain.ExerciseLog
 	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
 	if startDate != "" {
-		start, _, err := chinaDateWindow(startDate)
-		if err != nil {
+		if _, _, err := chinaDateWindow(startDate); err != nil {
 			return nil, err
 		}
-		q = q.Where("recorded_on >= ?", start)
+		q = q.Where("recorded_on >= ?", startDate)
 	}
 	if endDate != "" {
-		_, end, err := chinaDateWindow(endDate)
-		if err != nil {
+		if _, _, err := chinaDateWindow(endDate); err != nil {
 			return nil, err
 		}
-		q = q.Where("recorded_on < ?", end)
+		q = q.Where("recorded_on <= ?", endDate)
 	}
-	err := q.Order("created_at desc").Find(&rows).Error
+	err := q.Order("recorded_on desc, created_at desc").Find(&rows).Error
 	return rows, err
 }
 
@@ -62,12 +60,11 @@ func (r *ExerciseRepo) DeleteExerciseLog(ctx context.Context, userID, logID stri
 }
 
 func (r *ExerciseRepo) GetDailyCaloriesBurned(ctx context.Context, userID string, recordedOn string) (int64, error) {
-	start, end, err := chinaDateWindow(recordedOn)
-	if err != nil {
+	if _, _, err := chinaDateWindow(recordedOn); err != nil {
 		return 0, err
 	}
 	var total int64
-	err = r.db.WithContext(ctx).Model(&domain.ExerciseLog{}).Where("user_id = ? AND recorded_on >= ? AND recorded_on < ?", userID, start, end).Select("COALESCE(SUM(calories_burned), 0)").Scan(&total).Error
+	err := r.db.WithContext(ctx).Model(&domain.ExerciseLog{}).Where("user_id = ? AND recorded_on = ?", userID, recordedOn).Select("COALESCE(SUM(calories_burned), 0)").Scan(&total).Error
 	return total, err
 }
 

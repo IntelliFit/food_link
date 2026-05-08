@@ -125,6 +125,7 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 			"exercise_desc":   log.ExerciseDesc,
 			"calories_burned": calories,
 			"recorded_on":     nil,
+			"recorded_at":     nil,
 			"created_at":      nil,
 			"ai_reasoning":    nil,
 		}
@@ -137,6 +138,7 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 		if log.CreatedAt != nil {
 			item["created_at"] = log.CreatedAt.Format(time.RFC3339)
 		}
+		item["recorded_at"] = exerciseLogRecordedAt(log)
 		logItems = append(logItems, item)
 	}
 
@@ -148,13 +150,14 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 }
 
 func (s *ExerciseService) CreateLog(ctx context.Context, userID string, exerciseDesc string) (map[string]any, error) {
-	return s.CreateLogWithDate(ctx, userID, exerciseDesc, "")
+	return s.CreateLogWithDate(ctx, userID, exerciseDesc, "", "")
 }
 
-func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string) (map[string]any, error) {
+func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string, imageURL string) (map[string]any, error) {
 	desc := strings.TrimSpace(exerciseDesc)
-	if desc == "" {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述不能为空", HTTPStatus: 400}
+	imageURL = strings.TrimSpace(imageURL)
+	if desc == "" && imageURL == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述和图片不能同时为空", HTTPStatus: 400}
 	}
 	if len(desc) > 200 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述过长", HTTPStatus: 400}
@@ -178,16 +181,22 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 	}
 
 	task := &domain.AnalysisTask{
-		UserID:    userID,
-		TaskType:  "exercise",
-		Status:    "pending",
-		TextInput: &desc,
+		UserID:   userID,
+		TaskType: "exercise",
+		Status:   "pending",
 		Payload: map[string]any{
 			"recorded_on":       recordedOn,
 			"profile_snapshot":  profileSnapshot,
 			"estimation_source": "go_exercise_worker",
 		},
 		CreatedAt: &now,
+	}
+	if desc != "" {
+		task.TextInput = &desc
+	}
+	if imageURL != "" {
+		task.ImageURL = &imageURL
+		task.Payload["image_url"] = imageURL
 	}
 	if creditsInfo != nil {
 		if spendPlan, ok := creditsInfo["credit_spend_plan"]; ok {
@@ -220,7 +229,7 @@ func (s *ExerciseService) EstimateCalories(ctx context.Context, userID string, e
 	if err != nil {
 		return nil, err
 	}
-	estimate := s.estimateExerciseCalories(ctx, desc, profileSnapshot)
+	estimate := s.estimateExerciseCalories(ctx, desc, "", profileSnapshot)
 	return map[string]any{
 		"estimated_calories": estimate.CaloriesKcal,
 		"exercise_desc":      desc,
@@ -291,10 +300,11 @@ func (s *ExerciseService) BuildExerciseProfileSnapshot(ctx context.Context, user
 	return snapshot, nil
 }
 
-func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerciseDesc, recordedOn string, payload map[string]any) (map[string]any, error) {
+func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerciseDesc, imageURL, recordedOn string, payload map[string]any) (map[string]any, error) {
 	desc := strings.TrimSpace(exerciseDesc)
-	if desc == "" {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述不能为空", HTTPStatus: 400}
+	imageURL = strings.TrimSpace(imageURL)
+	if desc == "" && imageURL == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述和图片不能同时为空", HTTPStatus: 400}
 	}
 	if recordedOn == "" {
 		recordedOn = time.Now().In(chinaTZ).Format("2006-01-02")
@@ -307,7 +317,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 			return nil, err
 		}
 	}
-	estimate := s.estimateExerciseCalories(ctx, desc, profileSnapshot)
+	estimate := s.estimateExerciseCalories(ctx, desc, imageURL, profileSnapshot)
 	now := time.Now().UTC()
 	recordedDate, err := parseChinaDate(recordedOn)
 	if err != nil {
@@ -315,11 +325,16 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	}
 	calories := float64(estimate.CaloriesKcal)
 	reasoning := estimate.Reasoning
+	logDesc := desc
+	if logDesc == "" {
+		logDesc = "图片识别运动"
+	}
 	log := &domain.ExerciseLog{
 		UserID:         userID,
-		ExerciseDesc:   desc,
+		ExerciseDesc:   logDesc,
 		CaloriesBurned: &calories,
 		RecordedOn:     &recordedDate,
+		RecordedAt:     &now,
 		AIReasoning:    &reasoning,
 		CreatedAt:      &now,
 	}
@@ -381,13 +396,17 @@ var (
 	}
 )
 
-func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc string, profileSnapshot map[string]any) ExerciseEstimate {
+func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) ExerciseEstimate {
+	imageURL = strings.TrimSpace(imageURL)
+	if imageURL != "" {
+		return s.estimateSingleExerciseCalories(ctx, desc, imageURL, profileSnapshot)
+	}
 	segments := splitExerciseSegments(desc)
 	if shouldEstimateBySegments(desc, segments) {
 		total := 0
 		rows := make([]map[string]any, 0, len(segments))
 		for _, segment := range segments {
-			estimate := s.estimateSingleExerciseCalories(ctx, segment, profileSnapshot)
+			estimate := s.estimateSingleExerciseCalories(ctx, segment, "", profileSnapshot)
 			total += estimate.CaloriesKcal
 			rows = append(rows, map[string]any{
 				"segment":       segment,
@@ -407,17 +426,20 @@ func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc str
 		rawBytes, _ := json.Marshal(map[string]any{"segments": rows, "calories_kcal": total, "reasoning": reasoning})
 		return ExerciseEstimate{CaloriesKcal: total, Raw: string(rawBytes), Reasoning: reasoning, Source: "segmented"}
 	}
-	return s.estimateSingleExerciseCalories(ctx, desc, profileSnapshot)
+	return s.estimateSingleExerciseCalories(ctx, desc, "", profileSnapshot)
 }
 
-func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, desc string, profileSnapshot map[string]any) ExerciseEstimate {
-	if estimate, ok := s.estimateExerciseCaloriesWithLLM(ctx, desc, profileSnapshot); ok {
+func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) ExerciseEstimate {
+	if estimate, ok := s.estimateExerciseCaloriesWithLLM(ctx, desc, imageURL, profileSnapshot); ok {
 		return estimate
+	}
+	if strings.TrimSpace(desc) == "" && strings.TrimSpace(imageURL) != "" {
+		desc = "图片识别运动"
 	}
 	return ruleEstimateExerciseCalories(desc, profileSnapshot)
 }
 
-func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, desc string, profileSnapshot map[string]any) (ExerciseEstimate, bool) {
+func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, bool) {
 	apiKey := ""
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.OfoxAIAPIKey)
@@ -425,18 +447,32 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if apiKey == "" {
 		return ExerciseEstimate{}, false
 	}
+	desc = strings.TrimSpace(desc)
+	imageURL = strings.TrimSpace(imageURL)
 	userPrompt := "用户运动描述：" + compactExerciseDesc(desc)
+	if desc == "" {
+		userPrompt = "用户上传了一张运动图片，请识别主要运动类型、估算持续时长和消耗热量。"
+	}
 	if profileText := formatExerciseProfileSnapshot(profileSnapshot); profileText != "" {
 		userPrompt += "\n\n" + profileText + "\n\n请结合这些真实信息估算；只有缺失字段才允许合理假设。"
 	}
+	userContent := any(userPrompt)
+	systemPrompt := "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。reasoning 不超过 80 个汉字。"
+	if imageURL != "" {
+		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。只输出 JSON 对象，不要 markdown。格式为 {\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。reasoning 不超过 80 个汉字。"
+		userContent = []map[string]any{
+			{"type": "text", "text": userPrompt},
+			{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
+		}
+	}
 	body := map[string]any{
 		"model": "google/gemini-3.1-flash-lite-preview",
-		"messages": []map[string]string{
+		"messages": []map[string]any{
 			{
 				"role":    "system",
-				"content": "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。reasoning 不超过 80 个汉字。",
+				"content": systemPrompt,
 			},
-			{"role": "user", "content": userPrompt},
+			{"role": "user", "content": userContent},
 		},
 		"response_format": map[string]string{"type": "json_object"},
 		"temperature":     0.25,
@@ -502,6 +538,19 @@ func parseExerciseEstimateJSON(raw string) (ExerciseEstimate, error) {
 		reasoning = "基于运动类型、时长和用户画像估算"
 	}
 	return ExerciseEstimate{CaloriesKcal: clampInt(calories, 1, 5000), Reasoning: reasoning}, nil
+}
+
+func exerciseLogRecordedAt(log domain.ExerciseLog) any {
+	if log.RecordedAt != nil {
+		return log.RecordedAt.Format(time.RFC3339)
+	}
+	if log.CreatedAt != nil {
+		return log.CreatedAt.Format(time.RFC3339)
+	}
+	if log.RecordedOn != nil {
+		return log.RecordedOn.In(chinaTZ).Format("2006-01-02T12:00:00+08:00")
+	}
+	return nil
 }
 
 func ruleEstimateExerciseCalories(desc string, profileSnapshot map[string]any) ExerciseEstimate {

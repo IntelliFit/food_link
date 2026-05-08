@@ -71,6 +71,7 @@ type ExternalConfig struct {
 	SupabaseKey     string `mapstructure:"supabase_service_role_key"`
 	TiandituTK      string `mapstructure:"tianditu_tk"`
 	OfoxAIAPIKey    string `mapstructure:"ofoxai_api_key"`
+	OfoxAIBaseURL   string `mapstructure:"ofoxai_base_url"`
 	LLMProvider     string `mapstructure:"llm_provider"`
 	DeepSeekAPIKey  string `mapstructure:"deepseek_api_key"`
 	DeepSeekBaseURL string `mapstructure:"deepseek_base_url"`
@@ -167,6 +168,7 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.supabase_service_role_key", "SUPABASE_SERVICE_ROLE_KEY")
 	_ = v.BindEnv("external.tianditu_tk", "TIANDITU_TK")
 	_ = v.BindEnv("external.ofoxai_api_key", "OFOXAI_API_KEY")
+	_ = v.BindEnv("external.ofoxai_base_url", "OFOXAI_BASE_URL", "OFOX_BASE_URL")
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
 	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
 	_ = v.BindEnv("external.deepseek_base_url", "DEEPSEEK_BASE_URL")

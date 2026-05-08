@@ -84,6 +84,8 @@ func (r *TaskRepo) ListTasksByUser(ctx context.Context, userID, taskType, status
 	q := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Limit(limit)
 	if taskType != "" {
 		q = q.Where("task_type = ?", taskType)
+	} else {
+		q = applyAnalyzeHistoryTaskFilter(q)
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -95,28 +97,46 @@ func (r *TaskRepo) ListTasksByUser(ctx context.Context, userID, taskType, status
 
 func (r *TaskRepo) CountTasksByUser(ctx context.Context, userID string) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).Where("user_id = ?", userID).Count(&count).Error
+	err := applyAnalyzeHistoryTaskFilter(
+		r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).Where("user_id = ?", userID),
+	).Count(&count).Error
 	return count, err
 }
 
-func (r *TaskRepo) CountTasksByStatus(ctx context.Context, userID string) (map[string]int64, error) {
-	var rows []struct {
-		Status string `gorm:"column:status"`
-		Count  int64  `gorm:"column:count"`
+func (r *TaskRepo) RecordedTaskMap(ctx context.Context, userID string, taskIDs []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(taskIDs) == 0 {
+		return out, nil
 	}
-	err := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
-		Select("status, COUNT(*) as count").
+	var rows []struct {
+		ID           string `gorm:"column:id"`
+		SourceTaskID string `gorm:"column:source_task_id"`
+	}
+	err := r.db.WithContext(ctx).Table("user_food_records").
+		Select("id, source_task_id").
 		Where("user_id = ?", userID).
-		Group("status").
+		Where("source_task_id IN ?", taskIDs).
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]int64)
-	for _, r := range rows {
-		out[r.Status] = r.Count
+	for _, row := range rows {
+		if row.SourceTaskID != "" {
+			out[row.SourceTaskID] = row.ID
+		}
 	}
 	return out, nil
+}
+
+func applyAnalyzeHistoryTaskFilter(q *gorm.DB) *gorm.DB {
+	return q.Where(
+		`task_type IN ? OR task_type LIKE ? OR task_type LIKE ? OR task_type LIKE ? OR task_type LIKE ?`,
+		[]string{"food", "food_text", "precision_plan", "precision_aggregate"},
+		"food_debug%",
+		"food_text_debug%",
+		"precision_plan_debug%",
+		"precision_aggregate_debug%",
+	)
 }
 
 func (r *TaskRepo) UpdateTaskResult(ctx context.Context, taskID string, result map[string]any) error {

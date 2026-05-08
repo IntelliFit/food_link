@@ -1538,6 +1538,18 @@ function parseUploadAnalyzeResponseData(rawData: unknown): Record<string, any> |
   }
 }
 
+function unwrapUploadAnalyzePayload(parsedData: Record<string, any> | null): Record<string, any> | null {
+  if (!parsedData) return null
+  if (typeof parsedData.code === 'number') {
+    if (parsedData.code !== 0) return parsedData
+    const data = parsedData.data
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, any>)
+      : parsedData
+  }
+  return parsedData
+}
+
 export async function uploadAnalyzeImageFile(localPath: string): Promise<{ imageUrl: string }> {
   const filePath = (localPath || '').trim()
   if (!filePath) {
@@ -1559,6 +1571,7 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
   })
 
   const parsedData = parseUploadAnalyzeResponseData(response?.data)
+  const payload = unwrapUploadAnalyzePayload(parsedData)
   if (response?.statusCode !== 200) {
     throwHttpErrorWithStatus(
       Number(response?.statusCode || 0),
@@ -1568,7 +1581,7 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
     )
   }
 
-  const imageUrl = String(parsedData?.imageUrl || '').trim()
+  const imageUrl = String(payload?.imageUrl || payload?.image_url || payload?.url || '').trim()
   if (!imageUrl) {
     throw new Error('上传图片失败：服务端未返回图片地址')
   }
@@ -4234,8 +4247,9 @@ export interface ExerciseLogItem {
   id: string
   exercise_desc: string
   calories_burned: number
-  recorded_on: string
-  recorded_at: string
+  recorded_on?: string | null
+  recorded_at?: string | null
+  created_at?: string | null
   /** 模型估算时的思考过程（需库表含 ai_reasoning 列） */
   ai_reasoning?: string | null
 }
@@ -4307,10 +4321,14 @@ export interface ExerciseTaskResultPayload {
 /** 提交运动分析任务（后台 Worker 调用大模型并落库；返回 task_id，需轮询 getAnalyzeTask） */
 export async function createExerciseLog(data: {
   exercise_desc: string
+  image_url?: string
   date?: string
 }): Promise<{ task_id: string; message: string }> {
   const trimmed = data.exercise_desc.trim()
   const parts: string[] = [`exercise_desc=${encodeURIComponent(trimmed)}`]
+  if (data.image_url) {
+    parts.push(`image_url=${encodeURIComponent(data.image_url)}`)
+  }
   if (data.date) {
     parts.push(`date=${encodeURIComponent(data.date)}`)
   }

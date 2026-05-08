@@ -34,7 +34,7 @@ type ExerciseService interface {
 
 type ExerciseServiceWithRange interface {
 	ListLogsByRange(ctx context.Context, userID string, date string, startDate string, endDate string) (map[string]any, error)
-	CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string) (map[string]any, error)
+	CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string, imageURL string) (map[string]any, error)
 }
 
 type StatsService interface {
@@ -319,6 +319,7 @@ func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 	var body struct {
 		ExerciseDesc string `json:"exercise_desc" form:"exercise_desc"`
 		Date         string `json:"date" form:"date"`
+		ImageURL     string `json:"image_url" form:"image_url"`
 	}
 	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/x-www-form-urlencoded") {
 		if err := c.ShouldBind(&body); err != nil {
@@ -335,7 +336,7 @@ func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 	var result map[string]any
 	var err error
 	if svc, ok := h.exercise.(ExerciseServiceWithRange); ok {
-		result, err = svc.CreateLogWithDate(c.Request.Context(), userID, body.ExerciseDesc, body.Date)
+		result, err = svc.CreateLogWithDate(c.Request.Context(), userID, body.ExerciseDesc, body.Date, body.ImageURL)
 	} else {
 		result, err = h.exercise.CreateLog(c.Request.Context(), userID, body.ExerciseDesc)
 	}

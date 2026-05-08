@@ -29,7 +29,7 @@ type TaskService interface {
 	CreateBatchTask(ctx context.Context, userID string, imageURLs []string, payload map[string]any, result map[string]any) (string, error)
 	ListTasks(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error)
 	CountTasks(ctx context.Context, userID string) (int64, error)
-	CountTasksByStatus(ctx context.Context, userID string) (map[string]int64, error)
+	CountTasksByStatus(ctx context.Context, userID string) (map[string]any, error)
 	GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error)
 	UpdateTaskResult(ctx context.Context, taskID, userID string, result map[string]any) error
 	DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error)

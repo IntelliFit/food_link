@@ -3,89 +3,118 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
-	"reflect"
+	"strings"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestDashScopeClient_Analyze_Success(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	client := NewDashScopeClient("fake-key", "qwen-vl-max")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body := `{"choices":[{"message":{"content":"{\"description\":\"test\",\"items\":[{\"name\":\"rice\",\"estimatedWeightGrams\":100,\"nutrients\":{\"calories\":130}}]}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewBufferString(body)),
 			Header:     make(http.Header),
 		}, nil
-	})
-	defer patches.Reset()
+	})}
 
-	client := NewDashScopeClient("fake-key", "qwen-vl-max")
 	result, err := client.Analyze(context.Background(), "test prompt", "https://example.com/img.jpg")
 	assert.NoError(t, err)
 	assert.Equal(t, "test", result["description"])
 }
 
 func TestDashScopeClient_Analyze_HTTPError(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
-		return nil, assert.AnError
-	})
-	defer patches.Reset()
-
 	client := NewDashScopeClient("fake-key", "")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, assert.AnError
+	})}
+
 	_, err := client.Analyze(context.Background(), "test", "")
 	assert.Error(t, err)
 }
 
 func TestDashScopeClient_Analyze_StatusError(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	client := NewDashScopeClient("fake-key", "")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusInternalServerError,
 			Body:       io.NopCloser(bytes.NewBufferString("error")),
 			Header:     make(http.Header),
 		}, nil
-	})
-	defer patches.Reset()
+	})}
 
-	client := NewDashScopeClient("fake-key", "")
 	_, err := client.Analyze(context.Background(), "test", "")
 	assert.Error(t, err)
 }
 
 func TestDashScopeClient_Analyze_EmptyChoices(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	client := NewDashScopeClient("fake-key", "")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body := `{"choices":[]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewBufferString(body)),
 			Header:     make(http.Header),
 		}, nil
-	})
-	defer patches.Reset()
+	})}
 
-	client := NewDashScopeClient("fake-key", "")
 	_, err := client.Analyze(context.Background(), "test", "")
 	assert.Error(t, err)
 }
 
 func TestOfoxAIClient_Analyze_Success(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
 		body := `{"choices":[{"message":{"content":"{\"description\":\"test\",\"items\":[{\"name\":\"rice\",\"estimatedWeightGrams\":100,\"nutrients\":{\"calories\":130}}]}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewBufferString(body)),
 			Header:     make(http.Header),
 		}, nil
-	})
-	defer patches.Reset()
+	})}
 
-	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview")
 	result, err := client.Analyze(context.Background(), "test prompt", "https://example.com/img.jpg")
 	assert.NoError(t, err)
 	assert.Equal(t, "test", result["description"])
+}
+
+func TestOfoxAIClient_Analyze_CustomBaseURL(t *testing.T) {
+	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview", "https://proxy.example.com/v1/")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://proxy.example.com/v1/chat/completions", req.URL.String())
+		return nil, errors.New("stop after url assertion")
+	})}
+
+	_, err := client.Analyze(context.Background(), "test prompt", "https://example.com/img.jpg")
+	assert.Error(t, err)
+}
+
+func TestOfoxAIClient_Analyze_HTMLResponse(t *testing.T) {
+	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString("<html><head><title>Ofox AI</title></head><body>home</body></html>")),
+			Header:     http.Header{"Content-Type": []string{"text/html; charset=utf-8"}},
+		}, nil
+	})}
+
+	_, err := client.Analyze(context.Background(), "test prompt", "https://example.com/img.jpg")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "returned html instead of json")
+	assert.False(t, strings.Contains(err.Error(), "<html"))
 }
 
 func TestParseLLMJSON_WithFences(t *testing.T) {

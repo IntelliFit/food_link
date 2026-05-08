@@ -438,18 +438,88 @@ func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status st
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(taskType) == "" {
+		tasks = filterAnalyzeHistoryTasks(tasks)
+	}
+	doneTaskIDs := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		if task.Status == "done" {
+			doneTaskIDs = append(doneTaskIDs, task.ID)
+		}
+	}
+	recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, doneTaskIDs)
+	if err != nil {
+		return nil, err
+	}
 	for i := range tasks {
 		s.normalizeTaskImages(&tasks[i])
+		if tasks[i].Status == "done" {
+			if recordID, ok := recordedMap[tasks[i].ID]; ok {
+				tasks[i].IsRecorded = true
+				tasks[i].RecordID = recordID
+			}
+		}
 	}
 	return tasks, nil
 }
 
 func (s *TaskService) CountTasks(ctx context.Context, userID string) (int64, error) {
-	return s.tasks.CountTasksByUser(ctx, userID)
+	tasks, err := s.tasks.ListTasksByUser(ctx, userID, "", "", 10000)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(filterAnalyzeHistoryTasks(tasks))), nil
 }
 
-func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (map[string]int64, error) {
-	return s.tasks.CountTasksByStatus(ctx, userID)
+func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (map[string]any, error) {
+	tasks, err := s.tasks.ListTasksByUser(ctx, userID, "", "", 500)
+	if err != nil {
+		return nil, err
+	}
+	tasks = filterAnalyzeHistoryTasks(tasks)
+	doneTaskIDs := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		if task.Status == "done" {
+			doneTaskIDs = append(doneTaskIDs, task.ID)
+		}
+	}
+	recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, doneTaskIDs)
+	if err != nil {
+		return nil, err
+	}
+	var recognizing, waitingRecord, recorded int64
+	waitingTasks := make([]domain.AnalysisTask, 0)
+	for _, task := range tasks {
+		switch task.Status {
+		case "pending", "processing":
+			recognizing++
+		case "done":
+			if _, ok := recordedMap[task.ID]; ok {
+				recorded++
+			} else {
+				waitingRecord++
+				waitingTasks = append(waitingTasks, task)
+			}
+		}
+	}
+	hasUnseen := waitingRecord > 0
+	if hasUnseen && s.users != nil {
+		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil && user.LastSeenAnalyzeHistory != nil {
+			hasUnseen = false
+			for _, task := range waitingTasks {
+				if task.CreatedAt != nil && task.CreatedAt.After(*user.LastSeenAnalyzeHistory) {
+					hasUnseen = true
+					break
+				}
+			}
+		}
+	}
+	return map[string]any{
+		"recognizing":               recognizing,
+		"waiting_record":            waitingRecord,
+		"recorded":                  recorded,
+		"has_unseen_waiting_record": hasUnseen,
+	}, nil
 }
 
 func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error) {
@@ -464,6 +534,16 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 		return nil, errors.ErrForbidden
 	}
 	s.normalizeTaskImages(task)
+	if task.Status == "done" {
+		recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, []string{task.ID})
+		if err != nil {
+			return nil, err
+		}
+		if recordID, ok := recordedMap[task.ID]; ok {
+			task.IsRecorded = true
+			task.RecordID = recordID
+		}
+	}
 	return task, nil
 }
 
@@ -582,6 +662,54 @@ func (s *TaskService) resolveFoodImageURL(path string) string {
 		return path
 	}
 	return s.storage.ResolveReferenceURL("food-images", path)
+}
+
+func filterAnalyzeHistoryTasks(tasks []domain.AnalysisTask) []domain.AnalysisTask {
+	out := make([]domain.AnalysisTask, 0, len(tasks))
+	for _, task := range tasks {
+		if isTaskExcludedFromAnalyzeHistory(task) {
+			continue
+		}
+		out = append(out, task)
+	}
+	return out
+}
+
+func isTaskExcludedFromAnalyzeHistory(task domain.AnalysisTask) bool {
+	if boolFromAny(task.Payload["expiry_recognition"]) || boolFromAny(task.Payload["exercise"]) {
+		return true
+	}
+	taskType := task.TaskType
+	if strings.HasPrefix(taskType, "precision_item_estimate") ||
+		strings.HasPrefix(taskType, "health_report") ||
+		strings.HasPrefix(taskType, "public_food_library_text") ||
+		strings.HasPrefix(taskType, "exercise") {
+		return true
+	}
+	if strings.HasPrefix(taskType, "precision_plan") &&
+		task.Status == "done" &&
+		strings.TrimSpace(stringFromAny(task.Result["redirectTaskId"])) != "" {
+		return true
+	}
+	return false
+}
+
+func boolFromAny(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		text := strings.TrimSpace(v)
+		return strings.EqualFold(text, "true") || text == "1"
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	default:
+		return false
+	}
 }
 
 func intFromAny(value any) int {

@@ -23,7 +23,7 @@ type UserDO struct {
 	DietGoal               *string        `gorm:"column:diet_goal;type:varchar(50)"`
 	Searchable             *bool          `gorm:"column:searchable;type:boolean;default:true"`
 	PublicRecords          *bool          `gorm:"column:public_records;type:boolean;default:true"`
-	LastSeenAnalyzeHistory *time.Time     `gorm:"column:last_seen_analyze_history;type:timestamptz"`
+	LastSeenAnalyzeHistory *time.Time     `gorm:"column:last_seen_analyze_history_at;type:timestamptz"`
 	ExecutionMode          *string        `gorm:"column:execution_mode;type:text;default:'standard'"`
 	ModeSetBy              *string        `gorm:"column:mode_set_by;type:text;default:'system'"`
 	ModeSetAt              *time.Time     `gorm:"column:mode_set_at;type:timestamptz"`

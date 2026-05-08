@@ -16,10 +16,18 @@ import (
 func setupExerciseTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(
-		&domain.ExerciseLog{},
-		&domain.AnalysisTask{},
-	))
+	require.NoError(t, db.Exec(`CREATE TABLE user_exercise_logs (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		exercise_desc TEXT,
+		calories_burned REAL,
+		duration_min INTEGER,
+		recorded_on TEXT,
+		recorded_at TIMESTAMP,
+		ai_reasoning TEXT,
+		created_at TIMESTAMP
+	)`).Error)
+	require.NoError(t, db.AutoMigrate(&domain.AnalysisTask{}))
 	return db
 }
 
@@ -43,18 +51,44 @@ func TestExerciseRepo_CRUD(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, log.ID)
 
-	logs, err := r.ListExerciseLogsByDate(ctx, "user-1", "2024-06-15", "2024-06-15")
+	found, err := r.GetExerciseLogByID(ctx, "user-1", log.ID)
 	require.NoError(t, err)
-	assert.Len(t, logs, 1)
-	assert.Equal(t, "跑步30分钟", logs[0].ExerciseDesc)
-
-	total, err := r.GetDailyCaloriesBurned(ctx, "user-1", "2024-06-15")
-	require.NoError(t, err)
-	assert.Equal(t, int64(300), total)
+	require.NotNil(t, found)
+	assert.Equal(t, "跑步30分钟", found.ExerciseDesc)
 
 	deleted, err := r.DeleteExerciseLog(ctx, "user-1", log.ID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), deleted)
+}
+
+func TestExerciseRepo_ListAndDailyCaloriesUseDateColumnSemantics(t *testing.T) {
+	db := setupExerciseTestDB(t)
+	r := NewExerciseRepo(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	require.NoError(t, db.Exec(`INSERT INTO user_exercise_logs
+		(id, user_id, exercise_desc, calories_burned, recorded_on, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		"ex-1", "user-1", "跑步30分钟", 300, "2024-06-15", now).Error)
+	require.NoError(t, db.Exec(`INSERT INTO user_exercise_logs
+		(id, user_id, exercise_desc, calories_burned, recorded_on, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		"ex-2", "user-1", "跳绳20分钟", 285, "2024-06-15", now.Add(time.Second)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO user_exercise_logs
+		(id, user_id, exercise_desc, calories_burned, recorded_on, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		"ex-old", "user-1", "昨天的运动", 120, "2024-06-14", now).Error)
+
+	logs, err := r.ListExerciseLogsByDate(ctx, "user-1", "2024-06-15", "2024-06-15")
+	require.NoError(t, err)
+	require.Len(t, logs, 2)
+	assert.Equal(t, "跳绳20分钟", logs[0].ExerciseDesc)
+	assert.Equal(t, "跑步30分钟", logs[1].ExerciseDesc)
+
+	total, err := r.GetDailyCaloriesBurned(ctx, "user-1", "2024-06-15")
+	require.NoError(t, err)
+	assert.Equal(t, int64(585), total)
 }
 
 func TestExerciseRepo_CreateAnalysisTask(t *testing.T) {

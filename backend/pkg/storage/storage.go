@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -205,7 +206,7 @@ func (c *Client) UploadBytes(bucketAlias, key string, data []byte, contentType s
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	_, err = client.Object.Put(nil, key, bytes.NewReader(data), &cos.ObjectPutOptions{
+	_, err = client.Object.Put(context.Background(), key, bytes.NewReader(data), &cos.ObjectPutOptions{
 		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
 			ContentType: contentType,
 		},

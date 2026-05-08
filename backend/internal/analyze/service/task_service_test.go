@@ -20,6 +20,11 @@ func setupTaskServiceTestDB(t *testing.T) (*gorm.DB, *repo.TaskRepo, *repo.Preci
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&analyzedomain.AnalysisTask{}, &analyzedomain.PrecisionSession{}, &analyzedomain.PrecisionSessionRound{}, &authrepo.User{}))
+	require.NoError(t, db.Exec(`CREATE TABLE user_food_records (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		source_task_id TEXT
+	)`).Error)
 	return db, repo.NewTaskRepo(db), repo.NewPrecisionRepo(db), authrepo.NewUserRepo(db)
 }
 
@@ -119,7 +124,10 @@ func TestTaskService_CountTasksByStatus(t *testing.T) {
 
 	counts, err := svc.CountTasksByStatus(ctx, "user1")
 	require.NoError(t, err)
-	assert.NotEmpty(t, counts)
+	assert.Equal(t, int64(1), counts["recognizing"])
+	assert.Equal(t, int64(0), counts["waiting_record"])
+	assert.Equal(t, int64(0), counts["recorded"])
+	assert.Equal(t, false, counts["has_unseen_waiting_record"])
 }
 
 func TestTaskService_GetTask(t *testing.T) {

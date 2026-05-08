@@ -140,7 +140,7 @@ func TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning(t *testing.
 	repo := &mockExerciseRepo{}
 	svc := NewExerciseService(repo)
 
-	result, err := svc.ProcessExerciseTask(context.Background(), "u1", "跑步30分钟", recordedOn, map[string]any{
+	result, err := svc.ProcessExerciseTask(context.Background(), "u1", "跑步30分钟", "", recordedOn, map[string]any{
 		"profile_snapshot": map[string]any{"weight_kg": 70.0},
 	})
 	require.NoError(t, err)

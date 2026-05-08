@@ -12,6 +12,9 @@ import (
 	"food_link/backend/internal/common/errors"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
+	"food_link/backend/pkg/logger"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -1082,7 +1085,36 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
 	resp["unresolved_count"] = unresolvedCount
+	logDBFirstNutritionSummary(out, resolvedCount, unresolvedCount)
 	return resp
+}
+
+func logDBFirstNutritionSummary(items []map[string]any, resolvedCount, unresolvedCount int) {
+	total := resolvedCount + unresolvedCount
+	hitRate := 0.0
+	if total > 0 {
+		hitRate = math.Round((float64(resolvedCount)/float64(total))*10000) / 100
+	}
+	fields := []zap.Field{
+		zap.Int("total", total),
+		zap.Int("resolved", resolvedCount),
+		zap.Int("unresolved", unresolvedCount),
+		zap.Float64("hit_rate_percent", hitRate),
+	}
+	itemFields := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		itemFields = append(itemFields, map[string]any{
+			"name":              strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			"weight_g":          numberFromAny(item["estimatedWeightGrams"]),
+			"matched_food_name": item["matched_food_name"],
+			"resolve_status":    item["resolve_status"],
+			"resolve_score":     item["resolve_score"],
+			"nutrition_source":  item["nutrition_source"],
+			"is_unresolved":     item["is_unresolved"],
+		})
+	}
+	fields = append(fields, zap.Any("items", itemFields))
+	logger.L().Info("db_first nutrition lookup summary", fields...)
 }
 
 func copyAnyMap(in map[string]any) map[string]any {
