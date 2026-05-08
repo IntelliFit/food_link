@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/common/response"
@@ -19,12 +20,21 @@ type BodyMetricsService interface {
 	SaveWeightRecord(ctx context.Context, userID string, weightKg float64, recordedOn string) (map[string]any, error)
 }
 
+type BodyMetricsServiceWithMeta interface {
+	SaveWeightRecordWithMeta(ctx context.Context, userID string, weightKg float64, recordedOn string, clientID string, sourceType string) (map[string]any, error)
+}
+
 type ExerciseService interface {
 	GetDailyCalories(ctx context.Context, userID string, date string) (map[string]any, error)
 	ListLogs(ctx context.Context, userID string, date string) (map[string]any, error)
 	CreateLog(ctx context.Context, userID string, exerciseDesc string) (map[string]any, error)
 	EstimateCalories(ctx context.Context, userID string, exerciseDesc string) (map[string]any, error)
 	DeleteLog(ctx context.Context, userID, logID string) error
+}
+
+type ExerciseServiceWithRange interface {
+	ListLogsByRange(ctx context.Context, userID string, date string, startDate string, endDate string) (map[string]any, error)
+	CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string) (map[string]any, error)
 }
 
 type StatsService interface {
@@ -110,13 +120,15 @@ func (h *HealthHandler) SaveBodyWaterLog(c *gin.Context) {
 	var body struct {
 		AmountMl   int    `json:"amount_ml"`
 		RecordedOn string `json:"recorded_on"`
+		Date       string `json:"date"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
-	result, err := h.bodyMetrics.AddWaterLog(c.Request.Context(), userID, body.AmountMl, body.RecordedOn)
+	recordedOn := firstNonEmpty(body.Date, body.RecordedOn)
+	result, err := h.bodyMetrics.AddWaterLog(c.Request.Context(), userID, body.AmountMl, recordedOn)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -128,13 +140,15 @@ func (h *HealthHandler) SaveBodyWaterLog(c *gin.Context) {
 func (h *HealthHandler) ResetBodyWaterLogs(c *gin.Context) {
 	var body struct {
 		RecordedOn string `json:"recorded_on"`
+		Date       string `json:"date"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
-	result, err := h.bodyMetrics.ResetWaterLogs(c.Request.Context(), userID, body.RecordedOn)
+	recordedOn := firstNonEmpty(body.Date, body.RecordedOn)
+	result, err := h.bodyMetrics.ResetWaterLogs(c.Request.Context(), userID, recordedOn)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -146,14 +160,29 @@ func (h *HealthHandler) ResetBodyWaterLogs(c *gin.Context) {
 func (h *HealthHandler) SaveBodyWeightRecord(c *gin.Context) {
 	var body struct {
 		WeightKg   float64 `json:"weight_kg"`
+		Value      float64 `json:"value"`
 		RecordedOn string  `json:"recorded_on"`
+		Date       string  `json:"date"`
+		ClientID   string  `json:"client_id"`
+		SourceType string  `json:"source_type"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
-	result, err := h.bodyMetrics.SaveWeightRecord(c.Request.Context(), userID, body.WeightKg, body.RecordedOn)
+	weightKg := body.WeightKg
+	if weightKg == 0 {
+		weightKg = body.Value
+	}
+	recordedOn := firstNonEmpty(body.Date, body.RecordedOn)
+	var result map[string]any
+	var err error
+	if svc, ok := h.bodyMetrics.(BodyMetricsServiceWithMeta); ok {
+		result, err = svc.SaveWeightRecordWithMeta(c.Request.Context(), userID, weightKg, recordedOn, body.ClientID, body.SourceType)
+	} else {
+		result, err = h.bodyMetrics.SaveWeightRecord(c.Request.Context(), userID, weightKg, recordedOn)
+	}
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -269,7 +298,15 @@ func (h *HealthHandler) GetExerciseCaloriesDaily(c *gin.Context) {
 func (h *HealthHandler) GetExerciseLogs(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	date := c.Query("date")
-	result, err := h.exercise.ListLogs(c.Request.Context(), userID, date)
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+	var result map[string]any
+	var err error
+	if svc, ok := h.exercise.(ExerciseServiceWithRange); ok {
+		result, err = svc.ListLogsByRange(c.Request.Context(), userID, date, startDate, endDate)
+	} else {
+		result, err = h.exercise.ListLogs(c.Request.Context(), userID, date)
+	}
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -280,14 +317,28 @@ func (h *HealthHandler) GetExerciseLogs(c *gin.Context) {
 // POST /api/exercise-logs
 func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 	var body struct {
-		ExerciseDesc string `json:"exercise_desc"`
+		ExerciseDesc string `json:"exercise_desc" form:"exercise_desc"`
+		Date         string `json:"date" form:"date"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		response.Error(c, err)
-		return
+	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/x-www-form-urlencoded") {
+		if err := c.ShouldBind(&body); err != nil {
+			response.Error(c, err)
+			return
+		}
+	} else {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			response.Error(c, err)
+			return
+		}
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
-	result, err := h.exercise.CreateLog(c.Request.Context(), userID, body.ExerciseDesc)
+	var result map[string]any
+	var err error
+	if svc, ok := h.exercise.(ExerciseServiceWithRange); ok {
+		result, err = svc.CreateLogWithDate(c.Request.Context(), userID, body.ExerciseDesc, body.Date)
+	} else {
+		result, err = h.exercise.CreateLog(c.Request.Context(), userID, body.ExerciseDesc)
+	}
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -332,4 +383,13 @@ func parseIntOrDefault(s string, def int) int {
 		return n
 	}
 	return def
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

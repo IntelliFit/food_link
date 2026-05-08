@@ -27,10 +27,11 @@ func TestExpiryRepo_CreateAndGet(t *testing.T) {
 
 	name := "apple"
 	item := &domain.ExpiryItem{
-		UserID:   "user-1",
-		Name:     name,
-		Category: "fruit",
-		Status:   "active",
+		UserID:     "user-1",
+		FoodName:   name,
+		Category:   "fruit",
+		ExpireDate: time.Now(),
+		Status:     "active",
 	}
 	err := r.Create(ctx, item)
 	require.NoError(t, err)
@@ -39,7 +40,7 @@ func TestExpiryRepo_CreateAndGet(t *testing.T) {
 	found, err := r.GetByID(ctx, item.ID)
 	require.NoError(t, err)
 	require.NotNil(t, found)
-	assert.Equal(t, "apple", found.Name)
+	assert.Equal(t, "apple", found.FoodName)
 	assert.Equal(t, "active", found.Status)
 }
 
@@ -48,9 +49,9 @@ func TestExpiryRepo_ListByUser(t *testing.T) {
 	r := NewExpiryRepo(db)
 	ctx := context.Background()
 
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "a", Status: "active"}))
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "b", Status: "consumed"}))
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u2", Name: "c", Status: "active"}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "a", Status: "active", ExpireDate: time.Now()}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "b", Status: "consumed", ExpireDate: time.Now()}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u2", FoodName: "c", Status: "active", ExpireDate: time.Now()}))
 
 	items, err := r.ListByUser(ctx, "u1", "", 0)
 	require.NoError(t, err)
@@ -59,7 +60,7 @@ func TestExpiryRepo_ListByUser(t *testing.T) {
 	activeItems, err := r.ListByUser(ctx, "u1", "active", 0)
 	require.NoError(t, err)
 	assert.Len(t, activeItems, 1)
-	assert.Equal(t, "a", activeItems[0].Name)
+	assert.Equal(t, "a", activeItems[0].FoodName)
 }
 
 func TestExpiryRepo_Update(t *testing.T) {
@@ -67,16 +68,16 @@ func TestExpiryRepo_Update(t *testing.T) {
 	r := NewExpiryRepo(db)
 	ctx := context.Background()
 
-	item := &domain.ExpiryItem{UserID: "u1", Name: "milk", Status: "active"}
+	item := &domain.ExpiryItem{UserID: "u1", FoodName: "milk", Status: "active", ExpireDate: time.Now()}
 	require.NoError(t, r.Create(ctx, item))
 
-	updated, err := r.Update(ctx, "u1", item.ID, map[string]any{"name": "almond milk"})
+	updated, err := r.Update(ctx, "u1", item.ID, map[string]any{"food_name": "almond milk"})
 	require.NoError(t, err)
 	require.NotNil(t, updated)
-	assert.Equal(t, "almond milk", updated.Name)
+	assert.Equal(t, "almond milk", updated.FoodName)
 
 	// wrong user
-	notFound, err := r.Update(ctx, "u2", item.ID, map[string]any{"name": "x"})
+	notFound, err := r.Update(ctx, "u2", item.ID, map[string]any{"food_name": "x"})
 	require.NoError(t, err)
 	assert.Nil(t, notFound)
 }
@@ -86,9 +87,9 @@ func TestExpiryRepo_CountByStatus(t *testing.T) {
 	r := NewExpiryRepo(db)
 	ctx := context.Background()
 
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "a", Status: "active"}))
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "b", Status: "active"}))
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "c", Status: "expired"}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "a", Status: "active", ExpireDate: time.Now()}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "b", Status: "active", ExpireDate: time.Now()}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "c", Status: "expired", ExpireDate: time.Now()}))
 
 	counts, err := r.CountByStatus(ctx, "u1")
 	require.NoError(t, err)
@@ -105,10 +106,10 @@ func TestExpiryRepo_ListExpiringSoon(t *testing.T) {
 	future := today.AddDate(0, 0, 3)
 	farFuture := today.AddDate(0, 0, 10)
 
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "a", Status: "active", ExpiryDate: &today}))
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "b", Status: "active", ExpiryDate: &future}))
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "c", Status: "active", ExpiryDate: &farFuture}))
-	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "d", Status: "consumed", ExpiryDate: &today}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "a", Status: "active", ExpireDate: today}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "b", Status: "active", ExpireDate: future}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "c", Status: "active", ExpireDate: farFuture}))
+	require.NoError(t, r.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "d", Status: "consumed", ExpireDate: today}))
 
 	items, err := r.ListExpiringSoon(ctx, "u1", 7, 0)
 	require.NoError(t, err)

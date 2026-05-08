@@ -515,6 +515,7 @@ type User struct {
 	OpenID               string     `gorm:"column:openid"`
 	EarnedCreditsBalance int        `gorm:"column:earned_credits_balance"`
 	CreatedAt            *time.Time `gorm:"column:create_time"`
+	Birthday             *string    `gorm:"column:birthday"`
 }
 
 func (User) TableName() string { return "weapp_user" }

@@ -46,23 +46,25 @@ func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey, baseURL, model string
 
 // AnalyzeInput holds all possible inputs for analysis.
 type AnalyzeInput struct {
-	Base64Image           string   `json:"base64Image"`
-	ImageURL              string   `json:"image_url"`
-	ImageURLs             []string `json:"image_urls"`
-	Text                  string   `json:"text"`
-	AdditionalContext     string   `json:"additionalContext"`
-	MealType              string   `json:"meal_type"`
-	TimezoneOffsetMinutes *int     `json:"timezone_offset_minutes"`
-	Province              string   `json:"province"`
-	City                  string   `json:"city"`
-	District              string   `json:"district"`
-	UserGoal              string   `json:"user_goal"`
-	DietGoal              string   `json:"diet_goal"`
-	ActivityTiming        string   `json:"activity_timing"`
-	RemainingCalories     *float64 `json:"remaining_calories"`
-	ExecutionMode         *string  `json:"execution_mode"`
-	ModelName             string   `json:"modelName"`
-	AnalysisEngine        string   `json:"analysis_engine"`
+	Base64Image           string           `json:"base64Image"`
+	ImageURL              string           `json:"image_url"`
+	ImageURLs             []string         `json:"image_urls"`
+	Text                  string           `json:"text"`
+	AdditionalContext     string           `json:"additionalContext"`
+	MealType              string           `json:"meal_type"`
+	TimezoneOffsetMinutes *int             `json:"timezone_offset_minutes"`
+	Province              string           `json:"province"`
+	City                  string           `json:"city"`
+	District              string           `json:"district"`
+	UserGoal              string           `json:"user_goal"`
+	DietGoal              string           `json:"diet_goal"`
+	ActivityTiming        string           `json:"activity_timing"`
+	RemainingCalories     *float64         `json:"remaining_calories"`
+	ExecutionMode         *string          `json:"execution_mode"`
+	ModelName             string           `json:"modelName"`
+	AnalysisEngine        string           `json:"analysis_engine"`
+	IsMultiView           bool             `json:"is_multi_view"`
+	ReferenceObjects      []map[string]any `json:"reference_objects"`
 }
 
 func normalizeExecutionMode(mode *string) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,6 +38,9 @@ type User struct {
 	Searchable             *bool          `gorm:"column:searchable"`
 	PublicRecords          *bool          `gorm:"column:public_records"`
 	LastSeenAnalyzeHistory *time.Time     `gorm:"column:last_seen_analyze_history"`
+	RegistrationInviteCode *string        `gorm:"column:registration_invite_code"`
+	ReferredByUserID       *string        `gorm:"column:referred_by_user_id"`
+	PointsBalance          *float64       `gorm:"column:points_balance"`
 }
 
 func (User) TableName() string { return "weapp_user" }
@@ -118,4 +122,54 @@ func (r *UserRepo) CountFoodRecordDays(ctx context.Context, userID string) (int6
 		WHERE user_id = ?
 	`, userID).Scan(&count).Error
 	return count, err
+}
+
+func (r *UserRepo) FindByRegistrationInviteCode(ctx context.Context, code string) (*User, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return nil, nil
+	}
+	var user User
+	err := r.db.WithContext(ctx).Where("registration_invite_code = ?", code).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &user, err
+}
+
+func (r *UserRepo) ResolveUserByInviteCode(ctx context.Context, code string) (*User, error) {
+	code = strings.ToLower(strings.TrimSpace(code))
+	if len(code) < 3 {
+		return nil, nil
+	}
+	var users []User
+	err := r.db.WithContext(ctx).
+		Where("LOWER(REPLACE(id, '-', '')) LIKE ?", code+"%").
+		Limit(2).
+		Find(&users).Error
+	if err != nil || len(users) == 0 {
+		return nil, err
+	}
+	if len(users) > 1 {
+		return nil, fmt.Errorf("invite code is ambiguous")
+	}
+	return &users[0], nil
+}
+
+func (r *UserRepo) CreateInviteReferralBinding(ctx context.Context, inviterUserID, inviteeUserID, inviteCode string) error {
+	if inviterUserID == "" || inviteeUserID == "" || inviterUserID == inviteeUserID {
+		return nil
+	}
+	now := time.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60))
+	row := map[string]any{
+		"inviter_user_id":   inviterUserID,
+		"invitee_user_id":   inviteeUserID,
+		"invite_code":       strings.ToUpper(strings.TrimSpace(inviteCode)),
+		"status":            "pending",
+		"reward_start_date": now.Format("2006-01-02"),
+		"reward_end_date":   now.AddDate(0, 0, 7).Format("2006-01-02"),
+		"created_at":        time.Now(),
+		"updated_at":        time.Now(),
+	}
+	return r.db.WithContext(ctx).Table("user_invite_referrals").Create(row).Error
 }

@@ -142,3 +142,21 @@ func (r *BodyMetricsRepo) SumWaterByDate(ctx context.Context, userID string, rec
 	err = r.db.WithContext(ctx).Model(&domain.BodyWaterLog{}).Where("user_id = ? AND recorded_on >= ? AND recorded_on < ?", userID, start, end).Select("COALESCE(SUM(amount_ml), 0)").Scan(&total).Error
 	return total, err
 }
+
+func (r *BodyMetricsRepo) GetUserProfile(ctx context.Context, userID string) (*domain.BodyMetricUserProfile, error) {
+	var row domain.BodyMetricUserProfile
+	if err := r.db.WithContext(ctx).Where("id = ?", userID).First(&row).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *BodyMetricsRepo) UpdateUserProfileMetrics(ctx context.Context, userID string, updates map[string]any) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Updates(updates).Error
+}

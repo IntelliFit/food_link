@@ -318,11 +318,9 @@ func TestFoodRecordService_buildRecordTime_InvalidDate(t *testing.T) {
 	svc := NewFoodRecordService(r, tr, ur)
 
 	invalidDate := "not-a-date"
-	tm := svc.buildRecordTime(&invalidDate, nil)
-	assert.NotNil(t, tm)
-	// falls back to today
-	chinaTZ := time.FixedZone("Asia/Shanghai", 8*60*60)
-	assert.Equal(t, time.Now().In(chinaTZ).Day(), tm.In(chinaTZ).Day())
+	tm, err := svc.buildRecordTime(context.Background(), &invalidDate, nil)
+	assert.Error(t, err)
+	assert.Nil(t, tm)
 }
 
 func TestFoodRecordService_buildRecordTime_SourceTaskNoPayload(t *testing.T) {
@@ -335,7 +333,8 @@ func TestFoodRecordService_buildRecordTime_SourceTaskNoPayload(t *testing.T) {
 	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "analyze"}
 	require.NoError(t, db.Create(task).Error)
 
-	tm := svc.buildRecordTime(nil, &task.ID)
+	tm, err := svc.buildRecordTime(context.Background(), nil, &task.ID)
+	require.NoError(t, err)
 	assert.NotNil(t, tm)
 }
 
@@ -614,7 +613,8 @@ func TestFoodRecordService_buildRecordTime_TaskRepoError(t *testing.T) {
 	})
 	defer patches.Reset()
 
-	tm := svc.buildRecordTime(nil, &taskID)
+	tm, err := svc.buildRecordTime(context.Background(), nil, &taskID)
+	require.NoError(t, err)
 	assert.NotNil(t, tm)
 }
 
@@ -660,7 +660,8 @@ func TestFoodRecordService_buildRecordTime_NilTask(t *testing.T) {
 
 	// task ID that doesn't exist - returns nil task
 	taskID := "nonexistent-task"
-	tm := svc.buildRecordTime(nil, &taskID)
+	tm, err := svc.buildRecordTime(context.Background(), nil, &taskID)
+	require.NoError(t, err)
 	assert.NotNil(t, tm)
 }
 
@@ -674,7 +675,8 @@ func TestFoodRecordService_buildRecordTime_TaskNoPayload(t *testing.T) {
 	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "analyze"}
 	require.NoError(t, db.Create(task).Error)
 
-	tm := svc.buildRecordTime(nil, &task.ID)
+	tm, err := svc.buildRecordTime(context.Background(), nil, &task.ID)
+	require.NoError(t, err)
 	assert.NotNil(t, tm)
 }
 
@@ -689,8 +691,9 @@ func TestFoodRecordService_buildRecordTime_TaskInvalidDate(t *testing.T) {
 	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "analyze", Payload: payload}
 	require.NoError(t, db.Create(task).Error)
 
-	tm := svc.buildRecordTime(nil, &task.ID)
-	assert.NotNil(t, tm)
+	tm, err := svc.buildRecordTime(context.Background(), nil, &task.ID)
+	assert.Error(t, err)
+	assert.Nil(t, tm)
 }
 
 func TestFoodRecordService_buildRecordTime_TaskValidRecordedOn(t *testing.T) {
@@ -699,22 +702,23 @@ func TestFoodRecordService_buildRecordTime_TaskValidRecordedOn(t *testing.T) {
 	tr := foodrepo.NewAnalysisTaskRepo(db)
 	ur := repo.NewUserRepo(db)
 	svc := NewFoodRecordService(r, tr, ur)
+	chinaTZ := time.FixedZone("Asia/Shanghai", 8*60*60)
 
 	// Mock the task repo to return a task with valid recorded_on
 	patches := ApplyMethod(reflect.TypeOf(tr), "GetByID", func(_ *foodrepo.AnalysisTaskRepo, _ context.Context, _ string) (*analyzedomain.AnalysisTask, error) {
 		return &analyzedomain.AnalysisTask{
 			ID:      "task-1",
 			UserID:  "u1",
-			Payload: map[string]any{"recorded_on": "2024-06-20"},
+			Payload: map[string]any{"recorded_on": time.Now().In(chinaTZ).Format("2006-01-02")},
 		}, nil
 	})
 	defer patches.Reset()
 
 	taskID := "task-1"
-	tm := svc.buildRecordTime(nil, &taskID)
+	tm, err := svc.buildRecordTime(context.Background(), nil, &taskID)
+	require.NoError(t, err)
 	assert.NotNil(t, tm)
-	chinaTZ := time.FixedZone("Asia/Shanghai", 8*60*60)
-	assert.Equal(t, 20, tm.In(chinaTZ).Day())
+	assert.Equal(t, time.Now().In(chinaTZ).Day(), tm.In(chinaTZ).Day())
 }
 
 func TestNormalizeMealType_SnackEvening(t *testing.T) {
@@ -743,7 +747,8 @@ func TestFoodRecordService_buildRecordTime_EmptyDate(t *testing.T) {
 	svc := NewFoodRecordService(r, tr, ur)
 
 	emptyDate := ""
-	tm := svc.buildRecordTime(&emptyDate, nil)
+	tm, err := svc.buildRecordTime(context.Background(), &emptyDate, nil)
+	require.NoError(t, err)
 	assert.NotNil(t, tm)
 }
 

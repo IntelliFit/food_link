@@ -58,7 +58,7 @@ func NewFeedRepo(db *gorm.DB) *FeedRepo {
 	return &FeedRepo{db: db}
 }
 
-func (r *FeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date string, limit int) ([]FeedRecord, error) {
 	var publicUserIDs []string
 	err := r.db.WithContext(ctx).Table("weapp_user").
 		Select("id").Where("public_records = ?", true).Pluck("id", &publicUserIDs).Error
@@ -76,13 +76,20 @@ func (r *FeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal string
 	if dietGoal != "" {
 		q = q.Where("diet_goal = ?", dietGoal)
 	}
+	if date != "" {
+		start, end, err := chinaDateWindow(date)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where("record_time >= ? AND record_time < ?", start, end)
+	}
 
 	var rows []FeedRecord
 	err = q.Order("record_time DESC").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 
-func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date string, limit int) ([]FeedRecord, error) {
 	if len(authorIDs) == 0 {
 		return nil, nil
 	}
@@ -92,6 +99,13 @@ func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealT
 	}
 	if dietGoal != "" {
 		q = q.Where("diet_goal = ?", dietGoal)
+	}
+	if date != "" {
+		start, end, err := chinaDateWindow(date)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where("record_time >= ? AND record_time < ?", start, end)
 	}
 	var rows []FeedRecord
 	err := q.Order("record_time DESC").Limit(limit).Find(&rows).Error
@@ -306,4 +320,14 @@ func ptrEqual(a, b *string) bool {
 		return false
 	}
 	return *a == *b
+}
+
+func chinaDateWindow(date string) (time.Time, time.Time, error) {
+	loc := time.FixedZone("Asia/Shanghai", 8*60*60)
+	parsed, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	start := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, loc)
+	return start.UTC(), start.AddDate(0, 0, 1).UTC(), nil
 }

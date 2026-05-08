@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"food_link/backend/internal/auth/repo"
@@ -140,22 +142,43 @@ func (s *UserService) GetHealthProfile(ctx context.Context, userID string) (map[
 }
 
 type UpdateHealthProfileInput struct {
-	Gender           *string                      `json:"gender"`
-	Birthday         *string                      `json:"birthday"`
-	Height           *float64                     `json:"height"`
-	Weight           *float64                     `json:"weight"`
-	ActivityLevel    *string                      `json:"activity_level"`
-	DietGoal         *string                      `json:"diet_goal"`
-	ExecutionMode    *string                      `json:"execution_mode"`
-	ModeSetBy        *string                      `json:"mode_set_by"`
-	ModeReason       *string                      `json:"mode_reason"`
-	MedicalHistory   *string                      `json:"medical_history"`
-	DietPreference   *string                      `json:"diet_preference"`
-	Allergies        *string                      `json:"allergies"`
-	HealthNotes      *string                      `json:"health_notes"`
-	DashboardTargets *UpdateDashboardTargetsInput `json:"dashboard_targets"`
-	ReportExtract    map[string]any               `json:"report_extract"`
-	ReportImageURL   *string                      `json:"report_image_url"`
+	Gender                     *string                      `json:"gender"`
+	Birthday                   *string                      `json:"birthday"`
+	Height                     *float64                     `json:"height"`
+	Weight                     *float64                     `json:"weight"`
+	ActivityLevel              *string                      `json:"activity_level"`
+	DietGoal                   *string                      `json:"diet_goal"`
+	ExecutionMode              *string                      `json:"execution_mode"`
+	ModeSetBy                  *string                      `json:"mode_set_by"`
+	ModeReason                 *string                      `json:"mode_reason"`
+	MedicalHistory             *StringList                  `json:"medical_history"`
+	DietPreference             *StringList                  `json:"diet_preference"`
+	Allergies                  *StringList                  `json:"allergies"`
+	HealthNotes                *string                      `json:"health_notes"`
+	DashboardTargets           *UpdateDashboardTargetsInput `json:"dashboard_targets"`
+	ReportExtract              map[string]any               `json:"report_extract"`
+	ReportImageURL             *string                      `json:"report_image_url"`
+	PrecisionReferenceDefaults map[string]any               `json:"precision_reference_defaults"`
+}
+
+type StringList []string
+
+func (s *StringList) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*s = nil
+		return nil
+	}
+	var list []string
+	if err := json.Unmarshal(data, &list); err == nil {
+		*s = cleanStringList(list)
+		return nil
+	}
+	var single string
+	if err := json.Unmarshal(data, &single); err != nil {
+		return err
+	}
+	*s = cleanStringList([]string{single})
+	return nil
 }
 
 func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, input UpdateHealthProfileInput) (map[string]any, error) {
@@ -228,13 +251,13 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 		healthCondition = map[string]any{}
 	}
 	if input.MedicalHistory != nil {
-		healthCondition["medical_history"] = *input.MedicalHistory
+		healthCondition["medical_history"] = []string(*input.MedicalHistory)
 	}
 	if input.DietPreference != nil {
-		healthCondition["diet_preference"] = *input.DietPreference
+		healthCondition["diet_preference"] = []string(*input.DietPreference)
 	}
 	if input.Allergies != nil {
-		healthCondition["allergies"] = *input.Allergies
+		healthCondition["allergies"] = []string(*input.Allergies)
 	}
 	if input.HealthNotes != nil {
 		healthCondition["health_notes"] = *input.HealthNotes
@@ -246,6 +269,13 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 			"protein_target": math.Round(dt.ProteinTarget*10) / 10,
 			"carbs_target":   math.Round(dt.CarbsTarget*10) / 10,
 			"fat_target":     math.Round(dt.FatTarget*10) / 10,
+		}
+	}
+	if input.PrecisionReferenceDefaults != nil {
+		if normalized := normalizePrecisionReferenceDefaults(input.PrecisionReferenceDefaults); len(normalized) > 0 {
+			healthCondition["precision_reference_defaults"] = normalized
+		} else {
+			delete(healthCondition, "precision_reference_defaults")
 		}
 	}
 
@@ -350,7 +380,7 @@ func buildProfileResponse(user *repo.User) map[string]any {
 		"birthday":              user.Birthday,
 		"gender":                user.Gender,
 		"activity_level":        user.ActivityLevel,
-		"health_condition":      user.HealthCondition,
+		"health_condition":      normalizeHealthConditionResponse(user.HealthCondition),
 		"bmr":                   user.BMR,
 		"tdee":                  user.TDEE,
 		"onboarding_completed":  user.OnboardingCompleted,
@@ -373,7 +403,7 @@ func buildHealthProfileResponse(user *repo.User) map[string]any {
 		"birthday":              user.Birthday,
 		"gender":                user.Gender,
 		"activity_level":        user.ActivityLevel,
-		"health_condition":      user.HealthCondition,
+		"health_condition":      normalizeHealthConditionResponse(user.HealthCondition),
 		"bmr":                   user.BMR,
 		"tdee":                  user.TDEE,
 		"onboarding_completed":  user.OnboardingCompleted,
@@ -433,6 +463,78 @@ func buildDashboardTargets(user *repo.User) map[string]float64 {
 		"carbs_target":   math.Round(carbs*10) / 10,
 		"fat_target":     math.Round(fat*10) / 10,
 	}
+}
+
+func cleanStringList(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		cleaned := strings.TrimSpace(value)
+		if cleaned == "" || seen[cleaned] {
+			continue
+		}
+		seen[cleaned] = true
+		out = append(out, cleaned)
+	}
+	return out
+}
+
+func normalizeHealthConditionResponse(input map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range input {
+		out[key] = value
+	}
+	for _, key := range []string{"medical_history", "diet_preference", "allergies"} {
+		switch v := out[key].(type) {
+		case []string:
+			out[key] = cleanStringList(v)
+		case []any:
+			values := make([]string, 0, len(v))
+			for _, item := range v {
+				values = append(values, fmt.Sprintf("%v", item))
+			}
+			out[key] = cleanStringList(values)
+		case string:
+			out[key] = cleanStringList([]string{v})
+		case nil:
+			out[key] = []string{}
+		}
+	}
+	if raw, ok := out["precision_reference_defaults"].(map[string]any); ok {
+		out["precision_reference_defaults"] = normalizePrecisionReferenceDefaults(raw)
+	}
+	return out
+}
+
+func normalizePrecisionReferenceDefaults(input map[string]any) map[string]any {
+	out := map[string]any{}
+	if key := strings.TrimSpace(fmt.Sprintf("%v", input["preferred_reference_key"])); key != "" && key != "<nil>" {
+		out["preferred_reference_key"] = key
+	}
+	if presets, ok := input["presets"].(map[string]any); ok && len(presets) > 0 {
+		cleaned := map[string]any{}
+		for key, raw := range presets {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			if cfg, ok := raw.(map[string]any); ok {
+				name := strings.TrimSpace(fmt.Sprintf("%v", cfg["reference_name"]))
+				if name == "" || name == "<nil>" {
+					continue
+				}
+				item := map[string]any{"reference_name": name}
+				if dims, ok := cfg["dimensions_mm"].(map[string]any); ok && len(dims) > 0 {
+					item["dimensions_mm"] = dims
+				}
+				cleaned[key] = item
+			}
+		}
+		if len(cleaned) > 0 {
+			out["presets"] = cleaned
+		}
+	}
+	return out
 }
 
 func normalizeExecutionMode(mode *string) string {

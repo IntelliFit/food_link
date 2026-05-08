@@ -10,6 +10,7 @@ import (
 	"food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
 	authrepo "food_link/backend/internal/auth/repo"
+	"food_link/backend/internal/common/dateutil"
 	"food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/storage"
 )
@@ -40,30 +41,43 @@ func (s *TaskService) ConfigureCreditGuard(guard CreditGuard) {
 }
 
 type SubmitTaskInput struct {
-	ImageURL           string   `json:"image_url"`
-	ImageURLs          []string `json:"image_urls"`
-	Text               string   `json:"text"`
-	TextInput          string   `json:"text_input"`
-	Date               string   `json:"date"`
-	MealType           string   `json:"meal_type"`
-	Province           string   `json:"province"`
-	City               string   `json:"city"`
-	District           string   `json:"district"`
-	DietGoal           string   `json:"diet_goal"`
-	ActivityTiming     string   `json:"activity_timing"`
-	UserGoal           string   `json:"user_goal"`
-	RemainingCalories  *float64 `json:"remaining_calories"`
-	AdditionalContext  string   `json:"additionalContext"`
-	ModelName          string   `json:"modelName"`
-	ExecutionMode      *string  `json:"execution_mode"`
-	PrecisionSessionID *string  `json:"precision_session_id"`
-	AnalysisEngine     string   `json:"analysis_engine"`
+	ImageURL              string           `json:"image_url"`
+	ImageURLs             []string         `json:"image_urls"`
+	Text                  string           `json:"text"`
+	TextInput             string           `json:"text_input"`
+	Date                  string           `json:"date"`
+	MealType              string           `json:"meal_type"`
+	Province              string           `json:"province"`
+	City                  string           `json:"city"`
+	District              string           `json:"district"`
+	DietGoal              string           `json:"diet_goal"`
+	ActivityTiming        string           `json:"activity_timing"`
+	UserGoal              string           `json:"user_goal"`
+	RemainingCalories     *float64         `json:"remaining_calories"`
+	AdditionalContext     string           `json:"additionalContext"`
+	ModelName             string           `json:"modelName"`
+	ExecutionMode         *string          `json:"execution_mode"`
+	PrecisionSessionID    *string          `json:"precision_session_id"`
+	AnalysisEngine        string           `json:"analysis_engine"`
+	TimezoneOffsetMinutes *int             `json:"timezone_offset_minutes"`
+	IsMultiView           bool             `json:"is_multi_view"`
+	PreviousResult        map[string]any   `json:"previousResult"`
+	CorrectionItems       []map[string]any `json:"correctionItems"`
+	ReferenceObjects      []map[string]any `json:"reference_objects"`
+	SubscribeStatus       string           `json:"subscribe_status"`
+	SourceType            string           `json:"source_type"`
 }
 
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
 	}
+
+	recordedOn, err := dateutil.ResolveRecordedOnDate(input.Date, "date")
+	if err != nil {
+		return "", err
+	}
+	input.Date = recordedOn
 
 	mode := normalizeExecutionMode(input.ExecutionMode)
 	if userID != "" {
@@ -86,10 +100,9 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 		"modelName":          input.ModelName,
 		"execution_mode":     mode,
 		"analysis_engine":    input.AnalysisEngine,
+		"recorded_on":        recordedOn,
 	}
-	if input.Date != "" {
-		payload["recorded_on"] = input.Date
-	}
+	applySubmitCompatibilityPayload(payload, input)
 
 	creditMode := mode
 	if input.PrecisionSessionID != nil {
@@ -133,9 +146,15 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if input.TextInput == "" {
 		input.TextInput = input.Text
 	}
-	if input.TextInput == "" {
+	if input.TextInput == "" && !hasPrecisionSupplement(input) {
 		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
 	}
+
+	recordedOn, err := dateutil.ResolveRecordedOnDate(input.Date, "date")
+	if err != nil {
+		return "", err
+	}
+	input.Date = recordedOn
 
 	mode := normalizeExecutionMode(input.ExecutionMode)
 	if userID != "" {
@@ -158,10 +177,9 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 		"modelName":          input.ModelName,
 		"execution_mode":     mode,
 		"analysis_engine":    input.AnalysisEngine,
+		"recorded_on":        recordedOn,
 	}
-	if input.Date != "" {
-		payload["recorded_on"] = input.Date
-	}
+	applySubmitCompatibilityPayload(payload, input)
 
 	creditMode := mode
 	if input.PrecisionSessionID != nil {
@@ -216,6 +234,40 @@ func (s *TaskService) applyFoodCreditGuard(ctx context.Context, userID, executio
 	return creditsInfo, cost, nil
 }
 
+func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInput) {
+	if input.TimezoneOffsetMinutes != nil {
+		payload["timezone_offset_minutes"] = *input.TimezoneOffsetMinutes
+	}
+	if input.IsMultiView {
+		payload["is_multi_view"] = true
+	}
+	if len(input.PreviousResult) > 0 {
+		payload["previousResult"] = input.PreviousResult
+	}
+	if len(input.CorrectionItems) > 0 {
+		payload["correctionItems"] = input.CorrectionItems
+	}
+	if len(input.ReferenceObjects) > 0 {
+		payload["reference_objects"] = input.ReferenceObjects
+	}
+	if strings.TrimSpace(input.SubscribeStatus) != "" {
+		payload["subscribe_status"] = strings.TrimSpace(input.SubscribeStatus)
+	}
+	if strings.TrimSpace(input.SourceType) != "" {
+		payload["source_type"] = strings.ToLower(strings.TrimSpace(input.SourceType))
+	}
+}
+
+func hasPrecisionSupplement(input SubmitTaskInput) bool {
+	if input.PrecisionSessionID == nil || strings.TrimSpace(*input.PrecisionSessionID) == "" {
+		return false
+	}
+	return strings.TrimSpace(input.AdditionalContext) != "" ||
+		len(input.ReferenceObjects) > 0 ||
+		len(input.CorrectionItems) > 0 ||
+		len(input.PreviousResult) > 0
+}
+
 func (s *TaskService) consumeFoodCredits(ctx context.Context, userID string, creditsInfo map[string]any, cost int, taskID, taskType string) {
 	if s.creditGuard == nil || userID == "" || creditsInfo == nil || taskID == "" {
 		return
@@ -251,6 +303,9 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		if existing.UserID != userID {
 			return "", errors.ErrForbidden
 		}
+		if strings.TrimSpace(existing.SourceType) != "" && strings.TrimSpace(existing.SourceType) != sourceType {
+			return "", &errors.AppError{Code: 10002, Message: "source_type does not match precision session", HTTPStatus: 400}
+		}
 		if !precisionSessionCanContinue(existing.Status) {
 			return "", &errors.AppError{Code: 10002, Message: "该精准模式会话已结束，无法继续", HTTPStatus: 400}
 		}
@@ -259,12 +314,16 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		for key, value := range payload {
 			latestInputs[key] = value
 		}
-		if err := s.precision.UpdateSession(ctx, existing.ID, map[string]any{
+		sessionUpdates := map[string]any{
 			"status":        "collecting",
 			"round_index":   nextRound,
 			"latest_inputs": latestInputs,
 			"updated_at":    time.Now(),
-		}); err != nil {
+		}
+		if len(input.ReferenceObjects) > 0 {
+			sessionUpdates["reference_objects"] = referenceObjectsAsAny(input.ReferenceObjects)
+		}
+		if err := s.precision.UpdateSession(ctx, existing.ID, sessionUpdates); err != nil {
 			return "", err
 		}
 		if err := s.precision.CreateRound(ctx, &domain.PrecisionSessionRound{
@@ -280,12 +339,13 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		session.LatestInputs = latestInputs
 	} else {
 		newSession := &domain.PrecisionSession{
-			UserID:        userID,
-			SourceType:    sourceType,
-			ExecutionMode: "strict",
-			Status:        "collecting",
-			RoundIndex:    1,
-			LatestInputs:  payload,
+			UserID:           userID,
+			SourceType:       sourceType,
+			ExecutionMode:    "strict",
+			Status:           "collecting",
+			RoundIndex:       1,
+			LatestInputs:     payload,
+			ReferenceObjects: referenceObjectsAsAny(input.ReferenceObjects),
 		}
 		if err := s.precision.CreateSession(ctx, newSession); err != nil {
 			return "", err
@@ -352,10 +412,25 @@ func precisionSessionCanContinue(status string) bool {
 }
 
 func precisionSourceType(input SubmitTaskInput) string {
+	requested := strings.ToLower(strings.TrimSpace(input.SourceType))
+	if requested == "image" || requested == "text" {
+		return requested
+	}
 	if input.TextInput != "" && input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		return "text"
 	}
 	return "image"
+}
+
+func referenceObjectsAsAny(items []map[string]any) []any {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, item)
+	}
+	return out
 }
 
 func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error) {

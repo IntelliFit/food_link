@@ -324,6 +324,9 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 	if user == nil {
 		return nil, commonerrors.ErrNotFound
 	}
+	if err := enforceMinorPaymentLimit(user, plan.Amount); err != nil {
+		return nil, err
+	}
 	openID := strings.TrimSpace(user.OpenID)
 	if openID == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "当前用户缺少 openid，无法发起微信支付", HTTPStatus: 400}
@@ -1442,6 +1445,31 @@ func canUsePrecisionMode(membership *domain.UserMembership) bool {
 	}
 	code := strings.TrimSpace(*membership.CurrentPlanCode)
 	return strings.EqualFold(code, "pro_monthly") || strings.HasPrefix(code, "standard_") || strings.HasPrefix(code, "advanced_")
+}
+
+func enforceMinorPaymentLimit(user *membershiprepo.User, amount float64) error {
+	if user == nil || user.Birthday == nil || strings.TrimSpace(*user.Birthday) == "" {
+		return nil
+	}
+	birthday, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(*user.Birthday), chinaLocation())
+	if err != nil {
+		return nil
+	}
+	now := time.Now().In(chinaLocation())
+	age := now.Year() - birthday.Year()
+	if now.YearDay() < birthday.YearDay() {
+		age--
+	}
+	switch {
+	case age < 8:
+		return &commonerrors.AppError{Code: 10003, Message: "users under 8 cannot make payments", HTTPStatus: 403}
+	case age < 16 && amount > 50:
+		return &commonerrors.AppError{Code: 10003, Message: "single payment for users under 16 cannot exceed 50 CNY", HTTPStatus: 403}
+	case age < 18 && amount > 100:
+		return &commonerrors.AppError{Code: 10003, Message: "single payment for users under 18 cannot exceed 100 CNY", HTTPStatus: 403}
+	default:
+		return nil
+	}
 }
 
 func normalizeChinaDate(value string) (string, error) {

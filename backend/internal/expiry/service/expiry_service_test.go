@@ -31,10 +31,10 @@ func TestExpiryService_Dashboard(t *testing.T) {
 	soon := today.AddDate(0, 0, 3)
 	far := today.AddDate(0, 0, 10)
 
-	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "a", Status: "active", ExpiryDate: &today}))
-	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "b", Status: "active", ExpiryDate: &soon}))
-	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "c", Status: "active", ExpiryDate: &far}))
-	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", Name: "d", Status: "consumed"}))
+	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "a", Status: "active", ExpireDate: today}))
+	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "b", Status: "active", ExpireDate: soon}))
+	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "c", Status: "active", ExpireDate: far}))
+	require.NoError(t, expiryRepo.Create(ctx, &domain.ExpiryItem{UserID: "u1", FoodName: "d", Status: "consumed", ExpireDate: far}))
 
 	dash, err := svc.Dashboard(ctx, "u1")
 	require.NoError(t, err)
@@ -48,12 +48,13 @@ func TestExpiryService_CreateItem(t *testing.T) {
 	svc := NewExpiryService(expiryRepo, taskRepo)
 	ctx := context.Background()
 
-	item, err := svc.CreateItem(ctx, "u1", CreateItemInput{Name: "milk"})
+	expireDate := time.Now().AddDate(0, 0, 3)
+	item, err := svc.CreateItem(ctx, "u1", CreateItemInput{Name: "milk", ExpireDate: &expireDate})
 	require.NoError(t, err)
-	assert.Equal(t, "milk", item.Name)
+	assert.Equal(t, "milk", item.FoodName)
 	assert.Equal(t, "active", item.Status)
 
-	_, err = svc.CreateItem(ctx, "u1", CreateItemInput{Name: ""})
+	_, err = svc.CreateItem(ctx, "u1", CreateItemInput{Name: "", ExpireDate: &expireDate})
 	require.Error(t, err)
 }
 
@@ -62,12 +63,12 @@ func TestExpiryService_GetItem(t *testing.T) {
 	svc := NewExpiryService(expiryRepo, taskRepo)
 	ctx := context.Background()
 
-	item := &domain.ExpiryItem{UserID: "u1", Name: "egg", Status: "active"}
+	item := &domain.ExpiryItem{UserID: "u1", FoodName: "egg", Status: "active", ExpireDate: time.Now()}
 	require.NoError(t, expiryRepo.Create(ctx, item))
 
 	found, err := svc.GetItem(ctx, "u1", item.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "egg", found.Name)
+	assert.Equal(t, "egg", found.FoodName)
 
 	_, err = svc.GetItem(ctx, "u1", "nonexistent")
 	require.Error(t, err)
@@ -81,13 +82,13 @@ func TestExpiryService_UpdateItem(t *testing.T) {
 	svc := NewExpiryService(expiryRepo, taskRepo)
 	ctx := context.Background()
 
-	item := &domain.ExpiryItem{UserID: "u1", Name: "bread", Status: "active"}
+	item := &domain.ExpiryItem{UserID: "u1", FoodName: "bread", Status: "active", ExpireDate: time.Now()}
 	require.NoError(t, expiryRepo.Create(ctx, item))
 
 	newName := "sourdough"
 	updated, err := svc.UpdateItem(ctx, "u1", item.ID, UpdateItemInput{Name: &newName})
 	require.NoError(t, err)
-	assert.Equal(t, "sourdough", updated.Name)
+	assert.Equal(t, "sourdough", updated.FoodName)
 
 	emptyName := ""
 	_, err = svc.UpdateItem(ctx, "u1", item.ID, UpdateItemInput{Name: &emptyName})
@@ -102,7 +103,7 @@ func TestExpiryService_UpdateStatus(t *testing.T) {
 	svc := NewExpiryService(expiryRepo, taskRepo)
 	ctx := context.Background()
 
-	item := &domain.ExpiryItem{UserID: "u1", Name: "yogurt", Status: "active"}
+	item := &domain.ExpiryItem{UserID: "u1", FoodName: "yogurt", Status: "active", ExpireDate: time.Now()}
 	require.NoError(t, expiryRepo.Create(ctx, item))
 
 	updated, err := svc.UpdateStatus(ctx, "u1", item.ID, "consumed")
@@ -118,7 +119,7 @@ func TestExpiryService_Subscribe(t *testing.T) {
 	svc := NewExpiryService(expiryRepo, taskRepo)
 	ctx := context.Background()
 
-	item := &domain.ExpiryItem{UserID: "u1", Name: "cheese", Status: "active"}
+	item := &domain.ExpiryItem{UserID: "u1", FoodName: "cheese", Status: "active", ExpireDate: time.Now()}
 	require.NoError(t, expiryRepo.Create(ctx, item))
 
 	res, err := svc.Subscribe(ctx, "u1", item.ID)

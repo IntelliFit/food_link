@@ -290,6 +290,7 @@ func (s *FriendService) GetInviteProfile(ctx context.Context, userID string) (ma
 	}
 	return map[string]any{
 		"id":         user.ID,
+		"user_id":    user.ID,
 		"nickname":   user.Nickname,
 		"avatar":     user.Avatar,
 		"invite_code": buildInviteCode(user.ID),
@@ -309,6 +310,7 @@ func (s *FriendService) ResolveUserByInviteCode(ctx context.Context, code string
 	}
 	return map[string]any{
 		"id":         user.ID,
+		"user_id":    user.ID,
 		"nickname":   user.Nickname,
 		"avatar":     user.Avatar,
 		"invite_code": buildInviteCode(user.ID),
@@ -328,6 +330,7 @@ func (s *FriendService) ResolveInviteWithRelation(ctx context.Context, userID, c
 	}
 	profile["is_self"] = isSelf
 	profile["is_friend"] = isFriend
+	profile["already_friend"] = isFriend
 	return profile, nil
 }
 
@@ -345,16 +348,18 @@ func (s *FriendService) AcceptInvite(ctx context.Context, userID, code string) (
 	}
 	isFriend, _ := s.IsFriend(ctx, userID, inviterID)
 	if isFriend {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "你们已是好友", HTTPStatus: 400}
+		profile["status"] = "already_friend"
+		profile["already_friend"] = true
+		return profile, nil
 	}
 	fr, err := s.friendRepo.SendFriendRequest(ctx, userID, inviterID)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
-		"request_id": fr.ID,
-		"status":     fr.Status,
-	}, nil
+	profile["request_id"] = fr.ID
+	profile["status"] = "request_sent"
+	profile["already_friend"] = false
+	return profile, nil
 }
 
 func buildInviteCode(userID string) string {

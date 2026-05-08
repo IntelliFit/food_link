@@ -117,7 +117,7 @@ func TestCreateItem(t *testing.T) {
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"name": "bread"})
+	body, _ := json.Marshal(map[string]string{"name": "bread", "expire_date": "2026-06-15"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/items", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -159,7 +159,7 @@ func TestUpdateItem(t *testing.T) {
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"name": "sourdough"})
+	body, _ := json.Marshal(map[string]string{"name": "sourdough", "expire_date": "2026-06-15"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPut, "/api/expiry/items/i1", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -268,7 +268,7 @@ func TestCreateItemError(t *testing.T) {
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"name": "bread"})
+	body, _ := json.Marshal(map[string]string{"name": "bread", "expire_date": "2026-06-15"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/expiry/items", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

@@ -44,7 +44,7 @@ func (h *CommunityHandler) PublicFeed(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"list": items})
+	response.Success(c, gin.H{"list": items, "has_more": len(items) >= params.Limit})
 }
 
 func (h *CommunityHandler) Feed(c *gin.Context) {
@@ -58,7 +58,7 @@ func (h *CommunityHandler) Feed(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"list": items})
+	response.Success(c, gin.H{"list": items, "has_more": len(items) >= params.Limit})
 }
 
 func (h *CommunityHandler) CheckinLeaderboard(c *gin.Context) {
@@ -116,7 +116,7 @@ func (h *CommunityHandler) ListComments(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"comments": items})
+	response.Success(c, gin.H{"list": items})
 }
 
 func (h *CommunityHandler) FeedContext(c *gin.Context) {
@@ -135,7 +135,7 @@ func (h *CommunityHandler) FeedContext(c *gin.Context) {
 		response.Error(c, commonerrors.ErrForbidden)
 		return
 	}
-	response.Success(c, result)
+	response.Success(c, gin.H{"item": result})
 }
 
 func (h *CommunityHandler) PostComment(c *gin.Context) {
@@ -171,7 +171,7 @@ func (h *CommunityHandler) ListCommentTasks(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"tasks": tasks})
+	response.Success(c, gin.H{"list": tasks})
 }
 
 func (h *CommunityHandler) ListNotifications(c *gin.Context) {
@@ -235,6 +235,7 @@ func parseFeedParams(c *gin.Context) service.FeedParams {
 	}
 	params.MealType = c.Query("meal_type")
 	params.DietGoal = c.Query("diet_goal")
+	params.Date = c.Query("date")
 	if s := c.Query("sort_by"); s != "" {
 		params.SortBy = s
 	}

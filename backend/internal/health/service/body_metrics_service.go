@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
+	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 )
@@ -24,6 +26,8 @@ type BodyMetricsRepo interface {
 	GetBodyMetricSettings(ctx context.Context, userID string) (*domain.BodyMetricSettings, error)
 	UpsertBodyMetricSettings(ctx context.Context, settings *domain.BodyMetricSettings) error
 	SumWaterByDate(ctx context.Context, userID string, recordedOn string) (int64, error)
+	GetUserProfile(ctx context.Context, userID string) (*domain.BodyMetricUserProfile, error)
+	UpdateUserProfileMetrics(ctx context.Context, userID string, updates map[string]any) error
 }
 
 type BodyMetricsService struct {
@@ -46,20 +50,20 @@ type WaterDaily struct {
 }
 
 type BodyMetricsSummary struct {
-	Range              string        `json:"range"`
-	StartDate          string        `json:"start_date"`
-	EndDate            string        `json:"end_date"`
-	WeightEntries      []WeightEntry `json:"weight_entries"`
-	WeightTrendDaily   []WeightEntry `json:"weight_trend_daily"`
-	LatestWeight       *WeightEntry  `json:"latest_weight"`
-	PreviousWeight     *WeightEntry  `json:"previous_weight"`
-	WeightChange       *float64      `json:"weight_change"`
-	WaterGoalMl        int           `json:"water_goal_ml"`
-	TodayWater         WaterDaily    `json:"today_water"`
-	WaterDaily         []WaterDaily  `json:"water_daily"`
-	TotalWaterMl       int           `json:"total_water_ml"`
-	AvgDailyWaterMl    float64       `json:"avg_daily_water_ml"`
-	WaterRecordedDays  int           `json:"water_recorded_days"`
+	Range             string        `json:"range"`
+	StartDate         string        `json:"start_date"`
+	EndDate           string        `json:"end_date"`
+	WeightEntries     []WeightEntry `json:"weight_entries"`
+	WeightTrendDaily  []WeightEntry `json:"weight_trend_daily"`
+	LatestWeight      *WeightEntry  `json:"latest_weight"`
+	PreviousWeight    *WeightEntry  `json:"previous_weight"`
+	WeightChange      *float64      `json:"weight_change"`
+	WaterGoalMl       int           `json:"water_goal_ml"`
+	TodayWater        WaterDaily    `json:"today_water"`
+	WaterDaily        []WaterDaily  `json:"water_daily"`
+	TotalWaterMl      int           `json:"total_water_ml"`
+	AvgDailyWaterMl   float64       `json:"avg_daily_water_ml"`
+	WaterRecordedDays int           `json:"water_recorded_days"`
 }
 
 func (s *BodyMetricsService) GetSummary(ctx context.Context, userID string, statsRange string) (*BodyMetricsSummary, error) {
@@ -136,9 +140,9 @@ func (s *BodyMetricsService) GetSummary(ctx context.Context, userID string, stat
 }
 
 type SyncLocalInput struct {
-	WeightEntries []LocalWeightEntry     `json:"weight_entries"`
+	WeightEntries []LocalWeightEntry       `json:"weight_entries"`
 	WaterByDate   map[string]LocalWaterDay `json:"water_by_date"`
-	WaterGoalMl   *int                   `json:"water_goal_ml"`
+	WaterGoalMl   *int                     `json:"water_goal_ml"`
 }
 
 type LocalWeightEntry struct {
@@ -199,10 +203,12 @@ func (s *BodyMetricsService) SyncLocal(ctx context.Context, userID string, input
 				}
 				now := time.Now().UTC()
 				record := &domain.BodyWeightRecord{
-					UserID:     userID,
-					WeightKg:   round1(entry.Value),
-					RecordedOn: &recordedOn,
-					CreatedAt:  &now,
+					UserID:         userID,
+					WeightKg:       round1(entry.Value),
+					RecordedOn:     &recordedOn,
+					ClientRecordID: &clientID,
+					SourceType:     "imported",
+					CreatedAt:      &now,
 				}
 				if err := s.repo.CreateWeightRecord(ctx, record); err == nil {
 					existingClientIDs[clientID] = true
@@ -251,6 +257,7 @@ func (s *BodyMetricsService) SyncLocal(ctx context.Context, userID string, input
 						UserID:     userID,
 						AmountMl:   amount,
 						RecordedOn: &recordedOn,
+						SourceType: "imported",
 						CreatedAt:  &now,
 					}
 					if err := s.repo.CreateWaterLog(ctx, log); err == nil {
@@ -272,14 +279,17 @@ func (s *BodyMetricsService) AddWaterLog(ctx context.Context, userID string, amo
 	if amountMl <= 0 || amountMl > 5000 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "amount_ml 不合法", HTTPStatus: 400}
 	}
-	if recordedOn == "" {
-		recordedOn = time.Now().In(chinaTZ).Format("2006-01-02")
+	normalizedDate, err := dateutil.NormalizeChinaDate(recordedOn, "date")
+	if err != nil {
+		return nil, err
 	}
+	recordedDate, _ := parseChinaDate(normalizedDate)
 	now := time.Now().UTC()
 	log := &domain.BodyWaterLog{
 		UserID:     userID,
 		AmountMl:   amountMl,
-		RecordedOn: func() *time.Time { t, _ := parseChinaDate(recordedOn); return &t }(),
+		RecordedOn: &recordedDate,
+		SourceType: "manual",
 		CreatedAt:  &now,
 	}
 	if err := s.repo.CreateWaterLog(ctx, log); err != nil {
@@ -289,55 +299,128 @@ func (s *BodyMetricsService) AddWaterLog(ctx context.Context, userID string, amo
 		"message": "喝水已记录",
 		"item": map[string]any{
 			"id":        log.ID,
-			"date":      recordedOn,
+			"date":      normalizedDate,
 			"amount_ml": amountMl,
 		},
 	}, nil
 }
 
 func (s *BodyMetricsService) ResetWaterLogs(ctx context.Context, userID string, recordedOn string) (map[string]any, error) {
-	if recordedOn == "" {
-		recordedOn = time.Now().In(chinaTZ).Format("2006-01-02")
+	normalizedDate, err := dateutil.NormalizeChinaDate(recordedOn, "date")
+	if err != nil {
+		return nil, err
 	}
-	deletedCount, err := s.repo.DeleteWaterLogsByDate(ctx, userID, recordedOn)
+	deletedCount, err := s.repo.DeleteWaterLogsByDate(ctx, userID, normalizedDate)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{
 		"message":       "已清空当日喝水记录",
 		"deleted_count": deletedCount,
-		"date":          recordedOn,
+		"date":          normalizedDate,
 	}, nil
 }
 
 func (s *BodyMetricsService) SaveWeightRecord(ctx context.Context, userID string, weightKg float64, recordedOn string) (map[string]any, error) {
+	return s.SaveWeightRecordWithMeta(ctx, userID, weightKg, recordedOn, "", "manual")
+}
+
+func (s *BodyMetricsService) SaveWeightRecordWithMeta(ctx context.Context, userID string, weightKg float64, recordedOn string, clientID string, sourceType string) (map[string]any, error) {
 	if weightKg < 20 || weightKg > 300 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "weight_kg 不合法", HTTPStatus: 400}
 	}
-	if recordedOn == "" {
-		recordedOn = time.Now().In(chinaTZ).Format("2006-01-02")
+	normalizedDate, err := dateutil.NormalizeChinaDate(recordedOn, "date")
+	if err != nil {
+		return nil, err
 	}
+	recordedDate, _ := parseChinaDate(normalizedDate)
+	clientID = strings.TrimSpace(clientID)
+	sourceType = normalizeBodyMetricSourceType(sourceType)
 	now := time.Now().UTC()
 	record := &domain.BodyWeightRecord{
 		UserID:     userID,
 		WeightKg:   round1(weightKg),
-		RecordedOn: func() *time.Time { t, _ := parseChinaDate(recordedOn); return &t }(),
+		RecordedOn: &recordedDate,
+		SourceType: sourceType,
 		CreatedAt:  &now,
+	}
+	if clientID != "" {
+		record.ClientRecordID = &clientID
 	}
 	if err := s.repo.CreateWeightRecord(ctx, record); err != nil {
 		return nil, err
 	}
+	_ = s.syncProfileWeightFromLatest(ctx, userID)
 	return map[string]any{
 		"message": "体重已保存",
 		"item": map[string]any{
-			"id":         record.ID,
-			"date":       recordedOn,
-			"weight_kg":  round1(weightKg),
+			"id":        record.ID,
+			"date":      normalizedDate,
+			"value":     round1(weightKg),
+			"weight_kg": round1(weightKg),
+			"client_id": clientID,
 		},
 	}, nil
 }
 
 // Helpers
+
+func normalizeBodyMetricSourceType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "imported", "ai":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "manual"
+	}
+}
+
+func (s *BodyMetricsService) syncProfileWeightFromLatest(ctx context.Context, userID string) error {
+	latest, err := s.repo.GetLatestWeightRecord(ctx, userID)
+	if err != nil || latest == nil {
+		return err
+	}
+	profile, err := s.repo.GetUserProfile(ctx, userID)
+	if err != nil || profile == nil {
+		return err
+	}
+	updates := map[string]any{"weight": round1(latest.WeightKg)}
+	gender := ""
+	if profile.Gender != nil {
+		gender = strings.ToLower(strings.TrimSpace(*profile.Gender))
+	}
+	if gender == "male" || gender == "female" {
+		activity := "sedentary"
+		if profile.ActivityLevel != nil && strings.TrimSpace(*profile.ActivityLevel) != "" {
+			activity = strings.TrimSpace(*profile.ActivityLevel)
+		}
+		bmr := calculateBodyMetricBMR(gender, latest.WeightKg)
+		tdee := calculateBodyMetricTDEE(bmr, activity)
+		updates["bmr"] = round1(bmr)
+		updates["tdee"] = round1(tdee)
+	}
+	return s.repo.UpdateUserProfileMetrics(ctx, userID, updates)
+}
+
+func calculateBodyMetricBMR(gender string, weightKg float64) float64 {
+	if gender == "male" {
+		return math.Max(0, (48.5*weightKg+2954.7)/4.184)
+	}
+	return math.Max(0, (41.9*weightKg+2869.1)/4.184)
+}
+
+func calculateBodyMetricTDEE(bmr float64, activityLevel string) float64 {
+	mult := map[string]float64{
+		"sedentary":   1.2,
+		"light":       1.375,
+		"moderate":    1.55,
+		"active":      1.725,
+		"very_active": 1.9,
+	}[activityLevel]
+	if mult == 0 {
+		mult = 1.2
+	}
+	return bmr * mult
+}
 
 func resolveStatsRangeDates(statsRange string) (string, string) {
 	now := time.Now().In(chinaTZ)

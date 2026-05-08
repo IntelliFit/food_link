@@ -6,6 +6,7 @@ import (
 	"time"
 
 	authrepo "food_link/backend/internal/auth/repo"
+	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/repo"
@@ -86,7 +87,10 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	}
 	normalizedMeal := normalizeMealType(input.MealType, nil)
 
-	recordTime := s.buildRecordTime(input.Date, input.SourceTaskID)
+	recordTime, err := s.buildRecordTime(ctx, input.Date, input.SourceTaskID)
+	if err != nil {
+		return nil, err
+	}
 
 	record := &domain.FoodRecord{
 		UserID:           userID,
@@ -242,29 +246,27 @@ func (s *FoodRecordService) SaveCriticalSamples(ctx context.Context, userID stri
 	return s.recordRepo.InsertCriticalSamples(ctx, userID, items)
 }
 
-func (s *FoodRecordService) buildRecordTime(dateStr *string, sourceTaskID *string) *time.Time {
-	now := time.Now().In(chinaTZ)
-	targetDate := now
-
+func (s *FoodRecordService) buildRecordTime(ctx context.Context, dateStr *string, sourceTaskID *string) (*time.Time, error) {
+	recordedOn := ""
 	if dateStr != nil && *dateStr != "" {
-		d, err := time.ParseInLocation("2006-01-02", *dateStr, chinaTZ)
-		if err == nil {
-			targetDate = d
-		}
+		recordedOn = *dateStr
 	} else if sourceTaskID != nil && *sourceTaskID != "" {
-		task, err := s.taskRepo.GetByID(context.Background(), *sourceTaskID)
+		task, err := s.taskRepo.GetByID(ctx, *sourceTaskID)
 		if err == nil && task != nil && task.Payload != nil {
 			if v, ok := task.Payload["recorded_on"].(string); ok && v != "" {
-				d, err := time.ParseInLocation("2006-01-02", v, chinaTZ)
-				if err == nil {
-					targetDate = d
-				}
+				recordedOn = v
 			}
 		}
 	}
-
-	t := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), now.Hour(), now.Minute(), now.Second(), 0, chinaTZ).UTC()
-	return &t
+	normalized, err := dateutil.ResolveRecordedOnDate(recordedOn, "date")
+	if err != nil {
+		return nil, err
+	}
+	t, err := dateutil.BuildRecordTime(normalized)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }
 
 func (s *FoodRecordService) hydrateRecord(record *domain.FoodRecord) *domain.FoodRecord {

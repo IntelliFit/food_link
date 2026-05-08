@@ -4,11 +4,13 @@ import "time"
 
 // BodyWeightRecord — table: user_weight_records
 type BodyWeightRecord struct {
-	ID         string     `gorm:"column:id"`
-	UserID     string     `gorm:"column:user_id"`
-	WeightKg   float64    `gorm:"column:weight_kg"`
-	RecordedOn *time.Time `gorm:"column:recorded_on"`
-	CreatedAt  *time.Time `gorm:"column:created_at"`
+	ID             string     `gorm:"column:id"`
+	UserID         string     `gorm:"column:user_id"`
+	WeightKg       float64    `gorm:"column:weight_kg"`
+	RecordedOn     *time.Time `gorm:"column:recorded_on"`
+	ClientRecordID *string    `gorm:"column:client_record_id"`
+	SourceType     string     `gorm:"column:source_type"`
+	CreatedAt      *time.Time `gorm:"column:created_at"`
 }
 
 func (BodyWeightRecord) TableName() string { return "user_weight_records" }
@@ -19,6 +21,7 @@ type BodyWaterLog struct {
 	UserID     string     `gorm:"column:user_id"`
 	AmountMl   int        `gorm:"column:amount_ml"`
 	RecordedOn *time.Time `gorm:"column:recorded_on"`
+	SourceType string     `gorm:"column:source_type"`
 	CreatedAt  *time.Time `gorm:"column:created_at"`
 }
 
@@ -52,6 +55,15 @@ type ExerciseUserProfile struct {
 }
 
 func (ExerciseUserProfile) TableName() string { return "weapp_user" }
+
+type BodyMetricUserProfile struct {
+	ID            string   `gorm:"column:id"`
+	Weight        *float64 `gorm:"column:weight"`
+	Gender        *string  `gorm:"column:gender"`
+	ActivityLevel *string  `gorm:"column:activity_level"`
+}
+
+func (BodyMetricUserProfile) TableName() string { return "weapp_user" }
 
 // StatsInsight — table: ai_stats_insights
 type StatsInsight struct {

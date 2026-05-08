@@ -14,19 +14,19 @@ import (
 )
 
 type mockFriendService struct {
-	searchUsersResult           []map[string]any
-	searchUsersErr              error
-	sendFriendRequestResult     map[string]any
-	sendFriendRequestErr        error
-	getFriendRequestsResult     []map[string]any
-	getFriendRequestsErr        error
-	respondFriendRequestErr     error
-	cancelSentFriendRequestErr  error
-	getFriendListResult         []map[string]any
-	getFriendListErr            error
-	countFriendsResult          int64
-	countFriendsErr             error
-	deleteFriendErr             error
+	searchUsersResult               []map[string]any
+	searchUsersErr                  error
+	sendFriendRequestResult         map[string]any
+	sendFriendRequestErr            error
+	getFriendRequestsResult         []map[string]any
+	getFriendRequestsErr            error
+	respondFriendRequestErr         error
+	cancelSentFriendRequestErr      error
+	getFriendListResult             []map[string]any
+	getFriendListErr                error
+	countFriendsResult              int64
+	countFriendsErr                 error
+	deleteFriendErr                 error
 	getFriendRequestsOverviewResult map[string]any
 	getFriendRequestsOverviewErr    error
 	cleanupDuplicateFriendsResult   map[string]any
@@ -121,8 +121,9 @@ func TestFriendHandler_Search(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.Equal(t, float64(0), resp["code"])
-	data := resp["data"].([]any)
-	assert.Len(t, data, 1)
+	data := resp["data"].(map[string]any)
+	list := data["list"].([]any)
+	assert.Len(t, list, 1)
 }
 
 func TestFriendHandler_SearchMissingKeyword(t *testing.T) {
@@ -167,8 +168,9 @@ func TestFriendHandler_GetRequests(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	data := resp["data"].([]any)
-	assert.Len(t, data, 1)
+	data := resp["data"].(map[string]any)
+	list := data["list"].([]any)
+	assert.Len(t, list, 1)
 }
 
 func TestFriendHandler_RespondRequest(t *testing.T) {
@@ -212,8 +214,9 @@ func TestFriendHandler_List(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	data := resp["data"].([]any)
-	assert.Len(t, data, 1)
+	data := resp["data"].(map[string]any)
+	list := data["list"].([]any)
+	assert.Len(t, list, 1)
 }
 
 func TestFriendHandler_Count(t *testing.T) {
@@ -358,7 +361,6 @@ func TestFriendHandler_Error(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
-
 
 func TestFriendHandler_SendRequestBindError(t *testing.T) {
 	mockSvc := &mockFriendService{}

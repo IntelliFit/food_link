@@ -178,6 +178,15 @@ func (h *AnalyzeHandler) AnalyzeBatch(c *gin.Context) {
 		"execution_mode":     input.ExecutionMode,
 		"batch_image_count":  len(input.ImageURLs),
 	}
+	if input.TimezoneOffsetMinutes != nil {
+		payload["timezone_offset_minutes"] = *input.TimezoneOffsetMinutes
+	}
+	if input.IsMultiView {
+		payload["is_multi_view"] = true
+	}
+	if len(input.ReferenceObjects) > 0 {
+		payload["reference_objects"] = input.ReferenceObjects
+	}
 
 	taskID, err := h.taskSvc.CreateBatchTask(c.Request.Context(), userID, input.ImageURLs, payload, result)
 	if err != nil {
@@ -223,6 +232,9 @@ func (h *AnalyzeHandler) SubmitTextTask(c *gin.Context) {
 		return
 	}
 	if input.TextInput == "" {
+		input.TextInput = input.Text
+	}
+	if input.TextInput == "" && input.PrecisionSessionID == nil && strings.TrimSpace(input.AdditionalContext) == "" && len(input.ReferenceObjects) == 0 && len(input.CorrectionItems) == 0 && len(input.PreviousResult) == 0 {
 		response.Error(c, &gin.Error{Err: http.ErrBodyNotAllowed, Type: gin.ErrorTypePublic})
 		return
 	}
@@ -353,7 +365,10 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		UserGoal              string           `json:"user_goal"`
 		RemainingCalories     *float64         `json:"remaining_calories"`
 		IsMultiView           bool             `json:"is_multi_view"`
+		PreviousResult        map[string]any   `json:"previousResult"`
+		CorrectionItems       []map[string]any `json:"correctionItems"`
 		ReferenceObjects      []map[string]any `json:"reference_objects"`
+		SubscribeStatus       string           `json:"subscribe_status"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -367,20 +382,30 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	mode := "strict"
 	input := service.SubmitTaskInput{
-		ImageURL:           strings.TrimSpace(body.ImageURL),
-		ImageURLs:          body.ImageURLs,
-		TextInput:          strings.TrimSpace(body.Text),
-		MealType:           body.MealType,
-		Province:           body.Province,
-		City:               body.City,
-		District:           body.District,
-		DietGoal:           body.DietGoal,
-		ActivityTiming:     body.ActivityTiming,
-		UserGoal:           body.UserGoal,
-		RemainingCalories:  body.RemainingCalories,
-		AdditionalContext:  body.AdditionalContext,
-		ExecutionMode:      &mode,
-		PrecisionSessionID: &sessionID,
+		ImageURL:              strings.TrimSpace(body.ImageURL),
+		ImageURLs:             body.ImageURLs,
+		TextInput:             strings.TrimSpace(body.Text),
+		SourceType:            sourceType,
+		MealType:              body.MealType,
+		Province:              body.Province,
+		City:                  body.City,
+		District:              body.District,
+		DietGoal:              body.DietGoal,
+		ActivityTiming:        body.ActivityTiming,
+		UserGoal:              body.UserGoal,
+		RemainingCalories:     body.RemainingCalories,
+		AdditionalContext:     body.AdditionalContext,
+		ExecutionMode:         &mode,
+		PrecisionSessionID:    &sessionID,
+		TimezoneOffsetMinutes: body.TimezoneOffsetMinutes,
+		IsMultiView:           body.IsMultiView,
+		PreviousResult:        body.PreviousResult,
+		CorrectionItems:       body.CorrectionItems,
+		ReferenceObjects:      body.ReferenceObjects,
+		SubscribeStatus:       body.SubscribeStatus,
+	}
+	if body.Date != nil {
+		input.Date = strings.TrimSpace(*body.Date)
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
 	var taskID string

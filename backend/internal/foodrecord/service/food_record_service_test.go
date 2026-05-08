@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -50,13 +51,14 @@ func TestBuildRecordTime(t *testing.T) {
 	chinaTZ := time.FixedZone("Asia/Shanghai", 8*60*60)
 	now := time.Now().In(chinaTZ)
 
-	dateStr := "2024-06-15"
+	dateStr := time.Now().In(chinaTZ).Format("2006-01-02")
 	svc := &FoodRecordService{}
-	tm := svc.buildRecordTime(&dateStr, nil)
+	tm, err := svc.buildRecordTime(context.Background(), &dateStr, nil)
+	assert.NoError(t, err)
 	assert.NotNil(t, tm)
-	assert.Equal(t, 2024, tm.In(chinaTZ).Year())
-	assert.Equal(t, time.June, tm.In(chinaTZ).Month())
-	assert.Equal(t, 15, tm.In(chinaTZ).Day())
+	assert.Equal(t, now.Year(), tm.In(chinaTZ).Year())
+	assert.Equal(t, now.Month(), tm.In(chinaTZ).Month())
+	assert.Equal(t, now.Day(), tm.In(chinaTZ).Day())
 	assert.Equal(t, now.Hour(), tm.In(chinaTZ).Hour())
 }
 

@@ -15,6 +15,8 @@ type mockBodyMetricsRepo struct {
 	weightRecords []domain.BodyWeightRecord
 	waterLogs     []domain.BodyWaterLog
 	settings      *domain.BodyMetricSettings
+	userProfile   *domain.BodyMetricUserProfile
+	profileUpdate map[string]any
 }
 
 func (m *mockBodyMetricsRepo) CreateWeightRecord(ctx context.Context, record *domain.BodyWeightRecord) error {
@@ -73,6 +75,15 @@ func (m *mockBodyMetricsRepo) SumWaterByDate(ctx context.Context, userID string,
 		}
 	}
 	return total, nil
+}
+
+func (m *mockBodyMetricsRepo) GetUserProfile(ctx context.Context, userID string) (*domain.BodyMetricUserProfile, error) {
+	return m.userProfile, nil
+}
+
+func (m *mockBodyMetricsRepo) UpdateUserProfileMetrics(ctx context.Context, userID string, updates map[string]any) error {
+	m.profileUpdate = updates
+	return nil
 }
 
 func TestBodyMetricsService_GetSummary(t *testing.T) {

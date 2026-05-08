@@ -38,32 +38,49 @@ func (s *ExpiryService) ConfigureCreditGuard(guard CreditGuard) {
 }
 
 type DashboardResult struct {
-	ActiveCount   int                 `json:"active_count"`
-	ConsumedCount int                 `json:"consumed_count"`
-	ExpiredCount  int                 `json:"expired_count"`
-	ExpiringSoon  []domain.ExpiryItem `json:"expiring_soon"`
+	ActiveCount    int                 `json:"active_count"`
+	ConsumedCount  int                 `json:"consumed_count"`
+	ExpiredCount   int                 `json:"expired_count"`
+	TodayCount     int                 `json:"today_count"`
+	SoonCount      int                 `json:"soon_count"`
+	ProcessedCount int                 `json:"processed_count"`
+	ExpiringSoon   []domain.ExpiryItem `json:"expiring_soon"`
 }
 
 type CreateItemInput struct {
-	Name       string
-	Category   string
-	ExpiryDate *time.Time
-	Quantity   *int
-	Location   *string
-	Notes      *string
-	ImageURL   *string
-	Status     string
+	Name         string
+	FoodName     string
+	Category     string
+	ExpiryDate   *time.Time
+	ExpireDate   *time.Time
+	Quantity     *int
+	QuantityNote *string
+	Location     *string
+	StorageType  string
+	Notes        *string
+	Note         *string
+	ImageURL     *string
+	OpenedDate   *time.Time
+	SourceType   string
+	Status       string
 }
 
 type UpdateItemInput struct {
-	Name       *string
-	Category   *string
-	ExpiryDate *time.Time
-	Quantity   *int
-	Location   *string
-	Notes      *string
-	ImageURL   *string
-	Status     *string
+	Name         *string
+	FoodName     *string
+	Category     *string
+	ExpiryDate   *time.Time
+	ExpireDate   *time.Time
+	Quantity     *int
+	QuantityNote *string
+	Location     *string
+	StorageType  *string
+	Notes        *string
+	Note         *string
+	ImageURL     *string
+	OpenedDate   *time.Time
+	SourceType   *string
+	Status       *string
 }
 
 type SubscribeResult struct {
@@ -86,15 +103,33 @@ func (s *ExpiryService) Dashboard(ctx context.Context, userID string) (*Dashboar
 	if err != nil {
 		return nil, err
 	}
-	expiringSoon, err := s.expiryRepo.ListExpiringSoon(ctx, userID, 7, 50)
+	expiringSoonAll, err := s.expiryRepo.ListExpiringSoon(ctx, userID, 7, 0)
 	if err != nil {
 		return nil, err
 	}
+	expiredCount, todayCount, soonCount := 0, 0, 0
+	for _, item := range expiringSoonAll {
+		switch days := expiryDaysUntil(item.ExpireDate); {
+		case days < 0:
+			expiredCount++
+		case days == 0:
+			todayCount++
+		case days <= 3:
+			soonCount++
+		}
+	}
+	expiringSoon := expiringSoonAll
+	if len(expiringSoon) > 50 {
+		expiringSoon = expiringSoon[:50]
+	}
 	return &DashboardResult{
-		ActiveCount:   counts["active"],
-		ConsumedCount: counts["consumed"],
-		ExpiredCount:  counts["discarded"],
-		ExpiringSoon:  expiringSoon,
+		ActiveCount:    counts["active"],
+		ConsumedCount:  counts["consumed"],
+		ExpiredCount:   expiredCount,
+		TodayCount:     todayCount,
+		SoonCount:      soonCount,
+		ProcessedCount: counts["consumed"] + counts["discarded"],
+		ExpiringSoon:   expiringSoon,
 	}, nil
 }
 
@@ -103,28 +138,48 @@ func (s *ExpiryService) ListItems(ctx context.Context, userID, status string) ([
 }
 
 func (s *ExpiryService) CreateItem(ctx context.Context, userID string, input CreateItemInput) (*domain.ExpiryItem, error) {
-	if input.Name == "" {
+	name := strings.TrimSpace(input.FoodName)
+	if name == "" {
+		name = strings.TrimSpace(input.Name)
+	}
+	if name == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "name 不能为空", HTTPStatus: 400}
 	}
 	status := input.Status
 	if status == "" {
 		status = "active"
 	}
-	storageType := mapLocationToStorageType(input.Location)
-	var quantityNote *string
+	expireDate := input.ExpireDate
+	if expireDate == nil {
+		expireDate = input.ExpiryDate
+	}
+	if expireDate == nil || expireDate.IsZero() {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "expire_date is required", HTTPStatus: 400}
+	}
+	storageType, err := normalizeStorageType(input.StorageType, input.Location)
+	if err != nil {
+		return nil, err
+	}
+	quantityNote := input.QuantityNote
 	if input.Quantity != nil {
 		s := strconv.Itoa(*input.Quantity)
 		quantityNote = &s
 	}
+	note := input.Note
+	if note == nil {
+		note = input.Notes
+	}
+	sourceType := normalizeSourceType(input.SourceType)
 	item := &domain.ExpiryItem{
 		UserID:       userID,
-		FoodName:     input.Name,
+		FoodName:     name,
 		Category:     input.Category,
 		StorageType:  storageType,
 		QuantityNote: quantityNote,
-		ExpireDate:   ptrTimeValue(input.ExpiryDate),
-		Note:         input.Notes,
-		SourceType:   "manual",
+		ExpireDate:   *expireDate,
+		OpenedDate:   input.OpenedDate,
+		Note:         note,
+		SourceType:   sourceType,
 		Status:       status,
 	}
 	if err := s.expiryRepo.Create(ctx, item); err != nil {
@@ -149,6 +204,9 @@ func (s *ExpiryService) GetItem(ctx context.Context, userID, itemID string) (*do
 
 func (s *ExpiryService) UpdateItem(ctx context.Context, userID, itemID string, input UpdateItemInput) (*domain.ExpiryItem, error) {
 	updates := map[string]any{}
+	if input.FoodName != nil {
+		input.Name = input.FoodName
+	}
 	if input.Name != nil {
 		if *input.Name == "" {
 			return nil, &commonerrors.AppError{Code: 10002, Message: "name 不能为空", HTTPStatus: 400}
@@ -158,17 +216,40 @@ func (s *ExpiryService) UpdateItem(ctx context.Context, userID, itemID string, i
 	if input.Category != nil {
 		updates["category"] = *input.Category
 	}
-	if input.ExpiryDate != nil {
-		updates["expire_date"] = *input.ExpiryDate
+	expireDate := input.ExpireDate
+	if expireDate == nil {
+		expireDate = input.ExpiryDate
+	}
+	if expireDate != nil {
+		updates["expire_date"] = *expireDate
 	}
 	if input.Quantity != nil {
 		updates["quantity_note"] = strconv.Itoa(*input.Quantity)
 	}
+	if input.QuantityNote != nil {
+		updates["quantity_note"] = *input.QuantityNote
+	}
 	if input.Location != nil {
 		updates["storage_type"] = mapLocationToStorageType(input.Location)
 	}
+	if input.StorageType != nil {
+		storageType, err := normalizeStorageType(*input.StorageType, nil)
+		if err != nil {
+			return nil, err
+		}
+		updates["storage_type"] = storageType
+	}
 	if input.Notes != nil {
 		updates["note"] = *input.Notes
+	}
+	if input.Note != nil {
+		updates["note"] = *input.Note
+	}
+	if input.OpenedDate != nil {
+		updates["opened_date"] = *input.OpenedDate
+	}
+	if input.SourceType != nil {
+		updates["source_type"] = normalizeSourceType(*input.SourceType)
 	}
 	if input.Status != nil {
 		updates["status"] = *input.Status
@@ -459,6 +540,37 @@ func mapLocationToStorageType(location *string) string {
 		return "room_temp"
 	}
 	return "refrigerated"
+}
+
+func normalizeStorageType(value string, location *string) (string, error) {
+	storageType := strings.ToLower(strings.TrimSpace(value))
+	if storageType == "" {
+		storageType = mapLocationToStorageType(location)
+	}
+	switch storageType {
+	case "room_temp", "refrigerated", "frozen":
+		return storageType, nil
+	default:
+		return "", &commonerrors.AppError{Code: 10002, Message: "storage_type is invalid", HTTPStatus: 400}
+	}
+}
+
+func normalizeSourceType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "ocr", "ai":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "manual"
+	}
+}
+
+func expiryDaysUntil(expireDate time.Time) int {
+	china := time.FixedZone("Asia/Shanghai", 8*60*60)
+	now := time.Now().In(china)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, china)
+	expire := expireDate.In(china)
+	expireDay := time.Date(expire.Year(), expire.Month(), expire.Day(), 0, 0, 0, 0, china)
+	return int(expireDay.Sub(today).Hours() / 24)
 }
 
 func ptrTimeValue(t *time.Time) time.Time {

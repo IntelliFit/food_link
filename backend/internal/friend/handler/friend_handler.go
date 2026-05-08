@@ -49,7 +49,7 @@ func (h *FriendHandler) Search(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, data)
+	response.Success(c, gin.H{"list": data})
 }
 
 // POST /api/friend/request
@@ -82,7 +82,7 @@ func (h *FriendHandler) GetRequests(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, data)
+	response.Success(c, gin.H{"list": data})
 }
 
 // POST /api/friend/request/:request_id/respond
@@ -126,7 +126,7 @@ func (h *FriendHandler) List(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, data)
+	response.Success(c, gin.H{"list": data})
 }
 
 // GET /api/friend/count

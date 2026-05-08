@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	"food_link/backend/pkg/config"
@@ -55,26 +56,54 @@ func (s *ExerciseService) ConfigureCreditGuard(guard CreditGuard) {
 }
 
 func (s *ExerciseService) GetDailyCalories(ctx context.Context, userID string, date string) (map[string]any, error) {
-	if date == "" {
-		date = time.Now().In(chinaTZ).Format("2006-01-02")
+	normalizedDate, err := dateutil.NormalizeChinaDate(date, "date")
+	if err != nil {
+		return nil, err
 	}
-	total, err := s.repo.GetDailyCaloriesBurned(ctx, userID, date)
+	total, err := s.repo.GetDailyCaloriesBurned(ctx, userID, normalizedDate)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{
-		"date":                  date,
+		"date":                  normalizedDate,
 		"total_calories_burned": int(total),
 	}, nil
 }
 
 func (s *ExerciseService) ListLogs(ctx context.Context, userID string, date string) (map[string]any, error) {
-	var startDate, endDate string
+	return s.ListLogsByRange(ctx, userID, date, "", "")
+}
+
+func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, date string, startDate string, endDate string) (map[string]any, error) {
 	if date != "" {
-		startDate = date
-		endDate = date
+		normalized, err := dateutil.NormalizeChinaDate(date, "date")
+		if err != nil {
+			return nil, err
+		}
+		startDate = normalized
+		endDate = normalized
+	} else if startDate != "" || endDate != "" {
+		var err error
+		if startDate != "" {
+			startDate, err = dateutil.NormalizeChinaDate(startDate, "start_date")
+			if err != nil {
+				return nil, err
+			}
+		}
+		if endDate != "" {
+			endDate, err = dateutil.NormalizeChinaDate(endDate, "end_date")
+			if err != nil {
+				return nil, err
+			}
+		}
+		if startDate == "" {
+			startDate = endDate
+		}
+		if endDate == "" {
+			endDate = startDate
+		}
 	} else {
-		startDate = time.Now().In(chinaTZ).Format("2006-01-02")
+		startDate = dateutil.TodayChina()
 		endDate = startDate
 	}
 
@@ -119,6 +148,10 @@ func (s *ExerciseService) ListLogs(ctx context.Context, userID string, date stri
 }
 
 func (s *ExerciseService) CreateLog(ctx context.Context, userID string, exerciseDesc string) (map[string]any, error) {
+	return s.CreateLogWithDate(ctx, userID, exerciseDesc, "")
+}
+
+func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string) (map[string]any, error) {
 	desc := strings.TrimSpace(exerciseDesc)
 	if desc == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述不能为空", HTTPStatus: 400}
@@ -127,10 +160,12 @@ func (s *ExerciseService) CreateLog(ctx context.Context, userID string, exercise
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述过长", HTTPStatus: 400}
 	}
 
-	recordedOn := time.Now().In(chinaTZ).Format("2006-01-02")
+	recordedOn, err := dateutil.ResolveRecordedOnDate(date, "date")
+	if err != nil {
+		return nil, err
+	}
 	var creditsInfo map[string]any
 	if s.creditGuard != nil && userID != "" {
-		var err error
 		creditsInfo, err = s.creditGuard.ValidateExerciseCredits(ctx, userID, recordedOn)
 		if err != nil {
 			return nil, err
