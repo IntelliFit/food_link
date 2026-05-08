@@ -120,3 +120,7 @@ step*.png
 
 .playwright-mcp/
 tmp/
+
+# Local migration reports
+backend/migration-db-*.json
+backend/migration-storage-*.json
