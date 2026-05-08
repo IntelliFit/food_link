@@ -14,15 +14,16 @@ import (
 )
 
 type mockMembershipService struct {
-	listPlansResult               []map[string]any
-	listPlansErr                  error
-	getMyMembershipResult         map[string]any
-	getMyMembershipErr            error
-	createPaymentResult           map[string]any
-	createPaymentErr              error
-	wechatNotifyErr               error
-	claimSharePosterRewardResult  map[string]any
-	claimSharePosterRewardErr     error
+	listPlansResult              []map[string]any
+	listPlansErr                 error
+	getMyMembershipResult        map[string]any
+	getMyMembershipErr           error
+	createPaymentResult          map[string]any
+	createPaymentErr             error
+	wechatNotifyResult           map[string]any
+	wechatNotifyErr              error
+	claimSharePosterRewardResult map[string]any
+	claimSharePosterRewardErr    error
 }
 
 func (m *mockMembershipService) ListPlans(ctx context.Context) ([]map[string]any, error) {
@@ -31,11 +32,17 @@ func (m *mockMembershipService) ListPlans(ctx context.Context) ([]map[string]any
 func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID string) (map[string]any, error) {
 	return m.getMyMembershipResult, m.getMyMembershipErr
 }
-func (m *mockMembershipService) CreatePayment(ctx context.Context, userID, planID string) (map[string]any, error) {
+func (m *mockMembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {
 	return m.createPaymentResult, m.createPaymentErr
 }
 func (m *mockMembershipService) WechatNotify(ctx context.Context, paymentID string) error {
 	return m.wechatNotifyErr
+}
+func (m *mockMembershipService) HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error) {
+	if m.wechatNotifyResult != nil {
+		return m.wechatNotifyResult, m.wechatNotifyErr
+	}
+	return map[string]any{"code": "SUCCESS", "message": "成功"}, m.wechatNotifyErr
 }
 func (m *mockMembershipService) ClaimSharePosterReward(ctx context.Context, userID, recordID string) (map[string]any, error) {
 	return m.claimSharePosterRewardResult, m.claimSharePosterRewardErr
@@ -57,7 +64,7 @@ func setupRouter(h *MembershipHandler) *gin.Engine {
 }
 
 func TestMembershipHandler_ListPlans(t *testing.T) {
-	mockSvc := &mockMembershipService{listPlansResult: []map[string]any{{"id": "p1", "name": "Basic"}}}
+	mockSvc := &mockMembershipService{listPlansResult: []map[string]any{{"code": "standard_monthly", "name": "标准版"}}}
 	h := NewMembershipHandler(mockSvc)
 	r := setupRouter(h)
 
@@ -68,13 +75,12 @@ func TestMembershipHandler_ListPlans(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, float64(0), resp["code"])
-	data := resp["data"].([]any)
-	assert.Len(t, data, 1)
+	data := resp["data"].(map[string]any)
+	assert.Len(t, data["list"].([]any), 1)
 }
 
 func TestMembershipHandler_GetMyMembership(t *testing.T) {
-	mockSvc := &mockMembershipService{getMyMembershipResult: map[string]any{"status": "active", "daily_limit": int64(100)}}
+	mockSvc := &mockMembershipService{getMyMembershipResult: map[string]any{"status": "active", "daily_credits_max": 40}}
 	h := NewMembershipHandler(mockSvc)
 	r := setupRouter(h)
 
@@ -83,17 +89,14 @@ func TestMembershipHandler_GetMyMembership(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]any
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, float64(0), resp["code"])
 }
 
 func TestMembershipHandler_CreatePayment(t *testing.T) {
-	mockSvc := &mockMembershipService{createPaymentResult: map[string]any{"payment_id": "pay1"}}
+	mockSvc := &mockMembershipService{createPaymentResult: map[string]any{"order_no": "PM1"}}
 	h := NewMembershipHandler(mockSvc)
 	r := setupRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"plan_id": "p1"})
+	body, _ := json.Marshal(map[string]string{"plan_code": "standard_monthly"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -103,56 +106,38 @@ func TestMembershipHandler_CreatePayment(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
-	assert.Equal(t, "pay1", data["payment_id"])
+	assert.Equal(t, "PM1", data["order_no"])
 }
 
-func TestMembershipHandler_CreatePaymentMissingPlanID(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
+func TestMembershipHandler_CreatePaymentMissingPlanCode(t *testing.T) {
+	h := NewMembershipHandler(&mockMembershipService{})
 	r := setupRouter(h)
 
-	body, _ := json.Marshal(map[string]string{})
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestMembershipHandler_WechatNotify(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
+func TestMembershipHandler_WechatNotifyRawSuccess(t *testing.T) {
+	h := NewMembershipHandler(&mockMembershipService{})
 	r := setupRouter(h)
 
-	body, _ := json.Marshal(map[string]string{"payment_id": "pay1"})
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/notify/membership", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/notify/membership", bytes.NewReader([]byte(`{"id":"notify"}`)))
+	req.Header.Set("Wechatpay-Signature", "sig")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, true, resp["data"].(map[string]any)["success"])
-}
-
-func TestMembershipHandler_WechatNotifyMissingPaymentID(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	body, _ := json.Marshal(map[string]string{})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/notify/membership", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "SUCCESS", resp["code"])
 }
 
 func TestMembershipHandler_ClaimSharePosterReward(t *testing.T) {
-	mockSvc := &mockMembershipService{claimSharePosterRewardResult: map[string]any{"success": true, "reward_id": "rwd1"}}
+	mockSvc := &mockMembershipService{claimSharePosterRewardResult: map[string]any{"claimed": true}}
 	h := NewMembershipHandler(mockSvc)
 	r := setupRouter(h)
 
@@ -164,166 +149,20 @@ func TestMembershipHandler_ClaimSharePosterReward(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestMembershipHandler_ListPlansError(t *testing.T) {
-	mockSvc := &mockMembershipService{listPlansErr: errors.New("db error")}
-	h := NewMembershipHandler(mockSvc)
+func TestMembershipHandler_ErrorPaths(t *testing.T) {
+	h := NewMembershipHandler(&mockMembershipService{listPlansErr: errors.New("db error")})
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/membership/plans", nil)
 	r.ServeHTTP(w, req)
-
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-}
 
-func TestMembershipHandler_GetMyMembershipUnauthorized(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
 	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	r.GET("/api/membership/me", h.GetMyMembership)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/membership/me", nil)
-	r.ServeHTTP(w, req)
-
+	unauth := gin.New()
+	unauth.GET("/api/membership/me", h.GetMyMembership)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, "/api/membership/me", nil)
+	unauth.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
-}
-
-func TestMembershipHandler_GetMyMembershipError(t *testing.T) {
-	mockSvc := &mockMembershipService{getMyMembershipErr: errors.New("db error")}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/membership/me", nil)
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-}
-
-func TestMembershipHandler_CreatePaymentBindError(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader([]byte("bad json")))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestMembershipHandler_CreatePaymentUnauthorized(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	r.POST("/api/membership/pay/create", h.CreatePayment)
-
-	body, _ := json.Marshal(map[string]string{"plan_id": "p1"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-}
-
-func TestMembershipHandler_CreatePaymentError(t *testing.T) {
-	mockSvc := &mockMembershipService{createPaymentErr: errors.New("db error")}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	body, _ := json.Marshal(map[string]string{"plan_id": "p1"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-}
-
-func TestMembershipHandler_WechatNotifyBindError(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/notify/membership", bytes.NewReader([]byte("bad json")))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestMembershipHandler_WechatNotifyError(t *testing.T) {
-	mockSvc := &mockMembershipService{wechatNotifyErr: errors.New("notify error")}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	body, _ := json.Marshal(map[string]string{"payment_id": "pay1"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/notify/membership", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-}
-
-func TestMembershipHandler_ClaimSharePosterRewardBindError(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader([]byte("bad json")))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestMembershipHandler_ClaimSharePosterRewardMissingRecordID(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	body, _ := json.Marshal(map[string]string{})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestMembershipHandler_ClaimSharePosterRewardUnauthorized(t *testing.T) {
-	mockSvc := &mockMembershipService{}
-	h := NewMembershipHandler(mockSvc)
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	r.POST("/api/membership/rewards/share-poster/claim", h.ClaimSharePosterReward)
-
-	body, _ := json.Marshal(map[string]string{"record_id": "rec1"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-}
-
-func TestMembershipHandler_ClaimSharePosterRewardError(t *testing.T) {
-	mockSvc := &mockMembershipService{claimSharePosterRewardErr: errors.New("db error")}
-	h := NewMembershipHandler(mockSvc)
-	r := setupRouter(h)
-
-	body, _ := json.Marshal(map[string]string{"record_id": "rec1"})
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

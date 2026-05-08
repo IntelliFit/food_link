@@ -1,5 +1,328 @@
 # 当前任务
 
+## 状态：完成 - Go 后端上线前万无一失清单
+
+- 2026-05-08 prelaunch checklist checkpoint:
+  - 用户要求把后续上线前所有需要做的工作写成清单，并提交到当前分支，确保上线版本尽量无遗漏。
+  - 已新增上线前检查清单：`docs/go-backend-prelaunch-checklist-2026-05-08.md`。
+  - 清单覆盖：
+    - Go/No-Go 总门槛。
+    - 代码与构建冻结。
+    - 数据库 schema 与数据一致性。
+    - 生产配置核对。
+    - 后端自动化验证。
+    - 真实环境 smoke test。
+    - worker 专项验收。
+    - 前端与小程序上线配套。
+    - 观测、告警、排障。
+    - 安全权限。
+    - 部署执行步骤。
+    - 回滚预案。
+    - 上线后 24 小时巡检。
+  - 本轮仅为文档和项目状态更新，没有改动前端页面、组件、样式、路由或交互，因此不需要执行 `weapp-devtools` 运行态验证。
+  - Remaining:
+    - 发布 Go 后端 `v2` 前必须逐项执行该清单。
+    - P0 未完成不得上线；P1 未完成必须有明确风险接受人。
+
+## 状态：阶段性收尾 - Go 后端完整迁移 Phase 6：测试后台与运维脚本 parity checkpoint
+
+- 2026-05-08 Phase 6 checkpoint:
+  - 测试后台静态页已从 Python `main` 恢复到 Go 后端镜像：
+    - `backend/static/test_backend/index.html`
+    - `backend/static/test_backend/login.html`
+    - `backend/static/test_backend/app.js`
+    - `backend/static/test_backend/style.css`
+    - `backend/Dockerfile` 已复制 `/app/static`，server 同镜像可直出 `/test-backend`。
+  - `/test-backend` / `/test-backend/login` 不再返回占位 HTML：
+    - 未登录访问 `/test-backend` 会跳转登录页。
+    - 登录页兼容 Go 包装响应 `{code,message,data}`。
+    - 静态 `app.js` 新增统一 API 解包层，兼容 Go `{code:0,data:...}` 与 Python 旧 `{success,data,...}`。
+  - 测试后台核心接口恢复 multipart/旧契约兼容：
+    - `/api/test-backend/analyze` 支持 FormData 多图上传、模型选择、prompt ids、reference weight、expected items。
+    - `/api/test-backend/batch/prepare` 支持 ZIP 上传并解析 `labels.txt`。
+    - `/api/test-backend/batch/start` 支持 FormData 启动批次，当前 Go 版同步处理并把结果写入 `test_batches.results`。
+    - `/api/test-backend/batch/:batch_id` 返回静态页需要的 `batch_id/status/summary/progress/items` 结构。
+    - `/api/prompts*` 兼容前端使用的 `prompt_name/prompt_content` 字段，同时保留 Go domain 的 `name/content`。
+  - legacy test API 不再是 stub：
+    - `/api/test/batch-upload` 可接 ZIP 或 JSON `image_urls`，逐项调用分析并返回 summary/results。
+    - `/api/test/single-image` 可接 multipart 图片 + `trueWeight` 或 JSON `image_url`，返回 estimated/true/deviation/items/model metadata。
+  - 运维脚本 parity：
+    - 已从 Python `main` 恢复 `backend/scripts/apply_exercise_migration.py`、`enrich_top_missing_foods.py`、`import_usda_fooddata.py`、`reconcile_membership_truth.py`、`translate_usda_aliases.py`、`wechat_pay_show_cert_serial.py`。
+  - Verification:
+    - `go test ./internal/testbackend/handler ./internal/testbackend/domain` 通过。
+    - `go test ./internal/analyze/handler ./internal/analyze/domain ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/expiry/handler ./internal/health/service ./internal/health/handler ./internal/membership/domain ./internal/membership/handler ./internal/membership/service ./internal/analyze/handler ./internal/analyze/domain ./internal/testbackend/handler ./internal/testbackend/domain` 通过。
+    - `go build -o %TEMP%\food-link-server-phase6.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-phase6.exe ./cmd/worker` 通过。
+    - `node --check backend/static/test_backend/app.js` 通过。
+    - `python -m py_compile backend/scripts/*.py` 通过，并已清理本轮产生的 `backend/scripts/__pycache__`。
+  - Known blockers still present:
+    - 当前环境 `go env CGO_ENABLED=0`，full service/repo sqlite 测试仍会被 `go-sqlite3 requires cgo` 阻塞。
+    - 部分历史 utility/analyze service 测试仍依赖外部服务响应；全量 `go test ./...` 仍不能作为本轮通过标准。
+  - Remaining:
+    - 如果追求更严格的“完全等价”，后续可继续把测试后台批量处理改为 Python 一样的后台异步 goroutine，而不是当前 start 请求内同步处理。
+    - 全量回归前仍需决定 sqlite 测试 driver/CGO 策略。
+
+## 状态：进行中 - Go 后端完整迁移 Phase 4/5：会员支付积分治理、二维码与 stats websocket
+
+- 2026-05-08 continuation checkpoint:
+  - 会员早鸟/创始人权益 parity 已补齐：
+    - 早鸟 trial rank：前 500 名 `founding_top_500_bonus_month` 60 天，501-1000 名 `early_first_1000` 30 天，普通新用户 3 天。
+    - 早期付费用户 rank 与 meta 已返回：`early_user_rank`、`early_paid_user_rank`、`early_user_paid_bonus_multiplier`、`early_user_paid_bonus_*`。
+    - 早期付费用户每日系统积分按 Python 旧逻辑翻倍。
+    - 付费订单 reconcile 继续以最新真实 paid membership order 为准；手动升级白名单保留更高档位和更高 daily credits。
+  - 运动估算已从 Go stub 推进为 Python-like 异步闭环：
+    - `POST /api/exercise-logs` 不再立即创建 stub log，而是创建 `analysis_tasks(task_type=exercise)` pending task。
+    - task payload 写入 `recorded_on`、`profile_snapshot`、`credit_usage`、`estimation_source=go_exercise_worker`。
+    - worker 消费 `exercise` 后调用 `ProcessExerciseTask`，结合画像快照估算 calories，写入 `user_exercise_logs`，并保存 `ai_reasoning`。
+    - `POST /api/exercise-logs/estimate-calories` 会返回画像快照、reasoning 和 estimated_calories；有 `OFOXAI_API_KEY` 时走 `google/gemini-3.1-flash-lite-preview` 短 JSON，失败/无 key 时走规则兜底。
+    - 多项运动描述会按换行/分号/句号拆分分项估算再求和。
+  - stats insight 已从 Go 文本 stub 升级为 Python 缓存/LLM 策略：
+    - domain/repo 切到生产表 `ai_stats_insights`，字段为 `range_type / generated_date / data_fingerprint / insight_text`。
+    - `GET /api/stats/summary` 只读当天缓存或最近缓存，并按 `data_fingerprint` 判断 `analysis_summary_needs_refresh`。
+    - `POST /api/stats/insight/generate` 会组织用户健康档案、TDEE、饮食目标、餐次分布、宏量占比、体重趋势，调用 DeepSeek 生成 200-300 字洞察；无 key 时返回可用兜底文本。
+    - `POST /api/stats/insight/save` 会重新计算指纹并 upsert 当天缓存。
+    - `/ws/stats/insight` 继续复用同一生成逻辑并按 8 字小块推送。
+  - 测试清理：
+    - `backend/internal/expiry/handler/expiry_handler_test.go` 已从旧 `ExpiryItem.Name` 同步到当前生产字段 `FoodName`。
+  - Verification:
+    - `go test ./internal/health/service` 通过。
+    - `go test ./internal/health/domain ./internal/health/handler ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go test ./internal/expiry/handler` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/expiry/handler ./internal/health/service ./internal/health/handler ./internal/membership/domain ./internal/membership/handler ./internal/membership/service ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go build -o %TEMP%\food-link-server-checkpoint.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-checkpoint.exe ./cmd/worker` 通过。
+  - Known blockers still present:
+    - `go test ./internal/health/repo` 当前仍被环境 `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 阻塞。
+    - `go test ./internal/membership/repo` 同类 sqlite CGO 阻塞仍存在。
+    - 部分 utility/analyze service 历史测试仍含外部服务或 sqlite CGO 依赖。
+  - Remaining:
+    - Phase 6：测试后台 batch/legacy API、运维脚本与剩余 Python ops parity。
+    - 精准模式 planner prompt 还可继续向 Python 专用 prompt 靠拢。
+    - 全量回归前仍需处理 sqlite CGO 测试策略或切换测试 sqlite driver。
+
+- 2026-05-08 latest checkpoint:
+  - Phase 4 会员/支付/积分治理已从旧 mock schema 切到 Python 生产 schema：
+    - `membership_plan_config`
+    - `user_pro_memberships`
+    - `pro_membership_payment_records`
+    - `user_credit_bonus_events`
+    - `user_earned_credit_ledger`
+    - `weapp_user.earned_credits_balance`
+  - Go membership repo/service/handler 已补齐：
+    - `/api/membership/plans` 返回前端需要的 `data.list`。
+    - `/api/membership/me` 会按最新 paid 会员订单 reconcile 会员状态，并返回系统积分、earned credits、total available 等字段。
+    - `/api/membership/pay/create` 改为真实微信 JSAPI 下单，支持 `plan_code`，返回 `order_no / plan_code / amount / pay_params`。
+    - `/api/payment/wechat/notify/membership` 改为读取微信原始 body + headers，验签、AES-GCM 解密 resource、校验金额、更新订单、激活/续期会员，并返回微信要求的原始 `{code:"SUCCESS", message:"成功"}`。
+    - RSA 签名/验签使用 `crypto.SHA256`；私钥/公钥配置支持直接 PEM 或文件路径。
+    - 海报分享奖励写 `user_credit_bonus_events`，并通过 `user_earned_credit_ledger` 累加 earned credits。
+  - 积分额度治理已接入 Go 提交流程：
+    - `Analyze TaskService` 注入 membership credit guard。
+    - 图片/文字/精准模式提交会先生成 `credit_spend_plan` 并写入 `analysis_tasks.payload.credit_usage`。
+    - 精准模式子任务不再携带 `credit_usage`，避免 `precision_item_estimate` / `precision_aggregate` 重复计分。
+    - `expiry_recognize` 会按食物分析标准成本校验额度，成功识别后按 spend plan 扣 earned credits。
+    - `exercise` 提交会按 1 分校验额度，task payload 写 `credit_usage`，成功创建任务后扣 earned credits。
+  - Phase 5 外部能力继续补齐：
+    - `/api/qrcode` 已从 mock base64 改为真实微信 `stable_token -> getwxacodeunlimit`，支持 token 缓存 5400 秒、token 失效清缓存重试一次、`width/check_path/env_version/page` 参数。
+    - `/ws/stats/insight` 不再返回“未迁移”占位；现在按 query 的 `user_id/range` 生成 Go stats insight，并按小块文本通过 websocket 推送。
+    - `/api/stats/insight/generate` / `save` 已兼容前端实际字段 `range` / `analysis_summary`，同时保留旧 `date_range` / `content`。
+  - Verification:
+    - `go build -o %TEMP%\food-link-server-membership-tests.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-membership-tests.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-qrcode.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-qrcode.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-stats-contract.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-stats-contract.exe ./cmd/worker` 通过。
+    - `go test ./internal/membership/domain ./internal/membership/handler ./internal/membership/service ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/membership/domain ./internal/membership/handler ./internal/membership/service` 通过。
+    - `go test ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go test ./internal/utility/service -run "TestQRCodeService"` 通过。
+    - `go test ./internal/health/handler ./internal/health/service ./internal/app` 通过。
+  - Known blockers still present:
+    - `go test ./internal/membership/repo` 当前被环境 `CGO_ENABLED=0` + sqlite driver 阻塞，但测试代码已更新到新生产 schema。
+    - `go test ./internal/utility/service -run "TestQRCode|TestLocation|TestManualFood"` 中非二维码项仍被历史 location 外部响应和 sqlite CGO 阻塞。
+    - `go test ./internal/analyze/service -run "TestTaskService"` 仍被既有 sqlite CGO 阻塞。
+  - Remaining:
+    - 会员早鸟/创始翻倍 meta 仍是简化版，后续要补 `early_user_rank / early_paid_user_rank / multiplier` 完整 Python 逻辑。
+    - stats insight 目前使用 Go stub 文本生成，不是 Python `_generate_nutrition_insight` 的真实 LLM prompt/cache 指纹完整等价。
+    - 运动估算仍是 Go 兼容估算，尚未恢复 Python 画像快照 + LLM fallback 细节。
+    - 继续 Phase 6：测试后台 batch/legacy API、运维脚本和剩余 Python ops parity。
+
+## 状态：进行中 - Go 后端完整迁移 Phase 2/3：worker runtime 与 db_first 第一版
+
+- 2026-05-08 follow-up checkpoint:
+  - 精准模式已从单个 `precision_plan` 任务推进为 Go worker 多阶段链路：
+    - `precision_plan` 生成 planner round 与待估计主体。
+    - `precision_item_estimate` 子任务按主体/分组并行估计。
+    - `precision_aggregate` 等待子任务完成后聚合最终结果，并写回 `precision_sessions.final_result`。
+    - 新增 `precision_item_estimates` repo 读写方法，任务 payload 会保留 source/text/image 与分组信息。
+  - worker 已继续接入 `health_report`：
+    - 支持单图或逗号分隔多图 URL。
+    - 调用现有 DashScope OCR，合并 indicators/conclusions/suggestions/medical_notes。
+    - 写入 `user_health_documents(document_type=report)`。
+    - 回写 `weapp_user.health_condition.report_extract`。
+    - 完成 `analysis_tasks.result={"extracted_content": ...}`。
+  - 保质期识别已从“仅创建 pending 任务”补成可用链路：
+    - 新增 `backend/internal/expiry/service/recognizer.go`，使用专用保质期 prompt 调用视觉 LLM，返回前端表单预填 items。
+    - `POST /api/expiry/recognize` 现在会同步识别、更新 task 为 `processing -> done/failed`，并返回 `task_id / credits_cost / items / message`。
+    - worker 同时支持兜底消费 `expiry_recognize` 任务。
+    - `WORKER_TASK_TYPES` 默认增加 `health_report`、`expiry_recognize`。
+  - 保质期订阅提醒登记已从 stub 推进为真实 job upsert：
+    - 新增 `food_expiry_notification_jobs` Go domain/repo 写入能力。
+    - `POST /api/expiry/items/:item_id/subscribe` 现在读取订阅状态、openid 与模板 ID。
+    - active 条目会按到期日中国时间 09:00（当天已过则 +1 分钟）创建/更新提醒任务。
+    - 非 active 条目会取消未完成提醒任务；拒绝订阅时返回未创建。
+  - 保质期订阅通知发送 worker 已补齐：
+    - 新增 `backend/internal/expiry/service/notification_worker.go`。
+    - repo 支持 claim `food_expiry_notification_jobs` pending job，并更新状态/错误/重试时间。
+    - worker 默认任务类型包含 `expiry_notification`，会轮询到期 job 并调用微信订阅消息接口发送。
+    - 失败按 `5/30/120` 分钟退避重试，超过最大次数后标记 `failed`。
+  - Phase 3 `unknown-food DeepSeek fallback` 已迁移：
+    - `AnalyzeService` 现在可配置 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_TEXT_MODEL`。
+    - db_first 未命中食物会调用 DeepSeek 估算每 100g 扩展营养字段，返回 `nutrition_source=deepseek_text_fallback`。
+    - DeepSeek 结果会写入 `food_nutrition_library`，并写 `food_nutrition_aliases`，后续同名食物可直接命中。
+    - `food_nutrition_library` / alias lookup 已使用 `normalized_name` / `normalized_alias`，返回项的 `unit_nutrition_per_100g` 与 `nutrients` 覆盖完整扩展字段；未兜底时也返回 zero unit。
+    - 标准 db_first 图片/文字 prompt 已收窄为“食物名称 + 重量”为主，营养由后端查库/DeepSeek fallback 统一计算；`legacy_direct` 和 model compare 保留旧的直接营养估算 prompt。
+  - Verification:
+    - `go build -o %TEMP%\food-link-worker-health-expiry.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-health-expiry.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-server-expiry-subscribe.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-expiry-subscribe.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-deepseek.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-deepseek.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-dbfirst-prompt.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-dbfirst-prompt.exe ./cmd/worker` 通过。
+    - `go test ./internal/worker ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go test ./internal/analyze/service -run "TestBuildPrompt|TestParseItems|TestBuildAnalyzeResponse"` 通过。
+    - `go test ./internal/analyze/... ./internal/foodrecord/...` 已尝试，仍被既有历史环境阻塞：`CGO_ENABLED=0` 下 sqlite 测试不可运行，LLM client 测试访问真实外部 API 并返回鉴权/404。
+    - `go test ./internal/expiry/handler` 已尝试，仍被既有历史测试字段阻塞：测试还引用旧 `ExpiryItem.Name` 字段，而当前 domain 已使用 `FoodName`。
+  - Remaining:
+    - 精准模式 planner prompt 还需进一步贴近 Python planner 专用 prompt。
+    - Phase 4：会员支付、积分额度、权益治理仍未开始。
+
+- 2026-05-08 implementation:
+  - 用户要求开始“一口气”迁移，并希望尽量持续推进到 Go 后端完整替代 Python 后端。
+  - 已承诺按阶段连续推进：每个 checkpoint 完成后编译、记录状态，再继续下一块；不无验证地大爆炸写到底。
+  - Phase 2 已完成第一版真实 Go worker runtime：
+    - 新增 `backend/cmd/worker/main.go`
+    - 新增 `backend/internal/worker/worker.go`
+    - `backend/internal/analyze/repo/task_repo.go` 新增 `ClaimNextPendingTask`、`CompleteTask`、`FailTask`
+    - 支持 `analysis_tasks` 原子领取 `pending -> processing`，并写回 `done / failed`
+    - 首批 processor 覆盖 `food`、`food_text`、`precision_plan`、`public_food_library_text`、`exercise`
+    - `backend/pkg/config/config.go` 新增 worker 配置：`WORKER_ID`、`WORKER_TASK_TYPES`、`WORKER_POLL_INTERVAL_SECONDS`、`WORKER_MAX_CONCURRENT`
+    - `backend/Dockerfile` 同时构建 `/app/food-link` 与 `/app/food-link-worker`
+  - Phase 3 已完成第一版 `db_first` 营养库后处理：
+    - `AnalyzeService` 支持注入 `FoodNutritionRepo`
+    - `food_nutrition_aliases` / `food_nutrition_library` 命中后按估重回算营养
+    - 未命中项写入 `food_unresolved_logs`
+    - 返回项补充 `matched_food_id`、`matched_food_name`、`resolve_status`、`resolve_score`、`nutrition_source`、`unit_nutrition_per_100g`、`is_unresolved`
+    - `AnalyzeCompareEngines` 现在能体现 `legacy_direct` 与 `db_first` 真实差异
+  - 顺手修复：
+    - 文字分析 prompt 现在会包含用户原始文字，避免 `food_text` 任务只拿通用图片分析 prompt。
+    - 精准模式 submit payload / latest_inputs 会保留 `source_type`、`text`、`image_url(s)`，供 worker 消费。
+  - Verification:
+    - `go build -o %TEMP%\food-link-worker-phase2.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-phase2.exe ./cmd/server` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/publicfood/... ./internal/recipe/...` 通过。
+    - `go test ./internal/analyze/... ./internal/worker/...` 已尝试，仍被既有 `CGO_ENABLED=0` sqlite 测试和真实外部 LLM 测试阻塞。
+  - Remaining:
+    - Phase 2 后续：恢复精准模式 planner -> item estimate -> aggregate 的多阶段并行模型；接入 health_report OCR、expiry recognize、通知调度。
+    - Phase 3 后续：迁移 DeepSeek unknown-food per-100g fallback 自动补库，并进一步收口 db_first prompt。
+    - Phase 4：会员支付、积分额度、权益治理仍未开始。
+
+## 状态：完成 - 对账当前 Go 后端分支相对主分支 Python 后端的迁移缺口
+
+- 2026-05-08 update:
+  - 用户要求比较当前 `backend-refactor-sync-migrate-tencent` 分支与原主分支，找出 Go 重构时还遗漏哪些 Python 后端能力。
+  - 已确认当前分支为 `434d019`，本地 `main` / `dev` 均为 `fcc6b61`，因此本次以 `main` 作为主分支/开发分支同基线对账。
+  - 已按项目规则读取身份、状态、当天记忆，并使用 `.kimi/skills/ddd-go-backend/SKILL.md` 的 Go DDD 结构口径辅助判断。
+  - 静态对账结论：
+    - 当前 Go 后端手写真实注册路由约 `125` 个。
+    - 仍有 `20` 个小程序使用路由由 `ROUTE_MAP.md` 自动注册到 `backend/internal/stub/handler.go`，请求会返回 `501 已注册但尚未迁移`：
+      - `POST /api/precision-sessions/{session_id}/continue`
+      - 公共食物库 `/api/public-food-library*` 共 `12` 个路由
+      - 菜谱 `/api/recipes*` 共 `7` 个路由
+    - `GET /ws/stats/insight` 仍是 websocket 占位实现，返回 `websocket route registered but not migrated yet`。
+    - 若按行为等价而非路由存在判断，Go 版还明显缺：
+      - 异步 worker runtime：`/api/analyze/submit`、`/api/analyze-text/submit`、精准模式、保质期识别等只创建 pending task，没有等价 Python `worker.py` 的消费处理闭环。
+      - `db_first` 食物营养库匹配：当前 Go 中 `legacy_direct` / `db_first` 用同一次 LLM 调用近似，未真正接 `food_nutrition_library` / aliases / unresolved logs。
+      - 会员支付：当前返回 mock prepay / mock paySign，notify 不是微信回调验签解密链路。
+      - 会员积分与额度治理：`ValidateQuota` 仍是 stub，旧系统积分、earned credits、邀请奖励、订单 reconciliation 未闭环。
+      - `/api/qrcode` 返回 mock base64，不调用微信小程序码接口。
+      - stats insight、expiry subscribe/recognize、测试后台 batch/legacy API 均有简化或占位。
+      - 主分支的若干 Python 运维脚本未迁入当前 Go backend，例如会员治理、微信支付证书 serial、USDA/缺词补库脚本等。
+  - 已新增详细报告：
+    - `docs/go-backend-main-gap-analysis-2026-05-08.md`
+- 2026-05-08 follow-up:
+  - 用户询问如果要把 Go 后端迁到与原 Python 主分支“完全一样”需要多久，并表示准备开始迁移，争取一次性迁移完毕。
+  - 当前估时口径：
+    - 只做到小程序线上核心链路可替换 Python：约 `7-10` 个高强度工作日。
+    - 做到后端行为完整等价，包含公共食物库、菜谱、worker、db_first、会员支付积分、二维码、保质期、stats insight、测试后台和运维脚本：约 `15-20` 个工作日。
+    - 若要求充分 E2E 回归、灰度部署和线上事故预案，建议预留 `20-25` 个工作日更稳。
+  - 建议执行方式：在一个迁移分支内集中完成，但按业务域设置 checkpoint 和测试门槛，不建议无检查地一次性写到底。
+- 2026-05-08 plan:
+  - 用户要求写好重构计划书，准备一口气把 Go 后端迁移补完。
+  - 已新增计划书：
+    - `docs/go-backend-full-migration-plan-2026-05-08.md`
+  - 计划分为 8 个阶段：
+    - Phase 0：迁移准备与冻结基线
+    - Phase 1：补齐 20 个 stub 小程序路由
+    - Phase 2：恢复异步 worker runtime
+    - Phase 3：迁移 db_first 营养库算法
+    - Phase 4：会员、支付、积分和权益治理
+    - Phase 5：补齐二维码、stats insight、保质期识别/订阅等外部能力
+    - Phase 6：测试后台与运维脚本
+    - Phase 7：全量回归与上线准备
+
+## 状态：进行中 - Go 后端完整迁移 Phase 1：清除 miniapp-used route stubs
+
+- 2026-05-08 implementation:
+  - 已开始按 `docs/go-backend-full-migration-plan-2026-05-08.md` 执行完整迁移。
+  - Phase 1 目标：先让 20 个原本走 route-map stub 的小程序路由拥有真实 Go handler。
+  - 新增公共食物库模块：
+    - `backend/internal/publicfood/domain/public_food_domain.go`
+    - `backend/internal/publicfood/repo/public_food_repo.go`
+    - `backend/internal/publicfood/service/public_food_service.go`
+    - `backend/internal/publicfood/handler/public_food_handler.go`
+  - 新增菜谱模块：
+    - `backend/internal/recipe/domain/recipe_domain.go`
+    - `backend/internal/recipe/repo/recipe_repo.go`
+    - `backend/internal/recipe/service/recipe_service.go`
+    - `backend/internal/recipe/handler/recipe_handler.go`
+  - 补齐 precision continue：
+    - `backend/internal/analyze/handler/analyze_handler.go` 新增 `ContinuePrecisionSession`
+    - `backend/internal/analyze/service/task_service.go` 支持继续已有 precision session 的活跃状态判断
+    - `backend/internal/analyze/domain/analyze_domain.go` 补齐 `precision_sessions` / `precision_session_rounds` 当前 schema 字段
+  - `backend/internal/app/app.go` 已注册：
+    - `/api/public-food-library*` 12 个路由
+    - `/api/recipes*` 7 个路由
+    - `POST /api/precision-sessions/:session_id/continue`
+  - 静态 route-map 对账结果：
+    - `real=145`
+    - `stub_from_route_map=0`
+  - Verification:
+    - `C:\Program Files\Go\bin\gofmt.exe` 已格式化新增/修改 Go 文件。
+    - `go test ./internal/publicfood/... ./internal/recipe/... ./internal/app` 通过。
+    - `go build -o %TEMP%\food-link-server-phase1.exe ./cmd/server` 通过。
+    - `go test ./...` 已尝试，仍被既有测试环境/历史问题阻塞：`CGO_ENABLED=0` 下 sqlite 测试不可运行，部分 LLM/OCR/location 测试访问真实外部服务失败，expiry 历史测试引用旧字段。
+  - Remaining note:
+    - Phase 1 只清除 route stub；公共食物库文字审核、precision 任务、保质期识别等异步任务仍依赖 Phase 2 的 Go worker runtime 才能完整闭环。
+
+## 状态：完成 - 拉取远端代码并分析 Go 后端数据库访问方式
+
+- 2026-05-08 update:
+  - 用户要求“拉取最新代码覆盖本地，然后分析 Go 项目如何访问数据库”。
+  - 已执行 `git fetch --all --prune` 并用上游分支 `@{u}` 硬重置本地工作区。
+  - 当前分支：`backend-refactor-sync-migrate-tencent`，同步后 HEAD 为 `434d019 feat(storage): 添加存储客户端的图像路径解析和引用 URL 解析功能`。
+  - 分析结论：
+    - Go 后端使用 `GORM + PostgreSQL` 访问数据库，入口在 `backend/pkg/database/postgres.go`。
+    - 配置由 `backend/pkg/config/config.go` 读取 `config.yaml` / 环境变量，数据库相关旧环境变量包括 `POSTGRESQL_HOST`、`POSTGRESQL_PORT`、`POSTGRESQL_USER`、`POSTGRESQL_PASSWORD`、`POSTGRESQL_DATABASE`。
+    - `backend/internal/app/app.go` 在启动时调用 `database.Open(cfg.Database)` 创建一个共享 `*gorm.DB`，再手工注入各业务 repo。
+    - 各业务 repo 通过 `db.WithContext(ctx)` 执行 GORM 查询，常见模式为 `Where/First/Find/Create/Updates/Delete/Table/Raw/Scan`。
+    - 未发现业务代码绕开 GORM 使用 `database/sql`、`sql.Open`、`sqlx` 或 `pgx.Connect` 直连数据库。
+
 ## 状态：完成 - 恢复 Go backend CCR 推送脚本并固定 v2 标签
 
 - 2026-05-06 update:

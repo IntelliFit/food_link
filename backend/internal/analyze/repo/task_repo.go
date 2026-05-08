@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type TaskRepo struct {
@@ -24,6 +25,47 @@ func (r *TaskRepo) CreateTask(ctx context.Context, task *domain.AnalysisTask) er
 		task.ID = uuid.New().String()
 	}
 	return r.db.WithContext(ctx).Create(task).Error
+}
+
+func (r *TaskRepo) ClaimNextPendingTask(ctx context.Context, taskTypes []string) (*domain.AnalysisTask, error) {
+	if len(taskTypes) == 0 {
+		return nil, nil
+	}
+	var claimed *domain.AnalysisTask
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var task domain.AnalysisTask
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("status = ? AND task_type IN ?", "pending", taskTypes).
+			Order("created_at ASC").
+			Limit(1).
+			First(&task).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		now := time.Now()
+		result := tx.Model(&domain.AnalysisTask{}).
+			Where("id = ? AND status = ?", task.ID, "pending").
+			Updates(map[string]any{
+				"status":        "processing",
+				"error_message": nil,
+				"updated_at":    now,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		task.Status = "processing"
+		task.ErrorMessage = nil
+		task.UpdatedAt = &now
+		claimed = &task
+		return nil
+	})
+	return claimed, err
 }
 
 func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*domain.AnalysisTask, error) {
@@ -86,6 +128,31 @@ func (r *TaskRepo) UpdateTaskResult(ctx context.Context, taskID string, result m
 	now := time.Now()
 	task.UpdatedAt = &now
 	return r.db.WithContext(ctx).Save(&task).Error
+}
+
+func (r *TaskRepo) CompleteTask(ctx context.Context, taskID string, result map[string]any) (bool, error) {
+	updates := map[string]any{
+		"status":        "done",
+		"result":        result,
+		"error_message": nil,
+		"updated_at":    time.Now(),
+	}
+	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
+		Where("id = ? AND status <> ?", taskID, "cancelled").
+		Updates(updates)
+	return res.RowsAffected > 0, res.Error
+}
+
+func (r *TaskRepo) FailTask(ctx context.Context, taskID string, errorMsg string) (bool, error) {
+	updates := map[string]any{
+		"status":        "failed",
+		"error_message": errorMsg,
+		"updated_at":    time.Now(),
+	}
+	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
+		Where("id = ? AND status <> ?", taskID, "cancelled").
+		Updates(updates)
+	return res.RowsAffected > 0, res.Error
 }
 
 func (r *TaskRepo) UpdateTaskStatus(ctx context.Context, taskID string, status string, errorMsg *string) error {

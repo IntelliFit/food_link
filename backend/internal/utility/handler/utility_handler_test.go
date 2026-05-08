@@ -34,7 +34,7 @@ type mockQRCodeService struct {
 	err    error
 }
 
-func (m *mockQRCodeService) GenerateQRCode(ctx context.Context, scene, page string) (string, error) {
+func (m *mockQRCodeService) GenerateQRCode(ctx context.Context, scene, page string, width int, checkPath bool, envVersion string) (string, error) {
 	return m.base64, m.err
 }
 

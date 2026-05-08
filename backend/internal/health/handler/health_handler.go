@@ -84,9 +84,9 @@ func (h *HealthHandler) GetBodyMetricsSummary(c *gin.Context) {
 // POST /api/body-metrics/sync-local
 func (h *HealthHandler) SyncLocalBodyMetrics(c *gin.Context) {
 	var body struct {
-		WeightEntries []service.LocalWeightEntry     `json:"weight_entries"`
+		WeightEntries []service.LocalWeightEntry       `json:"weight_entries"`
 		WaterByDate   map[string]service.LocalWaterDay `json:"water_by_date"`
-		WaterGoalMl   *int                           `json:"water_goal_ml"`
+		WaterGoalMl   *int                             `json:"water_goal_ml"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -179,30 +179,31 @@ func (h *HealthHandler) GetStatsSummary(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"range":                         summary.Range,
-		"start_date":                    summary.StartDate,
-		"end_date":                      summary.EndDate,
-		"tdee":                          summary.TDEE,
-		"streak_days":                   summary.StreakDays,
-		"total_calories":                summary.TotalCalories,
-		"avg_calories_per_day":          summary.AvgCaloriesPerDay,
-		"cal_surplus_deficit":           summary.CalSurplusDeficit,
-		"total_protein":                 summary.TotalProtein,
-		"total_carbs":                   summary.TotalCarbs,
-		"total_fat":                     summary.TotalFat,
-		"by_meal":                       summary.ByMeal,
-		"daily_calories":                summary.DailyCalories,
-		"macro_percent":                 summary.MacroPercent,
-		"analysis_summary":              summary.AnalysisSummary,
+		"range":                           summary.Range,
+		"start_date":                      summary.StartDate,
+		"end_date":                        summary.EndDate,
+		"tdee":                            summary.TDEE,
+		"streak_days":                     summary.StreakDays,
+		"total_calories":                  summary.TotalCalories,
+		"avg_calories_per_day":            summary.AvgCaloriesPerDay,
+		"cal_surplus_deficit":             summary.CalSurplusDeficit,
+		"total_protein":                   summary.TotalProtein,
+		"total_carbs":                     summary.TotalCarbs,
+		"total_fat":                       summary.TotalFat,
+		"by_meal":                         summary.ByMeal,
+		"daily_calories":                  summary.DailyCalories,
+		"macro_percent":                   summary.MacroPercent,
+		"analysis_summary":                summary.AnalysisSummary,
 		"analysis_summary_generated_date": summary.AnalysisSummaryGeneratedDate,
-		"analysis_summary_needs_refresh": summary.AnalysisSummaryNeedsRefresh,
-		"body_metrics":                  summary.BodyMetrics,
+		"analysis_summary_needs_refresh":  summary.AnalysisSummaryNeedsRefresh,
+		"body_metrics":                    summary.BodyMetrics,
 	})
 }
 
 // POST /api/stats/insight/generate
 func (h *HealthHandler) GenerateStatsInsight(c *gin.Context) {
 	var body struct {
+		Range     string `json:"range"`
 		DateRange string `json:"date_range"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -212,7 +213,11 @@ func (h *HealthHandler) GenerateStatsInsight(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	tdee := 2000
 	streakDays := 0
-	result, err := h.stats.GenerateInsight(c.Request.Context(), userID, body.DateRange, tdee, streakDays)
+	statsRange := body.Range
+	if statsRange == "" {
+		statsRange = body.DateRange
+	}
+	result, err := h.stats.GenerateInsight(c.Request.Context(), userID, statsRange, tdee, streakDays)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -223,15 +228,25 @@ func (h *HealthHandler) GenerateStatsInsight(c *gin.Context) {
 // POST /api/stats/insight/save
 func (h *HealthHandler) SaveStatsInsight(c *gin.Context) {
 	var body struct {
-		Content   string `json:"content"`
-		DateRange string `json:"date_range"`
+		Range           string `json:"range"`
+		DateRange       string `json:"date_range"`
+		Content         string `json:"content"`
+		AnalysisSummary string `json:"analysis_summary"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
-	if err := h.stats.SaveInsight(c.Request.Context(), userID, body.Content, body.DateRange); err != nil {
+	content := body.Content
+	if content == "" {
+		content = body.AnalysisSummary
+	}
+	statsRange := body.Range
+	if statsRange == "" {
+		statsRange = body.DateRange
+	}
+	if err := h.stats.SaveInsight(c.Request.Context(), userID, content, statsRange); err != nil {
 		response.Error(c, err)
 		return
 	}

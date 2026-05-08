@@ -53,25 +53,46 @@ type FoodItemNutrients struct {
 
 // FoodNutrition — table: food_nutrition_library (read-only)
 type FoodNutrition struct {
-	ID              string  `gorm:"column:id" json:"id"`
-	CanonicalName   string  `gorm:"column:canonical_name" json:"canonical_name"`
-	KcalPer100g     float64 `gorm:"column:kcal_per_100g" json:"kcal_per_100g"`
-	ProteinPer100g  float64 `gorm:"column:protein_per_100g" json:"protein_per_100g"`
-	CarbsPer100g    float64 `gorm:"column:carbs_per_100g" json:"carbs_per_100g"`
-	FatPer100g      float64 `gorm:"column:fat_per_100g" json:"fat_per_100g"`
-	FiberPer100g    float64 `gorm:"column:fiber_per_100g" json:"fiber_per_100g"`
-	SugarPer100g    float64 `gorm:"column:sugar_per_100g" json:"sugar_per_100g"`
-	SodiumMgPer100g float64 `gorm:"column:sodium_mg_per_100g" json:"sodium_mg_per_100g"`
-	IsActive        bool    `gorm:"column:is_active" json:"is_active"`
+	ID                    string  `gorm:"column:id" json:"id"`
+	CanonicalName         string  `gorm:"column:canonical_name" json:"canonical_name"`
+	NormalizedName        string  `gorm:"column:normalized_name" json:"normalized_name"`
+	KcalPer100g           float64 `gorm:"column:kcal_per_100g" json:"kcal_per_100g"`
+	ProteinPer100g        float64 `gorm:"column:protein_per_100g" json:"protein_per_100g"`
+	CarbsPer100g          float64 `gorm:"column:carbs_per_100g" json:"carbs_per_100g"`
+	FatPer100g            float64 `gorm:"column:fat_per_100g" json:"fat_per_100g"`
+	FiberPer100g          float64 `gorm:"column:fiber_per_100g" json:"fiber_per_100g"`
+	SugarPer100g          float64 `gorm:"column:sugar_per_100g" json:"sugar_per_100g"`
+	SaturatedFatPer100g   float64 `gorm:"column:saturated_fat_per_100g" json:"saturated_fat_per_100g"`
+	CholesterolMgPer100g  float64 `gorm:"column:cholesterol_mg_per_100g" json:"cholesterol_mg_per_100g"`
+	SodiumMgPer100g       float64 `gorm:"column:sodium_mg_per_100g" json:"sodium_mg_per_100g"`
+	PotassiumMgPer100g    float64 `gorm:"column:potassium_mg_per_100g" json:"potassium_mg_per_100g"`
+	CalciumMgPer100g      float64 `gorm:"column:calcium_mg_per_100g" json:"calcium_mg_per_100g"`
+	IronMgPer100g         float64 `gorm:"column:iron_mg_per_100g" json:"iron_mg_per_100g"`
+	MagnesiumMgPer100g    float64 `gorm:"column:magnesium_mg_per_100g" json:"magnesium_mg_per_100g"`
+	ZincMgPer100g         float64 `gorm:"column:zinc_mg_per_100g" json:"zinc_mg_per_100g"`
+	VitaminARaeMcgPer100g float64 `gorm:"column:vitamin_a_rae_mcg_per_100g" json:"vitamin_a_rae_mcg_per_100g"`
+	VitaminCMgPer100g     float64 `gorm:"column:vitamin_c_mg_per_100g" json:"vitamin_c_mg_per_100g"`
+	VitaminDMcgPer100g    float64 `gorm:"column:vitamin_d_mcg_per_100g" json:"vitamin_d_mcg_per_100g"`
+	VitaminEMgPer100g     float64 `gorm:"column:vitamin_e_mg_per_100g" json:"vitamin_e_mg_per_100g"`
+	VitaminKMcgPer100g    float64 `gorm:"column:vitamin_k_mcg_per_100g" json:"vitamin_k_mcg_per_100g"`
+	ThiaminMgPer100g      float64 `gorm:"column:thiamin_mg_per_100g" json:"thiamin_mg_per_100g"`
+	RiboflavinMgPer100g   float64 `gorm:"column:riboflavin_mg_per_100g" json:"riboflavin_mg_per_100g"`
+	NiacinMgPer100g       float64 `gorm:"column:niacin_mg_per_100g" json:"niacin_mg_per_100g"`
+	VitaminB6MgPer100g    float64 `gorm:"column:vitamin_b6_mg_per_100g" json:"vitamin_b6_mg_per_100g"`
+	FolateMcgPer100g      float64 `gorm:"column:folate_mcg_per_100g" json:"folate_mcg_per_100g"`
+	VitaminB12McgPer100g  float64 `gorm:"column:vitamin_b12_mcg_per_100g" json:"vitamin_b12_mcg_per_100g"`
+	Source                string  `gorm:"column:source" json:"source"`
+	IsActive              bool    `gorm:"column:is_active" json:"is_active"`
 }
 
 func (FoodNutrition) TableName() string { return "food_nutrition_library" }
 
 // FoodNutritionAlias — table: food_nutrition_aliases
 type FoodNutritionAlias struct {
-	ID        string `gorm:"column:id" json:"id"`
-	FoodID    string `gorm:"column:food_id" json:"food_id"`
-	AliasName string `gorm:"column:alias_name" json:"alias_name"`
+	ID              string `gorm:"column:id" json:"id"`
+	FoodID          string `gorm:"column:food_id" json:"food_id"`
+	AliasName       string `gorm:"column:alias_name" json:"alias_name"`
+	NormalizedAlias string `gorm:"column:normalized_alias" json:"normalized_alias"`
 }
 
 func (FoodNutritionAlias) TableName() string { return "food_nutrition_aliases" }

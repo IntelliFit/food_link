@@ -32,21 +32,66 @@ type ExerciseLog struct {
 	CaloriesBurned *float64   `gorm:"column:calories_burned"`
 	DurationMin    *int       `gorm:"column:duration_min"`
 	RecordedOn     *time.Time `gorm:"column:recorded_on"`
+	AIReasoning    *string    `gorm:"column:ai_reasoning"`
 	CreatedAt      *time.Time `gorm:"column:created_at"`
 }
 
 func (ExerciseLog) TableName() string { return "user_exercise_logs" }
 
-// StatsInsight — table: user_stats_insights
-type StatsInsight struct {
-	ID        string     `gorm:"column:id"`
-	UserID    string     `gorm:"column:user_id"`
-	Content   string     `gorm:"column:content"`
-	DateRange string     `gorm:"column:date_range"`
-	CreatedAt *time.Time `gorm:"column:created_at"`
+// ExerciseUserProfile is the weapp_user projection needed for exercise
+// calorie estimation profile snapshots.
+type ExerciseUserProfile struct {
+	ID            string   `gorm:"column:id"`
+	Height        *float64 `gorm:"column:height"`
+	Weight        *float64 `gorm:"column:weight"`
+	Birthday      *string  `gorm:"column:birthday"`
+	Gender        *string  `gorm:"column:gender"`
+	ActivityLevel *string  `gorm:"column:activity_level"`
+	BMR           *float64 `gorm:"column:bmr"`
+	TDEE          *float64 `gorm:"column:tdee"`
 }
 
-func (StatsInsight) TableName() string { return "user_stats_insights" }
+func (ExerciseUserProfile) TableName() string { return "weapp_user" }
+
+// StatsInsight — table: ai_stats_insights
+type StatsInsight struct {
+	ID              string     `gorm:"column:id"`
+	UserID          string     `gorm:"column:user_id"`
+	RangeType       string     `gorm:"column:range_type"`
+	GeneratedDate   time.Time  `gorm:"column:generated_date"`
+	DataFingerprint string     `gorm:"column:data_fingerprint"`
+	InsightText     string     `gorm:"column:insight_text"`
+	CreatedAt       *time.Time `gorm:"column:created_at"`
+}
+
+func (StatsInsight) TableName() string { return "ai_stats_insights" }
+
+func (s StatsInsight) GeneratedDateString() string {
+	if s.GeneratedDate.IsZero() {
+		return ""
+	}
+	return s.GeneratedDate.In(chinaDateLocation()).Format("2006-01-02")
+}
+
+func chinaDateLocation() *time.Location {
+	return time.FixedZone("Asia/Shanghai", 8*60*60)
+}
+
+// StatsUserProfile is the weapp_user projection needed for stats insight.
+type StatsUserProfile struct {
+	ID              string         `gorm:"column:id"`
+	Gender          *string        `gorm:"column:gender"`
+	Height          *float64       `gorm:"column:height"`
+	Weight          *float64       `gorm:"column:weight"`
+	Birthday        *string        `gorm:"column:birthday"`
+	ActivityLevel   *string        `gorm:"column:activity_level"`
+	BMR             *float64       `gorm:"column:bmr"`
+	TDEE            *float64       `gorm:"column:tdee"`
+	DietGoal        *string        `gorm:"column:diet_goal"`
+	HealthCondition map[string]any `gorm:"column:health_condition;serializer:json"`
+}
+
+func (StatsUserProfile) TableName() string { return "weapp_user" }
 
 // FoodRecord — minimal projection for stats aggregation (table: user_food_records)
 type FoodRecord struct {
@@ -77,8 +122,8 @@ func (AnalysisTask) TableName() string { return "analysis_tasks" }
 
 // BodyMetricSettings — table: user_body_metric_settings
 type BodyMetricSettings struct {
-	UserID       string `gorm:"column:user_id;primaryKey"`
-	WaterGoalMl  int    `gorm:"column:water_goal_ml"`
+	UserID      string `gorm:"column:user_id;primaryKey"`
+	WaterGoalMl int    `gorm:"column:water_goal_ml"`
 }
 
 func (BodyMetricSettings) TableName() string { return "user_body_metric_settings" }

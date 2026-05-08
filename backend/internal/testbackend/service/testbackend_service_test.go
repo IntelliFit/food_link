@@ -329,7 +329,9 @@ func TestTestBackendService_LegacyBatchUpload(t *testing.T) {
 
 	result, err := svc.LegacyBatchUpload(ctx, LegacyBatchUploadInput{ImageURLs: []string{"/a.jpg"}})
 	require.NoError(t, err)
-	assert.Equal(t, "legacy batch upload stub", result["message"])
+	assert.Equal(t, "batch upload processed", result["message"])
+	summary := result["summary"].(map[string]any)
+	assert.Equal(t, 1, summary["total"])
 }
 
 func TestTestBackendService_LegacySingleImage(t *testing.T) {
@@ -341,7 +343,8 @@ func TestTestBackendService_LegacySingleImage(t *testing.T) {
 
 	result, err := svc.LegacySingleImage(ctx, LegacySingleImageInput{ImageURL: "/a.jpg"})
 	require.NoError(t, err)
-	assert.Equal(t, "legacy single image stub", result["message"])
+	assert.Equal(t, true, result["success"])
+	assert.NotNil(t, result["data"])
 }
 
 // ---------- ResolveModelConfig ----------

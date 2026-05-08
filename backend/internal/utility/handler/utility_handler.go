@@ -16,7 +16,7 @@ type LocationService interface {
 }
 
 type QRCodeService interface {
-	GenerateQRCode(ctx context.Context, scene, page string) (string, error)
+	GenerateQRCode(ctx context.Context, scene, page string, width int, checkPath bool, envVersion string) (string, error)
 }
 
 type ManualFoodService interface {
@@ -25,9 +25,9 @@ type ManualFoodService interface {
 }
 
 type UtilityHandler struct {
-	locationSvc    LocationService
-	qrcodeSvc      QRCodeService
-	manualFoodSvc  ManualFoodService
+	locationSvc   LocationService
+	qrcodeSvc     QRCodeService
+	manualFoodSvc ManualFoodService
 }
 
 func NewUtilityHandler(
@@ -80,14 +80,17 @@ func (h *UtilityHandler) LocationSearch(c *gin.Context) {
 // POST /api/qrcode
 func (h *UtilityHandler) QRCode(c *gin.Context) {
 	var body struct {
-		Scene string `json:"scene"`
-		Page  string `json:"page"`
+		Scene      string `json:"scene"`
+		Page       string `json:"page"`
+		Width      int    `json:"width"`
+		CheckPath  bool   `json:"check_path"`
+		EnvVersion string `json:"env_version"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
-	base64, err := h.qrcodeSvc.GenerateQRCode(c.Request.Context(), body.Scene, body.Page)
+	base64, err := h.qrcodeSvc.GenerateQRCode(c.Request.Context(), body.Scene, body.Page, body.Width, body.CheckPath, body.EnvVersion)
 	if err != nil {
 		response.Error(c, err)
 		return

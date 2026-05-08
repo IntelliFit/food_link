@@ -15,6 +15,8 @@ type mockExerciseRepo struct {
 	logs      []domain.ExerciseLog
 	tasks     []domain.AnalysisTask
 	deletedID string
+	profile   *domain.ExerciseUserProfile
+	weight    *domain.BodyWeightRecord
 }
 
 func (m *mockExerciseRepo) CreateExerciseLog(ctx context.Context, log *domain.ExerciseLog) error {
@@ -48,6 +50,14 @@ func (m *mockExerciseRepo) GetDailyCaloriesBurned(ctx context.Context, userID st
 		}
 	}
 	return total, nil
+}
+
+func (m *mockExerciseRepo) GetUserProfile(ctx context.Context, userID string) (*domain.ExerciseUserProfile, error) {
+	return m.profile, nil
+}
+
+func (m *mockExerciseRepo) GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error) {
+	return m.weight, nil
 }
 
 func (m *mockExerciseRepo) CreateAnalysisTask(ctx context.Context, task *domain.AnalysisTask) error {
@@ -94,7 +104,11 @@ func TestExerciseService_ListLogs(t *testing.T) {
 }
 
 func TestExerciseService_CreateLog(t *testing.T) {
-	repo := &mockExerciseRepo{}
+	weightDate := time.Now().UTC()
+	repo := &mockExerciseRepo{
+		profile: &domain.ExerciseUserProfile{ID: "u1"},
+		weight:  &domain.BodyWeightRecord{UserID: "u1", WeightKg: 70, RecordedOn: &weightDate},
+	}
 	svc := NewExerciseService(repo)
 	ctx := context.Background()
 
@@ -102,20 +116,50 @@ func TestExerciseService_CreateLog(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, result["task_id"])
 	assert.Equal(t, "运动分析任务已提交，请轮询任务状态直至完成", result["message"])
-	assert.Len(t, repo.logs, 1)
+	assert.Len(t, repo.logs, 0)
 	assert.Len(t, repo.tasks, 1)
 	assert.Equal(t, "exercise", repo.tasks[0].TaskType)
+	assert.NotEmpty(t, repo.tasks[0].Payload["profile_snapshot"])
 }
 
 func TestExerciseService_EstimateCalories(t *testing.T) {
-	repo := &mockExerciseRepo{}
+	repo := &mockExerciseRepo{profile: &domain.ExerciseUserProfile{ID: "u1"}}
 	svc := NewExerciseService(repo)
 	ctx := context.Background()
 
 	result, err := svc.EstimateCalories(ctx, "u1", "跑步30分钟")
 	require.NoError(t, err)
-	assert.Greater(t, result["estimated_calories"].(float64), 0.0)
+	assert.Greater(t, result["estimated_calories"].(int), 0)
 	assert.Equal(t, "跑步30分钟", result["exercise_desc"])
+	assert.NotEmpty(t, result["reasoning"])
+	assert.NotNil(t, result["profile_snapshot"])
+}
+
+func TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning(t *testing.T) {
+	recordedOn := time.Now().In(chinaTZ).Format("2006-01-02")
+	repo := &mockExerciseRepo{}
+	svc := NewExerciseService(repo)
+
+	result, err := svc.ProcessExerciseTask(context.Background(), "u1", "跑步30分钟", recordedOn, map[string]any{
+		"profile_snapshot": map[string]any{"weight_kg": 70.0},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "跑步30分钟", result["exercise_log"].(map[string]any)["exercise_desc"])
+	assert.NotEmpty(t, result["reasoning"])
+	require.Len(t, repo.logs, 1)
+	assert.NotNil(t, repo.logs[0].AIReasoning)
+	assert.Greater(t, *repo.logs[0].CaloriesBurned, 0.0)
+}
+
+func TestExerciseService_EstimateCalories_SplitsMultiItemDescription(t *testing.T) {
+	repo := &mockExerciseRepo{}
+	svc := NewExerciseService(repo)
+	desc := "慢跑30分钟；跳绳10分钟；拉伸15分钟"
+
+	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
+	require.NoError(t, err)
+	assert.Contains(t, result["reasoning"], "分项估算")
+	assert.Greater(t, result["estimated_calories"].(int), 0)
 }
 
 func TestExerciseService_DeleteLog(t *testing.T) {

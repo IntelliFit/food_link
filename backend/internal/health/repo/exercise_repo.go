@@ -71,6 +71,32 @@ func (r *ExerciseRepo) GetDailyCaloriesBurned(ctx context.Context, userID string
 	return total, err
 }
 
+func (r *ExerciseRepo) GetUserProfile(ctx context.Context, userID string) (*domain.ExerciseUserProfile, error) {
+	var row domain.ExerciseUserProfile
+	if err := r.db.WithContext(ctx).Where("id = ?", userID).First(&row).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *ExerciseRepo) GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error) {
+	var row domain.BodyWeightRecord
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("recorded_on DESC").
+		Order("created_at DESC").
+		First(&row).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *ExerciseRepo) CreateAnalysisTask(ctx context.Context, task *domain.AnalysisTask) error {
 	if task.ID == "" {
 		task.ID = uuid.New().String()

@@ -96,7 +96,7 @@ func TestDashboard(t *testing.T) {
 }
 
 func TestListItems(t *testing.T) {
-	mockSvc := &mockExpiryService{listItems: []domain.ExpiryItem{{ID: "i1", Name: "milk"}}}
+	mockSvc := &mockExpiryService{listItems: []domain.ExpiryItem{{ID: "i1", FoodName: "milk"}}}
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 
@@ -113,7 +113,7 @@ func TestListItems(t *testing.T) {
 }
 
 func TestCreateItem(t *testing.T) {
-	mockSvc := &mockExpiryService{createItem: &domain.ExpiryItem{ID: "i1", Name: "bread"}}
+	mockSvc := &mockExpiryService{createItem: &domain.ExpiryItem{ID: "i1", FoodName: "bread"}}
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 
@@ -131,7 +131,7 @@ func TestCreateItem(t *testing.T) {
 }
 
 func TestGetItem(t *testing.T) {
-	mockSvc := &mockExpiryService{getItem: &domain.ExpiryItem{ID: "i1", Name: "egg"}}
+	mockSvc := &mockExpiryService{getItem: &domain.ExpiryItem{ID: "i1", FoodName: "egg"}}
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 
@@ -155,7 +155,7 @@ func TestGetItemNotFound(t *testing.T) {
 }
 
 func TestUpdateItem(t *testing.T) {
-	mockSvc := &mockExpiryService{updateItem: &domain.ExpiryItem{ID: "i1", Name: "sourdough"}}
+	mockSvc := &mockExpiryService{updateItem: &domain.ExpiryItem{ID: "i1", FoodName: "sourdough"}}
 	h := NewExpiryHandler(mockSvc)
 	r := setupRouter(h)
 

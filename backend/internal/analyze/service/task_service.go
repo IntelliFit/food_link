@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"food_link/backend/internal/analyze/domain"
@@ -12,10 +15,11 @@ import (
 )
 
 type TaskService struct {
-	tasks     *repo.TaskRepo
-	precision *repo.PrecisionRepo
-	users     *authrepo.UserRepo
-	storage   *storage.Client
+	tasks       *repo.TaskRepo
+	precision   *repo.PrecisionRepo
+	users       *authrepo.UserRepo
+	storage     *storage.Client
+	creditGuard CreditGuard
 }
 
 func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *authrepo.UserRepo, storageClient ...*storage.Client) *TaskService {
@@ -26,10 +30,21 @@ func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *
 	return &TaskService{tasks: tasks, precision: precision, users: users, storage: client}
 }
 
+type CreditGuard interface {
+	ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string) (map[string]any, error)
+	ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
+}
+
+func (s *TaskService) ConfigureCreditGuard(guard CreditGuard) {
+	s.creditGuard = guard
+}
+
 type SubmitTaskInput struct {
 	ImageURL           string   `json:"image_url"`
 	ImageURLs          []string `json:"image_urls"`
+	Text               string   `json:"text"`
 	TextInput          string   `json:"text_input"`
+	Date               string   `json:"date"`
 	MealType           string   `json:"meal_type"`
 	Province           string   `json:"province"`
 	City               string   `json:"city"`
@@ -72,9 +87,26 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 		"execution_mode":     mode,
 		"analysis_engine":    input.AnalysisEngine,
 	}
+	if input.Date != "" {
+		payload["recorded_on"] = input.Date
+	}
+
+	creditMode := mode
+	if input.PrecisionSessionID != nil {
+		creditMode = validExecutionMode
+	}
+	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, payload)
+	if err != nil {
+		return "", err
+	}
 
 	if mode == validExecutionMode || input.PrecisionSessionID != nil {
-		return s.submitPrecisionTask(ctx, userID, input, payload)
+		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload)
+		if err != nil {
+			return "", err
+		}
+		s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, taskID, "precision_plan")
+		return taskID, nil
 	}
 
 	var imageURL *string
@@ -93,10 +125,14 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if err := s.tasks.CreateTask(ctx, task); err != nil {
 		return "", err
 	}
+	s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, task.ID, task.TaskType)
 	return task.ID, nil
 }
 
 func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if input.TextInput == "" {
+		input.TextInput = input.Text
+	}
 	if input.TextInput == "" {
 		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
 	}
@@ -123,9 +159,26 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 		"execution_mode":     mode,
 		"analysis_engine":    input.AnalysisEngine,
 	}
+	if input.Date != "" {
+		payload["recorded_on"] = input.Date
+	}
+
+	creditMode := mode
+	if input.PrecisionSessionID != nil {
+		creditMode = validExecutionMode
+	}
+	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, payload)
+	if err != nil {
+		return "", err
+	}
 
 	if mode == validExecutionMode || input.PrecisionSessionID != nil {
-		return s.submitPrecisionTask(ctx, userID, input, payload)
+		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload)
+		if err != nil {
+			return "", err
+		}
+		s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, taskID, "precision_plan")
+		return taskID, nil
 	}
 
 	text := input.TextInput
@@ -139,10 +192,53 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if err := s.tasks.CreateTask(ctx, task); err != nil {
 		return "", err
 	}
+	s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, task.ID, task.TaskType)
 	return task.ID, nil
 }
 
+func (s *TaskService) applyFoodCreditGuard(ctx context.Context, userID, executionMode, recordedOn string, payload map[string]any) (map[string]any, int, error) {
+	if s.creditGuard == nil || userID == "" {
+		return nil, 0, nil
+	}
+	creditsInfo, err := s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, executionMode, recordedOn)
+	if err != nil {
+		return nil, 0, err
+	}
+	cost := intFromAny(creditsInfo["credit_cost"])
+	if spendPlan, ok := creditsInfo["credit_spend_plan"]; ok {
+		payload["credit_usage"] = spendPlan
+		if plan, ok := spendPlan.(map[string]any); ok {
+			if recorded := stringFromAny(plan["recorded_on"]); recorded != "" {
+				payload["recorded_on"] = recorded
+			}
+		}
+	}
+	return creditsInfo, cost, nil
+}
+
+func (s *TaskService) consumeFoodCredits(ctx context.Context, userID string, creditsInfo map[string]any, cost int, taskID, taskType string) {
+	if s.creditGuard == nil || userID == "" || creditsInfo == nil || taskID == "" {
+		return
+	}
+	_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, cost, "food_analysis_reward_spend", "food_analysis:"+taskID, map[string]any{
+		"task_id":   taskID,
+		"task_type": taskType,
+	})
+}
+
 func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any) (string, error) {
+	sourceType := precisionSourceType(input)
+	payload["source_type"] = sourceType
+	if input.TextInput != "" {
+		payload["text"] = input.TextInput
+	}
+	if input.ImageURL != "" {
+		payload["image_url"] = input.ImageURL
+	}
+	if len(input.ImageURLs) > 0 {
+		payload["image_urls"] = input.ImageURLs
+	}
+
 	var session *domain.PrecisionSession
 	if input.PrecisionSessionID != nil && *input.PrecisionSessionID != "" {
 		existing, err := s.precision.GetSessionByID(ctx, *input.PrecisionSessionID)
@@ -155,37 +251,50 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		if existing.UserID != userID {
 			return "", errors.ErrForbidden
 		}
-		if existing.Status != "collecting" && existing.Status != "active" {
+		if !precisionSessionCanContinue(existing.Status) {
 			return "", &errors.AppError{Code: 10002, Message: "该精准模式会话已结束，无法继续", HTTPStatus: 400}
 		}
 		nextRound := existing.RoundIndex + 1
+		latestInputs := copyMap(existing.LatestInputs)
+		for key, value := range payload {
+			latestInputs[key] = value
+		}
 		if err := s.precision.UpdateSession(ctx, existing.ID, map[string]any{
-			"status":      "collecting",
-			"round_index": nextRound,
-			"updated_at":  time.Now(),
+			"status":        "collecting",
+			"round_index":   nextRound,
+			"latest_inputs": latestInputs,
+			"updated_at":    time.Now(),
 		}); err != nil {
 			return "", err
 		}
 		if err := s.precision.CreateRound(ctx, &domain.PrecisionSessionRound{
-			SessionID:  existing.ID,
-			RoundIndex: nextRound,
+			SessionID:    existing.ID,
+			RoundIndex:   nextRound,
+			ActorRole:    "user",
+			InputPayload: payload,
 		}); err != nil {
 			return "", err
 		}
 		session = existing
 		session.RoundIndex = nextRound
+		session.LatestInputs = latestInputs
 	} else {
 		newSession := &domain.PrecisionSession{
-			UserID:     userID,
-			Status:     "collecting",
-			RoundIndex: 1,
+			UserID:        userID,
+			SourceType:    sourceType,
+			ExecutionMode: "strict",
+			Status:        "collecting",
+			RoundIndex:    1,
+			LatestInputs:  payload,
 		}
 		if err := s.precision.CreateSession(ctx, newSession); err != nil {
 			return "", err
 		}
 		if err := s.precision.CreateRound(ctx, &domain.PrecisionSessionRound{
-			SessionID:  newSession.ID,
-			RoundIndex: 1,
+			SessionID:    newSession.ID,
+			RoundIndex:   1,
+			ActorRole:    "user",
+			InputPayload: payload,
 		}); err != nil {
 			return "", err
 		}
@@ -223,6 +332,30 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		return "", err
 	}
 	return task.ID, nil
+}
+
+func copyMap(in map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func precisionSessionCanContinue(status string) bool {
+	switch status {
+	case "collecting", "estimating", "needs_user_input", "needs_retake", "active":
+		return true
+	default:
+		return false
+	}
+}
+
+func precisionSourceType(input SubmitTaskInput) string {
+	if input.TextInput != "" && input.ImageURL == "" && len(input.ImageURLs) == 0 {
+		return "text"
+	}
+	return "image"
 }
 
 func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error) {
@@ -376,10 +509,44 @@ func (s *TaskService) resolveFoodImageURL(path string) string {
 	return s.storage.ResolveReferenceURL("food-images", path)
 }
 
-// ValidateQuota is a stub for membership/quota validation.
+func intFromAny(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case int32:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	case json.Number:
+		i, _ := v.Int64()
+		return int(i)
+	default:
+		return 0
+	}
+}
+
+func stringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprintf("%v", value))
+	if text == "<nil>" {
+		return ""
+	}
+	return text
+}
+
+// ValidateQuota keeps the legacy admin/test hook wired into the same membership
+// guard used by normal food submissions.
 func (s *TaskService) ValidateQuota(ctx context.Context, userID string) error {
-	// TODO: integrate with membership service when available
-	_ = ctx
-	_ = userID
-	return nil
+	if s.creditGuard == nil || strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	recordedOn := time.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
+	_, err := s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, "standard", recordedOn)
+	return err
 }

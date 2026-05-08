@@ -15,6 +15,7 @@ type Config struct {
 	Storage   StorageConfig   `mapstructure:"storage"`
 	External  ExternalConfig  `mapstructure:"external"`
 	WechatPay WechatPayConfig `mapstructure:"wechat_pay"`
+	Worker    WorkerConfig    `mapstructure:"worker"`
 }
 
 type AppConfig struct {
@@ -71,6 +72,9 @@ type ExternalConfig struct {
 	TiandituTK      string `mapstructure:"tianditu_tk"`
 	OfoxAIAPIKey    string `mapstructure:"ofoxai_api_key"`
 	LLMProvider     string `mapstructure:"llm_provider"`
+	DeepSeekAPIKey  string `mapstructure:"deepseek_api_key"`
+	DeepSeekBaseURL string `mapstructure:"deepseek_base_url"`
+	DeepSeekModel   string `mapstructure:"deepseek_text_model"`
 }
 
 type WechatPayConfig struct {
@@ -82,6 +86,13 @@ type WechatPayConfig struct {
 	PublicKey                   string `mapstructure:"public_key"`
 	ExpirySubscribeTemplateID   string `mapstructure:"expiry_subscribe_template_id"`
 	AnalysisSubscribeTemplateID string `mapstructure:"analysis_subscribe_template_id"`
+}
+
+type WorkerConfig struct {
+	ID                  string   `mapstructure:"id"`
+	TaskTypes           []string `mapstructure:"task_types"`
+	PollIntervalSeconds float64  `mapstructure:"poll_interval_seconds"`
+	MaxConcurrent       int      `mapstructure:"max_concurrent"`
 }
 
 func Load(baseDir string) (*Config, error) {
@@ -107,7 +118,21 @@ func Load(baseDir string) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
+	cfg.Worker.TaskTypes = normalizeCSV(cfg.Worker.TaskTypes)
 	return &cfg, nil
+}
+
+func normalizeCSV(values []string) []string {
+	out := []string{}
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
 }
 
 func (c *Config) ListenAddr() string {
@@ -127,6 +152,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.refresh_token_ttl_seconds", int64(36525*24*60*60))
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.insecure", true)
+	v.SetDefault("worker.poll_interval_seconds", 2.0)
+	v.SetDefault("worker.max_concurrent", 1)
+	v.SetDefault("worker.task_types", []string{"food", "food_text", "precision_plan", "precision_item_estimate", "precision_aggregate", "public_food_library_text", "exercise", "health_report", "expiry_recognize", "expiry_notification"})
 }
 
 func bindLegacyEnv(v *viper.Viper) {
@@ -140,6 +168,9 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.tianditu_tk", "TIANDITU_TK")
 	_ = v.BindEnv("external.ofoxai_api_key", "OFOXAI_API_KEY")
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
+	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
+	_ = v.BindEnv("external.deepseek_base_url", "DEEPSEEK_BASE_URL")
+	_ = v.BindEnv("external.deepseek_text_model", "DEEPSEEK_TEXT_MODEL")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")
 	_ = v.BindEnv("wechat_pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat_pay.serial_no", "WECHAT_PAY_SERIAL_NO")
@@ -164,4 +195,8 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("database.user", "POSTGRESQL_USER")
 	_ = v.BindEnv("database.password", "POSTGRESQL_PASSWORD")
 	_ = v.BindEnv("database.name", "POSTGRESQL_DATABASE")
+	_ = v.BindEnv("worker.id", "WORKER_ID")
+	_ = v.BindEnv("worker.task_types", "WORKER_TASK_TYPES")
+	_ = v.BindEnv("worker.poll_interval_seconds", "WORKER_POLL_INTERVAL_SECONDS")
+	_ = v.BindEnv("worker.max_concurrent", "WORKER_MAX_CONCURRENT")
 }

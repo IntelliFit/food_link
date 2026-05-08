@@ -10,9 +10,9 @@ import (
 func TestBodyWeightRecord_Struct(t *testing.T) {
 	now := time.Now()
 	record := BodyWeightRecord{
-		ID:       "r-1",
-		UserID:   "user-1",
-		WeightKg: 70.5,
+		ID:         "r-1",
+		UserID:     "user-1",
+		WeightKg:   70.5,
 		RecordedOn: &now,
 		CreatedAt:  &now,
 	}
@@ -23,9 +23,9 @@ func TestBodyWeightRecord_Struct(t *testing.T) {
 func TestBodyWaterLog_Struct(t *testing.T) {
 	now := time.Now()
 	log := BodyWaterLog{
-		ID:       "w-1",
-		UserID:   "user-1",
-		AmountMl: 500,
+		ID:         "w-1",
+		UserID:     "user-1",
+		AmountMl:   500,
 		RecordedOn: &now,
 		CreatedAt:  &now,
 	}
@@ -53,14 +53,17 @@ func TestExerciseLog_Struct(t *testing.T) {
 func TestStatsInsight_Struct(t *testing.T) {
 	now := time.Now()
 	insight := StatsInsight{
-		ID:        "s-1",
-		UserID:    "user-1",
-		Content:   "test insight",
-		DateRange: "2024-01-01 to 2024-01-07",
-		CreatedAt: &now,
+		ID:              "s-1",
+		UserID:          "user-1",
+		RangeType:       "week",
+		GeneratedDate:   now,
+		DataFingerprint: "500_500.0_1_17.6_52.7_29.7",
+		InsightText:     "test insight",
+		CreatedAt:       &now,
 	}
 	assert.Equal(t, "s-1", insight.ID)
-	assert.Equal(t, "user_stats_insights", insight.TableName())
+	assert.Equal(t, "ai_stats_insights", insight.TableName())
+	assert.NotEmpty(t, insight.GeneratedDateString())
 }
 
 func TestFoodRecord_Struct(t *testing.T) {
@@ -79,10 +82,10 @@ func TestFoodRecord_Struct(t *testing.T) {
 func TestAnalysisTask_Struct(t *testing.T) {
 	now := time.Now()
 	task := AnalysisTask{
-		ID:       "t-1",
-		UserID:   "user-1",
-		TaskType: "health_report",
-		Status:   "done",
+		ID:        "t-1",
+		UserID:    "user-1",
+		TaskType:  "health_report",
+		Status:    "done",
 		CreatedAt: &now,
 	}
 	assert.Equal(t, "t-1", task.ID)
