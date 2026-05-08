@@ -330,7 +330,7 @@ func buildExpirySummary(items []homerepo.ExpiryItem) map[string]any {
 			days: days,
 			item: map[string]any{
 				"id":                item.ID,
-				"name":              deref(item.Name),
+				"name":              deref(item.FoodName),
 				"status":            item.Status,
 				"expire_date":       item.ExpireDate,
 				"urgency":           urgency,

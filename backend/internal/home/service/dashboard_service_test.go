@@ -161,9 +161,9 @@ func TestBuildExpirySummary(t *testing.T) {
 	now := time.Now()
 	today := now.In(chinaTZ).Truncate(24 * time.Hour)
 	items := []homerepo.ExpiryItem{
-		{ID: "e1", Name: strPtr("milk"), ExpireDate: &today, Status: "active"},
-		{ID: "e2", Name: strPtr("egg"), ExpireDate: ptrTime(today.AddDate(0, 0, 3)), Status: "active"},
-		{ID: "e3", Name: strPtr("bread"), ExpireDate: ptrTime(today.AddDate(0, 0, -1)), Status: "active"},
+		{ID: "e1", FoodName: strPtr("milk"), ExpireDate: &today, Status: "active"},
+		{ID: "e2", FoodName: strPtr("egg"), ExpireDate: ptrTime(today.AddDate(0, 0, 3)), Status: "active"},
+		{ID: "e3", FoodName: strPtr("bread"), ExpireDate: ptrTime(today.AddDate(0, 0, -1)), Status: "active"},
 	}
 	summary := buildExpirySummary(items)
 	assert.Equal(t, 3, summary["count"])

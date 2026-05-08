@@ -39,7 +39,7 @@ func setupHomeTestDB(t *testing.T) *gorm.DB {
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
 		status TEXT,
-		name TEXT,
+		food_name TEXT,
 		expire_date TIMESTAMP,
 		storage_type TEXT
 	)`)
@@ -105,7 +105,7 @@ func TestHomeRepo_ListExpiryItems(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now()
-	db.Exec(`INSERT INTO food_expiry_items (id, user_id, status, name, expire_date) VALUES (?, ?, ?, ?, ?)`,
+	db.Exec(`INSERT INTO food_expiry_items (id, user_id, status, food_name, expire_date) VALUES (?, ?, ?, ?, ?)`,
 		"e1", "user-1", "active", "Milk", now)
 
 	items, err := repo.ListExpiryItems(ctx, "user-1")

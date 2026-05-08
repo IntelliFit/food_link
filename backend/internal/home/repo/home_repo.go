@@ -38,7 +38,7 @@ type ExpiryItem struct {
 	ID          string     `gorm:"column:id"`
 	UserID      string     `gorm:"column:user_id"`
 	Status      string     `gorm:"column:status"`
-	Name        *string    `gorm:"column:name"`
+	FoodName    *string    `gorm:"column:food_name"`
 	ExpireDate  *time.Time `gorm:"column:expire_date"`
 	StorageType *string    `gorm:"column:storage_type"`
 }

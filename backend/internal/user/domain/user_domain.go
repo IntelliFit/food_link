@@ -9,7 +9,7 @@ type UserHealthDocument struct {
 	DocumentType     string         `gorm:"column:document_type"`
 	ImageURL         *string        `gorm:"column:image_url"`
 	ExtractedContent map[string]any `gorm:"column:extracted_content;serializer:json"`
-	CreatedAt        *time.Time     `gorm:"column:create_time"`
+	CreatedAt        *time.Time     `gorm:"column:created_at"`
 }
 
 func (UserHealthDocument) TableName() string { return "user_health_documents" }
@@ -22,7 +22,7 @@ type UserModeSwitchLog struct {
 	ToMode     string     `gorm:"column:to_mode"`
 	ChangedBy  string     `gorm:"column:changed_by"`
 	ReasonCode *string    `gorm:"column:reason_code"`
-	CreatedAt  *time.Time `gorm:"column:create_time"`
+	CreatedAt  *time.Time `gorm:"column:created_at"`
 }
 
 func (UserModeSwitchLog) TableName() string { return "user_mode_switch_logs" }
@@ -35,7 +35,7 @@ type AnalysisTask struct {
 	Status    string         `gorm:"column:status"`
 	ImageURL  *string        `gorm:"column:image_url"`
 	Payload   map[string]any `gorm:"column:payload;serializer:json"`
-	CreatedAt *time.Time     `gorm:"column:create_time"`
+	CreatedAt *time.Time     `gorm:"column:created_at"`
 }
 
 func (AnalysisTask) TableName() string { return "analysis_tasks" }
