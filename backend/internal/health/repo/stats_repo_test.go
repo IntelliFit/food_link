@@ -19,7 +19,9 @@ func setupStatsTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(
 		&domain.FoodRecord{},
 		&domain.StatsInsight{},
+		&domain.StatsUserProfile{},
 	))
+	require.NoError(t, db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_stats_insights_unique ON ai_stats_insights(user_id, range_type, generated_date)`).Error)
 	return db
 }
 
@@ -54,19 +56,20 @@ func TestStatsRepo_Insight(t *testing.T) {
 	r := NewStatsRepo(db)
 	ctx := context.Background()
 
-	now := time.Now().UTC()
-	insight := &domain.StatsInsight{
-		UserID:    "user-1",
-		Content:   "Test insight",
-		DateRange: "week",
-		CreatedAt: &now,
-	}
-	err := r.SaveInsight(ctx, insight)
+	err := r.UpsertInsightCache(ctx, "user-1", "week", "2024-06-15", "fp-1", "Test insight")
 	require.NoError(t, err)
-	assert.NotEmpty(t, insight.ID)
 
-	latest, err := r.GetLatestInsight(ctx, "user-1", "week")
+	cached, err := r.GetCachedInsight(ctx, "user-1", "week", "2024-06-15")
+	require.NoError(t, err)
+	require.NotNil(t, cached)
+	assert.Equal(t, "Test insight", cached.InsightText)
+
+	err = r.UpsertInsightCache(ctx, "user-1", "week", "2024-06-15", "fp-2", "Updated insight")
+	require.NoError(t, err)
+
+	latest, err := r.GetLatestCachedInsight(ctx, "user-1", "week")
 	require.NoError(t, err)
 	require.NotNil(t, latest)
-	assert.Equal(t, "Test insight", latest.Content)
+	assert.Equal(t, "Updated insight", latest.InsightText)
+	assert.Equal(t, "fp-2", latest.DataFingerprint)
 }

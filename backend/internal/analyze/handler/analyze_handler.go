@@ -4,11 +4,13 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
-	authmw "food_link/backend/internal/auth"
-	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/service"
+	authmw "food_link/backend/internal/auth"
+	errors "food_link/backend/internal/common/errors"
+	"food_link/backend/internal/common/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -330,4 +332,75 @@ func (h *AnalyzeHandler) CleanupTimeoutTasks(c *gin.Context) {
 		return
 	}
 	response.Success(c, map[string]any{"affected": affected})
+}
+
+// POST /api/precision-sessions/:session_id/continue
+func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
+	var body struct {
+		SourceType            string           `json:"source_type"`
+		ImageURL              string           `json:"image_url"`
+		ImageURLs             []string         `json:"image_urls"`
+		Text                  string           `json:"text"`
+		Date                  *string          `json:"date"`
+		AdditionalContext     string           `json:"additionalContext"`
+		MealType              string           `json:"meal_type"`
+		TimezoneOffsetMinutes *int             `json:"timezone_offset_minutes"`
+		Province              string           `json:"province"`
+		City                  string           `json:"city"`
+		District              string           `json:"district"`
+		DietGoal              string           `json:"diet_goal"`
+		ActivityTiming        string           `json:"activity_timing"`
+		UserGoal              string           `json:"user_goal"`
+		RemainingCalories     *float64         `json:"remaining_calories"`
+		IsMultiView           bool             `json:"is_multi_view"`
+		ReferenceObjects      []map[string]any `json:"reference_objects"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	sourceType := strings.ToLower(strings.TrimSpace(body.SourceType))
+	if sourceType != "image" && sourceType != "text" {
+		response.Error(c, &errors.AppError{Code: 10002, Message: "source_type 必须为 image 或 text", HTTPStatus: 400})
+		return
+	}
+	sessionID := c.Param("session_id")
+	mode := "strict"
+	input := service.SubmitTaskInput{
+		ImageURL:           strings.TrimSpace(body.ImageURL),
+		ImageURLs:          body.ImageURLs,
+		TextInput:          strings.TrimSpace(body.Text),
+		MealType:           body.MealType,
+		Province:           body.Province,
+		City:               body.City,
+		District:           body.District,
+		DietGoal:           body.DietGoal,
+		ActivityTiming:     body.ActivityTiming,
+		UserGoal:           body.UserGoal,
+		RemainingCalories:  body.RemainingCalories,
+		AdditionalContext:  body.AdditionalContext,
+		ExecutionMode:      &mode,
+		PrecisionSessionID: &sessionID,
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	var taskID string
+	var err error
+	if sourceType == "text" {
+		if input.TextInput == "" && input.AdditionalContext == "" && len(body.ReferenceObjects) == 0 {
+			response.Error(c, &errors.AppError{Code: 10002, Message: "请至少补充说明、参考物或新的文字描述", HTTPStatus: 400})
+			return
+		}
+		taskID, err = h.taskSvc.SubmitTextTask(c.Request.Context(), userID, input)
+	} else {
+		if input.ImageURL == "" && len(input.ImageURLs) == 0 && input.AdditionalContext == "" && len(body.ReferenceObjects) == 0 {
+			response.Error(c, &errors.AppError{Code: 10002, Message: "请至少补充说明、参考物或新的图片", HTTPStatus: 400})
+			return
+		}
+		taskID, err = h.taskSvc.SubmitAnalyzeTask(c.Request.Context(), userID, input)
+	}
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"task_id": taskID, "message": "精准模式已继续，系统正在重新规划本轮估计"})
 }

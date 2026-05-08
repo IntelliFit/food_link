@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"io"
+	"net/http"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
@@ -13,8 +15,9 @@ import (
 type MembershipService interface {
 	ListPlans(ctx context.Context) ([]map[string]any, error)
 	GetMyMembership(ctx context.Context, userID string) (map[string]any, error)
-	CreatePayment(ctx context.Context, userID, planID string) (map[string]any, error)
+	CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
+	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
 	ClaimSharePosterReward(ctx context.Context, userID, recordID string) (map[string]any, error)
 }
 
@@ -33,7 +36,7 @@ func (h *MembershipHandler) ListPlans(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, data)
+	response.Success(c, map[string]any{"list": data})
 }
 
 // GET /api/membership/me
@@ -54,14 +57,19 @@ func (h *MembershipHandler) GetMyMembership(c *gin.Context) {
 // POST /api/membership/pay/create
 func (h *MembershipHandler) CreatePayment(c *gin.Context) {
 	var body struct {
-		PlanID string `json:"plan_id"`
+		PlanCode string `json:"plan_code"`
+		PlanID   string `json:"plan_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
-	if body.PlanID == "" {
-		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "plan_id required", HTTPStatus: 400})
+	planCode := body.PlanCode
+	if planCode == "" {
+		planCode = body.PlanID
+	}
+	if planCode == "" {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "plan_code required", HTTPStatus: 400})
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
@@ -69,7 +77,7 @@ func (h *MembershipHandler) CreatePayment(c *gin.Context) {
 		response.Error(c, commonerrors.ErrUnauthorized)
 		return
 	}
-	data, err := h.svc.CreatePayment(c.Request.Context(), userID, body.PlanID)
+	data, err := h.svc.CreatePayment(c.Request.Context(), userID, planCode)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -79,22 +87,17 @@ func (h *MembershipHandler) CreatePayment(c *gin.Context) {
 
 // POST /api/payment/wechat/notify/membership
 func (h *MembershipHandler) WechatNotify(c *gin.Context) {
-	var body struct {
-		PaymentID string `json:"payment_id"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	if body.PaymentID == "" {
-		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "payment_id required", HTTPStatus: 400})
-		return
-	}
-	if err := h.svc.WechatNotify(c.Request.Context(), body.PaymentID); err != nil {
+	data, err := h.svc.HandleWechatNotify(c.Request.Context(), c.Request.Header, body)
+	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, map[string]bool{"success": true})
+	response.Raw(c, http.StatusOK, data)
 }
 
 // POST /api/membership/rewards/share-poster/claim

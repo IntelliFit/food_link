@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ExpiryRepo struct {
@@ -88,4 +89,126 @@ func (r *ExpiryRepo) ListExpiringSoon(ctx context.Context, userID string, days i
 	}
 	err := q.Order("expire_date asc").Find(&items).Error
 	return items, err
+}
+
+func (r *ExpiryRepo) ListNotificationJobsByItem(ctx context.Context, itemID string) ([]domain.ExpiryNotificationJob, error) {
+	var jobs []domain.ExpiryNotificationJob
+	err := r.db.WithContext(ctx).
+		Where("expiry_item_id = ?", itemID).
+		Order("created_at DESC").
+		Find(&jobs).Error
+	return jobs, err
+}
+
+func (r *ExpiryRepo) UpsertNotificationJob(ctx context.Context, job *domain.ExpiryNotificationJob) (*domain.ExpiryNotificationJob, error) {
+	var existing domain.ExpiryNotificationJob
+	err := r.db.WithContext(ctx).
+		Where("expiry_item_id = ? AND template_id = ? AND status <> ?", job.ExpiryItemID, job.TemplateID, "sent").
+		Order("created_at DESC").
+		First(&existing).Error
+	now := time.Now()
+	updates := map[string]any{
+		"user_id":          job.UserID,
+		"expiry_item_id":   job.ExpiryItemID,
+		"template_id":      job.TemplateID,
+		"openid":           job.OpenID,
+		"status":           "pending",
+		"scheduled_at":     job.ScheduledAt,
+		"sent_at":          nil,
+		"last_error":       nil,
+		"retry_count":      0,
+		"max_retry_count":  job.MaxRetryCount,
+		"payload_snapshot": job.PayloadSnapshot,
+		"updated_at":       now,
+	}
+	if err == nil {
+		if err := r.db.WithContext(ctx).Model(&domain.ExpiryNotificationJob{}).
+			Where("id = ?", existing.ID).
+			Updates(updates).Error; err != nil {
+			return nil, err
+		}
+		return r.GetNotificationJobByID(ctx, existing.ID)
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	if job.ID == "" {
+		job.ID = uuid.New().String()
+	}
+	job.Status = "pending"
+	job.SentAt = nil
+	job.LastError = nil
+	job.RetryCount = 0
+	if job.MaxRetryCount <= 0 {
+		job.MaxRetryCount = 3
+	}
+	job.CreatedAt = now
+	job.UpdatedAt = now
+	if err := r.db.WithContext(ctx).Create(job).Error; err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
+func (r *ExpiryRepo) GetNotificationJobByID(ctx context.Context, jobID string) (*domain.ExpiryNotificationJob, error) {
+	var job domain.ExpiryNotificationJob
+	err := r.db.WithContext(ctx).Where("id = ?", jobID).First(&job).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &job, err
+}
+
+func (r *ExpiryRepo) CancelNotificationJobsByItem(ctx context.Context, itemID string) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&domain.ExpiryNotificationJob{}).
+		Where("expiry_item_id = ? AND status IN ?", itemID, []string{"pending", "processing", "failed"}).
+		Updates(map[string]any{"status": "cancelled", "last_error": nil, "updated_at": time.Now()})
+	return res.RowsAffected, res.Error
+}
+
+func (r *ExpiryRepo) ClaimNextPendingNotificationJob(ctx context.Context) (*domain.ExpiryNotificationJob, error) {
+	var claimed *domain.ExpiryNotificationJob
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var job domain.ExpiryNotificationJob
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("status = ? AND scheduled_at <= ?", "pending", time.Now()).
+			Order("scheduled_at ASC, created_at ASC").
+			Limit(1).
+			First(&job).Error
+		if err == gorm.ErrRecordNotFound {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		res := tx.Model(&domain.ExpiryNotificationJob{}).
+			Where("id = ? AND status = ?", job.ID, "pending").
+			Updates(map[string]any{
+				"status":     "processing",
+				"last_error": nil,
+				"updated_at": time.Now(),
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return nil
+		}
+		job.Status = "processing"
+		job.LastError = nil
+		claimed = &job
+		return nil
+	})
+	return claimed, err
+}
+
+func (r *ExpiryRepo) UpdateNotificationJob(ctx context.Context, jobID string, updates map[string]any) (*domain.ExpiryNotificationJob, error) {
+	if len(updates) == 0 {
+		return r.GetNotificationJobByID(ctx, jobID)
+	}
+	updates["updated_at"] = time.Now()
+	if err := r.db.WithContext(ctx).Model(&domain.ExpiryNotificationJob{}).Where("id = ?", jobID).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return r.GetNotificationJobByID(ctx, jobID)
 }

@@ -1,5 +1,75 @@
 # DECISIONS
 
+- `2026-05-08`: Go 测试后台 Phase 6 兼容口径：
+  - `/test-backend` 继续服务 Python 旧静态页，不要求静态页一次性改成 Go 新统一响应模型。
+  - 测试后台静态 JS 允许在 `authFetch().json()` 层统一解包 Go `{code,message,data}`，并继续向页面逻辑暴露 Python 风格 `{success,data,...}`。
+  - `/api/test-backend/analyze`、`/api/test-backend/batch/prepare`、`/api/test-backend/batch/start` 必须兼容 FormData，因为恢复的旧页面直接上传图片/ZIP。
+  - Go 版批量测试当前可把批次状态和结果写入 `test_batches.results`，后续如需完全复刻 Python，可再改为进程内/后台 goroutine 异步执行；本 checkpoint 先保证页面契约和核心处理可用。
+  - `/api/prompts*` 在测试后台上下文中同时兼容 Go `name/content` 与 Python `prompt_name/prompt_content` 字段。
+- `2026-05-08`: Go stats insight 迁移口径更新：
+  - 统计页摘要接口只读 AI 洞察缓存，不在打开统计页时实时调用大模型。
+  - Go 后端使用 Python 生产表 `ai_stats_insights`，以 `(user_id, range_type, generated_date)` 作为 upsert 唯一口径。
+  - 数据一致性通过 `data_fingerprint = total_calories / avg_calories_per_day / recorded_days / macro_percent` 判断；缓存日期不是当天或指纹不一致时返回 `analysis_summary_needs_refresh=true`。
+  - `generate` / websocket 负责按当前统计数据与健康档案调用 DeepSeek；`save` 负责重新计算指纹并保存前端最终展示的完整文本。
+  - 无 `DEEPSEEK_API_KEY` 时返回可用兜底洞察文本，避免本地/测试环境因缺 key 完全不可用。
+- `2026-05-08`: Go exercise 迁移口径更新：
+  - `POST /api/exercise-logs` 走异步 `analysis_tasks(task_type=exercise)`，不再同步创建 stub exercise log。
+  - 提交时必须保存 `profile_snapshot`，优先使用 `user_weight_records` 最新体重，缺失才回退 `weapp_user.weight`。
+  - worker 成功估算后再写 `user_exercise_logs`，并落库 `ai_reasoning`。
+  - 估算优先走 OfoxAI `google/gemini-3.1-flash-lite-preview` 短 JSON；无 key、调用失败或解析失败时用 MET/时长/体重规则兜底。
+  - 一条描述包含多项运动时，按换行/分号/句号拆分分项估算后求和。
+- `2026-05-08`: Go `db_first` DeepSeek fallback 迁移口径：
+  - 标准模式下图片/文字分析 prompt 应尽量只让模型输出食物名称、重量、描述和简短建议；营养计算统一由 `food_nutrition_library` / aliases / DeepSeek fallback 后处理完成。
+  - `legacy_direct` 与模型对比接口继续使用旧的“模型直接估营养” prompt，避免对比结果因为 db_first 轻 prompt 变成零营养。
+  - 未命中食物先标记 `is_unresolved=true` 并记录 `food_unresolved_logs`；若 DeepSeek fallback 成功，`nutrition_source` 改为 `deepseek_text_fallback`，但仍保留未命中事实用于补库追踪。
+  - DeepSeek fallback 生成的是每 100g 扩展营养字段，Go 返回的 `unit_nutrition_per_100g` 与按重量缩放的 `nutrients` 应保持同一字段集合；没有 fallback 时也返回 zero unit，避免前端/保存链路分叉。
+  - DeepSeek fallback 成功后自动写入 `food_nutrition_library(source=deepseek_auto)` 和 `food_nutrition_aliases`，下一次同名食物优先走库命中。
+- `2026-05-08`: 保质期通知发送 Go worker 口径：
+  - `/api/expiry/items/:item_id/subscribe` 只负责创建/更新/取消 `food_expiry_notification_jobs`；真实微信订阅消息发送由 worker 处理。
+  - worker 通过原子 claim pending job，使用稳定 access token/临时 fallback token 调用微信订阅消息接口。
+  - 发送失败按 `5/30/120` 分钟退避重试，超过最大重试次数后标记 `failed`，避免单个坏 job 阻塞队列。
+
+- `2026-05-08`: Go worker Phase 2 后续决策：
+  - `precision_plan` 不再直接把单次分析结果当最终精准结果；Go worker 需要保留 Python 旧链路的多阶段形态：planner round -> item estimate 子任务 -> aggregate。
+  - `health_report` 应继续保持 Python 主分支的多图兼容：允许逗号分隔 URL，逐张 OCR 后合并并写入 `user_health_documents` 与 `weapp_user.health_condition.report_extract`。
+  - `/api/expiry/recognize` 对前端仍应是同步识别接口：创建 `analysis_tasks` 只是为了历史/配额/审计记录，接口必须直接返回 `items` 给前端预填表单。
+  - `expiry_recognize` 仍加入 worker 默认任务类型，作为历史 pending 任务或后续异步化的兜底消费路径。
+  - 保质期订阅接口不应只是 stub；Go 版应继续沿用 Python 的 `food_expiry_notification_jobs` 队列表。订阅接口负责 upsert/cancel job，实际微信订阅消息发送由后续 worker 处理。
+
+- `2026-05-08`: Go 后端恢复真实 worker 的部署口径更新：
+  - 允许重新创建 `backend/cmd/worker`，因为这次不是旧的空壳 worker，而是真正消费 `analysis_tasks` 的 runtime。
+  - `backend/Dockerfile` 同时构建 `/app/food-link` 和 `/app/food-link-worker`；默认入口仍是 server，worker 由部署层用同镜像不同 command 启动。
+  - worker 默认任务类型先覆盖 `food,food_text,precision_plan,public_food_library_text,exercise`，健康报告 OCR、保质期识别和订阅通知在后续 Phase 接入。
+  - 任务领取必须使用数据库原子锁定，当前采用 GORM transaction + `FOR UPDATE SKIP LOCKED`，避免多 worker 重复消费同一 pending task。
+- `2026-05-08`: Go `db_first` 第一版策略：
+  - 模型识别结果进入后处理后，优先用 `food_nutrition_aliases` / `food_nutrition_library` 回算营养。
+  - 命中库的项以每 100g 营养值按 `estimatedWeightGrams` 缩放，未命中项记录到 `food_unresolved_logs`。
+  - 未完成 DeepSeek fallback 前，未命中项保留原模型营养估计但显式标记 `nutrition_source=unresolved` 与 `is_unresolved=true`，不能伪装成库命中。
+  - 下一步应继续迁移 Python 的 unknown-food per-100g fallback 自动补库，并把 db_first prompt 收窄为“食物名 + 重量”为主。
+
+- `2026-05-08`: 当前 Go 后端迁移状态不能只按 `docs/go-backend-migration-status.md` 的“Migration is COMPLETE”判断；实际代码对账显示：
+  - `main` / `dev` 当前同为 `fcc6b61`，可作为本轮 Python 后端旧基线。
+  - 当前 Go 分支 `434d019` 仍有 `20` 个小程序使用路由依赖 route map stub fallback，且 `/ws/stats/insight` 仍是 websocket 占位。
+  - 行为等价层面，异步 worker、db_first 食物库匹配、会员支付/积分治理、小程序码、stats insight、保质期识别/订阅、测试后台批处理等仍需继续补迁。
+  - 详细对账报告固定记录在 `docs/go-backend-main-gap-analysis-2026-05-08.md`。
+- `2026-05-08`: Go 后端完整迁移采用“一条集中迁移分支 + 分阶段 checkpoint”的策略：
+  - 计划书固定在 `docs/go-backend-full-migration-plan-2026-05-08.md`。
+  - 目标是一口气补完到可替代 Python，但执行过程必须按 Phase 验收，不能无检查地大爆炸写到底。
+  - 优先级固定为：先补 20 个 stub 路由，再补 worker runtime，再补 db_first，再补会员支付/积分治理，然后补二维码、stats insight、保质期、测试后台和运维脚本。
+  - 当前估时以 `15-20` 个工作日为正式计划口径；若加入完整灰度和回滚演练，预留 `20-25` 个工作日。
+- `2026-05-08`: Go 后端 Phase 1 已将 route-map stub 数量从 `20` 清到 `0`：
+  - `/api/public-food-library*` 与 `/api/recipes*` 已按独立 DDD module 注册真实 handler。
+  - `POST /api/precision-sessions/:session_id/continue` 已接入 analyze handler 和 task service。
+  - 这只表示路由不再 501；异步审核/分析任务仍需要 Phase 2 worker runtime 才能闭环。
+
+- `2026-05-08`: 当前 Go backend 数据库访问基线：
+  - 数据库客户端统一为 `GORM + PostgreSQL`，连接入口为 `backend/pkg/database/postgres.go`。
+  - 启动装配由 `backend/internal/app/app.go` 创建一个共享 `*gorm.DB`，再手工注入各模块 repo。
+  - 业务 repo 应继续通过 `db.WithContext(ctx)` 做 GORM 查询；目前未采用 `database/sql`、`sqlx` 或 `pgx` 直连作为业务访问路径。
+  - 数据库配置继续由 `backend/pkg/config` 通过 `config.yaml` 与环境变量绑定提供，生产敏感值不应写入仓库配置文件。
+  - Supabase 当前应视为旧数据/旧存储迁移源和兼容对象 URL 来源；不要把 Supabase 当作 Go 后端运行时主数据源，除非明确执行一次性同步/迁移脚本。
+  - 如 Supabase 上还有新变更，必须主动再次执行“从 Supabase 源库/对象存储同步到当前腾讯云 PostgreSQL/COS”的迁移流程；当前 Go 服务不会自动轮询 Supabase。
+
 - `2026-05-06`: Go backend CCR 推送脚本继续使用 mjs：
   - 该脚本属于仓库级部署辅助工具，不属于 Go 后端 runtime。
   - 继续通过根目录 `npm run push-docker-ccr` 调用 `backend/scripts/push-docker-ccr.mjs`。
@@ -529,6 +599,22 @@
   - `littlehorse-deployment/foodlink/main/deployment.yaml` 的生产后端使用 `envFrom -> configMapRef -> foodlink-main-env`
   - 因此生产支付配置（如 `APPID / WECHAT_PAY_MCHID / WECHAT_PAY_SERIAL_NO / WECHAT_PAY_PRIVATE_KEY / WECHAT_PAY_NOTIFY_URL / WECHAT_PAY_API_V3_KEY`）的真源应视为集群中的 `foodlink-main-env`，而不是镜像构建机当前环境
   - 若仅更新镜像、不更新 `foodlink-main-env` 或不重启 Pod，线上仍会继续使用旧支付配置
+
+- `2026-05-08`: Go 后端会员/支付/积分迁移以 Python 生产表为准，不能继续沿用 Go 重构早期 mock schema。稳定口径：
+  - 会员配置表使用 `membership_plan_config`。
+  - 用户权益表使用 `user_pro_memberships`。
+  - 支付流水表使用 `pro_membership_payment_records`。
+  - 额外奖励与 earned credits 使用 `user_credit_bonus_events`、`user_earned_credit_ledger`、`weapp_user.earned_credits_balance`。
+  - `/api/membership/me` 应以最新真实 `paid` 会员订单为真相来源进行 reconcile，避免 mock/手动脏状态覆盖付费事实。
+  - `/api/membership/pay/create` 必须走真实微信 JSAPI 下单；`/api/payment/wechat/notify/membership` 必须按微信支付回调原始 body + headers 验签、AES-GCM 解密 resource、校验金额后再激活或续期会员。
+  - 微信支付 PEM 配置可接受直接 PEM 或文件路径；生产真源仍是运行时 `ConfigMap`，不是镜像构建机环境变量。
+- `2026-05-08`: Go 后端积分额度治理迁移口径：
+  - 食物标准分析和保质期识别消耗 `2` 分；精准分析消耗 `4` 分；运动估算消耗 `1` 分；普通试用每日系统积分为 `8`。
+  - submit/recognize/log 创建成功前只校验并生成 `credit_spend_plan`；成功后才扣 earned credits，避免失败请求吞积分。
+  - `analysis_tasks.payload.credit_usage` 记录系统积分按天使用量，精准模式子任务不再复制 `credit_usage`，避免重复计数。
+  - 历史任务 fallback 计数仍按 `food/food_text=2`、`precision_plan=4`、`exercise=1` 兼容。
+- `2026-05-08`: `/api/qrcode` 在 Go 后端必须调用微信 `stable_token -> getwxacodeunlimit` 生成真实小程序码，token 可缓存约 5400 秒，遇到 token 失效需清缓存重试一次；不得再返回 mock PNG。
+- `2026-05-08`: Go stats insight websocket 不能返回“未迁移”占位。当前先使用 Go 生成文本流式推送；后续若追求完全等价，需要继续迁移 Python `_generate_nutrition_insight` 的 LLM prompt、缓存与数据指纹策略。
 
 - `2026-03-27`: Added persistent state files so `food_link` context survives session resets and compaction better.
 - `2026-03-27`: Project ownership must come from `IDENTITY.md` plus state files, not stale transcript memory.

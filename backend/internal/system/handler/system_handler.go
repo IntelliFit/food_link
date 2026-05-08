@@ -2,6 +2,8 @@ package handler
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,11 +31,23 @@ func (h *Handler) MapPicker(c *gin.Context) {
 }
 
 func (h *Handler) TestBackendPage(c *gin.Context) {
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(http.StatusOK, "<html><body><h1>test-backend</h1></body></html>")
+	if _, err := c.Cookie("test_backend_token"); err != nil {
+		c.Redirect(http.StatusFound, "/test-backend/login")
+		return
+	}
+	serveStaticHTML(c, filepath.Join("static", "test_backend", "index.html"))
 }
 
 func (h *Handler) TestBackendLoginPage(c *gin.Context) {
+	serveStaticHTML(c, filepath.Join("static", "test_backend", "login.html"))
+}
+
+func serveStaticHTML(c *gin.Context, path string) {
+	if _, err := os.Stat(path); err != nil {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusNotFound, "<html><body><h1>page not found</h1></body></html>")
+		return
+	}
 	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.String(http.StatusOK, "<html><body><h1>test-backend login</h1></body></html>")
+	c.File(path)
 }

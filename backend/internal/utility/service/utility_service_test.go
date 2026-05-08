@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"food_link/backend/internal/utility/domain"
@@ -62,10 +64,32 @@ func TestManualFoodService_Search(t *testing.T) {
 }
 
 func TestQRCodeService_GenerateQRCode(t *testing.T) {
-	svc := NewQRCodeService()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/cgi-bin/stable_token":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"fake-token","expires_in":7200}`))
+		case "/wxa/getwxacodeunlimit":
+			assert.Equal(t, "fake-token", r.URL.Query().Get("access_token"))
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte("jpeg-bytes"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	svc := &QRCodeService{
+		appID:          "appid",
+		secret:         "secret",
+		client:         server.Client(),
+		stableTokenURL: server.URL + "/cgi-bin/stable_token",
+		tokenURL:       server.URL + "/cgi-bin/token",
+		qrCodeURL:      server.URL + "/wxa/getwxacodeunlimit",
+	}
 	ctx := context.Background()
 
-	b64, err := svc.GenerateQRCode(ctx, "scene=123", "pages/index")
+	b64, err := svc.GenerateQRCode(ctx, "scene=123", "pages/index", 430, false, "release")
 	require.NoError(t, err)
-	assert.Contains(t, b64, "data:image/png;base64,")
+	assert.Contains(t, b64, "data:image/jpeg;base64,")
 }

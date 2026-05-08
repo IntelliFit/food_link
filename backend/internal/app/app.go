@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	analyzehandler "food_link/backend/internal/analyze/handler"
 	analyzerepo "food_link/backend/internal/analyze/repo"
@@ -37,6 +38,12 @@ import (
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
+	publicfoodhandler "food_link/backend/internal/publicfood/handler"
+	publicfoodrepo "food_link/backend/internal/publicfood/repo"
+	publicfoodservice "food_link/backend/internal/publicfood/service"
+	recipehandler "food_link/backend/internal/recipe/handler"
+	reciperepo "food_link/backend/internal/recipe/repo"
+	recipeservice "food_link/backend/internal/recipe/service"
 	"food_link/backend/internal/stub"
 	systemhandler "food_link/backend/internal/system/handler"
 	testbackendhandler "food_link/backend/internal/testbackend/handler"
@@ -116,9 +123,11 @@ func New(cfg *config.Config) (*App, error) {
 	// Analyze module DI
 	analyzeTaskRepo := analyzerepo.NewTaskRepo(db)
 	analyzePrecisionRepo := analyzerepo.NewPrecisionRepo(db)
+	analyzeNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "gemini-3-flash-preview")
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview")
-	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo)
+	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
+	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL, cfg.External.DeepSeekModel)
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	analyzeHandler := analyzehandler.NewAnalyzeHandler(analyzeSvc, analyzeTaskSvc, adminKey)
@@ -151,24 +160,39 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
 	statsRepo := healthrepo.NewStatsRepo(db)
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)
-	exerciseSvc := healthservice.NewExerciseService(exerciseRepo)
-	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc)
+	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
+	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
 	healthHandler := healthhandler.NewHealthHandler(bodyMetricsSvc, exerciseSvc, statsSvc)
 
 	// Membership module DI
 	membershipRepo := membershiprepo.NewMembershipRepo(db)
-	membershipSvc := membershipservice.NewMembershipService(membershipRepo)
+	membershipSvc := membershipservice.NewMembershipService(membershipRepo, cfg)
+	analyzeTaskSvc.ConfigureCreditGuard(membershipSvc)
+	exerciseSvc.ConfigureCreditGuard(membershipSvc)
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
+
+	// Public food library module DI
+	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
+	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo)
+	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
+
+	// Recipe module DI
+	recipeRepo := reciperepo.NewRecipeRepo(db)
+	recipeSvc := recipeservice.NewRecipeService(recipeRepo)
+	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
 
 	// Expiry module DI
 	expiryRepo := expiryrepo.NewExpiryRepo(db)
 	expiryTaskRepo := expiryrepo.NewTaskRepo(db)
-	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo)
+	expiryRecognizer := expiryservice.NewRecognizer(cfg)
+	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
+	expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)
+	expirySvc.ConfigureCreditGuard(membershipSvc)
 	expiryHandler := expiryhandler.NewExpiryHandler(expirySvc)
 
 	// Utility module DI
 	locationSvc := utilityservice.NewLocationService(cfg)
-	qrcodeSvc := utilityservice.NewQRCodeService()
+	qrcodeSvc := utilityservice.NewQRCodeService(cfg)
 	manualFoodRepo := utilityrepo.NewManualFoodRepo(db)
 	manualFoodSvc := utilityservice.NewManualFoodService(manualFoodRepo)
 	utilityHandler := utilityhandler.NewUtilityHandler(locationSvc, qrcodeSvc, manualFoodSvc)
@@ -196,7 +220,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/map-picker", system.MapPicker)
 	engine.GET("/test-backend", system.TestBackendPage)
 	engine.GET("/test-backend/login", system.TestBackendLoginPage)
-	engine.GET("/ws/stats/insight", websocketStub())
+	engine.Static("/static/test_backend", filepath.Join("static", "test_backend"))
+	engine.GET("/ws/stats/insight", statsInsightWebsocket(statsSvc))
 
 	// User routes
 	engine.GET("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.GetProfile)
@@ -233,6 +258,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PATCH("/api/analyze/tasks/:task_id/result", authmw.RequireJWT(jwtSvc), analyzeHandler.UpdateTaskResult)
 	engine.DELETE("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteTask)
 	engine.POST("/api/analyze/tasks/cleanup-timeout", analyzeHandler.CleanupTimeoutTasks)
+	engine.POST("/api/precision-sessions/:session_id/continue", authmw.RequireJWT(jwtSvc), analyzeHandler.ContinuePrecisionSession)
 
 	// FoodRecord routes
 	engine.POST("/api/food-record/save", authmw.RequireJWT(jwtSvc), frHandler.SaveFoodRecord)
@@ -298,6 +324,29 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
+
+	// Public food library routes
+	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
+	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.Create)
+	engine.GET("/api/public-food-library/mine", authmw.RequireJWT(jwtSvc), publicFoodHandler.Mine)
+	engine.GET("/api/public-food-library/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collections)
+	engine.POST("/api/public-food-library/feedback", authmw.RequireJWT(jwtSvc), publicFoodHandler.Feedback)
+	engine.GET("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Get)
+	engine.POST("/api/public-food-library/:item_id/like", authmw.RequireJWT(jwtSvc), publicFoodHandler.Like)
+	engine.DELETE("/api/public-food-library/:item_id/like", authmw.RequireJWT(jwtSvc), publicFoodHandler.Unlike)
+	engine.POST("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collect)
+	engine.DELETE("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Uncollect)
+	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
+	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.AddComment)
+
+	// Recipe routes
+	engine.GET("/api/recipes", authmw.RequireJWT(jwtSvc), recipeHandler.List)
+	engine.POST("/api/recipes", authmw.RequireJWT(jwtSvc), recipeHandler.Create)
+	engine.GET("/api/recipes/count", authmw.RequireJWT(jwtSvc), recipeHandler.Count)
+	engine.GET("/api/recipes/:recipe_id", authmw.RequireJWT(jwtSvc), recipeHandler.Get)
+	engine.PUT("/api/recipes/:recipe_id", authmw.RequireJWT(jwtSvc), recipeHandler.Update)
+	engine.DELETE("/api/recipes/:recipe_id", authmw.RequireJWT(jwtSvc), recipeHandler.Delete)
+	engine.POST("/api/recipes/:recipe_id/use", authmw.RequireJWT(jwtSvc), recipeHandler.Use)
 
 	// Expiry routes
 	engine.GET("/api/expiry/dashboard", authmw.RequireJWT(jwtSvc), expiryHandler.Dashboard)
@@ -433,7 +482,7 @@ func wrap(mw gin.HandlerFunc, final gin.HandlerFunc) gin.HandlerFunc {
 	}
 }
 
-func websocketStub() gin.HandlerFunc {
+func statsInsightWebsocket(statsSvc *healthservice.StatsService) gin.HandlerFunc {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
@@ -443,9 +492,37 @@ func websocketStub() gin.HandlerFunc {
 			return
 		}
 		defer conn.Close()
-		_ = conn.WriteJSON(gin.H{
-			"code":    10004,
-			"message": "websocket route registered but not migrated yet",
-		})
+		userID := strings.TrimSpace(c.Query("user_id"))
+		if userID == "" {
+			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "user_id required"), time.Now().Add(time.Second))
+			return
+		}
+		statsRange := c.DefaultQuery("range", "week")
+		if statsRange != "week" && statsRange != "month" {
+			statsRange = "week"
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		defer cancel()
+		result, err := statsSvc.GenerateInsight(ctx, userID, statsRange, 2000, 0)
+		if err != nil {
+			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "generate insight failed"), time.Now().Add(time.Second))
+			return
+		}
+		text := strings.TrimSpace(fmt.Sprintf("%v", result["analysis_summary"]))
+		if text == "" || text == "<nil>" {
+			text = "本期暂无足够记录生成洞察，请继续记录饮食后再查看。"
+		}
+		chunkSize := 8
+		runes := []rune(text)
+		for i := 0; i < len(runes); i += chunkSize {
+			end := i + chunkSize
+			if end > len(runes) {
+				end = len(runes)
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(string(runes[i:end]))); err != nil {
+				return
+			}
+			time.Sleep(40 * time.Millisecond)
+		}
 	}
 }

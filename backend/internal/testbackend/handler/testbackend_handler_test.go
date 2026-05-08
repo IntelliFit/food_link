@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"testing"
 
 	commonerrors "food_link/backend/internal/common/errors"
@@ -18,41 +20,41 @@ import (
 )
 
 type mockTestBackendService struct {
-	listPrompts        []domain.Prompt
-	listPromptsErr     error
-	createPrompt       *domain.Prompt
-	createPromptErr    error
-	getPrompt          *domain.Prompt
-	getPromptErr       error
-	getActivePrompt    *domain.Prompt
-	getActivePromptErr error
-	updatePrompt       *domain.Prompt
-	updatePromptErr    error
-	deletePromptErr    error
-	activatePrompt     *domain.Prompt
-	activatePromptErr  error
-	getPromptHistory   []domain.PromptHistory
+	listPrompts         []domain.Prompt
+	listPromptsErr      error
+	createPrompt        *domain.Prompt
+	createPromptErr     error
+	getPrompt           *domain.Prompt
+	getPromptErr        error
+	getActivePrompt     *domain.Prompt
+	getActivePromptErr  error
+	updatePrompt        *domain.Prompt
+	updatePromptErr     error
+	deletePromptErr     error
+	activatePrompt      *domain.Prompt
+	activatePromptErr   error
+	getPromptHistory    []domain.PromptHistory
 	getPromptHistoryErr error
-	analyzeResult      map[string]any
-	analyzeErr         error
-	prepareBatch       *domain.TestBatch
-	prepareBatchErr    error
-	startBatch         *domain.TestBatch
-	startBatchErr      error
-	getBatch           *domain.TestBatch
-	getBatchErr        error
-	listDatasets       []domain.TestDataset
-	listDatasetsErr    error
-	importDataset      *domain.TestDataset
-	importDatasetErr   error
-	prepareDataset     *domain.TestDataset
-	prepareDatasetErr  error
-	loginErr           error
-	logoutErr          error
-	legacyBatch        map[string]any
-	legacyBatchErr     error
-	legacySingle       map[string]any
-	legacySingleErr    error
+	analyzeResult       map[string]any
+	analyzeErr          error
+	prepareBatch        *domain.TestBatch
+	prepareBatchErr     error
+	startBatch          *domain.TestBatch
+	startBatchErr       error
+	getBatch            *domain.TestBatch
+	getBatchErr         error
+	listDatasets        []domain.TestDataset
+	listDatasetsErr     error
+	importDataset       *domain.TestDataset
+	importDatasetErr    error
+	prepareDataset      *domain.TestDataset
+	prepareDatasetErr   error
+	loginErr            error
+	logoutErr           error
+	legacyBatch         map[string]any
+	legacyBatchErr      error
+	legacySingle        map[string]any
+	legacySingleErr     error
 }
 
 func (m *mockTestBackendService) ListPrompts(ctx context.Context) ([]domain.Prompt, error) {
@@ -273,6 +275,29 @@ func TestAnalyze(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestAnalyzeMultipart(t *testing.T) {
+	mockSvc := &mockTestBackendService{analyzeResult: map[string]any{"success": true, "data": map[string]any{"items": []any{}}}}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", `form-data; name="images"; filename="meal.png"`)
+	header.Set("Content-Type", "image/png")
+	part, _ := writer.CreatePart(header)
+	_, _ = part.Write([]byte("fake-image"))
+	_ = writer.WriteField("models", "gemini-3-flash-preview")
+	_ = writer.Close()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/analyze", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
 // ---------- Batch Handler Tests ----------
 
 func TestPrepareBatch(t *testing.T) {
@@ -289,6 +314,25 @@ func TestPrepareBatch(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestPrepareBatchMultipart(t *testing.T) {
+	mockSvc := &mockTestBackendService{prepareBatch: &domain.TestBatch{ID: "b1", Status: "pending", Results: map[string]any{"status": "pending"}}}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	file, _ := writer.CreateFormFile("file", "batch.zip")
+	_, _ = file.Write([]byte("fake-zip"))
+	_ = writer.Close()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/batch/prepare", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
 func TestStartBatch(t *testing.T) {
 	mockSvc := &mockTestBackendService{startBatch: &domain.TestBatch{ID: "b1", Status: "running"}}
 	h := NewTestBackendHandler(mockSvc)
@@ -298,6 +342,25 @@ func TestStartBatch(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/batch/start", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestStartBatchMultipart(t *testing.T) {
+	mockSvc := &mockTestBackendService{startBatch: &domain.TestBatch{ID: "b1", Status: "completed", Results: map[string]any{"status": "completed"}}}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("batch_id", "b1")
+	_ = writer.WriteField("models", "gemini-3-flash-preview")
+	_ = writer.Close()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/batch/start", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -461,7 +524,6 @@ func TestListPromptsError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
-
 
 func TestCreatePromptBindError(t *testing.T) {
 	mockSvc := &mockTestBackendService{}

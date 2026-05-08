@@ -3,12 +3,15 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
 
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/errors"
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
+	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 )
 
 const (
@@ -20,14 +23,25 @@ type AnalyzeService struct {
 	dashScopeClient LLMClient
 	ofoxAIClient    LLMClient
 	users           *authrepo.UserRepo
+	nutrition       *foodrecordrepo.FoodNutritionRepo
+	deepseek        *DeepSeekNutritionEstimator
 }
 
-func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.UserRepo) *AnalyzeService {
+func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
+	var nutritionRepo *foodrecordrepo.FoodNutritionRepo
+	if len(nutrition) > 0 {
+		nutritionRepo = nutrition[0]
+	}
 	return &AnalyzeService{
 		dashScopeClient: dashScopeClient,
 		ofoxAIClient:    ofoxAIClient,
 		users:           users,
+		nutrition:       nutritionRepo,
 	}
+}
+
+func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey, baseURL, model string) {
+	s.deepseek = NewDeepSeekNutritionEstimator(apiKey, baseURL, model)
 }
 
 // AnalyzeInput holds all possible inputs for analysis.
@@ -48,6 +62,7 @@ type AnalyzeInput struct {
 	RemainingCalories     *float64 `json:"remaining_calories"`
 	ExecutionMode         *string  `json:"execution_mode"`
 	ModelName             string   `json:"modelName"`
+	AnalysisEngine        string   `json:"analysis_engine"`
 }
 
 func normalizeExecutionMode(mode *string) string {
@@ -105,6 +120,17 @@ func mealName(mealType string, tzOffset *int) string {
 }
 
 func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
+	if executionMode != validExecutionMode && !strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
+		if strings.TrimSpace(input.Text) != "" {
+			return buildTextDBFirstPrompt(input, user)
+		}
+		return buildImageDBFirstPrompt(input, user)
+	}
+
+	if strings.TrimSpace(input.Text) != "" {
+		return buildTextPrompt(input, user, executionMode)
+	}
+
 	additionalLine := ""
 	if input.AdditionalContext != "" {
 		additionalLine = fmt.Sprintf(`用户补充背景信息: "%s"。请根据此信息调整对隐形成分或烹饪方式的判断。`, input.AdditionalContext)
@@ -240,6 +266,183 @@ JSON:
   "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
   "context_advice": "情境建议（简体中文，若无则空字符串）"
 }`, mealHint, goalHint, stateHint, remainHint, locationHint, profileBlock, modeHint, additionalLine)
+}
+
+func buildContextTags(input AnalyzeInput, user *authrepo.User) []string {
+	tags := []string{}
+	if input.MealType != "" {
+		tags = append(tags, fmt.Sprintf("餐次:%s", mealName(input.MealType, input.TimezoneOffsetMinutes)))
+	}
+	stateParts := []string{}
+	if input.DietGoal != "" && input.DietGoal != "none" {
+		stateParts = append(stateParts, input.DietGoal)
+	}
+	if input.ActivityTiming != "" && input.ActivityTiming != "none" {
+		stateParts = append(stateParts, input.ActivityTiming)
+	}
+	if len(stateParts) > 0 {
+		tags = append(tags, "状态:"+strings.Join(stateParts, "/"))
+	}
+	if input.RemainingCalories != nil {
+		tags = append(tags, fmt.Sprintf("剩余:%gkcal", *input.RemainingCalories))
+	}
+	locationText := buildLocationText(input.Province, input.City, input.District)
+	if locationText != "" {
+		tags = append(tags, fmt.Sprintf("位置:%s", locationText))
+	}
+	if user != nil {
+		if summary := formatHealthRiskSummary(user); summary != "" {
+			tags = append(tags, summary)
+		}
+	}
+	return tags
+}
+
+func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
+	tagBlock := ""
+	if tags := buildContextTags(input, user); len(tags) > 0 {
+		tagBlock = strings.Join(tags, "\n") + "\n"
+	}
+	additionalLine := ""
+	if input.AdditionalContext != "" {
+		additionalLine = fmt.Sprintf(`用户补充背景信息: "%s"。请根据此信息调整对隐形成分或烹饪方式的判断。`, input.AdditionalContext)
+	}
+	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称和可食部分重量；营养成分由后端数据库查表补充，不要自行估算营养。
+%s%s
+识别规则：
+- 只识别图片中实际可见的食物，不补充看不见的食物
+- 不输出餐具、包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
+- 相同食物合并为一项，明显不同食物分开
+- 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
+- 混合菜无法可靠拆分时，作为一道常见菜名输出，不要猜测不可见成分
+
+重量规则：
+- estimatedWeightGrams 必须是数字，单位克，不要输出范围或单位字符串
+- 综合可见面积、厚度、高度、容器、餐具、手掌、包装等参照物估算
+- 只估算可见可食部分，不把餐具、包装、骨头、壳、果核计入重量
+
+输出要求：
+- 简体中文
+- description <= 16字
+- insight 1-2句，<= 32字
+- pfc_ratio_comment 可根据食物结构简要评价，不要编具体营养数值
+- absorption_notes 可简述烹饪/搭配影响，不要编具体营养数值
+- context_advice 1-2句，<= 32字，无需则空字符串
+- 只返回 JSON
+
+JSON:
+{
+  "items":[{"name":"","estimatedWeightGrams":0}],
+  "description":"",
+  "insight":"",
+  "pfc_ratio_comment":"",
+  "absorption_notes":"",
+  "context_advice":""
+}`, tagBlock, additionalLine)
+}
+
+func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
+	compactTags := []string{}
+	if input.MealType != "" {
+		compactTags = append(compactTags, fmt.Sprintf("餐次:%s", mealName(input.MealType, input.TimezoneOffsetMinutes)))
+	}
+	if input.DietGoal != "" && input.DietGoal != "none" {
+		compactTags = append(compactTags, "饮食目标:"+input.DietGoal)
+	}
+	if input.ActivityTiming != "" && input.ActivityTiming != "none" {
+		compactTags = append(compactTags, "运动时机:"+input.ActivityTiming)
+	}
+	if input.RemainingCalories != nil {
+		compactTags = append(compactTags, fmt.Sprintf("剩余热量:%gkcal", *input.RemainingCalories))
+	}
+	locationText := buildLocationText(input.Province, input.City, input.District)
+	if locationText != "" {
+		compactTags = append(compactTags, "位置:"+locationText)
+	}
+	if user != nil {
+		if summary := formatHealthRiskSummary(user); summary != "" {
+			compactTags = append(compactTags, summary)
+		}
+	}
+	modeLine := "标准模式：从用户文字中拆解食物、估算重量和营养。"
+	if executionMode == validExecutionMode {
+		modeLine = "精准模式：从用户文字中尽可能精确拆解所有食物、重量、烹饪方式和营养。"
+	}
+	contextLine := ""
+	if input.AdditionalContext != "" {
+		contextLine = "用户补充说明：" + input.AdditionalContext
+	}
+	tags := ""
+	if len(compactTags) > 0 {
+		tags = strings.Join(compactTags, "\n")
+	}
+	return fmt.Sprintf(`请作为专业营养师分析这段用户饮食文字，只返回 JSON。
+
+用户原始输入：
+%s
+
+%s
+%s
+%s
+
+输出要求：
+- 简体中文
+- 根据自然语言拆分食物，不要虚构用户没有提到的主食物
+- 重量可基于常见份量估算
+- description <= 24字
+- insight/context_advice 各 1-2 句，<= 40字
+
+JSON:
+{
+  "items":[{"name":"","estimatedWeightGrams":0,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "description":"",
+  "insight":"",
+  "pfc_ratio_comment":"",
+  "absorption_notes":"",
+  "context_advice":""
+}`, strings.TrimSpace(input.Text), tags, contextLine, modeLine)
+}
+
+func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
+	tagBlock := ""
+	if tags := buildContextTags(input, user); len(tags) > 0 {
+		tagBlock = strings.Join(tags, "\n") + "\n"
+	}
+	contextLine := ""
+	if input.AdditionalContext != "" {
+		contextLine = "用户补充说明：" + input.AdditionalContext
+	}
+	return fmt.Sprintf(`你是食物文字解析助手。请把用户的自然语言饮食描述解析成可查营养数据库的结构化食物名称和重量；营养成分由后端数据库统一计算，不要输出营养值。
+
+用户描述:
+%s
+
+%s
+%s解析规则：
+- 只输出用户明确描述的食物，不补充没有出现的食物
+- 如果用户写了明确重量、个数、半份、一碗、一杯等份量，请换算为克；没有明确重量时按日常熟食份量保守估算
+- 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
+- 相同食物合并为一项，重量为合计重量
+- 混合菜无法可靠拆分时，作为一道常见菜名输出
+
+输出要求：
+- 简体中文
+- description <= 16字
+- insight 1-2句，<= 32字
+- pfc_ratio_comment 可根据食物结构简要评价，不要编具体营养数值
+- absorption_notes 可简述烹饪/搭配影响，不要编具体营养数值
+- context_advice 1-2句，<= 32字，无需则空字符串
+- 只返回 JSON
+
+JSON:
+{
+  "items":[{"name":"","estimatedWeightGrams":0}],
+  "description":"",
+  "insight":"",
+  "pfc_ratio_comment":"",
+  "absorption_notes":"",
+  "context_advice":""
+}`, strings.TrimSpace(input.Text), contextLine, tagBlock)
 }
 
 func buildExecutionModeHint(mode string) string {
@@ -415,7 +618,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
 
-	return buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs), nil
+	return s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
 }
 
 // AnalyzeText performs text-only analysis.
@@ -439,7 +642,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		return nil, err
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
-	return buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs), nil
+	return s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
 }
 
 // AnalyzeCompare calls both Qwen and Gemini in parallel.
@@ -449,7 +652,9 @@ func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, inpu
 	if userID != "" {
 		user, _ = s.users.FindByID(ctx, userID)
 	}
-	prompt := buildPrompt(input, user, executionMode)
+	compareInput := input
+	compareInput.AnalysisEngine = "legacy_direct"
+	prompt := buildPrompt(compareInput, user, executionMode)
 
 	imageURL := ""
 	if input.ImageURL != "" {
@@ -501,10 +706,11 @@ func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID strin
 	if userID != "" {
 		user, _ = s.users.FindByID(ctx, userID)
 	}
-	// For Go migration, we keep both engines using the same LLM call but tag differently.
-	// In the original Python, db_first had additional food DB lookup; here we approximate
-	// by using the same analysis pipeline with different engine tags.
-	prompt := buildPrompt(input, user, executionMode)
+	// Use the richer legacy prompt here so the direct branch still has model
+	// nutrients; db_first then replaces nutrients with library lookup results.
+	compareInput := input
+	compareInput.AnalysisEngine = "legacy_direct"
+	prompt := buildPrompt(compareInput, user, executionMode)
 
 	imageURL := ""
 	if input.ImageURL != "" {
@@ -532,14 +738,13 @@ func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID strin
 	legacy["analysis_engine"] = "legacy_direct"
 
 	dbFirst := buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs)
+	dbFirst = s.applyDBFirstNutrition(ctx, dbFirst, input.AdditionalContext)
 	dbFirst["analysis_engine"] = "db_first"
-	dbFirst["resolved_count"] = len(toItems(dbFirst["items"]))
-	dbFirst["unresolved_count"] = 0
 
 	return map[string]any{
-		"model_name":       model,
-		"legacy_result":    modelResultFrom(legacy, nil, model),
-		"db_first_result":  modelResultFrom(dbFirst, nil, model),
+		"model_name":            model,
+		"legacy_result":         modelResultFrom(legacy, nil, model),
+		"db_first_result":       modelResultFrom(dbFirst, nil, model),
 		"requested_model_names": []string{model},
 		"results": []map[string]any{
 			{
@@ -613,6 +818,11 @@ func (s *AnalyzeService) AnalyzeBatch(ctx context.Context, userID string, input 
 	}
 
 	merged := mergeBatchResults(successful, executionMode)
+	if !strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
+		merged = s.applyDBFirstNutrition(ctx, merged, input.AdditionalContext)
+	} else {
+		merged["analysis_engine"] = "legacy_direct"
+	}
 	return merged, nil
 }
 
@@ -640,16 +850,16 @@ func buildAnalyzeResponse(parsed map[string]any, executionMode, provider, model 
 	}
 
 	resp := map[string]any{
-		"description":         desc,
-		"insight":             insight,
-		"items":               items,
-		"pfc_ratio_comment":   optStr(parsed["pfc_ratio_comment"]),
-		"absorption_notes":    optStr(parsed["absorption_notes"]),
-		"context_advice":      optStr(parsed["context_advice"]),
-		"analysis_engine":     "db_first",
+		"description":          desc,
+		"insight":              insight,
+		"items":                items,
+		"pfc_ratio_comment":    optStr(parsed["pfc_ratio_comment"]),
+		"absorption_notes":     optStr(parsed["absorption_notes"]),
+		"context_advice":       optStr(parsed["context_advice"]),
+		"analysis_engine":      "db_first",
 		"analysis_duration_ms": durationMs,
-		"resolved_count":      len(items),
-		"unresolved_count":    0,
+		"resolved_count":       len(items),
+		"unresolved_count":     0,
 	}
 
 	if executionMode != validExecutionMode {
@@ -766,6 +976,190 @@ func modelResultFrom(result map[string]any, err error, modelName string) map[str
 	return result
 }
 
+func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, parsed map[string]any, input AnalyzeInput, executionMode, provider, model string, durationMs float64) (map[string]any, error) {
+	resp := buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs)
+	if strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
+		resp["analysis_engine"] = "legacy_direct"
+		return resp, nil
+	}
+	return s.applyDBFirstNutrition(ctx, resp, input.AdditionalContext), nil
+}
+
+func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[string]any, additionalContext ...string) map[string]any {
+	resp["analysis_engine"] = "db_first"
+	if s.nutrition == nil {
+		return resp
+	}
+	items := toItems(resp["items"])
+	if len(items) == 0 {
+		resp["resolved_count"] = 0
+		resp["unresolved_count"] = 0
+		return resp
+	}
+
+	type lookupItem struct {
+		index   int
+		item    map[string]any
+		name    string
+		weight  float64
+		resolve *foodrecordrepo.ResolveResult
+	}
+	lookups := make([]lookupItem, 0, len(items))
+	fallbackCandidates := []UnresolvedNutritionCandidate{}
+	resolvedCount := 0
+	unresolvedCount := 0
+	for index, item := range items {
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		weight := numberFromAny(item["estimatedWeightGrams"])
+		if weight <= 0 {
+			weight = numberFromAny(item["originalWeightGrams"])
+		}
+		resolve, err := s.nutrition.ResolveFood(ctx, name)
+		if err != nil || resolve == nil || resolve.Food == nil {
+			unresolvedCount++
+			if weight > 0 {
+				fallbackCandidates = append(fallbackCandidates, UnresolvedNutritionCandidate{Index: index, Name: name, EstimatedWeightGrams: weight})
+			}
+			lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: "unresolved", Score: 0}})
+		} else {
+			resolvedCount++
+			lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: resolve})
+		}
+	}
+
+	fallbacks := map[int]map[string]any{}
+	if s.deepseek != nil && len(fallbackCandidates) > 0 {
+		contextText := ""
+		if len(additionalContext) > 0 {
+			contextText = additionalContext[0]
+		}
+		if rows, err := s.deepseek.Estimate(ctx, fallbackCandidates, contextText); err == nil {
+			fallbacks = rows
+		}
+	}
+
+	out := make([]map[string]any, 0, len(items))
+	for _, lookup := range lookups {
+		next := copyAnyMap(lookup.item)
+		resolve := lookup.resolve
+		if resolve == nil || resolve.Food == nil {
+			_ = s.nutrition.LogUnresolved(ctx, lookup.name)
+			unit := zeroUnitNutritionPer100g()
+			next["matched_food_id"] = nil
+			next["matched_food_name"] = nil
+			next["resolve_status"] = "unresolved"
+			next["is_unresolved"] = true
+			next["resolve_score"] = 0
+			next["nutrition_source"] = "unresolved"
+			if fallbackUnit, ok := fallbacks[lookup.index]; ok && len(fallbackUnit) > 0 {
+				unit = fallbackUnit
+				next["nutrition_source"] = "deepseek_text_fallback"
+				_, _ = s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, unit)
+			}
+			next["unit_nutrition_per_100g"] = unit
+			next["nutrients"] = scaleNutrition(unit, lookup.weight)
+			next["estimatedWeightGrams"] = lookup.weight
+			next["originalWeightGrams"] = lookup.weight
+			out = append(out, next)
+			continue
+		}
+		unit := nutritionUnit(resolve.Food)
+		next["matched_food_id"] = resolve.Food.ID
+		next["matched_food_name"] = resolve.Food.CanonicalName
+		next["resolve_status"] = resolve.Status
+		next["resolve_score"] = resolve.Score
+		next["is_unresolved"] = false
+		next["nutrition_source"] = nutritionSource(resolve.Status)
+		next["unit_nutrition_per_100g"] = unit
+		next["nutrients"] = scaleNutrition(unit, lookup.weight)
+		next["estimatedWeightGrams"] = lookup.weight
+		next["originalWeightGrams"] = lookup.weight
+		_ = resolve.MatchSource
+		out = append(out, next)
+	}
+	resp["items"] = out
+	resp["resolved_count"] = resolvedCount
+	resp["unresolved_count"] = unresolvedCount
+	return resp
+}
+
+func copyAnyMap(in map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func numberFromAny(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case int32:
+		return float64(v)
+	default:
+		return 0
+	}
+}
+
+func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
+	return map[string]any{
+		"calories":       food.KcalPer100g,
+		"protein":        food.ProteinPer100g,
+		"carbs":          food.CarbsPer100g,
+		"fat":            food.FatPer100g,
+		"fiber":          food.FiberPer100g,
+		"sugar":          food.SugarPer100g,
+		"saturatedFat":   food.SaturatedFatPer100g,
+		"cholesterolMg":  food.CholesterolMgPer100g,
+		"sodiumMg":       food.SodiumMgPer100g,
+		"potassiumMg":    food.PotassiumMgPer100g,
+		"calciumMg":      food.CalciumMgPer100g,
+		"ironMg":         food.IronMgPer100g,
+		"magnesiumMg":    food.MagnesiumMgPer100g,
+		"zincMg":         food.ZincMgPer100g,
+		"vitaminARaeMcg": food.VitaminARaeMcgPer100g,
+		"vitaminCMg":     food.VitaminCMgPer100g,
+		"vitaminDMcg":    food.VitaminDMcgPer100g,
+		"vitaminEMg":     food.VitaminEMgPer100g,
+		"vitaminKMcg":    food.VitaminKMcgPer100g,
+		"thiaminMg":      food.ThiaminMgPer100g,
+		"riboflavinMg":   food.RiboflavinMgPer100g,
+		"niacinMg":       food.NiacinMgPer100g,
+		"vitaminB6Mg":    food.VitaminB6MgPer100g,
+		"folateMcg":      food.FolateMcgPer100g,
+		"vitaminB12Mcg":  food.VitaminB12McgPer100g,
+	}
+}
+
+func scaleNutrition(unit map[string]any, weight float64) map[string]any {
+	factor := weight / 100.0
+	out := map[string]any{}
+	for key, value := range unit {
+		out[key] = math.Round(numberFromAny(value)*factor*100) / 100
+	}
+	return out
+}
+
+func nutritionSource(status string) string {
+	switch status {
+	case "exact_alias":
+		return "library_exact_alias"
+	case "exact_canonical":
+		return "library_exact_canonical"
+	case "fuzzy":
+		return "library_fuzzy"
+	default:
+		return "unresolved"
+	}
+}
+
 func mergeBatchResults(results []map[string]any, executionMode string) map[string]any {
 	allItems := []map[string]any{}
 	descriptions := []string{}
@@ -846,17 +1240,17 @@ func mergeBatchResults(results []map[string]any, executionMode string) map[strin
 	}
 
 	merged := map[string]any{
-		"description":       desc,
-		"insight":           insight,
-		"items":             mergedItems,
-		"pfc_ratio_comment": nil,
-		"absorption_notes":  nil,
-		"context_advice":    nil,
-		"recognitionOutcome": nil,
-		"rejectionReason":   nil,
-		"retakeGuidance":    nil,
+		"description":         desc,
+		"insight":             insight,
+		"items":               mergedItems,
+		"pfc_ratio_comment":   nil,
+		"absorption_notes":    nil,
+		"context_advice":      nil,
+		"recognitionOutcome":  nil,
+		"rejectionReason":     nil,
+		"retakeGuidance":      nil,
 		"allowedFoodCategory": nil,
-		"followupQuestions": nil,
+		"followupQuestions":   nil,
 	}
 
 	if len(pfcComments) > 0 {
@@ -935,5 +1329,3 @@ func mergeUniqueTextLists(lists ...[]string) []string {
 	}
 	return merged
 }
-
-

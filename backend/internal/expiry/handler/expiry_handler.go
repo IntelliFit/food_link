@@ -25,6 +25,14 @@ type ExpiryService interface {
 	Recognize(ctx context.Context, userID string, imageURLs []string) (*service.RecognizeResult, error)
 }
 
+type ExpiryContextRecognizer interface {
+	RecognizeWithContext(ctx context.Context, userID string, imageURLs []string, additionalContext string) (*service.RecognizeResult, error)
+}
+
+type ExpiryContextSubscriber interface {
+	SubscribeWithContext(ctx context.Context, userID, itemID, openID, subscribeStatus, errMsg string) (*service.SubscribeResult, error)
+}
+
 type ExpiryHandler struct {
 	svc ExpiryService
 }
@@ -158,9 +166,21 @@ func (h *ExpiryHandler) UpdateStatus(c *gin.Context) {
 
 // POST /api/expiry/items/:item_id/subscribe
 func (h *ExpiryHandler) Subscribe(c *gin.Context) {
+	var body struct {
+		SubscribeStatus string `json:"subscribe_status"`
+		ErrMsg          string `json:"err_msg"`
+	}
+	_ = c.ShouldBindJSON(&body)
 	userID := c.GetString(authmw.ContextUserIDKey)
+	openID := c.GetString(authmw.ContextOpenIDKey)
 	itemID := c.Param("item_id")
-	result, err := h.svc.Subscribe(c.Request.Context(), userID, itemID)
+	var result *service.SubscribeResult
+	var err error
+	if svc, ok := h.svc.(ExpiryContextSubscriber); ok {
+		result, err = svc.SubscribeWithContext(c.Request.Context(), userID, itemID, openID, body.SubscribeStatus, body.ErrMsg)
+	} else {
+		result, err = h.svc.Subscribe(c.Request.Context(), userID, itemID)
+	}
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -171,7 +191,8 @@ func (h *ExpiryHandler) Subscribe(c *gin.Context) {
 // POST /api/expiry/recognize
 func (h *ExpiryHandler) Recognize(c *gin.Context) {
 	var body struct {
-		ImageURLs []string `json:"image_urls"`
+		ImageURLs         []string `json:"image_urls"`
+		AdditionalContext string   `json:"additional_context"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -182,7 +203,13 @@ func (h *ExpiryHandler) Recognize(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
-	result, err := h.svc.Recognize(c.Request.Context(), userID, body.ImageURLs)
+	var result *service.RecognizeResult
+	var err error
+	if svc, ok := h.svc.(ExpiryContextRecognizer); ok {
+		result, err = svc.RecognizeWithContext(c.Request.Context(), userID, body.ImageURLs, body.AdditionalContext)
+	} else {
+		result, err = h.svc.Recognize(c.Request.Context(), userID, body.ImageURLs)
+	}
 	if err != nil {
 		response.Error(c, err)
 		return
