@@ -169,6 +169,25 @@ func TestParsePrecisionEstimateItems_MultiItems(t *testing.T) {
 	}
 }
 
+func TestParsePrecisionEstimateItems_FiltersToPlannedItems(t *testing.T) {
+	items, err := parsePrecisionEstimateItems(map[string]any{
+		"items": []map[string]any{
+			{"name": "剁椒鱼块", "estimatedWeightGrams": 85},
+			{"name": "米饭", "estimatedWeightGrams": 135},
+			{"name": "西兰花", "estimatedWeightGrams": 75},
+		},
+	}, []map[string]any{{"item_name": "剁椒鱼块"}}, nil)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one planned item, got %#v", items)
+	}
+	if got := stringFromMap(items[0], "name"); got != "剁椒鱼块" {
+		t.Fatalf("expected planned item preserved, got %s", got)
+	}
+}
+
 func TestAttachPrecisionItemMetadata_MatchesByNameThenIndex(t *testing.T) {
 	items := attachPrecisionItemMetadata(
 		[]map[string]any{
@@ -222,6 +241,55 @@ func TestPrecisionStaplePrompts_ForceContainerDepthAndThinLayer(t *testing.T) {
 	}
 }
 
+func TestPrecisionPrompts_ForceFoodTypeCandidates(t *testing.T) {
+	plan := buildPrecisionPlanPrompt("image", "图片输入", "", nil, nil)
+	for _, expected := range []string{"候选食物", "莴苣", "百叶包", "蒸饺", "visual_evidence", "alternative_name"} {
+		if !strings.Contains(plan, expected) {
+			t.Fatalf("plan prompt missing food type candidate rule %q:\n%s", expected, plan)
+		}
+	}
+
+	single, err := buildPrecisionItemEstimatePromptFromPayload("image", map[string]any{
+		"items_to_estimate": []map[string]any{{
+			"item_name":        "青菜",
+			"candidate_names":  []string{"莴苣片", "青菜", "小白菜"},
+			"alternative_name": "莴苣片",
+			"visual_evidence":  "浅绿色厚片状茎部为主",
+		}},
+	}, "图片输入", "", nil)
+	if err != nil {
+		t.Fatalf("unexpected prompt error: %v", err)
+	}
+	for _, expected := range []string{"候选：青菜/莴苣片/小白菜", "视觉证据：浅绿色厚片状茎部为主", "莴苣/莴笋片", "青菜/小白菜"} {
+		if !strings.Contains(single, expected) {
+			t.Fatalf("single item prompt missing candidate context %q:\n%s", expected, single)
+		}
+	}
+}
+
+func TestNormalizePrecisionPlanItems_PreservesRecognitionCandidates(t *testing.T) {
+	items := normalizePrecisionPlanItems([]map[string]any{{
+		"item_key":         "veg",
+		"item_name":        "莴苣片",
+		"candidate_names":  []string{"莴苣片", "青菜", "小白菜"},
+		"alternative_name": "青菜",
+		"visual_evidence":  "浅绿色厚片状茎部为主",
+	}})
+	if len(items) != 1 {
+		t.Fatalf("expected one item, got %#v", items)
+	}
+	candidates := stringSliceFromAny(items[0]["candidate_names"])
+	if strings.Join(candidates, ",") != "莴苣片,青菜,小白菜" {
+		t.Fatalf("unexpected candidates: %#v", candidates)
+	}
+	if got := stringFromMap(items[0], "visual_evidence"); got != "浅绿色厚片状茎部为主" {
+		t.Fatalf("expected visual evidence preserved, got %s", got)
+	}
+	if got := stringFromMap(items[0], "alternative_name"); got != "青菜" {
+		t.Fatalf("expected alternative preserved, got %s", got)
+	}
+}
+
 func TestParsePrecisionRefinedItems_UsesFallbackWhenNoItems(t *testing.T) {
 	fallback := []map[string]any{{"name": "白米饭", "estimatedWeightGrams": 180}}
 	items, notes := parsePrecisionRefinedItems(map[string]any{
@@ -256,6 +324,94 @@ func TestParsePrecisionRefinedItems_ParsesWeights(t *testing.T) {
 	}
 	if len(notes) != 1 {
 		t.Fatalf("expected note, got %#v", notes)
+	}
+}
+
+func TestParsePrecisionRefinedItems_DoesNotExpandBeyondFallback(t *testing.T) {
+	fallback := []map[string]any{{"name": "剁椒鱼块", "estimatedWeightGrams": 95}}
+	items, _ := parsePrecisionRefinedItems(map[string]any{
+		"items": []map[string]any{
+			{"name": "剁椒鱼块", "estimatedWeightGrams": 85},
+			{"name": "米饭", "estimatedWeightGrams": 135},
+			{"name": "西兰花", "estimatedWeightGrams": 75},
+			{"name": "青菜", "estimatedWeightGrams": 55},
+			{"name": "抄手", "estimatedWeightGrams": 65},
+		},
+	}, fallback)
+
+	if len(items) != 1 {
+		t.Fatalf("expected refine to keep one fallback item, got %#v", items)
+	}
+	if got := stringFromMap(items[0], "name"); got != "剁椒鱼块" {
+		t.Fatalf("expected fallback-matched item, got %s", got)
+	}
+	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 85 {
+		t.Fatalf("expected refined planned weight, got %v", got)
+	}
+}
+
+func TestBuildItemsFromCorrection_KeepsUserNutrition(t *testing.T) {
+	items := buildItemsFromCorrection([]map[string]any{
+		{
+			"name":           "白米饭",
+			"weight":         120,
+			"sourceItemId":   7,
+			"sourceName":     "米饭",
+			"calorie":        156,
+			"protein":        3.1,
+			"carbs":          34.2,
+			"fat":            0.4,
+			"originalWeight": 180,
+		},
+	})
+
+	if len(items) != 1 {
+		t.Fatalf("expected one correction item, got %#v", items)
+	}
+	if got := stringFromMap(items[0], "name"); got != "白米饭" {
+		t.Fatalf("expected corrected name, got %s", got)
+	}
+	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 120 {
+		t.Fatalf("expected corrected weight, got %v", got)
+	}
+	nutrients, _ := items[0]["nutrients"].(map[string]any)
+	if got, _ := floatFromAny(nutrients["calories"]); got != 156 {
+		t.Fatalf("expected user calories to be preserved, got %v", got)
+	}
+}
+
+func TestRestoreCorrectionFallbackNutrition_PreventsZeroForUnresolved(t *testing.T) {
+	dbItems := []map[string]any{{
+		"name":                 "用户自定义菜",
+		"estimatedWeightGrams": 100,
+		"is_unresolved":        true,
+		"resolve_status":       "unresolved",
+		"nutrition_source":     "unresolved",
+		"nutrients": map[string]any{
+			"calories": 0.0,
+			"protein":  0.0,
+			"carbs":    0.0,
+			"fat":      0.0,
+		},
+	}}
+	original := []map[string]any{{
+		"name":                 "用户自定义菜",
+		"estimatedWeightGrams": 100,
+		"nutrients": map[string]any{
+			"calories": 210.0,
+			"protein":  12.0,
+			"carbs":    18.0,
+			"fat":      9.0,
+		},
+	}}
+
+	restored := restoreCorrectionFallbackNutrition(dbItems, original)
+	nutrients := restored[0]["nutrients"].(map[string]any)
+	if got, _ := floatFromAny(nutrients["calories"]); got != 210 {
+		t.Fatalf("expected fallback calories, got %v", got)
+	}
+	if source := stringFromMap(restored[0], "nutrition_source"); source != "user_correction_fallback" {
+		t.Fatalf("expected user correction fallback source, got %s", source)
 	}
 }
 

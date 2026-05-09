@@ -41,6 +41,7 @@ type StatsService interface {
 	GetSummary(ctx context.Context, userID string, statsRange string, tdee int, streakDays int) (*service.StatsSummary, error)
 	GenerateInsight(ctx context.Context, userID string, dateRange string, tdee int, streakDays int) (map[string]any, error)
 	SaveInsight(ctx context.Context, userID string, content string, dateRange string) error
+	GenerateDietRecommendation(ctx context.Context, userID string, input service.DietRecommendationInput) (*service.DietRecommendationResult, error)
 }
 
 type HealthHandler struct {
@@ -280,6 +281,22 @@ func (h *HealthHandler) SaveStatsInsight(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "ok"})
+}
+
+// POST /api/diet/recommendations
+func (h *HealthHandler) GenerateDietRecommendation(c *gin.Context) {
+	var body service.DietRecommendationInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	result, err := h.stats.GenerateDietRecommendation(c.Request.Context(), userID, body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // GET /api/exercise-calories/daily

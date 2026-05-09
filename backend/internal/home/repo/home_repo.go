@@ -35,12 +35,14 @@ type FeedComment struct {
 func (FeedComment) TableName() string { return "feed_comments" }
 
 type ExpiryItem struct {
-	ID          string     `gorm:"column:id"`
-	UserID      string     `gorm:"column:user_id"`
-	Status      string     `gorm:"column:status"`
-	FoodName    *string    `gorm:"column:food_name"`
-	ExpireDate  *time.Time `gorm:"column:expire_date"`
-	StorageType *string    `gorm:"column:storage_type"`
+	ID           string     `gorm:"column:id"`
+	UserID       string     `gorm:"column:user_id"`
+	Status       string     `gorm:"column:status"`
+	FoodName     *string    `gorm:"column:food_name"`
+	ExpireDate   *time.Time `gorm:"column:expire_date"`
+	StorageType  *string    `gorm:"column:storage_type"`
+	QuantityNote *string    `gorm:"column:quantity_note"`
+	Note         *string    `gorm:"column:note"`
 }
 
 func (ExpiryItem) TableName() string { return "food_expiry_items" }

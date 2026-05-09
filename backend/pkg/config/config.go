@@ -152,7 +152,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.insecure", true)
 	v.SetDefault("worker.poll_interval_seconds", 2.0)
-	v.SetDefault("worker.max_concurrent", 1)
+	v.SetDefault("worker.max_concurrent", 4)
 	v.SetDefault("worker.task_types", []string{"food", "food_text", "precision_plan", "precision_item_estimate", "precision_aggregate", "public_food_library_text", "exercise", "health_report", "expiry_recognize", "expiry_notification"})
 }
 

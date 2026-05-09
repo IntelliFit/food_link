@@ -613,6 +613,64 @@ export interface DashboardTargetsUpdateResult {
   saveScope: 'server' | 'local'
 }
 
+export type DietRecommendationScene = 'eat_out' | 'cook_home'
+
+export interface DietRecommendationMacroContext {
+  calories?: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
+export interface DietRecommendationMealContext {
+  type: string
+  name: string
+  description?: string
+  calories: number
+  protein?: number
+  carbs?: number
+  fat?: number
+}
+
+export interface DietRecommendationRequest {
+  scene: DietRecommendationScene
+  date?: string
+  calorie_remaining: number
+  macro_gaps: DietRecommendationMacroContext
+  targets: DietRecommendationMacroContext
+  current: DietRecommendationMacroContext
+  meals?: DietRecommendationMealContext[]
+  user_goal?: string
+  preference_context?: string
+}
+
+export interface DietRecommendationFoodItem {
+  name: string
+  amount: string
+}
+
+export interface DietRecommendationOption {
+  title: string
+  reason: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  items: DietRecommendationFoodItem[]
+  tips?: string[]
+  alternatives?: string[]
+}
+
+export interface DietRecommendationResult {
+  scene: DietRecommendationScene
+  title: string
+  summary: string
+  calorie_remaining: number
+  macro_gaps: DietRecommendationMacroContext
+  recommendations: DietRecommendationOption[]
+  generated_by?: string
+}
+
 const DASHBOARD_TARGETS_STORAGE_KEY = 'food_link_dashboard_targets_v1'
 
 /** 将服务端返回的摄入数据与本机暂存的目标合并（用于线上尚未返回自定义目标时） */
@@ -993,6 +1051,9 @@ export interface CreateMembershipPaymentResponse {
   order_no: string
   plan_code: string
   amount: number
+  original_amount?: number
+  order_mode?: 'new_purchase' | 'renewal' | 'prorated_current_period_upgrade' | string
+  upgrade_terms?: Record<string, any>
   pay_params: {
     timeStamp: string
     nonceStr: string
@@ -1810,11 +1871,19 @@ export interface AnalyzeTaskSubmitParams {
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
   previousResult?: AnalyzeResponse
+  correction_source_task_id?: string
+  correction_root_task_id?: string
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
   correctionItems?: Array<{
     name: string
     weight: number
+    originalWeight?: number
+    calorie?: number
+    protein?: number
+    carbs?: number
+    fat?: number
+    nutrients?: Record<string, number>
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
@@ -1953,12 +2022,20 @@ export interface AnalyzeTextTaskSubmitParams {
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
   previousResult?: AnalyzeResponse
+  correction_source_task_id?: string
+  correction_root_task_id?: string
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
   subscribe_status?: string
   correctionItems?: Array<{
     name: string
     weight: number
+    originalWeight?: number
+    calorie?: number
+    protein?: number
+    carbs?: number
+    fat?: number
+    nutrients?: Record<string, number>
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
@@ -2428,6 +2505,21 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
     throw new Error(msg)
   }
   return res.data as StatsSummary
+}
+
+export async function generateDietRecommendation(
+  payload: DietRecommendationRequest
+): Promise<DietRecommendationResult> {
+  const res = await authenticatedRequest('/api/diet/recommendations', {
+    method: 'POST',
+    data: payload,
+    timeout: 45000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '生成推荐失败'
+    throw new Error(msg)
+  }
+  return res.data as DietRecommendationResult
 }
 
 export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
@@ -4033,6 +4125,15 @@ export async function uncollectPublicFoodLibraryItem(itemId: string): Promise<vo
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '取消收藏失败')
   }
+}
+
+/** 删除/下架自己上传的公共食物库条目 */
+export async function deletePublicFoodLibraryItem(itemId: string): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}`, { method: 'DELETE', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '删除失败')
+  }
+  return response.data as { message: string }
 }
 
 /** 获取公共食物库条目的评论列表 */

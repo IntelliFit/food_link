@@ -86,7 +86,7 @@ func main() {
 	}
 	maxConcurrent := cfg.Worker.MaxConcurrent
 	if maxConcurrent <= 0 {
-		maxConcurrent = 1
+		maxConcurrent = 4
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

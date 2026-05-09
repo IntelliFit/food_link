@@ -157,6 +157,7 @@ function RecordDetailPage() {
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
   const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
   const [inviteLoading, setInviteLoading] = React.useState(false)
+  const sharePosterRewardClaimingRef = React.useRef(false)
 
   useEffect(() => {
     // 加载会员状态（用于海报样式判断）
@@ -401,17 +402,38 @@ function RecordDetailPage() {
     setEditItems(prev => prev.filter((_, i) => i !== index))
   }, [editItems])
 
+  const claimSharePosterRewardAfterShare = useCallback(async () => {
+    if (!isOwner || !record?.id || sharePosterRewardClaimingRef.current) return
+    sharePosterRewardClaimingRef.current = true
+    try {
+      const rewardRes = await claimSharePosterReward(record.id)
+      if (rewardRes.claimed && rewardRes.credits > 0) {
+        Taro.showToast({
+          title: `海报奖励 +${rewardRes.credits} 积分`,
+          icon: 'success'
+        })
+      }
+    } catch (rewardErr) {
+      console.warn('claimSharePosterReward failed', rewardErr)
+    } finally {
+      sharePosterRewardClaimingRef.current = false
+    }
+  }, [isOwner, record?.id])
+
   const handleSharePosterImage = useCallback(() => {
     if (!posterImageUrl) return
     // @ts-ignore
     Taro.showShareImageMenu({
       path: posterImageUrl,
+      success: () => {
+        void claimSharePosterRewardAfterShare()
+      },
       fail: (err: { errMsg?: string }) => {
         console.error('showShareImageMenu fail', err)
         void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
     })
-  }, [posterImageUrl])
+  }, [claimSharePosterRewardAfterShare, posterImageUrl])
 
   if (loading || !record) {
     return (
@@ -646,20 +668,6 @@ function RecordDetailPage() {
                 setPosterGenerating(false)
                 setPosterImageUrl(resp.tempFilePath)
                 setShowPosterModal(true)
-                if (isOwner && record?.id) {
-                  claimSharePosterReward(record.id)
-                    .then((rewardRes) => {
-                      if (rewardRes.claimed && rewardRes.credits > 0) {
-                        Taro.showToast({
-                          title: `海报奖励 +${rewardRes.credits} 积分`,
-                          icon: 'success'
-                        })
-                      }
-                    })
-                    .catch((rewardErr) => {
-                      console.warn('claimSharePosterReward failed', rewardErr)
-                    })
-                }
               },
               fail: (err) => {
                 Taro.hideLoading()

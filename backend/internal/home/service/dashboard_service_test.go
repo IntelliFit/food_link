@@ -143,36 +143,60 @@ func TestNormalizeMealType(t *testing.T) {
 
 func TestBuildMealItem(t *testing.T) {
 	now := time.Now()
+	later := now.Add(30 * time.Minute)
 	records := []homerepo.FoodRecord{
 		{
 			ID: "r1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &now,
 			ImagePaths: []string{"https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/legacy.jpg"},
 		},
+		{
+			ID: "r2", MealType: "lunch", TotalCalories: 300, TotalProtein: 10, TotalCarbs: 40, TotalFat: 8, RecordTime: &later,
+			ImagePaths: []string{"https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/second.jpg"},
+		},
 	}
 	svc := NewDashboardService(nil, nil, storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"}))
 	meal := svc.buildMealItem("lunch", records, 800)
 	assert.Equal(t, "lunch", meal["type"])
-	assert.Equal(t, 500.0, meal["calorie"])
+	assert.Equal(t, 800.0, meal["calorie"])
 	assert.Equal(t, 800.0, meal["target"])
 	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", meal["image_path"])
+
+	entries, ok := meal["meal_record_entries"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, entries, 2)
+	assert.Equal(t, "r1", entries[0]["id"])
+	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", entries[0]["image_path"])
+	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, entries[0]["image_paths"])
+	assert.Equal(t, "r2", entries[1]["id"])
+	assert.Equal(t, "https://cdn.example.com/food/second.jpg", entries[1]["image_path"])
+	assert.Equal(t, []string{"https://cdn.example.com/food/second.jpg"}, entries[1]["image_paths"])
 }
 
 func TestBuildExpirySummary(t *testing.T) {
 	now := time.Now()
 	today := now.In(chinaTZ).Truncate(24 * time.Hour)
 	items := []homerepo.ExpiryItem{
-		{ID: "e1", FoodName: strPtr("milk"), ExpireDate: &today, Status: "active"},
+		{ID: "e1", UserID: "u1", FoodName: strPtr("milk"), ExpireDate: &today, Status: "active", StorageType: strPtr("refrigerated"), QuantityNote: strPtr("2盒")},
 		{ID: "e2", FoodName: strPtr("egg"), ExpireDate: ptrTime(today.AddDate(0, 0, 3)), Status: "active"},
 		{ID: "e3", FoodName: strPtr("bread"), ExpireDate: ptrTime(today.AddDate(0, 0, -1)), Status: "active"},
 	}
 	summary := buildExpirySummary(items)
 	assert.Equal(t, 3, summary["count"])
+	assert.Equal(t, 3, summary["pendingCount"])
+	assert.Equal(t, 2, summary["soonCount"])
+	assert.Equal(t, 1, summary["overdueCount"])
 	summaryItems, ok := summary["items"].([]map[string]any)
 	require.True(t, ok)
 	assert.Len(t, summaryItems, 3)
 	assert.Equal(t, "expired", summaryItems[0]["urgency"])
 	assert.Equal(t, "today", summaryItems[1]["urgency"])
 	assert.Equal(t, "soon", summaryItems[2]["urgency"])
+	assert.Equal(t, "milk", summaryItems[1]["food_name"])
+	deadlineLabel, ok := summaryItems[1]["deadline_label"].(*string)
+	require.True(t, ok)
+	assert.Equal(t, today.Format("01-02"), *deadlineLabel)
+	assert.Equal(t, "冷藏", summaryItems[1]["storage_location"])
+	assert.Equal(t, "2盒", summaryItems[1]["quantity_text"])
 }
 
 func TestPreviousChinaDate(t *testing.T) {

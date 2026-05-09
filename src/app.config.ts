@@ -46,6 +46,7 @@ const extraSubpackagePages = [
   'pages/user-group/index',
   'pages/profile-settings/index',
   'pages/exercise-record/index',
+  'pages/body-trends/index',
 ]
 
 export default defineAppConfig({

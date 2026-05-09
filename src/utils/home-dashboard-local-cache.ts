@@ -230,6 +230,8 @@ export function applyOptimisticFoodRecordToHomeDashboardSnapshot(
       record_time: optimisticRecord.record_time,
       total_calories: payload.total_calories,
       title: recordTitle,
+      image_path: payload.image_path || payload.image_paths?.[0] || null,
+      image_paths: payload.image_paths || (payload.image_path ? [payload.image_path] : null),
       full_record: optimisticRecord,
     },
     ...((existingMeal?.meal_record_entries || []).filter((entry) => String(entry?.id || '').trim() !== recordId)),

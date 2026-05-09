@@ -1,6 +1,47 @@
 # DECISIONS
 
+- `2026-05-09`: Go 精准模式的分组估重要真正并行执行，不能让 `grouped_parallel` 在本地 worker 默认配置下退化成串行。worker 默认并发和本地配置口径为 `max_concurrent=4`。当前用户要求先不要二次重量复核，因此精准模式默认 `precisionRefineEnabled=false`，只做 planner -> 分项首轮估重 -> db_first 回算 -> aggregate；复核代码可以保留但默认关闭。所有精准子项估计结果都必须按本组 `items_to_estimate` 过滤，不能因为模型输出整餐而扩项或重复累计。
+
+- `2026-05-09`: 精准模式的优先级必须是“先判准食物种类，再估重量”。planner 不能只直接输出单个 `item_name`；对每个主体应先列 2-3 个候选食物，并记录 `candidate_names / alternative_name / visual_evidence` 等内部字段，再基于视觉证据选择主名称。子项估重阶段必须接收这些候选和证据；若 planner 名称与视觉证据冲突，允许把最终 `name` 修正为更可能的候选。典型易混淆项包括莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。这些候选和证据属于内部识别辅助，不展示到用户结果页。
+
+- `2026-05-09`: `precision_sessions.status` 必须严格使用数据库 check constraint 允许值：`collecting / estimating / needs_user_input / needs_retake / done / cancelled / failed`。精准模式纠错完成时也写 `done`，不得写 `completed`；前端结果字段 `precisionStatus` 同步使用 `done`。
+
+- `2026-05-09`: `识别记录` 列表不应把同一次食物识别的多轮纠错/重识别展示成多条并列记录。稳定口径：纠错任务在 `analysis_tasks.payload` 中记录 `correction_source_task_id` 与 `correction_root_task_id`；列表、总数和等待记录角标按 root 折叠，只展示最新版本。为兼容已经产生的旧任务，如果没有 root 字段，则同一天同一图片或同一文字输入也按同一组折叠为最新一条。该口径不改数据库 schema，只复用已有 JSON payload。
+
+- `2026-05-09`: 体重、喝水、运动的完整趋势统计不继续塞进底部「分析」页。稳定信息架构是：首页作为日常身体状态与行为数据入口，体重/喝水/运动卡点击进入统一分包页 `body-trends`；分析页保持「健康指数 / 饮食相关风险趋势」主叙事，只在需要时引用身体数据摘要或证据，不承载完整录入型统计。该方向第一版只复用已有 `body-metrics` 与 `exercise-logs` 接口，不改数据库 schema。
+
+- `2026-05-09`: 体重趋势页的记录列表必须按“每次记录都显示相对上一条体重的变化量”来呈现。正向增加用红色、下降用绿色；列表可按月分组，并展示月总变化与日均变化，帮助用户快速扫出体重波动方向。
+
+- `2026-05-09`: 食物分析二次纠错必须做 AI 二次分析，不能把前端结构化纠错清单直接当最终结果回算。稳定口径对齐 `dev` Python：任务 payload 携带 `additionalContext / previousResult / correctionItems`；prompt 中明确上一轮餐食描述、上一轮识别结果、用户纠错说明和结构化清单；AI 重新输出名称和重量；后端再走 db_first 营养库回算。精准模式纠错不进入 precision planner/item_estimate/aggregate，而是和普通纠错一样走单次 AI 二次分析，避免扩项和重复累计。
+
+- `2026-05-09`: 首页/我的页「识别记录」角标的稳定口径是“最近 24 小时内已识别完成但未保存为饮食记录的任务数”，不是历史所有未保存任务总数。历史识别记录仍保留在列表和总数里，但不再持续累加到角标；`has_unseen_waiting_record` 也只在最近 24 小时窗口内判断未读。
+
+- `2026-05-09`: 公共食物库允许上传者删除/下架自己上传的条目。实现口径为软下架，不改数据库结构：复用 `public_food_library.status`，用户主动删除写为 `user_deleted`；公共列表/收藏列表不可见，详情读取把 `user_deleted/deleted` 当作 not found，`mine` 列表也排除删除状态。后端必须校验 `item.user_id == 当前登录用户`，非上传者不得删除。过渡期不为此能力新增表、字段、索引或约束。
+
+- `2026-05-09`: 当天饮食记录页删除单个食物时，稳定口径是复用已有饮食记录更新接口 `PUT /api/food-record/:id`，提交删减后的 `items` 与重新汇总的 `total_calories/total_protein/total_carbs/total_fat/total_weight_grams`；不为“记录内单个食物删除”新增表字段或 schema。若一条记录只剩最后一个食物，删除该食物等价于删除整条饮食记录，并在确认文案中明确提示。
+
+- `2026-05-09`: Go 后端使用 `Updates(map[string]any)` 更新 `serializer:json` / JSONB 字段时，不能直接把 slice/map（如 `user_food_records.items`、`image_paths`）放进 map 里依赖 GORM serializer。repo 层应先显式 `json.Marshal` 并写入 `datatypes.JSON`，避免 PostgreSQL JSONB 更新 500。该口径已应用到 `FoodRecordRepo.Update()` 的 `items` / `image_paths`。
+
+- `2026-05-09`: 食物分析二次纠错前端不得再跳转到 `analyze-loading` 走完整长任务页面。后端纠错轻链路完成很快，结果页应在当前页面轮询纠错 task，拿到 `done + result` 后直接刷新当前页面状态和 `analyzeResult/analyzeSourceTaskId` 缓存；否则 loading 页重定向和旧缓存/旧导航栈会让用户看到“提交成功但又退回原结果且无改动”。
+
+- `2026-05-09`: 食物分析二次纠错不再重新走完整识别链路。普通模式和精准模式纠错统一采用“用户结构化纠错清单 -> db_first 营养库回算 -> 完成任务”的轻链路；只要请求带 `correctionItems`，worker 就不得重新识图、不得重新跑精准 planner/item_estimate/refine/aggregate。精准纠错可以更新 precision session 的 final_result/status，但不能再因为重新 planner 把 5 个食物扩成 7-8 个。若纠错项营养库未命中且 DeepSeek fallback 不可用，应保留纠错提交时页面已有的 calories/protein/carbs/fat 作为 `user_correction_fallback`，避免热量显示为 0。
+
+- `2026-05-09`: 会员升级/切换套餐的当前稳定口径：采用“改签当前会员期 + 剩余价值补差”模型，不是新卡叠加。当前连续会员期的起算日不变；目标套餐周期从该起算日开始计算；用户只补“目标套餐从今天到目标到期日的剩余价值 - 当前套餐从今天到当前到期日的剩余价值”。支付成功后立即切换到新档位权益，当日积分额度即时按新档位生效，已消耗积分继续计入当天用量。若所选套餐会缩短当前有效期，或当前套餐剩余价值已覆盖所选套餐，则不允许即时切换，提示选择更高档位/更长周期或到期后再购买。
+
+- `2026-05-09`: 会员套餐优惠展示必须按真实差价展示，不得把 `4.8` 取整宣传成 `5`、把 `59.8` 取整宣传成 `60`。购买页的“立省”金额应保留必要小数并去掉多余 0。
+
+- `2026-05-09`: Python/Supabase -> Go/PostgreSQL 过渡期的开发规则：
+  - 可直接转述的短口径：当前项目处在 Python/Supabase 旧线上版本 -> Go/PostgreSQL 新版本 的过渡期。正式切流前，Supabase 仍是生产数据和 schema 真源。现有 `migrate_supabase_db_to_postgres.py` 是破坏式全量同步：会让目标 PostgreSQL 与 Supabase 完全一致，因此只在 PostgreSQL 手工新增的表/字段，最终同步时可能被覆盖。
+  - 不涉及数据库结构的改动（Go 业务逻辑、前端、接口适配、文案、样式、bug fix）可以正常在 Go 重构分支推进。
+  - 涉及数据库结构的改动不能只手工改本地/服务器 PostgreSQL；当前 `backend/scripts/migrate_supabase_db_to_postgres.py` 会 drop/recreate 目标 schema，并让目标库与 Supabase 源库完全一致，PostgreSQL-only 字段/表会在最终全量同步时被覆盖。
+  - 切流前真实生产 schema 仍以 Supabase/Python 侧为准。新增字段/表如果需要随最终同步保留，要么先作为向后兼容 migration 应用到 Supabase 生产源库，要么在最终全量同步之后、Go 正式启动之前作为正式 Go SQL migration 应用到目标 PostgreSQL。
+  - 体验版/本地 Go 写入 PostgreSQL 的数据默认视为测试数据；如果必须保留为真实用户数据，最终切流不能只做 Supabase 覆盖 PostgreSQL，必须额外做 PostgreSQL delta/upsert 合并。
+
+- `2026-05-09`: 首页 dashboard 的 `expirySummary` 必须保持 Python 旧版前端契约：`pendingCount / soonCount / overdueCount / items[]`，其中 item 至少包含 `food_name / quantity_text / storage_location / note / days_left / deadline_label / urgency_level`。Go 后端不得只返回内部字段 `count/name/urgency`，否则首页保质期卡片会出现标题和 meta 为空。保质期条目当前不显示图片，也不新增 `food_expiry_items.image_url`；旧 Python/Supabase 口径本来没有为保质期条目持久化图片。
+
 - `2026-05-09`: Go 重构分支的积分体系当前目标是先严格对齐 `dev` / Python 旧版逻辑，不在本轮顺手修正旧版自身设计问题。对齐口径包括：食物标准分析 2 分、精准分析 4 分、运动记录 1 分；系统积分按中国自然日计算；补录优先消耗目标日系统积分，再消耗今日系统积分，最后消耗 earned credits；任务/识别成功创建后才扣 earned credits；邀请奖励也必须保留旧版“新用户 7 天内 2 个不同自然日有效使用后双方各得 15 earned credits”的闭环。
+
+- `2026-05-09`: 海报分享奖励不能在“生成海报图片”时发放，只能在用户触发微信图片分享并进入 `showShareImageMenu` 成功回调后调用 `/api/membership/rewards/share-poster/claim`。保存图片、打开海报预览、自动生成海报都不应领取 1 积分；后端仍保持幂等和每日上限校验。
 
 - `2026-05-09`: Go 精准模式必须对齐 Python 当前正在使用的实际流程。稳定口径是：`precision_plan` 使用专用 planner prompt 拆主体并规范化 `itemsToEstimate/splitStrategy`；`precision_item_estimate` 使用专用单项/多项估重 prompt，只解析 `item/items` 的 `name + estimatedWeightGrams`，再挂 planner metadata；随后按 Python 条件触发二次重量复核，触发条件为 `uncertainty_level=high`、`requires_reference=true`、或食物名包含米饭/炒饭/面/粥/红烧肉等易错关键词，复核使用 `temperature=0.1`，失败只记录日志并沿用首次估重；最后走 db_first 营养库回算；`precision_aggregate` 按 `item_index` 聚合子项结果；planner/item estimate 精准 JSON completion 使用多图输入、固定 `temperature=0.2`，图片/文字超时分别为 `90s/60s`。不能再用通用 `Analyze/AnalyzeText` 作为精准子任务主算法，否则会重新识别整餐并造成重复累加。
 
@@ -693,3 +734,5 @@
 - `2026-03-28`: 精准模式不再只是提示词差异；分析结果统一新增 `recognitionOutcome`、`rejectionReason`、`retakeGuidance`、`allowedFoodCategory`，由后端在严格模式下做 hard/soft reject 后校验，前端结果页和历史页按结构化状态展示。
 - `2026-03-28`: 文字异步分析任务的 `execution_mode` 必须和图片任务一样做"请求优先、档案回退"的统一合并，避免未传模式时默认掉回 `standard`。
 - `2026-03-29`: 结果页的"上传公共库"必须是独立入口，点击后应直接进入公共库上传页并沿用当前拍照分析结果作为草稿；不要先走"记录餐次/保存记录"链路，也不要在"记录"成功后再弹上传提醒。
+- `2026-05-09`: 智能饮食推荐第一版采用“即时生成、不落库、不改 schema”的保守口径，适配 Python/Supabase -> Go/PostgreSQL 过渡期。前端把当天剩余热量、三大营养素缺口、目标、已吃餐次摘要和场景（`eat_out` / `cook_home`）传给 Go 后端；Go 后端用 DeepSeek `deepseek-v4-flash` 生成结构化 JSON，失败或缺少 `DEEPSEEK_API_KEY` 时返回规则兜底推荐。后续若要引入推荐历史、用户口味画像、外食商家库或收藏替换项，涉及新增表/字段时必须先写正式 migration，并明确 Supabase 源库与最终 PostgreSQL 的应用顺序。
+- `2026-05-09`: 首页「今日餐食」卡片右侧的 `N次` 固定表示该餐次下有 N 条饮食记录，不表示照片数量。照片数量仍只在餐次缩略图角标中用「共 N 张」表达。多记录弹层里的每条 entry 必须展示该记录自己的 `image_path/image_paths`，不能复用餐次级聚合图片。

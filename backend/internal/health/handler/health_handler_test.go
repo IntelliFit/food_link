@@ -43,12 +43,12 @@ func (m *mockBodyMetricsSvc) SaveWeightRecord(ctx context.Context, userID string
 }
 
 type mockExerciseSvc struct {
-	logs            map[string]any
-	createResult    map[string]any
-	estimateResult  map[string]any
-	dailyCalories   map[string]any
-	deleteErr       error
-	err             error
+	logs           map[string]any
+	createResult   map[string]any
+	estimateResult map[string]any
+	dailyCalories  map[string]any
+	deleteErr      error
+	err            error
 }
 
 func (m *mockExerciseSvc) GetDailyCalories(ctx context.Context, userID string, date string) (map[string]any, error) {
@@ -72,10 +72,11 @@ func (m *mockExerciseSvc) DeleteLog(ctx context.Context, userID, logID string) e
 }
 
 type mockStatsSvc struct {
-	summary        *service.StatsSummary
-	insightResult  map[string]any
-	saveErr        error
-	err            error
+	summary       *service.StatsSummary
+	insightResult map[string]any
+	dietResult    *service.DietRecommendationResult
+	saveErr       error
+	err           error
 }
 
 func (m *mockStatsSvc) GetSummary(ctx context.Context, userID string, statsRange string, tdee int, streakDays int) (*service.StatsSummary, error) {
@@ -88,6 +89,10 @@ func (m *mockStatsSvc) GenerateInsight(ctx context.Context, userID string, dateR
 
 func (m *mockStatsSvc) SaveInsight(ctx context.Context, userID string, content string, dateRange string) error {
 	return m.saveErr
+}
+
+func (m *mockStatsSvc) GenerateDietRecommendation(ctx context.Context, userID string, input service.DietRecommendationInput) (*service.DietRecommendationResult, error) {
+	return m.dietResult, m.err
 }
 
 func setupHealthRouter(h *HealthHandler) *gin.Engine {
@@ -105,6 +110,7 @@ func setupHealthRouter(h *HealthHandler) *gin.Engine {
 	r.GET("/api/stats/summary", h.GetStatsSummary)
 	r.POST("/api/stats/insight/generate", h.GenerateStatsInsight)
 	r.POST("/api/stats/insight/save", h.SaveStatsInsight)
+	r.POST("/api/diet/recommendations", h.GenerateDietRecommendation)
 	r.GET("/api/exercise-calories/daily", h.GetExerciseCaloriesDaily)
 	r.GET("/api/exercise-logs", h.GetExerciseLogs)
 	r.POST("/api/exercise-logs", h.CreateExerciseLog)
@@ -117,14 +123,14 @@ func TestGetBodyMetricsSummary(t *testing.T) {
 	change := -0.5
 	mockSvc := &mockBodyMetricsSvc{
 		summary: &service.BodyMetricsSummary{
-			WeightEntries:    []service.WeightEntry{{Date: "2024-06-15", Value: 70.0}},
-			LatestWeight:     &service.WeightEntry{Date: "2024-06-15", Value: 70.0},
-			PreviousWeight:   &service.WeightEntry{Date: "2024-06-14", Value: 70.5},
-			WeightChange:     &change,
-			WaterGoalMl:      2000,
-			TodayWater:       service.WaterDaily{Date: "2024-06-15", Total: 500},
-			TotalWaterMl:     500,
-			AvgDailyWaterMl:  500.0,
+			WeightEntries:     []service.WeightEntry{{Date: "2024-06-15", Value: 70.0}},
+			LatestWeight:      &service.WeightEntry{Date: "2024-06-15", Value: 70.0},
+			PreviousWeight:    &service.WeightEntry{Date: "2024-06-14", Value: 70.5},
+			WeightChange:      &change,
+			WaterGoalMl:       2000,
+			TodayWater:        service.WaterDaily{Date: "2024-06-15", Total: 500},
+			TotalWaterMl:      500,
+			AvgDailyWaterMl:   500.0,
 			WaterRecordedDays: 1,
 		},
 	}
@@ -255,6 +261,37 @@ func TestSaveStatsInsight(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestGenerateDietRecommendation(t *testing.T) {
+	mockSvc := &mockStatsSvc{
+		dietResult: &service.DietRecommendationResult{
+			Scene: "eat_out",
+			Title: "外面吃一餐",
+			Recommendations: []service.DietRecommendationOption{{
+				Title: "便利店组合",
+				Items: []service.DietRecommendationFoodItem{{Name: "鸡胸肉", Amount: "1包"}},
+			}},
+		},
+	}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"scene":             "eat_out",
+		"calorie_remaining": 500,
+		"macro_gaps":        map[string]any{"protein": 30, "carbs": 40, "fat": 10},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/diet/recommendations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "eat_out", data["scene"])
+}
+
 func TestGetExerciseCaloriesDaily(t *testing.T) {
 	mockSvc := &mockExerciseSvc{
 		dailyCalories: map[string]any{"date": "2024-06-15", "total_calories_burned": 300},
@@ -350,7 +387,6 @@ func TestGetStatsSummaryError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
-
 
 func TestSyncLocalBodyMetricsBindError(t *testing.T) {
 	mockSvc := &mockBodyMetricsSvc{}

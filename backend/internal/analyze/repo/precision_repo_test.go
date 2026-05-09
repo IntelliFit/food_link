@@ -116,12 +116,12 @@ func TestPrecisionRepo_UpdateSession(t *testing.T) {
 	db.Exec(`INSERT INTO precision_sessions (id, user_id, status, round_index, created_at) VALUES (?, ?, ?, ?, ?)`,
 		sessionID, "user-1", "active", 1, now)
 
-	err := repo.UpdateSession(ctx, sessionID, map[string]any{"status": "completed"})
+	err := repo.UpdateSession(ctx, sessionID, map[string]any{"status": "done"})
 	require.NoError(t, err)
 
 	var status string
 	db.Raw("SELECT status FROM precision_sessions WHERE id = ?", sessionID).Scan(&status)
-	assert.Equal(t, "completed", status)
+	assert.Equal(t, "done", status)
 }
 
 func TestNormalizePrecisionJSONUpdates(t *testing.T) {

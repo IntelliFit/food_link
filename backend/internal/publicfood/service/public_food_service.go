@@ -17,6 +17,11 @@ type PublicFoodService struct {
 	storage *storage.Client
 }
 
+const (
+	statusUserDeleted = "user_deleted"
+	statusDeleted     = "deleted"
+)
+
 func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.Client) *PublicFoodService {
 	var client *storage.Client
 	if len(storageClient) > 0 {
@@ -168,7 +173,7 @@ func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*do
 	if err != nil {
 		return nil, err
 	}
-	if item == nil {
+	if item == nil || isDeletedStatus(item.Status) {
 		return nil, commonerrors.ErrNotFound
 	}
 	views, err := s.hydrate(ctx, userID, []domain.PublicFoodItem{*item}, "")
@@ -192,6 +197,20 @@ func (s *PublicFoodService) Collect(ctx context.Context, userID, itemID string) 
 
 func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string) error {
 	return s.repo.Uncollect(ctx, userID, itemID)
+}
+
+func (s *PublicFoodService) Delete(ctx context.Context, userID, itemID string) error {
+	item, err := s.repo.GetItem(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item == nil || isDeletedStatus(item.Status) {
+		return commonerrors.ErrNotFound
+	}
+	if item.UserID != userID {
+		return commonerrors.ErrForbidden
+	}
+	return s.repo.SoftDeleteOwned(ctx, itemID, userID, statusUserDeleted)
 }
 
 func (s *PublicFoodService) Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error) {
@@ -445,4 +464,13 @@ func ptrString(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+func isDeletedStatus(status string) bool {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case statusUserDeleted, statusDeleted:
+		return true
+	default:
+		return false
+	}
 }

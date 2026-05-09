@@ -276,7 +276,34 @@
   line-height: 36rpx;
   color: #475569;
   font-weight: 600;
+}
+
+.day-record-food-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14rpx;
   flex-shrink: 0;
+}
+
+.day-record-food-delete {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1rpx #eef2f7;
+
+  &:active {
+    background: #fee2e2;
+  }
+}
+
+.day-record-food-delete-icon {
+  font-size: 26rpx;
+  color: #94a3b8;
 }
 
 // 每个食物的宏量营养行

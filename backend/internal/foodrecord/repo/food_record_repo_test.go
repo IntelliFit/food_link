@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -70,6 +71,30 @@ func TestFoodRecordRepo_CRUD(t *testing.T) {
 	found, err = r.GetByID(ctx, record.ID)
 	require.NoError(t, err)
 	assert.Nil(t, found)
+}
+
+func TestNormalizeFoodRecordJSONUpdates_MarshalsItems(t *testing.T) {
+	updates, err := normalizeFoodRecordJSONUpdates(map[string]any{
+		"items": []domain.FoodItem{{
+			Name:   "白米饭",
+			Weight: 100,
+			Ratio:  100,
+			Intake: 100,
+			Nutrients: domain.FoodItemNutrients{
+				Calories: 116,
+				Protein:  2.6,
+				Carbs:    25.9,
+				Fat:      0.3,
+			},
+		}},
+		"total_calories": 116.0,
+	})
+
+	require.NoError(t, err)
+	itemsJSON, ok := updates["items"].(datatypes.JSON)
+	require.True(t, ok)
+	assert.JSONEq(t, `[{"name":"白米饭","weight":100,"ratio":100,"intake":100,"nutrients":{"calories":116,"protein":2.6,"carbs":25.9,"fat":0.3,"fiber":0,"sugar":0,"sodium_mg":0}}]`, string(itemsJSON))
+	assert.Equal(t, 116.0, updates["total_calories"])
 }
 
 func TestFoodRecordRepo_ListByUser_WithDate(t *testing.T) {

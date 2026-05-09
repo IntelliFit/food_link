@@ -121,6 +121,21 @@ func (r *TaskRepo) CountTasksByStatus(ctx context.Context, userID string) (map[s
 	return out, nil
 }
 
+func (r *TaskRepo) CountUnrecordedDoneTasksSince(ctx context.Context, userID string, since time.Time) (int64, error) {
+	var count int64
+	q := applyAnalyzeHistoryTaskFilter(
+		r.db.WithContext(ctx).
+			Model(&domain.AnalysisTask{}).
+			Joins("LEFT JOIN user_food_records ON user_food_records.source_task_id = analysis_tasks.id AND user_food_records.user_id = analysis_tasks.user_id").
+			Where("analysis_tasks.user_id = ?", userID).
+			Where("analysis_tasks.status = ?", "done").
+			Where("analysis_tasks.created_at > ?", since).
+			Where("user_food_records.id IS NULL"),
+	)
+	err := q.Count(&count).Error
+	return count, err
+}
+
 func (r *TaskRepo) RecordedTaskMap(ctx context.Context, userID string, taskIDs []string) (map[string]string, error) {
 	out := map[string]string{}
 	if len(taskIDs) == 0 {

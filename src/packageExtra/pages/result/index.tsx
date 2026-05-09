@@ -477,6 +477,48 @@ function ResultPage() {
     setTotalWeight(Math.round(total))
   }
 
+  const applyAnalyzeResultToPage = (
+    result: AnalyzeResponse,
+    nextTaskId?: string,
+    fallbackPrecisionSessionId = precisionSessionId,
+    resetCommittedState = Boolean(nextTaskId),
+  ) => {
+    setDescription(result.description || '')
+    setHealthAdvice(result.insight || '保持健康饮食！')
+    setPfcRatioComment(result.pfc_ratio_comment ?? null)
+    setAbsorptionNotes(result.absorption_notes ?? null)
+    setContextAdvice(result.context_advice ?? null)
+    setRecognitionOutcome(normalizeRecognitionOutcome(result.recognitionOutcome))
+    setRejectionReason(result.rejectionReason?.trim() || null)
+    setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
+    setAllowedFoodCategory(normalizeAllowedFoodCategory(result.allowedFoodCategory))
+    setFollowupQuestions(Array.isArray(result.followupQuestions) ? result.followupQuestions.filter(Boolean) : [])
+    setPrecisionSessionId(result.precisionSessionId || fallbackPrecisionSessionId)
+    setPrecisionStatus(result.precisionStatus || '')
+    setPendingRequirements(normalizePrecisionStringList(result.pendingRequirements))
+    setRetakeInstructions(normalizePrecisionStringList(result.retakeInstructions))
+    setReferenceObjectNeeded(Boolean(result.referenceObjectNeeded))
+    setReferenceObjectSuggestions(normalizePrecisionStringList(result.referenceObjectSuggestions))
+    setDetectedItemsSummary(normalizePrecisionStringList(result.detectedItemsSummary))
+    setSplitStrategy(String(result.splitStrategy || ''))
+    setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
+
+    const items = convertApiDataToItems(result.items || [])
+    setNutritionItems(items)
+    setCorrectionItems(items)
+    calculateNutritionStats(items)
+
+    Taro.setStorageSync('analyzeResult', JSON.stringify(result))
+    if (nextTaskId) {
+      Taro.setStorageSync('analyzeSourceTaskId', nextTaskId)
+    }
+    if (resetCommittedState) {
+      Taro.removeStorageSync('analyzeTaskIsRecorded')
+      Taro.removeStorageSync('analyzeCommittedRecordId')
+      setCommittedRecordId(null)
+    }
+  }
+
   const hydrateCommittedRecord = useCallback(() => {
     // 状态由 analyze-history 列表传入的 analyzeTaskIsRecorded 标记决定，
     // 不再查询后端或维护本地 analyze_committed_session 缓存。
@@ -525,28 +567,7 @@ function ResultPage() {
       const storedResult = Taro.getStorageSync('analyzeResult')
       if (storedResult) {
         const result: AnalyzeResponse = JSON.parse(storedResult)
-        setDescription(result.description || '')
-        setHealthAdvice(result.insight || '保持健康饮食！')
-        setPfcRatioComment(result.pfc_ratio_comment ?? null)
-        setAbsorptionNotes(result.absorption_notes ?? null)
-        setContextAdvice(result.context_advice ?? null)
-        setRecognitionOutcome(normalizeRecognitionOutcome(result.recognitionOutcome))
-        setRejectionReason(result.rejectionReason?.trim() || null)
-        setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
-        setAllowedFoodCategory(normalizeAllowedFoodCategory(result.allowedFoodCategory))
-        setFollowupQuestions(Array.isArray(result.followupQuestions) ? result.followupQuestions.filter(Boolean) : [])
-        setPrecisionSessionId(result.precisionSessionId || storedPrecisionSessionId)
-        setPrecisionStatus(result.precisionStatus || '')
-        setPendingRequirements(normalizePrecisionStringList(result.pendingRequirements))
-        setRetakeInstructions(normalizePrecisionStringList(result.retakeInstructions))
-        setReferenceObjectNeeded(Boolean(result.referenceObjectNeeded))
-        setReferenceObjectSuggestions(normalizePrecisionStringList(result.referenceObjectSuggestions))
-        setDetectedItemsSummary(normalizePrecisionStringList(result.detectedItemsSummary))
-        setSplitStrategy(String(result.splitStrategy || ''))
-        setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
-        const items = convertApiDataToItems(result.items)
-        setNutritionItems(items)
-        calculateNutritionStats(items)
+        applyAnalyzeResultToPage(result, undefined, storedPrecisionSessionId)
         void hydrateCommittedRecord()
       } else {
         Taro.showModal({
@@ -1343,7 +1364,7 @@ function ResultPage() {
 
         try {
           setIsResubmitting(true)
-          Taro.showLoading({ title: '提交分析中...', mask: true })
+          Taro.showLoading({ title: '提交纠错中...', mask: true })
           const resolvedCorrectionItems = correctionItems.map((item) => ({ ...item }))
           setCorrectionItems(resolvedCorrectionItems)
 
@@ -1353,6 +1374,7 @@ function ResultPage() {
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
           const savedExecutionMode = normalizeAvailableExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
           const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
+          const correctionSourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,
@@ -1414,6 +1436,35 @@ function ResultPage() {
           const finalCorrectionContext = correctionParts.length > 0
             ? correctionParts.join('\n')
             : '用户发起了二次纠错，请结合原始内容重新分析。'
+          const correctionPayload = resolvedCorrectionItems.map((item) => {
+            const baseline = baselineMap.get(item.id)
+            const normalizedName = item.name.trim()
+            return {
+              name: normalizedName,
+              weight: Math.round(item.weight || 0),
+              originalWeight: item.originalWeight,
+              calorie: item.calorie,
+              protein: item.protein,
+              carbs: item.carbs,
+              fat: item.fat,
+              nutrients: {
+                calories: item.calorie,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                fiber: 0,
+                sugar: 0,
+              },
+              sourceName: baseline?.name || item.sourceName,
+              sourceItemId: item.sourceItemId ?? item.id,
+              nameEdited: baseline
+                ? normalizeFoodNameForCorrection(normalizedName) !== normalizeFoodNameForCorrection(baseline.name)
+                : true,
+              weightEdited: baseline
+                ? Math.round(item.weight || 0) !== Math.round(baseline.weight || 0)
+                : true,
+            }
+          })
 
           let taskId = ''
 
@@ -1431,6 +1482,8 @@ function ResultPage() {
               execution_mode: savedExecutionMode,
               analysis_engine: savedAnalysisEngine,
               previousResult,
+              correction_source_task_id: correctionSourceTaskId || undefined,
+              correctionItems: correctionPayload,
             })
             taskId = res.task_id
           } else {
@@ -1454,23 +1507,26 @@ function ResultPage() {
               activity_timing: savedActivityTiming,
               execution_mode: savedExecutionMode,
               previousResult,
+              correction_source_task_id: correctionSourceTaskId || undefined,
+              correctionItems: correctionPayload,
             })
             taskId = res.task_id
           }
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzePendingCorrectionItems')
 
-          Taro.hideLoading()
-          setShowCorrectionDrawer(false)
-
-          // 4. 跳转到 loading 页面重新走解析流程
-          const nextTaskType = shouldResubmitWithImage ? 'food_image' : 'food_text'
+          const nextTaskType = shouldResubmitWithImage ? 'food' : 'food_text'
+          Taro.setStorageSync('analyzeTaskType', nextTaskType)
           if (!shouldResubmitWithImage) {
             Taro.removeStorageSync('analyzeImagePath')
             Taro.removeStorageSync('analyzeImagePaths')
           }
+
+          Taro.hideLoading()
+          setShowCorrectionDrawer(false)
+          setAdditionalContext('')
           Taro.navigateTo({
-            url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${taskId}&task_type=${nextTaskType}&execution_mode=${savedExecutionMode}`
+            url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${taskId}&task_type=${nextTaskType}&execution_mode=${savedExecutionMode}&correction=1`
           })
 
         } catch (e: any) {

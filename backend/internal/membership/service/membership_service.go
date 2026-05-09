@@ -109,6 +109,19 @@ type trialPolicy struct {
 	Policy    any
 }
 
+type membershipPaymentTerms struct {
+	Mode                       string
+	ChargeAmount               float64
+	CurrentPlanCode            string
+	CurrentPeriodStart         time.Time
+	CurrentExpiresAt           time.Time
+	TargetPeriodStart          time.Time
+	TargetExpiresAt            time.Time
+	CurrentRemainingValue      float64
+	TargetRemainingValue       float64
+	UnusedCurrentCreditApplied float64
+}
+
 func NewMembershipService(repo MembershipRepo, cfg ...*config.Config) *MembershipService {
 	var c *config.Config
 	if len(cfg) > 0 {
@@ -222,7 +235,12 @@ func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.C
 	if durationMonths <= 0 {
 		durationMonths = 1
 	}
+	expectedPeriodStart := *paidAt
 	expectedExpiresAt := addMonths(*paidAt, durationMonths)
+	if terms, ok := paymentTermsFromExtra(latest.Extra); ok && terms.Mode == "prorated_current_period_upgrade" {
+		expectedPeriodStart = terms.TargetPeriodStart
+		expectedExpiresAt = terms.TargetExpiresAt
+	}
 	expectedStatus := "expired"
 	if expectedExpiresAt.After(time.Now()) {
 		expectedStatus = "active"
@@ -231,14 +249,14 @@ func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.C
 	if membership != nil && membership.FirstActivatedAt != nil {
 		firstActivatedAt = *membership.FirstActivatedAt
 	}
-	if membership != nil && membershipMatchesPaidTruth(membership, effectivePlanCode, expectedStatus, *paidAt, expectedExpiresAt, effectiveDailyCredits) {
+	if membership != nil && membershipMatchesPaidTruth(membership, effectivePlanCode, expectedStatus, expectedPeriodStart, expectedExpiresAt, *paidAt, effectiveDailyCredits) {
 		return membership, nil
 	}
 	return s.repo.SaveMembership(ctx, userID, map[string]any{
 		"current_plan_code":    effectivePlanCode,
 		"status":               expectedStatus,
 		"first_activated_at":   firstActivatedAt,
-		"current_period_start": *paidAt,
+		"current_period_start": expectedPeriodStart,
 		"expires_at":           expectedExpiresAt,
 		"last_paid_at":         *paidAt,
 		"auto_renew":           false,
@@ -502,7 +520,16 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 	if user == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	if err := enforceMinorPaymentLimit(user, plan.Amount); err != nil {
+	membership, err := s.getEffectiveMembership(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	terms, err := s.buildMembershipPaymentTerms(ctx, plan, membership, now)
+	if err != nil {
+		return nil, err
+	}
+	if err := enforceMinorPaymentLimit(user, terms.ChargeAmount); err != nil {
 		return nil, err
 	}
 	openID := strings.TrimSpace(user.OpenID)
@@ -515,6 +542,7 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 	}
 	orderNo := generateMembershipOrderNo()
 	canonicalURL := "/v3/pay/transactions/jsapi"
+	orderExtra := buildPaymentExtra(plan, terms)
 	requestPayload := map[string]any{
 		"appid":        payCfg.AppID,
 		"mchid":        payCfg.MchID,
@@ -522,7 +550,7 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		"out_trade_no": orderNo,
 		"notify_url":   payCfg.NotifyURL,
 		"amount": map[string]any{
-			"total":    amountToFen(plan.Amount),
+			"total":    amountToFen(terms.ChargeAmount),
 			"currency": "CNY",
 		},
 		"payer": map[string]any{"openid": openID},
@@ -563,7 +591,7 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		UserID:         userID,
 		PlanCode:       plan.Code,
 		OrderNo:        orderNo,
-		Amount:         plan.Amount,
+		Amount:         terms.ChargeAmount,
 		Currency:       "CNY",
 		DurationMonths: plan.DurationMonths,
 		PayChannel:     "wechat_mini_program",
@@ -571,11 +599,10 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		Status:         "pending",
 		WxOpenID:       &openID,
 		WxPrepayID:     &wxResp.PrepayID,
-		Extra: map[string]any{
-			"create_order_payload":         requestPayload,
-			"wechat_create_order_response": wxResp,
-		},
+		Extra:          orderExtra,
 	}
+	payment.Extra["create_order_payload"] = requestPayload
+	payment.Extra["wechat_create_order_response"] = wxResp
 	if err := s.repo.CreatePayment(ctx, payment); err != nil {
 		return nil, err
 	}
@@ -584,11 +611,97 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		return nil, err
 	}
 	return map[string]any{
-		"order_no":   orderNo,
-		"plan_code":  plan.Code,
-		"amount":     plan.Amount,
-		"pay_params": params,
+		"order_no":        orderNo,
+		"plan_code":       plan.Code,
+		"amount":          terms.ChargeAmount,
+		"original_amount": plan.Amount,
+		"order_mode":      terms.Mode,
+		"upgrade_terms":   orderExtra["upgrade_terms"],
+		"pay_params":      params,
 	}, nil
+}
+
+func (s *MembershipService) buildMembershipPaymentTerms(ctx context.Context, targetPlan *domain.MembershipPlan, membership *domain.UserMembership, now time.Time) (*membershipPaymentTerms, error) {
+	terms := &membershipPaymentTerms{
+		Mode:         "new_purchase",
+		ChargeAmount: roundMoney(targetPlan.Amount),
+	}
+	if membership == nil || membership.Status != "active" || membership.ExpiresAt == nil || !membership.ExpiresAt.After(now) || membership.CurrentPlanCode == nil {
+		return terms, nil
+	}
+	currentPlanCode := strings.TrimSpace(*membership.CurrentPlanCode)
+	targetPlanCode := strings.TrimSpace(targetPlan.Code)
+	if currentPlanCode == "" || currentPlanCode == targetPlanCode {
+		terms.Mode = "renewal"
+		return terms, nil
+	}
+	currentPlan, err := s.repo.GetPlanByCode(ctx, currentPlanCode)
+	if err != nil {
+		return nil, err
+	}
+	if currentPlan == nil || currentPlan.Amount <= 0 || currentPlan.DurationMonths <= 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "当前会员套餐配置缺失，暂无法计算升级补差", HTTPStatus: 400}
+	}
+	start := timeOr(membership.CurrentPeriodStart, timeOr(membership.FirstActivatedAt, now))
+	if !start.Before(now) {
+		start = now
+	}
+	currentExpires := *membership.ExpiresAt
+	targetExpires := addMonths(start, targetPlan.DurationMonths)
+	if !targetExpires.After(now) {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "所选套餐周期已短于当前已使用时长，请选择更长周期或等待当前会员到期后再购买", HTTPStatus: 400}
+	}
+	if targetExpires.Before(currentExpires) {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "所选套餐会缩短当前会员有效期，请选择不短于当前有效期的套餐", HTTPStatus: 400}
+	}
+	currentDurationEnd := addMonths(start, currentPlan.DurationMonths)
+	targetDurationSeconds := targetExpires.Sub(start).Seconds()
+	currentDurationSeconds := currentDurationEnd.Sub(start).Seconds()
+	if targetDurationSeconds <= 0 || currentDurationSeconds <= 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "套餐周期配置异常，暂无法计算升级补差", HTTPStatus: 400}
+	}
+	currentRemainingSeconds := currentExpires.Sub(now).Seconds()
+	targetRemainingSeconds := targetExpires.Sub(now).Seconds()
+	currentRemainingValue := currentPlan.Amount * currentRemainingSeconds / currentDurationSeconds
+	targetRemainingValue := targetPlan.Amount * targetRemainingSeconds / targetDurationSeconds
+	chargeAmount := roundMoney(targetRemainingValue - currentRemainingValue)
+	if chargeAmount <= 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "当前套餐剩余价值已覆盖所选套餐，请选择更高档位或更长周期", HTTPStatus: 400}
+	}
+	terms.Mode = "prorated_current_period_upgrade"
+	terms.ChargeAmount = chargeAmount
+	terms.CurrentPlanCode = currentPlanCode
+	terms.CurrentPeriodStart = start
+	terms.CurrentExpiresAt = currentExpires
+	terms.TargetPeriodStart = start
+	terms.TargetExpiresAt = targetExpires
+	terms.CurrentRemainingValue = roundMoney(currentRemainingValue)
+	terms.TargetRemainingValue = roundMoney(targetRemainingValue)
+	terms.UnusedCurrentCreditApplied = roundMoney(currentRemainingValue)
+	return terms, nil
+}
+
+func buildPaymentExtra(plan *domain.MembershipPlan, terms *membershipPaymentTerms) map[string]any {
+	extra := map[string]any{
+		"order_mode":      terms.Mode,
+		"original_amount": plan.Amount,
+		"charge_amount":   terms.ChargeAmount,
+	}
+	if terms.Mode == "prorated_current_period_upgrade" {
+		extra["upgrade_terms"] = map[string]any{
+			"mode":                          terms.Mode,
+			"current_plan_code":             terms.CurrentPlanCode,
+			"current_period_start":          terms.CurrentPeriodStart.Format(time.RFC3339),
+			"current_expires_at":            terms.CurrentExpiresAt.Format(time.RFC3339),
+			"target_period_start":           terms.TargetPeriodStart.Format(time.RFC3339),
+			"target_expires_at":             terms.TargetExpiresAt.Format(time.RFC3339),
+			"current_remaining_value":       terms.CurrentRemainingValue,
+			"target_remaining_value":        terms.TargetRemainingValue,
+			"unused_current_credit_applied": terms.UnusedCurrentCreditApplied,
+			"payable_amount":                terms.ChargeAmount,
+		}
+	}
+	return extra
 }
 
 func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) error {
@@ -958,7 +1071,11 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 		return nil, err
 	}
 	var start, expires, first time.Time
-	if membership != nil && membership.Status == "active" && membership.ExpiresAt != nil && membership.ExpiresAt.After(paidAt) {
+	if terms, ok := paymentTermsFromExtra(payment.Extra); ok && terms.Mode == "prorated_current_period_upgrade" {
+		start = terms.TargetPeriodStart
+		expires = terms.TargetExpiresAt
+		first = timeOr(membershipFirstActivatedAt(membership), paidAt)
+	} else if membership != nil && membership.Status == "active" && membership.ExpiresAt != nil && membership.ExpiresAt.After(paidAt) {
 		start = timeOr(membership.CurrentPeriodStart, paidAt)
 		expires = addMonths(*membership.ExpiresAt, payment.DurationMonths)
 		first = timeOr(membership.FirstActivatedAt, paidAt)
@@ -1144,7 +1261,7 @@ func copyMeta(input map[string]any) map[string]any {
 	return out
 }
 
-func membershipMatchesPaidTruth(membership *domain.UserMembership, planCode, status string, paidAt, expiresAt time.Time, dailyCredits int) bool {
+func membershipMatchesPaidTruth(membership *domain.UserMembership, planCode, status string, periodStart, expiresAt, lastPaidAt time.Time, dailyCredits int) bool {
 	if membership == nil {
 		return false
 	}
@@ -1154,7 +1271,7 @@ func membershipMatchesPaidTruth(membership *domain.UserMembership, planCode, sta
 	if strings.TrimSpace(membership.Status) != status {
 		return false
 	}
-	if !timeMatches(membership.CurrentPeriodStart, paidAt) || !timeMatches(membership.ExpiresAt, expiresAt) || !timeMatches(membership.LastPaidAt, paidAt) {
+	if !timeMatches(membership.CurrentPeriodStart, periodStart) || !timeMatches(membership.ExpiresAt, expiresAt) || !timeMatches(membership.LastPaidAt, lastPaidAt) {
 		return false
 	}
 	return membership.DailyCredits == dailyCredits
@@ -1315,6 +1432,42 @@ func generateMembershipOrderNo() string {
 
 func amountToFen(amount float64) int {
 	return int(math.Round(amount * 100))
+}
+
+func roundMoney(amount float64) float64 {
+	return math.Round(amount*100) / 100
+}
+
+func paymentTermsFromExtra(extra map[string]any) (*membershipPaymentTerms, bool) {
+	if extra == nil {
+		return nil, false
+	}
+	rawTerms, _ := extra["upgrade_terms"].(map[string]any)
+	if rawTerms == nil {
+		return nil, false
+	}
+	mode := strings.TrimSpace(fmt.Sprintf("%v", rawTerms["mode"]))
+	start := timeFromAny(rawTerms["target_period_start"])
+	expires := timeFromAny(rawTerms["target_expires_at"])
+	if mode == "" || start == nil || expires == nil {
+		return nil, false
+	}
+	return &membershipPaymentTerms{
+		Mode:              mode,
+		TargetPeriodStart: *start,
+		TargetExpiresAt:   *expires,
+	}, true
+}
+
+func timeFromAny(value any) *time.Time {
+	switch v := value.(type) {
+	case time.Time:
+		return &v
+	case *time.Time:
+		return v
+	default:
+		return parseTime(fmt.Sprintf("%v", value))
+	}
 }
 
 func buildWechatPayAuthorization(mchID, serialNo, privateKeyPEM, method, canonicalURL, body string) (string, error) {
@@ -1528,6 +1681,13 @@ func timeOr(t *time.Time, fallback time.Time) time.Time {
 		return *t
 	}
 	return fallback
+}
+
+func membershipFirstActivatedAt(membership *domain.UserMembership) *time.Time {
+	if membership == nil {
+		return nil
+	}
+	return membership.FirstActivatedAt
 }
 
 func stringValue(v *string) any {

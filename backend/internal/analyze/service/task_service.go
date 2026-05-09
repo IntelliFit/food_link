@@ -23,6 +23,8 @@ type TaskService struct {
 	creditGuard CreditGuard
 }
 
+const waitingRecordBadgeWindow = 24 * time.Hour
+
 func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *authrepo.UserRepo, storageClient ...*storage.Client) *TaskService {
 	var client *storage.Client
 	if len(storageClient) > 0 {
@@ -41,31 +43,33 @@ func (s *TaskService) ConfigureCreditGuard(guard CreditGuard) {
 }
 
 type SubmitTaskInput struct {
-	ImageURL              string           `json:"image_url"`
-	ImageURLs             []string         `json:"image_urls"`
-	Text                  string           `json:"text"`
-	TextInput             string           `json:"text_input"`
-	Date                  string           `json:"date"`
-	MealType              string           `json:"meal_type"`
-	Province              string           `json:"province"`
-	City                  string           `json:"city"`
-	District              string           `json:"district"`
-	DietGoal              string           `json:"diet_goal"`
-	ActivityTiming        string           `json:"activity_timing"`
-	UserGoal              string           `json:"user_goal"`
-	RemainingCalories     *float64         `json:"remaining_calories"`
-	AdditionalContext     string           `json:"additionalContext"`
-	ModelName             string           `json:"modelName"`
-	ExecutionMode         *string          `json:"execution_mode"`
-	PrecisionSessionID    *string          `json:"precision_session_id"`
-	AnalysisEngine        string           `json:"analysis_engine"`
-	TimezoneOffsetMinutes *int             `json:"timezone_offset_minutes"`
-	IsMultiView           bool             `json:"is_multi_view"`
-	PreviousResult        map[string]any   `json:"previousResult"`
-	CorrectionItems       []map[string]any `json:"correctionItems"`
-	ReferenceObjects      []map[string]any `json:"reference_objects"`
-	SubscribeStatus       string           `json:"subscribe_status"`
-	SourceType            string           `json:"source_type"`
+	ImageURL               string           `json:"image_url"`
+	ImageURLs              []string         `json:"image_urls"`
+	Text                   string           `json:"text"`
+	TextInput              string           `json:"text_input"`
+	Date                   string           `json:"date"`
+	MealType               string           `json:"meal_type"`
+	Province               string           `json:"province"`
+	City                   string           `json:"city"`
+	District               string           `json:"district"`
+	DietGoal               string           `json:"diet_goal"`
+	ActivityTiming         string           `json:"activity_timing"`
+	UserGoal               string           `json:"user_goal"`
+	RemainingCalories      *float64         `json:"remaining_calories"`
+	AdditionalContext      string           `json:"additionalContext"`
+	ModelName              string           `json:"modelName"`
+	ExecutionMode          *string          `json:"execution_mode"`
+	PrecisionSessionID     *string          `json:"precision_session_id"`
+	AnalysisEngine         string           `json:"analysis_engine"`
+	TimezoneOffsetMinutes  *int             `json:"timezone_offset_minutes"`
+	IsMultiView            bool             `json:"is_multi_view"`
+	PreviousResult         map[string]any   `json:"previousResult"`
+	CorrectionItems        []map[string]any `json:"correctionItems"`
+	CorrectionSourceTaskID string           `json:"correction_source_task_id"`
+	CorrectionRootTaskID   string           `json:"correction_root_task_id"`
+	ReferenceObjects       []map[string]any `json:"reference_objects"`
+	SubscribeStatus        string           `json:"subscribe_status"`
+	SourceType             string           `json:"source_type"`
 }
 
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
@@ -104,6 +108,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 		"recorded_on":        recordedOn,
 	}
 	applySubmitCompatibilityPayload(payload, input)
+	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
 	if input.PrecisionSessionID != nil {
@@ -182,6 +187,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 		"recorded_on":        recordedOn,
 	}
 	applySubmitCompatibilityPayload(payload, input)
+	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
 	if input.PrecisionSessionID != nil {
@@ -249,6 +255,12 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	if len(input.CorrectionItems) > 0 {
 		payload["correctionItems"] = input.CorrectionItems
 	}
+	if strings.TrimSpace(input.CorrectionSourceTaskID) != "" {
+		payload["correction_source_task_id"] = strings.TrimSpace(input.CorrectionSourceTaskID)
+	}
+	if strings.TrimSpace(input.CorrectionRootTaskID) != "" {
+		payload["correction_root_task_id"] = strings.TrimSpace(input.CorrectionRootTaskID)
+	}
 	if len(input.ReferenceObjects) > 0 {
 		payload["reference_objects"] = input.ReferenceObjects
 	}
@@ -258,6 +270,30 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	if strings.TrimSpace(input.SourceType) != "" {
 		payload["source_type"] = strings.ToLower(strings.TrimSpace(input.SourceType))
 	}
+}
+
+func (s *TaskService) attachCorrectionChain(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any) {
+	if len(input.CorrectionItems) == 0 && len(input.PreviousResult) == 0 {
+		return
+	}
+	sourceID := strings.TrimSpace(input.CorrectionSourceTaskID)
+	rootID := strings.TrimSpace(input.CorrectionRootTaskID)
+	if sourceID == "" {
+		return
+	}
+	sourceTask, err := s.tasks.GetTaskByID(ctx, sourceID)
+	if err != nil || sourceTask == nil || sourceTask.UserID != userID {
+		return
+	}
+	if rootID == "" {
+		rootID = stringFromAny(sourceTask.Payload["correction_root_task_id"])
+	}
+	if rootID == "" {
+		rootID = sourceID
+	}
+	payload["is_correction"] = true
+	payload["correction_source_task_id"] = sourceID
+	payload["correction_root_task_id"] = rootID
 }
 
 func hasPrecisionSupplement(input SubmitTaskInput) bool {
@@ -442,6 +478,7 @@ func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status st
 	}
 	if strings.TrimSpace(taskType) == "" {
 		tasks = filterAnalyzeHistoryTasks(tasks)
+		tasks = collapseAnalyzeHistoryTasks(tasks)
 	}
 	doneTaskIDs := make([]string, 0, len(tasks))
 	for _, task := range tasks {
@@ -470,7 +507,7 @@ func (s *TaskService) CountTasks(ctx context.Context, userID string) (int64, err
 	if err != nil {
 		return 0, err
 	}
-	return int64(len(filterAnalyzeHistoryTasks(tasks))), nil
+	return int64(len(collapseAnalyzeHistoryTasks(filterAnalyzeHistoryTasks(tasks)))), nil
 }
 
 func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (map[string]any, error) {
@@ -478,7 +515,7 @@ func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (ma
 	if err != nil {
 		return nil, err
 	}
-	tasks = filterAnalyzeHistoryTasks(tasks)
+	tasks = collapseAnalyzeHistoryTasks(filterAnalyzeHistoryTasks(tasks))
 	doneTaskIDs := make([]string, 0, len(tasks))
 	for _, task := range tasks {
 		if task.Status == "done" {
@@ -491,6 +528,7 @@ func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (ma
 	}
 	var recognizing, waitingRecord, recorded int64
 	waitingTasks := make([]domain.AnalysisTask, 0)
+	recentSince := time.Now().Add(-waitingRecordBadgeWindow)
 	for _, task := range tasks {
 		switch task.Status {
 		case "pending", "processing":
@@ -498,7 +536,7 @@ func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (ma
 		case "done":
 			if _, ok := recordedMap[task.ID]; ok {
 				recorded++
-			} else {
+			} else if task.CreatedAt != nil && task.CreatedAt.After(recentSince) {
 				waitingRecord++
 				waitingTasks = append(waitingTasks, task)
 			}
@@ -706,6 +744,63 @@ func filterAnalyzeHistoryTasks(tasks []domain.AnalysisTask) []domain.AnalysisTas
 	return out
 }
 
+func collapseAnalyzeHistoryTasks(tasks []domain.AnalysisTask) []domain.AnalysisTask {
+	seen := make(map[string]bool, len(tasks))
+	out := make([]domain.AnalysisTask, 0, len(tasks))
+	for _, task := range tasks {
+		key := analyzeHistoryGroupKey(task)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, task)
+	}
+	return out
+}
+
+func analyzeHistoryGroupKey(task domain.AnalysisTask) string {
+	if rootID := stringFromAny(task.Payload["correction_root_task_id"]); rootID != "" {
+		return "root:" + rootID
+	}
+	if sourceID := stringFromAny(task.Payload["correction_source_task_id"]); sourceID != "" {
+		return "root:" + sourceID
+	}
+	if fingerprint := analyzeHistoryInputFingerprint(task); fingerprint != "" {
+		return "input:" + analyzeHistoryCreatedDate(task) + ":" + fingerprint
+	}
+	return "task:" + task.ID
+}
+
+func analyzeHistoryInputFingerprint(task domain.AnalysisTask) string {
+	parts := make([]string, 0)
+	if len(task.ImagePaths) > 0 {
+		parts = append(parts, task.ImagePaths...)
+	} else if task.ImageURL != nil && strings.TrimSpace(*task.ImageURL) != "" {
+		parts = append(parts, strings.TrimSpace(*task.ImageURL))
+	} else if values := stringSliceFromAny(task.Payload["image_urls"]); len(values) > 0 {
+		parts = append(parts, values...)
+	} else if imageURL := stringFromAny(task.Payload["image_url"]); imageURL != "" {
+		parts = append(parts, imageURL)
+	}
+	if len(parts) > 0 {
+		return "image:" + strings.Join(parts, "|")
+	}
+	if task.TextInput != nil && strings.TrimSpace(*task.TextInput) != "" {
+		return "text:" + strings.Join(strings.Fields(*task.TextInput), " ")
+	}
+	if text := stringFromAny(task.Payload["text"]); text != "" {
+		return "text:" + strings.Join(strings.Fields(text), " ")
+	}
+	return ""
+}
+
+func analyzeHistoryCreatedDate(task domain.AnalysisTask) string {
+	if task.CreatedAt == nil {
+		return "unknown"
+	}
+	return task.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
+}
+
 func isTaskExcludedFromAnalyzeHistory(task domain.AnalysisTask) bool {
 	if boolFromAny(task.Payload["expiry_recognition"]) || boolFromAny(task.Payload["exercise"]) {
 		return true
@@ -740,6 +835,29 @@ func boolFromAny(value any) bool {
 		return v != 0
 	default:
 		return false
+	}
+}
+
+func stringSliceFromAny(value any) []string {
+	switch v := value.(type) {
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if text := strings.TrimSpace(item); text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if text := stringFromAny(item); text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

@@ -32,6 +32,7 @@ type mockMembershipRepo struct {
 	foodRecordOwner               string
 	shareClaimsToday              int
 	shareClaim                    *domain.UserCreditBonusEvent
+	saveMembershipCalls           int
 }
 
 func (m *mockMembershipRepo) ListActivePlans(ctx context.Context) ([]domain.MembershipPlan, error) {
@@ -61,6 +62,7 @@ func (m *mockMembershipRepo) GetActiveMembership(ctx context.Context, userID str
 	return nil, nil
 }
 func (m *mockMembershipRepo) SaveMembership(ctx context.Context, userID string, updates map[string]any) (*domain.UserMembership, error) {
+	m.saveMembershipCalls++
 	if m.membership == nil {
 		m.membership = &domain.UserMembership{ID: "um1", UserID: userID}
 	}
@@ -483,4 +485,79 @@ func TestMembershipService_GetMyMembership_ManualUpgradeKeepsHigherTierOnReconci
 	assert.Equal(t, advanced, *mockRepo.membership.CurrentPlanCode)
 	assert.Equal(t, 200, mockRepo.membership.DailyCredits)
 	assert.Equal(t, 200, data["daily_credits_max"])
+}
+
+func TestMembershipService_BuildPaymentTermsProratesUpgradeFromOriginalPeriodStart(t *testing.T) {
+	start := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	now := start.AddDate(0, 0, 5)
+	currentExpires := addMonths(start, 1)
+	light := "light_monthly"
+	standardYearly := "standard_yearly"
+	repo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{
+			light:          &domain.MembershipPlan{Code: light, Name: "轻度版月卡", Amount: 19.9, DurationMonths: 1, DailyCredits: 8, IsActive: true},
+			standardYearly: &domain.MembershipPlan{Code: standardYearly, Name: "标准版年卡", Amount: 299, DurationMonths: 12, DailyCredits: 20, IsActive: true},
+		},
+	}
+	svc := NewMembershipService(repo)
+	membership := &domain.UserMembership{
+		ID:                 "um1",
+		UserID:             "u1",
+		CurrentPlanCode:    &light,
+		Status:             "active",
+		CurrentPeriodStart: &start,
+		ExpiresAt:          &currentExpires,
+		DailyCredits:       8,
+	}
+
+	terms, err := svc.buildMembershipPaymentTerms(context.Background(), repo.planByCode[standardYearly], membership, now)
+	require.NoError(t, err)
+	assert.Equal(t, "prorated_current_period_upgrade", terms.Mode)
+	assert.True(t, timeMatches(&terms.TargetPeriodStart, start))
+	assert.True(t, timeMatches(&terms.TargetExpiresAt, addMonths(start, 12)))
+	assert.Less(t, terms.ChargeAmount, repo.planByCode[standardYearly].Amount)
+	assert.Greater(t, terms.ChargeAmount, 270.0)
+}
+
+func TestMembershipService_ActivateMembershipUsesProratedUpgradeTargetPeriod(t *testing.T) {
+	start := time.Now().AddDate(0, 0, -5)
+	currentExpires := addMonths(start, 1)
+	targetExpires := addMonths(start, 12)
+	standard := "standard_monthly"
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{
+			standard: &domain.MembershipPlan{Code: standard, Name: "标准版", DailyCredits: 20, IsActive: true},
+		},
+		membership: &domain.UserMembership{
+			ID:                 "um1",
+			UserID:             "u1",
+			CurrentPlanCode:    &standard,
+			Status:             "active",
+			CurrentPeriodStart: &start,
+			ExpiresAt:          &currentExpires,
+			DailyCredits:       8,
+		},
+		user: &membershiprepo.User{ID: "u1"},
+	}
+	svc := NewMembershipService(mockRepo)
+	payment := &domain.MembershipPayment{
+		ID:             "pay1",
+		UserID:         "u1",
+		PlanCode:       standard,
+		Status:         "paid",
+		DurationMonths: 12,
+		Extra: map[string]any{
+			"upgrade_terms": map[string]any{
+				"mode":                "prorated_current_period_upgrade",
+				"target_period_start": start.Format(time.RFC3339),
+				"target_expires_at":   targetExpires.Format(time.RFC3339),
+			},
+		},
+	}
+
+	updated, err := svc.activateMembershipFromPayment(context.Background(), payment, time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, updated.ExpiresAt)
+	assert.True(t, timeMatches(updated.CurrentPeriodStart, start))
+	assert.True(t, timeMatches(updated.ExpiresAt, targetExpires))
 }

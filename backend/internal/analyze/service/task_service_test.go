@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
@@ -103,6 +104,47 @@ func TestTaskService_ListTasks(t *testing.T) {
 	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, tasks[0].ImagePaths)
 }
 
+func TestTaskService_ListTasksCollapsesRepeatedSameDayInput(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+	now := time.Now()
+	olderCreatedAt := now.Add(-10 * time.Minute)
+	newerCreatedAt := now.Add(-5 * time.Minute)
+	imageURL := "https://example.com/meal.jpg"
+	older := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done", ImageURL: &imageURL, CreatedAt: &olderCreatedAt}
+	newer := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done", ImageURL: &imageURL, CreatedAt: &newerCreatedAt}
+	require.NoError(t, taskRepo.CreateTask(ctx, older))
+	require.NoError(t, taskRepo.CreateTask(ctx, newer))
+
+	tasks, err := svc.ListTasks(ctx, "user1", "", "", 10)
+	require.NoError(t, err)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, newer.ID, tasks[0].ID)
+}
+
+func TestTaskService_SubmitCorrectionStoresChainRoot(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+	imageURL := "https://example.com/meal.jpg"
+	source := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done", ImageURL: &imageURL}
+	require.NoError(t, taskRepo.CreateTask(ctx, source))
+
+	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
+		ImageURL:               imageURL,
+		CorrectionSourceTaskID: source.ID,
+		PreviousResult:         map[string]any{"description": "old"},
+		CorrectionItems:        []map[string]any{{"name": "米饭", "weight": 100}},
+	})
+	require.NoError(t, err)
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, true, task.Payload["is_correction"])
+	assert.Equal(t, source.ID, task.Payload["correction_source_task_id"])
+	assert.Equal(t, source.ID, task.Payload["correction_root_task_id"])
+}
+
 func TestTaskService_CountTasks(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
@@ -128,6 +170,28 @@ func TestTaskService_CountTasksByStatus(t *testing.T) {
 	assert.Equal(t, int64(0), counts["waiting_record"])
 	assert.Equal(t, int64(0), counts["recorded"])
 	assert.Equal(t, false, counts["has_unseen_waiting_record"])
+}
+
+func TestTaskService_CountTasksByStatusWaitingRecordUsesRecentWindow(t *testing.T) {
+	db, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+	now := time.Now()
+	recentCreatedAt := now.Add(-2 * time.Hour)
+	oldCreatedAt := now.Add(-25 * time.Hour)
+
+	recentWaiting := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done", CreatedAt: &recentCreatedAt}
+	oldWaiting := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food_text", Status: "done", CreatedAt: &oldCreatedAt}
+	recentRecorded := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done", CreatedAt: &recentCreatedAt}
+	require.NoError(t, taskRepo.CreateTask(ctx, recentWaiting))
+	require.NoError(t, taskRepo.CreateTask(ctx, oldWaiting))
+	require.NoError(t, taskRepo.CreateTask(ctx, recentRecorded))
+	require.NoError(t, db.Exec(`INSERT INTO user_food_records (id, user_id, source_task_id) VALUES (?, ?, ?)`, "record1", "user1", recentRecorded.ID).Error)
+
+	counts, err := svc.CountTasksByStatus(ctx, "user1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), counts["waiting_record"])
+	assert.Equal(t, true, counts["has_unseen_waiting_record"])
 }
 
 func TestTaskService_GetTask(t *testing.T) {

@@ -159,6 +159,8 @@ type AnalyzeInput struct {
 	AnalysisEngine        string           `json:"analysis_engine"`
 	IsMultiView           bool             `json:"is_multi_view"`
 	ReferenceObjects      []map[string]any `json:"reference_objects"`
+	PreviousResult        map[string]any   `json:"previousResult"`
+	CorrectionItems       []map[string]any `json:"correctionItems"`
 }
 
 func normalizeExecutionMode(mode *string) string {
@@ -421,10 +423,11 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 	}
 	additionalLine := ""
 	if input.AdditionalContext != "" {
-		additionalLine = fmt.Sprintf(`用户补充背景信息: "%s"。请根据此信息调整对隐形成分或烹饪方式的判断。`, input.AdditionalContext)
+		additionalLine = fmt.Sprintf("用户补充背景信息:\n%s\n请根据此信息调整对隐形成分或烹饪方式的判断。", input.AdditionalContext)
 	}
+	correctionBlock := buildCorrectionContextBlock(input)
 	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称和可食部分重量；营养成分由后端数据库查表补充，不要自行估算营养。
-%s%s
+%s%s%s
 识别规则：
 - 只识别图片中实际可见的食物，不补充看不见的食物
 - 不输出餐具、包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
@@ -444,6 +447,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - pfc_ratio_comment 可根据食物结构简要评价，不要编具体营养数值
 - absorption_notes 可简述烹饪/搭配影响，不要编具体营养数值
 - context_advice 1-2句，<= 32字，无需则空字符串
+- 如果这是纠错任务，必须基于原图、上一轮结果和用户纠错说明重新判断；不要机械照抄上一轮结果，也不要仅把前端列表原样返回
 - 只返回 JSON
 
 JSON:
@@ -454,7 +458,7 @@ JSON:
   "pfc_ratio_comment":"",
   "absorption_notes":"",
   "context_advice":""
-}`, tagBlock, additionalLine)
+}`, tagBlock, additionalLine, correctionBlock)
 }
 
 func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
@@ -528,18 +532,20 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 	if input.AdditionalContext != "" {
 		contextLine = "用户补充说明：" + input.AdditionalContext
 	}
+	correctionBlock := buildCorrectionContextBlock(input)
 	return fmt.Sprintf(`你是食物文字解析助手。请把用户的自然语言饮食描述解析成可查营养数据库的结构化食物名称和重量；营养成分由后端数据库统一计算，不要输出营养值。
 
 用户描述:
 %s
 
 %s
-%s解析规则：
+%s%s解析规则：
 - 只输出用户明确描述的食物，不补充没有出现的食物
 - 如果用户写了明确重量、个数、半份、一碗、一杯等份量，请换算为克；没有明确重量时按日常熟食份量保守估算
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 相同食物合并为一项，重量为合计重量
 - 混合菜无法可靠拆分时，作为一道常见菜名输出
+- 如果这是纠错任务，必须基于原始文字、上一轮结果和用户纠错说明重新判断；不要机械照抄上一轮结果，也不要仅把前端列表原样返回
 
 输出要求：
 - 简体中文
@@ -558,7 +564,81 @@ JSON:
   "pfc_ratio_comment":"",
   "absorption_notes":"",
   "context_advice":""
-}`, strings.TrimSpace(input.Text), contextLine, tagBlock)
+}`, strings.TrimSpace(input.Text), contextLine, tagBlock, correctionBlock)
+}
+
+func buildCorrectionContextBlock(input AnalyzeInput) string {
+	parts := []string{}
+	if len(input.PreviousResult) > 0 {
+		prevParts := []string{}
+		if desc := strings.TrimSpace(fmt.Sprintf("%v", input.PreviousResult["description"])); desc != "" && desc != "<nil>" {
+			prevParts = append(prevParts, "上一轮餐食描述："+desc)
+		}
+		if insight := strings.TrimSpace(fmt.Sprintf("%v", input.PreviousResult["insight"])); insight != "" && insight != "<nil>" {
+			prevParts = append(prevParts, "上一轮健康建议："+insight)
+		}
+		if itemText := formatCorrectionItemsForPrompt(toItems(input.PreviousResult["items"])); itemText != "" {
+			prevParts = append(prevParts, "上一轮识别结果："+itemText)
+		}
+		if len(prevParts) > 0 {
+			parts = append(parts, "第一轮分析输出 / 当前结果页基线（可能已包含用户手动修改后的名称与重量）：\n- "+strings.Join(prevParts, "\n- "))
+		}
+	}
+	if itemText := formatCorrectionItemsForPrompt(input.CorrectionItems); itemText != "" {
+		parts = append(parts, "用户在纠错列表中提交的结构化清单：\n"+itemText)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "\n\n这是一次基于「原始输入 + 上一轮结果 + 用户纠错说明」的二次纠错分析。\n" +
+		strings.Join(parts, "\n\n") +
+		"\n\n信息优先级（高到低）：\n1. 用户本轮纠错说明和结构化清单\n2. 上一轮分析输出 / 当前结果页基线\n3. 原始图片或原始文字\n若高优先级信息与低优先级冲突，必须以前者为准；但仍要让 AI 重新分析名称、重量和是否新增/删除食物。\n"
+}
+
+func formatCorrectionItemsForPrompt(items []map[string]any) string {
+	if len(items) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(items))
+	for index, item := range items {
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		if name == "" || name == "<nil>" {
+			continue
+		}
+		weight := numberFromAny(item["estimatedWeightGrams"])
+		if weight <= 0 {
+			weight = numberFromAny(item["weight"])
+		}
+		if weight <= 0 {
+			weight = numberFromAny(item["originalWeightGrams"])
+		}
+		if weight <= 0 {
+			weight = numberFromAny(item["originalWeight"])
+		}
+		sourceName := strings.TrimSpace(fmt.Sprintf("%v", item["sourceName"]))
+		if sourceName == "<nil>" {
+			sourceName = ""
+		}
+		editTags := []string{}
+		if boolFromAny(item["nameEdited"]) {
+			editTags = append(editTags, "名称已改")
+		}
+		if boolFromAny(item["weightEdited"]) {
+			editTags = append(editTags, "重量已改")
+		}
+		line := fmt.Sprintf("%d. %s", index+1, name)
+		if weight > 0 {
+			line += fmt.Sprintf(" %.0fg", weight)
+		}
+		if sourceName != "" && sourceName != name {
+			line += fmt.Sprintf("（原识别：%s）", sourceName)
+		}
+		if len(editTags) > 0 {
+			line += " [" + strings.Join(editTags, "、") + "]"
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildExecutionModeHint(mode string) string {

@@ -20,7 +20,10 @@ import {
   deleteFoodRecord,
   getAnalyzeTaskStatusCount,
   getFoodExpiryDashboard,
+  generateDietRecommendation,
   type DashboardTargets,
+  type DietRecommendationResult,
+  type DietRecommendationScene,
   type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
@@ -74,7 +77,7 @@ import {
 } from './utils/constants'
 import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, type MealPosterSharePayload } from './components'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, type MealPosterSharePayload } from './components'
 
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
 function getInviteCodeFromUserId(userId: string): string {
@@ -591,6 +594,10 @@ function IndexPage() {
   const [dailyPosterGenerating, setDailyPosterGenerating] = useState(false)
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = useState(false)
+  const [dietRecVisible, setDietRecVisible] = useState(false)
+  const [dietRecScene, setDietRecScene] = useState<DietRecommendationScene>('eat_out')
+  const [dietRecLoading, setDietRecLoading] = useState(false)
+  const [dietRecResult, setDietRecResult] = useState<DietRecommendationResult | null>(null)
 
   // 餐食卡片操作状态
   const [mealActionSheetVisible, setMealActionSheetVisible] = useState(false)
@@ -1455,6 +1462,88 @@ function IndexPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(date)}` })
   }
 
+  const openBodyTrends = (tab: 'weight' | 'water' | 'exercise') => {
+    if (!getAccessToken()) {
+      redirectToLogin()
+      return
+    }
+    const date = selectedDateRef.current || formatDateKey(new Date())
+    Taro.navigateTo({
+      url: `${extraPkgUrl('/pages/body-trends/index')}?tab=${encodeURIComponent(tab)}&date=${encodeURIComponent(date)}`
+    })
+  }
+
+  const buildDietRecommendationPayload = useCallback((scene: DietRecommendationScene) => {
+    const macros = intakeData.macros
+    const calorieRemaining = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
+    const proteinGap = Math.max(0, Number(((macros.protein?.target || 0) - (macros.protein?.current || 0)).toFixed(1)))
+    const carbsGap = Math.max(0, Number(((macros.carbs?.target || 0) - (macros.carbs?.current || 0)).toFixed(1)))
+    const fatGap = Math.max(0, Number(((macros.fat?.target || 0) - (macros.fat?.current || 0)).toFixed(1)))
+    return {
+      scene,
+      date: mapCalendarDateToApi(selectedDateRef.current || selectedDate) || selectedDate,
+      calorie_remaining: calorieRemaining,
+      macro_gaps: {
+        calories: calorieRemaining,
+        protein: proteinGap,
+        carbs: carbsGap,
+        fat: fatGap
+      },
+      targets: {
+        calories: intakeData.target,
+        protein: macros.protein?.target || 0,
+        carbs: macros.carbs?.target || 0,
+        fat: macros.fat?.target || 0
+      },
+      current: {
+        calories: intakeData.current,
+        protein: macros.protein?.current || 0,
+        carbs: macros.carbs?.current || 0,
+        fat: macros.fat?.current || 0
+      },
+      meals: (meals || []).map((meal) => ({
+        type: meal.type,
+        name: meal.name,
+        description: meal.description || '',
+        calories: normalizeDisplayNumber(meal.calorie),
+        protein: normalizeDisplayNumber(meal.protein),
+        carbs: normalizeDisplayNumber(meal.carbs),
+        fat: normalizeDisplayNumber(meal.fat)
+      }))
+    }
+  }, [intakeData, meals, selectedDate])
+
+  const requestDietRecommendation = useCallback(async (scene: DietRecommendationScene) => {
+    if (!getAccessToken()) {
+      redirectToLogin()
+      return
+    }
+    setDietRecScene(scene)
+    setDietRecVisible(true)
+    setDietRecLoading(true)
+    try {
+      const result = await generateDietRecommendation(buildDietRecommendationPayload(scene))
+      setDietRecResult(result)
+    } catch (error) {
+      await showUnifiedApiError(error, '生成推荐失败')
+    } finally {
+      setDietRecLoading(false)
+    }
+  }, [buildDietRecommendationPayload])
+
+  const openDietRecommendation = useCallback((scene: DietRecommendationScene) => {
+    void requestDietRecommendation(scene)
+  }, [requestDietRecommendation])
+
+  const handleDietRecommendationSceneChange = useCallback((scene: DietRecommendationScene) => {
+    if (scene === dietRecScene && dietRecResult) return
+    void requestDietRecommendation(scene)
+  }, [dietRecScene, dietRecResult, requestDietRecommendation])
+
+  const refreshDietRecommendation = useCallback(() => {
+    void requestDietRecommendation(dietRecScene)
+  }, [dietRecScene, requestDietRecommendation])
+
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
   const syncDashboardForDate = useCallback(async (date: string) => {
     // 若同日期请求已在进行中，跳过本次调用
@@ -2220,10 +2309,34 @@ function IndexPage() {
           </View>
         </View>
 
+        <View className='diet-rec-entry'>
+          <View className='diet-rec-entry-main'>
+            <View className='diet-rec-entry-icon'>
+              <Text className='iconfont icon-canciguanli diet-rec-entry-icon-text' />
+            </View>
+            <View className='diet-rec-entry-copy'>
+              <Text className='diet-rec-entry-title'>今天吃什么</Text>
+              <Text className='diet-rec-entry-subtitle'>
+                {dashboardBusy || isGuest
+                  ? '按剩余目标推荐一餐'
+                  : `还可吃 ${formatDisplayNumber(Math.max(0, Math.round(intakeData.target - intakeData.current)))} kcal`}
+              </Text>
+            </View>
+          </View>
+          <View className='diet-rec-entry-actions'>
+            <View className='diet-rec-entry-btn' onClick={() => openDietRecommendation('eat_out')}>
+              <Text className='diet-rec-entry-btn-text'>外面吃</Text>
+            </View>
+            <View className='diet-rec-entry-btn primary' onClick={() => openDietRecommendation('cook_home')}>
+              <Text className='diet-rec-entry-btn-text primary'>自己做</Text>
+            </View>
+          </View>
+        </View>
+
         {/* 体重/喝水状态卡片 */}
         <View className='body-status-section'>
           {/* 体重卡片 */}
-          <View className='body-status-card weight-card' onClick={openWeightEditor}>
+          <View className='body-status-card weight-card' onClick={() => openBodyTrends('weight')} onLongPress={openWeightEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
@@ -2257,12 +2370,12 @@ function IndexPage() {
                 ? '记录体重，追踪变化'
                 : weightSummary.latestWeight 
                   ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
-                  : '记录体重，追踪变化'}
+                  : '查看趋势，记录体重'}
             </Text>
           </View>
 
           {/* 喝水卡片 */}
-          <View className='body-status-card water-card' onClick={openWaterEditor}>
+          <View className='body-status-card water-card' onClick={() => openBodyTrends('water')} onLongPress={openWaterEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
@@ -2285,12 +2398,12 @@ function IndexPage() {
               )}
             </View>
             <Text className='body-status-hint'>
-              {dashboardBusy || isGuest ? '记录喝水，保持水分' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+              {dashboardBusy || isGuest ? '查看喝水趋势' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
             </Text>
           </View>
 
           {/* 运动卡片 */}
-          <View className='body-status-card exercise-card' onClick={openExerciseRecord}>
+          <View className='body-status-card exercise-card' onClick={() => openBodyTrends('exercise')} onLongPress={openExerciseRecord}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
@@ -2315,7 +2428,7 @@ function IndexPage() {
               )}
             </View>
             <Text className='body-status-hint'>
-              点击记录今日运动
+              查看运动趋势
             </Text>
           </View>
         </View>
@@ -2734,6 +2847,16 @@ function IndexPage() {
 
       {/* 记录菜单弹窗 */}
       <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} hasUnseenWaitingRecord={hasUnseenWaitingRecord} />
+
+      <DietRecommendationSheet
+        visible={dietRecVisible}
+        scene={dietRecScene}
+        loading={dietRecLoading}
+        result={dietRecResult}
+        onClose={() => setDietRecVisible(false)}
+        onChangeScene={handleDietRecommendationSceneChange}
+        onRefresh={refreshDietRecommendation}
+      />
 
       <View className='poster-canvas-wrap'>
         <Canvas

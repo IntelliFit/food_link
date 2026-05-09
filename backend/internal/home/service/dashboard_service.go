@@ -227,11 +227,17 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 		mealProtein += record.TotalProtein
 		mealCarbs += record.TotalCarbs
 		mealFat += record.TotalFat
+		recordImagePaths := make([]string, 0)
+		recordSeen := map[string]bool{}
 		for _, imagePath := range record.ImagePaths {
 			imagePath = s.resolveFoodImageURL(imagePath)
 			if imagePath != "" && !seen[imagePath] {
 				imagePaths = append(imagePaths, imagePath)
 				seen[imagePath] = true
+			}
+			if imagePath != "" && !recordSeen[imagePath] {
+				recordImagePaths = append(recordImagePaths, imagePath)
+				recordSeen[imagePath] = true
 			}
 		}
 		if record.ImagePath != nil {
@@ -239,6 +245,10 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 			if resolved != "" && !seen[resolved] {
 				imagePaths = append(imagePaths, resolved)
 				seen[resolved] = true
+			}
+			if resolved != "" && !recordSeen[resolved] {
+				recordImagePaths = append(recordImagePaths, resolved)
+				recordSeen[resolved] = true
 			}
 		}
 		title := ""
@@ -255,8 +265,8 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 			"record_time":    record.RecordTime,
 			"total_calories": round1(record.TotalCalories),
 			"title":          title,
-			"image_path":     firstOrNil(imagePaths),
-			"image_paths":    imagePaths,
+			"image_path":     firstOrNil(recordImagePaths),
+			"image_paths":    recordImagePaths,
 			"full_record":    record,
 		})
 	}
@@ -300,15 +310,22 @@ func (s *DashboardService) resolveFoodImageURL(path string) string {
 	return s.storage.ResolveReferenceURL("food-images", path)
 }
 
+type homeExpirySummaryItem struct {
+	item map[string]any
+	rank int
+	days int
+}
+
 func buildExpirySummary(items []homerepo.ExpiryItem) map[string]any {
 	today := time.Now().In(homerepo.ChinaTZ()).Truncate(24 * time.Hour)
-	type summaryItem struct {
-		item map[string]any
-		rank int
-		days int
-	}
-	summaries := make([]summaryItem, 0)
+	activeItems := make([]homerepo.ExpiryItem, 0, len(items))
 	for _, item := range items {
+		if item.Status == "" || item.Status == "active" {
+			activeItems = append(activeItems, item)
+		}
+	}
+	summaries := make([]homeExpirySummaryItem, 0)
+	for _, item := range activeItems {
 		urgency := "fresh"
 		label := "保鲜中"
 		days := 9999
@@ -325,22 +342,30 @@ func buildExpirySummary(items []homerepo.ExpiryItem) map[string]any {
 			}
 		}
 		rank := map[string]int{"expired": 0, "today": 1, "soon": 2, "fresh": 3}[urgency]
-		summaries = append(summaries, summaryItem{
+		summaries = append(summaries, homeExpirySummaryItem{
 			rank: rank,
 			days: days,
 			item: map[string]any{
 				"id":                item.ID,
+				"user_id":           item.UserID,
+				"food_name":         deref(item.FoodName),
 				"name":              deref(item.FoodName),
 				"status":            item.Status,
 				"expire_date":       item.ExpireDate,
+				"deadline_label":    formatExpiryDeadlineLabel(item.ExpireDate),
 				"urgency":           urgency,
 				"urgency_label":     label,
+				"urgency_level":     homeExpiryUrgencyLevel(urgency),
 				"days_until_expire": days,
+				"days_left":         days,
 				"storage_type":      deref(item.StorageType),
+				"storage_location":  homeExpiryStorageLabel(deref(item.StorageType)),
+				"quantity_text":     deref(item.QuantityNote),
+				"note":              deref(item.Note),
 			},
 		})
 	}
-	slices.SortFunc(summaries, func(a, b summaryItem) int {
+	slices.SortFunc(summaries, func(a, b homeExpirySummaryItem) int {
 		if a.rank != b.rank {
 			return a.rank - b.rank
 		}
@@ -354,9 +379,61 @@ func buildExpirySummary(items []homerepo.ExpiryItem) map[string]any {
 		out = append(out, item.item)
 	}
 	return map[string]any{
-		"count": len(items),
-		"items": out,
+		"count":        len(activeItems),
+		"pendingCount": len(activeItems),
+		"soonCount":    countHomeExpiryUrgency(summaries, "today", "soon"),
+		"overdueCount": countHomeExpiryUrgency(summaries, "expired"),
+		"items":        out,
 	}
+}
+
+func formatExpiryDeadlineLabel(expireDate *time.Time) *string {
+	if expireDate == nil {
+		return nil
+	}
+	label := expireDate.In(homerepo.ChinaTZ()).Format("01-02")
+	return &label
+}
+
+func homeExpiryUrgencyLevel(urgency string) string {
+	switch urgency {
+	case "expired":
+		return "overdue"
+	case "today":
+		return "today"
+	case "soon":
+		return "soon"
+	default:
+		return "normal"
+	}
+}
+
+func homeExpiryStorageLabel(value string) string {
+	switch value {
+	case "room_temp":
+		return "常温"
+	case "frozen":
+		return "冷冻"
+	case "refrigerated":
+		return "冷藏"
+	default:
+		return ""
+	}
+}
+
+func countHomeExpiryUrgency(items []homeExpirySummaryItem, values ...string) int {
+	wanted := map[string]struct{}{}
+	for _, value := range values {
+		wanted[value] = struct{}{}
+	}
+	count := 0
+	for _, item := range items {
+		urgency, _ := item.item["urgency"].(string)
+		if _, ok := wanted[urgency]; ok {
+			count++
+		}
+	}
+	return count
 }
 
 func previousChinaDate(date string) string {

@@ -317,6 +317,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/stats/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsSummary)
 	engine.POST("/api/stats/insight/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateStatsInsight)
 	engine.POST("/api/stats/insight/save", authmw.RequireJWT(jwtSvc), healthHandler.SaveStatsInsight)
+	engine.POST("/api/diet/recommendations", authmw.RequireJWT(jwtSvc), healthHandler.GenerateDietRecommendation)
 	engine.GET("/api/exercise-calories/daily", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseCaloriesDaily)
 	engine.GET("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseLogs)
 	engine.POST("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.CreateExerciseLog)
@@ -341,6 +342,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/public-food-library/:item_id/like", authmw.RequireJWT(jwtSvc), publicFoodHandler.Unlike)
 	engine.POST("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collect)
 	engine.DELETE("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Uncollect)
+	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
 	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.AddComment)
 

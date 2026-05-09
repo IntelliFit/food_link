@@ -2,10 +2,12 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 
 	"food_link/backend/internal/foodrecord/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -53,7 +55,11 @@ func (r *FoodRecordRepo) GetByID(ctx context.Context, recordID string) (*domain.
 }
 
 func (r *FoodRecordRepo) Update(ctx context.Context, userID, recordID string, updates map[string]any) (*domain.FoodRecord, error) {
-	result := r.db.WithContext(ctx).Model(&domain.FoodRecord{}).Where("id = ? AND user_id = ?", recordID, userID).Updates(updates)
+	normalizedUpdates, err := normalizeFoodRecordJSONUpdates(updates)
+	if err != nil {
+		return nil, err
+	}
+	result := r.db.WithContext(ctx).Model(&domain.FoodRecord{}).Where("id = ? AND user_id = ?", recordID, userID).Updates(normalizedUpdates)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -61,6 +67,26 @@ func (r *FoodRecordRepo) Update(ctx context.Context, userID, recordID string, up
 		return nil, nil
 	}
 	return r.GetByID(ctx, recordID)
+}
+
+func normalizeFoodRecordJSONUpdates(updates map[string]any) (map[string]any, error) {
+	if len(updates) == 0 {
+		return updates, nil
+	}
+	out := make(map[string]any, len(updates))
+	for key, value := range updates {
+		switch key {
+		case "items", "image_paths":
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return nil, err
+			}
+			out[key] = datatypes.JSON(encoded)
+		default:
+			out[key] = value
+		}
+	}
+	return out, nil
 }
 
 func (r *FoodRecordRepo) Delete(ctx context.Context, userID, recordID string) error {

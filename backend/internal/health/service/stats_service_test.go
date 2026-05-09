@@ -120,6 +120,20 @@ func TestStatsInsightUsesDeepSeekV4FlashModel(t *testing.T) {
 	assert.Equal(t, "deepseek-v4-flash", statsInsightDeepSeekModel)
 }
 
+func TestStatsService_GenerateDietRecommendationFallback(t *testing.T) {
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
+	result, err := svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene:            "cook_home",
+		CalorieRemaining: 450,
+		MacroGaps:        DietRecommendationMacro{Protein: 30, Carbs: 50, Fat: 8},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "cook_home", result.Scene)
+	assert.Equal(t, "rule_fallback", result.GeneratedBy)
+	assert.NotEmpty(t, result.Recommendations)
+	assert.NotEmpty(t, result.Recommendations[0].Items)
+}
+
 func TestStatsService_SaveInsight(t *testing.T) {
 	repo := &mockStatsRepo{}
 	bodyMetrics := &mockBodyMetricsProvider{}

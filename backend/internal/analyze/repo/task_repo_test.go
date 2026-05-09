@@ -100,6 +100,41 @@ func TestTaskRepo_CountTasksByStatus(t *testing.T) {
 	assert.Equal(t, int64(2), counts["done"])
 }
 
+func TestTaskRepo_CountUnrecordedDoneTasksSince(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewTaskRepo(db)
+	ctx := context.Background()
+	requireNoError := func(err error) {
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	requireNoError(db.Exec(`CREATE TABLE user_food_records (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		source_task_id TEXT
+	)`).Error)
+	now := time.Now()
+	recentCreatedAt := now.Add(-2 * time.Hour)
+	oldCreatedAt := now.Add(-25 * time.Hour)
+
+	recentWaiting := &domain.AnalysisTask{UserID: "u1", TaskType: "food", Status: "done", CreatedAt: &recentCreatedAt}
+	oldWaiting := &domain.AnalysisTask{UserID: "u1", TaskType: "food", Status: "done", CreatedAt: &oldCreatedAt}
+	recentRecorded := &domain.AnalysisTask{UserID: "u1", TaskType: "food_text", Status: "done", CreatedAt: &recentCreatedAt}
+	recentPending := &domain.AnalysisTask{UserID: "u1", TaskType: "food", Status: "pending", CreatedAt: &recentCreatedAt}
+	otherUser := &domain.AnalysisTask{UserID: "u2", TaskType: "food", Status: "done", CreatedAt: &recentCreatedAt}
+	requireNoError(r.CreateTask(ctx, recentWaiting))
+	requireNoError(r.CreateTask(ctx, oldWaiting))
+	requireNoError(r.CreateTask(ctx, recentRecorded))
+	requireNoError(r.CreateTask(ctx, recentPending))
+	requireNoError(r.CreateTask(ctx, otherUser))
+	requireNoError(db.Exec(`INSERT INTO user_food_records (id, user_id, source_task_id) VALUES (?, ?, ?)`, "record1", "u1", recentRecorded.ID).Error)
+
+	count, err := r.CountUnrecordedDoneTasksSince(ctx, "u1", now.Add(-24*time.Hour))
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+}
+
 func TestTaskRepo_UpdateTaskResult(t *testing.T) {
 	db := setupTestDB(t)
 	r := NewTaskRepo(db)

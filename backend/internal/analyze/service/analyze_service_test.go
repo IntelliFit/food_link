@@ -130,6 +130,45 @@ func TestBuildPromptStrictMode(t *testing.T) {
 	assert.Contains(t, prompt, "absorption_notes")
 }
 
+func TestBuildDBFirstPromptIncludesCorrectionContext(t *testing.T) {
+	input := AnalyzeInput{
+		ImageURL:          "https://example.com/meal.jpg",
+		AdditionalContext: "米饭只有薄薄一层，肉丸其实是鸡肉块",
+		PreviousResult: map[string]any{
+			"description": "米饭肉丸",
+			"items": []map[string]any{
+				{"name": "白米饭", "estimatedWeightGrams": 220},
+				{"name": "肉丸", "estimatedWeightGrams": 120},
+			},
+		},
+		CorrectionItems: []map[string]any{
+			{
+				"name":       "白米饭",
+				"weight":     90,
+				"nameEdited": false,
+			},
+			{
+				"name":       "青椒炒鸡块",
+				"weight":     80,
+				"sourceName": "肉丸",
+				"nameEdited": true,
+			},
+		},
+	}
+
+	prompt := buildImageDBFirstPrompt(input, nil)
+
+	assert.Contains(t, prompt, "二次纠错分析")
+	assert.Contains(t, prompt, "米饭只有薄薄一层")
+	assert.Contains(t, prompt, "上一轮识别结果")
+	assert.Contains(t, prompt, "白米饭 220g")
+	assert.Contains(t, prompt, "用户在纠错列表中提交的结构化清单")
+	assert.Contains(t, prompt, "白米饭 90g")
+	assert.Contains(t, prompt, "青椒炒鸡块 80g")
+	assert.Contains(t, prompt, "原识别：肉丸")
+	assert.Contains(t, prompt, "仍要让 AI 重新分析")
+}
+
 func TestMergeBatchResults(t *testing.T) {
 	results := []map[string]any{
 		{

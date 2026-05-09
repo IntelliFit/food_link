@@ -1,5 +1,353 @@
 # 当前任务
 
+## 状态：已修复 - 精准模式分组估重加速
+
+- 2026-05-09 precision speed fix:
+  - 用户反馈：精准模式从 UI 看等待 4-5 分钟才完成，终端里早已出现部分识别结果，整体太慢。
+  - 定位：
+    - `precision_plan` 会把食物拆成多个 `precision_item_estimate` 子任务，但当前 worker 日志显示 `max_concurrent: 1`，所以 `grouped_parallel` 实际被串行执行。
+    - 每个子任务在首轮估重后还会做可选二次重量复核；复核失败/上游超时时此前可能吃满接近 2 分钟，导致 UI 一直等最终 `precision_aggregate`。
+    - 复核模型有时会从单个计划项扩展输出整餐食物，既拖慢又可能造成重复/扩项。
+  - 修复：
+    - Go worker 默认并发从 `1` 改为 `4`；`cmd/worker` fallback 和 `pkg/config` 默认值同步调整。本地 `backend/config.yaml` 也已写入 `worker.max_concurrent: 4`。
+    - 用户确认当前先不要二次重量复核；已将 `precisionRefineEnabled=false`，精准子任务只做首轮分项估重 + db_first 回算。
+    - 精准二次重量复核代码暂时保留为关闭状态；以后如需重新启用，仍有 `25s` 短超时，超时只跳过复核并沿用首轮估重。
+    - `parsePrecisionEstimateItems` 和 `parsePrecisionRefinedItems` 都按本组 `items_to_estimate` 做过滤，复核结果不能比本组计划食物扩项。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过；关闭二次复核后再次通过。
+    - `go test ./pkg/config -count=1` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration -count=1` 通过。
+    - `go build -o %TEMP%\food-link-worker-speed.exe ./cmd/worker` 通过；关闭二次复核后 `go build -o %TEMP%\food-link-worker-no-refine.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-speed.exe ./cmd/server` 通过。
+    - `git diff --check` 针对本轮文件通过，仅有 Windows CRLF warning。
+  - 复测要求：用户需重启 Go worker；重启后日志应显示 `max_concurrent: 4`。精准模式 3 个分组应并行推进，并且不再出现 `precision refine` / `precision refine skipped` 日志。
+
+## 状态：已修复 - 精准模式先做食物种类候选判别
+
+- 2026-05-09 precision food type candidates:
+  - 用户反馈：精准模式把莴苣识别成青菜、百叶包识别成蒸饺；强调“先把食物种类识别对，后面重量估计才有意义”。
+  - 判断：此前精准模式主要加强分组和估重，planner 直接输出单个 `item_name`，没有强迫模型在相似食物之间给候选、视觉证据和最终选择。
+  - 修复：
+    - `buildPrecisionPlanPrompt()` 新增强约束：每个主体必须先列 2-3 个候选食物，再根据视觉证据选择主名称。
+    - 明确要求比较切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式和烹饪方式。
+    - 明确提示易混淆项：莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。
+    - `itemsToEstimate` 支持并保留内部字段 `candidate_names / alternative_name / visual_evidence`，这些字段用于后续子任务，不展示在结果页。
+    - `buildPrecisionItemEstimatePromptSingle/Multi()` 会把候选和视觉证据带入分项估重；如果 planner 名称和视觉证据不一致，子任务允许修正 `name` 为更可能的候选食物。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go build -o %TEMP%\food-link-worker-foodtype.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-foodtype.exe ./cmd/server` 通过。
+    - `git diff --check` 针对本轮 worker 文件通过，仅有 Windows CRLF warning。
+
+## 状态：已修复 - 精准模式纠错 session 状态写库失败
+
+- 2026-05-09 precision correction status fix:
+  - 用户反馈：精准模式纠错等待很久后失败，前端显示 `new row for relation "precision_sessions" violates check constraint "precision_sessions_status_check"`。
+  - 根因：Go worker 的精准纠错完成分支把 `precision_sessions.status` 和返回结果 `precisionStatus` 写成了 `completed`；但 PostgreSQL check constraint 只允许 `collecting / estimating / needs_user_input / needs_retake / done / cancelled / failed`。
+  - 修复：
+    - `completeCorrectionTask()` 中精准 session 完成状态从 `completed` 改为 `done`。
+    - `precision_repo_test` 中对应 UpdateSession 测试期望同步改为 `done`。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go build -o %TEMP%\food-link-worker-precision-correction-status.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-precision-correction-status.exe ./cmd/server` 通过。
+    - `git diff --check` 针对本轮文件通过，仅有 Windows CRLF warning。
+    - `go test ./internal/analyze/repo -run TestPrecisionRepo_UpdateSession -count=1` 仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞，未能运行 sqlite repo 单测。
+  - 备注：精准纠错当前仍是“单次 AI 二次分析 + db_first 回算”，不是完整 precision planner/item/aggregate 链路；因此耗时主要取决于视觉模型调用。如果后续要进一步加速，需要产品上确认是否允许对结构化纠错清单走直接 db_first 回算。
+
+## 状态：已实现 - 识别记录列表折叠同一输入的重复纠错/重识别
+
+- 2026-05-09 analyze history duplicate collapse:
+  - 用户反馈：同一个食物/同一张图识别后，如果因为结果有误进行了 2 次修改或 2 次重新识别，`识别记录` 列表会显示多条几乎相同的记录，造成列表噪音。
+  - 过渡期 schema 判断：本轮只改 Go 后端列表聚合口径和前端纠错提交 payload，不新增/修改表、字段、索引、约束或字段类型。
+  - 修复：
+    - 纠错提交时，前端把当前 `analyzeSourceTaskId` 作为 `correction_source_task_id` 传给后端。
+    - Go 后端提交任务时校验 source task 属于当前用户，并写入 `is_correction/correction_source_task_id/correction_root_task_id` 到已有 `analysis_tasks.payload` JSON，不改 schema。
+    - `ListTasks/CountTasks/CountTasksByStatus` 对识别历史任务做折叠：优先按 `correction_root_task_id` 分组；兼容旧数据时，按同一天同一图片/同一文字输入分组，只保留最新一条。
+    - 识别记录列表、总数和最近 24 小时等待记录角标都使用折叠后的任务集，避免纠错/重识别重复堆叠。
+  - Verification:
+    - `go build -o %TEMP%\food-link-analyze-history-collapse-server.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\result\index.tsx src\utils\api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `go test ./internal/analyze/handler -run TestAnalyzeHandler_CountTasksByStatus -count=1` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - 已补 service 单测覆盖“同一天同一图片只展示最新”和“纠错任务写 root 链路”，但当前 Windows Go 环境 `CGO_ENABLED=0` 下 `go-sqlite3 requires cgo`，无法运行 service/sqlite 单测。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，未能截图/交互验证。
+
+## 状态：已修复 - 食物分析纠错恢复 AI 二次分析
+
+- 2026-05-09 correction AI reanalysis fix:
+  - 用户明确指出：纠错不是直接显示“已更新”，而是必须让 AI 基于纠错提示再次分析；需要参考 `dev` 分支 Python 设计。
+  - 已核对 `dev:backend/worker.py`：
+    - Python 纠错会把 `additionalContext`、`previousResult` 和 `correctionItems` 写入任务 payload。
+    - 图片/文字 db_first prompt 会把“上一轮餐食描述、上一轮识别结果、用户本轮纠错说明、结构化纠错清单”放进 prompt。
+    - AI 重新输出食物名称和重量；后端再走 db_first 营养库回算。
+    - 不是把前端纠错列表直接作为最终结果，也不是简单更新本地页面。
+  - 修复：
+    - `backend/internal/analyze/service/analyze_service.go` 的 `AnalyzeInput` 增加 `PreviousResult/CorrectionItems`。
+    - 图片和文字 db_first prompt 新增二次纠错上下文块，明确“基于原始输入 + 上一轮结果 + 用户纠错说明”重新分析，并禁止机械照抄上一轮或仅原样返回前端列表。
+    - `backend/internal/worker/worker.go` 的 `completeCorrectionTask` 改为真正调用 AI：普通图片走 `Analyze`，文字走 `AnalyzeText`，精准纠错也短路为同一套单次 AI 二次分析，不再进入 precision planner/item_estimate/aggregate。
+    - AI 输出后继续走 db_first；如果库未命中且输出为 0，仍保留纠错提交时页面已有营养作为 `user_correction_fallback`，避免热量归零。
+    - 前端结果页保留上一轮修复：纠错任务完成后当前页直接刷新结果，不再跳 loading 页。
+  - Verification:
+    - `go test ./internal/analyze/service -run '^(TestBuildDBFirstPromptIncludesCorrectionContext|TestBuildPromptStandardMode|TestBuildPromptStrictMode|TestParseLLMJSON|TestNormalizePayload)$'` 通过。
+    - `go test ./internal/worker -count=1` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-correction-ai-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-correction-ai-worker.exe ./cmd/worker` 通过。
+    - `eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能截图/交互验证。
+  - 复测要求：用户需重启 Go server + Go worker，并保持前端 watch 更新；重新发起一条新的纠错任务。预期会等待 AI 二次分析结果，结果页当前页刷新为新识别结果，而不是立刻“已更新”但内容不变。
+  - 2026-05-09 follow-up:
+    - 用户复测后反馈纠错一直显示提交中，随后提示“纠错处理超时”。
+    - 定位：前端 `waitForCorrectionTaskResult` 仍沿用上一版轻链路的 15 秒超时，但当前纠错已恢复 AI 二次分析，15 秒过短。
+    - 修复：结果页纠错等待超时从 15 秒改为 120 秒，轮询间隔从 700ms 改为 1200ms，loading 文案从“提交分析中...”改为“纠错分析中...”；超时文案改为“纠错分析仍在处理中，请稍后到识别记录查看”。
+    - 用户要求本轮不用跑测试，由用户自行复测。
+  - 2026-05-09 correction waiting page:
+    - 用户指出纠错也应该有专门等待页，像正常分析等待页一样。
+    - 当前项目没有独立的纠错等待页面文件；已复用现有 `packageExtra/pages/analyze-loading` 并增加 `correction=1` 模式。
+    - `src/packageExtra/pages/result/index.tsx` 纠错提交成功后不再在结果页轮询，改为跳转 `analyze-loading?correction=1`。
+    - `src/packageExtra/pages/analyze-loading/index.tsx` 新增纠错等待态：导航栏标题为“纠错分析中”，阶段文案为“理解纠错说明 → 重新分析食物 → 更新营养结果”，底部模式 badge 显示“纠错分析”，稍后查看文案也改为纠错分析语境。
+    - Verification: `eslint src/packageExtra/pages/result/index.tsx src/packageExtra/pages/analyze-loading/index.tsx src/utils/api.ts` 通过；`git diff --check` 通过，仅有 Windows CRLF warning。
+
+## 状态：已实现 - 首页体重/喝水/运动进入身体趋势页
+
+- 2026-05-09 health metrics stats IA discussion:
+  - 用户反馈：体重、喝水、运动目前缺少一个很好的统计页面；如果塞进底部「分析」页，会让已经很重的分析页继续膨胀。
+  - 当前产品背景：底部「分析」页已经开始从传统营养统计页转为「健康指数 / 饮食相关风险趋势」页面，主叙事更偏长期健康方向与风险参考。
+  - 用户初步设想：把体重、喝水、运动的长期趋势统计直接做在首页相关卡片后面，例如首页点击「体重」进入一个长期趋势页。
+  - 已实现第一版：
+    - 新增分包页 `src/packageExtra/pages/body-trends/`，路由为 `packageExtra/pages/body-trends/index`。
+    - `src/app.config.ts` 注册 `pages/body-trends/index`。
+    - 首页体重/喝水/运动三张状态卡点击后分别进入 `body-trends?tab=weight|water|exercise`。
+    - 新页面提供 3 个 tab：体重、喝水、运动；展示近 30 天摘要和近 21 天趋势图。
+    - 体重 tab 支持直接记录今日体重；喝水 tab 支持快捷加水；运动 tab 提供“去记录”跳转到既有记运动页。
+    - 不改数据库结构、不新增 migration、不新增表字段；只复用已有 `body-metrics` 与 `exercise-logs` 接口。
+  - Verification:
+    - `eslint src/packageExtra/pages/body-trends/index.tsx src/pages/index/index.tsx` 通过。
+    - `git diff --check` 针对本轮文件通过，仅有 Windows CRLF warning。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被项目既有历史类型错误阻塞；过滤 `body-trends` / 首页本轮入口没有新增报错。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，目标项目窗口自动化链路不可用，未能完成截图/交互验证。
+- 2026-05-09 body-trends weight delta refinement:
+  - 用户参考体重记录 App 截图指出：身体重量每次记录都要显示“比上次增加/减少多少”，而不是只在顶部展示一次。
+  - 已调整 `src/packageExtra/pages/body-trends/index.tsx` / `index.scss`：
+    - 体重 tab 的「最近记录」改成按月份分组。
+    - 每条体重记录右侧显示相对上一条记录的变化量，正数用红色、负数用绿色、无上一条显示 `--`。
+    - 月份头展示该月「总变化」和「日均变化」，样式靠近用户提供的示例。
+  - Verification:
+    - `eslint src/packageExtra/pages/body-trends/index.tsx` 通过。
+    - `git diff --check` 针对 body-trends 文件通过。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被历史类型错误阻塞；过滤 `body-trends` 无新增报错。
+    - 再次尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，未能截图/交互验证。
+
+## 状态：已实现 - 识别记录角标只统计最近 24 小时未记录任务
+
+- 2026-05-09 analyze waiting badge recent-window fix:
+  - 用户反馈：「我的」页/首页入口里的「识别记录」角标会显示 `99+`，实际表示历史所有已识别但未保存为饮食记录的任务数量，会长期堆积，不合理。
+  - 过渡期 schema 判断：本轮只修改 Go 后端统计口径，不新增/修改表、字段、索引、约束或字段类型。
+  - 修复：
+    - `GET /api/analyze/tasks/status-count` 的 `waiting_record` 改为只统计过去 24 小时内 `done` 且没有关联 `user_food_records.source_task_id` 的识别任务。
+    - `has_unseen_waiting_record` 同步受 24 小时窗口约束；如果用户已经看过识别记录，只对“最近 24 小时且晚于 last_seen”的未记录任务显示未读红点。
+    - 历史识别记录总数与列表不变，仍可在识别记录页查看历史；只是不再让历史未保存任务持续推高角标。
+  - Verification:
+    - `go test ./internal/analyze/handler -run TestAnalyzeHandler_CountTasksByStatus -count=1` 通过。
+    - `go build -o %TEMP%\food-link-analyze-badge-server.exe ./cmd/server` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - 新增 repo/service sqlite 单测已写入，但当前 Windows Go 环境 `CGO_ENABLED=0` 下 `go-sqlite3 requires cgo`，目标测试无法运行；这是项目既有环境阻塞。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，未能截图/交互验证。
+
+## 状态：已实现 - 当天饮食记录页支持单个食物删除
+
+- 2026-05-09 day-record item delete:
+  - 用户反馈：`当天饮食记录` 页面每条记录只有“整条记录删除”按钮；用户希望直接在当天列表里删除某一样食物，不必点进记录详情页。
+  - 过渡期 schema 判断：本轮只复用已有 `PUT /api/food-record/:id` 更新记录 items 与营养汇总，以及既有 `DELETE /api/food-record/:id` 删除整条记录；不涉及新增表、字段、索引、约束或字段类型。
+  - 修复：
+    - `src/packageExtra/pages/day-record/index.tsx` 引入 `updateFoodRecord`，在列表映射时保留原始 `FoodRecord`。
+    - 每个食物行新增删除按钮；点击后弹确认框，只删除该食物并保留同一记录内其他食物。
+    - 删除后按剩余 items 重新汇总 `total_calories/total_protein/total_carbs/total_fat/total_weight_grams` 并提交更新。
+    - 若该食物是记录里的最后一项，确认文案提示会一并删除整条记录，并复用现有整条记录删除接口。
+    - `src/packageExtra/pages/day-record/index.scss` 为食物行右侧新增 calories + 删除图标布局，避免与宏量营养行挤压。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\day-record\index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- src\packageExtra\pages\day-record\index.tsx src\packageExtra\pages\day-record\index.scss` 通过，仅有 Windows CRLF warning。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被项目既有历史类型错误阻塞，报错位于 `expiry*`、`food-library*`、`health-profile-view`、`record-manual`、`src/utils/api.ts` 的历史问题，本轮 `day-record` 文件没有出现在报错中。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 复测建议：用户保持 `npm run dev:weapp` watch 更新后，进入当天饮食记录页，点击某个食物行右侧删除图标；预期只移除该食物，整条记录总热量和页面总摄入随之下降；删除最后一个食物时整条记录被删除。
+
+- 2026-05-09 day-record item delete 500 follow-up:
+  - 用户复测删除单个食物时，前端请求 `PUT /api/food-record/:id` 返回 500；同时微信开发者工具提示 `<wx-image>` 不再支持 HTTP 图片链接。
+  - 根因判断：Go `FoodRecordRepo.Update()` 使用 `Updates(map[string]any)` 更新 `items`，而 `items` 是 `serializer:json` 字段；map 更新路径不会稳定走 GORM serializer，PostgreSQL JSONB 更新容易触发服务端错误。该问题与新增 schema 无关。
+  - 修复：
+    - `backend/internal/foodrecord/repo/food_record_repo.go` 新增 `normalizeFoodRecordJSONUpdates()`，对 `items` / `image_paths` 显式 `json.Marshal` 后写入 `datatypes.JSON`。
+    - `backend/internal/foodrecord/repo/food_record_repo_test.go` 新增 `TestNormalizeFoodRecordJSONUpdates_MarshalsItems`，锁住记录内 items 更新必须转 JSON。
+    - `src/packageExtra/pages/day-record/index.tsx` 增加 `normalizeDisplayImageUrl()`：`http://tmp/...` 转 `wxfile://tmp/...`；普通 `http://...` 图片不再传给 `<Image>`，降级为占位，避免微信端 HTTP 图片 warning。
+  - Verification:
+    - `C:\Program Files\Go\bin\go.exe test ./internal/foodrecord/repo -run TestNormalizeFoodRecordJSONUpdates_MarshalsItems -count=1` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-foodrecord-update.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\day-record\index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check` 针对本轮 day-record 与 foodrecord repo 文件通过，仅有 Windows CRLF warning。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/foodrecord/handler ./internal/foodrecord/service -count=1` 中 handler 通过，service 包仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 历史测试环境阻塞。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成截图/交互验证。
+  - 复测要求：用户需重启 Go server 后再次删除当天记录中的单个食物；前端 watch 也需确保 day-record 新代码已编译到 `dist`。
+
+## 状态：已修复 - 结果页纠错提交后不再跳 loading 页
+
+- 2026-05-09 correction result-page UX fix:
+  - 用户反馈：点击纠错后提示任务提交成功，进入分析中后突然退回原结果页，页面没有任何改动。
+  - 根因：上一轮后端已把纠错改成轻链路快速完成，但前端结果页仍按“长时间重新分析”跳转到 `analyze-loading`。loading 页完成后再重定向结果页，容易受到导航栈、旧 `analyzeResult` 缓存和旧 source task 状态影响，表现为回到原页面且看不到改动。
+  - 修复：
+    - `src/packageExtra/pages/result/index.tsx` 引入 `getAnalyzeTask`。
+    - 纠错提交后不再 `navigateTo('/pages/analyze-loading')`。
+    - 当前结果页直接轮询纠错 task，拿到 `done + result` 后在本页更新 description/insight/营养项/总营养/精准字段，并写回 `analyzeResult` 与新的 `analyzeSourceTaskId`。
+    - 纠错成功后关闭抽屉、清空本轮补充说明并提示“已更新”。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/result/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- src/packageExtra/pages/result/index.tsx src/utils/api.ts` 通过，仅有 Windows CRLF warning。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 复测要求：用户保持前端 watch 更新后，重新打开结果页发起一条新的纠错；预期停留在当前结果页，抽屉关闭后食物与营养数据直接刷新，不再跳到 loading 页再退回旧结果。
+
+## 状态：已核查 - 圈子评论删除能力
+
+- 2026-05-09 community comment delete check:
+  - 用户询问当前在「圈子」里评论后，是否能删除自己的评论。
+  - 结论：
+    - 圈子主列表页 `src/pages/community/index.tsx` 已接入评论删除：对评论长按会触发「删除评论」确认弹窗。
+    - 删除入口允许“评论作者本人”删除自己的评论；同时动态作者也可以删除自己动态下的别人评论。
+    - 前端 API `communityDeleteComment(recordId, commentId)` 已存在，并请求 `DELETE /api/community/feed/:record_id/comments/:comment_id`。
+    - Go 后端 `backend/internal/community/handler/comment_handler.go` 已注册并实现删除接口，权限判断为 `target.UserID == currentUserID || record.UserID == currentUserID`；删除时会级联删除该评论的一层子回复。
+    - 当前 `dist/pages/community/index.js` 和 `dist/common.js` 也已包含对应长按删除逻辑，说明当前构建产物里圈子主列表已有该功能。
+  - 限制/缺口：
+    - 互动消息跳转后的动态详情页 `src/packageExtra/pages/interaction-feed-detail/index.tsx` 只支持点击评论回复，未导入 `communityDeleteComment`，也没有长按删除入口；如果用户从互动消息详情页进入评论区，目前看不到删除自己的评论入口。
+    - 后端 PRD gap 文档 `backend/docs/backend-api-prd/api/community/feed/[record_id]-comment-[comment_id]-gap.md` 已过期，仍写着后端缺 DELETE route，但实际 Go 后端已经实现并注册。
+  - Verification:
+    - 只读核查源码与 `dist` 产物通过。
+    - 尝试 `go test ./internal/community/handler -run TestCommentHandler_DeleteComment -count=1`：`CGO_ENABLED=0` 下被 `go-sqlite3 requires cgo` 阻塞；再试 `CGO_ENABLED=1` 被本机缺 `gcc` 阻塞，未能运行该 sqlite 单测。
+
+## 状态：已修复 - 公共食物库上传者删除/下架能力
+
+- 2026-05-09 public food delete capability check:
+  - 用户询问：自己上传到公共食物库的食物如果上传错，作为上传者能否删除。
+  - 当前代码结论：暂时不能。Go 后端公共食物库已提供创建、列表、我的上传、收藏、点赞、评论、反馈/修正接口，但没有 `DELETE /api/public-food-library/:item_id` 或等价下架接口；前端详情页也只有点赞、收藏、评论和“信息有误？点击修正”，没有上传者删除按钮。
+  - 代码依据：
+    - `backend/internal/app/app.go` 公共食物库路由只注册 list/create/mine/collections/feedback/get/like/collect/comments。
+    - `backend/internal/publicfood/service/public_food_service.go` 只有 `Create/List/Mine/Collections/Get/Like/Unlike/Collect/Uncollect/Comments/AddComment/Feedback`。
+    - `src/utils/api.ts` 只有 `getMyPublicFoodLibrary`、`submitPublicFoodLibraryFeedback` 等公共库 API，没有删除公共库条目的客户端函数。
+  - 建议实现口径：上传者应允许删除/下架自己的条目；优先做软删除或下架（如 `status=user_deleted/deleted`），立即从公共列表、详情、收藏列表中不可见，同时保留后台审计、评论/点赞历史或可按需清理。
+  - 用户确认该能力合理，已实现：
+    - 后端新增 `DELETE /api/public-food-library/:item_id`，service 先读取条目并校验 `item.user_id == 当前登录用户`；非上传者返回 forbidden；不存在或已删除返回 not found。
+    - 删除采用已有 `public_food_library.status` 软下架为 `user_deleted`，不新增表/字段/索引/约束，符合 Python/Supabase -> Go/PostgreSQL 过渡期 schema 保守规则。
+    - `Get` 会把 `user_deleted/deleted` 视为不存在；`Mine` 也排除删除状态；公共列表和收藏列表原本只查 `published`，删除后自然不可见。
+    - 前端 `src/utils/api.ts` 新增 `deletePublicFoodLibraryItem()`。
+    - `src/packageExtra/pages/food-library-detail/index.tsx` 仅当 `item.user_id === Taro.getStorageSync('user_id')` 时显示删除按钮，删除前二次确认，成功后写入 `food_library_need_refresh` 并返回列表。
+    - 暗黑模式补充删除按钮样式。
+  - Verification:
+    - `go test ./internal/publicfood/... ./internal/app` 通过。
+    - `go build -o %TEMP%\food-link-publicfood-delete-server.exe ./cmd/server` 通过。
+    - `eslint src/packageExtra/pages/food-library-detail/index.tsx src/utils/api.ts` 通过。
+    - `git diff --check` 公共库删除相关文件通过，仅有 Windows CRLF warning。
+    - 误将 SCSS 传给 eslint 时失败，原因是项目 eslint/Babel 不解析 SCSS；随后已按 TS/TSX 文件重新 lint 通过。
+    - `weapp-devtools` 自动化验证失败：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均无法连接目标项目窗口自动化，未能截图/交互验证。
+
+## 状态：已修复 - 食物分析纠错统一为结构化清单回算
+
+- 2026-05-09 correction flow fix:
+  - 用户反馈精准模式纠错后会把原本 5 个食物扩成 7-8 个食物；普通模式纠错后被纠错食物热量/营养可能显示为 0。
+  - 定位：
+    - 结果页二次纠错虽然维护了 `correctionItems`，但重新提交任务时没有把结构化纠错清单传给后端，只把用户修改拼成 `additionalContext`。
+    - 普通模式因此会重新走 Gemini/DeepSeek 识别；精准模式会重新走 `precision_plan -> item_estimate -> refine -> aggregate`，模型会基于原图再次拆食物，容易引入额外项。
+    - 营养为 0 的原因是重新识别后 db_first 未命中且 fallback 不可用时会按 zero unit 输出；纠错页已有的用户当前营养值没有被作为兜底传给后端。
+  - 修复：
+    - `src/packageExtra/pages/result/index.tsx` 二次纠错提交时传入完整 `correctionItems`，包含名称、重量、原始重量、当前 calories/protein/carbs/fat、sourceName/sourceItemId、nameEdited/weightEdited。
+    - `src/utils/api.ts` 补充 `correctionItems` 类型字段。
+    - `backend/internal/worker/worker.go` 新增统一纠错轻链路：`food`、`food_text`、`precision_plan` 任务只要检测到 `correctionItems`，直接按用户清单构建 items，走 `ApplyDBFirstToItems` 营养库回算并完成任务，不再重新识图、不再走精准 planner/分组/复核。
+    - 对数据库未命中的纠错项，若 db_first 输出 zero nutrition，则保留纠错提交时页面已有的 calories/protein/carbs/fat，标记 `nutrition_source=user_correction_fallback`，避免用户修正后热量变 0。
+    - 精准纠错仍会更新 precision session final_result/status，但不会再创建 item estimate/aggregate 子任务。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDashScopeClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-correction-server.exe ./cmd/server`、`go build -o %TEMP%\food-link-correction-worker.exe ./cmd/worker` 通过。
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/result/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- src/packageExtra/pages/result/index.tsx src/utils/api.ts backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` 通过，仅有 Windows CRLF warning。
+  - Runtime validation:
+    - 已按项目要求读取并使用 `.agents/skills/weapp-devtools/SKILL.md`，尝试 `mrc where --port 3001` 与 `mrc where --port 9420`，均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用；未能完成截图/交互验证。
+  - 复测要求：用户需重启 Go server + Go worker，并确保前端 watch 产物更新后重新发起一条新的纠错任务；旧纠错任务仍保留旧结果。
+
+## 状态：已修复 - 会员支付优惠金额展示与中途升级补差
+
+- 2026-05-09 membership payment/pricing fix:
+  - 用户指出会员页宣传优惠金额不够严谨：季度/年度套餐当前写“省 5 元 / 省 60 元”，按实际价格应为“省 4.8 元 / 省 59.8 元”。
+  - 定位：`src/packageExtra/pages/pro-membership/index.tsx` 对 `savings` 和按月卡折算差价使用 `toFixed(0)`，导致小数优惠金额被取整展示。
+  - 修复：新增 `formatCurrencyCompact()`，优惠金额保留真实小数但去掉多余 0；周期 tab 和已选套餐卡都使用该格式。
+  - 用户同时指出套餐升级当前体验粗糙：例如先买 19.9 月度会员，使用 10 天后升级到 29.9 时，不应简单吞掉原套餐剩余价值，也不能让旧套餐剩余期直接免费升级成高档权益。
+  - 最终采用口径：中途升级/切换按“改签当前会员期 + 剩余价值补差”计算，会员期起算日保持第一次开通当前连续会员期的时间不变，目标套餐周期也从这个起算日开始算。
+  - 补差公式：`应付金额 = 目标套餐剩余价值 - 当前套餐剩余价值`；其中剩余价值按“套餐金额 × 从今天到对应到期日的剩余时长 / 套餐总时长”计算。
+  - 示例：5 月 1 日买轻度月卡，5 月 11 日升级标准月卡，则补 5 月 11 日到原月卡到期日之间的档位差价，到期日不变；若升级标准年卡，则目标年卡从 5 月 1 日起算到次年 5 月 1 日，只补这段目标年卡剩余价值减去轻度月卡剩余价值。
+  - 后端实现：
+    - `CreatePayment()` 会先读取当前会员和目标套餐，用 `buildMembershipPaymentTerms()` 计算动态应付金额，微信下单金额和 `pro_membership_payment_records.amount` 都写补差金额。
+    - 支付记录 `extra.upgrade_terms` 保存补差订单的起算日、目标到期日、当前剩余价值、目标剩余价值和本次应付金额；不新增 schema。
+    - `activateMembershipFromPayment()` 和 `/membership/me` reconcile 会读取 `extra.upgrade_terms`，支付成功后把 `current_period_start` 保持为原起算日，把 `expires_at` 设为“原起算日 + 目标套餐周期”，避免叠加新卡或吞掉旧价值。
+    - 若目标套餐周期已短于当前已使用时长、会缩短当前有效期，或当前套餐剩余价值已覆盖目标套餐，则拒绝即时切换。
+  - 前端实现：
+    - `src/packageExtra/pages/pro-membership/index.tsx` 增加同口径的预估展示：按钮显示“补差升级 · ¥x”，确认弹窗展示“本次补差”和“已折抵当前套餐剩余价值约 ¥x”；实际支付金额仍以后端返回为准。
+    - `src/utils/api.ts` 的 `CreateMembershipPaymentResponse` 补充 `original_amount/order_mode/upgrade_terms` 可选字段。
+    - `src/packageExtra/pages/membership-agreement/index.tsx` 的升级规则更新为“按剩余价值折抵后补差，目标套餐从当前连续会员期起算日开始计算”；会员页“生成分享海报”奖励文案改为“分享海报成功”。
+  - Verification:
+    - `go test ./internal/membership/service` 通过。
+    - `go build -o %TEMP%\food-link-membership-proration.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\pro-membership\index.tsx src\packageExtra\pages\membership-agreement\index.tsx src\utils\api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 备注：本轮不涉及新增表/字段/索引/约束；补差信息写入已有支付记录 `extra` JSON 字段，符合 Python/Supabase -> Go/PostgreSQL 过渡期 schema 保守规则。
+
+## 状态：已修复 - 分享海报奖励从生成时机改为分享成功时机
+
+- 2026-05-09 share poster reward trigger fix:
+  - 用户反馈当前分享海报积分有 bug：只要生成分享图就奖励 1 积分，但正确口径应是分享动作完成后才奖励。
+  - 定位：`src/packageExtra/pages/record-detail/index.tsx` 在 `Taro.canvasToTempFilePath.success` 中生成海报临时文件后立即调用 `claimSharePosterReward(record.id)`，导致“自动生成海报/打开预览”也会发放奖励。
+  - 修复：删除生成成功回调里的领奖调用；新增 `claimSharePosterRewardAfterShare()`，只在用户点击海报弹窗的「微信」分享并进入 `Taro.showShareImageMenu.success` 后调用领奖接口。保存图片和生成预览不会领奖；后端幂等、重复领取、每日上限仍由现有接口校验。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/record-detail/index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git grep` 确认 `claimSharePosterReward(...)` 只剩分享成功后的调用点。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 复测建议：用户保持 `npm run dev:weapp` watch 更新后，进入一条自己的饮食记录详情页生成海报；只生成海报时会员积分不应变化；点击「微信」并完成分享后，首次同一记录当天应显示 `海报奖励 +1 积分`，重复分享同一记录不再加分。
+
+## 状态：进行中 - Python/Supabase 到 Go/PostgreSQL 过渡期开发规则
+
+- 2026-05-09 transition/dev-rule:
+  - 用户询问 Go 后端基本重构完成后，过渡期新增功能或 schema 改动应该如何处理。
+  - 已确认 `backend/scripts/migrate_supabase_db_to_postgres.py` 是 destructive full sync：dump Supabase 源库后 drop/recreate 目标 schema，再 restore 并校验，使目标 PostgreSQL 与 Supabase 完全一致。
+  - 结论：
+    - 非 schema 改动可以正常在 Go 分支开发和测试。
+    - schema 改动不能只改 PostgreSQL；否则最终从 Supabase 全量同步时会被覆盖。
+    - 切流前生产 schema 以 Supabase/Python 为真源；新增表/字段若要被最终同步保留，应先以向后兼容方式进入 Supabase，或在最终同步后、Go 正式启动前作为正式 SQL migration 应用到 PostgreSQL。
+    - 体验版/本地 Go 写入 PostgreSQL 的数据默认是测试数据；若要保留真实用户体验版数据，最终切流必须做双源增量合并，不能只跑 Supabase 覆盖 PostgreSQL。
+
+## 状态：已修复 - 首页底部食物保质期字段展示
+
+  - 2026-05-09 home expiry summary fix:
+  - 用户反馈首页底部「食物保质期」卡片图片没有显示；截图同时显示卡片标题为空、只剩「点击编辑」。
+  - 定位：
+    - Go 首页 dashboard 的 `expirySummary` 与 Python 旧版契约不一致：Go 返回 `count/name/urgency`，前端读取的是 `pendingCount/food_name/quantity_text/storage_location/deadline_label/urgency_level`，导致标题和 meta 为空。
+    - 进一步核对后确认：旧 Python/Supabase 版保质期条目本来不显示图片，也没有图片持久化字段；用户确认无需显示图片。
+  - 修复：
+    - `backend/internal/home/service/dashboard_service.go` 的 `buildExpirySummary` 恢复 Python 旧版字段口径。
+    - `backend/internal/home/repo/home_repo.go` 首页保质期查询补 `quantity_note/note`，用于首页 meta 展示。
+    - 已撤回本轮尝试加入的 `food_expiry_items.image_url`、前端保存图片 URL、首页缩略图渲染等图片相关改动；保质期区块继续显示 icon。
+  - Verification:
+    - `go test ./internal/home/service -run TestBuildExpirySummary` 通过。
+    - `go test ./internal/expiry/handler` 通过。
+    - `go build -o %TEMP%\food-link-expiry-image-server.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\pages\index\index.tsx src\packageExtra\pages\expiry-edit\index.tsx src\utils\api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+  - Known blockers:
+    - `go test ./internal/home/service ./internal/expiry/service` 的全包测试仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞在 sqlite 初始化。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被项目既有历史类型错误阻塞，未发现本轮文件新增相关错误。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 2026-05-09 schema clarification:
+    - 用户追问当前数据库是否已有图片列，以及旧 Supabase/Python 版使用什么字段。
+    - 已核对旧 Python `create_food_expiry_item_v2()`：写入字段只有 `user_id/food_name/category/storage_type/quantity_note/expire_date/opened_date/note/source_type/status`，没有图片字段；旧首页 `_build_food_expiry_summary()` 也未输出图片字段。
+    - 已只读查询当前 PostgreSQL `information_schema.columns`：`food_expiry_items` 真实列为 `id/user_id/food_name/category/storage_type/quantity_note/expire_date/opened_date/note/source_type/status/created_at/updated_at`，没有 `image_url`。
+    - 用户确认此处本来就不用显示图片；已按要求恢复图片相关改动，避免引入 schema 变更。
+
 ## 状态：已修复 - Go 积分体系补齐 dev/Python 邀请奖励闭环
 
 - 2026-05-09 credit parity review:
@@ -4984,3 +5332,55 @@
   - 点击后 `mrc pageInfo` 显示 `packageExtra/pages/health-profile/index` → 跳转正确 ✅
   - 编译产物 `dist/pages/index/index.js` 确认包含 `openDebugHealthProfileFromMenu` 和新调试项 ✅
   - 编译产物 `dist/pages/profile/index.js` 确认已无调试按钮代码 ✅
+---
+
+## 2026-05-09 — 智能饮食推荐（基于剩余热量）产品方案讨论
+
+- Task: 讨论“剩余热量不知道吃什么”功能怎么做更合适。
+- Status: implemented_minimal_v1（已按用户后续要求实现最简单版本；未新增/修改数据库结构）
+- User feedback:
+  - 用户希望在用户设置目标后，根据“剩余热量/营养缺口”推荐接下来吃什么。
+  - 推荐需要区分“外面吃”和“自己做”两个场景。
+  - 自己做推荐食材与重量；外面吃推荐可点的餐品/组合。
+  - 目标是辅助用户把当天摄入补到目标附近，而不是只展示统计。
+- Initial product direction:
+  - P1 先做规则 + 食物库匹配：按剩余 calories、protein/carbs/fat 缺口、餐次、时间段和用户目标，推荐具体食物/重量与替换选项。
+  - P1 需接入现有 food nutrition library / public food library，优先复用库中可计算营养的食物。
+  - P2 再接用户历史偏好、口味、禁忌、外食品牌/场景做个性化。
+- Notes:
+  - 初版应避免直接承诺“最健康/治疗疾病”，产品表达应是“帮你补齐今日目标”“更接近你的热量和营养目标”。
+  - 与统计页“饮食健康参考/风险趋势”可以形成闭环：看差距 -> 给可执行吃法 -> 记录后刷新目标。
+- Implementation:
+  - Go 后端新增 `POST /api/diet/recommendations`，挂在 health handler 下，复用现有 DeepSeek `deepseek-v4-flash` 配置。
+  - 前端首页热量卡下方新增“今天吃什么”入口，支持 `外面吃` / `自己做` 两个场景。
+  - 前端弹层展示 3 个推荐方案：食物/份量、预计热量、蛋白/碳水/脂肪、执行提示和替换项。
+  - DeepSeek 不可用时后端返回规则兜底方案，保证功能不断链。
+- Verification:
+  - `go test ./internal/health/service ./internal/health/handler ./internal/app` 通过。
+  - `go build -o %TEMP%\food-link-diet-rec-server.exe ./cmd/server` 通过。
+  - `eslint src/pages/index/index.tsx src/pages/index/components/DietRecommendationSheet.tsx src/utils/api.ts` 通过。
+  - `git diff --check` 通过（仅 CRLF warning）。
+  - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成截图/交互验证。
+
+## 2026-05-09 — 首页今日餐食多记录缩略图串图修复
+
+- Task: 解释首页「今日餐食」卡片右侧 `2次` 的含义，并修复点击后两条记录显示同一张照片的问题。
+- Status: fixed_code_verified_runtime_blocked
+- Explanation:
+  - `2次` 表示该餐次下有 2 条饮食记录，不是 2 张照片。
+  - 照片数量仍由缩略图角标「共 N 张」表达。
+- Root cause:
+  - Go 首页 dashboard 在 `buildMealItem()` 中构造 `meal_record_entries` 时，用了餐次级累计 `imagePaths` 的第一张图作为每条 entry 的 `image_path`。
+  - 同餐次多条记录时，弹层里的每条记录因此都会显示餐次第一张图。
+- Changes:
+  - `backend/internal/home/service/dashboard_service.go`：为每条 record 单独收集 `recordImagePaths`；entry 的 `image_path/image_paths` 使用该记录自己的图片，餐次级 `image_paths` 继续保留去重聚合列表。
+  - `src/utils/home-dashboard-local-cache.ts`：本地乐观首页缓存的新 entry 也写入自己的 `image_path/image_paths`。
+  - `backend/internal/home/handler/dashboard_handler_test.go`：新增同餐次两记录不同图片的接口级回归用例。
+  - `backend/internal/home/service/dashboard_service_test.go`：扩展 `TestBuildMealItem` 锁定 entry 级图片独立。
+- Verification:
+  - `go test ./internal/home/service -run TestBuildMealItem -count=1` 通过。
+  - `go build -o %TEMP%\food-link-home-meal-images.exe ./cmd/server` 通过。
+  - `eslint src/utils/home-dashboard-local-cache.ts` 通过。
+  - `git diff --check` 针对本轮触达文件通过，仅有 CRLF warning。
+  - 完整 `go test ./internal/home/handler ./internal/home/service` 被当前 Windows `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 阻塞；设置 `CGO_ENABLED=1` 后本机又缺少 `gcc`。
+  - `mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成微信开发者工具截图/交互验证。

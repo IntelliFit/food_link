@@ -90,7 +90,11 @@ func (r *PublicFoodRepo) ListMine(ctx context.Context, userID string, limit int)
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at desc").Limit(limit).Find(&rows).Error
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND status NOT IN ?", userID, []string{"user_deleted", "deleted"}).
+		Order("created_at desc").
+		Limit(limit).
+		Find(&rows).Error
 	return rows, err
 }
 
@@ -165,6 +169,16 @@ func (r *PublicFoodRepo) Collect(ctx context.Context, userID, itemID string) err
 
 func (r *PublicFoodRepo) Uncollect(ctx context.Context, userID, itemID string) error {
 	return r.db.WithContext(ctx).Where("user_id = ? AND library_item_id = ?", userID, itemID).Delete(&domain.PublicFoodCollection{}).Error
+}
+
+func (r *PublicFoodRepo) SoftDeleteOwned(ctx context.Context, itemID, userID, status string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ? AND user_id = ?", itemID, userID).
+		Updates(map[string]any{
+			"status":     status,
+			"updated_at": time.Now(),
+		}).Error
 }
 
 func (r *PublicFoodRepo) ListComments(ctx context.Context, itemID string, limit int) ([]domain.PublicFoodComment, error) {
