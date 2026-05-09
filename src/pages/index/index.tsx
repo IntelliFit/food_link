@@ -12,6 +12,7 @@ import {
   getUnlimitedQRCode,
   getFriendInviteProfile,
   getSharedFoodRecord,
+  getFoodRecordById,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
@@ -1324,14 +1325,14 @@ function IndexPage() {
   const handleMealEdit = async () => {
     if (!mealActionRecordId) return
     const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
-    if (cachedRecord) {
+    if (cachedRecord && String(cachedRecord.id || '').trim()) {
       setMealActionRecord(cachedRecord)
       setShowRecordEditModal(true)
       return
     }
     Taro.showLoading({ title: '加载中...', mask: true })
     try {
-      const res = await getSharedFoodRecord(mealActionRecordId)
+      const res = await getFoodRecordById(mealActionRecordId)
       setMealActionRecord(res.record)
       setShowRecordEditModal(true)
     } catch (e: any) {
@@ -1344,15 +1345,23 @@ function IndexPage() {
   const handleMealPoster = async () => {
     if (!mealActionRecordId) return
     const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
-    if (cachedRecord) {
+    if (
+      cachedRecord &&
+      String(cachedRecord.id || '').trim() &&
+      String(cachedRecord.user_id || '').trim()
+    ) {
       setMealActionRecord(cachedRecord)
       setShowRecordPosterModal(true)
       return
     }
     Taro.showLoading({ title: '加载中...', mask: true })
     try {
-      const res = await getSharedFoodRecord(mealActionRecordId)
-      setMealActionRecord(res.record)
+      const res = await getFoodRecordById(mealActionRecordId)
+      const nextRecord = res.record
+      if (!nextRecord || !String(nextRecord.id || '').trim() || !String(nextRecord.user_id || '').trim()) {
+        throw new Error('记录信息不完整，请稍后重试')
+      }
+      setMealActionRecord(nextRecord)
       setShowRecordPosterModal(true)
     } catch (e: any) {
       await showUnifiedApiError(e, '加载失败')

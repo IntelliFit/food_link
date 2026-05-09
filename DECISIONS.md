@@ -1,5 +1,7 @@
 # DECISIONS
 
+- `2026-05-09`: 首页「今日餐食 -> 生成分享海报」的稳定交互口径是不再停留在项目自定义的全屏海报预览层。首页只保留隐藏 canvas 用于生成图片；生成成功后立即拉起微信官方图片菜单 `showShareImageMenu`。如本地缺少相册权限，则先通过官方小程序权限接口 `getSetting / authorize / openSetting` 请求或引导开启，再交由微信官方菜单提供发送/保存能力。
+
 - `2026-05-09`: Go 精准模式的分组估重要真正并行执行，不能让 `grouped_parallel` 在本地 worker 默认配置下退化成串行。worker 默认并发和本地配置口径为 `max_concurrent=4`。当前用户要求先不要二次重量复核，因此精准模式默认 `precisionRefineEnabled=false`，只做 planner -> 分项首轮估重 -> db_first 回算 -> aggregate；复核代码可以保留但默认关闭。所有精准子项估计结果都必须按本组 `items_to_estimate` 过滤，不能因为模型输出整餐而扩项或重复累计。
 
 - `2026-05-09`: 精准模式的优先级必须是“先判准食物种类，再估重量”。planner 不能只直接输出单个 `item_name`；对每个主体应先列 2-3 个候选食物，并记录 `candidate_names / alternative_name / visual_evidence` 等内部字段，再基于视觉证据选择主名称。子项估重阶段必须接收这些候选和证据；若 planner 名称与视觉证据冲突，允许把最终 `name` 修正为更可能的候选。典型易混淆项包括莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。这些候选和证据属于内部识别辅助，不展示到用户结果页。

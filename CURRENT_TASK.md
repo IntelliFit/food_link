@@ -45,6 +45,56 @@
     - `mrc relaunch /pages/index/index --port 9420` succeeded
     - `mrc logs error 20 --port 9420` returned 0 runtime errors
 
+## 状态：完成源码修复 - 首页今日餐食分享海报错误请求 `undefined`
+
+- 2026-05-09 update:
+  - User reported that tapping homepage `今日餐食 -> 生成分享海报` triggered:
+    - `/api/food-record/undefined/poster-calorie-compare`
+    - `/api/friend/invite/profile/undefined`
+  - Root cause:
+    - homepage poster flow could consume a cached `full_record` missing stable `id` / `user_id`
+    - poster modal requested compare/invite APIs without guarding these identifiers
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - homepage edit/poster flow now validates cached record identifiers before using cache
+      - poster flow falls back to `getFoodRecordById(mealActionRecordId)` for a complete record instead of relying on the share endpoint
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - added `safeRecordId` / `safeUserId` guards
+      - compare/invite requests only fire when required identifiers are present
+      - modal resets poster-related derived state when record changes to avoid stale carry-over
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed
+    - `git diff --check` passed for touched files
+    - `mrc relaunch /pages/index/index --port 9420` succeeded
+    - `mrc logs error 30 --port 9420` returned 0 runtime errors
+
+## 状态：完成源码修复 - 首页今日餐食海报生成后直接进入微信官方图片菜单
+
+- 2026-05-09 update:
+  - User clarified that homepage `今日餐食 -> 生成分享海报` should not stop on the project-custom full-screen preview sheet first.
+  - Target behavior:
+    - poster image still needs to be generated on the homepage
+    - once generated, it should directly enter the WeChat official image menu UI
+    - if album permission is missing, request it through official mini-program permission APIs first
+  - Fix applied:
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - removed the custom homepage poster preview sheet UI from the render path
+      - kept the hidden canvas generation flow only
+      - after `canvasToTempFilePath` succeeds, immediately calls WeChat native `showShareImageMenu`
+      - added official album permission preflight via `getSetting` / `authorize` / `openSetting`
+      - keeps the previous `safeRecordId` / `safeUserId` guards so poster compare/invite requests do not hit `undefined`
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordPosterModal.tsx src/pages/index/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc where --port 9420` connected successfully
+    - `mrc relaunch /pages/index/index --port 9420` succeeded
+    - `mrc logs error 20 --port 9420` returned 0 runtime errors
+    - `mrc exists .poster-modal --port 9420` returned false in the current homepage state, confirming the custom preview layer is no longer present by default
+  - Runtime validation blocker:
+    - current automated homepage state is `meals-empty`
+    - `mrc exists .empty-record-btn --port 9420` and `mrc exists .meals-empty --port 9420` are both true
+    - because there is no real meal card in this environment, automation could not trigger the full `今日餐食 -> 生成分享海报` click path end-to-end
+
 ## 状态：完成 - 同步 `backend-refactor-sync-migrate-tencent` 分支代码
 
 - 2026-05-09 update:
