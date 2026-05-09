@@ -12,6 +12,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/community/domain"
 	"food_link/backend/internal/community/repo"
+	"food_link/backend/pkg/storage"
 )
 
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -48,17 +49,23 @@ type CommunityService struct {
 	feedRepo  FeedRepo
 	notifRepo NotificationRepo
 	userRepo  UserFinder
+	storage   *storage.Client
 }
 
 type UserFinder interface {
 	FindByID(ctx context.Context, userID string) (*authrepo.User, error)
 }
 
-func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder) *CommunityService {
+func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, storageClient ...*storage.Client) *CommunityService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
 	return &CommunityService{
 		feedRepo:  feedRepo,
 		notifRepo: notifRepo,
 		userRepo:  userRepo,
+		storage:   client,
 	}
 }
 
@@ -199,11 +206,12 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 
 	items := make([]FeedItem, 0, len(records))
 	for _, rec := range records {
+		rec = s.normalizeFeedRecord(rec)
 		profile := profiles[rec.UserID]
 		author := map[string]string{"id": rec.UserID, "nickname": "用户", "avatar": ""}
 		if profile != nil {
 			author["nickname"] = profile.Nickname
-			author["avatar"] = profile.Avatar
+			author["avatar"] = s.resolveAvatarURL(profile.Avatar)
 		}
 		likeInfo := likesMap[rec.ID]
 		if likeInfo == nil {
@@ -326,11 +334,12 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 
 	items := make([]FeedItem, 0, len(records))
 	for _, rec := range records {
+		rec = s.normalizeFeedRecord(rec)
 		profile := profiles[rec.UserID]
 		author := map[string]string{"id": rec.UserID, "nickname": "用户", "avatar": ""}
 		if profile != nil {
 			author["nickname"] = profile.Nickname
-			author["avatar"] = profile.Avatar
+			author["avatar"] = s.resolveAvatarURL(profile.Avatar)
 		}
 		likeInfo := likesMap[rec.ID]
 		if likeInfo == nil {
@@ -450,7 +459,7 @@ func (s *CommunityService) getCommentsMap(ctx context.Context, recordIDs []strin
 				Content:         c.Content,
 				CreatedAt:       c.CreatedAt,
 				Nickname:        strOr(author, "用户"),
-				Avatar:          strOrAvatar(author),
+				Avatar:          s.resolveAvatarURL(strOrAvatar(author)),
 			})
 		}
 		result[rid] = items
@@ -470,6 +479,78 @@ func strOrAvatar(profile *repo.UserProfile) string {
 		return profile.Avatar
 	}
 	return ""
+}
+
+func (s *CommunityService) normalizeFeedRecord(record repo.FeedRecord) repo.FeedRecord {
+	record.ImagePaths = s.resolveFoodImageURLs(record.ImagePaths)
+	if len(record.ImagePaths) > 0 {
+		first := record.ImagePaths[0]
+		record.ImagePath = &first
+		return record
+	}
+	if record.ImagePath != nil {
+		resolved := s.resolveFoodImageURL(*record.ImagePath)
+		if resolved == "" {
+			record.ImagePath = nil
+		} else {
+			record.ImagePath = &resolved
+			record.ImagePaths = []string{resolved}
+		}
+	}
+	return record
+}
+
+func (s *CommunityService) resolveFoodImageURLs(values []string) []string {
+	if s.storage != nil {
+		return s.storage.ResolveReferenceURLs("food-images", values)
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (s *CommunityService) resolveFoodImageURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("food-images", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
+}
+
+func (s *CommunityService) resolveAvatarURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
 }
 
 // leaderboard cache
@@ -533,7 +614,7 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 			if p.Nickname != "" {
 				nickname = p.Nickname
 			}
-			avatar = p.Avatar
+			avatar = s.resolveAvatarURL(p.Avatar)
 		}
 		items = append(items, LeaderboardItem{
 			UserID:       uid,
@@ -664,7 +745,7 @@ func (s *CommunityService) ListComments(ctx context.Context, recordID string, li
 			Content:         c.Content,
 			CreatedAt:       c.CreatedAt,
 			Nickname:        strOr(author, "用户"),
-			Avatar:          strOrAvatar(author),
+			Avatar:          s.resolveAvatarURL(strOrAvatar(author)),
 		})
 	}
 	return items, nil
@@ -697,13 +778,15 @@ func (s *CommunityService) FeedContext(ctx context.Context, userID, recordID str
 	if !ctxCheck.Allowed {
 		return ctxCheck, nil
 	}
+	normalizedRecord := s.normalizeFeedRecord(*record)
+	record = &normalizedRecord
 
 	profiles, _ := s.feedRepo.GetUserProfiles(ctx, []string{record.UserID})
 	profile := profiles[record.UserID]
 	author := map[string]string{"id": record.UserID, "nickname": "用户", "avatar": ""}
 	if profile != nil {
 		author["nickname"] = profile.Nickname
-		author["avatar"] = profile.Avatar
+		author["avatar"] = s.resolveAvatarURL(profile.Avatar)
 	}
 
 	likesMap, _ := s.feedRepo.GetLikesForRecords(ctx, []string{recordID}, userID)
@@ -865,7 +948,7 @@ func (s *CommunityService) commentToItem(ctx context.Context, comment *domain.Fe
 		Content:         comment.Content,
 		CreatedAt:       comment.CreatedAt,
 		Nickname:        strOr(author, "用户"),
-		Avatar:          strOrAvatar(author),
+		Avatar:          s.resolveAvatarURL(strOrAvatar(author)),
 	}, nil
 }
 
@@ -909,7 +992,7 @@ func (s *CommunityService) ListNotifications(ctx context.Context, userID string,
 			if actor.Nickname != "" {
 				nickname = actor.Nickname
 			}
-			avatar = actor.Avatar
+			avatar = s.resolveAvatarURL(actor.Avatar)
 		}
 		items = append(items, NotificationItem{
 			ID:               n.ID,

@@ -97,6 +97,74 @@ func TestResolveReferenceURL(t *testing.T) {
 	}
 }
 
+func TestResolveReferenceURL_AllBuckets(t *testing.T) {
+	cfg := config.StorageConfig{
+		CDNFoodImagesBaseURL:    "https://cdn.example.com/food",
+		CDNUserAvatarsBaseURL:   "https://cdn.example.com/avatar",
+		CDNHealthReportsBaseURL: "https://cdn.example.com/health",
+		CDNIconBaseURL:          "https://cdn.example.com/icon",
+		COSFoodImagesBucket:     "food-images-1370036754",
+		COSUserAvatarsBucket:    "user-avatars-1370036754",
+		COSHealthReportsBucket:  "health-reports-1370036754",
+		COSIconBucket:           "icon-1370036754",
+		COSRegion:               "ap-shanghai",
+	}
+	client := New(cfg)
+
+	tests := []struct {
+		name     string
+		bucket   string
+		input    string
+		expected string
+	}{
+		{
+			name:     "legacy avatar supabase url",
+			bucket:   "user-avatars",
+			input:    "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/user-avatars/u1/avatar.jpg",
+			expected: "https://cdn.example.com/avatar/u1/avatar.jpg",
+		},
+		{
+			name:     "legacy health report supabase url",
+			bucket:   "health-reports",
+			input:    "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/health-reports/u1/report.jpg",
+			expected: "https://cdn.example.com/health/u1/report.jpg",
+		},
+		{
+			name:     "legacy icon supabase url",
+			bucket:   "icon",
+			input:    "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png",
+			expected: "https://cdn.example.com/icon/shitan-nobackground.png",
+		},
+		{
+			name:     "target bucket name in legacy public path",
+			bucket:   "user-avatars",
+			input:    "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/user-avatars-1370036754/u1/avatar.jpg",
+			expected: "https://cdn.example.com/avatar/u1/avatar.jpg",
+		},
+		{
+			name:     "target cos origin url",
+			bucket:   "icon",
+			input:    "https://icon-1370036754.cos.ap-shanghai.myqcloud.com/shitan-nobackground.png",
+			expected: "https://cdn.example.com/icon/shitan-nobackground.png",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, client.ResolveReferenceURL(tt.bucket, tt.input))
+		})
+	}
+}
+
+func TestResolveReferenceURLs(t *testing.T) {
+	client := New(config.StorageConfig{CDNUserAvatarsBaseURL: "https://cdn.example.com/avatar"})
+	input := []string{" u1/a.jpg ", "u1/a.jpg", "", "u1/b.jpg"}
+	assert.Equal(t, []string{
+		"https://cdn.example.com/avatar/u1/a.jpg",
+		"https://cdn.example.com/avatar/u1/b.jpg",
+	}, client.ResolveReferenceURLs("user-avatars", input))
+}
+
 func TestBucketName(t *testing.T) {
 	cfg := config.StorageConfig{
 		COSFoodImagesBucket:    "food-bucket",

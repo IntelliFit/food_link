@@ -16,6 +16,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 )
 
 const creditCostExerciseLog = 1
@@ -36,6 +37,7 @@ type ExerciseService struct {
 	creditGuard CreditGuard
 	cfg         *config.Config
 	client      *http.Client
+	storage     *storage.Client
 }
 
 func NewExerciseService(repo ExerciseRepo, cfg ...*config.Config) *ExerciseService {
@@ -53,6 +55,10 @@ type CreditGuard interface {
 
 func (s *ExerciseService) ConfigureCreditGuard(guard CreditGuard) {
 	s.creditGuard = guard
+}
+
+func (s *ExerciseService) ConfigureStorage(storageClient *storage.Client) {
+	s.storage = storageClient
 }
 
 func (s *ExerciseService) GetDailyCalories(ctx context.Context, userID string, date string) (map[string]any, error) {
@@ -155,7 +161,7 @@ func (s *ExerciseService) CreateLog(ctx context.Context, userID string, exercise
 
 func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string, imageURL string) (map[string]any, error) {
 	desc := strings.TrimSpace(exerciseDesc)
-	imageURL = strings.TrimSpace(imageURL)
+	imageURL = s.resolveFoodImageURL(imageURL)
 	if desc == "" && imageURL == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述和图片不能同时为空", HTTPStatus: 400}
 	}
@@ -302,7 +308,7 @@ func (s *ExerciseService) BuildExerciseProfileSnapshot(ctx context.Context, user
 
 func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerciseDesc, imageURL, recordedOn string, payload map[string]any) (map[string]any, error) {
 	desc := strings.TrimSpace(exerciseDesc)
-	imageURL = strings.TrimSpace(imageURL)
+	imageURL = s.resolveFoodImageURL(imageURL)
 	if desc == "" && imageURL == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述和图片不能同时为空", HTTPStatus: 400}
 	}
@@ -512,6 +518,21 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	estimate.Raw = raw
 	estimate.Source = "llm"
 	return estimate, true
+}
+
+func (s *ExerciseService) resolveFoodImageURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("food-images", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
 }
 
 func parseExerciseEstimateJSON(raw string) (ExerciseEstimate, error) {

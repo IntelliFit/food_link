@@ -14,6 +14,8 @@ import (
 	"food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
+	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
@@ -99,6 +101,35 @@ func TestUserService_GetProfile(t *testing.T) {
 	profile, err := svc.GetProfile(ctx, user.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test", profile["nickname"])
+}
+
+func TestUserService_ProfileAvatarUsesCDNForLegacySupabaseURL(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	storageClient := storage.New(config.StorageConfig{
+		CDNUserAvatarsBaseURL: "https://cdn.example.com/avatar",
+		COSUserAvatarsBucket:  "user-avatars-1370036754",
+		COSRegion:             "ap-shanghai",
+	})
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), storageClient)
+	ctx := context.Background()
+
+	legacyAvatar := "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/user-avatars/u1/avatar.jpg"
+	user := &repo.User{OpenID: "o1", Nickname: "Test", Avatar: legacyAvatar}
+	_ = userRepo.Create(ctx, user)
+
+	profile, err := svc.GetProfile(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "https://cdn.example.com/avatar/u1/avatar.jpg", profile["avatar"])
+
+	nextLegacyAvatar := "https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/user-avatars/u1/next.jpg"
+	updated, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{Avatar: &nextLegacyAvatar})
+	assert.NoError(t, err)
+	assert.Equal(t, "https://cdn.example.com/avatar/u1/next.jpg", updated["avatar"])
+
+	found, err := userRepo.FindByID(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "https://cdn.example.com/avatar/u1/next.jpg", found.Avatar)
 }
 
 func TestUserService_GetProfile_NotFound(t *testing.T) {

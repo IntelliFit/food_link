@@ -13,6 +13,7 @@ import (
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/pkg/logger"
+	"food_link/backend/pkg/storage"
 
 	"go.uber.org/zap"
 )
@@ -28,6 +29,7 @@ type AnalyzeService struct {
 	users           *authrepo.UserRepo
 	nutrition       *foodrecordrepo.FoodNutritionRepo
 	deepseek        *DeepSeekNutritionEstimator
+	storage         *storage.Client
 }
 
 func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
@@ -45,6 +47,10 @@ func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.
 
 func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey, baseURL, model string) {
 	s.deepseek = NewDeepSeekNutritionEstimator(apiKey, baseURL, model)
+}
+
+func (s *AnalyzeService) ConfigureStorage(storageClient *storage.Client) {
+	s.storage = storageClient
 }
 
 // AnalyzeInput holds all possible inputs for analysis.
@@ -78,6 +84,26 @@ func normalizeExecutionMode(mode *string) string {
 		return *mode
 	}
 	return defaultExecutionMode
+}
+
+func (s *AnalyzeService) normalizeFoodImageInput(input *AnalyzeInput) {
+	if input == nil || s.storage == nil {
+		return
+	}
+	input.ImageURL = s.resolveFoodImageURL(input.ImageURL)
+	input.ImageURLs = s.storage.ResolveReferenceURLs("food-images", input.ImageURLs)
+}
+
+func (s *AnalyzeService) resolveFoodImageURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("food-images", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
 }
 
 func (s *AnalyzeService) resolveExecutionMode(ctx context.Context, userID string, requested *string) string {
@@ -584,6 +610,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 
 // Analyze performs single-image or text analysis synchronously.
 func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 
 	var user *authrepo.User
@@ -652,6 +679,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 
 // AnalyzeCompare calls both Qwen and Gemini in parallel.
 func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	var user *authrepo.User
 	if userID != "" {
@@ -706,6 +734,7 @@ func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, inpu
 
 // AnalyzeCompareEngines runs legacy_direct vs db_first on the same input.
 func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	var user *authrepo.User
 	if userID != "" {
@@ -763,6 +792,7 @@ func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID strin
 
 // AnalyzeBatch analyzes multiple images with semaphore limit.
 func (s *AnalyzeService) AnalyzeBatch(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	s.normalizeFoodImageInput(&input)
 	if len(input.ImageURLs) == 0 {
 		return nil, errors.ErrBadRequest
 	}

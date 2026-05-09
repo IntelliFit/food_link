@@ -9,14 +9,20 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
+	"food_link/backend/pkg/storage"
 )
 
 type PublicFoodService struct {
-	repo *repo.PublicFoodRepo
+	repo    *repo.PublicFoodRepo
+	storage *storage.Client
 }
 
-func NewPublicFoodService(repo *repo.PublicFoodRepo) *PublicFoodService {
-	return &PublicFoodService{repo: repo}
+func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.Client) *PublicFoodService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
+	return &PublicFoodService{repo: repo, storage: client}
 }
 
 type CreateInput struct {
@@ -76,11 +82,19 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 			}
 		}
 	}
+	imagePaths = s.normalizeFoodImageURLs(imagePaths)
 
 	firstPath := input.ImagePath
 	if len(imagePaths) > 0 {
 		first := imagePaths[0]
 		firstPath = &first
+	} else if firstPath != nil {
+		resolved := s.resolveFoodImageURL(*firstPath)
+		if resolved == "" {
+			firstPath = nil
+		} else {
+			firstPath = &resolved
+		}
 	}
 
 	item := &domain.PublicFoodItem{
@@ -134,7 +148,11 @@ func (s *PublicFoodService) List(ctx context.Context, userID string, filter repo
 }
 
 func (s *PublicFoodService) Mine(ctx context.Context, userID string) ([]domain.PublicFoodItem, error) {
-	return s.repo.ListMine(ctx, userID, 50)
+	items, err := s.repo.ListMine(ctx, userID, 50)
+	if err != nil {
+		return nil, err
+	}
+	return s.normalizePublicFoodItems(items), nil
 }
 
 func (s *PublicFoodService) Collections(ctx context.Context, userID string) ([]domain.PublicFoodView, error) {
@@ -177,7 +195,12 @@ func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string
 }
 
 func (s *PublicFoodService) Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error) {
-	return s.repo.ListComments(ctx, itemID, 50)
+	comments, err := s.repo.ListComments(ctx, itemID, 50)
+	if err != nil {
+		return nil, err
+	}
+	s.normalizePublicFoodComments(comments)
+	return comments, nil
 }
 
 func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID, content string, rating *int) (*domain.PublicFoodComment, error) {
@@ -203,6 +226,7 @@ func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID, cont
 	_ = s.repo.RefreshCommentStats(ctx, itemID)
 	rows, err := s.repo.ListComments(ctx, itemID, 1)
 	if err == nil {
+		s.normalizePublicFoodComments(rows)
 		for _, row := range rows {
 			if row.ID == comment.ID {
 				return &row, nil
@@ -248,19 +272,106 @@ func (s *PublicFoodService) hydrate(ctx context.Context, userID string, items []
 	}
 	out := make([]domain.PublicFoodView, 0, len(items))
 	for _, it := range items {
+		item := s.normalizePublicFoodItem(it)
 		author := authors[it.UserID]
 		if author.Nickname == "" {
 			author = domain.Author{ID: it.UserID, Nickname: "用户"}
 		}
+		author.Avatar = s.resolveAvatarURL(author.Avatar)
 		out = append(out, domain.PublicFoodView{
-			PublicFoodItem:  it,
+			PublicFoodItem:  item,
 			Liked:           likes[it.ID],
 			Collected:       collections[it.ID],
 			Author:          author,
-			RecommendReason: recommendReason(it, sortBy),
+			RecommendReason: recommendReason(item, sortBy),
 		})
 	}
 	return out, nil
+}
+
+func (s *PublicFoodService) normalizePublicFoodItems(items []domain.PublicFoodItem) []domain.PublicFoodItem {
+	for i := range items {
+		items[i] = s.normalizePublicFoodItem(items[i])
+	}
+	return items
+}
+
+func (s *PublicFoodService) normalizePublicFoodItem(item domain.PublicFoodItem) domain.PublicFoodItem {
+	item.ImagePaths = s.normalizeFoodImageURLs(item.ImagePaths)
+	if len(item.ImagePaths) > 0 {
+		first := item.ImagePaths[0]
+		item.ImagePath = &first
+		return item
+	}
+	if item.ImagePath != nil {
+		resolved := s.resolveFoodImageURL(*item.ImagePath)
+		if resolved == "" {
+			item.ImagePath = nil
+		} else {
+			item.ImagePath = &resolved
+			item.ImagePaths = []string{resolved}
+		}
+	}
+	return item
+}
+
+func (s *PublicFoodService) normalizePublicFoodComments(comments []domain.PublicFoodComment) {
+	for i := range comments {
+		comments[i].Avatar = s.resolveAvatarURL(comments[i].Avatar)
+	}
+}
+
+func (s *PublicFoodService) normalizeFoodImageURLs(values []string) []string {
+	if s.storage != nil {
+		return s.storage.ResolveReferenceURLs("food-images", values)
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (s *PublicFoodService) resolveFoodImageURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("food-images", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
+}
+
+func (s *PublicFoodService) resolveAvatarURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
 }
 
 func recommendReason(item domain.PublicFoodItem, sortBy string) string {

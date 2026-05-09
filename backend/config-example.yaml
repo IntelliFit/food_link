@@ -32,6 +32,7 @@ storage:
   user_avatars_bucket: ""
   icon_bucket: ""
   food_images_cdn_base_url: ""
+  health_reports_cdn_base_url: ""
   user_avatars_cdn_base_url: ""
   icon_cdn_base_url: ""
 

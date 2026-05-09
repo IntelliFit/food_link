@@ -4,10 +4,12 @@ import { Cell } from '@taroify/core'
 import '@taroify/core/cell/style'
 import '@taroify/icons/style'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import localLogo from '../../../assets/logo.png'
 import './index.scss'
 
 export default function AboutPage() {
-    const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
+    const iconCdnBaseUrl = (__ICON_CDN_BASE_URL__ || '').replace(/\/+$/, '')
+    const APP_LOGO_URL = iconCdnBaseUrl ? `${iconCdnBaseUrl}/shitan-nobackground.png` : localLogo
 
     const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
 

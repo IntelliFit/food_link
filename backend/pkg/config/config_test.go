@@ -29,6 +29,7 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("COS_ICON_BUCKET", "t")
 	t.Setenv("CDN_FOOD_IMAGES_BASE_URL", "u")
 	t.Setenv("CDN_USER_AVATARS_BASE_URL", "v")
+	t.Setenv("CDN_HEALTH_REPORTS_BASE_URL", "health")
 	t.Setenv("CDN_ICON_BASE_URL", "w")
 	t.Setenv("POSTGRESQL_HOST", "x")
 	t.Setenv("POSTGRESQL_PORT", "5432")
@@ -45,5 +46,8 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	}
 	if cfg.External.OfoxAIBaseURL != "https://proxy.example.com/v1" {
 		t.Fatalf("ofox base url env binding failed: %+v", cfg.External)
+	}
+	if cfg.Storage.CDNHealthReportsBaseURL != "health" {
+		t.Fatalf("health reports cdn env binding failed: %+v", cfg.Storage)
 	}
 }

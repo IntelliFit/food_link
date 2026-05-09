@@ -113,6 +113,29 @@ func (c *Client) ResolveReferenceURL(bucketAlias, value string) string {
 	return raw
 }
 
+func (c *Client) ResolveReferenceURLs(bucketAlias string, values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		resolved := c.ResolveReferenceURL(bucketAlias, value)
+		if resolved == "" {
+			continue
+		}
+		if _, ok := seen[resolved]; ok {
+			continue
+		}
+		seen[resolved] = struct{}{}
+		out = append(out, resolved)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func (c *Client) bucketBaseURL(bucketAlias string) string {
 	var base string
 	switch bucketAlias {

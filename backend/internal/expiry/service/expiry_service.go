@@ -10,6 +10,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/expiry/domain"
 	"food_link/backend/internal/expiry/repo"
+	"food_link/backend/pkg/storage"
 )
 
 type ExpiryService struct {
@@ -18,6 +19,7 @@ type ExpiryService struct {
 	recognizer  *Recognizer
 	templateID  string
 	creditGuard CreditGuard
+	storage     *storage.Client
 }
 
 func NewExpiryService(expiryRepo *repo.ExpiryRepo, taskRepo *repo.TaskRepo, recognizers ...*Recognizer) *ExpiryService {
@@ -35,6 +37,10 @@ type CreditGuard interface {
 
 func (s *ExpiryService) ConfigureCreditGuard(guard CreditGuard) {
 	s.creditGuard = guard
+}
+
+func (s *ExpiryService) ConfigureStorage(storageClient *storage.Client) {
+	s.storage = storageClient
 }
 
 type DashboardResult struct {
@@ -472,6 +478,7 @@ func (s *ExpiryService) Recognize(ctx context.Context, userID string, imageURLs 
 }
 
 func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string, imageURLs []string, additionalContext string) (*RecognizeResult, error) {
+	imageURLs = s.resolveFoodImageURLs(imageURLs)
 	if len(imageURLs) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "请至少提供 1 张图片", HTTPStatus: 400}
 	}
@@ -526,6 +533,29 @@ func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string,
 		Items:       recognized.Items,
 		Message:     "已识别 " + strconv.Itoa(len(recognized.Items)) + " 项食物，可继续补充后保存",
 	}, nil
+}
+
+func (s *ExpiryService) resolveFoodImageURLs(values []string) []string {
+	if s.storage != nil {
+		return s.storage.ResolveReferenceURLs("food-images", values)
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func mapLocationToStorageType(location *string) string {

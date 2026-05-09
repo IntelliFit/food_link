@@ -7,15 +7,21 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/repo"
+	"food_link/backend/pkg/storage"
 	"gorm.io/gorm"
 )
 
 type RecipeService struct {
-	repo *repo.RecipeRepo
+	repo    *repo.RecipeRepo
+	storage *storage.Client
 }
 
-func NewRecipeService(repo *repo.RecipeRepo) *RecipeService {
-	return &RecipeService{repo: repo}
+func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *RecipeService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
+	return &RecipeService{repo: repo, storage: client}
 }
 
 type CreateInput struct {
@@ -53,6 +59,7 @@ func (s *RecipeService) Create(ctx context.Context, userID string, input CreateI
 	if strings.TrimSpace(input.RecipeName) == "" {
 		return "", &commonerrors.AppError{Code: 10002, Message: "recipe_name 不能为空", HTTPStatus: 400}
 	}
+	input.ImagePath = s.normalizeImagePathPtr(input.ImagePath)
 	recipe := &domain.Recipe{
 		UserID:           userID,
 		RecipeName:       input.RecipeName,
@@ -75,7 +82,11 @@ func (s *RecipeService) Create(ctx context.Context, userID string, input CreateI
 }
 
 func (s *RecipeService) List(ctx context.Context, userID, mealType string, isFavorite *bool) ([]domain.Recipe, error) {
-	return s.repo.List(ctx, userID, normalizeMeal(mealType), isFavorite)
+	recipes, err := s.repo.List(ctx, userID, normalizeMeal(mealType), isFavorite)
+	if err != nil {
+		return nil, err
+	}
+	return s.normalizeRecipes(recipes), nil
 }
 
 func (s *RecipeService) Count(ctx context.Context, userID string, isFavorite *bool) (int64, error) {
@@ -90,7 +101,7 @@ func (s *RecipeService) Get(ctx context.Context, userID, recipeID string) (*doma
 	if recipe == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	return recipe, nil
+	return s.normalizeRecipe(recipe), nil
 }
 
 func (s *RecipeService) Update(ctx context.Context, userID, recipeID string, input UpdateInput) (*domain.Recipe, error) {
@@ -105,7 +116,12 @@ func (s *RecipeService) Update(ctx context.Context, userID, recipeID string, inp
 		updates["description"] = *input.Description
 	}
 	if input.ImagePath != nil {
-		updates["image_path"] = *input.ImagePath
+		normalized := s.normalizeImagePathPtr(input.ImagePath)
+		if normalized == nil {
+			updates["image_path"] = ""
+		} else {
+			updates["image_path"] = *normalized
+		}
 	}
 	if input.Items != nil {
 		updates["items"] = input.Items
@@ -144,7 +160,7 @@ func (s *RecipeService) Update(ctx context.Context, userID, recipeID string, inp
 	if recipe == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	return recipe, nil
+	return s.normalizeRecipe(recipe), nil
 }
 
 func (s *RecipeService) Delete(ctx context.Context, userID, recipeID string) error {
@@ -188,6 +204,48 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 	}
 	_ = s.repo.MarkUsed(ctx, recipeID, userID, recipe.UseCount)
 	return record.ID, nil
+}
+
+func (s *RecipeService) normalizeRecipes(recipes []domain.Recipe) []domain.Recipe {
+	for i := range recipes {
+		recipe := &recipes[i]
+		recipes[i] = *s.normalizeRecipe(recipe)
+	}
+	return recipes
+}
+
+func (s *RecipeService) normalizeRecipe(recipe *domain.Recipe) *domain.Recipe {
+	if recipe == nil {
+		return nil
+	}
+	recipe.ImagePath = s.normalizeImagePathPtr(recipe.ImagePath)
+	return recipe
+}
+
+func (s *RecipeService) normalizeImagePathPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	resolved := s.resolveFoodImageURL(*value)
+	if resolved == "" {
+		return nil
+	}
+	return &resolved
+}
+
+func (s *RecipeService) resolveFoodImageURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("food-images", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
 }
 
 func normalizeMealPtr(v *string) *string {

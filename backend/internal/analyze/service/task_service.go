@@ -69,6 +69,7 @@ type SubmitTaskInput struct {
 }
 
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	s.normalizeSubmitImages(&input)
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
 	}
@@ -146,6 +147,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if input.TextInput == "" {
 		input.TextInput = input.Text
 	}
+	s.normalizeSubmitImages(&input)
 	if input.TextInput == "" && !hasPrecisionSupplement(input) {
 		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
 	}
@@ -659,9 +661,38 @@ func (s *TaskService) normalizeTaskImages(task *domain.AnalysisTask) {
 
 func (s *TaskService) resolveFoodImageURL(path string) string {
 	if s.storage == nil {
-		return path
+		return strings.TrimSpace(path)
 	}
 	return s.storage.ResolveReferenceURL("food-images", path)
+}
+
+func (s *TaskService) normalizeSubmitImages(input *SubmitTaskInput) {
+	if input == nil {
+		return
+	}
+	input.ImageURL = s.resolveFoodImageURL(input.ImageURL)
+	if s.storage != nil {
+		input.ImageURLs = s.storage.ResolveReferenceURLs("food-images", input.ImageURLs)
+		return
+	}
+	normalized := make([]string, 0, len(input.ImageURLs))
+	seen := make(map[string]struct{}, len(input.ImageURLs))
+	for _, value := range input.ImageURLs {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		input.ImageURLs = nil
+		return
+	}
+	input.ImageURLs = normalized
 }
 
 func filterAnalyzeHistoryTasks(tasks []domain.AnalysisTask) []domain.AnalysisTask {

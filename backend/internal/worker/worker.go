@@ -17,6 +17,7 @@ import (
 	userdomain "food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
+	"food_link/backend/pkg/storage"
 
 	"go.uber.org/zap"
 )
@@ -33,6 +34,7 @@ type Runner struct {
 	notifier   *expiryservice.NotificationWorker
 	exercise   *healthservice.ExerciseService
 	log        *zap.Logger
+	storage    *storage.Client
 }
 
 type Options struct {
@@ -54,9 +56,14 @@ func NewRunner(
 	notifier *expiryservice.NotificationWorker,
 	exercise *healthservice.ExerciseService,
 	log *zap.Logger,
+	storageClient ...*storage.Client,
 ) *Runner {
 	if log == nil {
 		log = zap.NewNop()
+	}
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
 	}
 	return &Runner{
 		tasks:      tasks,
@@ -70,6 +77,7 @@ func NewRunner(
 		notifier:   notifier,
 		exercise:   exercise,
 		log:        log,
+		storage:    client,
 	}
 }
 
@@ -200,6 +208,7 @@ func (r *Runner) process(ctx context.Context, task *domain.AnalysisTask) {
 }
 
 func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) error {
+	r.normalizeTaskImages(task, "food-images")
 	input := analyzeInputFromTask(task)
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		return fmt.Errorf("food task missing image_url/image_paths")
@@ -226,6 +235,7 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 }
 
 func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.AnalysisTask) error {
+	r.normalizeTaskImages(task, "food-images")
 	input := analyzeInputFromTask(task)
 	mode := "strict"
 	input.ExecutionMode = &mode
@@ -369,6 +379,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 }
 
 func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.AnalysisTask) error {
+	r.normalizeTaskImages(task, "food-images")
 	estimate, err := r.precision.GetItemEstimateBySourceTask(ctx, task.ID)
 	if err != nil {
 		return err
@@ -803,6 +814,62 @@ func healthReportImageURLs(task *domain.AnalysisTask) []string {
 	return out
 }
 
+func (r *Runner) normalizeTaskImages(task *domain.AnalysisTask, bucketAlias string) {
+	if task == nil {
+		return
+	}
+	task.ImagePaths = r.resolveImageURLs(bucketAlias, task.ImagePaths)
+	if len(task.ImagePaths) > 0 {
+		first := task.ImagePaths[0]
+		task.ImageURL = &first
+		return
+	}
+	if task.ImageURL != nil {
+		resolved := r.resolveImageURL(bucketAlias, *task.ImageURL)
+		if resolved == "" {
+			task.ImageURL = nil
+		} else {
+			task.ImageURL = &resolved
+			task.ImagePaths = []string{resolved}
+		}
+	}
+}
+
+func (r *Runner) resolveImageURLs(bucketAlias string, values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = r.resolveImageURL(bucketAlias, value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (r *Runner) resolveImageURL(bucketAlias, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if r.storage == nil {
+		return value
+	}
+	resolved := r.storage.ResolveReferenceURL(bucketAlias, value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
+}
+
 func anySlice(value any) []any {
 	switch arr := value.(type) {
 	case []any:
@@ -899,6 +966,7 @@ func (r *Runner) processExercise(ctx context.Context, task *domain.AnalysisTask)
 	if imageURL == "" {
 		imageURL = stringFromMap(task.Payload, "image_url")
 	}
+	imageURL = r.resolveImageURL("food-images", imageURL)
 	if desc == "" && imageURL == "" {
 		return fmt.Errorf("exercise task missing text_input/image_url")
 	}
@@ -914,7 +982,7 @@ func (r *Runner) processHealthReport(ctx context.Context, task *domain.AnalysisT
 	if r.ocr == nil || r.healthDocs == nil || r.users == nil {
 		return fmt.Errorf("health_report worker dependencies are not initialized")
 	}
-	imageURLs := healthReportImageURLs(task)
+	imageURLs := r.resolveImageURLs("health-reports", healthReportImageURLs(task))
 	if len(imageURLs) == 0 {
 		return fmt.Errorf("health_report task missing image_url")
 	}
@@ -983,7 +1051,7 @@ func (r *Runner) processExpiryRecognize(ctx context.Context, task *domain.Analys
 	if r.expiry == nil {
 		return fmt.Errorf("expiry_recognize worker dependencies are not initialized")
 	}
-	imageURLs := healthReportImageURLs(task)
+	imageURLs := r.resolveImageURLs("food-images", healthReportImageURLs(task))
 	if len(imageURLs) == 0 {
 		return fmt.Errorf("expiry_recognize task missing image_url/image_paths")
 	}

@@ -9,6 +9,7 @@ import (
 	authrepo "food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/friend/repo"
+	"food_link/backend/pkg/storage"
 )
 
 const friendCacheTTL = 5 * time.Minute
@@ -23,13 +24,19 @@ type FriendService struct {
 	userRepo   *authrepo.UserRepo
 	cacheMu    sync.RWMutex
 	cache      map[string]friendCacheEntry
+	storage    *storage.Client
 }
 
-func NewFriendService(friendRepo *repo.FriendRepo, userRepo *authrepo.UserRepo) *FriendService {
+func NewFriendService(friendRepo *repo.FriendRepo, userRepo *authrepo.UserRepo, storageClient ...*storage.Client) *FriendService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
 	return &FriendService{
 		friendRepo: friendRepo,
 		userRepo:   userRepo,
 		cache:      make(map[string]friendCacheEntry),
+		storage:    client,
 	}
 }
 
@@ -89,7 +96,7 @@ func (s *FriendService) SearchUsers(ctx context.Context, currentUserID, nickname
 		out = append(out, map[string]any{
 			"id":         u.ID,
 			"nickname":   u.Nickname,
-			"avatar":     u.Avatar,
+			"avatar":     s.resolveAvatarURL(u.Avatar),
 			"is_friend":  friendSet[u.ID],
 			"is_pending": pendingSet[u.ID],
 		})
@@ -148,7 +155,7 @@ func (s *FriendService) GetFriendRequestsReceived(ctx context.Context, toUserID 
 		avatar := ""
 		if u != nil {
 			nickname = u.Nickname
-			avatar = u.Avatar
+			avatar = s.resolveAvatarURL(u.Avatar)
 		}
 		out = append(out, map[string]any{
 			"id":            r.ID,
@@ -203,7 +210,7 @@ func (s *FriendService) GetFriendList(ctx context.Context, userID string) ([]map
 		out = append(out, map[string]any{
 			"id":       u.ID,
 			"nickname": u.Nickname,
-			"avatar":   u.Avatar,
+			"avatar":   s.resolveAvatarURL(u.Avatar),
 		})
 	}
 	return out, nil
@@ -248,7 +255,7 @@ func (s *FriendService) GetFriendRequestsOverview(ctx context.Context, userID st
 			"updated_at":           r.UpdatedAt,
 			"counterpart_user_id":  r.CounterpartUserID,
 			"counterpart_nickname": r.CounterpartNickname,
-			"counterpart_avatar":   r.CounterpartAvatar,
+			"counterpart_avatar":   s.resolveAvatarURL(r.CounterpartAvatar),
 		})
 	}
 	sentOut := make([]map[string]any, 0, len(sent))
@@ -262,7 +269,7 @@ func (s *FriendService) GetFriendRequestsOverview(ctx context.Context, userID st
 			"updated_at":           r.UpdatedAt,
 			"counterpart_user_id":  r.CounterpartUserID,
 			"counterpart_nickname": r.CounterpartNickname,
-			"counterpart_avatar":   r.CounterpartAvatar,
+			"counterpart_avatar":   s.resolveAvatarURL(r.CounterpartAvatar),
 		})
 	}
 	return map[string]any{
@@ -289,10 +296,10 @@ func (s *FriendService) GetInviteProfile(ctx context.Context, userID string) (ma
 		return nil, commonerrors.ErrNotFound
 	}
 	return map[string]any{
-		"id":         user.ID,
-		"user_id":    user.ID,
-		"nickname":   user.Nickname,
-		"avatar":     user.Avatar,
+		"id":          user.ID,
+		"user_id":     user.ID,
+		"nickname":    user.Nickname,
+		"avatar":      s.resolveAvatarURL(user.Avatar),
 		"invite_code": buildInviteCode(user.ID),
 	}, nil
 }
@@ -309,10 +316,10 @@ func (s *FriendService) ResolveUserByInviteCode(ctx context.Context, code string
 		return nil, commonerrors.ErrNotFound
 	}
 	return map[string]any{
-		"id":         user.ID,
-		"user_id":    user.ID,
-		"nickname":   user.Nickname,
-		"avatar":     user.Avatar,
+		"id":          user.ID,
+		"user_id":     user.ID,
+		"nickname":    user.Nickname,
+		"avatar":      s.resolveAvatarURL(user.Avatar),
 		"invite_code": buildInviteCode(user.ID),
 	}, nil
 }
@@ -362,6 +369,21 @@ func (s *FriendService) AcceptInvite(ctx context.Context, userID, code string) (
 	return profile, nil
 }
 
+func (s *FriendService) resolveAvatarURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
+}
+
 func buildInviteCode(userID string) string {
 	raw := strings.ToLower(strings.ReplaceAll(userID, "-", ""))
 	if len(raw) < 8 {
@@ -369,4 +391,3 @@ func buildInviteCode(userID string) string {
 	}
 	return raw[:8]
 }
-

@@ -85,6 +85,19 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	if !validMealType(input.MealType) {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "meal_type 不合法", HTTPStatus: 400}
 	}
+	input.ImagePaths = s.normalizeImagePaths(input.ImagePaths)
+	if input.ImagePath != nil {
+		resolved := s.resolveFoodImageURL(*input.ImagePath)
+		if resolved == "" {
+			input.ImagePath = nil
+		} else {
+			input.ImagePath = &resolved
+		}
+	}
+	if input.ImagePath == nil && len(input.ImagePaths) > 0 {
+		first := input.ImagePaths[0]
+		input.ImagePath = &first
+	}
 	normalizedMeal := normalizeMealType(input.MealType, nil)
 
 	recordTime, err := s.buildRecordTime(ctx, input.Date, input.SourceTaskID)

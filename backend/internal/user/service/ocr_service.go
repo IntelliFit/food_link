@@ -11,14 +11,20 @@ import (
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 )
 
 type OCRService struct {
-	cfg *config.Config
+	cfg     *config.Config
+	storage *storage.Client
 }
 
-func NewOCRService(cfg *config.Config) *OCRService {
-	return &OCRService{cfg: cfg}
+func NewOCRService(cfg *config.Config, storageClient ...*storage.Client) *OCRService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
+	return &OCRService{cfg: cfg, storage: client}
 }
 
 func (s *OCRService) ExtractFromBase64(ctx context.Context, base64Image string) (map[string]any, error) {
@@ -30,7 +36,19 @@ func (s *OCRService) ExtractFromBase64(ctx context.Context, base64Image string) 
 }
 
 func (s *OCRService) ExtractFromURL(ctx context.Context, imageURL string) (map[string]any, error) {
-	return s.callDashScope(ctx, imageURL)
+	return s.callDashScope(ctx, s.resolveHealthReportURL(imageURL))
+}
+
+func (s *OCRService) resolveHealthReportURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("health-reports", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
 }
 
 func (s *OCRService) callDashScope(ctx context.Context, imageURL string) (map[string]any, error) {

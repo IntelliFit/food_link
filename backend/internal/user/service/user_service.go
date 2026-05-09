@@ -12,6 +12,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
+	"food_link/backend/pkg/storage"
 )
 
 const (
@@ -25,10 +26,15 @@ type UserService struct {
 	users         *repo.UserRepo
 	healthDocs    *userrepo.HealthDocumentRepo
 	modeSwitchLog *userrepo.ModeSwitchLogRepo
+	storage       *storage.Client
 }
 
-func NewUserService(users *repo.UserRepo, healthDocs *userrepo.HealthDocumentRepo, modeSwitchLog *userrepo.ModeSwitchLogRepo) *UserService {
-	return &UserService{users: users, healthDocs: healthDocs, modeSwitchLog: modeSwitchLog}
+func NewUserService(users *repo.UserRepo, healthDocs *userrepo.HealthDocumentRepo, modeSwitchLog *userrepo.ModeSwitchLogRepo, storageClient ...*storage.Client) *UserService {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
+	return &UserService{users: users, healthDocs: healthDocs, modeSwitchLog: modeSwitchLog, storage: client}
 }
 
 func (s *UserService) GetProfile(ctx context.Context, userID string) (map[string]any, error) {
@@ -39,7 +45,7 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (map[string
 	if user == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	return buildProfileResponse(user), nil
+	return s.buildProfileResponse(user), nil
 }
 
 type UpdateProfileInput struct {
@@ -56,7 +62,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 		updates["nickname"] = *input.Nickname
 	}
 	if input.Avatar != nil {
-		updates["avatar"] = *input.Avatar
+		updates["avatar"] = s.resolveAvatarURL(*input.Avatar)
 	}
 	if input.Telephone != nil {
 		updates["telephone"] = *input.Telephone
@@ -74,17 +80,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
-		"id":             user.ID,
-		"openid":         user.OpenID,
-		"unionid":        user.UnionID,
-		"nickname":       user.Nickname,
-		"avatar":         user.Avatar,
-		"telephone":      user.Telephone,
-		"create_time":    user.CreatedAt,
-		"searchable":     user.Searchable,
-		"public_records": user.PublicRecords,
-	}, nil
+	return s.buildProfileResponse(user), nil
 }
 
 func (s *UserService) GetDashboardTargets(ctx context.Context, userID string) (map[string]float64, error) {
@@ -279,6 +275,11 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 		}
 	}
 
+	if input.ReportImageURL != nil {
+		normalizedReportURL := s.resolveHealthReportURL(*input.ReportImageURL)
+		input.ReportImageURL = &normalizedReportURL
+	}
+
 	if input.ReportExtract != nil && len(input.ReportExtract) > 0 {
 		doc := &domain.UserHealthDocument{
 			UserID:           userID,
@@ -364,6 +365,42 @@ func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, 
 
 func (s *UserService) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {
 	return s.users.UpdateLastSeenAnalyzeHistory(ctx, userID)
+}
+
+func (s *UserService) buildProfileResponse(user *repo.User) map[string]any {
+	out := buildProfileResponse(user)
+	out["avatar"] = s.resolveAvatarURL(user.Avatar)
+	return out
+}
+
+func (s *UserService) resolveAvatarURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
+}
+
+func (s *UserService) resolveHealthReportURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("health-reports", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
 }
 
 func buildProfileResponse(user *repo.User) map[string]any {

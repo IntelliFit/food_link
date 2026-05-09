@@ -112,11 +112,11 @@ func New(cfg *config.Config) (*App, error) {
 	modeSwitchLogRepo := userrepo.NewModeSwitchLogRepo(db)
 	analysisTaskRepo := userrepo.NewAnalysisTaskRepo(db)
 
-	userSvc := userservice.NewUserService(userRepo, healthDocRepo, modeSwitchLogRepo)
+	userSvc := userservice.NewUserService(userRepo, healthDocRepo, modeSwitchLogRepo, storageClient)
 	bindPhoneSvc := userservice.NewBindPhoneService(cfg, userRepo)
 	uploadSvc := userservice.NewUploadService(storageClient)
-	ocrSvc := userservice.NewOCRService(cfg)
-	analysisTaskSvc := userservice.NewAnalysisTaskService(analysisTaskRepo)
+	ocrSvc := userservice.NewOCRService(cfg, storageClient)
+	analysisTaskSvc := userservice.NewAnalysisTaskService(analysisTaskRepo, storageClient)
 
 	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc)
 
@@ -128,6 +128,7 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL, cfg.External.DeepSeekModel)
+	analyzeSvc.ConfigureStorage(storageClient)
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	analyzeHandler := analyzehandler.NewAnalyzeHandler(analyzeSvc, analyzeTaskSvc, adminKey)
@@ -146,13 +147,13 @@ func New(cfg *config.Config) (*App, error) {
 	dashboardHandler := homehandler.NewDashboardHandler(dashboardService)
 	// Friend module DI
 	friendRepo := friendrepo.NewFriendRepo(db)
-	friendSvc := friendservice.NewFriendService(friendRepo, userRepo)
+	friendSvc := friendservice.NewFriendService(friendRepo, userRepo, storageClient)
 	friendHandler := friendhandler.NewFriendHandler(friendSvc)
 
 	// Community module DI
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
-	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo)
+	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Health module DI
@@ -161,6 +162,7 @@ func New(cfg *config.Config) (*App, error) {
 	statsRepo := healthrepo.NewStatsRepo(db)
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)
 	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
+	exerciseSvc.ConfigureStorage(storageClient)
 	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
 	healthHandler := healthhandler.NewHealthHandler(bodyMetricsSvc, exerciseSvc, statsSvc)
 
@@ -173,12 +175,12 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
-	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo)
+	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
 
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
-	recipeSvc := recipeservice.NewRecipeService(recipeRepo)
+	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
 
 	// Expiry module DI
@@ -188,6 +190,7 @@ func New(cfg *config.Config) (*App, error) {
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
 	expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)
 	expirySvc.ConfigureCreditGuard(membershipSvc)
+	expirySvc.ConfigureStorage(storageClient)
 	expiryHandler := expiryhandler.NewExpiryHandler(expirySvc)
 
 	// Utility module DI

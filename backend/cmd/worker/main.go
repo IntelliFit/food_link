@@ -23,6 +23,7 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
 	"food_link/backend/pkg/logger"
+	"food_link/backend/pkg/storage"
 
 	"go.uber.org/zap"
 )
@@ -57,16 +58,19 @@ func main() {
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	expiryRepo := expiryrepo.NewExpiryRepo(db)
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
+	storageClient := storage.New(cfg.Storage)
 
 	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "qwen-vl-max")
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, nutritionRepo)
-	ocrSvc := userservice.NewOCRService(cfg)
+	analyzeSvc.ConfigureStorage(storageClient)
+	ocrSvc := userservice.NewOCRService(cfg, storageClient)
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
 	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
+	exerciseSvc.ConfigureStorage(storageClient)
 
-	runner := worker.NewRunner(taskRepo, precisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, zapLog)
+	runner := worker.NewRunner(taskRepo, precisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, zapLog, storageClient)
 	workerID := cfg.Worker.ID
 	if workerID == "" {
 		if host, hostErr := os.Hostname(); hostErr == nil && host != "" {
