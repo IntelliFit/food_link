@@ -42,6 +42,7 @@ import {
   POSTER_WIDTH,
   type DailySummaryPosterInput
 } from '../../utils/poster'
+import { isShowShareImageMenuCancel } from '../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
 
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconWaterDrop } from '../../components/iconfont'
@@ -1883,6 +1884,7 @@ function IndexPage() {
     Taro.showShareImageMenu({
       path: dailyPosterImageUrl,
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
@@ -1894,6 +1896,7 @@ function IndexPage() {
     Taro.showShareImageMenu({
       path: dailyPosterImageUrl,
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         void showUnifiedApiError(new Error('打开图片菜单失败，请重试'), '打开图片菜单失败，请重试')
       }

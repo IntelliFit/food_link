@@ -16,6 +16,7 @@ import {
   type Nutrients
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
+import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
@@ -429,6 +430,7 @@ function RecordDetailPage() {
         void claimSharePosterRewardAfterShare()
       },
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
@@ -691,6 +693,7 @@ function RecordDetailPage() {
     Taro.showShareImageMenu({
       path: posterImageUrl,
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         void showUnifiedApiError(new Error('打开图片菜单失败，请重试'), '打开图片菜单失败，请重试')
       }

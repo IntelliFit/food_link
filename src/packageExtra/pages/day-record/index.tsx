@@ -17,6 +17,7 @@ import {
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type DayRecordPosterMeal } from '../../../utils/poster'
+import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
@@ -524,6 +525,7 @@ function DayRecordPage() {
     Taro.showShareImageMenu({
       path: posterImageUrl,
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
       }
@@ -535,6 +537,7 @@ function DayRecordPage() {
     Taro.showShareImageMenu({
       path: posterImageUrl,
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         Taro.showToast({ title: '打开图片菜单失败，请重试', icon: 'none' })
       }

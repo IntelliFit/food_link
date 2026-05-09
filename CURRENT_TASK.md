@@ -95,6 +95,63 @@
     - `mrc exists .empty-record-btn --port 9420` and `mrc exists .meals-empty --port 9420` are both true
     - because there is no real meal card in this environment, automation could not trigger the full `今日餐食 -> 生成分享海报` click path end-to-end
 
+## 状态：完成源码修复 - 微信官方图片菜单取消不再误报失败
+
+- 2026-05-09 update:
+  - User reported `MealRecordPosterModal.tsx` logging:
+    - `showShareImageMenu fail { errMsg: "showShareImageMenu:fail cancel" }`
+  - Root cause:
+    - current poster flows treated WeChat native image menu cancel as a real failure
+    - fail handlers showed error UI even when the user simply dismissed the menu
+  - Fix applied:
+    - added `src/utils/weapp-share-image.ts` with `isShowShareImageMenuCancel()`
+    - homepage meal poster:
+      - cancel now closes silently because this flow has no custom preview layer anymore
+    - homepage daily summary / record detail / day-record poster:
+      - cancel is now ignored silently, real failures still show their original error prompt
+  - Verification:
+    - `npx eslint src/utils/weapp-share-image.ts src/pages/index/components/MealRecordPosterModal.tsx src/pages/index/index.tsx src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc where --port 9420` connected successfully
+    - `mrc logs error 20 --port 9420` returned 0 runtime errors
+
+## 状态：完成源码修改 - 识别记录状态标签单行展示并增强胶囊样式
+
+- 2026-05-10 update:
+  - User requested that the `识别记录` page status labels such as `已经记录` / `等待记录` should never wrap inside the rounded rectangle and should look slightly more refined.
+  - Fix applied:
+    - `src/packageExtra/pages/analyze-history/index.scss`
+      - status badges now use larger horizontal padding and a slightly wider minimum width
+      - `status-text` now forces single-line rendering with `white-space: nowrap` and `word-break: keep-all`
+      - added a subtle inset highlight and soft shadow to make the capsule feel more intentional
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze-history/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/analyze-history/index --port 9420` succeeded
+    - `mrc where --port 9420` confirmed current page `packageExtra/pages/analyze-history/index`
+    - `mrc exists .status-badge --port 9420` returned true
+  - Runtime validation note:
+    - attempted `mrc screenshot` did not produce a file in the current environment, so this round has navigation/elements verification but no screenshot artifact
+
+## 状态：完成源码修复 - Docker 基础镜像改为固定 Go patch tag
+
+- 2026-05-10 update:
+  - User ran `npm run push-docker-ccr` and hit Docker build failure while resolving:
+    - `docker.io/library/golang:1.26-bookworm`
+  - Findings:
+    - local toolchain is `go1.26.1 darwin/arm64`
+    - backend codebase is aligned to `go 1.26`
+    - the failure is not evidence that the backend must downgrade Go; it is more consistent with Docker Hub alias / metadata instability around the floating tag `1.26-bookworm`
+  - Fix applied:
+    - `backend/Dockerfile`
+      - changed `ARG GO_VERSION=1.26` to `ARG GO_VERSION=1.26.1`
+      - builder image now resolves as `golang:1.26.1-bookworm`, avoiding the floating alias
+  - Verification:
+    - local `go version` confirmed `go1.26.1`
+    - local `docker buildx build --platform linux/amd64 --progress plain -t foodlink-test:v2 backend` reached the same metadata resolution step for `golang:1.26.1-bookworm`
+  - Remaining blocker:
+    - Docker Hub access in the current environment is unstable/intermittent, so the validation build did not finish end-to-end in this session
+
 ## 状态：完成 - 同步 `backend-refactor-sync-migrate-tencent` 分支代码
 
 - 2026-05-09 update:

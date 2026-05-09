@@ -1,6 +1,6 @@
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.26.1
 
-FROM golang:${GO_VERSION}-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS builder
 
 WORKDIR /src
 
@@ -11,8 +11,11 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY pkg ./pkg
 
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
+ENV CGO_ENABLED=0
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w" -o /out/food-link ./cmd/server && \
     go build -trimpath -ldflags="-s -w" -o /out/food-link-worker ./cmd/worker

@@ -11,6 +11,7 @@ import {
   type FoodRecord
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
+import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 
 import './MealRecordPosterModal.scss'
@@ -79,6 +80,10 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         onClose()
       },
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) {
+          onClose()
+          return
+        }
         console.error('showShareImageMenu fail', err)
         onClose()
         void showUnifiedApiError(new Error('打开微信图片菜单失败，请重试'), '打开微信图片菜单失败，请重试')
