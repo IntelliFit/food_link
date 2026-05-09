@@ -63,6 +63,7 @@ func main() {
 	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "qwen-vl-max")
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, nutritionRepo)
+	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
 	ocrSvc := userservice.NewOCRService(cfg, storageClient)
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)

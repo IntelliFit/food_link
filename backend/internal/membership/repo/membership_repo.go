@@ -280,6 +280,72 @@ func (r *MembershipRepo) CountDailyMembershipBonusCredits(ctx context.Context, u
 	return inviteBonus, shareBonus, nil
 }
 
+func (r *MembershipRepo) GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error) {
+	var row domain.UserInviteReferral
+	err := r.db.WithContext(ctx).
+		Where("invitee_user_id = ?", inviteeUserID).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func (r *MembershipRepo) UpdateInviteReferral(ctx context.Context, id string, updates map[string]any) (*domain.UserInviteReferral, error) {
+	if len(updates) > 0 {
+		if _, ok := updates["updated_at"]; !ok {
+			updates["updated_at"] = time.Now()
+		}
+		if err := r.db.WithContext(ctx).Model(&domain.UserInviteReferral{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return nil, err
+		}
+	}
+	var row domain.UserInviteReferral
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func (r *MembershipRepo) CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error) {
+	start, err := time.ParseInLocation("2006-01-02", monthStart, chinaLocation())
+	if err != nil {
+		return 0, nil
+	}
+	end, err := time.ParseInLocation("2006-01-02", nextMonthStart, chinaLocation())
+	if err != nil {
+		return 0, nil
+	}
+	var count int64
+	err = r.db.WithContext(ctx).Model(&domain.UserInviteReferral{}).
+		Where("inviter_user_id = ? AND status = ? AND reward_start_date >= ? AND reward_start_date < ?", inviterUserID, "reward_completed", start, end).
+		Count(&count).Error
+	return int(count), err
+}
+
+func (r *MembershipRepo) ListActiveInviteRewards(ctx context.Context, userID, chinaDate string) ([]domain.UserInviteReferral, error) {
+	if _, err := time.ParseInLocation("2006-01-02", chinaDate, chinaLocation()); err != nil {
+		return nil, nil
+	}
+	var rows []domain.UserInviteReferral
+	err := r.db.WithContext(ctx).
+		Where("(inviter_user_id = ? OR invitee_user_id = ?) AND status = ? AND reward_start_date <= ? AND reward_end_date >= ?", userID, userID, "reward_active", chinaDate, chinaDate).
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *MembershipRepo) ListSharePosterBonusEvents(ctx context.Context, userID, chinaDate string) ([]domain.UserCreditBonusEvent, error) {
+	if _, err := time.ParseInLocation("2006-01-02", chinaDate, chinaLocation()); err != nil {
+		return nil, nil
+	}
+	var rows []domain.UserCreditBonusEvent
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND bonus_type = ? AND bonus_date = ?", userID, "share_poster", chinaDate).
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *MembershipRepo) UpdatePaymentStatus(ctx context.Context, id string, status string) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.MembershipPayment{}).

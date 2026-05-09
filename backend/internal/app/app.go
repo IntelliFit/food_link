@@ -124,10 +124,10 @@ func New(cfg *config.Config) (*App, error) {
 	analyzeTaskRepo := analyzerepo.NewTaskRepo(db)
 	analyzePrecisionRepo := analyzerepo.NewPrecisionRepo(db)
 	analyzeNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
-	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "gemini-3-flash-preview")
+	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "qwen-vl-max")
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
-	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL, cfg.External.DeepSeekModel)
+	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
 	adminKey := os.Getenv("ADMIN_API_KEY")
@@ -171,6 +171,8 @@ func New(cfg *config.Config) (*App, error) {
 	membershipSvc := membershipservice.NewMembershipService(membershipRepo, cfg)
 	analyzeTaskSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureCreditGuard(membershipSvc)
+	exerciseSvc.ConfigureInviteRewardActivator(membershipSvc)
+	frSvc.ConfigureInviteRewardActivator(membershipSvc)
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
 
 	// Public food library module DI

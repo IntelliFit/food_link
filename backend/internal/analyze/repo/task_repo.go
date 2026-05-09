@@ -103,6 +103,24 @@ func (r *TaskRepo) CountTasksByUser(ctx context.Context, userID string) (int64, 
 	return count, err
 }
 
+func (r *TaskRepo) CountTasksByStatus(ctx context.Context, userID string) (map[string]int64, error) {
+	var rows []struct {
+		Status string
+		Count  int64
+	}
+	err := applyAnalyzeHistoryTaskFilter(
+		r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).Where("user_id = ?", userID),
+	).Select("status, count(*) as count").Group("status").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]int64{}
+	for _, row := range rows {
+		out[row.Status] = row.Count
+	}
+	return out, nil
+}
+
 func (r *TaskRepo) RecordedTaskMap(ctx context.Context, userID string, taskIDs []string) (map[string]string, error) {
 	out := map[string]string{}
 	if len(taskIDs) == 0 {

@@ -45,8 +45,93 @@ func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.
 	}
 }
 
-func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey, baseURL, model string) {
-	s.deepseek = NewDeepSeekNutritionEstimator(apiKey, baseURL, model)
+func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string) {
+	s.deepseek = NewDeepSeekNutritionEstimator(apiKey, "", "")
+}
+
+func (s *AnalyzeService) RunPrecisionJSON(ctx context.Context, sourceType, prompt, imageURL, modelName string) (map[string]any, error) {
+	imageURLs := []string{}
+	if strings.TrimSpace(imageURL) != "" {
+		imageURLs = append(imageURLs, imageURL)
+	}
+	return s.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, modelName)
+}
+
+func (s *AnalyzeService) RunPrecisionJSONWithImages(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
+	return s.RunPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0.2)
+}
+
+func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
+	sourceType = strings.TrimSpace(sourceType)
+	timeout := 60 * time.Second
+	if sourceType == "image" {
+		timeout = 90 * time.Second
+	}
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	provider, _ := resolveModelConfig(modelName)
+	if strings.TrimSpace(modelName) == "" {
+		provider = "gemini"
+	}
+	var client LLMClient
+	switch provider {
+	case "deepseek":
+		if s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
+			return nil, fmt.Errorf("精准模式文字模型使用 DeepSeek 时，请配置 DEEPSEEK_API_KEY")
+		}
+		client = s.deepseek
+	case "gemini":
+		client = s.ofoxAIClient
+	default:
+		client = s.ofoxAIClient
+	}
+	if client == nil {
+		return nil, fmt.Errorf("精准模式 LLM client 未初始化")
+	}
+	if strings.TrimSpace(sourceType) != "image" {
+		imageURLs = nil
+	}
+	imageURLs = nonEmptyStrings(imageURLs)
+	if len(imageURLs) > 0 {
+		if precisionClient, ok := client.(interface {
+			AnalyzeWithImagesAndTemperature(context.Context, string, []string, float64) (map[string]any, error)
+		}); ok {
+			return precisionClient.AnalyzeWithImagesAndTemperature(callCtx, prompt, imageURLs, temperature)
+		}
+		if multiClient, ok := client.(interface {
+			AnalyzeWithImages(context.Context, string, []string) (map[string]any, error)
+		}); ok {
+			return multiClient.AnalyzeWithImages(callCtx, prompt, imageURLs)
+		}
+		return client.Analyze(callCtx, prompt, imageURLs[0])
+	}
+	if precisionClient, ok := client.(interface {
+		AnalyzeWithImagesAndTemperature(context.Context, string, []string, float64) (map[string]any, error)
+	}); ok {
+		return precisionClient.AnalyzeWithImagesAndTemperature(callCtx, prompt, nil, temperature)
+	}
+	return client.Analyze(callCtx, prompt, "")
+}
+
+func (s *AnalyzeService) ApplyDBFirstToItems(ctx context.Context, items []map[string]any, additionalContext string) []map[string]any {
+	resp := map[string]any{"items": items}
+	resp = s.applyDBFirstNutrition(ctx, resp, additionalContext)
+	return toItems(resp["items"])
+}
+
+func nonEmptyStrings(values []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func (s *AnalyzeService) ConfigureStorage(storageClient *storage.Client) {
@@ -596,8 +681,17 @@ func formatHealthRiskSummary(user *authrepo.User) string {
 func resolveModelConfig(modelName string) (provider, model string) {
 	raw := strings.TrimSpace(modelName)
 	normalized := strings.ToLower(raw)
-	if raw == "" || normalized == "qwen" || normalized == "qwen-vl" || normalized == "qwen-vl-max" {
-		return "qwen", "qwen-vl-max"
+	if raw == "" {
+		return "gemini", "gemini-3-flash-preview"
+	}
+	if normalized == "qwen" || normalized == "qwen-vl" || normalized == "qwen-vl-max" {
+		return "gemini", "gemini-3-flash-preview"
+	}
+	if normalized == "deepseek" || normalized == "deepseek-v4-flash" {
+		return "deepseek", "deepseek-v4-flash"
+	}
+	if strings.HasPrefix(normalized, "deepseek") {
+		return "deepseek", raw
 	}
 	if normalized == "gemini" || normalized == "gemini-flash" || normalized == "gemini-vision" {
 		return "gemini", "gemini-3-flash-preview"
@@ -605,7 +699,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if strings.HasPrefix(normalized, "gemini") {
 		return "gemini", raw
 	}
-	return "qwen", raw
+	return "gemini", "gemini-3-flash-preview"
 }
 
 // Analyze performs single-image or text analysis synchronously.
@@ -622,18 +716,19 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 
 	provider, model := resolveModelConfig(input.ModelName)
 	var client LLMClient
-	if provider == "gemini" {
-		client = NewOfoxAIClient("", model)
-	} else {
-		client = NewDashScopeClient("", model)
-	}
-	// Note: actual API keys are injected via the service's configured clients;
-	// for flexibility we use the factory here but in production you'd want to
-	// reuse the initialized clients from the service struct.
-	if provider == "gemini" {
+	switch provider {
+	case "gemini":
 		client = s.ofoxAIClient
-	} else {
-		client = s.dashScopeClient
+	case "deepseek":
+		if s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
+			return nil, fmt.Errorf("图片识别不再使用 Qwen；如需显式 DeepSeek，请配置 DEEPSEEK_API_KEY")
+		}
+		client = s.deepseek
+	default:
+		client = s.ofoxAIClient
+	}
+	if client == nil {
+		return nil, fmt.Errorf("图片识别 Gemini client 未初始化")
 	}
 
 	imageURL := ""
@@ -663,10 +758,23 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	prompt := buildPrompt(input, user, executionMode)
 	provider, model := resolveModelConfig(input.ModelName)
 	var client LLMClient
-	if provider == "gemini" {
+	if strings.TrimSpace(input.ModelName) == "" {
+		if s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
+			return nil, fmt.Errorf("文字输入模式默认使用 DeepSeek，请配置 DEEPSEEK_API_KEY")
+		}
+		provider = "deepseek"
+		model = s.deepseek.Model
+		client = s.deepseek
+	} else if provider == "deepseek" {
+		if s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
+			return nil, fmt.Errorf("文字输入模式使用 DeepSeek，请配置 DEEPSEEK_API_KEY")
+		}
+		client = s.deepseek
+		model = s.deepseek.Model
+	} else if provider == "gemini" {
 		client = s.ofoxAIClient
 	} else {
-		client = s.dashScopeClient
+		client = s.ofoxAIClient
 	}
 	start := time.Now()
 	parsed, err := client.Analyze(ctx, prompt, "")
@@ -758,7 +866,7 @@ func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID strin
 	if provider == "gemini" {
 		client = s.ofoxAIClient
 	} else {
-		client = s.dashScopeClient
+		client = s.ofoxAIClient
 	}
 
 	start := time.Now()
@@ -812,7 +920,7 @@ func (s *AnalyzeService) AnalyzeBatch(ctx context.Context, userID string, input 
 	if provider == "gemini" {
 		client = s.ofoxAIClient
 	} else {
-		client = s.dashScopeClient
+		client = s.ofoxAIClient
 	}
 
 	sem := make(chan struct{}, 3)

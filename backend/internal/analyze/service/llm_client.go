@@ -36,10 +36,26 @@ func NewDashScopeClient(apiKey, model string) *DashScopeClient {
 }
 
 func (c *DashScopeClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	imageURLs := []string{}
+	if strings.TrimSpace(imageURL) != "" {
+		imageURLs = append(imageURLs, imageURL)
+	}
+	return c.AnalyzeWithImages(ctx, prompt, imageURLs)
+}
+
+func (c *DashScopeClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
+	return c.AnalyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3)
+}
+
+func (c *DashScopeClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
 	content := []map[string]any{
 		{"type": "text", "text": prompt},
 	}
-	if imageURL != "" {
+	for _, imageURL := range imageURLs {
+		imageURL = strings.TrimSpace(imageURL)
+		if imageURL == "" {
+			continue
+		}
 		content = append(content, map[string]any{
 			"type": "image_url",
 			"image_url": map[string]string{
@@ -51,7 +67,7 @@ func (c *DashScopeClient) Analyze(ctx context.Context, prompt, imageURL string) 
 		"model":           c.Model,
 		"messages":        []map[string]any{{"role": "user", "content": content}},
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature":     0.3,
+		"temperature":     temperature,
 	}
 	return c.doRequest(ctx, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", body)
 }
@@ -117,10 +133,26 @@ func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
 }
 
 func (c *OfoxAIClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	imageURLs := []string{}
+	if strings.TrimSpace(imageURL) != "" {
+		imageURLs = append(imageURLs, imageURL)
+	}
+	return c.AnalyzeWithImages(ctx, prompt, imageURLs)
+}
+
+func (c *OfoxAIClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
+	return c.AnalyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3)
+}
+
+func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
 	content := []map[string]any{
 		{"type": "text", "text": prompt},
 	}
-	if imageURL != "" {
+	for _, imageURL := range imageURLs {
+		imageURL = strings.TrimSpace(imageURL)
+		if imageURL == "" {
+			continue
+		}
 		content = append(content, map[string]any{
 			"type": "image_url",
 			"image_url": map[string]string{
@@ -132,7 +164,7 @@ func (c *OfoxAIClient) Analyze(ctx context.Context, prompt, imageURL string) (ma
 		"model":           c.Model,
 		"messages":        []map[string]any{{"role": "user", "content": content}},
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature":     0.3,
+		"temperature":     temperature,
 	}
 	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
 }

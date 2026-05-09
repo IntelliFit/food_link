@@ -1,7 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"net/http"
 	"testing"
 
 	authrepo "food_link/backend/internal/auth/repo"
@@ -40,8 +43,20 @@ func TestNormalizeExecutionMode(t *testing.T) {
 
 func TestResolveModelConfig(t *testing.T) {
 	p, m := resolveModelConfig("")
-	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen-vl-max", m)
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3-flash-preview", m)
+
+	p, m = resolveModelConfig("qwen")
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3-flash-preview", m)
+
+	p, m = resolveModelConfig("qwen-vl-max")
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3-flash-preview", m)
+
+	p, m = resolveModelConfig("deepseek")
+	assert.Equal(t, "deepseek", p)
+	assert.Equal(t, "deepseek-v4-flash", m)
 
 	p, m = resolveModelConfig("gemini")
 	assert.Equal(t, "gemini", p)
@@ -50,6 +65,10 @@ func TestResolveModelConfig(t *testing.T) {
 	p, m = resolveModelConfig("gemini-custom")
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-custom", m)
+
+	p, m = resolveModelConfig("unknown-model")
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3-flash-preview", m)
 }
 
 func TestParseLLMJSON(t *testing.T) {
@@ -194,14 +213,45 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 }
 
 func TestAnalyzeService_AnalyzeText(t *testing.T) {
-	_, userRepo := setupAnalyzeServiceTestDB(t)
 	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{}}}
-	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, nil)
+	svc.ConfigureDeepSeekFallback("fake-key")
+	svc.deepseek.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"{\"description\":\"text test\",\"items\":[]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
 	ctx := context.Background()
 
 	result, err := svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "一碗米饭"})
 	require.NoError(t, err)
 	assert.Equal(t, "text test", result["description"])
+}
+
+func TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "should not be used", "items": []any{}}}
+	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, nil)
+
+	_, err := svc.AnalyzeText(context.Background(), "", AnalyzeInput{Text: "一碗米饭"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "DEEPSEEK_API_KEY")
+}
+
+func TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini(t *testing.T) {
+	dashScopeClient := &mockLLMClient{err: assert.AnError}
+	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini image", "items": []any{}}}
+	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "qwen-vl-max",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "gemini image", result["description"])
 }
 
 func TestAnalyzeService_AnalyzeCompare(t *testing.T) {

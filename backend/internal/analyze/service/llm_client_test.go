@@ -117,6 +117,30 @@ func TestOfoxAIClient_Analyze_HTMLResponse(t *testing.T) {
 	assert.False(t, strings.Contains(err.Error(), "<html"))
 }
 
+func TestDeepSeekNutritionEstimator_Analyze_Success(t *testing.T) {
+	client := NewDeepSeekNutritionEstimator("fake-key", "", "")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://api.deepseek.com/chat/completions", req.URL.String())
+		body := `{"choices":[{"message":{"content":"{\"description\":\"文字记录\",\"items\":[{\"name\":\"米饭\",\"estimatedWeightGrams\":100}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	result, err := client.Analyze(context.Background(), "test prompt", "")
+	assert.NoError(t, err)
+	assert.Equal(t, "文字记录", result["description"])
+}
+
+func TestDeepSeekNutritionEstimator_Analyze_MissingKey(t *testing.T) {
+	client := NewDeepSeekNutritionEstimator("", "", "")
+	_, err := client.Analyze(context.Background(), "test prompt", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "DEEPSEEK_API_KEY")
+}
+
 func TestParseLLMJSON_WithFences(t *testing.T) {
 	jsonStr := "```json\n{\"name\":\"apple\"}\n```"
 	result, err := parseLLMJSON(jsonStr)

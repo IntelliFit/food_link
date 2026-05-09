@@ -60,7 +60,7 @@ import {
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
-import { isTodayRecordDate } from '../../utils/record-date'
+import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -101,6 +101,15 @@ function formatPosterWeekdayLabel(dateKey: string): string {
   const [y, m, d] = parts
   const dt = new Date(y, m - 1, d)
   return `周${SHORT_DAY_NAMES[dt.getDay()] ?? '—'}`
+}
+
+function formatBackfillDateLabel(dateKey: string): string {
+  const parts = dateKey.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+    return dateKey
+  }
+  const [_y, m, d] = parts
+  return `${m}月${d}日`
 }
 
 // 与后端/统计周对齐：真实日历为 2026 时，仅在与「可能带错年」的接口字段比对时做归一
@@ -2045,6 +2054,9 @@ function IndexPage() {
     homeAchievement
   ])
 
+  const showBackfillHint = isAllowedRecordDate(selectedDate) && !isTodayRecordDate(selectedDate)
+  const backfillDateLabel = formatBackfillDateLabel(selectedDate)
+
   return (
     <View className='home-page'>
       {/* 后台静默同步中：左上角微型 spinner */}
@@ -2078,7 +2090,12 @@ function IndexPage() {
           selectedDate={selectedDate} 
           onSelect={handleDateSelect} 
         />
-        {/* 补录提示已移除 */}
+        {showBackfillHint && (
+          <View className='home-backfill-hint'>
+            <Text className='home-backfill-hint__dot' />
+            <Text className='home-backfill-hint__text'>正在补录 {backfillDateLabel}</Text>
+          </View>
+        )}
 
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
         <View className='main-card combined-card'>

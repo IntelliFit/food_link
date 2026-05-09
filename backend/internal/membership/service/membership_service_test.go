@@ -13,21 +13,25 @@ import (
 )
 
 type mockMembershipRepo struct {
-	plans              []domain.MembershipPlan
-	planByCode         map[string]*domain.MembershipPlan
-	membership         *domain.UserMembership
-	payment            *domain.MembershipPayment
-	latestPaidPayment  *domain.MembershipPayment
-	user               *membershiprepo.User
-	analysisCountToday int64
-	usedByDate         map[string]int
-	earlyUserRank      int
-	earlyPaidRank      int
-	inviteBonusCredits int
-	shareBonusCredits  int
-	foodRecordOwner    string
-	shareClaimsToday   int
-	shareClaim         *domain.UserCreditBonusEvent
+	plans                         []domain.MembershipPlan
+	planByCode                    map[string]*domain.MembershipPlan
+	membership                    *domain.UserMembership
+	payment                       *domain.MembershipPayment
+	latestPaidPayment             *domain.MembershipPayment
+	user                          *membershiprepo.User
+	analysisCountToday            int64
+	usedByDate                    map[string]int
+	earlyUserRank                 int
+	earlyPaidRank                 int
+	inviteBonusCredits            int
+	shareBonusCredits             int
+	inviteReferral                *domain.UserInviteReferral
+	activeInviteRewards           []domain.UserInviteReferral
+	shareEvents                   []domain.UserCreditBonusEvent
+	completedInviteRewardsInMonth int
+	foodRecordOwner               string
+	shareClaimsToday              int
+	shareClaim                    *domain.UserCreditBonusEvent
 }
 
 func (m *mockMembershipRepo) ListActivePlans(ctx context.Context) ([]domain.MembershipPlan, error) {
@@ -130,6 +134,44 @@ func (m *mockMembershipRepo) GetFirstPaidMembershipUserRank(ctx context.Context,
 }
 func (m *mockMembershipRepo) CountDailyMembershipBonusCredits(ctx context.Context, userID, chinaDate string) (int, int, error) {
 	return m.inviteBonusCredits, m.shareBonusCredits, nil
+}
+func (m *mockMembershipRepo) GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error) {
+	return m.inviteReferral, nil
+}
+func (m *mockMembershipRepo) UpdateInviteReferral(ctx context.Context, id string, updates map[string]any) (*domain.UserInviteReferral, error) {
+	if m.inviteReferral == nil {
+		m.inviteReferral = &domain.UserInviteReferral{ID: id}
+	}
+	if v, ok := updates["status"].(string); ok {
+		m.inviteReferral.Status = v
+	}
+	if v, ok := updates["first_effective_action_at"].(time.Time); ok {
+		m.inviteReferral.FirstEffectiveActionAt = &v
+	}
+	if v, ok := updates["first_effective_action_type"].(string); ok {
+		m.inviteReferral.FirstEffectiveActionType = &v
+	}
+	if v, ok := updates["reward_start_date"].(time.Time); ok {
+		m.inviteReferral.RewardStartDate = &v
+	}
+	if v, ok := updates["reward_end_date"].(time.Time); ok {
+		m.inviteReferral.RewardEndDate = &v
+	}
+	if v, ok := updates["blocked_reason"].(string); ok {
+		m.inviteReferral.BlockedReason = &v
+	} else if _, ok := updates["blocked_reason"]; ok {
+		m.inviteReferral.BlockedReason = nil
+	}
+	return m.inviteReferral, nil
+}
+func (m *mockMembershipRepo) CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error) {
+	return m.completedInviteRewardsInMonth, nil
+}
+func (m *mockMembershipRepo) ListActiveInviteRewards(ctx context.Context, userID, chinaDate string) ([]domain.UserInviteReferral, error) {
+	return m.activeInviteRewards, nil
+}
+func (m *mockMembershipRepo) ListSharePosterBonusEvents(ctx context.Context, userID, chinaDate string) ([]domain.UserCreditBonusEvent, error) {
+	return m.shareEvents, nil
 }
 func (m *mockMembershipRepo) GetUser(ctx context.Context, userID string) (*membershiprepo.User, error) {
 	return m.user, nil
@@ -297,6 +339,80 @@ func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTie
 	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict", "")
 	require.NoError(t, err)
 	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
+}
+
+func TestMembershipService_ActivateInviteReferralRecordsFirstValidUse(t *testing.T) {
+	created := time.Now().Add(-24 * time.Hour)
+	repo := &mockMembershipRepo{
+		inviteReferral: &domain.UserInviteReferral{
+			ID:            "ref1",
+			InviterUserID: "inviter",
+			InviteeUserID: "invitee",
+			Status:        "pending_qualified",
+			CreatedAt:     &created,
+		},
+	}
+	svc := NewMembershipService(repo)
+
+	ref, err := svc.ActivatePendingInviteReferralOnFirstValidUse(context.Background(), "invitee", "food_record")
+	require.NoError(t, err)
+	require.NotNil(t, ref)
+	assert.Equal(t, "pending_qualified", ref.Status)
+	require.NotNil(t, ref.FirstEffectiveActionAt)
+	require.NotNil(t, ref.FirstEffectiveActionType)
+	assert.Equal(t, "food_record", *ref.FirstEffectiveActionType)
+}
+
+func TestMembershipService_ActivateInviteReferralSecondDayAwardsBothSides(t *testing.T) {
+	first := time.Now().AddDate(0, 0, -1)
+	created := time.Now().AddDate(0, 0, -2)
+	repo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "invitee"},
+		inviteReferral: &domain.UserInviteReferral{
+			ID:                     "ref1",
+			InviterUserID:          "inviter",
+			InviteeUserID:          "invitee",
+			Status:                 "pending_qualified",
+			FirstEffectiveActionAt: &first,
+			CreatedAt:              &created,
+		},
+	}
+	svc := NewMembershipService(repo)
+
+	ref, err := svc.ActivatePendingInviteReferralOnFirstValidUse(context.Background(), "invitee", "exercise_log")
+	require.NoError(t, err)
+	require.NotNil(t, ref)
+	assert.Equal(t, "reward_completed", ref.Status)
+	assert.NotNil(t, ref.RewardStartDate)
+}
+
+func TestMembershipService_GetMyMembershipMaterializesLegacyInviteAndShareRewards(t *testing.T) {
+	now := time.Now()
+	today := now.In(chinaLocation()).Format("2006-01-02")
+	recordID := "rec1"
+	repo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1", CreatedAt: &now},
+		activeInviteRewards: []domain.UserInviteReferral{{
+			ID:            "ref1",
+			InviterUserID: "u1",
+			InviteeUserID: "u2",
+			Status:        "reward_active",
+		}},
+		shareEvents: []domain.UserCreditBonusEvent{{
+			ID:             "bonus1",
+			UserID:         "u1",
+			BonusType:      "share_poster",
+			BonusDate:      today,
+			Credits:        1,
+			SourceRecordID: &recordID,
+		}},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetMyMembership(context.Background(), "u1")
+	require.NoError(t, err)
+	assert.Equal(t, 6, data["earned_credits_balance"])
+	assert.Equal(t, 14, data["total_credits_available"])
 }
 
 func TestMembershipService_WechatNotify_ActivatesMembership(t *testing.T) {
