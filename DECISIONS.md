@@ -747,11 +747,11 @@
 - `2026-05-09`: 当 `backend-refactor-sync-migrate-tencent` 本地分支同时落后远端又携带旧本地提交时，同步策略以“先 fetch，再 rebase 到远端最新，再只保留仍有独立价值的本地迁移资产”为准：
   - 已被远端更完整实现覆盖的旧本地提交可跳过，不强行保留历史实现形态
   - 迁移脚本、状态文档等独立资产需要在 rebase 后继续保留并推回远端
-- `2026-05-09`: 小程序内“保存海报到相册”不能再直接散落调用 `Taro.saveImageToPhotosAlbum`。正式口径是统一走 `src/utils/weapp-save-image-album.ts`：
-  - 保存前先执行微信隐私授权（`requirePrivacyAuthorize`）
-  - 再处理 `scope.writePhotosAlbum` 权限
-  - 最后再做临时文件归一化/持久化后保存
-  - `src/app.config.ts` 需要显式开启 `__usePrivacyCheck__: true`
+- `2026-05-09`: 小程序内海报“保存图片/下载图片”的正式口径改为直接使用微信原生图片菜单 `showShareImageMenu`，不再维护项目自己的本地相册保存 helper：
+  - 首页餐食海报、首页今日小结海报、记录详情海报、按日记录海报统一使用原生图片菜单
+  - 项目不再直接调用 `Taro.saveImageToPhotosAlbum` 作为海报下载主路径
+  - `src/utils/weapp-save-image-album.ts` 已删除
+  - `scope.writePhotosAlbum` 权限声明也随之移除
 - `2026-05-09`: 「我的」页正式口径改为“进入即拉后端最新数据”，不再以本地缓存作为展示优先源：
   - `src/pages/profile/index.tsx` 不再依赖 `userInfo`、`membershipStatus`、`userRegisterTime`、`profile_stats_*` 作为首屏展示缓存
   - 「识别记录」快捷入口不再展示 waiting/unread 红色 badge

@@ -17,7 +17,6 @@ import {
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
-import { savePosterToPhotosAlbum } from '../../../utils/weapp-save-image-album'
 
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
@@ -689,13 +688,11 @@ function RecordDetailPage() {
 
   const handleSavePoster = () => {
     if (!posterImageUrl) return
-    void savePosterToPhotosAlbum(posterImageUrl, {
-      onSuccess: () => {
-        Taro.showToast({ title: '已保存到相册', icon: 'success' })
-        setShowPosterModal(false)
-      },
-      onToast: (message) => {
-        Taro.showToast({ title: message, icon: 'none' })
+    Taro.showShareImageMenu({
+      path: posterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        console.error('showShareImageMenu fail', err)
+        void showUnifiedApiError(new Error('打开图片菜单失败，请重试'), '打开图片菜单失败，请重试')
       }
     })
   }

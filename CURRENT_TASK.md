@@ -27,17 +27,16 @@
     - poster save flows still called `Taro.saveImageToPhotosAlbum` directly
     - release builds require mini-program privacy authorization before calling album APIs, while local/dev may not expose the same failure path
   - Fix applied:
-    - enabled app privacy check in `src/app.config.ts` via `__usePrivacyCheck__: true`
-    - extended `src/utils/weapp-save-image-album.ts`:
-      - call `requirePrivacyAuthorize` before album permission and save
-      - if the user has not agreed yet, prompt to open the privacy contract
-      - keep existing album-permission and temp-file normalization logic
-      - retain explicit modal for the case where the release app still lacks the required privacy declaration on the WeChat platform side
-    - switched these poster save entries to the shared save helper:
+    - first tried a unified custom save helper path for release privacy handling
+    - then, per latest user request, removed the custom local-save helper entirely and switched poster download/save actions to WeChat native `showShareImageMenu`
+    - current poster save/download behavior now relies on the built-in image menu window instead of project-local album save logic
+    - switched these poster save entries to the native image menu:
       - homepage meal poster `src/pages/index/components/MealRecordPosterModal.tsx`
       - homepage daily summary poster `src/pages/index/index.tsx`
       - record detail poster `src/packageExtra/pages/record-detail/index.tsx`
       - day-record poster `src/packageExtra/pages/day-record/index.tsx`
+    - removed `src/utils/weapp-save-image-album.ts`
+    - removed `scope.writePhotosAlbum` app permission config because the project no longer directly calls the album save API
   - Verification:
     - `npx eslint` passed for the touched files
     - `git diff --check` passed

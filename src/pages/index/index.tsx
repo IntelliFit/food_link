@@ -42,7 +42,6 @@ import {
   type DailySummaryPosterInput
 } from '../../utils/poster'
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
-import { savePosterToPhotosAlbum } from '../../utils/weapp-save-image-album'
 
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconWaterDrop } from '../../components/iconfont'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
@@ -1883,13 +1882,11 @@ function IndexPage() {
 
   const handleSaveDailyPoster = useCallback(() => {
     if (!dailyPosterImageUrl) return
-    void savePosterToPhotosAlbum(dailyPosterImageUrl, {
-      onSuccess: () => {
-        Taro.showToast({ title: '已保存到相册', icon: 'success' })
-        setShowDailyPosterModal(false)
-      },
-      onToast: (message) => {
-        Taro.showToast({ title: message, icon: 'none' })
+    Taro.showShareImageMenu({
+      path: dailyPosterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        console.error('showShareImageMenu fail', err)
+        void showUnifiedApiError(new Error('打开图片菜单失败，请重试'), '打开图片菜单失败，请重试')
       }
     })
   }, [dailyPosterImageUrl])

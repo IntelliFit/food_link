@@ -18,7 +18,6 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type DayRecordPosterMeal } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
-import { savePosterToPhotosAlbum } from '../../../utils/weapp-save-image-album'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
 function formatNumber(value: number): string {
@@ -533,16 +532,14 @@ function DayRecordPage() {
 
   const handleSaveDayRecordPoster = useCallback(() => {
     if (!posterImageUrl) return
-    void savePosterToPhotosAlbum(posterImageUrl, {
-      onSuccess: () => {
-        Taro.showToast({ title: '已保存到相册', icon: 'success' })
-        closeDayRecordPoster()
-      },
-      onToast: (message) => {
-        Taro.showToast({ title: message, icon: 'none' })
+    Taro.showShareImageMenu({
+      path: posterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        console.error('showShareImageMenu fail', err)
+        Taro.showToast({ title: '打开图片菜单失败，请重试', icon: 'none' })
       }
     })
-  }, [posterImageUrl, closeDayRecordPoster])
+  }, [posterImageUrl])
 
   return (
     <View className='day-record-page'>
