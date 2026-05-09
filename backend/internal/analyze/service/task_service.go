@@ -424,7 +424,7 @@ func precisionSourceType(input SubmitTaskInput) string {
 
 func referenceObjectsAsAny(items []map[string]any) []any {
 	if len(items) == 0 {
-		return nil
+		return []any{}
 	}
 	out := make([]any, 0, len(items))
 	for _, item := range items {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/repo"
+	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/pkg/storage"
 	"gorm.io/gorm"
 )
@@ -30,6 +32,11 @@ type FoodRecordService struct {
 	taskRepo   *repo.AnalysisTaskRepo
 	userRepo   *authrepo.UserRepo
 	storage    *storage.Client
+	rewards    InviteRewardActivator
+}
+
+type InviteRewardActivator interface {
+	ActivatePendingInviteReferralOnFirstValidUse(ctx context.Context, inviteeUserID, effectiveAction string) (*membershipdomain.UserInviteReferral, error)
 }
 
 func NewFoodRecordService(
@@ -48,6 +55,10 @@ func NewFoodRecordService(
 		userRepo:   userRepo,
 		storage:    client,
 	}
+}
+
+func (s *FoodRecordService) ConfigureInviteRewardActivator(rewards InviteRewardActivator) {
+	s.rewards = rewards
 }
 
 type SaveFoodRecordInput struct {
@@ -116,7 +127,17 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	if err := s.recordRepo.Create(ctx, record); err != nil {
 		return nil, err
 	}
+	s.activateInviteReward(ctx, userID, "food_record")
 	return record, nil
+}
+
+func (s *FoodRecordService) activateInviteReward(ctx context.Context, userID, action string) {
+	if s.rewards == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	if _, err := s.rewards.ActivatePendingInviteReferralOnFirstValidUse(ctx, userID, action); err != nil {
+		fmt.Printf("[food_record] invite reward activation failed user=%s action=%s error=%v\n", userID, action, err)
+	}
 }
 
 func (s *FoodRecordService) List(ctx context.Context, userID, date string) ([]domain.FoodRecord, error) {

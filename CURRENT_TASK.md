@@ -1,6 +1,193 @@
 # 当前任务
 
+## 状态：已修复 - Go 积分体系补齐 dev/Python 邀请奖励闭环
+
+- 2026-05-09 credit parity review:
+  - 用户说明当前分支是基于最新 `dev/main` Python 后端能力做 Go 重构后的测试分支，要求先把积分体系逻辑做到与 `dev` 一模一样；`dev` 自身已有的问题暂不处理。
+  - 已静态对照 `dev` 的 `backend/main.py`、`backend/database.py`、`backend/routers/*` 与当前 Go `backend/internal/membership/*`、`backend/internal/analyze/service/task_service.go`、`backend/internal/expiry/service/expiry_service.go`、`backend/internal/health/service/exercise_service.go`、`backend/internal/foodrecord/service/food_record_service.go`。
+  - 当前 Go 已基本覆盖：标准食物分析 2 分、精准分析 4 分、运动记录 1 分；每日系统积分 + earned credits 拆分；补录日期优先使用目标日系统积分、再用今日系统积分、最后用长期奖励积分；付费会员/试用/前 1000 注册/前 100 付费翻倍；海报奖励每日每条记录一次、每人最多 3 分；任务创建成功后再扣 earned credits。
+  - 主要缺口：`dev` 在保存饮食记录和创建运动记录后会调用 `activate_pending_invite_referral_on_first_valid_use_sync`，新用户 7 天内完成 2 个不同自然日有效使用后，邀请双方各得 15 earned credits；当前 Go 只创建 `user_invite_referrals` 绑定并在会员接口统计已有 ledger，缺少“有效使用推进邀请状态 + 发 15 分”的闭环。
+  - 次级差异：Go 的 `CountDailyMembershipBonusCredits` 只统计 ledger，不像 `dev.get_daily_membership_bonus_breakdown()` 会先 materialize 历史 `reward_active` 邀请奖励和海报事件；当前海报领取路径已立即写 ledger，问题主要落在邀请奖励兼容/补偿。
+  - Verification:
+    - `go test ./internal/membership/domain ./internal/membership/handler ./internal/membership/service` 通过。
+    - `go test ./internal/membership/...` 仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞在 repo 测试。
+  - 下一步建议：先补 Go 邀请奖励闭环与 materialize 兼容，再补 repo/集成测试或真实 PostgreSQL 事务验证。
+  - 2026-05-09 credit parity fix:
+    - 已补 Go `membership` 的邀请奖励闭环：
+      - `ActivatePendingInviteReferralOnFirstValidUse` 复刻 `dev.record_invite_referral_valid_use_sync`：只处理 `pending_qualified`；7 天窗口过期标记 `reward_blocked/qualification_window_expired`；第一天有效使用只记录 `first_effective_action_at/type`；第二个不同中国自然日检查邀请人当月已完成奖励数，超过 10 人则 `reward_blocked/monthly_limit_reached`；未超限则邀请双方各得 15 earned credits，source_key 分别为 `invite-qualified:{referral_id}:inviter/invitee`，然后 referral 标记 `reward_completed`。
+      - `GetMyMembership` 计算积分前新增 materialize 兼容：对 `reward_active` 老邀请奖励按每天 5 分写入 `invite_daily_reward` ledger；对 `user_credit_bonus_events` 的海报事件补写 `share_poster_reward` ledger，保持与 `dev.get_daily_membership_bonus_breakdown()` 的副作用一致。
+    - 已把奖励激活接入主业务：
+      - `FoodRecordService.Save` 饮食记录保存成功后触发 `food_record` 有效使用。
+      - `ExerciseService.ProcessExerciseTask` 运动 worker 真正创建运动记录成功后触发 `exercise_log` 有效使用。
+      - 两处都按 Python 口径：奖励失败只打印并忽略，不阻塞记录保存/运动任务完成。
+    - Verification:
+      - `go test ./internal/membership/domain ./internal/membership/handler ./internal/membership/service` 通过。
+      - `go test ./internal/app ./internal/worker ./internal/health/service` 通过。
+      - `go build -o %TEMP%\food-link-credit-parity-server.exe ./cmd/server` 通过。
+      - `go build -o %TEMP%\food-link-credit-parity-worker.exe ./cmd/worker` 通过。
+      - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - Known blockers:
+      - `go test ./internal/foodrecord/service ...` 与涉及 repo/sqlite 的全量测试仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞。
+
+## 状态：已修复 - Go 精准模式对齐 Python 实际流程
+
+- 2026-05-09 precision parity:
+  - 用户要求精准模式必须按 Python 当前正在使用的流程迁移；进一步确认 Python 实际运行路径会按条件触发 `_maybe_refine_precision_weights_sync` 二次重量复核，因此 Go 也已补回。
+  - 已对照 `main:backend/worker.py` 迁移 Go worker 精准模式主链路：
+    - `precision_plan` 不再复用通用食物分析 prompt，改为 Python 版专用 planner prompt，读取 session/latest_inputs/reference_objects/previous_rounds，输出并规范化 `precisionStatus=ready_for_estimate`、`splitStrategy`、`itemsToEstimate`。
+    - `precision_item_estimate` 不再复用通用 `Analyze/AnalyzeText`，改为 Python 版专用单项/多项估重 prompt，只解析 `item/items` 中的 `name + estimatedWeightGrams`，再挂回 planner metadata，并走 db_first 营养库回算。
+    - `precision_item_estimate` 已补回 Python 条件式二次重量复核：`uncertainty_level=high`、`requires_reference=true`、或食物名包含米饭/炒饭/面/粥/红烧肉等关键词时触发；复核使用 `temperature=0.1`，失败只打日志并继续使用首次估重。
+    - `precision_aggregate` 按 `item_index` 汇总子项结果，补 `originalWeightGrams`、`dbLookupSummary`、single_shot/grouped_parallel/high uncertainty/deepseek fallback insight 和终端结构化日志。
+    - 精准图片 JSON 调用支持多图 `image_urls/image_paths`，并将精准 JSON completion 的 temperature 固定为 `0.2`、图片/文字超时分别设为 `90s/60s`，与 Python content_parts / `_run_json_completion_sync` 行为对齐。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestResolveModelConfig|TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-refine-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-precision-refine-worker.exe ./cmd/worker` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+  - 复测要求：用户重启 Go server 和 Go worker 后，提交新的精准模式任务；期望 planner 识别 5 项时，estimate/aggregate 不再把两个子任务各自识别出的整餐叠加成 10 项。
+  - 用户复测后发现结果页 `insight/context_advice` 暴露“分组精估、估计不确定性、AI估算、数据库命中/AI补全”等内部流程/诊断文案。
+  - 已修复：`buildPrecisionFinalResult` 的用户可见 `insight` 改为普通饮食分析文案，`context_advice` 不再输出内部参考物/不确定性提示；`dbLookupSummary` 继续保留在结果对象中供内部调试，worker 终端日志继续输出命中率。
+  - 追加验证：
+    - `go test ./internal/worker -count=1` 通过，新增测试锁定用户可见 insight 不能包含 `数据库命中/AI补全/AI估算/分组/参考物/不确定性`。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-user-facing-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-precision-user-facing-worker.exe ./cmd/worker` 通过。
+  - 主食估重优化：
+    - 用户反馈精准模式对主食仍容易估高，尤其薄薄一层米饭、浅碗饭、深碗饭没有按容器大小/填充深度区分。
+    - 已在单项估重、多项估重、二次重量复核 prompt 中加入主食体积规则：必须先判断 `容器容量 × 填充比例 × 食物厚度/松散度`，不能套常见一碗饭 `180g/200g`。
+    - 按用户纠正，已删除“薄层米饭固定 50-120g”这类硬区间；薄层如果面积很大，体积和重量仍可能不小。现在 prompt 要求先估可见面积和平均厚度得到体积，再按熟米饭/面/粥的体积密度换算重量。
+    - 追加验证：`go test ./internal/worker -count=1`、相关 Go 包测试、server/worker build 均通过，新增测试确保三类 prompt 都包含主食体积/面积/厚度规则，并禁止重新硬编码 `50-120g`。
+  - 模型路由收口：
+    - 用户明确要求普通拍照和精准拍照都不要再使用 Qwen，默认统一用 `gemini-3-flash-preview`。
+    - 已将 `resolveModelConfig("")` 默认改为 `gemini / gemini-3-flash-preview`，并把 `qwen/qwen-vl/qwen-vl-max` 显式别名也强制归到 Gemini，防止前端旧参数或缓存绕回 DashScope/Qwen。
+    - 普通图片 `Analyze` 改为使用已装配的 Gemini/Ofox client；精准模式 `RunPrecisionJSONWithImages*` 未传模型时走 Gemini，传 Qwen 别名也会走 Gemini。
+    - Qwen client 仅保留给 `AnalyzeCompare` 这类专门模型对比/测试入口，不再作为普通模式或精准模式路由。
+    - 文字输入模式保持前序决策：默认 DeepSeek `deepseek-v4-flash`，不受本次视觉模型默认值影响。
+    - Verification:
+      - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDashScopeClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
+      - `go test ./internal/worker -count=1` 通过。
+      - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+      - `go build -o %TEMP%\food-link-gemini-default-server.exe ./cmd/server`、`go build -o %TEMP%\food-link-gemini-default-worker.exe ./cmd/worker` 通过。
+      - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/app/app.go` 通过，仅有 Windows CRLF warning。
+    - Known blocker:
+      - 误跑包含 sqlite 初始化的 `AnalyzeService` 老测试时仍会被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞；本轮已用不依赖 sqlite 的专项测试锁定模型路由。
+
+## 状态：排查中 - 本地开发内存持续上涨
+
+- 2026-05-09 local dev memory diagnosis:
+  - 用户反馈本地开发时内存会越来越大，最终爆掉。
+  - 已按 `jinhui-stack-debug` 口径先看环境/运行时/构建依赖，不重启或停止用户进程，仅做只读诊断。
+  - 当前现场证据：
+    - Go 后端 `go run ./cmd/server` 子进程 `server.exe` private memory 约 `59MB`，`go run ./cmd/worker` 子进程 `worker.exe` private memory 约 `56MB`；60 秒采样基本稳定，暂未看到 Go server/worker 明显泄漏。
+    - `npm run dev:weapp` 的 Taro watch 核心子进程 `taro build --type weapp --watch --no-check` private memory 约 `1.86GB`，是项目内最可疑的持续涨内存来源。
+    - 当前 dev 配置在 development 下同时开启 `mini.enableSourceMap=true` 和 Vite `config.build.sourcemap=true`，大项目 watch 下容易推高 Taro/Vite 内存。
+    - 微信开发者工具本身有多个 renderer/GPU 进程，占用也较高；另外本机存在大量与 `food_link` 无关的 `xcodebuildmcp` Node 进程，合计 private memory 约 `5.8GB`，会显著增加整机内存压力。
+  - 初步结论：当前更像“前端 Taro watch / 微信开发者工具 / 本机额外 MCP 进程叠加导致的本地开发内存膨胀”，而不是 Go 后端业务代码的明确内存泄漏。
+  - 建议后续：
+    - 本地开发默认用轻量 watch：关闭或改成可选 source map，必要时另设 `dev:weapp:debug` 才开启完整 sourcemap。
+    - 增加一个只读内存诊断脚本，快速输出 Taro、Go server/worker、微信开发者工具、项目相关 Node 进程的 private/working set。
+    - 若需要确认“持续上涨曲线”，再做 10-30 分钟采样日志，而不是只看单点占用。
+
 ## 状态：进行中 - Go 重构后端功能测试与问题修复
+
+- 2026-05-09 issue #9 / stats AI risk insight manual refresh:
+  - 测试问题：数据分析页「AI 风险解读」缓存过期提示缺少「手动更新」按钮；该洞察生成应使用固定 DeepSeek 模型 `deepseek-v4-flash`。
+  - 定位：
+    - dev 分支统计页在 `analysis_summary_needs_refresh=true` 时，会在缓存状态条右侧显示「手动更新」并调用 `/api/stats/insight/generate`。
+    - 当前 Go 重构测试分支页面保留了生成逻辑和空态「生成本周/月洞察」入口，但缓存过期状态条缺少该 action JSX；样式中也缺少 `analysis-status-action*`。
+    - Go 后端 stats insight 模型应固定为 `deepseek-v4-flash`，不再通过 YAML/env 切换。
+  - 修复：
+    - `src/pages/stats/index.tsx` 恢复 dev 口径：仅当 `insightNeedsRefresh` 为 true 时，在 AI 风险解读详情弹窗缓存状态条内显示「手动更新」按钮，点击触发 `handleGenerateInsight()`，生成中显示 spinner icon。
+    - `src/pages/stats/index.scss` 补回 `analysis-status` flex 布局和 `analysis-status-action*` 按钮样式。
+    - `src/styles/fl-color-scheme-dark.scss` 补暗黑模式下手动更新按钮颜色。
+    - `backend/internal/health/service/stats_service.go` 将 stats insight DeepSeek 模型名收口为常量 `statsInsightDeepSeekModel = "deepseek-v4-flash"`，并补测试锁定模型名。
+  - Verification:
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-stats-insight-fix.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src/pages/stats/index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- ...` 通过，仅提示工作区 CRLF 警告。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标窗口未开启自动化或端口不可用；未能完成截图/交互验证。
+  - 复测要求：用户需要确保当前 `npm run dev:weapp` watch 产物已更新，并在微信开发者工具中打开「分析」页 -> AI 风险解读详情；当后端返回 `analysis_summary_needs_refresh=true` 时，应看到「手动更新」按钮。
+
+- 2026-05-09 issue #8 / precision photo submit:
+  - 测试问题：拍照识别的精准模式提交失败，`POST /api/analyze/submit` 返回 500，小程序只显示 `internal server error`。
+  - 定位：
+    - 普通拍照提交只写 `analysis_tasks`；精准模式提交会额外创建 `precision_sessions` 和 `precision_session_rounds`。
+    - 真实 PostgreSQL schema 中 `precision_sessions.pending_requirements`、`precision_sessions.reference_objects`、`precision_sessions.created_at`、`precision_sessions.updated_at`、`precision_session_rounds.input_payload`、`precision_session_rounds.created_at`、`precision_item_estimates.payload/created_at/updated_at` 等字段是 `NOT NULL` 或依赖默认值。
+    - Go domain 使用 `map/slice/*time.Time`，nil 时 GORM 可能显式写入 `NULL`，从而在精准模式入口直接触发数据库错误；普通拍照不碰这些表，所以不会报同样的错。
+  - 修复：
+    - `PrecisionRepo.CreateSession` 在入库前补齐默认 `execution_mode/status/round_index/latest_inputs/pending_requirements/reference_objects/created_at/updated_at`。
+    - `PrecisionRepo.CreateRound` 在入库前补齐空 `input_payload` 和 `created_at`。
+    - `PrecisionRepo.CreateItemEstimate` 在入库前补齐默认 `status/payload/created_at/updated_at`。
+    - `referenceObjectsAsAny` 在无参考物时返回空数组而不是 nil，避免写入 JSONB NULL。
+  - 复测后续定位：
+    - 用户再次提交精准模式后，`POST /api/analyze/submit` 已返回 200，但前端轮询显示任务失败：`precision_sessions.pending_requirements` 违反 NOT NULL。
+    - 终端日志显示 `precision_item_estimate` 与 `precision_aggregate` 子任务已处理，说明失败点不在提交接口，而在 worker 的 `precision_plan` 更新 session 阶段。
+    - 根因：`PrecisionRepo.UpdateSession` 使用 `Updates(map[string]any)` 写入 `pending_requirements: []any{}` 等 JSONB 字段时，GORM map 更新不会稳定走 struct serializer，空 slice 可能落成 SQL NULL。
+  - 追加修复：
+    - `PrecisionRepo.UpdateSession` 对 `latest_inputs/pending_requirements/reference_objects/split_plan/latest_planner_result/final_result` 显式 JSON marshal 后写 `datatypes.JSON`。
+    - `PrecisionRepo.UpdateItemEstimate` 对 `payload/result` 使用同一 JSON 更新规范。
+    - `precision_repo_test` 增加 `TestNormalizePrecisionJSONUpdates`，锁定空数组应编码为 JSON `[]`。
+  - Verification:
+    - 只读查询真实 PostgreSQL schema，确认 precision 相关 NOT NULL 字段存在。
+    - 真实 PostgreSQL 事务检查通过：临时创建 session 并更新 `pending_requirements/reference_objects/latest_planner_result`，查询结果为 `[] / [] / {"ok": true, "items": []}`，事务已回滚。
+    - `go test ./internal/analyze/repo -run TestNormalizePrecisionJSONUpdates` 通过。
+    - `go test ./pkg/config` 通过。
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestDeepSeekNutritionEstimator|TestResolveModelConfig'` 通过。
+    - `go test ./internal/app ./internal/worker ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-json-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-precision-json-worker.exe ./cmd/worker` 通过。
+  - Known blockers:
+    - `go test ./internal/analyze/repo -run 'TestPrecisionRepo|TestTaskRepo_CountTasksByStatus'` 在当前 Windows 环境被 SQLite CGO 阻塞：`CGO_ENABLED=0` 时 go-sqlite3 是 stub；设置 `CGO_ENABLED=1` 后本机缺少 `gcc`。
+    - `go test ./internal/analyze/service -run TestTaskService_SubmitAnalyzeTask` 被本机 `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞。
+  - 第三轮复测问题：
+    - 用户反馈精准模式已成功，但结果里同一份食物重复出现两遍，整餐总量偏大；worker 日志显示 `precision_plan` 先识别出 5 项，随后两个 `precision_item_estimate` 子任务各自又识别出完整 5 项，`precision_aggregate` 聚合后变成约 10 项。
+    - 对照 Python `main:backend/worker.py` 后确认：Python 版子项估计使用专门的 `_build_precision_item_estimate_prompt/_multi`，要求只返回当前主体的 `item/items`；当前 Go 版临时复用了普通 `Analyze`，即使 AdditionalContext 写了“只估这些主体”，模型仍可能重新输出整图所有食物。因此 Go 版精准模式此前并非与 Python 版 1:1。
+  - 第三轮修复：
+    - `processPrecisionItemEstimate` 在 attach metadata 前新增计划项过滤保护：根据 `payload.items_to_estimate` 对子任务结果做名称相似度匹配，只保留本组应估计的食物；单项任务会把返回的整图 `items` 收口为单个 `item`。
+    - 新增 `filterPrecisionResultToPlanned`、`plannedItemMatchScore` 等工具函数，支持 exact/contains/中文字符集合相似度匹配，避免 `青椒炒鸡块` vs `辣椒炒鸡肉` 这类近似名被误删。
+    - `attachPlannedItemMetadata` 补单 item 结果的 metadata 附加。
+  - 第三轮 Verification:
+    - `go test ./internal/worker` 通过，新增覆盖“子任务返回整盘 5 项只保留本组计划项”和“单计划项从整图结果中挑出相似食物”的测试。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-dedupe-worker.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-precision-dedupe-server.exe ./cmd/server` 通过。
+    - `git diff --check -- backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` 通过，仅有 CRLF warning。
+  - Python parity 复核：
+    - Python 版精准模式不是普通 strict 食物分析的重复调用，而是三段专用链路：`_build_precision_plan_prompt` 做 planner，`_build_precision_item_estimate_prompt/_multi` 做子项估重，`_maybe_refine_precision_weights_sync` 做高不确定食物重量复核，最后 `_build_precision_final_result` 聚合。
+    - 当前 Go 版只复刻了 `precision_plan -> precision_item_estimate -> precision_aggregate` 的任务形态和分组/聚合骨架；planner 与 item estimate 仍复用通用 `Analyze/AnalyzeText` prompt，缺少 Python 专用 prompt、专用解析、重量复核、部分 session latest_inputs/previous_rounds 语义，因此不能声称与 Python 版 1:1。
+    - 结论：第三轮过滤修复只解决“子任务整图重复输出导致 aggregate 重复累加”的 P0 问题，不代表精准模式算法 parity 完成。
+    - 后续应把 Python 版 `_build_precision_plan_prompt`、`_build_precision_item_estimate_prompt`、`_build_precision_item_estimate_prompt_multi`、`_maybe_refine_precision_weights_sync` 的语义迁入 Go worker/service，再做样例对齐测试。
+  - 复测要求：用户重启 Go worker 后重新提交一条新的精准模式任务；这次 aggregate 最终项数应接近 planner 识别的项数，不应再把每个子任务的整图结果叠加。
+
+- 2026-05-09 issue #7 / text analyze model:
+  - 测试问题：文字输入模式识别失败，错误为 `dashscope api error 401`，提示 DashScope API key 不正确。
+  - 定位：这是配置依赖问题。Go 文字分析默认仍可能落到 DashScope/Qwen；当前本地 DashScope key 无效，所以文字模式失败。
+  - 修复：
+    - 文字输入模式在未指定 `modelName` 时默认走 DeepSeek，而不是 DashScope。
+    - 如果文字模式未配置 `DEEPSEEK_API_KEY`，直接返回清晰配置错误，不再静默回退 DashScope 造成 401 误导。
+    - 显式 `modelName=deepseek/deepseek-*` 也走 DeepSeek；显式选择其它模型时仍保留原有模型路由能力。
+    - worker 启动时已注入 DeepSeek 配置，异步 `food_text` 任务和同步 `/api/analyze-text` 使用同一口径。
+    - DeepSeek 默认 text model 统一为 `deepseek-chat`，`backend/config-example.yaml` 已补 `deepseek_api_key/deepseek_base_url/deepseek_text_model` 示例。
+  - 复测后续定位：
+    - 用户确认 `backend/.env` 中已有 `DEEPSEEK_API_KEY`，但 Go `config.Load` 原先只读取 `config.yaml` 和当前进程环境变量，不会自动加载 `.env`。
+    - 当前 `backend/config.yaml` 中没有 `deepseek_api_key`，因此直接启动 Go server/worker 时，worker 拿不到 DeepSeek key，文字任务报“请配置 DEEPSEEK_API_KEY”。
+  - 追加修复：
+    - 按用户要求，本地 Go 后端配置统一收口到 `backend/config.yaml`，不再自动读取 `.env`。
+    - DeepSeek 配置只保留 `external.deepseek_api_key` 一项；base URL 固定为 `https://api.deepseek.com`，文字模型固定为 `deepseek-v4-flash`，不再通过 YAML / env 配置。
+    - 已把本地 DeepSeek key 迁入 `backend/config.yaml` 的 `external.deepseek_api_key`，未在终端输出密钥。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestDeepSeekNutritionEstimator|TestResolveModelConfig|TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./pkg/config` 通过，覆盖 DeepSeek API key 从 YAML 读取。
+    - `go test ./internal/worker ./internal/app ./pkg/config` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/health/service ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-text-deepseek-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-text-deepseek-worker.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-deepseek-yaml-key-only-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-deepseek-yaml-key-only-worker.exe ./cmd/worker` 通过。
+  - 复测要求：用户需要重启 Go server 和 Go worker；然后重新提交一条文字输入任务。
 
 - 2026-05-09 issue #4 / expiry data source:
   - 测试问题：用户在线上版本新增/修改的食物保质期数据，在本地 Go 重构测试版看不到。
@@ -94,6 +281,17 @@
   - Verification:
     - `go test ./internal/common/dateutil` 通过，覆盖前天允许、未来日期和三天前拒绝。
     - `go test ./internal/foodrecord/service -run ...` 与 `go test ./internal/analyze/service -run TestTaskService` 仍被本机 `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 既有环境问题阻塞，不代表补录逻辑失败。
+- 2026-05-09 backfill hint UI regression:
+  - 用户补充：旧版在首页选中昨天/前天时会显示“正在补录 X月X日”，当前 Go 测试分支前端没有该提示。
+  - 定位：`src/pages/index/index.tsx` 中日期选择器下方留下了“补录提示已移除”的注释，属于前端展示回归，不是后端补录能力缺失。
+  - 修复：
+    - 首页 `DateSelector` 下方恢复补录提示。
+    - 仅当 `selectedDate` 属于允许补录窗口且不是今天时显示，避免未来日期或窗口外日期误提示。
+    - 文案为 `正在补录 X月X日`。
+    - 新增浅色与暗黑模式样式。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src/pages/index/index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化或端口不可用，未能截图/交互验证。
 - 2026-05-09 issue #2:
   - 测试问题：拍照分析食物时，`POST /api/upload-analyze-image-file` 上传图片失败，Gin recovery 捕获 panic。
   - 根因：`backend/pkg/storage/storage.go` 中腾讯云 COS SDK `client.Object.Put(nil, ...)` 传入了 `nil` context；当前 SDK 版本在 `addHeaderOptions` 内调用 `ctx.Value(...)`，导致 nil pointer dereference。

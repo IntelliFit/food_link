@@ -40,6 +40,7 @@ external:
   tianditu_tk: ""
   ofoxai_api_key: ""
   ofoxai_base_url: "https://api.ofox.ai/v1"
+  deepseek_api_key: ""
   dashscope_api_key: ""
   appid: ""
   secret: ""

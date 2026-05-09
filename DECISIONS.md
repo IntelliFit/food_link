@@ -1,6 +1,32 @@
 # DECISIONS
 
+- `2026-05-09`: Go 重构分支的积分体系当前目标是先严格对齐 `dev` / Python 旧版逻辑，不在本轮顺手修正旧版自身设计问题。对齐口径包括：食物标准分析 2 分、精准分析 4 分、运动记录 1 分；系统积分按中国自然日计算；补录优先消耗目标日系统积分，再消耗今日系统积分，最后消耗 earned credits；任务/识别成功创建后才扣 earned credits；邀请奖励也必须保留旧版“新用户 7 天内 2 个不同自然日有效使用后双方各得 15 earned credits”的闭环。
+
+- `2026-05-09`: Go 精准模式必须对齐 Python 当前正在使用的实际流程。稳定口径是：`precision_plan` 使用专用 planner prompt 拆主体并规范化 `itemsToEstimate/splitStrategy`；`precision_item_estimate` 使用专用单项/多项估重 prompt，只解析 `item/items` 的 `name + estimatedWeightGrams`，再挂 planner metadata；随后按 Python 条件触发二次重量复核，触发条件为 `uncertainty_level=high`、`requires_reference=true`、或食物名包含米饭/炒饭/面/粥/红烧肉等易错关键词，复核使用 `temperature=0.1`，失败只记录日志并沿用首次估重；最后走 db_first 营养库回算；`precision_aggregate` 按 `item_index` 聚合子项结果；planner/item estimate 精准 JSON completion 使用多图输入、固定 `temperature=0.2`，图片/文字超时分别为 `90s/60s`。不能再用通用 `Analyze/AnalyzeText` 作为精准子任务主算法，否则会重新识别整餐并造成重复累加。
+
+- `2026-05-09`: 精准模式结果页不得展示内部流程/工程诊断文案。`insight/context_advice` 不能包含“分组精估、估重不确定性、建议补充参考物、数据库命中、AI补全、AI估算非数据库标准值”等内容；这些只允许出现在 worker/server 终端日志或内部调试字段。用户可见结果只展示饮食分析、食物明细、热量和营养构成。
+
+- `2026-05-09`: 精准模式主食估重必须以实际可见体积为准，不能套“常见一碗饭”默认值，也不能把“薄薄一层”直接映射成固定低克重区间。米饭/面条/粉/粥/炒饭/盖饭类必须先判断容器口径、深度、填充比例、可见面积、平均厚度、被菜覆盖程度和松散度，再用体积密度换算重量；薄层但面积很大时重量仍可能不低，小面积薄层才应低。该规则必须同时进入一次估重和二次重量复核 prompt。
+
+- `2026-05-09`: 普通拍照识别和精准拍照识别都不再使用 Qwen 作为默认或别名路由。未指定模型时统一走 Ofox/Gemini `gemini-3-flash-preview`；即使请求里显式传入 `qwen`、`qwen-vl` 或 `qwen-vl-max`，普通/精准识别也要强制归到 Gemini，避免旧前端参数或缓存绕回 DashScope/Qwen。Qwen 仅可保留在模型对比/测试入口中；文字输入模式仍按单独决策默认 DeepSeek `deepseek-v4-flash`。
+
+- `2026-05-09`: 数据分析页「AI 风险解读」遵循缓存优先 + 用户主动刷新口径：打开统计页只读 `ai_stats_insights` 缓存并根据 `analysis_summary_needs_refresh` 提示是否过期；仅在过期时于详情弹窗状态条显示「手动更新」，点击后调用 `/api/stats/insight/generate` 重新生成，再 `save` 入缓存。Go stats insight 生成模型固定为 `deepseek-v4-flash`，不再通过 YAML/env 切换模型名。
+
+- `2026-05-09`: Go 精准模式写入 `precision_sessions / precision_session_rounds / precision_item_estimates` 时，repo 层必须显式补齐非空 JSONB 默认值和时间戳，不能依赖 GORM 对 nil map/slice/*time.Time 与 PostgreSQL DEFAULT 的交互。`pending_requirements/reference_objects/input_payload/payload` 无内容时写空数组或空对象，`created_at/updated_at` 无值时由 repo 设为当前时间，避免精准模式提交在数据库 NOT NULL 约束处返回 500。
+
+- `2026-05-09`: Go 精准模式更新 `precision_sessions` 或 `precision_item_estimates` 的 JSONB 字段时，不能直接把 `[]any{}` / `map[string]any{}` 放进 `Updates(map[string]any)` 依赖 GORM serializer；必须先显式 `json.Marshal` 并以 `datatypes.JSON` 写入。尤其 `pending_requirements`、`reference_objects` 这类 NOT NULL JSONB 空数组字段，更新时也必须落库为 `[]`，不能变成 SQL NULL。
+
+- `2026-05-09`: Go 精准模式的 `precision_item_estimate` 子任务如果继续复用通用食物识别模型，必须在 worker 层按 `items_to_estimate` 做结果过滤，不能把模型返回的整图所有食物直接交给 aggregate。否则多个子任务会各自输出完整餐盘，最终聚合重复计入同一份米饭/菜品。长期 parity 方向是迁回 Python 版专用子项估计 prompt；短期保护栏是按计划项名称 exact/contains/相似度匹配后只保留本组食物。
+
+- `2026-05-09`: 不能再声称当前 Go 精准模式与 Python 版算法 1:1。当前 Go 版只具备任务形态 parity（plan/item_estimate/aggregate）和重复过滤保护；Python 版还有专用 planner prompt、专用单项/多项估重 prompt、结构化 `item/items` 解析、重量复核 `_maybe_refine_precision_weights_sync`、previous rounds/session latest_inputs 参与规划等语义。真正 parity 需要继续迁移这些专用逻辑。
+
+- `2026-05-09`: 食物文字输入模式默认使用 DeepSeek 文本模型，不再默认走 DashScope/Qwen。原因是文字输入不需要视觉模型，而当前 DashScope key 配置错误会导致 `dashscope api error 401`；未指定 `modelName` 时应走 `external.deepseek_api_key`，base URL 固定为 `https://api.deepseek.com`，模型固定为 `deepseek-v4-flash`。如果 DeepSeek key 缺失，后端应返回明确的 `DEEPSEEK_API_KEY` 配置错误，而不是静默回退到 DashScope。图片/拍照分析仍按现有视觉模型 + `db_first` 营养库回算链路执行。
+
+- `2026-05-09`: Go 后端本地开发配置统一从 `backend/config.yaml` 读取，不再自动读取 `backend/.env`。DeepSeek 在 YAML 中只配置 `external.deepseek_api_key`；base URL 固定为 `https://api.deepseek.com`，文字模型固定为 `deepseek-v4-flash`，不再额外暴露 `deepseek_base_url` 或 `deepseek_text_model` 配置项。
+
 - `2026-05-09`: Go 重构版本必须保留 Python 旧版的补录日期口径：记录相关入口只允许近 3 天，即今天、昨天、前天。前端用 `src/utils/record-date.ts` 的 `RECORD_BACKFILL_WINDOW_DAYS = 3` 约束入口日期，后端用 `backend/internal/common/dateutil.ResolveRecordedOnDate` 做最终校验；食物记录保存必须通过 `BuildRecordTime` 把目标中国自然日写入 `user_food_records.record_time`，不能默默落到当天。
+
+- `2026-05-09`: 首页选中昨天或前天时必须显示补录上下文提示，稳定文案为 `正在补录 X月X日`。该提示不是装饰文案，而是防止用户误以为正在记录今天；仅在 `isAllowedRecordDate(selectedDate) && !isTodayRecordDate(selectedDate)` 时显示，未来日期和窗口外日期不能显示补录提示。
 
 - `2026-05-09`: 运动记录的 `user_exercise_logs.recorded_on` 按 PostgreSQL `date` 字段处理，详情列表、当日运动消耗和首页 dashboard 必须使用同一日期口径。查询单日总量用 `recorded_on = YYYY-MM-DD`；查询日期范围用 `recorded_on >= start_date AND recorded_on <= end_date`。不要再把该字段当 `timestamptz` 做中国时区 UTC 窗口查询，否则会出现首页有 kcal、详情列表为空的矛盾。
 

@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("PORT", "3010")
@@ -45,5 +49,35 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	}
 	if cfg.External.OfoxAIBaseURL != "https://proxy.example.com/v1" {
 		t.Fatalf("ofox base url env binding failed: %+v", cfg.External)
+	}
+}
+
+func TestLoadReadsDeepSeekFromYAML(t *testing.T) {
+	oldKey, hadKey := os.LookupEnv("DEEPSEEK_API_KEY")
+	_ = os.Unsetenv("DEEPSEEK_API_KEY")
+	t.Cleanup(func() {
+		if hadKey {
+			_ = os.Setenv("DEEPSEEK_API_KEY", oldKey)
+		} else {
+			_ = os.Unsetenv("DEEPSEEK_API_KEY")
+		}
+	})
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+external:
+  deepseek_api_key: "yaml-key"
+`)
+	if err := os.WriteFile(configPath, content, 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.External.DeepSeekAPIKey != "yaml-key" {
+		t.Fatalf("expected yaml deepseek key, got %q", cfg.External.DeepSeekAPIKey)
 	}
 }

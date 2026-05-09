@@ -74,8 +74,6 @@ type ExternalConfig struct {
 	OfoxAIBaseURL   string `mapstructure:"ofoxai_base_url"`
 	LLMProvider     string `mapstructure:"llm_provider"`
 	DeepSeekAPIKey  string `mapstructure:"deepseek_api_key"`
-	DeepSeekBaseURL string `mapstructure:"deepseek_base_url"`
-	DeepSeekModel   string `mapstructure:"deepseek_text_model"`
 }
 
 type WechatPayConfig struct {
@@ -170,9 +168,6 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.ofoxai_api_key", "OFOXAI_API_KEY")
 	_ = v.BindEnv("external.ofoxai_base_url", "OFOXAI_BASE_URL", "OFOX_BASE_URL")
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
-	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
-	_ = v.BindEnv("external.deepseek_base_url", "DEEPSEEK_BASE_URL")
-	_ = v.BindEnv("external.deepseek_text_model", "DEEPSEEK_TEXT_MODEL")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")
 	_ = v.BindEnv("wechat_pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat_pay.serial_no", "WECHAT_PAY_SERIAL_NO")

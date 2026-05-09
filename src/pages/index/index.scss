@@ -149,6 +149,35 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   margin-bottom: 16rpx; // 增加间距
 }
 
+.home-backfill-hint {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-height: 52rpx;
+  padding: 0 22rpx;
+  margin: -2rpx 0 18rpx;
+  border-radius: 18rpx;
+  background: rgb(92 184 150 / 12%);
+  border: 1rpx solid rgb(92 184 150 / 24%);
+  box-sizing: border-box;
+}
+
+.home-backfill-hint__dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: $primary-color;
+  box-shadow: 0 0 0 6rpx rgb(92 184 150 / 14%);
+  flex-shrink: 0;
+}
+
+.home-backfill-hint__text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 600;
+  color: #2f7f62;
+}
+
 .date-list {
   display: flex;
   justify-content: space-between;

@@ -15,6 +15,7 @@ import (
 	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
+	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/pkg/config"
 )
 
@@ -34,6 +35,7 @@ type ExerciseRepo interface {
 type ExerciseService struct {
 	repo        ExerciseRepo
 	creditGuard CreditGuard
+	rewards     InviteRewardActivator
 	cfg         *config.Config
 	client      *http.Client
 }
@@ -53,6 +55,14 @@ type CreditGuard interface {
 
 func (s *ExerciseService) ConfigureCreditGuard(guard CreditGuard) {
 	s.creditGuard = guard
+}
+
+type InviteRewardActivator interface {
+	ActivatePendingInviteReferralOnFirstValidUse(ctx context.Context, inviteeUserID, effectiveAction string) (*membershipdomain.UserInviteReferral, error)
+}
+
+func (s *ExerciseService) ConfigureInviteRewardActivator(rewards InviteRewardActivator) {
+	s.rewards = rewards
 }
 
 func (s *ExerciseService) GetDailyCalories(ctx context.Context, userID string, date string) (map[string]any, error) {
@@ -341,6 +351,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	if err := s.repo.CreateExerciseLog(ctx, log); err != nil {
 		return nil, err
 	}
+	s.activateInviteReward(ctx, userID, "exercise_log")
 	total, err := s.repo.GetDailyCaloriesBurned(ctx, userID, recordedOn)
 	if err != nil {
 		return nil, err
@@ -361,6 +372,15 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		"profile_snapshot":   profileSnapshot,
 		"today_total":        total,
 	}, nil
+}
+
+func (s *ExerciseService) activateInviteReward(ctx context.Context, userID, action string) {
+	if s.rewards == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	if _, err := s.rewards.ActivatePendingInviteReferralOnFirstValidUse(ctx, userID, action); err != nil {
+		fmt.Printf("[exercise_log] invite reward activation failed user=%s action=%s error=%v\n", userID, action, err)
+	}
 }
 
 type ExerciseEstimate struct {

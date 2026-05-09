@@ -116,6 +116,10 @@ func TestStatsService_GenerateInsight(t *testing.T) {
 	assert.NotEmpty(t, result["analysis_summary"])
 }
 
+func TestStatsInsightUsesDeepSeekV4FlashModel(t *testing.T) {
+	assert.Equal(t, "deepseek-v4-flash", statsInsightDeepSeekModel)
+}
+
 func TestStatsService_SaveInsight(t *testing.T) {
 	repo := &mockStatsRepo{}
 	bodyMetrics := &mockBodyMetricsProvider{}

@@ -44,6 +44,51 @@ func NewDeepSeekNutritionEstimator(apiKey, baseURL, model string) *DeepSeekNutri
 	}
 }
 
+func (e *DeepSeekNutritionEstimator) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	if e == nil || e.APIKey == "" {
+		return nil, fmt.Errorf("缺少 DEEPSEEK_API_KEY")
+	}
+	body := map[string]any{
+		"model": e.Model,
+		"messages": []map[string]any{
+			{"role": "user", "content": prompt},
+		},
+		"response_format": map[string]string{"type": "json_object"},
+		"temperature":     0.2,
+		"stream":          false,
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+e.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("DeepSeek API 错误: %d", resp.StatusCode)
+	}
+	var response struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, err
+	}
+	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+		return nil, fmt.Errorf("DeepSeek 返回了空响应")
+	}
+	return parseLLMJSON(response.Choices[0].Message.Content)
+}
+
 func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
 	if e == nil || e.APIKey == "" {
 		return map[int]map[string]any{}, nil

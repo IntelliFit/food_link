@@ -37,6 +37,8 @@ type StatsService struct {
 	client      *http.Client
 }
 
+const statsInsightDeepSeekModel = "deepseek-v4-flash"
+
 func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg ...*config.Config) *StatsService {
 	var c *config.Config
 	if len(cfg) > 0 {
@@ -303,15 +305,9 @@ func (s *StatsService) getStreakDays(ctx context.Context, userID string) int {
 func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *statsComputation) (string, error) {
 	apiKey := ""
 	baseURL := "https://api.deepseek.com"
-	model := "deepseek-v4-flash"
+	model := statsInsightDeepSeekModel
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
-		if v := strings.TrimSpace(s.cfg.External.DeepSeekBaseURL); v != "" {
-			baseURL = strings.TrimRight(v, "/")
-		}
-		if v := strings.TrimSpace(s.cfg.External.DeepSeekModel); v != "" {
-			model = v
-		}
 	}
 	if apiKey == "" {
 		return fallbackStatsInsight(comp), nil

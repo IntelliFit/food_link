@@ -95,6 +95,25 @@ type UserEarnedCreditLedger struct {
 
 func (UserEarnedCreditLedger) TableName() string { return "user_earned_credit_ledger" }
 
+// UserInviteReferral — table: user_invite_referrals
+type UserInviteReferral struct {
+	ID                       string     `gorm:"column:id;primaryKey" json:"id"`
+	InviterUserID            string     `gorm:"column:inviter_user_id" json:"inviter_user_id"`
+	InviteeUserID            string     `gorm:"column:invitee_user_id" json:"invitee_user_id"`
+	InviteCode               *string    `gorm:"column:invite_code" json:"invite_code,omitempty"`
+	SourceRequestID          *string    `gorm:"column:source_request_id" json:"source_request_id,omitempty"`
+	Status                   string     `gorm:"column:status" json:"status"`
+	FirstEffectiveActionAt   *time.Time `gorm:"column:first_effective_action_at" json:"first_effective_action_at,omitempty"`
+	FirstEffectiveActionType *string    `gorm:"column:first_effective_action_type" json:"first_effective_action_type,omitempty"`
+	RewardStartDate          *time.Time `gorm:"column:reward_start_date;type:date" json:"reward_start_date,omitempty"`
+	RewardEndDate            *time.Time `gorm:"column:reward_end_date;type:date" json:"reward_end_date,omitempty"`
+	BlockedReason            *string    `gorm:"column:blocked_reason" json:"blocked_reason,omitempty"`
+	CreatedAt                *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt                *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (UserInviteReferral) TableName() string { return "user_invite_referrals" }
+
 // MembershipShareReward is kept for legacy tests/old code paths. The runtime
 // reward table is user_credit_bonus_events.
 type MembershipShareReward struct {

@@ -40,6 +40,11 @@ const (
 	earlyUserTrialDays              = 30
 	regularUserTrialDays            = 3
 	earlyUserPaidCreditsMultiplier  = 2
+	inviteRewardRequiredDays        = 2
+	inviteRewardWindowDays          = 7
+	inviteRewardCreditsOnQualify    = 15
+	inviteRewardMonthlyLimit        = 10
+	inviteRewardLegacyCreditsPerDay = 5
 	sharePosterRewardCredits        = 1
 	sharePosterDailyMaxEvents       = 3
 )
@@ -67,6 +72,11 @@ type MembershipRepo interface {
 	GetFirstMembershipTrialBatchRank(ctx context.Context, userID string, limit int) (int, error)
 	GetFirstPaidMembershipUserRank(ctx context.Context, userID string, limit int) (int, error)
 	CountDailyMembershipBonusCredits(ctx context.Context, userID, chinaDate string) (inviteBonus int, shareBonus int, err error)
+	GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error)
+	UpdateInviteReferral(ctx context.Context, id string, updates map[string]any) (*domain.UserInviteReferral, error)
+	CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error)
+	ListActiveInviteRewards(ctx context.Context, userID, chinaDate string) ([]domain.UserInviteReferral, error)
+	ListSharePosterBonusEvents(ctx context.Context, userID, chinaDate string) ([]domain.UserCreditBonusEvent, error)
 	GetUser(ctx context.Context, userID string) (*membershiprepo.User, error)
 	GetFoodRecordOwner(ctx context.Context, recordID string) (string, error)
 	CountSharePosterClaims(ctx context.Context, userID, chinaDate string) (int, error)
@@ -269,11 +279,17 @@ func (s *MembershipService) computeDailyCreditsStatus(ctx context.Context, userI
 	if err != nil {
 		return nil, err
 	}
+	if _, _, err := s.materializeDailyBonusCredits(ctx, userID, today); err != nil {
+		return nil, err
+	}
 	inviteBonusCredits, shareBonusCredits, err := s.repo.CountDailyMembershipBonusCredits(ctx, userID, today)
 	if err != nil {
 		return nil, err
 	}
 	dailyBonusCredits := inviteBonusCredits + shareBonusCredits
+	if refreshedUser, err := s.repo.GetUser(ctx, userID); err == nil && refreshedUser != nil {
+		user = refreshedUser
+	}
 	earnedBalance := 0
 	if user != nil && user.EarnedCreditsBalance > 0 {
 		earnedBalance = user.EarnedCreditsBalance
@@ -307,6 +323,168 @@ func (s *MembershipService) computeDailyCreditsStatus(ctx context.Context, userI
 		"early_user_paid_bonus_source":     earlyMeta.PaidBonusSource,
 		"early_user_paid_bonus_active":     earlyMeta.PaidBonusActive,
 	}, nil
+}
+
+func (s *MembershipService) ActivatePendingInviteReferralOnFirstValidUse(ctx context.Context, inviteeUserID, effectiveAction string) (*domain.UserInviteReferral, error) {
+	inviteeUserID = strings.TrimSpace(inviteeUserID)
+	if inviteeUserID == "" {
+		return nil, nil
+	}
+	referral, err := s.repo.GetInviteReferralByInvitee(ctx, inviteeUserID)
+	if err != nil || referral == nil {
+		return referral, err
+	}
+	status := strings.TrimSpace(referral.Status)
+	switch status {
+	case "reward_completed", "reward_blocked", "cancelled", "reward_active":
+		return referral, nil
+	case "pending_qualified":
+	default:
+		return referral, nil
+	}
+
+	nowUTC := time.Now().UTC()
+	todayCN := dateOnly(nowUTC.In(chinaLocation()))
+	createdAt := nowUTC
+	if referral.CreatedAt != nil {
+		createdAt = *referral.CreatedAt
+	}
+	deadlineCN := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	if todayCN.After(deadlineCN) {
+		blocked := "qualification_window_expired"
+		return s.repo.UpdateInviteReferral(ctx, referral.ID, map[string]any{
+			"status":         "reward_blocked",
+			"blocked_reason": blocked,
+			"updated_at":     nowUTC,
+		})
+	}
+
+	if referral.FirstEffectiveActionAt == nil {
+		action := strings.TrimSpace(effectiveAction)
+		return s.repo.UpdateInviteReferral(ctx, referral.ID, map[string]any{
+			"first_effective_action_at":   nowUTC,
+			"first_effective_action_type": action,
+			"updated_at":                  nowUTC,
+		})
+	}
+	firstDay := dateOnly(referral.FirstEffectiveActionAt.In(chinaLocation()))
+	if todayCN.Equal(firstDay) {
+		return referral, nil
+	}
+
+	monthStart := time.Date(todayCN.Year(), todayCN.Month(), 1, 0, 0, 0, 0, chinaLocation())
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	qualifiedCount, err := s.repo.CountCompletedInviteRewardsForInviterInMonth(ctx, referral.InviterUserID, monthStart.Format("2006-01-02"), nextMonthStart.Format("2006-01-02"))
+	if err != nil {
+		return nil, err
+	}
+	if qualifiedCount >= inviteRewardMonthlyLimit {
+		blocked := "monthly_limit_reached"
+		return s.repo.UpdateInviteReferral(ctx, referral.ID, map[string]any{
+			"status":         "reward_blocked",
+			"blocked_reason": blocked,
+			"updated_at":     nowUTC,
+		})
+	}
+
+	qualifiedDate := todayCN.Format("2006-01-02")
+	baseMeta := map[string]any{
+		"referral_id":     referral.ID,
+		"inviter_user_id": referral.InviterUserID,
+		"invitee_user_id": referral.InviteeUserID,
+		"qualified_date":  qualifiedDate,
+		"rule":            fmt.Sprintf("%dd/%ddays/%dcredits", inviteRewardWindowDays, inviteRewardRequiredDays, inviteRewardCreditsOnQualify),
+	}
+	inviterMeta := copyMeta(baseMeta)
+	inviterMeta["role"] = "inviter"
+	_, _, err = s.repo.ChangeEarnedCredits(ctx, referral.InviterUserID, inviteRewardCreditsOnQualify, "invite_qualified_reward", "invite-qualified:"+referral.ID+":inviter", qualifiedDate, inviterMeta)
+	if err != nil {
+		return nil, err
+	}
+	inviteeMeta := copyMeta(baseMeta)
+	inviteeMeta["role"] = "invitee"
+	_, _, err = s.repo.ChangeEarnedCredits(ctx, referral.InviteeUserID, inviteRewardCreditsOnQualify, "invite_qualified_reward", "invite-qualified:"+referral.ID+":invitee", qualifiedDate, inviteeMeta)
+	if err != nil {
+		return nil, err
+	}
+	rewardDate := todayCN
+	return s.repo.UpdateInviteReferral(ctx, referral.ID, map[string]any{
+		"status":            "reward_completed",
+		"reward_start_date": rewardDate,
+		"reward_end_date":   rewardDate,
+		"blocked_reason":    nil,
+		"updated_at":        nowUTC,
+	})
+}
+
+func (s *MembershipService) materializeDailyBonusCredits(ctx context.Context, userID, chinaDate string) (int, int, error) {
+	inviteAwarded, err := s.materializeDailyInviteRewardCredits(ctx, userID, chinaDate)
+	if err != nil {
+		return 0, 0, err
+	}
+	shareAwarded, err := s.materializeDailySharePosterRewardCredits(ctx, userID, chinaDate)
+	if err != nil {
+		return inviteAwarded, 0, err
+	}
+	return inviteAwarded, shareAwarded, nil
+}
+
+func (s *MembershipService) materializeDailyInviteRewardCredits(ctx context.Context, userID, chinaDate string) (int, error) {
+	rows, err := s.repo.ListActiveInviteRewards(ctx, userID, chinaDate)
+	if err != nil {
+		return 0, err
+	}
+	awarded := 0
+	for _, row := range rows {
+		role := ""
+		if row.InviterUserID == userID {
+			role = "inviter"
+		} else if row.InviteeUserID == userID {
+			role = "invitee"
+		}
+		if role == "" || row.ID == "" {
+			continue
+		}
+		meta := map[string]any{
+			"role":            role,
+			"referral_id":     row.ID,
+			"inviter_user_id": row.InviterUserID,
+			"invitee_user_id": row.InviteeUserID,
+		}
+		_, applied, err := s.repo.ChangeEarnedCredits(ctx, userID, inviteRewardLegacyCreditsPerDay, "invite_daily_reward", "invite:"+row.ID+":"+role+":"+chinaDate, chinaDate, meta)
+		if err != nil {
+			return awarded, err
+		}
+		if applied {
+			awarded += inviteRewardLegacyCreditsPerDay
+		}
+	}
+	return awarded, nil
+}
+
+func (s *MembershipService) materializeDailySharePosterRewardCredits(ctx context.Context, userID, chinaDate string) (int, error) {
+	rows, err := s.repo.ListSharePosterBonusEvents(ctx, userID, chinaDate)
+	if err != nil {
+		return 0, err
+	}
+	awarded := 0
+	for _, row := range rows {
+		if row.ID == "" || row.Credits <= 0 {
+			continue
+		}
+		meta := map[string]any{"bonus_event_id": row.ID}
+		if row.SourceRecordID != nil {
+			meta["source_record_id"] = *row.SourceRecordID
+		}
+		_, applied, err := s.repo.ChangeEarnedCredits(ctx, userID, row.Credits, "share_poster_reward", "share:"+row.ID, chinaDate, meta)
+		if err != nil {
+			return awarded, err
+		}
+		if applied {
+			awarded += row.Credits
+		}
+	}
+	return awarded, nil
 }
 
 func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {
@@ -956,6 +1134,14 @@ func applyEarlyPaidMultiplier(credits int, meta *earlyUserMembershipMeta) int {
 		return credits * meta.PaidBonusMultiplier
 	}
 	return credits
+}
+
+func copyMeta(input map[string]any) map[string]any {
+	out := make(map[string]any, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
 }
 
 func membershipMatchesPaidTruth(membership *domain.UserMembership, planCode, status string, paidAt, expiresAt time.Time, dailyCredits int) bool {

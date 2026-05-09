@@ -23,6 +23,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&domain.MembershipPayment{},
 		&domain.UserCreditBonusEvent{},
 		&domain.UserEarnedCreditLedger{},
+		&domain.UserInviteReferral{},
 		&analysisTask{},
 		&User{},
 	))

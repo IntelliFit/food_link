@@ -2,7 +2,9 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -226,29 +228,67 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 }
 
 func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.AnalysisTask) error {
-	input := analyzeInputFromTask(task)
-	mode := "strict"
-	input.ExecutionMode = &mode
-
-	var result map[string]any
-	var err error
-	if strings.TrimSpace(input.Text) != "" && input.ImageURL == "" && len(input.ImageURLs) == 0 {
-		result, err = r.analyze.AnalyzeText(ctx, task.UserID, input)
-	} else {
-		result, err = r.analyze.Analyze(ctx, task.UserID, input)
-	}
-	if err != nil {
-		return err
-	}
-
 	sessionID := stringFromMap(task.Payload, "precision_session_id")
 	if sessionID == "" {
 		return fmt.Errorf("precision_plan task missing precision_session_id")
 	}
+	session, err := r.precision.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return fmt.Errorf("精准模式会话不存在")
+	}
 	roundIndex := intFromMap(task.Payload, "round_index")
+	if roundIndex <= 0 {
+		roundIndex = session.RoundIndex
+	}
 	if roundIndex <= 0 {
 		roundIndex = 1
 	}
+	sourceType := stringFromMap(task.Payload, "source_type")
+	if sourceType == "" {
+		sourceType = session.SourceType
+	}
+	if sourceType != "text" {
+		sourceType = "image"
+	}
+	latestInputs := session.LatestInputs
+	if latestInputs == nil {
+		latestInputs = map[string]any{}
+	}
+	additionalContext := stringFromMap(latestInputs, "additionalContext")
+	referenceObjects := extractItems(firstNonNil(latestInputs["reference_objects"], session.ReferenceObjects))
+	previousRounds, err := r.precision.ListRounds(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	rawInput := additionalContext
+	if sourceType == "image" {
+		if rawInput == "" {
+			rawInput = "图片输入"
+		}
+	} else {
+		rawInput = firstNonEmptyString(latestInputs, "text")
+		if rawInput == "" && task.TextInput != nil {
+			rawInput = strings.TrimSpace(*task.TextInput)
+		}
+	}
+	imageURL := firstNonEmptyString(latestInputs, "image_url")
+	if imageURL == "" && task.ImageURL != nil {
+		imageURL = strings.TrimSpace(*task.ImageURL)
+	}
+	imageURLs := stringSliceFromAny(firstNonNil(latestInputs["image_urls"], task.ImagePaths))
+	if len(imageURLs) == 0 && imageURL != "" {
+		imageURLs = []string{imageURL}
+	}
+	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds)
+	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, stringFromMap(task.Payload, "modelName"))
+	if err != nil {
+		return err
+	}
+	result = normalizePrecisionPlanResult(result)
+
 	if err := r.precision.CreateRound(ctx, &domain.PrecisionSessionRound{
 		SessionID:     sessionID,
 		RoundIndex:    roundIndex,
@@ -259,17 +299,34 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		return err
 	}
 
-	plannedItems := buildPrecisionEstimateItems(result)
-	groups := groupPrecisionItems(plannedItems)
+	plannedItems := buildPrecisionEstimateItems(result, sourceType)
+	splitStrategy := stringFromMap(result, "splitStrategy")
+	groups := groupPrecisionItemsByStrategy(plannedItems, splitStrategy)
+	r.log.Info("precision plan",
+		zap.String("task_id", task.ID),
+		zap.String("session_id", sessionID),
+		zap.Int("round", roundIndex),
+		zap.String("split_strategy", splitStrategy),
+		zap.Int("items", len(plannedItems)),
+		zap.Int("groups", len(groups)),
+		zap.String("detail", formatPrecisionGroups(groups)),
+	)
 	childTaskIDs := make([]string, 0, len(groups))
-	sourceType := stringFromMap(task.Payload, "source_type")
-	if sourceType == "" {
-		sourceType = "image"
-	}
 
 	for groupIndex, groupItems := range groups {
-		groupPayload := copyAnyMap(task.Payload)
-		delete(groupPayload, "credit_usage")
+		groupPayload := map[string]any{
+			"precision_session_id": sessionID,
+			"source_type":          sourceType,
+			"round_index":          roundIndex,
+			"group_index":          groupIndex,
+			"items_to_estimate":    groupItems,
+			"additionalContext":    additionalContext,
+			"reference_objects":    referenceObjects,
+			"image_url":            imageURL,
+			"image_urls":           imageURLs,
+			"text":                 firstNonEmptyString(latestInputs, "text"),
+			"modelName":            stringFromMap(task.Payload, "modelName"),
+		}
 		groupPayload["round_index"] = roundIndex
 		groupPayload["group_index"] = groupIndex
 		groupPayload["items_to_estimate"] = groupItems
@@ -322,7 +379,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	aggregatePayload := map[string]any{
 		"precision_session_id": sessionID,
 		"round_index":          roundIndex,
-		"split_strategy":       splitStrategyForGroups(groups),
+		"split_strategy":       splitStrategy,
 		"child_task_ids":       childTaskIDs,
 		"source_type":          sourceType,
 	}
@@ -355,7 +412,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	result["itemsToEstimate"] = plannedItems
 	if err := r.precision.UpdateSession(ctx, sessionID, map[string]any{
 		"status":                "estimating",
-		"split_plan":            map[string]any{"splitStrategy": splitStrategyForGroups(groups), "items": plannedItems},
+		"split_plan":            map[string]any{"splitStrategy": splitStrategy, "items": plannedItems},
 		"latest_planner_result": result,
 		"pending_requirements":  []any{},
 		"current_task_id":       aggregateTask.ID,
@@ -379,24 +436,104 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 		}
 	}
 
-	input := analyzeInputFromTask(task)
-	mode := "strict"
-	input.ExecutionMode = &mode
-	input.AdditionalContext = buildPrecisionEstimateContext(task.Payload, input.AdditionalContext)
-
-	var result map[string]any
-	if strings.TrimSpace(input.Text) != "" && input.ImageURL == "" && len(input.ImageURLs) == 0 {
-		result, err = r.analyze.AnalyzeText(ctx, task.UserID, input)
-	} else {
-		result, err = r.analyze.Analyze(ctx, task.UserID, input)
+	sourceType := stringFromMap(task.Payload, "source_type")
+	if sourceType != "text" {
+		sourceType = "image"
 	}
+	additionalContext := stringFromMap(task.Payload, "additionalContext")
+	referenceObjects := extractItems(task.Payload["reference_objects"])
+	plannedItems := extractItems(task.Payload["items_to_estimate"])
+	imageURL := stringFromMap(task.Payload, "image_url")
+	if imageURL == "" && task.ImageURL != nil {
+		imageURL = strings.TrimSpace(*task.ImageURL)
+	}
+	imageURLs := stringSliceFromAny(task.Payload["image_urls"])
+	if len(imageURLs) == 0 && len(task.ImagePaths) > 0 {
+		imageURLs = task.ImagePaths
+	}
+	if len(imageURLs) == 0 && imageURL != "" {
+		imageURLs = []string{imageURL}
+	}
+	textInput := stringFromMap(task.Payload, "text")
+	if textInput == "" && task.TextInput != nil {
+		textInput = strings.TrimSpace(*task.TextInput)
+	}
+	prompt, err := buildPrecisionItemEstimatePromptFromPayload(sourceType, task.Payload, textInput, additionalContext, referenceObjects)
 	if err != nil {
 		if estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": err.Error()})
 		}
 		return err
 	}
-	result = attachPlannedItemMetadata(result, task.Payload)
+	parsed, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, stringFromMap(task.Payload, "modelName"))
+	if err != nil {
+		if estimate != nil {
+			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": err.Error()})
+		}
+		return err
+	}
+	parsedItems, err := parsePrecisionEstimateItems(parsed, plannedItems, task.Payload)
+	if err != nil {
+		if estimate != nil {
+			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": err.Error()})
+		}
+		return err
+	}
+	parsedItems = attachPrecisionItemMetadata(parsedItems, plannedItems)
+	rawInputForRefine := textInput
+	if sourceType == "image" {
+		rawInputForRefine = additionalContext
+		if rawInputForRefine == "" {
+			rawInputForRefine = "图片输入"
+		}
+	}
+	initialWeights := precisionWeightSnapshot(parsedItems)
+	refinedNotes := []string{}
+	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, stringFromMap(task.Payload, "modelName"))
+	if refineErr != nil {
+		r.log.Warn("precision refine skipped",
+			zap.String("task_id", task.ID),
+			zap.Int("group_index", intFromMap(task.Payload, "group_index")),
+			zap.Error(refineErr),
+		)
+	} else {
+		parsedItems = attachPrecisionItemMetadata(refinedItems, plannedItems)
+		refinedNotes = notes
+		refinedWeights := precisionWeightSnapshot(parsedItems)
+		if strings.Join(refinedWeights, "|") != strings.Join(initialWeights, "|") {
+			r.log.Info("precision refine",
+				zap.String("task_id", task.ID),
+				zap.Int("group_index", intFromMap(task.Payload, "group_index")),
+				zap.Strings("before", initialWeights),
+				zap.Strings("after", refinedWeights),
+			)
+		}
+	}
+	dbItems := r.analyze.ApplyDBFirstToItems(ctx, parsedItems, additionalContext)
+	dbItems = attachPrecisionItemMetadata(dbItems, plannedItems)
+	uncertaintyNotes := stringSliceFromAny(parsed["uncertaintyNotes"])
+	uncertaintyNotes = append(uncertaintyNotes, refinedNotes...)
+	var result map[string]any
+	if len(plannedItems) > 1 {
+		result = map[string]any{"items": dbItems, "uncertaintyNotes": nilIfEmptyStrings(uncertaintyNotes)}
+	} else {
+		var item any
+		if len(dbItems) > 0 {
+			item = dbItems[0]
+		}
+		result = map[string]any{"item": item, "uncertaintyNotes": nilIfEmptyStrings(uncertaintyNotes)}
+	}
+	lookupSummary := summarizeLookupItems(dbItems)
+	r.log.Info("precision estimate",
+		zap.String("task_id", task.ID),
+		zap.String("session_id", stringFromMap(task.Payload, "precision_session_id")),
+		zap.Int("round", intFromMap(task.Payload, "round_index")),
+		zap.Int("group_index", intFromMap(task.Payload, "group_index")),
+		zap.Int("items", intFromMap(lookupSummary, "total")),
+		zap.Int("db_hits", intFromMap(lookupSummary, "library_hits")),
+		zap.Int("deepseek_fallback", intFromMap(lookupSummary, "deepseek_fallback")),
+		zap.Int("unresolved", intFromMap(lookupSummary, "unresolved")),
+	)
 	if estimate != nil {
 		if err := r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "done", "result": result, "error_message": nil}); err != nil {
 			return err
@@ -448,6 +585,17 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 	if err != nil {
 		return err
 	}
+	lookupSummary := finalResult["dbLookupSummary"]
+	r.log.Info("precision aggregate",
+		zap.String("task_id", task.ID),
+		zap.String("session_id", sessionID),
+		zap.Int("round", roundIndex),
+		zap.String("split_strategy", stringFromMap(task.Payload, "split_strategy")),
+		zap.Int("items", intFromMap(mapFromAny(lookupSummary), "total")),
+		zap.Int("db_hits", intFromMap(mapFromAny(lookupSummary), "library_hits")),
+		zap.Int("deepseek_fallback", intFromMap(mapFromAny(lookupSummary), "deepseek_fallback")),
+		zap.Int("unresolved", intFromMap(mapFromAny(lookupSummary), "unresolved")),
+	)
 	if err := r.precision.UpdateSession(ctx, sessionID, map[string]any{
 		"status":          "done",
 		"final_result":    finalResult,
@@ -461,7 +609,111 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 	return err
 }
 
-func buildPrecisionEstimateItems(plan map[string]any) []map[string]any {
+func normalizePrecisionPlanResult(parsed map[string]any) map[string]any {
+	if parsed == nil {
+		parsed = map[string]any{}
+	}
+	precisionStatus := strings.ToLower(strings.TrimSpace(stringFromAny(parsed["precisionStatus"])))
+	if precisionStatus != "needs_user_input" && precisionStatus != "needs_retake" && precisionStatus != "ready_for_estimate" {
+		precisionStatus = "ready_for_estimate"
+	}
+	splitStrategy := strings.ToLower(strings.TrimSpace(stringFromAny(parsed["splitStrategy"])))
+	if !validPrecisionSplitStrategy(splitStrategy) {
+		splitStrategy = "single_item"
+	}
+	detectedItems := stringSliceFromAny(parsed["detectedItemsSummary"])
+	itemsToEstimate := normalizePrecisionPlanItems(parsed["itemsToEstimate"])
+	if len(itemsToEstimate) == 0 {
+		for index, name := range detectedItems {
+			itemsToEstimate = append(itemsToEstimate, map[string]any{
+				"item_key":           fmt.Sprintf("detected_%d", index+1),
+				"item_name":          name,
+				"item_hint":          "来自画面识别摘要，按主体食物继续估计",
+				"requires_reference": false,
+				"uncertainty_level":  "medium",
+			})
+		}
+	}
+	if len(itemsToEstimate) == 0 {
+		itemsToEstimate = append(itemsToEstimate, map[string]any{
+			"item_key":           "meal",
+			"item_name":          "整餐",
+			"item_hint":          "当前信息不足以稳定拆分时，按整顿餐食直接估计",
+			"requires_reference": true,
+			"uncertainty_level":  "high",
+			"uncertainty_reason": "当前画面或文字未能稳定拆分出独立主体",
+		})
+	}
+	precisionStatus = "ready_for_estimate"
+	if len(itemsToEstimate) > 1 && (splitStrategy == "single_item" || splitStrategy == "multi_item_parallel") {
+		hasHigh := false
+		for _, item := range itemsToEstimate {
+			if stringFromMap(item, "uncertainty_level") == "high" {
+				hasHigh = true
+				break
+			}
+		}
+		if len(itemsToEstimate) <= 3 && !hasHigh {
+			splitStrategy = "single_shot"
+		} else {
+			splitStrategy = "grouped_parallel"
+		}
+	}
+	return map[string]any{
+		"precisionStatus":            precisionStatus,
+		"splitStrategy":              splitStrategy,
+		"detectedItemsSummary":       detectedItems,
+		"followupQuestions":          stringSliceFromAny(parsed["followupQuestions"]),
+		"retakeInstructions":         stringSliceFromAny(firstNonNil(parsed["retakeInstructions"], parsed["retakeGuidance"])),
+		"pendingRequirements":        stringSliceFromAny(parsed["pendingRequirements"]),
+		"referenceObjectNeeded":      boolFromAny(parsed["referenceObjectNeeded"]),
+		"referenceObjectSuggestions": stringSliceFromAny(parsed["referenceObjectSuggestions"]),
+		"uncertaintyNotes":           stringSliceFromAny(parsed["uncertaintyNotes"]),
+		"itemsToEstimate":            itemsToEstimate,
+		"rejectionReason":            stringFromMap(parsed, "rejectionReason"),
+		"description":                stringFromMap(parsed, "description"),
+		"insight":                    stringFromMap(parsed, "insight"),
+	}
+}
+
+func validPrecisionSplitStrategy(value string) bool {
+	switch value {
+	case "single_item", "multi_item_parallel", "single_shot", "grouped_parallel", "retake_required", "user_annotation_required":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizePrecisionPlanItems(value any) []map[string]any {
+	rawItems := extractItems(value)
+	items := make([]map[string]any, 0, len(rawItems))
+	for index, item := range rawItems {
+		name := firstNonEmptyString(item, "item_name", "name")
+		if name == "" {
+			continue
+		}
+		itemKey := firstNonEmptyString(item, "item_key")
+		if itemKey == "" {
+			itemKey = fmt.Sprintf("item_%d", index+1)
+		}
+		level := strings.ToLower(firstNonEmptyString(item, "uncertainty_level"))
+		if level != "low" && level != "medium" && level != "high" {
+			level = "medium"
+		}
+		items = append(items, map[string]any{
+			"item_key":           itemKey,
+			"item_name":          name,
+			"item_hint":          firstNonEmptyString(item, "item_hint"),
+			"requires_reference": boolFromAny(item["requires_reference"]),
+			"uncertainty_level":  level,
+			"uncertainty_reason": firstNonEmptyString(item, "uncertainty_reason"),
+		})
+	}
+	return items
+}
+
+func buildPrecisionEstimateItems(plan map[string]any, sourceType string) []map[string]any {
 	rawItems := extractItems(plan["itemsToEstimate"])
 	if len(rawItems) == 0 {
 		rawItems = extractItems(plan["items"])
@@ -490,11 +742,15 @@ func buildPrecisionEstimateItems(plan map[string]any) []map[string]any {
 		})
 	}
 	if len(out) == 0 {
+		fallbackName := "整餐"
+		if sourceType == "text" {
+			fallbackName = "整段描述"
+		}
 		out = append(out, map[string]any{
 			"item_key":           "meal",
-			"item_name":          "整餐",
+			"item_name":          fallbackName,
 			"item_hint":          "当前信息不足以稳定拆分时，按整体直接估计",
-			"requires_reference": true,
+			"requires_reference": sourceType == "image",
 			"uncertainty_level":  "high",
 			"uncertainty_reason": "当前画面或文字未能稳定拆分出独立主体",
 		})
@@ -514,6 +770,43 @@ func groupPrecisionItems(items []map[string]any) [][]map[string]any {
 		}
 	}
 	if len(items) <= 3 && !hasHigh {
+		return [][]map[string]any{items}
+	}
+	groups := [][]map[string]any{}
+	high := []map[string]any{}
+	other := []map[string]any{}
+	for _, item := range items {
+		if stringFromMap(item, "uncertainty_level") == "high" {
+			high = append(high, item)
+		} else {
+			other = append(other, item)
+		}
+	}
+	for i := 0; i < len(high); i += 2 {
+		end := i + 2
+		if end > len(high) {
+			end = len(high)
+		}
+		groups = append(groups, high[i:end])
+	}
+	for i := 0; i < len(other); i += 3 {
+		end := i + 3
+		if end > len(other) {
+			end = len(other)
+		}
+		groups = append(groups, other[i:end])
+	}
+	return groups
+}
+
+func groupPrecisionItemsByStrategy(items []map[string]any, splitStrategy string) [][]map[string]any {
+	if len(items) == 0 {
+		return nil
+	}
+	if splitStrategy == "single_shot" && len(items) <= 3 {
+		return [][]map[string]any{items}
+	}
+	if len(items) <= 1 {
 		return [][]map[string]any{items}
 	}
 	groups := [][]map[string]any{}
@@ -570,6 +863,376 @@ func displayGroupName(items []map[string]any, groupIndex int) string {
 	return strings.Join(names, "、")
 }
 
+func formatPrecisionGroups(groups [][]map[string]any) string {
+	if len(groups) == 0 {
+		return "无分组"
+	}
+	parts := make([]string, 0, len(groups))
+	for index, groupItems := range groups {
+		labels := []string{}
+		for _, item := range groupItems {
+			name := firstNonEmptyString(item, "item_name", "name")
+			if name == "" {
+				name = fmt.Sprintf("item_%d", index+1)
+			}
+			level := strings.ToLower(firstNonEmptyString(item, "uncertainty_level"))
+			if level == "" {
+				level = "medium"
+			}
+			labels = append(labels, fmt.Sprintf("%s<%s>", name, level))
+		}
+		parts = append(parts, fmt.Sprintf("group%d=[%s]", index+1, strings.Join(labels, ", ")))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func buildReferenceObjectsHint(referenceObjects []map[string]any) string {
+	if len(referenceObjects) == 0 {
+		return "当前没有提供参考物。"
+	}
+	lines := []string{}
+	for _, ref := range referenceObjects {
+		dims, _ := ref["dimensions_mm"].(map[string]any)
+		dimTokens := []string{}
+		if dims != nil {
+			if value := stringFromAny(dims["length"]); value != "" {
+				dimTokens = append(dimTokens, "长"+value+"mm")
+			}
+			if value := stringFromAny(dims["width"]); value != "" {
+				dimTokens = append(dimTokens, "宽"+value+"mm")
+			}
+			if value := stringFromAny(dims["height"]); value != "" {
+				dimTokens = append(dimTokens, "高"+value+"mm")
+			}
+		}
+		dimText := "尺寸未提供"
+		if len(dimTokens) > 0 {
+			dimText = strings.Join(dimTokens, "，")
+		}
+		placement := stringFromMap(ref, "placement_note")
+		placementText := ""
+		if placement != "" {
+			placementText = "，摆放说明：" + placement
+		}
+		applies := stringSliceFromAny(ref["applies_to_items"])
+		applyText := ""
+		if len(applies) > 0 {
+			applyText = "，适用于 " + strings.Join(applies, ", ")
+		}
+		name := firstNonEmptyString(ref, "reference_name", "name")
+		if name == "" {
+			name = "参考物"
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s%s%s", name, dimText, placementText, applyText))
+	}
+	return "参考物信息：\n" + strings.Join(lines, "\n")
+}
+
+func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, referenceObjects []map[string]any, previousRounds []domain.PrecisionSessionRound) string {
+	previousContext := []string{}
+	start := len(previousRounds) - 3
+	if start < 0 {
+		start = 0
+	}
+	for _, round := range previousRounds[start:] {
+		if len(round.PlannerResult) == 0 {
+			continue
+		}
+		if data, err := json.Marshal(round.PlannerResult); err == nil {
+			previousContext = append(previousContext, string(data))
+		}
+	}
+	if strings.TrimSpace(rawInput) == "" {
+		rawInput = "无"
+	}
+	previousBlock := strings.Join(previousContext, "\n")
+	if previousBlock == "" {
+		previousBlock = "无"
+	}
+	if additionalContext == "" {
+		additionalContext = "无"
+	}
+	return fmt.Sprintf(`你是精准模式的直接估计规划器。你的任务不是跟用户对话，而是尽可能把当前画面/文本拆成可直接估计的主体，并为后续数据库营养检索提供结构化列表。
+
+请基于当前输入，返回 JSON，且 precisionStatus 统一使用 ready_for_estimate。
+
+当前输入类型：%s
+原始输入：
+%s
+
+用户补充说明：
+%s
+
+%s
+
+最近几轮历史（如有）：
+%s
+
+要求：
+- 如果有多个主体食物，请拆成 itemsToEstimate，后续并行估计。
+- 不要生成追问式输出，也不要要求用户补充后再继续。
+- 如果缺比例尺且会显著影响估重，请把 referenceObjectNeeded 设为 true，但仍然返回可估计主体。
+- itemsToEstimate 中每个主体必须给 item_key、item_name、uncertainty_level，可选 item_hint。
+- uncertainty_level 规则：
+  - low：单一食材、形状固定（如苹果、鸡蛋、鸡胸肉块、白米饭）
+  - medium：普通菜肴、食材可见（如清炒西兰花、蒸蛋、切片水果）
+  - high：混合菜、酱汁覆盖、油炸膨胀、无固定形状（如炒饭、炒面、咖喱、红烧肉、油条、粥、汤面）
+- 如果有 high 难度的食物且没有提供参考物，依旧返回 ready_for_estimate，并在 referenceObjectSuggestions / uncertaintyNotes 中给出建议。
+- followupQuestions 和 retakeInstructions 仅作内部备注，能留空就留空。
+
+只返回 JSON，结构如下：
+{
+  "precisionStatus": "ready_for_estimate",
+  "splitStrategy": "single_item | multi_item_parallel | single_shot | grouped_parallel | retake_required | user_annotation_required",
+  "detectedItemsSummary": ["米饭", "鸡腿", "西兰花"],
+  "followupQuestions": [],
+  "retakeInstructions": [],
+  "pendingRequirements": ["reference_object", "cook_method"],
+  "referenceObjectNeeded": true,
+  "referenceObjectSuggestions": ["手掌", "常规卡片", "大卡片"],
+  "uncertaintyNotes": ["米饭厚度不清楚"],
+  "rejectionReason": "当前主体遮挡严重",
+  "description": "可继续精估",
+  "insight": "先补充信息再进入精估。",
+  "itemsToEstimate": [
+    {"item_key": "rice", "item_name": "米饭", "item_hint": "主食区域", "requires_reference": false, "uncertainty_level": "low"},
+    {"item_key": "chicken_leg", "item_name": "鸡腿", "item_hint": "右侧肉类主体", "requires_reference": false, "uncertainty_level": "medium"},
+    {"item_key": "fried_rice", "item_name": "炒饭", "item_hint": "左侧混合菜", "requires_reference": true, "uncertainty_level": "high", "uncertainty_reason": "混合菜，米饭和配菜难以分离"}
+  ]
+}`, sourceType, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), previousBlock)
+}
+
+func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[string]any, textInput, additionalContext string, referenceObjects []map[string]any) (string, error) {
+	items := extractItems(payload["items_to_estimate"])
+	if len(items) > 1 {
+		return buildPrecisionItemEstimatePromptMulti(sourceType, items, textInput, additionalContext, referenceObjects), nil
+	}
+	itemName := stringFromMap(payload, "item_name")
+	if itemName == "" && len(items) == 1 {
+		itemName = firstNonEmptyString(items[0], "item_name", "name")
+	}
+	if itemName == "" {
+		return "", fmt.Errorf("精准模式子项估计任务缺少 item_name")
+	}
+	itemHint := stringFromMap(payload, "item_hint")
+	if itemHint == "" && len(items) == 1 {
+		itemHint = firstNonEmptyString(items[0], "item_hint")
+	}
+	return buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, textInput, additionalContext, referenceObjects), nil
+}
+
+func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawInput, additionalContext string, referenceObjects []map[string]any) string {
+	if rawInput == "" {
+		rawInput = "无"
+	}
+	if sourceType == "image" && rawInput == "无" {
+		rawInput = "图片输入"
+	}
+	hintBlock := ""
+	if itemHint != "" {
+		hintBlock = "主体提示：" + itemHint + "\n"
+	}
+	if additionalContext == "" {
+		additionalContext = "无"
+	}
+	return fmt.Sprintf(`你是精准模式的分项估计器。你现在只需要聚焦一个主体食物：%s。
+%s原始输入：
+%s
+
+补充说明：
+%s
+
+%s
+
+要求：
+- 只输出这个主体食物自己的名称和估计重量，不要把其他食物并进去。
+- 如果画面/描述里还有其他食物，忽略它们。
+- 参考物和尺寸如果可用，请务必用于精确估重。
+- 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
+- 估重时必须同时考虑：可见面积、堆叠高度/厚度、容器占比、与餐具/手掌/碗盘的相对大小。
+- 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）不要套用保守默认值，必须根据容器填充深度和实际视觉占比修正。
+%s
+- 对以下容易估计错误的食物要特别仔细：混合菜（如炒饭、炒面）、带酱汁的食物、油炸食物、无固定形状的食物（如粥、汤）。
+- 仅返回 JSON。
+
+JSON 结构：
+{
+  "item": {
+    "name": "%s",
+    "estimatedWeightGrams": 180
+  },
+  "uncertaintyNotes": ["如果没有参考物，重量可能有一定波动"]
+}`, itemName, hintBlock, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules(), itemName)
+}
+
+func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string]any, rawInput, additionalContext string, referenceObjects []map[string]any) string {
+	if rawInput == "" {
+		rawInput = "无"
+	}
+	if sourceType == "image" && rawInput == "无" {
+		rawInput = "图片输入"
+	}
+	lines := []string{}
+	for index, item := range items {
+		name := firstNonEmptyString(item, "item_name", "name")
+		if name == "" {
+			name = fmt.Sprintf("食物%d", index+1)
+		}
+		line := "  - " + name
+		if hint := firstNonEmptyString(item, "item_hint"); hint != "" {
+			line += "（" + hint + "）"
+		}
+		if stringFromMap(item, "uncertainty_level") == "high" {
+			line += " 【注意：此食物较难精确估重，请特别仔细】"
+		}
+		lines = append(lines, line)
+	}
+	if additionalContext == "" {
+		additionalContext = "无"
+	}
+	return fmt.Sprintf(`你是精准模式的分项估计器。请对以下食物进行一次性估计：
+
+%s
+
+原始输入：
+%s
+
+补充说明：
+%s
+
+%s
+
+要求：
+- 分别输出每个食物的名称和估计重量。
+- 注意食物之间的比例关系和相对大小，这有助于更准确地估重。
+- 参考物和尺寸如果可用，请务必用于精确估重。
+- 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
+- 每个食物都必须根据自身可见面积、厚度/高度、容器占比、与餐具/碗盘/手掌的相对大小估重。
+- 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）不要套用保守默认值，必须根据容器填充深度和实际视觉占比修正。
+%s
+- 对标记为【注意】的难估食物要特别仔细。
+- 仅返回 JSON。
+
+JSON 结构：
+{
+  "items": [
+    {"name": "食物名称1", "estimatedWeightGrams": 180},
+    {"name": "食物名称2", "estimatedWeightGrams": 120}
+  ],
+  "uncertaintyNotes": ["如果没有参考物，重量可能有一定波动"]
+}`, strings.Join(lines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules())
+}
+
+func precisionStapleVolumeRules() string {
+	return `- 主食估重必须先判断“容器容量 × 填充比例 × 食物厚度/松散度”，绝不能直接套用常见一碗饭 180g/200g。
+- 米饭/面条/粉/粥/炒饭/盖饭必须区分：深碗满装、浅碗半碗、盘底薄薄一层、被菜覆盖的一小撮，这些重量差异很大。
+- “薄薄一层”不能直接等于低克重；如果铺开的面积很大，体积和重量仍可能不小。必须先估可见面积，再估平均厚度，得到体积后再换算重量。
+- 判断主食时请观察容器口径、碗/盘深度、主食占容器面积、堆叠高度、边缘厚度、是否被菜盖住；看不到厚度时不要默认偏高或默认偏低。
+- 熟米饭可粗略按体积估算，约 0.75-0.85g/ml；熟面/粉更蓬松，约 0.55-0.70g/ml；粥含水更多，需看碗深和液面高度。
+- 估计时请给出与实际可见体积一致的克重：小面积薄层应低，大面积薄层可中等，深碗厚堆可高；不要使用固定区间替代体积判断。`
+}
+
+var precisionWeightRefinementKeywords = []string{
+	"米饭",
+	"白饭",
+	"炒饭",
+	"盖饭",
+	"面",
+	"面条",
+	"粉",
+	"粥",
+	"馒头",
+	"包子",
+	"面包",
+	"红烧肉",
+	"咖喱",
+	"油条",
+	"汤面",
+}
+
+func shouldRefinePrecisionWeights(plannedItems []map[string]any) bool {
+	for _, item := range plannedItems {
+		if item == nil {
+			continue
+		}
+		name := firstNonEmptyString(item, "item_name", "name")
+		if stringFromMap(item, "uncertainty_level") == "high" || boolFromAny(item["requires_reference"]) {
+			return true
+		}
+		for _, keyword := range precisionWeightRefinementKeywords {
+			if strings.Contains(name, keyword) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, additionalContext string, referenceObjects []map[string]any) string {
+	itemLines := []string{}
+	for _, item := range items {
+		name := firstNonEmptyString(item, "name", "item_name")
+		if name == "" {
+			name = "未知食物"
+		}
+		weight, _ := floatFromAny(item["estimatedWeightGrams"])
+		uncertaintyLevel := strings.ToLower(firstNonEmptyString(item, "uncertainty_level"))
+		if uncertaintyLevel == "" {
+			uncertaintyLevel = "medium"
+		}
+		note := ""
+		if uncertaintyLevel == "high" || precisionNameHasRefineKeyword(name) {
+			note = "，重点复核"
+		}
+		itemLines = append(itemLines, fmt.Sprintf("- %s: 当前估计 %.0fg，难度 %s%s", name, weight, uncertaintyLevel, note))
+	}
+	if rawInput == "" {
+		rawInput = "无"
+	}
+	if additionalContext == "" {
+		additionalContext = "无"
+	}
+	return fmt.Sprintf(`你是精准模式的重量复核器。请复核下面这些食物的重量估计，重点检查模型是否因为“保守默认值”而低估或高估。
+
+当前估计：
+%s
+
+原始输入：
+%s
+
+补充说明：
+%s
+
+%s
+
+复核规则：
+- 只复核重量，不要补充营养。
+- 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示。
+- 必须根据可见面积、容器填充深度、堆积高度/厚度、与餐具/碗盘/手掌的相对大小重新审视重量。
+- 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）绝不能套用保守默认值。
+%s
+- 如果当前估计明显与视觉占比不符，必须修正；如果没有足够依据修正，可以保留原值，但要在 uncertaintyNotes 里写明原因。
+- 仅返回 JSON。
+
+JSON 结构：
+{
+  "items": [
+    {"name": "食物名称1", "estimatedWeightGrams": 220},
+    {"name": "食物名称2", "estimatedWeightGrams": 95}
+  ],
+  "uncertaintyNotes": ["米饭缺少清晰顶视角，估重仍有波动"]
+}`, strings.Join(itemLines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules())
+}
+
+func precisionNameHasRefineKeyword(name string) bool {
+	for _, keyword := range precisionWeightRefinementKeywords {
+		if strings.Contains(name, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 func buildPrecisionEstimateContext(payload map[string]any, existing string) string {
 	items := extractItems(payload["items_to_estimate"])
 	lines := []string{}
@@ -600,10 +1263,295 @@ func buildPrecisionEstimateContext(payload map[string]any, existing string) stri
 	return strings.Join(lines, "\n")
 }
 
+func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[string]any, payload map[string]any) ([]map[string]any, error) {
+	if parsed == nil {
+		parsed = map[string]any{}
+	}
+	isMulti := len(plannedItems) > 1
+	if isMulti {
+		rawItems := extractItems(parsed["items"])
+		if len(rawItems) == 0 {
+			return nil, fmt.Errorf("精准模式多食物估计未返回有效结果")
+		}
+		items := make([]map[string]any, 0, len(rawItems))
+		for _, raw := range rawItems {
+			name := firstNonEmptyString(raw, "name")
+			weight, _ := floatFromAny(firstNonNil(raw["estimatedWeightGrams"], raw["weight"]))
+			if name != "" {
+				items = append(items, map[string]any{
+					"name":                 name,
+					"estimatedWeightGrams": weight,
+				})
+			}
+		}
+		return items, nil
+	}
+
+	itemPayload, ok := parsed["item"].(map[string]any)
+	if !ok || itemPayload == nil {
+		itemPayload = parsed
+	}
+	name := firstNonEmptyString(itemPayload, "name")
+	weight, _ := floatFromAny(firstNonNil(itemPayload["estimatedWeightGrams"], itemPayload["weight"]))
+	if name == "" {
+		return nil, fmt.Errorf("精准模式子项估计未返回有效结果")
+	}
+	return []map[string]any{{
+		"name":                 name,
+		"estimatedWeightGrams": weight,
+	}}, nil
+}
+
+func (r *Runner) maybeRefinePrecisionWeights(
+	ctx context.Context,
+	sourceType string,
+	parsedItems []map[string]any,
+	plannedItems []map[string]any,
+	rawInput string,
+	additionalContext string,
+	referenceObjects []map[string]any,
+	imageURLs []string,
+	modelName string,
+) ([]map[string]any, []string, error) {
+	if len(parsedItems) == 0 || !shouldRefinePrecisionWeights(plannedItems) {
+		return parsedItems, nil, nil
+	}
+	prompt := buildPrecisionWeightRefinePrompt(parsedItems, rawInput, additionalContext, referenceObjects)
+	parsed, err := r.analyze.RunPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0.1)
+	if err != nil {
+		return parsedItems, nil, err
+	}
+	refinedItems, notes := parsePrecisionRefinedItems(parsed, parsedItems)
+	return refinedItems, notes, nil
+}
+
+func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[string]any) ([]map[string]any, []string) {
+	notes := []string{}
+	if parsed != nil {
+		notes = stringSliceFromAny(parsed["uncertaintyNotes"])
+	}
+	rawItems := extractItems(parsed["items"])
+	if len(rawItems) == 0 {
+		return fallbackItems, notes
+	}
+	refined := make([]map[string]any, 0, len(rawItems))
+	for _, raw := range rawItems {
+		name := firstNonEmptyString(raw, "name")
+		if name == "" {
+			continue
+		}
+		weight, _ := floatFromAny(firstNonNil(raw["estimatedWeightGrams"], raw["weight"]))
+		refined = append(refined, map[string]any{
+			"name":                 name,
+			"estimatedWeightGrams": weight,
+		})
+	}
+	if len(refined) == 0 {
+		return fallbackItems, notes
+	}
+	return refined, notes
+}
+
+func precisionWeightSnapshot(items []map[string]any) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		name := stringFromMap(item, "name")
+		weight, _ := floatFromAny(item["estimatedWeightGrams"])
+		out = append(out, fmt.Sprintf("%s:%.2f", name, weight))
+	}
+	return out
+}
+
+func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []map[string]any {
+	if len(parsedItems) == 0 {
+		return nil
+	}
+	enriched := make([]map[string]any, 0, len(parsedItems))
+	for _, item := range parsedItems {
+		enriched = append(enriched, copyAnyMap(item))
+	}
+	if len(plannedItems) == 0 {
+		return enriched
+	}
+
+	used := map[int]bool{}
+	for _, planned := range plannedItems {
+		if planned == nil {
+			continue
+		}
+		targetName := firstNonEmptyString(planned, "item_name", "name")
+		matchIndex := findPrecisionMetadataMatchIndex(enriched, targetName, used)
+		if matchIndex < 0 {
+			for index := range enriched {
+				if !used[index] {
+					matchIndex = index
+					break
+				}
+			}
+		}
+		if matchIndex < 0 {
+			continue
+		}
+		used[matchIndex] = true
+		for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason"} {
+			if value, ok := planned[key]; ok && !isEmptyAny(value) {
+				enriched[matchIndex][key] = value
+			}
+		}
+		if value, ok := planned["requires_reference"]; ok {
+			enriched[matchIndex]["requires_reference"] = boolFromAny(value)
+		}
+	}
+	return enriched
+}
+
+func findPrecisionMetadataMatchIndex(items []map[string]any, targetName string, used map[int]bool) int {
+	targetNorm := normalizeFoodName(targetName)
+	if targetNorm == "" {
+		return -1
+	}
+	fuzzyIndex := -1
+	for index, item := range items {
+		if used[index] {
+			continue
+		}
+		itemNorm := normalizeFoodName(stringFromMap(item, "name"))
+		if itemNorm == "" {
+			continue
+		}
+		if itemNorm == targetNorm {
+			return index
+		}
+		if fuzzyIndex < 0 && (strings.Contains(targetNorm, itemNorm) || strings.Contains(itemNorm, targetNorm)) {
+			fuzzyIndex = index
+		}
+	}
+	return fuzzyIndex
+}
+
+func filterPrecisionResultToPlanned(result map[string]any, payload map[string]any) map[string]any {
+	if result == nil {
+		return result
+	}
+	planned := extractItems(payload["items_to_estimate"])
+	if len(planned) == 0 {
+		return result
+	}
+	items := extractItems(result["items"])
+	if len(items) == 0 {
+		if item, ok := result["item"].(map[string]any); ok && item != nil {
+			if plannedItemMatches(item, planned) || len(planned) == 1 {
+				return result
+			}
+			result["item"] = nil
+		}
+		return result
+	}
+	filtered := make([]map[string]any, 0, len(planned))
+	used := make([]bool, len(items))
+	for _, plan := range planned {
+		bestIndex := -1
+		bestScore := 0.0
+		for index, item := range items {
+			if used[index] {
+				continue
+			}
+			score := plannedItemMatchScore(item, plan)
+			if score > bestScore {
+				bestScore = score
+				bestIndex = index
+			}
+		}
+		if bestIndex >= 0 && bestScore >= 0.4 {
+			used[bestIndex] = true
+			filtered = append(filtered, items[bestIndex])
+		}
+	}
+	if len(filtered) == 0 && len(items) <= len(planned) {
+		filtered = items
+	}
+	if len(planned) == 1 {
+		if len(filtered) > 0 {
+			result["item"] = filtered[0]
+			delete(result, "items")
+		}
+		return result
+	}
+	result["items"] = filtered
+	return result
+}
+
+func plannedItemMatches(item map[string]any, planned []map[string]any) bool {
+	for _, plan := range planned {
+		if plannedItemMatchScore(item, plan) >= 0.4 {
+			return true
+		}
+	}
+	return false
+}
+
+func plannedItemMatchScore(item map[string]any, plan map[string]any) float64 {
+	itemName := normalizeFoodName(firstNonEmptyString(item, "name", "item_name"))
+	planName := normalizeFoodName(firstNonEmptyString(plan, "item_name", "name"))
+	if itemName == "" || planName == "" {
+		return 0
+	}
+	if itemName == planName {
+		return 1
+	}
+	if strings.Contains(itemName, planName) || strings.Contains(planName, itemName) {
+		return 0.9
+	}
+	itemRunes := runeSet(itemName)
+	planRunes := runeSet(planName)
+	if len(itemRunes) == 0 || len(planRunes) == 0 {
+		return 0
+	}
+	intersection := 0
+	for ch := range itemRunes {
+		if planRunes[ch] {
+			intersection++
+		}
+	}
+	union := len(itemRunes) + len(planRunes) - intersection
+	if union == 0 {
+		return 0
+	}
+	return float64(intersection) / float64(union)
+}
+
+func normalizeFoodName(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	replacements := []string{" ", "\t", "\n", "\r", "（", "）", "(", ")", "，", ",", "、", "-", "_"}
+	for _, old := range replacements {
+		name = strings.ReplaceAll(name, old, "")
+	}
+	return name
+}
+
+func runeSet(value string) map[rune]bool {
+	out := map[rune]bool{}
+	for _, ch := range value {
+		out[ch] = true
+	}
+	return out
+}
+
 func attachPlannedItemMetadata(result map[string]any, payload map[string]any) map[string]any {
 	items := extractItems(result["items"])
 	planned := extractItems(payload["items_to_estimate"])
-	if len(items) == 0 || len(planned) == 0 {
+	if len(planned) == 0 {
+		return result
+	}
+	if len(items) == 0 {
+		if item, ok := result["item"].(map[string]any); ok && item != nil {
+			for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason", "requires_reference"} {
+				if value, ok := planned[0][key]; ok {
+					item[key] = value
+				}
+			}
+			result["item"] = item
+		}
 		return result
 	}
 	for index := range items {
@@ -631,8 +1579,13 @@ func allPrecisionEstimatesFinished(estimates []domain.PrecisionItemEstimate) boo
 }
 
 func buildPrecisionFinalResult(sessionID string, roundIndex int, splitStrategy string, estimates []domain.PrecisionItemEstimate) (map[string]any, error) {
+	sort.SliceStable(estimates, func(i, j int) bool {
+		return estimates[i].ItemIndex < estimates[j].ItemIndex
+	})
 	items := []map[string]any{}
 	uncertaintyNotes := []string{}
+	hasDeepSeekFallback := false
+	hasHighUncertainty := false
 	for _, estimate := range estimates {
 		result := estimate.Result
 		if result == nil {
@@ -647,6 +1600,12 @@ func buildPrecisionFinalResult(sessionID string, roundIndex int, splitStrategy s
 		for _, item := range resultItems {
 			if _, ok := item["originalWeightGrams"]; !ok {
 				item["originalWeightGrams"] = item["estimatedWeightGrams"]
+			}
+			if stringFromMap(item, "nutrition_source") == "deepseek_text_fallback" {
+				hasDeepSeekFallback = true
+			}
+			if stringFromMap(item, "uncertainty_level") == "high" {
+				hasHighUncertainty = true
 			}
 			items = append(items, item)
 		}
@@ -671,10 +1630,9 @@ func buildPrecisionFinalResult(sessionID string, roundIndex int, splitStrategy s
 		description += "等"
 	}
 	lookup := summarizeLookupItems(items)
-	insight := fmt.Sprintf("已完成精准模式估计。数据库命中 %d/%d 项。", intFromMap(lookup, "library_hits"), intFromMap(lookup, "total"))
-	if intFromMap(lookup, "unresolved") > 0 {
-		insight += fmt.Sprintf("仍有 %d 项未命中标准库。", intFromMap(lookup, "unresolved"))
-	}
+	_ = hasDeepSeekFallback
+	_ = hasHighUncertainty
+	insight := "已完成本餐食物和份量分析，可结合下方明细查看热量与营养构成。"
 	return map[string]any{
 		"description":                description,
 		"insight":                    insight,
@@ -740,6 +1698,42 @@ func copyAnyMap(in map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func mapFromAny(value any) map[string]any {
+	if m, ok := value.(map[string]any); ok {
+		return m
+	}
+	return map[string]any{}
+}
+
+func firstNonNil(values ...any) any {
+	for _, value := range values {
+		if !isEmptyAny(value) {
+			return value
+		}
+	}
+	return nil
+}
+
+func isEmptyAny(value any) bool {
+	if value == nil {
+		return true
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v) == ""
+	case []string:
+		return len(v) == 0
+	case []any:
+		return len(v) == 0
+	case []map[string]any:
+		return len(v) == 0
+	case map[string]any:
+		return len(v) == 0
+	default:
+		return false
+	}
 }
 
 func firstNonEmptyString(m map[string]any, keys ...string) string {
