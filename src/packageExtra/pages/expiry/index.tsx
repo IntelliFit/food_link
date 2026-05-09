@@ -6,7 +6,6 @@ import {
   listManagedFoodExpiryItems,
   showUnifiedApiError,
   updateManagedFoodExpiryStatus,
-  markAnalyzeHistorySeen,
   type FoodExpiryDashboard,
   type FoodExpiryItem,
   type FoodExpiryStatus,
@@ -73,20 +72,10 @@ export default function ExpiryPage() {
   })
 
   useDidHide(() => {
-    // 页面隐藏时：食物保质期 + 识别记录 未读全部一笔勾销
-    void (async () => {
-      try {
-        await markAnalyzeHistorySeen()
-      } catch {
-        // 静默失败
-      }
-      const today = new Date().toISOString().slice(0, 10)
-      Taro.setStorageSync('food_expiry_last_seen_date', today)
-      Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
-      Taro.setStorageSync('analyze_waiting_record_count', 0)
-      const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
-      Taro.setStorageSync('profile_tab_badge_count', friendBadge)
-    })()
+    const today = new Date().toISOString().slice(0, 10)
+    Taro.setStorageSync('food_expiry_last_seen_date', today)
+    const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+    Taro.setStorageSync('profile_tab_badge_count', friendBadge)
   })
 
   useEffect(() => {

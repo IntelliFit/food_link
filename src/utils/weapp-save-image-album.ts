@@ -181,6 +181,73 @@ const isPrivacyApiBlocked = (err: WeappSaveImageErr): boolean => {
   return err.errno === 1025 || msg.includes('privacy') || msg.includes('banned')
 }
 
+const isPrivacyAuthorizeDenied = (err: WeappSaveImageErr): boolean => {
+  const msg = String(err?.errMsg || '').toLowerCase()
+  return (
+    msg.includes('cancel') ||
+    msg.includes('deny') ||
+    msg.includes('denied') ||
+    msg.includes('refuse') ||
+    msg.includes('rejected')
+  )
+}
+
+function promptOpenPrivacyContract(): void {
+  Taro.showModal({
+    title: '需要先同意隐私指引',
+    content: '保存图片前，需要先同意小程序隐私保护指引中的相册相关说明。',
+    confirmText: '查看指引',
+    success: (r) => {
+      if (!r.confirm) return
+      const openPrivacyContract = (Taro as unknown as {
+        openPrivacyContract?: (options?: { success?: () => void; fail?: (err: unknown) => void }) => void
+      }).openPrivacyContract
+      if (typeof openPrivacyContract === 'function') {
+        openPrivacyContract({
+          fail: (err) => {
+            console.error('[promptOpenPrivacyContract] openPrivacyContract fail', err)
+          }
+        })
+      }
+    }
+  })
+}
+
+export async function ensurePrivacyAuthorization(): Promise<'granted' | 'denied'> {
+  if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) return 'granted'
+  const requirePrivacyAuthorize = (Taro as unknown as {
+    requirePrivacyAuthorize?: (options?: { success?: () => void; fail?: (err: WeappSaveImageErr) => void }) => void
+  }).requirePrivacyAuthorize
+  if (typeof requirePrivacyAuthorize !== 'function') return 'granted'
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      requirePrivacyAuthorize({
+        success: () => resolve(),
+        fail: (err) => reject(err),
+      })
+    })
+    return 'granted'
+  } catch (error) {
+    const err = error as WeappSaveImageErr
+    console.error('[ensurePrivacyAuthorization] requirePrivacyAuthorize fail', err)
+    if (isPrivacyAuthorizeDenied(err)) {
+      promptOpenPrivacyContract()
+      return 'denied'
+    }
+    if (isPrivacyApiBlocked(err)) {
+      Taro.showModal({
+        title: '隐私指引未配置完成',
+        content:
+          '当前正式版尚未完成相册相关隐私声明或发布。请在微信公众平台补充「保存图片到相册」用途说明，并重新发布版本。',
+        showCancel: false
+      })
+      return 'denied'
+    }
+    return 'granted'
+  }
+}
+
 /**
  * 在保存前尽量触发一次相册授权（用户点击「保存」时已处于用户手势上下文，符合平台要求）。
  * 若用户曾选「拒绝」，返回 denied，由上层引导 openSetting。
@@ -232,6 +299,8 @@ export async function savePosterToPhotosAlbum(filePath: string, handlers: SavePo
   }
 
   if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP) {
+    const privacy = await ensurePrivacyAuthorization()
+    if (privacy === 'denied') return
     const perm = await ensureWritePhotosAlbumPermission()
     if (perm === 'denied') {
       promptOpenAlbumSettings()

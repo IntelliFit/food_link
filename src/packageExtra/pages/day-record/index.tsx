@@ -18,6 +18,7 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type DayRecordPosterMeal } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { savePosterToPhotosAlbum } from '../../../utils/weapp-save-image-album'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
 function formatNumber(value: number): string {
@@ -532,25 +533,13 @@ function DayRecordPage() {
 
   const handleSaveDayRecordPoster = useCallback(() => {
     if (!posterImageUrl) return
-    Taro.saveImageToPhotosAlbum({
-      filePath: posterImageUrl,
-      success: () => {
+    void savePosterToPhotosAlbum(posterImageUrl, {
+      onSuccess: () => {
         Taro.showToast({ title: '已保存到相册', icon: 'success' })
         closeDayRecordPoster()
       },
-      fail: (err) => {
-        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
-          Taro.showModal({
-            title: '提示',
-            content: '需要您授权保存图片到相册',
-            confirmText: '去设置',
-            success: (r) => {
-              if (r.confirm) Taro.openSetting()
-            }
-          })
-        } else {
-          Taro.showToast({ title: '保存失败', icon: 'none' })
-        }
+      onToast: (message) => {
+        Taro.showToast({ title: message, icon: 'none' })
       }
     })
   }, [posterImageUrl, closeDayRecordPoster])

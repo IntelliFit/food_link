@@ -1,5 +1,51 @@
 # 当前任务
 
+## 状态：完成源码修改 - 「我的」页改为每次直连后端，移除识别记录未读 badge
+
+- 2026-05-09 update:
+  - User要求：
+    - 「我的」页不要再优先读本地缓存，每次进入直接从后端获取最新数据
+    - 移除「识别记录」右上角 unread 红色 badge，以及相关等待记录未读数量计算链路
+  - 已完成：
+    - `src/pages/profile/index.tsx` 删除本地缓存优先展示逻辑，不再以 `userInfo`、`membershipStatus`、`userRegisterTime`、`profile_stats_*` 作为页面展示源
+    - 「我的」页顶部快捷入口中的「识别记录」仅展示总数，不再展示右上角 waiting/unread badge
+    - 首页 `RecordMenu` 的「识别记录」红点移除
+    - 删除 `waiting_record / has_unseen_waiting_record` 在首页、识别记录页、保质期页中的前端 badge 计算与清零链路
+    - 保留好友请求与食物保质期自身 badge 逻辑
+  - 静态验证：
+    - `npx eslint` 针对相关改动文件通过
+  - 运行时验证阻塞：
+    - `mrc` 无法连接 `ws://localhost:9420`
+    - 当前无法通过微信开发者工具自动化确认界面，需要用户本地开启开发者工具自动化后复验
+
+## 状态：完成源码修复 - 正式版首页餐食海报保存触发隐私 API 拦截
+
+- 2026-05-09 update:
+  - User reported that in release builds, tapping the save/download button after opening the homepage meal share poster failed with:
+    - `MiniProgramError errno:1025 errMsg:savelmageToPhotosAlbum:fail appid privacy api banned`
+  - Root cause:
+    - poster save flows still called `Taro.saveImageToPhotosAlbum` directly
+    - release builds require mini-program privacy authorization before calling album APIs, while local/dev may not expose the same failure path
+  - Fix applied:
+    - enabled app privacy check in `src/app.config.ts` via `__usePrivacyCheck__: true`
+    - extended `src/utils/weapp-save-image-album.ts`:
+      - call `requirePrivacyAuthorize` before album permission and save
+      - if the user has not agreed yet, prompt to open the privacy contract
+      - keep existing album-permission and temp-file normalization logic
+      - retain explicit modal for the case where the release app still lacks the required privacy declaration on the WeChat platform side
+    - switched these poster save entries to the shared save helper:
+      - homepage meal poster `src/pages/index/components/MealRecordPosterModal.tsx`
+      - homepage daily summary poster `src/pages/index/index.tsx`
+      - record detail poster `src/packageExtra/pages/record-detail/index.tsx`
+      - day-record poster `src/packageExtra/pages/day-record/index.tsx`
+  - Verification:
+    - `npx eslint` passed for the touched files
+    - `git diff --check` passed
+    - WeApp DevTools automation service started on port `9420`
+    - `mrc where --port 9420` connected successfully and confirmed current page `pages/index/index`
+    - `mrc relaunch /pages/index/index --port 9420` succeeded
+    - `mrc logs error 20 --port 9420` returned 0 runtime errors
+
 ## 状态：完成 - 同步 `backend-refactor-sync-migrate-tencent` 分支代码
 
 - 2026-05-09 update:

@@ -17,6 +17,7 @@ import {
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { savePosterToPhotosAlbum } from '../../../utils/weapp-save-image-album'
 
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
@@ -688,25 +689,13 @@ function RecordDetailPage() {
 
   const handleSavePoster = () => {
     if (!posterImageUrl) return
-    Taro.saveImageToPhotosAlbum({
-      filePath: posterImageUrl,
-      success: () => {
+    void savePosterToPhotosAlbum(posterImageUrl, {
+      onSuccess: () => {
         Taro.showToast({ title: '已保存到相册', icon: 'success' })
         setShowPosterModal(false)
       },
-      fail: (err) => {
-        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
-          Taro.showModal({
-            title: '提示',
-            content: '需要您授权保存图片到相册',
-            confirmText: '去设置',
-            success: (r) => {
-              if (r.confirm) Taro.openSetting()
-            }
-          })
-        } else {
-          void showUnifiedApiError(new Error('保存失败'), '保存失败')
-        }
+      onToast: (message) => {
+        Taro.showToast({ title: message, icon: 'none' })
       }
     })
   }
