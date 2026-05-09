@@ -1,5 +1,24 @@
 # 当前任务
 
+## 状态：完成 - 同步 `backend-refactor-sync-migrate-tencent` 分支代码
+
+- 2026-05-09 update:
+  - User requested to sync the current branch with remote.
+  - Before sync:
+    - local branch: `backend-refactor-sync-migrate-tencent`
+    - tracking state: ahead 2, behind 14 relative to `origin/backend-refactor-sync-migrate-tencent`
+  - Actions taken:
+    - fetched latest remote refs
+    - rebased local branch onto `origin/backend-refactor-sync-migrate-tencent`
+    - skipped local commit `6e728fd` because its membership / WeChat Pay / analyze changes were already superseded by newer upstream implementations
+    - retained and rebased local migration-script work as new commit `71bf30a`
+    - resolved conflicts by keeping newer upstream Go runtime code and preserving durable migration/state updates
+    - pushed synced branch back to `origin/backend-refactor-sync-migrate-tencent`
+  - After sync:
+    - local and remote branch are aligned at `71bf30a`
+    - preserved assets include `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
+    - `DECISIONS.md` and `PROJECT_STATE.md` now retain the Supabase -> PostgreSQL/COS migration context for future sessions
+
 ## 状态：已修复 - 精准模式分组估重加速
 
 - 2026-05-09 precision speed fix:
