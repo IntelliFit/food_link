@@ -1,5 +1,61 @@
 # 当前任务
 
+## 状态：准备提交推送 - 结果页成分营养格紧凑化与流程梳理记录
+
+- 2026-05-11 update:
+  - User要求先提交代码、推送远端，并与远端代码合并。
+  - 当前分支：`backend-refactor-sync-migrate-tencent`
+  - 已执行 `git fetch origin`，`git rev-list --left-right --count HEAD...@{u}` 返回 `0 0`，说明本地与远端提交基线一致，没有需要合并的远端提交。
+  - 待提交范围：
+    - 结果页「包含成分」营养格去除图标并压缩高度。
+    - `CURRENT_TASK.md` / `memory/2026-05-10.md` / `memory/2026-05-11.md` 项目状态与记忆更新。
+  - Verification before commit:
+    - 根目录临时文件清理已执行。
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+
+## 状态：完成静态梳理 - 当前食物能量分析后端流程
+
+- 2026-05-11 update:
+  - User询问当前系统中“食物能量分析”的后端流程如何实现。
+  - 已静态追踪链路：
+    - 前端图片页上传图片到 `/api/upload-analyze-image-file`，失败时回退 `/api/upload-analyze-image`。
+    - 当前图片分析主链路提交 `/api/analyze/submit`，文字分析提交 `/api/analyze-text/submit`，后端立即返回 `task_id`，前端进入 loading 页轮询 `/api/analyze/tasks/:task_id`。
+    - Go 后端 `TaskService` 创建 `analysis_tasks`：
+      - 标准模式：`task_type=food` 或 `food_text`
+      - 精准模式：`task_type=precision_plan`，并创建/续接 `precision_sessions`
+    - worker 通过 `FOR UPDATE SKIP LOCKED` 领取 pending 任务并更新为 processing。
+    - 标准模式 worker 调 `AnalyzeService.Analyze/AnalyzeText`；图片默认使用 OfoxAI Gemini，文字默认使用 DeepSeek。
+    - 标准模式默认 `db_first`：prompt 主要让模型输出食物名称和重量，营养由后端 `food_nutrition_library / food_nutrition_aliases` 查库回算。
+    - 热量计算口径：每 100g 营养值按 `estimatedWeightGrams / 100` 缩放，得到每项 `nutrients.calories/protein/carbs/fat`。
+    - 未命中食物会记录 `food_unresolved_logs`；若 DeepSeek fallback 可用，则让 DeepSeek 估每 100g 营养，写入 `food_nutrition_library(source=deepseek_auto)` 以便下次命中。
+    - 精准模式为多阶段：`precision_plan` 识别/拆分主体 → 创建 `precision_item_estimate` 子任务逐项估重 → DB-first 回算营养 → `precision_aggregate` 聚合最终结果。
+    - 用户点击保存后，前端把结果提交 `/api/food-record/save`，后端保存到 `user_food_records`，包含 `items`、`total_calories`、P/C/F 汇总、`source_task_id` 等。
+  - 本轮未改代码、未运行测试。
+
+## 状态：完成源码优化 - 分析结果页「包含成分」营养格去除图标并压缩高度
+
+- 2026-05-10 update:
+  - User要求：
+    - 食物分析结果页「包含成分」部分，把卡路里到脂肪的全部图标去除，让整个卡片更加紧凑。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 删除成分营养四格中的热量/蛋白质/碳水/脂肪图标节点。
+      - 删除仅供这些图标使用的 `NUTRITION_CARD_META`。
+    - `src/packageExtra/pages/result/index.scss`
+      - 删除 `ingredient-summary-icon-*` 相关图标样式。
+      - 将四格营养条的间距、内边距、圆角、最小高度与数值字号整体收紧，使单个食物卡片更紧凑。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .ingredient-nutrition-strip --port 9420` 为 true
+    - `mrc exists .ingredient-summary-icon --port 9420` 为 false
+    - `mrc click .ingredient-summary-cell--protein --port 9420` 成功，点击后 `.correction-drawer-content` 存在
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot ./result-ingredients-compact.png --port 9420` 本轮卡住未产出文件，已终止该截图进程；因此有页面/元素/交互验证，但没有截图证据。
+
 ## 状态：完成源码修复 - 我的页退出登录残留调用 `setRegisterDate` 导致正式环境 ReferenceError
 
 - 2026-05-10 update:

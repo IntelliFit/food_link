@@ -238,13 +238,6 @@ const MACRO_FIELD_META: Record<MacroField, { label: string; className: string }>
   fat: { label: '脂肪', className: 'fat' }
 }
 
-const NUTRITION_CARD_META = {
-  cal: { label: '热量', iconClass: 'icon-huore', accentClass: 'cal' },
-  protein: { label: '蛋白质', iconClass: 'icon-danbaizhi', accentClass: 'protein' },
-  carbs: { label: '碳水', iconClass: 'icon-tanshui-dabiao', accentClass: 'carbs' },
-  fat: { label: '脂肪', iconClass: 'icon-zhifangyouheruhuazhifangzhipin', accentClass: 'fat' },
-} as const
-
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
 const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
@@ -1985,10 +1978,7 @@ function ResultPage() {
 
                   <View className='ingredient-nutrition-strip'>
                     <View className='ingredient-summary-cell ingredient-summary-cell--cal'>
-                      <View className='ingredient-summary-icon-wrap ingredient-summary-icon-wrap--cal'>
-                        <Text className={`iconfont ${NUTRITION_CARD_META.cal.iconClass} ingredient-summary-icon ingredient-summary-icon--cal`}></Text>
-                      </View>
-                      <Text className='ingredient-summary-label'>{NUTRITION_CARD_META.cal.label}</Text>
+                      <Text className='ingredient-summary-label'>热量</Text>
                       <View className='ingredient-cal-kcal-line'>
                         <Text className='ingredient-cal-kcal-num'>
                           {Math.round(item.calorie * (item.ratio / 100))}
@@ -2005,11 +1995,6 @@ function ResultPage() {
                           className={`ingredient-summary-cell ingredient-summary-cell--${meta.className}`}
                           onClick={() => handleMacroEdit(item.id, field, item[field])}
                         >
-                          <View className={`ingredient-summary-icon-wrap ingredient-summary-icon-wrap--${meta.className}`}>
-                            <Text
-                              className={`iconfont ${NUTRITION_CARD_META[field].iconClass} ingredient-summary-icon ingredient-summary-icon--${meta.className}`}
-                            ></Text>
-                          </View>
                           <Text className='ingredient-summary-label'>{meta.label}</Text>
                           <View className='ingredient-macro-value-line'>
                             <Text className={`ingredient-macro-num ingredient-macro-num--${meta.className}`}>
