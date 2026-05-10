@@ -182,6 +182,38 @@ func TestFriendFeed(t *testing.T) {
 	assert.True(t, items[0].Liked)
 }
 
+func TestNormalizeFeedRecordUsesChinaTime(t *testing.T) {
+	utcTime := time.Date(2026, 5, 11, 12, 30, 0, 0, time.UTC)
+	svc := newTestService(&mockFeedRepo{}, &mockNotificationRepo{}, &mockUserRepo{})
+
+	record := svc.normalizeFeedRecord(repo.FeedRecord{ID: "r1", RecordTime: &utcTime})
+
+	assert.NotNil(t, record.RecordTime)
+	assert.Equal(t, "2026-05-11T20:30:00+08:00", record.RecordTime.Format(time.RFC3339))
+}
+
+func TestChinaWeekWindowUsesBeijingNaturalWeek(t *testing.T) {
+	mondayMorning := time.Date(2026, 5, 11, 9, 30, 0, 0, chinaTZ)
+
+	start, end, startStr, endStr := chinaWeekWindow(mondayMorning)
+
+	assert.Equal(t, "2026-05-11", startStr)
+	assert.Equal(t, "2026-05-17", endStr)
+	assert.Equal(t, "2026-05-11T00:00:00+08:00", start.Format(time.RFC3339))
+	assert.Equal(t, "2026-05-18T00:00:00+08:00", end.Format(time.RFC3339))
+}
+
+func TestChinaWeekWindowSundayStaysInSameNaturalWeek(t *testing.T) {
+	sundayNight := time.Date(2026, 5, 17, 23, 30, 0, 0, chinaTZ)
+
+	start, end, startStr, endStr := chinaWeekWindow(sundayNight)
+
+	assert.Equal(t, "2026-05-11", startStr)
+	assert.Equal(t, "2026-05-17", endStr)
+	assert.Equal(t, "2026-05-11T00:00:00+08:00", start.Format(time.RFC3339))
+	assert.Equal(t, "2026-05-18T00:00:00+08:00", end.Format(time.RFC3339))
+}
+
 func TestCheckinLeaderboard(t *testing.T) {
 	mockFeed := &mockFeedRepo{
 		friendIDs:     []string{"u2"},
