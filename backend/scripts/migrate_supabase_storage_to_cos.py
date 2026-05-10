@@ -5,7 +5,7 @@ Default behavior:
 1. Discover source buckets from Supabase Storage.
 2. Map each source bucket to a target COS bucket.
 3. Upload missing or mismatched objects.
-4. Delete target-only objects unless --keep-extra is passed.
+4. Keep target-only objects unless --delete-extra is passed.
 5. Verify object count, keys, and sizes.
 
 Typical usage:
@@ -35,7 +35,17 @@ from urllib.parse import quote
 
 import requests
 from dotenv import load_dotenv
-from qcloud_cos import CosConfig, CosS3Client
+
+try:
+    from qcloud_cos import CosConfig, CosS3Client
+except ModuleNotFoundError as err:
+    raise SystemExit(
+        "missing dependency: qcloud_cos\n"
+        "Use the backend virtualenv Python, for example:\n"
+        "  backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_storage_to_cos.py --dry-run\n"
+        "or install it into the active Python environment:\n"
+        "  python -m pip install cos-python-sdk-v5"
+    ) from err
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -110,14 +120,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--delete-extra",
         action="store_true",
-        default=True,
-        help="Delete COS objects that do not exist in Supabase. Enabled by default.",
+        default=False,
+        help="Delete COS objects that do not exist in Supabase. Default: keep target-only objects.",
     )
     parser.add_argument(
         "--keep-extra",
         dest="delete_extra",
         action="store_false",
-        help="Keep target-only COS objects and report them as mismatches.",
+        help="Keep target-only COS objects. This is the default.",
     )
     parser.add_argument(
         "--verbose-objects",
@@ -533,6 +543,8 @@ def main() -> int:
                 for key in missing_keys:
                     bucket_report["mismatches"].append({"key": key, "reason": "missing in target"})
                 for key in extra_keys:
+                    if not config.delete_extra:
+                        continue
                     bucket_report["mismatches"].append({"key": key, "reason": "extra in target"})
                 for key, source_size in source_map.items():
                     target_size = target_map.get(key)
