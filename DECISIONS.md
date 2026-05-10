@@ -1,5 +1,13 @@
 # DECISIONS
 
+- `2026-05-10`: 微信小程序非 Tab 页不再默认全部塞进单一 `packageExtra` 分包。对明显偏重的页面采用“顶层独立分包 + `extraPkgUrl()` 路由映射”的稳定口径，当前已单独拆出：
+  - `packageAbout/pages/about/index`
+  - `packageUserGroup/pages/user-group/index`
+  - `packageStatsMetabolic/pages/stats-metabolic/index`
+  这样可以在不改业务调用口径的前提下控制单分包体积，避免真机调试/预览触发微信包体限制；旧的 `/packageExtra/pages/...` 回跳地址也要继续兼容映射到新分包路径。
+
+- `2026-05-10`: `about` 页 logo 不再 import 本地大图 `src/assets/logo.png`。该资源会被直接打进页面 JS，显著放大编译产物；稳定口径是优先使用 `__ICON_CDN_BASE_URL__`，缺省回退 `https://cdn-food-icon.coachlink.fit/shitan-nobackground.png`。
+
 - `2026-05-09`: 首页「今日餐食 -> 生成分享海报」的稳定交互口径是不再停留在项目自定义的全屏海报预览层。首页只保留隐藏 canvas 用于生成图片；生成成功后立即拉起微信官方图片菜单 `showShareImageMenu`。如本地缺少相册权限，则先通过官方小程序权限接口 `getSetting / authorize / openSetting` 请求或引导开启，再交由微信官方菜单提供发送/保存能力。
 
 - `2026-05-09`: 微信原生图片菜单 `showShareImageMenu` 的 `fail cancel` 属于用户主动关闭菜单，不应当作业务失败提示。稳定口径是：真正拉起失败才提示错误；若当前页面已没有自定义预览层（如首页餐食海报直拉官方菜单），取消时可静默关闭当前分享流程；若当前页面仍停留在自定义预览层，则取消时保持页面原状且不报错。

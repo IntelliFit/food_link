@@ -144,6 +144,50 @@
     - 当前页面为 `pages/index/index`
     - `lsof -i :9420` 确认 `wechatweb` 正在监听 `9420`
 
+## 状态：已修复 - 真机调试提示小程序编译产物过大
+
+- 2026-05-10 update:
+  - 用户反馈：
+    - 真机调试/编译时提示微信小程序编译产物过大
+    - 平行 `dev` 分支同类版本没有这个问题，希望在不破坏功能前提下定位并修复
+  - 根因排查：
+    - 对比 `dev` 分支发现，当前分支 `src/packageExtra/pages/about/index.tsx` 新增了对本地 `src/assets/logo.png` 的 import；该图片约 `838KB`，被直接内联进 `about` 页 JS，导致 `about` 页构建产物一度达到约 `1.1MB`
+    - 同时 `about`、`user-group`、`stats-metabolic(ECharts)` 都堆在同一个 `packageExtra` 分包里，使共享分包逼近/触发微信包体限制
+  - 修复方案：
+    - `src/packageExtra/pages/about/index.tsx`
+      - 去掉本地大图 import
+      - 改为优先使用 `__ICON_CDN_BASE_URL__`，缺省回退 `https://cdn-food-icon.coachlink.fit/shitan-nobackground.png`
+    - `src/app.config.ts`
+      - 保留原有功能页路由语义，但把重页面拆到独立顶层分包：
+        - `packageAbout/pages/about/index`
+        - `packageUserGroup/pages/user-group/index`
+        - `packageStatsMetabolic/pages/stats-metabolic/index`
+      - 从共享 `packageExtra` 中移除 `stats-metabolic`
+    - `src/utils/subpackage-extra.ts`
+      - 为上述三个页面增加路由映射，业务侧仍调用 `extraPkgUrl('/pages/...')`
+      - 兼容旧的 `/packageExtra/pages/...` 回跳地址，避免已有登录回跳/缓存路径失效
+    - 新增包装入口：
+      - `src/packageAbout/pages/about/*`
+      - `src/packageUserGroup/pages/user-group/*`
+      - `src/packageStatsMetabolic/pages/stats-metabolic/*`
+      - 这些入口仅转发到原页面实现，不复制业务逻辑
+    - `config/index.ts`
+      - ECharts vendor chunk 输出从 `packageExtra/echarts-vendor.js` 改为 `packageStatsMetabolic/echarts-vendor.js`
+  - 构建验证：
+    - `npm run build:weapp:preview` 通过
+    - 关键产物体积降幅：
+      - `packageAbout` 约 `5,414` bytes
+      - `packageUserGroup` 约 `531,909` bytes
+      - `packageStatsMetabolic` 约 `901,785` bytes
+      - 共享 `packageExtra` 约 `1,198,082` bytes
+    - `about` 页 JS 从约 `1.1MB` 降到约 `3.3KB`
+  - 微信开发者工具自动化验证：
+    - `mrc relaunch /packageAbout/pages/about/index --port 9420` 成功
+    - `mrc relaunch /packageUserGroup/pages/user-group/index --port 9420` 成功
+    - `mrc logs error 10 --port 9420` 和 `mrc logs warn 10 --port 9420` 均返回 `0` 条
+  - 运行态验证阻塞：
+    - `mrc screenshot ./user-group-verify.png --port 9420` 当前环境仍会在连接成功后超时，未能产出截图文件
+
 ## 状态：完成源码修复 - Docker 基础镜像改为固定 Go patch tag
 
 - 2026-05-10 update:

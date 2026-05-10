@@ -4,12 +4,13 @@ import { Cell } from '@taroify/core'
 import '@taroify/core/cell/style'
 import '@taroify/icons/style'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
-import localLogo from '../../../assets/logo.png'
 import './index.scss'
 
+const DEFAULT_ICON_CDN_BASE_URL = 'https://cdn-food-icon.coachlink.fit'
+
 export default function AboutPage() {
-    const iconCdnBaseUrl = (__ICON_CDN_BASE_URL__ || '').replace(/\/+$/, '')
-    const APP_LOGO_URL = iconCdnBaseUrl ? `${iconCdnBaseUrl}/shitan-nobackground.png` : localLogo
+    const iconCdnBaseUrl = (__ICON_CDN_BASE_URL__ || DEFAULT_ICON_CDN_BASE_URL).replace(/\/+$/, '')
+    const APP_LOGO_URL = `${iconCdnBaseUrl}/shitan-nobackground.png`
 
     const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
 

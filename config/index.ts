@@ -144,9 +144,9 @@ export default defineConfig<'vite'>(async (merge) => {
             }
           }
         },
-        // 将 ECharts/ZRender 打到分包目录，避免进入主包根目录 vendors（缓解主包 2MB）
+        // 将 ECharts/ZRender 打到代谢页专属分包，避免留在共享分包里继续挤占体积。
         {
-          name: 'echarts-chunk-to-package-extra',
+          name: 'echarts-chunk-to-package-stats-metabolic',
           configResolved(config) {
             const ro = config.build.rollupOptions
             const outs = ro.output
@@ -170,7 +170,7 @@ export default defineConfig<'vite'>(async (merge) => {
               const prevNames = o.chunkFileNames
               o.chunkFileNames = (chunkInfo) => {
                 if (chunkInfo.name === 'echarts-vendor') {
-                  return 'packageExtra/echarts-vendor.js'
+                  return 'packageStatsMetabolic/echarts-vendor.js'
                 }
                 if (typeof prevNames === 'function') {
                   return prevNames(chunkInfo)

@@ -27,7 +27,6 @@ const extraSubpackagePages = [
   'pages/health-profile/index',
   'pages/health-profile-view/index',
   'pages/day-record/index',
-  'pages/stats-metabolic/index',
   'pages/record-detail/index',
   'pages/food-library/index',
   'pages/food-library-detail/index',
@@ -36,14 +35,12 @@ const extraSubpackagePages = [
   'pages/food-library-share/index',
   'pages/location-search/index',
   'pages/login/index',
-  'pages/about/index',
   'pages/agreement/index',
   'pages/membership-agreement/index',
   'pages/privacy/index',
   'pages/privacy-settings/index',
   'pages/friends/index',
   'pages/invite-friends/index',
-  'pages/user-group/index',
   'pages/profile-settings/index',
   'pages/exercise-record/index',
   'pages/body-trends/index',
@@ -60,6 +57,24 @@ export default defineAppConfig({
       root: 'packageExtra',
       name: 'extra',
       pages: extraSubpackagePages,
+    },
+    {
+      // ECharts vendor chunk is large; isolate this route in its own top-level subpackage to stay under WeChat package limits.
+      root: 'packageStatsMetabolic',
+      name: 'stats-metabolic',
+      pages: ['pages/stats-metabolic/index'],
+    },
+    {
+      // About page used to pull a very large local logo; keep it isolated even after slimming the asset path.
+      root: 'packageAbout',
+      name: 'about',
+      pages: ['pages/about/index'],
+    },
+    {
+      // User group QR images make this page relatively heavy; isolating it prevents the shared profile subpackage from overflowing.
+      root: 'packageUserGroup',
+      name: 'user-group',
+      pages: ['pages/user-group/index'],
     },
   ],
   window: {
