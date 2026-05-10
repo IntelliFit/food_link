@@ -133,6 +133,17 @@
   - Runtime validation note:
     - attempted `mrc screenshot` did not produce a file in the current environment, so this round has navigation/elements verification but no screenshot artifact
 
+## 状态：运行环境可用 - 微信开发者工具自动化服务已启动
+
+- 2026-05-10 update:
+  - 用户要求启动微信开发者服务器。
+  - 已使用微信开发者工具 CLI 启动自动化服务：
+    - `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+  - 运行态确认：
+    - `mrc where --port 9420` 连接成功
+    - 当前页面为 `pages/index/index`
+    - `lsof -i :9420` 确认 `wechatweb` 正在监听 `9420`
+
 ## 状态：完成源码修复 - Docker 基础镜像改为固定 Go patch tag
 
 - 2026-05-10 update:
