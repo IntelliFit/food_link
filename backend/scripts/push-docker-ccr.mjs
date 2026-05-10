@@ -11,6 +11,7 @@
  * 构建上下文为 backend/（含 backend/Dockerfile）。
  * 默认强制构建 linux/amd64，避免 ARM 开发机推送后在 AMD64 服务器不可运行。
  * 如需覆盖平台，可传入环境变量 DOCKER_BUILD_PLATFORM（例如 linux/amd64,linux/arm64）。
+ * 如 Docker Hub 访问不稳定，可传入 DOCKER_GO_BUILDER_IMAGE 覆盖 Go builder 基础镜像。
  *
  * 运行时配置由部署侧环境变量 / ConfigMap 注入，勿把密钥打进镜像。
  */
@@ -27,6 +28,7 @@ const REGISTRY = 'ccr.ccs.tencentyun.com';
 const IMAGE_NAMESPACE = 'littlehorse';
 const IMAGE_REPOSITORY = 'foodlink';
 const IMAGE_TAG = 'v2';
+const DEFAULT_GO_BUILDER_IMAGE = 'docker.io/library/golang:1.26.1-bookworm';
 
 function findGitRoot(startDir) {
   let dir = path.resolve(startDir);
@@ -133,6 +135,8 @@ function main() {
   const imageTag = `${imageBase}:${IMAGE_TAG}`;
   const buildPlatform = (process.env.DOCKER_BUILD_PLATFORM || 'linux/amd64').trim() || 'linux/amd64';
   const buildProgress = (process.env.DOCKER_BUILD_PROGRESS || 'auto').trim() || 'auto';
+  const goBuilderImage =
+    (process.env.DOCKER_GO_BUILDER_IMAGE || DEFAULT_GO_BUILDER_IMAGE).trim() || DEFAULT_GO_BUILDER_IMAGE;
 
   print(`Registry:   ${REGISTRY}`);
   print(`镜像基名:   ${imageBase}`);
@@ -140,6 +144,7 @@ function main() {
   print(`当前分支:   ${branch}`);
   print(`Git 短 SHA: ${shortSha}`);
   print(`构建平台:   ${buildPlatform}`);
+  print(`Go 构建镜像: ${goBuilderImage}`);
   if (buildProgress !== 'auto') {
     print(`进度模式:   ${buildProgress}`);
   }
@@ -154,6 +159,7 @@ function main() {
   if (buildProgress !== 'auto') {
     buildArgs.push('--progress', buildProgress);
   }
+  buildArgs.push('--build-arg', `GO_BUILDER_IMAGE=${goBuilderImage}`);
   buildArgs.push('-t', imageTag, '--push', '.');
 
   print('--- docker buildx build --push ---');
@@ -161,14 +167,19 @@ function main() {
   if (!build.ok) {
     const tip =
       '常见原因：未登录腾讯云 CCR、账号或密码错误、Docker daemon 未启动、网络问题。\n' +
-      `请先执行: docker login ${REGISTRY}\n` +
+      `若报错包含 auth.docker.io、registry-1.docker.io 或 load metadata for ${DEFAULT_GO_BUILDER_IMAGE}，这是拉取 Go 基础镜像失败，不是腾讯云 CCR 登录失败。\n` +
+      `CCR 鉴权问题请先执行: docker login ${REGISTRY}\n` +
+      '\n' +
+      'Docker Hub 访问不稳定时，可临时覆盖 Go builder 基础镜像后重试：\n' +
+      `  PowerShell: $env:DOCKER_GO_BUILDER_IMAGE="docker.m.daocloud.io/library/golang:1.26.1-bookworm"; npm run push-docker-ccr\n` +
+      `  Bash:       DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm npm run push-docker-ccr\n` +
       '\n' +
       '若上方 docker 原始报错信息不够，可打开完整构建输出：\n' +
       '  PowerShell: $env:DOCKER_BUILD_PROGRESS="plain"; npm run push-docker-ccr\n' +
       '  Bash:       DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr\n' +
       '\n' +
       '也可以单独调试构建（不推送）：\n' +
-      `  docker buildx build --platform ${buildPlatform} --progress plain -t ${imageTag} ${BACKEND_ROOT}`;
+      `  docker buildx build --platform ${buildPlatform} --progress plain --build-arg GO_BUILDER_IMAGE=${goBuilderImage} -t ${imageTag} ${BACKEND_ROOT}`;
     die('docker buildx build --push 失败', tip);
   }
 

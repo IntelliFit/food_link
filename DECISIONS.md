@@ -14,7 +14,7 @@
 
 - `2026-05-10`: `识别记录` 列表中的状态标签（如 `已经记录`、`等待记录`）稳定口径是单行胶囊，不允许在圆角矩形内部换行。样式上应优先通过 `white-space: nowrap`、更宽的横向内边距、适度最小宽度和轻微高光/阴影来保证可读性，而不是依赖更小字体硬塞进去。
 
-- `2026-05-10`: 后端 Docker 构建基础镜像不要使用浮动主版本别名 `golang:1.26-bookworm`。当前稳定口径是固定到 patch tag `golang:1.26.1-bookworm`，以减少 Docker Hub 别名元数据漂移或损坏导致的 `buildx` 拉取失败；项目代码与本机工具链仍保持 `go 1.26 / go1.26.1`，不因为这类镜像别名问题而回退语言版本。
+- `2026-05-10`: 后端 Docker 构建基础镜像不要使用浮动主版本别名 `golang:1.26-bookworm`。当前稳定口径是固定到 patch tag `docker.io/library/golang:1.26.1-bookworm`，以减少 Docker Hub 别名元数据漂移或损坏导致的 `buildx` 拉取失败；项目代码与本机工具链仍保持 `go 1.26 / go1.26.1`，不因为这类镜像别名问题而回退语言版本。国内网络下如 Docker Hub 不可达，可通过 `DOCKER_GO_BUILDER_IMAGE` 临时覆盖 builder 基础镜像，但默认口径仍保留官方镜像。
 
 - `2026-05-09`: Go 精准模式的分组估重要真正并行执行，不能让 `grouped_parallel` 在本地 worker 默认配置下退化成串行。worker 默认并发和本地配置口径为 `max_concurrent=4`。当前用户要求先不要二次重量复核，因此精准模式默认 `precisionRefineEnabled=false`，只做 planner -> 分项首轮估重 -> db_first 回算 -> aggregate；复核代码可以保留但默认关闭。所有精准子项估计结果都必须按本组 `items_to_estimate` 过滤，不能因为模型输出整餐而扩项或重复累计。
 

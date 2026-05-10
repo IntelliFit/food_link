@@ -12,7 +12,6 @@ import {
     uploadUserAvatar,
     imageToBase64,
     requestFriendByInviteCode,
-    formatApiErrorModalBody,
 } from '../../../utils/api'
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
 import { isPublicPage } from '../../../utils/withAuth'
@@ -65,47 +64,26 @@ function safeDecodeURIComponent(value: string): string {
     }
 }
 
-function extractTraceId(text: string): string {
-    const m = String(text || '').match(/traceId\s*[:：]\s*([a-fA-F0-9]+)/i)
-    return (m?.[1] || '').trim() || 'no-trace-id'
-}
-
 function stripTraceText(text: string): string {
     return String(text || '')
         .replace(/\s*[\(（]?\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*[\)）]?\s*$/i, '')
         .trim()
 }
 
-async function showLoginErrorModal(error: unknown, fallback: string): Promise<void> {
+async function showLoginErrorToast(error: unknown, fallback: string): Promise<void> {
     const raw = String((error as any)?.message || fallback || '请求失败，请稍后重试')
-    const traceFromProp = String((error as any)?.traceId || '').trim()
-    const traceId = traceFromProp || extractTraceId(raw)
     const base = stripTraceText(raw) || fallback || '请求失败，请稍后重试'
-    const content = formatApiErrorModalBody(base).slice(0, 860)
-    // 避免与 setState/loading 同帧冲突导致弹窗不出现
+    const title = base.length > 26 ? `${base.slice(0, 25)}…` : base
+    console.warn('[login] request failed', {
+        message: raw,
+        traceId: String((error as any)?.traceId || '').trim() || undefined,
+    })
+    // 避免与 setState/loading 同帧冲突导致 toast 被 loading 覆盖
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     try {
-        await Taro.showModal({
-            title: '请求失败',
-            content,
-            confirmText: '复制',
-            showCancel: false,
-        })
-    } catch (firstError) {
-        console.warn('[login] show error modal failed, fallback to simple modal', firstError)
-        // 二次兜底：极简内容，确保至少有确认弹窗
-        await Taro.showModal({
-            title: '请求失败',
-            content: formatApiErrorModalBody('请求失败，请稍后重试'),
-            confirmText: '复制',
-            showCancel: false,
-        })
-    }
-    try {
-        await Taro.setClipboardData({ data: traceId })
-        Taro.showToast({ title: '已复制', icon: 'success' })
-    } catch {
-        Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
+        await Taro.showToast({ title, icon: 'none', duration: 2200 })
+    } catch (toastError) {
+        console.warn('[login] showToast failed', toastError)
     }
 }
 
@@ -174,7 +152,7 @@ export default function LoginPage() {
             await handleLoginSuccess(loginData)
         } catch (error: any) {
             console.error('登录失败:', error)
-            await showLoginErrorModal(error, '登录失败')
+            await showLoginErrorToast(error, '登录失败')
         } finally {
             setLoading(false)
         }
@@ -200,7 +178,7 @@ export default function LoginPage() {
             setTimeout(() => { finishLoginFlow() }, 1000)
         } catch (err: any) {
             Taro.hideLoading()
-            await showLoginErrorModal(err, '绑定失败')
+            await showLoginErrorToast(err, '绑定失败')
         }
     }
 
@@ -279,7 +257,7 @@ export default function LoginPage() {
                 Taro.hideLoading()
             } catch (err: any) {
                 Taro.hideLoading()
-                await showLoginErrorModal(err, '上传失败')
+                await showLoginErrorToast(err, '上传失败')
             }
         } else {
             setTempAvatar(avatarUrl)
@@ -319,7 +297,7 @@ export default function LoginPage() {
 
         } catch (err: any) {
             Taro.hideLoading()
-            await showLoginErrorModal(err, '保存失败')
+            await showLoginErrorToast(err, '保存失败')
         }
     }
 

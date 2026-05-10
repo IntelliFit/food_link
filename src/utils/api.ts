@@ -1497,17 +1497,6 @@ function stripTraceSuffixFromUserMessage(message: string): string {
   return s.trim()
 }
 
-/** 统一错误弹窗正文：不展示 traceId，一句一行；点击「复制」后剪贴板仍为 traceId */
-export function formatApiErrorModalBody(summaryLine: string): string {
-  const line1 = stripTraceSuffixFromUserMessage((summaryLine || '').trim()) || '请求失败，请稍后重试'
-  return [
-    line1,
-    '',
-    '请点击下方「复制」按钮。',
-    '将剪贴板内容反馈给工作人员或开发者，便于定位问题。',
-  ].join('\n')
-}
-
 export function getTraceIdFromError(error: unknown): string | undefined {
   const err = error as ErrorLike | undefined
   const trace = (err?.traceId || '').trim()
@@ -1517,10 +1506,8 @@ export function getTraceIdFromError(error: unknown): string | undefined {
   return m?.[1]
 }
 
-/** 微信 `showModal` 的 `content` 过长时可能失败或不展示，统一截断 */
-const UNIFIED_ERROR_MODAL_CONTENT_MAX = 880
-
-function truncateModalContent(text: string, max: number): string {
+/** 微信 toast 文案过长时体验较差，统一截断 */
+function truncateToastTitle(text: string, max = 26): string {
   const t = (text || '').trim()
   if (t.length <= max) return t
   return `${t.slice(0, Math.max(0, max - 1))}…`
@@ -1531,39 +1518,15 @@ export async function showUnifiedApiError(error: unknown, fallback: string = '�
   const traceId = getTraceIdFromError(err)
   const raw = (err?.message || '').trim()
   const userMsg = stripTraceSuffixFromUserMessage(raw) || fallback
-  const traceForCopy = traceId || 'no-trace-id'
-  const content = truncateModalContent(formatApiErrorModalBody(userMsg), UNIFIED_ERROR_MODAL_CONTENT_MAX)
-  // 延后到下一宏任务，避免与首帧渲染 / loading 同步更新冲突导致弹窗不弹出
-  await new Promise<void>((resolve) => {
-    setTimeout(() => resolve(), 0)
-  })
+  console.warn('[showUnifiedApiError]', { message: raw || userMsg, traceId })
   try {
-    await Taro.showModal({
-      title: '请求失败',
-      content,
-      confirmText: '复制',
-      showCancel: false,
+    await Taro.showToast({
+      title: truncateToastTitle(userMsg || '请求失败，请稍后重试'),
+      icon: 'none',
+      duration: 2200,
     })
-    try {
-      await Taro.setClipboardData({ data: traceForCopy })
-      Taro.showToast({ title: '已复制', icon: 'success' })
-    } catch {
-      Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
-    }
-  } catch (e) {
-    console.warn('[showUnifiedApiError] 首次 showModal 失败，重试极简弹窗', e)
-    await Taro.showModal({
-      title: '请求失败',
-      content: formatApiErrorModalBody('请求失败，请稍后重试'),
-      confirmText: '复制',
-      showCancel: false,
-    })
-    try {
-      await Taro.setClipboardData({ data: traceForCopy })
-      Taro.showToast({ title: '已复制', icon: 'success' })
-    } catch {
-      Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
-    }
+  } catch (toastError) {
+    console.warn('[showUnifiedApiError] showToast failed', toastError)
   }
 }
 

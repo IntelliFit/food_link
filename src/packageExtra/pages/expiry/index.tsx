@@ -237,7 +237,7 @@ export default function ExpiryPage() {
         ) : fetchFailed ? (
           <View className='expiry-empty expiry-empty--failed'>
             <Text className='expiry-empty-title'>加载失败</Text>
-            <Text className='expiry-empty-desc'>网络或服务异常，请稍后重试。若已弹出说明框，可复制 traceId 联系技术支持。</Text>
+            <Text className='expiry-empty-desc'>网络或服务异常，请稍后重试。</Text>
             <Button className='expiry-retry-btn' type='primary' onClick={() => void loadData()}>
               重试
             </Button>

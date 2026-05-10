@@ -1,6 +1,6 @@
-ARG GO_VERSION=1.26.1
+ARG GO_BUILDER_IMAGE=docker.io/library/golang:1.26.1-bookworm
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS builder
+FROM --platform=$BUILDPLATFORM ${GO_BUILDER_IMAGE} AS builder
 
 WORKDIR /src
 

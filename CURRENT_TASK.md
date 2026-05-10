@@ -190,6 +190,33 @@
 
 ## 状态：完成源码修复 - Docker 基础镜像改为固定 Go patch tag
 
+- 2026-05-10 update 3:
+  - User asked the agent to run `npm run push-docker-ccr` until success.
+  - Executed with current network workaround:
+    - PowerShell env: `DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm`
+    - command: `npm run push-docker-ccr`
+  - Result:
+    - Docker buildx completed successfully and pushed `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`.
+    - Source branch printed by script: `backend-refactor-sync-migrate-tencent`
+    - Source short SHA printed by script: `2e3a281`
+    - Remote CCR inspect confirms manifest digest `sha256:59ac6f87bd4ffd92357b43ca94abe727f5a6f01e9847f1bc1b45d79d70d4ab5f`.
+    - Remote manifest includes `linux/amd64` image digest `sha256:03b5643e6124a29ebe1b14f2dc4af1e9e58321ce0228145b21d5faac1538da1f`.
+
+- 2026-05-10 update 2:
+  - User reran `npm run push-docker-ccr` after CCR login and now failed while resolving `docker.io/library/golang:1.26.1-bookworm`.
+  - Verified locally:
+    - `docker buildx imagetools inspect docker.io/library/golang:1.26.1-bookworm` fails on network timeout to Docker Hub.
+    - `docker buildx imagetools inspect ccr.ccs.tencentyun.com/library/golang:1.26.1-bookworm` returns not found.
+    - `docker buildx imagetools inspect docker.m.daocloud.io/library/golang:1.26.1-bookworm` resolves and includes `linux/amd64`.
+    - `docker buildx build --platform linux/amd64 --progress plain --build-arg GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm -t foodlink-test:v2 backend` succeeds without `--push`.
+  - Fix applied:
+    - `backend/Dockerfile` now accepts `GO_BUILDER_IMAGE`, defaulting to `docker.io/library/golang:1.26.1-bookworm`.
+    - `backend/scripts/push-docker-ccr.mjs` passes `DOCKER_GO_BUILDER_IMAGE` into the Docker build and prints it in the release banner.
+    - Push failure hints now distinguish Docker Hub base-image pull failures from Tencent CCR auth failures.
+    - `AGENTS.md` documents the override command and the new failure mode.
+  - Remaining action:
+    - Run `npm run push-docker-ccr` normally if Docker Hub is reachable, or set `DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm` before rerun in the current network. This session verified local build only and did not push CCR.
+
 - 2026-05-10 update:
   - User ran `npm run push-docker-ccr` and hit Docker build failure while resolving:
     - `docker.io/library/golang:1.26-bookworm`

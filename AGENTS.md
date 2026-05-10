@@ -129,6 +129,10 @@ npm run push-docker-ccr
 - 如需覆盖平台（例如构建多架构清单），可设置环境变量：
   - PowerShell：`$env:DOCKER_BUILD_PLATFORM="linux/amd64,linux/arm64"; npm run push-docker-ccr`
   - Bash：`DOCKER_BUILD_PLATFORM=linux/amd64,linux/arm64 npm run push-docker-ccr`
+- 默认 Go builder 基础镜像：`docker.io/library/golang:1.26.1-bookworm`
+- 如 Docker Hub 网络不稳定，可临时覆盖 Go builder 基础镜像：
+  - PowerShell：`$env:DOCKER_GO_BUILDER_IMAGE="docker.m.daocloud.io/library/golang:1.26.1-bookworm"; npm run push-docker-ccr`
+  - Bash：`DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm npm run push-docker-ccr`
 - 标签规则：
   - 暂不再按 `main` / `dev` 分支映射镜像标签
   - 任意当前分支执行脚本都会推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
@@ -163,6 +167,9 @@ npm run push-docker-ccr
   - 重新执行 `docker login ccr.ccs.tencentyun.com`
 - `docker buildx` 不可用
   - 升级或重装 Docker Desktop，确保 Buildx 启用
+- `failed to fetch anonymous token` / `auth.docker.io` / `registry-1.docker.io` / `load metadata for docker.io/library/golang`
+  - 这是拉取 Go builder 基础镜像失败，不是腾讯云 CCR 登录失败
+  - 优先检查 Docker Desktop 代理或 registry mirror；需要临时绕过时设置 `DOCKER_GO_BUILDER_IMAGE`
 - 推送成功但线上未生效
   - 等待自动更新窗口（约 5 分钟）后，再检查 `food-backend.service` 状态与镜像拉取日志
 
