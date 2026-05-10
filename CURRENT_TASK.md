@@ -206,6 +206,14 @@
   - Runtime validation blocker:
     - 当前 `mrc screenshot ./result-page-verify.png --port 9420` 返回 `fail to capture screenshot`
     - `mrc elements` 在该结果页环境里未返回可读的 displayed 文本，因此本轮有页面导航与交互验证，但没有截图落盘证据
+## 状态：完成版本号更新 - 3.0.1
+
+- 2026-05-10 update:
+  - User is preparing to build/upload the mini program and requested version `3.0.1`.
+  - Ran `npm version 3.0.1 --no-git-tag-version`, updating root `package.json` and `package-lock.json`.
+  - Confirmed profile page displays `__APP_VERSION__`, injected from `config/index.ts` by reading root `package.json`; no hardcoded profile version edit needed.
+  - Updated `PROGRESS.md` with release log for `3.0.1`.
+
 ## 状态：已准备提交 - 相册/拍照隐私检查开关冻结
 
 - 2026-05-10 update:

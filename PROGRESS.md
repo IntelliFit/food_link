@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-05-10
+
+- 🔧 chore: 发布小程序版本 `3.0.1`（`package.json` / `package-lock.json`；「我的」页版本号继续由 `__APP_VERSION__` 从 package 注入）
+
 ## 2026-05-01
 
 - 📝 docs: 完善 `AGENTS.md` 的部署章节，补充 buildx/平台覆盖、标准操作步骤和常见故障排查，确保跨架构部署口径清晰 `AGENTS.md`
