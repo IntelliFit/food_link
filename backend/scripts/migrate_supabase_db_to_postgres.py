@@ -13,9 +13,11 @@ Default behavior:
 Typical usage:
   backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py --dry-run
   backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py --yes
+  backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py --data-only
 
 Important:
 - This is destructive for the selected target schemas.
+- Use --data-only for a non-destructive insert-only data sync into the existing target schema.
 - By default it migrates only the `public` schema, which is the app's business schema.
 - If you need a stronger guarantee, keep the default verification enabled.
 """
@@ -38,6 +40,9 @@ from typing import Dict, List, Sequence, Tuple
 from urllib.parse import quote
 
 import psycopg2
+from psycopg2 import sql
+from psycopg2 import errorcodes
+from psycopg2.extras import Json, execute_values
 from dotenv import load_dotenv
 
 
@@ -57,6 +62,9 @@ class RuntimeConfig:
     keep_dump: bool
     dry_run: bool
     verify_only: bool
+    data_only: bool
+    update_existing: bool
+    batch_size: int
     yes: bool
     pg_dump_path: str
     psql_path: str
@@ -112,6 +120,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--keep-dump", action="store_true", help="Keep generated dump file.")
     parser.add_argument("--dry-run", action="store_true", help="Print the plan only.")
     parser.add_argument("--verify-only", action="store_true", help="Only run verification.")
+    parser.add_argument(
+        "--data-only",
+        action="store_true",
+        help=(
+            "Non-destructive data sync into the existing target schema. "
+            "By default this inserts missing source rows only and keeps existing target rows unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--update-existing",
+        action="store_true",
+        help="With --data-only, also update rows that already exist in the target. Default: insert missing rows only.",
+    )
+    parser.add_argument("--batch-size", type=int, default=1000, help="Rows per batch for --data-only. Default: 1000.")
     parser.add_argument("--yes", action="store_true", help="Confirm destructive schema rebuild.")
     parser.add_argument("--pg-dump-path", default="", help="Explicit pg_dump executable path.")
     parser.add_argument("--psql-path", default="", help="Explicit psql executable path.")
@@ -121,8 +143,15 @@ def parse_args() -> argparse.Namespace:
         help="Optional JSON report path for verification output.",
     )
     args = parser.parse_args()
+    modes = [bool(args.verify_only), bool(args.data_only)]
+    if sum(modes) > 1:
+        raise SystemExit("--verify-only and --data-only cannot be used together")
     if args.dry_run and args.verify_only:
         raise SystemExit("--dry-run and --verify-only cannot be used together")
+    if args.update_existing and not args.data_only:
+        raise SystemExit("--update-existing can only be used with --data-only")
+    if args.batch_size < 1:
+        raise SystemExit("--batch-size must be greater than 0")
     return args
 
 
@@ -193,6 +222,9 @@ def load_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         keep_dump=bool(args.keep_dump),
         dry_run=bool(args.dry_run),
         verify_only=bool(args.verify_only),
+        data_only=bool(args.data_only),
+        update_existing=bool(args.update_existing),
+        batch_size=int(args.batch_size),
         yes=bool(args.yes),
         pg_dump_path=args.pg_dump_path.strip(),
         psql_path=args.psql_path.strip(),
@@ -648,6 +680,447 @@ def fetch_row_counts(conn, tables: Sequence[Tuple[str, str]]) -> Dict[str, int]:
     return result
 
 
+def table_key(schema: str, table: str) -> str:
+    return f"{schema}.{table}"
+
+
+def split_table_key(key: str) -> Tuple[str, str]:
+    schema, table = key.split(".", 1)
+    return schema, table
+
+
+def fetch_column_meta(conn, schemas: Sequence[str]) -> Dict[str, List[Dict[str, str]]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                table_schema,
+                table_name,
+                column_name,
+                COALESCE(udt_name, ''),
+                COALESCE(is_nullable, ''),
+                COALESCE(column_default, ''),
+                COALESCE(identity_generation, ''),
+                COALESCE(is_generated, '')
+            FROM information_schema.columns
+            WHERE table_schema = ANY(%s)
+            ORDER BY table_schema, table_name, ordinal_position
+            """,
+            (list(schemas),),
+        )
+        result: Dict[str, List[Dict[str, str]]] = {}
+        for schema, table, name, udt_name, nullable, default, identity, generated in cur.fetchall():
+            result.setdefault(table_key(schema, table), []).append(
+                {
+                    "name": name,
+                    "udt_name": udt_name,
+                    "is_nullable": nullable,
+                    "column_default": default,
+                    "identity_generation": identity,
+                    "is_generated": generated,
+                }
+            )
+        return result
+
+
+def fetch_primary_keys(conn, schemas: Sequence[str]) -> Dict[str, List[str]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                n.nspname AS schema_name,
+                c.relname AS table_name,
+                a.attname AS column_name,
+                ord.ordinality
+            FROM pg_constraint con
+            JOIN pg_class c ON c.oid = con.conrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN unnest(con.conkey) WITH ORDINALITY AS ord(attnum, ordinality) ON true
+            JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ord.attnum
+            WHERE con.contype = 'p'
+              AND n.nspname = ANY(%s)
+            ORDER BY n.nspname, c.relname, ord.ordinality
+            """,
+            (list(schemas),),
+        )
+        result: Dict[str, List[str]] = {}
+        for schema, table, column, _ordinality in cur.fetchall():
+            result.setdefault(table_key(schema, table), []).append(column)
+        return result
+
+
+def fetch_dependency_order(conn, schemas: Sequence[str], table_keys: Sequence[str]) -> List[str]:
+    table_set = set(table_keys)
+    dependencies: Dict[str, set[str]] = {key: set() for key in table_set}
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                child_ns.nspname AS child_schema,
+                child.relname AS child_table,
+                parent_ns.nspname AS parent_schema,
+                parent.relname AS parent_table
+            FROM pg_constraint con
+            JOIN pg_class child ON child.oid = con.conrelid
+            JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
+            JOIN pg_class parent ON parent.oid = con.confrelid
+            JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
+            WHERE con.contype = 'f'
+              AND child_ns.nspname = ANY(%s)
+              AND parent_ns.nspname = ANY(%s)
+            ORDER BY child_ns.nspname, child.relname, parent_ns.nspname, parent.relname
+            """,
+            (list(schemas), list(schemas)),
+        )
+        for child_schema, child_table, parent_schema, parent_table in cur.fetchall():
+            child_key = table_key(child_schema, child_table)
+            parent_key = table_key(parent_schema, parent_table)
+            if child_key in table_set and parent_key in table_set and child_key != parent_key:
+                dependencies[child_key].add(parent_key)
+
+    ordered: List[str] = []
+    ready = sorted(key for key, deps in dependencies.items() if not deps)
+    while ready:
+        current = ready.pop(0)
+        ordered.append(current)
+        for key in sorted(dependencies):
+            if current in dependencies[key]:
+                dependencies[key].remove(current)
+                if not dependencies[key] and key not in ordered and key not in ready:
+                    ready.append(key)
+        ready.sort()
+
+    remaining = sorted(key for key in table_set if key not in ordered)
+    return ordered + remaining
+
+
+def is_required_without_default(column: Dict[str, str]) -> bool:
+    return (
+        column["is_nullable"] == "NO"
+        and not column["column_default"]
+        and not column["identity_generation"]
+        and column["is_generated"] in {"", "NEVER"}
+    )
+
+
+def adapt_value(value: object, udt_name: str) -> object:
+    if value is not None and udt_name in {"json", "jsonb"} and isinstance(value, (dict, list)):
+        return Json(value)
+    return value
+
+
+def fetch_table_row_count(conn, schema: str, table: str) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("SELECT COUNT(*) FROM {}.{}").format(sql.Identifier(schema), sql.Identifier(table))
+        )
+        return int(cur.fetchone()[0])
+
+
+def is_skip_conflict_error(err: psycopg2.Error) -> bool:
+    return err.pgcode in {
+        errorcodes.UNIQUE_VIOLATION,
+        errorcodes.EXCLUSION_VIOLATION,
+    }
+
+
+def sync_data_table(
+    *,
+    source_conn,
+    target_conn,
+    table: str,
+    source_columns: List[Dict[str, str]],
+    target_columns: List[Dict[str, str]],
+    primary_key: List[str],
+    update_existing: bool,
+    batch_size: int,
+) -> Dict[str, object]:
+    schema, table_name = split_table_key(table)
+    source_by_name = {column["name"]: column for column in source_columns}
+    target_by_name = {column["name"]: column for column in target_columns}
+    common_columns = [column["name"] for column in source_columns if column["name"] in target_by_name]
+    source_only_columns = [column["name"] for column in source_columns if column["name"] not in target_by_name]
+    target_only_columns = [column["name"] for column in target_columns if column["name"] not in source_by_name]
+    required_target_only = [
+        column["name"]
+        for column in target_columns
+        if column["name"] not in source_by_name and is_required_without_default(column)
+    ]
+
+    report: Dict[str, object] = {
+        "table": table,
+        "mode": "update-existing" if update_existing else "insert-missing",
+        "source_rows": 0,
+        "processed_rows": 0,
+        "conflict_rows": 0,
+        "fallback_row_by_row": False,
+        "common_columns": common_columns,
+        "source_only_columns": source_only_columns,
+        "target_only_columns": target_only_columns,
+        "required_target_only_columns": required_target_only,
+        "skipped": False,
+        "skip_reason": "",
+    }
+
+    if not primary_key:
+        report["skipped"] = True
+        report["skip_reason"] = "missing target primary key"
+        return report
+    missing_pk_columns = [column for column in primary_key if column not in common_columns]
+    if missing_pk_columns:
+        report["skipped"] = True
+        report["skip_reason"] = f"primary key columns are not present in source and target: {', '.join(missing_pk_columns)}"
+        return report
+    if required_target_only:
+        report["skipped"] = True
+        report["skip_reason"] = (
+            "target has required columns not present in source: " + ", ".join(required_target_only)
+        )
+        return report
+    if not common_columns:
+        report["skipped"] = True
+        report["skip_reason"] = "no common columns"
+        return report
+
+    source_row_count = fetch_table_row_count(source_conn, schema, table_name)
+    report["source_rows"] = source_row_count
+    if source_row_count == 0:
+        return report
+
+    select_query = sql.SQL("SELECT {} FROM {}.{}").format(
+        sql.SQL(", ").join(sql.Identifier(column) for column in common_columns),
+        sql.Identifier(schema),
+        sql.Identifier(table_name),
+    )
+    update_columns = [column for column in common_columns if column not in primary_key]
+    if update_existing and update_columns:
+        insert_query_sql = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s ON CONFLICT ({}) DO UPDATE SET {}").format(
+            sql.Identifier(schema),
+            sql.Identifier(table_name),
+            sql.SQL(", ").join(sql.Identifier(column) for column in common_columns),
+            sql.SQL(", ").join(sql.Identifier(column) for column in primary_key),
+            sql.SQL(", ").join(
+                sql.SQL("{} = EXCLUDED.{}").format(sql.Identifier(column), sql.Identifier(column))
+                for column in update_columns
+            ),
+        )
+    else:
+        insert_query_sql = sql.SQL("INSERT INTO {}.{} ({}) VALUES %s ON CONFLICT DO NOTHING").format(
+            sql.Identifier(schema),
+            sql.Identifier(table_name),
+            sql.SQL(", ").join(sql.Identifier(column) for column in common_columns),
+        )
+    insert_query = insert_query_sql.as_string(target_conn)
+    insert_one_query = sql.SQL("INSERT INTO {}.{} ({}) VALUES ({})").format(
+        sql.Identifier(schema),
+        sql.Identifier(table_name),
+        sql.SQL(", ").join(sql.Identifier(column) for column in common_columns),
+        sql.SQL(", ").join(sql.Placeholder() for _ in common_columns),
+    ).as_string(target_conn)
+
+    source_types = [source_by_name[column]["udt_name"] for column in common_columns]
+    processed_rows = 0
+    use_row_by_row = False
+    with source_conn.cursor(name=f"sync_{schema}_{table_name}") as source_cur:
+        source_cur.itersize = batch_size
+        source_cur.execute(select_query)
+        with target_conn.cursor() as target_cur:
+            while True:
+                rows = source_cur.fetchmany(batch_size)
+                if not rows:
+                    break
+                adapted_rows = [
+                    tuple(adapt_value(value, source_types[index]) for index, value in enumerate(row))
+                    for row in rows
+                ]
+                if update_existing:
+                    execute_values(target_cur, insert_query, adapted_rows, page_size=batch_size)
+                else:
+                    if not use_row_by_row:
+                        target_cur.execute("SAVEPOINT data_only_batch")
+                        try:
+                            execute_values(target_cur, insert_query, adapted_rows, page_size=batch_size)
+                            target_cur.execute("RELEASE SAVEPOINT data_only_batch")
+                        except psycopg2.errors.ObjectNotInPrerequisiteState as err:
+                            if "ON CONFLICT does not support deferrable" not in str(err):
+                                raise
+                            target_cur.execute("ROLLBACK TO SAVEPOINT data_only_batch")
+                            target_cur.execute("RELEASE SAVEPOINT data_only_batch")
+                            use_row_by_row = True
+                            report["fallback_row_by_row"] = True
+                    if use_row_by_row:
+                        target_cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+                        for row in adapted_rows:
+                            target_cur.execute("SAVEPOINT data_only_row")
+                            try:
+                                target_cur.execute(insert_one_query, row)
+                                target_cur.execute("RELEASE SAVEPOINT data_only_row")
+                            except psycopg2.Error as row_err:
+                                target_cur.execute("ROLLBACK TO SAVEPOINT data_only_row")
+                                target_cur.execute("RELEASE SAVEPOINT data_only_row")
+                                if is_skip_conflict_error(row_err):
+                                    report["conflict_rows"] = int(report["conflict_rows"]) + 1
+                                    continue
+                                raise
+                processed_rows += len(adapted_rows)
+                report["processed_rows"] = processed_rows
+    return report
+
+
+def refresh_target_sequences(conn, schemas: Sequence[str]) -> List[Dict[str, object]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT table_schema, table_name, column_name
+            FROM information_schema.columns
+            WHERE table_schema = ANY(%s)
+              AND (
+                column_default LIKE 'nextval%%'
+                OR COALESCE(identity_generation, '') <> ''
+              )
+            ORDER BY table_schema, table_name, ordinal_position
+            """,
+            (list(schemas),),
+        )
+        sequence_columns = [(row[0], row[1], row[2]) for row in cur.fetchall()]
+
+    report: List[Dict[str, object]] = []
+    with conn.cursor() as cur:
+        for schema, table, column in sequence_columns:
+            cur.execute("SELECT pg_get_serial_sequence(%s, %s)", (f'"{schema}"."{table}"', column))
+            sequence_name = cur.fetchone()[0]
+            if not sequence_name:
+                continue
+            cur.execute(
+                sql.SQL("SELECT MAX({}) FROM {}.{}").format(
+                    sql.Identifier(column),
+                    sql.Identifier(schema),
+                    sql.Identifier(table),
+                )
+            )
+            max_value = cur.fetchone()[0]
+            if max_value is None:
+                cur.execute("SELECT setval(%s::regclass, 1, false)", (sequence_name,))
+                set_value = 1
+                is_called = False
+            else:
+                cur.execute("SELECT setval(%s::regclass, %s, true)", (sequence_name, max_value))
+                set_value = int(max_value)
+                is_called = True
+            report.append(
+                {
+                    "table": table_key(schema, table),
+                    "column": column,
+                    "sequence": sequence_name,
+                    "set_value": set_value,
+                    "is_called": is_called,
+                }
+            )
+    return report
+
+
+def run_data_only_sync(config: RuntimeConfig) -> Dict[str, object]:
+    metadata_source_conn = connect_db(config.source_url)
+    metadata_target_conn = connect_db(config.target_url)
+    try:
+        source_tables = {
+            table_key(schema, table) for schema, table in fetch_table_names(metadata_source_conn, config.schemas)
+        }
+        target_tables = {
+            table_key(schema, table) for schema, table in fetch_table_names(metadata_target_conn, config.schemas)
+        }
+        common_tables = sorted(source_tables & target_tables)
+        ordered_tables = fetch_dependency_order(metadata_target_conn, config.schemas, common_tables)
+        source_columns = fetch_column_meta(metadata_source_conn, config.schemas)
+        target_columns = fetch_column_meta(metadata_target_conn, config.schemas)
+        primary_keys = fetch_primary_keys(metadata_target_conn, config.schemas)
+    finally:
+        metadata_source_conn.close()
+        metadata_target_conn.close()
+
+    retry_limit = 5
+    report: Dict[str, object] = {
+        "source": redact_url(config.source_url),
+        "target": redact_url(config.target_url),
+        "schemas": config.schemas,
+        "mode": "data-only-update-existing" if config.update_existing else "data-only-insert-missing",
+        "batch_size": config.batch_size,
+        "source_only_tables": sorted(source_tables - target_tables),
+        "target_only_tables": sorted(target_tables - source_tables),
+        "tables": [],
+        "commit_scope": "per-table",
+        "table_retry_limit": retry_limit,
+    }
+
+    for index, table in enumerate(ordered_tables, 1):
+        print(f"[data-only] Syncing table {index}/{len(ordered_tables)}: {table}")
+        table_report: Dict[str, object] | None = None
+        for attempt in range(1, retry_limit + 1):
+            source_conn = None
+            target_conn = None
+            try:
+                source_conn = connect_db(config.source_url)
+                target_conn = connect_db(config.target_url)
+                table_report = sync_data_table(
+                    source_conn=source_conn,
+                    target_conn=target_conn,
+                    table=table,
+                    source_columns=source_columns.get(table, []),
+                    target_columns=target_columns.get(table, []),
+                    primary_key=primary_keys.get(table, []),
+                    update_existing=config.update_existing,
+                    batch_size=config.batch_size,
+                )
+                if target_conn is not None:
+                    target_conn.commit()
+                break
+            except (psycopg2.OperationalError, psycopg2.InterfaceError) as err:
+                if target_conn is not None:
+                    target_conn.rollback()
+                if attempt >= retry_limit:
+                    raise
+                log(
+                    f"table {table} connection failed on attempt {attempt}/{retry_limit}; "
+                    "reconnecting and retrying current table..."
+                )
+                time.sleep(2 ** (attempt - 1))
+                continue
+            except Exception:
+                if target_conn is not None:
+                    target_conn.rollback()
+                raise
+            finally:
+                if source_conn is not None:
+                    source_conn.close()
+                if target_conn is not None:
+                    target_conn.close()
+
+        assert table_report is not None
+        report["tables"].append(table_report)  # type: ignore[index]
+        if table_report["skipped"]:
+            print(f"  skipped: {table_report['skip_reason']}")
+        else:
+            print(
+                f"  processed={table_report['processed_rows']} "
+                f"source_rows={table_report['source_rows']} "
+                f"conflicts={table_report['conflict_rows']} "
+                f"fallback_row_by_row={table_report['fallback_row_by_row']} "
+                f"mode={table_report['mode']}"
+            )
+
+    print("[data-only] Refreshing target sequences...")
+    target_conn = connect_db(config.target_url)
+    try:
+        report["sequences"] = refresh_target_sequences(target_conn, config.schemas)
+        target_conn.commit()
+    except Exception:
+        target_conn.rollback()
+        raise
+    finally:
+        target_conn.close()
+    return report
+
+
 def collect_snapshot(conn, schemas: Sequence[str]) -> Dict[str, object]:
     tables = fetch_table_names(conn, schemas)
     return {
@@ -699,12 +1172,24 @@ def write_report(path: Path, report: Dict[str, object]) -> None:
 
 
 def print_plan(config: RuntimeConfig) -> None:
+    if config.verify_only:
+        mode = "verify-only"
+        operation = "This operation only compares source and target."
+    elif config.data_only:
+        mode = "data-only update-existing" if config.update_existing else "data-only insert-missing"
+        operation = (
+            "This operation keeps the target schema and target-only rows. "
+            "Existing target rows are not updated unless --update-existing is passed."
+        )
+    else:
+        mode = "destructive migrate"
+        operation = "This operation rebuilds the selected target schemas."
     print("===== Database Migration Plan =====")
     print(f"Source: {redact_url(config.source_url)}")
     print(f"Target: {redact_url(config.target_url)}")
     print(f"Schemas: {', '.join(config.schemas)}")
-    print(f"Mode: {'verify-only' if config.verify_only else 'migrate'}")
-    print("This operation rebuilds the selected target schemas.")
+    print(f"Mode: {mode}")
+    print(operation)
     if "pooler.supabase.com" in config.source_url:
         print("Warning: pooled Supabase URLs often fail with pg_dump; prefer SUPABASE_DIRECT_DB_URL.")
 
@@ -719,9 +1204,30 @@ def main() -> int:
     print_plan(config)
     if config.dry_run:
         return 0
-    if not config.verify_only and not config.yes:
+    if not config.verify_only and not config.data_only and not config.yes:
         print("refusing to run destructive sync without --yes", file=sys.stderr)
         return 2
+
+    if config.data_only:
+        try:
+            report = run_data_only_sync(config)
+            if config.report_file:
+                write_report(config.report_file, report)
+                print(f"Data-only sync report written to: {config.report_file}")
+            skipped_tables = [table for table in report["tables"] if table.get("skipped")]  # type: ignore[index]
+            if skipped_tables:
+                print(
+                    f"data-only sync completed with skipped tables: {len(skipped_tables)}; "
+                    "check the report for details.",
+                    file=sys.stderr,
+                )
+                return 1
+            print("data-only sync completed.")
+            return 0
+        except Exception as err:  # noqa: BLE001
+            print(f"data-only sync failed: {err}", file=sys.stderr)
+            traceback.print_exc()
+            return 1
 
     temp_dir: Path | None = None
     dump_path: Path | None = None
