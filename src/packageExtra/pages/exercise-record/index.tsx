@@ -25,6 +25,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -319,20 +320,22 @@ export default function ExerciseRecordPage() {
       itemList: ['拍照', '从相册选择'],
       success: (res) => {
         const sourceType: Array<'album' | 'camera'> = res.tapIndex === 0 ? ['camera'] : ['album']
-        Taro.chooseImage({
+        void chooseImageWithPrivacy({
           count: 1,
           sizeType: ['compressed'],
           sourceType,
-          success: (chooseRes) => {
-            const paths = chooseRes.tempFilePaths || []
-            if (paths.length > 0) {
-              setSelectedImagePath(paths[0])
-            }
-          },
-          fail: (err) => {
-            if (err.errMsg?.includes('cancel')) return
-            console.error('[exercise-record] chooseImage', err)
+        }).then((chooseRes) => {
+          const paths = chooseRes.tempFilePaths || []
+          if (paths.length > 0) {
+            setSelectedImagePath(paths[0])
           }
+        }).catch((err) => {
+          if (err.errMsg?.includes('cancel')) return
+          if (isPrivacyAuthorizeError(err)) {
+            showPrivacyAuthorizeFailure(err)
+            return
+          }
+          console.error('[exercise-record] chooseImage', err)
         })
       }
     })

@@ -4,6 +4,8 @@ import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
 import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
+import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModal'
+import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
 
 import './app.scss'
 
@@ -18,6 +20,7 @@ const PUBLIC_PAGES = new Set([
 function App({ children }: PropsWithChildren<any>) {
   useLaunch((options) => {
     console.log('App launched.')
+    cleanupGeneratedUserFiles().catch(() => { /* ignore startup cleanup errors */ })
     // 小程序码参数在 options.query.scene，不是 options.scene（后者是场景值数字）
     const rawScene = String((options as any)?.query?.scene || '')
     const decodedScene = (() => {
@@ -51,7 +54,7 @@ function App({ children }: PropsWithChildren<any>) {
   })
 
   // children 为当前页面；Provider 供全站主题与「我的」页切换
-  return createElement(AppColorSchemeProvider, null, children)
+  return createElement(AppColorSchemeProvider, null, createElement(PrivacyAuthorizationModal), children)
 }
 
 export default App

@@ -206,6 +206,184 @@
   - Runtime validation blocker:
     - 当前 `mrc screenshot ./result-page-verify.png --port 9420` 返回 `fail to capture screenshot`
     - `mrc elements` 在该结果页环境里未返回可读的 displayed 文本，因此本轮有页面导航与交互验证，但没有截图落盘证据
+## 状态：已准备提交 - 相册/拍照隐私检查开关冻结
+
+- 2026-05-10 update:
+  - User asked to commit the current code and explicitly said this area is temporarily not allowed to change.
+  - Frozen scope:
+    - Do not restore `__usePrivacyCheck__` in `src/app.config.ts`.
+    - Do not restore `permission['scope.camera']` or `permission['scope.writePhotosAlbum']`.
+    - Do not add `chooseImage` / `getImageInfo` to `requiredPrivateInfos`.
+  - Rationale:
+    - Current local image/photo behavior is working after removing forced privacy checking and matching the working development branch's direct `chooseImage` call shape.
+    - Future privacy/admin-console work must not re-enable code-side hard checks unless the user explicitly approves.
+
+## 状态：完成源码收口 - 全量相册/拍照入口接入小程序隐私授权封装
+
+- 2026-05-10 update:
+  - User continued to report album/camera image selection failing with:
+    - `chooseImage:fail api scope is not declared in the privacy agreement`
+    - `errno:112`
+  - Findings:
+    - `requiredPrivateInfos` is not the fix for image selection; WeChat DevTools 3.15.2 rejects `chooseImage/getImageInfo` there.
+    - The code-side fix is to let all image selection flows pass through the global privacy authorization flow, while the WeChat admin console privacy guide must declare and approve the photo/camera usage.
+  - Fix applied:
+    - Added `isPrivacyAuthorizeError()` to `src/utils/weapp-privacy.ts`.
+    - Replaced all remaining direct `Taro.chooseImage` call sites with `chooseImageWithPrivacy()`.
+    - Converted privacy errors to the explicit `showPrivacyAuthorizeFailure()` modal instead of generic `选择图片失败/上传失败`.
+    - Covered these entry points:
+      - `src/pages/index/components/RecordMenu.tsx`
+      - `src/utils/weapp-open-analyze-image.ts`
+      - `src/packageExtra/pages/analyze/index.tsx`
+      - `src/packageExtra/pages/exercise-record/index.tsx`
+      - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - `src/packageExtra/pages/food-library-share/index.tsx`
+      - `src/packageExtra/pages/health-profile/index.tsx`
+      - `src/packageExtra/pages/health-profile-view/index.tsx`
+      - `src/pages/community/index.tsx`
+      - `src/pages/record/index.tsx`
+    - While linting touched files, fixed existing lint issues in `health-profile-view`: replaced global `isNaN` with `Number.isNaN` and imported `Image`.
+  - Verification:
+    - `npx eslint src/utils/weapp-privacy.ts src/components/PrivacyAuthorizationModal.tsx src/app.ts src/pages/index/components/RecordMenu.tsx src/utils/weapp-open-analyze-image.ts src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/exercise-record/index.tsx src/packageExtra/pages/expiry-edit/index.tsx src/packageExtra/pages/food-library-share/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/pages/community/index.tsx src/pages/record/index.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` failed: target project window not opened with automation enabled.
+    - `mrc where --port 9420` failed: target project window not opened with automation enabled.
+  - Follow-up:
+    - User still needs the WeChat Mini Program admin console privacy guide to finish approval/effective publication for photo/camera usage.
+    - After the backend privacy guide is effective, restart or let `npm run dev:weapp` watch regenerate dist, then clear DevTools cache and retest image selection.
+
+- 2026-05-10 follow-up:
+  - User reported privacy error no longer appears, but tapping photo/album seems to do nothing, while DevTools still repeatedly logs:
+    - `writeFile:fail the maximum size of the file storage limit is exceeded`
+  - Fix applied:
+    - `chooseImageWithPrivacy()` now runs `cleanupGeneratedUserFiles()` before `Taro.chooseImage`.
+    - If `Taro.chooseImage` fails with a quota-like error, it cleans generated files again and retries once.
+    - Homepage `RecordMenu` membership preflight is capped at 1.2s; if membership status is slow/unavailable, it proceeds to image selection and lets the submit API enforce quota/credits later.
+    - Shared `pickImageAndOpenAnalyze()` uses the same 1.2s membership preflight cap.
+    - App launch now silently cleans generated user files once to reduce repeated file-storage quota failures during hot reload/navigation.
+  - Verification:
+    - `npx eslint src/app.ts src/utils/weapp-privacy.ts src/utils/weapp-open-analyze-image.ts src/pages/index/components/RecordMenu.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` still cannot connect to WeChat DevTools automation.
+
+- 2026-05-10 follow-up 2:
+  - User logs still show:
+    - `invalid app.json permission["scope.camera"]`
+    - tapping photo/album still has no visible response
+  - Findings:
+    - Current `src/app.config.ts` still had invalid `permission['scope.camera']`, so `dist/app.json` was correctly being generated with the invalid field.
+    - `dev` branch also contains `scope.camera`, and also contains old `scope.writePhotosAlbum`, so switching to `dev` is not a good fix for this issue.
+    - `chooseImageWithPrivacy()` was still proactively awaiting `ensureWeappPrivacyAuthorized()` before calling `Taro.chooseImage`; if WeChat privacy APIs hang in DevTools/backend-review state, this can make the click look like a no-op.
+  - Fix applied:
+    - Removed `permission['scope.camera']` from `src/app.config.ts`; only `scope.userLocation` remains in app config permissions.
+    - `chooseImageWithPrivacy()` no longer blocks on proactive `ensureWeappPrivacyAuthorized()` before `Taro.chooseImage`; WeChat's actual privacy interception now happens on the real API call, and errors still flow to `showPrivacyAuthorizeFailure()`.
+  - Verification:
+    - `npx eslint src/app.config.ts src/utils/weapp-privacy.ts src/app.ts src/pages/index/components/RecordMenu.tsx src/utils/weapp-open-analyze-image.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Follow-up:
+    - Because app config changes regenerate `app.json`, current dev watch may need restart (`npm run dev:weapp`) if it does not update `dist/app.json` automatically.
+
+- 2026-05-10 follow-up 3:
+  - User tested a development version and reported that photo/album works there, asking whether to sync/mimic the development version.
+  - Comparison with `dev`:
+    - `dev` uses direct `Taro.chooseImage({ success, fail })` callback style for RecordMenu and shared image entry points.
+    - `dev` still has invalid `permission['scope.camera']`, and also still has old `scope.writePhotosAlbum`, so copying the whole `dev` app config would reintroduce known warnings.
+  - Fix applied:
+    - `chooseImageWithPrivacy()` now mimics the development version's runtime shape: it calls `Taro.chooseImage({ ...options, success, fail })` immediately inside a Promise executor, instead of awaiting cleanup or privacy preflight before invoking the native API.
+    - Quota cleanup is now only attempted after a quota-like `chooseImage` failure, then it retries once.
+    - This keeps privacy-specific error handling while preserving the direct native call behavior that works in `dev`.
+  - Verification:
+    - `npx eslint src/utils/weapp-privacy.ts src/pages/index/components/RecordMenu.tsx src/utils/weapp-open-analyze-image.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` still failed to connect to WeChat DevTools automation.
+
+- 2026-05-10 follow-up 5:
+  - User asked whether production privacy check is necessary, and whether image choose/save can just work regardless of the privacy guide state.
+  - Decision / fix:
+    - Removed `__usePrivacyCheck__` entirely from `src/app.config.ts`, rather than enabling it only in production.
+    - Rationale: current priority is keeping photo/album flows usable; `__usePrivacyCheck__` is a local/app.json opt-in hard check that can force `chooseImage` errno 112 before the WeChat admin privacy guide is stable.
+    - This does not guarantee bypassing WeChat review or future runtime enforcement; the admin privacy guide should still declare photo/camera usage before release.
+    - Confirmed there are no remaining direct `Taro.saveImageToPhotosAlbum` calls.
+    - Removed homepage meal poster's proactive `scope.writePhotosAlbum` authorization preflight before `showShareImageMenu`; the project now relies on WeChat's official image menu rather than direct album-save APIs.
+  - Verification:
+    - Search over `src,config` found no `__usePrivacyCheck__`, `scope.camera`, `scope.writePhotosAlbum`, or `saveImageToPhotosAlbum`.
+    - `npx eslint src/app.config.ts src/pages/index/components/MealRecordPosterModal.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+
+- 2026-05-10 follow-up 4:
+  - User correctly questioned why `dev` branch can choose images if the issue is purely WeChat backend privacy agreement.
+  - Key finding:
+    - Current branch had `__usePrivacyCheck__: true` in `src/app.config.ts`.
+    - `dev` branch does not have this switch.
+    - Therefore the same WeChat backend privacy status can behave differently by branch in DevTools: current branch forces local privacy API checking, while `dev` does not.
+  - Fix applied:
+    - Changed app config to only include `__usePrivacyCheck__: true` for production builds:
+      - `...(process.env.NODE_ENV === 'production' ? { __usePrivacyCheck__: true } : {})`
+    - Local `npm run dev:weapp` now matches the working development branch behavior and should not force local privacy checking.
+    - Production/preview builds can still enable privacy checking after the WeChat admin privacy guide is approved/effective.
+  - Verification:
+    - `npx eslint src/app.config.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Follow-up:
+    - Since this changes `app.json`, user must restart `npm run dev:weapp` if watch does not regenerate `dist/app.json`.
+    - In local dev, `dist/app.json` should no longer contain `__usePrivacyCheck__`.
+
+## 状态：已纠正 - 相册/拍照隐私声明不能写入 requiredPrivateInfos
+
+- 2026-05-10 update:
+  - User reported all album/camera image selection flows fail with:
+    - `chooseImage:fail api scope is not declared in the privacy agreement`
+    - `errno:112`
+  - Then user reported the attempted code-side fix made compilation fail:
+    - `dist/app.json: requiredPrivateInfos[1] 字段需为 chooseAddress,chooseLocation,choosePoi,getFuzzyLocation,getLocation,onLocationChange,startLocationUpdate,startLocationUpdateBackground`
+  - Findings:
+    - Project image upload/photo entry points mainly use `Taro.chooseImage`.
+    - Several follow-up paths call `Taro.getImageInfo` to normalize devtools/tmp/network image paths before upload or canvas use.
+    - WeChat DevTools 3.15.2 only allows location/address APIs in `requiredPrivateInfos`; `chooseImage` / `getImageInfo` are invalid there.
+    - The `chooseImage` errno 112 issue must be handled by the WeChat Mini Program admin console privacy agreement, not by app.json `requiredPrivateInfos`.
+  - Fix applied:
+    - Reverted `src/app.config.ts` to `requiredPrivateInfos: ['getLocation']`.
+    - Added an inline comment explaining that image selection privacy declaration belongs in the Mini Program admin console privacy guide, not in app.json.
+    - Added a global `PrivacyAuthorizationModal` wired through `wx.onNeedPrivacyAuthorization`.
+    - The modal uses the official `agreePrivacyAuthorization` button path and opens the privacy contract through `openPrivacyContract`.
+    - `src/app.ts` now mounts this modal globally so any privacy-gated API call can trigger the consent flow.
+  - Verification:
+    - `npx eslint src/app.ts src/components/PrivacyAuthorizationModal.tsx src/app.config.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` both failed to connect to WeChat DevTools automation, so screenshot/click validation could not be completed.
+  - Follow-up:
+    - Need Taro watch to regenerate `dist/app.json`; if watch does not pick up app config changes, restart `npm run dev:weapp`.
+    - To fix runtime `chooseImage` errno 112, update the WeChat Mini Program admin console privacy agreement to include the image-selection/privacy item corresponding to choosing photos/videos and camera usage.
+    - Screenshot shows the privacy guide is `审核中`; while it is pending, WeChat may still reject `chooseImage` before the app code can complete the consent flow.
+
+## 状态：完成源码修复 - 登录点击触发旧 about 分包 WXML 缺失与文件配额清理
+
+- 2026-05-10 update:
+  - User reported clicking login now fails with:
+    - `WXML 文件编译错误 ENOENT ... dist/packageExtra/pages/about/index.wxml`
+    - `writeFile:fail the maximum size of the file storage limit is exceeded`
+    - `navigateTo:fail timeout`
+  - Root cause / findings:
+    - `about` page was recently moved to independent `packageAbout`, but old source `src/packageExtra/pages/about` still exists and WeChat DevTools / cached routes can still try to open `/packageExtra/pages/about/index`.
+    - Because `packageExtra` no longer registered `pages/about/index`, Taro no longer generated `dist/packageExtra/pages/about/index.wxml`, so any stale route to the old path triggers ENOENT and can cascade into navigation timeout.
+    - The file quota message is likely from accumulated generated files under mini-program `USER_DATA_PATH` (`analyze_`, `expiry_`, `cv_`), which normal `removeStorageSync` does not clear.
+  - Fix applied:
+    - `src/app.config.ts` re-registers `pages/about/index` in shared `packageExtra` as a lightweight compatibility route; normal business routing still maps `/pages/about/index` to independent `packageAbout` through `extraPkgUrl()`.
+    - Added `src/utils/weapp-user-files.ts` to clean project-generated user files in `USER_DATA_PATH` and detect quota errors.
+    - Login page calls this cleanup before `Taro.login()` so stale generated files do not block login storage/file writes.
+    - Profile page “清除缓存” now also removes generated user files, not just key-value storage.
+    - Canvas data URI writes now retry once after generated-file cleanup when quota is exceeded.
+  - Verification:
+    - `npx eslint src/app.config.ts src/utils/weapp-user-files.ts src/utils/weapp-canvas-image.ts src/packageExtra/pages/login/index.tsx src/pages/profile/index.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only existing Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` both failed to connect to WeChat DevTools automation, so screenshot/click validation could not be completed in this session.
+  - Follow-up:
+    - Taro watch must regenerate `dist/app.json` and `dist/packageExtra/pages/about/index.wxml`; if watch does not pick up config changes, user should restart local `npm run dev:weapp`.
 
 ## 状态：完成源码修改 - 「我的」页改为每次直连后端，移除识别记录未读 badge
 

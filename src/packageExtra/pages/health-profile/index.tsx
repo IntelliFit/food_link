@@ -15,6 +15,7 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -369,7 +370,7 @@ function HealthProfilePage() {
   /** 上传体检报告：仅上传到 Supabase 并展示，不解析；点击「保存健康档案」时在后台提交病历提取任务 */
   const handleReportUpload = async () => {
     try {
-      const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })
+      const res = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'] })
       const base64 = await imageToBase64(res.tempFilePaths[0])
       Taro.showLoading({ title: '上传中...', mask: true })
       const { imageUrl } = await uploadReportImage(base64)
@@ -378,6 +379,11 @@ function HealthProfilePage() {
       Taro.showToast({ title: '上传成功，保存时将自动识别', icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
+      if (e?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       await showUnifiedApiError(e, '上传失败')
     }
   }

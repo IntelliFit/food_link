@@ -16,6 +16,7 @@ import {
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
 import { isPublicPage } from '../../../utils/withAuth'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { cleanupGeneratedUserFiles } from '../../../utils/weapp-user-files'
 
 import loginLogo from '../../../assets/login-logo.png'
 import './index.scss'
@@ -146,6 +147,7 @@ export default function LoginPage() {
         if (loading) return
         setLoading(true)
         try {
+            await cleanupGeneratedUserFiles()
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
             const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCodeFromQuery)

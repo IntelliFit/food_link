@@ -31,6 +31,7 @@ import {
 } from '../../utils/membership'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
+import { cleanupGeneratedUserFiles } from '../../utils/weapp-user-files'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -401,7 +402,7 @@ function ProfilePage() {
     Taro.showModal({
       title: '提示',
       content: '确定要清除缓存吗？这将重置首页、识别记录和朋友圈的本地数据，下次进入时会重新加载。',
-      success: (res) => {
+      success: async (res) => {
         if (!res.confirm) return
         try {
           // 首页相关缓存
@@ -459,6 +460,7 @@ function ProfilePage() {
             }
           })
 
+          await cleanupGeneratedUserFiles()
           Taro.showToast({ title: '缓存已清除', icon: 'success' })
         } catch (error) {
           console.error('清除缓存失败:', error)

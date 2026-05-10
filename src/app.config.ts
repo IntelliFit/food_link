@@ -38,6 +38,9 @@ const extraSubpackagePages = [
   'pages/agreement/index',
   'pages/membership-agreement/index',
   'pages/privacy/index',
+  // 兼容旧构建/开发者工具缓存仍尝试打开 /packageExtra/pages/about/index 的情况；
+  // 真实业务入口会经 extraPkgUrl() 路由到独立 packageAbout。
+  'pages/about/index',
   'pages/privacy-settings/index',
   'pages/friends/index',
   'pages/invite-friends/index',
@@ -47,7 +50,6 @@ const extraSubpackagePages = [
 ]
 
 export default defineAppConfig({
-  __usePrivacyCheck__: true,
   // 主题由应用内的 `AppColorSchemeContext` 手动控制，不能再让宿主按系统深色模式自动改色，
   // 否则会出现“应用仍是浅色态，但原生页面背景先变黑”的半黑半白混合态。
   darkmode: false,
@@ -118,10 +120,8 @@ export default defineAppConfig({
     'scope.userLocation': {
       desc: '你的位置信息将用于分享食物时标记商家位置',
     },
-    /** 与记录页 <Camera> 组件配套，正式版授权说明（需在隐私指引中声明使用摄像头） */
-    'scope.camera': {
-      desc: '用于拍照识别食物、记录饮食',
-    },
   },
+  // 微信当前只允许在 requiredPrivateInfos 中声明定位/地址类接口；
+  // chooseImage 等选图接口需在小程序后台“用户隐私保护指引”中声明，不能写进 app.json。
   requiredPrivateInfos: ['getLocation'],
 })

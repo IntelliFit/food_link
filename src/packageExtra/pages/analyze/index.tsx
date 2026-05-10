@@ -40,6 +40,7 @@ import {
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -516,7 +517,7 @@ function AnalyzePage() {
     }
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
-      const res = await Taro.chooseImage({
+      const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
@@ -525,7 +526,11 @@ function AnalyzePage() {
       const newPaths = await persistImagePathsImmediately(rawPaths)
       setImagePaths(prev => [...prev, ...newPaths])
     } catch (e) {
-      // cancelled
+      if ((e as any)?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       console.log('选择图片取消/失败', e)
     }
   }

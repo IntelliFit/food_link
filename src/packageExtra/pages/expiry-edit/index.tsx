@@ -24,6 +24,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 import './index.scss'
 
@@ -342,7 +343,7 @@ export default function ExpiryEditPage() {
       return
     }
     try {
-      const res = await Taro.chooseImage({
+      const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
@@ -350,8 +351,12 @@ export default function ExpiryEditPage() {
       const rawPaths = (res.tempFilePaths || []).map((path) => String(path || '').trim()).filter(Boolean)
       const newPaths = await persistImagePathsImmediately(rawPaths)
       setImagePaths((prev) => [...prev, ...newPaths])
-    } catch {
-      // user cancelled
+    } catch (error) {
+      if ((error as any)?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(error)) {
+        showPrivacyAuthorizeFailure(error)
+        return
+      }
     }
   }
 

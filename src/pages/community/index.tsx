@@ -42,6 +42,7 @@ import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../utils/home-events'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../utils/weapp-privacy'
 
 /** 同一条动态、同一回复目标、同一内容在短窗口内视为重复点击 */
 const COMMENT_SEND_DEBOUNCE_MS = 450
@@ -1492,20 +1493,22 @@ function CommunityPage() {
       redirectToLogin()
       return
     }
-    Taro.chooseImage({
+    void chooseImageWithPrivacy({
       count: 1,
       sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
-      success: (res) => {
-        const imagePath = res.tempFilePaths[0]
-        Taro.setStorageSync('analyzeImagePath', imagePath)
-        Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
-      },
-      fail: (err) => {
-        if (err?.errMsg?.includes('cancel')) return
-        console.error('选择图片失败:', err)
-        void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
+    }).then((res) => {
+      const imagePath = res.tempFilePaths[0]
+      Taro.setStorageSync('analyzeImagePath', imagePath)
+      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze/index') })
+    }).catch((err) => {
+      if (err?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(err)) {
+        showPrivacyAuthorizeFailure(err)
+        return
       }
+      console.error('选择图片失败:', err)
+      void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
     })
   }
 

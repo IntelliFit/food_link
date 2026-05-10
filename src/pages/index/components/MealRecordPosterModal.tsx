@@ -48,32 +48,8 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
   const safeRecordId = String(record?.id || '').trim()
   const safeUserId = String(record?.user_id || '').trim()
 
-  const ensureAlbumPermission = useCallback(async () => {
-    try {
-      const setting = await Taro.getSetting()
-      const albumAuth = setting.authSetting?.['scope.writePhotosAlbum']
-      if (albumAuth === true) return true
-      if (albumAuth === false) {
-        const modal = await Taro.showModal({
-          title: '需要相册权限',
-          content: '开启相册权限后，才能使用微信官方的保存图片能力。',
-          confirmText: '去开启',
-        })
-        if (!modal.confirm) return false
-        const openSettingRes = await Taro.openSetting()
-        return openSettingRes.authSetting?.['scope.writePhotosAlbum'] === true
-      }
-      await Taro.authorize({ scope: 'scope.writePhotosAlbum' })
-      return true
-    } catch (error) {
-      console.warn('ensureAlbumPermission fail', error)
-      return false
-    }
-  }, [])
-
   const openOfficialImageMenu = useCallback(async (path: string) => {
     if (!path) return
-    await ensureAlbumPermission()
     Taro.showShareImageMenu({
       path,
       success: () => {
@@ -89,7 +65,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         void showUnifiedApiError(new Error('打开微信图片菜单失败，请重试'), '打开微信图片菜单失败，请重试')
       }
     })
-  }, [ensureAlbumPermission, onClose])
+  }, [onClose])
 
   useEffect(() => {
     setOwnerNickname('')
@@ -257,7 +233,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
               isPro: isProUser,
             })
 
-            // JPG + 不透明：部分机型对 PNG/透明通道 saveImageToPhotosAlbum 不稳定；海报本身有底色
+            // JPG + 不透明：海报本身有底色，交给微信官方图片菜单处理分享/保存。
             Taro.canvasToTempFilePath({
               canvas: canvas as any,
               destWidth: POSTER_WIDTH * 2,

@@ -2,6 +2,7 @@ import { View, Text, Image, Input } from '@tarojs/components'
 import { useState } from 'react'
 import Taro from '@tarojs/taro'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../utils/weapp-privacy'
 
 import './index.scss'
 
@@ -23,27 +24,30 @@ export default function RecordPage() {
   }
 
   const handleChooseImage = () => {
-    Taro.chooseImage({
+    void chooseImageWithPrivacy({
       count: 1,
       sizeType: ['original', 'compressed'],
       sourceType: ['camera'],
-      success: (res) => {
-        const imagePath = res.tempFilePaths[0]
-        console.log('选择的图片:', res.tempFilePaths)
-        // 将图片路径存储到全局数据中
-        Taro.setStorageSync('analyzeImagePath', imagePath)
-        // 直接跳转到分析页面
-        Taro.navigateTo({
-          url: extraPkgUrl('/pages/analyze/index')
-        })
-      },
-      fail: (err) => {
-        console.error('选择图片失败:', err)
-        Taro.showToast({
-          title: '选择图片失败',
-          icon: 'none'
-        })
+    }).then((res) => {
+      const imagePath = res.tempFilePaths[0]
+      console.log('选择的图片:', res.tempFilePaths)
+      // 将图片路径存储到全局数据中
+      Taro.setStorageSync('analyzeImagePath', imagePath)
+      // 直接跳转到分析页面
+      Taro.navigateTo({
+        url: extraPkgUrl('/pages/analyze/index')
+      })
+    }).catch((err) => {
+      if (err?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(err)) {
+        showPrivacyAuthorizeFailure(err)
+        return
       }
+      console.error('选择图片失败:', err)
+      Taro.showToast({
+        title: '选择图片失败',
+        icon: 'none'
+      })
     })
   }
 

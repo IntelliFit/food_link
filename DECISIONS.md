@@ -39,6 +39,23 @@
 - `2026-05-10`: 分析结果页里「实际摄入」滑杆调节的是 `ratio/intake`，不是直接改整份 `weight`。稳定展示口径是：
   - 保存/落库仍保留 `weight + ratio` 双字段，避免影响后续记录详情和营养换算
   - 但结果页食物卡片中的重量数字要跟当前 `intake` 同步展示，保证用户拖动滑杆后看到的热量和重量口径一致
+- `2026-05-10`: 用户明确要求相册/拍照隐私开关这一块“暂时不允许改”。稳定口径：不要重新加入 `__usePrivacyCheck__`，不要把 `scope.camera` / `scope.writePhotosAlbum` 写回 `app.config.ts/app.json`，不要把 `chooseImage` / `getImageInfo` 写进 `requiredPrivateInfos`。除非用户后续明确解除该限制，否则该区域只能做不改变上述口径的旁路修复。
+
+- `2026-05-10`: 小程序 `app.config.ts` 的 `requiredPrivateInfos` 只能声明微信当前允许的定位/地址类隐私接口；当前稳定值只保留 `getLocation`。不要把 `chooseImage`、`getImageInfo` 写进 `requiredPrivateInfos`，否则微信开发者工具 3.15.2 会直接编译失败。若出现 `chooseImage:fail api scope is not declared in the privacy agreement (errno:112)`，解决点是微信小程序后台“用户隐私保护指引”中声明选图/拍照相关信息类型，而不是改 `app.json` 的 `requiredPrivateInfos`。
+
+- `2026-05-10`: 小程序隐私授权的代码侧稳定口径是全局挂载 `PrivacyAuthorizationModal`，监听 `wx.onNeedPrivacyAuthorization`，用官方 `agreePrivacyAuthorization` 按钮完成用户同意，并用 `openPrivacyContract` 打开隐私指引。该代码只能处理“后台隐私指引已声明且已生效，但用户尚未同意”的情况；如果后台隐私指引处于 `审核中` 或没有声明相册/拍照用途，`chooseImage` 仍会被微信基础库直接拦截。
+
+- `2026-05-10`: 小程序所有相册/拍照入口不得直接调用 `Taro.chooseImage`。稳定口径是统一调用 `chooseImageWithPrivacy()`，并在 `api scope is not declared in the privacy agreement` 或用户未同意隐私授权时走 `showPrivacyAuthorizeFailure()`，避免用户只看到笼统的“选择图片失败/上传失败”。新增选图入口时必须复用 `src/utils/weapp-privacy.ts`。
+
+- `2026-05-10`: 首页记录菜单的会员额度预检不能无限阻塞相册/相机拉起。稳定口径是预检最多等待约 1.2 秒；超时或接口失败时先允许用户选图，最终积分/额度由分析提交接口兜底校验。`chooseImageWithPrivacy()` 在拉起选图前应先清理项目生成的 USER_DATA_PATH 文件，遇到文件配额类错误再清理并重试一次。
+
+- `2026-05-10`: 小程序 `permission` 配置只保留微信仍支持的合法权限说明。当前稳定值只包含 `scope.userLocation`；不要再写 `scope.camera` 或 `scope.writePhotosAlbum` 到 `app.config.ts/app.json`，否则微信开发者工具 3.15.2 会提示 invalid permission。相机/相册用途应通过微信后台隐私保护指引声明，代码侧通过 `chooseImageWithPrivacy()` 和隐私授权弹窗兜底。
+
+- `2026-05-10`: `__usePrivacyCheck__` 暂不写入 `app.config.ts/app.json`，development 和 production 都不主动开启。原因是当前优先级是保证拍照/相册流程可用；该字段会在微信后台隐私指引不稳定时把 `chooseImage` 变成硬拦截并报 `errno:112`。这不代表可以无视微信审核和未来运行时规则；发布前仍应在微信后台隐私保护指引中声明相册/拍照用途。若未来后台隐私指引已审核通过且需要主动压测隐私合规，再单独恢复该字段。
+
+- `2026-05-10`: `about` 页主业务入口稳定路由仍是独立分包 `packageAbout/pages/about/index`，但 `packageExtra/pages/about/index` 需要保留为轻量兼容页。原因是微信开发者工具、旧本地缓存、旧 redirect 或历史页面栈可能仍尝试编译/打开 `/packageExtra/pages/about/index`；如果该路径没有 WXML 产物，会触发 `ENOENT dist/packageExtra/pages/about/index.wxml` 并导致登录/导航超时。该兼容页必须继续保持轻量，不得重新 import 本地大图。
+
+- `2026-05-10`: 小程序 `USER_DATA_PATH` 中由项目生成的临时持久文件需要可清理，至少包括 `analyze_`、`expiry_`、`cv_` 前缀。普通 `removeStorageSync` 不会清除文件系统配额；登录前和“我的 -> 清除缓存”应清理这些生成文件，canvas/base64 写文件遇到 quota 类错误时应先清理再重试一次。
 
 - `2026-05-10`: 微信小程序非 Tab 页不再默认全部塞进单一 `packageExtra` 分包。对明显偏重的页面采用“顶层独立分包 + `extraPkgUrl()` 路由映射”的稳定口径，当前已单独拆出：
   - `packageAbout/pages/about/index`

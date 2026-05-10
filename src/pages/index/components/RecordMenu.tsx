@@ -29,6 +29,7 @@ import {
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
 import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 interface RecordMenuProps {
   visible: boolean
@@ -87,6 +88,17 @@ const QUICK_ACCESS_ITEMS = [
   },
 ] as const
 
+const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 1200
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), timeoutMs)
+    }),
+  ])
+}
+
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
@@ -126,7 +138,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
         void (async () => {
           try {
             // 优先使用弹窗打开时预取的结果，未命中则降级发起新请求
-            const membershipStatus = await (membershipPromiseRef.current ?? getMyMembership())
+            const membershipStatus = await withTimeout(
+              membershipPromiseRef.current ?? getMyMembership(),
+              MEMBERSHIP_PREFLIGHT_TIMEOUT_MS
+            )
             if (membershipStatus && isFoodAnalysisCreditExhausted(membershipStatus)) {
               const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
               const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
@@ -148,22 +163,24 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
           } catch {
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
-          Taro.chooseImage({
+          chooseImageWithPrivacy({
             count: modeId === 'album' ? 5 : 1,
             sizeType: ['compressed'],
             sourceType: modeId === 'camera' ? ['camera'] : ['album'],
-            success: (res) => {
-              const tempPaths = res.tempFilePaths || []
-              if (tempPaths.length > 0) {
-                Taro.setStorageSync('analyzeImagePath', tempPaths[0])
-                Taro.setStorageSync('analyzeImagePaths', tempPaths)
-              }
-              Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
-            },
-            fail: (err) => {
-              if (err.errMsg?.includes('cancel')) return
-              void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
+          }).then((res) => {
+            const tempPaths = res.tempFilePaths || []
+            if (tempPaths.length > 0) {
+              Taro.setStorageSync('analyzeImagePath', tempPaths[0])
+              Taro.setStorageSync('analyzeImagePaths', tempPaths)
             }
+            Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
+          }).catch((err) => {
+            if (err.errMsg?.includes('cancel')) return
+            if (isPrivacyAuthorizeError(err)) {
+              showPrivacyAuthorizeFailure(err)
+              return
+            }
+            void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
           })
         })()
         break

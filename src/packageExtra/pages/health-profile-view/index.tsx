@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Input, Textarea, PickerView, PickerViewColumn } from '@tarojs/components'
+import { View, Text, ScrollView, Input, Textarea, PickerView, PickerViewColumn, Image } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 // Popup removed — using custom bottom sheet instead
@@ -20,6 +20,7 @@ import {
 } from '../../../utils/execution-mode'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 import './index.scss'
 
@@ -193,7 +194,7 @@ function HealthProfileViewPage() {
 
   const handleDirectReportUpload = async () => {
     try {
-      const res = await Taro.chooseImage({ count: 9, sizeType: ['compressed'] })
+      const res = await chooseImageWithPrivacy({ count: 9, sizeType: ['compressed'] })
       const tempPaths = res.tempFilePaths || []
       if (tempPaths.length === 0) return
       Taro.showLoading({ title: '上传中...', mask: true })
@@ -215,6 +216,11 @@ function HealthProfileViewPage() {
       }, 1500)
     } catch (e: any) {
       Taro.hideLoading()
+      if (e?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       await showUnifiedApiError(e, '上传失败')
     }
   }
@@ -413,7 +419,7 @@ function HealthProfileViewPage() {
       case 'birthday': req.birthday = value || undefined; break
       case 'height': {
         const h = Number(value)
-        if (isNaN(h) || h < 100 || h > 250) {
+        if (Number.isNaN(h) || h < 100 || h > 250) {
           Taro.showToast({ title: '请输入 100-250 之间的身高', icon: 'none' })
           return
         }
@@ -422,7 +428,7 @@ function HealthProfileViewPage() {
       }
       case 'weight': {
         const w = Number(value)
-        if (isNaN(w) || w < 30 || w > 200) {
+        if (Number.isNaN(w) || w < 30 || w > 200) {
           Taro.showToast({ title: '请输入 30-200 之间的体重', icon: 'none' })
           return
         }
@@ -698,7 +704,7 @@ function HealthProfileViewPage() {
 
         const handleReportUpload = async () => {
           try {
-            const res = await Taro.chooseImage({ count: 9, sizeType: ['compressed'] })
+            const res = await chooseImageWithPrivacy({ count: 9, sizeType: ['compressed'] })
             const tempPaths = res.tempFilePaths || []
             if (tempPaths.length === 0) return
             Taro.showLoading({ title: '上传中...', mask: true })
@@ -718,6 +724,11 @@ function HealthProfileViewPage() {
             setTimeout(() => closeEditor(), 1500)
           } catch (e: any) {
             Taro.hideLoading()
+            if (e?.errMsg?.includes('cancel')) return
+            if (isPrivacyAuthorizeError(e)) {
+              showPrivacyAuthorizeFailure(e)
+              return
+            }
             await showUnifiedApiError(e, '上传失败')
           }
         }
