@@ -1,5 +1,81 @@
 # 当前任务
 
+## 状态：完成源码修复 - 我的页退出登录残留调用 `setRegisterDate` 导致正式环境 ReferenceError
+
+- 2026-05-10 update:
+  - User提供真机报错：
+    - `ReferenceError: setRegisterDate is not defined`
+    - 调用栈落在某个 `success` 回调里
+  - Root cause:
+    - `src/pages/profile/index.tsx` 的退出登录逻辑里仍保留 `setRegisterDate('--')`
+    - 但当前 Profile 页已经没有 `registerDate` / `setRegisterDate` 这组 state
+    - 因此用户触发退出登录链路时会直接抛 `ReferenceError`
+  - Fix applied:
+    - `src/pages/profile/index.tsx`
+      - 删除退出登录回调中的残留 `setRegisterDate('--')`
+  - Verification:
+    - `rg -n "setRegisterDate|registerDate" src` 仅剩该处旧引用，现已清除
+    - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+  - Note:
+    - 这条错误说明“非调试模式疯狂报错”里至少有一部分是前端同步运行时异常，不是单纯接口或白名单问题
+
+## 状态：完成源码修复 - 首页目标联动基准稳定化，并修正文案“正在补录”的误导
+
+- 2026-05-10 update:
+  - User反馈：
+    - 今日摄入目标卡路里清空后再输入，仍会出现只有碳水上涨、蛋白质和脂肪保持 0 的问题
+    - 首页一直显示“正在补录”，想确认这段文案与哪个接口有关，以及为什么不会消失
+  - Root cause:
+    - 首页目标弹窗在用户逐字输入总卡路里时，三大营养素联动一直使用“上一步已经被四舍五入过的临时宏量值”继续缩放；清空后重新输入时，比例会快速漂移，导致某些宏量目标被压成 0 后持续沿用错误基准
+    - 首页“正在补录”不是接口返回的任务状态，而是前端仅根据 `selectedDate` 是否为“最近 3 天内的非今天日期”本地计算出来的提示，所以只要当前停留在补录日期，它就会持续显示
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `getMacroTargetsFromIntake()` 和 `targetScaleBaseMacrosRef`
+      - 打开目标弹窗时，把当前 intake target 记为本轮编辑的稳定联动基准
+      - 编辑总卡路里时，三大营养素始终基于这份稳定基准按比例缩放，不再基于上一步已舍入的临时值连环缩放
+      - 只有当用户显式编辑蛋白质/碳水/脂肪字段时，才更新这份联动基准
+      - 首页提示文案从“正在补录 {date}”改为“当前补录日期 {date}”，避免误导为后台仍在处理中
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/TargetEditor.tsx src/pages/index/types/index.ts --max-warnings 0` passed
+    - `git diff --check` passed
+    - `rg -n "showBackfillHint|isAllowedRecordDate|isTodayRecordDate"` 已确认“补录提示”链路只依赖前端 `selectedDate` 计算
+    - `mrc where --port 9420` 成功，当前页面为 `pages/index/index`
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 当前自动化环境仍无法稳定读取首页目标弹窗输入框的显示值，也未稳定产出截图文件
+    - 因此本轮已完成静态逻辑校验与首页运行态连通性确认，但缺少“清空后逐字重新输入”在自动化里直接读值的落盘证据
+
+## 状态：完成源码修复 - 首页编辑今日目标弹窗输入校验、步进精度与清空后联动恢复
+
+- 2026-05-10 update:
+  - User要求：
+    - 目标输入框只能输入数字，不能输入其他字符
+    - 点击加减时避免出现 `98.00000000003` 这类浮点误差
+    - 今日总卡路里清空后，再点加号或手动输入时，蛋白质/碳水/脂肪要继续按比例联动，不能只剩单个营养素目标
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `sanitizeTargetInput()`，统一过滤非数字字符，仅保留合法数字与单个小数点
+      - 新增 `roundTargetValue()`，目标数值统一按 1 位小数舍入，避免步进后的浮点残值泄露到输入框
+      - `handleTargetInput()` 改为先清洗输入，再处理联动
+      - 当编辑热量目标时，如果当前三大营养素输入暂时不可解析，会回退到当前首页 intake target 作为联动基准，保证清空后再次输入/加减仍能按比例缩放三大营养素
+    - `src/pages/index/components/TargetEditor.tsx`
+      - 子组件不再回传整份表单给父组件“猜测”变更字段，改为直接回传 `key + value`
+      - 加减按钮改为走统一格式化后的字符串输出，避免 `parseFloat + step` 直接产生长尾小数
+    - `src/pages/index/types/index.ts`
+      - `TargetEditorProps` 改为 `onTargetFieldChange`
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/TargetEditor.tsx src/pages/index/types/index.ts --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc where --port 9420` 成功，确认当前页面为 `pages/index/index`
+    - `mrc click .target-edit-text --port 9420` 成功，已打开首页“编辑今日目标”弹窗
+    - `mrc exists .target-modal-title --port 9420` 为 true
+    - `mrc type input 1800 --port 9420` 成功，已跑通输入链路
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 当前 `mrc screenshot` 命令仍未稳定返回截图文件
+    - `mrc elements input --port 9420` 返回 `displayed: 0`，在该弹窗环境下无法稳定读取输入框显示值，因此本轮做到了页面导航、弹窗打开与输入链路验证，但缺少自动化读取输入值/截图证据
+
 ## 状态：完成源码微调 - 实际摄入滑杆回退为更接近原版样式，仅放大滑块与轨道
 
 - 2026-05-10 update:

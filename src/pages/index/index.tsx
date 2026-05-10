@@ -176,8 +176,28 @@ function parseCompleteNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function sanitizeTargetInput(value: string): string {
+  const cleaned = value.replace(/[^\d.]/g, '')
+  if (!cleaned) return ''
+
+  const dotIndex = cleaned.indexOf('.')
+  if (dotIndex === -1) {
+    return cleaned.replace(/^0+(?=\d)/, '')
+  }
+
+  const integerPartRaw = cleaned.slice(0, dotIndex).replace(/\./g, '')
+  const decimalPart = cleaned.slice(dotIndex + 1).replace(/\./g, '').slice(0, 1)
+  const integerPart = integerPartRaw ? integerPartRaw.replace(/^0+(?=\d)/, '') : '0'
+
+  return decimalPart ? `${integerPart}.${decimalPart}` : `${integerPart}.`
+}
+
+function roundTargetValue(value: number): number {
+  return Math.max(0, Math.round((value + Number.EPSILON) * 10) / 10)
+}
+
 function formatTargetInput(value: number): string {
-  const rounded = Math.max(0, Number(value.toFixed(1)))
+  const rounded = roundTargetValue(value)
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
@@ -212,6 +232,14 @@ function scaleMacrosByCalorieTarget(nextCalorie: number, baseMacros: MacroTarget
     protein: baseMacros.protein * ratio,
     carbs: baseMacros.carbs * ratio,
     fat: baseMacros.fat * ratio
+  }
+}
+
+function getMacroTargetsFromIntake(intake: HomeIntakeData): MacroTargets {
+  return {
+    protein: roundTargetValue(intake.macros.protein.target),
+    carbs: roundTargetValue(intake.macros.carbs.target),
+    fat: roundTargetValue(intake.macros.fat.target)
   }
 }
 
@@ -546,6 +574,7 @@ function IndexPage() {
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
+  const targetScaleBaseMacrosRef = useRef<MacroTargets>(getMacroTargetsFromIntake(DEFAULT_INTAKE))
   
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate)
 
@@ -1151,21 +1180,23 @@ function IndexPage() {
       redirectToLogin()
       return
     }
+    targetScaleBaseMacrosRef.current = getMacroTargetsFromIntake(intakeData)
     setTargetForm(createTargetForm(intakeData))
     setShowTargetEditor(true)
   }
 
   const handleTargetInput = (key: keyof TargetFormState, value: string) => {
     setTargetForm((prev) => {
-      const nextForm: TargetFormState = { ...prev, [key]: value }
+      const sanitizedValue = sanitizeTargetInput(value)
+      const nextForm: TargetFormState = { ...prev, [key]: sanitizedValue }
 
       if (key === 'calorieTarget') {
-        const nextCalorie = parseCompleteNumber(value)
-        const baseMacros = parseMacroTargets(prev)
-        if (nextCalorie == null || baseMacros == null) {
+        const nextCalorie = parseCompleteNumber(sanitizedValue)
+        if (nextCalorie == null) {
           return nextForm
         }
 
+        const baseMacros = targetScaleBaseMacrosRef.current
         const scaledMacros = scaleMacrosByCalorieTarget(nextCalorie, baseMacros)
         return {
           calorieTarget: formatTargetInput(nextCalorie),
@@ -1180,6 +1211,7 @@ function IndexPage() {
         if (macros == null) {
           return nextForm
         }
+        targetScaleBaseMacrosRef.current = macros
 
         return {
           ...nextForm,
@@ -2159,7 +2191,7 @@ function IndexPage() {
         {showBackfillHint && (
           <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
-            <Text className='home-backfill-hint__text'>正在补录 {backfillDateLabel}</Text>
+            <Text className='home-backfill-hint__text'>当前补录日期 {backfillDateLabel}</Text>
           </View>
         )}
 
@@ -2672,13 +2704,7 @@ function IndexPage() {
         visible={showTargetEditor}
         targetForm={targetForm}
         saving={savingTargets}
-        onTargetFormChange={(newForm) => {
-          // 同步处理targetForm变更
-          const key = Object.keys(newForm).find(k => newForm[k as keyof typeof newForm] !== targetForm[k as keyof typeof targetForm])
-          if (key) {
-            handleTargetInput(key as keyof typeof targetForm, newForm[key as keyof typeof newForm])
-          }
-        }}
+        onTargetFieldChange={handleTargetInput}
         onSave={handleSaveTargets}
         onClose={() => setShowTargetEditor(false)}
       />

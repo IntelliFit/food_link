@@ -485,7 +485,6 @@ function ProfilePage() {
               meta: '已记录 0 天'
             })
             setRecordDays(0)
-            setRegisterDate('--')
             setAnalyzeCount(0)
             setFriendCount(0)
             setFavoriteCount(0)
