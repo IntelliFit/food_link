@@ -238,9 +238,18 @@ const MACRO_FIELD_META: Record<MacroField, { label: string; className: string }>
   fat: { label: '脂肪', className: 'fat' }
 }
 
+const NUTRITION_CARD_META = {
+  cal: { label: '热量', iconClass: 'icon-huore', accentClass: 'cal' },
+  protein: { label: '蛋白质', iconClass: 'icon-danbaizhi', accentClass: 'protein' },
+  carbs: { label: '碳水', iconClass: 'icon-tanshui-dabiao', accentClass: 'carbs' },
+  fat: { label: '脂肪', iconClass: 'icon-zhifangyouheruhuazhifangzhipin', accentClass: 'fat' },
+} as const
+
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
 const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
+
+const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
 
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
   roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
@@ -1976,6 +1985,10 @@ function ResultPage() {
 
                   <View className='ingredient-nutrition-strip'>
                     <View className='ingredient-summary-cell ingredient-summary-cell--cal'>
+                      <View className='ingredient-summary-icon-wrap ingredient-summary-icon-wrap--cal'>
+                        <Text className={`iconfont ${NUTRITION_CARD_META.cal.iconClass} ingredient-summary-icon ingredient-summary-icon--cal`}></Text>
+                      </View>
+                      <Text className='ingredient-summary-label'>{NUTRITION_CARD_META.cal.label}</Text>
                       <View className='ingredient-cal-kcal-line'>
                         <Text className='ingredient-cal-kcal-num'>
                           {Math.round(item.calorie * (item.ratio / 100))}
@@ -1992,7 +2005,12 @@ function ResultPage() {
                           className={`ingredient-summary-cell ingredient-summary-cell--${meta.className}`}
                           onClick={() => handleMacroEdit(item.id, field, item[field])}
                         >
-                          <Text className='ingredient-macro-name'>{meta.label}</Text>
+                          <View className={`ingredient-summary-icon-wrap ingredient-summary-icon-wrap--${meta.className}`}>
+                            <Text
+                              className={`iconfont ${NUTRITION_CARD_META[field].iconClass} ingredient-summary-icon ingredient-summary-icon--${meta.className}`}
+                            ></Text>
+                          </View>
+                          <Text className='ingredient-summary-label'>{meta.label}</Text>
                           <View className='ingredient-macro-value-line'>
                             <Text className={`ingredient-macro-num ingredient-macro-num--${meta.className}`}>
                               {formatMacroDisplay(intakeMacro)}
@@ -2012,7 +2030,7 @@ function ResultPage() {
                           className='adjust-btn minus'
                           onClick={() => handleWeightAdjust(item.id, -10)}
                         >–</View>
-                        <Text className='weight-display'>{item.weight}g</Text>
+                        <Text className='weight-display'>{formatWeightDisplay(item.intake)}</Text>
                         <View
                           className='adjust-btn plus'
                           onClick={() => handleWeightAdjust(item.id, 10)}
@@ -2023,19 +2041,24 @@ function ResultPage() {
                     <View className='ratio-control'>
                       <Text className='control-label'>实际摄入</Text>
                       <View className='ratio-control-right'>
-                        <Slider
-                          className='ratio-slider-modern'
-                          value={item.ratio}
-                          min={0}
-                          max={100}
-                          step={5}
-                          activeColor='#00bc7d'
-                          backgroundColor='#e5e7eb'
-                          blockSize={16}
-                          blockColor='#ffffff'
-                          showValue={false}
-                          onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
-                        />
+                        <View className='ratio-slider-shell'>
+                          <View className='ratio-slider-hitbox'>
+                            <Slider
+                              className='ratio-slider-modern'
+                              value={item.ratio}
+                              min={0}
+                              max={100}
+                              step={1}
+                              activeColor='#00bc7d'
+                              backgroundColor='#dbe4dd'
+                              blockSize={24}
+                              blockColor='#ffffff'
+                              showValue={false}
+                              onChanging={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                              onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                            />
+                          </View>
+                        </View>
                         <Text className='ratio-display'>{item.ratio}%</Text>
                       </View>
                     </View>

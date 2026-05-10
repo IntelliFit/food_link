@@ -833,16 +833,18 @@ transitiontransition
   @extend %card-base;
 
   padding: 0; // 内部布局控制内边距
-  border: 1rpx solid rgb(0 0 0 / 3%);
-  border-radius: 24rpx;
-  box-shadow: 0 6rpx 20rpx rgb(15 23 42 / 5%);
+  background: linear-gradient(180deg, #f5f8f5 0%, #eef4ef 100%);
+  border: 1rpx solid rgba(178, 196, 183, 0.42);
+  border-radius: 28rpx;
+  box-shadow: 0 8rpx 22rpx rgb(15 23 42 / 5%);
   transition: all 0.3s ease;
 
 }
 
 .ingredient-main {
   padding: 20rpx 24rpx 16rpx;
-  border-bottom: 1rpx solid #f1f5f9;
+  background: transparent;
+  border-bottom: 1rpx solid rgba(178, 196, 183, 0.28);
 }
 
 .ingredient-header--title-row {
@@ -870,39 +872,99 @@ transitiontransition
 .ingredient-nutrition-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8rpx;
-  padding: 14rpx 16rpx;
-  background: #f1f5f9;
-  border-bottom: 1rpx solid #e2e8f0;
+  gap: 10rpx;
+  padding: 16rpx;
+  background: transparent;
+  border-bottom: 1rpx solid rgba(178, 196, 183, 0.28);
 }
 
 .ingredient-summary-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 6rpx;
+  justify-content: flex-start;
+  gap: 8rpx;
   min-width: 0;
-  padding: 10rpx 4rpx;
-  border-radius: 8rpx;
-  background: #fff;
-  border: 1rpx solid #e2e8f0;
+  min-height: 156rpx;
+  padding: 18rpx 8rpx 14rpx;
+  border-radius: 34rpx;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1rpx solid rgba(196, 210, 200, 0.72);
+  box-shadow:
+    inset 0 2rpx 8rpx rgba(255, 255, 255, 0.86),
+    0 4rpx 12rpx rgba(15, 23, 42, 0.03);
+  box-sizing: border-box;
 
   &--cal {
-    justify-content: center;
+    border-color: rgba(240, 152, 92, 0.16);
   }
 
   &--protein:active {
-    background: rgb(59 130 246 / 6%);
+    background: rgba(248, 251, 255, 0.94);
   }
 
   &--carbs:active {
-    background: rgb(234 179 8 / 8%);
+    background: rgba(255, 253, 243, 0.96);
   }
 
   &--fat:active {
-    background: rgb(249 115 22 / 6%);
+    background: rgba(255, 248, 242, 0.96);
   }
+}
+
+.ingredient-summary-icon-wrap {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2rpx 8rpx rgba(255, 255, 255, 0.9);
+
+  &--cal {
+    background: rgba(240, 152, 92, 0.16);
+  }
+
+  &--protein {
+    background: rgba(59, 130, 246, 0.14);
+  }
+
+  &--carbs {
+    background: rgba(234, 179, 8, 0.16);
+  }
+
+  &--fat {
+    background: rgba(249, 115, 22, 0.14);
+  }
+}
+
+.ingredient-summary-icon {
+  font-size: 24rpx;
+  line-height: 1;
+
+  &--cal {
+    color: #f0985c;
+  }
+
+  &--protein {
+    color: #3b82f6;
+  }
+
+  &--carbs {
+    color: #d4ac52;
+  }
+
+  &--fat {
+    color: #f97316;
+  }
+}
+
+.ingredient-summary-label {
+  font-size: 20rpx;
+  color: #64748b;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
 }
 
 // 总 kcal：不展示「热量」文案，数字与格内视觉体量接近小卡高度
@@ -913,6 +975,7 @@ transitiontransition
   justify-content: center;
   gap: 4rpx;
   flex-wrap: wrap;
+  margin-top: auto;
 }
 
 .ingredient-cal-kcal-num {
@@ -930,19 +993,12 @@ transitiontransition
   line-height: 1.2;
 }
 
-.ingredient-macro-name {
-  font-size: 20rpx;
-  color: #64748b;
-  font-weight: 500;
-  line-height: 1.2;
-  text-align: center;
-}
-
 .ingredient-macro-value-line {
   display: flex;
   align-items: baseline;
   justify-content: center;
   gap: 2rpx;
+  margin-top: auto;
 }
 
 // 首页 index.tsx：protein #3b82f6 · carbs #eab308 · fat #f97316
@@ -1023,7 +1079,7 @@ transitiontransition
 
 .ingredient-controls {
   padding: 18rpx 24rpx 22rpx;
-  background: #f8fafc;
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 16rpx;
@@ -1046,10 +1102,11 @@ transitiontransition
   display: flex;
   align-items: center;
   gap: 20rpx;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.78);
   padding: 8rpx;
-  border-radius: 16rpx;
-  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 2%);
+  border-radius: 18rpx;
+  border: 1rpx solid rgba(196, 210, 200, 0.66);
+  box-shadow: inset 0 2rpx 8rpx rgba(255, 255, 255, 0.85);
 }
 
 .adjust-btn {
@@ -1101,17 +1158,39 @@ transitiontransition
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 16rpx;
   min-width: 0;
+}
+
+.ratio-slider-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 76rpx;
+  padding: 0 14rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1rpx solid rgba(196, 210, 200, 0.66);
+  box-shadow: inset 0 2rpx 8rpx rgba(255, 255, 255, 0.85);
+}
+
+.ratio-slider-hitbox {
+  flex: 1;
+  min-width: 0;
+  height: 76rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 4rpx;
 }
 
 .ratio-display {
   flex-shrink: 0;
-  font-size: 24rpx;
+  font-size: 26rpx;
   font-weight: 700;
   color: #059669;
   font-family: 'DIN Alternate', sans-serif;
-  min-width: 64rpx;
+  min-width: 72rpx;
   text-align: right;
 }
 
@@ -1120,6 +1199,34 @@ transitiontransition
   min-width: 0;
   margin: 0;
   padding: 0;
+
+  .wx-slider {
+    padding: 0;
+    margin: 0;
+  }
+
+  .wx-slider__wrapper,
+  .wx-slider-wrapper {
+    margin: 0;
+    padding: 0;
+  }
+
+  .wx-slider__track,
+  .wx-slider-track {
+    height: 14rpx !important;
+    border-radius: 999rpx;
+  }
+
+  .wx-slider__handle,
+  .wx-slider-thumb {
+    width: 32rpx !important;
+    height: 32rpx !important;
+    margin-top: -12rpx !important;
+    border: 3rpx solid rgba(255, 255, 255, 0.96);
+    box-shadow:
+      0 6rpx 12rpx rgba(15, 23, 42, 0.08),
+      0 2rpx 4rpx rgba(15, 23, 42, 0.06);
+  }
 }
 
 // 底部固定操作栏
@@ -1923,7 +2030,7 @@ transitiontransition
   .calories-label,
   .weight-text,
   .control-label,
-  .ingredient-macro-name,
+  .ingredient-summary-label,
   .ingredient-cal-kcal-unit,
   .followup-question-label,
   .recognition-status-label,

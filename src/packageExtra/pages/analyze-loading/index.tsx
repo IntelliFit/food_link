@@ -661,7 +661,7 @@ function AnalyzeLoadingPage() {
     }
     Taro.showModal({
       title: '稍后查看',
-      content: isCorrectionMode ? '纠错分析将在后台继续，完成后可在「识别记录」中查看结果。' : '分析将在后台继续，完成后可在「识别记录」中查看结果。',
+      content: isCorrectionMode ? '纠错分析将在后台继续，完成后可在「我的」「识别记录」中查看结果。' : '分析将在后台继续，完成后可在「我的」「识别记录」中查看结果。',
       showCancel: true,
       confirmText: '去历史',
       success: res => {

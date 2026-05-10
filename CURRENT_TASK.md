@@ -1,5 +1,136 @@
 # 当前任务
 
+## 状态：完成源码微调 - 实际摄入滑杆回退为更接近原版样式，仅放大滑块与轨道
+
+- 2026-05-10 update:
+  - User要求：
+    - slider 恢复成更接近之前的样子
+    - 保留圆角矩形外框
+    - 只把按钮调大、轨道宽度调大
+    - 外框背景色改成和“估算重量”控件容器一致
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - `ratio-slider-shell` 背景、边框、内阴影改为与 `weight-adjuster` 同套颜色和质感
+      - 保留外层圆角矩形框，但从上版的更强“内嵌轨道壳”收回到更接近原版的简洁样式
+      - `ratio-slider-hitbox` 高度增大到 `76rpx`
+      - 滑轨厚度从 `10rpx` 提升到 `14rpx`
+      - 滑块从 `40rpx` 提升到 `48rpx`
+  - Verification:
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+
+## 状态：完成源码调整 - 结果页营养卡与滑杆样式向参考图收敛，降低弧度并统一卡片底色
+
+- 2026-05-10 update:
+  - User反馈：
+    - 上一版结果页改得“非常奇怪”
+    - “实际摄入”滑杆希望更像参考图里的内嵌轨道
+    - 四个营养块圆角过大，需要更像首页日期区的胶囊形体
+    - 单个食物卡片缺少整体性，希望整张卡片背景保持统一
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - `ratio-slider-shell` 改为更克制的浅灰绿内嵌轨道外壳，增加统一外边框与更接近参考图的滑块尺寸
+      - 四个营养块从超大弧度收窄为中等圆角，降低“过度鼓包”的观感
+      - 整个 `ingredient-card` 改成统一的浅灰绿底色，并让 `ingredient-main / ingredient-nutrition-strip / ingredient-controls` 使用同一张卡片背景体系
+      - `weight-adjuster` 也同步改成同一套卡内浅色控件底，提升整体一致性
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .ingredient-card --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 本轮 `mrc screenshot` 仍未稳定返回可用截图文件
+
+## 状态：完成源码优化 - 结果页食物营养四宫格改为首页日期风格的竖向胶囊卡
+
+- 2026-05-10 update:
+  - User要求：
+    - 结果页每个食物卡片里那一排四个营养块，改成更像首页日期选择器那种胶囊感
+    - 从上到下依次显示图标、说明文字、数据
+    - 数据样式尽量保持当前版本一致
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 为热量/蛋白质/碳水/脂肪四块新增统一的图标与标题结构
+      - 每块内容改为纵向排布：图标 → 标签 → 数据
+      - 保留现有的数值字号、配色与单位呈现方式
+    - `src/packageExtra/pages/result/index.scss`
+      - 原来的四格小方卡改为更接近首页日期胶囊语言的高圆角竖向胶囊卡
+      - 增加顶部圆形图标底、浅渐变底色、轻高光和柔和阴影
+      - 不同营养项延续各自的强调色体系
+      - 同步修正深色主题下该区域的文字颜色映射
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .ingredient-controls --port 9420` 为 true
+    - `mrc exists .ingredient-nutrition-strip --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 结果页依赖本地分析缓存，自动化重启后偶尔会回退首页，需要等待 `relaunch` 完成后再次确认
+    - 本轮 `mrc screenshot` 仍未稳定返回可用截图文件，因此没有截图落盘证据
+
+## 状态：完成源码优化 - 分析结果页“实际摄入”滑杆改为内嵌轨道并扩大触控热区
+
+- 2026-05-10 update:
+  - User要求：
+    - 优化分析结果页里“实际摄入”进度条的交互效果
+    - 视觉上更像内嵌轨道
+    - 让整体可触控范围更大，拖动更顺手
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 给结果页滑杆新增 `ratio-slider-shell` / `ratio-slider-hitbox` 包裹层
+      - 滑杆步进从 `5` 调整为 `1`，细调更顺滑
+      - 同时监听 `onChanging` 与 `onChange`，拖动过程中实时联动热量、重量和营养显示，不必等松手后才更新
+      - `blockSize` 从 `16` 提升到 `24`，提升拖拽命中率
+    - `src/packageExtra/pages/result/index.scss`
+      - 将滑杆容器改成浅绿系内嵌胶囊轨道
+      - 增加 `56rpx` 高度的命中区和额外横向内边距
+      - 加粗轨道、放大滑块、补充内阴影和高光，让视觉更像嵌入式轨道控件
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc exists .ratio-slider-hitbox --port 9420` 为 true
+    - `mrc exists .ratio-slider-modern --port 9420` 为 true
+    - `mrc click .ratio-slider-modern --port 9420` 成功
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - 结果页依赖本地分析缓存，自动化重启后偶尔会短暂回退首页，需要等待 `relaunch` 真正完成
+    - 本轮 `mrc screenshot` 命令未稳定返回可用截图结果，仍缺截图落盘证据
+
+## 状态：完成源码修复 - 分析结果页拖动实际摄入滑杆时同步更新重量展示
+
+- 2026-05-10 update:
+  - User反馈：
+    - 实物分析成功后的结果页里，拖动「实际摄入」进度条时，上方卡路里会按比例减少
+    - 但每个食物卡片中的重量数字没有同步减少，导致展示口径不一致
+  - Root cause:
+    - 结果页前端同时维护 `weight`（整份估算重量）和 `ratio/intake`（实际摄入量）
+    - 滑杆只更新了 `ratio` 与 `intake`，卡片里的重量展示仍固定读取 `item.weight`
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 新增 `formatWeightDisplay()`
+      - 食物卡片「估算重量」展示改为读取当前 `item.intake`，让重量展示与滑杆、顶部热量汇总保持同步
+    - 保持保存链路原有 `weight + ratio` 数据结构不变，避免影响后续记录详情和营养换算口径
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .weight-display --port 9420` 为 true
+    - `mrc exists .ratio-slider-modern --port 9420` 为 true
+    - 已执行一次 `mrc click .ratio-slider-modern --port 9420` 交互检查，`mrc logs error 20 --port 9420` 为 0
+  - Runtime validation blocker:
+    - 当前 `mrc screenshot ./result-page-verify.png --port 9420` 返回 `fail to capture screenshot`
+    - `mrc elements` 在该结果页环境里未返回可读的 displayed 文本，因此本轮有页面导航与交互验证，但没有截图落盘证据
+
 ## 状态：完成源码修改 - 「我的」页改为每次直连后端，移除识别记录未读 badge
 
 - 2026-05-09 update:
@@ -5654,3 +5785,26 @@
   - `git diff --check` 针对本轮触达文件通过，仅有 CRLF warning。
   - 完整 `go test ./internal/home/handler ./internal/home/service` 被当前 Windows `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 阻塞；设置 `CGO_ENABLED=1` 后本机又缺少 `gcc`。
   - `mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成微信开发者工具截图/交互验证。
+
+## 2026-05-10 — 圈子/公共库链路出现 `wxfile://tmp...` 图片路径排查
+
+- Task: 解释为什么“进入圈子”相关请求里会出现：
+  - `image_path: "wxfile://tmp_....jpg"`
+  - `image_paths: ["wxfile://tmp_....jpg"]`
+- Status: root_cause_confirmed_not_fixed
+- Root cause:
+  - 分析页提交识别前会先把图片上传到后端，拿到正式 `imageUrl`；但同时也把本地临时路径缓存到 `analyzeImagePath/analyzeImagePaths`，供结果页本地预览继续使用。
+  - 结果页初始化时优先从这两个本地缓存恢复图片，因此页面内持有的是 `wxfile://tmp/...`。
+  - 结果页保存饮食记录时，把当前 `image_path/image_paths` 原样带入 `SaveFoodRecordRequest`，即使同时也带了 `source_task_id`。
+  - Go 后端 `food-record/save` 与后续 `public-food-library/create` 都会对图片字段做“非空即保留”的引用归一化；`storage.ResolveReferenceURL()` 对无法识别为 COS/CDN/Supabase 对象的公开 URL 不会丢弃，而是直接返回原值，因此 `wxfile://tmp/...` 被当成合法字符串保留下来。
+  - 后续分享到公共库/圈子时，如果来源记录已经存了这类本地路径，请求体和展示链路就会继续带出它。
+- Key code points:
+  - `src/packageExtra/pages/analyze/index.tsx`：上传成功后仍缓存本地 `analyzeImagePath/analyzeImagePaths`
+  - `src/packageExtra/pages/result/index.tsx`：结果页从缓存恢复本地路径，并在保存记录时直接发送
+  - `backend/internal/analyze/service/task_service.go`：分析任务提交前会做图片归一化，但无法识别的公开 scheme 会继续保留
+  - `backend/pkg/storage/storage.go`：`ResolveReferenceURL()` 对非私有 bucket 的未知 scheme 最终 `return raw`
+  - `backend/internal/foodrecord/service/food_record_service.go`：保存记录时继续接受归一化后的 `image_path/image_paths`
+  - `backend/internal/publicfood/service/public_food_service.go`：上传公共库时继续沿用来源记录里的图片字段
+- Next step:
+  - 优先修复前端结果页保存链路：若存在 `source_task_id`，保存记录时不要再把本地 `wxfile://tmp/...` 作为 `image_path/image_paths` 发给后端，改为仅依赖已上传的分析任务图片。
+  - 同时补后端兜底：拒绝或过滤 `wxfile://` / `http://tmp/` 这类小程序本地临时路径，避免再次落库。
