@@ -33,7 +33,7 @@ import (
 
 const (
 	defaultRequestCount = 20
-	defaultPollInterval = 2 * time.Second
+	defaultPollInterval = 500 * time.Millisecond
 	defaultTaskTimeout  = 8 * time.Minute
 )
 
@@ -57,17 +57,21 @@ type loadConfig struct {
 }
 
 type requestResult struct {
-	index          int
-	userTokenIndex int
-	imageURL       string
-	taskID         string
-	status         string
-	uploadDuration time.Duration
-	submitDuration time.Duration
-	taskDuration   time.Duration
-	totalDuration  time.Duration
-	calories       float64
-	err            error
+	index               int
+	userTokenIndex      int
+	imageURL            string
+	taskID              string
+	status              string
+	uploadDuration      time.Duration
+	submitDuration      time.Duration
+	queueDuration       time.Duration
+	taskDuration        time.Duration
+	processDuration     time.Duration
+	totalDuration       time.Duration
+	processingStartedAt *time.Time
+	completedAt         *time.Time
+	calories            float64
+	err                 error
 }
 
 type apiEnvelope struct {
@@ -89,6 +93,13 @@ type analysisTaskResponse struct {
 	ImagePaths   []string       `json:"image_paths"`
 	Result       map[string]any `json:"result"`
 	ErrorMessage string         `json:"error_message"`
+	CreatedAt    *time.Time     `json:"created_at"`
+	UpdatedAt    *time.Time     `json:"updated_at"`
+}
+
+type pollAnalyzeTaskResult struct {
+	task                analysisTaskResponse
+	processingStartedAt *time.Time
 }
 
 func TestFoodAnalysisStabilityAndLatency(t *testing.T) {
@@ -105,6 +116,7 @@ func runFoodAnalysisLoadTest(t *testing.T, defaultModel string) {
 		cfg.baseURL, cfg.requestCount, cfg.startPattern, cfg.startInterval, cfg.imagePath, cfg.executionMode, cfg.analysisModel)
 	t.Log("upload API: POST /api/upload-analyze-image-file, form field `file`; legacy base64 API: POST /api/upload-analyze-image")
 	t.Log("task cleanup API: DELETE /api/analyze/tasks/:task_id only deletes analysis task rows; uploaded COS objects are deleted directly by this test after URL key resolution")
+	t.Log("latency focus: processing_duration is measured from backend task status=processing updated_at to final done updated_at; upload, submit, queue wait, and test goroutine scheduling are not included in the main latency statistics")
 
 	imageBytes, err := os.ReadFile(cfg.imagePath)
 	if err != nil {
@@ -234,6 +246,7 @@ func runFoodAnalysisOnce(ctx context.Context, cfg loadConfig, imageURL string, i
 	submitStarted := time.Now()
 	taskID, err := submitAnalyzeTask(ctx, cfg, token, imageURL, index)
 	result.submitDuration = time.Since(submitStarted)
+	submitFinished := time.Now()
 	if err != nil {
 		result.err = fmt.Errorf("submit analysis task: %w", err)
 		result.totalDuration = time.Since(started)
@@ -242,15 +255,30 @@ func runFoodAnalysisOnce(ctx context.Context, cfg loadConfig, imageURL string, i
 	result.taskID = taskID
 
 	taskStarted := time.Now()
-	task, err := pollAnalyzeTask(ctx, cfg, token, taskID)
+	pollResult, err := pollAnalyzeTask(ctx, cfg, token, taskID)
 	result.taskDuration = time.Since(taskStarted)
 	result.totalDuration = time.Since(started)
 	if err != nil {
 		result.err = fmt.Errorf("poll task %s: %w", taskID, err)
 		return result
 	}
+	task := pollResult.task
 	result.status = task.Status
 	result.calories = extractCalories(task.Result)
+	result.processingStartedAt = pollResult.processingStartedAt
+	result.completedAt = task.UpdatedAt
+	if result.processingStartedAt != nil {
+		result.queueDuration = result.processingStartedAt.Sub(submitFinished)
+		if result.queueDuration < 0 {
+			result.queueDuration = 0
+		}
+	}
+	if result.processingStartedAt != nil && result.completedAt != nil {
+		result.processDuration = result.completedAt.Sub(*result.processingStartedAt)
+		if result.processDuration < 0 {
+			result.processDuration = 0
+		}
+	}
 	if task.Status != "done" {
 		result.err = fmt.Errorf("task ended with status=%s error=%s", task.Status, task.ErrorMessage)
 	}
@@ -332,23 +360,33 @@ func submitAnalyzeTask(ctx context.Context, cfg loadConfig, token, imageURL stri
 	return taskID, nil
 }
 
-func pollAnalyzeTask(ctx context.Context, cfg loadConfig, token, taskID string) (analysisTaskResponse, error) {
+func pollAnalyzeTask(ctx context.Context, cfg loadConfig, token, taskID string) (pollAnalyzeTaskResult, error) {
 	deadline := time.Now().Add(cfg.taskTimeout)
+	var processingStartedAt *time.Time
 	for {
 		task, err := getAnalyzeTask(ctx, cfg.baseURL, token, taskID)
 		if err != nil {
-			return analysisTaskResponse{}, err
+			return pollAnalyzeTaskResult{processingStartedAt: processingStartedAt}, err
+		}
+		if task.Status == "processing" && processingStartedAt == nil {
+			if task.UpdatedAt != nil {
+				startedAt := *task.UpdatedAt
+				processingStartedAt = &startedAt
+			} else {
+				startedAt := time.Now()
+				processingStartedAt = &startedAt
+			}
 		}
 		switch task.Status {
 		case "done", "failed", "timed_out", "cancelled", "violated":
-			return task, nil
+			return pollAnalyzeTaskResult{task: task, processingStartedAt: processingStartedAt}, nil
 		}
 		if time.Now().After(deadline) {
-			return task, fmt.Errorf("task did not finish within %s; last status=%s", cfg.taskTimeout, task.Status)
+			return pollAnalyzeTaskResult{task: task, processingStartedAt: processingStartedAt}, fmt.Errorf("task did not finish within %s; last status=%s", cfg.taskTimeout, task.Status)
 		}
 		select {
 		case <-ctx.Done():
-			return task, ctx.Err()
+			return pollAnalyzeTaskResult{task: task, processingStartedAt: processingStartedAt}, ctx.Err()
 		case <-time.After(cfg.pollInterval):
 		}
 	}
@@ -527,19 +565,32 @@ func summarizeFoodAnalysisLoad(t *testing.T, results []requestResult, sharedUplo
 	}
 
 	submitDurations := durations(successes, func(r requestResult) time.Duration { return r.submitDuration })
+	queueDurations := durationsWithValue(successes, func(r requestResult) (time.Duration, bool) {
+		return r.queueDuration, r.processingStartedAt != nil
+	})
 	taskDurations := durations(successes, func(r requestResult) time.Duration { return r.taskDuration })
 	totalDurations := durations(successes, func(r requestResult) time.Duration { return r.totalDuration })
+	processDurations := durationsWithValue(successes, func(r requestResult) (time.Duration, bool) {
+		return r.processDuration, r.processDuration > 0
+	})
 	avgCalories := averageFloat(successes, func(r requestResult) float64 { return r.calories })
+	processVarianceMS2, processStddev := durationVarianceMS2(processDurations)
 	taskVarianceMS2, taskStddev := durationVarianceMS2(taskDurations)
 	totalVarianceMS2, totalStddev := durationVarianceMS2(totalDurations)
 
-	t.Logf("food analysis load summary: total=%d success=%d failed=%d success_rate=%.1f%% shared_upload=%s avg_submit=%s avg_task=%s p95_task=%s task_variance_ms2=%.2f task_stddev=%s avg_total=%s p95_total=%s total_variance_ms2=%.2f total_stddev=%s avg_calories=%.1f",
+	t.Logf("food analysis load summary: total=%d success=%d failed=%d success_rate=%.1f%% shared_upload=%s avg_submit=%s avg_queue=%s avg_processing=%s p95_processing=%s processing_variance_ms2=%.2f processing_stddev=%s processing_samples=%d avg_task_wait=%s p95_task_wait=%s task_wait_variance_ms2=%.2f task_wait_stddev=%s avg_total=%s p95_total=%s total_variance_ms2=%.2f total_stddev=%s avg_calories=%.1f",
 		len(results),
 		len(successes),
 		failures,
 		float64(len(successes))*100/float64(len(results)),
 		sharedUploadDuration,
 		averageDuration(submitDurations),
+		averageDuration(queueDurations),
+		averageDuration(processDurations),
+		percentileDuration(processDurations, 0.95),
+		processVarianceMS2,
+		processStddev,
+		len(processDurations),
 		averageDuration(taskDurations),
 		percentileDuration(taskDurations, 0.95),
 		taskVarianceMS2,
@@ -552,12 +603,12 @@ func summarizeFoodAnalysisLoad(t *testing.T, results []requestResult, sharedUplo
 	)
 	for _, result := range results {
 		if result.err != nil {
-			t.Logf("#%02d token=%02d status=%s task=%s submit=%s task_wait=%s total=%s err=%v",
-				result.index+1, result.userTokenIndex+1, result.status, result.taskID, result.submitDuration, result.taskDuration, result.totalDuration, result.err)
+			t.Logf("#%02d token=%02d status=%s task=%s submit=%s queue=%s processing=%s task_wait=%s total=%s err=%v",
+				result.index+1, result.userTokenIndex+1, result.status, result.taskID, result.submitDuration, result.queueDuration, result.processDuration, result.taskDuration, result.totalDuration, result.err)
 			continue
 		}
-		t.Logf("#%02d token=%02d status=%s task=%s submit=%s task_wait=%s total=%s calories=%.1f",
-			result.index+1, result.userTokenIndex+1, result.status, result.taskID, result.submitDuration, result.taskDuration, result.totalDuration, result.calories)
+		t.Logf("#%02d token=%02d status=%s task=%s submit=%s queue=%s processing=%s task_wait=%s total=%s calories=%.1f",
+			result.index+1, result.userTokenIndex+1, result.status, result.taskID, result.submitDuration, result.queueDuration, result.processDuration, result.taskDuration, result.totalDuration, result.calories)
 	}
 }
 
@@ -565,6 +616,19 @@ func durations(results []requestResult, pick func(requestResult) time.Duration) 
 	out := make([]time.Duration, 0, len(results))
 	for _, result := range results {
 		out = append(out, pick(result))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func durationsWithValue(results []requestResult, pick func(requestResult) (time.Duration, bool)) []time.Duration {
+	out := make([]time.Duration, 0, len(results))
+	for _, result := range results {
+		value, ok := pick(result)
+		if !ok {
+			continue
+		}
+		out = append(out, value)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out

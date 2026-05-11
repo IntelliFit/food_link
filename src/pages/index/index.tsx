@@ -452,10 +452,12 @@ function applyCloudBodyMetrics(storage: BodyMetricsStorage, cloud: {
   if (cloud.water_daily?.length) {
     for (const day of cloud.water_daily) {
       const d = bmDateKey(day.date)
+      const total = Math.max(0, Number(day.total) || 0)
+      const logs = (day.logs || []).map((value) => Math.max(0, Number(value) || 0))
       next.waterByDate[d] = {
         date: d,
-        total: day.total,
-        logs: day.logs || []
+        total,
+        logs
       }
     }
   }
@@ -466,6 +468,68 @@ function applyCloudBodyMetrics(storage: BodyMetricsStorage, cloud: {
 function getTodayWater(metrics: BodyMetricsStorage, date: string): BodyMetricWaterDay {
   const d = bmDateKey(date)
   return metrics.waterByDate[d] || metrics.waterByDate[date] || { date, total: 0, logs: [] }
+}
+
+function normalizeMetricNumber(value: unknown): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function foodRecordItemWaterMl(item: FoodRecord['items'][number]): number {
+  const waterMl = normalizeMetricNumber(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
+  if (waterMl <= 0) return 0
+  const ratio = normalizeMetricNumber(item.ratio)
+  if (ratio > 0) return waterMl * ratio / 100
+  const intake = normalizeMetricNumber(item.intake)
+  const weight = normalizeMetricNumber(item.weight)
+  if (intake > 0 && weight > 0) return waterMl * intake / weight
+  if (intake === 0 && weight === 0) return waterMl
+  return 0
+}
+
+function calculateFoodRecordWaterMl(record: FoodRecord | null | undefined): number {
+  const total = (record?.items || []).reduce((sum, item) => sum + foodRecordItemWaterMl(item), 0)
+  return Math.max(0, Math.round(total))
+}
+
+function reduceWaterForDate(metrics: BodyMetricsStorage, date: string, amount: number, expectedMaxTotal?: number): BodyMetricsStorage {
+  const amountMl = Math.max(0, Math.round(amount))
+  const key = bmDateKey(date)
+  const current = getTodayWater(metrics, date)
+  const currentTotal = Math.max(0, Number(current.total) || 0)
+  const targetTotal = Math.max(0, Math.min(
+    typeof expectedMaxTotal === 'number' && Number.isFinite(expectedMaxTotal)
+      ? expectedMaxTotal
+      : currentTotal - amountMl,
+    currentTotal
+  ))
+  const delta = currentTotal - targetTotal
+  if (delta <= 0) return metrics
+
+  let remaining = delta
+  const logs = [...(current.logs || [])]
+  for (let i = logs.length - 1; i >= 0 && remaining > 0; i--) {
+    const value = Math.max(0, Number(logs[i]) || 0)
+    if (value <= remaining) {
+      remaining -= value
+      logs.splice(i, 1)
+    } else {
+      logs[i] = value - remaining
+      remaining = 0
+    }
+  }
+
+  return {
+    ...metrics,
+    waterByDate: {
+      ...metrics.waterByDate,
+      [key]: {
+        date: key,
+        total: targetTotal,
+        logs
+      }
+    }
+  }
 }
 
 function addWaterToMetrics(metrics: BodyMetricsStorage, date: string, amount: number): BodyMetricsStorage {
@@ -1410,6 +1474,8 @@ function IndexPage() {
 
   const handleMealDelete = async () => {
     if (!mealActionRecordId) return
+    const currentDate = selectedDateRef.current || formatDateKey(new Date())
+    const waterTotalBeforeDelete = getTodayWater(bodyMetrics, currentDate).total
     const { confirm } = await Taro.showModal({
       title: '确认删除',
       content: '确定要删除这条饮食记录吗？删除后不可恢复。',
@@ -1420,6 +1486,16 @@ function IndexPage() {
 
     Taro.showLoading({ title: '删除中...', mask: true })
     try {
+      let deletedWaterMl = calculateFoodRecordWaterMl(getCachedMealFullRecord(mealActionRecordId))
+      if (deletedWaterMl <= 0) {
+        try {
+          const res = await getFoodRecordById(mealActionRecordId)
+          deletedWaterMl = calculateFoodRecordWaterMl(res.record)
+        } catch {
+          deletedWaterMl = 0
+        }
+      }
+
       await deleteFoodRecord(mealActionRecordId)
 
       // 先从当前 meals 中移除被删记录，做乐观更新
@@ -1439,8 +1515,15 @@ function IndexPage() {
       }
 
       // 重新从后端拉取当日 dashboard，确保能量、宏量等数据准确
-      const currentDate = selectedDateRef.current || formatDateKey(new Date())
       await syncDashboardForDate(currentDate)
+      if (deletedWaterMl > 0) {
+        const expectedMaxWaterTotal = Math.max(0, waterTotalBeforeDelete - deletedWaterMl)
+        setBodyMetrics(prev => {
+          const next = reduceWaterForDate(prev, currentDate, deletedWaterMl, expectedMaxWaterTotal)
+          saveBodyMetrics(next)
+          return next
+        })
+      }
 
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
@@ -1587,9 +1670,10 @@ function IndexPage() {
     }
     setDataSyncing(true)
     try {
-      const [res, exerciseLogsRes] = await Promise.all([
+      const [res, exerciseLogsRes, bodyMetricsRes] = await Promise.all([
         getHomeDashboard(date),
-        getExerciseLogs({ date }).catch(() => null)
+        getExerciseLogs({ date }).catch(() => null),
+        getBodyMetricsSummary('week').catch(() => null)
       ])
       if (seq !== syncDashboardSeqRef.current) return
       const intake = res.intakeData
@@ -1611,6 +1695,17 @@ function IndexPage() {
         exerciseBurnedKcal: nextExerciseKcal,
         achievement: nextAchievement
       })
+      if (bodyMetricsRes) {
+        setBodyMetrics(prev => {
+          const next = applyCloudBodyMetrics(prev, {
+            weight_entries: bodyMetricsRes.weight_entries,
+            water_daily: bodyMetricsRes.water_daily,
+            water_goal_ml: bodyMetricsRes.water_goal_ml
+          })
+          saveBodyMetrics(next)
+          return next
+        })
+      }
       // 同步更新该日期在周热图中的颜色
       setWeekHeatmapCells(prev => prev.map(cell => {
         if (cell.date !== date) return cell

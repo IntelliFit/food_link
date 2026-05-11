@@ -17,6 +17,18 @@
   - 本地 Kafka broker 暴露为 `127.0.0.1:9092`，topic 使用 `food-link-analysis-tasks`。
   - 本地测试时 `backend/config.yaml` 可临时设置 `task_queue.driver: "kafka"`、`brokers: ["127.0.0.1:9092"]`、`consumer_group: "food-link-local-workers"`。
   - 独立 worker 入口已删除；本地 Kafka 模式仍通过 server 内嵌 worker 消费，必须保持 `worker.count > 0`。
+- `2026-05-12`: 首页喝水卡片依赖 `bodyMetrics.waterByDate`，不能只靠 `/api/home/dashboard` 刷新：
+  - 删除或更新食物记录会在后端同步维护 AI 饮水日志，但首页喝水卡片来自 `/api/body-metrics/summary` 合并后的本地 `bodyMetrics`。
+  - 因此删除食物记录后的首页轻量同步必须同时刷新 body metrics summary，否则热量/三宏会更新，喝水量仍停留在本地旧值。
+  - 前端合并云端 `water_daily` 时需要把 `total/logs` 钳制为非负数；后端也应保证扣减不低于 0。
+  - `user_water_logs.recorded_on` 是数据库 `date` 字段；后端 exact/sum/delete/reduce 这类单日水日志操作必须按自然日匹配，不能用中国自然日转 UTC 的 `time.Time` 窗口去查，否则 Go/GORM 对 PostgreSQL date 参数可能匹配不到行。
+
+- `2026-05-12`: 食物分析压测脚本的主耗时口径改为后端 processing 窗口：
+  - 20 并发压测日志里的 `task_wait` 只作为辅助字段，因为它包含提交后排队、worker 领取等待和轮询间隔。
+  - 主性能字段使用 `processing`：轮询第一次观察到 `analysis_tasks.status=processing` 时取任务 `updated_at` 作为开始，终态 `done` 的 `updated_at` 作为结束。
+  - 压测汇总优先看 `avg_processing / p95_processing / processing_variance_ms2 / processing_stddev`；`avg_total` 仍包含提交接口和轮询总等待，不应再作为模型性能结论。
+  - 默认轮询间隔使用 `500ms`，降低漏采 processing 开始时间的概率；真实模型压测仍只在显式手动执行 build tag `food_analysis_load` 时运行。
+
 - `2026-05-12`: 食物记录含水量与喝水统计的扣减口径：
   - 保存食物记录时自动生成的饮水日志统一使用 `source_type='ai'`，用于和用户手动喝水区分。
   - 删除整条食物记录时，后端按原记录 items 的实际摄入含水量，从该记录日期对应中国自然日的 AI 饮水日志中扣减。

@@ -75,15 +75,14 @@ func (r *BodyMetricsRepo) ReduceWaterLogsByDateSource(ctx context.Context, userI
 	if amountMl <= 0 {
 		return 0, nil
 	}
-	start, end, err := chinaDateWindow(recordedOn)
-	if err != nil {
+	if _, _, err := chinaDateWindow(recordedOn); err != nil {
 		return 0, err
 	}
 	reduced := 0
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var rows []domain.BodyWaterLog
 		if err := tx.
-			Where("user_id = ? AND recorded_on >= ? AND recorded_on < ? AND source_type = ?", userID, start, end, sourceType).
+			Where("user_id = ? AND DATE(recorded_on) = ? AND source_type = ?", userID, recordedOn, sourceType).
 			Order("created_at desc, id desc").
 			Find(&rows).Error; err != nil {
 			return err
@@ -132,21 +131,19 @@ func (r *BodyMetricsRepo) GetWaterLogsByDate(ctx context.Context, userID string,
 }
 
 func (r *BodyMetricsRepo) GetWaterLogsByExactDate(ctx context.Context, userID string, recordedOn string) ([]domain.BodyWaterLog, error) {
-	start, end, err := chinaDateWindow(recordedOn)
-	if err != nil {
+	if _, _, err := chinaDateWindow(recordedOn); err != nil {
 		return nil, err
 	}
 	var rows []domain.BodyWaterLog
-	err = r.db.WithContext(ctx).Where("user_id = ? AND recorded_on >= ? AND recorded_on < ?", userID, start, end).Find(&rows).Error
+	err := r.db.WithContext(ctx).Where("user_id = ? AND DATE(recorded_on) = ?", userID, recordedOn).Find(&rows).Error
 	return rows, err
 }
 
 func (r *BodyMetricsRepo) DeleteWaterLogsByDate(ctx context.Context, userID string, recordedOn string) (int64, error) {
-	start, end, err := chinaDateWindow(recordedOn)
-	if err != nil {
+	if _, _, err := chinaDateWindow(recordedOn); err != nil {
 		return 0, err
 	}
-	result := r.db.WithContext(ctx).Where("user_id = ? AND recorded_on >= ? AND recorded_on < ?", userID, start, end).Delete(&domain.BodyWaterLog{})
+	result := r.db.WithContext(ctx).Where("user_id = ? AND DATE(recorded_on) = ?", userID, recordedOn).Delete(&domain.BodyWaterLog{})
 	return result.RowsAffected, result.Error
 }
 
@@ -181,12 +178,11 @@ func (r *BodyMetricsRepo) UpsertBodyMetricSettings(ctx context.Context, settings
 }
 
 func (r *BodyMetricsRepo) SumWaterByDate(ctx context.Context, userID string, recordedOn string) (int64, error) {
-	start, end, err := chinaDateWindow(recordedOn)
-	if err != nil {
+	if _, _, err := chinaDateWindow(recordedOn); err != nil {
 		return 0, err
 	}
 	var total int64
-	err = r.db.WithContext(ctx).Model(&domain.BodyWaterLog{}).Where("user_id = ? AND recorded_on >= ? AND recorded_on < ?", userID, start, end).Select("COALESCE(SUM(amount_ml), 0)").Scan(&total).Error
+	err := r.db.WithContext(ctx).Model(&domain.BodyWaterLog{}).Where("user_id = ? AND DATE(recorded_on) = ?", userID, recordedOn).Select("COALESCE(SUM(amount_ml), 0)").Scan(&total).Error
 	return total, err
 }
 

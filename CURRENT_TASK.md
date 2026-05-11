@@ -50,6 +50,74 @@
   - `go test ./pkg/config ./internal/taskqueue -run Test -count=1` passed。
   - `docker compose -f backend/docker-compose.kafka.yml config` passed。
   - `git diff --check -- backend/docker-compose.kafka.yml docs/backend-task-queue-worker-config.md CURRENT_TASK.md DECISIONS.md memory/2026-05-12.md` passed with only CRLF warnings。
+## 状态：完成源码修改 - 删除食物后首页喝水量同步扣减
+
+- 2026-05-12 update:
+  - User 反馈：前端删除食物成功后，首页其他营养成分会扣除，但喝水栏目没有扣除该食物含水量；需要保证喝水量不小于 0。
+  - Finding:
+    - 首页删除记录后调用 `syncDashboardForDate()` 只重新拉 `/api/home/dashboard` 和运动日志；首页喝水卡片实际来自本地 `bodyMetrics.waterByDate`，需要重新拉 `/api/body-metrics/summary` 才会拿到后端扣减后的 `water_daily`。
+    - 用户复测后仍不变；只读查库发现用户 `2026-05-12` 已无食物记录，但 `user_water_logs` 仍有 `source_type='ai'` 的 860ml 孤儿水日志。
+    - 进一步用本地 Go 后端做临时闭环：保存含水量食物记录会新增 AI 水日志，但 DELETE 后水日志不减少。
+    - 根因在 `BodyMetricsRepo`：`user_water_logs.recorded_on` 是 PostgreSQL `date` 字段，但 repo 的 exact/reduce/sum/delete 路径使用中国自然日转 UTC 的 `time.Time` 窗口查询；Go/GORM 参数下没有匹配到 date 行，导致扣减实际为 0。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - `syncDashboardForDate()` 同步 dashboard 时一并请求 `getBodyMetricsSummary('week')`，成功后用 `applyCloudBodyMetrics()` 更新 `bodyMetrics` 与本地缓存。
+      - `applyCloudBodyMetrics()` 合并云端 `water_daily` 时对 `total` 和 `logs` 做非负钳制，确保前端展示喝水量不会小于 0。
+      - 删除前读取被删记录含水量；删除后如云端水量未变化，则本地按该含水量做一次兜底扣减，且不低于 0，避免旧后端/未部署后端时首页立即显示错误。
+    - `backend/internal/health/repo/body_metrics_repo.go`
+      - `ReduceWaterLogsByDateSource()`、`GetWaterLogsByExactDate()`、`DeleteWaterLogsByDate()`、`SumWaterByDate()` 改为 `DATE(recorded_on) = ?` 精确匹配自然日，符合 `recorded_on date` 表结构。
+  - Verification:
+    - 真实库临时闭环验证：保存一条 `66ml` 食物水记录后水量增加，调用 `FoodRecordService.Delete()` 后水量恢复原值；调试临时记录和水日志已清理。
+    - 已清理用户 `8826bc8d-81ad-40a4-bc42-6cc30506b8c3` 在 `2026-05-12` 已确认无食物记录情况下残留的 3 条 AI 水日志，共 860ml；手动喝水记录未动。
+    - `go test ./internal/health/repo -run 'TestBodyMetricsRepo_ReduceWaterLogsByDateSource|TestBodyMetricsRepo_WaterCRUD' -count=1` passed。
+    - `go test ./internal/foodrecord/service ./internal/app -run 'TestFoodRecordService_Save|TestFoodRecordService_Update|TestFoodRecordService_Delete|TestTotalFoodWaterIntakeMl|Test' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+
+## 状态：完成定位 - llm_provider 改 qwen 后日志仍显示 gemini
+
+- 2026-05-12 update:
+  - User 反馈：已把配置文件 `external.llm_provider` 改成 qwen，但后端日志仍显示 `provider=gemini`、`requested_model=gemini`。
+  - Diagnosis:
+    - 当前本地 `backend/config.yaml` 确认为 `external.llm_provider: "qwen"`。
+    - 当前代码 `app.New()` 会调用 `analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)`。
+    - 当前代码 `resolveImageModelConfig()` 在 image provider 为 qwen 时，即使请求 `modelName/requested_model` 为 `gemini`，也应路由到 qwen。
+    - 当前运行中的后端进程：
+      - `go run cmd/server/main.go` 启动时间约 `03:16`，cwd 为 `/Users/kirigaya/project/food_link/backend`。
+      - `backend/config.yaml` 修改时间为 `03:42:34`。
+      - 用户贴出的日志时间为 `03:43:33`。
+    - 因为 Go 后端只在启动时 `config.Load(".")` 读取配置，03:16 启动的进程不会自动感知 03:42 的配置修改，所以它仍在使用旧的 `llm_provider=gemini`。
+    - 当前 shell 未发现 `LLM_PROVIDER` 环境变量覆盖。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen' -count=1` passed。
+    - `go test ./pkg/config -run Test -count=1` passed。
+  - Next step:
+    - 需要用户按项目规则手动重启本地 Go 后端；重启后新分析日志应显示 `provider=qwen`、`model=qwen-vl-max`。
+
+## 状态：完成源码修改与编译验证 - 修正食物分析压测耗时统计口径
+
+- 2026-05-12 update:
+  - User 反馈：之前 20 样本并发压测脚本的时间统计明显偏大；千问实际常在 10 秒内出结果，但脚本统计远超实际。用户只关心任务真正提交给大模型后，到最终完成营养/能量结果的耗时，不关心整段脚本运行耗时。
+  - Finding:
+    - 旧脚本 `taskDuration/task_wait` 从 `/api/analyze/submit` 返回 task_id 后开始，到轮询到 `done` 为止，包含任务排队、worker 领取等待和轮询间隔。
+    - 旧脚本 `totalDuration/total` 又额外包含提交接口耗时；不包含共享图片上传，但仍不是“模型处理 + 后处理”口径。
+  - Fix applied:
+    - `backend/internal/analyze/loadtest/food_analysis_stability_test.go`
+      - `analysisTaskResponse` 增加 `created_at/updated_at` 解析。
+      - 轮询过程中第一次观察到 `status=processing` 时，记录后端返回的 `updated_at` 作为 `processingStartedAt`。
+      - 任务终态 `done` 时使用终态 `updated_at` 作为完成时间，计算 `processDuration = done.updated_at - processing.updated_at`。
+      - summary 主指标改为 `avg_processing / p95_processing / processing_variance_ms2 / processing_stddev / processing_samples`。
+      - `avg_task_wait / avg_total` 保留为辅助诊断字段，避免误读。
+      - 默认轮询间隔从 `2s` 降到 `500ms`，减少错过 processing 状态的概率。
+  - Verification:
+    - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `git diff --check` passed。
+  - Runtime note:
+    - 本轮未实际发起 20 并发真实模型压测，避免未经要求再次消耗模型/COS 资源。
+
 ## 状态：完成源码修改与验证 - 删除/更新食物记录同步扣减喝水量
 
 - 2026-05-12 update:
