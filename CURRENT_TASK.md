@@ -1,5 +1,25 @@
 # 当前任务
 
+## 状态：完成 rebase 合并、验证与推送 - 食物喝水扣减与压测统计修复
+
+- 2026-05-12 update:
+  - User 要求提交代码、推送代码并进行合并。
+  - Completed:
+    - 已将本地提交 rebase 到远端 `origin/backend-refactor-sync-migrate-tencent` 最新 `ee93cf5` 之后。
+    - rebase 冲突仅发生在 `CURRENT_TASK.md`、`DECISIONS.md`、`memory/2026-05-12.md` 等状态记录文件；已保留远端 Kafka 线上验证记录和本地食物喝水/压测修复记录。
+    - 已推送业务提交到远端：
+      - `6758e3c fix: sync food water tracking with record changes`
+      - `f21781e fix: sync water totals after food deletion`
+  - Verification:
+    - `go test ./internal/health/repo -run 'TestBodyMetricsRepo_ReduceWaterLogsByDateSource|TestBodyMetricsRepo_WaterCRUD' -count=1` passed。
+    - `go test ./internal/foodrecord/service ./internal/app -run 'TestFoodRecordService_Save|TestFoodRecordService_Update|TestFoodRecordService_Delete|TestTotalFoodWaterIntakeMl|Test' -count=1`：`foodrecord/service` passed；`app` 首次因 `proxy.golang.org` 下载 `kafka-go` 超时失败，随后用 `GOPROXY=https://goproxy.cn,direct go test ./internal/app -run 'Test' -count=1` passed。
+    - `go test ./internal/analyze/loadtest -count=1` passed/no test files。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已尝试 `mrc where --port 9420` 与 `mrc where --port 3001`；均提示目标项目窗口未开启自动化服务，未能进行小程序截图/交互验证。
+
 ## 状态：待用户在线上执行验证 - Kafka task_queue 与 worker 崩溃恢复
 
 - 2026-05-12 update:
