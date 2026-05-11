@@ -1,5 +1,17 @@
 # 当前任务
 
+## 状态：待用户在线上执行验证 - Kafka task_queue 与 worker 崩溃恢复
+
+- 2026-05-12 update:
+  - User 已同步线上并提供 `foodlink-v2` 三个 Running Pod 与 `kafka` Pod，询问如何验证线上是否真的使用 Kafka，以及此前担心的 worker 拿到任务后进程挂掉是否会丢任务/卡住是否已解决。
+  - Plan:
+    - 只读验证：检查 `foodlink-v2` 启动日志是否有 `embedded worker enabled` 且 `task_queue_driver=kafka`，检查 worker 是否有 `task queue delivery received`、`task claimed`、`source=task_queue`，检查 Kafka consumer group `food-link-workers` 是否存在并有消费者。
+    - 功能验证：提交一条图片分析任务，观察 submit 日志、worker delivery/claim/process 日志、Kafka consumer lag、DB `analysis_tasks` 的 `worker_id/attempt_id/attempt_count/lease_until`。
+    - 故障注入验证：在测试任务进入 `processing` 后删除 claim 该任务的 `foodlink-v2` pod；预期任务先保持 processing 到 lease 过期，随后 recovery 重新 publish，新的 worker 以 `attempt_count=2` 重新 claim 并完成。
+  - Note:
+    - 本地无 kube context，无法直接替用户连线上集群；需要用户在 `~/littlehorse-deployment` 服务器上执行 kubectl 命令。
+    - 当前 Dockerfile 使用 scratch 镜像，不能依赖 `kubectl exec foodlink-v2 -- sh` 进入应用容器检查文件；应通过 `kubectl logs`、`kubectl get deploy -o yaml`、Kafka Pod 内工具和 DB SQL 验证。
+
 ## 状态：完成手动 merge 复核、远端同步与推送
 
 - 2026-05-12 update:
