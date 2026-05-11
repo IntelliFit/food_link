@@ -1,5 +1,25 @@
 # 当前任务
 
+## 状态：完成提交与远端同步 - 积分扣除优化和分析订阅移除
+
+- 2026-05-12 update:
+  - User要求：提交当前代码，并完成与远端同步。
+  - Completed:
+    - 已在 `backend-refactor-sync-migrate-tencent` 上完成 rebase，解决远端 task_queue/trace/首页补录提示记录与本地提交的冲突。
+    - 已保留远端 `task_queue` 发布/内嵌 worker 逻辑，同时保留积分扣除优化：提交时只校验和写 `credit_usage`，任务 `done` 后再幂等结算累计奖励积分。
+    - 已保留运动任务创建后的 queue publish，移除创建成功后的即时累计奖励积分扣除。
+    - 已推送提交：
+      - `2a5654a fix: remove analysis notification subscription`
+      - `011ae75 fix: defer credit settlement until task success`
+  - Verification after rebase:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/utils/api.ts src/utils/membership.ts src/pages/index/index.tsx --max-warnings 0` passed。
+    - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app ./internal/analyze/handler -run Test -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+    - `go test ./pkg/config ./internal/taskqueue ./pkg/trace ./pkg/logger -run Test -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 微信开发者工具自动化已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，两个端口均无法连接，提示目标项目窗口未开启自动化服务；本轮无法完成小程序运行时截图/交互验证。
+
 ## 状态：完成源码修改 - 分析任务分发改为本地 task_queue
 
 - 2026-05-11 update:
@@ -102,6 +122,182 @@
     - 当前本机任务仍 pending，因为按项目规则本轮未擅自重启常驻 server。
     - 本地复测只需重启 Go server；server 默认会带内置 worker 并领取现有 pending 任务。
     - 若线上已有独立 worker 或多副本 server，部署层可在 `config.yaml` 中设置 `worker.count: 0` 关闭 server 内置 worker，继续只让独立 worker 消费队列。
+## 状态：完成源码修改 - 积分消耗延后到任务成功返回
+
+- 2026-05-12 update:
+  - User要求：
+    - 确认前端轮询获取识别结果时是否能知道任务类型与图片数量。
+    - 优化积分扣除机制：根据任务类型（标准/精准）和图片数量，在任务成功返回结果后再扣积分，而不是创建任务后立即扣，因为任务可能失败。
+  - Confirmation:
+    - `GET /api/analyze/tasks/:task_id` 返回的 `AnalysisTask` 已包含 `task_type`、`image_paths`、`payload`、`result`。
+    - 前端 `analyze-loading` 已从 task/payload 中读取任务类型与执行模式；图片数量可由 `image_paths.length` 判断。
+  - Fix applied:
+    - `backend/internal/membership/service/membership_service.go`
+      - `ValidateFoodAnalysisCredits()` 支持传入本次计费 units。
+      - 标准食物分析成本为 `2 * units`；精准模式为 `4 * units`。
+    - `backend/internal/analyze/service/task_service.go`
+      - 食物图片/文字/精准提交仍在提交时校验积分是否足够，并把 `credit_usage` 写入任务 payload。
+      - 删除创建 `analysis_tasks` 成功后立即扣累计奖励积分的逻辑。
+      - `GetTask()` 仅在任务 `status=done` 时结算累计奖励积分，sourceKey 幂等避免重复扣。
+    - `backend/internal/membership/repo/membership_repo.go`
+      - 每日系统积分统计只统计 `status=done` 的任务。
+      - `precision_plan` 不再因为中间规划完成就计入积分；精准最终成功由 `precision_aggregate` 计入。
+    - `backend/internal/worker/worker.go`
+      - 精准模式把原始任务的 `credit_usage` 透传到 `precision_aggregate`，只有最终聚合成功后才计入系统积分。
+    - `backend/internal/health/service/exercise_service.go`
+      - 运动任务创建后不再立即扣累计奖励积分；成功结果由 `GetTask()` 结算。
+    - `backend/internal/expiry/service/expiry_service.go`
+      - 保质期同步识别按图片数量校验/返回成本；只有识别成功并完成任务后才扣累计奖励积分。
+    - `src/utils/membership.ts`、`src/packageExtra/pages/analyze/index.tsx`
+      - 前端分析页积分不足预检查按当前图片数量计算；首页入口未选图前仍按 1 张做预检查。
+  - Cost rule:
+    - 标准食物/保质期识别：`2 积分 * 图片数`。
+    - 精准模式：`4 积分 * 图片数`。
+    - 文字分析：按 1 个 unit。
+    - 运动记录：1 积分。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/utils/membership.ts --max-warnings 0` passed。
+    - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker -run 'Test' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$' -count=1` passed。
+    - `go test ./internal/analyze/handler ./internal/app ./internal/health/handler ./internal/expiry/handler -run 'Test' -count=1` passed。
+    - `git diff --check` passed。
+  - Validation notes:
+    - `go test ./internal/analyze/service -run 'Test' -count=1` 仍被既有 `TestTaskService_ListTasks` 空指针失败阻断；本轮相关新增/修改用例均通过。
+    - 微信开发者工具自动化尝试连接 9420 与 3001 均失败，提示目标项目窗口未开启自动化服务；本轮无法完成小程序运行时截图/交互验证。
+
+## 状态：完成静态梳理 - 前端积分扣除触发链路
+
+- 2026-05-12 update:
+  - User要求：查看前端目前如何执行积分扣除机制，即当前用户每日积分额度是在点击什么按钮、什么接口成功之后扣除。
+  - Findings:
+    - 前端不直接调用“扣积分”接口；前端只通过 `getMyMembership()` / `GET /api/membership/me` 获取积分状态并在按钮点击前做不足拦截。
+    - 食物图片分析：
+      - 首页 `RecordMenu` 的「拍照识别/相册上传」只做积分预检查和选图，不扣积分。
+      - `src/packageExtra/pages/analyze/index.tsx` 底部「分析 X 张图片」按钮触发 `handleAnalyzePress()` -> `doAnalyze()`。
+      - 图片上传成功后调用 `submitAnalyzeTask()` -> `POST /api/analyze/submit`；若是继续精准会话则调用 `continuePrecisionSession()` -> `POST /api/precision-sessions/:session_id/continue`。
+      - 后端 `TaskService.SubmitAnalyzeTask()` 在创建 `analysis_tasks` 成功后调用 `consumeFoodCredits()`。
+    - 食物文字分析：
+      - `src/packageExtra/pages/record-text/index.tsx` 底部「开始智能分析」按钮触发 `handleSubmit()`。
+      - 调用 `submitTextAnalyzeTask()` -> `POST /api/analyze-text/submit`。
+      - 后端 `TaskService.SubmitTextTask()` 在创建 `analysis_tasks` 成功后调用 `consumeFoodCredits()`。
+    - 纠错/重新智能分析：
+      - `src/packageExtra/pages/result/index.tsx` 的纠错重分析继续调用 `submitAnalyzeTask()` 或 `submitTextAnalyzeTask()`，因此会按新任务再次消耗积分。
+      - 结果页继续精准估计调用 `continuePrecisionSession()`，同样走后端提交任务扣分链路。
+    - 运动记录：
+      - `src/packageExtra/pages/exercise-record/index.tsx` 发送按钮或输入框确认触发 `runSubmitFlow()`。
+      - 调用 `createExerciseLog()` -> `POST /api/exercise-logs`。
+      - 后端 `ExerciseService.CreateLogWithDate()` 创建 `analysis_tasks(task_type=exercise)` 成功后扣 1 积分。
+    - 保质期拍照识别：
+      - `src/packageExtra/pages/expiry-edit/index.tsx`「识别并预填」按钮触发 `handleRecognize()`。
+      - 调用 `recognizeManagedFoodExpiryItems()` -> `POST /api/expiry/recognize`。
+      - 后端 `ExpiryService.RecognizeWithContext()` 在识别成功并 `CompleteTask` 后扣 2 积分。
+  - Backend mechanism:
+    - 积分校验统一由 `MembershipService.ValidateFoodAnalysisCredits()` / `ValidateExerciseCredits()` 完成。
+    - 食物标准分析成本 2，精准模式 4，运动记录 1，保质期识别 2。
+    - 每日“系统积分”不是直接写一个扣减字段，而是通过 `analysis_tasks.payload.credit_usage.system_by_date` 和任务类型统计当日已用。
+    - 累计奖励积分余额会通过 `ConsumeEarnedCreditsAfterSuccess()` 写 `user_earned_credit_ledger` 并更新 `weapp_user.earned_credits_balance`。
+  - Verification:
+    - 本轮为源码静态梳理，未修改业务代码，未运行测试。
+
+## 状态：完成静态定位 - 食物过期通知推送实现链路
+
+- 2026-05-12 update:
+  - User要求：用户反馈食物过期通知推送失败，先找到通知推送相关的前端和后端实现位置，尤其是后端实现。
+  - Frontend implementation map:
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - `promptExpirySubscribe()` 保存保质期条目后弹订阅确认，调用 `Taro.requestSubscribeMessage()`。
+      - 成功后对每个条目调用 `subscribeManagedFoodExpiryItem()`。
+    - `src/utils/api.ts`
+      - `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 读取构建常量。
+      - `FoodExpirySubscribeRequest/Response` 定义订阅接口协议。
+      - `subscribeManagedFoodExpiryItem()` 调 `POST /api/expiry/items/:id/subscribe`。
+    - `config/index.ts`
+      - 从 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 注入 `__EXPIRY_SUBSCRIBE_TEMPLATE_ID__`。
+  - Backend implementation map:
+    - `backend/internal/app/app.go`
+      - 路由注册 `POST /api/expiry/items/:item_id/subscribe`。
+      - `expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)` 注入后端模板 ID。
+    - `backend/internal/expiry/handler/expiry_handler.go`
+      - `Subscribe()` 从 JWT context 取 `userID/openID`，接收 `subscribe_status/err_msg`。
+    - `backend/internal/expiry/service/expiry_service.go`
+      - `SubscribeWithContext()` 校验条目归属、状态、订阅状态、openid、模板 ID。
+      - `reconcileNotificationJob()` 计算到期日当天北京时间 09:00 的提醒时间，写 `food_expiry_notification_jobs`。
+    - `backend/internal/expiry/repo/expiry_repo.go`
+      - `UpsertNotificationJob()` 创建/更新 job。
+      - `ClaimNextPendingNotificationJob()` 按 `status=pending AND scheduled_at<=now` 领取 due job。
+    - `backend/internal/expiry/service/notification_worker.go`
+      - `NotificationWorker.ProcessNext/ProcessJob()` 消费 job。
+      - `sendSubscribeMessage()` 调微信 `message/subscribe/send`。
+      - `getAccessToken()` 用 `external.appid/external.secret` 获取微信 access_token。
+    - `backend/internal/worker/worker.go` + `backend/cmd/worker/main.go`
+      - 独立 worker 进程在空闲时处理 `expiry_notification` job。
+  - Key risk points confirmed:
+    - 前端构建必须注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`，否则不会弹订阅，也不会创建后端 job。
+    - 后端需要 `APPID/SECRET` 和 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 或对应 YAML 配置。
+    - 生产必须单独启动 `/app/food-link-worker`，且 `WORKER_TASK_TYPES` 不能漏掉 `expiry_notification`。
+    - 当前 `dist/common.js` 里模板 ID 为空字符串，说明当前本地产物不会发起过期提醒订阅。
+  - Verification:
+    - 本轮为源码静态定位，未修改业务代码，未运行测试。
+
+## 状态：完成源码修改 - 首页补录提示改为低能量补录入口
+
+- 2026-05-12 update:
+  - User要求：
+    - 将页面里的「当前补录日期」提示改为「检测到当日能量过低，是否需要补录」。
+    - 用户点击这个色块后，直接弹出点击卡路里后对应的补录对话框。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 旧文案「当前补录日期」已删除。
+      - 补录提示改为低能量提示：可补录的非今日日期，且当天摄入低于目标 60% 时展示。
+      - 点击提示色块直接 `setShowRecordMenu(true)`，打开首页记录菜单弹窗（拍照识别/相册上传/文本输入/手动输入）。
+    - `src/pages/index/index.scss`
+      - 提示块改为可点击样式，增加日期副文案和「去补录」胶囊。
+    - `src/styles/fl-color-scheme-dark.scss`
+      - 补齐暗色主题下日期副文案与「去补录」胶囊颜色。
+  - Verification:
+    - `rg -n "当前补录日期|正在补录" src/pages src/packageExtra/pages src/components src/styles -g '*.{tsx,ts,scss}'` 无匹配。
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 微信开发者工具自动化尝试连接 9420 与 3001 均失败，提示项目窗口未开启自动化服务；本轮无法完成运行时截图/交互验证。
+    - `npx stylelint src/pages/index/index.scss src/styles/fl-color-scheme-dark.scss --allow-empty-input` 被仓库既有 SCSS/parser 与旧样式规则问题阻断，例如 `index.scss` 开头 SCSS 变量被当作 Unknown word、暗色样式旧空块/rgba 规则等。
+
+## 状态：完成源码修改 - 移除食物分析前订阅通知授权链路
+
+- 2026-05-12 update:
+  - User要求：图片分析页点击食物记录分析识别前，不再请求通知订阅权限，并把对应前后端能力全部去掉。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 删除分析前 `Taro.requestSubscribeMessage()` 调用。
+      - 删除分析提交 payload 中的 `subscribe_status`。
+    - `src/packageExtra/pages/record-text/index.tsx`
+      - 同步删除文字分析入口的分析订阅模板依赖、订阅弹窗和 `subscribe_status` 提交，避免后端协议残留。
+    - `src/utils/api.ts`
+      - 删除 `ANALYSIS_SUBSCRIBE_TEMPLATE_ID` 常量。
+      - 删除分析/文字分析提交参数中的 `subscribe_status`。
+    - `config/index.ts`
+      - 删除 `TARO_APP_ANALYSIS_SUBSCRIBE_TEMPLATE_ID` 读取和 `__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__` 注入。
+    - `backend/internal/analyze/service/task_service.go`
+      - 删除 `SubmitTaskInput.SubscribeStatus` 和写入 `analysis_tasks.payload.subscribe_status` 的逻辑。
+    - `backend/internal/analyze/handler/analyze_handler.go`
+      - 删除精准续接接口里分析订阅状态字段的接收与转传。
+    - `backend/pkg/config/config.go`
+      - 删除 `wechat_pay.analysis_subscribe_template_id` 配置字段和 `ANALYSIS_SUBSCRIBE_TEMPLATE_ID` env 绑定。
+    - `backend/docs/backend-api-prd/_shared/models/analyze.md`、`docs/backend-api-prd/_shared/models/analyze.md`
+      - 分析提交请求模型移除 `subscribe_status`。
+  - Scope note:
+    - 保质期过期提醒订阅链路保留不变：`src/packageExtra/pages/expiry-edit/index.tsx`、`FoodExpirySubscribeRequest`、`EXPIRY_SUBSCRIBE_TEMPLATE_ID` 等仍继续存在。
+  - Verification:
+    - `rg -n "ANALYSIS_SUBSCRIBE|analysis_subscribe|__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__|TARO_APP_ANALYSIS" src backend config package.json types tests docs` 无匹配。
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `go test ./internal/analyze/handler -run 'TestAnalyzeHandler_SubmitAnalyzeTask|TestAnalyzeHandler_SubmitTextTask' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask|TestTaskService_SubmitTextTask|TestTaskService_SubmitCorrectionStoresChainRoot' -count=1` passed。
+    - `go test ./internal/analyze/service -run '^$' -count=1` passed，确认包可编译。
+    - `go test ./pkg/config -run 'Test' -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - `go test ./internal/analyze/handler ./internal/analyze/service ./pkg/config -run 'Test' -count=1` 中 handler/config passed，但 `internal/analyze/service` 全量测试被既有 `TestTaskService_ListTasks` 空指针失败阻断；聚焦测试和包编译均通过。
+    - 微信开发者工具自动化已尝试 `mrc where/relaunch/logs`，但 9420 与 3001 端口均无法连接，提示目标项目窗口未开启自动化服务；本轮无法完成运行时截图/交互验证。
 
 ## 状态：完成排查与后端修复 - 保质期订阅通知未推送
 

@@ -80,6 +80,8 @@ import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTarget
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, type MealPosterSharePayload } from './components'
 
+const BACKFILL_LOW_ENERGY_RATIO = 0.6
+
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
 function getInviteCodeFromUserId(userId: string): string {
   const raw = (userId || '').replace(/-/g, '').toLowerCase()
@@ -2152,8 +2154,17 @@ function IndexPage() {
     homeAchievement
   ])
 
-  const showBackfillHint = isAllowedRecordDate(selectedDate) && !isTodayRecordDate(selectedDate)
+  const selectedDayEnergyRatio = intakeData.target > 0 ? intakeData.current / intakeData.target : 0
+  const showBackfillHint =
+    isAllowedRecordDate(selectedDate) &&
+    !isTodayRecordDate(selectedDate) &&
+    !dashboardBusy &&
+    !isGuest &&
+    selectedDayEnergyRatio < BACKFILL_LOW_ENERGY_RATIO
   const backfillDateLabel = formatBackfillDateLabel(selectedDate)
+  const openBackfillRecordMenu = () => {
+    setShowRecordMenu(true)
+  }
 
   return (
     <View className='home-page'>
@@ -2189,9 +2200,13 @@ function IndexPage() {
           onSelect={handleDateSelect} 
         />
         {showBackfillHint && (
-          <View className='home-backfill-hint'>
+          <View className='home-backfill-hint home-backfill-hint--tappable' onClick={openBackfillRecordMenu}>
             <Text className='home-backfill-hint__dot' />
-            <Text className='home-backfill-hint__text'>当前补录日期 {backfillDateLabel}</Text>
+            <View className='home-backfill-hint__copy'>
+              <Text className='home-backfill-hint__text'>检测到当日能量过低，是否需要补录</Text>
+              <Text className='home-backfill-hint__date'>{backfillDateLabel}</Text>
+            </View>
+            <Text className='home-backfill-hint__action'>去补录</Text>
           </View>
         )}
 

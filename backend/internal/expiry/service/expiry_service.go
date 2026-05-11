@@ -31,7 +31,7 @@ func NewExpiryService(expiryRepo *repo.ExpiryRepo, taskRepo *repo.TaskRepo, reco
 }
 
 type CreditGuard interface {
-	ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string) (map[string]any, error)
+	ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string, units ...int) (map[string]any, error)
 	ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
 }
 
@@ -486,11 +486,18 @@ func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string,
 		return nil, &commonerrors.AppError{Code: 10000, Message: "保质期识别服务未初始化", HTTPStatus: 500}
 	}
 	var creditsInfo map[string]any
+	creditCost := expiryCreditCost * len(imageURLs)
+	if creditCost <= 0 {
+		creditCost = expiryCreditCost
+	}
 	if s.creditGuard != nil && userID != "" {
 		var err error
-		creditsInfo, err = s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, "standard", "")
+		creditsInfo, err = s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, "standard", "", len(imageURLs))
 		if err != nil {
 			return nil, err
+		}
+		if value := intFromAny(creditsInfo["credit_cost"], 0); value > 0 {
+			creditCost = value
 		}
 	}
 	extraPayload := map[string]any{}
@@ -521,7 +528,7 @@ func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string,
 		return nil, err
 	}
 	if s.creditGuard != nil && creditsInfo != nil {
-		_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, expiryCreditCost, "food_analysis_reward_spend", "food_analysis:"+task.ID, map[string]any{
+		_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, creditCost, "food_analysis_reward_spend", "food_analysis:"+task.ID, map[string]any{
 			"task_id":        task.ID,
 			"task_type":      task.TaskType,
 			"recognize_mode": "food_expiry",
@@ -529,7 +536,7 @@ func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string,
 	}
 	return &RecognizeResult{
 		TaskID:      task.ID,
-		CreditsCost: expiryCreditCost,
+		CreditsCost: creditCost,
 		Items:       recognized.Items,
 		Message:     "已识别 " + strconv.Itoa(len(recognized.Items)) + " 项食物，可继续补充后保存",
 	}, nil

@@ -868,7 +868,7 @@ func (s *MembershipService) shareRewardResponse(ctx context.Context, userID stri
 	}, nil
 }
 
-func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string) (map[string]any, error) {
+func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string, units ...int) (map[string]any, error) {
 	mode := normalizeFoodExecutionMode(executionMode)
 	cost := creditCostStandardFoodAnalysis
 	analysisLabel := "食物分析"
@@ -876,6 +876,7 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "精准分析"
 	}
+	cost *= normalizeCreditUnits(units...)
 	membership, err := s.getEffectiveMembership(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -888,6 +889,13 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 		return nil, &commonerrors.AppError{Code: 10005, Message: "精准模式仅对标准版和进阶版开放，请升级或开通后再试。", HTTPStatus: 402}
 	}
 	return s.validateCredits(ctx, userID, cost, analysisLabel, recordedOn, membership, user)
+}
+
+func normalizeCreditUnits(units ...int) int {
+	if len(units) == 0 || units[0] <= 0 {
+		return 1
+	}
+	return units[0]
 }
 
 func (s *MembershipService) ValidateExerciseCredits(ctx context.Context, userID, recordedOn string) (map[string]any, error) {

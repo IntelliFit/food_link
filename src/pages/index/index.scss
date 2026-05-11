@@ -153,13 +153,21 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   display: flex;
   align-items: center;
   gap: 12rpx;
-  min-height: 52rpx;
-  padding: 0 22rpx;
+  min-height: 64rpx;
+  padding: 10rpx 18rpx 10rpx 22rpx;
   margin: -2rpx 0 18rpx;
   border-radius: 18rpx;
   background: rgb(92 184 150 / 12%);
   border: 1rpx solid rgb(92 184 150 / 24%);
   box-sizing: border-box;
+
+  &--tappable {
+    cursor: pointer;
+  }
+
+  &--tappable:active {
+    opacity: 0.82;
+  }
 }
 
 .home-backfill-hint__dot {
@@ -176,6 +184,32 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   line-height: 34rpx;
   font-weight: 600;
   color: #2f7f62;
+}
+
+.home-backfill-hint__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.home-backfill-hint__date {
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: rgb(47 127 98 / 72%);
+}
+
+.home-backfill-hint__action {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: $primary-color;
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 22%);
 }
 
 .date-list {

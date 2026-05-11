@@ -978,6 +978,9 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		"child_task_ids":       childTaskIDs,
 		"source_type":          sourceType,
 	}
+	if creditUsage := mapFromAny(task.Payload["credit_usage"]); len(creditUsage) > 0 {
+		aggregatePayload["credit_usage"] = creditUsage
+	}
 	if task.ImageURL != nil && *task.ImageURL != "" {
 		aggregatePayload["image_url"] = *task.ImageURL
 	}

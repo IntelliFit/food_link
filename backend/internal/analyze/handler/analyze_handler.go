@@ -368,7 +368,6 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		PreviousResult        map[string]any   `json:"previousResult"`
 		CorrectionItems       []map[string]any `json:"correctionItems"`
 		ReferenceObjects      []map[string]any `json:"reference_objects"`
-		SubscribeStatus       string           `json:"subscribe_status"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -402,7 +401,6 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		PreviousResult:        body.PreviousResult,
 		CorrectionItems:       body.CorrectionItems,
 		ReferenceObjects:      body.ReferenceObjects,
-		SubscribeStatus:       body.SubscribeStatus,
 	}
 	if body.Date != nil {
 		input.Date = strings.TrimSpace(*body.Date)

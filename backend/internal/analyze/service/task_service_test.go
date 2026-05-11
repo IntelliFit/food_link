@@ -27,6 +27,48 @@ func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.
 	return nil
 }
 
+type mockTaskCreditGuard struct {
+	validateCalls []int
+	consumeCalls  []struct {
+		userID    string
+		cost      int
+		reason    string
+		sourceKey string
+	}
+}
+
+func (m *mockTaskCreditGuard) ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string, units ...int) (map[string]any, error) {
+	unit := 1
+	if len(units) > 0 && units[0] > 0 {
+		unit = units[0]
+	}
+	m.validateCalls = append(m.validateCalls, unit)
+	cost := 2 * unit
+	if executionMode == "strict" {
+		cost = 4 * unit
+	}
+	return map[string]any{
+		"credit_cost": cost,
+		"credit_spend_plan": map[string]any{
+			"recorded_on":     recordedOn,
+			"cost":            cost,
+			"system_by_date":  map[string]any{recordedOn: cost},
+			"earned_units":    0,
+			"total_available": cost,
+		},
+	}, nil
+}
+
+func (m *mockTaskCreditGuard) ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
+	m.consumeCalls = append(m.consumeCalls, struct {
+		userID    string
+		cost      int
+		reason    string
+		sourceKey string
+	}{userID: userID, cost: cost, reason: reason, sourceKey: sourceKey})
+	return nil
+}
+
 func setupTaskServiceTestDB(t *testing.T) (*gorm.DB, *repo.TaskRepo, *repo.PrecisionRepo, *authrepo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -67,11 +109,20 @@ func TestTaskService_SubmitAnalyzeTask_Success(t *testing.T) {
 func TestTaskService_SubmitAnalyzeTask_WithImages(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
 	ctx := context.Background()
 
 	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{ImageURLs: []string{"https://example.com/1.jpg", "https://example.com/2.jpg"}})
 	require.NoError(t, err)
 	assert.NotEmpty(t, taskID)
+	require.Equal(t, []int{2}, guard.validateCalls)
+	assert.Empty(t, guard.consumeCalls)
+
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	usage := task.Payload["credit_usage"].(map[string]any)
+	assert.Equal(t, 4, intFromAny(usage["cost"]))
 }
 
 func TestTaskService_EnqueueTaskPublishesQueueMessage(t *testing.T) {
@@ -251,6 +302,52 @@ func TestTaskService_GetTask(t *testing.T) {
 
 	_, err = svc.GetTask(ctx, "nonexistent", "user1")
 	assert.Error(t, err)
+}
+
+func TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	now := time.Now()
+	done := &analyzedomain.AnalysisTask{
+		UserID:   "user1",
+		TaskType: "food",
+		Status:   "done",
+		Payload: map[string]any{
+			"credit_usage": map[string]any{
+				"cost":           2,
+				"system_by_date": map[string]any{now.Format("2006-01-02"): 2},
+				"earned_units":   0,
+			},
+		},
+		CreatedAt: &now,
+	}
+	pending := &analyzedomain.AnalysisTask{
+		UserID:   "user1",
+		TaskType: "food",
+		Status:   "pending",
+		Payload: map[string]any{
+			"credit_usage": map[string]any{
+				"cost":           2,
+				"system_by_date": map[string]any{now.Format("2006-01-02"): 2},
+			},
+		},
+		CreatedAt: &now,
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, done))
+	require.NoError(t, taskRepo.CreateTask(ctx, pending))
+
+	_, err := svc.GetTask(ctx, pending.ID, "user1")
+	require.NoError(t, err)
+	assert.Empty(t, guard.consumeCalls)
+
+	_, err = svc.GetTask(ctx, done.ID, "user1")
+	require.NoError(t, err)
+	require.Len(t, guard.consumeCalls, 1)
+	assert.Equal(t, "food_analysis_reward_spend", guard.consumeCalls[0].reason)
+	assert.Equal(t, "food_analysis:"+done.ID, guard.consumeCalls[0].sourceKey)
 }
 
 func TestTaskService_UpdateTaskResult(t *testing.T) {

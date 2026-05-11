@@ -36,7 +36,6 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("WECHAT_PAY_PRIVATE_KEY", "l")
 	t.Setenv("WECHAT_PAY_PUBLIC_KEY", "m")
 	t.Setenv("EXPIRY_SUBSCRIBE_TEMPLATE_ID", "n")
-	t.Setenv("ANALYSIS_SUBSCRIBE_TEMPLATE_ID", "o")
 	t.Setenv("COS_REGION", "p")
 	t.Setenv("COS_FOOD_IMAGES_BUCKET", "q")
 	t.Setenv("COS_HEALTH_REPORTS_BUCKET", "r")

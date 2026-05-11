@@ -432,7 +432,7 @@ func (r *MembershipRepo) CountDailySystemCreditUsage(ctx context.Context, userID
 	end := target.AddDate(0, 0, 3)
 	var rows []analysisTask
 	err = r.db.WithContext(ctx).
-		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, start, end).
+		Where("user_id = ? AND status = ? AND created_at >= ? AND created_at < ?", userID, "done", start, end).
 		Find(&rows).Error
 	if err != nil {
 		return 0, err
@@ -590,6 +590,7 @@ type analysisTask struct {
 	ID        string         `gorm:"column:id"`
 	UserID    string         `gorm:"column:user_id"`
 	TaskType  string         `gorm:"column:task_type"`
+	Status    string         `gorm:"column:status"`
 	Payload   map[string]any `gorm:"column:payload;serializer:json"`
 	CreatedAt *time.Time     `gorm:"column:created_at"`
 }
@@ -623,7 +624,10 @@ func isFoodAnalysisTaskTypeForQuota(taskType string, payload map[string]any) boo
 func taskSystemCreditUsageUnits(row analysisTask, chinaDate string) int {
 	if usage, ok := row.Payload["credit_usage"].(map[string]any); ok {
 		if byDate, ok := usage["system_by_date"].(map[string]any); ok {
-			return intFromAny(byDate[chinaDate])
+			if isBillableCompletedCreditTaskType(row.TaskType, row.Payload) {
+				return intFromAny(byDate[chinaDate])
+			}
+			return 0
 		}
 	}
 	if row.CreatedAt == nil || row.CreatedAt.In(chinaLocation()).Format("2006-01-02") != chinaDate {
@@ -639,6 +643,23 @@ func taskSystemCreditUsageUnits(row analysisTask, chinaDate string) int {
 		return 2
 	}
 	return 0
+}
+
+func isBillableCompletedCreditTaskType(taskType string, payload map[string]any) bool {
+	taskType = strings.TrimSpace(taskType)
+	if taskType == "exercise" || taskType == "expiry_recognize" {
+		return true
+	}
+	if taskType == "food" || taskType == "food_text" {
+		return true
+	}
+	if strings.HasPrefix(taskType, "food_debug") || strings.HasPrefix(taskType, "food_text_debug") {
+		return true
+	}
+	if taskType == "precision_aggregate" || strings.HasPrefix(taskType, "precision_aggregate_debug") {
+		return true
+	}
+	return false
 }
 
 func intFromAny(value any) int {

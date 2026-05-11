@@ -101,6 +101,7 @@ func TestMembershipRepo_CountDailySystemCreditUsage(t *testing.T) {
 		ID:       uuid.New().String(),
 		UserID:   "u1",
 		TaskType: "food",
+		Status:   "done",
 		Payload: map[string]any{
 			"credit_usage": map[string]any{"system_by_date": map[string]any{today: 2}},
 		},
@@ -110,7 +111,16 @@ func TestMembershipRepo_CountDailySystemCreditUsage(t *testing.T) {
 		ID:        uuid.New().String(),
 		UserID:    "u1",
 		TaskType:  "exercise",
+		Status:    "done",
 		Payload:   map[string]any{"credit_usage": map[string]any{"system_by_date": map[string]any{today: 1}}},
+		CreatedAt: &now,
+	}).Error)
+	require.NoError(t, db.Create(&analysisTask{
+		ID:        uuid.New().String(),
+		UserID:    "u1",
+		TaskType:  "food",
+		Status:    "failed",
+		Payload:   map[string]any{"credit_usage": map[string]any{"system_by_date": map[string]any{today: 2}}},
 		CreatedAt: &now,
 	}).Error)
 

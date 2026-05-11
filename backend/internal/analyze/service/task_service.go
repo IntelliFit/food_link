@@ -41,7 +41,7 @@ func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *
 }
 
 type CreditGuard interface {
-	ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string) (map[string]any, error)
+	ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string, units ...int) (map[string]any, error)
 	ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
 }
 
@@ -79,7 +79,6 @@ type SubmitTaskInput struct {
 	CorrectionSourceTaskID string           `json:"correction_source_task_id"`
 	CorrectionRootTaskID   string           `json:"correction_root_task_id"`
 	ReferenceObjects       []map[string]any `json:"reference_objects"`
-	SubscribeStatus        string           `json:"subscribe_status"`
 	SourceType             string           `json:"source_type"`
 }
 
@@ -125,7 +124,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
-	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, payload)
+	_, _, err = s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
 	if err != nil {
 		return "", err
 	}
@@ -135,7 +134,6 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 		if err != nil {
 			return "", err
 		}
-		s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, taskID, "precision_plan")
 		logAnalyzeTaskSubmitted(ctx, userID, taskID, "precision_plan", input, payload)
 		return taskID, nil
 	}
@@ -159,7 +157,6 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if err := s.enqueueTask(ctx, task); err != nil {
 		return "", err
 	}
-	s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, task.ID, task.TaskType)
 	logAnalyzeTaskSubmitted(ctx, userID, task.ID, task.TaskType, input, payload)
 	return task.ID, nil
 }
@@ -209,7 +206,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
-	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, payload)
+	_, _, err = s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
 	if err != nil {
 		return "", err
 	}
@@ -219,7 +216,6 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 		if err != nil {
 			return "", err
 		}
-		s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, taskID, "precision_plan")
 		logAnalyzeTaskSubmitted(ctx, userID, taskID, "precision_plan", input, payload)
 		return taskID, nil
 	}
@@ -238,7 +234,6 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if err := s.enqueueTask(ctx, task); err != nil {
 		return "", err
 	}
-	s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, task.ID, task.TaskType)
 	logAnalyzeTaskSubmitted(ctx, userID, task.ID, task.TaskType, input, payload)
 	return task.ID, nil
 }
@@ -282,11 +277,11 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 	)
 }
 
-func (s *TaskService) applyFoodCreditGuard(ctx context.Context, userID, executionMode, recordedOn string, payload map[string]any) (map[string]any, int, error) {
+func (s *TaskService) applyFoodCreditGuard(ctx context.Context, userID, executionMode, recordedOn string, units int, payload map[string]any) (map[string]any, int, error) {
 	if s.creditGuard == nil || userID == "" {
 		return nil, 0, nil
 	}
-	creditsInfo, err := s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, executionMode, recordedOn)
+	creditsInfo, err := s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, executionMode, recordedOn, units)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -300,6 +295,16 @@ func (s *TaskService) applyFoodCreditGuard(ctx context.Context, userID, executio
 		}
 	}
 	return creditsInfo, cost, nil
+}
+
+func creditUnitsForInput(input SubmitTaskInput) int {
+	if len(input.ImageURLs) > 0 {
+		return len(input.ImageURLs)
+	}
+	if strings.TrimSpace(input.ImageURL) != "" {
+		return 1
+	}
+	return 1
 }
 
 func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInput) {
@@ -323,9 +328,6 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	}
 	if len(input.ReferenceObjects) > 0 {
 		payload["reference_objects"] = input.ReferenceObjects
-	}
-	if strings.TrimSpace(input.SubscribeStatus) != "" {
-		payload["subscribe_status"] = strings.TrimSpace(input.SubscribeStatus)
 	}
 	if strings.TrimSpace(input.SourceType) != "" {
 		payload["source_type"] = strings.ToLower(strings.TrimSpace(input.SourceType))
@@ -364,16 +366,6 @@ func hasPrecisionSupplement(input SubmitTaskInput) bool {
 		len(input.ReferenceObjects) > 0 ||
 		len(input.CorrectionItems) > 0 ||
 		len(input.PreviousResult) > 0
-}
-
-func (s *TaskService) consumeFoodCredits(ctx context.Context, userID string, creditsInfo map[string]any, cost int, taskID, taskType string) {
-	if s.creditGuard == nil || userID == "" || creditsInfo == nil || taskID == "" {
-		return
-	}
-	_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, cost, "food_analysis_reward_spend", "food_analysis:"+taskID, map[string]any{
-		"task_id":   taskID,
-		"task_type": taskType,
-	})
 }
 
 func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask) error {
@@ -683,6 +675,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 	}
 	s.normalizeTaskImages(task)
 	if task.Status == "done" {
+		s.settleSuccessfulTaskCredits(ctx, task)
 		recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, []string{task.ID})
 		if err != nil {
 			return nil, err
@@ -693,6 +686,34 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 		}
 	}
 	return task, nil
+}
+
+func (s *TaskService) settleSuccessfulTaskCredits(ctx context.Context, task *domain.AnalysisTask) {
+	if s.creditGuard == nil || task == nil || task.UserID == "" || task.ID == "" || task.Status != "done" {
+		return
+	}
+	usage, ok := task.Payload["credit_usage"].(map[string]any)
+	if !ok || len(usage) == 0 {
+		return
+	}
+	cost := intFromAny(usage["cost"])
+	if cost <= 0 {
+		return
+	}
+	reason := "food_analysis_reward_spend"
+	sourcePrefix := "food_analysis:"
+	if task.TaskType == "exercise" {
+		reason = "exercise_reward_spend"
+		sourcePrefix = "exercise:"
+	}
+	creditsInfo := map[string]any{
+		"credit_cost":       cost,
+		"credit_spend_plan": usage,
+	}
+	_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, task.UserID, creditsInfo, cost, reason, sourcePrefix+task.ID, map[string]any{
+		"task_id":   task.ID,
+		"task_type": task.TaskType,
+	})
 }
 
 func (s *TaskService) UpdateTaskResult(ctx context.Context, taskID, userID string, result map[string]any) error {
