@@ -47,6 +47,7 @@ import './index.scss'
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 /** 判断当前识别会话是否已保存为饮食记录。
  * 优先读取 analyze-history 列表传入的 analyzeTaskIsRecorded 标记；
  * 不再依赖本地 analyze_committed_session 缓存，状态由后端返回。 */
@@ -472,6 +473,7 @@ function ResultPage() {
   const resultScrollRafRef = useRef<number | null>(null)
   const pendingResultScrollTopRef = useRef(0)
   const precisionDefaultsLoadedRef = useRef(false)
+  const correctionSubmitDebounceRef = useRef(0)
 
   const handleResultScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
     const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
@@ -1480,6 +1482,11 @@ function ResultPage() {
 
   // 提交二次纠正重新分析
   const handleSubmitCorrection = async () => {
+    if (isResubmitting) return
+    const now = Date.now()
+    if (now - correctionSubmitDebounceRef.current < CORRECTION_SUBMIT_DEBOUNCE_MS) return
+    correctionSubmitDebounceRef.current = now
+
     const isTextTask = taskType === 'food_text'
 
     if (!isTextTask && correctionItems.length === 0) {

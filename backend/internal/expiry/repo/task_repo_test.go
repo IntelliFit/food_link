@@ -24,6 +24,8 @@ func setupExpiryTaskTestDB(t *testing.T) *gorm.DB {
 		payload TEXT,
 		result TEXT,
 		error_message TEXT,
+		is_violated BOOLEAN,
+		violation_reason TEXT,
 		created_at TIMESTAMP,
 		updated_at TIMESTAMP
 	)`)

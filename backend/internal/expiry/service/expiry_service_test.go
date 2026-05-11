@@ -18,7 +18,7 @@ import (
 func setupTestDB(t *testing.T) (*repo.ExpiryRepo, *repo.TaskRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.ExpiryItem{}, &analyzedomain.AnalysisTask{}))
+	require.NoError(t, db.AutoMigrate(&domain.ExpiryItem{}, &domain.ExpiryNotificationJob{}, &analyzedomain.AnalysisTask{}))
 	return repo.NewExpiryRepo(db), repo.NewTaskRepo(db)
 }
 
@@ -122,11 +122,12 @@ func TestExpiryService_Subscribe(t *testing.T) {
 	item := &domain.ExpiryItem{UserID: "u1", FoodName: "cheese", Status: "active", ExpireDate: time.Now()}
 	require.NoError(t, expiryRepo.Create(ctx, item))
 
-	res, err := svc.Subscribe(ctx, "u1", item.ID)
+	svc.ConfigureNotificationTemplate("template-id")
+	res, err := svc.SubscribeWithContext(ctx, "u1", item.ID, "openid-1", "accept", "")
 	require.NoError(t, err)
 	assert.True(t, res.Subscribed)
 
-	_, err = svc.Subscribe(ctx, "u2", item.ID)
+	_, err = svc.SubscribeWithContext(ctx, "u2", item.ID, "openid-2", "accept", "")
 	require.Error(t, err)
 }
 
@@ -138,7 +139,7 @@ func TestExpiryService_Recognize(t *testing.T) {
 	_, err := svc.Recognize(ctx, "u1", nil)
 	require.Error(t, err)
 
-	res, err := svc.Recognize(ctx, "u1", []string{"https://example.com/img.jpg"})
-	require.NoError(t, err)
-	assert.NotEmpty(t, res.TaskID)
+	_, err = svc.Recognize(ctx, "u1", []string{"https://example.com/img.jpg"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "保质期识别服务未初始化")
 }

@@ -113,6 +113,35 @@ func TestBodyMetricsService_GetSummary(t *testing.T) {
 	assert.Equal(t, -0.5, *summary.WeightChange)
 }
 
+func TestBodyMetricsService_GetSummaryUsesLatestWeightForSameDate(t *testing.T) {
+	repo := &mockBodyMetricsRepo{}
+	svc := NewBodyMetricsService(repo)
+	ctx := context.Background()
+
+	createdAt1 := time.Date(2026, 5, 9, 7, 35, 40, 0, time.UTC)
+	createdAt2 := time.Date(2026, 5, 9, 7, 35, 52, 0, time.UTC)
+	createdAt3 := time.Date(2026, 5, 9, 7, 36, 0, 0, time.UTC)
+	recordedOn1 := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	recordedOn2 := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
+	repo.weightRecords = []domain.BodyWeightRecord{
+		{UserID: "u1", WeightKg: 47.5, RecordedOn: &recordedOn1, CreatedAt: &createdAt1},
+		{UserID: "u1", WeightKg: 47.5, RecordedOn: &recordedOn2, CreatedAt: &createdAt1},
+		{UserID: "u1", WeightKg: 47.5, RecordedOn: &recordedOn2, CreatedAt: &createdAt2},
+		{UserID: "u1", WeightKg: 47.4, RecordedOn: &recordedOn2, CreatedAt: &createdAt3},
+	}
+
+	summary, err := svc.GetSummary(ctx, "u1", "week")
+	require.NoError(t, err)
+	require.NotNil(t, summary.LatestWeight)
+	require.NotNil(t, summary.PreviousWeight)
+	assert.Len(t, summary.WeightEntries, 2)
+	assert.Equal(t, "2026-05-09", summary.LatestWeight.Date)
+	assert.Equal(t, 47.4, summary.LatestWeight.Value)
+	assert.Equal(t, 47.5, summary.PreviousWeight.Value)
+	require.NotNil(t, summary.WeightChange)
+	assert.Equal(t, -0.1, *summary.WeightChange)
+}
+
 func TestBodyMetricsService_AddWaterLog(t *testing.T) {
 	repo := &mockBodyMetricsRepo{}
 	svc := NewBodyMetricsService(repo)

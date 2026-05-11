@@ -88,19 +88,65 @@ const FEED_GOAL_OPTIONS: Array<{ value: DietGoal | 'all'; label: string }> = [
   { value: 'maintain', label: '维持' },
 ]
 
-function formatFeedTime(recordTime: string): string {
-  if (!recordTime) return ''
-  try {
-    const d = new Date(recordTime)
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    if (diff < 60000) return '刚刚'
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-    return d.toLocaleDateString()
-  } catch {
-    return recordTime.slice(0, 16).replace('T', ' ')
+const CHINA_TIMEZONE_OFFSET_MS = 8 * 60 * 60 * 1000
+const ISO_TIMEZONE_SUFFIX_RE = /(Z|[+-]\d{2}:?\d{2})$/i
+const ISO_LOCAL_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/
+
+function parseFeedRecordTime(recordTime: string): Date | null {
+  const raw = String(recordTime || '').trim()
+  if (!raw) return null
+  if (!ISO_TIMEZONE_SUFFIX_RE.test(raw)) {
+    const localMatch = raw.match(ISO_LOCAL_DATETIME_RE)
+    if (localMatch) {
+      const [, y, mo, d, h, mi, s = '0'] = localMatch
+      const utcMs = Date.UTC(
+        Number(y),
+        Number(mo) - 1,
+        Number(d),
+        Number(h),
+        Number(mi),
+        Number(s)
+      ) - CHINA_TIMEZONE_OFFSET_MS
+      return new Date(utcMs)
+    }
   }
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getChinaTimeParts(date: Date) {
+  const shifted = new Date(date.getTime() + CHINA_TIMEZONE_OFFSET_MS)
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+  }
+}
+
+function formatChinaDateTime(date: Date): string {
+  const p = getChinaTimeParts(date)
+  const now = getChinaTimeParts(new Date())
+  const timeText = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
+  if (p.year === now.year && p.month === now.month && p.day === now.day) {
+    return `今天 ${timeText}`
+  }
+  if (p.year === now.year) {
+    return `${p.month}月${p.day}日 ${timeText}`
+  }
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')} ${timeText}`
+}
+
+function formatFeedTime(recordTime: string): string {
+  const d = parseFeedRecordTime(recordTime)
+  if (!d) return recordTime ? recordTime.slice(0, 16).replace('T', ' ') : ''
+  const diff = Date.now() - d.getTime()
+  if (diff < 0 && diff > -60000) return '刚刚'
+  if (diff >= 0 && diff < 60000) return '刚刚'
+  if (diff >= 0 && diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
+  if (diff >= 0 && diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
+  return formatChinaDateTime(d)
 }
 
 /** 与首页一致的细线搜索图标（替代「搜」字） */
@@ -144,7 +190,9 @@ const CACHE_KEYS = {
   FEED_TIMESTAMP: 'community_feed_timestamp',
   FRIENDS_TIMESTAMP: 'community_friends_timestamp',
   FEED_FILTERS: 'community_feed_filters_v2',
-  PRIORITY_AUTHORS: 'community_priority_authors_v1'
+  PRIORITY_AUTHORS: 'community_priority_authors_v1',
+  FEED_SESSION_ID: 'community_feed_session_id_v1',
+  FEED_CACHE_SESSION_ID: 'community_feed_cache_session_id_v1'
 }
 
 // 缓存有效期（5分钟）
@@ -234,6 +282,28 @@ function savePriorityAuthorIds(ids: string[]) {
   }
 }
 
+function readCommunityFeedSessionId(): string {
+  try {
+    const existing = String(Taro.getStorageSync(CACHE_KEYS.FEED_SESSION_ID) || '').trim()
+    if (existing) return existing
+    const next = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    Taro.setStorageSync(CACHE_KEYS.FEED_SESSION_ID, next)
+    return next
+  } catch {
+    return ''
+  }
+}
+
+function isCommunityFeedCacheFromCurrentSession(): boolean {
+  try {
+    const currentSessionId = readCommunityFeedSessionId()
+    const cachedSessionId = String(Taro.getStorageSync(CACHE_KEYS.FEED_CACHE_SESSION_ID) || '').trim()
+    return Boolean(currentSessionId && cachedSessionId && currentSessionId === cachedSessionId)
+  } catch {
+    return false
+  }
+}
+
 function buildFeedQueryParams(
   sortBy: CommunityFeedSortBy,
   mealType: MealType | 'all',
@@ -289,6 +359,7 @@ function CommunityPage() {
   const [feedScrollIntoView, setFeedScrollIntoView] = useState('')
   /** 动态卡片内评论：超过 3 条时默认只展示 2 条，点此展开/收起（仿微信朋友圈） */
   const [feedCommentPreviewExpanded, setFeedCommentPreviewExpanded] = useState<Record<string, boolean>>({})
+  const [hidingFeedIds, setHidingFeedIds] = useState<string[]>([])
 
   // 固定页面高度
   const [pageHeight, setPageHeight] = useState(0)
@@ -372,6 +443,7 @@ function CommunityPage() {
    */
   const loadFromCache = useCallback(() => {
     try {
+      const feedCacheFromCurrentSession = isCommunityFeedCacheFromCurrentSession()
       const cachedFeed = Taro.getStorageSync(CACHE_KEYS.FEED)
       const cachedFriends = Taro.getStorageSync(CACHE_KEYS.FRIENDS)
       const cachedRequests = Taro.getStorageSync(CACHE_KEYS.REQUESTS)
@@ -393,7 +465,7 @@ function CommunityPage() {
 
       setPriorityAuthorIds(readPriorityAuthorIds())
 
-      if (cachedFeed) {
+      if (cachedFeed && feedCacheFromCurrentSession) {
         try {
           const parsed = JSON.parse(cachedFeed)
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -404,6 +476,12 @@ function CommunityPage() {
         } catch (e) {
           console.error('解析 Feed 缓存失败:', e)
         }
+      } else if (cachedFeed && !feedCacheFromCurrentSession) {
+        try {
+          Taro.removeStorageSync(CACHE_KEYS.FEED)
+          Taro.removeStorageSync(CACHE_KEYS.FEED_TIMESTAMP)
+          Taro.removeStorageSync(CACHE_KEYS.FEED_CACHE_SESSION_ID)
+        } catch (_) {}
       }
 
       if (cachedFriends) {
@@ -454,6 +532,8 @@ function CommunityPage() {
         })
         Taro.setStorageSync(CACHE_KEYS.FEED, JSON.stringify(dataToCache))
         Taro.setStorageSync(CACHE_KEYS.FEED_TIMESTAMP, Date.now().toString())
+        const sessionId = readCommunityFeedSessionId()
+        if (sessionId) Taro.setStorageSync(CACHE_KEYS.FEED_CACHE_SESSION_ID, sessionId)
       }
       Taro.setStorageSync(CACHE_KEYS.FEED_FILTERS, JSON.stringify({
         sortBy: feedSortBy,
@@ -480,6 +560,7 @@ function CommunityPage() {
     try {
       Taro.removeStorageSync(CACHE_KEYS.FEED)
       Taro.removeStorageSync(CACHE_KEYS.FEED_TIMESTAMP)
+      Taro.removeStorageSync(CACHE_KEYS.FEED_CACHE_SESSION_ID)
     } catch (e) {
       console.error('清除缓存失败:', e)
     }
@@ -986,21 +1067,30 @@ function CommunityPage() {
 
   const handleHideFeed = async (item: CommunityFeedItem) => {
     if (!getAccessToken()) return
+    if (hidingFeedIds.includes(item.record.id)) return
     Taro.showModal({
-      title: '确认移除',
-      content: '从圈子中移除这条动态？你的饮食记录不会被删除。',
-      confirmText: '移除',
+      title: '删除动态',
+      content: '从圈子中删除这条动态？你的饮食记录不会被删除。',
+      confirmText: '删除',
       confirmColor: '#ef4444',
       success: async (res) => {
         if (!res.confirm) return
+        setHidingFeedIds((prev) => prev.includes(item.record.id) ? prev : [...prev, item.record.id])
         try {
           await communityHideFeed(item.record.id)
-          const newList = feedList.filter(f => f.record.id !== item.record.id)
-          setFeedList(newList)
-          saveToCache(newList)
-          Taro.showToast({ title: '已从圈子移除', icon: 'success' })
+          setFeedList((prev) => {
+            const next = prev.filter(f => f.record.id !== item.record.id)
+            saveToCache(next)
+            return next
+          })
+          clearCache()
+          lastFeedRefreshTime.current = 0
+          setOffset((prev) => Math.max(0, prev - 1))
+          Taro.showToast({ title: '已从圈子删除', icon: 'success' })
         } catch (e) {
           await showUnifiedApiError(e, '操作失败')
+        } finally {
+          setHidingFeedIds((prev) => prev.filter((id) => id !== item.record.id))
         }
       }
     })
@@ -1977,11 +2067,11 @@ function CommunityPage() {
                               </View>
                               {item.is_mine ? (
                                 <View
-                                  className='action-item action-delete'
+                                  className={`action-item action-delete ${hidingFeedIds.includes(item.record.id) ? 'is-deleting' : ''}`}
                                   onClick={() => handleHideFeed(item)}
                                 >
                                   <Text className='action-icon action-delete-icon'>×</Text>
-                                  <Text className='action-count action-delete-text'>移除</Text>
+                                  <Text className='action-count action-delete-text'>删除</Text>
                                 </View>
                               ) : null}
                             </View>
@@ -2084,14 +2174,7 @@ function CommunityPage() {
               {feedList.length > 0 && (
                 <View className='load-more-wrapper' onClick={(e) => e.stopPropagation()}>
                   {loadingMore ? (
-                    <View className='load-more-loading'>
-                      <View className='loading-spinner'>
-                        <View className='spinner-dot' />
-                        <View className='spinner-dot' />
-                        <View className='spinner-dot' />
-                      </View>
-                      <Text className='load-more-text'>正在加载</Text>
-                    </View>
+                    <View className='load-more-loading' />
                   ) : hasMore ? (
                     <View className='load-more-idle'>
                       <View className='load-more-line' />

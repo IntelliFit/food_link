@@ -73,7 +73,7 @@ func (w *NotificationWorker) ProcessJob(ctx context.Context, job *domain.ExpiryN
 		return err
 	}
 	china := time.FixedZone("Asia/Shanghai", 8*60*60)
-	if scheduledLocal.UTC().After(job.ScheduledAt) && scheduledLocal.After(time.Now().In(china)) {
+	if notificationScheduleChangedAfterJobDue(job.ScheduledAt, item, scheduledLocal, time.Now().In(china)) {
 		_, err = w.repo.UpdateNotificationJob(ctx, job.ID, map[string]any{
 			"status":     "cancelled",
 			"last_error": "条目提醒时间已变化，旧任务作废",
@@ -94,6 +94,19 @@ func (w *NotificationWorker) ProcessJob(ctx context.Context, job *domain.ExpiryN
 		return updateErr
 	}
 	return w.retryOrFail(ctx, job, err)
+}
+
+func notificationScheduleChangedAfterJobDue(jobScheduledAt time.Time, item *domain.ExpiryItem, scheduledLocal *time.Time, nowLocal time.Time) bool {
+	if item == nil || scheduledLocal == nil {
+		return false
+	}
+	expireDate := item.ExpireDate.In(nowLocal.Location())
+	expireDay := time.Date(expireDate.Year(), expireDate.Month(), expireDate.Day(), 0, 0, 0, 0, nowLocal.Location())
+	today := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, nowLocal.Location())
+	if expireDay.Equal(today) {
+		return false
+	}
+	return scheduledLocal.UTC().After(jobScheduledAt) && scheduledLocal.After(nowLocal)
 }
 
 func (w *NotificationWorker) sendSubscribeMessage(ctx context.Context, job *domain.ExpiryNotificationJob, item *domain.ExpiryItem) (map[string]any, error) {

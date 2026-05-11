@@ -31,6 +31,14 @@ const ACTIVITY_OPTIONS = [
   { label: '极高', desc: '体力劳动/每天训练', value: 'very_active', icon: '🔥' }
 ]
 
+/** 作息选项 */
+const ROUTINE_OPTIONS = [
+  { label: '早睡早起', desc: '通常 22:30 前睡，7:00 前起', value: 'early_bird', icon: '🌅' },
+  { label: '标准作息', desc: '通常 23:00 左右睡，7:00-8:00 起', value: 'regular', icon: '🕰️' },
+  { label: '晚睡晚起', desc: '经常 0 点后睡，起床也偏晚', value: 'night_owl', icon: '🌙' },
+  { label: '不太固定', desc: '轮班、带娃或经常变化', value: 'irregular', icon: '🔁' }
+]
+
 /** 既往病史选项（无图标） */
 const MEDICAL_OPTIONS = [
   { label: '糖尿病', value: 'diabetes' },
@@ -70,7 +78,7 @@ const GOAL_OPTIONS = [
   { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: '💪' }
 ]
 
-const TOTAL_STEPS = 11 // 性别、生日、身高、体重、目标、活动、病史、饮食、过敏、特殊情况、体检报告
+const TOTAL_STEPS = 12 // 性别、生日、身高、体重、目标、活动、作息、病史、饮食、过敏、特殊情况、体检报告
 
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
@@ -85,6 +93,7 @@ function HealthProfilePage() {
   const [weight, setWeight] = useState<string>('')
   const [dietGoal, setDietGoal] = useState<string>('')
   const [activityLevel, setActivityLevel] = useState<string>('')
+  const [routineType, setRoutineType] = useState<string>('')
   const [medicalHistory, setMedicalHistory] = useState<string[]>([])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergyList, setAllergyList] = useState<string[]>([])
@@ -126,6 +135,7 @@ function HealthProfilePage() {
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergyList(hc.allergies as string[])
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
+      if (hc?.routine_type) setRoutineType(String(hc.routine_type))
     } catch (err: any) {
       await showUnifiedApiError(err, '获取档案失败')
     } finally {
@@ -289,6 +299,10 @@ function HealthProfilePage() {
     setActivityLevel(value)
   }
 
+  const handleSelectRoutine = (value: string) => {
+    setRoutineType(value)
+  }
+
   const handleSelectDietGoal = (value: string) => {
     setDietGoal(value)
   }
@@ -308,9 +322,11 @@ function HealthProfilePage() {
       case 5:
         return !!activityLevel
       case 6:
+        return !!routineType
       case 7:
       case 8:
       case 9:
+      case 10:
         return true
       default:
         return true
@@ -333,6 +349,7 @@ function HealthProfilePage() {
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allAllergies.length ? allAllergies : undefined,
       health_notes: healthNotes || undefined,
+      routine_type: routineType || undefined,
       report_image_url: reportImageUrl || undefined
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
@@ -569,7 +586,34 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 6: 既往病史（多选） */}
+          {/* Step 6: 作息习惯 */}
+          <View className='card step-card'>
+            <Text className='step-card-title'>作息习惯</Text>
+            <Text className='step-card-subtitle'>你的日常睡眠和起床时间更接近哪一种？</Text>
+            <View className='option-list'>
+              {ROUTINE_OPTIONS.map((o) => (
+                <View
+                  key={o.value}
+                  className={`option-card with-desc ${routineType === o.value ? 'active' : ''}`}
+                  onClick={() => handleSelectRoutine(o.value)}
+                >
+                  <Text className='option-icon'>{o.icon}</Text>
+                  <View className='option-info'>
+                    <Text className='option-label'>{o.label}</Text>
+                    <Text className='option-desc'>{o.desc}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+            <View className='card-footer'>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${routineType ? 'ready' : ''}`} onClick={goNext} disabled={!routineType}>
+                下一步 <Text className='iconfont icon-right' />
+              </Button>
+            </View>
+          </View>
+
+          {/* Step 7: 既往病史（多选） */}
           <View className='card step-card'>
             <Text className='step-card-title'>既往病史</Text>
             <Text className='step-card-subtitle'>是否有以下病史？（可多选）</Text>
@@ -627,7 +671,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 7: 特殊饮食（多选） */}
+          {/* Step 8: 特殊饮食（多选） */}
           <View className='card step-card'>
             <Text className='step-card-title'>饮食习惯</Text>
             <Text className='step-card-subtitle'>你有特殊的饮食习惯吗？（可多选）</Text>
@@ -651,7 +695,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 8: 过敏源 */}
+          {/* Step 9: 过敏源 */}
           <View className='card step-card'>
             <Text className='step-card-title'>过敏源</Text>
             <Text className='step-card-subtitle'>有过敏源吗？（可多选）</Text>
@@ -710,7 +754,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 9: 特殊情况和问题补充 */}
+          {/* Step 10: 特殊情况和问题补充 */}
           <View className='card step-card'>
             <Text className='step-card-title'>补充信息</Text>
             <Text className='step-card-subtitle'>有其他特殊情况需要补充吗？（选填）</Text>
@@ -733,7 +777,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 10: 体检报告上传 */}
+          {/* Step 11: 体检报告上传 */}
           <View className='card step-card upload-step'>
             <View className='upload-hero'>
               <View className='hero-icon-wrapper'>

@@ -18,6 +18,33 @@ func TestSanitizeTaskErrorMessage_HTML(t *testing.T) {
 	}
 }
 
+func TestSanitizeTaskErrorMessage_Timeout(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`))
+	if strings.Contains(msg, "https://api.ofox.ai") || strings.Contains(msg, "Client.Timeout") {
+		t.Fatalf("raw timeout leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "AI 识别服务响应超时") {
+		t.Fatalf("unexpected sanitized timeout: %s", msg)
+	}
+}
+
+func TestSanitizeTaskErrorMessage_ResourceExhausted(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`ofoxai api error 429: {"error":{"message":"Resource exhausted. Please try again later"}}`))
+	if !strings.Contains(msg, "AI 识别服务当前繁忙") {
+		t.Fatalf("unexpected sanitized busy error: %s", msg)
+	}
+}
+
+func TestSanitizeTaskErrorMessage_APIKey(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`dashscope api error 401: {"error":{"message":"Incorrect API key provided. For details, see: https://help.aliyun.com/zh/model-studio/error-code#apikey-error"}}`))
+	if strings.Contains(strings.ToLower(msg), "apikey") || strings.Contains(msg, "help.aliyun.com") {
+		t.Fatalf("raw api key error leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "AI 识别服务配置异常") {
+		t.Fatalf("unexpected sanitized api key error: %s", msg)
+	}
+}
+
 func TestSanitizeTaskErrorMessage_TruncatesLongText(t *testing.T) {
 	msg := sanitizeTaskErrorMessage(errors.New(strings.Repeat("x", 400)))
 	if len([]rune(msg)) > 303 {

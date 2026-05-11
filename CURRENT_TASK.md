@@ -1,5 +1,168 @@
 # 当前任务
 
+## 状态：完成排查与后端修复 - 保质期订阅通知未推送
+
+- 2026-05-11 update:
+  - User反馈：
+    - 5/6 花卷馒头过期，但没有系统服务通知。
+    - 昨天过期食物当天应该有提示但没有。
+    - 要求查看后端实现位置，以及 secret/key 等变量是否齐全。
+  - Implementation map:
+    - 前端订阅入口：`src/packageExtra/pages/expiry-edit/index.tsx`
+      - 保存食物后 `promptExpirySubscribe()` 调 `Taro.requestSubscribeMessage()`。
+      - 有模板 ID 才会弹订阅；模板 ID 来自 `EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - 前端构建注入：`config/index.ts`
+      - 读取 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 注入 `__EXPIRY_SUBSCRIBE_TEMPLATE_ID__`。
+    - 后端订阅接口：`POST /api/expiry/items/:item_id/subscribe`
+      - `backend/internal/expiry/handler/expiry_handler.go`
+      - `backend/internal/expiry/service/expiry_service.go`
+      - 验证 `subscribe_status`、openid、后端模板 ID 后写 `food_expiry_notification_jobs`。
+    - 后端通知 worker：
+      - `backend/internal/expiry/service/notification_worker.go`
+      - `backend/internal/worker/worker.go`
+      - worker task types 包含 `expiry_notification` 时，会在没有普通 `analysis_tasks` 时轮询 `food_expiry_notification_jobs`。
+    - 配置来源：
+      - 后端：`external.appid` / `external.secret` / `wechat_pay.expiry_subscribe_template_id`
+      - 环境变量覆盖：`APPID` / `SECRET` / `EXPIRY_SUBSCRIBE_TEMPLATE_ID` / `WORKER_TASK_TYPES`
+      - 前端：`TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`
+  - Findings:
+    - 本地 `backend/config.yaml` 中后端 `external.appid`、`external.secret`、`wechat_pay.expiry_subscribe_template_id` 均有值；`worker.task_types` 未显式配置，但 Go config 默认包含 `expiry_notification`。
+    - 当前 shell 中未设置 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - `package.json` 的 `dev:weapp`、`dev:weapp:online`、`build:weapp:preview` 都没有注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - 当前 `dist/common.js` 中 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 实际为空字符串，因此本地/当前产物会直接跳过订阅弹窗，不会请求后端创建通知 job。
+    - Docker 镜像包含 `/app/food-link-worker`，但默认 `ENTRYPOINT` 是 `/app/food-link`；生产必须部署层单独以 worker command 启动，否则通知 job 不会被消费。
+    - SSH 线上只读检查被 host key changed 拦截，未绕过；因此线上 `food-link-worker` 是否实际启动、线上环境变量是否齐全仍需在主机指纹确认后再查。
+  - Root cause fixed:
+    - `backend/internal/expiry/service/notification_worker.go`
+      - 之前 worker 处理当天 9 点已到期 job 时会重新调用 `buildNotificationSchedule()`。
+      - 该函数在当天 9 点已过时会返回 `now + 1min`。
+      - worker 随后把它判断成“提醒时间已变化，旧任务作废”，导致本该发送的当天到期通知被取消。
+      - 已改为：如果条目到期日就是今天，due job 不因重新计算出的 `now + 1min` 被取消。
+    - `backend/internal/expiry/service/notification_worker_test.go`
+      - 增加当天 due job 不取消、未来改期 job 仍取消的测试。
+    - 顺手更新保质期相关旧测试：
+      - `expiry_service_test.go` 补齐 notification job migration、订阅测试改用 openid/template、识别未初始化按当前行为断言。
+      - `task_repo_test.go` 补齐 `analysis_tasks.is_violated/violation_reason` 测试 schema。
+  - Verification:
+    - `go test ./internal/expiry/service ./internal/expiry/repo ./internal/expiry/handler ./internal/worker -run 'Test' -count=1` passed
+    - `go test ./pkg/config -run 'Test' -count=1` passed
+    - `git diff --check` passed
+  - Remaining actions:
+    - 发布/体验版构建前必须设置 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`，否则小程序不会发起订阅授权。
+    - 确认线上 systemd/Docker 是否单独启动 `/app/food-link-worker`，且 `WORKER_TASK_TYPES` 未覆盖掉 `expiry_notification`。
+    - 修复 SSH known_hosts 指纹后再查线上服务状态与 `food_expiry_notification_jobs` 状态分布。
+
+## 状态：完成源码修改 - 注册后引导与健康档案增加作息习惯
+
+- 2026-05-11 update:
+  - User要求：
+    - 用户注册后的引导页面增加一个作息询问，先随便设置一个。
+    - 这部分数据可以在健康档案中显示和修改。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 问卷总步数从 11 调整为 12。
+      - 在活动水平之后新增「作息习惯」步骤。
+      - 暂定 4 个作息选项：`early_bird` 早睡早起、`regular` 标准作息、`night_owl` 晚睡晚起、`irregular` 不太固定/轮班。
+      - 保存健康档案时提交 `routine_type`。
+    - `src/packageExtra/pages/health-profile-view/index.tsx`
+      - 基础信息区新增「作息习惯」展示行。
+      - 底部编辑器支持修改 `routine_type`。
+    - `src/utils/api.ts`
+      - `HealthCondition` 和 `HealthProfileUpdateRequest` 增加 `routine_type`。
+    - `backend/internal/user/service/user_service.go`
+      - `UpdateHealthProfileInput` 增加 `RoutineType`，写入 `health_condition.routine_type`。
+    - `backend/internal/user/service/user_service_test.go`
+      - 补齐测试 sqlite schema 中已存在于 repo 的邀请/积分字段，避免 `UserRepo.Create` 插入失败。
+      - 新增 `TestUserService_UpdateHealthProfile_WithRoutineType` 覆盖作息字段保存。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/utils/api.ts --max-warnings 0` passed
+    - `go test ./internal/user/service -run 'TestUserService_UpdateHealthProfile_WithRoutineType|TestUserService_UpdateHealthProfile_WithDashboardTargets|TestBuildHealthProfileResponse' -count=1` passed
+    - `git diff --check` passed
+    - `dist/packageExtra/pages/health-profile/index.js` 与 `dist/packageExtra/pages/health-profile-view/index.js` 已包含 `routine_type`、`作息习惯` 与作息选项，说明当前 watch 产物已同步。
+    - 微信开发者工具自动化：
+      - `mrc relaunch /packageExtra/pages/health-profile/index --port 9420` 成功；`.progress-wrap` 与 `.step-card-title` 存在；错误日志 0 条。
+      - `mrc relaunch /packageExtra/pages/health-profile-view/index --port 9420` 成功；`.health-profile-view-page` 与 `.block` 存在；点击 `.row` 可打开 `.editor-modal`；错误日志 0 条。
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-routine-profile.png --port 9420` 仍卡住未产出文件，已终止截图子进程；本轮有页面/元素/交互验证，但没有截图证据。
+
+## 状态：完成源码优化 - 分析与纠错重分析按钮增加 300ms 防抖
+
+- 2026-05-11 update:
+  - User要求：
+    - 相册上传后「分析」按钮前端增加 300ms 防抖，防止重复发送多个请求。
+    - 识别有误点击纠错里的「重新智能分析」按钮也做同样优化。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 新增 `ANALYZE_SUBMIT_DEBOUNCE_MS = 300` 与 `analyzeSubmitDebounceRef`。
+      - `handleAnalyzePress()` 在提交前做 300ms 时间窗拦截。
+      - `doAnalyze()` 将 `setIsAnalyzing(true)` 提前到订阅消息授权和上传 loading 之前，堵住订阅弹窗前的连点窗口。
+    - `src/packageExtra/pages/result/index.tsx`
+      - 新增 `CORRECTION_SUBMIT_DEBOUNCE_MS = 300` 与 `correctionSubmitDebounceRef`。
+      - `handleSubmitCorrection()` 在校验、弹确认框和提交纠错任务前先拦截 `isResubmitting` 与 300ms 内重复点击，避免重复弹窗/重复提交。
+  - Model check:
+    - 当前食物图片识别/精准第一阶段默认仍走 OfoxAI Gemini，模型名 `gemini-3-flash-preview`。
+    - 文字输入模式未显式传模型时默认走 DeepSeek `deepseek-v4-flash`。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - 微信开发者工具自动化：
+      - `mrc where --port 9420` 成功，当前页面为 `packageExtra/pages/result/index`
+      - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+      - 交接前已完成 analyze/result 页面 relaunch 与元素检查；截图命令在当前环境仍容易卡住，本轮未产出截图证据。
+
+## 状态：完成源码微调 - 圈子好友动态去除 spinner 动画
+
+- 2026-05-11 update:
+  - User反馈：好友动态已经有骨架屏，spinner 动画去掉。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 移除 Feed 刷新已有列表时的 `feed-loading-spinner`。
+      - 移除骨架屏上方额外的初始 spinner。
+      - 触底加载更多时不再渲染 spinner，仅保留安静占位。
+      - 自己动态删除中的 `action-delete-spinner` 也移除，保留禁用态防重复点击。
+    - `src/pages/community/index.scss`
+      - 删除 `feed-loading-spinner`、`feed-refresh-spinner-row`、`feed-initial-spinner-row`、`action-delete-spinner` 和对应旋转 keyframes。
+  - Verification:
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `rg -n "feed-loading-spinner|feed-refresh-spinner-row|feed-initial-spinner-row|action-delete-spinner|community-feed-spin|正在加载" src/pages/community/index.tsx src/pages/community/index.scss` 返回无匹配
+    - 微信开发者工具自动化：
+      - `mrc switchTab /pages/community/index --port 9420` 成功
+      - `.feed-section` 存在
+      - `.feed-loading-spinner` 不存在
+      - `.action-delete-spinner` 不存在
+      - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+
+## 状态：完成源码修改 - 圈子好友动态缓存收口、加载 spinner 与自己动态删除修复
+
+- 2026-05-11 update:
+  - User要求：
+    - 好友动态如果不是本次进入软件，不需要保留缓存。
+    - 加载消息时需要 spinner 加载动画。
+    - 检查并修复圈子内自己动态的删除功能。
+  - Fix applied:
+    - `src/app.ts`
+      - 小程序每次 `useLaunch` 时清理上一启动会话的 `community_feed_cache / community_feed_timestamp / community_feed_cache_session_id_v1`，并生成新的 `community_feed_session_id_v1`。
+    - `src/pages/community/index.tsx` / `index.scss`
+      - Feed 缓存写入时绑定当前启动 session；读取时只接受同 session 的缓存，跨冷启动缓存会被丢弃。
+      - 初次加载、刷新已有列表、触底加载更多均增加旋转 spinner；纯加载态不再展示“正在加载”文字。
+      - 自己动态操作文案从“移除”收口为“删除动态/删除”，并在删除请求进行中显示小 spinner、防重复点击。
+      - 删除成功后立即从当前列表移除、清理 Feed 缓存、重置刷新时间，避免旧缓存把已删除动态顶回来。
+    - `backend/internal/community/service/community_service.go`
+      - `hidden_from_feed=true` 的记录在圈子 context / like / comment 权限链路中按 `not_found` 处理，避免旧通知或旧缓存继续打开已从圈子删除的动态。
+    - `src/pages/profile/index.tsx`
+      - “清除缓存”同步清理新增的 Feed session 缓存键。
+  - Verification:
+    - `npx eslint src/app.ts src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed
+    - `go test ./internal/community/repo ./internal/community/service -count=1` passed
+    - `git diff --check` passed
+    - `dist/pages/community/index.js` / `index.wxss` 已包含 `删除动态`、`feed-loading-spinner` 与 session cache key 产物。
+    - `mrc relaunch /pages/community/index --port 9420` 成功；`.feed-section` 和 `.action-delete` 存在；点击 `.action-delete` 成功；`mrc logs error 20 --port 9420` 返回 0 条错误日志。
+  - Validation notes:
+    - `npm run typecheck` 仍被仓库既有无关类型错误阻断：如 `expiry` 主题类型、`food-library` clipboard typings、`record-manual` 的 `sodium_mg`、`__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__` 声明等；本轮改动文件未出现在错误列表中。
+    - `mrc screenshot /tmp/foodlink-community-delete-check.png --port 9420` 仍卡住未产出文件，已终止截图子进程；本轮无截图证据。
+    - `weapp-dev.log` 显示 Taro watch 的 commonjs service 已退出；按项目规则未擅自启动/重启 `dev:weapp`。
+
 ## 状态：完成源码修改 - 结果页支持展开更多维生素/矿物质营养数据
 
 - 2026-05-11 update:
@@ -215,6 +378,216 @@
     - `mrc logs error 20 --port 9420` 返回 0 条错误日志
   - Runtime validation note:
     - `mrc screenshot ./result-ingredients-compact.png --port 9420` 本轮卡住未产出文件，已终止该截图进程；因此有页面/元素/交互验证，但没有截图证据。
+## 状态：排查中 - 食物分析 OfoxAI 上游超时
+
+- 2026-05-11 update:
+  - User反馈：食物分析页停在“识别中”后失败，真机截图显示：
+    - `Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`
+  - User明确要求：先确认 Ofox 是否无法正常访问；只有确认不能访问后再考虑兜底。
+  - Findings:
+    - 当前工作机到 `api.ofox.ai:443` TCP 连通，`Test-NetConnection` 成功。
+    - 不带鉴权请求 `https://api.ofox.ai/v1/chat/completions` 能快速返回 `401`。
+    - 使用本地 `backend/config.yaml` 中 Ofox key 发起 3 次最小模型请求，均返回 `200`：
+      - 第 1 次约 `4449ms`
+      - 第 2 次约 `2908ms`
+      - 第 3 次约 `2912ms`
+    - 按用户要求进一步只测当前代码模型 `gemini-3-flash-preview`：
+      - 纯文本 JSON 调用成功，返回 `{"model":"gemini-3-flash-preview","ok":true,"message":"model reply ok"}`，耗时约 `8056ms`。
+      - 带公网 HTTPS 图片的视觉调用失败，返回 `500 {"error":{"message":"Internal error encountered.","type":"api_error"}}`，耗时约 `1283ms`。
+      - 去掉 `response_format` 后同一视觉调用仍失败，仍返回 `500 Internal error encountered`，耗时约 `1254ms`。
+    - 因此 Ofox 不是整体不可访问；当前关键问题是 `gemini-3-flash-preview` 的视觉/图片输入链路不可用，这正好影响食物拍照分析。
+    - 继续查生产数据库最近 `food` 分析任务：
+      - `2026-05-11 10:27-11:06` 多条图片任务失败，错误多为 `context deadline exceeded (Client.Timeout exceeded while awaiting headers)`。
+      - 同一时间段还有明确 `ofoxai api error 429: Resource exhausted. Please try again later...`。
+      - 最近失败任务使用的是 `https://cdn-food-images.coachlink.fit/...jpg`，图片本身本机 GET 为 `200 image/jpeg`。
+    - 使用今天失败任务里的同一张 CDN 图片重新调用当前模型 `gemini-3-flash-preview`，现在返回 `200` 并能识别出瑞幸咖啡；使用今天 429 失败的同一张图现在也返回 `200`；昨晚成功任务图片也可正常返回 `200`。
+    - 更正后的结论：
+      - 不是 Ofox 整体不可访问。
+      - 不是当前模型永久失去视觉能力。
+      - 不是我们的 CDN 图片永久不可抓取。
+      - 更像是当时 Ofox/Google Vertex 上游发生了资源耗尽/限流，表现为部分请求直接 `429 Resource exhausted`，部分请求长时间排队无响应直到 Go client 90 秒超时。
+  - Blocker:
+    - 直接 SSH `root@coachlink.fit` 检查生产机到 Ofox 的连通性失败：`Permission denied (publickey)`。
+    - 无法读取生产 `food-backend.service` 日志或从生产机执行 curl 验证。
+  - Code note:
+    - 已按用户要求加入 DashScope/Qwen 兜底：
+      - 根据用户最新要求，最近 1-2 天 Ofox/Gemini 连续限流，图片分析主链路临时默认改用 DashScope `qwen-vl-max`。
+      - `resolveModelConfig()` 中空默认值、历史 `modelName: "gemini"`、`gemini-3-flash-preview`、`google/gemini-3-flash-preview` 都临时路由到 `qwen-vl-max`，避免前端仍传 `"gemini"` 时继续打到 Ofox。
+      - Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` 或 `ofox-gemini:<model>` 入口，方便后续上游恢复后切回。
+      - 标准图片识别、精准模式 `RunPrecisionJSONWithImages*`、单模型 compare engines、批量图片分析都会按新的默认解析走 Qwen。
+      - 若显式使用 Ofox/Gemini，为避免长时间无响应吃完整个任务窗口，图片主调用最多等待 `45s`，超时后进入 Qwen 兜底。
+      - 如果两边都失败，worker 不再把原始 `Post "https://api.ofox.ai/..." Client.Timeout...` 展示给用户，而是归一为“AI 识别服务响应超时/当前繁忙/暂时不可用”。
+  - Real provider check:
+    - 使用今天失败任务的同一张 CDN 图片直接调用 DashScope `qwen-vl-max`，返回 `200`，耗时约 `7600ms`，确认备用视觉模型可用。
+    - User随后再次测试失败，最新任务 `028ca932-13fb-48e1-ae5f-d6c0250ac700`：
+      - `created_at=2026-05-11T11:25:33+08:00`
+      - `updated_at=2026-05-11T11:27:05+08:00`
+      - 图片为 `http://cdn-food-images.coachlink.fit/181a1760-4f17-450e-b493-ed57281633f1.jpg`
+      - 图片本身可 GET，Ofox/Gemini 对同图 HTTP/HTTPS 均超时到 `120s`，DashScope/Qwen 对同图 HTTP/HTTPS 均约 `8s` 返回 `200`。
+      - 该任务总耗时约 `92s`，符合旧 worker 仅等待 Ofox 90 秒超时后失败；说明线上/当前运行中的 worker 尚未部署或重启到带 Qwen 兜底的版本。
+  - Verification:
+    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError" -count=1` passed
+    - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_HTML|TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed
+    - `go build -o %TEMP%/food-link-qwen-default.exe ./cmd/server` passed
+    - `go build -o %TEMP%/food-link-qwen-default-worker.exe ./cmd/worker` passed
+    - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` passed with CRLF warnings only
+  - Blocker:
+    - Full `go test ./internal/analyze/service -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` setup.
+  - Runtime note:
+    - Backend-only worker/service change; no mini program page/component/style/route/interaction change, so no weapp-devtools UI verification required.
+  - Post-compaction recheck:
+    - Re-read project state and re-ran targeted analyze/worker tests plus `cmd/server` and `cmd/worker` builds; all passed.
+    - Current source fix is ready for deployment. Real users will still hit the old Ofox/Gemini path until the backend image is pushed and the running service/worker updates.
+  - Follow-up 401:
+    - User复测后出现 `dashscope api error 401: Incorrect API key provided`，说明请求已切到 DashScope/Qwen，但运行环境里的 `DASHSCOPE_API_KEY` 被 DashScope 判为无效。
+    - 本地 `backend/config.yaml` 中的 DashScope key 用最小 `qwen-vl-max` 请求验证为 `200`，所以更像线上 ConfigMap/env 与本地配置不一致，或值带了前后空白。
+    - 本地 `backend/.env` 发现 `DASHSCOPE_API_KEY=` 后存在前导空格；如果生产 ConfigMap 从同类 env 文件生成，这个空格会进入真实 key。
+    - 已补代码防御：配置加载后 trim 外部 API key；`NewDashScopeClient()` 也 trim key/model；worker 将 `dashscope/ofox 401` 归一为“AI 识别服务配置异常，请联系管理员处理”。
+    - User强调本地也失败；已直接修正本地 `backend/.env` 中 `DASHSCOPE_API_KEY=` 后的前导空格。
+    - 使用修正后的本地 `.env` key 直接调用 DashScope `qwen-vl-max` 图片识别，返回 `HTTP_STATUS=200` 并识别出图片内容。
+    - 当前本地仍在跑旧 `go run ./cmd/server` / `go run ./cmd/worker` 进程；需要重启本地 backend/worker 后才会读到修正后的 env 与新代码。
+    - User 重启后仍失败；进一步读取 worker 进程环境发现 `DASHSCOPE_API_KEY` 被系统/用户环境变量覆盖为另一把无效 key：
+      - `config.yaml` / `backend/.env` key 指纹一致，长度 35，直接请求 DashScope 返回 `200`。
+      - worker 进程环境变量 key 长度 38，指纹不同，直接请求 DashScope 返回 `401 Incorrect API key`。
+      - 本机 User 级环境变量 `DASHSCOPE_API_KEY=sk-sp-...` 正在覆盖本地配置文件。
+    - 已追加配置优先级防护：`backend/pkg/config/config.go` 只要存在 `config.yaml`，外部模型 key 优先使用配置文件值，避免系统脏环境变量覆盖；生产 scratch 镜像没有 `config.yaml`，仍走 ConfigMap/env。
+    - 验证：在当前 shell 仍带坏 `DASHSCOPE_API_KEY` 的情况下，`config.Load(".")` 已加载到 `config.yaml` 的正确 DashScope key 指纹；`go test ./pkg/config`、定向 analyze/worker 测试、server/worker build 均通过。
+  - All image recognition Qwen sweep:
+    - 食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算均已切到 DashScope `qwen-vl-max`。
+    - 保质期识别不再在 DashScope 缺失时隐式 fallback 到 Ofox/Gemini；缺 Qwen 配置时直接配置错误，避免偷偷走回 Gemini。
+    - 仍保留的 Gemini/Ofox 代码仅用于显式 `ofox-gemini` escape hatch、对比/测试后台和 Ofox client 单元测试，不属于默认用户图像识别路径。
+    - User补充要求：不要删除原 Gemini 通道；当前口径是临时默认 Qwen，保留 Gemini/Ofox 显式入口和后续切回能力。
+    - Verification:
+      - `go test ./internal/expiry/service -run TestRecognizer -count=1` passed
+      - `go test ./internal/user/service -run TestOCRService -count=1` passed
+      - `go test ./internal/health/service -run "TestExerciseService_EstimateImageUsesQwenDashScope" -count=1` passed
+      - targeted analyze service Qwen routing/fallback tests passed
+      - server/worker builds passed
+
+## 状态：完成源码修复 - 体重 summary 同日多条记录取值口径不一致
+
+- 2026-05-11 update:
+  - User反馈：用户「饭饭」上一次记录体重到底是多少；当前代码有时显示 `47.4kg`、有时显示 `47.5kg`。
+  - Data check:
+    - 「饭饭」用户当前 `weapp_user.weight` 为 `47.4kg`。
+    - `user_weight_records` 中最近记录都在 `2026-05-09`：
+      - `07:35:40 +08:00` 记录 `47.5kg`
+      - `07:35:52 +08:00` 记录 `47.5kg`
+      - `07:36:00 +08:00` 记录 `47.4kg`
+    - 因此“最后一次/最新一次”体重应为 `47.4kg`；同一天上一条和前一天 `2026-05-08` 都是 `47.5kg`。
+  - Root cause:
+    - `BodyMetricsRepo.ListWeightRecords()` 按 `recorded_on asc, created_at asc` 返回同一天多条记录。
+    - `aggregateWeightDaily()` 旧逻辑用 `seen` 跳过同日期后续记录，导致 `/api/body-metrics/summary` 的 `weight_entries/latest_weight` 取到当天第一条 `47.5kg`。
+    - `GetLatestWeightRecord()` 和 `buildWeightTrendDaily()` 则取当天最后一条，所以其他位置会显示 `47.4kg`。
+  - Fix applied:
+    - `backend/internal/health/service/body_metrics_service.go`
+      - `aggregateWeightDaily()` 改为同日期后续记录覆盖前一条，保持每日只输出一条，但取当天最后一次记录。
+    - `backend/internal/health/service/body_metrics_service_test.go`
+      - 新增同日多条体重记录回归测试，锁定最新值为 `47.4kg`、较上次变化为 `-0.1kg`。
+  - Verification:
+    - `go test ./internal/health/service -run "TestBodyMetricsService_GetSummary|TestBodyMetricsService_GetSummaryUsesLatestWeightForSameDate" -count=1` passed
+    - `go test ./internal/health/service -count=1` passed
+    - `go test ./internal/health/handler -run TestGetBodyMetricsSummary -count=1` passed
+    - `git diff --check -- backend/internal/health/service/body_metrics_service.go backend/internal/health/service/body_metrics_service_test.go` passed with CRLF warnings only
+  - Blocker:
+    - `go test ./internal/health/repo -run TestBodyMetricsRepo_WeightCRUD -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` setup.
+  - Runtime note:
+    - Backend-only service fix; no mini program page/component/style/route/interaction change this round, so no weapp-devtools UI verification was required.
+
+## 状态：完成源码修复 - 圈子时间按中国时间展示，周榜按北京时间自然周统计
+
+- 2026-05-11 follow-up:
+  - User复测反馈：
+    - 排行榜没问题了。
+    - 圈子动态时间仍不对，例如 `kk` 的动态应是约 5 小时前，但显示约 1 小时前。
+  - Clarification:
+    - User随后明确：圈子动态就应该按照“记录时间”算。
+    - 因此如果 `kk` 这条饮食记录的 `user_food_records.record_time` 是 1 小时前，那么页面显示 1 小时前是符合产品口径的，不应改成识别任务时间。
+  - Reverted:
+    - 撤回了“用 `analysis_tasks.created_at` 修正 source task 记录时间”的临时改法。
+    - 撤回范围包括：
+      - `backend/internal/common/dateutil/dateutil.go` 的 `BuildRecordTimeWithClock`
+      - `backend/internal/foodrecord/service/food_record_service.go` 中读取 source task created_at 的逻辑
+      - `backend/internal/community/repo/feed_repo.go` 的 `source_task_id`/`GetTaskCreatedAtByIDs`
+      - `backend/internal/community/service/community_service.go` 的 feed 返回层 source task 时间修正
+      - 对应 source task 时间修正测试
+  - Verification:
+    - `go test ./internal/common/dateutil -count=1` passed
+    - `go test ./internal/foodrecord/service -run "TestBuildRecordTime|TestNormalizeMealType" -count=1` passed
+    - `go test ./internal/community/service -run "TestNormalizeFeedRecordUsesChinaTime|TestChinaWeekWindow|TestCheckinLeaderboard" -count=1` passed
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed
+    - `git diff --check -- backend/internal/community/service/community_service.go backend/internal/community/service/community_service_test.go src/pages/community/index.tsx backend/internal/common/dateutil/dateutil.go backend/internal/foodrecord/service/food_record_service.go` passed with CRLF warnings only
+  - Runtime validation blocker:
+    - `mrc where --port 9420` failed to connect to WeChat DevTools automation.
+    - `mrc where --port 3001` failed to connect to WeChat DevTools automation.
+  - Note:
+    - 当前保留的有效改动是：周榜北京时间自然周、动态 `record_time` 按中国时间输出/格式化。
+    - 圈子动态相对时间仍以 `record_time` 为准。
+
+- 2026-05-11 update:
+  - User反馈：
+    - 圈子里显示的时间不是中国时间
+    - 本周打卡排行榜不是自然周
+    - 用户补充：`dev` 分支是正确的，可以模仿 `dev`
+  - Root cause:
+    - `dev` Python 后端周榜窗口是北京时间自然周：周一 00:00 到下周一 00:00（不含）。
+    - 当前 Go 后端使用 `nowCN.AddDate(...).Truncate(24 * time.Hour)` 计算周起点；Go 的 `Truncate` 按绝对 UTC 时刻截断，落到北京时间会变成 08:00 边界，导致周榜不是自然周。
+    - 圈子 feed 前端此前在超过 24 小时后使用设备环境的 `toLocaleDateString()`，且后端返回 `record_time` 未显式转为 `+08:00` 输出，容易受运行环境时区影响。
+  - Fix applied:
+    - `backend/internal/community/service/community_service.go`
+      - 新增 `chinaWeekWindow()`，用 `time.Date(..., 00:00, chinaTZ)` 生成北京时间周一零点，替代 `Truncate(24h)`。
+      - `CheckinLeaderboard()` 使用该自然周窗口查询，统计周期与 `dev` 对齐。
+      - `normalizeFeedRecord()` 将 `record_time` 显式转为 `Asia/Shanghai` 偏移后返回。
+    - `backend/internal/community/service/community_service_test.go`
+      - 新增周一/周日自然周窗口测试，锁定边界为北京时间 00:00。
+      - 新增 feed record time 输出 `+08:00` 测试。
+    - `src/pages/community/index.tsx`
+      - `formatFeedTime()` 改为使用北京时间解析/格式化兜底，不再依赖设备默认 `toLocaleDateString()`。
+      - 对没有时区后缀的 ISO 时间按北京时间本地时间处理，兼容潜在旧数据。
+  - Verification:
+    - `go test ./internal/community/service -run "TestNormalizeFeedRecordUsesChinaTime|TestChinaWeekWindow|TestCheckinLeaderboard" -count=1` passed
+    - `go test ./internal/community/service -count=1` passed
+    - `go test ./internal/community/handler -run "TestCommunityHandler_CheckinLeaderboard|TestCheckinLeaderboard|CheckinLeaderboard" -count=1` passed
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed
+    - `git diff --check -- backend/internal/community/service/community_service.go backend/internal/community/service/community_service_test.go src/pages/community/index.tsx` passed with CRLF warnings only
+  - Runtime validation blocker:
+    - `mrc where --port 3001` failed to connect to WeChat DevTools automation.
+    - `mrc where --port 9420` failed to connect to WeChat DevTools automation.
+    - No screenshot/click evidence this round because automation was unavailable; no local dev server/watch process was started or restarted.
+    - Full `go test ./internal/community/handler -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` test setup; targeted leaderboard handler test passed.
+
+## 状态：完成源码修复 - 保质期拍照识别 500 只返回 `internal server error`
+
+- 2026-05-10 update:
+  - User提供小程序日志：
+    - `POST https://v2.healthymax.cn/api/expiry/recognize 500`
+    - 前端只收到 `{ code, message: "internal server error" }`
+    - 同时出现 `showLoading 与 hideLoading 必须配对使用` 与 `writeFile:fail the maximum size of the file storage limit is exceeded`
+  - Findings:
+    - `/api/expiry/recognize` 已打到 Go 后端，问题主链路是后端接口或模型上游，不是前端路由未命中。
+    - 保质期 recognizer 里“缺图 / 未识别到食物 / 模型上游失败 / 配置缺失”等错误此前都是裸 `fmt.Errorf`；统一响应层会把裸 error 全部隐藏成 500 `internal server error`，导致前端无法显示真实可处理原因。
+    - 线上 SSH 日志读取尝试被 host key 校验阻塞，未拿到生产服务实际上游错误正文。
+  - Fix applied:
+    - `backend/internal/expiry/service/recognizer.go`
+      - 将“缺图/未识别到可录入食物”转为 400 AppError，给用户可读提示。
+      - 将模型上游失败/空响应/JSON 解析失败转为 502 AppError，前端不再只看到 `internal server error`。
+      - 将模型配置缺失/错误转为明确 500 AppError，并记录上游错误日志。
+    - `backend/internal/expiry/service/recognizer_test.go`
+      - 新增 recognizer 成功、无识别项、上游失败、缺配置测试。
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - 保质期图片持久化遇到小程序 USER_DATA_PATH 配额错误时，先清理项目生成的 `analyze_ / expiry_ / cv_` 文件再重试。
+      - 识别流程里的原生 `showLoading/hideLoading` 改为显式配对，避免失败路径多 hide 触发微信警告。
+  - Verification:
+    - `go test ./internal/expiry/service -run TestRecognizer -count=1` passed
+    - `go test ./internal/expiry/handler -run TestRecognize -count=1` passed
+    - `go build -o %TEMP%\food-link-expiry-recognize-fix.exe ./cmd/server` passed
+    - `npx eslint src/packageExtra/pages/expiry-edit/index.tsx --ext .ts,.tsx --max-warnings 0` passed
+    - `git diff --check` passed with CRLF warnings only
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` both failed to connect to WeChat DevTools automation, so no screenshot/click evidence this round.
+    - `go test ./internal/expiry/service -run TestExpiryService_Recognize -count=1` remains blocked by the existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` issue.
+  - Deployment note:
+    - This is backend + frontend source fix. For `https://v2.healthymax.cn` to change behavior, the Go backend image/service must be redeployed and the mini program dev/preview bundle must include the updated `expiry-edit` page.
 
 ## 状态：完成源码修复 - 我的页退出登录残留调用 `setRegisterDate` 导致正式环境 ReferenceError
 

@@ -482,6 +482,10 @@ func strOrAvatar(profile *repo.UserProfile) string {
 }
 
 func (s *CommunityService) normalizeFeedRecord(record repo.FeedRecord) repo.FeedRecord {
+	if record.RecordTime != nil {
+		recordTime := record.RecordTime.In(chinaTZ)
+		record.RecordTime = &recordTime
+	}
 	record.ImagePaths = s.resolveFoodImageURLs(record.ImagePaths)
 	if len(record.ImagePaths) > 0 {
 		first := record.ImagePaths[0]
@@ -561,6 +565,18 @@ type leaderboardCacheEntry struct {
 
 var leaderboardCache sync.Map
 
+func chinaWeekWindow(now time.Time) (time.Time, time.Time, string, string) {
+	nowCN := now.In(chinaTZ)
+	weekday := nowCN.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	todayStartCN := time.Date(nowCN.Year(), nowCN.Month(), nowCN.Day(), 0, 0, 0, 0, chinaTZ)
+	weekStartCN := todayStartCN.AddDate(0, 0, -int(weekday-1))
+	weekEndCN := weekStartCN.AddDate(0, 0, 7)
+	return weekStartCN, weekEndCN, weekStartCN.Format("2006-01-02"), weekStartCN.AddDate(0, 0, 6).Format("2006-01-02")
+}
+
 func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID string) (*LeaderboardResult, error) {
 	friendIDs, err := s.feedRepo.GetFriendIDs(ctx, viewerUserID)
 	if err != nil {
@@ -576,15 +592,7 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 		authorIDs = append(authorIDs, id)
 	}
 
-	nowCN := time.Now().In(chinaTZ)
-	weekday := nowCN.Weekday()
-	if weekday == 0 {
-		weekday = 7
-	}
-	weekStartCN := nowCN.AddDate(0, 0, -int(weekday-1)).Truncate(24 * time.Hour)
-	weekEndCN := weekStartCN.AddDate(0, 0, 7)
-	weekStartStr := weekStartCN.Format("2006-01-02")
-	weekEndStr := weekStartCN.AddDate(0, 0, 6).Format("2006-01-02")
+	weekStartCN, weekEndCN, weekStartStr, weekEndStr := chinaWeekWindow(time.Now())
 
 	cacheKey := viewerUserID + ":" + weekStartStr
 	if cached, ok := leaderboardCache.Load(cacheKey); ok {
@@ -812,6 +820,9 @@ func (s *CommunityService) FeedContext(ctx context.Context, userID, recordID str
 
 func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, userID string, record *repo.FeedRecord) (*FeedContextResult, error) {
 	if record == nil {
+		return &FeedContextResult{Allowed: false, Reason: "not_found"}, nil
+	}
+	if record.HiddenFromFeed {
 		return &FeedContextResult{Allowed: false, Reason: "not_found"}, nil
 	}
 	if userID != "" && record.UserID == userID {

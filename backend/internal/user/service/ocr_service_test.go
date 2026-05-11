@@ -6,15 +6,19 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"reflect"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"food_link/backend/pkg/config"
 )
+
+type ocrRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f ocrRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func mockOCRResponse() *http.Response {
 	content := "```json\n{\"indicators\":[{\"name\":\"血糖\",\"value\":\"5.6\",\"unit\":\"mmol/L\"}],\"conclusions\":[\"正常\"],\"suggestions\":[],\"medical_notes\":\"\"}\n```"
@@ -32,13 +36,15 @@ func mockOCRResponse() *http.Response {
 }
 
 func TestOCRService_ExtractFromBase64_Success(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
-		return mockOCRResponse(), nil
-	})
-	defer patches.Reset()
-
 	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
+	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.Equal(t, "qwen-vl-max", payload["model"])
+		return mockOCRResponse(), nil
+	})}
 	ctx := context.Background()
 
 	result, err := svc.ExtractFromBase64(ctx, "data:image/jpeg;base64,abc123")
@@ -50,13 +56,11 @@ func TestOCRService_ExtractFromBase64_Success(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromURL_Success(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
-		return mockOCRResponse(), nil
-	})
-	defer patches.Reset()
-
 	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
+	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return mockOCRResponse(), nil
+	})}
 	ctx := context.Background()
 
 	result, err := svc.ExtractFromURL(ctx, "https://example.com/report.jpg")
@@ -74,13 +78,12 @@ func TestOCRService_ExtractFromBase64_MissingKey(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_HTTPError(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
-		return nil, assert.AnError
-	})
-	defer patches.Reset()
-
 	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
+	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return nil, assert.AnError
+	})}
+
 	ctx := context.Background()
 
 	_, err := svc.ExtractFromBase64(ctx, "base64data")
@@ -88,17 +91,16 @@ func TestOCRService_ExtractFromBase64_HTTPError(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_StatusError(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	svc := NewOCRService(cfg)
+	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusInternalServerError,
 			Body:       io.NopCloser(bytes.NewBufferString("error")),
 			Header:     make(http.Header),
 		}, nil
-	})
-	defer patches.Reset()
+	})}
 
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
-	svc := NewOCRService(cfg)
 	ctx := context.Background()
 
 	_, err := svc.ExtractFromBase64(ctx, "base64data")
@@ -106,18 +108,17 @@ func TestOCRService_ExtractFromBase64_StatusError(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_EmptyChoices(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	svc := NewOCRService(cfg)
+	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		body := `{"choices":[]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewBufferString(body)),
 			Header:     make(http.Header),
 		}, nil
-	})
-	defer patches.Reset()
+	})}
 
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
-	svc := NewOCRService(cfg)
 	ctx := context.Background()
 
 	_, err := svc.ExtractFromBase64(ctx, "base64data")
@@ -125,18 +126,17 @@ func TestOCRService_ExtractFromBase64_EmptyChoices(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_InvalidJSON(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	svc := NewOCRService(cfg)
+	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		body := `{"choices":[{"message":{"content":"not json"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewBufferString(body)),
 			Header:     make(http.Header),
 		}, nil
-	})
-	defer patches.Reset()
+	})}
 
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
-	svc := NewOCRService(cfg)
 	ctx := context.Background()
 
 	_, err := svc.ExtractFromBase64(ctx, "base64data")

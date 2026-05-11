@@ -1103,6 +1103,7 @@ export interface HealthCondition {
   diet_preference?: string[]
   allergies?: string[]
   health_notes?: string
+  routine_type?: string
   report_extract?: ReportExtract | null
   precision_reference_defaults?: PrecisionReferenceDefaults
   [key: string]: unknown
@@ -1139,6 +1140,7 @@ export interface HealthProfileUpdateRequest {
   diet_preference?: string[]
   allergies?: string[]
   health_notes?: string
+  routine_type?: string
   /** 体检报告 OCR 识别结果，保存时与问卷一并写入 user_health_documents */
   report_extract?: ReportExtract | null
   /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */

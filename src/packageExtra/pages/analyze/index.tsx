@@ -85,6 +85,7 @@ const REFERENCE_PRESETS: Array<{
 
 const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
   value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
@@ -298,6 +299,7 @@ function AnalyzePage() {
 
   const imagePathsRef = useRef<string[]>([])
   const routeSessionSignatureRef = useRef('')
+  const analyzeSubmitDebounceRef = useRef(0)
   imagePathsRef.current = imagePaths
 
   const canUseStrictMode = canUseStrictModeForMembership(membershipStatus)
@@ -580,6 +582,8 @@ function AnalyzePage() {
       return
     }
 
+    setIsAnalyzing(true)
+
     // 请求订阅消息授权（在图片上传前调用，避免上传耗时导致弹窗时机不佳）
     let subscribeStatus: string | undefined
     if (ANALYSIS_SUBSCRIBE_TEMPLATE_ID) {
@@ -593,7 +597,6 @@ function AnalyzePage() {
       }
     }
 
-    setIsAnalyzing(true)
     Taro.showLoading({ title: '上传图片...', mask: true })
 
     try {
@@ -720,6 +723,9 @@ function AnalyzePage() {
   /** 主按钮：无图则唤起选图；有图则直接提交并进入 analyze-loading（与拍照后进页再分析一致） */
   const handleAnalyzePress = () => {
     if (isAnalyzing) return
+    const now = Date.now()
+    if (now - analyzeSubmitDebounceRef.current < ANALYZE_SUBMIT_DEBOUNCE_MS) return
+    analyzeSubmitDebounceRef.current = now
     if (isQuotaExhausted) {
       const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
       const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
