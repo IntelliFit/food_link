@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-12`: 后端 Docker 部署构建需要显式使用可配置 `GOPROXY`：
+  - `backend/Dockerfile` 在 builder 阶段设置 `ARG GOPROXY=https://goproxy.cn,direct` 与 `ENV GOPROXY=${GOPROXY}`。
+  - `backend/scripts/push-docker-ccr.mjs` 默认将 `DOCKER_GO_PROXY` / `GOPROXY` / `https://goproxy.cn,direct` 传入 Docker build。
+  - 这样直接运行 `npm run push-docker-ccr` 时，`go mod download` 不再默认依赖容器内访问 `proxy.golang.org`，降低本地网络卡死风险。
+
 - `2026-05-12`: 线上 Kafka topic partition 初始建议按后端总 worker 数规划，并给未来 Pod 扩容预留。
   - 当前若后端 3 个 Pod 且 `worker.count=2`，同一 consumer group 中总消费者为 6。
   - 后续若扩到 6 个 Pod 且 `worker.count=2`，总消费者为 12。

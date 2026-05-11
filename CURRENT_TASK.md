@@ -1,5 +1,21 @@
 # 当前任务
 
+## 状态：完成后端镜像构建推送部署
+
+- 2026-05-12 update:
+  - User 要求完成后部署后端，并进一步要求想办法运行成功 `npm run push-docker-ccr`。
+  - Completed:
+    - 初次运行 `npm run push-docker-ccr` 卡在 Docker build 的 `go mod download` 阶段。
+    - 已更新 `backend/Dockerfile` 与 `backend/scripts/push-docker-ccr.mjs`，为 Docker 构建增加可配置 `GOPROXY`，默认 `https://goproxy.cn,direct`，并提交推送：
+      - `4ebf0c5 chore: make backend docker push use go proxy`
+    - 已重新执行 `DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr` 并成功。
+    - 已推送镜像：`ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
+    - 本次镜像构建对应 Git short SHA：`4ebf0c5`
+    - 镜像 digest：`sha256:61637ad8c0fb5262a254a6bd8bd60a0decade1fed717c984ec20d56a8188e3f1`
+    - 平台：`linux/amd64`
+  - Note:
+    - 部署端按项目约定会在约 5 分钟内自动拉取 `:v2` 镜像并更新服务。
+
 ## 状态：完成 rebase 合并、验证与推送 - 食物喝水扣减与压测统计修复
 
 - 2026-05-12 update:
