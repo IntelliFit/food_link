@@ -1,5 +1,25 @@
 # 当前任务
 
+## 状态：完成提交与远端同步 - 积分扣除优化和分析订阅移除
+
+- 2026-05-12 update:
+  - User要求：提交当前代码，并完成与远端同步。
+  - Completed:
+    - 已在 `backend-refactor-sync-migrate-tencent` 上完成 rebase，解决远端 task_queue/trace/首页补录提示记录与本地提交的冲突。
+    - 已保留远端 `task_queue` 发布/内嵌 worker 逻辑，同时保留积分扣除优化：提交时只校验和写 `credit_usage`，任务 `done` 后再幂等结算累计奖励积分。
+    - 已保留运动任务创建后的 queue publish，移除创建成功后的即时累计奖励积分扣除。
+    - 已推送提交：
+      - `2a5654a fix: remove analysis notification subscription`
+      - `011ae75 fix: defer credit settlement until task success`
+  - Verification after rebase:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/utils/api.ts src/utils/membership.ts src/pages/index/index.tsx --max-warnings 0` passed。
+    - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app ./internal/analyze/handler -run Test -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+    - `go test ./pkg/config ./internal/taskqueue ./pkg/trace ./pkg/logger -run Test -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 微信开发者工具自动化已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，两个端口均无法连接，提示目标项目窗口未开启自动化服务；本轮无法完成小程序运行时截图/交互验证。
+
 ## 状态：完成源码修改 - 分析任务分发改为本地 task_queue
 
 - 2026-05-11 update:
