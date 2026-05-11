@@ -12,6 +12,7 @@
  * 默认强制构建 linux/amd64，避免 ARM 开发机推送后在 AMD64 服务器不可运行。
  * 如需覆盖平台，可传入环境变量 DOCKER_BUILD_PLATFORM（例如 linux/amd64,linux/arm64）。
  * 如 Docker Hub 访问不稳定，可传入 DOCKER_GO_BUILDER_IMAGE 覆盖 Go builder 基础镜像。
+ * 如 Go module 下载不稳定，可传入 DOCKER_GO_PROXY 覆盖 GOPROXY。
  *
  * 运行时配置由部署侧环境变量 / ConfigMap 注入，勿把密钥打进镜像。
  */
@@ -137,6 +138,7 @@ function main() {
   const buildProgress = (process.env.DOCKER_BUILD_PROGRESS || 'auto').trim() || 'auto';
   const goBuilderImage =
     (process.env.DOCKER_GO_BUILDER_IMAGE || DEFAULT_GO_BUILDER_IMAGE).trim() || DEFAULT_GO_BUILDER_IMAGE;
+  const goProxy = (process.env.DOCKER_GO_PROXY || process.env.GOPROXY || 'https://goproxy.cn,direct').trim();
 
   print(`Registry:   ${REGISTRY}`);
   print(`镜像基名:   ${imageBase}`);
@@ -145,6 +147,7 @@ function main() {
   print(`Git 短 SHA: ${shortSha}`);
   print(`构建平台:   ${buildPlatform}`);
   print(`Go 构建镜像: ${goBuilderImage}`);
+  print(`Go module proxy: ${goProxy || '(go default)'}`);
   if (buildProgress !== 'auto') {
     print(`进度模式:   ${buildProgress}`);
   }
@@ -160,6 +163,9 @@ function main() {
     buildArgs.push('--progress', buildProgress);
   }
   buildArgs.push('--build-arg', `GO_BUILDER_IMAGE=${goBuilderImage}`);
+  if (goProxy) {
+    buildArgs.push('--build-arg', `GOPROXY=${goProxy}`);
+  }
   buildArgs.push('-t', imageTag, '--push', '.');
 
   print('--- docker buildx build --push ---');

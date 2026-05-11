@@ -4,6 +4,9 @@ FROM --platform=$BUILDPLATFORM ${GO_BUILDER_IMAGE} AS builder
 
 WORKDIR /src
 
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
+
 COPY go.mod go.sum ./
 RUN go mod download
 
