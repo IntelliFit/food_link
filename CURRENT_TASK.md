@@ -50,6 +50,253 @@
   - `go test ./pkg/config ./internal/taskqueue -run Test -count=1` passed。
   - `docker compose -f backend/docker-compose.kafka.yml config` passed。
   - `git diff --check -- backend/docker-compose.kafka.yml docs/backend-task-queue-worker-config.md CURRENT_TASK.md DECISIONS.md memory/2026-05-12.md` passed with only CRLF warnings。
+## 状态：完成源码修改与验证 - 删除/更新食物记录同步扣减喝水量
+
+- 2026-05-12 update:
+  - User 要求：删除食物时，如果食物带有含水量，需要同步从喝水栏目扣除；喝水量不能小于 0；当前首页其他营养成分已经扣除，但喝水没有扣除；完成后提交代码。
+  - Fix applied:
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - `Delete()` 删除食物记录前读取原记录 items，按含水量和实际摄入比例计算应扣减水量；删除成功后从当天 AI 自动饮水日志中扣减。
+      - `Update()` 在 items 变更时读取旧记录并计算新旧含水量差值，用于当天记录页删除单个食物成分时同步增减喝水量。
+      - 扣减只作用于 `source_type='ai'` 的饮水日志，不影响用户手动喝水记录。
+    - `backend/internal/health/repo/body_metrics_repo.go`
+      - 新增 `ReduceWaterLogsByDateSource()`，按中国自然日和来源扣减饮水日志；不足扣时只扣到已有 AI 水量为止，保证总喝水不会被扣成负数。
+    - `backend/internal/foodrecord/service/service_test.go`
+      - 新增更新 items 调整食物含水量差值、删除记录扣减食物含水量测试。
+    - `backend/internal/health/repo/body_metrics_repo_test.go`
+      - 新增只扣 AI 水日志、不动 manual 手动喝水、且不足扣不低于 0 的 repo 测试。
+  - Verification:
+    - `go test ./internal/foodrecord/service ./internal/app -run 'TestFoodRecordService_Save|TestFoodRecordService_Update|TestFoodRecordService_Delete|TestTotalFoodWaterIntakeMl|Test' -count=1` passed。
+    - `go test ./internal/health/repo -run 'TestBodyMetricsRepo_ReduceWaterLogsByDateSource|TestBodyMetricsRepo_WaterCRUD' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx src/packageExtra/pages/day-record/index.tsx src/utils/api.ts src/utils/home-dashboard-local-cache.ts --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 本轮核心修改是后端删除/更新记录后的水量同步；未擅自启动或重启本地前后端服务。
+
+## 状态：完成源码修改与实测 - qwen 食物分析 20 并发压测
+
+- 2026-05-12 update:
+  - User 要求：
+    - 给食物分析压测脚本添加参数，快速切换测试大模型。
+    - 测试 qwen 模型性能并返回表格结果。
+    - 确认测试脚本算法是否与当前主程序食物分析算法一致，不要在测试里重写算法。
+    - 输入食物必须是同一个，输出 20 个样本方差。
+    - 测试成功后图片链接必须删除，避免占用 OSS/COS 资源。
+  - Fix applied:
+    - `backend/internal/analyze/loadtest/food_analysis_stability_test.go`
+      - 新增 Go test 参数：
+        - `-food.analysis.model=qwen`：直接覆盖提交给 `/api/analyze/submit` 的 `modelName`。
+        - `-food.analysis.execution_mode=standard|precision`：直接覆盖 `execution_mode`。
+      - 保留环境变量 `FOOD_ANALYSIS_LOAD_MODEL` 和 `FOOD_ANALYSIS_LOAD_EXECUTION_MODE`，优先级低于 Go test 参数。
+      - 测试开始只上传 1 张图片，所有并发请求复用同一个 `sharedImageURL`，并日志注明 same-food guarantee。
+      - 结果汇总新增：
+        - `task_variance_ms2` / `task_stddev`
+        - `total_variance_ms2` / `total_stddev`
+      - 清理 COS 图片时对共享 image URL 去重，只删除 1 个对象。
+    - `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`
+      - 保留 qwen 专用入口 `TestFoodAnalysisStabilityAndLatencyQwen`，默认 `modelName="qwen"`；也可用 `-food.analysis.model` 覆盖。
+  - Algorithm parity:
+    - 当前压测脚本没有重写食物识别算法。
+    - 它通过真实后端 HTTP 链路执行：`POST /api/upload-analyze-image-file` -> `POST /api/analyze/submit` -> 轮询 `GET /api/analyze/tasks/:task_id`。
+    - `/api/analyze/submit` 进入主程序 `TaskService.SubmitAnalyzeTask()`，server 内嵌 worker 再调用当前业务里的 `AnalyzeService.Analyze()` / DB-first 营养库逻辑，并访问真实数据库。
+    - 因此主业务算法、模型路由、任务队列、积分校验、营养库 DB-first 等后续变化都会反映到该 HTTP 集成压测里。
+  - qwen real run:
+    - Command:
+      - `FOOD_ANALYSIS_LOAD_USER_IDS='20个临时压测用户UUID' FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 FOOD_ANALYSIS_LOAD_TASK_TIMEOUT=20m go test -tags food_analysis_load ./internal/analyze/loadtest -run '^TestFoodAnalysisStabilityAndLatencyQwen$' -food.analysis.model=qwen -count=1 -timeout=30m -v`
+    - Input:
+      - 同一张图片：`backend/testdata/food/6781F1707431AC4E3BAB1416242E433D.jpg`
+      - 共享图片 URL：`http://cdn-food-images.coachlink.fit/706a09d0-917b-454c-9942-951a839b6e9e.jpg`
+      - 只上传一次，20 个并发任务复用该 URL。
+    - Result:
+      - 20/20 成功，success rate `100.0%`。
+      - shared upload `355.623875ms`。
+      - avg submit `1.512151222s`。
+      - avg task wait `1m19.716098387s`，p95 task wait `2m15.310774333s`。
+      - task wait variance `1,566,089,646.37 ms^2`，stddev `39.573850537s`。
+      - avg total `1m21.228250402s`，p95 total `2m17.374845709s`。
+      - total variance `1,601,369,195.37 ms^2`，stddev `40.017111282s`。
+      - avg calories `819.5 kcal`。
+  - Cleanup:
+    - 压测脚本日志显示 `cleanup COS food images: deleted=1`，已删除本次唯一共享上传图片。
+    - 本次 20 个 `analysis_tasks` 任务 ID 复查数据库计数为 `0`。
+    - 本轮临时创建的 20 个 qwen load test 用户已从 `weapp_user` 删除。
+  - Verification:
+    - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `git diff --check` passed。
+
+## 状态：完成源码修改 - 食物分析压测复用单张图片 URL，并新增千问专用测试
+
+- 2026-05-12 update:
+  - User 要求：之前 Go 语言 20 次并发食物分析压测中，不要每个请求都上传图片；改为每次测试只上传 1 张图片，然后 20 个并发请求复用该图片链接。同时复制一份脚本用于测试千问模型，并先梳理当前后端可用大模型的 API/model name 信息。
+  - Model findings from code/config:
+    - 当前本地 `backend/config.yaml` 为 `external.llm_provider: "gemini"`，因此食物图片分析在未显式指定模型或历史 `gemini` 参数时，默认走 OfoxAI/Gemini。
+    - 千问链路为 DashScope compatible API，模型名 `qwen-vl-max`；提交 payload 传 `modelName: "qwen"` 会强制使用该链路。
+    - OfoxAI/Gemini 链路模型名为 `gemini-3-flash-preview`，endpoint 使用 `external.ofoxai_base_url` 或默认 `https://api.ofox.ai/v1`。
+    - DeepSeek 文本链路模型名为 `deepseek-v4-flash`，主要用于文字输入、营养库 fallback、统计/推荐文本生成，不是当前图片压测的视觉主链路。
+  - Fix applied:
+    - `backend/internal/analyze/loadtest/food_analysis_stability_test.go`
+      - `TestFoodAnalysisStabilityAndLatency` 现在测试开始时只调用一次 `POST /api/upload-analyze-image-file`。
+      - 20 个并发/错峰请求复用同一个 `sharedImageURL` 提交 `/api/analyze/submit`。
+      - 清理 COS 图片时对 image URL 去重，避免同一对象被删除 20 次。
+      - 日志汇总从 `avg_upload` 改为 `shared_upload`，避免把一次上传误解为每个请求的上传耗时。
+    - 新增 `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`
+      - `TestFoodAnalysisStabilityAndLatencyQwen` 复用同一套 loadtest helper，默认设置 `modelName="qwen"`，用于千问/DashScope `qwen-vl-max` 压测。
+  - Verification:
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`，确认普通 Go 测试不会执行压测。
+    - `git diff --check` passed。
+  - Run examples:
+    - 默认/当前配置模型：`cd backend && FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=20m -v`
+    - 千问模型：`cd backend && FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatencyQwen -count=1 -timeout=20m -v`
+
+## 状态：完成源码修改 - 今日餐食含水量展示与保存记录计入喝水
+
+- 2026-05-12 update:
+  - User 反馈：首页「今日餐食」卡片底部仍未显示食物含水量；点击保存食物记录后，含水量也没有累加到首页喝水板块。
+  - Findings:
+    - 前端结果页保存 payload 已发送 `items[].water_ml`，但后端 `FoodItem` 只稳定接收 snake_case，旧/兼容 payload 中的 `waterMl` 或 `nutrients.water_ml` 可能无法进入保存后的水量累计。
+    - 首页 dashboard 的 `meals[]` 原本只聚合热量、蛋白质、碳水、脂肪，没有返回该餐次含水量字段，因此前端即便想展示也拿不到稳定数据。
+  - Fix applied:
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - `FoodItem` 自定义 JSON 解析，兼容 `water_ml`、`waterMl`、`nutrients.water_ml`、`nutrients.waterMl`。
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - 保存食物记录成功后按实际摄入比例累计含水量，并通过 `user_water_logs` 写入当天喝水；日期使用食物记录 `record_time` 对应中国自然日。
+    - `backend/internal/app/app.go`
+      - 将 `healthrepo.BodyMetricsRepo` 注入 `FoodRecordService`，复用现有喝水日志写入。
+    - `backend/internal/home/service/dashboard_service.go`
+      - 首页 dashboard 的每个 `meals[]` 增加 `water_ml` 聚合字段，按记录 items 中的含水量和实际摄入比例计算。
+    - `src/utils/api.ts` / `src/utils/home-dashboard-local-cache.ts`
+      - 首页餐食类型和本地缓存保留 `water_ml/waterMl`；保存成功后的乐观餐食缓存也同步加上本次含水量。
+    - `src/pages/index/index.tsx` / `src/pages/index/index.scss`
+      - 今日餐食卡片底部在蛋白质/碳水/脂肪右侧展示含水量，使用 `icon-drink` 和 `ml` 单位；旧缓存缺水量字段时强制云端刷新。
+  - Verification:
+    - `go test ./internal/foodrecord/domain ./internal/foodrecord/service ./internal/home/service ./internal/app -run 'TestFoodItem_UnmarshalJSONWaterMlAliases|TestFoodRecordService_Save|TestTotalFoodWaterIntakeMl|TestFoodRecordService_hydrateRecord|TestDashboardService_HomeDashboard|TestBuildMealItem|TestTotalFoodRecordWaterMl|Test' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx src/utils/api.ts src/utils/home-dashboard-local-cache.ts src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420`、`mrc where --port 3001` 和 `mrc logs error 20 --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+
+## 状态：完成源码修改 - 当天饮食记录页图片误显示无图片
+
+- 2026-05-12 update:
+  - User 反馈：当天饮食记录页中图片显示“无图片”，但首页今日餐食同一记录能看到图片。
+  - Finding:
+    - 页面位置：`src/packageExtra/pages/day-record/index.tsx`。
+    - 该页 `normalizeDisplayImageUrl()` 会把所有 `http://...` URL 过滤为空字符串。
+    - 当前食物图片 CDN/后端返回为 `http://cdn-food-images.coachlink.fit/...`；首页没有这个过滤，所以首页能显示，当天记录页被误判为无图。
+  - Fix applied:
+    - 删除当天记录页对普通 `http://` 图片的全量过滤。
+    - 保留 `http(s)://tmp/` 小程序临时路径转换为 `wxfile://tmp/` 的兼容逻辑。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+
+## 状态：完成源码修改 - 食物分析稳定性/平均响应速度手动压测
+
+- 2026-05-12 update:
+  - User 要求：编写一个 Go 的独特测试，模拟不同用户同时或按间隔发起 20 次食物分析请求，走当前上传图片到 OSS/COS、提交分析任务、轮询结果、统计响应速度和能量结果、最后清理上传图片的完整流程；该测试不能进入普通 Go 测试集合。
+  - API findings:
+    - 当前图片上传接口：
+      - `POST /api/upload-analyze-image-file`：multipart/form-data，字段名 `file`，小程序当前主要使用该接口。
+      - `POST /api/upload-analyze-image`：JSON body `{ "base64Image": "..." }`，兼容 base64 上传。
+    - 当前没有单独公开的“删除 OSS/COS 图片”HTTP 接口。
+    - `DELETE /api/analyze/tasks/:task_id` 只删除/取消分析任务记录，并返回关联图片数量计数；当前后端代码没有实际删除 COS object。
+  - Fix applied:
+    - 新增 `backend/internal/analyze/loadtest/doc.go`，让普通 `go test ./...` 遍历该目录时不会报“无可构建文件”。
+    - 新增 `backend/internal/analyze/loadtest/food_analysis_stability_test.go`，带 build tag `food_analysis_load`。
+    - 测试默认 20 次请求，支持 `stagger` 间隔启动或 `burst` 同时启动。
+    - 每个请求会：
+      - 上传测试图片到 `/api/upload-analyze-image-file`。
+      - 调 `/api/analyze/submit` 创建分析任务。
+      - 轮询 `/api/analyze/tasks/:task_id` 到终态。
+      - 记录 upload/submit/task wait/total duration、任务状态、分析热量。
+    - 清理阶段会：
+      - 调 `DELETE /api/analyze/tasks/:task_id` 清理任务。
+      - 使用后端同一套 COS 配置直接解析图片 URL 的 object key，并删除 `food-images` bucket 中本轮上传的对象。
+  - Run command:
+    - 编译检查：`cd backend && go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1`
+    - 实际压测示例：
+      - `cd backend && FOOD_ANALYSIS_LOAD_TOKENS='token1,token2' FOOD_ANALYSIS_LOAD_PATTERN=burst go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=20m -v`
+      - 若不用真实 tokens，可传 `FOOD_ANALYSIS_LOAD_USER_IDS`，测试会用本地 `config.yaml` 的 JWT secret 生成 token；但这些 user_id 必须已存在于目标数据库，否则会员/积分校验会失败。
+  - Verification:
+    - `go test ./internal/analyze/loadtest -count=1` passed，输出 `[no test files]`，确认普通测试不执行压测。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed，确认带 tag 时压测测试可编译。
+    - `git diff --check` passed。
+  - Follow-up actual run:
+    - User 要求实际运行该测试并以表格返回结果。
+    - 初次真实运行发现测试构造 bug：multipart file part 未设置 `Content-Type: image/jpeg`，后端按当前规则返回 `400 仅支持图片文件上传`；已修复为显式 `CreatePart` 并设置图片 content type。
+    - 重新运行命令：
+      - `FOOD_ANALYSIS_LOAD_USER_IDS='...' FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 FOOD_ANALYSIS_LOAD_TASK_TIMEOUT=20m go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=30m -v`
+    - Run result:
+      - 20 个 burst 请求均完成上传和任务提交。
+      - 11 个请求轮询到 `done`；9 个请求在约 10.5 分钟时轮询 `GET /api/analyze/tasks/:task_id` 得到 500，测试失败。
+      - 测试日志汇总：success rate `55.0%`，成功样本平均 upload `746ms`，平均 submit `1.153s`，平均 task wait `5m19.978s`，p95 task wait `9m50.234s`，平均 total `5m21.877s`，p95 total `9m52.521s`。
+      - DB 二次核算成功样本平均能量约 `724.9 kcal`，范围 `640.3-960.2 kcal`；测试日志中的 `avg_calories=0.0` 是压测工具未读取嵌套 `items[].nutrients.calories` 的统计 bug，已修复。
+    - Cleanup:
+      - 原测试内任务 cleanup 调 `DELETE /api/analyze/tasks/:task_id` 返回 500；原 COS cleanup 因删除 region/DNS 失败未删图。
+      - 已新增 cleanup-only 测试 `TestFoodAnalysisLoadCleanupUploadedImages`，支持 `FOOD_ANALYSIS_LOAD_CLEANUP_IMAGE_URLS` 删除指定图片 URL。
+      - 已运行 cleanup-only 测试，成功删除本次上传的 20 张 COS 图片。
+      - 已手动删除本次压测创建的 20 条 `analysis_tasks` 测试记录，避免继续占用测试用户当日积分/任务统计。
+    - Additional hardening:
+      - 压测工具热量提取兼容 `items[].nutrients.calories`。
+      - COS 删除增加 region candidates 和重试。
+
+## 状态：完成源码修改 - 保存食物记录时将食物含水量计入当天饮水
+
+- 2026-05-12 update:
+  - User 要求：当前用户点击食物记录时，如果每个成分有含水量，需要将含水量累加起来，并加到用户当天喝水里面。
+  - Fix applied:
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - 新增 `WaterLogRecorder` 依赖和 `ConfigureWaterLogRecorder()`。
+      - 保存食物记录成功后，按 `record.RecordTime` 的中国自然日，将各食物成分的含水量累计写入 `user_water_logs`。
+      - 含水量按实际摄入折算：优先使用 `water_ml * ratio / 100`；缺少 ratio 时使用 `water_ml * intake / weight`；无摄入比例上下文时按整份水量计。
+      - 饮水记录 `source_type` 标记为 `ai`；单条超过 5000ml 时拆分，符合 `user_water_logs` 约束。
+    - `backend/internal/app/app.go`
+      - 将 `healthrepo.BodyMetricsRepo` 注入 `FoodRecordService`，复用现有 `CreateWaterLog()`。
+    - `backend/internal/foodrecord/service/service_test.go`
+      - 新增保存食物记录自动创建饮水日志测试。
+      - 新增含水量按比例/摄入重量折算的单元测试。
+  - Verification:
+    - `go test ./internal/foodrecord/service -run 'TestFoodRecordService_Save|TestTotalFoodWaterIntakeMl' -count=1` passed。
+    - `go test ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/foodrecord/handler ./internal/health/service ./internal/worker -run Test -count=1` passed。
+    - `go build -o /tmp/food-link-server-food-water ./cmd/server` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 本轮只改后端保存链路和测试，没有修改小程序页面、组件、样式、路由或交互；未运行 weapp-devtools。
+    - 按项目规则未擅自重启本地后端服务，改动需用户手动重启后生效。
+
+## 状态：完成源码修改 - 食物图片识别尊重 llm_provider 配置
+
+- 2026-05-12 update:
+  - User 反馈上传食物进行分析时，前端结果页显示“识别失败：AI 识别服务配置异常，请联系管理员处理”。
+  - Findings:
+    - 前端展示的错误文案来自后端 worker 的 `sanitizeTaskErrorMessage()`，通常由 DashScope/Ofox key 或 base URL 配置错误触发。
+    - 当前本地 `backend/config.yaml` 配置了 `external.llm_provider: "gemini"` 和 OfoxAI key，但食物图片分析模块没有读取该配置，仍把空 model 或历史 `gemini` 参数默认路由到 Qwen/DashScope。
+    - 在 DashScope key 缺失或不可用的环境下，上传食物图片会调用 DashScope 失败并被清洗成用户看到的配置异常。
+  - Fix applied:
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 新增 `ConfigureImageProvider()`，支持从配置指定默认图片识别 provider。
+      - 普通图片分析、精准图片子任务、图片 engine 对比和批量图片分析在 model 为空或历史 `gemini` 参数时，优先尊重配置的 `llm_provider`。
+      - 显式传 `qwen` 时仍走 Qwen，不被 `llm_provider=gemini` 覆盖。
+    - `backend/internal/app/app.go`
+      - 初始化 `AnalyzeService` 后调用 `ConfigureImageProvider(cfg.External.LLMProvider)`。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 新增配置 `gemini` 时走 Ofox/Gemini、显式 `qwen` 不被覆盖的测试。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/worker -run 'Test' -count=1` passed。
+    - `go build -o /tmp/food-link-server-llm-provider ./cmd/server` passed。
+    - `git diff --check` passed。
+  - Known unrelated test gap:
+    - `go test ./internal/analyze/service ./internal/app ./internal/worker -run 'Test' -count=1` 中 app/worker 通过，但 `internal/analyze/service` 全量仍被既有 `TestTaskService_ListTasks` 空指针问题阻断。
+  - Runtime note:
+    - 本轮只改后端配置选择逻辑；按项目规则未擅自重启本地后端服务。需要用户手动重启 Go server 后，本地上传识别才会走新逻辑。
 
 ## 状态：完成提交、拉取远端并合并 - 积分任务组失败返还
 

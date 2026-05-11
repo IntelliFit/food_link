@@ -29,6 +29,7 @@ const (
 type AnalyzeService struct {
 	dashScopeClient LLMClient
 	ofoxAIClient    LLMClient
+	imageProvider   string
 	users           *authrepo.UserRepo
 	nutrition       *foodrecordrepo.FoodNutritionRepo
 	deepseek        *DeepSeekNutritionEstimator
@@ -46,6 +47,10 @@ func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.
 		users:           users,
 		nutrition:       nutritionRepo,
 	}
+}
+
+func (s *AnalyzeService) ConfigureImageProvider(provider string) {
+	s.imageProvider = normalizeImageProviderPreference(provider)
 }
 
 func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string) {
@@ -71,7 +76,9 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 		timeout = 90 * time.Second
 	}
 	provider, _ := resolveModelConfig(modelName)
-	if strings.TrimSpace(modelName) == "" {
+	if sourceType == "image" {
+		provider, _ = s.resolveImageModelConfig(modelName)
+	} else if strings.TrimSpace(modelName) == "" {
 		provider = "qwen"
 	}
 	traceCtx, span := apm.StartSpan(ctx, "analysis.precision.llm",
@@ -919,6 +926,43 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	return "qwen", "qwen-vl-max"
 }
 
+func normalizeImageProviderPreference(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "qwen", "dashscope", "qwen-vl", "qwen-vl-max":
+		return "qwen"
+	case "gemini", "ofox", "ofoxai", "ofox-gemini":
+		return "gemini"
+	default:
+		return ""
+	}
+}
+
+func shouldUseImageProviderPreference(modelName string) bool {
+	raw := strings.TrimSpace(modelName)
+	if raw == "" {
+		return true
+	}
+	normalized := strings.ToLower(raw)
+	switch normalized {
+	case "gemini", "gemini-flash", "gemini-vision", "gemini-3-flash-preview", "google/gemini-3-flash-preview":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *AnalyzeService) resolveImageModelConfig(modelName string) (provider, model string) {
+	if shouldUseImageProviderPreference(modelName) {
+		switch s.imageProvider {
+		case "gemini":
+			return "gemini", "gemini-3-flash-preview"
+		case "qwen":
+			return "qwen", "qwen-vl-max"
+		}
+	}
+	return resolveModelConfig(modelName)
+}
+
 // Analyze performs single-image or text analysis synchronously.
 func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
 	s.normalizeFoodImageInput(&input)
@@ -931,7 +975,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 
 	prompt := buildPrompt(input, user, executionMode)
 
-	provider, model := resolveModelConfig(input.ModelName)
+	provider, model := s.resolveImageModelConfig(input.ModelName)
 	var client LLMClient
 	switch provider {
 	case "qwen":
@@ -1289,7 +1333,7 @@ func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID strin
 		imageURL = normalizeImageURL(input.Base64Image)
 	}
 
-	provider, model := resolveModelConfig(input.ModelName)
+	provider, model := s.resolveImageModelConfig(input.ModelName)
 	var client LLMClient
 	if provider == "qwen" {
 		client = s.dashScopeClient
@@ -1345,7 +1389,7 @@ func (s *AnalyzeService) AnalyzeBatch(ctx context.Context, userID string, input 
 	}
 
 	basePrompt := buildPrompt(input, user, executionMode)
-	provider, _ := resolveModelConfig(input.ModelName)
+	provider, _ := s.resolveImageModelConfig(input.ModelName)
 	var client LLMClient
 	if provider == "qwen" {
 		client = s.dashScopeClient

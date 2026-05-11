@@ -41,6 +41,10 @@ func TestDashboardService_HomeDashboard(t *testing.T) {
 	now := time.Now()
 	require.NoError(t, db.Create(&homerepo.FoodRecord{
 		ID: "r1", UserID: user.ID, MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &now,
+		Items: []map[string]any{
+			{"name": "粥", "weight": 300.0, "ratio": 50.0, "intake": 150.0, "water_ml": 240.0},
+			{"name": "苹果", "weight": 100.0, "ratio": 100.0, "intake": 100.0, "waterMl": 85.0},
+		},
 	}).Error)
 
 	result, err := svc.HomeDashboard(ctx, user.ID, now.Format("2006-01-02"))
@@ -48,6 +52,10 @@ func TestDashboardService_HomeDashboard(t *testing.T) {
 	assert.NotNil(t, result["intakeData"])
 	assert.NotNil(t, result["meals"])
 	assert.NotNil(t, result["expirySummary"])
+	meals, ok := result["meals"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, meals, 1)
+	assert.Equal(t, 205.0, meals[0]["water_ml"])
 }
 
 func TestDashboardService_HomeDashboard_NoRecords(t *testing.T) {
@@ -148,10 +156,12 @@ func TestBuildMealItem(t *testing.T) {
 		{
 			ID: "r1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &now,
 			ImagePaths: []string{"https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/legacy.jpg"},
+			Items:      []map[string]any{{"water_ml": 240.0, "ratio": 50.0}},
 		},
 		{
 			ID: "r2", MealType: "lunch", TotalCalories: 300, TotalProtein: 10, TotalCarbs: 40, TotalFat: 8, RecordTime: &later,
 			ImagePaths: []string{"https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/second.jpg"},
+			Items:      []map[string]any{{"nutrients": map[string]any{"waterMl": 85.0}, "ratio": 100.0}},
 		},
 	}
 	svc := NewDashboardService(nil, nil, storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"}))
@@ -159,6 +169,7 @@ func TestBuildMealItem(t *testing.T) {
 	assert.Equal(t, "lunch", meal["type"])
 	assert.Equal(t, 800.0, meal["calorie"])
 	assert.Equal(t, 800.0, meal["target"])
+	assert.Equal(t, 205.0, meal["water_ml"])
 	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", meal["image_path"])
 
 	entries, ok := meal["meal_record_entries"].([]map[string]any)
@@ -170,6 +181,13 @@ func TestBuildMealItem(t *testing.T) {
 	assert.Equal(t, "r2", entries[1]["id"])
 	assert.Equal(t, "https://cdn.example.com/food/second.jpg", entries[1]["image_path"])
 	assert.Equal(t, []string{"https://cdn.example.com/food/second.jpg"}, entries[1]["image_paths"])
+}
+
+func TestTotalFoodRecordWaterMl(t *testing.T) {
+	assert.Equal(t, 0.0, totalFoodRecordWaterMl(nil))
+	assert.Equal(t, 150.0, totalFoodRecordWaterMl([]map[string]any{{"water_ml": 300.0, "ratio": 50.0, "weight": 300.0, "intake": 150.0}}))
+	assert.Equal(t, 80.0, totalFoodRecordWaterMl([]map[string]any{{"waterMl": 200.0, "weight": 500.0, "intake": 200.0}}))
+	assert.Equal(t, 125.5, totalFoodRecordWaterMl([]map[string]any{{"nutrients": map[string]any{"water_ml": 125.5}}}))
 }
 
 func TestBuildExpirySummary(t *testing.T) {

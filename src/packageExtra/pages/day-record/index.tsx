@@ -64,7 +64,6 @@ function normalizeDisplayImageUrl(url: string): string {
   if (/^https?:\/\/tmp\//i.test(raw)) {
     return raw.replace(/^https?:\/\/tmp\//i, 'wxfile://tmp/')
   }
-  if (/^http:\/\//i.test(raw)) return ''
   return raw
 }
 

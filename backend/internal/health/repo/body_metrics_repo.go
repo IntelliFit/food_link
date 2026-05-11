@@ -71,6 +71,53 @@ func (r *BodyMetricsRepo) CreateWaterLog(ctx context.Context, log *domain.BodyWa
 	return r.db.WithContext(ctx).Create(log).Error
 }
 
+func (r *BodyMetricsRepo) ReduceWaterLogsByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string, amountMl int) (int, error) {
+	if amountMl <= 0 {
+		return 0, nil
+	}
+	start, end, err := chinaDateWindow(recordedOn)
+	if err != nil {
+		return 0, err
+	}
+	reduced := 0
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var rows []domain.BodyWaterLog
+		if err := tx.
+			Where("user_id = ? AND recorded_on >= ? AND recorded_on < ? AND source_type = ?", userID, start, end, sourceType).
+			Order("created_at desc, id desc").
+			Find(&rows).Error; err != nil {
+			return err
+		}
+		remaining := amountMl
+		for _, row := range rows {
+			if remaining <= 0 {
+				break
+			}
+			if row.AmountMl <= 0 {
+				continue
+			}
+			if row.AmountMl <= remaining {
+				if err := tx.Where("id = ? AND user_id = ?", row.ID, userID).Delete(&domain.BodyWaterLog{}).Error; err != nil {
+					return err
+				}
+				reduced += row.AmountMl
+				remaining -= row.AmountMl
+				continue
+			}
+			nextAmount := row.AmountMl - remaining
+			if err := tx.Model(&domain.BodyWaterLog{}).
+				Where("id = ? AND user_id = ?", row.ID, userID).
+				Update("amount_ml", nextAmount).Error; err != nil {
+				return err
+			}
+			reduced += remaining
+			remaining = 0
+		}
+		return nil
+	})
+	return reduced, err
+}
+
 func (r *BodyMetricsRepo) GetWaterLogsByDate(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWaterLog, error) {
 	var rows []domain.BodyWaterLog
 	q := r.db.WithContext(ctx).Where("user_id = ?", userID)

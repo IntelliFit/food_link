@@ -299,6 +299,36 @@ func TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily(t *testin
 	assert.Equal(t, "qwen image", result["description"])
 }
 
+func TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider(t *testing.T) {
+	dashScopeClient := &mockLLMClient{err: assert.AnError}
+	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini image", "items": []any{}}}
+	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.ConfigureImageProvider("gemini")
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "gemini",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "gemini image", result["description"])
+}
+
+func TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen image", "items": []any{}}}
+	ofoxClient := &mockLLMClient{err: assert.AnError}
+	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.ConfigureImageProvider("gemini")
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "qwen",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "qwen image", result["description"])
+}
+
 func TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError(t *testing.T) {
 	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen fallback", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: errors.New("ofoxai api error 429: Resource exhausted. Please try again later")}

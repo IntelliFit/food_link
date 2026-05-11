@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/repo"
+	healthdomain "food_link/backend/internal/health/domain"
 	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/pkg/storage"
 	"gorm.io/gorm"
@@ -33,10 +35,16 @@ type FoodRecordService struct {
 	userRepo   *authrepo.UserRepo
 	storage    *storage.Client
 	rewards    InviteRewardActivator
+	waterLogs  WaterLogRecorder
 }
 
 type InviteRewardActivator interface {
 	ActivatePendingInviteReferralOnFirstValidUse(ctx context.Context, inviteeUserID, effectiveAction string) (*membershipdomain.UserInviteReferral, error)
+}
+
+type WaterLogRecorder interface {
+	CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error
+	ReduceWaterLogsByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string, amountMl int) (int, error)
 }
 
 func NewFoodRecordService(
@@ -59,6 +67,10 @@ func NewFoodRecordService(
 
 func (s *FoodRecordService) ConfigureInviteRewardActivator(rewards InviteRewardActivator) {
 	s.rewards = rewards
+}
+
+func (s *FoodRecordService) ConfigureWaterLogRecorder(recorder WaterLogRecorder) {
+	s.waterLogs = recorder
 }
 
 type SaveFoodRecordInput struct {
@@ -140,8 +152,93 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	if err := s.recordRepo.Create(ctx, record); err != nil {
 		return nil, err
 	}
+	if err := s.recordFoodWaterIntake(ctx, userID, record); err != nil {
+		return nil, err
+	}
 	s.activateInviteReward(ctx, userID, "food_record")
 	return record, nil
+}
+
+func (s *FoodRecordService) recordFoodWaterIntake(ctx context.Context, userID string, record *domain.FoodRecord) error {
+	if s.waterLogs == nil || record == nil || strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	amountMl := totalFoodWaterIntakeMl(record.Items)
+	if amountMl <= 0 {
+		return nil
+	}
+	return s.recordFoodWaterAmount(ctx, userID, foodRecordWaterDate(record.RecordTime), amountMl)
+}
+
+func (s *FoodRecordService) adjustFoodWaterIntake(ctx context.Context, userID string, recordTime *time.Time, deltaMl int) error {
+	if s.waterLogs == nil || strings.TrimSpace(userID) == "" || deltaMl == 0 {
+		return nil
+	}
+	recordedDate := foodRecordWaterDate(recordTime)
+	if deltaMl > 0 {
+		return s.recordFoodWaterAmount(ctx, userID, recordedDate, deltaMl)
+	}
+	_, err := s.waterLogs.ReduceWaterLogsByDateSource(ctx, userID, recordedDate.Format("2006-01-02"), "ai", -deltaMl)
+	return err
+}
+
+func (s *FoodRecordService) recordFoodWaterAmount(ctx context.Context, userID string, recordedDate time.Time, amountMl int) error {
+	if s.waterLogs == nil || amountMl <= 0 {
+		return nil
+	}
+	for amountMl > 0 {
+		chunk := amountMl
+		if chunk > 5000 {
+			chunk = 5000
+		}
+		now := time.Now().UTC()
+		log := &healthdomain.BodyWaterLog{
+			UserID:     userID,
+			AmountMl:   chunk,
+			RecordedOn: &recordedDate,
+			SourceType: "ai",
+			CreatedAt:  &now,
+		}
+		if err := s.waterLogs.CreateWaterLog(ctx, log); err != nil {
+			return err
+		}
+		amountMl -= chunk
+	}
+	return nil
+}
+
+func foodRecordWaterDate(recordTime *time.Time) time.Time {
+	recordedOn := time.Now().In(chinaTZ)
+	if recordTime != nil {
+		recordedOn = recordTime.In(chinaTZ)
+	}
+	return time.Date(recordedOn.Year(), recordedOn.Month(), recordedOn.Day(), 0, 0, 0, 0, chinaTZ)
+}
+
+func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
+	total := 0.0
+	for _, item := range items {
+		waterMl := item.WaterMl
+		if waterMl <= 0 {
+			continue
+		}
+		ratio := item.Ratio
+		if ratio > 0 {
+			total += waterMl * ratio / 100
+			continue
+		}
+		if item.Intake > 0 && item.Weight > 0 {
+			total += waterMl * item.Intake / item.Weight
+			continue
+		}
+		if item.Intake == 0 && item.Weight == 0 {
+			total += waterMl
+		}
+	}
+	if total <= 0 {
+		return 0
+	}
+	return int(math.Round(total))
 }
 
 func (s *FoodRecordService) activateInviteReward(ctx context.Context, userID, action string) {
@@ -201,6 +298,23 @@ func (s *FoodRecordService) Get(ctx context.Context, userID, recordID string) (*
 }
 
 func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string, input UpdateFoodRecordInput) (*domain.FoodRecord, error) {
+	var previousWaterMl int
+	var previousRecordTime *time.Time
+	if input.Items != nil {
+		existing, err := s.recordRepo.GetByID(ctx, recordID)
+		if err != nil {
+			return nil, err
+		}
+		if existing == nil {
+			return nil, commonerrors.ErrNotFound
+		}
+		if existing.UserID != userID {
+			return nil, commonerrors.ErrNotFound
+		}
+		previousWaterMl = totalFoodWaterIntakeMl(existing.Items)
+		previousRecordTime = existing.RecordTime
+	}
+
 	updates := map[string]any{}
 	if input.MealType != nil {
 		if !validMealType(*input.MealType) {
@@ -236,17 +350,37 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	if record == nil {
 		return nil, commonerrors.ErrNotFound
 	}
+	if input.Items != nil {
+		nextWaterMl := totalFoodWaterIntakeMl(record.Items)
+		if err := s.adjustFoodWaterIntake(ctx, userID, previousRecordTime, nextWaterMl-previousWaterMl); err != nil {
+			return nil, err
+		}
+	}
 	record = s.hydrateRecord(record)
 	record.MealType = normalizeMealType(record.MealType, record.RecordTime)
 	return record, nil
 }
 
 func (s *FoodRecordService) Delete(ctx context.Context, userID, recordID string) error {
+	record, err := s.recordRepo.GetByID(ctx, recordID)
+	if err != nil {
+		return err
+	}
+	if record == nil {
+		return commonerrors.ErrNotFound
+	}
+	if record.UserID != userID {
+		return commonerrors.ErrNotFound
+	}
+	waterMl := totalFoodWaterIntakeMl(record.Items)
 	if err := s.recordRepo.Delete(ctx, userID, recordID); err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return commonerrors.ErrNotFound
 		}
 		return err
+	}
+	if waterMl > 0 {
+		return s.adjustFoodWaterIntake(ctx, userID, record.RecordTime, -waterMl)
 	}
 	return nil
 }

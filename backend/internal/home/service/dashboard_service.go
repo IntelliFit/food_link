@@ -210,7 +210,7 @@ func normalizeMealType(mealType string, recordTime *time.Time) string {
 }
 
 func (s *DashboardService) buildMealItem(mealType string, records []homerepo.FoodRecord, mealTarget float64) map[string]any {
-	mealCal, mealProtein, mealCarbs, mealFat := 0.0, 0.0, 0.0, 0.0
+	mealCal, mealProtein, mealCarbs, mealFat, mealWater := 0.0, 0.0, 0.0, 0.0, 0.0
 	imagePaths := make([]string, 0)
 	seen := map[string]bool{}
 	entries := make([]map[string]any, 0, len(records))
@@ -227,6 +227,7 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 		mealProtein += record.TotalProtein
 		mealCarbs += record.TotalCarbs
 		mealFat += record.TotalFat
+		mealWater += totalFoodRecordWaterMl(record.Items)
 		recordImagePaths := make([]string, 0)
 		recordSeen := map[string]bool{}
 		for _, imagePath := range record.ImagePaths {
@@ -292,6 +293,7 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 		"protein":             round1(mealProtein),
 		"carbs":               round1(mealCarbs),
 		"fat":                 round1(mealFat),
+		"water_ml":            round1(mealWater),
 		"target":              round1(mealTarget),
 		"progress":            progress,
 		"tags":                tags,
@@ -301,6 +303,46 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 		"description":         strings.Join(titles, "、"),
 		"meal_record_entries": entries,
 	}
+}
+
+func totalFoodRecordWaterMl(items []map[string]any) float64 {
+	total := 0.0
+	for _, item := range items {
+		waterMl := waterMlFromHomeFoodItem(item)
+		if waterMl <= 0 {
+			continue
+		}
+		if ratio, ok := toFloat64(item["ratio"]); ok && ratio > 0 {
+			total += waterMl * ratio / 100
+			continue
+		}
+		intake, intakeOK := toFloat64(item["intake"])
+		weight, weightOK := toFloat64(item["weight"])
+		if intakeOK && weightOK && intake > 0 && weight > 0 {
+			total += waterMl * intake / weight
+			continue
+		}
+		if (!intakeOK || intake == 0) && (!weightOK || weight == 0) {
+			total += waterMl
+		}
+	}
+	return total
+}
+
+func waterMlFromHomeFoodItem(item map[string]any) float64 {
+	for _, key := range []string{"water_ml", "waterMl"} {
+		if value, ok := toFloat64(item[key]); ok {
+			return value
+		}
+	}
+	if nutrients, ok := item["nutrients"].(map[string]any); ok {
+		for _, key := range []string{"water_ml", "waterMl"} {
+			if value, ok := toFloat64(nutrients[key]); ok {
+				return value
+			}
+		}
+	}
+	return 0
 }
 
 func (s *DashboardService) resolveFoodImageURL(path string) string {

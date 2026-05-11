@@ -137,6 +137,7 @@ func New(cfg *config.Config) (*App, error) {
 	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "qwen-vl-max")
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
+	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
@@ -148,7 +149,9 @@ func New(cfg *config.Config) (*App, error) {
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 	frTaskRepo := foodrecordrepo.NewAnalysisTaskRepo(db)
 	frNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	bodyMetricsRepo := healthrepo.NewBodyMetricsRepo(db)
 	frSvc := foodrecordservice.NewFoodRecordService(frRepo, frTaskRepo, userRepo, storageClient)
+	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
@@ -168,7 +171,6 @@ func New(cfg *config.Config) (*App, error) {
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Health module DI
-	bodyMetricsRepo := healthrepo.NewBodyMetricsRepo(db)
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
 	statsRepo := healthrepo.NewStatsRepo(db)
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)

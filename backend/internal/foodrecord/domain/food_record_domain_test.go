@@ -1,10 +1,12 @@
 package domain
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFoodRecord_Struct(t *testing.T) {
@@ -38,6 +40,20 @@ func TestFoodItem_Struct(t *testing.T) {
 		},
 	}
 	assert.Equal(t, "Apple", item.Name)
+}
+
+func TestFoodItem_UnmarshalJSONWaterMlAliases(t *testing.T) {
+	var camel FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"粥","waterMl":120,"nutrients":{"calories":10}}`), &camel))
+	assert.Equal(t, 120.0, camel.WaterMl)
+
+	var snake FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"粥","water_ml":85,"nutrients":{"calories":10}}`), &snake))
+	assert.Equal(t, 85.0, snake.WaterMl)
+
+	var nested FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"汤","nutrients":{"calories":10,"water_ml":200}}`), &nested))
+	assert.Equal(t, 200.0, nested.WaterMl)
 }
 
 func TestFoodNutrition_Struct(t *testing.T) {

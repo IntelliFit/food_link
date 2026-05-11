@@ -12,6 +12,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	foodrepo "food_link/backend/internal/foodrecord/repo"
+	healthdomain "food_link/backend/internal/health/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
@@ -22,6 +23,50 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type mockWaterLogRecorder struct {
+	logs []healthdomain.BodyWaterLog
+	err  error
+}
+
+func (m *mockWaterLogRecorder) CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.logs = append(m.logs, *log)
+	return nil
+}
+
+func (m *mockWaterLogRecorder) ReduceWaterLogsByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string, amountMl int) (int, error) {
+	if m.err != nil {
+		return 0, m.err
+	}
+	if amountMl <= 0 {
+		return 0, nil
+	}
+	targetDate, err := time.ParseInLocation("2006-01-02", recordedOn, chinaTZ)
+	if err != nil {
+		return 0, err
+	}
+	reduced := 0
+	nextLogs := make([]healthdomain.BodyWaterLog, 0, len(m.logs))
+	for _, log := range m.logs {
+		if reduced >= amountMl || log.UserID != userID || log.SourceType != sourceType || log.RecordedOn == nil || log.RecordedOn.In(chinaTZ).Format("2006-01-02") != targetDate.Format("2006-01-02") {
+			nextLogs = append(nextLogs, log)
+			continue
+		}
+		remaining := amountMl - reduced
+		if log.AmountMl <= remaining {
+			reduced += log.AmountMl
+			continue
+		}
+		log.AmountMl -= remaining
+		reduced += remaining
+		nextLogs = append(nextLogs, log)
+	}
+	m.logs = nextLogs
+	return reduced, nil
+}
 
 func setupServiceTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open("file::memory:?_fk=1"), &gorm.Config{})
@@ -77,7 +122,7 @@ func TestFoodRecordService_Save_WithDate(t *testing.T) {
 	svc := NewFoodRecordService(r, tr, ur)
 	ctx := context.Background()
 
-	dateStr := "2024-06-15"
+	dateStr := time.Now().In(chinaTZ).AddDate(0, 0, -1).Format("2006-01-02")
 	record, err := svc.Save(ctx, "u1", SaveFoodRecordInput{
 		MealType:      "lunch",
 		Date:          &dateStr,
@@ -86,7 +131,107 @@ func TestFoodRecordService_Save_WithDate(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, record.RecordTime)
 	chinaTZ := time.FixedZone("Asia/Shanghai", 8*60*60)
-	assert.Equal(t, 15, record.RecordTime.In(chinaTZ).Day())
+	assert.Equal(t, dateStr, record.RecordTime.In(chinaTZ).Format("2006-01-02"))
+}
+
+func TestFoodRecordService_Save_AddsFoodWaterToBodyWater(t *testing.T) {
+	db := setupServiceTestDB(t)
+	r := foodrepo.NewFoodRecordRepo(db)
+	tr := foodrepo.NewAnalysisTaskRepo(db)
+	ur := repo.NewUserRepo(db)
+	waterRecorder := &mockWaterLogRecorder{}
+	svc := NewFoodRecordService(r, tr, ur)
+	svc.ConfigureWaterLogRecorder(waterRecorder)
+	ctx := context.Background()
+
+	dateStr := time.Now().In(chinaTZ).AddDate(0, 0, -1).Format("2006-01-02")
+	record, err := svc.Save(ctx, "u1", SaveFoodRecordInput{
+		MealType: "lunch",
+		Date:     &dateStr,
+		Items: []domain.FoodItem{
+			{Name: "粥", Weight: 300, Ratio: 50, Intake: 150, WaterMl: 240},
+			{Name: "苹果", Weight: 100, Ratio: 100, Intake: 100, WaterMl: 85},
+			{Name: "炸物", Weight: 80, Ratio: 100, Intake: 80, WaterMl: 0},
+		},
+		TotalCalories: 500,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	require.Len(t, waterRecorder.logs, 1)
+	assert.Equal(t, "u1", waterRecorder.logs[0].UserID)
+	assert.Equal(t, 205, waterRecorder.logs[0].AmountMl)
+	assert.Equal(t, "ai", waterRecorder.logs[0].SourceType)
+	require.NotNil(t, waterRecorder.logs[0].RecordedOn)
+	assert.Equal(t, dateStr, waterRecorder.logs[0].RecordedOn.In(chinaTZ).Format("2006-01-02"))
+}
+
+func TestFoodRecordService_Update_AdjustsFoodWaterDiff(t *testing.T) {
+	db := setupServiceTestDB(t)
+	r := foodrepo.NewFoodRecordRepo(db)
+	tr := foodrepo.NewAnalysisTaskRepo(db)
+	ur := repo.NewUserRepo(db)
+	waterRecorder := &mockWaterLogRecorder{}
+	svc := NewFoodRecordService(r, tr, ur)
+	svc.ConfigureWaterLogRecorder(waterRecorder)
+	ctx := context.Background()
+
+	recordTime := time.Now().In(chinaTZ)
+	record := &domain.FoodRecord{
+		UserID:     "u1",
+		MealType:   "lunch",
+		RecordTime: &recordTime,
+		Items: []domain.FoodItem{
+			{Name: "粥", Weight: 300, Ratio: 50, Intake: 150, WaterMl: 240},
+			{Name: "苹果", Weight: 100, Ratio: 100, Intake: 100, WaterMl: 85},
+		},
+	}
+	require.NoError(t, r.Create(ctx, record))
+	recordedOn := foodRecordWaterDate(record.RecordTime)
+	require.NoError(t, svc.recordFoodWaterAmount(ctx, "u1", recordedOn, 205))
+
+	_, err := svc.Update(ctx, "u1", record.ID, UpdateFoodRecordInput{
+		Items: []domain.FoodItem{{Name: "苹果", Weight: 100, Ratio: 100, Intake: 100, WaterMl: 85}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, waterRecorder.logs, 1)
+	assert.Equal(t, 85, waterRecorder.logs[0].AmountMl)
+}
+
+func TestFoodRecordService_Delete_ReducesFoodWater(t *testing.T) {
+	db := setupServiceTestDB(t)
+	r := foodrepo.NewFoodRecordRepo(db)
+	tr := foodrepo.NewAnalysisTaskRepo(db)
+	ur := repo.NewUserRepo(db)
+	waterRecorder := &mockWaterLogRecorder{}
+	svc := NewFoodRecordService(r, tr, ur)
+	svc.ConfigureWaterLogRecorder(waterRecorder)
+	ctx := context.Background()
+
+	recordTime := time.Now().In(chinaTZ)
+	record := &domain.FoodRecord{
+		UserID:     "u1",
+		MealType:   "lunch",
+		RecordTime: &recordTime,
+		Items:      []domain.FoodItem{{Name: "粥", Weight: 300, Ratio: 50, Intake: 150, WaterMl: 240}},
+	}
+	require.NoError(t, r.Create(ctx, record))
+	recordedOn := foodRecordWaterDate(record.RecordTime)
+	require.NoError(t, svc.recordFoodWaterAmount(ctx, "u1", recordedOn, 50))
+
+	err := svc.Delete(ctx, "u1", record.ID)
+
+	require.NoError(t, err)
+	assert.Empty(t, waterRecorder.logs)
+}
+
+func TestTotalFoodWaterIntakeMl(t *testing.T) {
+	assert.Equal(t, 0, totalFoodWaterIntakeMl(nil))
+	assert.Equal(t, 150, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 300, Ratio: 50, Weight: 300, Intake: 150}}))
+	assert.Equal(t, 80, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 200, Weight: 500, Intake: 200}}))
+	assert.Equal(t, 0, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 200, Ratio: 0, Weight: 500, Intake: 0}}))
+	assert.Equal(t, 126, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 125.5}}))
 }
 
 func TestFoodRecordService_Save_WithSourceTaskID(t *testing.T) {
@@ -97,7 +242,8 @@ func TestFoodRecordService_Save_WithSourceTaskID(t *testing.T) {
 	svc := NewFoodRecordService(r, tr, ur)
 	ctx := context.Background()
 
-	payload := map[string]any{"recorded_on": "2024-06-20"}
+	recordedOn := time.Now().In(chinaTZ).Format("2006-01-02")
+	payload := map[string]any{"recorded_on": recordedOn}
 	task := &analyzedomain.AnalysisTask{UserID: "u1", TaskType: "analyze", Payload: payload}
 	require.NoError(t, db.Create(task).Error)
 
@@ -352,7 +498,7 @@ func TestFoodRecordService_hydrateRecord(t *testing.T) {
 	// already has image paths
 	record := &domain.FoodRecord{ImagePaths: []string{"img.jpg"}}
 	result := svc.hydrateRecord(record)
-	assert.Equal(t, []string{"img.jpg"}, result.ImagePaths)
+	assert.Equal(t, []string{"https://cdn.example.com/food/img.jpg"}, result.ImagePaths)
 
 	// with source task id
 	imagePaths := []string{"https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/food-images/task_img.jpg"}
@@ -480,6 +626,11 @@ func TestFoodRecordService_Delete_RepoError(t *testing.T) {
 	ur := repo.NewUserRepo(db)
 	svc := NewFoodRecordService(r, tr, ur)
 	ctx := context.Background()
+
+	patchGet := ApplyMethod(reflect.TypeOf(r), "GetByID", func(_ *foodrepo.FoodRecordRepo, _ context.Context, _ string) (*domain.FoodRecord, error) {
+		return &domain.FoodRecord{ID: "id1", UserID: "u1", MealType: "lunch"}, nil
+	})
+	defer patchGet.Reset()
 
 	patches := ApplyMethod(reflect.TypeOf(r), "Delete", func(_ *foodrepo.FoodRecordRepo, _ context.Context, _, _ string) error {
 		return errors.New("db error")

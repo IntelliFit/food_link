@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // FoodRecord — table: user_food_records
 type FoodRecord struct {
@@ -40,6 +43,51 @@ type FoodItem struct {
 	ManualSourceID     *string           `json:"manual_source_id,omitempty"`
 	ManualSourceTitle  *string           `json:"manual_source_title,omitempty"`
 	ManualPortionLabel *string           `json:"manual_portion_label,omitempty"`
+}
+
+func (f *FoodItem) UnmarshalJSON(data []byte) error {
+	type Alias FoodItem
+	aux := struct {
+		*Alias
+		WaterMlCamel *float64       `json:"waterMl"`
+		WaterMlSnake *float64       `json:"water_ml"`
+		NutrientsRaw map[string]any `json:"nutrients"`
+	}{
+		Alias: (*Alias)(f),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	switch {
+	case aux.WaterMlSnake != nil:
+		f.WaterMl = *aux.WaterMlSnake
+	case aux.WaterMlCamel != nil:
+		f.WaterMl = *aux.WaterMlCamel
+	case f.WaterMl <= 0 && aux.NutrientsRaw != nil:
+		f.WaterMl = numberFromAny(aux.NutrientsRaw["water_ml"])
+		if f.WaterMl <= 0 {
+			f.WaterMl = numberFromAny(aux.NutrientsRaw["waterMl"])
+		}
+	}
+	return nil
+}
+
+func numberFromAny(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		n, _ := v.Float64()
+		return n
+	default:
+		return 0
+	}
 }
 
 type FoodItemNutrients struct {

@@ -85,6 +85,43 @@ func TestBodyMetricsRepo_WaterCRUD(t *testing.T) {
 	assert.Equal(t, int64(1), deleted)
 }
 
+func TestBodyMetricsRepo_ReduceWaterLogsByDateSource(t *testing.T) {
+	db := setupBodyMetricsTestDB(t)
+	r := NewBodyMetricsRepo(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	manualSource := "manual"
+	require.NoError(t, r.CreateWaterLog(ctx, &domain.BodyWaterLog{UserID: "user-1", AmountMl: 100, RecordedOn: &recordedOn, SourceType: manualSource, CreatedAt: &now}))
+	require.NoError(t, r.CreateWaterLog(ctx, &domain.BodyWaterLog{UserID: "user-1", AmountMl: 80, RecordedOn: &recordedOn, SourceType: "ai", CreatedAt: &now}))
+	require.NoError(t, r.CreateWaterLog(ctx, &domain.BodyWaterLog{UserID: "user-1", AmountMl: 150, RecordedOn: &recordedOn, SourceType: "ai", CreatedAt: &now}))
+
+	reduced, err := r.ReduceWaterLogsByDateSource(ctx, "user-1", "2024-06-15", "ai", 200)
+
+	require.NoError(t, err)
+	assert.Equal(t, 200, reduced)
+	logs, err := r.GetWaterLogsByExactDate(ctx, "user-1", "2024-06-15")
+	require.NoError(t, err)
+	total := 0
+	manualTotal := 0
+	for _, log := range logs {
+		total += log.AmountMl
+		if log.SourceType == manualSource {
+			manualTotal += log.AmountMl
+		}
+	}
+	assert.Equal(t, 130, total)
+	assert.Equal(t, 100, manualTotal)
+
+	reduced, err = r.ReduceWaterLogsByDateSource(ctx, "user-1", "2024-06-15", "ai", 999)
+	require.NoError(t, err)
+	assert.Equal(t, 30, reduced)
+	sum, err := r.SumWaterByDate(ctx, "user-1", "2024-06-15")
+	require.NoError(t, err)
+	assert.Equal(t, int64(100), sum)
+}
+
 func TestBodyMetricsRepo_Settings(t *testing.T) {
 	db := setupBodyMetricsTestDB(t)
 	r := NewBodyMetricsRepo(db)

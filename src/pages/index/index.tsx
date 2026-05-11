@@ -965,10 +965,13 @@ function IndexPage() {
       }
     })()
 
-    // 若本地缓存的 meals 缺少蛋白质/脂肪/碳水，视为脏数据，强制走云端刷新
+    // 若本地缓存的 meals 缺少营养聚合字段，视为脏数据，强制走云端刷新
     const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
     if (localSnapshot && (localSnapshot.meals || []).some(
-      (meal) => typeof meal.protein !== 'number' || typeof meal.carbs !== 'number' || typeof meal.fat !== 'number'
+      (meal) => typeof meal.protein !== 'number' ||
+        typeof meal.carbs !== 'number' ||
+        typeof meal.fat !== 'number' ||
+        typeof (meal.water_ml ?? meal.waterMl) !== 'number'
     )) {
       homeDataStaleRef.current = true
     }
@@ -2591,7 +2594,7 @@ function IndexPage() {
                           </Text>
                         </View>
                       </View>
-                      {/* 第三行：三大营养素 */}
+                      {/* 第三行：三大营养素 + 含水量 */}
                       <View className='meal-macros-row'>
                         {typeof meal.protein === 'number' && (
                           <View className='meal-macro-pill'>
@@ -2609,6 +2612,12 @@ function IndexPage() {
                           <View className='meal-macro-pill'>
                             <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin' style={{ color: '#f0985c', fontSize: '22rpx', marginRight: '4rpx' }} />
                             <Text className='meal-macro-text'>{formatDisplayNumber(meal.fat)}g</Text>
+                          </View>
+                        )}
+                        {typeof (meal.water_ml ?? meal.waterMl) === 'number' && Number(meal.water_ml ?? meal.waterMl) > 0 && (
+                          <View className='meal-macro-pill'>
+                            <Text className='iconfont icon-drink' style={{ color: '#70B8A0', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='meal-macro-text'>{formatDisplayNumber(Number(meal.water_ml ?? meal.waterMl))}ml</Text>
                           </View>
                         )}
                       </View>

@@ -520,6 +520,9 @@ export interface HomeMealItem {
   protein?: number
   carbs?: number
   fat?: number
+  /** 该餐次食物含水量聚合（ml） */
+  water_ml?: number
+  waterMl?: number
   /** 该餐次食物描述（由多条记录标题拼接） */
   description?: string
 }
@@ -555,6 +558,8 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
     protein: row.protein,
     carbs: row.carbs,
     fat: row.fat,
+    water_ml: typeof row.water_ml === 'number' ? row.water_ml : row.waterMl,
+    waterMl: typeof row.waterMl === 'number' ? row.waterMl : row.water_ml,
   }
 }
 

@@ -17,6 +17,45 @@
   - 本地 Kafka broker 暴露为 `127.0.0.1:9092`，topic 使用 `food-link-analysis-tasks`。
   - 本地测试时 `backend/config.yaml` 可临时设置 `task_queue.driver: "kafka"`、`brokers: ["127.0.0.1:9092"]`、`consumer_group: "food-link-local-workers"`。
   - 独立 worker 入口已删除；本地 Kafka 模式仍通过 server 内嵌 worker 消费，必须保持 `worker.count > 0`。
+- `2026-05-12`: 食物记录含水量与喝水统计的扣减口径：
+  - 保存食物记录时自动生成的饮水日志统一使用 `source_type='ai'`，用于和用户手动喝水区分。
+  - 删除整条食物记录时，后端按原记录 items 的实际摄入含水量，从该记录日期对应中国自然日的 AI 饮水日志中扣减。
+  - 当天饮食记录页删除单个食物成分实际走 `PUT /api/food-record/:id` 更新 items；后端必须按旧 items 与新 items 的含水量差值同步调整 AI 饮水日志。
+  - 扣减不能影响 `source_type='manual'` 的手动喝水记录；若 AI 饮水不足，只扣到已有 AI 水量为止，整体喝水统计不得小于 0。
+
+- `2026-05-12`: 食物分析压测脚本的稳定口径：
+  - `backend/internal/analyze/loadtest/food_analysis_stability_test.go` 仍使用 `//go:build food_analysis_load`，不进入普通 `go test ./...`。
+  - 每次压测只上传 1 张图片到 `/api/upload-analyze-image-file`，随后所有并发请求复用同一个 image URL 调 `/api/analyze/submit`，用于隔离模型/任务处理并发能力，避免 COS 上传成为主要变量。
+  - 清理阶段需要对 image URL 去重后删除 COS object；任务记录仍逐个调用 `DELETE /api/analyze/tasks/:task_id`。
+  - 模型快速切换优先使用 Go test 参数 `-food.analysis.model=<modelName>`，也兼容环境变量 `FOOD_ANALYSIS_LOAD_MODEL`；执行模式同理支持 `-food.analysis.execution_mode=<mode>` 和 `FOOD_ANALYSIS_LOAD_EXECUTION_MODE`。
+  - 压测结果必须输出 task wait 与 total duration 的 variance/stddev；默认使用 20 个同图输入样本。
+  - 千问专用压测入口放在 `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`，测试名 `TestFoodAnalysisStabilityAndLatencyQwen`，默认 `modelName="qwen"`，后端解析为 DashScope `qwen-vl-max`。
+
+- `2026-05-12`: 食物记录含水量需要同时进入首页今日餐食展示和当天喝水统计：
+  - 保存食物记录时，后端以 `items[].water_ml` 为主，同时兼容 `waterMl`、`nutrients.water_ml`、`nutrients.waterMl`，避免不同前端/旧缓存 payload 丢失水量。
+  - 计入喝水的水量按实际摄入折算：优先 `water_ml * ratio / 100`；缺少 ratio 时用 `water_ml * intake / weight`；缺少摄入上下文时才按整份含水量计。
+  - 自动写入 `user_water_logs`，`source_type='ai'`，日期使用该食物记录的 `record_time` 所在中国自然日。
+  - 首页 `/api/home/dashboard` 的 `meals[]` 必须返回 `water_ml`，同样按该餐下所有 `user_food_records.items` 的实际摄入水量聚合。
+  - 小程序首页今日餐食卡片在蛋白质/碳水/脂肪之后展示含水量，使用 `icon-drink` 和 `ml`；本地乐观缓存和旧缓存刷新判断也要保留该字段。
+
+- `2026-05-12`: 食物分析稳定性/平均响应速度压测采用手动 build tag，不进入普通 Go 测试：
+  - 压测文件放在 `backend/internal/analyze/loadtest/food_analysis_stability_test.go`，使用 `//go:build food_analysis_load`。
+  - 普通 `go test ./...` 不应执行真实上传、模型调用、任务轮询或 COS 删除。
+  - 手动执行时使用 `go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=20m -v`。
+  - 食物分析上传接口是 `POST /api/upload-analyze-image-file`（multipart 字段 `file`）和兼容旧入口 `POST /api/upload-analyze-image`（base64）。
+  - 当前没有公开 HTTP 删除 COS 图片接口；`DELETE /api/analyze/tasks/:task_id` 只删除/取消任务记录，不实际删除 COS object。压测清理上传图片时直接使用后端 COS 配置按 URL 解析 key 并删除 `food-images` bucket 对象。
+  - 压测清理可单独运行 `TestFoodAnalysisLoadCleanupUploadedImages`，通过 `FOOD_ANALYSIS_LOAD_CLEANUP_IMAGE_URLS` 删除已知图片 URL；删除 COS 对象时应支持 region fallback 和短重试，避免本地配置/网络抖动导致清理失败。
+
+- `2026-05-12`: 保存食物记录时，食物成分含水量要计入当天饮水：
+  - 后端 `POST /api/food-record/save` 成功创建 `user_food_records` 后，根据 `items[].water_ml` 累计生成 `user_water_logs`。
+  - 计入饮水的水量必须按实际摄入折算：优先 `water_ml * ratio / 100`，缺少 ratio 时用 `water_ml * intake / weight`。
+  - 饮水记录日期使用食物记录的 `record_time` 对应中国自然日，不一定是当天真实日期；补录到昨天/前天时也应加到对应日期。
+  - 自动生成的饮水日志 `source_type='ai'`，用于和用户手动喝水记录区分。
+
+- `2026-05-12`: 食物图片识别默认模型选择必须尊重 `external.llm_provider`：
+  - `backend/config.yaml` 中若设置 `external.llm_provider: "gemini"`，普通食物图片分析、精准图片子任务、图片 engine 对比和批量图片分析在 model 为空或历史 `gemini` 参数时，应走 Ofox/Gemini。
+  - 显式传入 `qwen` / `qwen-vl-max` 时仍走 DashScope/Qwen，不被默认 provider 覆盖。
+  - 这条规则用于避免配置文件已经选择 Gemini、但分析模块仍默认打到缺失/不可用 DashScope key 后返回“AI 识别服务配置异常”。
 
 - `2026-05-11`: 食物/健康/运动等 `analysis_tasks` 分析任务不再把 DB pending 扫描当作分发队列：
   - DB 表 `analysis_tasks` 只作为任务状态、结果、错误信息和前端轮询的持久化来源。
