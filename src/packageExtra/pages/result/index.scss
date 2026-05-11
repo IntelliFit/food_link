@@ -986,6 +986,78 @@ transitiontransition
   font-weight: 500;
 }
 
+.ingredient-more-section {
+  padding: 0 18rpx;
+  background: transparent;
+  border-bottom: 1rpx solid rgba(178, 196, 183, 0.28);
+}
+
+.ingredient-more-toggle {
+  min-height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  color: #0f766e;
+}
+
+.ingredient-more-toggle-text {
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.ingredient-more-toggle-icon {
+  font-size: 24rpx;
+  line-height: 1;
+  transition: transform 0.2s ease;
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
+}
+
+.ingredient-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8rpx;
+  padding: 0 0 18rpx;
+}
+
+.ingredient-detail-cell {
+  min-width: 0;
+  padding: 12rpx 8rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1rpx solid rgba(196, 210, 200, 0.58);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.ingredient-detail-label {
+  font-size: 18rpx;
+  color: #64748b;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ingredient-detail-value {
+  font-size: 24rpx;
+  color: #0f172a;
+  font-weight: 700;
+  font-family: 'DIN Alternate', sans-serif;
+  line-height: 1.1;
+}
+
+.ingredient-detail-unit {
+  margin-left: 2rpx;
+  font-size: 17rpx;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
 .edit-icon-wrapper {
   width: 44rpx;
   height: 44rpx;
@@ -2122,6 +2194,28 @@ transitiontransition
 
   .ingredient-nutrition-strip {
     border-bottom-color: rgba(120, 139, 130, 0.14);
+  }
+
+  .ingredient-more-section {
+    border-bottom-color: rgba(120, 139, 130, 0.14);
+  }
+
+  .ingredient-more-toggle {
+    color: #5eead4;
+  }
+
+  .ingredient-detail-cell {
+    background: rgba(22, 31, 29, 0.88);
+    border-color: rgba(216, 230, 223, 0.14);
+  }
+
+  .ingredient-detail-label,
+  .ingredient-detail-unit {
+    color: rgba(214, 226, 220, 0.62);
+  }
+
+  .ingredient-detail-value {
+    color: #e8f1ec;
   }
 
   .ingredient-summary-cell {

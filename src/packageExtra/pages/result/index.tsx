@@ -5,6 +5,7 @@ import {
   AnalyzeResponse,
   FoodItem,
   MealType,
+  type Nutrients,
   type SaveFoodRecordRequest,
   saveFoodRecord,
   getAccessToken,
@@ -227,6 +228,7 @@ interface NutritionItem {
   carbs: number
   fat: number
   waterMl: number
+  nutrients: Nutrients
 }
 
 type MacroField = 'protein' | 'carbs' | 'fat'
@@ -252,6 +254,110 @@ const formatIngredientMetricDisplay = (field: IngredientMetricField, value: numb
 )
 
 const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
+
+type NutrientDetailKey = keyof Pick<Nutrients,
+  'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
+  'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg' |
+  'vitaminDMcg' | 'vitaminEMg' | 'vitaminKMcg' | 'thiaminMg' | 'riboflavinMg' |
+  'niacinMg' | 'vitaminB6Mg' | 'folateMcg' | 'vitaminB12Mcg'
+>
+
+const NUTRIENT_DETAIL_META: Array<{ key: NutrientDetailKey; label: string; unit: string }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' }
+]
+
+const normalizeNutrientValue = (value: unknown) => {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
+const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefined, waterMl: number): Nutrients => ({
+  calories: normalizeNutrientValue(nutrients?.calories),
+  protein: normalizeNutrientValue(nutrients?.protein),
+  carbs: normalizeNutrientValue(nutrients?.carbs),
+  fat: normalizeNutrientValue(nutrients?.fat),
+  fiber: normalizeNutrientValue(nutrients?.fiber),
+  sugar: normalizeNutrientValue(nutrients?.sugar),
+  waterMl,
+  water_ml: waterMl,
+  saturatedFat: normalizeNutrientValue(nutrients?.saturatedFat),
+  cholesterolMg: normalizeNutrientValue(nutrients?.cholesterolMg),
+  sodiumMg: normalizeNutrientValue(nutrients?.sodiumMg),
+  potassiumMg: normalizeNutrientValue(nutrients?.potassiumMg),
+  calciumMg: normalizeNutrientValue(nutrients?.calciumMg),
+  ironMg: normalizeNutrientValue(nutrients?.ironMg),
+  magnesiumMg: normalizeNutrientValue(nutrients?.magnesiumMg),
+  zincMg: normalizeNutrientValue(nutrients?.zincMg),
+  vitaminARaeMcg: normalizeNutrientValue(nutrients?.vitaminARaeMcg),
+  vitaminCMg: normalizeNutrientValue(nutrients?.vitaminCMg),
+  vitaminDMcg: normalizeNutrientValue(nutrients?.vitaminDMcg),
+  vitaminEMg: normalizeNutrientValue(nutrients?.vitaminEMg),
+  vitaminKMcg: normalizeNutrientValue(nutrients?.vitaminKMcg),
+  thiaminMg: normalizeNutrientValue(nutrients?.thiaminMg),
+  riboflavinMg: normalizeNutrientValue(nutrients?.riboflavinMg),
+  niacinMg: normalizeNutrientValue(nutrients?.niacinMg),
+  vitaminB6Mg: normalizeNutrientValue(nutrients?.vitaminB6Mg),
+  folateMcg: normalizeNutrientValue(nutrients?.folateMcg),
+  vitaminB12Mcg: normalizeNutrientValue(nutrients?.vitaminB12Mcg)
+})
+
+const scaleNutrients = (nutrients: Nutrients, factor: number): Nutrients => {
+  const scaled = { ...nutrients }
+  ;(Object.keys(scaled) as Array<keyof Nutrients>).forEach((key) => {
+    const current = scaled[key]
+    if (typeof current === 'number') {
+      scaled[key] = Math.max(0, Math.round(current * factor * 100) / 100) as never
+    }
+  })
+  return scaled
+}
+
+const buildFoodItemNutrients = (item: NutritionItem): Nutrients => ({
+  ...item.nutrients,
+  calories: item.calorie,
+  protein: item.protein,
+  carbs: item.carbs,
+  fat: item.fat,
+  waterMl: item.waterMl,
+  water_ml: item.waterMl,
+  fiber: item.nutrients.fiber || 0,
+  sugar: item.nutrients.sugar || 0
+})
+
+const getNutrientDetailRows = (item: NutritionItem) => {
+  const ratio = item.ratio / 100
+  return NUTRIENT_DETAIL_META
+    .map((meta) => ({
+      ...meta,
+      value: normalizeNutrientValue(item.nutrients[meta.key]) * ratio
+    }))
+}
+
+const formatNutrientDetailValue = (value: number) => {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
 
 const normalizeWaterMl = (...values: unknown[]) => {
   for (const value of values) {
@@ -299,6 +405,7 @@ function ResultPage() {
   const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
+  const [expandedNutritionDetailIds, setExpandedNutritionDetailIds] = useState<Record<number, boolean>>({})
   const [nutritionStats, setNutritionStats] = useState({
     calories: 0,
     protein: 0,
@@ -438,15 +545,7 @@ function ResultPage() {
         name: item.name,
         weight: item.weight,
         water_ml: item.waterMl,
-        nutrients: {
-          calories: item.calorie,
-          protein: item.protein,
-          carbs: item.carbs,
-          fat: item.fat,
-          waterMl: item.waterMl,
-          fiber: 0,
-          sugar: 0
-        }
+        nutrients: buildFoodItemNutrients(item)
       }))
     }
 
@@ -462,6 +561,7 @@ function ResultPage() {
       const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
       const itemId = item.itemId ?? (index + 1)
       const waterMl = normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml)
+      const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
       return {
         id: itemId,
         sourceItemId: itemId,
@@ -469,13 +569,14 @@ function ResultPage() {
         name: item.name,
         weight: item.estimatedWeightGrams,
         originalWeight: aiWeight,
-        calorie: item.nutrients.calories,
+        calorie: nutrients.calories,
         intake: item.estimatedWeightGrams,
         ratio: 100,
-        protein: item.nutrients.protein,
-        carbs: item.nutrients.carbs,
-        fat: item.nutrients.fat,
-        waterMl
+        protein: nutrients.protein,
+        carbs: nutrients.carbs,
+        fat: nutrients.fat,
+        waterMl,
+        nutrients
       }
     })
   }
@@ -815,6 +916,7 @@ function ResultPage() {
           const nextCarbs = item.carbs * weightScale
           const nextFat = item.fat * weightScale
           const nextWaterMl = item.waterMl * weightScale
+          const nextNutrients = scaleNutrients(item.nutrients, weightScale)
           // ratio 保持不变，重新计算 intake
           const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
@@ -826,7 +928,16 @@ function ResultPage() {
             protein: nextProtein,
             carbs: nextCarbs,
             fat: nextFat,
-            waterMl: nextWaterMl
+            waterMl: nextWaterMl,
+            nutrients: {
+              ...nextNutrients,
+              calories: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
+              protein: nextProtein,
+              carbs: nextCarbs,
+              fat: nextFat,
+              waterMl: nextWaterMl,
+              water_ml: nextWaterMl
+            }
             // ratio 不变
           }
         }
@@ -854,20 +965,40 @@ function ResultPage() {
           : Math.max(0, roundToSingleDecimal(resolvedValue))
         const nextItem = {
           ...item,
-          [field]: normalizedValue
+          [field]: normalizedValue,
+          nutrients: {
+            ...item.nutrients,
+            [field]: normalizedValue,
+            ...(field === 'waterMl' ? { water_ml: normalizedValue } : {})
+          }
         } as NutritionItem
         if (field === 'waterMl') {
           return nextItem
         }
+        const nextCalories = calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
         return {
           ...nextItem,
-          calorie: calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
+          calorie: nextCalories,
+          nutrients: {
+            ...nextItem.nutrients,
+            calories: nextCalories,
+            protein: nextItem.protein,
+            carbs: nextItem.carbs,
+            fat: nextItem.fat
+          }
         }
       })
 
       calculateNutritionStats(updatedItems)
       return updatedItems
     })
+  }
+
+  const toggleNutritionDetails = (id: number) => {
+    setExpandedNutritionDetailIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
   }
 
   const handleIngredientMetricEdit = (id: number, field: IngredientMetricField, currentValue: number) => {
@@ -989,15 +1120,7 @@ function ResultPage() {
                         estimatedWeightGrams: item.weight,
                         originalWeightGrams: item.originalWeight,
                         waterMl: item.waterMl,
-                        nutrients: {
-                          calories: item.calorie,
-                          protein: item.protein,
-                          carbs: item.carbs,
-                          fat: item.fat,
-                          waterMl: item.waterMl,
-                          fiber: 0,
-                          sugar: 0
-                        }
+                        nutrients: buildFoodItemNutrients(item)
                       })),
                       pfc_ratio_comment: pfcRatioComment || undefined,
                       absorption_notes: absorptionNotes || undefined,
@@ -1080,16 +1203,7 @@ function ResultPage() {
             ratio: item.ratio,
             intake: item.intake,
             water_ml: item.waterMl,
-            nutrients: {
-              calories: item.calorie,
-              protein: item.protein,
-              carbs: item.carbs,
-              fat: item.fat,
-              waterMl: item.waterMl,
-              water_ml: item.waterMl,
-              fiber: 0,
-              sugar: 0
-            }
+            nutrients: buildFoodItemNutrients(item)
           })),
           total_calories: nutritionStats.calories,
           total_protein: nutritionStats.protein,
@@ -1280,16 +1394,7 @@ function ResultPage() {
               ratio: nutritionItem.ratio,
               intake: nutritionItem.intake,
               water_ml: nutritionItem.waterMl,
-              nutrients: {
-                calories: nutritionItem.calorie,
-                protein: nutritionItem.protein,
-                carbs: nutritionItem.carbs,
-                fat: nutritionItem.fat,
-                waterMl: nutritionItem.waterMl,
-                water_ml: nutritionItem.waterMl,
-                fiber: 0,
-                sugar: 0
-              }
+              nutrients: buildFoodItemNutrients(nutritionItem)
             }))
 
             await createUserRecipe({
@@ -1367,7 +1472,8 @@ function ResultPage() {
         protein: 0,
         carbs: 0,
         fat: 0,
-        waterMl: 0
+        waterMl: 0,
+        nutrients: normalizeItemNutrients(undefined, 0)
       }
     ])
   }
@@ -1417,15 +1523,7 @@ function ResultPage() {
               estimatedWeightGrams: item.weight,
               originalWeightGrams: item.originalWeight,
               waterMl: item.waterMl,
-              nutrients: {
-                calories: item.calorie,
-                protein: item.protein,
-                carbs: item.carbs,
-                fat: item.fat,
-                waterMl: item.waterMl,
-                fiber: 0,
-                sugar: 0
-              }
+              nutrients: buildFoodItemNutrients(item)
             })),
             pfc_ratio_comment: pfcRatioComment || undefined,
             absorption_notes: absorptionNotes || undefined,
@@ -1483,16 +1581,7 @@ function ResultPage() {
               carbs: item.carbs,
               fat: item.fat,
               waterMl: item.waterMl,
-              nutrients: {
-                calories: item.calorie,
-                protein: item.protein,
-                carbs: item.carbs,
-                fat: item.fat,
-                waterMl: item.waterMl,
-                water_ml: item.waterMl,
-                fiber: 0,
-                sugar: 0,
-              },
+              nutrients: buildFoodItemNutrients(item),
               sourceName: baseline?.name || item.sourceName,
               sourceItemId: item.sourceItemId ?? item.id,
               nameEdited: baseline
@@ -2004,7 +2093,10 @@ function ResultPage() {
             </View>
 
             <View className='ingredients-list'>
-              {nutritionItems.map((item) => (
+              {nutritionItems.map((item) => {
+                const detailRows = getNutrientDetailRows(item)
+                const detailsExpanded = !!expandedNutritionDetailIds[item.id]
+                return (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
                     <View className='ingredient-header ingredient-header--title-row'>
@@ -2051,6 +2143,30 @@ function ResultPage() {
                     })}
                   </View>
 
+                  {detailRows.length > 0 && (
+                    <View className='ingredient-more-section'>
+                      <View className='ingredient-more-toggle' onClick={() => toggleNutritionDetails(item.id)}>
+                        <Text className='ingredient-more-toggle-text'>
+                          {detailsExpanded ? '收起更多营养' : '展开更多营养'}
+                        </Text>
+                        <Text className={`ingredient-more-toggle-icon ${detailsExpanded ? 'expanded' : ''}`}>⌄</Text>
+                      </View>
+                      {detailsExpanded && (
+                        <View className='ingredient-detail-grid'>
+                          {detailRows.map((row) => (
+                            <View key={`${item.id}-${row.key}`} className='ingredient-detail-cell'>
+                              <Text className='ingredient-detail-label'>{row.label}</Text>
+                              <Text className='ingredient-detail-value'>
+                                {formatNutrientDetailValue(row.value)}
+                                <Text className='ingredient-detail-unit'>{row.unit}</Text>
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
+
                   <View className='ingredient-controls'>
                     <View className='weight-control'>
                       <Text className='control-label'>估算重量</Text>
@@ -2093,7 +2209,8 @@ function ResultPage() {
                     </View>
                   </View>
                 </View>
-              ))}
+                )
+              })}
             </View>
           </View>
         </View>

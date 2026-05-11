@@ -1,5 +1,78 @@
 # 当前任务
 
+## 状态：完成源码修改 - 结果页支持展开更多维生素/矿物质营养数据
+
+- 2026-05-11 update:
+  - User要求：
+    - 查看 `food_nutrition_library` 中除热量、蛋白质、碳水、脂肪外的更多营养字段。
+    - 后端也返回这些维生素/矿物质数据。
+    - 小程序结果页默认仍保持当前展示，只增加“展开更多”展示维生素等数据。
+  - Source check:
+    - `backend/internal/foodrecord/domain/food_record_domain.go` 的 `FoodNutrition` 已包含：
+      - 膳食纤维、糖、饱和脂肪、胆固醇、钠、钾、钙、铁、镁、锌。
+      - 维生素 A/C/D/E/K、B1、B2、烟酸、B6、叶酸、B12。
+    - `backend/internal/analyze/service/analyze_service.go` 的 `nutritionUnit()` 已把上述字段放入 `unit_nutrition_per_100g`，`scaleNutrition()` 会按重量缩放后放入 `nutrients`。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - `NutritionItem` 保留完整 `nutrients`。
+      - 前端从后端 `item.nutrients` 读取纤维、糖、矿物质和维生素字段。
+      - 每个食物卡片新增“展开更多营养/收起更多营养”折叠区；默认不展开。
+      - 展开后仅显示值大于 0 的更多营养项，并按实际摄入比例 `ratio` 缩放展示。
+      - 重量调整时同步缩放完整 `nutrients`；保存、纠错、食谱草稿等链路不再把 fiber/sugar 重置为 0，而是透传完整 nutrients。
+    - `src/packageExtra/pages/result/index.scss`
+      - 新增更多营养折叠区、三列明细格样式，并补充暗色主题覆盖。
+    - `src/utils/api.ts`
+      - 纠错 payload 的 nutrients 类型从 `Record<string, number>` 改为现有 `Nutrients`，兼容完整营养字段。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 新增 `TestNutritionUnitIncludesMicronutrients`，断言钙、铁、维生素 A/C/B12 会被返回并按重量缩放。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+    - `go test ./internal/analyze/service -run 'TestNutritionUnitIncludesMicronutrients|TestBuildAnalyzeResponse|TestParseItems' -count=1` passed.
+    - `git diff --check` passed.
+    - `npx tsc --noEmit --pretty false` 仍被项目既有历史类型错误阻塞；本轮 `result/index.tsx` 不再报错。
+  - Runtime validation blocker:
+    - 已按项目要求尝试 `weapp-devtools`，但当前 Windows 环境 `mrc` 命令不存在：`The term 'mrc' is not recognized...`。
+    - 因此本轮未能完成微信开发者工具截图/交互验证；需要在安装/配置 `mrc` 或打开 DevTools 自动化后复测结果页“展开更多营养”。
+
+- 2026-05-11 follow-up:
+  - User明确：即使更多营养字段为 0 也要展示，数据后续会优化。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - `getNutrientDetailRows()` 去掉 `value > 0` 过滤。
+      - 每个食物卡片的“展开更多营养”会固定展示全部扩展营养项，包括 0。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed.
+    - `git diff --check` passed.
+    - `weapp-devtools` 仍因当前环境没有 `mrc` 命令无法运行态验证。
+
+## 状态：完成静态梳理 - 小程序分析结果页展示内容
+
+- 2026-05-11 update:
+  - User询问当前小程序端分析结果展示了哪些内容。
+  - 已静态核对 `src/packageExtra/pages/result/index.tsx`：
+    - 顶部营养总览展示：总热量 kcal、总摄入重量约 g、蛋白质 g、碳水 g、脂肪 g，并用宏量柱状条展示三大营养素能量占比。
+    - `AI 饮食分析` 卡片按后端返回字段条件展示：餐食描述 `description`、健康提示/亮点 `insight`、营养比例 `pfc_ratio_comment`、吸收与利用 `absorption_notes`、情境建议 `context_advice`。
+    - `包含成分` 列表展示识别到的食物数量与每个食物卡片。
+    - 每个食物卡片展示：食物名称、热量 kcal、蛋白质 g、碳水 g、脂肪 g、含水量 ml、估算重量、实际摄入比例 slider。
+    - 食物名称支持编辑/删除；蛋白质、碳水、脂肪、含水量格可点击编辑；重量可用加减调整；实际摄入 slider 会按比例联动热量/重量/营养展示。
+  - 本轮仅阅读和解释代码，未改业务代码，未运行测试。
+
+## 状态：完成静态梳理 - backend 拍照食物热量分析链路
+
+- 2026-05-11 update:
+  - User询问当前 backend 后端如何进行食物热量拍照分析。
+  - 已静态核对当前 Go 后端源码：
+    - 图片先通过 `/api/upload-analyze-image-file` 或 `/api/upload-analyze-image` 上传，返回 `imageUrl`。
+    - 拍照分析提交 `/api/analyze/submit`，由 `TaskService.SubmitAnalyzeTask()` 创建 `analysis_tasks` 异步任务。
+    - 标准模式任务类型为 `food`；精准模式任务类型为 `precision_plan`，后续拆成 `precision_item_estimate` 与 `precision_aggregate`。
+    - worker 通过 `ClaimNextPendingTask()` 使用 `FOR UPDATE SKIP LOCKED` 领取 pending 任务并置为 processing。
+    - 标准图片任务调用 `AnalyzeService.Analyze()`；默认模型配置为 Gemini provider / `gemini-3-flash-preview`，实际 client 为 OfoxAI Gemini client。
+    - 当前标准链路默认 `db_first`：提示词要求模型只输出可见食物名称、估算克重 `estimatedWeightGrams` 和含水量 `waterMl`，不要自行估算营养。
+    - 后端 `applyDBFirstNutrition()` 使用 `food_nutrition_aliases` / `food_nutrition_library` 解析食物名，取每 100g 营养值，再按 `estimatedWeightGrams / 100` 缩放得到 calories/protein/carbs/fat。
+    - 未命中营养库时记录 unresolved；若 DeepSeek fallback 可用，则估每 100g 营养并写回营养库，当前 item 标记 `deepseek_text_fallback`。
+    - 前端轮询 `/api/analyze/tasks/:task_id` 获取完成结果；保存饮食记录时调用 `/api/food-record/save` 写入 `user_food_records`。
+  - 本轮仅阅读和解释代码，未改业务代码，未运行测试。
+
 ## 状态：完成源码微调 - 结果页 ratio-slider-shell 黑色主题改为暗色壳
 
 - 2026-05-11 update:

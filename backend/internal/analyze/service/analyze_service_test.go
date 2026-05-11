@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	authrepo "food_link/backend/internal/auth/repo"
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -365,6 +366,29 @@ func TestBuildAnalyzeResponse(t *testing.T) {
 
 	resp2 := buildAnalyzeResponse(map[string]any{"description": "d", "items": []any{}, "pfc_ratio_comment": "good"}, "strict", "qwen", "qwen-vl-max", 100)
 	assert.Equal(t, "good", *resp2["pfc_ratio_comment"].(*string))
+}
+
+func TestNutritionUnitIncludesMicronutrients(t *testing.T) {
+	food := &foodrecorddomain.FoodNutrition{
+		KcalPer100g:           100,
+		ProteinPer100g:        2,
+		CarbsPer100g:          20,
+		FatPer100g:            1,
+		FiberPer100g:          3,
+		CalciumMgPer100g:      40,
+		IronMgPer100g:         1.2,
+		VitaminCMgPer100g:     12,
+		VitaminARaeMcgPer100g: 30,
+		VitaminB12McgPer100g:  0.6,
+	}
+	unit := nutritionUnit(food)
+	scaled := scaleNutrition(unit, 50)
+
+	assert.Equal(t, 20.0, scaled["calciumMg"])
+	assert.Equal(t, 0.6, scaled["ironMg"])
+	assert.Equal(t, 6.0, scaled["vitaminCMg"])
+	assert.Equal(t, 15.0, scaled["vitaminARaeMcg"])
+	assert.Equal(t, 0.3, scaled["vitaminB12Mcg"])
 }
 
 func TestParseItems_Empty(t *testing.T) {

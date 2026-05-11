@@ -1852,7 +1852,7 @@ export interface AnalyzeTaskSubmitParams {
     protein?: number
     carbs?: number
     fat?: number
-    nutrients?: Record<string, number>
+    nutrients?: Nutrients
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
@@ -2004,7 +2004,7 @@ export interface AnalyzeTextTaskSubmitParams {
     protein?: number
     carbs?: number
     fat?: number
-    nutrients?: Record<string, number>
+    nutrients?: Nutrients
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
