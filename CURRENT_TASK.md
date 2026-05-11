@@ -1,5 +1,30 @@
 # 当前任务
 
+## 状态：完成手动 merge 复核、远端同步与推送
+
+- 2026-05-12 update:
+  - User 表示因冲突做过一次手动 merge，要求确认是否有问题；随后要求拉取远端最新代码并合并，只负责本轮相关内容，合并时保留双方功能。
+  - Completed:
+    - 复核初始工作区：无未提交文件、无 Git 未解决冲突、无真实冲突标记；分支为 `backend-refactor-sync-migrate-tencent`，本地领先 1、落后远端 1。
+    - 拉取远端后发现本地 `64de20b feat: 增加 Kafka 驱动的可靠分析任务处理` 与远端 `af8da94 fix: refund credits for failed task groups` 分叉。
+    - 执行普通 merge，冲突文件为 `CURRENT_TASK.md` 和 `backend/internal/worker/worker.go`。
+    - `worker.go` 合并口径：保留本地 Kafka/DB attempt lease 的 `CompleteTaskAttempt/FailTaskAttempt` 幂等所有权检查，同时合入远端失败任务积分返还、精准子任务失败状态更新逻辑。
+    - 已提交 merge commit：`4f5b73a Merge remote-tracking branch 'origin/backend-refactor-sync-migrate-tencent' into backend-refactor-sync-migrate-tencent`。
+    - 已推送到 `origin/backend-refactor-sync-migrate-tencent`，本地与远端 HEAD 均为 `4f5b73a`。
+  - Verification:
+    - `go test ./internal/taskqueue ./pkg/config ./pkg/trace ./pkg/logger -run Test -count=1` passed。
+    - `go test ./internal/worker ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/membership/service ./internal/health/service ./internal/analyze/handler ./internal/worker ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/expiry/service -run 'TestNotificationWorker|TestSchedule|TestReconcile|TestRecognize|TestStale' -count=1` passed。
+    - `go test ./internal/analyze/service -run '^$' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/analyze/repo ./internal/expiry/repo ./internal/migration -run "^$" -count=1` passed/no test files。
+    - `go test ./internal/health/repo ./internal/membership/repo -run '^$' -count=1` passed/no tests to run。
+    - `go build -o $env:TEMP\food-link-server-merge-check.exe ./cmd/server` passed。
+    - `git diff --cached --check` passed。
+  - Known local test blocker:
+    - 包含 sqlite 真实用例的完整 `membership/repo`、`expiry/service`、`analyze/service` 聚焦测试被当前 Windows Go 环境阻断：`CGO_ENABLED=0` 且本机无 `gcc`，`go-sqlite3 requires cgo to work`。这是环境限制，不是本次合并新增编译错误。
+
 ## 2026-05-12 update: migration 已确认，本地 Kafka 快速启动文档已补充
 
 - User 已在 `backend/` 下执行 `go run ./cmd/migration -config-dir .`，输出 `migration completed: config_dir=. schema=public`。
