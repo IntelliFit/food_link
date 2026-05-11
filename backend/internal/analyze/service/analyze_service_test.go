@@ -167,6 +167,7 @@ func TestBuildDBFirstPromptIncludesCorrectionContext(t *testing.T) {
 	assert.Contains(t, prompt, "青椒炒鸡块 80g")
 	assert.Contains(t, prompt, "原识别：肉丸")
 	assert.Contains(t, prompt, "仍要让 AI 重新分析")
+	assert.Contains(t, prompt, `"waterMl":0`)
 }
 
 func TestMergeBatchResults(t *testing.T) {
@@ -175,7 +176,7 @@ func TestMergeBatchResults(t *testing.T) {
 			"description": "desc1",
 			"insight":     "insight1",
 			"items": []map[string]any{
-				{"name": "rice", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 100.0}},
+				{"name": "rice", "estimatedWeightGrams": 100.0, "waterMl": 65.0, "nutrients": map[string]any{"calories": 100.0}},
 			},
 			"pfc_ratio_comment": "good",
 		},
@@ -192,6 +193,7 @@ func TestMergeBatchResults(t *testing.T) {
 	assert.Contains(t, merged["description"], "2 种食物")
 	items := merged["items"].([]map[string]any)
 	assert.Len(t, items, 2)
+	assert.Equal(t, 65.0, items[0]["waterMl"])
 }
 
 func TestParseItems(t *testing.T) {
@@ -200,6 +202,7 @@ func TestParseItems(t *testing.T) {
 			map[string]any{
 				"name":                 "apple",
 				"estimatedWeightGrams": 150.0,
+				"waterMl":              126.0,
 				"nutrients": map[string]any{
 					"calories": 80.0,
 					"protein":  0.5,
@@ -214,6 +217,7 @@ func TestParseItems(t *testing.T) {
 	items := parseItems(parsed)
 	assert.Len(t, items, 1)
 	assert.Equal(t, "apple", items[0]["name"])
+	assert.Equal(t, 126.0, items[0]["waterMl"])
 }
 
 func TestMergeUniqueTextLists(t *testing.T) {

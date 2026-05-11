@@ -1,5 +1,92 @@
 # 当前任务
 
+## 状态：完成源码微调 - 结果页 ratio-slider-shell 黑色主题改为暗色壳
+
+- 2026-05-11 update:
+  - User反馈：`ratio-slider-shell` 黑色主题下仍是白色透明度背景。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - `result-page--dark .ratio-slider-shell` 从浅色半透明背景改为暗色控件底，并同步使用暗色边框和内高光。
+    - `src/packageExtra/pages/result/index.tsx`
+      - `Slider` 的 `backgroundColor` 在 dark 模式下切换为深灰绿 `#2d3935`，避免未激活轨道仍显示浅灰白。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc evaluate` 设置 `fl_app_color_scheme=dark` 成功
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .result-page--dark --port 9420` 为 true
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc click .ratio-slider-modern --port 9420` 成功
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-ratio-slider-dark.png --port 9420` 仍卡住未产出文件，已仅终止截图子进程；本轮有页面/元素/交互验证，但没有截图证据。
+
+## 状态：完成源码修改 - 分析结果页成分卡支持黑色主题
+
+- 2026-05-11 update:
+  - User提供黑色主题截图，要求分析结果页面支持黑色主题，重点是「包含成分」卡片内的营养小格、估算重量和实际摄入控件。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - 在 `result-page--dark` 下补齐成分卡暗色背景、边框和阴影。
+      - 五个营养小格改为暗色渐变底、弱高光边框，并补充热量/蛋白质/碳水/脂肪/含水量各自的暗色边框与数值色。
+      - 成分卡标题区、营养区、控件区保持同一张暗色卡片表面，不再套亮色背景。
+      - 估算重量按钮和容器补充暗色背景、边框与阴影；实际摄入 slider 外壳调整为黑色主题下可读的浅色轨道壳。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc evaluate` 设置 `fl_app_color_scheme=dark` 并注入普通分析结果缓存成功
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .result-page--dark --port 9420` 为 true
+    - `mrc exists .ingredient-summary-cell--water --port 9420` 为 true
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc click .ingredient-summary-cell--water --port 9420` 成功，点击后 `mrc exists input --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-result-dark.png --port 9420` 仍卡住未产出文件，已仅终止截图子进程；本轮有页面/元素/交互验证，但没有截图证据。
+
+## 状态：完成源码修改 - 普通模式食物识别增加每项含水量输出与结果页编辑
+
+- 2026-05-11 update:
+  - User要求：
+    - 实物检测普通模式下，第一阶段大模型 `items` 数组中每个对象从 `{"name":"","estimatedWeightGrams":0}` 增加 `waterMl`，单位毫升，默认 0。
+    - 该字段需要保留到最终结果，不破坏现有前端响应。
+    - 结果页「识别结果/包含成分」同一行增加含水量展示，并允许用户修改。
+  - Fix applied:
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 标准图片 DB-first prompt 增加 `waterMl` 输出字段、单位和估算规则。
+      - 文字 DB-first prompt 同步支持 `waterMl`，保持普通分析链路一致。
+      - `parseItems()` 兼容解析 `waterMl` / `water_ml`，缺失或非法时归零。
+      - DB-first 后处理和多结果合并保留 `waterMl`，不参与热量/三大营养素回算。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 增加 prompt schema、解析和合并保留水量字段的断言。
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - 保存记录 item JSON 增加 `water_ml,omitempty`，避免保存时丢字段。
+    - `src/utils/api.ts`
+      - 前端 API 类型增加 `waterMl` / `water_ml` 兼容字段。
+    - `src/packageExtra/pages/result/index.tsx`
+      - 结果页 `NutritionItem` 增加 `waterMl`。
+      - 「包含成分」营养行从热量+蛋白质/碳水/脂肪扩展为热量+蛋白质/碳水/脂肪/含水量。
+      - 含水量随实际摄入比例展示，随估算重量调整等比例缩放，并可点击弹窗编辑。
+      - 保存、纠错、收藏菜谱、快速上传草稿等结果传递链路保留水量字段。
+    - `src/packageExtra/pages/result/index.scss`
+      - 成分营养行改为 5 列，并补充含水量颜色/点击态。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed
+    - `go test ./internal/analyze/service -run 'TestBuildDBFirstPromptIncludesCorrectionContext|TestParseItems|TestMergeBatchResults|TestBuildAnalyzeResponse' -count=1` passed
+    - `go test ./internal/foodrecord/domain -count=1` passed
+    - `go test ./internal/worker -run 'Test' -count=1` passed
+    - `go build -o /tmp/food-link-water-server ./cmd/server` passed
+    - `go build -o /tmp/food-link-water-worker ./cmd/worker` passed
+    - `git diff --check` passed
+    - `mrc evaluate` 注入带 `waterMl:210` 的普通食物分析缓存成功
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .ingredient-summary-cell--water --port 9420` 为 true
+    - `mrc click .ingredient-summary-cell--water --port 9420` 成功
+    - 点击后 `mrc exists input --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-water-result.png --port 9420` 本轮仍卡住未产出文件，已仅终止截图子进程；因此有页面/元素/交互验证，但没有截图证据。
+
 ## 状态：准备提交推送 - 结果页成分营养格紧凑化与流程梳理记录
 
 - 2026-05-11 update:

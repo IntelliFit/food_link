@@ -426,7 +426,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 		additionalLine = fmt.Sprintf("用户补充背景信息:\n%s\n请根据此信息调整对隐形成分或烹饪方式的判断。", input.AdditionalContext)
 	}
 	correctionBlock := buildCorrectionContextBlock(input)
-	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称和可食部分重量；营养成分由后端数据库查表补充，不要自行估算营养。
+	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称、可食部分重量和该食物中可计入饮水参考的含水量；营养成分由后端数据库查表补充，不要自行估算营养。
 %s%s%s
 识别规则：
 - 只识别图片中实际可见的食物，不补充看不见的食物
@@ -439,6 +439,8 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - estimatedWeightGrams 必须是数字，单位克，不要输出范围或单位字符串
 - 综合可见面积、厚度、高度、容器、餐具、手掌、包装等参照物估算
 - 只估算可见可食部分，不把餐具、包装、骨头、壳、果核计入重量
+- waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；固体食物按常见含水率保守估算，无法判断时填 0
+- 饮品、汤、粥、奶、茶、咖啡等液体或半流体应估算 waterMl；干货、油炸物、酱料难判断时可填 0
 
 输出要求：
 - 简体中文
@@ -452,7 +454,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0}],
+  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -533,7 +535,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 		contextLine = "用户补充说明：" + input.AdditionalContext
 	}
 	correctionBlock := buildCorrectionContextBlock(input)
-	return fmt.Sprintf(`你是食物文字解析助手。请把用户的自然语言饮食描述解析成可查营养数据库的结构化食物名称和重量；营养成分由后端数据库统一计算，不要输出营养值。
+	return fmt.Sprintf(`你是食物文字解析助手。请把用户的自然语言饮食描述解析成可查营养数据库的结构化食物名称、重量和该食物中可计入饮水参考的含水量；营养成分由后端数据库统一计算，不要输出营养值。
 
 用户描述:
 %s
@@ -545,6 +547,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 相同食物合并为一项，重量为合计重量
 - 混合菜无法可靠拆分时，作为一道常见菜名输出
+- waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；饮品、汤、粥、奶、茶、咖啡等应估算，无法判断时填 0
 - 如果这是纠错任务，必须基于原始文字、上一轮结果和用户纠错说明重新判断；不要机械照抄上一轮结果，也不要仅把前端列表原样返回
 
 输出要求：
@@ -558,7 +561,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0}],
+  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -1129,6 +1132,13 @@ func parseItems(parsed map[string]any) []map[string]any {
 			if w, ok := item["estimatedWeightGrams"].(float64); ok {
 				weight = w
 			}
+			waterMl := numberFromAny(item["waterMl"])
+			if waterMl <= 0 {
+				waterMl = numberFromAny(item["water_ml"])
+			}
+			if waterMl < 0 {
+				waterMl = 0
+			}
 			nutrients := map[string]any{
 				"calories": 0.0,
 				"protein":  0.0,
@@ -1148,6 +1158,7 @@ func parseItems(parsed map[string]any) []map[string]any {
 				"name":                 name,
 				"estimatedWeightGrams": weight,
 				"originalWeightGrams":  weight,
+				"waterMl":              waterMl,
 				"nutrients":            nutrients,
 			})
 		}
@@ -1478,6 +1489,7 @@ func mergeBatchResults(results []map[string]any, executionMode string) map[strin
 			"name":                 item["name"],
 			"estimatedWeightGrams": item["estimatedWeightGrams"],
 			"originalWeightGrams":  item["estimatedWeightGrams"],
+			"waterMl":              numberFromAny(item["waterMl"]),
 			"nutrients":            nutrients,
 		})
 	}

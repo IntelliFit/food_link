@@ -226,23 +226,42 @@ interface NutritionItem {
   protein: number
   carbs: number
   fat: number
+  waterMl: number
 }
 
 type MacroField = 'protein' | 'carbs' | 'fat'
+type IngredientMetricField = MacroField | 'waterMl'
 
-const MACRO_FIELDS: MacroField[] = ['protein', 'carbs', 'fat']
+const INGREDIENT_METRIC_FIELDS: IngredientMetricField[] = ['protein', 'carbs', 'fat', 'waterMl']
 
-const MACRO_FIELD_META: Record<MacroField, { label: string; className: string }> = {
-  protein: { label: '蛋白质', className: 'protein' },
-  carbs: { label: '碳水', className: 'carbs' },
-  fat: { label: '脂肪', className: 'fat' }
+const INGREDIENT_METRIC_META: Record<IngredientMetricField, { label: string; className: string; unit: string }> = {
+  protein: { label: '蛋白质', className: 'protein', unit: 'g' },
+  carbs: { label: '碳水', className: 'carbs', unit: 'g' },
+  fat: { label: '脂肪', className: 'fat', unit: 'g' },
+  waterMl: { label: '含水量', className: 'water', unit: 'ml' }
 }
 
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
 const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
 
+const formatWaterDisplay = (value: number) => String(Math.max(0, Math.round(value)))
+
+const formatIngredientMetricDisplay = (field: IngredientMetricField, value: number) => (
+  field === 'waterMl' ? formatWaterDisplay(value) : formatMacroDisplay(value)
+)
+
 const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
+
+const normalizeWaterMl = (...values: unknown[]) => {
+  for (const value of values) {
+    const num = Number(value)
+    if (Number.isFinite(num) && num > 0) {
+      return Math.round(num)
+    }
+  }
+  return 0
+}
 
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
   roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
@@ -418,11 +437,13 @@ function ResultPage() {
       items: nutritionItems.map((item) => ({
         name: item.name,
         weight: item.weight,
+        water_ml: item.waterMl,
         nutrients: {
           calories: item.calorie,
           protein: item.protein,
           carbs: item.carbs,
           fat: item.fat,
+          waterMl: item.waterMl,
           fiber: 0,
           sugar: 0
         }
@@ -440,6 +461,7 @@ function ResultPage() {
     return items.map((item, index) => {
       const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
       const itemId = item.itemId ?? (index + 1)
+      const waterMl = normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml)
       return {
         id: itemId,
         sourceItemId: itemId,
@@ -452,7 +474,8 @@ function ResultPage() {
         ratio: 100,
         protein: item.nutrients.protein,
         carbs: item.nutrients.carbs,
-        fat: item.nutrients.fat
+        fat: item.nutrients.fat,
+        waterMl
       }
     })
   }
@@ -791,6 +814,7 @@ function ResultPage() {
           const nextProtein = item.protein * weightScale
           const nextCarbs = item.carbs * weightScale
           const nextFat = item.fat * weightScale
+          const nextWaterMl = item.waterMl * weightScale
           // ratio 保持不变，重新计算 intake
           const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
@@ -801,7 +825,8 @@ function ResultPage() {
             calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
             protein: nextProtein,
             carbs: nextCarbs,
-            fat: nextFat
+            fat: nextFat,
+            waterMl: nextWaterMl
             // ratio 不变
           }
         }
@@ -815,20 +840,25 @@ function ResultPage() {
     })
   }
 
-  const updateMacroField = (
+  const updateIngredientMetricField = (
     id: number,
-    field: MacroField,
+    field: IngredientMetricField,
     nextValue: number | ((currentValue: number) => number)
   ) => {
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id !== id) return item
         const resolvedValue = typeof nextValue === 'function' ? nextValue(item[field]) : nextValue
-        const normalizedValue = Math.max(0, roundToSingleDecimal(resolvedValue))
+        const normalizedValue = field === 'waterMl'
+          ? Math.max(0, Math.round(resolvedValue))
+          : Math.max(0, roundToSingleDecimal(resolvedValue))
         const nextItem = {
           ...item,
           [field]: normalizedValue
         } as NutritionItem
+        if (field === 'waterMl') {
+          return nextItem
+        }
         return {
           ...nextItem,
           calorie: calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
@@ -840,14 +870,14 @@ function ResultPage() {
     })
   }
 
-  const handleMacroEdit = (id: number, field: MacroField, currentValue: number) => {
-    const meta = MACRO_FIELD_META[field]
+  const handleIngredientMetricEdit = (id: number, field: IngredientMetricField, currentValue: number) => {
+    const meta = INGREDIENT_METRIC_META[field]
     Taro.showModal({
-      title: `修改${meta.label}(g)`,
-      content: formatMacroDisplay(currentValue),
+      title: `修改${meta.label}(${meta.unit})`,
+      content: formatIngredientMetricDisplay(field, currentValue),
       // @ts-ignore
       editable: true,
-      placeholderText: '请输入克数',
+      placeholderText: `请输入${meta.unit}`,
       success: (res) => {
         if (!res.confirm) return
 
@@ -861,7 +891,7 @@ function ResultPage() {
           return
         }
 
-        updateMacroField(id, field, parsed)
+        updateIngredientMetricField(id, field, parsed)
       }
     })
   }
@@ -958,11 +988,13 @@ function ResultPage() {
                         name: item.name,
                         estimatedWeightGrams: item.weight,
                         originalWeightGrams: item.originalWeight,
+                        waterMl: item.waterMl,
                         nutrients: {
                           calories: item.calorie,
                           protein: item.protein,
                           carbs: item.carbs,
                           fat: item.fat,
+                          waterMl: item.waterMl,
                           fiber: 0,
                           sugar: 0
                         }
@@ -1047,11 +1079,14 @@ function ResultPage() {
             weight: item.weight,
             ratio: item.ratio,
             intake: item.intake,
+            water_ml: item.waterMl,
             nutrients: {
               calories: item.calorie,
               protein: item.protein,
               carbs: item.carbs,
               fat: item.fat,
+              waterMl: item.waterMl,
+              water_ml: item.waterMl,
               fiber: 0,
               sugar: 0
             }
@@ -1244,11 +1279,14 @@ function ResultPage() {
               weight: nutritionItem.weight,
               ratio: nutritionItem.ratio,
               intake: nutritionItem.intake,
+              water_ml: nutritionItem.waterMl,
               nutrients: {
                 calories: nutritionItem.calorie,
                 protein: nutritionItem.protein,
                 carbs: nutritionItem.carbs,
                 fat: nutritionItem.fat,
+                waterMl: nutritionItem.waterMl,
+                water_ml: nutritionItem.waterMl,
                 fiber: 0,
                 sugar: 0
               }
@@ -1328,7 +1366,8 @@ function ResultPage() {
         ratio: 100,
         protein: 0,
         carbs: 0,
-        fat: 0
+        fat: 0,
+        waterMl: 0
       }
     ])
   }
@@ -1377,11 +1416,13 @@ function ResultPage() {
               name: item.name,
               estimatedWeightGrams: item.weight,
               originalWeightGrams: item.originalWeight,
+              waterMl: item.waterMl,
               nutrients: {
                 calories: item.calorie,
                 protein: item.protein,
                 carbs: item.carbs,
                 fat: item.fat,
+                waterMl: item.waterMl,
                 fiber: 0,
                 sugar: 0
               }
@@ -1441,11 +1482,14 @@ function ResultPage() {
               protein: item.protein,
               carbs: item.carbs,
               fat: item.fat,
+              waterMl: item.waterMl,
               nutrients: {
                 calories: item.calorie,
                 protein: item.protein,
                 carbs: item.carbs,
                 fat: item.fat,
+                waterMl: item.waterMl,
+                water_ml: item.waterMl,
                 fiber: 0,
                 sugar: 0,
               },
@@ -1986,21 +2030,21 @@ function ResultPage() {
                         <Text className='ingredient-cal-kcal-unit'>kcal</Text>
                       </View>
                     </View>
-                    {MACRO_FIELDS.map((field) => {
-                      const meta = MACRO_FIELD_META[field]
-                      const intakeMacro = item[field] * (item.ratio / 100)
+                    {INGREDIENT_METRIC_FIELDS.map((field) => {
+                      const meta = INGREDIENT_METRIC_META[field]
+                      const intakeValue = item[field] * (item.ratio / 100)
                       return (
                         <View
                           key={`${item.id}-${field}`}
                           className={`ingredient-summary-cell ingredient-summary-cell--${meta.className}`}
-                          onClick={() => handleMacroEdit(item.id, field, item[field])}
+                          onClick={() => handleIngredientMetricEdit(item.id, field, item[field])}
                         >
                           <Text className='ingredient-summary-label'>{meta.label}</Text>
                           <View className='ingredient-macro-value-line'>
                             <Text className={`ingredient-macro-num ingredient-macro-num--${meta.className}`}>
-                              {formatMacroDisplay(intakeMacro)}
+                              {formatIngredientMetricDisplay(field, intakeValue)}
                             </Text>
-                            <Text className='ingredient-macro-g'>g</Text>
+                            <Text className='ingredient-macro-g'>{meta.unit}</Text>
                           </View>
                         </View>
                       )
@@ -2035,7 +2079,7 @@ function ResultPage() {
                               max={100}
                               step={1}
                               activeColor='#00bc7d'
-                              backgroundColor='#dbe4dd'
+                              backgroundColor={scheme === 'dark' ? '#2d3935' : '#dbe4dd'}
                               blockSize={24}
                               blockColor='#ffffff'
                               showValue={false}

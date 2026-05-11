@@ -34,6 +34,7 @@ type FoodItem struct {
 	Weight             float64           `json:"weight"`
 	Ratio              float64           `json:"ratio"`
 	Intake             float64           `json:"intake"`
+	WaterMl            float64           `json:"water_ml,omitempty"`
 	Nutrients          FoodItemNutrients `json:"nutrients"`
 	ManualSource       *string           `json:"manual_source,omitempty"`
 	ManualSourceID     *string           `json:"manual_source_id,omitempty"`

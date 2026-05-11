@@ -158,6 +158,8 @@ export interface Nutrients {
   fat: number
   fiber: number
   sugar: number
+  waterMl?: number
+  water_ml?: number
   saturatedFat?: number
   cholesterolMg?: number
   sodiumMg?: number
@@ -187,6 +189,8 @@ export interface FoodItem {
   name: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  waterMl?: number
+  water_ml?: number
   nutrients: Nutrients
   unit_nutrition_per_100g?: UnitNutritionPer100g
   matched_food_name?: string | null
@@ -396,6 +400,7 @@ export interface FoodRecordItemPayload {
   weight: number
   ratio: number
   intake: number
+  water_ml?: number
   nutrients: Nutrients
   manual_source?: 'public_library' | 'nutrition_library'
   manual_source_id?: string
@@ -454,6 +459,7 @@ export interface FoodRecord {
     weight: number
     ratio: number
     intake: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories: number
@@ -4155,6 +4161,7 @@ export interface UserRecipe {
     weight: number
     ratio: number
     intake: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories: number
@@ -4181,6 +4188,7 @@ export interface CreateRecipeRequest {
     weight: number
     ratio: number
     intake: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories: number
@@ -4203,6 +4211,7 @@ export interface UpdateRecipeRequest {
     weight: number
     ratio: number
     intake: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories?: number

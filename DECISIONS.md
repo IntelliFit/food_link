@@ -1,5 +1,11 @@
 # DECISIONS
 
+- `2026-05-11`: 普通模式食物分析的 DB-first 第一阶段模型 item schema 需要长期保留 `waterMl`：
+  - 图片/文字普通分析 prompt 均使用 `items:[{"name":"","estimatedWeightGrams":0,"waterMl":0}]` 作为结构口径。
+  - `waterMl` 表示该食物或饮品本身可计入饮水参考的含水量，单位毫升；无法判断时为 `0`。
+  - 后端营养库仍只负责热量、蛋白质、碳水、脂肪等营养回算，`waterMl` 从模型识别结果透传并随前端重量/比例展示调整。
+  - 前端和保存链路同时兼容 camelCase `waterMl` 与 snake_case `water_ml`，保存记录 item JSON 使用 `water_ml`。
+
 - `2026-05-10`: 当用户反馈“小程序非调试模式报错、调试模式正常”时，排查优先级不能只盯接口域名；要先排除前端同步运行时异常与生产包残留调用。当前已确认一个真实案例：
   - `src/pages/profile/index.tsx` 退出登录回调里残留 `setRegisterDate('--')`
   - 该 state 已不存在，正式运行到这条链路会直接抛 `ReferenceError`
